@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/common/gpu/media/v4l2_video_decode_accelerator.h"
+
 #include <dlfcn.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -12,6 +14,8 @@
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -21,7 +25,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/common/gpu/media/shared_memory_region.h"
-#include "content/common/gpu/media/v4l2_video_decode_accelerator.h"
 #include "media/base/media_switches.h"
 #include "media/filters/h264_parser.h"
 #include "ui/gfx/geometry/rect.h"
@@ -205,8 +208,10 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
   DCHECK(child_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(decoder_state_, kUninitialized);
 
-  if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
-    NOTREACHED() << "GL callbacks are required for this VDA";
+  if (!device_->SupportsDecodeProfileForV4L2PixelFormats(
+          config.profile, arraysize(supported_input_fourccs_),
+          supported_input_fourccs_)) {
+    DVLOG(1) << "Initialize(): unsupported profile=" << config.profile;
     return false;
   }
 
@@ -215,10 +220,13 @@ bool V4L2VideoDecodeAccelerator::Initialize(const Config& config,
     return false;
   }
 
-  if (!device_->SupportsDecodeProfileForV4L2PixelFormats(
-          config.profile, arraysize(supported_input_fourccs_),
-          supported_input_fourccs_)) {
-    DVLOG(1) << "Initialize(): unsupported profile=" << config.profile;
+  if (config.output_mode != Config::OutputMode::ALLOCATE) {
+    NOTREACHED() << "Only ALLOCATE OutputMode is supported by this VDA";
+    return false;
+  }
+
+  if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
+    NOTREACHED() << "GL callbacks are required for this VDA";
     return false;
   }
 
@@ -375,9 +383,21 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK_EQ(output_record.cleared, false);
     DCHECK_LE(1u, buffers[i].texture_ids().size());
 
-    EGLImageKHR egl_image = device_->CreateEGLImage(
-        egl_display_, gl_context->GetHandle(), buffers[i].texture_ids()[0],
-        coded_size_, i, output_format_fourcc_, output_planes_count_);
+    std::vector<base::ScopedFD> dmabuf_fds;
+    dmabuf_fds = device_->GetDmabufsForV4L2Buffer(
+        i, output_planes_count_, V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE);
+    if (dmabuf_fds.empty()) {
+      NOTIFY_ERROR(PLATFORM_FAILURE);
+      return;
+    }
+
+    EGLImageKHR egl_image = device_->CreateEGLImage(egl_display_,
+                                                    gl_context->GetHandle(),
+                                                    buffers[i].texture_ids()[0],
+                                                    coded_size_,
+                                                    i,
+                                                    output_format_fourcc_,
+                                                    dmabuf_fds);
     if (egl_image == EGL_NO_IMAGE_KHR) {
       LOG(ERROR) << "AssignPictureBuffers(): could not create EGLImageKHR";
       // Ownership of EGLImages allocated in previous iterations of this loop
@@ -469,6 +489,10 @@ bool V4L2VideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
   decode_client_ = decode_client_;
   decode_task_runner_ = decode_task_runner;
   return true;
+}
+
+media::VideoPixelFormat V4L2VideoDecodeAccelerator::GetOutputFormat() const {
+  return V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_);
 }
 
 // static

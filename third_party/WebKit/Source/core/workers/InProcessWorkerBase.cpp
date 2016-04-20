@@ -10,7 +10,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/workers/WorkerGlobalScopeProxy.h"
+#include "core/workers/InProcessWorkerGlobalScopeProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -32,7 +32,7 @@ InProcessWorkerBase::~InProcessWorkerBase()
     m_contextProxy->workerObjectDestroyed();
 }
 
-void InProcessWorkerBase::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
+void InProcessWorkerBase::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, ExceptionState& exceptionState)
 {
     ASSERT(m_contextProxy);
     // Disentangle the port in preparation for sending it to the remote context.
@@ -59,7 +59,7 @@ bool InProcessWorkerBase::initialize(ExecutionContext* context, const String& ur
         bind(&InProcessWorkerBase::onResponse, this),
         bind(&InProcessWorkerBase::onFinished, this));
 
-    m_contextProxy = createWorkerGlobalScopeProxy(context);
+    m_contextProxy = createInProcessWorkerGlobalScopeProxy(context);
 
     return true;
 }

@@ -16,7 +16,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
-#include "bindings/core/v8/TransferableMessagePort.h"
+#include "bindings/core/v8/Transferables.h"
 #include "bindings/core/v8/UnionTypesCore.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
@@ -53,14 +53,11 @@
 #include "bindings/core/v8/V8XPathNSResolver.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ClassCollection.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/dom/FlexibleArrayBufferView.h"
-#include "core/dom/MessagePort.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/custom/CustomElementProcessingStack.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
@@ -10154,25 +10151,20 @@ void postMessageImpl(const char* interfaceName, TestObject* instance, const v8::
         exceptionState.throwIfNeeded();
         return;
     }
-    TransferableArray* transferables = new TransferableArray;
+    Transferables transferables;
     if (info.Length() > 1) {
         const int transferablesArgIndex = 1;
-        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, *transferables, exceptionState)) {
+        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, transferables, exceptionState)) {
             exceptionState.throwIfNeeded();
             return;
         }
     }
-    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], transferables, exceptionState);
+    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], &transferables, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
     // FIXME: Only pass context/exceptionState if instance really requires it.
     ExecutionContext* context = currentExecutionContext(info.GetIsolate());
-    MessagePortArray* ports;
-    if (auto* messagePorts = TransferableMessagePort::get(*transferables))
-        ports = &(messagePorts->getArray());
-    else
-        ports = new MessagePortArray;
-    instance->postMessage(context, message.release(), ports, exceptionState);
+    instance->postMessage(context, message.release(), transferables.messagePorts, exceptionState);
     exceptionState.throwIfNeeded();
 }
 

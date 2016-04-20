@@ -57,7 +57,8 @@
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/cursor_manager_test_api.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/common/root_window_finder.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -387,7 +388,8 @@ class DetachToBrowserTabDragControllerTest
       return;
 #if defined(OS_CHROMEOS)
     event_generator_.reset(new ui::test::EventGenerator(
-        new ScreenEventGeneratorDelegate(ash::wm::GetRootWindowAt(point))));
+        new ScreenEventGeneratorDelegate(ash::wm::WmWindowAura::GetAuraWindow(
+            ash::wm::GetRootWindowAt(point)))));
 #endif
   }
 
@@ -1086,6 +1088,62 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   ASSERT_FALSE(TabDragController::IsActive());
 
   EXPECT_EQ("1", IDString(browser()->tab_strip_model()));
+
+  EXPECT_FALSE(GetIsDragged(browser()));
+}
+
+namespace {
+
+void CloseTabsWhileDetachedStep2(const BrowserList* browser_list) {
+  ASSERT_EQ(2u, browser_list->size());
+  Browser* old_browser = browser_list->get(0);
+  EXPECT_EQ("0 3", IDString(old_browser->tab_strip_model()));
+  Browser* new_browser = browser_list->get(1);
+  EXPECT_EQ("1 2", IDString(new_browser->tab_strip_model()));
+  chrome::CloseTab(new_browser);
+}
+
+}  // namespace
+
+#if defined(OS_CHROMEOS)
+// TODO(sky,sad): Disabled as it fails due to resize locks with a real
+// compositor. crbug.com/331924
+#define MAYBE_DeleteTabsWhileDetached DISABLED_DeleteTabsWhileDetached
+#else
+#define MAYBE_DeleteTabsWhileDetached DeleteTabsWhileDetached
+#endif
+// Selects 2 tabs out of 4, drags them out and closes the new browser window
+// while dragging tabs.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_DeleteTabsWhileDetached) {
+  // Add 3 tabs for a total of 4 tabs.
+  AddTabAndResetBrowser(browser());
+  AddTabAndResetBrowser(browser());
+  AddTabAndResetBrowser(browser());
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  EXPECT_EQ("0 1 2 3", IDString(browser()->tab_strip_model()));
+
+  // Click the first tab and select two middle tabs.
+  gfx::Point tab_1_center(GetCenterInScreenCoordinates(tab_strip->tab_at(1)));
+  gfx::Point tab_2_center(GetCenterInScreenCoordinates(tab_strip->tab_at(2)));
+  ASSERT_TRUE(PressInput(tab_1_center));
+  ASSERT_TRUE(ReleaseInput());
+  browser()->tab_strip_model()->AddTabAtToSelection(1);
+  browser()->tab_strip_model()->AddTabAtToSelection(2);
+  // Press mouse button in the second tab and drag it enough to detach.
+  ASSERT_TRUE(PressInput(tab_2_center));
+  ASSERT_TRUE(DragInputToNotifyWhenDone(
+      tab_2_center.x(), tab_2_center.y() + GetDetachY(tab_strip),
+      base::Bind(&CloseTabsWhileDetachedStep2, browser_list)));
+  QuitWhenNotDragging();
+
+  // Should not be dragging.
+  ASSERT_EQ(1u, browser_list->size());
+  ASSERT_FALSE(tab_strip->IsDragSessionActive());
+  ASSERT_FALSE(TabDragController::IsActive());
+
+  // Both tabs "1" and "2" get closed.
+  EXPECT_EQ("0 3", IDString(browser()->tab_strip_model()));
 
   EXPECT_FALSE(GetIsDragged(browser()));
 }

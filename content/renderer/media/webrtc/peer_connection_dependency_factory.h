@@ -9,10 +9,10 @@
 
 #include "base/files/file.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
-#include "content/public/renderer/render_process_observer.h"
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
 #include "ipc/ipc_platform_file.h"
@@ -71,10 +71,7 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   blink::WebRTCPeerConnectionHandler* CreateRTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client);
 
-  // Add an ECDSA certificate to |config| in case it contains no certificate.
-  static void SetDefaultCertificate(
-      webrtc::PeerConnectionInterface::RTCConfiguration* config);
-
+  // Generate an ECDSA certificate.
   static rtc::scoped_refptr<rtc::RTCCertificate> GenerateDefaultCertificate();
 
   // Asks the PeerConnection factory to create a Local MediaStream object.

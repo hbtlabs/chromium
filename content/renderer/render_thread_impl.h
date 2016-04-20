@@ -116,7 +116,7 @@ class P2PSocketDispatcher;
 class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
 class RasterWorkerPool;
-class RenderProcessObserver;
+class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
 class RendererDemuxerAndroid;
 class RendererGpuVideoAcceleratorFactories;
@@ -180,8 +180,8 @@ class CONTENT_EXPORT RenderThreadImpl
   int GenerateRoutingID() override;
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
-  void AddObserver(RenderProcessObserver* observer) override;
-  void RemoveObserver(RenderProcessObserver* observer) override;
+  void AddObserver(RenderThreadObserver* observer) override;
+  void RemoveObserver(RenderThreadObserver* observer) override;
   void SetResourceDispatcherDelegate(
       ResourceDispatcherDelegate* delegate) override;
   std::unique_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
@@ -297,9 +297,6 @@ class CONTENT_EXPORT RenderThreadImpl
   SynchronousCompositorFilter* sync_compositor_message_filter() {
     return sync_compositor_message_filter_.get();
   }
-
-  static void SetStreamTextureFactory(
-      scoped_refptr<StreamTextureFactory> factory);
 
   scoped_refptr<StreamTextureFactory> GetStreamTexureFactory();
   bool EnableStreamTextureCopy();
@@ -526,9 +523,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   void ReleaseFreeMemory();
 
-  std::unique_ptr<WebGraphicsContext3DCommandBufferImpl>
-  CreateOffscreenContext3d();
-
   // These objects live solely on the render thread.
   std::unique_ptr<AppCacheDispatcher> appcache_dispatcher_;
   std::unique_ptr<DomStorageDispatcher> dom_storage_dispatcher_;
@@ -645,7 +639,7 @@ class CONTENT_EXPORT RenderThreadImpl
 
   scoped_refptr<ContextProviderCommandBuffer> shared_main_thread_contexts_;
 
-  base::ObserverList<RenderProcessObserver> observers_;
+  base::ObserverList<RenderThreadObserver> observers_;
 
   scoped_refptr<ContextProviderCommandBuffer> shared_worker_context_provider_;
 
@@ -672,7 +666,6 @@ class CONTENT_EXPORT RenderThreadImpl
   bool is_lcd_text_enabled_;
   bool is_distance_field_text_enabled_;
   bool is_zero_copy_enabled_;
-  bool is_one_copy_enabled_;
   bool is_gpu_memory_buffer_compositor_resources_enabled_;
   bool is_partial_raster_enabled_;
   bool is_elastic_overscroll_enabled_;

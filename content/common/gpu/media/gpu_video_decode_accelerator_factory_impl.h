@@ -5,6 +5,8 @@
 #ifndef CONTENT_COMMON_GPU_MEDIA_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_IMPL_H_
 #define CONTENT_COMMON_GPU_MEDIA_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_IMPL_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
@@ -69,6 +71,8 @@ public:
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const BindGLImageCallback& bind_image_cb,
       const GetGLES2DecoderCallback& get_gles2_decoder_cb);
+
+  static std::unique_ptr<GpuVideoDecodeAcceleratorFactoryImpl> CreateWithNoGL();
 
   static gpu::VideoDecodeAcceleratorCapabilities GetDecoderCapabilities(
       const gpu::GpuPreferences& gpu_preferences);

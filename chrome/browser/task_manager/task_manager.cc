@@ -257,33 +257,27 @@ TaskManagerModel::TaskManagerModel(TaskManager* task_manager)
   AddResourceProvider(
       new task_manager::BrowserProcessResourceProvider(task_manager));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::BackgroundInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::BackgroundInformation())));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::TabContentsInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::TabContentsInformation())));
 #if defined(ENABLE_PRINT_PREVIEW)
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::PrintingInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::PrintingInformation())));
 #endif  // ENABLE_PRINT_PREVIEW
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::PanelInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::PanelInformation())));
   AddResourceProvider(
       new task_manager::ChildProcessResourceProvider(task_manager));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::ExtensionInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::ExtensionInformation())));
   AddResourceProvider(new task_manager::WebContentsResourceProvider(
-      task_manager,
-      scoped_ptr<WebContentsInformation>(
-          new task_manager::GuestInformation())));
+      task_manager, std::unique_ptr<WebContentsInformation>(
+                        new task_manager::GuestInformation())));
 #if defined(OS_WIN)
   working_set_snapshot_.reset(new PrivateWorkingSetSnapshot);
   working_set_snapshot_->AddToMonitorList("chrome");
@@ -1513,6 +1507,16 @@ Resource* TaskManagerModel::GetResource(int index) const {
 void TaskManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(prefs::kTaskManagerWindowPlacement);
   registry->RegisterDictionaryPref(prefs::kTaskManagerColumnVisibility);
+  registry->RegisterBooleanPref(prefs::kTaskManagerEndProcessEnabled, true);
+}
+
+// static
+bool TaskManager::IsEndProcessEnabled() {
+  if (g_browser_process->local_state()) {
+    return g_browser_process->local_state()->GetBoolean(
+        prefs::kTaskManagerEndProcessEnabled);
+  }
+  return true;
 }
 
 bool TaskManager::IsBrowserProcess(int index) const {

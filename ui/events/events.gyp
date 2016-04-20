@@ -66,6 +66,8 @@
         'keycodes/keyboard_code_conversion_x.cc',
         'keycodes/keyboard_code_conversion_x.h',
         'keycodes/keyboard_codes.h',
+        'latency_info.cc',
+        'latency_info.h',
         'x/keysym_to_unicode.cc',
         'x/keysym_to_unicode.h',
       ],
@@ -98,7 +100,6 @@
         '<(DEPTH)/skia/skia.gyp:skia',
         '../gfx/gfx.gyp:gfx',
         '../gfx/gfx.gyp:gfx_geometry',
-        '../latency_info/latency_info.gyp:latency_info',
         'dom_keycode_converter',
         'events_base',
         'gesture_detection',
@@ -161,6 +162,7 @@
             '../../build/linux/system.gyp:x11',
             '../gfx/x/gfx_x11.gyp:gfx_x11',
             'devices/events_devices.gyp:events_devices',
+            'devices/x11/events_devices_x11.gyp:events_devices_x11',
             'x/events_x.gyp:events_x',
           ],
         }],
@@ -300,6 +302,24 @@
       ],
     },
     {
+      # GN version: //ui/events/ipc:events_ipc
+      'target_name': 'events_ipc',
+      'type': '<(component)',
+      'dependencies': [
+        '<(DEPTH)/base/base.gyp:base',
+        '<(DEPTH)/ipc/ipc.gyp:ipc',
+        'events_base',
+      ],
+      'defines': [
+        'EVENTS_IPC_IMPLEMENTATION',
+      ],
+      'sources': [
+        'ipc/latency_info_param_traits.cc',
+        'ipc/latency_info_param_traits.h',
+        'ipc/latency_info_param_traits_macros.h',
+      ],
+    },
+    {
       # GN version: //ui/events:test_support
       'target_name': 'events_test_support',
       'type': 'static_library',
@@ -342,6 +362,11 @@
         ['OS=="ios"', {
           # The cocoa files don't apply to iOS.
           'sources/': [['exclude', 'cocoa']],
+        }],
+        ['use_x11==1', {
+          'dependencies': [
+            'devices/x11/events_devices_x11.gyp:events_devices_x11',
+          ],
         }],
         ['use_x11==1 or use_ozone==1', {
           'sources' : [

@@ -6,6 +6,7 @@
 #define GPU_IPC_SERVICE_IMAGE_TRANSPORT_SURFACE_OVERLAY_MAC_H_
 
 #include <list>
+#include <memory>
 #include <vector>
 
 #import "base/mac/scoped_nsobject.h"
@@ -13,9 +14,9 @@
 #include "gpu/ipc/service/gpu_command_buffer_stub.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "ui/base/cocoa/remote_layer_api.h"
+#include "ui/events/latency_info.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gpu_switching_observer.h"
-#include "ui/latency_info/latency_info.h"
 
 @class CAContext;
 @class CALayer;
@@ -59,7 +60,8 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
                        bool is_clipped,
                        const gfx::RectF& clip_rect,
                        const gfx::Transform& transform,
-                       int sorting_context_id) override;
+                       int sorting_context_id,
+                       unsigned filter) override;
   bool IsSurfaceless() const override;
 
   // ui::GpuSwitchingObserver implementation.
@@ -99,12 +101,12 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
 
   // Planes that have been scheduled, but have not had a subsequent SwapBuffers
   // call made yet.
-  scoped_ptr<CALayerPartialDamageTree> pending_partial_damage_tree_;
-  scoped_ptr<CALayerTree> pending_ca_layer_tree_;
+  std::unique_ptr<CALayerPartialDamageTree> pending_partial_damage_tree_;
+  std::unique_ptr<CALayerTree> pending_ca_layer_tree_;
 
   // The planes that are currently being displayed on the screen.
-  scoped_ptr<CALayerPartialDamageTree> current_partial_damage_tree_;
-  scoped_ptr<CALayerTree> current_ca_layer_tree_;
+  std::unique_ptr<CALayerPartialDamageTree> current_partial_damage_tree_;
+  std::unique_ptr<CALayerTree> current_ca_layer_tree_;
 
   // The vsync information provided by the browser.
   bool vsync_parameters_valid_;

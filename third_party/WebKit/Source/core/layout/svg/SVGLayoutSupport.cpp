@@ -34,6 +34,7 @@
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/LayoutSVGShape.h"
 #include "core/layout/svg/LayoutSVGText.h"
+#include "core/layout/svg/LayoutSVGTransformableContainer.h"
 #include "core/layout/svg/LayoutSVGViewportContainer.h"
 #include "core/layout/svg/SVGResources.h"
 #include "core/layout/svg/SVGResourcesCache.h"
@@ -246,48 +247,40 @@ const LayoutSVGRoot* SVGLayoutSupport::findTreeRootObject(const LayoutObject* st
     return toLayoutSVGRoot(start);
 }
 
-inline bool SVGLayoutSupport::layoutSizeOfNearestViewportChanged(const LayoutObject* start)
+bool SVGLayoutSupport::layoutSizeOfNearestViewportChanged(const LayoutObject* start)
 {
-    while (start && !start->isSVGRoot() && !start->isSVGViewportContainer())
-        start = start->parent();
-
-    ASSERT(start);
-    ASSERT(start->isSVGRoot() || start->isSVGViewportContainer());
-    if (start->isSVGViewportContainer())
-        return toLayoutSVGViewportContainer(start)->isLayoutSizeChanged();
-
-    return toLayoutSVGRoot(start)->isLayoutSizeChanged();
+    for (; start; start = start->parent()) {
+        if (start->isSVGRoot())
+            return toLayoutSVGRoot(start)->isLayoutSizeChanged();
+        if (start->isSVGViewportContainer())
+            return toLayoutSVGViewportContainer(start)->isLayoutSizeChanged();
+    }
+    ASSERT_NOT_REACHED();
+    return false;
 }
 
-bool SVGLayoutSupport::transformToRootChanged(LayoutObject* ancestor)
+bool SVGLayoutSupport::transformToRootChanged(const LayoutObject* ancestor)
 {
     while (ancestor && !ancestor->isSVGRoot()) {
         if (ancestor->isSVGTransformableContainer())
-            return toLayoutSVGContainer(ancestor)->didTransformToRootUpdate();
+            return toLayoutSVGTransformableContainer(ancestor)->didTransformToRootUpdate();
         if (ancestor->isSVGViewportContainer())
             return toLayoutSVGViewportContainer(ancestor)->didTransformToRootUpdate();
         ancestor = ancestor->parent();
     }
-
     return false;
 }
 
-void SVGLayoutSupport::layoutChildren(LayoutObject* start, bool selfNeedsLayout)
+void SVGLayoutSupport::layoutChildren(LayoutObject* firstChild, bool forceLayout, bool transformChanged, bool layoutSizeChanged)
 {
-    // When hasRelativeLengths() is false, no descendants have relative lengths
-    // (hence no one is interested in viewport size changes).
-    bool layoutSizeChanged = toSVGElement(start->node())->hasRelativeLengths()
-        && layoutSizeOfNearestViewportChanged(start);
-    bool transformChanged = transformToRootChanged(start);
-
-    for (LayoutObject* child = start->slowFirstChild(); child; child = child->nextSibling()) {
-        bool forceLayout = selfNeedsLayout;
+    for (LayoutObject* child = firstChild; child; child = child->nextSibling()) {
+        bool forceChildLayout = forceLayout;
 
         if (transformChanged) {
             // If the transform changed we need to update the text metrics (note: this also happens for layoutSizeChanged=true).
             if (child->isSVGText())
                 toLayoutSVGText(child)->setNeedsTextMetricsUpdate();
-            forceLayout = true;
+            forceChildLayout = true;
         }
 
         if (layoutSizeChanged) {
@@ -303,7 +296,7 @@ void SVGLayoutSupport::layoutChildren(LayoutObject* start, bool selfNeedsLayout)
                         toLayoutSVGText(child)->setNeedsPositioningValuesUpdate();
                     }
 
-                    forceLayout = true;
+                    forceChildLayout = true;
                 }
             }
         }
@@ -321,7 +314,7 @@ void SVGLayoutSupport::layoutChildren(LayoutObject* start, bool selfNeedsLayout)
             child->layoutIfNeeded();
         } else {
             SubtreeLayoutScope layoutScope(*child);
-            if (forceLayout)
+            if (forceChildLayout)
                 layoutScope.setNeedsLayout(child, LayoutInvalidationReason::SvgChanged);
 
             // Lay out any referenced resources before the child.
@@ -366,18 +359,10 @@ void SVGLayoutSupport::intersectPaintInvalidationRectWithResources(const LayoutO
         paintInvalidationRect.intersect(masker->resourceBoundingBox(layoutObject));
 }
 
-bool SVGLayoutSupport::filtersForceContainerLayout(LayoutObject* object)
+bool SVGLayoutSupport::hasFilterResource(const LayoutObject& object)
 {
-    // If any of this container's children need to be laid out, and a filter is applied
-    // to the container, we need to issue paint invalidations the entire container.
-    if (!object->normalChildNeedsLayout())
-        return false;
-
-    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(object);
-    if (!resources || !resources->filter())
-        return false;
-
-    return true;
+    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(&object);
+    return resources && resources->filter();
 }
 
 bool SVGLayoutSupport::pointInClippingArea(const LayoutObject* object, const FloatPoint& point)

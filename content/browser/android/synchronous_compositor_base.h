@@ -25,10 +25,10 @@ struct BeginFrameArgs;
 namespace content {
 
 class RenderWidgetHostViewAndroid;
-class SynchronousCompositorStreamTextureFactoryImpl;
 class WebContents;
 struct DidOverscrollParams;
 
+// TODO(boliu): Merge this into SynchronousCompositorHost.
 class SynchronousCompositorBase : public SynchronousCompositor {
  public:
   static std::unique_ptr<SynchronousCompositorBase> Create(

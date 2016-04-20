@@ -73,6 +73,7 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
   virtual void DelegatedFrameHostUpdateVSyncParameters(
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) = 0;
+  virtual void SetBeginFrameSource(cc::BeginFrameSource* source) = 0;
 };
 
 // The DelegatedFrameHost is used to host all of the RenderWidgetHostView state
@@ -317,8 +318,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   std::unique_ptr<content::ReadbackYUVInterface> yuv_readback_pipeline_;
 
   std::unique_ptr<DelegatedFrameEvictor> delegated_frame_evictor_;
-
-  cc::BeginFrameSource* begin_frame_source_;
 };
 
 }  // namespace content

@@ -36,6 +36,7 @@ LayoutSVGContainer::LayoutSVGContainer(SVGElement* node)
     : LayoutSVGModelObject(node)
     , m_objectBoundingBoxValid(false)
     , m_needsBoundariesUpdate(true)
+    , m_didTransformToRootUpdate(false)
     , m_hasNonIsolatedBlendingDescendants(false)
     , m_hasNonIsolatedBlendingDescendantsDirty(false)
 {
@@ -55,11 +56,22 @@ void LayoutSVGContainer::layout()
 
     // Allow LayoutSVGTransformableContainer to update its transform.
     bool updatedTransform = calculateLocalTransform();
+    m_didTransformToRootUpdate = updatedTransform || SVGLayoutSupport::transformToRootChanged(parent());
 
     // LayoutSVGViewportContainer needs to set the 'layout size changed' flag.
     determineIfLayoutSizeChanged();
 
-    SVGLayoutSupport::layoutChildren(this, selfNeedsLayout() || SVGLayoutSupport::filtersForceContainerLayout(this));
+    // When hasRelativeLengths() is false, no descendants have relative lengths
+    // (hence no one is interested in viewport size changes).
+    bool layoutSizeChanged = element()->hasRelativeLengths()
+        && SVGLayoutSupport::layoutSizeOfNearestViewportChanged(this);
+
+    // If any of this container's children need to be laid out, and a filter is
+    // applied to the container, we need to issue paint invalidations for all
+    // the descendants.
+    bool forceLayoutOfChildren = selfNeedsLayout()
+        || (normalChildNeedsLayout() && SVGLayoutSupport::hasFilterResource(*this));
+    SVGLayoutSupport::layoutChildren(firstChild(), forceLayoutOfChildren, m_didTransformToRootUpdate, layoutSizeChanged);
 
     // Invalidate all resources of this client if our layout changed.
     if (everHadLayout() && needsLayout())
@@ -98,8 +110,7 @@ void LayoutSVGContainer::removeChild(LayoutObject* child)
 
 bool LayoutSVGContainer::selfWillPaint() const
 {
-    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(this);
-    return resources && resources->filter();
+    return SVGLayoutSupport::hasFilterResource(*this);
 }
 
 void LayoutSVGContainer::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)

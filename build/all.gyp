@@ -30,6 +30,7 @@
         '../sql/sql.gyp:*',
         '../testing/gmock.gyp:*',
         '../testing/gtest.gyp:*',
+        '../third_party/boringssl/boringssl.gyp:*',
         '../third_party/icu/icu.gyp:*',
         '../third_party/libxml/libxml.gyp:*',
         '../third_party/sqlite/sqlite.gyp:*',
@@ -167,11 +168,6 @@
             '<(libjpeg_gyp_path):*',
           ],
         }],
-        ['use_openssl==0 and OS=="ios"', {
-          'dependencies': [
-            '../third_party/nss/nss.gyp:*',
-           ],
-        }],
         ['OS=="win" or OS=="ios" or OS=="linux"', {
           'dependencies': [
             '../breakpad/breakpad.gyp:*',
@@ -254,17 +250,7 @@
             '../remoting/remoting_all.gyp:remoting_all',
           ],
         }],
-        ['use_openssl==0', {
-          'dependencies': [
-            '../net/third_party/nss/ssl.gyp:*',
-          ],
-        }],
-        ['use_openssl==1', {
-          'dependencies': [
-            '../third_party/boringssl/boringssl.gyp:*',
-          ],
-        }],
-        ['use_openssl==1 and OS!="ios"', {
+        ['OS!="ios"', {
           'dependencies': [
             '../third_party/boringssl/boringssl_tests.gyp:*',
           ],
@@ -473,7 +459,7 @@
           'dependencies': [
             '../ash/ash.gyp:ash_unittests',
             '../ui/app_list/app_list.gyp:app_list_unittests',
-            '../ui/app_list/shower/app_list_shower.gyp:app_list_shower_unittests',
+            '../ui/app_list/presenter/app_list_presenter.gyp:app_list_presenter_unittests',
             '../ui/aura/aura.gyp:aura_unittests',
             '../ui/compositor/compositor.gyp:compositor_unittests',
           ],
@@ -827,7 +813,6 @@
             '../ui/android/ui_android.gyp:ui_android_unittests',
             '../ui/base/ui_base_tests.gyp:ui_base_unittests',
             '../ui/events/events_unittests.gyp:events_unittests',
-            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             # Unit test bundles packaged as an apk.
             '../base/base.gyp:base_unittests_apk',
@@ -856,7 +841,6 @@
             '../ui/events/events_unittests.gyp:events_unittests_apk',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests_apk',
             '../ui/gl/gl_tests.gyp:gl_unittests_apk',
-            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests_apk',
           ],
           'conditions': [
@@ -1056,7 +1040,6 @@
             '../ui/events/events_unittests.gyp:events_unittests',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
-            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             '../ui/views/views.gyp:views_unittests',
             '../url/url.gyp:url_unittests',
@@ -1160,7 +1143,6 @@
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
             '../ui/keyboard/keyboard.gyp:keyboard_unittests',
-            '../ui/latency_info/latency_info_unittests.gyp:latency_info_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',
             '../url/url.gyp:url_unittests',
           ],
@@ -1279,7 +1261,6 @@
             '../ui/events/events.gyp:*',
             '../ui/gfx/gfx_tests.gyp:gfx_unittests',
             '../ui/gl/gl_tests.gyp:gl_unittests',
-            '../ui/latency_info/latency_info.gyp:*',
             '../ui/keyboard/keyboard.gyp:*',
             '../ui/snapshot/snapshot.gyp:snapshot_unittests',
             '../ui/touch_selection/ui_touch_selection.gyp:ui_touch_selection_unittests',

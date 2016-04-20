@@ -71,9 +71,9 @@ void WebTestWithWebController::SetUp() {
   web_state_impl_.reset(new WebStateImpl(GetBrowserState()));
   web_state_impl_->GetNavigationManagerImpl().InitializeSession(nil, nil, NO,
                                                                 0);
+  web_state_impl_->SetWebUsageEnabled(true);
   webController_.reset(web_state_impl_->GetWebController());
 
-  [webController_ setWebUsageEnabled:YES];
   // Force generation of child views; necessary for some tests.
   [webController_ triggerPendingLoad];
   s_html_load_count = 0;
@@ -175,6 +175,20 @@ NSString* WebTestWithWebController::EvaluateJavaScriptAsString(
   return [[evaluationResult retain] autorelease];
 }
 
+id WebTestWithWebController::ExecuteJavaScript(NSString* script) {
+  __block base::scoped_nsprotocol<id> executionResult;
+  __block bool executionCompleted = false;
+  [webController_ executeJavaScript:script
+                  completionHandler:^(id result, NSError*) {
+                    executionResult.reset([result copy]);
+                    executionCompleted = true;
+                  }];
+  base::test::ios::WaitUntilCondition(^{
+    return executionCompleted;
+  });
+  return [[executionResult retain] autorelease];
+}
+
 void WebTestWithWebController::WillProcessTask(
     const base::PendingTask& pending_task) {
   // Nothing to do.
@@ -190,8 +204,8 @@ bool WebTestWithWebController::ResetPageIfNavigationStalled(
   NSString* inner_html = EvaluateJavaScriptAsString(
       @"(document && document.body && document.body.innerHTML) || 'undefined'");
   if ([inner_html rangeOfString:load_check].location == NSNotFound) {
-    [webController_ setWebUsageEnabled:NO];
-    [webController_ setWebUsageEnabled:YES];
+    web_state_impl_->SetWebUsageEnabled(false);
+    web_state_impl_->SetWebUsageEnabled(true);
     [webController_ triggerPendingLoad];
     return true;
   }

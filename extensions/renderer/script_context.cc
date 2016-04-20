@@ -4,10 +4,11 @@
 
 #include "extensions/renderer/script_context.h"
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -210,7 +211,7 @@ v8::Local<v8::Value> ScriptContext::CallFunction(
 Feature::Availability ScriptContext::GetAvailability(
     const std::string& api_name) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (api_name == "test") {
+  if (base::StartsWith(api_name, "test", base::CompareCase::SENSITIVE)) {
     bool allowed = base::CommandLine::ForCurrentProcess()->
                        HasSwitch(::switches::kTestType);
     Feature::AvailabilityResult result =
@@ -323,7 +324,7 @@ void ScriptContext::OnResponseReceived(const std::string& name,
   DCHECK(thread_checker_.CalledOnValidThread());
   v8::HandleScope handle_scope(isolate());
 
-  scoped_ptr<V8ValueConverter> converter(V8ValueConverter::create());
+  std::unique_ptr<V8ValueConverter> converter(V8ValueConverter::create());
   v8::Local<v8::Value> argv[] = {
       v8::Integer::New(isolate(), request_id),
       v8::String::NewFromUtf8(isolate(), name.c_str()),

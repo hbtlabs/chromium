@@ -15,21 +15,28 @@ class TabStackTraceTest(tab_test_case.TabTestCase):
   # Stack traces do not currently work on 10.6, but they are also being
   # disabled shortly so just disable it for now.
   # All platforms except chromeos should at least have a valid minidump.
-  # TODO(dyen): Investigate why crashpad_database_util is not being included.
-  @decorators.Disabled('snowleopard', 'chromeos', 'win')
+  @decorators.Disabled('snowleopard', 'chromeos')
   def testValidDump(self):
     with self.assertRaises(exceptions.DevtoolsTargetCrashException) as c:
       self._tab.Navigate('chrome://crash', timeout=5)
     self.assertTrue(c.exception.is_valid_dump)
 
   # Stack traces aren't working on Android yet.
-  # TODO(dyen): Investigate why windows is crashing in mojo.
   @decorators.Enabled('mac', 'linux')
   @decorators.Disabled('snowleopard')
   def testCrashSymbols(self):
     with self.assertRaises(exceptions.DevtoolsTargetCrashException) as c:
       self._tab.Navigate('chrome://crash', timeout=5)
     self.assertIn('CrashIntentionally', '\n'.join(c.exception.stack_trace))
+
+  # Some platforms do not support full stack traces, this test requires only
+  # minimal symbols to be available.
+  @decorators.Enabled('mac', 'linux', 'win')
+  @decorators.Disabled('snowleopard')
+  def testCrashMinimalSymbols(self):
+    with self.assertRaises(exceptions.DevtoolsTargetCrashException) as c:
+      self._tab.Navigate('chrome://crash', timeout=5)
+    self.assertIn('OnNavigate', '\n'.join(c.exception.stack_trace))
 
   # The breakpad file specific test only apply to platforms which use the
   # breakpad symbol format. This also must be tested in isolation because it can

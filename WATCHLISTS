@@ -365,6 +365,9 @@
     'extension': {
       'filepath': 'extension',
     },
+    'feedback_ui': {
+      'filepath': 'chrome/browser/resources/(md_)?feedback/'
+    },
     'fileapi': {
       'filepath': 'file_system/|' \
                   'fileapi/'
@@ -605,7 +608,8 @@
     },
     'offline_pages': {
       'filepath': 'components/offline_pages/'\
-                  '|chrome/browser/android/offline_pages/'
+                  '|chrome/browser/android/offline_pages/'\
+                  '|chrome/android/java/src/org/chromium/chrome/browser/offlinepages/'
     },
     'omnibox': {
       'filepath': 'chrome/browser/autocomplete/'\
@@ -806,8 +810,7 @@
       'filepath': 'third_party/tcmalloc'
     },
     'telemetry': {
-      'filepath': 'tools/perf/|'\
-                  'tools/telemetry/'
+      'filepath': 'tools/perf/'
     },
     'tests': {
       'filepath': 'apitest|unittest|browsertest|uitest|chrome/test/',
@@ -1345,7 +1348,8 @@
                            'piman+watch@chromium.org'],
     'browser_resources': ['arv+watch@chromium.org'],
     'browser_resources_md': ['michaelpg+watch-md-ui@chromium.org'],
-    'browsing_data': ['markusheintz@chromium.org'],
+    'browsing_data': ['markusheintz@chromium.org',
+                      'msramek+watch@chromium.org'],
     'bubble': ['msw+watch@chromium.org',
                'rouslan+bubble@chromium.org',
                'hcarmona+bubble@chromium.org',
@@ -1422,6 +1426,7 @@
     'events': ['tdresser+watch@chromium.org'],
     'extension': ['chromium-apps-reviews@chromium.org',
                   'extensions-reviews@chromium.org'],
+    'feedback_ui': ['apacible+watch@chromium.org'],
     'fileapi': ['kinuko+fileapi@chromium.org',
                 'nhiroki@chromium.org',
                 'tzik@chromium.org'],
@@ -1496,7 +1501,8 @@
             'pedrosimonetti+watch@chromium.org'],
     'ntp_snippets': ['mcwilliams+watch@chromium.org',
                      'dgn+watch@chromium.org'],
-    'offline_pages': ['dimich+watch@chromium.org'],
+    'offline_pages': ['dimich+watch@chromium.org',
+                      'fgorski+watch@chromium.org'],
     'omnibox': ['suzhe@chromium.org'],
     'options': ['dbeam+watch-options@chromium.org',
                 'michaelpg+watch-options@chromium.org'],

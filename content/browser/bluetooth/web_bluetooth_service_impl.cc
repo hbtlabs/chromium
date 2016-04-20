@@ -91,7 +91,15 @@ void WebBluetoothServiceImpl::DidFinishNavigation(
       navigation_handle->GetRenderFrameHost() == render_frame_host_ &&
       !navigation_handle->IsSamePage()) {
     // After navigation we need to clear the frame's state.
-    characteristic_id_to_notify_session_.clear();
+    ClearState();
+  }
+}
+
+void WebBluetoothServiceImpl::AdapterPresentChanged(
+    device::BluetoothAdapter* adapter,
+    bool present) {
+  if (!present) {
+    ClearState();
   }
 }
 
@@ -133,6 +141,42 @@ void WebBluetoothServiceImpl::SetClient(
     blink::mojom::WebBluetoothServiceClientAssociatedPtrInfo client) {
   DCHECK(!client_.get());
   client_.Bind(std::move(client));
+}
+
+void WebBluetoothServiceImpl::RemoteCharacteristicReadValue(
+    const mojo::String& characteristic_instance_id,
+    const RemoteCharacteristicReadValueCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RecordWebBluetoothFunctionCall(
+      UMAWebBluetoothFunction::CHARACTERISTIC_READ_VALUE);
+
+  const CacheQueryResult query_result =
+      GetBluetoothDispatcherHost()->QueryCacheForCharacteristic(
+          GetOrigin(), characteristic_instance_id);
+
+  if (query_result.outcome == CacheQueryOutcome::BAD_RENDERER) {
+    return;
+  }
+
+  if (query_result.outcome != CacheQueryOutcome::SUCCESS) {
+    RecordCharacteristicReadValueOutcome(query_result.outcome);
+    callback.Run(query_result.GetWebError(), nullptr /* value */);
+    return;
+  }
+
+  if (BluetoothBlacklist::Get().IsExcludedFromReads(
+          query_result.characteristic->GetUUID())) {
+    RecordCharacteristicReadValueOutcome(UMAGATTOperationOutcome::BLACKLISTED);
+    callback.Run(blink::mojom::WebBluetoothError::BLACKLISTED_READ,
+                 nullptr /* value */);
+    return;
+  }
+
+  query_result.characteristic->ReadRemoteCharacteristic(
+      base::Bind(&WebBluetoothServiceImpl::OnReadValueSuccess,
+                 weak_ptr_factory_.GetWeakPtr(), callback),
+      base::Bind(&WebBluetoothServiceImpl::OnReadValueFailed,
+                 weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void WebBluetoothServiceImpl::RemoteCharacteristicWriteValue(
@@ -258,6 +302,24 @@ void WebBluetoothServiceImpl::RemoteCharacteristicStopNotifications(
       weak_ptr_factory_.GetWeakPtr(), characteristic_instance_id, callback));
 }
 
+void WebBluetoothServiceImpl::OnReadValueSuccess(
+    const RemoteCharacteristicReadValueCallback& callback,
+    const std::vector<uint8_t>& value) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  RecordCharacteristicReadValueOutcome(UMAGATTOperationOutcome::SUCCESS);
+  callback.Run(blink::mojom::WebBluetoothError::SUCCESS,
+               mojo::Array<uint8_t>::From(value));
+}
+
+void WebBluetoothServiceImpl::OnReadValueFailed(
+    const RemoteCharacteristicReadValueCallback& callback,
+    device::BluetoothGattService::GattErrorCode error_code) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  callback.Run(TranslateGATTErrorAndRecord(
+                   error_code, UMAGATTOperation::CHARACTERISTIC_READ),
+               nullptr /* value */);
+}
+
 void WebBluetoothServiceImpl::OnWriteValueSuccess(
     const RemoteCharacteristicWriteValueCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -320,6 +382,10 @@ void WebBluetoothServiceImpl::CrashRendererAndClosePipe(
 
 url::Origin WebBluetoothServiceImpl::GetOrigin() {
   return render_frame_host_->GetLastCommittedOrigin();
+}
+
+void WebBluetoothServiceImpl::ClearState() {
+  characteristic_id_to_notify_session_.clear();
 }
 
 }  // namespace content

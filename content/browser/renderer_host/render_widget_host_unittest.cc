@@ -24,7 +24,6 @@
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
 #include "content/common/resize_params.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -349,8 +348,7 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
         unhandled_keyboard_event_type_(WebInputEvent::Undefined),
         handle_wheel_event_(false),
         handle_wheel_event_called_(false),
-        unresponsive_timer_fired_(false),
-        text_input_state_(new TextInputState()) {}
+        unresponsive_timer_fired_(false) {}
   ~MockRenderWidgetHostDelegate() override {}
 
   // Tests that make sure we ignore keyboard event acknowledgments to events we
@@ -386,10 +384,6 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   bool handle_wheel_event_called() const { return handle_wheel_event_called_; }
 
   bool unresponsive_timer_fired() const { return unresponsive_timer_fired_; }
-
-  const TextInputState* GetTextInputState() override {
-    return text_input_state_.get();
-  }
 
  protected:
   bool PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
@@ -432,8 +426,6 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   bool handle_wheel_event_called_;
 
   bool unresponsive_timer_fired_;
-
-  std::unique_ptr<TextInputState> text_input_state_;
 };
 
 // RenderWidgetHostTest --------------------------------------------------------
@@ -1531,24 +1523,24 @@ TEST_F(RenderWidgetHostTest, InputRouterReceivesHasTouchEventHandlers) {
   EXPECT_TRUE(host_->mock_input_router()->message_received_);
 }
 
-ui::LatencyInfo GetLatencyInfoFromInputEvent(RenderWidgetHostProcess* process) {
-  const IPC::Message* message = process->sink().GetUniqueMessageMatching(
-      InputMsg_HandleInputEvent::ID);
-  EXPECT_TRUE(message);
-  InputMsg_HandleInputEvent::Param params;
-  EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
-  process->sink().ClearMessages();
-  return base::get<1>(params);
-}
-
 void CheckLatencyInfoComponentInMessage(RenderWidgetHostProcess* process,
                                         int64_t component_id,
-                                        WebInputEvent::Type input_type) {
-  ui::LatencyInfo latency_info = GetLatencyInfoFromInputEvent(process);
+                                        WebInputEvent::Type expected_type) {
+  EXPECT_EQ(process->sink().message_count(), 1U);
+
+  const IPC::Message* message = process->sink().GetMessageAt(0);
+  EXPECT_EQ(InputMsg_HandleInputEvent::ID, message->type());
+  InputMsg_HandleInputEvent::Param params;
+  EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
+
+  const WebInputEvent* event = base::get<0>(params);
+  ui::LatencyInfo latency_info = base::get<1>(params);
+
+  EXPECT_TRUE(event->type == expected_type);
   EXPECT_TRUE(latency_info.FindLatency(
-      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT,
-      component_id,
-      NULL));
+      ui::INPUT_EVENT_LATENCY_BEGIN_RWH_COMPONENT, component_id, NULL));
+
+  process->sink().ClearMessages();
 }
 
 // Tests that after input event passes through RWHI through ForwardXXXEvent()

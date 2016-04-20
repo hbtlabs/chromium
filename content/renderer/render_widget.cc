@@ -38,7 +38,6 @@
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
 #include "content/common/swapped_out_messages.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -63,6 +62,7 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/resizing_mode_selector.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "ipc/ipc_sync_message.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
@@ -92,7 +92,6 @@
 
 #if defined(OS_ANDROID)
 #include <android/keycodes.h>
-#include "content/renderer/android/synchronous_compositor_factory.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/android/synchronous_compositor_output_surface.h"
 #endif
@@ -205,6 +204,30 @@ content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
   // back to the browser process rather than Mus so we use the |widget| as the
   // RenderWidgetInputHandlerDelegate.
   return widget;
+}
+
+std::unique_ptr<content::WebGraphicsContext3DCommandBufferImpl>
+CreateOffscreenContext(scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+                       const GURL& url) {
+  DCHECK(gpu_channel_host);
+
+  // This is for an offscreen context for the compositor. So the default
+  // framebuffer doesn't need alpha, depth, stencil, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  attributes.lose_context_when_out_of_memory = true;
+
+  bool share_resources = true;
+  bool automatic_flushes = false;
+
+  return base::WrapUnique(new content::WebGraphicsContext3DCommandBufferImpl(
+      gpu::kNullSurfaceHandle, url, gpu_channel_host.get(), attributes,
+      gfx::PreferIntegratedGpu, share_resources, automatic_flushes, nullptr));
 }
 
 }  // namespace
@@ -731,7 +754,7 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
         CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE;
     gpu_channel_host =
         RenderThreadImpl::current()->EstablishGpuChannelSync(cause);
-    if (!gpu_channel_host.get()) {
+    if (!gpu_channel_host) {
       // Cause the compositor to wait and try again.
       return nullptr;
     }
@@ -751,18 +774,25 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
     vulkan_context_provider = cc::VulkanInProcessContextProvider::Create();
     if (vulkan_context_provider) {
       uint32_t output_surface_id = next_output_surface_id_++;
-      return std::unique_ptr<cc::OutputSurface>(
-          new DelegatedCompositorOutputSurface(
-              routing_id(), output_surface_id, context_provider,
-              worker_context_provider, vulkan_context_provider,
-              frame_swap_message_queue_));
+      return base::WrapUnique(new DelegatedCompositorOutputSurface(
+          routing_id(), output_surface_id, context_provider,
+          worker_context_provider, vulkan_context_provider,
+          frame_swap_message_queue_));
     }
 #endif
 
-    context_provider = ContextProviderCommandBuffer::Create(
-        CreateGraphicsContext3D(gpu_channel_host.get()),
-        RENDER_COMPOSITOR_CONTEXT);
-    DCHECK(context_provider);
+    gpu::SharedMemoryLimits limits;
+    // The renderer compositor context doesn't do a lot of stuff, so we don't
+    // expect it to need a lot of space for commands or transfer. Raster and
+    // uploads happen on the worker context instead.
+    limits.command_buffer_size = 64 * 1024;
+    limits.start_transfer_buffer_size = 64 * 1024;
+    limits.min_transfer_buffer_size = 64 * 1024;
+
+    context_provider = new ContextProviderCommandBuffer(
+        CreateOffscreenContext(std::move(gpu_channel_host),
+                               GetURLForGraphicsContext3D()),
+        limits, RENDER_COMPOSITOR_CONTEXT);
     worker_context_provider =
         RenderThreadImpl::current()->SharedWorkerContextProvider();
     if (!worker_context_provider) {
@@ -771,18 +801,13 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
     }
 
 #if defined(OS_ANDROID)
-    if (SynchronousCompositorFactory* factory =
-            SynchronousCompositorFactory::GetInstance()) {
-      uint32_t output_surface_id = next_output_surface_id_++;
-      return factory->CreateOutputSurface(
-          routing_id(), output_surface_id, frame_swap_message_queue_,
-          context_provider, worker_context_provider);
-    } else if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
+    if (RenderThreadImpl::current() &&
+        RenderThreadImpl::current()->sync_compositor_message_filter()) {
       uint32_t output_surface_id = next_output_surface_id_++;
       return base::WrapUnique(new SynchronousCompositorOutputSurface(
           context_provider, worker_context_provider, routing_id(),
-          output_surface_id, content::RenderThreadImpl::current()
-                                 ->sync_compositor_message_filter(),
+          output_surface_id,
+          RenderThreadImpl::current()->sync_compositor_message_filter(),
           frame_swap_message_queue_));
     }
 #endif
@@ -796,15 +821,15 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
       !RenderThreadImpl::current()->layout_test_mode()) {
     DCHECK(compositor_deps_->GetCompositorImplThreadTaskRunner());
     return base::WrapUnique(new DelegatedCompositorOutputSurface(
-        routing_id(), output_surface_id, context_provider,
-        worker_context_provider,
+        routing_id(), output_surface_id, std::move(context_provider),
+        std::move(worker_context_provider),
 #if defined(ENABLE_VULKAN)
         vulkan_context_provider,
 #endif
         frame_swap_message_queue_));
   }
 
-  if (!context_provider.get()) {
+  if (!context_provider) {
     std::unique_ptr<cc::SoftwareOutputDevice> software_device(
         new cc::SoftwareOutputDevice());
 
@@ -817,8 +842,9 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
   }
 
   return base::WrapUnique(new MailboxOutputSurface(
-      routing_id(), output_surface_id, context_provider,
-      worker_context_provider, frame_swap_message_queue_, cc::RGBA_8888));
+      routing_id(), output_surface_id, std::move(context_provider),
+      std::move(worker_context_provider), frame_swap_message_queue_,
+      cc::RGBA_8888));
 }
 
 std::unique_ptr<cc::BeginFrameSource>
@@ -896,40 +922,6 @@ void RenderWidget::OnSwapBuffersComplete() {
 
 void RenderWidget::OnSwapBuffersPosted() {
   TRACE_EVENT0("renderer", "RenderWidget::OnSwapBuffersPosted");
-}
-
-void RenderWidget::RecordFrameTimingEvents(
-    std::unique_ptr<cc::FrameTimingTracker::CompositeTimingSet>
-        composite_events,
-    std::unique_ptr<cc::FrameTimingTracker::MainFrameTimingSet>
-        main_frame_events) {
-  for (const auto& composite_event : *composite_events) {
-    int64_t frameId = composite_event.first;
-    const std::vector<cc::FrameTimingTracker::CompositeTimingEvent>& events =
-        composite_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF()));
-    }
-    webwidget_->recordFrameTimingEvent(blink::WebWidget::CompositeEvent,
-                                       frameId, webEvents);
-  }
-  for (const auto& main_frame_event : *main_frame_events) {
-    int64_t frameId = main_frame_event.first;
-    const std::vector<cc::FrameTimingTracker::MainFrameTimingEvent>& events =
-        main_frame_event.second;
-    std::vector<blink::WebFrameTimingEvent> webEvents;
-    for (size_t i = 0; i < events.size(); ++i) {
-      webEvents.push_back(blink::WebFrameTimingEvent(
-          events[i].frame_id,
-          (events[i].timestamp - base::TimeTicks()).InSecondsF(),
-          (events[i].end_time - base::TimeTicks()).InSecondsF()));
-    }
-    webwidget_->recordFrameTimingEvent(blink::WebWidget::RenderEvent, frameId,
-                                       webEvents);
-  }
 }
 
 void RenderWidget::RequestScheduleAnimation() {
@@ -1076,7 +1068,7 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
       || text_field_is_dirty_
 #endif
       ) {
-    TextInputState params;
+    ViewHostMsg_TextInputState_Params params;
     params.type = new_type;
     params.mode = new_mode;
     params.flags = new_info.flags;
@@ -2094,62 +2086,6 @@ void RenderWidget::didUpdateTextOfFocusedElementByNonUserInput() {
   if (!IsUsingImeThread())
     text_field_is_dirty_ = true;
 #endif
-}
-
-std::unique_ptr<WebGraphicsContext3DCommandBufferImpl>
-RenderWidget::CreateGraphicsContext3D(gpu::GpuChannelHost* gpu_channel_host) {
-  // This is for an offscreen context for raster in the compositor. So the
-  // default framebuffer doesn't need alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
-  attributes.bind_generates_resource = false;
-  attributes.lose_context_when_out_of_memory = true;
-
-  WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
-#if defined(OS_ANDROID)
-  bool using_synchronous_compositing =
-      SynchronousCompositorFactory::GetInstance() ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kIPCSyncCompositing);
-  // If we raster too fast we become upload bound, and pending
-  // uploads consume memory. For maximum upload throughput, we would
-  // want to allow for upload_throughput * pipeline_time of pending
-  // uploads, after which we are just wasting memory. Since we don't
-  // know our upload throughput yet, this just caps our memory usage.
-  // Synchronous compositor uses half because synchronous compositor
-  // pipeline is only one frame deep. But twice of half for low end
-  // because 16bit texture is not supported.
-  size_t divider = using_synchronous_compositing ? 2 : 1;
-  if (base::SysInfo::IsLowEndDevice())
-    divider = 6;
-  // For reference Nexus10 can upload 1MB in about 2.5ms.
-  const double max_mb_uploaded_per_ms = 2.0 / (5 * divider);
-  // Deadline to draw a frame to achieve 60 frames per second.
-  const size_t kMillisecondsPerFrame = 16;
-  // Assuming a two frame deep pipeline between the CPU and the GPU.
-  size_t max_transfer_buffer_usage_mb =
-      static_cast<size_t>(2 * kMillisecondsPerFrame * max_mb_uploaded_per_ms);
-  static const size_t kBytesPerMegabyte = 1024 * 1024;
-  // We keep the MappedMemoryReclaimLimit the same as the upload limit
-  // to avoid unnecessarily stalling the compositor thread.
-  limits.mapped_memory_reclaim_limit =
-      max_transfer_buffer_usage_mb * kBytesPerMegabyte;
-#endif
-  limits.command_buffer_size = 64 * 1024;
-  limits.start_transfer_buffer_size = 64 * 1024;
-  limits.min_transfer_buffer_size = 64 * 1024;
-
-  bool share_resources = true;
-  bool automatic_flushes = false;
-
-  return base::WrapUnique(new WebGraphicsContext3DCommandBufferImpl(
-      gpu::kNullSurfaceHandle, GetURLForGraphicsContext3D(), gpu_channel_host,
-      attributes, gfx::PreferIntegratedGpu, share_resources, automatic_flushes,
-      limits, nullptr));
 }
 
 void RenderWidget::RegisterRenderFrameProxy(RenderFrameProxy* proxy) {

@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include <map>
+#include <memory>
 #include <queue>
 #include <string>
 
@@ -27,8 +28,8 @@
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "gpu/gpu_export.h"
 #include "ipc/ipc_listener.h"
+#include "ui/events/latency_info.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/latency_info/latency_info.h"
 
 struct GPUCommandBufferConsoleMessage;
 
@@ -207,7 +208,7 @@ class GPU_EXPORT CommandBufferProxyImpl
   State last_state_;
 
   // The shared memory area used to update state.
-  scoped_ptr<base::SharedMemory> shared_state_shm_;
+  std::unique_ptr<base::SharedMemory> shared_state_shm_;
 
   // |*this| is owned by |*channel_| and so is always outlived by it, so using a
   // raw pointer is ok.

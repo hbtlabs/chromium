@@ -93,7 +93,7 @@ template("android_lint") {
         "--jar-path",
         rebase_path(invoker.jar_path, root_build_dir),
         "--java-files=$_rebased_java_files",
-        "--classpath=@FileArg($_rebased_build_config:javac:classpath)",
+        "--classpath=@FileArg($_rebased_build_config:javac:interface_classpath)",
       ]
     }
   }
@@ -679,9 +679,14 @@ template("emma_instr") {
         rebase_path("//", root_build_dir),
         "--emma-jar",
         rebase_path(_emma_jar, root_build_dir),
-        "--filter-string",
-        emma_filter,
       ]
+
+      if (emma_filter != "") {
+        args += [
+          "--filter-string",
+          emma_filter,
+        ]
+      }
     }
   } else {
     _output_jar_target = "${target_name}__copy_jar"
@@ -1935,6 +1940,7 @@ template("copy_ex") {
     sources = []
     forward_variables_from(invoker,
                            [
+                             "data",
                              "deps",
                              "inputs",
                              "sources",
@@ -2077,13 +2083,18 @@ template("test_runner_script") {
       defined(invoker.incremental_install) && invoker.incremental_install
 
   action(target_name) {
+    data_deps = []
+    deps = []
+    forward_variables_from(invoker,
+                           [
+                             "data_deps",
+                             "deps",
+                           ])
+
     script = "//build/android/gyp/create_test_runner_script.py"
     depfile = "$target_gen_dir/$target_name.d"
-    deps = []
 
-    datadeps = [
-      "//build/android:test_runner_py",
-    ]
+    data_deps += [ "//build/android:test_runner_py" ]
 
     test_runner_args = [
       _test_type,

@@ -10,9 +10,11 @@
 
 #include <algorithm>
 #include <list>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
+
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -272,6 +274,8 @@ class GPU_EXPORT Texture {
 
   void ApplyFormatWorkarounds(FeatureInfo* feature_info);
 
+  bool EmulatingRGB();
+
  private:
   friend class MailboxManagerImpl;
   friend class MailboxManagerSync;
@@ -491,6 +495,10 @@ class GPU_EXPORT Texture {
   // texture.
   void UpdateHasImages();
 
+  // Updates the flag that indicates whether this texture requires RGB
+  // emulation.
+  void UpdateEmulatingRGB();
+
   // Increment the framebuffer state change count in all the managers
   // referencing this texture.
   void IncAllFramebufferStateChangeCount();
@@ -595,6 +603,8 @@ class GPU_EXPORT Texture {
 
   const CompatibilitySwizzle* compatibility_swizzle_;
 
+  bool emulating_rgb_;
+
   DISALLOW_COPY_AND_ASSIGN(Texture);
 };
 
@@ -641,7 +651,7 @@ class GPU_EXPORT TextureRef : public base::RefCounted<TextureRef> {
 struct DecoderTextureState {
   // total_texture_upload_time automatically initialized to 0 in default
   // constructor.
-  explicit DecoderTextureState(const FeatureInfo::Workarounds& workarounds)
+  explicit DecoderTextureState(const GpuDriverBugWorkarounds& workarounds)
       : tex_image_failed(false),
         texture_upload_count(0),
         texsubimage_faster_than_teximage(
@@ -1086,7 +1096,7 @@ class GPU_EXPORT TextureManager : public base::trace_event::MemoryDumpProvider {
                       TextureRef* ref);
 
   MemoryTypeTracker* GetMemTracker();
-  scoped_ptr<MemoryTypeTracker> memory_type_tracker_;
+  std::unique_ptr<MemoryTypeTracker> memory_type_tracker_;
   MemoryTracker* memory_tracker_;
 
   scoped_refptr<FeatureInfo> feature_info_;

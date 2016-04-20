@@ -13,6 +13,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
+#include "ash/wm/common/window_animation_types.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/command_line.h"
@@ -227,10 +228,10 @@ bool AnimateShowWindow(aura::Window* window) {
   }
 
   switch (::wm::GetWindowVisibilityAnimationType(window)) {
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
       AnimateShowWindow_Minimize(window);
       return true;
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
       AnimateShowWindow_BrightnessGrayscale(window);
       return true;
     default:
@@ -246,10 +247,10 @@ bool AnimateHideWindow(aura::Window* window) {
   }
 
   switch (::wm::GetWindowVisibilityAnimationType(window)) {
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_MINIMIZE:
       AnimateHideWindow_Minimize(window);
       return true;
-    case WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
+    case wm::WINDOW_VISIBILITY_ANIMATION_TYPE_BRIGHTNESS_GRAYSCALE:
       AnimateHideWindow_BrightnessGrayscale(window);
       return true;
     default:
@@ -468,17 +469,12 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
   if (item_rect.width() != 0 || item_rect.height() != 0) {
     if (shelf->shelf_layout_manager()->visibility_state() == SHELF_AUTO_HIDE) {
       gfx::Rect shelf_bounds = shelf->shelf_widget()->GetWindowBoundsInScreen();
-      switch (shelf->alignment()) {
-        case SHELF_ALIGNMENT_BOTTOM:
-          item_rect.set_y(shelf_bounds.y());
-          break;
-        case SHELF_ALIGNMENT_LEFT:
-          item_rect.set_x(shelf_bounds.right());
-          break;
-        case SHELF_ALIGNMENT_RIGHT:
-          item_rect.set_x(shelf_bounds.x());
-          break;
-      }
+      if (shelf->alignment() == SHELF_ALIGNMENT_LEFT)
+        item_rect.set_x(shelf_bounds.right());
+      else if (shelf->alignment() == SHELF_ALIGNMENT_RIGHT)
+        item_rect.set_x(shelf_bounds.x());
+      else
+        item_rect.set_y(shelf_bounds.y());
       return item_rect;
     }
   }

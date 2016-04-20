@@ -247,7 +247,7 @@ base::TaskRunner* RenderMessageFilter::OverrideTaskRunnerForMessage(
 #endif
   // Always query audio device parameters on the audio thread.
   if (message.type() == ViewHostMsg_GetAudioHardwareConfig::ID)
-    return audio_manager_->GetTaskRunner().get();
+    return audio_manager_->GetTaskRunner();
   return NULL;
 }
 
@@ -493,8 +493,7 @@ void RenderMessageFilter::OnAllocatedSharedBitmap(
     size_t buffer_size,
     const base::SharedMemoryHandle& handle,
     const cc::SharedBitmapId& id) {
-  bitmap_manager_client_.ChildAllocatedSharedBitmap(buffer_size, handle,
-                                                    PeerHandle(), id);
+  bitmap_manager_client_.ChildAllocatedSharedBitmap(buffer_size, handle, id);
 }
 
 void RenderMessageFilter::OnDeletedSharedBitmap(const cc::SharedBitmapId& id) {

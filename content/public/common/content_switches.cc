@@ -11,6 +11,14 @@ namespace switches {
 // have an effect. 0 disables MSAA.
 const char kAcceleratedCanvas2dMSAASampleCount[] = "canvas-msaa-sample-count";
 
+// Enables a new tuning of the WebRTC Acoustic Echo Canceler (AEC). The new
+// tuning aims at resolving two issues with the AEC:
+// https://bugs.chromium.org/p/webrtc/issues/detail?id=5777
+// https://bugs.chromium.org/p/webrtc/issues/detail?id=5778
+// TODO(hlundin): Remove this switch when experimentation is over;
+// crbug.com/603821.
+const char kAecRefinedAdaptiveFilter[] = "aec-refined-adaptive-filter";
+
 // Override the default minimum starting volume of the Automatic Gain Control
 // algorithm in WebRTC used with audio tracks from getUserMedia.
 // The valid range is 12-255. Values outside that range will be clamped
@@ -389,10 +397,6 @@ const char kEnableMemoryBenchmarking[]      = "enable-memory-benchmarking";
 
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
-
-// Enables action button icons for the Web Notification API.
-const char kEnableNotificationActionIcons[] =
-    "enable-notification-action-icons";
 
 // Enables compositor-accelerated touch-screen pinch gestures.
 const char kEnablePinch[]                   = "enable-pinch";
@@ -914,9 +918,6 @@ const char kEnableAdaptiveSelectionHandleOrientation[] =
 
 // Enable drag manipulation of longpress-triggered text selections.
 const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";
-
-// Enable IPC-based synchronous compositing. Used by Android WebView.
-const char kIPCSyncCompositing[]            = "ipc-sync-compositing";
 
 // The telephony region (ISO country code) to use in phone number detection.
 const char kNetworkCountryIso[] = "network-country-iso";

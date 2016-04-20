@@ -59,7 +59,7 @@
 #include "net/ssl/ssl_key_logger.h"
 #endif
 
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
 #include "net/cert_net/nss_ocsp.h"
 #endif
 
@@ -118,7 +118,7 @@ bool EVP_MDToPrivateKeyHash(const EVP_MD* md, SSLPrivateKey::Hash* hash) {
   }
 }
 
-scoped_ptr<base::Value> NetLogPrivateKeyOperationCallback(
+std::unique_ptr<base::Value> NetLogPrivateKeyOperationCallback(
     SSLPrivateKey::Type type,
     SSLPrivateKey::Hash hash,
     NetLogCaptureMode mode) {
@@ -151,17 +151,17 @@ scoped_ptr<base::Value> NetLogPrivateKeyOperationCallback(
       break;
   }
 
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue);
   value->SetString("type", type_str);
   value->SetString("hash", hash_str);
   return std::move(value);
 }
 
-scoped_ptr<base::Value> NetLogChannelIDLookupCallback(
+std::unique_ptr<base::Value> NetLogChannelIDLookupCallback(
     ChannelIDService* channel_id_service,
     NetLogCaptureMode capture_mode) {
   ChannelIDStore* store = channel_id_service->GetChannelIDStore();
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetBoolean("ephemeral", store->IsEphemeral());
   dict->SetString("service", base::HexEncode(&channel_id_service,
                                              sizeof(channel_id_service)));
@@ -169,11 +169,11 @@ scoped_ptr<base::Value> NetLogChannelIDLookupCallback(
   return std::move(dict);
 }
 
-scoped_ptr<base::Value> NetLogChannelIDLookupCompleteCallback(
+std::unique_ptr<base::Value> NetLogChannelIDLookupCompleteCallback(
     crypto::ECPrivateKey* key,
     int result,
     NetLogCaptureMode capture_mode) {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger("net_error", result);
   std::string raw_key;
   if (result == OK && key && key->ExportRawPublicKey(&raw_key)) {
@@ -360,7 +360,7 @@ class SSLClientSocketOpenSSL::SSLContext {
   ScopedSSL_CTX ssl_ctx_;
 
 #if !defined(OS_NACL)
-  scoped_ptr<SSLKeyLogger> ssl_key_logger_;
+  std::unique_ptr<SSLKeyLogger> ssl_key_logger_;
 #endif
 
   // TODO(davidben): Use a separate cache per URLRequestContext.
@@ -396,7 +396,7 @@ class SSLClientSocketOpenSSL::PeerCertificateChain {
   // this will behave as if Reset(NULL) was called.
   void Reset(STACK_OF(X509)* chain);
 
-  // Note that when USE_OPENSSL is defined, OSCertHandle is X509*
+  // Note that when USE_OPENSSL_CERTS is defined, OSCertHandle is X509*
   scoped_refptr<X509Certificate> AsOSChain() const;
 
   size_t size() const {
@@ -468,7 +468,7 @@ void SSLClientSocket::ClearSessionCache() {
 }
 
 SSLClientSocketOpenSSL::SSLClientSocketOpenSSL(
-    scoped_ptr<ClientSocketHandle> transport_socket,
+    std::unique_ptr<ClientSocketHandle> transport_socket,
     const HostPortPair& host_and_port,
     const SSLConfig& ssl_config,
     const SSLClientSocketContext& context)
@@ -877,7 +877,7 @@ int SSLClientSocketOpenSSL::Init() {
   DCHECK(!ssl_);
   DCHECK(!transport_bio_);
 
-#if defined(USE_NSS_VERIFIER)
+#if defined(USE_NSS_CERTS)
   if (ssl_config_.cert_io_enabled) {
     // TODO(davidben): Move this out of SSLClientSocket. See
     // https://crbug.com/539520.

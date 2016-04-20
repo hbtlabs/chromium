@@ -84,7 +84,6 @@ class WebContentDecryptionModule;
 class WebPresentationClient;
 class WebPushClient;
 class WebSecurityOrigin;
-class WebWakeLockClient;
 enum class WebCachePolicy;
 struct WebCompositionUnderline;
 struct WebContextMenuData;
@@ -578,7 +577,6 @@ class CONTENT_EXPORT RenderFrameImpl
                            unsigned long long requested_size,
                            blink::WebStorageQuotaCallbacks callbacks) override;
   void willOpenWebSocket(blink::WebSocketHandle* handle) override;
-  blink::WebWakeLockClient* wakeLockClient() override;
   blink::WebGeolocationClient* geolocationClient() override;
   blink::WebPushClient* pushClient() override;
   blink::WebPresentationClient* presentationClient() override;
@@ -618,7 +616,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void unregisterProtocolHandler(const blink::WebString& scheme,
                                  const blink::WebURL& url) override;
   blink::WebBluetooth* bluetooth() override;
-  blink::WebUSBClient* usbClient() override;
   void checkIfAudioSinkExistsAndIsAuthorized(
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
@@ -1158,8 +1155,6 @@ class CONTENT_EXPORT RenderFrameImpl
   // local roots.
   DevToolsAgent* devtools_agent_;
 
-  WakeLockDispatcher* wakelock_dispatcher_;
-
   // The geolocation dispatcher attached to this frame, lazily initialized.
   GeolocationDispatcher* geolocation_dispatcher_;
 
@@ -1197,8 +1192,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   std::unique_ptr<blink::WebBluetooth> bluetooth_;
 
-  std::unique_ptr<blink::WebUSBClient> usb_client_;
-
   // Manages play, pause notifications for WebMediaPlayer implementations; its
   // lifetime is tied to the RenderFrame via the RenderFrameObserver interface.
   media::RendererWebMediaPlayerDelegate* media_player_delegate_;
@@ -1224,7 +1217,7 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<ExternalPopupMenu> external_popup_menu_;
 #endif
 
-  FrameBlameContext* blame_context_;  // Not owned.
+  std::unique_ptr<FrameBlameContext> blame_context_;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_;
 

@@ -7,14 +7,14 @@
       "drawsContent": true,
       "paintInvalidations": [
         {
-          "object": "InlineBox",
-          "rect": [0, 0, 0, 0],
-          "reason": "full"
+          "object": "LayoutBlockFlow UL",
+          "rect": [8, 83, 789, 30],
+          "reason": "bounds change"
         },
         {
-          "object": "InlineTextBox 'Lorem Ipsum'",
-          "rect": [0, 0, 0, 0],
-          "reason": "full"
+          "object": "LayoutBlockFlow BODY",
+          "rect": [8, 108, 789, 5],
+          "reason": "incremental"
         },
         {
           "object": "LayoutBlockFlow A id='link'",
@@ -22,23 +22,17 @@
           "reason": "style change"
         },
         {
-          "object": "LayoutBlockFlow UL",
-          "rect": [8, 83, 789, 30],
-          "reason": "bounds change"
-        },
-        {
           "object": "LayoutListItem LI",
           "rect": [30, 83, 767, 30],
           "reason": "bounds change"
         },
         {
-          "object": "RootInlineBox",
-          "rect": [0, 0, 0, 0],
-          "reason": "full"
+          "object": "LayoutBlockFlow BODY",
+          "rect": [792, 16, 5, 97],
+          "reason": "incremental"
         },
         {
           "object": "RootInlineBox",
-          "rect": [0, 0, 0, 0],
           "reason": "full"
         }
       ]

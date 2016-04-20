@@ -9,7 +9,8 @@
 
 #include <stdint.h>
 
-#include "base/containers/hash_tables.h"
+#include <unordered_map>
+
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -192,13 +193,13 @@ class NET_EXPORT_PRIVATE BackendImplV3 : public Backend {
   int DoomEntriesSince(base::Time initial_time,
                        const CompletionCallback& callback) override;
   int CalculateSizeOfAllEntries(const CompletionCallback& callback) override;
-  scoped_ptr<Iterator> CreateIterator() override;
+  std::unique_ptr<Iterator> CreateIterator() override;
   void GetStats(StatsItems* stats) override;
   void OnExternalCacheHit(const std::string& key) override;
 
  private:
   friend class EvictionV3;
-  typedef base::hash_map<CacheAddr, EntryImplV3*> EntriesMap;
+  using EntriesMap = std::unordered_map<CacheAddr, EntryImplV3*>;
   class IteratorImpl;
   class NotImplementedIterator;
   class Worker;
@@ -275,7 +276,7 @@ class NET_EXPORT_PRIVATE BackendImplV3 : public Backend {
   net::NetLog* net_log_;
 
   Stats stats_;  // Usage statistics.
-  scoped_ptr<base::RepeatingTimer> timer_;   // Usage timer.
+  std::unique_ptr<base::RepeatingTimer> timer_;  // Usage timer.
   scoped_refptr<TraceObject> trace_object_;  // Initializes internal tracing.
   base::WeakPtrFactory<BackendImplV3> ptr_factory_;
 

@@ -188,7 +188,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   RenderFrameHostManager(
       FrameTreeNode* frame_tree_node,
       RenderFrameHostDelegate* render_frame_delegate,
-      RenderViewHostDelegate* render_view_delegate,
       RenderWidgetHostDelegate* render_widget_delegate,
       Delegate* delegate);
   ~RenderFrameHostManager();
@@ -705,11 +704,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   void DiscardUnusedFrame(
       std::unique_ptr<RenderFrameHostImpl> render_frame_host);
 
-  // Holds |render_frame_host| until it can be deleted when its swap out ACK
-  // arrives.
-  void MoveToPendingDeleteHosts(
-      std::unique_ptr<RenderFrameHostImpl> render_frame_host);
-
   // Helper method to terminate the pending RenderFrameHost. The frame may be
   // deleted immediately, or it may be kept around in hopes of later reuse.
   void CancelPending();
@@ -751,7 +745,6 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Implemented by the owner of this class.  These delegates are installed into
   // all the RenderFrameHosts that we create.
   RenderFrameHostDelegate* render_frame_delegate_;
-  RenderViewHostDelegate* render_view_delegate_;
   RenderWidgetHostDelegate* render_widget_delegate_;
 
   // Our RenderFrameHost which is responsible for all communication with a child

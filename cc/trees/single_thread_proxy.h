@@ -58,7 +58,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void Stop() override;
   bool SupportsImplScrolling() const override;
   bool MainFrameWillHappenForTesting() override;
-  void SetChildrenNeedBeginFrames(bool children_need_begin_frames) override;
   void SetAuthoritativeVSyncInterval(const base::TimeDelta& interval) override;
   void UpdateTopControlsState(TopControlsState constraints,
                               TopControlsState current,
@@ -76,7 +75,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void ScheduledActionBeginOutputSurfaceCreation() override;
   void ScheduledActionPrepareTiles() override;
   void ScheduledActionInvalidateOutputSurface() override;
-  void SendBeginFramesToChildren(const BeginFrameArgs& args) override;
   void SendBeginMainFrameNotExpectedSoon() override;
 
   // LayerTreeHostImplClient implementation
@@ -108,10 +106,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void DidPrepareTiles() override;
   void DidCompletePageScaleAnimationOnImplThread() override;
   void OnDrawForOutputSurface(bool resourceless_software_draw) override;
-  void PostFrameTimingEventsOnImplThread(
-      std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override;
 
   void RequestNewOutputSurface();
 

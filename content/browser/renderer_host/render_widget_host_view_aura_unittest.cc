@@ -43,7 +43,6 @@
 #include "content/common/input/input_event_utils.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
-#include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
@@ -155,8 +154,7 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
 
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
  public:
-  MockRenderWidgetHostDelegate()
-      : rwh_(nullptr), text_input_state_(new TextInputState()) {}
+  MockRenderWidgetHostDelegate() : rwh_(nullptr) {}
   ~MockRenderWidgetHostDelegate() override {}
   const NativeWebKeyboardEvent* last_event() const { return last_event_.get(); }
   void set_widget_host(RenderWidgetHostImpl* rwh) { rwh_ = rwh; }
@@ -168,11 +166,6 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
     last_event_.reset(new NativeWebKeyboardEvent(event));
     return true;
   }
-
-  const TextInputState* GetTextInputState() override {
-    return text_input_state_.get();
-  }
-
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -185,7 +178,6 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
  private:
   std::unique_ptr<NativeWebKeyboardEvent> last_event_;
   RenderWidgetHostImpl* rwh_;
-  std::unique_ptr<TextInputState> text_input_state_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHostDelegate);
 };
@@ -2138,8 +2130,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
 
   for (size_t i = 0; i < (renderer_count - 1) * handles_per_frame; i++) {
     bitmap_client.ChildAllocatedSharedBitmap(
-        1, base::SharedMemory::NULLHandle(), base::GetCurrentProcessHandle(),
-        cc::SharedBitmap::GenerateId());
+        1, base::SharedMemory::NULLHandle(), cc::SharedBitmap::GenerateId());
   }
 
   // Hiding this last bitmap should evict all but two frames.

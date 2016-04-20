@@ -32,6 +32,7 @@ typedef UIView<CRWScrollableContent> CRWContentView;
 
 namespace base {
 class DictionaryValue;
+class Value;
 }
 
 namespace web {
@@ -39,6 +40,7 @@ namespace web {
 class BrowserState;
 class NavigationManager;
 class WebInterstitial;
+class WebStateDelegate;
 class WebStateObserver;
 class WebStatePolicyDecider;
 class WebStateWeakPtrFactory;
@@ -84,6 +86,15 @@ class WebState : public base::SupportsUserData {
 
   ~WebState() override {}
 
+  // Gets/Sets the delegate.
+  virtual WebStateDelegate* GetDelegate() = 0;
+  virtual void SetDelegate(WebStateDelegate* delegate) = 0;
+
+  // Whether or not a web view is allowed to exist in this WebState. Defaults
+  // to false; this should be enabled before attempting to access the view.
+  virtual bool IsWebUsageEnabled() const = 0;
+  virtual void SetWebUsageEnabled(bool enabled) = 0;
+
   // The view containing the contents of the current web page. If the view has
   // been purged due to low memory, this will recreate it. It is up to the
   // caller to size the view.
@@ -102,6 +113,16 @@ class WebState : public base::SupportsUserData {
 
   // Gets the CRWJSInjectionReceiver associated with this WebState.
   virtual CRWJSInjectionReceiver* GetJSInjectionReceiver() const = 0;
+
+  // Runs JavaScript in the main frame's context. If a callback is provided, it
+  // will be used to return the result, when the result is available or script
+  // execution has failed due to an error.
+  // NOTE: Integer values will be returned as TYPE_DOUBLE because of underlying
+  // library limitation.
+  typedef base::Callback<void(const base::Value*)> JavaScriptResultCallback;
+  virtual void ExecuteJavaScript(const base::string16& javascript) = 0;
+  virtual void ExecuteJavaScript(const base::string16& javascript,
+                                 const JavaScriptResultCallback& callback) = 0;
 
   // Gets the contents MIME type.
   virtual const std::string& GetContentsMimeType() const = 0;

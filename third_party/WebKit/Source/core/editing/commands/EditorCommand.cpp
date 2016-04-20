@@ -104,6 +104,33 @@ WebEditingCommandType WebEditingCommandTypeFromCommandName(const String& command
     return WebEditingCommandType::Invalid;
 }
 
+InputEvent::InputType InputTypeFromCommandType(WebEditingCommandType commandType)
+{
+    switch (commandType) {
+    case WebEditingCommandType::Delete:
+    case WebEditingCommandType::DeleteBackward:
+    case WebEditingCommandType::DeleteBackwardByDecomposingPreviousCharacter:
+    case WebEditingCommandType::DeleteForward:
+    case WebEditingCommandType::DeleteToBeginningOfLine:
+    case WebEditingCommandType::DeleteToBeginningOfParagraph:
+    case WebEditingCommandType::DeleteToEndOfLine:
+    case WebEditingCommandType::DeleteToEndOfParagraph:
+    case WebEditingCommandType::DeleteToMark:
+    case WebEditingCommandType::DeleteWordBackward:
+    case WebEditingCommandType::DeleteWordForward:
+        return InputEvent::InputType::DeleteContent;
+    case WebEditingCommandType::Redo:
+        return InputEvent::InputType::Redo;
+    case WebEditingCommandType::Undo:
+        return InputEvent::InputType::Undo;
+    case WebEditingCommandType::InsertBacktab:
+    case WebEditingCommandType::InsertText:
+        return InputEvent::InputType::InsertText;
+    default:
+        return InputEvent::InputType::None;
+    }
+}
+
 } // anonymous namespace
 
 class EditorInternalCommand {
@@ -231,13 +258,13 @@ static bool executeApplyParagraphStyle(LocalFrame& frame, EditorCommandSource so
 
 static bool executeInsertFragment(LocalFrame& frame, DocumentFragment* fragment)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return ReplaceSelectionCommand::create(*frame.document(), fragment, ReplaceSelectionCommand::PreventNesting, EditActionUnspecified)->apply();
 }
 
 static bool executeInsertElement(LocalFrame& frame, HTMLElement* content)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     DocumentFragment* fragment = DocumentFragment::create(*frame.document());
     TrackExceptionState exceptionState;
     fragment->appendChild(content, exceptionState);
@@ -356,7 +383,7 @@ static bool executeCreateLink(LocalFrame& frame, Event*, EditorCommandSource, co
 {
     if (value.isEmpty())
         return false;
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return CreateLinkCommand::create(*frame.document(), value)->apply();
 }
 
@@ -394,7 +421,7 @@ static bool executeDelete(LocalFrame& frame, Event*, EditorCommandSource source,
     case CommandFromDOM:
         // If the current selection is a caret, delete the preceding character. IE performs forwardDelete, but we currently side with Firefox.
         // Doesn't scroll to make the selection visible, or modify the kill ring (this time, siding with IE, not Firefox).
-        ASSERT(frame.document());
+        DCHECK(frame.document());
         TypingCommand::deleteKeyPressed(*frame.document(), frame.selection().granularity() == WordGranularity ? TypingCommand::SmartDelete : 0);
         return true;
     }
@@ -454,7 +481,7 @@ static bool executeDeleteToMark(LocalFrame& frame, Event*, EditorCommandSource, 
     const EphemeralRange mark = frame.editor().mark().toNormalizedEphemeralRange();
     if (mark.isNotNull()) {
         bool selected = frame.selection().setSelectedRange(unionEphemeralRanges(mark, frame.editor().selectedRange()), TextAffinity::Downstream, SelectionDirectionalMode::NonDirectional, FrameSelection::CloseTyping);
-        ASSERT(selected);
+        DCHECK(selected);
         if (!selected)
             return false;
     }
@@ -514,7 +541,7 @@ static bool executeFormatBlock(LocalFrame& frame, Event*, EditorCommandSource, c
         return false;
     QualifiedName qualifiedTagName(prefix, localName, xhtmlNamespaceURI);
 
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     FormatBlockCommand* command = FormatBlockCommand::create(*frame.document(), qualifiedTagName);
     command->apply();
     return command->didApply();
@@ -531,7 +558,7 @@ static bool executeForwardDelete(LocalFrame& frame, Event*, EditorCommandSource 
         // Doesn't scroll to make the selection visible, or modify the kill ring.
         // ForwardDelete is not implemented in IE or Firefox, so this behavior is only needed for
         // backward compatibility with ourselves, and for consistency with Delete.
-        ASSERT(frame.document());
+        DCHECK(frame.document());
         TypingCommand::forwardDeleteKeyPressed(*frame.document(), &editingState);
         if (editingState.isAborted())
             return false;
@@ -549,7 +576,7 @@ static bool executeIgnoreSpelling(LocalFrame& frame, Event*, EditorCommandSource
 
 static bool executeIndent(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return IndentOutdentCommand::create(*frame.document(), IndentOutdentCommand::Indent)->apply();
 }
 
@@ -560,7 +587,7 @@ static bool executeInsertBacktab(LocalFrame& frame, Event* event, EditorCommandS
 
 static bool executeInsertHorizontalRule(LocalFrame& frame, Event*, EditorCommandSource, const String& value)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     HTMLHRElement* rule = HTMLHRElement::create(*frame.document());
     if (!value.isEmpty())
         rule->setIdAttribute(AtomicString(value));
@@ -569,13 +596,13 @@ static bool executeInsertHorizontalRule(LocalFrame& frame, Event*, EditorCommand
 
 static bool executeInsertHTML(LocalFrame& frame, Event*, EditorCommandSource, const String& value)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return executeInsertFragment(frame, createFragmentFromMarkup(*frame.document(), value, ""));
 }
 
 static bool executeInsertImage(LocalFrame& frame, Event*, EditorCommandSource, const String& value)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     HTMLImageElement* image = HTMLImageElement::create(*frame.document());
     if (!value.isEmpty())
         image->setSrc(value);
@@ -591,7 +618,7 @@ static bool executeInsertLineBreak(LocalFrame& frame, Event* event, EditorComman
         // Doesn't scroll to make the selection visible, or modify the kill ring.
         // InsertLineBreak is not implemented in IE or Firefox, so this behavior is only needed for
         // backward compatibility with ourselves, and for consistency with other commands.
-        ASSERT(frame.document());
+        DCHECK(frame.document());
         return TypingCommand::insertLineBreak(*frame.document());
     }
     ASSERT_NOT_REACHED();
@@ -606,19 +633,19 @@ static bool executeInsertNewline(LocalFrame& frame, Event* event, EditorCommandS
 
 static bool executeInsertNewlineInQuotedContent(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return TypingCommand::insertParagraphSeparatorInQuotedContent(*frame.document());
 }
 
 static bool executeInsertOrderedList(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return InsertListCommand::create(*frame.document(), InsertListCommand::OrderedList)->apply();
 }
 
 static bool executeInsertParagraph(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return TypingCommand::insertParagraphSeparator(*frame.document());
 }
 
@@ -629,14 +656,14 @@ static bool executeInsertTab(LocalFrame& frame, Event* event, EditorCommandSourc
 
 static bool executeInsertText(LocalFrame& frame, Event*, EditorCommandSource, const String& value)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     TypingCommand::insertText(*frame.document(), value, 0);
     return true;
 }
 
 static bool executeInsertUnorderedList(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return InsertListCommand::create(*frame.document(), InsertListCommand::UnorderedList)->apply();
 }
 
@@ -984,7 +1011,7 @@ static bool executeMoveToRightEndOfLineAndModifySelection(LocalFrame& frame, Eve
 
 static bool executeOutdent(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return IndentOutdentCommand::create(*frame.document(), IndentOutdentCommand::Outdent)->apply();
 }
 
@@ -1204,7 +1231,7 @@ static bool executeUndo(LocalFrame& frame, Event*, EditorCommandSource, const St
 
 static bool executeUnlink(LocalFrame& frame, Event*, EditorCommandSource, const String&)
 {
-    ASSERT(frame.document());
+    DCHECK(frame.document());
     return UnlinkCommand::create(*frame.document())->apply();
 }
 
@@ -1735,9 +1762,9 @@ Editor::Command::Command(const EditorInternalCommand* command, EditorCommandSour
 {
     // Use separate assertions so we can tell which bad thing happened.
     if (!command)
-        ASSERT(!m_frame);
+        DCHECK(!m_frame);
     else
-        ASSERT(m_frame);
+        DCHECK(m_frame);
 }
 
 bool Editor::Command::execute(const String& parameter, Event* triggeringEvent) const
@@ -1751,6 +1778,19 @@ bool Editor::Command::execute(const String& parameter, Event* triggeringEvent) c
         if (!isSupported() || !m_frame || !m_command->allowExecutionWhenDisabled)
             return false;
     }
+
+    if (m_source == CommandFromMenuOrKeyBinding) {
+        InputEvent::InputType inputType = InputTypeFromCommandType(m_command->commandType);
+        if (inputType != InputEvent::InputType::None) {
+            if (dispatchBeforeInputEditorCommand(eventTargetNodeForDocument(m_frame->document()), inputType) != DispatchEventResult::NotCanceled)
+                return true;
+        }
+    }
+
+    // 'beforeinput' event handler may destroy |frame()|.
+    if (!m_frame || !frame().document())
+        return false;
+
     frame().document()->updateLayoutIgnorePendingStylesheets();
     DEFINE_STATIC_LOCAL(SparseHistogram, commandHistogram, ("WebCore.Editing.Commands"));
     commandHistogram.sample(static_cast<int>(m_command->commandType));

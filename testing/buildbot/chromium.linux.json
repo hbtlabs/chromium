@@ -140,19 +140,6 @@
         "test": "components_browsertests"
       },
       {
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
-            }
-          ],
-          "hard_timeout": 1200
-        },
-        "test": "chrome_public_test"
-      },
-      {
         "args": [
           "--isolate_file_path=src/components/components_unittests.isolate"
         ],
@@ -163,8 +150,8 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "build.id": "KTU84P",
-              "product.board": "hammerhead"
+              "device_os": "KTU84P",
+              "device_type": "hammerhead"
             }
           ],
           "hard_timeout": 960
@@ -247,6 +234,9 @@
     "instrumentation_tests": [
       {
         "test": "android_webview_test_apk"
+      },
+      {
+        "test": "chrome_public_test_apk"
       },
       {
         "test": "chrome_sync_shell_test_apk"
@@ -567,7 +557,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -1028,7 +1018,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {
@@ -1427,7 +1417,7 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "app_list_shower_unittests"
+        "test": "app_list_presenter_unittests"
       },
       {
         "swarming": {

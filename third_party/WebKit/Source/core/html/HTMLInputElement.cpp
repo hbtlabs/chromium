@@ -225,7 +225,7 @@ bool HTMLInputElement::valueMissing() const
 
 bool HTMLInputElement::hasBadInput() const
 {
-    return willValidate() && m_inputType->hasBadInput();
+    return willValidate() && m_inputTypeView->hasBadInput();
 }
 
 bool HTMLInputElement::patternMismatch() const
@@ -438,7 +438,7 @@ void HTMLInputElement::initializeTypeInParsing()
 
     const AtomicString& newTypeName = InputType::normalizeTypeName(fastGetAttribute(typeAttr));
     m_inputType = InputType::create(*this, newTypeName);
-    m_inputTypeView = m_inputType;
+    m_inputTypeView = m_inputType->createView();
     ensureUserAgentShadowRoot();
 
     updateTouchEventHandlerRegistry();
@@ -475,7 +475,7 @@ void HTMLInputElement::updateType()
     if (openShadowRoot())
         m_inputTypeView = InputTypeView::create(*this);
     else
-        m_inputTypeView = m_inputType;
+        m_inputTypeView = m_inputType->createView();
     m_inputTypeView->createShadowSubtree();
 
     updateTouchEventHandlerRegistry();
@@ -547,12 +547,12 @@ bool HTMLInputElement::shouldSaveAndRestoreFormControlState() const
 
 FormControlState HTMLInputElement::saveFormControlState() const
 {
-    return m_inputType->saveFormControlState();
+    return m_inputTypeView->saveFormControlState();
 }
 
 void HTMLInputElement::restoreFormControlState(const FormControlState& state)
 {
-    m_inputType->restoreFormControlState(state);
+    m_inputTypeView->restoreFormControlState(state);
     m_stateRestored = true;
 }
 
@@ -637,7 +637,7 @@ void HTMLInputElement::setSelectionRangeForBinding(int start, int end, const Str
 
 void HTMLInputElement::accessKeyAction(bool sendMouseEvents)
 {
-    m_inputType->accessKeyAction(sendMouseEvents);
+    m_inputTypeView->accessKeyAction(sendMouseEvents);
 }
 
 bool HTMLInputElement::isPresentationAttribute(const QualifiedName& name) const
@@ -1077,6 +1077,7 @@ void HTMLInputElement::setValue(const String& value, TextFieldEventBehavior even
     m_suggestedValue = String(); // Prevent TextFieldInputType::setValue from using the suggested value.
 
     m_inputType->setValue(sanitizedValue, valueChanged, eventBehavior);
+    m_inputTypeView->didSetValue(sanitizedValue, valueChanged);
 
     if (valueChanged && eventBehavior == DispatchNoEvent)
         setTextAsOfLastFormControlChangeEvent(sanitizedValue.isNull() ? defaultValue() : sanitizedValue);
@@ -1156,8 +1157,7 @@ void HTMLInputElement::setValueFromRenderer(const String& value)
     setAutofilled(false);
 }
 
-// TODO(Oilpan): It's nasty to return a void* pointer. Return ClickHandlingState* instead.
-void* HTMLInputElement::preDispatchEventHandler(Event* event)
+EventDispatchHandlingState* HTMLInputElement::preDispatchEventHandler(Event* event)
 {
     if (event->type() == EventTypeNames::textInput && m_inputTypeView->shouldSubmitImplicitly(event)) {
         event->stopPropagation();
@@ -1170,12 +1170,11 @@ void* HTMLInputElement::preDispatchEventHandler(Event* event)
     return m_inputTypeView->willDispatchClick();
 }
 
-void HTMLInputElement::postDispatchEventHandler(Event* event, void* dataFromPreDispatch)
+void HTMLInputElement::postDispatchEventHandler(Event* event, EventDispatchHandlingState* state)
 {
-    ClickHandlingState* state = static_cast<ClickHandlingState*>(dataFromPreDispatch);
     if (!state)
         return;
-    m_inputTypeView->didDispatchClick(event, *state);
+    m_inputTypeView->didDispatchClick(event, *static_cast<ClickHandlingState*>(state));
 }
 
 void HTMLInputElement::defaultEventHandler(Event* evt)
@@ -1212,7 +1211,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     // on the element, or presses enter while it is the active element. JavaScript code wishing to activate the element
     // must dispatch a DOMActivate event - a click event will not do the job.
     if (evt->type() == EventTypeNames::DOMActivate) {
-        m_inputType->handleDOMActivateEvent(evt);
+        m_inputTypeView->handleDOMActivateEvent(evt);
         if (evt->defaultHandled())
             return;
     }
@@ -1859,7 +1858,7 @@ bool HTMLInputElement::setupDateTimeChooserParameters(DateTimeChooserParameters&
     parameters.anchorRectInScreen = document().view()->contentsToScreen(pixelSnappedBoundingBox());
     parameters.currentValue = value();
     parameters.doubleValue = m_inputType->valueAsDouble();
-    parameters.isAnchorElementRTL = m_inputType->computedTextDirection() == RTL;
+    parameters.isAnchorElementRTL = m_inputTypeView->computedTextDirection() == RTL;
     if (HTMLDataListElement* dataList = this->dataList()) {
         HTMLDataListOptionsCollection* options = dataList->options();
         for (unsigned i = 0; HTMLOptionElement* option = options->item(i); ++i) {

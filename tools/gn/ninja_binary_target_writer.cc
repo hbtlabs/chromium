@@ -103,14 +103,15 @@ const char* GetPCHLangSuffixForToolType(Toolchain::ToolType type) {
   }
 }
 
-std::string GetWindowsPCHObjectExtension(Toolchain::ToolType tool_type) {
+std::string GetWindowsPCHObjectExtension(Toolchain::ToolType tool_type,
+                                         const std::string& obj_extension) {
   const char* lang_suffix = GetPCHLangSuffixForToolType(tool_type);
   std::string result = ".";
   // For MSVC, annotate the obj files with the language type. For example:
-  //   obj/foo/target_name.precompile.o ->
-  //   obj/foo/target_name.precompile.cc.o
+  //   obj/foo/target_name.precompile.obj ->
+  //   obj/foo/target_name.precompile.cc.obj
   result += lang_suffix;
-  result += ".o";
+  result += obj_extension;
   return result;
 }
 
@@ -182,7 +183,8 @@ void GetPCHOutputFiles(const Target* target,
   Tool::PrecompiledHeaderType header_type = tool->precompiled_header_type();
   switch (header_type) {
     case Tool::PCH_MSVC:
-      output_extension = GetWindowsPCHObjectExtension(tool_type);
+      output_extension = GetWindowsPCHObjectExtension(
+          tool_type, output_value.substr(extension_offset - 1));
       break;
     case Tool::PCH_GCC:
       output_extension = GetGCCPCHOutputExtension(tool_type);
@@ -621,7 +623,7 @@ void NinjaBinaryTargetWriter::WriteSources(
 
     if (tool_type != Toolchain::TYPE_NONE) {
       // Only include PCH deps that correspond to the tool type, for instance,
-      // do not specify target_name.precompile.cc.o (a CXX PCH file) as a dep
+      // do not specify target_name.precompile.cc.obj (a CXX PCH file) as a dep
       // for the output of a C tool type.
       //
       // This makes the assumption that pch_deps only contains pch output files
@@ -631,9 +633,13 @@ void NinjaBinaryTargetWriter::WriteSources(
       if (tool->precompiled_header_type() != Tool::PCH_NONE) {
         for (const auto& dep : pch_deps) {
           const std::string& output_value = dep.value();
+          size_t extension_offset = FindExtensionOffset(output_value);
+          if (extension_offset == std::string::npos)
+            continue;
           std::string output_extension;
           if (tool->precompiled_header_type() == Tool::PCH_MSVC) {
-            output_extension = GetWindowsPCHObjectExtension(tool_type);
+            output_extension = GetWindowsPCHObjectExtension(
+                tool_type, output_value.substr(extension_offset - 1));
           } else if (tool->precompiled_header_type() == Tool::PCH_GCC) {
             output_extension = GetGCCPCHOutputExtension(tool_type);
           }
@@ -779,6 +785,11 @@ void NinjaBinaryTargetWriter::WriteLinkerStuff(
       target_->output_type() == Target::LOADABLE_MODULE) {
     WriteLinkerFlags(optional_def_file);
     WriteLibs();
+  } else if (target_->output_type() == Target::STATIC_LIBRARY) {
+    out_ << "  arflags =";
+    RecursiveTargetConfigStringsToStream(target_, &ConfigValues::arflags,
+                                         GetFlagOptions(), out_);
+    out_ << std::endl;
   }
   WriteOutputSubstitutions();
   WriteSolibs(solibs);
@@ -789,9 +800,8 @@ void NinjaBinaryTargetWriter::WriteLinkerFlags(
   out_ << "  ldflags =";
 
   // First the ldflags from the target and its config.
-  EscapeOptions flag_options = GetFlagOptions();
   RecursiveTargetConfigStringsToStream(target_, &ConfigValues::ldflags,
-                                       flag_options, out_);
+                                       GetFlagOptions(), out_);
 
   // Followed by library search paths that have been recursively pushed
   // through the dependency tree.

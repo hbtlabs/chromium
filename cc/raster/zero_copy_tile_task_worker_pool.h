@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "cc/raster/tile_task_runner.h"
 #include "cc/raster/tile_task_worker_pool.h"
 
 namespace base {
@@ -23,8 +22,7 @@ namespace cc {
 class ResourceProvider;
 
 class CC_EXPORT ZeroCopyTileTaskWorkerPool : public TileTaskWorkerPool,
-                                             public TileTaskRunner,
-                                             public TileTaskClient {
+                                             public RasterBufferProvider {
  public:
   ~ZeroCopyTileTaskWorkerPool() override;
 
@@ -35,16 +33,14 @@ class CC_EXPORT ZeroCopyTileTaskWorkerPool : public TileTaskWorkerPool,
       ResourceFormat preferred_tile_format);
 
   // Overridden from TileTaskWorkerPool:
-  TileTaskRunner* AsTileTaskRunner() override;
-
-  // Overridden from TileTaskRunner:
   void Shutdown() override;
   void ScheduleTasks(TaskGraph* graph) override;
   void CheckForCompletedTasks() override;
   ResourceFormat GetResourceFormat(bool must_support_alpha) const override;
   bool GetResourceRequiresSwizzle(bool must_support_alpha) const override;
+  RasterBufferProvider* AsRasterBufferProvider() override;
 
-  // Overridden from TileTaskClient:
+  // Overridden from RasterBufferProvider:
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
       const Resource* resource,
       uint64_t resource_content_id,

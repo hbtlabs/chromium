@@ -10,6 +10,7 @@
 #include "net/http/http_response_headers.h"
 
 #include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 #include "base/format_macros.h"
@@ -457,7 +458,7 @@ void HttpResponseHeaders::GetNormalizedHeaders(std::string* output) const {
   // be a web app, we cannot be certain of the semantics of commas despite the
   // fact that RFC 2616 says that they should be regarded as value separators.
   //
-  typedef base::hash_map<std::string, size_t> HeadersMap;
+  using HeadersMap = std::unordered_map<std::string, size_t>;
   HeadersMap headers_map;
   HeadersMap::iterator iter = headers_map.end();
 
@@ -1411,11 +1412,11 @@ bool HttpResponseHeaders::GetContentRange(int64_t* first_byte_position,
   return true;
 }
 
-scoped_ptr<base::Value> HttpResponseHeaders::NetLogCallback(
+std::unique_ptr<base::Value> HttpResponseHeaders::NetLogCallback(
     NetLogCaptureMode capture_mode) const {
-  scoped_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   base::ListValue* headers = new base::ListValue();
-  headers->Append(new base::StringValue(GetStatusLine()));
+  headers->Append(new base::StringValue(EscapeNonASCII(GetStatusLine())));
   size_t iterator = 0;
   std::string name;
   std::string value;

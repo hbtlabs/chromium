@@ -902,6 +902,22 @@ bool LayerTreeHost::UpdateLayers() {
   return result || next_commit_forces_redraw_;
 }
 
+LayerListIterator<Layer> LayerTreeHost::begin() {
+  return LayerListIterator<Layer>(root_layer_.get());
+}
+
+LayerListIterator<Layer> LayerTreeHost::end() {
+  return LayerListIterator<Layer>(nullptr);
+}
+
+LayerListReverseIterator<Layer> LayerTreeHost::rbegin() {
+  return LayerListReverseIterator<Layer>(root_layer_.get());
+}
+
+LayerListReverseIterator<Layer> LayerTreeHost::rend() {
+  return LayerListReverseIterator<Layer>(nullptr);
+}
+
 void LayerTreeHost::DidCompletePageScaleAnimation() {
   did_complete_scale_animation_ = true;
 }
@@ -1260,26 +1276,9 @@ SurfaceSequence LayerTreeHost::CreateSurfaceSequence() {
   return SurfaceSequence(surface_id_namespace_, next_surface_sequence_++);
 }
 
-void LayerTreeHost::SetChildrenNeedBeginFrames(
-    bool children_need_begin_frames) const {
-  proxy_->SetChildrenNeedBeginFrames(children_need_begin_frames);
-}
-
-void LayerTreeHost::SendBeginFramesToChildren(
-    const BeginFrameArgs& args) const {
-  client_->SendBeginFramesToChildren(args);
-}
-
 void LayerTreeHost::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
   proxy_->SetAuthoritativeVSyncInterval(interval);
-}
-
-void LayerTreeHost::RecordFrameTimingEvents(
-    std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-    std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  client_->RecordFrameTimingEvents(std::move(composite_events),
-                                   std::move(main_frame_events));
 }
 
 Layer* LayerTreeHost::LayerById(int id) const {

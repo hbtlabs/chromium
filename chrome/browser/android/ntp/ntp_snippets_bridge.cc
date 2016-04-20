@@ -36,19 +36,27 @@ static void FetchSnippets(JNIEnv* env,
   NTPSnippetsServiceFactory::GetForProfile(profile)->FetchSnippets();
 }
 
+// Reschedules the fetching of snippets. Used to support different fetching
+// intervals for different times of day.
+static void RescheduleFetching(JNIEnv* env,
+                               const JavaParamRef<jclass>& caller) {
+  Profile* profile = ProfileManager::GetLastUsedProfile();
+  NTPSnippetsServiceFactory::GetForProfile(profile)->RescheduleFetching();
+}
+
 NTPSnippetsBridge::NTPSnippetsBridge(JNIEnv* env,
                                      const JavaParamRef<jobject>& j_profile)
     : snippet_service_observer_(this) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile);
   ntp_snippets_service_ = NTPSnippetsServiceFactory::GetForProfile(profile);
+  snippet_service_observer_.Add(ntp_snippets_service_);
 }
 
 void NTPSnippetsBridge::SetObserver(JNIEnv* env,
                                     const JavaParamRef<jobject>& obj,
                                     const JavaParamRef<jobject>& j_observer) {
   observer_.Reset(env, j_observer);
-  // This will call NTPSnippetsServiceLoaded.
-  snippet_service_observer_.Add(ntp_snippets_service_);
+  NTPSnippetsServiceLoaded();
 }
 
 NTPSnippetsBridge::~NTPSnippetsBridge() {}
@@ -65,7 +73,8 @@ void NTPSnippetsBridge::DiscardSnippet(JNIEnv* env,
 }
 
 void NTPSnippetsBridge::NTPSnippetsServiceLoaded() {
-  DCHECK(!observer_.is_null());
+  if (observer_.is_null())
+    return;
 
   std::vector<std::string> titles;
   std::vector<std::string> urls;

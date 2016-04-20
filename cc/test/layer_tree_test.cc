@@ -371,10 +371,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
     test_hooks_->DidInitializeOutputSurface();
   }
 
-  void SendBeginFramesToChildren(const BeginFrameArgs& args) override {
-    test_hooks_->SendBeginFramesToChildren(args);
-  }
-
   void DidFailToInitializeOutputSurface() override {
     test_hooks_->DidFailToInitializeOutputSurface();
     RequestNewOutputSurface();
@@ -397,11 +393,6 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
   void RequestScheduleComposite() override { test_hooks_->ScheduleComposite(); }
   void DidCompletePageScaleAnimation() override {}
   void BeginMainFrameNotExpectedSoon() override {}
-
-  void RecordFrameTimingEvents(
-      std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override {}
 
  private:
   explicit LayerTreeHostClientForTesting(TestHooks* test_hooks)

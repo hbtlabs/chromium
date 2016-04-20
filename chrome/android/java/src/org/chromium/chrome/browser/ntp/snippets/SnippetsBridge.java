@@ -54,6 +54,14 @@ public class SnippetsBridge {
     }
 
     /**
+     * Reschedules the fetching of snippets. Used to support different fetching intervals for
+     * different times of day.
+     */
+    public static void rescheduleFetching() {
+        nativeRescheduleFetching();
+    }
+
+    /**
      * Tells the native service to discard a snippet. It will be removed from the native side
      * storage and will also be discarded from subsequent fetch results.
      *
@@ -65,18 +73,19 @@ public class SnippetsBridge {
     }
 
     /**
-     * Sets the recipient for the fetched snippets. This method should be called only once.
+     * Sets the recipient for the fetched snippets.
      *
-     * Before the observer is set, the native code will not attempt to transmit them to java. Upon
-     * registration, the observer will be notified of already fetched snippets.
+     * An observer needs to be set before the native code attempts to transmit snippets them to
+     * java. Upon registration, the observer will be notified of already fetched snippets.
      *
-     * @param observer object to notify when snippets are received.
+     * @param observer object to notify when snippets are received, or {@code null} if we want to
+     *                 stop observing.
      */
     public void setObserver(SnippetsObserver observer) {
-        assert mObserver == null;
+        assert mObserver == null || mObserver == observer;
 
         mObserver = observer;
-        nativeSetObserver(mNativeSnippetsBridge, this);
+        nativeSetObserver(mNativeSnippetsBridge, observer == null ? null : this);
     }
 
     @CalledByNative
@@ -98,6 +107,7 @@ public class SnippetsBridge {
     private native long nativeInit(Profile profile);
     private native void nativeDestroy(long nativeNTPSnippetsBridge);
     private static native void nativeFetchSnippets();
+    private static native void nativeRescheduleFetching();
     private native void nativeDiscardSnippet(long nativeNTPSnippetsBridge, String snippetUrl);
     private native void nativeSetObserver(long nativeNTPSnippetsBridge, SnippetsBridge bridge);
 }

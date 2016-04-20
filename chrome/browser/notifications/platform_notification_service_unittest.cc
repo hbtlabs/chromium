@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -23,6 +24,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 
 #if defined(ENABLE_EXTENSIONS)
 #include "base/command_line.h"
@@ -114,7 +116,7 @@ class PlatformNotificationServiceTest : public testing::Test {
 
     service()->DisplayNotification(profile(), GURL("https://chrome.com/"),
                                    notification_data, NotificationResources(),
-                                   make_scoped_ptr(delegate), close_closure);
+                                   base::WrapUnique(delegate), close_closure);
 
     return delegate;
   }
@@ -131,8 +133,8 @@ class PlatformNotificationServiceTest : public testing::Test {
   StubNotificationUIManager* ui_manager() const { return ui_manager_.get(); }
 
  private:
-  scoped_ptr<StubNotificationUIManager> ui_manager_;
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<StubNotificationUIManager> ui_manager_;
+  std::unique_ptr<TestingProfile> profile_;
 
   content::TestBrowserThreadBundle thread_bundle_;
 };
@@ -200,7 +202,7 @@ TEST_F(PlatformNotificationServiceTest, DisplayPageNotificationMatches) {
       = new MockDesktopNotificationDelegate();
   service()->DisplayNotification(profile(), GURL("https://chrome.com/"),
                                  notification_data, NotificationResources(),
-                                 make_scoped_ptr(delegate), nullptr);
+                                 base::WrapUnique(delegate), nullptr);
 
   ASSERT_EQ(1u, ui_manager()->GetNotificationCount());
 
@@ -364,7 +366,7 @@ TEST_F(PlatformNotificationServiceTest, ExtensionPermissionChecks) {
   // Verify that the service indicates that permission has been granted. We only
   // check the UI thread-method for now, as that's the one guarding the behavior
   // in the browser process.
-  EXPECT_EQ(blink::WebNotificationPermissionAllowed,
+  EXPECT_EQ(blink::mojom::PermissionStatus::GRANTED,
             service()->CheckPermissionOnUIThread(profile(),
                                                  extension->url(),
                                                  kFakeRenderProcessId));

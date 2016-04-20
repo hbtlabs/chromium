@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/toolchain/toolchain.gni")
+import("//build/config/mac/mac_sdk.gni")
 
 # This is used as the base template for both iOS and Mac frameworks..
 #
@@ -74,6 +75,19 @@ template("framework_bundle") {
     ]
   }
 
+  _framework_public_config = _target_name + "_public_config"
+  config(_framework_public_config) {
+    # TODO(sdefresne): should we have a framework_dirs similar to lib_dirs
+    # and include_dirs to avoid duplicate values on the command-line.
+    visibility = [ ":$_framework_target" ]
+    common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
+    cflags_objc = common_flags
+    cflags_objcc = common_flags
+    ldflags = common_flags
+    lib_dirs = [ root_out_dir ]
+    libs = [ _framework_name ]
+  }
+
   create_bundle(_framework_target) {
     forward_variables_from(invoker,
                            [
@@ -93,6 +107,8 @@ template("framework_bundle") {
       public_deps = []
     }
     public_deps += [ ":$_shared_library_bundle_data" ]
+
+    public_configs = [ ":$_framework_public_config" ]
 
     bundle_root_dir = _framework_root_dir
     bundle_resources_dir = "$bundle_root_dir/Resources"
@@ -119,6 +135,94 @@ template("framework_bundle") {
         ":$_framework_target",
       ]
     }
+  }
+}
+
+# Template to combile .xib or .storyboard files.
+#
+#
+# Arguments
+#
+#     sources:
+#         list of string, sources to compile
+#
+#     ibtool_flags:
+#         (optional) list of string, additional flags to pass to the ibtool
+template("compile_xibs") {
+  action_foreach(target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+    assert(defined(invoker.sources),
+           "Sources must be specified for $target_name")
+
+    ibtool_flags = []
+    if (defined(invoker.ibtool_flags)) {
+      ibtool_flags = invoker.ibtool_flags
+    }
+
+    script = "//build/config/mac/compile_xib.py"
+    sources = invoker.sources
+    outputs = [
+      "$target_gen_dir/{{source_name_part}}.nib",
+    ]
+    args = [
+             "--input",
+             "{{source}}",
+             "--output",
+             rebase_path("$target_gen_dir/{{source_name_part}}.nib"),
+           ] + ibtool_flags
+  }
+}
+
+# Template to compile and package Mac XIB files as bundle data.
+#
+# Arguments
+#
+#     sources:
+#         list of string, sources to comiple
+#
+#     output_path:
+#         (optional) string, the path to use for the outputs list in the
+#         bundle_data step. If unspecified, defaults to bundle_resources_dir.
+template("mac_xib_bundle_data") {
+  _target_name = target_name
+  _compile_target_name = _target_name + "_compile_ibtool"
+
+  compile_xibs(_compile_target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    visibility = [ ":$_target_name" ]
+    sources = invoker.sources
+    ibtool_flags = [
+      "--minimum-deployment-target",
+      mac_deployment_target,
+      "--target-device",
+      "mac",
+    ]
+  }
+
+  bundle_data(_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "testonly",
+                             "visibility",
+                           ])
+
+    public_deps = [
+      ":$_compile_target_name",
+    ]
+    sources = get_target_outputs(":$_compile_target_name")
+
+    _output_path = "{{bundle_resources_dir}}"
+    if (defined(invoker.output_path)) {
+      _output_path = invoker.output_path
+    }
+
+    outputs = [
+      "$_output_path/{{source_file_part}}",
+    ]
   }
 }
 
@@ -260,6 +364,69 @@ template("mac_app_bundle") {
 
     bundle_root_dir = "$root_out_dir/${_output_name}.app/Contents"
     bundle_resources_dir = "$bundle_root_dir/Resources"
+    bundle_executable_dir = "$bundle_root_dir/MacOS"
+  }
+}
+
+# Template to package a loadable_module into a .plugin bundle.
+#
+# This takes no extra arguments that differ from a loadable_module.
+template("mac_plugin_bundle") {
+  assert(defined(invoker.deps),
+         "Dependencies must be specified for $target_name")
+
+  _target_name = target_name
+  _loadable_module_target = _target_name + "_loadable_module"
+  _loadable_module_bundle_data = _loadable_module_target + "_bundle_data"
+
+  _output_name = _target_name
+  if (defined(invoker.output_name)) {
+    _output_name = invoker.output_name
+  }
+
+  loadable_module(_loadable_module_target) {
+    visibility = [ ":$_loadable_module_bundle_data" ]
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "assert_no_deps",
+                             "data_deps",
+                             "output_name",
+                             "visibility",
+                           ])
+    output_dir = "$target_out_dir"
+    output_name = _output_name
+  }
+
+  bundle_data(_loadable_module_bundle_data) {
+    forward_variables_from(invoker, [ "testonly" ])
+    visibility = [ ":$_target_name" ]
+    sources = [
+      "$target_out_dir/${_output_name}.so",
+    ]
+    outputs = [
+      "{{bundle_executable_dir}}/$_output_name",
+    ]
+    public_deps = [
+      ":$_loadable_module_target",
+    ]
+  }
+
+  create_bundle(_target_name) {
+    forward_variables_from(invoker,
+                           [
+                             "data_deps",
+                             "deps",
+                             "public_deps",
+                             "testonly",
+                             "visibility",
+                           ])
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ ":$_loadable_module_bundle_data" ]
+
+    bundle_root_dir = "$root_out_dir/$_output_name.plugin/Contents"
     bundle_executable_dir = "$bundle_root_dir/MacOS"
   }
 }

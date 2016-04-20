@@ -169,12 +169,12 @@
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_switches_util.h"
+#include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/latency_info/latency_info.h"
 #include "url/url_constants.h"
 #include "v8/include/v8.h"
 
@@ -1088,14 +1088,16 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
       prefs.resue_global_for_unowned_main_frame);
   settings->setPreferHiddenVolumeControls(true);
   settings->setShrinksViewportContentToFit(true);
-  settings->setUseMobileViewportStyle(true);
   settings->setAutoplayExperimentMode(
       blink::WebString::fromUTF8(prefs.autoplay_experiment_mode));
 #endif
 
   settings->setViewportEnabled(prefs.viewport_enabled);
-  settings->setLoadWithOverviewMode(prefs.initialize_at_minimum_page_scale);
   settings->setViewportMetaEnabled(prefs.viewport_meta_enabled);
+  settings->setViewportStyle(
+      static_cast<blink::WebViewportStyle>(prefs.viewport_style));
+
+  settings->setLoadWithOverviewMode(prefs.initialize_at_minimum_page_scale);
   settings->setMainFrameResizesAreOrientationChanges(
       prefs.main_frame_resizes_are_orientation_changes);
 
@@ -1203,8 +1205,7 @@ void RenderViewImpl::OnGetRenderedText() {
   // TODO(dglazkov): WebFrameContentDumper should only be used for
   // testing purposes. See http://crbug.com/585164.
   std::string text =
-      WebFrameContentDumper::deprecatedDumpFrameTreeAsText(
-          webview()->mainFrame()->toWebLocalFrame(), kMaximumMessageSize)
+      WebFrameContentDumper::dumpWebViewAsText(webview(), kMaximumMessageSize)
           .utf8();
 
   Send(new ViewMsg_GetRenderedTextCompleted(GetRoutingID(), text));

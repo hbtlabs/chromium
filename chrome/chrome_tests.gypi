@@ -711,6 +711,7 @@
       'browser/chromeos/accessibility/speech_monitor.cc',
       'browser/chromeos/accessibility/speech_monitor.h',
       'browser/chromeos/accessibility/touch_exploration_controller_browsertest.cc',
+      'browser/chromeos/app_mode/kiosk_crash_restore_browsertest.cc',
       'browser/chromeos/app_mode/kiosk_app_manager_browsertest.cc',
       'browser/chromeos/app_mode/kiosk_app_update_service_browsertest.cc',
       'browser/chromeos/attestation/attestation_policy_browsertest.cc',
@@ -2404,7 +2405,7 @@
                 '<@(chrome_browser_app_list_ash_test_support_sources)'
               ],
               'dependencies': [
-                '../ui/app_list/shower/app_list_shower.gyp:app_list_shower_test_support',
+                '../ui/app_list/presenter/app_list_presenter.gyp:app_list_presenter_test_support',
               ],
             }],
           ],
@@ -3294,13 +3295,11 @@
             }],
             ['OS=="mac" or OS=="win"', {
               'dependencies': [
-                # TODO(kbr): port this dependency to GN.
                 '../third_party/crashpad/crashpad/tools/tools.gyp:crashpad_database_util',
               ],
             }],
             ['OS=="win"', {
               'dependencies': [
-                # TODO(kbr): port this dependency to GN.
                 'copy_cdb_to_output',
               ],
             }],
@@ -3463,7 +3462,6 @@
         ['OS=="win"', {
           'targets': [
             {
-              # TODO(kbr): port this target to GN.
               'target_name': 'copy_cdb_to_output',
               'type': 'none',
               'actions': [

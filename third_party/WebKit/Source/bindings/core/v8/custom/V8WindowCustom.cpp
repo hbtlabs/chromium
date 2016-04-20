@@ -37,7 +37,7 @@
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "bindings/core/v8/SerializedScriptValueFactory.h"
-#include "bindings/core/v8/TransferableMessagePort.h"
+#include "bindings/core/v8/Transferables.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8EventListenerList.h"
@@ -193,7 +193,7 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
     //   postMessage(message, targetOrigin, {sequence of transferrables})
     // Legacy non-standard implementations in webkit allowed:
     //   postMessage(message, {sequence of transferrables}, targetOrigin);
-    TransferableArray* transferables = new TransferableArray;
+    Transferables transferables;
     int targetOriginArgIndex = 1;
     if (info.Length() > 2) {
         int transferablesArgIndex = 2;
@@ -202,23 +202,18 @@ void V8Window::postMessageMethodCustom(const v8::FunctionCallbackInfo<v8::Value>
             targetOriginArgIndex = 2;
             transferablesArgIndex = 1;
         }
-        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, *transferables, exceptionState)) {
+        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, transferables, exceptionState)) {
             exceptionState.throwIfNeeded();
             return;
         }
     }
     TOSTRING_VOID(V8StringResource<TreatNullAndUndefinedAsNullString>, targetOrigin, info[targetOriginArgIndex]);
 
-    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], transferables, exceptionState);
+    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], &transferables, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
 
-    MessagePortArray* portArray;
-    if (auto* messagePorts = TransferableMessagePort::get(*transferables))
-        portArray = &(messagePorts->getArray());
-    else
-        portArray = new MessagePortArray;
-    window->postMessage(message.release(), portArray, targetOrigin, source, exceptionState);
+    window->postMessage(message.release(), transferables.messagePorts, targetOrigin, source, exceptionState);
     exceptionState.throwIfNeeded();
 }
 
@@ -347,35 +342,6 @@ void V8Window::namedPropertyGetterCustom(v8::Local<v8::Name> name, const v8::Pro
         v8SetReturnValueFast(info, items, window);
         return;
     }
-}
-
-static bool securityCheck(v8::Local<v8::Object> host)
-{
-    v8::Isolate* isolate = v8::Isolate::GetCurrent();
-    v8::Local<v8::Object> window = V8Window::findInstanceInPrototypeChain(host, isolate);
-    if (window.IsEmpty())
-        return false; // the frame is gone.
-
-    DOMWindow* targetWindow = V8Window::toImpl(window);
-    ASSERT(targetWindow);
-    if (!targetWindow->isLocalDOMWindow())
-        return false;
-
-    LocalFrame* target = toLocalDOMWindow(targetWindow)->frame();
-    if (!target)
-        return false;
-
-    // Notify the loader's client if the initial document has been accessed.
-    if (target->loader().stateMachine()->isDisplayingInitialEmptyDocument())
-        target->loader().didAccessInitialDocument();
-
-    return BindingSecurity::shouldAllowAccessTo(isolate, callingDOMWindow(isolate), targetWindow, DoNotReportSecurityError);
-}
-
-bool V8Window::securityCheckCustom(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject, v8::Local<v8::Value> data)
-{
-    // TODO(jochen): Take accessingContext into account.
-    return securityCheck(accessedObject);
 }
 
 } // namespace blink

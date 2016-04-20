@@ -5,19 +5,21 @@
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
-      "repaintRects": [
-        [154, 37, 94, 100],
-        [0, 37, 402, 100],
-        [0, 36, 402, 152]
-      ],
-      "paintInvalidationClients": [
-        "LayoutBlockFlow DIV id='target' class='target'",
-        "RootInlineBox",
-        "LayoutImage IMG",
-        "InlineBox",
-        "RootInlineBox",
-        "LayoutBlockFlow DIV id='target' class='target'",
-        "LayoutImage IMG"
+      "paintInvalidations": [
+        {
+          "object": "LayoutBlockFlow DIV id='target' class='target'",
+          "rect": [0, 36, 402, 152],
+          "reason": "forced by layout"
+        },
+        {
+          "object": "LayoutImage IMG",
+          "rect": [154, 37, 94, 100],
+          "reason": "location change"
+        },
+        {
+          "object": "RootInlineBox",
+          "reason": "full"
+        }
       ]
     }
   ]

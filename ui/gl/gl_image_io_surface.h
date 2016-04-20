@@ -58,6 +58,7 @@ class GL_EXPORT GLImageIOSurface : public GLImage {
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
                     const std::string& dump_name) override;
+  bool EmulatingRGB() const override;
 
   gfx::GenericSharedMemoryId io_surface_id() const { return io_surface_id_; }
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface();
@@ -72,16 +73,19 @@ class GL_EXPORT GLImageIOSurface : public GLImage {
   class RGBConverter;
 
   const gfx::Size size_;
+
+  // The "internalformat" exposed to the command buffer, which may not be
+  // "internalformat" requested by the client.
   const unsigned internalformat_;
+
+  // The "internalformat" requested by the client.
+  const unsigned client_internalformat_;
+
   gfx::BufferFormat format_;
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer_;
   gfx::GenericSharedMemoryId io_surface_id_;
   base::ThreadChecker thread_checker_;
-
-  // GL state to support 420v IOSurface conversion to RGB. This is retained
-  // to avoid re-creating the necessary GL programs every frame.
-  scoped_refptr<RGBConverter> rgb_converter_;
 
   DISALLOW_COPY_AND_ASSIGN(GLImageIOSurface);
 };

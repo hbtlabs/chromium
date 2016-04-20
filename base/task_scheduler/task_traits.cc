@@ -4,6 +4,8 @@
 
 #include "base/task_scheduler/task_traits.h"
 
+#include <stddef.h>
+
 #include <ostream>
 
 namespace base {
@@ -32,11 +34,6 @@ TaskTraits& TaskTraits::WithShutdownBehavior(
     TaskShutdownBehavior shutdown_behavior) {
   shutdown_behavior_ = shutdown_behavior;
   return *this;
-}
-
-bool TaskTraits::operator==(const TaskTraits& other) const {
-  return with_file_io_ == other.with_file_io_ && priority_ == other.priority_ &&
-         shutdown_behavior_ == other.shutdown_behavior_;
 }
 
 std::ostream& operator<<(std::ostream& os, const TaskPriority& task_priority) {

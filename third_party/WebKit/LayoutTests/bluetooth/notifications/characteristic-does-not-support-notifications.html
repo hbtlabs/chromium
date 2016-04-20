@@ -12,10 +12,10 @@ promise_test(() => {
     .then(gattService => gattService.getPrimaryService('heart_rate'))
     .then(service => service.getCharacteristic('body_sensor_location'))
     .then(characteristic => assert_promise_rejects_with_message(
-          characteristic.startNotifications(),
-          new DOMException('GATT Error: Not supported.',
-                           'NotSupportedError'),
-          'Characteristic does not support notifications.'));
+      characteristic.startNotifications(),
+      new DOMException('GATT Error: Not supported.',
+                       'NotSupportedError'),
+      'Characteristic does not support notifications.'));
 }, 'Characteristic does not support notifications. Reject with ' +
    'NotSupportedError.');
 </script>

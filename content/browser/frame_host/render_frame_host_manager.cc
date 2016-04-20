@@ -54,13 +54,11 @@ namespace content {
 RenderFrameHostManager::RenderFrameHostManager(
     FrameTreeNode* frame_tree_node,
     RenderFrameHostDelegate* render_frame_delegate,
-    RenderViewHostDelegate* render_view_delegate,
     RenderWidgetHostDelegate* render_widget_delegate,
     Delegate* delegate)
     : frame_tree_node_(frame_tree_node),
       delegate_(delegate),
       render_frame_delegate_(render_frame_delegate),
-      render_view_delegate_(render_view_delegate),
       render_widget_delegate_(render_widget_delegate),
       interstitial_page_(nullptr),
       weak_factory_(this) {
@@ -653,23 +651,24 @@ void RenderFrameHostManager::SwapOutOldFrame(
   if (old_render_frame_host->GetSiteInstance()->active_frame_count() <= 1) {
     // Tell the old RenderFrameHost to swap out, with no proxy to replace it.
     old_render_frame_host->SwapOut(nullptr, true);
-    MoveToPendingDeleteHosts(std::move(old_render_frame_host));
-    return;
+  } else {
+    // Otherwise there are active views and we need a proxy for the old RFH.
+    // (There should not be one yet.)
+    RenderFrameProxyHost* proxy =
+        CreateRenderFrameProxyHost(old_render_frame_host->GetSiteInstance(),
+                                   old_render_frame_host->render_view_host());
+
+    // Tell the old RenderFrameHost to swap out and be replaced by the proxy.
+    old_render_frame_host->SwapOut(proxy, true);
+
+    // SwapOut creates a RenderFrameProxy, so set the proxy to be initialized.
+    proxy->set_render_frame_proxy_created(true);
   }
 
-  // Otherwise there are active views and we need a proxy for the old RFH.
-  // (There should not be one yet.)
-  RenderFrameProxyHost* proxy =
-      CreateRenderFrameProxyHost(old_render_frame_host->GetSiteInstance(),
-                                 old_render_frame_host->render_view_host());
-
-  // Tell the old RenderFrameHost to swap out and be replaced by the proxy.
-  old_render_frame_host->SwapOut(proxy, true);
-
-  // SwapOut creates a RenderFrameProxy, so set the proxy to be initialized.
-  proxy->set_render_frame_proxy_created(true);
-
-  MoveToPendingDeleteHosts(std::move(old_render_frame_host));
+  // |old_render_frame_host| will be deleted when its SwapOut ACK is received,
+  // or when the timer times out, or when the RFHM itself is deleted (whichever
+  // comes first).
+  pending_delete_hosts_.push_back(std::move(old_render_frame_host));
 }
 
 void RenderFrameHostManager::DiscardUnusedFrame(
@@ -699,14 +698,6 @@ void RenderFrameHostManager::DiscardUnusedFrame(
   }
 
   render_frame_host.reset();
-}
-
-void RenderFrameHostManager::MoveToPendingDeleteHosts(
-    std::unique_ptr<RenderFrameHostImpl> render_frame_host) {
-  // |render_frame_host| will be deleted when its SwapOut ACK is received, or
-  // when the timer times out, or when the RFHM itself is deleted (whichever
-  // comes first).
-  pending_delete_hosts_.push_back(std::move(render_frame_host));
 }
 
 bool RenderFrameHostManager::IsViewPendingDeletion(

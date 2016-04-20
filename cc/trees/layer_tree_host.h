@@ -22,7 +22,6 @@
 #include "base/time/time.h"
 #include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
-#include "cc/debug/frame_timing_tracker.h"
 #include "cc/debug/micro_benchmark.h"
 #include "cc/debug/micro_benchmark_controller.h"
 #include "cc/input/event_listener_properties.h"
@@ -31,6 +30,7 @@
 #include "cc/input/scrollbar.h"
 #include "cc/input/top_controls_state.h"
 #include "cc/layers/layer_collections.h"
+#include "cc/layers/layer_list_iterator.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/renderer_capabilities.h"
 #include "cc/output/swap_promise.h"
@@ -146,6 +146,11 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void DidCommitAndDrawFrame() { client_->DidCommitAndDrawFrame(); }
   void DidCompleteSwapBuffers() { client_->DidCompleteSwapBuffers(); }
   bool UpdateLayers();
+
+  LayerListIterator<Layer> begin();
+  LayerListIterator<Layer> end();
+  LayerListReverseIterator<Layer> rbegin();
+  LayerListReverseIterator<Layer> rend();
 
   // Called when the compositor completed page scale animation.
   void DidCompletePageScaleAnimation();
@@ -342,20 +347,12 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   void set_surface_id_namespace(uint32_t id_namespace);
   SurfaceSequence CreateSurfaceSequence();
 
-  void SetChildrenNeedBeginFrames(bool children_need_begin_frames) const;
-  void SendBeginFramesToChildren(const BeginFrameArgs& args) const;
-
   void SetAuthoritativeVSyncInterval(const base::TimeDelta& interval);
 
   PropertyTrees* property_trees() { return &property_trees_; }
   bool needs_meta_info_recomputation() {
     return needs_meta_info_recomputation_;
   }
-
-  void RecordFrameTimingEvents(
-      std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      std::unique_ptr<FrameTimingTracker::MainFrameTimingSet>
-          main_frame_events);
 
   Layer* LayerById(int id) const;
 

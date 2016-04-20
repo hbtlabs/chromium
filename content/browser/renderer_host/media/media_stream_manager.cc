@@ -151,7 +151,7 @@ void EnableHotwordEffect(const StreamControls& controls, int* effects) {
     chromeos::CrasAudioHandler::Get()->GetAudioDevices(&devices);
     // Only enable if a hotword device exists.
     for (const chromeos::AudioDevice& device : devices) {
-      if (device.type == chromeos::AUDIO_TYPE_AOKR) {
+      if (device.type == chromeos::AUDIO_TYPE_HOTWORD) {
         DCHECK(device.is_input);
         *effects |= media::AudioParameters::HOTWORD;
       }
@@ -1128,7 +1128,7 @@ void MediaStreamManager::ReadOutputParamsAndPostRequestToUI(
     // its task runner, and MediaStreamManager is deleted on the UI thread,
     // after the IO thread has been stopped.
     base::PostTaskAndReplyWithResult(
-        audio_manager_->GetTaskRunner().get(), FROM_HERE,
+        audio_manager_->GetTaskRunner(), FROM_HERE,
         base::Bind(&media::AudioManager::GetDefaultOutputStreamParameters,
                    base::Unretained(audio_manager_)),
         base::Bind(&MediaStreamManager::PostRequestToUI, base::Unretained(this),

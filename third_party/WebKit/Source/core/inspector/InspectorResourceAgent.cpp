@@ -85,6 +85,7 @@ namespace ResourceAgentState {
 static const char resourceAgentEnabled[] = "resourceAgentEnabled";
 static const char extraRequestHeaders[] = "extraRequestHeaders";
 static const char cacheDisabled[] = "cacheDisabled";
+static const char bypassServiceWorker[] = "bypassServiceWorker";
 static const char userAgentOverride[] = "userAgentOverride";
 static const char monitoringXHR[] = "monitoringXHR";
 static const char blockedURLs[] = "blockedURLs";
@@ -280,6 +281,8 @@ static PassOwnPtr<protocol::Network::ResourceTiming> buildObjectForTiming(const 
         .setSendStart(timing.calculateMillisecondDelta(timing.sendStart()))
         .setSendEnd(timing.calculateMillisecondDelta(timing.sendEnd()))
         .setReceiveHeadersEnd(timing.calculateMillisecondDelta(timing.receiveHeadersEnd()))
+        .setPushStart(timing.pushStart())
+        .setPushEnd(timing.pushEnd())
         .build();
 }
 
@@ -524,6 +527,8 @@ void InspectorResourceAgent::willSendRequest(LocalFrame* frame, unsigned long id
         request.setCachePolicy(WebCachePolicy::BypassingCache);
         request.setShouldResetAppCache(true);
     }
+    if (m_state->booleanProperty(ResourceAgentState::bypassServiceWorker, false))
+        request.setSkipServiceWorker(true);
 
     willSendRequestInternal(frame, identifier, loader, request, redirectResponse, initiatorInfo);
 
@@ -1055,6 +1060,11 @@ void InspectorResourceAgent::setCacheDisabled(ErrorString*, bool cacheDisabled)
     m_state->setBoolean(ResourceAgentState::cacheDisabled, cacheDisabled);
     if (cacheDisabled)
         memoryCache()->evictResources();
+}
+
+void InspectorResourceAgent::setBypassServiceWorker(ErrorString*, bool bypass)
+{
+    m_state->setBoolean(ResourceAgentState::bypassServiceWorker, bypass);
 }
 
 void InspectorResourceAgent::emulateNetworkConditions(ErrorString*, bool, double, double, double)

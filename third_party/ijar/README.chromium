@@ -1,7 +1,7 @@
 Name: ijar
 URL: https://github.com/google/bazel/tree/master/third_party/ijar
 Version: 0
-Revision: 3a160e754eaa27be157f463c42ecea045906516f
+Revision: 31c8878fa3ed34356d90642c19e46e4a06d84f4a
 License: Apache 2.0
 Security Critical: No
 
@@ -11,3 +11,5 @@ A tool for generating interface .jars from normal .jars.
 Local Modifications:
 - Removed test directory
 - Added BUILD.gn and ijar.gni
+- Enabled CRC32 zip entries by passing true to 3rd parameter of FinishFile()
+  within ijar.cc

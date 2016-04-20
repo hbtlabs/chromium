@@ -19,6 +19,7 @@
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_state/credential.h"
 #include "ios/web/public/web_state/ui/crw_content_view.h"
+#include "ios/web/public/web_state/web_state_delegate.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #include "ios/web/public/web_state/web_state_policy_decider.h"
 #include "ios/web/web_state/global_web_state_event_tracker.h"
@@ -33,7 +34,8 @@
 namespace web {
 
 WebStateImpl::WebStateImpl(BrowserState* browser_state)
-    : is_loading_(false),
+    : delegate_(nullptr),
+      is_loading_(false),
       is_being_destroyed_(false),
       facade_delegate_(nullptr),
       web_controller_(nil),
@@ -65,6 +67,22 @@ WebStateImpl::~WebStateImpl() {
   DCHECK(script_command_callbacks_.empty());
   if (request_tracker_.get())
     CloseRequestTracker();
+  SetDelegate(nullptr);
+}
+
+WebStateDelegate* WebStateImpl::GetDelegate() {
+  return delegate_;
+}
+
+void WebStateImpl::SetDelegate(WebStateDelegate* delegate) {
+  if (delegate == delegate_)
+    return;
+  if (delegate_)
+    delegate_->Detach(this);
+  delegate_ = delegate;
+  if (delegate_) {
+    delegate_->Attach(this);
+  }
 }
 
 void WebStateImpl::AddObserver(WebStateObserver* observer) {
@@ -379,6 +397,12 @@ void WebStateImpl::ClearTransientContentView() {
   [web_controller_ clearTransientContentView];
 }
 
+void WebStateImpl::SendChangeLoadProgress(double progress) {
+  if (delegate_) {
+    delegate_->LoadProgressChanged(this, progress);
+  }
+}
+
 WebUIIOS* WebStateImpl::CreateWebUIIOS(const GURL& url) {
   WebUIIOSControllerFactory* factory =
       WebUIIOSControllerFactoryRegistry::GetInstance();
@@ -474,6 +498,14 @@ base::WeakPtr<WebState> WebStateImpl::AsWeakPtr() {
 
 #pragma mark - WebState implementation
 
+bool WebStateImpl::IsWebUsageEnabled() const {
+  return [web_controller_ webUsageEnabled];
+}
+
+void WebStateImpl::SetWebUsageEnabled(bool enabled) {
+  [web_controller_ setWebUsageEnabled:enabled];
+}
+
 UIView* WebStateImpl::GetView() {
   return [web_controller_ view];
 }
@@ -494,6 +526,26 @@ NavigationManager* WebStateImpl::GetNavigationManager() {
 
 CRWJSInjectionReceiver* WebStateImpl::GetJSInjectionReceiver() const {
   return [web_controller_ jsInjectionReceiver];
+}
+
+void WebStateImpl::ExecuteJavaScript(const base::string16& javascript) {
+  [web_controller_ executeJavaScript:base::SysUTF16ToNSString(javascript)
+                   completionHandler:nil];
+}
+
+void WebStateImpl::ExecuteJavaScript(const base::string16& javascript,
+                                     const JavaScriptResultCallback& callback) {
+  JavaScriptResultCallback stackCallback = callback;
+  [web_controller_ executeJavaScript:base::SysUTF16ToNSString(javascript)
+                   completionHandler:^(id value, NSError* error) {
+                     if (error) {
+                       DLOG(WARNING)
+                           << "Script execution has failed: "
+                           << base::SysNSStringToUTF16(
+                                  error.userInfo[NSLocalizedDescriptionKey]);
+                     }
+                     stackCallback.Run(ValueResultFromWKResult(value).get());
+                   }];
 }
 
 const std::string& WebStateImpl::GetContentLanguageHeader() const {

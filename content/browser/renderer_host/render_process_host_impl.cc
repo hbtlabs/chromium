@@ -128,8 +128,6 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_host_messages.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/mojo/channel_init.h"
-#include "content/common/mojo/mojo_messages.h"
 #include "content/common/mojo/mojo_shell_connection_impl.h"
 #include "content/common/render_process_messages.h"
 #include "content/common/resource_messages.h"
@@ -199,7 +197,7 @@
 #include "content/common/font_cache_dispatcher_win.h"
 #include "content/common/sandbox_win.h"
 #include "sandbox/win/src/sandbox_policy.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/dpi.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -736,9 +734,6 @@ bool RenderProcessHostImpl::Init() {
       content::BrowserThread::IO));
 #endif
 
-  // Setup the Mojo channel.
-  mojo_application_host_->Init();
-
   // Call the embedder first so that their IPC filters have priority.
   GetContentClient()->browser()->RenderProcessWillLaunch(this);
 
@@ -758,7 +753,7 @@ bool RenderProcessHostImpl::Init() {
             channel_id,
             BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
                 ->task_runner(),
-            in_process_renderer_handle_.release())));
+            mojo_channel_token_, mojo_application_host_->GetToken())));
 
     base::Thread::Options options;
 #if defined(OS_WIN) && !defined(OS_MACOSX)
@@ -817,24 +812,16 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
   if (ShouldUseMojoChannel()) {
     VLOG(1) << "Mojo Channel is enabled on host";
-    mojo::ScopedMessagePipeHandle handle;
-
-    if (run_renderer_in_process()) {
-      mojo::MessagePipe pipe;
-      handle = std::move(pipe.handle0);
-      in_process_renderer_handle_ = std::move(pipe.handle1);
-    } else {
-      mojo_channel_token_ = mojo::edk::GenerateRandomToken();
-      handle = mojo::edk::CreateParentMessagePipe(mojo_channel_token_);
-    }
+    mojo_channel_token_ = mojo::edk::GenerateRandomToken();
+    mojo::ScopedMessagePipeHandle handle =
+        mojo::edk::CreateParentMessagePipe(mojo_channel_token_);
 
     // Do NOT expand ifdef or run time condition checks here! Synchronous
     // IPCs from browser process are banned. It is only narrowly allowed
     // for Android WebView to maintain backward compatibility.
     // See crbug.com/526842 for details.
 #if defined(OS_ANDROID)
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kIPCSyncCompositing)) {
+    if (GetContentClient()->UsingSynchronousCompositing()) {
       return IPC::SyncChannel::Create(
           IPC::ChannelMojo::CreateServerFactory(std::move(handle)), this,
           runner.get(), true, &never_signaled_);
@@ -848,8 +835,7 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
 
     // Do NOT expand ifdef or run time condition checks here! See comment above.
 #if defined(OS_ANDROID)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kIPCSyncCompositing)) {
+  if (GetContentClient()->UsingSynchronousCompositing()) {
     return IPC::SyncChannel::Create(channel_id, IPC::Channel::MODE_SERVER, this,
                                     runner.get(), true, &never_signaled_);
   }
@@ -935,7 +921,7 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(new VideoCaptureHost(media_stream_manager));
   AddFilter(new AppCacheDispatcherHost(
       storage_partition_impl_->GetAppCacheService(), GetID()));
-  AddFilter(new ClipboardMessageFilter);
+  AddFilter(new ClipboardMessageFilter(blob_storage_context));
   AddFilter(new DOMStorageMessageFilter(
       storage_partition_impl_->GetDOMStorageContext()));
   AddFilter(new IndexedDBDispatcherHost(
@@ -1380,8 +1366,9 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
     command_line->AppendSwitch(switches::kEnablePinch);
 
 #if defined(OS_WIN)
-  command_line->AppendSwitchASCII(switches::kDeviceScaleFactor,
-                                  base::DoubleToString(gfx::GetDPIScale()));
+  command_line->AppendSwitchASCII(
+      switches::kDeviceScaleFactor,
+      base::DoubleToString(display::win::GetDPIScale()));
 #endif
 
   AppendCompositorCommandLineFlags(command_line);
@@ -1390,6 +1377,8 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
     command_line->AppendSwitchASCII(switches::kMojoChannelToken,
                                     mojo_channel_token_);
   }
+  command_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
+                                  mojo_application_host_->GetToken());
 }
 
 void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
@@ -1399,6 +1388,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
   // with any associated values) if present in the browser command line.
   static const char* const kSwitchNames[] = {
     switches::kAgcStartupMinVolume,
+    switches::kAecRefinedAdaptiveFilter,
     switches::kAllowLoopbackInPeerConnection,
     switches::kAndroidFontsPath,
     switches::kAudioBufferSize,
@@ -1469,7 +1459,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableLogging,
     switches::kEnableMemoryBenchmarking,
     switches::kEnableNetworkInformation,
-    switches::kEnableNotificationActionIcons,
     switches::kEnableOverlayScrollbar,
     switches::kEnablePinch,
     switches::kEnablePluginPlaceholderTesting,
@@ -1576,7 +1565,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableLowEndDeviceMode,
 #if defined(OS_ANDROID)
     switches::kDisableUnifiedMediaPipeline,
-    switches::kIPCSyncCompositing,
     switches::kRendererWaitForJavaDebugger,
 #endif
 #if defined(OS_MACOSX)
@@ -2630,11 +2618,6 @@ void RenderProcessHostImpl::OnProcessLaunched() {
   NotificationService::current()->Notify(NOTIFICATION_RENDERER_PROCESS_CREATED,
                                          Source<RenderProcessHost>(this),
                                          NotificationService::NoDetails());
-
-  // Allow Mojo to be setup before the renderer sees any Chrome IPC messages.
-  // This way, Mojo can be safely used from the renderer in response to any
-  // Chrome IPC message.
-  mojo_application_host_->Activate(this, GetHandle());
 
   while (!queued_messages_.empty()) {
     Send(queued_messages_.front());

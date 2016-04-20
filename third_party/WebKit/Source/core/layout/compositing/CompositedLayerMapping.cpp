@@ -1142,6 +1142,12 @@ void CompositedLayerMapping::updatePaintingPhases()
             paintPhase |= GraphicsLayerPaintForeground;
         m_scrollingContentsLayer->setPaintingPhase(paintPhase);
     }
+    if (m_foregroundLayer) {
+        GraphicsLayerPaintingPhase paintPhase = GraphicsLayerPaintForeground;
+        if (m_scrollingContentsLayer)
+            paintPhase |= GraphicsLayerPaintOverflowContents;
+        m_foregroundLayer->setPaintingPhase(paintPhase);
+    }
 }
 
 void CompositedLayerMapping::updateContentsRect()
@@ -1523,7 +1529,6 @@ bool CompositedLayerMapping::updateForegroundLayer(bool needsForegroundLayer)
     if (needsForegroundLayer) {
         if (!m_foregroundLayer) {
             m_foregroundLayer = createGraphicsLayer(CompositingReasonLayerForForeground);
-            m_foregroundLayer->setPaintingPhase(GraphicsLayerPaintForeground);
             layerChanged = true;
         }
     } else if (m_foregroundLayer) {
@@ -2358,7 +2363,7 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
     } else if (isScrollableAreaLayer(graphicsLayer)) {
         paintScrollableArea(graphicsLayer, context, interestRect);
     }
-    InspectorInstrumentation::didPaint(m_owningLayer.layoutObject(), graphicsLayer, context, LayoutRect(interestRect));
+    InspectorInstrumentation::didPaint(m_owningLayer.layoutObject()->frame(), graphicsLayer, context, LayoutRect(interestRect));
 #if ENABLE(ASSERT)
     if (Page* page = layoutObject()->frame()->page())
         page->setIsPainting(false);

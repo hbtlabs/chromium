@@ -412,12 +412,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
   }
 }
 
-#if defined(OS_ANDROID)
-#define MAYBE_NetHistograms DISABLED_NetHistograms
-#else
-#define MAYBE_NetHistograms NetHistograms
-#endif
-TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_NetHistograms) {
+TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
   const std::string kReceivedValidOCLHistogramName =
       "Net.HttpContentLengthWithValidOCL";
   const std::string kOriginalValidOCLHistogramName =
@@ -460,6 +455,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_NetHistograms) {
   std::unique_ptr<net::URLRequest> fake_request(
       FetchURLRequest(GURL("http://www.google.com/"), nullptr, response_headers,
                       kResponseContentLength));
+  fake_request->SetLoadFlags(fake_request->load_flags() | net::LOAD_MAIN_FRAME);
 
   base::TimeDelta freshness_lifetime =
       fake_request->response_info().headers->GetFreshnessLifetimes(
@@ -536,6 +532,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_NetHistograms) {
 
     fake_request = (FetchURLRequest(GURL("http://www.example.com/"), nullptr,
                                     response_headers, kResponseContentLength));
+    fake_request->SetLoadFlags(fake_request->load_flags() |
+                               net::LOAD_MAIN_FRAME);
 
     // Histograms are accumulative, so get the sum of all the tests so far.
     int expected_count = 0;
@@ -583,12 +581,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NullRequest) {
   EXPECT_TRUE(headers.HasHeader(kChromeProxyHeader));
 }
 
-#if defined(OS_ANDROID)
-#define MAYBE_OnCompletedInternalLoFi DISABLED_OnCompletedInternalLoFi
-#else
-#define MAYBE_OnCompletedInternalLoFi OnCompletedInternalLoFi
-#endif
-TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_OnCompletedInternalLoFi) {
+TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFi) {
   // Enable Lo-Fi.
   const struct {
     bool lofi_response;
@@ -615,14 +608,7 @@ TEST_F(DataReductionProxyNetworkDelegateTest, MAYBE_OnCompletedInternalLoFi) {
   }
 }
 
-#if defined(OS_ANDROID)
-#define MAYBE_OnCompletedInternalLoFiPreview \
-  DISABLED_OnCompletedInternalLoFiPreview
-#else
-#define MAYBE_OnCompletedInternalLoFiPreview OnCompletedInternalLoFiPreview
-#endif
-TEST_F(DataReductionProxyNetworkDelegateTest,
-       MAYBE_OnCompletedInternalLoFiPreview) {
+TEST_F(DataReductionProxyNetworkDelegateTest, OnCompletedInternalLoFiPreview) {
   // Enable Lo-Fi.
   const struct {
     bool is_preview;

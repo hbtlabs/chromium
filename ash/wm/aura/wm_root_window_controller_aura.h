@@ -33,6 +33,9 @@ class ASH_EXPORT WmRootWindowControllerAura : public WmRootWindowController {
 
   // WmRootWindowController:
   bool HasShelf() override;
+  WmGlobals* GetGlobals() override;
+  WorkspaceWindowState GetWorkspaceWindowState() override;
+  WmWindow* GetWindow() override;
 
  private:
   RootWindowController* root_window_controller_;

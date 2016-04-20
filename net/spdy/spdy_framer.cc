@@ -8,17 +8,18 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/lazy_instance.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "net/quic/quic_flags.h"
 #include "net/spdy/hpack/hpack_constants.h"
+#include "net/spdy/spdy_bitmasks.h"
+#include "net/spdy/spdy_bug_tracker.h"
 #include "net/spdy/spdy_frame_builder.h"
 #include "net/spdy/spdy_frame_reader.h"
-#include "net/spdy/spdy_bitmasks.h"
 #include "third_party/zlib/zlib.h"
 
 using base::StringPiece;
@@ -144,7 +145,7 @@ SettingsFlagsAndId SettingsFlagsAndId::FromWireFormat(SpdyMajorVersion version,
 
 SettingsFlagsAndId::SettingsFlagsAndId(uint8_t flags, uint32_t id)
     : flags_(flags), id_(id & 0x00ffffff) {
-  LOG_IF(DFATAL, id > (1u << 24)) << "SPDY setting ID too large: " << id;
+  SPDY_BUG_IF(id > (1u << 24)) << "SPDY setting ID too large: " << id;
 }
 
 uint32_t SettingsFlagsAndId::GetWireFormat(SpdyMajorVersion version) const {
@@ -419,6 +420,8 @@ const char* SpdyFramer::ErrorCodeToString(int error_code) {
   switch (error_code) {
     case SPDY_NO_ERROR:
       return "NO_ERROR";
+    case SPDY_INVALID_STREAM_ID:
+      return "INVALID_STREAM_ID";
     case SPDY_INVALID_CONTROL_FRAME:
       return "INVALID_CONTROL_FRAME";
     case SPDY_CONTROL_PAYLOAD_TOO_LARGE:
@@ -638,8 +641,8 @@ size_t SpdyFramer::ProcessInput(const char* data, size_t len) {
       }
 
       default:
-        LOG(DFATAL) << "Invalid value for " << display_protocol_
-                    << " framer state: " << state_;
+        SPDY_BUG << "Invalid value for " << display_protocol_
+                 << " framer state: " << state_;
         // This ensures that we don't infinite-loop if state_ gets an
         // invalid value somehow, such as due to a SpdyFramer getting deleted
         // from a callback it calls.
@@ -677,6 +680,68 @@ SpdyFramer::SpdySettingsScratch::SpdySettingsScratch()
 void SpdyFramer::SpdySettingsScratch::Reset() {
   buffer.Rewind();
   last_setting_id = -1;
+}
+
+SpdyFrameType SpdyFramer::ValidateFrameHeader(bool is_control_frame,
+                                              int frame_type_field) {
+  if (!SpdyConstants::IsValidFrameType(protocol_version_, frame_type_field)) {
+    if (protocol_version_ == SPDY3) {
+      if (is_control_frame) {
+        DLOG(WARNING) << "Invalid control frame type " << frame_type_field
+                      << " (protocol version: " << protocol_version_ << ")";
+        set_error(SPDY_INVALID_CONTROL_FRAME);
+      } else {
+        // Else it's a SPDY3 data frame which we don't validate further here
+      }
+    } else {
+      // In HTTP2 we ignore unknown frame types for extensibility, as long as
+      // the rest of the control frame header is valid.
+      // We rely on the visitor to check validity of current_frame_stream_id_.
+      bool valid_stream =
+          visitor_->OnUnknownFrame(current_frame_stream_id_, frame_type_field);
+      if (valid_stream) {
+        DLOG(WARNING) << "Ignoring unknown frame type.";
+        CHANGE_STATE(SPDY_IGNORE_REMAINING_PAYLOAD);
+      } else {
+        // Report an invalid frame error and close the stream if the
+        // stream_id is not valid.
+        DLOG(WARNING) << "Unknown control frame type " << frame_type_field
+                      << " received on invalid stream "
+                      << current_frame_stream_id_;
+        set_error(SPDY_INVALID_CONTROL_FRAME);
+      }
+    }
+    return DATA;
+  }
+
+  SpdyFrameType frame_type =
+      SpdyConstants::ParseFrameType(protocol_version_, frame_type_field);
+
+  if (protocol_version_ == HTTP2) {
+    if (!SpdyConstants::IsValidHTTP2FrameStreamId(current_frame_stream_id_,
+                                                  frame_type)) {
+      DLOG(ERROR) << "The framer received an invalid streamID of "
+                  << current_frame_stream_id_ << " for a frame of type "
+                  << FrameTypeToString(frame_type);
+      set_error(SPDY_INVALID_STREAM_ID);
+      return frame_type;
+    }
+
+    // Ensure that we see a CONTINUATION frame iff we expect to.
+    if ((frame_type == CONTINUATION) != (expect_continuation_ != 0)) {
+      if (expect_continuation_ != 0) {
+        DLOG(ERROR) << "The framer was expecting to receive a CONTINUATION "
+                    << "frame, but instead received a frame of type "
+                    << FrameTypeToString(frame_type);
+      } else {
+        DLOG(ERROR) << "The framer received an unexpected CONTINUATION frame.";
+      }
+      set_error(SPDY_UNEXPECTED_FRAME);
+      return frame_type;
+    }
+  }
+
+  return frame_type;
 }
 
 size_t SpdyFramer::ProcessCommonHeader(const char* data, size_t len) {
@@ -721,8 +786,6 @@ size_t SpdyFramer::ProcessCommonHeader(const char* data, size_t len) {
         set_error(SPDY_UNSUPPORTED_VERSION);
         return 0;
       }
-      // We check control_frame_type_field's validity in
-      // ProcessControlFrameHeader().
       uint16_t control_frame_type_field_uint16;
       successful_read = reader.ReadUInt16(&control_frame_type_field_uint16);
       control_frame_type_field = control_frame_type_field_uint16;
@@ -768,24 +831,8 @@ size_t SpdyFramer::ProcessCommonHeader(const char* data, size_t len) {
     DCHECK(successful_read);
 
     remaining_data_length_ = current_frame_length_ - reader.GetBytesConsumed();
-
-    // Before we accept a DATA frame, we need to make sure we're not in the
-    // middle of processing a header block.
-    const bool is_continuation_frame =
-        (control_frame_type_field ==
-         SpdyConstants::SerializeFrameType(protocol_version_, CONTINUATION));
-    if ((expect_continuation_ != 0) != is_continuation_frame) {
-      if (expect_continuation_ != 0) {
-        DLOG(ERROR) << "The framer was expecting to receive a CONTINUATION "
-                    << "frame, but instead received frame type "
-                    << control_frame_type_field;
-      } else {
-        DLOG(ERROR) << "The framer received an unexpected CONTINUATION frame.";
-      }
-      set_error(SPDY_UNEXPECTED_FRAME);
-      return original_len - len;
-    }
   }
+
   DCHECK_EQ(is_control_frame ? GetControlFrameHeaderSize()
                              : GetDataFrameMinimumSize(),
             reader.GetBytesConsumed());
@@ -805,6 +852,13 @@ size_t SpdyFramer::ProcessCommonHeader(const char* data, size_t len) {
       LOG(WARNING) << "Unexpectedly large frame.  " << display_protocol_
                    << " session is likely corrupt.";
     }
+  }
+
+  current_frame_type_ =
+      ValidateFrameHeader(is_control_frame, control_frame_type_field);
+
+  if (state_ == SPDY_ERROR || state_ == SPDY_IGNORE_REMAINING_PAYLOAD) {
+    return original_len - len;
   }
 
   // if we're here, then we have the common header all received.
@@ -854,38 +908,6 @@ size_t SpdyFramer::ProcessCommonHeader(const char* data, size_t len) {
 void SpdyFramer::ProcessControlFrameHeader(int control_frame_type_field) {
   DCHECK_EQ(SPDY_NO_ERROR, error_code_);
   DCHECK_LE(GetControlFrameHeaderSize(), current_frame_buffer_.len());
-
-  if (!SpdyConstants::IsValidFrameType(protocol_version_,
-                                       control_frame_type_field)) {
-    if (protocol_version_ == SPDY3) {
-      DLOG(WARNING) << "Invalid control frame type " << control_frame_type_field
-                    << " (protocol version: " << protocol_version_ << ")";
-      set_error(SPDY_INVALID_CONTROL_FRAME);
-      return;
-    } else {
-      // In HTTP2 we ignore unknown frame types for extensibility, as long as
-      // the rest of the control frame header is valid.
-      // We rely on the visitor to check validity of current_frame_stream_id_.
-      bool valid_stream = visitor_->OnUnknownFrame(current_frame_stream_id_,
-                                                   control_frame_type_field);
-      if (valid_stream) {
-        DVLOG(1) << "Ignoring unknown frame type.";
-        CHANGE_STATE(SPDY_IGNORE_REMAINING_PAYLOAD);
-      } else {
-        // Report an invalid frame error and close the stream if the
-        // stream_id is not valid.
-        DLOG(WARNING) << "Unknown control frame type "
-                      << control_frame_type_field
-                      << " received on invalid stream "
-                      << current_frame_stream_id_;
-        set_error(SPDY_INVALID_CONTROL_FRAME);
-      }
-      return;
-    }
-  }
-
-  current_frame_type_ = SpdyConstants::ParseFrameType(protocol_version_,
-                                                      control_frame_type_field);
 
   // Do some sanity checking on the control frame sizes and flags.
   switch (current_frame_type_) {
@@ -1125,8 +1147,8 @@ void SpdyFramer::ProcessControlFrameHeader(int control_frame_type_field) {
     // We should already be in an error state. Double-check.
     DCHECK_EQ(SPDY_ERROR, state_);
     if (state_ != SPDY_ERROR) {
-      LOG(DFATAL) << display_protocol_
-                  << " control frame buffer too small for fixed-length frame.";
+      SPDY_BUG << display_protocol_
+               << " control frame buffer too small for fixed-length frame.";
       set_error(SPDY_CONTROL_PAYLOAD_TOO_LARGE);
     }
     return;
@@ -1569,7 +1591,7 @@ size_t SpdyFramer::ProcessControlFrameHeaderBlock(const char* data,
       current_frame_type_ != HEADERS &&
       current_frame_type_ != PUSH_PROMISE &&
       current_frame_type_ != CONTINUATION) {
-    LOG(DFATAL) << "Unhandled frame type in ProcessControlFrameHeaderBlock.";
+    SPDY_BUG << "Unhandled frame type in ProcessControlFrameHeaderBlock.";
   }
   size_t process_bytes = std::min(
       data_len, remaining_data_length_ - remaining_padding_payload_length_);
@@ -2089,7 +2111,8 @@ size_t SpdyFramer::ProcessFramePadding(const char* data, size_t len) {
     DCHECK_EQ(remaining_padding_payload_length_, remaining_data_length_);
     size_t amount_to_discard = std::min(remaining_padding_payload_length_, len);
     if (current_frame_type_ == DATA && amount_to_discard > 0) {
-      DCHECK_EQ(HTTP2, protocol_version_);
+      SPDY_BUG_IF(protocol_version_ == SPDY3)
+          << "Padding invalid for SPDY version " << protocol_version_;
       visitor_->OnStreamPadding(current_frame_stream_id_, amount_to_discard);
     }
     data += amount_to_discard;
@@ -2197,9 +2220,9 @@ bool SpdyFramer::ParseHeaderBlockInBuffer(const char* header_data,
     (*block)[name] = value;
   }
   if (reader.GetBytesConsumed() != header_length) {
-    LOG(DFATAL) << "Buffer expected to consist entirely of headers, but only "
-                << reader.GetBytesConsumed() << " bytes consumed, from "
-                << header_length;
+    SPDY_BUG << "Buffer expected to consist entirely of headers, but only "
+             << reader.GetBytesConsumed() << " bytes consumed, from "
+             << header_length;
     return false;
   }
 
@@ -2290,7 +2313,7 @@ SpdySerializedFrame SpdyFramer::SerializeSynStream(
   // Sanitize priority.
   uint8_t priority = syn_stream.priority();
   if (priority > GetLowestPriority()) {
-    DLOG(DFATAL) << "Priority out-of-bounds.";
+    SPDY_BUG << "Priority out-of-bounds.";
     priority = GetLowestPriority();
   }
 
@@ -2514,7 +2537,7 @@ SpdySerializedFrame SpdyFramer::SerializeHeaders(const SpdyHeadersIR& headers) {
   SpdyPriority priority = static_cast<SpdyPriority>(headers.priority());
   if (headers.has_priority()) {
     if (headers.priority() > GetLowestPriority()) {
-      DLOG(DFATAL) << "Priority out-of-bounds.";
+      SPDY_BUG << "Priority out-of-bounds.";
       priority = GetLowestPriority();
     }
     size += 5;
@@ -2981,7 +3004,7 @@ bool SpdyFramer::IncrementallyDecompressControlFrameHeaderData(
   // Get a decompressor or set error.
   z_stream* decomp = GetHeaderDecompressor();
   if (decomp == NULL) {
-    LOG(DFATAL) << "Couldn't get decompressor for handling compressed headers.";
+    SPDY_BUG << "Couldn't get decompressor for handling compressed headers.";
     set_error(SPDY_DECOMPRESS_FAILURE);
     return false;
   }
@@ -3101,7 +3124,7 @@ void SpdyFramer::SerializeHeaderBlock(SpdyFrameBuilder* builder,
 
   z_stream* compressor = GetHeaderCompressor();
   if (!compressor) {
-    LOG(DFATAL) << "Could not obtain compressor.";
+    SPDY_BUG << "Could not obtain compressor.";
     return;
   }
   // Create an output frame.

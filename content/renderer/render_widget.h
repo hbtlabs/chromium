@@ -199,11 +199,6 @@ class CONTENT_EXPORT RenderWidget
   void OnSwapBuffersAborted() override;
   void OnSwapBuffersComplete() override;
   void OnSwapBuffersPosted() override;
-  void RecordFrameTimingEvents(
-      std::unique_ptr<cc::FrameTimingTracker::CompositeTimingSet>
-          composite_events,
-      std::unique_ptr<cc::FrameTimingTracker::MainFrameTimingSet>
-          main_frame_events) override;
   void RequestScheduleAnimation() override;
   void UpdateVisualState() override;
   void WillBeginCompositorFrame() override;
@@ -560,10 +555,6 @@ class CONTENT_EXPORT RenderWidget
   // Called when value of focused text field gets dirty, e.g. value is modified
   // by script, not by user input.
   void didUpdateTextOfFocusedElementByNonUserInput() override;
-
-  // Creates a 3D context associated with this view.
-  std::unique_ptr<WebGraphicsContext3DCommandBufferImpl>
-  CreateGraphicsContext3D(gpu::GpuChannelHost* gpu_channel_host);
 
   // Sends an ACK to the browser process during the next compositor frame.
   void OnWaitNextFrameForTests(int routing_id);

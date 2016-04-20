@@ -151,7 +151,17 @@ void LayoutSVGRoot::layout()
     SVGSVGElement* svg = toSVGSVGElement(node());
     ASSERT(svg);
     m_isLayoutSizeChanged = needsLayout || (svg->hasRelativeLengths() && oldSize != size());
-    SVGLayoutSupport::layoutChildren(this, needsLayout || SVGLayoutSupport::filtersForceContainerLayout(this));
+    // When hasRelativeLengths() is false, no descendants have relative lengths
+    // (hence no one is interested in viewport size changes).
+    bool layoutSizeChanged = m_isLayoutSizeChanged && svg->hasRelativeLengths();
+
+    // If any of this root's children need to be laid out, and a filter is
+    // applied to it, we need to issue paint invalidations for all descendants.
+    bool forceLayoutOfChildren = needsLayout
+        || (normalChildNeedsLayout() && SVGLayoutSupport::hasFilterResource(*this));
+
+    const bool transformToRootChanged = false;
+    SVGLayoutSupport::layoutChildren(firstChild(), forceLayoutOfChildren, transformToRootChanged, layoutSizeChanged);
 
     if (m_needsBoundariesOrTransformUpdate) {
         updateCachedBoundaries();

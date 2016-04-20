@@ -46,6 +46,7 @@ source_set("gpu_sources") {
     "//base/third_party/dynamic_annotations",
     "//components/tracing",
     "//content:export",
+    "//content/child",
     "//content/common",
     "//content/public/child:child_sources",
     "//content/public/common:common_sources",
@@ -56,9 +57,9 @@ source_set("gpu_sources") {
     "//media/mojo/services:application_factory",
     "//services/shell/public/interfaces",
     "//skia",
+    "//ui/events/ipc",
     "//ui/gfx/ipc",
     "//ui/gl",
-    "//ui/latency_info/ipc",
   ]
 
   if (mojo_media_host == "gpu") {

@@ -14,11 +14,14 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
+#include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
@@ -214,27 +217,28 @@ GLManager::~GLManager() {
   }
 }
 
-scoped_ptr<gfx::GpuMemoryBuffer> GLManager::CreateGpuMemoryBuffer(
+std::unique_ptr<gfx::GpuMemoryBuffer> GLManager::CreateGpuMemoryBuffer(
     const gfx::Size& size,
     gfx::BufferFormat format) {
 #if defined(OS_MACOSX)
   if (use_iosurface_memory_buffers_) {
-    return make_scoped_ptr<gfx::GpuMemoryBuffer>(
+    return base::WrapUnique<gfx::GpuMemoryBuffer>(
         new IOSurfaceGpuMemoryBuffer(size, format));
   }
 #endif  // defined(OS_MACOSX)
   std::vector<uint8_t> data(gfx::BufferSizeForBufferFormat(size, format), 0);
   scoped_refptr<base::RefCountedBytes> bytes(new base::RefCountedBytes(data));
-  return make_scoped_ptr<gfx::GpuMemoryBuffer>(
+  return base::WrapUnique<gfx::GpuMemoryBuffer>(
       new GpuMemoryBufferImpl(bytes.get(), size, format));
 }
 
 void GLManager::Initialize(const GLManager::Options& options) {
-  InitializeWithCommandLine(options, nullptr);
+  InitializeWithCommandLine(options, *base::CommandLine::ForCurrentProcess());
 }
 
-void GLManager::InitializeWithCommandLine(const GLManager::Options& options,
-                                          base::CommandLine* command_line) {
+void GLManager::InitializeWithCommandLine(
+    const GLManager::Options& options,
+    const base::CommandLine& command_line) {
   const int32_t kCommandBufferSize = 1024 * 1024;
   const size_t kStartTransferBufferSize = 4 * 1024 * 1024;
   const size_t kMinTransferBufferSize = 1 * 256 * 1024;
@@ -287,11 +291,10 @@ void GLManager::InitializeWithCommandLine(const GLManager::Options& options,
 
   attrib_helper.Serialize(&attribs);
 
-  DCHECK(!command_line || !context_group);
   if (!context_group) {
-    scoped_refptr<gles2::FeatureInfo> feature_info;
-    if (command_line)
-      feature_info = new gles2::FeatureInfo(*command_line);
+    GpuDriverBugWorkarounds gpu_driver_bug_workaround(&command_line);
+    scoped_refptr<gles2::FeatureInfo> feature_info =
+        new gles2::FeatureInfo(command_line, gpu_driver_bug_workaround);
     context_group = new gles2::ContextGroup(
         gpu_preferences_, mailbox_manager_.get(), NULL,
         new gpu::gles2::ShaderTranslatorCache(gpu_preferences_),
@@ -382,11 +385,9 @@ void GLManager::InitializeWithCommandLine(const GLManager::Options& options,
                                      this));
 
   ASSERT_TRUE(gles2_implementation_->Initialize(
-      kStartTransferBufferSize,
-      kMinTransferBufferSize,
-      kMaxTransferBufferSize,
-      gpu::gles2::GLES2Implementation::kNoLimit))
-          << "Could not init GLES2Implementation";
+      kStartTransferBufferSize, kMinTransferBufferSize, kMaxTransferBufferSize,
+      SharedMemoryLimits::kNoLimit))
+      << "Could not init GLES2Implementation";
 
   MakeCurrent();
 }
@@ -463,7 +464,7 @@ void GLManager::Destroy() {
   }
 }
 
-const gpu::gles2::FeatureInfo::Workarounds& GLManager::workarounds() const {
+const GpuDriverBugWorkarounds& GLManager::workarounds() const {
   return decoder_->GetContextGroup()->feature_info()->workarounds();
 }
 
@@ -566,7 +567,7 @@ int32_t GLManager::CreateGpuMemoryBufferImage(size_t width,
                                               unsigned internalformat,
                                               unsigned usage) {
   DCHECK_EQ(usage, static_cast<unsigned>(GL_READ_WRITE_CHROMIUM));
-  scoped_ptr<gfx::GpuMemoryBuffer> buffer = CreateGpuMemoryBuffer(
+  std::unique_ptr<gfx::GpuMemoryBuffer> buffer = CreateGpuMemoryBuffer(
       gfx::Size(width, height), gfx::BufferFormat::RGBA_8888);
   return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
 }

@@ -59,6 +59,7 @@ class HTMLInputElement;
 class HTMLQualifiedName;
 class HTMLSlotElement;
 class IntRect;
+class EventDispatchHandlingState;
 class KeyboardEvent;
 class NSResolver;
 class NameNodeList;
@@ -615,8 +616,8 @@ public:
 
     // Handlers to do/undo actions on the target node before an event is dispatched to it and after the event
     // has been dispatched.  The data pointer is handed back by the preDispatch and passed to postDispatch.
-    virtual void* preDispatchEventHandler(Event*) { return nullptr; }
-    virtual void postDispatchEventHandler(Event*, void* /*dataFromPreDispatch*/) { }
+    virtual EventDispatchHandlingState* preDispatchEventHandler(Event*) { return nullptr; }
+    virtual void postDispatchEventHandler(Event*, EventDispatchHandlingState*) { }
 
     void dispatchScopedEvent(Event*);
 
@@ -659,6 +660,8 @@ public:
     bool isFinishedParsingChildren() const { return getFlag(IsFinishedParsingChildrenFlag); }
 
     DECLARE_VIRTUAL_TRACE();
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
     unsigned lengthOfContents() const;
 

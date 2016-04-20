@@ -27,6 +27,8 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
 #if defined(OS_ANDROID)
   // Android does not have support for PagePopup
   WebRuntimeFeatures::enablePagePopup(false);
+  // No plan to support complex UI for date/time INPUT types.
+  WebRuntimeFeatures::enableInputMultipleFieldsUI(false);
   // Android does not yet support SharedWorker. crbug.com/154571
   WebRuntimeFeatures::enableSharedWorker(false);
   // Android does not yet support NavigatorContentUtils.
@@ -79,9 +81,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     // Chrome's Push Messaging implementation relies on Web Notifications.
     WebRuntimeFeatures::enablePushMessaging(false);
   }
-
-  if (command_line.HasSwitch(switches::kEnableNotificationActionIcons))
-    WebRuntimeFeatures::enableNotificationActionIcons(true);
 
   if (command_line.HasSwitch(switches::kDisableSharedWorkers))
     WebRuntimeFeatures::enableSharedWorker(false);
@@ -198,6 +197,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::enableMediaDocumentDownloadButton(
       base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
+
+  if (base::FeatureList::IsEnabled(features::kPointerEvents)) {
+      WebRuntimeFeatures::enableFeatureFromString(
+        std::string("PointerEvent"), true);
+  }
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

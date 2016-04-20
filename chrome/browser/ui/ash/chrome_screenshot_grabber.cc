@@ -41,7 +41,7 @@
 #include "chrome/browser/notifications/notifier_state_tracker.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
 #include "chromeos/login/login_state.h"
-#include "components/drive/file_system_interface.h"
+#include "components/drive/chromeos/file_system_interface.h"
 #endif
 
 namespace {
@@ -349,6 +349,29 @@ void ChromeScreenshotGrabber::HandleTakePartialScreenshot(
       screenshot_directory.AppendASCII(GetScreenshotBaseFilename() + ".png");
   screenshot_grabber_->TakeScreenshot(window, rect, screenshot_path);
   content::RecordAction(base::UserMetricsAction("Screenshot_TakePartial"));
+}
+
+void ChromeScreenshotGrabber::HandleTakeWindowScreenshot(aura::Window* window) {
+  if (ScreenshotsDisabled()) {
+    screenshot_grabber_->NotifyScreenshotCompleted(
+        ui::ScreenshotGrabberObserver::SCREENSHOTS_DISABLED, base::FilePath());
+    return;
+  }
+
+  base::FilePath screenshot_directory;
+  if (!GetScreenshotDirectory(&screenshot_directory)) {
+    screenshot_grabber_->NotifyScreenshotCompleted(
+        ui::ScreenshotGrabberObserver::SCREENSHOT_GET_DIR_FAILED,
+        base::FilePath());
+    return;
+  }
+
+  base::FilePath screenshot_path =
+      screenshot_directory.AppendASCII(GetScreenshotBaseFilename() + ".png");
+  screenshot_grabber_->TakeScreenshot(window,
+                                      gfx::Rect(window->bounds().size()),
+                                      screenshot_path);
+  content::RecordAction(base::UserMetricsAction("Screenshot_TakeWindow"));
 }
 
 bool ChromeScreenshotGrabber::CanTakeScreenshot() {

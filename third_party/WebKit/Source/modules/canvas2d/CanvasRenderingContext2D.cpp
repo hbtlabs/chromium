@@ -372,12 +372,17 @@ void CanvasRenderingContext2D::didDraw(const SkIRect& dirtyRect)
 
 bool CanvasRenderingContext2D::stateHasFilter()
 {
-    return state().hasFilter(canvas(), accessFont(), canvas()->size(), this);
+    return state().hasFilter(canvas(), canvas()->size(), this);
 }
 
 SkImageFilter* CanvasRenderingContext2D::stateGetFilter()
 {
-    return state().getFilter(canvas(), accessFont(), canvas()->size(), this);
+    return state().getFilter(canvas(), canvas()->size(), this);
+}
+
+void CanvasRenderingContext2D::snapshotStateForFilter()
+{
+    modifiableState().setFontForFilter(accessFont());
 }
 
 SkCanvas* CanvasRenderingContext2D::drawingCanvas() const
@@ -597,6 +602,16 @@ std::pair<Element*, String> CanvasRenderingContext2D::getControlAndIdIfHitRegion
         return std::make_pair(nullptr, hitRegion->id());
     }
     return std::make_pair(nullptr, String());
+}
+
+String CanvasRenderingContext2D::getIdFromControl(const Element* element)
+{
+    if (hitRegionsCount() <= 0)
+        return String();
+
+    if (HitRegion* hitRegion = m_hitRegionManager->getHitRegionByControl(element))
+        return hitRegion->id();
+    return String();
 }
 
 String CanvasRenderingContext2D::textAlign() const

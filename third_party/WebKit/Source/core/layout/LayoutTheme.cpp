@@ -406,10 +406,6 @@ bool LayoutTheme::isControlStyled(const ComputedStyle& style) const
     case TextFieldPart:
         return style.hasAuthorBackground() || style.hasAuthorBorder() || style.boxShadow();
 
-    case SliderHorizontalPart:
-    case SliderVerticalPart:
-        return style.boxShadow();
-
     default:
         return false;
     }
@@ -851,16 +847,15 @@ bool LayoutTheme::shouldOpenPickerWithF4Key() const
     return false;
 }
 
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 bool LayoutTheme::supportsCalendarPicker(const AtomicString& type) const
 {
+    DCHECK(RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled());
     return type == InputTypeNames::date
         || type == InputTypeNames::datetime
         || type == InputTypeNames::datetime_local
         || type == InputTypeNames::month
         || type == InputTypeNames::week;
 }
-#endif
 
 bool LayoutTheme::shouldUseFallbackTheme(const ComputedStyle&) const
 {

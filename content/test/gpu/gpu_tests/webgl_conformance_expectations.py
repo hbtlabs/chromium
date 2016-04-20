@@ -22,13 +22,47 @@ class WebGLConformanceExpectations(GpuTestExpectations):
 
   def CheckPatternIsValid(self, pattern):
     # Look for basic wildcards.
-    if not '*' in pattern:
+    if not '*' in pattern and not 'WebglExtension.' in pattern:
       full_path = os.path.normpath(os.path.join(self.conformance_path, pattern))
       if not os.path.exists(full_path):
         raise Exception('The WebGL conformance test path specified in ' +
           'expectation does not exist: ' + full_path)
 
   def SetExpectations(self):
+    # ===================================
+    # Extension availability expectations
+    # ===================================
+    # It's expected that not all extensions will be available on all platforms.
+    # Having a test listed here is not necessarily a problem.
+
+    self.Fail('WebglExtension.EXT_color_buffer_float',
+        ['win', 'mac'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_astc',
+        ['win', 'mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_atc',
+        ['win', 'mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_etc1',
+        ['mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_pvrtc',
+        ['win', 'mac', 'linux'])
+
+    # Extensions not available under D3D9
+    self.Fail('WebglExtension.EXT_disjoint_timer_query',
+        ['win', 'd3d9'])
+    self.Fail('WebglExtension.EXT_sRGB',
+        ['win', 'd3d9'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_etc1',
+        ['win', 'd3d9'])
+
+    self.Fail('WebglExtension.WEBGL_depth_texture',
+        ['win', 'amd', 'd3d9'])
+
+    self.Fail('WebglExtension.WEBGL_draw_buffers',
+        ['win', 'd3d9'])
+
+    # ========================
+    # Conformance expectations
+    # ========================
     # Fails on all platforms
     self.Fail('deqp/data/gles2/shaders/functions.html',
         bug=478572)
@@ -134,6 +168,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['mac', ('nvidia', 0xfd5), ('nvidia', 0xfe9)], bug=368912)
     self.Fail('conformance/textures/image_bitmap_from_image/*',
         ['mac', ('nvidia', 0xfd5), ('nvidia', 0xfe9)], bug=589930)
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        ['mavericks', ('nvidia', 0xfe9)], bug=586536)
 
     # Mac Retina AMD failures
     self.Fail('conformance/textures/image_bitmap_from_image/*',
@@ -218,6 +254,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['linux', 'intel'], bug=1312)  # ANGLE bug id. See also 598910
     self.Fail('conformance/glsl/bugs/sampler-array-using-loop-index.html',
         ['linux', 'intel', 'opengl'], bug=598924)
+    self.Fail('conformance/uniforms/gl-uniform-arrays.html',
+        ['linux', 'debug', ('intel', 0x412)], bug=604140)
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        ['linux', ('intel', 0x412), 'opengl'], bug=586536)
 
     # Android failures
     self.Fail('deqp/data/gles2/shaders/constants.html',

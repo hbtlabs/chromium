@@ -34,12 +34,16 @@ class BlinkGCPluginAction : public PluginASTAction {
     bool parsed = true;
 
     for (size_t i = 0; i < args.size() && parsed; ++i) {
-      if (args[i] == "enable-oilpan") {
-        options_.enable_oilpan = true;
-      } else if (args[i] == "dump-graph") {
+      // TODO(sof): remove this case once a version of the GC plugin
+      // has rolled which has enable-oilpan-always baked in _and_
+      // Blink no longer passes in the option (cf. Source/config.gyp)
+      if (args[i] == "enable-oilpan")
+        continue;
+      // TODO(sof): same for warn-raw-ptr
+      if (args[i] == "warn-raw-ptr")
+        continue;
+      if (args[i] == "dump-graph") {
         options_.dump_graph = true;
-      } else if (args[i] == "warn-raw-ptr") {
-        options_.warn_raw_ptr = true;
       } else if (args[i] == "warn-unneeded-finalizer") {
         options_.warn_unneeded_finalizer = true;
       } else {

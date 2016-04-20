@@ -88,6 +88,7 @@ enum HitTestFilter {
 enum MarkingBehavior {
     MarkOnlyThis,
     MarkContainerChain,
+    MarkContainerChainInLayout,
 };
 
 enum MapCoordinatesMode {
@@ -810,8 +811,7 @@ public:
 
     Element* offsetParent() const;
 
-    void markContainerChainForLayout(bool scheduleRelayout = true);
-    void markContainerChainForLayout(SubtreeLayoutScope*);
+    void markContainerChainForLayout(bool scheduleRelayout = true, SubtreeLayoutScope* = nullptr);
     void setNeedsLayout(LayoutInvalidationReasonForTracing, MarkingBehavior = MarkContainerChain, SubtreeLayoutScope* = nullptr);
     void setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReasonForTracing, MarkingBehavior = MarkContainerChain, SubtreeLayoutScope* = nullptr);
     void clearNeedsLayout();
@@ -1396,6 +1396,8 @@ public:
     // Clears the IsScrollAnchorObject bit, unless any ScrollAnchor still refers to us.
     void maybeClearIsScrollAnchorObject();
 
+    void clearChildNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setChildNeedsOverflowRecalcAfterStyleChange(false); }
+
 protected:
     enum LayoutObjectType {
         LayoutObjectBr,
@@ -1568,7 +1570,6 @@ protected:
     void setIsBackgroundAttachmentFixedObject(bool);
 
     void clearSelfNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setSelfNeedsOverflowRecalcAfterStyleChange(false); }
-    void clearChildNeedsOverflowRecalcAfterStyleChange() { m_bitfields.setChildNeedsOverflowRecalcAfterStyleChange(false); }
     void setShouldInvalidateOverflowForPaint() { m_bitfields.setShouldInvalidateOverflowForPaint(true); }
     void setEverHadLayout() { m_bitfields.setEverHadLayout(true); }
 
@@ -1606,11 +1607,9 @@ private:
 
     void setNeedsOverflowRecalcAfterStyleChange();
 
-    void markContainerChainForLayout(bool scheduleRelayout, SubtreeLayoutScope*);
-
     // FIXME: This should be 'markContaingBoxChainForOverflowRecalc when we make LayoutBox
     // recomputeOverflow-capable. crbug.com/437012 and crbug.com/434700.
-    inline void markContainingBlocksForOverflowRecalc();
+    inline void markAncestorsForOverflowRecalcIfNeeded();
 
     inline void markAncestorsForPaintInvalidation();
 
@@ -2016,8 +2015,8 @@ inline void LayoutObject::setNeedsLayout(LayoutInvalidationReasonForTracing reas
             TRACE_EVENT_SCOPE_THREAD,
             "data",
             InspectorLayoutInvalidationTrackingEvent::data(this, reason));
-        if (markParents == MarkContainerChain && (!layouter || layouter->root() != this))
-            markContainerChainForLayout(layouter);
+        if (markParents != MarkOnlyThis && (!layouter || layouter->root() != this))
+            markContainerChainForLayout(!layouter && markParents == MarkContainerChain, layouter);
     }
 }
 
@@ -2053,8 +2052,8 @@ inline void LayoutObject::setChildNeedsLayout(MarkingBehavior markParents, Subtr
     bool alreadyNeededLayout = normalChildNeedsLayout();
     setNormalChildNeedsLayout(true);
     // FIXME: Replace MarkOnlyThis with the SubtreeLayoutScope code path and remove the MarkingBehavior argument entirely.
-    if (!alreadyNeededLayout && markParents == MarkContainerChain && (!layouter || layouter->root() != this))
-        markContainerChainForLayout(layouter);
+    if (!alreadyNeededLayout && markParents != MarkOnlyThis && (!layouter || layouter->root() != this))
+        markContainerChainForLayout(!layouter && markParents == MarkContainerChain, layouter);
 }
 
 inline void LayoutObject::setNeedsPositionedMovementLayout()

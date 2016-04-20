@@ -218,10 +218,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_ANISOTROPIC_MIPMAP_SCALE
 #endif
 
-#ifndef    SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#   define SK_SUPPORT_LEGACY_REFENCODEDDATA_NOCTX
-#endif
-
 #ifndef    SK_IGNORE_ETC1_SUPPORT
 #   define SK_IGNORE_ETC1_SUPPORT
 #endif
@@ -244,6 +240,10 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #ifndef    SK_SUPPORT_LEGACY_TYPEFACE_PTR
 #   define SK_SUPPORT_LEGACY_TYPEFACE_PTR
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_IMAGEFILTER_CTM
+#   define SK_SUPPORT_LEGACY_IMAGEFILTER_CTM
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi

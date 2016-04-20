@@ -12,7 +12,6 @@
 #include <memory>
 
 #include "base/containers/mru_cache.h"
-#import "base/mac/objc_property_releaser.h"
 #include "base/mac/scoped_nsobject.h"
 #include "ios/web/net/cert_host_pair.h"
 #import "ios/web/net/crw_cert_verification_controller.h"
@@ -26,19 +25,6 @@
 namespace web {
 struct FrameInfo;
 class NavigationItem;
-}  // namespace web
-
-namespace web {
-// Values of the UMA |Web.URLVerificationFailure| histogram.
-enum WebViewDocumentType {
-  // Generic contents (e.g. PDF documents).
-  WEB_VIEW_DOCUMENT_TYPE_GENERIC = 0,
-  // HTML contents.
-  WEB_VIEW_DOCUMENT_TYPE_HTML,
-  // Unknown contents.
-  WEB_VIEW_DOCUMENT_TYPE_UNKNOWN,
-  WEB_VIEW_DOCUMENT_TYPE_COUNT,
-};
 }  // namespace web
 
 using web::NavigationManager;
@@ -82,28 +68,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 
 #pragma mark -
 
-// A container object for any navigation information that is only available
-// during pre-commit delegate callbacks, and thus must be held until the
-// navigation commits and the informatino can be used.
-@interface CRWWebControllerPendingNavigationInfo : NSObject {
-  base::mac::ObjCPropertyReleaser
-      _propertyReleaser_CRWWebControllerPendingNavigationInfo;
-}
-// The referrer for the page.
-@property(nonatomic, copy) NSString* referrer;
-// The MIME type for the page.
-@property(nonatomic, copy) NSString* MIMEType;
-// The navigation type for the load.
-@property(nonatomic, assign) WKNavigationType navigationType;
-// Whether the pending navigation has been directly cancelled before the
-// navigation is committed.
-// Cancelled navigations should be simply discarded without handling any
-// specific error.
-@property(nonatomic, assign) BOOL cancelled;
-@end
-
-#pragma mark -
-
 // Category for methods used or implemented by implementation subclasses of
 // CRWWebController.
 @interface CRWWebController (
@@ -115,48 +79,7 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // Downloader for PassKit files. Lazy initialized.
 @property(nonatomic, readonly) CRWPassKitDownloader* passKitDownloader;
 
-// The actual URL of the document object (i.e., the last committed URL).
-// TODO(crbug.com/549616): Remove this in favor of just updating the
-// navigation manager and treating that as authoritative. For now, this allows
-// sharing the flow that's currently in the superclass.
-@property(nonatomic, readonly) GURL documentURL;
-
-// YES if the user has interacted with the content area since the last URL
-// change.
-@property(nonatomic, readonly) BOOL interactionRegisteredSinceLastURLChange;
-
-- (CRWWebControllerPendingNavigationInfo*)pendingNavigationInfo;
-
-// Sets _documentURL to newURL, and updates any relevant state information.
-- (void)setDocumentURL:(const GURL&)newURL;
-
-// Returns the current URL of the web view, and sets |trustLevel| accordingly
-// based on the confidence in the verification.
-- (GURL)webURLWithTrustLevel:(web::URLVerificationTrustLevel*)trustLevel;
-
-// Returns the type of document object loaded in the web view.
-- (web::WebViewDocumentType)webViewDocumentType;
-
 - (void)loadRequest:(NSMutableURLRequest*)request;
-
-// Called before loading current URL in WebView.
-- (void)willLoadCurrentURLInWebView;
-
-// Loads request for the URL of the current navigation item. Subclasses may
-// choose to build a new NSURLRequest and call |loadRequest| on the underlying
-// web view, or use native web view navigation where possible (for example,
-// going back and forward through the history stack).
-- (void)loadRequestForCurrentNavigationItem;
-
-// Cancels any load in progress in the web view.
-- (void)abortWebLoad;
-
-// Called when web view process has been terminated.
-- (void)webViewWebProcessDidCrash;
-
-// Sets zoom scale value for webview scroll view from |zoomState|.
-- (void)applyWebViewScrollZoomScaleFromZoomState:
-    (const web::PageZoomState&)zoomState;
 
 // Called when web controller receives a new message from the web page.
 - (void)didReceiveScriptMessage:(WKScriptMessage*)message;
@@ -193,12 +116,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 
 // Returns a NSMutableURLRequest that represents the current NavigationItem.
 - (NSMutableURLRequest*)requestForCurrentNavigationItem;
-
-// Compares the two URLs being navigated between during a history navigation to
-// determine if a # needs to be appended to the URL of |toItem| to trigger a
-// hashchange event. If so, also saves the modified URL into |toItem|.
-- (GURL)URLForHistoryNavigationFromItem:(web::NavigationItem*)fromItem
-                                 toItem:(web::NavigationItem*)toItem;
 
 // Updates the internal state and informs the delegate that any outstanding load
 // operations are cancelled.
@@ -237,10 +154,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // Last URL change registered for load request.
 @property(nonatomic, readonly) GURL lastRegisteredRequestURL;
 
-// Pending information for an in-progress page navigation.
-@property(nonatomic, readonly)
-    CRWWebControllerPendingNavigationInfo* pendingNavigationInfo;
-
 // Returns YES if the object is being deallocated.
 @property(nonatomic, readonly) BOOL isBeingDestroyed;
 
@@ -271,13 +184,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // Returns NavigationManager's session controller.
 @property(nonatomic, readonly) CRWSessionController* sessionController;
 
-// Dictionary where keys are the names of WKWebView properties and values are
-// selector names which should be called when a corresponding property has
-// changed. e.g. @{ @"URL" : @"webViewURLDidChange" } means that
-// -[self webViewURLDidChange] must be called every time when WKWebView.URL is
-// changed.
-@property(nonatomic, readonly) NSDictionary* wkWebViewObservers;
-
 // Returns a new script which wraps |script| with windowID check so |script| is
 // not evaluated on windowID mismatch.
 - (NSString*)scriptByAddingWindowIDCheckForScript:(NSString*)script;
@@ -291,9 +197,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // changed (e.g. view's background color). Web controller adds |webView| to its
 // content view.
 - (void)webViewDidChange;
-
-// Aborts any load for both the web view and web controller.
-- (void)abortLoad;
 
 // Returns the URL that the navigation system believes should be currently
 // active.
@@ -330,10 +233,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 // TODO(stuartmorgan): The code conflates URL changes and document object
 // changes; the two need to be separated and handled differently.
 - (void)webPageChanged;
-
-// Injects all scripts registered for early injection, as well as the window ID,
-// if necssary. If they are already injected, this is a no-op.
-- (void)injectEarlyInjectionScripts;
 
 // Resets the set of script managers whose scripts have been injected into the
 // current page to an empty list.
@@ -449,12 +348,6 @@ static NSString* const kScriptImmediateName = @"crwebinvokeimmediate";
 
 // Resets pending navigation info.
 - (void)resetPendingNavigationInfo;
-
-// Converts MIME type string to WebViewDocumentType.
-- (web::WebViewDocumentType)documentTypeFromMIMEType:(NSString*)MIMEType;
-
-// Extracts Referer value from WKNavigationAction request header.
-- (NSString*)refererFromNavigationAction:(WKNavigationAction*)action;
 
 // Loads POST request with body in |_wkWebView| by constructing an HTML page
 // that executes the request through JavaScript and replaces document with the

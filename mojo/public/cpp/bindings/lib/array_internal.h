@@ -60,30 +60,9 @@ struct ArrayDataTraits {
 
 template <typename P>
 struct ArrayDataTraits<P*> {
-  typedef StructPointer<P> StorageType;
+  typedef Pointer<P> StorageType;
   typedef P*& Ref;
   typedef P* const& ConstRef;
-
-  static const uint32_t kMaxNumElements =
-      (kMaxUint32 - sizeof(ArrayHeader)) / sizeof(StorageType);
-
-  static uint32_t GetStorageSize(uint32_t num_elements) {
-    DCHECK(num_elements <= kMaxNumElements);
-    return sizeof(ArrayHeader) + sizeof(StorageType) * num_elements;
-  }
-  static Ref ToRef(StorageType* storage, size_t offset) {
-    return storage[offset].ptr;
-  }
-  static ConstRef ToConstRef(const StorageType* storage, size_t offset) {
-    return storage[offset].ptr;
-  }
-};
-
-template <typename T>
-struct ArrayDataTraits<Array_Data<T>*> {
-  typedef ArrayPointer<T> StorageType;
-  typedef Array_Data<T>*& Ref;
-  typedef Array_Data<T>* const& ConstRef;
 
   static const uint32_t kMaxNumElements =
       (kMaxUint32 - sizeof(ArrayHeader)) / sizeof(StorageType);
@@ -369,14 +348,14 @@ struct ArraySerializationHelper<U, false, true> {
 template <typename T>
 class Array_Data {
  public:
-  typedef ArrayDataTraits<T> Traits;
-  typedef typename Traits::StorageType StorageType;
-  typedef typename Traits::Ref Ref;
-  typedef typename Traits::ConstRef ConstRef;
-  typedef ArraySerializationHelper<T,
-                                   IsHandle<T>::value,
-                                   IsUnionDataType<T>::value>
-      Helper;
+  using Traits = ArrayDataTraits<T>;
+  using StorageType = typename Traits::StorageType;
+  using Ref = typename Traits::Ref;
+  using ConstRef = typename Traits::ConstRef;
+  using Helper = ArraySerializationHelper<T,
+                                          IsHandle<T>::value,
+                                          IsUnionDataType<T>::value>;
+  using Element = T;
 
   // Returns null if |num_elements| or the corresponding storage size cannot be
   // stored in uint32_t.

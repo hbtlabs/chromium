@@ -20,6 +20,7 @@
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
+#include "chrome/browser/media/router/media_source_helper.h"
 #include "chrome/browser/media/router/mojo/media_route_provider_util_win.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
 #include "chrome/browser/media/router/mojo/media_router_type_converters.h"
@@ -429,6 +430,10 @@ void MediaRouterMojoImpl::ClearIssue(const Issue::Id& issue_id) {
 }
 
 void MediaRouterMojoImpl::OnUserGesture() {
+  // Allow MRPM to intelligently update sinks and observers by passing in a
+  // media source.
+  UpdateMediaSinks(MediaSourceForDesktop().id());
+
 #if defined(OS_WIN)
   EnsureMdnsDiscoveryEnabled();
 #endif
@@ -599,8 +604,7 @@ void MediaRouterMojoImpl::DoCreateRoute(
     const std::vector<MediaRouteResponseCallback>& callbacks,
     base::TimeDelta timeout,
     bool off_the_record) {
-  std::string presentation_id("mr_");
-  presentation_id += base::GenerateGUID();
+  std::string presentation_id = MediaRouterBase::CreatePresentationId();
   DVLOG_WITH_INSTANCE(1) << "DoCreateRoute " << source_id << "=>" << sink_id
                          << ", presentation ID: " << presentation_id;
 
@@ -639,8 +643,7 @@ void MediaRouterMojoImpl::DoConnectRouteByRouteId(
     const std::vector<MediaRouteResponseCallback>& callbacks,
     base::TimeDelta timeout,
     bool off_the_record) {
-  std::string presentation_id("mr_");
-  presentation_id += base::GenerateGUID();
+  std::string presentation_id = MediaRouterBase::CreatePresentationId();
   DVLOG_WITH_INSTANCE(1) << "DoConnectRouteByRouteId " << source_id
                          << ", route ID: " << route_id
                          << ", presentation ID: " << presentation_id;
@@ -987,5 +990,18 @@ void MediaRouterMojoImpl::OnFirewallCheckComplete(
     EnsureMdnsDiscoveryEnabled();
 }
 #endif
+
+void MediaRouterMojoImpl::UpdateMediaSinks(
+    const MediaSource::Id& source_id) {
+  SetWakeReason(MediaRouteProviderWakeReason::UPDATE_MEDIA_SINKS);
+  RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoUpdateMediaSinks,
+                        base::Unretained(this), source_id));
+}
+
+void MediaRouterMojoImpl::DoUpdateMediaSinks(
+    const MediaSource::Id& source_id) {
+  DVLOG_WITH_INSTANCE(1) << "DoUpdateMediaSinks" << source_id;
+  media_route_provider_->UpdateMediaSinks(source_id);
+}
 
 }  // namespace media_router

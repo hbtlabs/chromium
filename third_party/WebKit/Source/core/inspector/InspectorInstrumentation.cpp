@@ -111,29 +111,31 @@ InspectorInstrumentationCookie::~InspectorInstrumentationCookie()
 
 namespace InspectorInstrumentation {
 
-bool isDebuggerPausedImpl(InstrumentingAgents* instrumentingAgents)
+bool isDebuggerPaused(LocalFrame* frame)
 {
-    if (InspectorDebuggerAgent* debuggerAgent = instrumentingAgents->inspectorDebuggerAgent())
-        return debuggerAgent->isPaused();
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(frame)) {
+        if (InspectorDebuggerAgent* debuggerAgent = instrumentingAgents->inspectorDebuggerAgent())
+            return debuggerAgent->isPaused();
+    }
     return false;
 }
 
-void didReceiveResourceResponseButCanceledImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
+void didReceiveResourceResponseButCanceled(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
 {
     didReceiveResourceResponse(frame, identifier, loader, r, 0);
 }
 
-void continueAfterXFrameOptionsDeniedImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
+void continueAfterXFrameOptionsDenied(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
 {
-    didReceiveResourceResponseButCanceledImpl(frame, loader, identifier, r);
+    didReceiveResourceResponseButCanceled(frame, loader, identifier, r);
 }
 
-void continueWithPolicyIgnoreImpl(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
+void continueWithPolicyIgnore(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)
 {
-    didReceiveResourceResponseButCanceledImpl(frame, loader, identifier, r);
+    didReceiveResourceResponseButCanceled(frame, loader, identifier, r);
 }
 
-void removedResourceFromMemoryCacheImpl(Resource* cachedResource)
+void removedResourceFromMemoryCache(Resource* cachedResource)
 {
     ASSERT(isMainThread());
     for (InstrumentingAgents* instrumentingAgents: instrumentingAgentsSet()) {
@@ -142,10 +144,12 @@ void removedResourceFromMemoryCacheImpl(Resource* cachedResource)
     }
 }
 
-bool collectingHTMLParseErrorsImpl(InstrumentingAgents* instrumentingAgents)
+bool collectingHTMLParseErrors(Document* document)
 {
     ASSERT(isMainThread());
-    return instrumentingAgentsSet().contains(instrumentingAgents);
+    if (InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(document))
+        return instrumentingAgentsSet().contains(instrumentingAgents);
+    return false;
 }
 
 bool consoleAgentEnabled(ExecutionContext* executionContext)
@@ -168,70 +172,24 @@ void unregisterInstrumentingAgents(InstrumentingAgents* instrumentingAgents)
     instrumentingAgentsSet().remove(instrumentingAgents);
 }
 
-InstrumentingAgents* instrumentingAgentsFor(LocalFrame* frame)
-{
-    return frame ? frame->instrumentingAgents() : nullptr;
-}
-
-InstrumentingAgents* instrumentingAgentsFor(EventTarget* eventTarget)
-{
-    if (!eventTarget)
-        return 0;
-    return instrumentingAgentsFor(eventTarget->getExecutionContext());
-}
-
-InstrumentingAgents* instrumentingAgentsFor(LayoutObject* layoutObject)
-{
-    return instrumentingAgentsFor(layoutObject->frame());
-}
-
 InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope* workerGlobalScope)
 {
     if (!workerGlobalScope)
-        return 0;
-    return instrumentationForWorkerGlobalScope(workerGlobalScope);
+        return nullptr;
+    if (WorkerInspectorController* controller = workerGlobalScope->workerInspectorController())
+        return controller->instrumentingAgents();
+    return nullptr;
 }
 
 InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext* context)
 {
     if (context->isWorkerGlobalScope())
-        return instrumentationForWorkerGlobalScope(toWorkerGlobalScope(context));
-
-    if (context->isWorkletGlobalScope()) {
-        LocalFrame* frame = toMainThreadWorkletGlobalScope(context)->frame();
-        if (frame)
-            return instrumentingAgentsFor(frame);
-    }
-
-    return 0;
+        return instrumentingAgentsFor(toWorkerGlobalScope(context));
+    if (context->isWorkletGlobalScope())
+        return instrumentingAgentsFor(toMainThreadWorkletGlobalScope(context)->frame());
+    return nullptr;
 }
 
 } // namespace InspectorInstrumentation
-
-namespace InstrumentationEvents {
-const char PaintSetup[] = "PaintSetup";
-const char Paint[] = "Paint";
-const char Layer[] = "Layer";
-const char RequestMainThreadFrame[] = "RequestMainThreadFrame";
-const char BeginFrame[] = "BeginFrame";
-const char ActivateLayerTree[] = "ActivateLayerTree";
-const char DrawFrame[] = "DrawFrame";
-const char EmbedderCallback[] = "EmbedderCallback";
-};
-
-namespace InstrumentationEventArguments {
-const char FrameId[] = "frameId";
-const char LayerId[] = "layerId";
-const char LayerTreeId[] = "layerTreeId";
-const char PageId[] = "pageId";
-const char CallbackName[] = "callbackName";
-};
-
-InstrumentingAgents* instrumentationForWorkerGlobalScope(WorkerGlobalScope* workerGlobalScope)
-{
-    if (WorkerInspectorController* controller = workerGlobalScope->workerInspectorController())
-        return controller->m_instrumentingAgents.get();
-    return 0;
-}
 
 } // namespace blink

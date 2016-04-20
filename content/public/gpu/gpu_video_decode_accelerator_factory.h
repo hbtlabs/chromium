@@ -5,6 +5,8 @@
 #ifndef CONTENT_PUBLIC_GPU_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_H_
 #define CONTENT_PUBLIC_GPU_GPU_VIDEO_DECODE_ACCELERATOR_FACTORY_H_
 
+#include <memory>
+
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -69,6 +71,13 @@ class CONTENT_EXPORT GpuVideoDecodeAcceleratorFactory {
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const BindGLImageCallback& bind_image_cb,
       const GetGLES2DecoderCallback& get_gles2_decoder_cb);
+
+  // Create a factory capable of producing VDA instances for current platform
+  // with no GL support.
+  // A factory created with this method will only be able to produce VDAs with
+  // no ability to call GL functions/access GL state. This also implies no
+  // ability to decode into textures provided by the client.
+  static std::unique_ptr<GpuVideoDecodeAcceleratorFactory> CreateWithNoGL();
 
   // Return decoder capabilities supported on the current platform.
   static gpu::VideoDecodeAcceleratorCapabilities GetDecoderCapabilities();

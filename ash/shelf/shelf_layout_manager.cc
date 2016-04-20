@@ -19,6 +19,7 @@
 #include "ash/shelf/shelf_bezel_event_filter.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
+#include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_window_ids.h"
@@ -278,9 +279,10 @@ void ShelfLayoutManager::UpdateVisibilityState() {
   } else {
     // TODO(zelidrag): Verify shelf drag animation still shows on the device
     // when we are in SHELF_AUTO_HIDE_ALWAYS_HIDDEN.
-    WorkspaceWindowState window_state(workspace_controller_->GetWindowState());
+    wm::WorkspaceWindowState window_state(
+        workspace_controller_->GetWindowState());
     switch (window_state) {
-      case WORKSPACE_WINDOW_STATE_FULL_SCREEN: {
+      case wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN: {
         const aura::Window* fullscreen_window = GetRootWindowController(
             root_window_)->GetWindowForFullscreenMode();
         if (fullscreen_window && wm::GetWindowState(fullscreen_window)->
@@ -294,15 +296,15 @@ void ShelfLayoutManager::UpdateVisibilityState() {
         break;
       }
 
-      case WORKSPACE_WINDOW_STATE_MAXIMIZED:
+      case wm::WORKSPACE_WINDOW_STATE_MAXIMIZED:
         SetState(CalculateShelfVisibility());
         break;
 
-      case WORKSPACE_WINDOW_STATE_WINDOW_OVERLAPS_SHELF:
-      case WORKSPACE_WINDOW_STATE_DEFAULT:
+      case wm::WORKSPACE_WINDOW_STATE_WINDOW_OVERLAPS_SHELF:
+      case wm::WORKSPACE_WINDOW_STATE_DEFAULT:
         SetState(CalculateShelfVisibility());
-        SetWindowOverlapsShelf(window_state ==
-                               WORKSPACE_WINDOW_STATE_WINDOW_OVERLAPS_SHELF);
+        SetWindowOverlapsShelf(
+            window_state == wm::WORKSPACE_WINDOW_STATE_WINDOW_OVERLAPS_SHELF);
         break;
     }
   }
@@ -387,6 +389,7 @@ void ShelfLayoutManager::CompleteGestureDrag(const ui::GestureEvent& gesture) {
       bool correct_direction = false;
       switch (GetAlignment()) {
         case SHELF_ALIGNMENT_BOTTOM:
+        case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         case SHELF_ALIGNMENT_RIGHT:
           correct_direction = gesture_drag_amount_ < 0;
           break;
@@ -491,26 +494,7 @@ void ShelfLayoutManager::OnWindowActivated(
 }
 
 bool ShelfLayoutManager::IsHorizontalAlignment() const {
-  return GetAlignment() == SHELF_ALIGNMENT_BOTTOM;
-}
-
-bool ShelfLayoutManager::IsAlignmentLocked() const {
-  if (state_.is_screen_locked)
-    return true;
-  // The session state becomes active at the start of transitioning to a user
-  // session, however the session is considered blocked until the full UI is
-  // ready. Exit early to allow for proper layout.
-  SessionStateDelegate* session_state_delegate =
-      Shell::GetInstance()->session_state_delegate();
-  if (session_state_delegate->GetSessionState() ==
-      SessionStateDelegate::SESSION_STATE_ACTIVE) {
-    return false;
-  }
-  if (session_state_delegate->IsUserSessionBlocked() ||
-      state_.is_adding_user_screen) {
-    return true;
-  }
-  return false;
+  return ash::IsHorizontalAlignment(GetAlignment());
 }
 
 void ShelfLayoutManager::SetChromeVoxPanelHeight(int height) {
@@ -533,8 +517,9 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
   State state;
   state.visibility_state = visibility_state;
   state.auto_hide_state = CalculateAutoHideState(visibility_state);
-  state.window_state = workspace_controller_ ?
-      workspace_controller_->GetWindowState() : WORKSPACE_WINDOW_STATE_DEFAULT;
+  state.window_state = workspace_controller_
+                           ? workspace_controller_->GetWindowState()
+                           : wm::WORKSPACE_WINDOW_STATE_DEFAULT;
   // Preserve the log in screen states.
   state.is_adding_user_screen = state_.is_adding_user_screen;
   state.is_screen_locked = state_.is_screen_locked;
@@ -574,7 +559,7 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
   // - Going from an auto hidden shelf in maximized mode to a visible shelf in
   //   maximized mode.
   if (state.visibility_state == SHELF_VISIBLE &&
-      state.window_state == WORKSPACE_WINDOW_STATE_MAXIMIZED &&
+      state.window_state == wm::WORKSPACE_WINDOW_STATE_MAXIMIZED &&
       old_state.visibility_state != SHELF_VISIBLE) {
     change_type = BACKGROUND_CHANGE_IMMEDIATE;
   } else {
@@ -596,9 +581,9 @@ void ShelfLayoutManager::SetState(ShelfVisibilityState visibility_state) {
     UpdateShelfBackground(change_type);
   }
 
-  shelf_->SetDimsShelf(
-      state.visibility_state == SHELF_VISIBLE &&
-      state.window_state == WORKSPACE_WINDOW_STATE_MAXIMIZED);
+  shelf_->SetDimsShelf(state.visibility_state == SHELF_VISIBLE &&
+                       state.window_state ==
+                           wm::WORKSPACE_WINDOW_STATE_MAXIMIZED);
 
   TargetBounds target_bounds;
   CalculateTargetBounds(state_, &target_bounds);
@@ -852,7 +837,7 @@ void ShelfLayoutManager::UpdateTargetBoundsForGesture(
     int shelf_height = target_bounds->shelf_bounds_in_root.height() - translate;
     shelf_height = std::max(shelf_height, kAutoHideSize);
     target_bounds->shelf_bounds_in_root.set_height(shelf_height);
-    if (GetAlignment() == SHELF_ALIGNMENT_BOTTOM) {
+    if (IsHorizontalAlignment()) {
       target_bounds->shelf_bounds_in_root.set_y(
           available_bounds.bottom() - shelf_height);
     }
@@ -892,7 +877,7 @@ void ShelfLayoutManager::UpdateShelfBackground(
 
 ShelfBackgroundType ShelfLayoutManager::GetShelfBackgroundType() const {
   if (state_.visibility_state != SHELF_AUTO_HIDE &&
-      state_.window_state == WORKSPACE_WINDOW_STATE_MAXIMIZED) {
+      state_.window_state == wm::WORKSPACE_WINDOW_STATE_MAXIMIZED) {
     return SHELF_BACKGROUND_MAXIMIZED;
   }
 
@@ -1008,7 +993,7 @@ ShelfAutoHideState ShelfLayoutManager::CalculateAutoHideState(
     ShelfAlignment alignment = GetAlignment();
     shelf_region.Inset(
         alignment == SHELF_ALIGNMENT_RIGHT ? -kNotificationBubbleGapHeight : 0,
-        alignment == SHELF_ALIGNMENT_BOTTOM ? -kNotificationBubbleGapHeight : 0,
+        IsHorizontalAlignment() ? -kNotificationBubbleGapHeight : 0,
         alignment == SHELF_ALIGNMENT_LEFT ? -kNotificationBubbleGapHeight : 0,
         0);
   }
@@ -1118,9 +1103,6 @@ void ShelfLayoutManager::SessionStateChanged(
 void ShelfLayoutManager::UpdateShelfVisibilityAfterLoginUIChange() {
   UpdateVisibilityState();
   LayoutShelf();
-  // The shelf alignment may have changed when it was unlocked.
-  Shell::GetInstance()->OnShelfAlignmentChanged(
-      shelf_->GetNativeWindow()->GetRootWindow());
 }
 
 }  // namespace ash

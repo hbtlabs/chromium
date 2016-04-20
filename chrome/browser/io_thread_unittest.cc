@@ -75,7 +75,7 @@ class NetworkSessionConfiguratorTest : public testing::Test {
 
   bool is_spdy_allowed_by_policy_;
   bool is_quic_allowed_by_policy_;
-  scoped_ptr<base::FieldTrialList> field_trial_list_;
+  std::unique_ptr<base::FieldTrialList> field_trial_list_;
   net::HttpNetworkSession::Params params_;
 
  private:
@@ -93,7 +93,7 @@ TEST_F(NetworkSessionConfiguratorTest, Defaults) {
   EXPECT_FALSE(params_.enable_tcp_fast_open_for_ssl);
   EXPECT_FALSE(params_.parse_alternative_services);
   EXPECT_FALSE(params_.enable_alternative_service_with_different_host);
-  EXPECT_TRUE(params_.enable_npn);
+  EXPECT_FALSE(params_.enable_npn);
   EXPECT_TRUE(params_.enable_priority_dependencies);
   EXPECT_FALSE(params_.enable_quic);
   EXPECT_FALSE(params_.enable_quic_for_proxies);
@@ -810,7 +810,7 @@ class IOThreadTestWithIOThreadObject : public testing::Test {
   // TestBrowserThreadBundle's destructor is responsible for calling
   // CleanUp(), the IOThread must be declared before the bundle, so that
   // the bundle is deleted first.
-  scoped_ptr<IOThread> io_thread_;
+  std::unique_ptr<IOThread> io_thread_;
   content::TestBrowserThreadBundle thread_bundle_;
 };
 

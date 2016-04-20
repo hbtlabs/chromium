@@ -21,10 +21,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
-#include "content/browser/renderer_host/begin_frame_observer_proxy.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
@@ -42,6 +42,8 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/wm/public/activation_delegate.h"
+
+struct ViewHostMsg_TextInputState_Params;
 
 namespace aura {
 class WindowTracker;
@@ -90,14 +92,14 @@ class TouchSelectionControllerClientAura;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       public DelegatedFrameHostClient,
-      public BeginFrameObserverProxyClient,
       public ui::TextInputClient,
       public gfx::DisplayObserver,
       public aura::WindowTreeHostObserver,
       public aura::WindowDelegate,
       public aura::client::ActivationDelegate,
       public aura::client::FocusChangeObserver,
-      public aura::client::CursorClientObserver {
+      public aura::client::CursorClientObserver,
+      public cc::BeginFrameObserverBase {
  public:
   // When |is_guest_view_hack| is true, this view isn't really the view for
   // the |widget|, a RenderWidgetHostViewGuest is.
@@ -134,7 +136,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void UpdateInputMethodIfNecessary(bool text_input_state_changed) override;
+  void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) override;
   void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -457,9 +460,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void DelegatedFrameHostUpdateVSyncParameters(
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) override;
+  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
 
-  // BeginFrameObserverProxyClient implementation.
-  void SendBeginFrame(const cc::BeginFrameArgs& args) override;
+  // cc::BeginFrameObserverBase implementation.
+  bool OnBeginFrameDerivedImpl(const cc::BeginFrameArgs& args) override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override;
 
   // Detaches |this| from the input method object.
   void DetachFromInputMethod();
@@ -565,6 +570,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // object.
   ui::MotionEventAura pointer_state_;
 
+  // The current text input type.
+  ui::TextInputType text_input_type_;
+  // The current text input mode corresponding to HTML5 inputmode attribute.
+  ui::TextInputMode text_input_mode_;
+  // The current text input flags.
+  int text_input_flags_;
+  bool can_compose_inline_;
+
   // Bounds for the selection.
   ui::SelectionBound selection_anchor_;
   ui::SelectionBound selection_focus_;
@@ -581,12 +594,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Current tooltip text.
   base::string16 tooltip_;
 
-  // The size and scale of the last software compositing frame that was swapped.
-  gfx::Size last_swapped_software_frame_size_;
-  float last_swapped_software_frame_scale_factor_;
-
-  // If non-NULL we're in OnPaint() and this is the supplied canvas.
-  gfx::Canvas* paint_canvas_;
+  // The begin frame source being observed.  Null if none.
+  cc::BeginFrameSource* begin_frame_source_;
+  bool needs_begin_frames_;
 
   // Used to record the last position of the mouse.
   // While the mouse is locked, they store the last known position just as mouse
@@ -665,8 +675,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // view, so we can ensure the window hasn't moved between copying from the
   // compositing surface and showing the disambiguation popup.
   gfx::Vector2dF disambiguation_scroll_offset_;
-
-  BeginFrameObserverProxy begin_frame_observer_proxy_;
 
   // This flag when set ensures that we send over a notification to blink that
   // the current view has focus. Defaults to false.

@@ -5,6 +5,7 @@
 #include "ash/wm/aura/wm_window_aura.h"
 
 #include "ash/screen_util.h"
+#include "ash/wm/aura/wm_globals_aura.h"
 #include "ash/wm/aura/wm_root_window_controller_aura.h"
 #include "ash/wm/common/wm_window_observer.h"
 #include "ash/wm/common/wm_window_property.h"
@@ -14,6 +15,7 @@
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/window_tree_client.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -91,6 +93,10 @@ const WmWindow* WmWindowAura::GetRootWindow() const {
 WmRootWindowController* WmWindowAura::GetRootWindowController() {
   aura::Window* root = window_->GetRootWindow();
   return root ? WmRootWindowControllerAura::Get(root) : nullptr;
+}
+
+WmGlobals* WmWindowAura::GetGlobals() const {
+  return WmGlobalsAura::Get();
 }
 
 int WmWindowAura::GetShellWindowId() {
@@ -177,12 +183,22 @@ bool WmWindowAura::GetBoolProperty(WmWindowProperty key) {
   return false;
 }
 
-WindowState* WmWindowAura::GetWindowState() {
+const WindowState* WmWindowAura::GetWindowState() const {
   return ash::wm::GetWindowState(window_);
 }
 
 WmWindow* WmWindowAura::GetToplevelWindow() {
   return Get(window_->GetToplevelWindow());
+}
+
+void WmWindowAura::SetParentUsingContext(WmWindow* context,
+                                         const gfx::Rect& screen_bounds) {
+  aura::client::ParentWindowWithContext(window_, GetAuraWindow(context),
+                                        screen_bounds);
+}
+
+void WmWindowAura::AddChild(WmWindow* window) {
+  window_->AddChild(GetAuraWindow(window));
 }
 
 WmWindow* WmWindowAura::GetParent() {
@@ -193,7 +209,36 @@ WmWindow* WmWindowAura::GetTransientParent() {
   return Get(::wm::GetTransientParent(window_));
 }
 
+std::vector<WmWindow*> WmWindowAura::GetTransientChildren() {
+  const std::vector<aura::Window*> aura_windows(
+      ::wm::GetTransientChildren(window_));
+  std::vector<WmWindow*> wm_windows(aura_windows.size());
+  for (size_t i = 0; i < aura_windows.size(); ++i)
+    wm_windows[i] = Get(aura_windows[i]);
+  return wm_windows;
+}
+
+void WmWindowAura::SetVisibilityAnimationType(int type) {
+  ::wm::SetWindowVisibilityAnimationType(window_, type);
+}
+
+void WmWindowAura::Animate(::wm::WindowAnimationType type) {
+  ::wm::AnimateWindow(window_, type);
+}
+
 void WmWindowAura::SetBounds(const gfx::Rect& bounds) {
+  window_->SetBounds(bounds);
+}
+
+void WmWindowAura::SetBoundsWithTransitionDelay(const gfx::Rect& bounds,
+                                                base::TimeDelta delta) {
+  if (::wm::WindowAnimationsDisabled(window_)) {
+    window_->SetBounds(bounds);
+    return;
+  }
+
+  ui::ScopedLayerAnimationSettings settings(window_->layer()->GetAnimator());
+  settings.SetTransitionDuration(delta);
   window_->SetBounds(bounds);
 }
 
@@ -287,6 +332,10 @@ void WmWindowAura::SetShowState(ui::WindowShowState show_state) {
 
 ui::WindowShowState WmWindowAura::GetShowState() const {
   return window_->GetProperty(aura::client::kShowStateKey);
+}
+
+void WmWindowAura::SetRestoreShowState(ui::WindowShowState show_state) {
+  window_->SetProperty(aura::client::kRestoreShowStateKey, show_state);
 }
 
 void WmWindowAura::SetCapture() {

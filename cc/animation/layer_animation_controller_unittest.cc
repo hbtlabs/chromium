@@ -48,11 +48,14 @@ TEST(LayerAnimationControllerTest, SyncNewAnimation) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller_impl->set_needs_active_value_observations(true);
 
   EXPECT_FALSE(controller_impl->GetAnimation(TargetProperty::OPACITY));
 
@@ -78,13 +81,16 @@ TEST(LayerAnimationControllerTest,
   FakeLayerAnimationValueProvider dummy_provider_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   controller_impl->set_value_provider(&dummy_provider_impl);
+
   FakeLayerAnimationValueObserver dummy;
   FakeLayerAnimationValueProvider dummy_provider;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   controller->set_value_provider(&dummy_provider);
 
   EXPECT_FALSE(controller_impl->GetAnimation(TargetProperty::SCROLL_OFFSET));
@@ -135,11 +141,14 @@ TEST(LayerAnimationControllerTest, DoNotClobberStartTimes) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   EXPECT_FALSE(controller_impl->GetAnimation(TargetProperty::OPACITY));
 
@@ -174,11 +183,14 @@ TEST(LayerAnimationControllerTest, UseSpecifiedStartTimes) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   int animation_id =
       AddOpacityTransitionToController(controller.get(), 1, 0, 1, false);
@@ -225,11 +237,15 @@ TEST(LayerAnimationControllerTest, Activation) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
+
   std::unique_ptr<AnimationEvents> events = host->CreateEvents();
 
   controller->SetAnimationHost(host.get());
@@ -305,11 +321,14 @@ TEST(LayerAnimationControllerTest, SyncPause) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   EXPECT_FALSE(controller_impl->GetAnimation(TargetProperty::OPACITY));
 
@@ -346,8 +365,8 @@ TEST(LayerAnimationControllerTest, SyncPause) {
   EXPECT_EQ(Animation::RUNNING,
             controller->GetAnimationById(animation_id)->run_state());
 
-  EXPECT_EQ(0.3f, dummy.opacity());
-  EXPECT_EQ(0.3f, dummy_impl.opacity());
+  EXPECT_EQ(0.3f, dummy.opacity(LayerTreeType::ACTIVE));
+  EXPECT_EQ(0.3f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_EQ(kInitialTickTime,
             controller->GetAnimationById(animation_id)->start_time());
@@ -373,19 +392,23 @@ TEST(LayerAnimationControllerTest, SyncPause) {
             controller_impl->GetAnimationById(animation_id)->run_state());
 
   // Opacity value doesn't depend on time if paused at specified time offset.
-  EXPECT_EQ(0.4f, dummy.opacity());
-  EXPECT_EQ(0.4f, dummy_impl.opacity());
+  EXPECT_EQ(0.4f, dummy.opacity(LayerTreeType::ACTIVE));
+  EXPECT_EQ(0.4f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, DoNotSyncFinishedAnimation) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
+
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
 
@@ -439,8 +462,10 @@ TEST(LayerAnimationControllerTest, AnimationsAreDeleted) {
       LayerAnimationController::Create(0));
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   AddOpacityTransitionToController(controller.get(), 1.0, 0.0f, 1.0f, false);
   controller->Animate(kInitialTickTime);
@@ -511,7 +536,8 @@ TEST(LayerAnimationControllerTest, TrivialTransition) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -524,13 +550,13 @@ TEST(LayerAnimationControllerTest, TrivialTransition) {
   EXPECT_FALSE(controller->needs_to_start_animations_for_testing());
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   // A non-impl-only animation should not generate property updates.
   const AnimationEvent* event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -542,7 +568,8 @@ TEST(LayerAnimationControllerTest, TrivialTransitionOnImpl) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -553,7 +580,7 @@ TEST(LayerAnimationControllerTest, TrivialTransitionOnImpl) {
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy_impl.opacity());
+  EXPECT_EQ(0.f, dummy_impl.opacity(LayerTreeType::ACTIVE));
   EXPECT_EQ(1u, events->events_.size());
   const AnimationEvent* start_opacity_event =
       GetMostRecentPropertyUpdateEvent(events.get());
@@ -562,7 +589,7 @@ TEST(LayerAnimationControllerTest, TrivialTransitionOnImpl) {
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(1000));
   controller_impl->UpdateState(true, events.get());
-  EXPECT_EQ(1.f, dummy_impl.opacity());
+  EXPECT_EQ(1.f, dummy_impl.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   EXPECT_EQ(2u, events->events_.size());
   const AnimationEvent* end_opacity_event =
@@ -576,7 +603,8 @@ TEST(LayerAnimationControllerTest, TrivialTransformOnImpl) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   // Choose different values for x and y to avoid coincidental values in the
   // observed transforms.
@@ -603,7 +631,7 @@ TEST(LayerAnimationControllerTest, TrivialTransformOnImpl) {
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(gfx::Transform(), dummy_impl.transform());
+  EXPECT_EQ(gfx::Transform(), dummy_impl.transform(LayerTreeType::ACTIVE));
   EXPECT_EQ(1u, events->events_.size());
   const AnimationEvent* start_transform_event =
       GetMostRecentPropertyUpdateEvent(events.get());
@@ -617,7 +645,7 @@ TEST(LayerAnimationControllerTest, TrivialTransformOnImpl) {
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(1000));
   controller_impl->UpdateState(true, events.get());
-  EXPECT_EQ(expected_transform, dummy_impl.transform());
+  EXPECT_EQ(expected_transform, dummy_impl.transform(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   EXPECT_EQ(2u, events->events_.size());
   const AnimationEvent* end_transform_event =
@@ -632,7 +660,8 @@ TEST(LayerAnimationControllerTest, FilterTransition) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<KeyframedFilterAnimationCurve> curve(
       KeyframedFilterAnimationCurve::Create());
@@ -653,22 +682,22 @@ TEST(LayerAnimationControllerTest, FilterTransition) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(start_filters, dummy.filters());
+  EXPECT_EQ(start_filters, dummy.filters(LayerTreeType::ACTIVE));
   // A non-impl-only animation should not generate property updates.
   const AnimationEvent* event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(500));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(1u, dummy.filters().size());
+  EXPECT_EQ(1u, dummy.filters(LayerTreeType::ACTIVE).size());
   EXPECT_EQ(FilterOperation::CreateBrightnessFilter(1.5f),
-            dummy.filters().at(0));
+            dummy.filters(LayerTreeType::ACTIVE).at(0));
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(end_filters, dummy.filters());
+  EXPECT_EQ(end_filters, dummy.filters(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -680,7 +709,8 @@ TEST(LayerAnimationControllerTest, FilterTransitionOnImplOnly) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   std::unique_ptr<KeyframedFilterAnimationCurve> curve(
       KeyframedFilterAnimationCurve::Create());
@@ -704,7 +734,7 @@ TEST(LayerAnimationControllerTest, FilterTransitionOnImplOnly) {
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(start_filters, dummy_impl.filters());
+  EXPECT_EQ(start_filters, dummy_impl.filters(LayerTreeType::ACTIVE));
   EXPECT_EQ(1u, events->events_.size());
   const AnimationEvent* start_filter_event =
       GetMostRecentPropertyUpdateEvent(events.get());
@@ -715,7 +745,7 @@ TEST(LayerAnimationControllerTest, FilterTransitionOnImplOnly) {
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(1000));
   controller_impl->UpdateState(true, events.get());
-  EXPECT_EQ(end_filters, dummy_impl.filters());
+  EXPECT_EQ(end_filters, dummy_impl.filters(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   EXPECT_EQ(2u, events->events_.size());
   const AnimationEvent* end_filter_event =
@@ -730,7 +760,9 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransition) {
   FakeLayerAnimationValueProvider dummy_provider_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   controller_impl->set_value_provider(&dummy_provider_impl);
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
@@ -738,7 +770,8 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransition) {
   FakeLayerAnimationValueProvider dummy_provider;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   controller->set_value_provider(&dummy_provider);
 
   gfx::ScrollOffset initial_value(100.f, 300.f);
@@ -767,12 +800,12 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransition) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, nullptr);
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(initial_value, dummy.scroll_offset());
+  EXPECT_EQ(initial_value, dummy.scroll_offset(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(initial_value, dummy_impl.scroll_offset());
+  EXPECT_EQ(initial_value, dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   // Scroll offset animations should not generate property updates.
   const AnimationEvent* event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -781,25 +814,27 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransition) {
   controller->Animate(kInitialTickTime + duration / 2);
   controller->UpdateState(true, nullptr);
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(200.f, 250.f), dummy.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(200.f, 250.f),
+                      dummy.scroll_offset(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime + duration / 2);
   controller_impl->UpdateState(true, events.get());
   EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(200.f, 250.f),
-                      dummy_impl.scroll_offset());
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller_impl->Animate(kInitialTickTime + duration);
   controller_impl->UpdateState(true, events.get());
-  EXPECT_VECTOR2DF_EQ(target_value, dummy_impl.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(target_value,
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller->Animate(kInitialTickTime + duration);
   controller->UpdateState(true, nullptr);
-  EXPECT_VECTOR2DF_EQ(target_value, dummy.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(target_value, dummy.scroll_offset(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -810,14 +845,17 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionNoImplProvider) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy;
   FakeLayerAnimationValueProvider dummy_provider;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   controller->set_value_provider(&dummy_provider);
 
   gfx::ScrollOffset initial_value(500.f, 100.f);
@@ -846,12 +884,12 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionNoImplProvider) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, nullptr);
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(initial_value, dummy.scroll_offset());
+  EXPECT_EQ(initial_value, dummy.scroll_offset(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(initial_value, dummy_impl.scroll_offset());
+  EXPECT_EQ(initial_value, dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   // Scroll offset animations should not generate property updates.
   const AnimationEvent* event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -860,25 +898,27 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionNoImplProvider) {
   controller->Animate(kInitialTickTime + duration / 2);
   controller->UpdateState(true, nullptr);
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(400.f, 150.f), dummy.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(400.f, 150.f),
+                      dummy.scroll_offset(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime + duration / 2);
   controller_impl->UpdateState(true, events.get());
   EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(400.f, 150.f),
-                      dummy_impl.scroll_offset());
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller_impl->Animate(kInitialTickTime + duration);
   controller_impl->UpdateState(true, events.get());
-  EXPECT_VECTOR2DF_EQ(target_value, dummy_impl.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(target_value,
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller->Animate(kInitialTickTime + duration);
   controller->UpdateState(true, nullptr);
-  EXPECT_VECTOR2DF_EQ(target_value, dummy.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(target_value, dummy.scroll_offset(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -886,7 +926,8 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionOnImplOnly) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
 
@@ -906,7 +947,7 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionOnImplOnly) {
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, events.get());
   EXPECT_TRUE(controller_impl->HasActiveAnimation());
-  EXPECT_EQ(initial_value, dummy_impl.scroll_offset());
+  EXPECT_EQ(initial_value, dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   // Scroll offset animations should not generate property updates.
   const AnimationEvent* event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -917,13 +958,14 @@ TEST(LayerAnimationControllerTest, ScrollOffsetTransitionOnImplOnly) {
   controller_impl->Animate(kInitialTickTime + duration / 2);
   controller_impl->UpdateState(true, events.get());
   EXPECT_VECTOR2DF_EQ(gfx::Vector2dF(200.f, 250.f),
-                      dummy_impl.scroll_offset());
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
 
   controller_impl->Animate(kInitialTickTime + duration);
   controller_impl->UpdateState(true, events.get());
-  EXPECT_VECTOR2DF_EQ(target_value, dummy_impl.scroll_offset());
+  EXPECT_VECTOR2DF_EQ(target_value,
+                      dummy_impl.scroll_offset(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller_impl->HasActiveAnimation());
   event = GetMostRecentPropertyUpdateEvent(events.get());
   EXPECT_FALSE(event);
@@ -934,7 +976,8 @@ TEST(LayerAnimationControllerTest, ScrollOffsetRemovalClearsScrollDelta) {
   FakeLayerAnimationValueProvider dummy_provider_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   controller_impl->set_value_provider(&dummy_provider_impl);
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
@@ -942,7 +985,8 @@ TEST(LayerAnimationControllerTest, ScrollOffsetRemovalClearsScrollDelta) {
   FakeLayerAnimationValueProvider dummy_provider;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   controller->set_value_provider(&dummy_provider);
 
   // First test the 1-argument version of RemoveAnimation.
@@ -1089,7 +1133,9 @@ TEST(LayerAnimationControllerTest,
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeAnimationDelegate delegate;
@@ -1125,11 +1171,15 @@ TEST(LayerAnimationControllerTest,
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
+
   FakeAnimationDelegate delegate;
   controller->set_layer_animation_delegate(&delegate);
 
@@ -1158,58 +1208,6 @@ TEST(LayerAnimationControllerTest,
   EXPECT_EQ(start_time, delegate.start_time());
 }
 
-class FakeLayerAnimationEventObserver : public LayerAnimationEventObserver {
- public:
-  FakeLayerAnimationEventObserver() : start_time_(base::TimeTicks()) {}
-
-  void OnAnimationStarted(const AnimationEvent& event) override {
-    start_time_ = event.monotonic_time;
-  }
-
-  TimeTicks start_time() { return start_time_; }
-
- private:
-  TimeTicks start_time_;
-};
-
-// Tests that specified start times are sent to the event observers
-TEST(LayerAnimationControllerTest, SpecifiedStartTimesAreSentToEventObservers) {
-  FakeLayerAnimationValueObserver dummy_impl;
-  scoped_refptr<LayerAnimationController> controller_impl(
-      LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
-  FakeLayerAnimationValueObserver dummy;
-  scoped_refptr<LayerAnimationController> controller(
-      LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
-  FakeLayerAnimationEventObserver observer;
-  controller->AddEventObserver(&observer);
-
-  int animation_id =
-      AddOpacityTransitionToController(controller.get(), 1, 0, 1, false);
-
-  const TimeTicks start_time = TicksFromSecondsF(123);
-  controller->GetAnimation(TargetProperty::OPACITY)->set_start_time(start_time);
-
-  controller->PushAnimationUpdatesTo(controller_impl.get());
-  controller_impl->ActivateAnimations();
-
-  EXPECT_TRUE(controller_impl->GetAnimationById(animation_id));
-  EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
-            controller_impl->GetAnimationById(animation_id)->run_state());
-
-  AnimationEvents events;
-  controller_impl->Animate(kInitialTickTime);
-  controller_impl->UpdateState(true, &events);
-
-  // Synchronize the start times.
-  EXPECT_EQ(1u, events.events_.size());
-  controller->NotifyAnimationStarted(events.events_[0]);
-
-  // Validate start time on the event observer.
-  EXPECT_EQ(start_time, observer.start_time());
-}
-
 // Tests animations that are waiting for a synchronized start time do not
 // finish.
 TEST(LayerAnimationControllerTest,
@@ -1219,7 +1217,8 @@ TEST(LayerAnimationControllerTest,
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -1232,15 +1231,15 @@ TEST(LayerAnimationControllerTest,
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // Send the synchronized start time.
   controller->NotifyAnimationStarted(
@@ -1248,7 +1247,7 @@ TEST(LayerAnimationControllerTest,
                      kInitialTickTime + TimeDelta::FromMilliseconds(2000)));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(5000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1259,7 +1258,8 @@ TEST(LayerAnimationControllerTest, TrivialQueuing) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   EXPECT_FALSE(controller->needs_to_start_animations_for_testing());
 
@@ -1279,7 +1279,7 @@ TEST(LayerAnimationControllerTest, TrivialQueuing) {
 
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   EXPECT_TRUE(controller->needs_to_start_animations_for_testing());
@@ -1287,10 +1287,10 @@ TEST(LayerAnimationControllerTest, TrivialQueuing) {
   EXPECT_FALSE(controller->needs_to_start_animations_for_testing());
 
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1301,14 +1301,16 @@ TEST(LayerAnimationControllerTest, Interrupt) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
+
   controller->AddAnimation(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
       1, TargetProperty::OPACITY));
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 1.f, 0.5f)),
@@ -1321,10 +1323,10 @@ TEST(LayerAnimationControllerTest, Interrupt) {
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(500));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1500));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1336,7 +1338,8 @@ TEST(LayerAnimationControllerTest, ScheduleTogetherWhenAPropertyIsBlocked) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   controller->AddAnimation(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 1,
@@ -1350,17 +1353,17 @@ TEST(LayerAnimationControllerTest, ScheduleTogetherWhenAPropertyIsBlocked) {
 
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_TRUE(controller->HasActiveAnimation());
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
   // Should not have started the float transition yet.
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   // The float animation should have started at time 1 and should be done.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1373,7 +1376,8 @@ TEST(LayerAnimationControllerTest, ScheduleTogetherWithAnAnimWaiting) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   controller->AddAnimation(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeTransformTransition(2)), 1,
@@ -1389,7 +1393,7 @@ TEST(LayerAnimationControllerTest, ScheduleTogetherWithAnAnimWaiting) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   // The opacity animation should have finished at time 1, but the group
   // of animations with id 1 don't finish until time 2 because of the length
   // of the transform animation.
@@ -1397,13 +1401,13 @@ TEST(LayerAnimationControllerTest, ScheduleTogetherWithAnAnimWaiting) {
   controller->UpdateState(true, events.get());
   // Should not have started the float transition yet.
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // The second opacity animation should start at time 2 and should be done by
   // time 3.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(3000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1414,7 +1418,8 @@ TEST(LayerAnimationControllerTest, TrivialLooping) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -1425,32 +1430,32 @@ TEST(LayerAnimationControllerTest, TrivialLooping) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1250));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.25f, dummy.opacity());
+  EXPECT_EQ(0.25f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1750));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2250));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.25f, dummy.opacity());
+  EXPECT_EQ(0.25f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2750));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(3000));
   controller->UpdateState(true, events.get());
   EXPECT_FALSE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // Just be extra sure.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(4000));
   controller->UpdateState(true, events.get());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 // Test that an infinitely looping animation does indeed go until aborted.
@@ -1460,7 +1465,8 @@ TEST(LayerAnimationControllerTest, InfiniteLooping) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -1471,33 +1477,33 @@ TEST(LayerAnimationControllerTest, InfiniteLooping) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1250));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.25f, dummy.opacity());
+  EXPECT_EQ(0.25f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1750));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
 
   controller->Animate(kInitialTickTime +
                       TimeDelta::FromMilliseconds(1073741824250));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.25f, dummy.opacity());
+  EXPECT_EQ(0.25f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime +
                       TimeDelta::FromMilliseconds(1073741824750));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_TRUE(controller->GetAnimation(TargetProperty::OPACITY));
   controller->GetAnimation(TargetProperty::OPACITY)
       ->SetRunState(Animation::ABORTED,
                     kInitialTickTime + TimeDelta::FromMilliseconds(750));
   EXPECT_FALSE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 // Test that pausing and resuming work as expected.
@@ -1507,7 +1513,8 @@ TEST(LayerAnimationControllerTest, PauseResume) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   controller->AddAnimation(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(1.0, 0.f, 1.f)),
@@ -1516,11 +1523,11 @@ TEST(LayerAnimationControllerTest, PauseResume) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(500));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_TRUE(controller->GetAnimation(TargetProperty::OPACITY));
   controller->GetAnimation(TargetProperty::OPACITY)
@@ -1530,7 +1537,7 @@ TEST(LayerAnimationControllerTest, PauseResume) {
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1024000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_TRUE(controller->GetAnimation(TargetProperty::OPACITY));
   controller->GetAnimation(TargetProperty::OPACITY)
@@ -1539,12 +1546,12 @@ TEST(LayerAnimationControllerTest, PauseResume) {
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1024250));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
 
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1024500));
   controller->UpdateState(true, events.get());
   EXPECT_FALSE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, AbortAGroupedAnimation) {
@@ -1553,7 +1560,8 @@ TEST(LayerAnimationControllerTest, AbortAGroupedAnimation) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   const int animation_id = 2;
   controller->AddAnimation(Animation::Create(
@@ -1569,11 +1577,11 @@ TEST(LayerAnimationControllerTest, AbortAGroupedAnimation) {
   controller->Animate(kInitialTickTime);
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_TRUE(controller->GetAnimationById(animation_id));
   controller->GetAnimationById(animation_id)
@@ -1582,24 +1590,26 @@ TEST(LayerAnimationControllerTest, AbortAGroupedAnimation) {
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(2000));
   controller->UpdateState(true, events.get());
   EXPECT_TRUE(!controller->HasActiveAnimation());
-  EXPECT_EQ(0.75f, dummy.opacity());
+  EXPECT_EQ(0.75f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, PushUpdatesWhenSynchronizedStartTimeNeeded) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> to_add(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeFloatTransition(2.0, 0.f, 1.f)),
@@ -1631,7 +1641,8 @@ TEST(LayerAnimationControllerTest, SkipUpdateState) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   std::unique_ptr<Animation> first_animation(CreateAnimation(
       std::unique_ptr<AnimationCurve>(new FakeTransformTransition(1)), 1,
@@ -1661,13 +1672,13 @@ TEST(LayerAnimationControllerTest, SkipUpdateState) {
 
   // The float transition should still be at its starting point.
   EXPECT_TRUE(controller->HasActiveAnimation());
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(3000));
   controller->UpdateState(true, events.get());
 
   // The float tranisition should now be done.
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
   EXPECT_FALSE(controller->HasActiveAnimation());
 }
 
@@ -1677,9 +1688,9 @@ TEST(LayerAnimationControllerTest, InactiveObserverGetsTicked) {
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy;
-  FakeInactiveLayerAnimationValueObserver pending_dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
+  controller->set_value_observer(&dummy);
 
   const int id = 1;
   controller->AddAnimation(CreateAnimation(
@@ -1694,7 +1705,7 @@ TEST(LayerAnimationControllerTest, InactiveObserverGetsTicked) {
   EXPECT_EQ(Animation::WAITING_FOR_TARGET_AVAILABILITY,
             controller->GetAnimation(TargetProperty::OPACITY)->run_state());
 
-  controller->AddValueObserver(&pending_dummy);
+  controller->set_needs_pending_value_observations(true);
 
   // With only a pending observer, the animation should progress to the
   // STARTING state and get ticked at its starting point, but should not
@@ -1704,7 +1715,7 @@ TEST(LayerAnimationControllerTest, InactiveObserverGetsTicked) {
   EXPECT_EQ(0u, events->events_.size());
   EXPECT_EQ(Animation::STARTING,
             controller->GetAnimation(TargetProperty::OPACITY)->run_state());
-  EXPECT_EQ(0.5f, pending_dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::PENDING));
 
   // Even when already in the STARTING state, the animation should stay
   // there, and shouldn't be ticked past its starting point.
@@ -1713,9 +1724,9 @@ TEST(LayerAnimationControllerTest, InactiveObserverGetsTicked) {
   EXPECT_EQ(0u, events->events_.size());
   EXPECT_EQ(Animation::STARTING,
             controller->GetAnimation(TargetProperty::OPACITY)->run_state());
-  EXPECT_EQ(0.5f, pending_dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::PENDING));
 
-  controller->AddValueObserver(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   // Now that an active observer has been added, the animation should still
   // initially tick at its starting point, but should now progress to RUNNING.
@@ -1724,13 +1735,13 @@ TEST(LayerAnimationControllerTest, InactiveObserverGetsTicked) {
   EXPECT_EQ(1u, events->events_.size());
   EXPECT_EQ(Animation::RUNNING,
             controller->GetAnimation(TargetProperty::OPACITY)->run_state());
-  EXPECT_EQ(0.5f, pending_dummy.opacity());
-  EXPECT_EQ(0.5f, dummy.opacity());
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // The animation should now tick past its starting point.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(3500));
-  EXPECT_NE(0.5f, pending_dummy.opacity());
-  EXPECT_NE(0.5f, dummy.opacity());
+  EXPECT_NE(0.5f, dummy.opacity(LayerTreeType::PENDING));
+  EXPECT_NE(0.5f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, TransformAnimationBounds) {
@@ -1809,7 +1820,8 @@ TEST(LayerAnimationControllerTest, AbortAnimations) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   // Start with several animations, and allow some of them to reach the finished
   // state.
@@ -1856,11 +1868,13 @@ TEST(LayerAnimationControllerTest, MainThreadAbortedAnimationGetsDeleted) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   int animation_id =
       AddOpacityTransitionToController(controller.get(), 1.0, 0.f, 1.f, false);
@@ -1891,11 +1905,13 @@ TEST(LayerAnimationControllerTest, ImplThreadAbortedAnimationGetsDeleted) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   FakeAnimationDelegate delegate;
   controller->set_layer_animation_delegate(&delegate);
 
@@ -1946,11 +1962,13 @@ TEST(LayerAnimationControllerTest, ImplThreadTakeoverAnimationGetsDeleted) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
   FakeAnimationDelegate delegate_impl;
   controller_impl->set_layer_animation_delegate(&delegate_impl);
   FakeAnimationDelegate delegate;
@@ -2014,7 +2032,8 @@ TEST(LayerAnimationControllerTest, FinishedEventsForGroup) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   const int group_id = 1;
 
@@ -2071,7 +2090,8 @@ TEST(LayerAnimationControllerTest, FinishedAndAbortedEventsForGroup) {
   FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
 
   // Add two animations with the same group id.
   std::unique_ptr<Animation> first_animation(CreateAnimation(
@@ -2561,15 +2581,16 @@ TEST(LayerAnimationControllerTest, NewlyPushedAnimationWaitsForActivation) {
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy_impl;
-  FakeInactiveLayerAnimationValueObserver pending_dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
-  controller_impl->AddValueObserver(&pending_dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+  controller_impl->set_needs_pending_value_observations(true);
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   EXPECT_FALSE(controller->needs_to_start_animations_for_testing());
   int animation_id =
@@ -2599,8 +2620,8 @@ TEST(LayerAnimationControllerTest, NewlyPushedAnimationWaitsForActivation) {
 
   // Since the animation hasn't been activated, only the pending observer
   // should have been ticked.
-  EXPECT_EQ(0.5f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.f, dummy_impl.opacity());
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
   EXPECT_TRUE(controller_impl->GetAnimationById(animation_id)
@@ -2616,23 +2637,25 @@ TEST(LayerAnimationControllerTest, NewlyPushedAnimationWaitsForActivation) {
   // RUNNING state and the active observer should start to get ticked.
   EXPECT_EQ(Animation::RUNNING,
             controller_impl->GetAnimationById(animation_id)->run_state());
-  EXPECT_EQ(0.5f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.5f, dummy_impl.opacity());
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, ActivationBetweenAnimateAndUpdateState) {
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy_impl;
-  FakeInactiveLayerAnimationValueObserver pending_dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
-  controller_impl->AddValueObserver(&pending_dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+  controller_impl->set_needs_pending_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   int animation_id =
       AddOpacityTransitionToController(controller.get(), 1, 0.5f, 1.f, true);
@@ -2651,8 +2674,8 @@ TEST(LayerAnimationControllerTest, ActivationBetweenAnimateAndUpdateState) {
 
   // Since the animation hasn't been activated, only the pending observer
   // should have been ticked.
-  EXPECT_EQ(0.5f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.f, dummy_impl.opacity());
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
   EXPECT_TRUE(controller_impl->GetAnimationById(animation_id)
@@ -2670,39 +2693,41 @@ TEST(LayerAnimationControllerTest, ActivationBetweenAnimateAndUpdateState) {
   controller_impl->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(500));
 
   // Both observers should have been ticked.
-  EXPECT_EQ(0.75f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.75f, dummy_impl.opacity());
+  EXPECT_EQ(0.75f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.75f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest,
      ObserverNotifiedWhenTransformIsPotentiallyAnimatingChanges) {
   AnimationEvents events;
-  FakeLayerAnimationValueObserver active_dummy_impl;
-  FakeInactiveLayerAnimationValueObserver pending_dummy_impl;
+  FakeLayerAnimationValueObserver dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&active_dummy_impl);
-  controller_impl->AddValueObserver(&pending_dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+  controller_impl->set_needs_pending_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
-  EXPECT_FALSE(dummy.transform_is_animating());
-  EXPECT_FALSE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_FALSE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   // Case 1: An animation that's allowed to run until its finish point.
   AddAnimatedTransformToController(controller.get(), 1.0, 1, 1);
-  EXPECT_TRUE(dummy.transform_is_animating());
+  EXPECT_TRUE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->PushAnimationUpdatesTo(controller_impl.get());
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_TRUE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime);
   controller_impl->UpdateState(true, &events);
@@ -2713,19 +2738,19 @@ TEST(LayerAnimationControllerTest,
   // Finish the animation.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
   controller->UpdateState(true, nullptr);
-  EXPECT_FALSE(dummy.transform_is_animating());
+  EXPECT_FALSE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->PushAnimationUpdatesTo(controller_impl.get());
 
   // controller_impl hasn't yet ticked at/past the end of the animation.
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_TRUE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(1000));
   controller_impl->UpdateState(true, &events);
-  EXPECT_FALSE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->NotifyAnimationFinished(events.events_[0]);
   events.events_.clear();
@@ -2733,15 +2758,15 @@ TEST(LayerAnimationControllerTest,
   // Case 2: An animation that's removed before it finishes.
   int animation_id =
       AddAnimatedTransformToController(controller.get(), 10.0, 2, 2);
-  EXPECT_TRUE(dummy.transform_is_animating());
+  EXPECT_TRUE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->PushAnimationUpdatesTo(controller_impl.get());
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_TRUE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(2000));
@@ -2751,27 +2776,27 @@ TEST(LayerAnimationControllerTest,
   events.events_.clear();
 
   controller->RemoveAnimation(animation_id);
-  EXPECT_FALSE(dummy.transform_is_animating());
+  EXPECT_FALSE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->PushAnimationUpdatesTo(controller_impl.get());
-  EXPECT_FALSE(pending_dummy_impl.transform_is_animating());
-  EXPECT_TRUE(active_dummy_impl.transform_is_animating());
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
-  EXPECT_FALSE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   // Case 3: An animation that's aborted before it finishes.
   animation_id = AddAnimatedTransformToController(controller.get(), 10.0, 3, 3);
-  EXPECT_TRUE(dummy.transform_is_animating());
+  EXPECT_TRUE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller->PushAnimationUpdatesTo(controller_impl.get());
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
-  EXPECT_TRUE(pending_dummy_impl.transform_is_animating());
-  EXPECT_TRUE(active_dummy_impl.transform_is_animating());
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_TRUE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(3000));
@@ -2781,62 +2806,66 @@ TEST(LayerAnimationControllerTest,
   events.events_.clear();
 
   controller_impl->AbortAnimations(TargetProperty::TRANSFORM);
-  EXPECT_FALSE(pending_dummy_impl.transform_is_animating());
-  EXPECT_FALSE(active_dummy_impl.transform_is_animating());
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::PENDING));
+  EXPECT_FALSE(dummy_impl.transform_is_animating(LayerTreeType::ACTIVE));
 
   controller_impl->Animate(kInitialTickTime +
                            TimeDelta::FromMilliseconds(4000));
   controller_impl->UpdateState(true, &events);
 
   controller->NotifyAnimationAborted(events.events_[0]);
-  EXPECT_FALSE(dummy.transform_is_animating());
+  EXPECT_FALSE(dummy.transform_is_animating(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, ClippedOpacityValues) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   AddOpacityTransitionToController(controller.get(), 1, 1.f, 2.f, true);
 
   controller->Animate(kInitialTickTime);
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // Opacity values are clipped [0,1]
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, ClippedNegativeOpacityValues) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   AddOpacityTransitionToController(controller.get(), 1, 0.f, -2.f, true);
 
   controller->Animate(kInitialTickTime);
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // Opacity values are clipped [0,1]
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1000));
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, PushedDeletedAnimationWaitsForActivation) {
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy_impl;
-  FakeInactiveLayerAnimationValueObserver pending_dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
-  controller_impl->AddValueObserver(&pending_dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+  controller_impl->set_needs_pending_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   int animation_id =
       AddOpacityTransitionToController(controller.get(), 1, 0.5f, 1.f, true);
@@ -2847,8 +2876,8 @@ TEST(LayerAnimationControllerTest, PushedDeletedAnimationWaitsForActivation) {
   controller_impl->UpdateState(true, events.get());
   EXPECT_EQ(Animation::RUNNING,
             controller_impl->GetAnimationById(animation_id)->run_state());
-  EXPECT_EQ(0.5f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.5f, dummy_impl.opacity());
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   EXPECT_TRUE(controller_impl->GetAnimationById(animation_id)
                   ->affects_pending_observers());
@@ -2870,8 +2899,8 @@ TEST(LayerAnimationControllerTest, PushedDeletedAnimationWaitsForActivation) {
   controller_impl->UpdateState(true, events.get());
 
   // Only the active observer should have been ticked.
-  EXPECT_EQ(0.5f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.75f, dummy_impl.opacity());
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.75f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
 
@@ -2885,15 +2914,17 @@ TEST(LayerAnimationControllerTest, StartAnimationsAffectingDifferentObservers) {
   std::unique_ptr<AnimationEvents> events(
       base::WrapUnique(new AnimationEvents));
   FakeLayerAnimationValueObserver dummy_impl;
-  FakeInactiveLayerAnimationValueObserver pending_dummy_impl;
   scoped_refptr<LayerAnimationController> controller_impl(
       LayerAnimationController::Create(0));
-  controller_impl->AddValueObserver(&dummy_impl);
-  controller_impl->AddValueObserver(&pending_dummy_impl);
+  controller_impl->set_value_observer(&dummy_impl);
+  controller_impl->set_needs_active_value_observations(true);
+  controller_impl->set_needs_pending_value_observations(true);
+
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   int first_animation_id =
       AddOpacityTransitionToController(controller.get(), 1, 0.f, 1.f, true);
@@ -2935,8 +2966,8 @@ TEST(LayerAnimationControllerTest, StartAnimationsAffectingDifferentObservers) {
 
   // The active observer should have been ticked by the original animation,
   // and the pending observer should have been ticked by the new animation.
-  EXPECT_EQ(1.f, pending_dummy_impl.opacity());
-  EXPECT_EQ(0.5f, dummy_impl.opacity());
+  EXPECT_EQ(1.f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(0.5f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 
   controller_impl->ActivateAnimations();
 
@@ -2957,15 +2988,16 @@ TEST(LayerAnimationControllerTest, StartAnimationsAffectingDifferentObservers) {
   EXPECT_EQ(
       Animation::RUNNING,
       controller_impl->GetAnimationById(second_animation_id)->run_state());
-  EXPECT_EQ(1.f, pending_dummy_impl.opacity());
-  EXPECT_EQ(1.f, dummy_impl.opacity());
+  EXPECT_EQ(1.f, dummy_impl.opacity(LayerTreeType::PENDING));
+  EXPECT_EQ(1.f, dummy_impl.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, TestIsCurrentlyAnimatingProperty) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   // Create an animation that initially affects only pending observers.
   std::unique_ptr<Animation> animation(CreateAnimation(
@@ -3018,7 +3050,7 @@ TEST(LayerAnimationControllerTest, TestIsCurrentlyAnimatingProperty) {
   EXPECT_FALSE(controller->IsCurrentlyAnimatingProperty(
       TargetProperty::FILTER, LayerAnimationController::ObserverType::ACTIVE));
 
-  EXPECT_EQ(0.f, dummy.opacity());
+  EXPECT_EQ(0.f, dummy.opacity(LayerTreeType::ACTIVE));
 
   // Tick past the end of the animation.
   controller->Animate(kInitialTickTime + TimeDelta::FromMilliseconds(1100));
@@ -3034,14 +3066,15 @@ TEST(LayerAnimationControllerTest, TestIsCurrentlyAnimatingProperty) {
   EXPECT_FALSE(controller->IsCurrentlyAnimatingProperty(
       TargetProperty::FILTER, LayerAnimationController::ObserverType::ACTIVE));
 
-  EXPECT_EQ(1.f, dummy.opacity());
+  EXPECT_EQ(1.f, dummy.opacity(LayerTreeType::ACTIVE));
 }
 
 TEST(LayerAnimationControllerTest, TestIsAnimatingPropertyTimeOffsetFillMode) {
   FakeLayerAnimationValueObserver dummy;
   scoped_refptr<LayerAnimationController> controller(
       LayerAnimationController::Create(0));
-  controller->AddValueObserver(&dummy);
+  controller->set_value_observer(&dummy);
+  controller->set_needs_active_value_observations(true);
 
   // Create an animation that initially affects only pending observers, and has
   // a start delay of 2 seconds.

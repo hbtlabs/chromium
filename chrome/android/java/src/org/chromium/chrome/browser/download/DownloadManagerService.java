@@ -29,7 +29,6 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.content.browser.DownloadController;
 import org.chromium.content.browser.DownloadInfo;
@@ -362,17 +361,16 @@ public class DownloadManagerService extends BroadcastReceiver implements
                     mDownloadItem.getSystemDownloadId()));
             int statusIndex = c.getColumnIndex(DownloadManager.COLUMN_STATUS);
             int reasonIndex = c.getColumnIndex(DownloadManager.COLUMN_REASON);
-            int filenameIndex = c.getColumnIndex(DownloadManager.COLUMN_LOCAL_FILENAME);
+            int titleIndex = c.getColumnIndex(DownloadManager.COLUMN_TITLE);
             int status = DownloadManager.STATUS_FAILED;
             Boolean canResolve = false;
             if (c.moveToNext()) {
                 status = c.getInt(statusIndex);
-                String path = c.getString(filenameIndex);
-                String fileName = TextUtils.isEmpty(path) ? null : new File(path).getName();
+                String title = c.getString(titleIndex);
                 if (mDownloadInfo == null) {
                     // Chrome has been killed, reconstruct a DownloadInfo.
                     mDownloadInfo = new DownloadInfo.Builder()
-                            .setFileName(fileName)
+                            .setFileName(title)
                             .setDescription(c.getString(
                                     c.getColumnIndex(DownloadManager.COLUMN_DESCRIPTION)))
                             .setMimeType(c.getString(
@@ -383,7 +381,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
                 }
                 if (status == DownloadManager.STATUS_SUCCESSFUL) {
                     mDownloadInfo = DownloadInfo.Builder.fromDownloadInfo(mDownloadInfo)
-                            .setFileName(fileName)
+                            .setFileName(title)
                             .build();
                     mDownloadItem.setDownloadInfo(mDownloadInfo);
                     canResolve = canResolveDownloadItem(mContext, mDownloadItem);
@@ -846,6 +844,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
                 description = info.getFileName();
             }
             request.setDescription(description);
+            request.setTitle(info.getFileName());
             request.addRequestHeader("Cookie", info.getCookie());
             request.addRequestHeader("Referer", info.getReferer());
             request.addRequestHeader("User-Agent", info.getUserAgent());
@@ -979,10 +978,6 @@ public class DownloadManagerService extends BroadcastReceiver implements
         launchIntent.setDataAndType(uri, manager.getMimeTypeForDownloadedFile(downloadId));
         launchIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
                 | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Uri referrer = new Uri.Builder().scheme(
-                IntentHandler.ANDROID_APP_REFERRER_SCHEME).authority(
-                        context.getPackageName()).build();
-        launchIntent.putExtra(Intent.EXTRA_REFERRER, referrer);
         return launchIntent;
     }
 

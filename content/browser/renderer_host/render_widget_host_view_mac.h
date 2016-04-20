@@ -22,6 +22,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_id.h"
 #include "content/browser/renderer_host/browser_compositor_view_mac.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
@@ -38,6 +39,8 @@
 #include "ui/base/cocoa/remote_layer_api.h"
 #import "ui/base/cocoa/tool_tip_base_view.h"
 #include "ui/gfx/display_observer.h"
+
+struct ViewHostMsg_TextInputState_Params;
 
 namespace content {
 class RenderWidgetHostImpl;
@@ -227,7 +230,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       public DelegatedFrameHostClient,
       public ui::AcceleratedWidgetMacNSView,
       public IPC::Sender,
-      public gfx::DisplayObserver {
+      public gfx::DisplayObserver,
+      public cc::BeginFrameObserverBase {
  public:
   // The view will associate itself with the given widget. The native view must
   // be hooked up immediately to the view hierarchy, or else when it is
@@ -283,7 +287,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void UpdateInputMethodIfNecessary(bool text_input_state_changed) override;
+  void TextInputStateChanged(
+      const ViewHostMsg_TextInputState_Params& params) override;
   void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -361,6 +366,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   // Forwards the mouse event to the renderer.
   void ForwardMouseEvent(const blink::WebMouseEvent& event);
+
+  // Called when RenderWidget wants to start BeginFrame scheduling or stop.
+  void OnSetNeedsBeginFrames(bool needs_begin_frames);
 
   void KillSelf();
 
@@ -502,6 +510,11 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void DelegatedFrameHostUpdateVSyncParameters(
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) override;
+  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
+
+  // cc::BeginFrameObserverBase implementation.
+  bool OnBeginFrameDerivedImpl(const cc::BeginFrameArgs& args) override;
+  void OnBeginFrameSourcePausedChanged(bool paused) override;
 
   // AcceleratedWidgetMacNSView implementation.
   NSView* AcceleratedWidgetGetNSView() const override;
@@ -588,6 +601,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // to SendVSyncParametersToRenderer(), and refreshed regularly thereafter.
   base::TimeTicks vsync_timebase_;
   base::TimeDelta vsync_interval_;
+
+  // The begin frame source being observed.  Null if none.
+  cc::BeginFrameSource* begin_frame_source_;
+  bool needs_begin_frames_;
 
   // The current composition character range and its bounds.
   gfx::Range composition_range_;

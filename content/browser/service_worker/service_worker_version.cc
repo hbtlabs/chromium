@@ -114,17 +114,6 @@ void RunTaskAfterStartWorker(
   task.Run();
 }
 
-void RunErrorMessageCallback(
-    const std::vector<TransferredMessagePort>& sent_message_ports,
-    const ServiceWorkerVersion::StatusCallback& callback,
-    ServiceWorkerStatusCode status) {
-  // Transfering the message ports failed, so destroy the ports.
-  for (const TransferredMessagePort& port : sent_message_ports) {
-    MessagePortService::GetInstance()->ClosePort(port.id);
-  }
-  callback.Run(status);
-}
-
 void KillEmbeddedWorkerProcess(int process_id, ResultCode code) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   RenderProcessHost* render_process_host =
@@ -561,48 +550,6 @@ void ServiceWorkerVersion::RunAfterStartWorker(
                          error_callback, task));
 }
 
-void ServiceWorkerVersion::DispatchMessageEvent(
-    const base::string16& message,
-    const std::vector<TransferredMessagePort>& sent_message_ports,
-    const StatusCallback& callback) {
-  for (const TransferredMessagePort& port : sent_message_ports) {
-    MessagePortService::GetInstance()->HoldMessages(port.id);
-  }
-
-  DispatchMessageEventInternal(message, sent_message_ports, callback);
-}
-
-void ServiceWorkerVersion::DispatchMessageEventInternal(
-    const base::string16& message,
-    const std::vector<TransferredMessagePort>& sent_message_ports,
-    const StatusCallback& callback) {
-  OnBeginEvent();
-  if (running_status() != RUNNING) {
-    // Schedule calling this method after starting the worker.
-    StartWorker(ServiceWorkerMetrics::EventType::MESSAGE,
-                base::Bind(&RunTaskAfterStartWorker, weak_factory_.GetWeakPtr(),
-                           base::Bind(&RunErrorMessageCallback,
-                                      sent_message_ports, callback),
-                           base::Bind(&self::DispatchMessageEventInternal,
-                                      weak_factory_.GetWeakPtr(), message,
-                                      sent_message_ports, callback)));
-    return;
-  }
-
-  // TODO(kinuko): Cleanup this (and corresponding unit test) when message
-  // event becomes extendable, round-trip event. (crbug.com/498596)
-  RestartTick(&idle_time_);
-
-  MessagePortMessageFilter* filter =
-      embedded_worker_->message_port_message_filter();
-  std::vector<int> new_routing_ids;
-  filter->UpdateMessagePortsWithNewRoutes(sent_message_ports, &new_routing_ids);
-  ServiceWorkerStatusCode status =
-      embedded_worker_->SendMessage(ServiceWorkerMsg_MessageToWorker(
-          message, sent_message_ports, new_routing_ids));
-  RunSoon(base::Bind(callback, status));
-}
-
 void ServiceWorkerVersion::AddControllee(
     ServiceWorkerProviderHost* provider_host) {
   const std::string& uuid = provider_host->client_uuid();
@@ -667,8 +614,12 @@ void ServiceWorkerVersion::SetStartWorkerStatusCode(
 void ServiceWorkerVersion::Doom() {
   DCHECK(!HasControllee());
   SetStatus(REDUNDANT);
-  if (running_status() == STARTING || running_status() == RUNNING)
-    embedded_worker_->Stop();
+  if (running_status() == STARTING || running_status() == RUNNING) {
+    if (embedded_worker()->devtools_attached())
+      stop_when_devtools_detached_ = true;
+    else
+      embedded_worker_->Stop();
+  }
   if (!context_)
     return;
   std::vector<ServiceWorkerDatabase::ResourceRecord> resources;
@@ -678,6 +629,12 @@ void ServiceWorkerVersion::Doom() {
 
 void ServiceWorkerVersion::SetDevToolsAttached(bool attached) {
   embedded_worker()->set_devtools_attached(attached);
+  if (stop_when_devtools_detached_ && !attached) {
+    DCHECK_EQ(REDUNDANT, status());
+    if (running_status() == STARTING || running_status() == RUNNING)
+      embedded_worker_->Stop();
+    return;
+  }
   if (attached) {
     // TODO(falken): Canceling the timeouts when debugging could cause
     // heisenbugs; we should instead run them as normal show an educational
@@ -1542,7 +1499,7 @@ void ServiceWorkerVersion::RecordStartWorkerResult(
   base::TimeTicks start_time = start_time_;
   ClearTick(&start_time_);
 
-  if (context_)
+  if (context_ && IsInstalled(prestart_status))
     context_->UpdateVersionFailureCount(version_id_, status);
 
   ServiceWorkerMetrics::RecordStartWorkerStatus(status, purpose,

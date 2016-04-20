@@ -8,7 +8,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -52,6 +54,7 @@ GpuChannelManager::GpuChannelManager(
     : task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       gpu_preferences_(gpu_preferences),
+      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()),
       delegate_(delegate),
       watchdog_(watchdog),
       shutdown_event_(shutdown_event),
@@ -142,13 +145,13 @@ GpuChannel* GpuChannelManager::LookupChannel(int32_t client_id) const {
   return it != gpu_channels_.end() ? it->second : nullptr;
 }
 
-scoped_ptr<GpuChannel> GpuChannelManager::CreateGpuChannel(
+std::unique_ptr<GpuChannel> GpuChannelManager::CreateGpuChannel(
     int client_id,
     uint64_t client_tracing_id,
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  return make_scoped_ptr(
+  return base::WrapUnique(
       new GpuChannel(this, sync_point_manager(), watchdog_, share_group(),
                      mailbox_manager(), preempts ? preemption_flag() : nullptr,
                      preempts ? nullptr : preemption_flag(), task_runner_.get(),
@@ -162,7 +165,7 @@ IPC::ChannelHandle GpuChannelManager::EstablishChannel(
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams) {
-  scoped_ptr<GpuChannel> channel(
+  std::unique_ptr<GpuChannel> channel(
       CreateGpuChannel(client_id, client_tracing_id, preempts,
                        allow_view_command_buffers, allow_real_time_streams));
   IPC::ChannelHandle channel_handle = channel->Init(shutdown_event_);

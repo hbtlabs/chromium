@@ -6,9 +6,9 @@
 
 #include <utility>
 
-#include "base/callback.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/task_scheduler/delayed_task_manager.h"
 #include "base/task_scheduler/priority_queue.h"
 #include "base/task_scheduler/scheduler_task_executor.h"
 #include "base/task_scheduler/sequence_sort_key.h"
@@ -18,27 +18,27 @@
 namespace base {
 namespace internal {
 
-bool PostTaskToExecutor(const tracked_objects::Location& posted_from,
-                        const Closure& closure,
-                        const TaskTraits& traits,
-                        const TimeDelta& delay,
+bool PostTaskToExecutor(std::unique_ptr<Task> task,
                         scoped_refptr<Sequence> sequence,
                         SchedulerTaskExecutor* executor,
-                        TaskTracker* task_tracker) {
-  DCHECK(!closure.is_null());
+                        TaskTracker* task_tracker,
+                        DelayedTaskManager* delayed_task_manager) {
+  DCHECK(task);
   DCHECK(sequence);
   DCHECK(executor);
   DCHECK(task_tracker);
-
-  // TODO(fdoray): Support delayed tasks.
-  DCHECK(delay.is_zero());
-
-  std::unique_ptr<Task> task(new Task(posted_from, closure, traits));
+  DCHECK(delayed_task_manager);
 
   if (!task_tracker->WillPostTask(task.get()))
     return false;
 
-  executor->PostTaskWithSequence(std::move(task), std::move(sequence));
+  if (task->delayed_run_time.is_null()) {
+    executor->PostTaskWithSequence(std::move(task), std::move(sequence));
+  } else {
+    delayed_task_manager->AddDelayedTask(std::move(task), std::move(sequence),
+                                         executor);
+  }
+
   return true;
 }
 

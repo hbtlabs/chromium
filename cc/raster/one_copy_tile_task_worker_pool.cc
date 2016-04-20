@@ -12,7 +12,6 @@
 
 #include "base/macros.h"
 #include "cc/base/math_util.h"
-#include "cc/raster/raster_buffer.h"
 #include "cc/raster/staging_buffer_pool.h"
 #include "cc/resources/platform_color.h"
 #include "cc/resources/resource_format.h"
@@ -111,10 +110,6 @@ OneCopyTileTaskWorkerPool::OneCopyTileTaskWorkerPool(
 OneCopyTileTaskWorkerPool::~OneCopyTileTaskWorkerPool() {
 }
 
-TileTaskRunner* OneCopyTileTaskWorkerPool::AsTileTaskRunner() {
-  return this;
-}
-
 void OneCopyTileTaskWorkerPool::Shutdown() {
   TRACE_EVENT0("cc", "OneCopyTileTaskWorkerPool::Shutdown");
 
@@ -170,6 +165,10 @@ ResourceFormat OneCopyTileTaskWorkerPool::GetResourceFormat(
 bool OneCopyTileTaskWorkerPool::GetResourceRequiresSwizzle(
     bool must_support_alpha) const {
   return ResourceFormatRequiresSwizzle(GetResourceFormat(must_support_alpha));
+}
+
+RasterBufferProvider* OneCopyTileTaskWorkerPool::AsRasterBufferProvider() {
+  return this;
 }
 
 std::unique_ptr<RasterBuffer> OneCopyTileTaskWorkerPool::AcquireBufferForRaster(
@@ -332,8 +331,8 @@ void OneCopyTileTaskWorkerPool::CopyOnWorkerThread(
       gl->CompressedCopyTextureCHROMIUM(staging_buffer->texture_id,
                                         resource_lock->texture_id());
     } else {
-      int bytes_per_row =
-          (BitsPerPixel(resource->format()) * resource->size().width()) / 8;
+      int bytes_per_row = ResourceUtil::UncheckedWidthInBytes<int>(
+          resource->size().width(), resource->format());
       int chunk_size_in_rows =
           std::max(1, max_bytes_per_copy_operation_ / bytes_per_row);
       // Align chunk size to 4. Required to support compressed texture formats.

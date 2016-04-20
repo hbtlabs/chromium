@@ -12,6 +12,7 @@
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "components/rappor/rappor_service.h"
 #include "components/rappor/rappor_utils.h"
 #include "content/public/browser/permission_type.h"
@@ -158,7 +159,7 @@ void RecordPermissionAction(PermissionType permission,
   if (!rappor_service || permission_str.empty())
     return;
 
-  scoped_ptr<rappor::Sample> sample =
+  std::unique_ptr<rappor::Sample> sample =
       rappor_service->CreateSample(rappor::SAFEBROWSING_RAPPOR_TYPE);
   sample->SetStringField("Scheme", requesting_origin.scheme());
   sample->SetStringField("Host", requesting_origin.host());
@@ -273,4 +274,16 @@ void PermissionUmaUtil::PermissionRevoked(PermissionType permission,
       permission == PermissionType::VIDEO_CAPTURE) {
     RecordPermissionAction(permission, REVOKED, revoked_origin);
   }
+}
+
+void PermissionUmaUtil::PermissionPromptShown(
+    const std::vector<PermissionBubbleRequest*>& requests) {
+  DCHECK(!requests.empty());
+  PermissionBubbleType permission_prompt_type = PermissionBubbleType::MULTIPLE;
+  if (requests.size() == 1)
+    permission_prompt_type = requests[0]->GetPermissionBubbleType();
+  UMA_HISTOGRAM_ENUMERATION(
+      "Permissions.Prompt.Shown",
+      static_cast<base::HistogramBase::Sample>(permission_prompt_type),
+      static_cast<base::HistogramBase::Sample>(PermissionBubbleType::NUM));
 }

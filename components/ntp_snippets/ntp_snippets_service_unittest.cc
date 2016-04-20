@@ -13,9 +13,13 @@
 #include "base/time/time.h"
 #include "components/ntp_snippets/ntp_snippet.h"
 #include "components/ntp_snippets/ntp_snippets_fetcher.h"
+#include "components/ntp_snippets/ntp_snippets_scheduler.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/url_request/url_request_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using testing::_;
 
 namespace ntp_snippets {
 
@@ -39,7 +43,10 @@ std::string GetTestJson(const std::string& content_creation_time_str,
       "\"snippet\" : \"Snippet\","
       "\"thumbnailUrl\" : \"http://localhost/salient_image\","
       "\"creationTimestampSec\" : \"%s\","
-      "\"expiryTimestampSec\" : \"%s\""
+      "\"expiryTimestampSec\" : \"%s\","
+      "\"sourceCorpusInfo\" : [ "
+      "{\"ampUrl\" : \"http://localhost/amp\"},"
+      "{\"corpusId\" : \"id\"}]"
       "}}"
       "]}";
 
@@ -97,6 +104,16 @@ void ParseJson(
   }
 }
 
+class MockScheduler : public NTPSnippetsScheduler {
+ public:
+  MOCK_METHOD4(Schedule,
+               bool(base::TimeDelta period_wifi_charging,
+                    base::TimeDelta period_wifi,
+                    base::TimeDelta period_fallback,
+                    base::Time reschedule_time));
+  MOCK_METHOD0(Unschedule, bool());
+};
+
 }  // namespace
 
 class NTPSnippetsServiceTest : public testing::Test {
@@ -111,24 +128,32 @@ class NTPSnippetsServiceTest : public testing::Test {
     CreateSnippetsService();
   }
 
-  void CreateSnippetsService() {
+  virtual void CreateSnippetsService() {
+    CreateSnippetsServiceEnabled(true);
+  }
+
+  void CreateSnippetsServiceEnabled(bool enabled) {
+    scheduler_.reset(new MockScheduler);
     scoped_refptr<base::SingleThreadTaskRunner> task_runner(
         base::ThreadTaskRunnerHandle::Get());
     scoped_refptr<net::TestURLRequestContextGetter> request_context_getter =
         new net::TestURLRequestContextGetter(task_runner.get());
 
     service_.reset(new NTPSnippetsService(
-        pref_service_.get(), nullptr, task_runner, std::string("fr"), nullptr,
+        pref_service_.get(), nullptr, task_runner, std::string("fr"),
+        scheduler_.get(),
         make_scoped_ptr(new NTPSnippetsFetcher(
             task_runner, std::move(request_context_getter), true)),
         base::Bind(&ParseJson, true)));
-    service_->Init(true);
+    if (enabled)
+      EXPECT_CALL(*scheduler_, Schedule(_, _, _, _));
+    else
+      EXPECT_CALL(*scheduler_, Unschedule());
+    service_->Init(enabled);
   }
 
  protected:
-  NTPSnippetsService* service() {
-    return service_.get();
-  }
+  NTPSnippetsService* service() { return service_.get(); }
 
   void LoadFromJSONString(const std::string& json) {
     service_->OnSnippetsDownloaded(json);
@@ -142,9 +167,25 @@ class NTPSnippetsServiceTest : public testing::Test {
   base::MessageLoop message_loop_;
   scoped_ptr<TestingPrefServiceSimple> pref_service_;
   scoped_ptr<NTPSnippetsService> service_;
+  scoped_ptr<MockScheduler> scheduler_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsServiceTest);
 };
+
+class NTPSnippetsServiceDisabledTest : public NTPSnippetsServiceTest {
+ public:
+  void CreateSnippetsService() override {
+    CreateSnippetsServiceEnabled(false);
+  }
+};
+
+TEST_F(NTPSnippetsServiceTest, Schedule) {
+  // CreateSnippetsServiceEnabled checks that Schedule is called.
+}
+
+TEST_F(NTPSnippetsServiceDisabledTest, Unschedule) {
+  // CreateSnippetsServiceEnabled checks that Unschedule is called.
+}
 
 TEST_F(NTPSnippetsServiceTest, Loop) {
   std::string json_str(
@@ -181,7 +222,18 @@ TEST_F(NTPSnippetsServiceTest, Full) {
     EXPECT_EQ(snippet.salient_image_url(),
               GURL("http://localhost/salient_image"));
     EXPECT_EQ(GetDefaultCreationTime(), snippet.publish_date());
+    EXPECT_EQ(snippet.amp_url(), GURL("http://localhost/amp"));
   }
+}
+
+TEST_F(NTPSnippetsServiceTest, Clear) {
+  std::string json_str(GetTestJson());
+
+  LoadFromJSONString(json_str);
+  EXPECT_EQ(service()->size(), 1u);
+
+  service()->ClearSnippets();
+  EXPECT_EQ(service()->size(), 0u);
 }
 
 TEST_F(NTPSnippetsServiceTest, LoadInvalidJson) {
@@ -237,6 +289,31 @@ TEST_F(NTPSnippetsServiceTest, Discard) {
   CreateSnippetsService();
   LoadFromJSONString(json_str);
   EXPECT_EQ(0u, service()->size());
+
+  // The snippet can be added again after clearing discarded snippets.
+  service()->ClearDiscardedSnippets();
+  EXPECT_EQ(0u, service()->size());
+  LoadFromJSONString(json_str);
+  EXPECT_EQ(1u, service()->size());
+}
+
+TEST_F(NTPSnippetsServiceTest, GetDiscarded) {
+  std::string json_str(
+      "{ \"recos\": [ { \"contentInfo\": { \"url\" : \"http://site.com\" }}]}");
+  LoadFromJSONString(json_str);
+
+  // For the test, we need the snippet to get discarded.
+  ASSERT_TRUE(service()->DiscardSnippet(GURL("http://site.com")));
+  const NTPSnippetsService::NTPSnippetStorage& snippets =
+      service()->discarded_snippets();
+  EXPECT_EQ(1u, snippets.size());
+  for (auto& snippet : snippets) {
+    EXPECT_EQ(GURL("http://site.com"), snippet->url());
+  }
+
+  // There should be no discarded snippet after clearing the list.
+  service()->ClearDiscardedSnippets();
+  EXPECT_EQ(0u, service()->discarded_snippets().size());
 }
 
 TEST_F(NTPSnippetsServiceTest, CreationTimestampParseFail) {

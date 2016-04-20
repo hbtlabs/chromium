@@ -467,6 +467,8 @@
       'password_manager/core/browser/affiliation_utils_unittest.cc',
       'password_manager/core/browser/browser_save_password_progress_logger_unittest.cc',
       'password_manager/core/browser/export/csv_writer_unittest.cc',
+      'password_manager/core/browser/export/password_exporter_unittest.cc',
+      'password_manager/core/browser/import/password_importer_unittest.cc',
       'password_manager/core/browser/facet_manager_unittest.cc',
       'password_manager/core/browser/import/csv_reader_unittest.cc',
       'password_manager/core/browser/log_manager_unittest.cc',
@@ -491,6 +493,7 @@
       'password_manager/core/browser/psl_matching_helper_unittest.cc',
       'password_manager/core/browser/statistics_table_unittest.cc',
       'password_manager/core/common/credential_manager_types_unittest.cc',
+      'password_manager/sync/browser/password_manager_setting_migrator_service_unittest.cc',
       'password_manager/sync/browser/password_sync_util_unittest.cc',
       'password_manager/sync/browser/sync_credentials_filter_unittest.cc',
       'password_manager/sync/browser/sync_username_test_base.cc',
@@ -637,6 +640,7 @@
       'safe_browsing_db/safe_browsing_api_handler_unittest.cc',
     ],
     'safe_browsing_db_unittest_sources': [
+      'safe_browsing_db/database_manager_unittest.cc',
       'safe_browsing_db/prefix_set_unittest.cc',
       'safe_browsing_db/testing_util.h',
       'safe_browsing_db/util_unittest.cc',
@@ -1269,6 +1273,7 @@
             'components.gyp:sessions_content',
             'components.gyp:storage_monitor',
             'components.gyp:storage_monitor_test_support',
+            'components.gyp:test_database_manager',
             'components.gyp:ui_zoom',
             'components.gyp:url_matcher',
             'components.gyp:visitedlink_browser',
@@ -1281,6 +1286,7 @@
             'test_runner/test_runner.gyp:test_runner',
             'tracing.gyp:tracing',
             'webcrypto/webcrypto.gyp:webcrypto',
+            '../third_party/boringssl/boringssl.gyp:boringssl',
             '../third_party/re2/re2.gyp:re2',
           ],
           'conditions': [
@@ -1297,24 +1303,6 @@
             ['OS=="android" and configuration_policy == 1', {
               'dependencies': [
                 'components.gyp:policy_java',
-              ],
-            }],
-            ['use_openssl==1', {
-              'dependencies': [
-                '../third_party/boringssl/boringssl.gyp:boringssl',
-              ],
-            }, {
-              'conditions': [
-                ['os_posix == 1 and OS != "mac" and OS != "ios" and OS != "android"', {
-                  'dependencies': [
-                    '../build/linux/system.gyp:ssl',
-                  ],
-                }, {
-                  'dependencies': [
-                    '../third_party/nss/nss.gyp:nspr',
-                    '../third_party/nss/nss.gyp:nss',
-                  ],
-                }],
               ],
             }],
             ['safe_browsing == 2 and OS != "ios"', {

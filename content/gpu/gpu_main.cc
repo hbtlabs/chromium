@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -184,7 +185,6 @@ int GpuMain(const MainFunctionParams& parameters) {
 #if defined(OS_WIN)
   // Use a UI message loop because ANGLE and the desktop GL platform can
   // create child windows to render to.
-  base::MessagePumpForGpu::InitFactory();
   base::MessageLoop main_message_loop(base::MessageLoop::TYPE_UI);
 #elif defined(OS_LINUX) && defined(USE_X11)
   // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX

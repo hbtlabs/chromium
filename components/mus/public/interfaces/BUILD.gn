@@ -23,6 +23,7 @@ mojom("interfaces") {
     "window_manager.mojom",
     "window_manager_constants.mojom",
     "window_manager_factory.mojom",
+    "window_server_test.mojom",
     "window_tree.mojom",
     "window_tree_host.mojom",
   ]
@@ -37,7 +38,4 @@ mojom("interfaces") {
     "//ui/mojo/geometry:interfaces",
     "//ui/mojo/ime:interfaces",
   ]
-
-  typemaps = [ "//gpu/command_buffer/common/mojo.typemap" ]
-  typemap_deps = [ "//gpu/ipc/common:command_buffer_traits" ]
 }

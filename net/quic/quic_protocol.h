@@ -11,6 +11,7 @@
 #include <limits>
 #include <list>
 #include <map>
+#include <memory>
 #include <ostream>
 #include <set>
 #include <string>
@@ -20,7 +21,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "net/base/int128.h"
 #include "net/base/iovec.h"
@@ -1390,8 +1390,6 @@ struct NET_EXPORT_PRIVATE TransmissionInfo {
   // Non-empty if there is a listener for this packet.
   std::list<AckListenerWrapper> ack_listeners;
 };
-static_assert(sizeof(TransmissionInfo) <= 128,
-              "TODO(ianswett): Keep the TransmissionInfo size to a cacheline.");
 
 // Struct to store the pending retransmission information.
 struct PendingRetransmission {

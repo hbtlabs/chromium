@@ -203,12 +203,12 @@ source_set("common") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
+    "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
-    "//ui/latency_info/ipc",
     "//ui/shell_dialogs",
     "//url",
     "//url/ipc:url_ipc",
@@ -529,8 +529,6 @@ mojom("mojo_bindings") {
   ]
 
   import_dirs = [ "//mojo/services" ]
-
-  typemaps = [ "//url/mojo/origin.typemap" ]
 
   public_deps = [
     "//components/leveldb/public/interfaces",

@@ -643,6 +643,7 @@ interface ServiceWorkerRegistration : EventTarget
     setter onupdatefound
 interface StorageManager
     method constructor
+    method estimate
     method persistentPermission
 interface SubtleCrypto
     method constructor
@@ -798,8 +799,6 @@ interface WorkerNavigator
     getter product
     getter storage
     getter userAgent
-    getter webkitPersistentStorage
-    getter webkitTemporaryStorage
     method constructor
 interface webkitIDBCursor
     getter direction

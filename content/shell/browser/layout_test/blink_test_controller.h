@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <ostream>
+#include <set>
 #include <string>
 
 #include "base/cancelable_callback.h"
@@ -133,11 +134,21 @@ class BlinkTestController : public base::NonThreadSafe,
   // True if the controller was reset successfully.
   bool ResetAfterLayoutTest();
 
+  // IPC messages forwarded from elsewhere.
+  void OnLayoutTestRuntimeFlagsChanged(
+      int sender_process_host_id,
+      const base::DictionaryValue& changed_layout_test_runtime_flags);
+  void OnTestFinishedInSecondaryRenderer();
+
+  // Makes sure that the potentially new renderer associated with |frame| is 1)
+  // initialized for the test, 2) kept-up-to-date wrt test flags and 3)
+  // monitored for crashes.
+  void HandleNewRenderFrameHost(RenderFrameHost* frame);
+
   void SetTempPath(const base::FilePath& temp_path);
   void RendererUnresponsive();
   void OverrideWebkitPrefs(WebPreferences* prefs);
   void OpenURL(const GURL& url);
-  void TestFinishedInSecondaryRenderer();
   bool IsMainWindow(WebContents* web_contents) const;
   std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
       RenderFrameHost* frame,
@@ -184,17 +195,12 @@ class BlinkTestController : public base::NonThreadSafe,
   static BlinkTestController* instance_;
 
   void DiscardMainWindow();
-  void HandleNewRenderFrameHost(
-      RenderFrameHost* frame_representing_target_process);
 
   // Message handlers.
   void OnAudioDump(const std::vector<unsigned char>& audio_dump);
   void OnImageDump(const std::string& actual_pixel_hash, const SkBitmap& image);
   void OnTextDump(const std::string& dump);
   void OnInitiateLayoutDump();
-  void OnLayoutTestRuntimeFlagsChanged(
-      RenderFrameHost* sender,
-      const base::DictionaryValue& changed_layout_test_runtime_flags);
   void OnLayoutDumpResponse(RenderFrameHost* sender, const std::string& dump);
   void OnPrintMessage(const std::string& message);
   void OnOverridePreferences(const WebPreferences& prefs);
@@ -266,6 +272,8 @@ class BlinkTestController : public base::NonThreadSafe,
   // Renderer processes are observed to detect crashes.
   ScopedObserver<RenderProcessHost, RenderProcessHostObserver>
       render_process_host_observer_;
+  std::set<RenderProcessHost*> all_observed_render_process_hosts_;
+  std::set<RenderProcessHost*> main_window_render_process_hosts_;
 
   // Changes reported by OnLayoutTestRuntimeFlagsChanged that have accumulated
   // since PrepareForLayoutTest (i.e. changes that need to be send to a fresh

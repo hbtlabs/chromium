@@ -30,6 +30,8 @@
 #include "SkColorMatrixFilter.h"
 #include "SkTableColorFilter.h"
 #include "platform/geometry/IntPoint.h"
+#include "platform/graphics/BoxReflection.h"
+#include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/filters/FilterEffect.h"
 #include "platform/graphics/filters/FilterOperations.h"
 #include "platform/graphics/filters/SourceGraphic.h"
@@ -38,12 +40,9 @@
 #include "third_party/skia/include/effects/SkXfermodeImageFilter.h"
 
 namespace blink {
+namespace SkiaImageFilterBuilder {
 
-SkiaImageFilterBuilder::~SkiaImageFilterBuilder()
-{
-}
-
-PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::build(FilterEffect* effect, ColorSpace colorSpace, bool destinationRequiresValidPreMultipliedPixels)
+sk_sp<SkImageFilter> build(FilterEffect* effect, ColorSpace colorSpace, bool destinationRequiresValidPreMultipliedPixels)
 {
     if (!effect)
         return nullptr;
@@ -51,37 +50,34 @@ PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::build(FilterEffect* effect, Co
     bool requiresPMColorValidation = effect->mayProduceInvalidPreMultipliedPixels() && destinationRequiresValidPreMultipliedPixels;
 
     if (SkImageFilter* filter = effect->getImageFilter(colorSpace, requiresPMColorValidation))
-        return filter;
+        return sk_ref_sp(filter);
 
     // Note that we may still need the color transform even if the filter is null
-    RefPtr<SkImageFilter> origFilter = requiresPMColorValidation ? effect->createImageFilter(*this) : effect->createImageFilterWithoutValidation(*this);
-    RefPtr<SkImageFilter> filter = transformColorSpace(origFilter.get(), effect->operatingColorSpace(), colorSpace);
-    effect->setImageFilter(colorSpace, requiresPMColorValidation, filter.get());
+    sk_sp<SkImageFilter> origFilter = requiresPMColorValidation ? effect->createImageFilter() : effect->createImageFilterWithoutValidation();
+    sk_sp<SkImageFilter> filter = transformColorSpace(origFilter, effect->operatingColorSpace(), colorSpace);
+    effect->setImageFilter(colorSpace, requiresPMColorValidation, filter);
     if (filter.get() != origFilter.get())
-        effect->setImageFilter(effect->operatingColorSpace(), requiresPMColorValidation, origFilter.get());
-    return filter.release();
+        effect->setImageFilter(effect->operatingColorSpace(), requiresPMColorValidation, std::move(origFilter));
+    return filter;
 }
 
-PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::transformColorSpace(
-    SkImageFilter* input, ColorSpace srcColorSpace, ColorSpace dstColorSpace) {
-
-    RefPtr<SkColorFilter> colorFilter = ColorSpaceUtilities::createColorSpaceFilter(srcColorSpace, dstColorSpace);
+sk_sp<SkImageFilter> transformColorSpace(sk_sp<SkImageFilter> input, ColorSpace srcColorSpace, ColorSpace dstColorSpace)
+{
+    sk_sp<SkColorFilter> colorFilter = toSkSp(ColorSpaceUtilities::createColorSpaceFilter(srcColorSpace, dstColorSpace));
     if (!colorFilter)
         return input;
 
-    return adoptRef(SkColorFilterImageFilter::Create(colorFilter.get(), input));
+    return SkColorFilterImageFilter::Make(std::move(colorFilter), std::move(input));
 }
 
-void SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& operations, CompositorFilterOperations* filters)
+void buildFilterOperations(const FilterOperations& operations, CompositorFilterOperations* filters)
 {
     ColorSpace currentColorSpace = ColorSpaceDeviceRGB;
-    SkImageFilter* const nullFilter = 0;
 
     for (size_t i = 0; i < operations.size(); ++i) {
         const FilterOperation& op = *operations.at(i);
         switch (op.type()) {
         case FilterOperation::REFERENCE: {
-            RefPtr<SkImageFilter> filter;
             Filter* referenceFilter = toReferenceFilterOperation(op).getFilter();
             if (referenceFilter && referenceFilter->lastEffect()) {
                 FilterEffect* filterEffect = referenceFilter->lastEffect();
@@ -91,18 +87,17 @@ void SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& opera
                 // initialize SourceGraphic with both options.
                 // Since we know SourceGraphic is always PM-valid, we also use
                 // these for the PM-validated options.
-                RefPtr<SkImageFilter> deviceFilter = transformColorSpace(nullFilter, currentColorSpace, ColorSpaceDeviceRGB);
-                RefPtr<SkImageFilter> linearFilter = transformColorSpace(nullFilter, currentColorSpace, ColorSpaceLinearRGB);
+                sk_sp<SkImageFilter> deviceFilter = transformColorSpace(nullptr, currentColorSpace, ColorSpaceDeviceRGB);
+                sk_sp<SkImageFilter> linearFilter = transformColorSpace(nullptr, currentColorSpace, ColorSpaceLinearRGB);
                 FilterEffect* sourceGraphic = referenceFilter->getSourceGraphic();
-                sourceGraphic->setImageFilter(ColorSpaceDeviceRGB, false, deviceFilter.get());
-                sourceGraphic->setImageFilter(ColorSpaceLinearRGB, false, linearFilter.get());
-                sourceGraphic->setImageFilter(ColorSpaceDeviceRGB, true, deviceFilter.get());
-                sourceGraphic->setImageFilter(ColorSpaceLinearRGB, true, linearFilter.get());
+                sourceGraphic->setImageFilter(ColorSpaceDeviceRGB, false, deviceFilter);
+                sourceGraphic->setImageFilter(ColorSpaceLinearRGB, false, linearFilter);
+                sourceGraphic->setImageFilter(ColorSpaceDeviceRGB, true, deviceFilter);
+                sourceGraphic->setImageFilter(ColorSpaceLinearRGB, true, linearFilter);
 
                 currentColorSpace = filterEffect->operatingColorSpace();
                 filterEffect->determineFilterPrimitiveSubregion(MapRectForward);
-                filter = SkiaImageFilterBuilder::build(filterEffect, currentColorSpace);
-                filters->appendReferenceFilter(filter.get());
+                filters->appendReferenceFilter(SkiaImageFilterBuilder::build(filterEffect, currentColorSpace));
             }
             break;
         }
@@ -165,10 +160,8 @@ void SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& opera
         case FilterOperation::BOX_REFLECT: {
             // TODO(jbroman): Consider explaining box reflect to the compositor,
             // instead of calling this a "reference filter".
-            const auto& reflectOperation = toBoxReflectFilterOperation(op);
-            RefPtr<SkImageFilter> imageFilter = buildBoxReflectFilter(
-                reflectOperation.direction(), reflectOperation.offset(), nullptr, nullFilter);
-            filters->appendReferenceFilter(imageFilter.get());
+            const auto& reflection = toBoxReflectFilterOperation(op).reflection();
+            filters->appendReferenceFilter(buildBoxReflectFilter(reflection, nullptr));
             break;
         }
         case FilterOperation::NONE:
@@ -177,47 +170,25 @@ void SkiaImageFilterBuilder::buildFilterOperations(const FilterOperations& opera
     }
     if (currentColorSpace != ColorSpaceDeviceRGB) {
         // Transform to device color space at the end of processing, if required
-        RefPtr<SkImageFilter> filter = transformColorSpace(nullFilter, currentColorSpace, ColorSpaceDeviceRGB);
-        filters->appendReferenceFilter(filter.get());
+        sk_sp<SkImageFilter> filter = transformColorSpace(nullptr, currentColorSpace, ColorSpaceDeviceRGB);
+        filters->appendReferenceFilter(std::move(filter));
     }
 }
 
-PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::buildTransform(const AffineTransform& transform, SkImageFilter* input)
+sk_sp<SkImageFilter> buildTransform(const AffineTransform& transform, sk_sp<SkImageFilter> input)
 {
-    return adoptRef(SkImageFilter::CreateMatrixFilter(affineTransformToSkMatrix(transform), kHigh_SkFilterQuality, input));
+    return SkImageFilter::MakeMatrixFilter(affineTransformToSkMatrix(transform), kHigh_SkFilterQuality, std::move(input));
 }
 
-SkMatrix SkiaImageFilterBuilder::matrixForBoxReflectFilter(ReflectionDirection direction, float offset)
+sk_sp<SkImageFilter> buildBoxReflectFilter(const BoxReflection& reflection, sk_sp<SkImageFilter> input)
 {
-    SkMatrix flipMatrix;
-    switch (direction) {
-    case VerticalReflection:
-        flipMatrix.setScale(1, -1);
-        flipMatrix.postTranslate(0, offset);
-        break;
-    case HorizontalReflection:
-        flipMatrix.setScale(-1, 1);
-        flipMatrix.postTranslate(offset, 0);
-        break;
-    default:
-        // MSVC requires that SkMatrix be initialized in this unreachable case.
-        NOTREACHED();
-        flipMatrix.reset();
-        break;
-    }
-    return flipMatrix;
-}
-
-PassRefPtr<SkImageFilter> SkiaImageFilterBuilder::buildBoxReflectFilter(ReflectionDirection direction, float offset, Image* maskImage, SkImageFilter* input)
-{
-    RefPtr<SkImageFilter> maskedInput = input;
+    sk_sp<SkImageFilter> maskedInput = input;
     // TODO(jbroman): If a mask image is provided, mask!
 
-    SkMatrix flipMatrix = matrixForBoxReflectFilter(direction, offset);
-    RefPtr<SkImageFilter> flipImageFilter = adoptRef(SkImageFilter::CreateMatrixFilter(
-        flipMatrix, kLow_SkFilterQuality, maskedInput.get()));
-
-    return fromSkSp(SkXfermodeImageFilter::Make(nullptr, flipImageFilter.get(), input, nullptr));
+    sk_sp<SkImageFilter> flipImageFilter = SkImageFilter::MakeMatrixFilter(
+        reflection.reflectionMatrix(), kLow_SkFilterQuality, std::move(maskedInput));
+    return SkXfermodeImageFilter::Make(nullptr, std::move(flipImageFilter), std::move(input), nullptr);
 }
 
+} // namespace SkiaImageFilterBuilder
 } // namespace blink

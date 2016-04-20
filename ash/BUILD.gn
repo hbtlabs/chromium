@@ -40,7 +40,7 @@ component("ash") {
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
     "//ui/base:ui_data_pack",
@@ -81,6 +81,7 @@ component("ash") {
       "//build/config/linux:xfixes",
     ]
     deps += [
+      "//ui/events/devices/x11",
       "//ui/events/platform",
       "//ui/gfx/x",
     ]
@@ -201,7 +202,7 @@ source_set("test_support") {
     "//testing/gtest",
     "//ui/accessibility",
     "//ui/app_list:test_support",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base:test_support",
@@ -286,7 +287,7 @@ static_library("ash_shell_lib") {
     "//net",
     "//skia",
     "//third_party/icu",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -356,7 +357,7 @@ test("ash_unittests") {
     "//testing/gtest",
     "//third_party/icu",
     "//ui/accessibility",
-    "//ui/app_list/shower",
+    "//ui/app_list/presenter",
     "//ui/aura",
     "//ui/aura:test_support",
     "//ui/base",

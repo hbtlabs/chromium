@@ -56,8 +56,6 @@ BlimpContextProvider::~BlimpContextProvider() {
 
 bool BlimpContextProvider::BindToCurrentThread() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
-  capabilities_.gpu = context_->GetImplementation()->capabilities();
-  capabilities_.gpu.image = true;
   return true;
 }
 
@@ -65,9 +63,9 @@ void BlimpContextProvider::DetachFromThread() {
   context_thread_checker_.DetachFromThread();
 }
 
-cc::ContextProvider::Capabilities BlimpContextProvider::ContextCapabilities() {
+gpu::Capabilities BlimpContextProvider::ContextCapabilities() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
-  return capabilities_;
+  return context_->GetImplementation()->capabilities();
 }
 
 gpu::gles2::GLES2Interface* BlimpContextProvider::ContextGL() {

@@ -10,6 +10,26 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     super(WebGL2ConformanceExpectations, self).__init__(conformance_path)
 
   def SetExpectations(self):
+    # ===================================
+    # Extension availability expectations
+    # ===================================
+    # It's expected that not all extensions will be available on all platforms.
+    # Having a test listed here is not necessarily a problem.
+
+    self.Fail('WebglExtension.EXT_color_buffer_float',
+        ['win', 'mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_astc',
+        ['win', 'mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_atc',
+        ['win', 'mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_etc1',
+        ['mac', 'linux'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_pvrtc',
+        ['win', 'mac', 'linux'])
+
+    # ========================
+    # Conformance expectations
+    # ========================
     # All platforms.
     self.Skip('deqp/functional/gles3/builtinprecision*.html', bug=483282)
     self.Skip('deqp/functional/gles3/draw.html', bug=483282)
@@ -332,10 +352,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac'], bug=295792)
     self.Fail('conformance2/renderbuffers/framebuffer-test.html',
         ['mac'], bug=483282)
-    self.Fail('conformance2/renderbuffers/readbuffer.html',
-        ['mac'], bug=570453)
-    self.Fail('conformance2/state/gl-object-get-calls.html',
-        ['mac'], bug=483282)
+    self.Fail('conformance2/rendering/framebuffer-completeness-unaffected.html',
+        ['mac'], bug=604053)
 
     # Mac Retina NVIDIA
     self.Fail('conformance2/rendering/draw-buffers.html',
@@ -361,8 +379,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Linux only.
     self.Fail('deqp/data/gles3/shaders/functions.html',
-        ['linux'], bug=483282)
-    self.Skip('deqp/functional/gles3/shaderswitch.html',
         ['linux'], bug=483282)
     self.Fail('conformance2/glsl3/vector-dynamic-indexing.html',
         ['linux'], bug=483282)

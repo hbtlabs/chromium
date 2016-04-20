@@ -34,10 +34,11 @@
 #include "bindings/core/v8/SerializedScriptValue.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/DedicatedWorkerThread.h"
+#include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/WorkerClients.h"
-#include "core/workers/WorkerObjectProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 
 namespace blink {
@@ -66,7 +67,7 @@ const AtomicString& DedicatedWorkerGlobalScope::interfaceName() const
     return EventTargetNames::DedicatedWorkerGlobalScope;
 }
 
-void DedicatedWorkerGlobalScope::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, ExceptionState& exceptionState)
+void DedicatedWorkerGlobalScope::postMessage(ExecutionContext* context, PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, ExceptionState& exceptionState)
 {
     // Disentangle the port in preparation for sending it to the remote context.
     OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(context, ports, exceptionState);
@@ -77,7 +78,7 @@ void DedicatedWorkerGlobalScope::postMessage(ExecutionContext* context, PassRefP
 
 DedicatedWorkerThread* DedicatedWorkerGlobalScope::thread() const
 {
-    return static_cast<DedicatedWorkerThread*>(Base::thread());
+    return static_cast<DedicatedWorkerThread*>(WorkerGlobalScope::thread());
 }
 
 static void countOnDocument(UseCounter::Feature feature, ExecutionContext* context)

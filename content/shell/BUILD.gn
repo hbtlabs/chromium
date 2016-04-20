@@ -86,8 +86,8 @@ static_library("content_shell_lib") {
     "browser/layout_test/layout_test_resource_dispatcher_host_delegate.h",
     "browser/layout_test/layout_test_url_request_context_getter.cc",
     "browser/layout_test/layout_test_url_request_context_getter.h",
-    "browser/layout_test/notify_done_forwarder.cc",
-    "browser/layout_test/notify_done_forwarder.h",
+    "browser/layout_test/secondary_test_window_observer.cc",
+    "browser/layout_test/secondary_test_window_observer.h",
     "browser/layout_test/test_info_extractor.cc",
     "browser/layout_test/test_info_extractor.h",
     "browser/shell.cc",
@@ -169,8 +169,8 @@ static_library("content_shell_lib") {
     "renderer/layout_test/layout_test_content_renderer_client.h",
     "renderer/layout_test/layout_test_render_frame_observer.cc",
     "renderer/layout_test/layout_test_render_frame_observer.h",
-    "renderer/layout_test/layout_test_render_process_observer.cc",
-    "renderer/layout_test/layout_test_render_process_observer.h",
+    "renderer/layout_test/layout_test_render_thread_observer.cc",
+    "renderer/layout_test/layout_test_render_thread_observer.h",
     "renderer/layout_test/leak_detector.cc",
     "renderer/layout_test/leak_detector.h",
     "renderer/layout_test/test_media_stream_renderer_factory.cc",
@@ -288,7 +288,7 @@ static_library("content_shell_lib") {
       "//tools/xdisplaycheck",
     ]
 
-    deps += [ "//ui/events/devices" ]
+    deps += [ "//ui/events/devices/x11" ]
   }
 
   if (is_android) {

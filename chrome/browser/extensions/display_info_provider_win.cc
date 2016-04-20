@@ -12,8 +12,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/win_util.h"
 #include "extensions/common/api/system_display.h"
+#include "ui/display/win/dpi.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/win/dpi.h"
 
 namespace extensions {
 
@@ -23,7 +23,8 @@ namespace {
 
 BOOL CALLBACK
 EnumMonitorCallback(HMONITOR monitor, HDC hdc, LPRECT rect, LPARAM data) {
-  DisplayInfo* all_displays = reinterpret_cast<DisplayInfo*>(data);
+  DisplayUnitInfoList* all_displays =
+      reinterpret_cast<DisplayUnitInfoList*>(data);
   DCHECK(all_displays);
 
   DisplayUnitInfo unit;
@@ -38,7 +39,7 @@ EnumMonitorCallback(HMONITOR monitor, HDC hdc, LPRECT rect, LPARAM data) {
   if (!EnumDisplayDevices(monitor_info.szDevice, 0, &device, 0))
     return FALSE;
 
-  gfx::Size dpi(gfx::GetDPI());
+  gfx::Size dpi(display::win::GetDPI());
   unit.id =
       base::Int64ToString(base::Hash(base::WideToUTF8(monitor_info.szDevice)));
   unit.name = base::WideToUTF8(device.DeviceString);
@@ -68,7 +69,7 @@ bool DisplayInfoProviderWin::SetInfo(
 void DisplayInfoProviderWin::UpdateDisplayUnitInfoForPlatform(
     const gfx::Display& display,
     extensions::api::system_display::DisplayUnitInfo* unit) {
-  DisplayInfo all_displays;
+  DisplayUnitInfoList all_displays;
   EnumDisplayMonitors(
       NULL, NULL, EnumMonitorCallback, reinterpret_cast<LPARAM>(&all_displays));
   for (size_t i = 0; i < all_displays.size(); ++i) {

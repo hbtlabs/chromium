@@ -14,12 +14,12 @@
 
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_export.h"
@@ -441,6 +441,12 @@ class NET_EXPORT_PRIVATE SpdyConstants {
   // in the given SPDY version.
   static int DataFrameType(SpdyMajorVersion version);
 
+  // (HTTP/2) All standard frame types except WINDOW_UPDATE are
+  // (stream-specific xor connection-level). Returns false iff we know
+  // the given frame type does not align with the given streamID.
+  static bool IsValidHTTP2FrameStreamId(SpdyStreamId current_frame_stream_id,
+                                        SpdyFrameType frame_type_field);
+
   // Returns true if a given on-the-wire enumeration of a setting id is valid
   // for a given protocol version, false otherwise.
   static bool IsValidSettingId(SpdyMajorVersion version, int setting_id_field);
@@ -646,7 +652,7 @@ class NET_EXPORT_PRIVATE SpdyDataIR
 
  private:
   // Used to store data that this SpdyDataIR should own.
-  scoped_ptr<std::string> data_store_;
+  std::unique_ptr<std::string> data_store_;
   base::StringPiece data_;
 
   bool padded_;

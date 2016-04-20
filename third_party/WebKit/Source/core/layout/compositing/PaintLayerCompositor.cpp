@@ -450,8 +450,6 @@ void PaintLayerCompositor::updateIfNeeded()
     for (unsigned i = 0; i < layersNeedingPaintInvalidation.size(); i++)
         forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendants(layersNeedingPaintInvalidation[i]->layoutObject());
 
-    m_layoutView.frameView()->setFrameTimingRequestsDirty(true);
-
     // Inform the inspector that the layer tree has changed.
     if (m_layoutView.frame()->isMainFrame())
         InspectorInstrumentation::layerTreeDidChange(m_layoutView.frame());
@@ -659,8 +657,8 @@ PaintLayerCompositor* PaintLayerCompositor::frameContentsCompositor(LayoutPart* 
 
     HTMLFrameOwnerElement* element = toHTMLFrameOwnerElement(layoutObject->node());
     if (Document* contentDocument = element->contentDocument()) {
-        if (LayoutView* view = contentDocument->layoutView())
-            return view->compositor();
+        if (LayoutViewItem view = contentDocument->layoutViewItem())
+            return view.compositor();
     }
     return nullptr;
 }

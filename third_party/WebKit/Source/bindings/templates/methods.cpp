@@ -31,7 +31,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     // prior to the call to BindingSecurity::shouldAllowAccessTo increases 30%
     // of speed performance on Android Nexus 7 as of Dec 2016.  ALWAYS_INLINE
     // didn't work in this case.
-    if (LocalDOMWindow* window = impl->toDOMWindow()) {
+    if (LocalDOMWindow* window = impl->toLocalDOMWindow()) {
         if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), window, exceptionState)) {
             {% if not method.returns_promise %}
             exceptionState.throwIfNeeded();
@@ -464,25 +464,20 @@ void postMessageImpl(const char* interfaceName, {{cpp_class}}* instance, const v
         exceptionState.throwIfNeeded();
         return;
     }
-    TransferableArray* transferables = new TransferableArray;
+    Transferables transferables;
     if (info.Length() > 1) {
         const int transferablesArgIndex = 1;
-        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, *transferables, exceptionState)) {
+        if (!SerializedScriptValue::extractTransferables(info.GetIsolate(), info[transferablesArgIndex], transferablesArgIndex, transferables, exceptionState)) {
             exceptionState.throwIfNeeded();
             return;
         }
     }
-    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], transferables, exceptionState);
+    RefPtr<SerializedScriptValue> message = SerializedScriptValueFactory::instance().create(info.GetIsolate(), info[0], &transferables, exceptionState);
     if (exceptionState.throwIfNeeded())
         return;
     // FIXME: Only pass context/exceptionState if instance really requires it.
     ExecutionContext* context = currentExecutionContext(info.GetIsolate());
-    MessagePortArray* ports;
-    if (auto* messagePorts = TransferableMessagePort::get(*transferables))
-        ports = &(messagePorts->getArray());
-    else
-        ports = new MessagePortArray;
-    instance->postMessage(context, message.release(), ports, exceptionState);
+    instance->postMessage(context, message.release(), transferables.messagePorts, exceptionState);
     exceptionState.throwIfNeeded();
 }
 {% endmacro %}

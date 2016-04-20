@@ -125,8 +125,6 @@
 #include "content/renderer/shared_worker_repository.h"
 #include "content/renderer/skia_benchmarking_extension.h"
 #include "content/renderer/stats_collection_controller.h"
-#include "content/renderer/usb/web_usb_client_impl.h"
-#include "content/renderer/wake_lock/wake_lock_dispatcher.h"
 #include "content/renderer/web_frame_utils.h"
 #include "content/renderer/web_ui_extension.h"
 #include "content/renderer/websharedworker_proxy.h"
@@ -162,7 +160,6 @@
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
-#include "third_party/WebKit/public/platform/modules/webusb/WebUSBClient.h"
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
@@ -1018,7 +1015,6 @@ RenderFrameImpl::RenderFrameImpl(const CreateParams& params)
       contains_media_player_(false),
 #endif
       devtools_agent_(nullptr),
-      wakelock_dispatcher_(nullptr),
       geolocation_dispatcher_(NULL),
       push_messaging_dispatcher_(NULL),
       presentation_dispatcher_(NULL),
@@ -1128,7 +1124,7 @@ void RenderFrameImpl::Initialize() {
 
 void RenderFrameImpl::InitializeBlameContext(RenderFrameImpl* parent_frame) {
   DCHECK(!blame_context_);
-  blame_context_ = new FrameBlameContext(this, parent_frame);
+  blame_context_ = base::WrapUnique(new FrameBlameContext(this, parent_frame));
   blame_context_->Initialize();
 }
 
@@ -2559,7 +2555,7 @@ blink::WebCookieJar* RenderFrameImpl::cookieJar() {
 
 blink::BlameContext* RenderFrameImpl::frameBlameContext() {
   DCHECK(blame_context_);
-  return blame_context_;
+  return blame_context_.get();
 }
 
 blink::WebServiceWorkerProvider*
@@ -4057,12 +4053,6 @@ void RenderFrameImpl::willOpenWebSocket(blink::WebSocketHandle* handle) {
   impl->set_render_frame_id(routing_id_);
 }
 
-blink::WebWakeLockClient* RenderFrameImpl::wakeLockClient() {
-  if (!wakelock_dispatcher_)
-    wakelock_dispatcher_ = new WakeLockDispatcher(this);
-  return wakelock_dispatcher_;
-}
-
 blink::WebGeolocationClient* RenderFrameImpl::geolocationClient() {
   if (!geolocation_dispatcher_)
     geolocation_dispatcher_ = new GeolocationDispatcher(this);
@@ -4291,16 +4281,6 @@ blink::WebBluetooth* RenderFrameImpl::bluetooth() {
   }
 
   return bluetooth_.get();
-}
-
-blink::WebUSBClient* RenderFrameImpl::usbClient() {
-  if (!base::FeatureList::IsEnabled(features::kWebUsb))
-    return nullptr;
-
-  if (!usb_client_)
-    usb_client_.reset(new WebUSBClientImpl(GetServiceRegistry()));
-
-  return usb_client_.get();
 }
 
 #if defined(ENABLE_WEBVR)

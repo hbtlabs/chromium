@@ -13,7 +13,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/scoped_ptr.h"
 #include "base/strings/string_piece.h"
 #include "base/sys_byteorder.h"
 #include "net/base/net_export.h"
@@ -329,6 +328,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // SPDY error codes.
   enum SpdyError {
     SPDY_NO_ERROR,
+    SPDY_INVALID_STREAM_ID,            // Stream ID is invalid
     SPDY_INVALID_CONTROL_FRAME,        // Control frame is mal-formatted.
     SPDY_CONTROL_PAYLOAD_TOO_LARGE,    // Control frame payload was too large.
     SPDY_ZLIB_INIT_FAILURE,            // The Zlib library could not initialize.
@@ -592,7 +592,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
     size_t len() const { return len_; }
 
    private:
-    scoped_ptr<char[]> buffer_;
+    std::unique_ptr<char[]> buffer_;
     size_t capacity_;
     size_t len_;
   };
@@ -631,6 +631,18 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   size_t ProcessSettingsFramePayload(const char* data, size_t len);
   size_t ProcessAltSvcFramePayload(const char* data, size_t len);
   size_t ProcessIgnoredControlFramePayload(/*const char* data,*/ size_t len);
+
+  // Validates the frame header against the current protocol, e.g.
+  // Frame type must be known, must specify a non-zero stream id.
+  //
+  // is_control_frame: the control bit for SPDY3
+  // frame_type_field: the unparsed frame type octet(s)
+  //
+  // For valid frames, returns the correct SpdyFrameType.
+  // Otherwise returns a best guess at invalid frame type,
+  // after setting the appropriate SpdyError.
+  SpdyFrameType ValidateFrameHeader(bool is_control_frame,
+                                    int frame_type_field);
 
   // TODO(jgraettinger): To be removed with migration to
   // SpdyHeadersHandlerInterface.  Serializes the last-processed
@@ -742,14 +754,14 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // current_frame_buffer_.
   SpdySettingsScratch settings_scratch_;
 
-  scoped_ptr<CharBuffer> altsvc_scratch_;
+  std::unique_ptr<CharBuffer> altsvc_scratch_;
 
   // SPDY header compressors.
-  scoped_ptr<z_stream> header_compressor_;
-  scoped_ptr<z_stream> header_decompressor_;
+  std::unique_ptr<z_stream> header_compressor_;
+  std::unique_ptr<z_stream> header_decompressor_;
 
-  scoped_ptr<HpackEncoder> hpack_encoder_;
-  scoped_ptr<HpackDecoder> hpack_decoder_;
+  std::unique_ptr<HpackEncoder> hpack_encoder_;
+  std::unique_ptr<HpackDecoder> hpack_decoder_;
 
   SpdyFramerVisitorInterface* visitor_;
   SpdyFramerDebugVisitorInterface* debug_visitor_;

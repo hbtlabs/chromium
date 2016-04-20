@@ -58,7 +58,6 @@
 #include "net/base/data_url.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
-#include "net/base/port_util.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebMemoryDumpProvider.h"
@@ -458,15 +457,6 @@ bool BlinkPlatformImpl::isReservedIPAddress(
   return address.IsReserved();
 }
 
-bool BlinkPlatformImpl::portAllowed(const blink::WebURL& url) const {
-  GURL gurl = GURL(url);
-  // Return true for URLs without a port specified.  This is needed to let
-  // through non-network schemes that don't go over the network.
-  if (!gurl.has_port())
-    return true;
-  return net::IsPortAllowedForScheme(gurl.EffectiveIntPort(), gurl.scheme());
-}
-
 bool BlinkPlatformImpl::parseMultipartHeadersFromBody(
     const char* bytes,
     size_t size,
@@ -743,6 +733,9 @@ const DataResource kDataResources[] = {
     {"viewportAndroid.css",
      IDR_UASTYLE_VIEWPORT_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
+    {"viewportTelevision.css",
+     IDR_UASTYLE_VIEWPORT_TELEVISION_CSS,
+     ui::SCALE_FACTOR_NONE},
     {"InspectorOverlayPage.html",
      IDR_INSPECTOR_OVERLAY_PAGE_HTML,
      ui::SCALE_FACTOR_NONE},
@@ -882,7 +875,6 @@ BlinkPlatformImpl::notificationManager() {
 
   return NotificationManager::ThreadSpecificInstance(
       thread_safe_sender_.get(),
-      main_thread_task_runner_.get(),
       notification_dispatcher_.get());
 }
 

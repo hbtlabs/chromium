@@ -9,14 +9,16 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gpu_control.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/command_executor.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface.h"
@@ -108,6 +110,7 @@ class Display : private gpu::GpuControl {
   EGLNativeDisplayType display_id_;
 
   gpu::GpuPreferences gpu_preferences_;
+  const gpu::GpuDriverBugWorkarounds gpu_driver_bug_workarounds_;
   bool is_initialized_;
 
   bool create_offscreen_;
@@ -116,18 +119,18 @@ class Display : private gpu::GpuControl {
   uint64_t next_fence_sync_release_;
 
   scoped_refptr<gpu::TransferBufferManagerInterface> transfer_buffer_manager_;
-  scoped_ptr<gpu::CommandBufferService> command_buffer_;
-  scoped_ptr<gpu::CommandExecutor> executor_;
-  scoped_ptr<gpu::gles2::GLES2Decoder> decoder_;
+  std::unique_ptr<gpu::CommandBufferService> command_buffer_;
+  std::unique_ptr<gpu::CommandExecutor> executor_;
+  std::unique_ptr<gpu::gles2::GLES2Decoder> decoder_;
   scoped_refptr<gfx::GLContext> gl_context_;
   scoped_refptr<gfx::GLSurface> gl_surface_;
-  scoped_ptr<gpu::gles2::GLES2CmdHelper> gles2_cmd_helper_;
-  scoped_ptr<gpu::TransferBuffer> transfer_buffer_;
+  std::unique_ptr<gpu::gles2::GLES2CmdHelper> gles2_cmd_helper_;
+  std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;
 
   // TODO(alokp): Support more than one config, surface, and context.
-  scoped_ptr<Config> config_;
-  scoped_ptr<Surface> surface_;
-  scoped_ptr<gpu::gles2::GLES2Implementation> context_;
+  std::unique_ptr<Config> config_;
+  std::unique_ptr<Surface> surface_;
+  std::unique_ptr<gpu::gles2::GLES2Implementation> context_;
 
   DISALLOW_COPY_AND_ASSIGN(Display);
 };

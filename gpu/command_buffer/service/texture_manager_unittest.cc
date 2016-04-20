@@ -7,11 +7,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "gpu/command_buffer/service/error_state_mock.h"
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
@@ -71,7 +71,8 @@ class TextureManagerTest : public GpuServiceTest {
     // enabled without FeatureInfo::EnableES3Validators().
     base::CommandLine command_line(0, nullptr);
     command_line.AppendSwitch(switches::kEnableUnsafeES3APIs);
-    feature_info_ = new FeatureInfo(command_line);
+    GpuDriverBugWorkarounds gpu_driver_bug_workaround(&command_line);
+    feature_info_ = new FeatureInfo(command_line, gpu_driver_bug_workaround);
   }
 
   ~TextureManagerTest() override {}
@@ -123,8 +124,8 @@ class TextureManagerTest : public GpuServiceTest {
   }
 
   scoped_refptr<FeatureInfo> feature_info_;
-  scoped_ptr<TextureManager> manager_;
-  scoped_ptr<MockErrorState> error_state_;
+  std::unique_ptr<TextureManager> manager_;
+  std::unique_ptr<MockErrorState> error_state_;
 };
 
 // GCC requires these declarations, but MSVC requires they not be present
@@ -166,6 +167,7 @@ class GLStreamTextureImageStub : public GLStreamTextureImage {
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
                     const std::string& dump_name) override {}
+  bool EmulatingRGB() const override { return false; }
   void GetTextureMatrix(float matrix[16]) override {}
 
  protected:
@@ -760,10 +762,10 @@ class TextureTestBase : public GpuServiceTest {
         texture_ref, pname, value, error);
   }
 
-  scoped_ptr<MockGLES2Decoder> decoder_;
-  scoped_ptr<MockErrorState> error_state_;
+  std::unique_ptr<MockGLES2Decoder> decoder_;
+  std::unique_ptr<MockErrorState> error_state_;
   scoped_refptr<FeatureInfo> feature_info_;
-  scoped_ptr<TextureManager> manager_;
+  std::unique_ptr<TextureManager> manager_;
   scoped_refptr<TextureRef> texture_ref_;
 };
 
@@ -2194,9 +2196,9 @@ class SharedTextureTest : public GpuServiceTest {
  protected:
   scoped_refptr<FeatureInfo> feature_info_;
   scoped_refptr<CountingMemoryTracker> memory_tracker1_;
-  scoped_ptr<TextureManager> texture_manager1_;
+  std::unique_ptr<TextureManager> texture_manager1_;
   scoped_refptr<CountingMemoryTracker> memory_tracker2_;
-  scoped_ptr<TextureManager> texture_manager2_;
+  std::unique_ptr<TextureManager> texture_manager2_;
 };
 
 TEST_F(SharedTextureTest, DeleteTextures) {

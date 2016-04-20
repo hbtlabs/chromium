@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -188,15 +189,17 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
 
   SetupMockGLBehaviors();
 
-  scoped_refptr<FeatureInfo> feature_info;
-  if (command_line)
-    feature_info = new FeatureInfo(*command_line);
-  group_ = scoped_refptr<ContextGroup>(
-      new ContextGroup(gpu_preferences_, NULL, memory_tracker_,
-                       new ShaderTranslatorCache(gpu_preferences_),
-                       new FramebufferCompletenessCache, feature_info.get(),
-                       new SubscriptionRefSet, new ValueStateMap,
-                       normalized_init.bind_generates_resource));
+  scoped_refptr<FeatureInfo> feature_info = new FeatureInfo;
+  if (command_line) {
+    GpuDriverBugWorkarounds gpu_driver_bug_workaround(command_line);
+    feature_info = new FeatureInfo(*command_line, gpu_driver_bug_workaround);
+  }
+
+  group_ = scoped_refptr<ContextGroup>(new ContextGroup(
+      gpu_preferences_, NULL, memory_tracker_,
+      new ShaderTranslatorCache(gpu_preferences_),
+      new FramebufferCompletenessCache, feature_info, new SubscriptionRefSet,
+      new ValueStateMap, normalized_init.bind_generates_resource));
   bool use_default_textures = normalized_init.bind_generates_resource;
 
   InSequence sequence;
@@ -645,7 +648,7 @@ void GLES2DecoderTestBase::SetBucketAsCStrings(uint32_t bucket_id,
                                                char str_end) {
   uint32_t header_size = sizeof(GLint) * (count + 1);
   uint32_t total_size = header_size;
-  scoped_ptr<GLint[]> header(new GLint[count + 1]);
+  std::unique_ptr<GLint[]> header(new GLint[count + 1]);
   header[0] = static_cast<GLint>(count_in_header);
   for (GLsizei ii = 0; ii < count; ++ii) {
     header[ii + 1] = str && str[ii] ? strlen(str[ii]) : 0;
@@ -1987,8 +1990,7 @@ void GLES2DecoderTestBase::SetupInitStateManualExpectations(bool es3_capable) {
 
 GLES2DecoderWithShaderTestBase::MockCommandBufferEngine::
 MockCommandBufferEngine() {
-
-  scoped_ptr<base::SharedMemory> shm(new base::SharedMemory());
+  std::unique_ptr<base::SharedMemory> shm(new base::SharedMemory());
   shm->CreateAndMapAnonymous(kSharedBufferSize);
   valid_buffer_ = MakeBufferFromSharedMemory(std::move(shm), kSharedBufferSize);
 

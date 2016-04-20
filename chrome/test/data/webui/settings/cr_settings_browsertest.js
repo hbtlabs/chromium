@@ -124,6 +124,32 @@ TEST_F('CrSettingsPeoplePageManageProfileTest', 'ManageProfile', function() {
 GEN('#endif');
 
 /**
+ * Test fixture for
+ * chrome/browser/resources/settings/people_page/people_page.html.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+*/
+function CrSettingsPeoplePageTest() {}
+
+CrSettingsPeoplePageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/people_page/people_page.html',
+
+  /** @override */
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'test_browser_proxy.js',
+    'people_page_test.js',
+  ]),
+};
+
+TEST_F('CrSettingsPeoplePageTest', 'PeoplePage', function() {
+  settings_people_page.registerTests();
+  mocha.run();
+});
+
+/**
  * @constructor
  * @extends {CrSettingsBrowserTest}
  */
@@ -146,7 +172,6 @@ TEST_F('CrSettingsRtlTest', 'DrawerPanelFlips', function() {
   settings_rtl_tests.registerDrawerPanelTests();
   mocha.run();
 });
-
 
 /**
  * Test fixture for chrome/browser/resources/settings/reset_page/.
@@ -278,8 +303,8 @@ TEST_F('CrSettingsCertificateManagerTest', 'CertificateManager', function() {
   certificate_manager_page.registerTests();
   mocha.run();
 });
+GEN('#endif');
 
-GEN('#elif defined(OS_WIN) || defined(OS_MACOSX)');
 /**
  * Test fixture for chrome/browser/resources/settings/privacy_page/.
  * @constructor
@@ -295,15 +320,16 @@ CrSettingsPrivacyPageTest.prototype = {
 
   /** @override */
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
     'test_browser_proxy.js',
     'privacy_page_test.js',
   ]),
 };
 
 TEST_F('CrSettingsPrivacyPageTest', 'PrivacyPage', function() {
+  settings_privacy_page.registerTests();
   mocha.run();
 });
-GEN('#endif');
 
 /**
  * Test fixture for chrome/browser/resources/settings/site_settings/.
@@ -409,5 +435,29 @@ CrSettingsStartupUrlsPageTest.prototype = {
 };
 
 TEST_F('CrSettingsStartupUrlsPageTest', 'StartupUrlsPage', function() {
+  mocha.run();
+});
+
+/**
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsLanguagesPageTest() {}
+
+CrSettingsLanguagesPageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/languages_page/languages_page.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'fake_language_settings_private.js',
+    'fake_settings_private.js',
+    'languages_page_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsLanguagesPageTest', 'LanguagesPage', function() {
   mocha.run();
 });

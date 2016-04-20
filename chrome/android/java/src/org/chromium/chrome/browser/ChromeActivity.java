@@ -87,6 +87,7 @@ import org.chromium.chrome.browser.init.AsyncInitializationActivity;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
+import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.nfc.BeamController;
 import org.chromium.chrome.browser.nfc.BeamProvider;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
@@ -120,6 +121,7 @@ import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.webapps.AddToHomescreenDialog;
 import org.chromium.chrome.browser.widget.ControlContainer;
+import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.content.browser.ContentVideoView;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.common.ContentSwitches;
@@ -220,6 +222,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     private AssistStatusHandler mAssistStatusHandler;
 
+    // A set of views obscuring all tabs. When this set is nonempty,
+    // all tab content will be hidden from the accessibility tree.
+    private List<View> mViewsObscuringAllTabs = new ArrayList<View>();
+
     private static AppMenuHandlerFactory sAppMenuHandlerFactory = new AppMenuHandlerFactory() {
         @Override
         public AppMenuHandler get(
@@ -250,11 +256,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
         ApplicationInitialization.enableFullscreenFlags(
                 getResources(), this, getControlContainerHeightResource());
-        // TODO(twellington): Remove this work around when the underlying bug is fixed.
-        //                    See crbug.com/583099.
-        if (!Build.VERSION.CODENAME.equals("N")) {
-            getWindow().setBackgroundDrawable(getBackgroundDrawable());
-        }
+        getWindow().setBackgroundDrawable(getBackgroundDrawable());
         mWindowAndroid = ((ChromeApplication) getApplicationContext())
                 .createActivityWindowAndroid(this);
         mWindowAndroid.restoreInstanceState(getSavedInstanceState());
@@ -638,6 +640,8 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             LaunchMetrics.commitLaunchMetrics(getActivityTab().getWebContents());
         }
         FeatureUtilities.setCustomTabVisible(isCustomTab());
+        FeatureUtilities.setIsInMultiWindowMode(
+                MultiWindowUtils.getInstance().isInMultiWindowMode(this));
     }
 
     @Override
@@ -1058,8 +1062,13 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                 if (!tabToBookmark.isClosing() && tabToBookmark.isInitialized()) {
                     // The BookmarkModel will be destroyed by BookmarkUtils#addOrEditBookmark() when
                     // done.
-                    BookmarkUtils.addOrEditBookmark(bookmarkId, bookmarkModel,
-                            tabToBookmark, getSnackbarManager(), ChromeActivity.this);
+                    BookmarkId newBookmarkId =
+                            BookmarkUtils.addOrEditBookmark(bookmarkId, bookmarkModel,
+                                    tabToBookmark, getSnackbarManager(), ChromeActivity.this);
+                    // If a new bookmark was created, try to save an offline page for it.
+                    if (newBookmarkId != null && newBookmarkId.getId() != bookmarkId) {
+                        OfflinePageUtils.saveBookmarkOffline(newBookmarkId, tabToBookmark);
+                    }
                 } else {
                     bookmarkModel.destroy();
                 }
@@ -1290,6 +1299,25 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         super.onConfigurationChanged(newConfig);
     }
 
+    /**
+     * Called by the system when the activity changes from fullscreen mode to multi-window mode
+     * and visa-versa.
+     * @param isInMultiWindowMode True if the activity is in multi-window mode.
+     */
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {
+        if (!isInMultiWindowMode
+                && ApplicationStatus.getStateForActivity(this) == ActivityState.RESUMED) {
+            // Start a new UMA session when exiting multi-window mode if the activity is currently
+            // resumed. When entering multi-window Android recents gains focus, so ChromeActivity
+            // will get a call to onPauseWithNative(), ending the current UMA session. When exiting
+            // multi-window, however, if ChromeActivity is resumed it stays in that state.
+            markSessionEnd();
+            markSessionResume();
+            FeatureUtilities.setIsInMultiWindowMode(
+                    MultiWindowUtils.getInstance().isInMultiWindowMode(this));
+        }
+    }
+
     @Override
     public final void onBackPressed() {
         if (mCompositorViewHolder != null) {
@@ -1445,6 +1473,39 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
             return false;
         }
         return true;
+    }
+
+    /**
+     * Add a view to the set of views that obscure the content of all tabs for
+     * accessibility. As long as this set is nonempty, all tabs should be
+     * hidden from the accessibility tree.
+     *
+     * @param view The view that obscures the contents of all tabs.
+     */
+    public void addViewObscuringAllTabs(View view) {
+        mViewsObscuringAllTabs.add(view);
+
+        Tab tab = getActivityTab();
+        if (tab != null) tab.updateAccessibilityVisibility();
+    }
+
+    /**
+     * Remove a view that previously obscured the content of all tabs.
+     *
+     * @param view The view that no longer obscures the contents of all tabs.
+     */
+    public void removeViewObscuringAllTabs(View view) {
+        mViewsObscuringAllTabs.remove(view);
+
+        Tab tab = getActivityTab();
+        if (tab != null) tab.updateAccessibilityVisibility();
+    }
+
+    /**
+     * Returns whether or not any views obscure all tabs.
+     */
+    public boolean isViewObscuringAllTabs() {
+        return !mViewsObscuringAllTabs.isEmpty();
     }
 
     private void markSessionResume() {

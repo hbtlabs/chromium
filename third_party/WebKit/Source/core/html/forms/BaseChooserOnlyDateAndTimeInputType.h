@@ -26,9 +26,6 @@
 #ifndef BaseChooserOnlyDateAndTimeInputType_h
 #define BaseChooserOnlyDateAndTimeInputType_h
 
-#include "wtf/build_config.h"
-
-#if !ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #include "core/html/forms/BaseClickableWithKeyInputType.h"
 #include "core/html/forms/BaseDateAndTimeInputType.h"
 #include "core/html/forms/DateTimeChooser.h"
@@ -37,22 +34,23 @@
 
 namespace blink {
 
-class BaseChooserOnlyDateAndTimeInputType : public BaseDateAndTimeInputType, public DateTimeChooserClient {
+// TODO(tkent): Rename this to ChooserOnlyDateAndTimeInputTypeView.
+class BaseChooserOnlyDateAndTimeInputType final : public InputTypeView, public DateTimeChooserClient {
     USING_GARBAGE_COLLECTED_MIXIN(BaseChooserOnlyDateAndTimeInputType);
     USING_PRE_FINALIZER(BaseChooserOnlyDateAndTimeInputType, closeDateTimeChooser);
-protected:
-    BaseChooserOnlyDateAndTimeInputType(HTMLInputElement&);
+public:
+    static BaseChooserOnlyDateAndTimeInputType* create(HTMLInputElement&, BaseDateAndTimeInputType&);
     ~BaseChooserOnlyDateAndTimeInputType() override;
-
     DECLARE_VIRTUAL_TRACE();
 
 private:
+    BaseChooserOnlyDateAndTimeInputType(HTMLInputElement&, BaseDateAndTimeInputType&);
     void closeDateTimeChooser();
 
-    // InputType functions:
+    // InputTypeView functions:
     void createShadowSubtree() override;
     void closePopupView() override;
-    void setValue(const String&, bool valueChanged, TextFieldEventBehavior) override;
+    void didSetValue(const String&, bool valueChanged) override;
     void handleDOMActivateEvent(Event*) override;
     void handleKeydownEvent(KeyboardEvent*) override;
     void handleKeypressEvent(KeyboardEvent*) override;
@@ -66,10 +64,10 @@ private:
     void didChooseValue(double) override;
     void didEndChooser() override;
 
+    Member<BaseDateAndTimeInputType> m_inputType;
     Member<DateTimeChooser> m_dateTimeChooser;
 };
 
 } // namespace blink
 
-#endif // ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 #endif // BaseChooserOnlyDateAndTimeInputType_h

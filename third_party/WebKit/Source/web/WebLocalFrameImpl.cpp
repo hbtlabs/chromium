@@ -166,7 +166,6 @@
 #include "modules/screen_orientation/ScreenOrientationController.h"
 #include "modules/vr/VRController.h"
 #include "modules/wake_lock/ScreenWakeLock.h"
-#include "modules/webusb/USBController.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -1417,7 +1416,6 @@ WebLocalFrameImpl* WebLocalFrameImpl::createProvisional(WebFrameClient* client, 
     return webFrame;
 }
 
-
 WebLocalFrameImpl::WebLocalFrameImpl(WebTreeScopeType scope, WebFrameClient* client)
     : WebLocalFrame(scope)
     , m_frameLoaderClientImpl(FrameLoaderClientImpl::create(this))
@@ -1479,10 +1477,6 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
     provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
     provideNavigatorContentUtilsTo(*m_frame, NavigatorContentUtilsClientImpl::create(this));
 
-    // Always provided so that availability of the API can be controlled by
-    // OriginTrials::webUSBEnabled().
-    USBController::provideTo(*m_frame, m_client ? m_client->usbClient() : nullptr);
-
     bool enableWebBluetooth = RuntimeEnabledFeatures::webBluetoothEnabled();
 #if OS(CHROMEOS) || OS(ANDROID)
     enableWebBluetooth = true;
@@ -1500,7 +1494,7 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
     if (RuntimeEnabledFeatures::webVREnabled())
         VRController::provideTo(*m_frame, m_client ? m_client->webVRClient() : nullptr);
     if (RuntimeEnabledFeatures::wakeLockEnabled())
-        ScreenWakeLock::provideTo(*m_frame, m_client ? m_client->wakeLockClient() : nullptr);
+        ScreenWakeLock::provideTo(*m_frame, m_client ? m_client->serviceRegistry(): nullptr);
     if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
         provideAudioOutputDeviceClientTo(*m_frame, AudioOutputDeviceClientImpl::create());
     if (RuntimeEnabledFeatures::installedAppEnabled())

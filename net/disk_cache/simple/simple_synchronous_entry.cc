@@ -640,7 +640,7 @@ void SimpleSynchronousEntry::CheckEOFRecord(int index,
 
 void SimpleSynchronousEntry::Close(
     const SimpleEntryStat& entry_stat,
-    scoped_ptr<std::vector<CRCRecord> > crc32s_to_write,
+    std::unique_ptr<std::vector<CRCRecord>> crc32s_to_write,
     net::GrowableIOBuffer* stream_0_data) {
   DCHECK(stream_0_data);
   // Write stream 0 data.
@@ -785,8 +785,9 @@ bool SimpleSynchronousEntry::OpenFiles(
   for (int i = 0; i < kSimpleEntryFileCount; ++i) {
     File::Error error;
     if (!MaybeOpenFile(i, &error)) {
-      // TODO(ttuttle,gavinp): Remove one each of these triplets of histograms.
-      // We can calculate the third as the sum or difference of the other two.
+      // TODO(juliatuttle,gavinp): Remove one each of these triplets of
+      // histograms. We can calculate the third as the sum or difference of the
+      // other two.
       RecordSyncOpenResult(
           cache_type_, OPEN_ENTRY_PLATFORM_FILE_ERROR, had_index);
       SIMPLE_CACHE_UMA(ENUMERATION,
@@ -865,8 +866,9 @@ bool SimpleSynchronousEntry::CreateFiles(
   for (int i = 0; i < kSimpleEntryFileCount; ++i) {
     File::Error error;
     if (!MaybeCreateFile(i, FILE_NOT_REQUIRED, &error)) {
-      // TODO(ttuttle,gavinp): Remove one each of these triplets of histograms.
-      // We can calculate the third as the sum or difference of the other two.
+      // TODO(juliatuttle,gavinp): Remove one each of these triplets of
+      // histograms. We can calculate the third as the sum or difference of the
+      // other two.
       RecordSyncCreateResult(CREATE_ENTRY_PLATFORM_FILE_ERROR, had_index);
       SIMPLE_CACHE_UMA(ENUMERATION,
                        "SyncCreatePlatformFileError", cache_type_,
@@ -955,7 +957,7 @@ int SimpleSynchronousEntry::InitializeForOpen(
       return net::ERR_FAILED;
     }
 
-    scoped_ptr<char[]> key(new char[header.key_length]);
+    std::unique_ptr<char[]> key(new char[header.key_length]);
     int key_read_result = files_[i].Read(sizeof(header), key.get(),
                                          header.key_length);
     if (key_read_result != base::checked_cast<int>(header.key_length)) {
@@ -1381,7 +1383,7 @@ bool SimpleSynchronousEntry::ReadSparseRange(const SparseRange* range,
       return false;
     }
   }
-  // TODO(ttuttle): Incremental crc32 calculation?
+  // TODO(juliatuttle): Incremental crc32 calculation?
 
   return true;
 }

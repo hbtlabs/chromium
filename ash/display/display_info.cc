@@ -21,7 +21,7 @@
 
 #if defined(OS_WIN)
 #include "ui/aura/window_tree_host.h"
-#include "ui/gfx/win/dpi.h"
+#include "ui/display/win/dpi.h"
 #endif
 
 namespace ash {
@@ -171,7 +171,7 @@ DisplayInfo DisplayInfo::CreateFromSpecWithID(const std::string& spec,
   float device_scale_factor = 1.0f;
   if (!GetDisplayBounds(main_spec, &bounds_in_native, &device_scale_factor)) {
 #if defined(OS_WIN)
-    device_scale_factor = gfx::GetDPIScale();
+    device_scale_factor = display::win::GetDPIScale();
 #endif
   }
 
@@ -305,6 +305,7 @@ void DisplayInfo::Copy(const DisplayInfo& native_info) {
   is_aspect_preserving_scaling_ = native_info.is_aspect_preserving_scaling_;
   display_modes_ = native_info.display_modes_;
   available_color_profiles_ = native_info.available_color_profiles_;
+  maximum_cursor_size_ = native_info.maximum_cursor_size_;
 
   // Rotation, ui_scale, color_profile and overscan are given by preference,
   // or unit tests. Don't copy if this native_info came from

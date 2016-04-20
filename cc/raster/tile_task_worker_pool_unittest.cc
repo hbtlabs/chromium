@@ -22,9 +22,7 @@
 #include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/gpu_tile_task_worker_pool.h"
 #include "cc/raster/one_copy_tile_task_worker_pool.h"
-#include "cc/raster/raster_buffer.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
-#include "cc/raster/tile_task_runner.h"
 #include "cc/raster/zero_copy_tile_task_worker_pool.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/resources/resource_provider.h"
@@ -52,14 +50,14 @@ enum TileTaskWorkerPoolType {
   TILE_TASK_WORKER_POOL_TYPE_BITMAP
 };
 
-class TestRasterTaskImpl : public RasterTask {
+class TestRasterTaskImpl : public TileTask {
  public:
   typedef base::Callback<void(bool was_canceled)> Reply;
 
   TestRasterTaskImpl(const Resource* resource,
                      const Reply& reply,
-                     ImageDecodeTask::Vector* dependencies)
-      : RasterTask(dependencies),
+                     TileTask::Vector* dependencies)
+      : TileTask(true, dependencies),
         resource_(resource),
         reply_(reply),
         raster_source_(FakeRasterSource::CreateFilled(gfx::Size(1, 1))) {}
@@ -73,13 +71,13 @@ class TestRasterTaskImpl : public RasterTask {
   }
 
   // Overridden from TileTask:
-  void ScheduleOnOriginThread(TileTaskClient* client) override {
+  void ScheduleOnOriginThread(RasterBufferProvider* provider) override {
     // The raster buffer has no tile ids associated with it for partial update,
     // so doesn't need to provide a valid dirty rect.
-    raster_buffer_ = client->AcquireBufferForRaster(resource_, 0, 0);
+    raster_buffer_ = provider->AcquireBufferForRaster(resource_, 0, 0);
   }
-  void CompleteOnOriginThread(TileTaskClient* client) override {
-    client->ReleaseBufferForRaster(std::move(raster_buffer_));
+  void CompleteOnOriginThread(RasterBufferProvider* provider) override {
+    provider->ReleaseBufferForRaster(std::move(raster_buffer_));
     reply_.Run(!HasFinishedRunning());
   }
 
@@ -100,7 +98,7 @@ class BlockingTestRasterTaskImpl : public TestRasterTaskImpl {
   BlockingTestRasterTaskImpl(const Resource* resource,
                              const Reply& reply,
                              base::Lock* lock,
-                             ImageDecodeTask::Vector* dependencies)
+                             TileTask::Vector* dependencies)
       : TestRasterTaskImpl(resource, reply, dependencies), lock_(lock) {}
 
   // Overridden from Task:
@@ -126,7 +124,7 @@ class TileTaskWorkerPoolTest
     bool canceled;
   };
 
-  typedef std::vector<scoped_refptr<RasterTask>> RasterTaskVector;
+  typedef std::vector<scoped_refptr<TileTask>> RasterTaskVector;
 
   enum NamedTaskSet { REQUIRED_FOR_ACTIVATION, REQUIRED_FOR_DRAW, ALL };
 
@@ -176,18 +174,18 @@ class TileTaskWorkerPoolTest
   }
 
   void TearDown() override {
-    tile_task_worker_pool_->AsTileTaskRunner()->Shutdown();
-    tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
+    tile_task_worker_pool_->Shutdown();
+    tile_task_worker_pool_->CheckForCompletedTasks();
   }
 
   void AllTileTasksFinished() {
-    tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
+    tile_task_worker_pool_->CheckForCompletedTasks();
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
   void RunMessageLoopUntilAllTasksHaveCompleted() {
     task_graph_runner_.RunUntilIdle();
-    tile_task_worker_pool_->AsTileTaskRunner()->CheckForCompletedTasks();
+    tile_task_worker_pool_->CheckForCompletedTasks();
   }
 
   void ScheduleTasks() {
@@ -201,7 +199,7 @@ class TileTaskWorkerPoolTest
                                 0 /* dependencies */);
     }
 
-    tile_task_worker_pool_->AsTileTaskRunner()->ScheduleTasks(&graph_);
+    tile_task_worker_pool_->ScheduleTasks(&graph_);
   }
 
   void AppendTask(unsigned id, const gfx::Size& size) {
@@ -211,7 +209,7 @@ class TileTaskWorkerPoolTest
                        RGBA_8888);
     const Resource* const_resource = resource.get();
 
-    ImageDecodeTask::Vector empty;
+    TileTask::Vector empty;
     tasks_.push_back(new TestRasterTaskImpl(
         const_resource,
         base::Bind(&TileTaskWorkerPoolTest::OnTaskCompleted,
@@ -230,7 +228,7 @@ class TileTaskWorkerPoolTest
                        RGBA_8888);
     const Resource* const_resource = resource.get();
 
-    ImageDecodeTask::Vector empty;
+    TileTask::Vector empty;
     tasks_.push_back(new BlockingTestRasterTaskImpl(
         const_resource,
         base::Bind(&TileTaskWorkerPoolTest::OnTaskCompleted,

@@ -44,7 +44,7 @@ DOMWindow::~DOMWindow()
 v8::Local<v8::Object> DOMWindow::wrap(v8::Isolate*, v8::Local<v8::Object> creationContext)
 {
     // DOMWindow must never be wrapped with wrap method.  The wrappers must be
-    // created at WindowProxy::installDOMWindow().
+    // created at WindowProxy::createContext() and setupWindowPrototypeChain().
     RELEASE_NOTREACHED();
     return v8::Local<v8::Object>();
 }
@@ -168,7 +168,7 @@ bool DOMWindow::isSecureContext() const
     return document()->isSecureContext(ExecutionContext::StandardSecureContextCheck);
 }
 
-void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray* ports, const String& targetOrigin, LocalDOMWindow* source, ExceptionState& exceptionState)
+void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const MessagePortArray& ports, const String& targetOrigin, LocalDOMWindow* source, ExceptionState& exceptionState)
 {
     if (!isCurrentlyDisplayedInFrame())
         return;
@@ -226,7 +226,7 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
     if (InspectorInstrumentation::consoleAgentEnabled(sourceDocument))
         stackTrace = ScriptCallStack::capture();
 
-    toLocalDOMWindow(this)->schedulePostMessage(event, target.get(), stackTrace.release());
+    blink::toLocalDOMWindow(this)->schedulePostMessage(event, target.get(), stackTrace.release());
 }
 
 // FIXME: Once we're throwing exceptions for cross-origin access violations, we will always sanitize the target

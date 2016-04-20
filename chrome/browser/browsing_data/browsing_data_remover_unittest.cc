@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -17,7 +18,7 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_test_util.h"
+#include "chrome/browser/browsing_data/registrable_domain_filter_builder.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/domain_reliability/service_factory.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
@@ -492,9 +494,9 @@ class RemoveChannelIDTester : public net::SSLConfigService::Observer {
   void AddChannelIDWithTimes(const std::string& server_identifier,
                              base::Time creation_time) {
     GetChannelIDStore()->SetChannelID(
-        make_scoped_ptr(new net::ChannelIDStore::ChannelID(
+        base::WrapUnique(new net::ChannelIDStore::ChannelID(
             server_identifier, creation_time,
-            make_scoped_ptr(crypto::ECPrivateKey::Create()))));
+            base::WrapUnique(crypto::ECPrivateKey::Create()))));
   }
 
   // Add a server bound cert for |server|, with the current time as the
@@ -837,11 +839,11 @@ class MockDomainReliabilityService : public DomainReliabilityService {
 
   ~MockDomainReliabilityService() override {}
 
-  scoped_ptr<DomainReliabilityMonitor> CreateMonitor(
+  std::unique_ptr<DomainReliabilityMonitor> CreateMonitor(
       scoped_refptr<base::SingleThreadTaskRunner> network_task_runner)
       override {
     NOTREACHED();
-    return scoped_ptr<DomainReliabilityMonitor>();
+    return std::unique_ptr<DomainReliabilityMonitor>();
   }
 
   void ClearBrowsingData(DomainReliabilityClearMode clear_mode,
@@ -851,7 +853,7 @@ class MockDomainReliabilityService : public DomainReliabilityService {
     callback.Run();
   }
 
-  void GetWebUIData(const base::Callback<void(scoped_ptr<base::Value>)>&
+  void GetWebUIData(const base::Callback<void(std::unique_ptr<base::Value>)>&
                         callback) const override {
     NOTREACHED();
   }
@@ -888,7 +890,7 @@ struct TestingDomainReliabilityServiceFactoryUserData
 const void* TestingDomainReliabilityServiceFactoryUserData::kKey =
     &TestingDomainReliabilityServiceFactoryUserData::kKey;
 
-scoped_ptr<KeyedService> TestingDomainReliabilityServiceFactoryFunction(
+std::unique_ptr<KeyedService> TestingDomainReliabilityServiceFactoryFunction(
     content::BrowserContext* context) {
   const void* kKey = TestingDomainReliabilityServiceFactoryUserData::kKey;
 
@@ -900,7 +902,7 @@ scoped_ptr<KeyedService> TestingDomainReliabilityServiceFactoryFunction(
   EXPECT_FALSE(data->attached);
 
   data->attached = true;
-  return make_scoped_ptr(data->service);
+  return base::WrapUnique(data->service);
 }
 
 class ClearDomainReliabilityTester {
@@ -1008,7 +1010,7 @@ class BrowsingDataRemoverTest : public testing::Test {
     BrowsingDataRemover* remover =
         BrowsingDataRemoverFactory::GetForBrowserContext(profile_.get());
     remover->OverrideWebappRegistryForTesting(
-        scoped_ptr<WebappRegistry>(new TestWebappRegistry()));
+        std::unique_ptr<WebappRegistry>(new TestWebappRegistry()));
 #endif
   }
 
@@ -1142,11 +1144,12 @@ class BrowsingDataRemoverTest : public testing::Test {
   }
 
  protected:
-  scoped_ptr<BrowsingDataRemover::NotificationDetails> called_with_details_;
+  std::unique_ptr<BrowsingDataRemover::NotificationDetails>
+      called_with_details_;
 
  private:
   content::TestBrowserThreadBundle thread_bundle_;
-  scoped_ptr<TestingProfile> profile_;
+  std::unique_ptr<TestingProfile> profile_;
 
   StoragePartitionRemovalData storage_partition_removal_data_;
 
@@ -1201,7 +1204,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveCookieLastHour) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveCookiesDomainBlacklist) {
-  BrowsingDataFilterBuilder filter(BrowsingDataFilterBuilder::BLACKLIST);
+  RegistrableDomainFilterBuilder filter(
+      RegistrableDomainFilterBuilder::BLACKLIST);
   filter.AddRegisterableDomain(kTestRegisterableDomain1);
   filter.AddRegisterableDomain(kTestRegisterableDomain3);
   BlockUntilOriginDataRemoved(BrowsingDataRemover::LAST_HOUR,
@@ -1268,7 +1272,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveSafeBrowsingCookieForeverWithPredicate) {
 
   tester.AddCookie();
   ASSERT_TRUE(tester.ContainsCookie());
-  BrowsingDataFilterBuilder filter(BrowsingDataFilterBuilder::BLACKLIST);
+  RegistrableDomainFilterBuilder filter(
+      RegistrableDomainFilterBuilder::BLACKLIST);
   filter.AddRegisterableDomain(kTestRegisterableDomain1);
   BlockUntilOriginDataRemoved(BrowsingDataRemover::EVERYTHING,
                               BrowsingDataRemover::REMOVE_COOKIES, filter);
@@ -1277,7 +1282,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveSafeBrowsingCookieForeverWithPredicate) {
   EXPECT_EQ(BrowsingDataHelper::UNPROTECTED_WEB, GetOriginTypeMask());
   EXPECT_TRUE(tester.ContainsCookie());
 
-  BrowsingDataFilterBuilder filter2(BrowsingDataFilterBuilder::WHITELIST);
+  RegistrableDomainFilterBuilder filter2(
+      RegistrableDomainFilterBuilder::WHITELIST);
   filter2.AddRegisterableDomain(kTestRegisterableDomain1);
   BlockUntilOriginDataRemoved(BrowsingDataRemover::EVERYTHING,
                               BrowsingDataRemover::REMOVE_COOKIES, filter2);
@@ -1743,7 +1749,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverNeither) {
 }
 
 TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedDataForeverSpecificOrigin) {
-  BrowsingDataFilterBuilder builder(BrowsingDataFilterBuilder::WHITELIST);
+  RegistrableDomainFilterBuilder builder(
+      RegistrableDomainFilterBuilder::WHITELIST);
   builder.AddRegisterableDomain(kTestRegisterableDomain1);
   // Remove Origin 1.
   BlockUntilOriginDataRemoved(BrowsingDataRemover::EVERYTHING,
@@ -1915,7 +1922,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveQuotaManagedProtectedSpecificOrigin) {
   policy->AddProtected(kOrigin1.GetOrigin());
 #endif
 
-  BrowsingDataFilterBuilder builder(BrowsingDataFilterBuilder::WHITELIST);
+  RegistrableDomainFilterBuilder builder(
+      RegistrableDomainFilterBuilder::WHITELIST);
   builder.AddRegisterableDomain(kTestRegisterableDomain1);
 
   // Try to remove kOrigin1. Expect failure.
@@ -2061,7 +2069,8 @@ TEST_F(BrowsingDataRemoverTest, TimeBasedHistoryRemoval) {
   ASSERT_TRUE(tester.HistoryContainsURL(kOrigin1));
   ASSERT_TRUE(tester.HistoryContainsURL(kOrigin2));
 
-  BrowsingDataFilterBuilder builder(BrowsingDataFilterBuilder::BLACKLIST);
+  RegistrableDomainFilterBuilder builder(
+      RegistrableDomainFilterBuilder::BLACKLIST);
   BlockUntilOriginDataRemoved(BrowsingDataRemover::LAST_HOUR,
                               BrowsingDataRemover::REMOVE_HISTORY, builder);
 
@@ -2212,12 +2221,12 @@ TEST_F(BrowsingDataRemoverTest, ContentProtectionPlatformKeysRemoval) {
       AccountId::FromUserEmail("test@example.com"));
   chromeos::ScopedUserManagerEnabler user_manager_enabler(mock_user_manager);
 
-  scoped_ptr<chromeos::DBusThreadManagerSetter> dbus_setter =
+  std::unique_ptr<chromeos::DBusThreadManagerSetter> dbus_setter =
       chromeos::DBusThreadManager::GetSetterForTesting();
   chromeos::MockCryptohomeClient* cryptohome_client =
       new chromeos::MockCryptohomeClient;
   dbus_setter->SetCryptohomeClient(
-      scoped_ptr<chromeos::CryptohomeClient>(cryptohome_client));
+      std::unique_ptr<chromeos::CryptohomeClient>(cryptohome_client));
 
   // Expect exactly one call.  No calls means no attempt to delete keys and more
   // than one call means a significant performance problem.
@@ -2284,7 +2293,7 @@ TEST_F(BrowsingDataRemoverTest, DomainReliability_ProtectedOrigins) {
   EXPECT_EQ(CLEAR_CONTEXTS, tester.last_clear_mode());
 }
 
-// TODO(ttuttle): This isn't actually testing the no-monitor case, since
+// TODO(juliatuttle): This isn't actually testing the no-monitor case, since
 // BrowsingDataRemoverTest now creates one unconditionally, since it's needed
 // for some unrelated test cases. This should be fixed so it tests the no-
 // monitor case again.
@@ -2310,9 +2319,10 @@ TEST_F(BrowsingDataRemoverTest, RemoveDownloadsByTimeOnly) {
 
 TEST_F(BrowsingDataRemoverTest, RemoveDownloadsByOrigin) {
   RemoveDownloadsTester tester(GetProfile());
-  BrowsingDataFilterBuilder builder(BrowsingDataFilterBuilder::WHITELIST);
+  RegistrableDomainFilterBuilder builder(
+      RegistrableDomainFilterBuilder::WHITELIST);
   builder.AddRegisterableDomain(kTestRegisterableDomain1);
-  base::Callback<bool(const GURL&)> filter = builder.BuildSameDomainFilter();
+  base::Callback<bool(const GURL&)> filter = builder.BuildGeneralFilter();
 
   EXPECT_CALL(
       *tester.download_manager(),
@@ -2346,9 +2356,10 @@ TEST_F(BrowsingDataRemoverTest, RemovePasswordsByTimeOnly) {
 
 TEST_F(BrowsingDataRemoverTest, RemovePasswordsByOrigin) {
   RemovePasswordsTester tester(GetProfile());
-  BrowsingDataFilterBuilder builder(BrowsingDataFilterBuilder::WHITELIST);
+  RegistrableDomainFilterBuilder builder(
+      RegistrableDomainFilterBuilder::WHITELIST);
   builder.AddRegisterableDomain(kTestRegisterableDomain1);
-  base::Callback<bool(const GURL&)> filter = builder.BuildSameDomainFilter();
+  base::Callback<bool(const GURL&)> filter = builder.BuildGeneralFilter();
 
   EXPECT_CALL(*tester.store(),
               RemoveLoginsByURLAndTimeImpl(ProbablySameFilter(filter), _, _))
@@ -2399,7 +2410,8 @@ TEST_F(BrowsingDataRemoverTest, RemoveContentSettingsWithBlacklist) {
       new base::DictionaryValue());
 
   // Clear all except for origin1 and origin3.
-  BrowsingDataFilterBuilder filter(BrowsingDataFilterBuilder::BLACKLIST);
+  RegistrableDomainFilterBuilder filter(
+      RegistrableDomainFilterBuilder::BLACKLIST);
   filter.AddRegisterableDomain(kTestRegisterableDomain1);
   filter.AddRegisterableDomain(kTestRegisterableDomain3);
   BlockUntilOriginDataRemoved(BrowsingDataRemover::LAST_HOUR,
@@ -2451,7 +2463,7 @@ TEST_F(BrowsingDataRemoverTest, ClearWithPredicate) {
   host_content_settings_map->SetWebsiteSettingCustomScope(
       pattern2, ContentSettingsPattern::Wildcard(),
       CONTENT_SETTINGS_TYPE_APP_BANNER, std::string(),
-      make_scoped_ptr(new base::DictionaryValue()));
+      base::WrapUnique(new base::DictionaryValue()));
 
   // First, test that we clear only IMAGES (not APP_BANNER), and pattern2.
   BrowsingDataRemover::ClearSettingsForOneTypeWithPredicate(

@@ -16,9 +16,9 @@
 #include "ash/shell_observer.h"
 #include "ash/snap_to_pixel_layout_manager.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/wm/common/workspace/workspace_types.h"
 #include "ash/wm/dock/docked_window_layout_manager_observer.h"
 #include "ash/wm/lock_state_observer.h"
-#include "ash/wm/workspace/workspace_types.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
@@ -191,6 +191,7 @@ class ASH_EXPORT ShelfLayoutManager
   T SelectValueForShelfAlignment(T bottom, T left, T right) const {
     switch (GetAlignment()) {
       case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
       case SHELF_ALIGNMENT_LEFT:
         return left;
@@ -208,11 +209,6 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Is the shelf's alignment horizontal?
   bool IsHorizontalAlignment() const;
-
-  // Returns true when the alignment is locked. This can be caused by the screen
-  // being locked, or when adding a user. Returns false when transitioning to a
-  // user session, and while the session is active.
-  bool IsAlignmentLocked() const;
 
   // Set the height of the ChromeVox panel, which takes away space from the
   // available work area from the top of the screen.
@@ -242,11 +238,12 @@ class ASH_EXPORT ShelfLayoutManager
   };
 
   struct State {
-    State() : visibility_state(SHELF_VISIBLE),
-              auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
-              window_state(WORKSPACE_WINDOW_STATE_DEFAULT),
-              is_screen_locked(false),
-              is_adding_user_screen(false) {}
+    State()
+        : visibility_state(SHELF_VISIBLE),
+          auto_hide_state(SHELF_AUTO_HIDE_HIDDEN),
+          window_state(wm::WORKSPACE_WINDOW_STATE_DEFAULT),
+          is_screen_locked(false),
+          is_adding_user_screen(false) {}
 
     // Returns true if the two states are considered equal. As
     // |auto_hide_state| only matters if |visibility_state| is
@@ -263,7 +260,7 @@ class ASH_EXPORT ShelfLayoutManager
 
     ShelfVisibilityState visibility_state;
     ShelfAutoHideState auto_hide_state;
-    WorkspaceWindowState window_state;
+    wm::WorkspaceWindowState window_state;
     bool is_screen_locked;
     bool is_adding_user_screen;
   };

@@ -27,7 +27,7 @@ class SitePerProcessBrowserTest : public ContentBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override;
   void SetUpOnMainThread() override;
 
-  WebContentsImpl* web_contents() {
+  WebContentsImpl* web_contents() const {
     return static_cast<WebContentsImpl*>(shell()->web_contents());
   }
 

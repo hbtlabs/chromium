@@ -529,13 +529,6 @@ void SingleThreadProxy::OnDrawForOutputSurface(
   NOTREACHED() << "Implemented by ThreadProxy for synchronous compositor.";
 }
 
-void SingleThreadProxy::PostFrameTimingEventsOnImplThread(
-    std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-    std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  layer_tree_host_->RecordFrameTimingEvents(std::move(composite_events),
-                                            std::move(main_frame_events));
-}
-
 void SingleThreadProxy::CompositeImmediately(base::TimeTicks frame_begin_time) {
   TRACE_EVENT0("cc,benchmark", "SingleThreadProxy::CompositeImmediately");
   DCHECK(task_runner_provider_->IsMainThread());
@@ -728,12 +721,6 @@ bool SingleThreadProxy::MainFrameWillHappenForTesting() {
   return scheduler_on_impl_thread_->MainFrameForTestingWillHappen();
 }
 
-void SingleThreadProxy::SetChildrenNeedBeginFrames(
-    bool children_need_begin_frames) {
-  scheduler_on_impl_thread_->SetChildrenNeedBeginFrames(
-      children_need_begin_frames);
-}
-
 void SingleThreadProxy::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
   authoritative_vsync_interval_ = interval;
@@ -912,10 +899,6 @@ void SingleThreadProxy::DidFinishImplFrame() {
       << "DidFinishImplFrame called while not inside an impl frame!";
   inside_impl_frame_ = false;
 #endif
-}
-
-void SingleThreadProxy::SendBeginFramesToChildren(const BeginFrameArgs& args) {
-  layer_tree_host_->SendBeginFramesToChildren(args);
 }
 
 }  // namespace cc

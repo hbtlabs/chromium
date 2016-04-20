@@ -240,7 +240,6 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       id_(id),
       requires_high_res_to_draw_(false),
       is_likely_to_require_a_draw_(false),
-      frame_timing_tracker_(FrameTimingTracker::Create(this)),
       mutator_(nullptr) {
   animation_host_ = AnimationHost::Create(ThreadInstance::IMPL);
   animation_host_->SetMutatorHostClient(this);
@@ -900,16 +899,6 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
         frame->will_draw_layers.push_back(*it);
 
         it->AppendQuads(target_render_pass, &append_quads_data);
-
-        // For layers that represent themselves, add composite frame timing
-        // requests if the visible rect intersects the requested rect.
-        for (const auto& request : it->frame_timing_requests()) {
-          if (request.rect().Intersects(it->visible_layer_rect())) {
-            frame->composite_events.push_back(
-                FrameTimingTracker::FrameAndRectIds(
-                    active_tree_->source_frame_number(), request.id()));
-          }
-        }
       }
 
       ++layers_drawn;
@@ -1065,10 +1054,6 @@ DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
   if (input_handler_client_)
     input_handler_client_->ReconcileElasticOverscrollAndRootScroll();
 
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Compositing.NumActiveLayers",
-      base::saturated_cast<int>(active_tree_->NumLayers()), 1, 400, 20);
-
   if (const char* client_name = GetClientNameForMetrics()) {
     size_t total_picture_memory = 0;
     for (const PictureLayerImpl* layer : active_tree()->picture_layers())
@@ -1081,6 +1066,11 @@ DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
                              client_name),
           base::saturated_cast<int>(total_picture_memory / 1024));
     }
+    // GetClientNameForMetrics only returns one non-null value over the lifetime
+    // of the process, so this histogram name is runtime constant.
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        base::StringPrintf("Compositing.%s.NumActiveLayers", client_name),
+        base::saturated_cast<int>(active_tree_->NumLayers()), 1, 400, 20);
   }
 
   bool update_lcd_text = false;
@@ -1610,11 +1600,6 @@ void LayerTreeHostImpl::DrawLayers(FrameData* frame) {
 
   base::TimeTicks frame_begin_time = CurrentBeginFrameArgs().frame_time;
   DCHECK(CanDraw());
-
-  if (!frame->composite_events.empty()) {
-    frame_timing_tracker_->SaveTimeStamps(frame_begin_time,
-                                          frame->composite_events);
-  }
 
   if (frame->has_no_damage) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_NoDamage", TRACE_EVENT_SCOPE_THREAD);
@@ -2165,7 +2150,7 @@ void LayerTreeHostImpl::CreateTileManagerResources() {
 
   // TODO(vmpstr): Initialize tile task limit at ctor time.
   tile_manager_->SetResources(
-      resource_pool_.get(), tile_task_worker_pool_->AsTileTaskRunner(),
+      resource_pool_.get(), tile_task_worker_pool_.get(),
       image_decode_controller_.get(),
       is_synchronous_single_threaded_ ? std::numeric_limits<size_t>::max()
                                       : settings_.scheduled_raster_task_limit,
@@ -2240,35 +2225,14 @@ void LayerTreeHostImpl::CreateResourceAndTileTaskWorkerPool(
   *resource_pool =
       ResourcePool::Create(resource_provider_.get(), GetTaskRunner());
 
-  int max_copy_texture_chromium_size = context_provider->ContextCapabilities()
-                                           .gpu.max_copy_texture_chromium_size;
+  const int max_copy_texture_chromium_size =
+      context_provider->ContextCapabilities().max_copy_texture_chromium_size;
 
   *tile_task_worker_pool = OneCopyTileTaskWorkerPool::Create(
       GetTaskRunner(), task_graph_runner, context_provider,
       resource_provider_.get(), max_copy_texture_chromium_size,
       settings_.use_partial_raster, settings_.max_staging_buffer_usage_in_bytes,
       settings_.renderer_settings.preferred_tile_format);
-}
-
-void LayerTreeHostImpl::RecordMainFrameTiming(
-    const BeginFrameArgs& start_of_main_frame_args,
-    const BeginFrameArgs& expected_next_main_frame_args) {
-  std::vector<int64_t> request_ids;
-  active_tree_->GatherFrameTimingRequestIds(&request_ids);
-  if (request_ids.empty())
-    return;
-
-  base::TimeTicks start_time = start_of_main_frame_args.frame_time;
-  base::TimeTicks end_time = expected_next_main_frame_args.frame_time;
-  frame_timing_tracker_->SaveMainFrameTimeStamps(
-      request_ids, start_time, end_time, active_tree_->source_frame_number());
-}
-
-void LayerTreeHostImpl::PostFrameTimingEvents(
-    std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-    std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-  client_->PostFrameTimingEventsOnImplThread(std::move(composite_events),
-                                             std::move(main_frame_events));
 }
 
 void LayerTreeHostImpl::SetLayerTreeMutator(LayerTreeMutator* mutator) {

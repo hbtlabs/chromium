@@ -6,20 +6,22 @@
 #define CHROME_BROWSER_NOTIFICATIONS_PLATFORM_NOTIFICATION_SERVICE_IMPL_H_
 
 #include <stdint.h>
+
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <unordered_set>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/common/persistent_notification_status.h"
+#include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 
 class NotificationDelegate;
 class NotificationUIManager;
@@ -85,11 +87,11 @@ class PlatformNotificationServiceImpl
   void OpenNotificationSettings(content::BrowserContext* browser_context);
 
   // content::PlatformNotificationService implementation.
-  blink::WebNotificationPermission CheckPermissionOnUIThread(
+  blink::mojom::PermissionStatus CheckPermissionOnUIThread(
       content::BrowserContext* browser_context,
       const GURL& origin,
       int render_process_id) override;
-  blink::WebNotificationPermission CheckPermissionOnIOThread(
+  blink::mojom::PermissionStatus CheckPermissionOnIOThread(
       content::ResourceContext* resource_context,
       const GURL& origin,
       int render_process_id) override;
@@ -98,7 +100,7 @@ class PlatformNotificationServiceImpl
       const GURL& origin,
       const content::PlatformNotificationData& notification_data,
       const content::NotificationResources& notification_resources,
-      scoped_ptr<content::DesktopNotificationDelegate> delegate,
+      std::unique_ptr<content::DesktopNotificationDelegate> delegate,
       base::Closure* cancel_callback) override;
   void DisplayPersistentNotification(
       content::BrowserContext* browser_context,
@@ -146,7 +148,7 @@ class PlatformNotificationServiceImpl
 
   // Platforms that display native notification interact with them through this
   // object.
-  scoped_ptr<NotificationUIManager> native_notification_ui_manager_;
+  std::unique_ptr<NotificationUIManager> native_notification_ui_manager_;
 
   // Weak reference. Ownership maintains with the test.
   NotificationUIManager* notification_ui_manager_for_tests_;

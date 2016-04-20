@@ -31,10 +31,7 @@
 #ifndef BaseMultipleFieldsDateAndTimeInputType_h
 #define BaseMultipleFieldsDateAndTimeInputType_h
 
-#include "wtf/build_config.h"
-
-#if ENABLE(INPUT_MULTIPLE_FIELDS_UI)
-#include "core/html/forms/BaseDateAndTimeInputType.h"
+#include "core/html/forms/InputTypeView.h"
 #include "core/html/shadow/ClearButtonElement.h"
 #include "core/html/shadow/DateTimeEditElement.h"
 #include "core/html/shadow/PickerIndicatorElement.h"
@@ -42,10 +39,12 @@
 
 namespace blink {
 
+class BaseDateAndTimeInputType;
 struct DateTimeChooserParameters;
 
-class BaseMultipleFieldsDateAndTimeInputType
-    : public BaseDateAndTimeInputType
+// TODO(tkent): Rename this to MultipleFieldsTemporalInputTypeView.
+class BaseMultipleFieldsDateAndTimeInputType final
+    : public InputTypeView
     , protected DateTimeEditElement::EditControlOwner
     , protected PickerIndicatorElement::PickerIndicatorOwner
     , protected SpinButtonElement::SpinButtonOwner
@@ -53,21 +52,18 @@ class BaseMultipleFieldsDateAndTimeInputType
     USING_GARBAGE_COLLECTED_MIXIN(BaseMultipleFieldsDateAndTimeInputType);
 
 public:
-    virtual bool isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, bool hasDay, bool hasAMPM, bool hasHour, bool hasMinute, bool hasSecond) const = 0;
-
-    DEFINE_INLINE_VIRTUAL_TRACE() { BaseDateAndTimeInputType::trace(visitor); }
-
-protected:
-    BaseMultipleFieldsDateAndTimeInputType(HTMLInputElement&);
+    static BaseMultipleFieldsDateAndTimeInputType* create(HTMLInputElement&, BaseDateAndTimeInputType&);
     ~BaseMultipleFieldsDateAndTimeInputType() override;
-
-    virtual void setupLayoutParameters(DateTimeEditElement::LayoutParameters&, const DateComponents&) const = 0;
+    DECLARE_VIRTUAL_TRACE();
 
 private:
+    BaseMultipleFieldsDateAndTimeInputType(HTMLInputElement&, BaseDateAndTimeInputType&);
+
     // DateTimeEditElement::EditControlOwner functions
     void didBlurFromControl() final;
     void didFocusOnControl() final;
     void editControlValueChanged() final;
+    String formatDateTimeFieldsState(const DateTimeFieldsState&) const override;
     bool isEditControlOwnerDisabled() const final;
     bool isEditControlOwnerReadOnly() const final;
     AtomicString localeIdentifier() const final;
@@ -93,8 +89,7 @@ private:
     bool shouldClearButtonRespondToMouseEvents() override;
     void clearValue() override;
 
-    // InputType functions
-    String badInputText() const override;
+    // InputTypeView functions
     void blur() final;
     void closePopupView() override;
     PassRefPtr<ComputedStyle> customStyleForLayoutObject(PassRefPtr<ComputedStyle>) override;
@@ -111,7 +106,7 @@ private:
     void requiredAttributeChanged() final;
     void restoreFormControlState(const FormControlState&) final;
     FormControlState saveFormControlState() const final;
-    void setValue(const String&, bool valueChanged, TextFieldEventBehavior) final;
+    void didSetValue(const String&, bool valueChanged) final;
     void stepAttributeChanged() final;
     void updateView() final;
     void valueAttributeChanged() override;
@@ -129,6 +124,7 @@ private:
     void hidePickerIndicator();
     void updatePickerIndicatorVisibility();
 
+    Member<BaseDateAndTimeInputType> m_inputType;
     bool m_isDestroyingShadowSubtree;
     bool m_pickerIndicatorIsVisible;
     bool m_pickerIndicatorIsAlwaysVisible;
@@ -136,5 +132,4 @@ private:
 
 } // namespace blink
 
-#endif
 #endif // BaseMultipleFieldsDateAndTimeInputType_h

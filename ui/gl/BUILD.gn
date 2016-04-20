@@ -59,6 +59,7 @@ component("gl") {
     "gl_gl_api_implementation.h",
     "gl_helper.cc",
     "gl_helper.h",
+    "gl_image.cc",
     "gl_image.h",
     "gl_image_memory.cc",
     "gl_image_memory.h",
@@ -229,6 +230,8 @@ component("gl") {
       "gl_image_io_surface.mm",
       "scoped_cgl.cc",
       "scoped_cgl.h",
+      "yuv_to_rgb_converter.cc",
+      "yuv_to_rgb_converter.h",
     ]
 
     libs = [

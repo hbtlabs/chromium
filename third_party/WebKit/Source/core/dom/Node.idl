@@ -22,6 +22,7 @@
 
 [
     DependentLifetime,
+    TraceWrappers=(ownerDocument,parentNode,parentElement,nextSibling,previousSibling,firstChild)
 ] interface Node : EventTarget {
     const unsigned short ELEMENT_NODE = 1;
     // FIXME: Attr should not inherit from Node. crbug.com/305105
@@ -42,7 +43,7 @@
 
     readonly attribute DOMString? baseURI;
 
-    [ImplementedAs=inShadowIncludingDocument] readonly attribute boolean isConnected;
+    [ImplementedAs=inShadowIncludingDocument, Measure] readonly attribute boolean isConnected;
     [PerWorldBindings] readonly attribute Document? ownerDocument;
     [PerWorldBindings] readonly attribute Node? parentNode;
     [PerWorldBindings] readonly attribute Element? parentElement;

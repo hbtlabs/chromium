@@ -2,22 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ios/web/public/test/test_web_state.h"
+
 #include <stdint.h>
 
-#include "ios/web/public/test/test_web_state.h"
+#include "base/callback.h"
 
 namespace web {
 
 TestWebState::TestWebState()
-    : trust_level_(kAbsolute), content_is_html_(true) {}
+    : web_usage_enabled_(false),
+      trust_level_(kAbsolute),
+      content_is_html_(true) {}
 
 TestWebState::~TestWebState() = default;
 
-UIView* TestWebState::GetView() {
+WebStateDelegate* TestWebState::GetDelegate() {
+  return nil;
+}
+
+void TestWebState::SetDelegate(WebStateDelegate* delegate) {}
+
+BrowserState* TestWebState::GetBrowserState() const {
   return nullptr;
 }
 
-BrowserState* TestWebState::GetBrowserState() const {
+bool TestWebState::IsWebUsageEnabled() const {
+  return web_usage_enabled_;
+}
+
+void TestWebState::SetWebUsageEnabled(bool enabled) {
+  web_usage_enabled_ = enabled;
+}
+
+UIView* TestWebState::GetView() {
   return nullptr;
 }
 
@@ -27,6 +45,13 @@ NavigationManager* TestWebState::GetNavigationManager() {
 
 CRWJSInjectionReceiver* TestWebState::GetJSInjectionReceiver() const {
   return nullptr;
+}
+
+void TestWebState::ExecuteJavaScript(const base::string16& javascript) {}
+
+void TestWebState::ExecuteJavaScript(const base::string16& javascript,
+                                     const JavaScriptResultCallback& callback) {
+  callback.Run(nullptr);
 }
 
 const std::string& TestWebState::GetContentsMimeType() const {

@@ -528,7 +528,8 @@ ScrollNodeData::ScrollNodeData()
       user_scrollable_horizontal(false),
       user_scrollable_vertical(false),
       element_id(0),
-      transform_id(0) {}
+      transform_id(0),
+      num_drawn_descendants(0) {}
 
 ScrollNodeData::ScrollNodeData(const ScrollNodeData& other) = default;
 
@@ -1462,6 +1463,9 @@ void ScrollTree::FromProtobuf(const proto::PropertyTree& proto) {
 
   currently_scrolling_node_id_ = data.currently_scrolling_node_id();
 
+  // TODO(khushalsagar): This should probably be removed if the copy constructor
+  // for ScrollTree copies the |layer_id_to_scroll_offset_map_| as well.
+  layer_id_to_scroll_offset_map_.clear();
   for (int i = 0; i < data.layer_id_to_scroll_offset_map_size(); ++i) {
     const proto::ScrollOffsetMapEntry entry =
         data.layer_id_to_scroll_offset_map(i);

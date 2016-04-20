@@ -8,14 +8,15 @@
 #include <stdint.h>
 
 #include <list>
+#include <memory>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
@@ -91,7 +92,7 @@ class NET_EXPORT_PRIVATE SimpleIndex
   SimpleIndex(const scoped_refptr<base::SingleThreadTaskRunner>& io_thread,
               SimpleIndexDelegate* delegate,
               net::CacheType cache_type,
-              scoped_ptr<SimpleIndexFile> simple_index_file);
+              std::unique_ptr<SimpleIndexFile> simple_index_file);
 
   virtual ~SimpleIndex();
 
@@ -117,7 +118,7 @@ class NET_EXPORT_PRIVATE SimpleIndex
   // entry.
   bool UpdateEntrySize(uint64_t entry_hash, int64_t entry_size);
 
-  typedef base::hash_map<uint64_t, EntryMetadata> EntrySet;
+  using EntrySet = std::unordered_map<uint64_t, EntryMetadata>;
 
   static void InsertInEntrySet(uint64_t entry_hash,
                                const EntryMetadata& entry_metadata,
@@ -130,11 +131,11 @@ class NET_EXPORT_PRIVATE SimpleIndex
   // range between |initial_time| and |end_time| where open intervals are
   // possible according to the definition given in |DoomEntriesBetween()| in the
   // disk cache backend interface.
-  scoped_ptr<HashList> GetEntriesBetween(const base::Time initial_time,
-                                         const base::Time end_time);
+  std::unique_ptr<HashList> GetEntriesBetween(const base::Time initial_time,
+                                              const base::Time end_time);
 
   // Returns the list of all entries key hash.
-  scoped_ptr<HashList> GetAllHashes();
+  std::unique_ptr<HashList> GetAllHashes();
 
   // Returns number of indexed entries.
   int32_t GetEntryCount() const;
@@ -163,12 +164,13 @@ class NET_EXPORT_PRIVATE SimpleIndex
   void UpdateEntryIteratorSize(EntrySet::iterator* it, int64_t entry_size);
 
   // Must run on IO Thread.
-  void MergeInitializingSet(scoped_ptr<SimpleIndexLoadResult> load_result);
+  void MergeInitializingSet(std::unique_ptr<SimpleIndexLoadResult> load_result);
 
 #if defined(OS_ANDROID)
   void OnApplicationStateChange(base::android::ApplicationState state);
 
-  scoped_ptr<base::android::ApplicationStatusListener> app_status_listener_;
+  std::unique_ptr<base::android::ApplicationStatusListener>
+      app_status_listener_;
 #endif
 
   // The owner of |this| must ensure the |delegate_| outlives |this|.
@@ -186,11 +188,11 @@ class NET_EXPORT_PRIVATE SimpleIndex
 
   // This stores all the entry_hash of entries that are removed during
   // initialization.
-  base::hash_set<uint64_t> removed_entries_;
+  std::unordered_set<uint64_t> removed_entries_;
   bool initialized_;
   IndexInitMethod init_method_;
 
-  scoped_ptr<SimpleIndexFile> index_file_;
+  std::unique_ptr<SimpleIndexFile> index_file_;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_;
 

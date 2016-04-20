@@ -86,7 +86,7 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/content_renderer_client.h"
-#include "content/public/renderer/render_process_observer.h"
+#include "content/public/renderer/render_thread_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
 #include "content/renderer/bluetooth/bluetooth_message_filter.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
@@ -127,6 +127,7 @@
 #include "content/renderer/shared_worker/embedded_shared_worker_stub.h"
 #include "gin/public/debug.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
@@ -165,7 +166,6 @@
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
 #include "content/renderer/android/synchronous_compositor_external_begin_frame_source.h"
-#include "content/renderer/android/synchronous_compositor_factory.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/media/android/renderer_demuxer_android.h"
 #include "content/renderer/media/android/stream_texture_factory_impl.h"
@@ -444,6 +444,31 @@ void StringToUintVector(const std::string& str, std::vector<unsigned>* vector) {
     DCHECK(succeed);
     vector->push_back(number);
   }
+}
+
+std::unique_ptr<WebGraphicsContext3DCommandBufferImpl> CreateOffscreenContext(
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+  DCHECK(gpu_channel_host);
+  // This is used to create a few different offscreen contexts:
+  // - The shared main thread context (offscreen) used by blink for canvas.
+  // - The worker context (offscreen) used for GPU raster and video decoding.
+  // This is for an offscreen context, so the default framebuffer doesn't need
+  // alpha, depth, stencil, antialiasing.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.depth_size = 0;
+  attributes.stencil_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+  attributes.lose_context_when_out_of_memory = true;
+  bool share_resources = true;
+  bool automatic_flushes = false;
+  return base::WrapUnique(new WebGraphicsContext3DCommandBufferImpl(
+      gpu::kNullSurfaceHandle,
+      GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext3d"),
+      gpu_channel_host.get(), attributes, gfx::PreferIntegratedGpu,
+      share_resources, automatic_flushes, nullptr));
 }
 
 }  // namespace
@@ -849,7 +874,7 @@ RenderThreadImpl::~RenderThreadImpl() {
 
 void RenderThreadImpl::Shutdown() {
   FOR_EACH_OBSERVER(
-      RenderProcessObserver, observers_, OnRenderProcessShutdown());
+      RenderThreadObserver, observers_, OnRenderProcessShutdown());
 
   if (memory_observer_) {
     message_loop()->RemoveTaskObserver(memory_observer_.get());
@@ -1109,11 +1134,11 @@ void RenderThreadImpl::RemoveFilter(IPC::MessageFilter* filter) {
   channel()->RemoveFilter(filter);
 }
 
-void RenderThreadImpl::AddObserver(RenderProcessObserver* observer) {
+void RenderThreadImpl::AddObserver(RenderThreadObserver* observer) {
   observers_.AddObserver(observer);
 }
 
-void RenderThreadImpl::RemoveObserver(RenderProcessObserver* observer) {
+void RenderThreadImpl::RemoveObserver(RenderThreadObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -1123,53 +1148,31 @@ void RenderThreadImpl::SetResourceDispatcherDelegate(
 }
 
 void RenderThreadImpl::InitializeCompositorThread() {
+  base::Thread::Options options;
 #if defined(OS_ANDROID)
-  SynchronousCompositorFactory* sync_compositor_factory =
-      SynchronousCompositorFactory::GetInstance();
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  bool using_ipc_sync_compositing =
-      cmd_line->HasSwitch(switches::kIPCSyncCompositing);
-  bool sync_input_for_sync_compositing =
-      cmd_line->HasSwitch(switches::kSyncInputForSyncCompositor);
-  DCHECK(!sync_compositor_factory || !using_ipc_sync_compositing);
-  DCHECK(!sync_input_for_sync_compositing || using_ipc_sync_compositing);
-
-  if (sync_compositor_factory) {
-    compositor_task_runner_ =
-        sync_compositor_factory->GetCompositorTaskRunner();
-  }
+  options.priority = base::ThreadPriority::DISPLAY;
 #endif
-  if (!compositor_task_runner_.get()) {
-    base::Thread::Options options;
-#if defined(OS_ANDROID)
-    options.priority = base::ThreadPriority::DISPLAY;
-#endif
-    compositor_thread_.reset(new WebThreadForCompositor(options));
-    blink_platform_impl_->SetCompositorThread(compositor_thread_.get());
-    compositor_task_runner_ = compositor_thread_->GetTaskRunner();
-    compositor_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(base::IgnoreResult(&ThreadRestrictions::SetIOAllowed),
-                   false));
-  }
+  compositor_thread_.reset(new WebThreadForCompositor(options));
+  blink_platform_impl_->SetCompositorThread(compositor_thread_.get());
+  compositor_task_runner_ = compositor_thread_->GetTaskRunner();
+  compositor_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(base::IgnoreResult(&ThreadRestrictions::SetIOAllowed), false));
 
   InputHandlerManagerClient* input_handler_manager_client = nullptr;
   SynchronousInputHandlerProxyClient* synchronous_input_handler_proxy_client =
       nullptr;
 #if defined(OS_ANDROID)
-  if (using_ipc_sync_compositing) {
+  if (GetContentClient()->UsingSynchronousCompositing()) {
     sync_compositor_message_filter_ =
         new SynchronousCompositorFilter(compositor_task_runner_);
     AddFilter(sync_compositor_message_filter_.get());
-    if (sync_input_for_sync_compositing)
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kSyncInputForSyncCompositor)) {
       input_handler_manager_client = sync_compositor_message_filter_.get();
+    }
     synchronous_input_handler_proxy_client =
         sync_compositor_message_filter_.get();
-  } else if (sync_compositor_factory) {
-    input_handler_manager_client =
-        sync_compositor_factory->GetInputHandlerManagerClient();
-    synchronous_input_handler_proxy_client =
-        sync_compositor_factory->GetSynchronousInputHandlerProxyClient();
   }
 #endif
   if (!input_handler_manager_client) {
@@ -1402,7 +1405,7 @@ void RenderThreadImpl::IdleHandler() {
     idle_timer_.Stop();
   }
 
-  FOR_EACH_OBSERVER(RenderProcessObserver, observers_, IdleNotification());
+  FOR_EACH_OBSERVER(RenderThreadObserver, observers_, IdleNotification());
 }
 
 int64_t RenderThreadImpl::GetIdleNotificationDelayInMs() const {
@@ -1488,70 +1491,36 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
   return nullptr;
 }
 
-std::unique_ptr<WebGraphicsContext3DCommandBufferImpl>
-RenderThreadImpl::CreateOffscreenContext3d() {
-  // This is used to create a few different offscreen contexts:
-  // - The shared main thread context (offscreen) used by blink for canvas.
-  // - The worker context (offscreen) used for GPU raster and video decoding.
-  // This is for an offscreen context, so the default framebuffer doesn't need
-  // alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
-  attributes.bind_generates_resource = false;
-  attributes.lose_context_when_out_of_memory = true;
-  bool share_resources = true;
-  bool automatic_flushes = false;
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(EstablishGpuChannelSync(
-      CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE));
-  if (!gpu_channel_host)
-    return nullptr;
-  return base::WrapUnique(
-      WebGraphicsContext3DCommandBufferImpl::CreateOffscreenContext(
-          gpu_channel_host.get(), attributes, gfx::PreferIntegratedGpu,
-          share_resources, automatic_flushes,
-          GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext3d"),
-          WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits(), NULL));
-}
-
 scoped_refptr<cc_blink::ContextProviderWebContext>
 RenderThreadImpl::SharedMainThreadContextProvider() {
   DCHECK(IsMainThread());
-  if (!shared_main_thread_contexts_.get() ||
-      shared_main_thread_contexts_->ContextGL()->GetGraphicsResetStatusKHR() !=
-          GL_NO_ERROR) {
-    shared_main_thread_contexts_ = ContextProviderCommandBuffer::Create(
-        CreateOffscreenContext3d(), RENDERER_MAINTHREAD_CONTEXT);
-    if (shared_main_thread_contexts_.get() &&
-        !shared_main_thread_contexts_->BindToCurrentThread())
-      shared_main_thread_contexts_ = NULL;
+  if (shared_main_thread_contexts_ &&
+      shared_main_thread_contexts_->ContextGL()->GetGraphicsResetStatusKHR() ==
+          GL_NO_ERROR)
+    return shared_main_thread_contexts_;
+
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(EstablishGpuChannelSync(
+      CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE));
+  if (!gpu_channel_host) {
+    shared_main_thread_contexts_ = nullptr;
+    return nullptr;
   }
+
+  shared_main_thread_contexts_ = new ContextProviderCommandBuffer(
+      CreateOffscreenContext(std::move(gpu_channel_host)),
+      gpu::SharedMemoryLimits(), RENDERER_MAINTHREAD_CONTEXT);
+  if (!shared_main_thread_contexts_->BindToCurrentThread())
+    shared_main_thread_contexts_ = nullptr;
   return shared_main_thread_contexts_;
 }
 
 #if defined(OS_ANDROID)
 
-namespace {
-base::LazyInstance<scoped_refptr<StreamTextureFactory>>
-    g_stream_texture_factory_override;
-}
-
-// static
-void RenderThreadImpl::SetStreamTextureFactory(
-    scoped_refptr<StreamTextureFactory> factory) {
-  g_stream_texture_factory_override.Get() = factory;
-}
-
 scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
   DCHECK(IsMainThread());
-  if (g_stream_texture_factory_override.Get()) {
-    stream_texture_factory_ = g_stream_texture_factory_override.Get();
-  } else if (!stream_texture_factory_.get() ||
-             stream_texture_factory_->ContextGL()
-                     ->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
+  if (!stream_texture_factory_.get() ||
+      stream_texture_factory_->ContextGL()->GetGraphicsResetStatusKHR() !=
+          GL_NO_ERROR) {
     if (!SharedMainThreadContextProvider().get()) {
       stream_texture_factory_ = NULL;
       return NULL;
@@ -1570,8 +1539,7 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
 }
 
 bool RenderThreadImpl::EnableStreamTextureCopy() {
-  return !g_stream_texture_factory_override.Get() &&
-         sync_compositor_message_filter_.get();
+  return sync_compositor_message_filter_.get();
 }
 
 #endif
@@ -1680,11 +1648,7 @@ cc::ContextProvider* RenderThreadImpl::GetSharedMainThreadContextProvider() {
 std::unique_ptr<cc::BeginFrameSource>
 RenderThreadImpl::CreateExternalBeginFrameSource(int routing_id) {
 #if defined(OS_ANDROID)
-  if (SynchronousCompositorFactory* factory =
-          SynchronousCompositorFactory::GetInstance()) {
-    DCHECK(!sync_compositor_message_filter_);
-    return factory->CreateExternalBeginFrameSource(routing_id);
-  } else if (sync_compositor_message_filter_) {
+  if (sync_compositor_message_filter_) {
     return base::WrapUnique(new SynchronousCompositorExternalBeginFrameSource(
         routing_id, sync_compositor_message_filter_.get()));
   }
@@ -1729,8 +1693,8 @@ void RenderThreadImpl::DoNotNotifyWebKitOfModalLoop() {
 }
 
 bool RenderThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
-  base::ObserverListBase<RenderProcessObserver>::Iterator it(&observers_);
-  RenderProcessObserver* observer;
+  base::ObserverListBase<RenderThreadObserver>::Iterator it(&observers_);
+  RenderThreadObserver* observer;
   while ((observer = it.GetNext()) != NULL) {
     if (observer->OnControlMessageReceived(msg))
       return true;
@@ -1907,7 +1871,7 @@ void RenderThreadImpl::OnPurgePluginListCache(bool reload_pages) {
   blink::resetPluginCache(reload_pages);
   blink_platform_impl_->set_plugin_refresh_allowed(true);
 
-  FOR_EACH_OBSERVER(RenderProcessObserver, observers_, PluginListChanged());
+  FOR_EACH_OBSERVER(RenderThreadObserver, observers_, PluginListChanged());
 }
 #endif
 
@@ -1917,7 +1881,7 @@ void RenderThreadImpl::OnNetworkConnectionChanged(
   bool online = type != net::NetworkChangeNotifier::CONNECTION_NONE;
   WebNetworkStateNotifier::setOnLine(online);
   FOR_EACH_OBSERVER(
-      RenderProcessObserver, observers_, NetworkStateChanged(online));
+      RenderThreadObserver, observers_, NetworkStateChanged(online));
   WebNetworkStateNotifier::setWebConnection(
       NetConnectionTypeToWebConnectionType(type), max_bandwidth_mbps);
 }
@@ -2041,24 +2005,29 @@ scoped_refptr<ContextProviderCommandBuffer>
 RenderThreadImpl::SharedWorkerContextProvider() {
   DCHECK(IsMainThread());
   // Try to reuse existing shared worker context provider.
-  bool shared_worker_context_provider_lost = false;
   if (shared_worker_context_provider_) {
     // Note: If context is lost, delete reference after releasing the lock.
-    base::AutoLock lock(*shared_worker_context_provider_->GetLock());
+    cc::ContextProvider::ScopedContextLock lock(
+        shared_worker_context_provider_.get());
     if (shared_worker_context_provider_->ContextGL()
-            ->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
-      shared_worker_context_provider_lost = true;
-    }
+            ->GetGraphicsResetStatusKHR() == GL_NO_ERROR)
+      return shared_worker_context_provider_;
   }
-  if (!shared_worker_context_provider_ || shared_worker_context_provider_lost) {
-    shared_worker_context_provider_ = ContextProviderCommandBuffer::Create(
-        CreateOffscreenContext3d(), RENDER_WORKER_CONTEXT);
-    if (shared_worker_context_provider_ &&
-        !shared_worker_context_provider_->BindToCurrentThread())
-      shared_worker_context_provider_ = nullptr;
-    if (shared_worker_context_provider_)
-      shared_worker_context_provider_->SetupLock();
+
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(EstablishGpuChannelSync(
+      CAUSE_FOR_GPU_LAUNCH_WEBGRAPHICSCONTEXT3DCOMMANDBUFFERIMPL_INITIALIZE));
+  if (!gpu_channel_host) {
+    shared_worker_context_provider_ = nullptr;
+    return shared_worker_context_provider_;
   }
+
+  shared_worker_context_provider_ = new ContextProviderCommandBuffer(
+      CreateOffscreenContext(std::move(gpu_channel_host)),
+      gpu::SharedMemoryLimits(), RENDER_WORKER_CONTEXT);
+  if (!shared_worker_context_provider_->BindToCurrentThread())
+    shared_worker_context_provider_ = nullptr;
+  if (shared_worker_context_provider_)
+    shared_worker_context_provider_->SetupLock();
   return shared_worker_context_provider_;
 }
 

@@ -9,6 +9,7 @@
 #include "base/trace_event/trace_event.h"
 #include "cc/playback/raster_source.h"
 #include "cc/raster/texture_compressor.h"
+#include "cc/resources/platform_color.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -19,8 +20,9 @@ TileTaskWorkerPool::TileTaskWorkerPool() {}
 TileTaskWorkerPool::~TileTaskWorkerPool() {}
 
 // static
-void TileTaskWorkerPool::ScheduleTasksOnOriginThread(TileTaskClient* client,
-                                                     TaskGraph* graph) {
+void TileTaskWorkerPool::ScheduleTasksOnOriginThread(
+    RasterBufferProvider* provider,
+    TaskGraph* graph) {
   TRACE_EVENT0("cc", "TileTaskWorkerPool::ScheduleTasksOnOriginThread");
 
   for (TaskGraph::Node::Vector::iterator it = graph->nodes.begin();
@@ -30,7 +32,7 @@ void TileTaskWorkerPool::ScheduleTasksOnOriginThread(TileTaskClient* client,
 
     if (!task->HasBeenScheduled()) {
       task->WillSchedule();
-      task->ScheduleOnOriginThread(client);
+      task->ScheduleOnOriginThread(provider);
       task->DidSchedule();
     }
   }
@@ -142,6 +144,26 @@ void TileTaskWorkerPool::PlaybackToMemory(
   }
 
   NOTREACHED();
+}
+
+bool TileTaskWorkerPool::ResourceFormatRequiresSwizzle(ResourceFormat format) {
+  switch (format) {
+    case RGBA_8888:
+    case BGRA_8888:
+      // Initialize resource using the preferred PlatformColor component
+      // order and swizzle in the shader instead of in software.
+      return !PlatformColor::SameComponentOrder(format);
+    case RGBA_4444:
+    case ETC1:
+    case ALPHA_8:
+    case LUMINANCE_8:
+    case RGB_565:
+    case RED_8:
+    case LUMINANCE_F16:
+      return false;
+  }
+  NOTREACHED();
+  return false;
 }
 
 }  // namespace cc

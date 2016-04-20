@@ -170,14 +170,12 @@ void GLHelperHolder::Initialize() {
   size_t full_screen_texture_size_in_bytes = display_info.GetDisplayHeight() *
                                              display_info.GetDisplayWidth() *
                                              kBytesPerPixel;
-  WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
+  gpu::SharedMemoryLimits limits;
   limits.command_buffer_size = 64 * 1024;
   limits.start_transfer_buffer_size = 64 * 1024;
   limits.min_transfer_buffer_size = 64 * 1024;
   limits.max_transfer_buffer_size = std::min(
       3 * full_screen_texture_size_in_bytes, kDefaultMaxTransferBufferSize);
-  limits.mapped_memory_reclaim_limit =
-      WebGraphicsContext3DCommandBufferImpl::kNoLimit;
 
   bool share_resources = true;
   // TODO(danakj): This should be false probably, it is for the main thread
@@ -189,9 +187,9 @@ void GLHelperHolder::Initialize() {
       new WebGraphicsContext3DCommandBufferImpl(
           gpu::kNullSurfaceHandle,  // offscreen
           url, gpu_channel_host.get(), attributes, gfx::PreferIntegratedGpu,
-          share_resources, automatic_flushes, limits, nullptr));
-  provider_ = ContextProviderCommandBuffer::Create(
-      std::move(context), BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
+          share_resources, automatic_flushes, nullptr));
+  provider_ = new ContextProviderCommandBuffer(
+      std::move(context), limits, BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
   if (!provider_->BindToCurrentThread())
     return;
   provider_->ContextGL()->TraceBeginCHROMIUM(
@@ -654,19 +652,22 @@ long RenderWidgetHostViewAndroid::GetNativeImeAdapter() {
   return reinterpret_cast<intptr_t>(&ime_adapter_android_);
 }
 
-void RenderWidgetHostViewAndroid::UpdateInputMethodIfNecessary(
-    bool text_input_state_changed) {
-  DCHECK(text_input_state_changed);
+void RenderWidgetHostViewAndroid::TextInputStateChanged(
+    const ViewHostMsg_TextInputState_Params& params) {
+  if (params.is_non_ime_change) {
+    // Sends an acknowledgement to the renderer of a processed IME event.
+    host_->Send(new InputMsg_ImeEventAck(host_->GetRoutingID()));
+  }
+
   if (!content_view_core_)
     return;
 
-  const TextInputState* state = host_->delegate()->GetTextInputState();
-
   content_view_core_->UpdateImeAdapter(
-      GetNativeImeAdapter(), static_cast<int>(state->type), state->flags,
-      state->value, state->selection_start, state->selection_end,
-      state->composition_start, state->composition_end,
-      state->show_ime_if_needed, state->is_non_ime_change);
+      GetNativeImeAdapter(),
+      static_cast<int>(params.type), params.flags,
+      params.value, params.selection_start, params.selection_end,
+      params.composition_start, params.composition_end,
+      params.show_ime_if_needed, params.is_non_ime_change);
 }
 
 void RenderWidgetHostViewAndroid::UpdateBackgroundColor(SkColor color) {
@@ -811,10 +812,6 @@ void RenderWidgetHostViewAndroid::Destroy() {
     surface_id_ = cc::SurfaceId();
   }
   surface_factory_.reset();
-
-  // The WebContentsImpl should be notified about us so that it will not hold
-  // an invalid text input state which was due to active text on this view.
-  NotifyHostDelegateAboutShutdown();
 
   // The RenderWidgetHost's destruction led here, so don't call it.
   host_ = NULL;

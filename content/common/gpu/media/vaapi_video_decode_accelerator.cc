@@ -6,6 +6,8 @@
 
 #include <string.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -327,6 +329,11 @@ bool VaapiVideoDecodeAccelerator::Initialize(const Config& config,
 
   if (config.is_encrypted) {
     NOTREACHED() << "Encrypted streams are not supported for this VDA";
+    return false;
+  }
+
+  if (config.output_mode != Config::OutputMode::ALLOCATE) {
+    NOTREACHED() << "Only ALLOCATE OutputMode is supported by this VDA";
     return false;
   }
 

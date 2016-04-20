@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 #include <utility>
 #include <vector>
@@ -23,11 +24,11 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
+#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/command_buffer/client/transfer_buffer.h"
 #include "gpu/command_buffer/common/command_buffer.h"
 #include "gpu/command_buffer/common/constants.h"
@@ -71,20 +72,14 @@ class GLInProcessContextImpl
   size_t GetMappedMemoryLimit() override;
   void SetLock(base::Lock* lock) override;
 
-#if defined(OS_ANDROID)
-  scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture(
-      uint32_t stream_id) override;
-  uint32_t CreateStreamTexture(uint32_t texture_id) override;
-#endif
-
  private:
   void Destroy();
   void OnSignalSyncPoint(const base::Closure& callback);
 
-  scoped_ptr<gles2::GLES2CmdHelper> gles2_helper_;
-  scoped_ptr<TransferBuffer> transfer_buffer_;
-  scoped_ptr<gles2::GLES2Implementation> gles2_implementation_;
-  scoped_ptr<InProcessCommandBuffer> command_buffer_;
+  std::unique_ptr<gles2::GLES2CmdHelper> gles2_helper_;
+  std::unique_ptr<TransferBuffer> transfer_buffer_;
+  std::unique_ptr<gles2::GLES2Implementation> gles2_implementation_;
+  std::unique_ptr<InProcessCommandBuffer> command_buffer_;
 
   const GLInProcessContextSharedMemoryLimits mem_limits_;
 
@@ -207,17 +202,6 @@ void GLInProcessContextImpl::Destroy() {
   command_buffer_.reset();
 }
 
-#if defined(OS_ANDROID)
-scoped_refptr<gfx::SurfaceTexture> GLInProcessContextImpl::GetSurfaceTexture(
-    uint32_t stream_id) {
-  return command_buffer_->GetSurfaceTexture(stream_id);
-}
-
-uint32_t GLInProcessContextImpl::CreateStreamTexture(uint32_t texture_id) {
-  return command_buffer_->CreateStreamTexture(texture_id);
-}
-#endif
-
 }  // anonymous namespace
 
 GLInProcessContextSharedMemoryLimits::GLInProcessContextSharedMemoryLimits()
@@ -225,8 +209,7 @@ GLInProcessContextSharedMemoryLimits::GLInProcessContextSharedMemoryLimits()
       start_transfer_buffer_size(kDefaultStartTransferBufferSize),
       min_transfer_buffer_size(kDefaultMinTransferBufferSize),
       max_transfer_buffer_size(kDefaultMaxTransferBufferSize),
-      mapped_memory_reclaim_limit(gles2::GLES2Implementation::kNoLimit) {
-}
+      mapped_memory_reclaim_limit(SharedMemoryLimits::kNoLimit) {}
 
 // static
 GLInProcessContext* GLInProcessContext::Create(
@@ -247,7 +230,7 @@ GLInProcessContext* GLInProcessContext::Create(
     DCHECK_EQ(gfx::kNullAcceleratedWidget, window);
   }
 
-  scoped_ptr<GLInProcessContextImpl> context(
+  std::unique_ptr<GLInProcessContextImpl> context(
       new GLInProcessContextImpl(memory_limits));
   if (!context->Initialize(surface,
                            is_offscreen,

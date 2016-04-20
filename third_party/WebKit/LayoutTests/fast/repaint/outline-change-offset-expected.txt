@@ -7,11 +7,6 @@
       "drawsContent": true,
       "paintInvalidations": [
         {
-          "object": "LayoutBlockFlow (positioned) DIV id='indicator'",
-          "rect": [35, 35, 130, 130],
-          "reason": "outline"
-        },
-        {
           "object": "LayoutBlockFlow (positioned) DIV id='target'",
           "rect": [35, 35, 130, 130],
           "reason": "style change"

@@ -3391,6 +3391,8 @@ interface InputDeviceCapabilities
     method constructor
 interface InputEvent : UIEvent
     attribute @@toStringTag
+    getter data
+    getter inputType
     method constructor
 interface IntersectionObserver
     attribute @@toStringTag
@@ -5861,6 +5863,7 @@ interface StorageEvent : Event
 interface StorageManager
     attribute @@toStringTag
     method constructor
+    method estimate
     method persistentPermission
     method requestPersistent
 interface Stream

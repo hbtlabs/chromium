@@ -4,7 +4,12 @@
 
 #include "ash/wm/aura/wm_root_window_controller_aura.h"
 
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
+#include "ash/shell.h"
+#include "ash/wm/aura/wm_globals_aura.h"
+#include "ash/wm/aura/wm_window_aura.h"
+#include "ash/wm/workspace_controller.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_property.h"
 
@@ -17,6 +22,13 @@ namespace wm {
 DEFINE_OWNED_WINDOW_PROPERTY_KEY(ash::wm::WmRootWindowControllerAura,
                                  kWmRootWindowControllerKey,
                                  nullptr);
+
+// static
+WmRootWindowController* WmRootWindowController::GetWithDisplayId(int64_t id) {
+  return WmRootWindowControllerAura::Get(Shell::GetInstance()
+                                             ->window_tree_host_manager()
+                                             ->GetRootWindowForDisplayId(id));
+}
 
 WmRootWindowControllerAura::WmRootWindowControllerAura(
     RootWindowController* root_window_controller)
@@ -50,6 +62,18 @@ const WmRootWindowControllerAura* WmRootWindowControllerAura::Get(
 
 bool WmRootWindowControllerAura::HasShelf() {
   return root_window_controller_->shelf() != nullptr;
+}
+
+WmGlobals* WmRootWindowControllerAura::GetGlobals() {
+  return WmGlobalsAura::Get();
+}
+
+WorkspaceWindowState WmRootWindowControllerAura::GetWorkspaceWindowState() {
+  return root_window_controller_->workspace_controller()->GetWindowState();
+}
+
+WmWindow* WmRootWindowControllerAura::GetWindow() {
+  return WmWindowAura::Get(root_window_controller_->GetRootWindow());
 }
 
 }  // namespace wm

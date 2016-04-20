@@ -136,6 +136,7 @@ public:
 
     void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) override;
     std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) override;
+    String getIdFromControl(const Element*) override;
 
     // SVGResourceClient implementation
     void filterNeedsInvalidation() override;
@@ -162,6 +163,7 @@ public:
 
     bool stateHasFilter() final;
     SkImageFilter* stateGetFilter() final;
+    void snapshotStateForFilter() final;
 
     void validateStateStack() final;
 

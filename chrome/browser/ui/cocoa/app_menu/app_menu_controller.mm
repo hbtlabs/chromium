@@ -361,6 +361,14 @@ class ToolbarActionsBarObserverHelper : public ToolbarActionsBarObserver {
       [self appMenuModel]->GetLabelForCommandId(IDC_ZOOM_PERCENT_DISPLAY));
   [[[buttonViewController_ zoomItem] viewWithTag:IDC_ZOOM_PERCENT_DISPLAY]
       setTitle:title];
+  [[[[buttonViewController_ zoomItem]
+      viewWithTag:IDC_ZOOM_MINUS] image]
+          setAccessibilityDescription:l10n_util::GetNSString(
+              IDS_TEXT_SMALLER_MAC)];
+  [[[[buttonViewController_ zoomItem]
+      viewWithTag:IDC_ZOOM_PLUS] image]
+        setAccessibilityDescription:l10n_util::GetNSString(
+              IDS_TEXT_BIGGER_MAC)];
   content::RecordAction(UserMetricsAction("ShowAppMenu"));
 
   NSImage* icon = [self appMenuModel]->browser()->window()->IsFullscreen()
@@ -379,17 +387,21 @@ class ToolbarActionsBarObserverHelper : public ToolbarActionsBarObserver {
   // menu is about to be displayed at the start of a tracking session.)
   zoom_level_observer_.reset();
   toolbar_actions_bar_observer_.reset();
+  // Make sure to reset() the BrowserActionsController since the view will also
+  // be destroyed. If a new one's needed, it'll be created when we create the
+  // model in -menuNeedsUpdate:.
+  browserActionsController_.reset();
   UMA_HISTOGRAM_TIMES("Toolbar.AppMenuTimeToAction",
                       base::TimeTicks::Now() - menuOpenTime_);
   menuOpenTime_ = base::TimeTicks();
 }
 
 - (void)menuNeedsUpdate:(NSMenu*)menu {
+  // We should never have a BrowserActionsController before creating the menu.
+  DCHECK(!browserActionsController_.get());
+
   // First empty out the menu and create a new model.
   [self removeAllItems:menu];
-  // Delete the BrowserActionsController; if a new one's needed, it'll be
-  // created as we add items to the menu.
-  browserActionsController_.reset();
   [self createModel];
   [menu setMinimumWidth:0];
 

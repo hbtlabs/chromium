@@ -104,11 +104,6 @@
 #include "ui/gfx/color_profile.h"
 #include "url/gurl.h"
 
-#if defined(OS_ANDROID)
-#include "content/renderer/android/synchronous_compositor_factory.h"
-#include "gpu/blink/webgraphicscontext3d_in_process_command_buffer_impl.h"
-#endif
-
 #if defined(OS_MACOSX)
 #include "content/common/mac/font_descriptor.h"
 #include "content/common/mac/font_loader.h"
@@ -1063,17 +1058,15 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
   bool automatic_flushes = true;
   // Prefer discrete GPU for WebGL.
   gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
-  WebGraphicsContext3DCommandBufferImpl::SharedMemoryLimits limits;
 
-  std::unique_ptr<WebGraphicsContext3DCommandBufferImpl> context(
-      WebGraphicsContext3DCommandBufferImpl::CreateOffscreenContext(
-          gpu_channel_host.get(), attributes, gpu_preference, share_resources,
-          automatic_flushes, GURL(top_document_web_url), limits,
-          share_context));
-  scoped_refptr<ContextProviderCommandBuffer> provider =
-      ContextProviderCommandBuffer::Create(std::move(context),
-                                           RENDERER_MAINTHREAD_CONTEXT);
-  if (!provider || !provider->BindToCurrentThread()) {
+  scoped_refptr<ContextProviderCommandBuffer> provider(
+      new ContextProviderCommandBuffer(
+          base::WrapUnique(new WebGraphicsContext3DCommandBufferImpl(
+              gpu::kNullSurfaceHandle, GURL(top_document_web_url),
+              gpu_channel_host.get(), attributes, gpu_preference,
+              share_resources, automatic_flushes, share_context)),
+          gpu::SharedMemoryLimits(), RENDERER_MAINTHREAD_CONTEXT));
+  if (!provider->BindToCurrentThread()) {
     // Collect Graphicsinfo if there is a context failure or it is failed
     // purposefully in case of layout tests.
     Collect3DContextInformationOnFailure(gl_info, gpu_channel_host.get());

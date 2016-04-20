@@ -38,8 +38,10 @@
 #include "core/editing/RenderedPosition.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Location.h"
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/Settings.h"
 #include "core/frame/TopControls.h"
@@ -231,7 +233,7 @@ void FrameView::reset()
 // Call function for each non-throttled frame view in pre tree order.
 // Note it needs a null check of the frame's layoutView to access it in case of detached frames.
 template <typename Function>
-void FrameView::forAllNonThrottledFrameViews(Function function)
+void FrameView::forAllNonThrottledFrameViews(const Function& function)
 {
     if (shouldThrottleRendering())
         return;
@@ -1622,7 +1624,7 @@ void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
 
 bool FrameView::computeCompositedSelection(LocalFrame& frame, CompositedSelection& selection)
 {
-    if (frame.view()->shouldThrottleRendering())
+    if (!frame.view() || frame.view()->shouldThrottleRendering())
         return false;
 
     const VisibleSelection& visibleSelection = frame.selection().selection();
@@ -2448,9 +2450,6 @@ void FrameView::updateLifecyclePhasesInternal(LifeCycleUpdateOption phases)
             if (!m_frame->document()->printing())
                 synchronizedPaint();
 
-            if (RuntimeEnabledFeatures::frameTimingSupportEnabled())
-                updateFrameTimingRequestsIfNeeded();
-
             if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
                 pushPaintArtifactToCompositor();
 
@@ -2549,18 +2548,6 @@ void FrameView::pushPaintArtifactToCompositor()
     if (!page)
         return;
     page->chromeClient().didPaint(paintArtifact);
-}
-
-void FrameView::updateFrameTimingRequestsIfNeeded()
-{
-    GraphicsLayerFrameTimingRequests graphicsLayerTimingRequests;
-    // TODO(mpb) use a 'dirty' bit to not call this every time.
-    collectFrameTimingRequestsRecursive(graphicsLayerTimingRequests);
-
-    for (const auto& iter : graphicsLayerTimingRequests) {
-        const GraphicsLayer* graphicsLayer = iter.key;
-        graphicsLayer->platformLayer()->setFrameTimingRequests(iter.value);
-    }
 }
 
 void FrameView::updateStyleAndLayoutIfNeededRecursive()
@@ -3947,43 +3934,6 @@ void FrameView::collectAnnotatedRegions(LayoutObject& layoutObject, Vector<Annot
         collectAnnotatedRegions(*curr, regions);
 }
 
-void FrameView::collectFrameTimingRequestsRecursive(GraphicsLayerFrameTimingRequests& graphicsLayerTimingRequests)
-{
-    if (!m_frameTimingRequestsDirty)
-        return;
-
-    collectFrameTimingRequests(graphicsLayerTimingRequests);
-
-    for (Frame* child = m_frame->tree().firstChild(); child; child = child->tree().nextSibling()) {
-        if (!child->isLocalFrame())
-            continue;
-
-        toLocalFrame(child)->view()->collectFrameTimingRequestsRecursive(graphicsLayerTimingRequests);
-    }
-    m_frameTimingRequestsDirty = false;
-}
-
-void FrameView::collectFrameTimingRequests(GraphicsLayerFrameTimingRequests& graphicsLayerTimingRequests)
-{
-    if (!m_frame->isLocalFrame())
-        return;
-    Frame* frame = m_frame.get();
-    LocalFrame* localFrame = toLocalFrame(frame);
-    LayoutRect viewRect = localFrame->contentLayoutItem().viewRect();
-    const LayoutBoxModelObject& paintInvalidationContainer = localFrame->contentLayoutObject()->containerForPaintInvalidation();
-    // If the frame is being throttled, its compositing state may not be up to date.
-    if (!paintInvalidationContainer.enclosingLayer()->isAllowedToQueryCompositingState())
-        return;
-    const GraphicsLayer* graphicsLayer = paintInvalidationContainer.enclosingLayer()->graphicsLayerBacking();
-
-    if (!graphicsLayer)
-        return;
-
-    PaintLayer::mapRectToPaintInvalidationBacking(*localFrame->contentLayoutObject(), paintInvalidationContainer, viewRect);
-
-    graphicsLayerTimingRequests.add(graphicsLayer, Vector<std::pair<int64_t, WebRect>>()).storedValue->value.append(std::make_pair(m_frame->frameID(), enclosingIntRect(viewRect)));
-}
-
 void FrameView::setNeedsUpdateViewportIntersection()
 {
     m_needsUpdateViewportIntersection = true;
@@ -4079,9 +4029,10 @@ void FrameView::notifyRenderThrottlingObservers()
     }
 
     bool becameUnthrottled = wasThrottled && !canThrottleRendering();
+    ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator();
     if (becameUnthrottled) {
         // ScrollingCoordinator needs to update according to the new throttling status.
-        if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
+        if (scrollingCoordinator)
             scrollingCoordinator->notifyGeometryChanged();
         // Start ticking animation frames again if necessary.
         page()->animator().scheduleVisualUpdate(m_frame.get());
@@ -4091,6 +4042,10 @@ void FrameView::notifyRenderThrottlingObservers()
         if (LayoutView* layoutView = this->layoutView())
             layoutView->invalidatePaintForViewAndCompositedLayers();
     }
+
+    bool hasHandlers = m_frame->document()->frameHost()->eventHandlerRegistry().hasEventHandlers(EventHandlerRegistry::TouchStartOrMoveEventBlocking);
+    if (wasThrottled != canThrottleRendering() && scrollingCoordinator && hasHandlers)
+        scrollingCoordinator->touchEventTargetRectsDidChange();
 }
 
 bool FrameView::shouldThrottleRendering() const

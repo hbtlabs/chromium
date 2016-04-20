@@ -104,6 +104,7 @@ InertTopControls status=experimental
 InputDeviceCapabilities status=stable
 InputEvent status=experimental
 InputModeAttribute status=experimental
+InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 KeyboardEventCode status=stable
@@ -134,7 +135,6 @@ NetInfoDownlinkMax status=stable
 NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationExperimental status=test
-NotificationActionIcons status=stable
 NotificationBadge status=experimental
 NotificationInlineReplies status=experimental
 Notifications status=stable
@@ -159,7 +159,6 @@ Presentation status=stable
 PresentationReceiver status=test
 PromiseRejectionEvent status=stable
 PushMessaging status=stable
-PushMessagingData status=stable
 PushSubscriptionRestrictions status=experimental
 QuotaPromise status=experimental
 ReducedReferrerGranularity
@@ -179,7 +178,6 @@ ScrollAnchoring
 // as per the spec, matching other Web engines.
 ScrollTopLeftInterop status=experimental
 ServiceWorkerClientAttributes status=stable
-ServiceWorkerExtendableMessageEvent status=stable
 ServiceWorkerClientsGetID status=stable
 ServiceWorkerWindowClientNavigate status=stable
 ShadowDOMV1 status=experimental

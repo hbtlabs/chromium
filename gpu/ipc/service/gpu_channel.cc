@@ -194,7 +194,7 @@ bool GpuChannelMessageQueue::PushBackMessage(const IPC::Message& message) {
 
     uint32_t order_num = sync_point_order_data_->GenerateUnprocessedOrderNumber(
         sync_point_manager_);
-    scoped_ptr<GpuChannelMessage> msg(
+    std::unique_ptr<GpuChannelMessage> msg(
         new GpuChannelMessage(message, order_num, base::TimeTicks::Now()));
 
     if (channel_messages_.empty()) {
@@ -958,7 +958,7 @@ void GpuChannel::OnCreateCommandBuffer(
     return;
   }
 
-  scoped_ptr<GpuCommandBufferStub> stub(new GpuCommandBufferStub(
+  std::unique_ptr<GpuCommandBufferStub> stub(new GpuCommandBufferStub(
       this, sync_point_manager_, task_runner_.get(), share_group,
       surface_handle, mailbox_manager_.get(), preempted_flag_.get(),
       subscription_ref_set_.get(), pending_valuebuffer_state_.get(), size,
@@ -983,7 +983,7 @@ void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
   TRACE_EVENT1("gpu", "GpuChannel::OnDestroyCommandBuffer",
                "route_id", route_id);
 
-  scoped_ptr<GpuCommandBufferStub> stub = stubs_.take_and_erase(route_id);
+  std::unique_ptr<GpuCommandBufferStub> stub = stubs_.take_and_erase(route_id);
   // In case the renderer is currently blocked waiting for a sync reply from the
   // stub, we need to make sure to reschedule the correct stream here.
   if (stub && !stub->IsScheduled()) {
@@ -996,16 +996,9 @@ void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
 
 void GpuChannel::OnGetDriverBugWorkArounds(
     std::vector<std::string>* gpu_driver_bug_workarounds) {
-  // TODO(j.isorce): http://crbug.com/599964 Do the extraction of workarounds in
-  // the GpuChannelManager constructor. Currently it is done in the FeatureInfo
-  // constructor. There is no need to extract them from the command-line every
-  // time a new FeatureInfo is created (i.e. per ContextGroup) since parsing
-  // result is a constant.
-  scoped_refptr<gpu::gles2::FeatureInfo> feature_info =
-      new gpu::gles2::FeatureInfo;
   gpu_driver_bug_workarounds->clear();
-#define GPU_OP(type, name)              \
-  if (feature_info->workarounds().name) \
+#define GPU_OP(type, name)                                     \
+  if (gpu_channel_manager_->gpu_driver_bug_workarounds().name) \
     gpu_driver_bug_workarounds->push_back(#name);
   GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
 #undef GPU_OP

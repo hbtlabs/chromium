@@ -119,22 +119,6 @@ void LayerTreeImpl::RecreateResources() {
   }
 }
 
-void LayerTreeImpl::GatherFrameTimingRequestIds(
-    std::vector<int64_t>* request_ids) {
-  if (!root_layer_)
-    return;
-
-  // TODO(vmpstr): Early out if there are no requests on any of the layers. For
-  // that, we need to inform LayerTreeImpl whenever there are requests when we
-  // get them.
-  LayerTreeHostCommon::CallFunctionForEveryLayer(
-      this,
-      [request_ids](LayerImpl* layer) {
-        layer->GatherFrameTimingRequestIds(request_ids);
-      },
-      CallFunctionLayerType::ALL_LAYERS);
-}
-
 bool LayerTreeImpl::IsViewportLayerId(int id) const {
   if (id == inner_viewport_scroll_layer_id_ ||
       id == outer_viewport_scroll_layer_id_)
@@ -441,20 +425,20 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   target_tree->has_ever_been_drawn_ = false;
 }
 
-LayerListIterator LayerTreeImpl::begin() {
-  return LayerListIterator(root_layer_);
+LayerListIterator<LayerImpl> LayerTreeImpl::begin() {
+  return LayerListIterator<LayerImpl>(root_layer_);
 }
 
-LayerListIterator LayerTreeImpl::end() {
-  return LayerListIterator(nullptr);
+LayerListIterator<LayerImpl> LayerTreeImpl::end() {
+  return LayerListIterator<LayerImpl>(nullptr);
 }
 
-LayerListReverseIterator LayerTreeImpl::rbegin() {
-  return LayerListReverseIterator(root_layer_);
+LayerListReverseIterator<LayerImpl> LayerTreeImpl::rbegin() {
+  return LayerListReverseIterator<LayerImpl>(root_layer_);
 }
 
-LayerListReverseIterator LayerTreeImpl::rend() {
-  return LayerListReverseIterator(nullptr);
+LayerListReverseIterator<LayerImpl> LayerTreeImpl::rend() {
+  return LayerListReverseIterator<LayerImpl>(nullptr);
 }
 
 void LayerTreeImpl::AddToElementMap(LayerImpl* layer) {
@@ -850,6 +834,9 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
               "Compositing.%s.LayerTreeImpl.CalculateDrawPropertiesUs",
               client_name),
           timer.Elapsed().InMicroseconds());
+      UMA_HISTOGRAM_COUNTS_100(
+          base::StringPrintf("Compositing.%s.NumRenderSurfaces", client_name),
+          base::saturated_cast<int>(render_surface_layer_list_.size()));
     }
   }
 
@@ -1760,20 +1747,9 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
 
 static bool ScrollsOrScrollbarAnyDrawnRenderSurfaceLayerListMember(
     LayerImpl* layer) {
-  if (!layer->scrollable() && !layer->ToScrollbarLayer())
-    return false;
-  if (layer->layer_or_descendant_is_drawn())
-    return true;
-
-  if (!layer->scroll_children())
-    return false;
-  for (std::set<LayerImpl*>::const_iterator it =
-           layer->scroll_children()->begin();
-       it != layer->scroll_children()->end(); ++it) {
-    if ((*it)->layer_or_descendant_is_drawn())
-      return true;
-  }
-  return false;
+  return layer->scrolls_drawn_descendant() ||
+         (layer->ToScrollbarLayer() &&
+          layer->IsDrawnRenderSurfaceLayerListMember());
 }
 
 struct FindScrollingLayerOrScrollbarLayerFunctor {

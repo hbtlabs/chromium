@@ -371,6 +371,7 @@ component("base") {
     "//net",
     "//third_party/icu",
     "//ui/base:ui_data_pack",
+    "//ui/display",
     "//ui/events",
     "//ui/events/devices",
     "//ui/resources",
@@ -411,6 +412,8 @@ component("base") {
       "dragdrop/drag_utils_aura.cc",
     ]
   }
+
+  # TODO(kylechar): remove ozone_platform_x11 from here.
   if (use_x11 || ozone_platform_x11) {
     sources += [
       "x/x11_foreign_window_manager.cc",
@@ -430,7 +433,10 @@ component("base") {
       ]
       configs += [ "//build/config/linux:xscrnsaver" ]
     }
-    deps += [ "//ui/gfx/x" ]
+    deps += [
+      "//ui/events/devices/x11",
+      "//ui/gfx/x",
+    ]
   }
 
   if (!use_aura || !is_linux) {
@@ -826,6 +832,7 @@ test("ui_base_unittests") {
     "//ui/base",
     "//ui/base:test_support",
     "//ui/base:ui_data_pack",
+    "//ui/display",
     "//ui/events:events_base",
     "//ui/events:test_support",
     "//ui/gfx:test_support",
@@ -871,7 +878,7 @@ test("ui_base_unittests") {
       "//chrome:resources",
       "//ui/android:ui_java",
     ]
-    isolate_file = "ui_base_unittests.isolate"
+    isolate_file = "ui_base_tests.isolate"
   }
 
   if (use_pango) {
@@ -945,7 +952,8 @@ test("ui_base_unittests") {
     data += [ "$root_out_dir/ui_unittests Framework.framework/" ]
 
     if (is_asan && symbol_level == 0) {
-      data += [ "$root_out_dir/ui_base_unittests.dSYM/" ]
+      # TODO(crbug.com/330301): make this conditional on mac_strip_release.
+      # data += [ "$root_out_dir/ui_base_unittests.dSYM/" ]
     }
   }
 }

@@ -414,6 +414,25 @@ void LayoutTable::simplifiedNormalFlowLayout()
     }
 }
 
+bool LayoutTable::recalcChildOverflowAfterStyleChange()
+{
+    ASSERT(childNeedsOverflowRecalcAfterStyleChange());
+    clearChildNeedsOverflowRecalcAfterStyleChange();
+
+    // If the table needs layout the sections we keep pointers to may have gone away and
+    // overflow will get recalculated anyway so return early.
+    if (needsLayout())
+        return false;
+
+    bool childrenOverflowChanged = false;
+    for (LayoutTableSection* section = topSection(); section; section = sectionBelow(section)) {
+        if (!section->childNeedsOverflowRecalcAfterStyleChange())
+            continue;
+        childrenOverflowChanged |= section->recalcChildOverflowAfterStyleChange();
+    }
+    return childrenOverflowChanged;
+}
+
 void LayoutTable::layout()
 {
     ASSERT(needsLayout());

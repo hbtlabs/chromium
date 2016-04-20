@@ -86,6 +86,10 @@ declare_args() {
   # TODO(brettw) it's weird that Mac and desktop Linux are different. We should
   # explore favoring size over speed in this case as well.
   optimize_for_size = is_android || is_ios
+
+  # Gold icf level, values are "none", "safe", "all". If value isn't overridden,
+  # default initialization is below.
+  gold_icf_level = ""
 }
 
 # Apply the default logic for these values if they were not set explicitly.
@@ -101,6 +105,16 @@ if (gold_path == false) {
 if (use_debug_fission == "default") {
   use_debug_fission = is_debug && !is_win && use_gold &&
                       linux_use_bundled_binutils && cc_wrapper == ""
+}
+
+if (gold_icf_level == "") {
+  if (use_gold && !is_clang) {
+    # Gold doesn't respect section alignment and breaks gcc builds with icf
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=576197
+    gold_icf_level = "none"
+  } else {
+    gold_icf_level = "all"
+  }
 }
 
 # default_include_dirs ---------------------------------------------------------
@@ -304,7 +318,7 @@ config("compiler") {
 
     if (!using_sanitizer && !(is_android && use_order_profiling)) {
       # TODO(brettw) common.gypi has this only for target toolset.
-      ldflags += [ "-Wl,--icf=all" ]
+      ldflags += [ "-Wl,--icf=${gold_icf_level}" ]
     }
 
     # TODO(thestig): Make this flag work with GN.
@@ -416,6 +430,12 @@ config("compiler") {
     if (is_linux) {
       ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
     }
+
+    arflags = [
+      "--plugin",
+      rebase_path("//third_party/llvm-build/Release+Asserts/lib/LLVMgold.so",
+                  root_build_dir),
+    ]
 
     # TODO(pcc): Make these flags work correctly with CFI.
     if (!is_cfi) {
@@ -835,12 +855,6 @@ config("default_warnings") {
 
     if (visual_studio_version == "2015") {
       cflags += [
-        # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to 4267.
-        # Example: short TruncTest(size_t x) { return x; }
-        # Since we disable 4244 we need to disable 4267 during migration.
-        # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-        "/wd4267",
-
         # C4312 is a VS 2015 64-bit warning for integer to larger pointer.
         # TODO(brucedawson): fix warnings, crbug.com/554200
         "/wd4312",
@@ -851,6 +865,16 @@ config("default_warnings") {
         # See http://bugs.icu-project.org/trac/ticket/11122
         "/wd4595",
       ]
+
+      if (current_cpu == "x86") {
+        cflags += [
+          # VC++ 2015 changes 32-bit size_t truncation warnings from 4244 to
+          # 4267. Example: short TruncTest(size_t x) { return x; }
+          # Since we disable 4244 we need to disable 4267 during migration.
+          # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+          "/wd4267",
+        ]
+      }
     }
 
     # VS xtree header file needs to be patched or 4702 (unreachable code
@@ -955,6 +979,15 @@ config("default_warnings") {
         # TODO(thakis): Enable this, crbug.com/507717
         "-Wno-shift-negative-value",
       ]
+
+      if (exec_script("//tools/clang/scripts/update.py",
+                      [ "--print-revision" ],
+                      "trim string") != "266460-1") {
+        cflags += [
+          # TODO(thakis): https://crbug.com/604888
+          "-Wno-undefined-var-template",
+        ]
+      }
     }
   }
 }

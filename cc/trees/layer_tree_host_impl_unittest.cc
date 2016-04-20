@@ -175,10 +175,6 @@ class LayerTreeHostImplTest : public testing::Test,
     host_impl_->SwapBuffers(*frame);
     last_on_draw_frame_ = std::move(frame);
   }
-  void PostFrameTimingEventsOnImplThread(
-      std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-      std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events)
-      override {}
 
   void set_reduce_memory_result(bool reduce_memory_result) {
     reduce_memory_result_ = reduce_memory_result;
@@ -965,8 +961,8 @@ TEST_F(LayerTreeHostImplTest, ScrollWithOverlappingNonScrollableLayer) {
   scrollbar->SetBounds(scrollbar_size);
   scrollbar->SetPosition(gfx::PointF(345, 0));
   scrollbar->SetScrollLayerId(scroll->id());
-  scrollbar->set_layer_or_descendant_is_drawn(true);
   scrollbar->SetDrawsContent(true);
+  scrollbar->SetOpacity(1.f);
 
   std::unique_ptr<LayerImpl> squash1 = LayerImpl::Create(layer_tree_impl, 5);
   squash1->SetBounds(gfx::Size(140, 300));

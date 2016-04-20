@@ -209,8 +209,6 @@ component("gfx") {
     "win/direct_manipulation.h",
     "win/direct_write.cc",
     "win/direct_write.h",
-    "win/dpi.cc",
-    "win/dpi.h",
     "win/hwnd_util.cc",
     "win/hwnd_util.h",
     "win/physical_size.cc",
@@ -691,17 +689,6 @@ source_set("test_support") {
   }
 }
 
-bundle_data("gfx_unittests_bundle_data") {
-  testonly = true
-  sources = [
-    "test/data",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/" +
-        "{{source_root_relative_dir}}/{{source_file_part}}",
-  ]
-}
-
 test("gfx_unittests") {
   sources = [
     "font_render_params_linux_unittest.cc",
@@ -784,7 +771,6 @@ test("gfx_unittests") {
 
   deps = [
     ":gfx",
-    ":gfx_unittests_bundle_data",
     ":test_support",
     "//base",
     "//base/test:test_support",

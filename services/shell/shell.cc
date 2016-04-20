@@ -120,10 +120,8 @@ class Shell::Instance : public mojom::Connector,
       allow_any_application_(capability_spec.required.count("*") == 1),
       pid_receiver_binding_(this),
       weak_factory_(this) {
-    if (identity_.name() == kShellName ||
-        shell_->GetLoaderForName(identity_.name())) {
+    if (identity_.name() == kShellName || identity_.name() == kCatalogName)
       pid_ = base::Process::Current().Pid();
-    }
     DCHECK_NE(mojom::kInvalidInstanceID, id_);
   }
 
@@ -378,6 +376,10 @@ class Shell::Instance : public mojom::Connector,
   }
 
   void PIDAvailable(base::ProcessId pid) {
+    if (pid == base::kNullProcessId) {
+      shell_->OnInstanceError(this);
+      return;
+    }
     pid_ = pid;
     shell_->NotifyPIDAvailable(id_, pid_);
   }
@@ -460,7 +462,6 @@ Shell::Shell(std::unique_ptr<NativeRunnerFactory> native_runner_factory,
 
 Shell::~Shell() {
   TerminateShellConnections();
-  STLDeleteValues(&name_to_loader_);
   for (auto& runner : native_runners_)
     runner.reset();
 }
@@ -487,14 +488,6 @@ mojom::ShellClientRequest Shell::InitInstanceForEmbedder(
   Connect(std::move(params), std::move(client));
 
   return request;
-}
-
-void Shell::SetLoaderForName(std::unique_ptr<Loader> loader,
-                             const std::string& name) {
-  auto it = name_to_loader_.find(name);
-  if (it != name_to_loader_.end())
-    delete it->second;
-  name_to_loader_[name] = loader.release();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -737,42 +730,22 @@ void Shell::OnGotResolvedName(mojom::ShellResolverPtr resolver,
   } else {
     // Otherwise we create a new ShellClient pipe.
     mojom::ShellClientRequest request = GetProxy(&client);
-    if (LoadWithLoader(target, &request)) {
-      instance->StartWithClient(std::move(client));
-    } else {
-      CHECK(!result->package_url.is_null() && !result->capabilities.is_null());
+    CHECK(!result->package_url.is_null() && !result->capabilities.is_null());
 
-      if (target.name() != result->resolved_name) {
-        instance->StartWithClient(std::move(client));
-        Identity factory(result->resolved_name, target.user_id(),
-                         instance_name);
-        CreateShellClientWithFactory(factory, target.name(),
-                                     std::move(request));
-      } else {
-        instance->StartWithFilePath(
-            mojo::util::UrlToFilePath(result->package_url.To<GURL>()));
-      }
+    if (target.name() != result->resolved_name) {
+      instance->StartWithClient(std::move(client));
+      Identity factory(result->resolved_name, target.user_id(),
+                       instance_name);
+      CreateShellClientWithFactory(factory, target.name(),
+                                   std::move(request));
+    } else {
+      instance->StartWithFilePath(
+          mojo::util::UrlToFilePath(result->package_url.To<GURL>()));
     }
   }
 
   // Now that the instance has a ShellClient, we can connect to it.
   instance->ConnectToClient(std::move(params));
-}
-
-bool Shell::LoadWithLoader(const Identity& target,
-                           mojom::ShellClientRequest* request) {
-  Loader* loader = GetLoaderForName(target.name());
-  if (!loader)
-    return false;
-  loader->Load(target.name(), std::move(*request));
-  return true;
-}
-
-Loader* Shell::GetLoaderForName(const std::string& name) {
-  auto name_it = name_to_loader_.find(name);
-  if (name_it != name_to_loader_.end())
-    return name_it->second;
-  return default_loader_.get();
 }
 
 base::WeakPtr<Shell> Shell::GetWeakPtr() {

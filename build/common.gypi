@@ -64,12 +64,6 @@
           # Use the PCI lib to collect GPU information.
           'use_libpci%': 1,
 
-          # Use OpenSSL instead of NSS as the underlying SSL and crypto
-          # implementation. Certificate verification will in most cases be
-          # handled by the OS. If OpenSSL's struct X509 is used to represent
-          # certificates, use_openssl_certs must be set.
-          'use_openssl%': 1,
-
           # Use OpenSSL for representing certificates. When targeting Android,
           # the platform certificate library is used for certificate
           # verification. On other targets, this flag also enables OpenSSL for
@@ -168,7 +162,6 @@
         'use_ozone%': '<(use_ozone)',
         'embedded%': '<(embedded)',
         'use_libpci%': '<(use_libpci)',
-        'use_openssl%': '<(use_openssl)',
         'use_openssl_certs%': '<(use_openssl_certs)',
         'enable_viewport%': '<(enable_viewport)',
         'enable_hidpi%': '<(enable_hidpi)',
@@ -355,7 +348,6 @@
       'use_ozone_evdev%': '<(use_ozone_evdev)',
       'use_clipboard_aurax11%': '<(use_clipboard_aurax11)',
       'embedded%': '<(embedded)',
-      'use_openssl%': '<(use_openssl)',
       'use_openssl_certs%': '<(use_openssl_certs)',
       'enable_viewport%': '<(enable_viewport)',
       'enable_hidpi%': '<(enable_hidpi)',
@@ -742,15 +734,6 @@
           'use_nss_certs%': 1,
         }, {
           'use_nss_certs%': 0,
-        }],
-
-        # NSS verifier usage.
-        # On non-OpenSSL iOS configurations, certificates use the operating
-        # system library, but the verifier uses the bundled copy of NSS.
-        ['(OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris") or (OS=="ios" and use_openssl==0)', {
-          'use_nss_verifier%': 1,
-        }, {
-          'use_nss_verifier%': 0,
         }],
 
         # libudev usage.  This currently only affects the content layer.
@@ -1167,10 +1150,8 @@
     'use_ash%': '<(use_ash)',
     'use_cras%': '<(use_cras)',
     'use_libpci%': '<(use_libpci)',
-    'use_openssl%': '<(use_openssl)',
     'use_openssl_certs%': '<(use_openssl_certs)',
     'use_nss_certs%': '<(use_nss_certs)',
-    'use_nss_verifier%': '<(use_nss_verifier)',
     'use_udev%': '<(use_udev)',
     'os_bsd%': '<(os_bsd)',
     'os_posix%': '<(os_posix)',
@@ -2139,9 +2120,6 @@
       ['use_nss_certs==1', {
         'grit_defines': ['-D', 'use_nss_certs'],
       }],
-      ['use_nss_verifier==1', {
-        'grit_defines': ['-D', 'use_nss_verifier'],
-      }],
       ['use_ozone==1', {
         'grit_defines': ['-D', 'use_ozone'],
       }],
@@ -2262,7 +2240,8 @@
             }],
           ],
           'clang_plugin_args%': '-Xclang -plugin-arg-find-bad-constructs -Xclang check-templates '
-          '-Xclang -plugin-arg-find-bad-constructs -Xclang follow-macro-expansion ',
+          '-Xclang -plugin-arg-find-bad-constructs -Xclang follow-macro-expansion '
+          '-Xclang -plugin-arg-find-bad-constructs -Xclang check-implicit-copy-ctors ',
         },
         # If you change these, also change build/config/clang/BUILD.gn.
         'clang_chrome_plugins_flags%':
@@ -2485,6 +2464,12 @@
         'enable_hangout_services_extension%': 1,
       }, {
         'enable_hangout_services_extension%': 0,
+      }],
+
+      # Gold doesn't respect section alignment and breaks gcc builds with icf
+      # https://bugs.chromium.org/p/chromium/issues/detail?id=576197
+      ['clang==0 and linux_use_bundled_gold==1', {
+        'gold_icf_level%': 'none'
       }],
     ],
 
@@ -3068,15 +3053,11 @@
       ['<(use_libpci)==1', {
         'defines': ['USE_LIBPCI=1'],
       }],
-      ['<(use_openssl)==1', {
-        'defines': ['USE_OPENSSL=1'],
-      }],
       ['<(use_openssl_certs)==1', {
         'defines': ['USE_OPENSSL_CERTS=1'],
       }],
       ['>(nacl_untrusted_build)==1', {
         'defines': [
-          'USE_OPENSSL=1',
           'USE_OPENSSL_CERTS=1',
         ],
       }],
@@ -3086,15 +3067,16 @@
       ['<(use_nss_certs)==1 and >(nacl_untrusted_build)==0', {
         'defines': ['USE_NSS_CERTS=1'],
       }],
-      ['<(use_nss_verifier)==1 and >(nacl_untrusted_build)==0', {
-        'defines': ['USE_NSS_VERIFIER=1'],
-      }],
       ['<(chromeos)==1 and >(nacl_untrusted_build)==0', {
         'defines': ['OS_CHROMEOS=1'],
       }],
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
+      }],
+      ['"<!(python <(DEPTH)/tools/clang/scripts/update.py --print-revision)"!="266460-1"', {
+        # TODO(thakis): https://crbug.com/604888
+        'variables': { 'clang_warning_flags': ['-Wno-undefined-var-template']},
       }],
       ['chromium_code==0', {
         'variables': {
@@ -3562,11 +3544,6 @@
             'defines': [
               'NS_BLOCK_ASSERTIONS=1',
             ],
-          }],
-          # Force disable blink assertions on Cast device builds (overriding DCHECK_ALWAYS_ON)
-          # Only defined for Release builds (NDEBUG), otherwise blink won't compile.
-          ['chromecast==1 and OS=="linux" and is_cast_desktop_build==0', {
-            'defines': ['ENABLE_ASSERT=0'],
           }],
         ],
       },

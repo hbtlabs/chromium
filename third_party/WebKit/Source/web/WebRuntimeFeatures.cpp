@@ -145,6 +145,11 @@ void WebRuntimeFeatures::enableImageColorProfiles(bool enable)
     RuntimeEnabledFeatures::setImageColorProfilesEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableInputMultipleFieldsUI(bool enable)
+{
+    RuntimeEnabledFeatures::setInputMultipleFieldsUIEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableMediaCapture(bool enable)
 {
     RuntimeEnabledFeatures::setMediaCaptureEnabled(enable);
@@ -153,11 +158,6 @@ void WebRuntimeFeatures::enableMediaCapture(bool enable)
 void WebRuntimeFeatures::enableMediaDocumentDownloadButton(bool enable)
 {
     RuntimeEnabledFeatures::setMediaDocumentDownloadButtonEnabled(enable);
-}
-
-void WebRuntimeFeatures::enableNotificationActionIcons(bool enable)
-{
-    RuntimeEnabledFeatures::setNotificationActionIconsEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableNotificationConstructor(bool enable)
@@ -308,11 +308,6 @@ void WebRuntimeFeatures::enableScrollAnchoring(bool enable)
 void WebRuntimeFeatures::enableRenderingPipelineThrottling(bool enable)
 {
     RuntimeEnabledFeatures::setRenderingPipelineThrottlingEnabled(enable);
-}
-
-bool WebRuntimeFeatures::isServiceWorkerExtendableMessageEventEnabled()
-{
-    return RuntimeEnabledFeatures::serviceWorkerExtendableMessageEventEnabled();
 }
 
 } // namespace blink

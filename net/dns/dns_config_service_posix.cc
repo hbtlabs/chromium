@@ -4,6 +4,7 @@
 
 #include "net/dns/dns_config_service_posix.h"
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
@@ -13,7 +14,6 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -161,8 +161,8 @@ ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
 // DNS code (and its clients) are already robust against failing to get the DNS
 // config for whatever reason, so the properties can disappear and the world
 // won't end.
-// TODO(ttuttle): Depend on libcutils, then switch this (and other uses of
-//                __system_property_get) to property_get.
+// TODO(juliatuttle): Depend on libcutils, then switch this (and other uses of
+//                    __system_property_get) to property_get.
 ConfigParsePosixResult ReadDnsConfig(DnsConfig* dns_config) {
    std::string dns1_string, dns2_string;
   char property_value[PROP_VALUE_MAX];
@@ -315,7 +315,7 @@ class DnsConfigServicePosix::ConfigReader : public SerialWorker {
   // on worker thread.
   DnsConfigServicePosix* const service_;
   // Dns config value to always return for testing.
-  scoped_ptr<const DnsConfig> dns_config_for_testing_;
+  std::unique_ptr<const DnsConfig> dns_config_for_testing_;
   // Written in DoWork, read in OnWorkFinished, no locking necessary.
   DnsConfig dns_config_;
   bool success_;
@@ -585,8 +585,9 @@ void DnsConfigServicePosix::OnNetworkChanged(
 }  // namespace internal
 
 // static
-scoped_ptr<DnsConfigService> DnsConfigService::CreateSystemService() {
-  return scoped_ptr<DnsConfigService>(new internal::DnsConfigServicePosix());
+std::unique_ptr<DnsConfigService> DnsConfigService::CreateSystemService() {
+  return std::unique_ptr<DnsConfigService>(
+      new internal::DnsConfigServicePosix());
 }
 
 }  // namespace net

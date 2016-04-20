@@ -300,11 +300,6 @@ bool RemoteChannelImpl::SupportsImplScrolling() const {
   return true;
 }
 
-void RemoteChannelImpl::SetChildrenNeedBeginFrames(
-    bool children_need_begin_frames) {
-  NOTREACHED() << "Should not be called on the remote client LayerTreeHost";
-}
-
 void RemoteChannelImpl::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
   NOTREACHED() << "Should not be called on the remote client LayerTreeHost";
@@ -375,11 +370,6 @@ void RemoteChannelImpl::DidInitializeOutputSurface(
 }
 
 void RemoteChannelImpl::DidCompletePageScaleAnimation() {}
-
-void RemoteChannelImpl::PostFrameTimingEventsOnMain(
-    std::unique_ptr<FrameTimingTracker::CompositeTimingSet> composite_events,
-    std::unique_ptr<FrameTimingTracker::MainFrameTimingSet> main_frame_events) {
-}
 
 void RemoteChannelImpl::BeginMainFrame(
     std::unique_ptr<BeginMainFrameAndCommitState> begin_main_frame_state) {

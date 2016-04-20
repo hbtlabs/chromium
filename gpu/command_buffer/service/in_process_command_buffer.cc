@@ -47,11 +47,6 @@
 #include "ui/gl/gl_image_shared_memory.h"
 #include "ui/gl/gl_share_group.h"
 
-#if defined(OS_ANDROID)
-#include "gpu/command_buffer/service/stream_texture_manager_in_process_android.h"
-#include "ui/gl/android/surface_texture.h"
-#endif
-
 #if defined(OS_WIN)
 #include <windows.h>
 #include "base/process/process_handle.h"
@@ -90,7 +85,7 @@ struct GpuInProcessThreadHolder {
   GpuInProcessThreadHolder()
       : sync_point_manager(new SyncPointManager(false)),
         gpu_thread(new GpuInProcessThread(sync_point_manager.get())) {}
-  scoped_ptr<SyncPointManager> sync_point_manager;
+  std::unique_ptr<SyncPointManager> sync_point_manager;
   scoped_refptr<InProcessCommandBuffer::Service> gpu_thread;
 };
 
@@ -152,16 +147,23 @@ scoped_refptr<InProcessCommandBuffer::Service> GetInitialService(
 
 }  // anonyous namespace
 
-InProcessCommandBuffer::Service::Service() {}
+InProcessCommandBuffer::Service::Service()
+    : gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()) {}
 
 InProcessCommandBuffer::Service::Service(const GpuPreferences& gpu_preferences)
-    : gpu_preferences_(gpu_preferences) {}
+    : gpu_preferences_(gpu_preferences),
+      gpu_driver_bug_workarounds_(base::CommandLine::ForCurrentProcess()) {}
 
 InProcessCommandBuffer::Service::~Service() {}
 
 const gpu::GpuPreferences&
 InProcessCommandBuffer::Service::gpu_preferences() {
   return gpu_preferences_;
+}
+
+const gpu::GpuDriverBugWorkarounds&
+InProcessCommandBuffer::Service::gpu_driver_bug_workarounds() {
+  return gpu_driver_bug_workarounds_;
 }
 
 scoped_refptr<gfx::GLShareGroup>
@@ -325,7 +327,7 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
   transfer_buffer_manager_ = manager;
   manager->Initialize();
 
-  scoped_ptr<CommandBufferService> command_buffer(
+  std::unique_ptr<CommandBufferService> command_buffer(
       new CommandBufferService(transfer_buffer_manager_.get()));
   command_buffer->SetPutOffsetChangeCallback(base::Bind(
       &InProcessCommandBuffer::PumpCommandsOnGpuThread, gpu_thread_weak_ptr_));
@@ -342,21 +344,19 @@ bool InProcessCommandBuffer::InitializeOnGpuThread(
                         ? params.context_group->gl_share_group_
                         : service_->share_group();
 
-#if defined(OS_ANDROID)
-  stream_texture_manager_.reset(new StreamTextureManagerInProcess);
-#endif
-
   bool bind_generates_resource = false;
+  scoped_refptr<gles2::FeatureInfo> feature_info =
+      new gles2::FeatureInfo(service_->gpu_driver_bug_workarounds());
   decoder_.reset(gles2::GLES2Decoder::Create(
       params.context_group
           ? params.context_group->decoder_->GetContextGroup()
-          : new gles2::ContextGroup(service_->gpu_preferences(),
-                                    service_->mailbox_manager(), NULL,
-                                    service_->shader_translator_cache(),
-                                    service_->framebuffer_completeness_cache(),
-                                    NULL, service_->subscription_ref_set(),
-                                    service_->pending_valuebuffer_state(),
-                                    bind_generates_resource)));
+          : new gles2::ContextGroup(
+                service_->gpu_preferences(), service_->mailbox_manager(), NULL,
+                service_->shader_translator_cache(),
+                service_->framebuffer_completeness_cache(), feature_info,
+                service_->subscription_ref_set(),
+                service_->pending_valuebuffer_state(),
+                bind_generates_resource)));
 
   executor_.reset(new CommandExecutor(command_buffer.get(), decoder_.get(),
                                       decoder_.get()));
@@ -484,9 +484,6 @@ bool InProcessCommandBuffer::DestroyOnGpuThread() {
     sync_point_order_data_ = nullptr;
   }
   gl_share_group_ = nullptr;
-#if defined(OS_ANDROID)
-  stream_texture_manager_.reset();
-#endif
 
   return true;
 }
@@ -842,7 +839,7 @@ int32_t InProcessCommandBuffer::CreateGpuMemoryBufferImage(
   CheckSequencedThread();
 
   DCHECK(gpu_memory_buffer_manager_);
-  scoped_ptr<gfx::GpuMemoryBuffer> buffer(
+  std::unique_ptr<gfx::GpuMemoryBuffer> buffer(
       gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
           gfx::Size(width, height),
           gpu::DefaultBufferFormatForImageFormat(internalformat),
@@ -993,16 +990,6 @@ bool InProcessCommandBuffer::CanWaitUnverifiedSyncToken(
   return sync_token->namespace_id() == GetNamespaceID();
 }
 
-uint32_t InProcessCommandBuffer::CreateStreamTextureOnGpuThread(
-    uint32_t client_texture_id) {
-#if defined(OS_ANDROID)
-  return stream_texture_manager_->CreateStreamTexture(
-      client_texture_id, decoder_->GetContextGroup()->texture_manager());
-#else
-  return 0;
-#endif
-}
-
 gpu::error::Error InProcessCommandBuffer::GetLastError() {
   CheckSequencedThread();
   return last_state_.error;
@@ -1027,7 +1014,7 @@ void PostCallback(
   }
 }
 
-void RunOnTargetThread(scoped_ptr<base::Closure> callback) {
+void RunOnTargetThread(std::unique_ptr<base::Closure> callback) {
   DCHECK(callback.get());
   callback->Run();
 }
@@ -1038,7 +1025,7 @@ base::Closure InProcessCommandBuffer::WrapCallback(
     const base::Closure& callback) {
   // Make sure the callback gets deleted on the target thread by passing
   // ownership.
-  scoped_ptr<base::Closure> scoped_callback(new base::Closure(callback));
+  std::unique_ptr<base::Closure> scoped_callback(new base::Closure(callback));
   base::Closure callback_on_client_thread =
       base::Bind(&RunOnTargetThread, base::Passed(&scoped_callback));
   base::Closure wrapped_callback =
@@ -1048,26 +1035,6 @@ base::Closure InProcessCommandBuffer::WrapCallback(
                  callback_on_client_thread);
   return wrapped_callback;
 }
-
-#if defined(OS_ANDROID)
-scoped_refptr<gfx::SurfaceTexture> InProcessCommandBuffer::GetSurfaceTexture(
-    uint32_t stream_id) {
-  DCHECK(stream_texture_manager_);
-  return stream_texture_manager_->GetSurfaceTexture(stream_id);
-}
-
-uint32_t InProcessCommandBuffer::CreateStreamTexture(uint32_t texture_id) {
-  base::WaitableEvent completion(true, false);
-  uint32_t stream_id = 0;
-  base::Callback<uint32_t(void)> task =
-      base::Bind(&InProcessCommandBuffer::CreateStreamTextureOnGpuThread,
-                 base::Unretained(this), texture_id);
-  QueueTask(
-      base::Bind(&RunTaskWithResult<uint32_t>, task, &stream_id, &completion));
-  completion.Wait();
-  return stream_id;
-}
-#endif
 
 GpuInProcessThread::GpuInProcessThread(SyncPointManager* sync_point_manager)
     : base::Thread("GpuThread"), sync_point_manager_(sync_point_manager) {

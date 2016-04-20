@@ -827,9 +827,9 @@ const FeatureEntry kFeatureEntries[] = {
             ui::switches::kDisableDisplayColorCalibration),
     },
     {
-        "enable-quirks-client", IDS_FLAGS_ENABLE_QUIRKS_CLIENT_NAME,
-        IDS_FLAGS_ENABLE_QUIRKS_CLIENT_DESCRIPTION, kOsCrOS,
-        SINGLE_VALUE_TYPE(quirks::switches::kEnableQuirksClient),
+        "disable-quirks-client", IDS_FLAGS_DISABLE_QUIRKS_CLIENT_NAME,
+        IDS_FLAGS_DISABLE_QUIRKS_CLIENT_DESCRIPTION, kOsCrOS,
+        SINGLE_VALUE_TYPE(quirks::switches::kDisableQuirksClient),
     },
     {
         "ash-disable-screen-orientation-lock",
@@ -1190,12 +1190,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-native-notifications", IDS_NOTIFICATIONS_NATIVE_FLAG,
      IDS_NOTIFICATIONS_NATIVE_FLAG_DESCRIPTION, kOsMac,
      SINGLE_VALUE_TYPE(switches::kEnableNativeNotifications)},
-#endif
-#if defined(ENABLE_NOTIFICATIONS)
-    {"enable-notification-action-icons",
-     IDS_FLAGS_ENABLE_NOTIFICATION_ACTION_ICONS_NAME,
-     IDS_FLAGS_ENABLE_NOTIFICATION_ACTION_ICONS_DESCRIPTION, kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableNotificationActionIcons)},
 #endif
 #if defined(TOOLKIT_VIEWS)
     {"disable-views-rect-based-targeting",  // FLAGS:RECORD_UMA
@@ -1788,6 +1782,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_PROTECT_SYNC_CREDENTIAL_ON_REAUTH_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(
          password_manager::features::kProtectSyncCredentialOnReauth)},
+    {"password-import-export", IDS_FLAGS_PASSWORD_IMPORT_EXPORT_NAME,
+     IDS_FLAGS_PASSWORD_IMPORT_EXPORT_DESCRIPTION,
+     kOsWin | kOsMac | kOsCrOS | kOsLinux,
+     FEATURE_VALUE_TYPE(password_manager::features::kPasswordImportExport)},
 #if defined(OS_CHROMEOS)
     {"enable-experimental-accessibility-features",
      IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_NAME,
@@ -1821,6 +1819,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kMediaStyleNotification)},
 #endif
+    {"enable-pointer-events",  // FLAGS:RECORD_UMA
+      IDS_FLAGS_EXPERIMENTAL_POINTER_EVENT_NAME,
+      IDS_FLAGS_EXPERIMENTAL_POINTER_EVENT_DESCRIPTION,
+      kOsAll,
+      FEATURE_VALUE_TYPE(features::kPointerEvents)},
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.

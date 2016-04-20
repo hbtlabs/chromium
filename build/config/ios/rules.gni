@@ -188,25 +188,19 @@ template("bundle_data_xib") {
   _target_name = target_name
   _compile_xib = target_name + "_compile_xib"
 
-  _nib_basename = get_path_info(invoker.source, "name")
-  _nib_filename = "$_nib_basename.nib"
-
-  action(_compile_xib) {
-    visibility = [ ":$_target_name" ]
-    script = "//build/config/ios/ios_compile_xib.py"
+  compile_xibs(_compile_xib) {
     sources = [
       invoker.source,
     ]
-    outputs = [
-      "$target_gen_dir/$_nib_filename",
-    ]
-    args = [
+    visibility = [ ":$_target_name" ]
+    ibtool_flags = [
       "--minimum-deployment-target",
       ios_deployment_target,
-      "--output",
-      rebase_path("$target_gen_dir/$_nib_filename"),
-      "--input",
-      rebase_path(invoker.source, root_out_dir),
+      "--auto-activate-custom-fonts",
+      "--target-device",
+      "iphone",
+      "--target-device",
+      "ipad",
     ]
   }
 
@@ -218,11 +212,10 @@ template("bundle_data_xib") {
     }
     public_deps += [ ":$_compile_xib" ]
 
-    sources = [
-      "$target_gen_dir/$_nib_filename",
-    ]
+    sources = get_target_outputs(":$_compile_xib")
+
     outputs = [
-      "{{bundle_resources_dir}}/$_nib_filename",
+      "{{bundle_resources_dir}}/{{source_file_part}}",
     ]
   }
 }
@@ -330,18 +323,6 @@ template("ios_framework_bundle") {
       ]
     }
 
-    _framework_public_config = _target_name + "_public_config"
-    config(_framework_public_config) {
-      # TODO(sdefresne): should we have a framework_dirs similar to lib_dirs
-      # and include_dirs to avoid duplicate values on the command-line.
-      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
-      cflags_objc = common_flags
-      cflags_objcc = common_flags
-      ldflags = common_flags
-      lib_dirs = [ root_out_dir ]
-      libs = [ _framework_name ]
-    }
-
     group(_framework_headers_target) {
       deps = [
         ":$_compile_headers_map_target",
@@ -383,13 +364,9 @@ template("ios_framework_bundle") {
                                "public_configs",
                              ])
 
-      deps = [
+      public_deps = [
         ":$_framework_target",
       ]
-      if (!defined(public_configs)) {
-        public_configs = []
-      }
-      public_configs += [ ":$_framework_public_config" ]
     }
   }
 }

@@ -73,8 +73,7 @@ DelegatedFrameHost::DelegatedFrameHost(DelegatedFrameHostClient* client)
       background_color_(SK_ColorRED),
       current_scale_factor_(1.f),
       can_lock_compositor_(YES_CAN_LOCK),
-      delegated_frame_evictor_(new DelegatedFrameEvictor(this)),
-      begin_frame_source_(nullptr) {
+      delegated_frame_evictor_(new DelegatedFrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->AddObserver(this);
   id_allocator_ = factory->GetContextFactory()->CreateSurfaceIdAllocator();
@@ -545,15 +544,18 @@ void DelegatedFrameHost::ReturnResources(
 
 void DelegatedFrameHost::WillDrawSurface(cc::SurfaceId id,
                                          const gfx::Rect& damage_rect) {
-  if (id != surface_id_)
+  // Frame subscribers are only interested in changes to the target surface, so
+  // do not attempt capture if |damage_rect| is empty.  This prevents the draws
+  // of parent surfaces from triggering extra frame captures, which can affect
+  // smoothness.
+  if (id != surface_id_ || damage_rect.IsEmpty())
     return;
   AttemptFrameSubscriberCapture(damage_rect);
 }
 
 void DelegatedFrameHost::SetBeginFrameSource(
     cc::BeginFrameSource* begin_frame_source) {
-  // TODO(enne): forward this to DelegatedFrameHostClient to observe and then to
-  // the renderer as an external begin frame source.
+  client_->SetBeginFrameSource(begin_frame_source);
 }
 
 void DelegatedFrameHost::EvictDelegatedFrame() {

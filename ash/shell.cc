@@ -59,7 +59,8 @@
 #include "ash/utility/partial_screenshot_controller.h"
 #include "ash/wm/ash_focus_rules.h"
 #include "ash/wm/ash_native_cursor_manager.h"
-#include "ash/wm/coordinate_conversion.h"
+#include "ash/wm/aura/wm_globals_aura.h"
+#include "ash/wm/common/root_window_finder.h"
 #include "ash/wm/event_client_impl.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
@@ -84,7 +85,7 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "ui/app_list/shower/app_list_shower.h"
+#include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
@@ -298,8 +299,8 @@ void Shell::ShowContextMenu(const gfx::Point& location_in_screen,
   if (session_state_delegate_->IsScreenLocked())
     return;
 
-  aura::Window* root =
-      wm::GetRootWindowMatching(gfx::Rect(location_in_screen, gfx::Size()));
+  aura::Window* root = wm::WmWindowAura::GetAuraWindow(
+      wm::GetRootWindowMatching(gfx::Rect(location_in_screen, gfx::Size())));
   GetRootWindowController(root)
       ->ShowContextMenu(location_in_screen, source_type);
 }
@@ -308,15 +309,15 @@ void Shell::ShowAppList(aura::Window* window) {
   // If the context window is not given, show it on the target root window.
   if (!window)
     window = GetTargetRootWindow();
-  delegate_->GetAppListShower()->Show(window);
+  delegate_->GetAppListPresenter()->Show(window);
 }
 
 void Shell::DismissAppList() {
-  delegate_->GetAppListShower()->Dismiss();
+  delegate_->GetAppListPresenter()->Dismiss();
 }
 
 void Shell::ToggleAppList(aura::Window* window) {
-  if (delegate_->GetAppListShower()->IsVisible()) {
+  if (delegate_->GetAppListPresenter()->IsVisible()) {
     DismissAppList();
     return;
   }
@@ -325,7 +326,7 @@ void Shell::ToggleAppList(aura::Window* window) {
 }
 
 bool Shell::GetAppListTargetVisibility() const {
-  return delegate_->GetAppListShower()->GetTargetVisibility();
+  return delegate_->GetAppListPresenter()->GetTargetVisibility();
 }
 
 bool Shell::IsSystemModalWindowOpen() const {
@@ -513,7 +514,7 @@ void Shell::SetShelfAutoHideBehavior(ShelfAutoHideBehavior behavior,
 
 ShelfAutoHideBehavior Shell::GetShelfAutoHideBehavior(
     aura::Window* root_window) const {
-  return Shelf::ForWindow(root_window)->GetAutoHideBehavior();
+  return Shelf::ForWindow(root_window)->auto_hide_behavior();
 }
 
 void Shell::SetShelfAlignment(ShelfAlignment alignment,
@@ -522,7 +523,7 @@ void Shell::SetShelfAlignment(ShelfAlignment alignment,
 }
 
 ShelfAlignment Shell::GetShelfAlignment(const aura::Window* root_window) const {
-  return Shelf::ForWindow(root_window)->GetAlignment();
+  return Shelf::ForWindow(root_window)->alignment();
 }
 
 void Shell::OnShelfAlignmentChanged(aura::Window* root_window) {
@@ -640,7 +641,6 @@ Shell::Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool)
       scoped_target_root_window_(nullptr),
       delegate_(delegate),
       shelf_model_(new ShelfModel),
-      window_positioner_(new WindowPositioner),
       activation_client_(nullptr),
 #if defined(OS_CHROMEOS)
       display_configurator_(new ui::DisplayConfigurator()),
@@ -852,6 +852,10 @@ Shell::~Shell() {
 
 void Shell::Init(const ShellInitParams& init_params) {
   in_mus_ = init_params.in_mus;
+
+  wm_globals_.reset(new wm::WmGlobalsAura);
+  window_positioner_.reset(new WindowPositioner(wm_globals_.get()));
+
   if (!in_mus_) {
     native_cursor_manager_ = new AshNativeCursorManager;
 #if defined(OS_CHROMEOS)

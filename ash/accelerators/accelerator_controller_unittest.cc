@@ -23,6 +23,7 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
 #include "ash/volume_control_delegate.h"
+#include "ash/wm/common/window_positioning_utils.h"
 #include "ash/wm/common/wm_event.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/panels/panel_layout_manager.h"
@@ -450,13 +451,13 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
     gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-        window.get());
+        wm::WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
     gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
-        window.get());
+        wm::WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
@@ -505,7 +506,7 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftRestore) {
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-                                window1.get());
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -527,8 +528,8 @@ TEST_F(AcceleratorControllerTest, WindowSnapRightDockRightRestore) {
 
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
-  gfx::Rect expected_bounds =
-    wm::GetDefaultRightSnappedWindowBoundsInParent(window1.get());
+  gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
@@ -549,10 +550,10 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
   window1_state->Activate();
 
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
-  gfx::Rect expected_bounds =
-    wm::GetDefaultLeftSnappedWindowBoundsInParent(window1.get());
-  gfx::Rect expected_bounds2 =
-    wm::GetDefaultRightSnappedWindowBoundsInParent(window1.get());
+  gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
+  gfx::Rect expected_bounds2 = wm::GetDefaultRightSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -621,8 +622,8 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
 
   gfx::Rect window_restore_bounds2 = window->bounds();
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
-  gfx::Rect expected_bounds =
-      wm::GetDefaultLeftSnappedWindowBoundsInParent(window.get());
+  gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
+      wm::WmWindowAura::Get(window.get()));
   gfx::Rect window_restore_bounds =
       window_state->GetRestoreBoundsInScreen();
   EXPECT_NE(expected_bounds.ToString(), window->bounds().ToString());
@@ -859,6 +860,17 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
     EXPECT_TRUE(ProcessInController(ui::Accelerator(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
     EXPECT_EQ(2, delegate->handle_take_screenshot_count());
+    // None active window test case.
+    EXPECT_TRUE(ProcessInController(ui::Accelerator(
+        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
+    EXPECT_EQ(0, delegate->handle_take_window_screenshot_count());
+    // Active window test case.
+    std::unique_ptr<aura::Window> window;
+    window.reset(CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
+    wm::ActivateWindow(window.get());
+    EXPECT_TRUE(ProcessInController(ui::Accelerator(
+        ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_ALT_DOWN | ui::EF_CONTROL_DOWN)));
+    EXPECT_EQ(1, delegate->handle_take_window_screenshot_count());
   }
   const ui::Accelerator volume_mute(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
   const ui::Accelerator volume_down(ui::VKEY_VOLUME_DOWN, ui::EF_NONE);

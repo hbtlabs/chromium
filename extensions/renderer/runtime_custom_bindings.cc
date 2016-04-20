@@ -6,8 +6,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/bind.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
@@ -32,10 +33,10 @@ RuntimeCustomBindings::RuntimeCustomBindings(ScriptContext* context)
   RouteFunction(
       "GetManifest",
       base::Bind(&RuntimeCustomBindings::GetManifest, base::Unretained(this)));
-  RouteFunction("OpenChannelToExtension",
+  RouteFunction("OpenChannelToExtension", "runtime.connect",
                 base::Bind(&RuntimeCustomBindings::OpenChannelToExtension,
                            base::Unretained(this)));
-  RouteFunction("OpenChannelToNativeApp",
+  RouteFunction("OpenChannelToNativeApp", "runtime.connectNative",
                 base::Bind(&RuntimeCustomBindings::OpenChannelToNativeApp,
                            base::Unretained(this)));
   RouteFunction("GetExtensionViews",
@@ -109,7 +110,7 @@ void RuntimeCustomBindings::GetManifest(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK(context()->extension());
 
-  scoped_ptr<V8ValueConverter> converter(V8ValueConverter::create());
+  std::unique_ptr<V8ValueConverter> converter(V8ValueConverter::create());
   args.GetReturnValue().Set(converter->ToV8Value(
       context()->extension()->manifest()->value(), context()->v8_context()));
 }

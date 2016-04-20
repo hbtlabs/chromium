@@ -109,6 +109,9 @@ class WindowTree : public mojom::WindowTree,
 
   std::set<const ServerWindow*> roots() { return roots_; }
 
+  void set_connection_name(const std::string& name) { connection_name_ = name; }
+  const std::string& connection_name() const { return connection_name_; }
+
   const Display* GetDisplay(const ServerWindow* window) const;
   Display* GetDisplay(const ServerWindow* window) {
     return const_cast<Display*>(
@@ -365,7 +368,8 @@ class WindowTree : public mojom::WindowTree,
   void SetImeVisibility(Id transport_window_id,
                         bool visible,
                         mojo::TextInputStatePtr state) override;
-  void OnWindowInputEventAck(uint32_t event_id, bool handled) override;
+  void OnWindowInputEventAck(uint32_t event_id,
+                             mojom::EventResult result) override;
   void SetClientArea(
       Id transport_window_id,
       mojo::InsetsPtr insets,
@@ -406,6 +410,7 @@ class WindowTree : public mojom::WindowTree,
 
   // Id of this tree as assigned by WindowServer.
   const ConnectionSpecificId id_;
+  std::string connection_name_;
 
   ConnectionSpecificId next_window_id_;
 

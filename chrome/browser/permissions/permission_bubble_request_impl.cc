@@ -106,7 +106,9 @@ base::string16 PermissionBubbleRequestImpl::GetMessageText() const {
       return base::string16();
   }
   return l10n_util::GetStringFUTF16(
-      message_id, url_formatter::FormatUrlForSecurityDisplay(request_origin_));
+      message_id,
+      url_formatter::FormatUrlForSecurityDisplay(
+          request_origin_, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
 
 base::string16 PermissionBubbleRequestImpl::GetMessageTextFragment() const {
@@ -160,4 +162,9 @@ void PermissionBubbleRequestImpl::Cancelled() {
 void PermissionBubbleRequestImpl::RequestFinished() {
   is_finished_ = true;
   delete_callback_.Run();
+}
+
+PermissionBubbleType PermissionBubbleRequestImpl::GetPermissionBubbleType()
+    const {
+  return PermissionBubbleType::PERMISSION;
 }

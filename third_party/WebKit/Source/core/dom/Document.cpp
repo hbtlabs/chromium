@@ -248,6 +248,31 @@ static const unsigned cMaxWriteRecursionDepth = 21;
 // for dual G5s. :)
 static const int cLayoutScheduleThreshold = 250;
 
+namespace {
+
+void updateViewportApplyScroll(Element* documentElement)
+{
+    if (!documentElement
+        || !documentElement->isHTMLElement()
+        || documentElement->document().ownerElement())
+        return;
+
+    if (documentElement->getApplyScroll())
+        return;
+
+    ScrollStateCallback* applyScroll =
+        new ViewportScrollCallback(documentElement->document());
+
+    // Use disable-native-scroll since the ViewportScrollCallback needs to
+    // apply scroll actions before (TopControls) and after (overscroll)
+    // scrolling the element so it applies scroll to the element itself.
+    documentElement->setApplyScroll(
+        applyScroll,
+        "disable-native-scroll");
+}
+
+} // namespace
+
 // DOM Level 2 says (letters added):
 //
 // a) Name start characters must have one of the categories Ll, Lu, Lo, Lt, Nl.
@@ -584,47 +609,13 @@ void Document::childrenChanged(const ChildrenChange& change)
 {
     ContainerNode::childrenChanged(change);
     m_documentElement = ElementTraversal::firstWithin(*this);
-}
 
-void Document::updateViewportApplyScroll()
-{
-    if (!m_documentElement
-        || !m_documentElement->isHTMLElement()
-        || ownerElement())
-        return;
-
-    Element* newScrollingElement = scrollingElement();
-
-    // If there is no scrolling element (in QuirksMode and body is scrollable),
-    // install the viewport scroll callback on the <HTML> element.
-    if (!newScrollingElement)
-        newScrollingElement = m_documentElement;
-
-    if (newScrollingElement == m_oldScrollingElement)
-        return;
-
-    ScrollStateCallback* applyScroll = nullptr;
-
-    // If the scrolling element changed, remove the apply scroll from the
-    // old one and keep it to put on the new scrolling element.
-    if (m_oldScrollingElement) {
-        applyScroll = m_oldScrollingElement->getApplyScroll();
-        m_oldScrollingElement->removeApplyScroll();
-    }
-
-    if (newScrollingElement) {
-        if (!applyScroll)
-            applyScroll = new ViewportScrollCallback(*this, *frameHost());
-
-        // Use disable-native-scroll since the ViewportScrollCallback needs to
-        // apply scroll actions before (TopControls) and after (overscroll)
-        // scrolling the element so it applies scroll to the element itself.
-        newScrollingElement->setApplyScroll(
-            applyScroll,
-            "disable-native-scroll");
-    }
-
-    m_oldScrollingElement = newScrollingElement;
+    // Installs the viewport scrolling callback (the "applyScroll" in Scroll
+    // Customization lingo) on the documentElement. This callback is
+    // responsible for viewport related scroll actions like top controls
+    // movement and overscroll glow as well as actually scrolling the root
+    // viewport.
+    updateViewportApplyScroll(m_documentElement);
 }
 
 AtomicString Document::convertLocalName(const AtomicString& name)
@@ -1805,7 +1796,6 @@ void Document::updateStyle()
     }
 
     view()->recalcOverflowAfterStyleChange();
-    view()->setFrameTimingRequestsDirty(true);
 
     clearChildNeedsStyleRecalc();
 
@@ -1905,8 +1895,6 @@ void Document::updateLayout()
 
 void Document::layoutUpdated()
 {
-    updateViewportApplyScroll();
-
     // Plugins can run script inside layout which can detach the page.
     // TODO(esprehn): Can this still happen now that all plugins are out of
     // process?
@@ -5390,7 +5378,7 @@ Touch* Document::createTouch(DOMWindow* window, EventTarget* target, int identif
     // http://developer.apple.com/library/safari/#documentation/UserExperience/Reference/DocumentAdditionsReference/DocumentAdditions/DocumentAdditions.html
     // when this method should throw and nor is it by inspection of iOS behavior. It would be nice to verify any cases where it throws under iOS
     // and implement them here. See https://bugs.webkit.org/show_bug.cgi?id=47819
-    LocalFrame* frame = window && window->isLocalDOMWindow() ? toLocalDOMWindow(window)->frame() : this->frame();
+    LocalFrame* frame = window && window->isLocalDOMWindow() ? blink::toLocalDOMWindow(window)->frame() : this->frame();
     return Touch::create(frame, target, identifier, FloatPoint(screenX, screenY), FloatPoint(pageX, pageY), FloatSize(radiusX, radiusY), rotationAngle, force, String());
 }
 
@@ -5825,12 +5813,17 @@ void Document::setShadowCascadeOrder(ShadowCascadeOrder order)
     if (order == m_shadowCascadeOrder)
         return;
 
-    if (order == ShadowCascadeOrder::ShadowCascadeV0)
+    if (order == ShadowCascadeOrder::ShadowCascadeV0) {
         m_mayContainV0Shadow = true;
+        if (m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV1)
+            UseCounter::count(*this, UseCounter::MixedShadowRootV0AndV1);
+    }
 
     // For V0 -> V1 upgrade, we need style recalculation for the whole document.
-    if (m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV0 && order == ShadowCascadeOrder::ShadowCascadeV1)
+    if (m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV0 && order == ShadowCascadeOrder::ShadowCascadeV1) {
         this->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Shadow));
+        UseCounter::count(*this, UseCounter::MixedShadowRootV0AndV1);
+    }
 
     if (order > m_shadowCascadeOrder)
         m_shadowCascadeOrder = order;
@@ -5875,7 +5868,6 @@ DEFINE_TRACE(Document)
     visitor->trace(m_contextFeatures);
     visitor->trace(m_styleSheetList);
     visitor->trace(m_documentTiming);
-    visitor->trace(m_oldScrollingElement);
     visitor->trace(m_mediaQueryMatcher);
     visitor->trace(m_scriptedAnimationController);
     visitor->trace(m_scriptedIdleTaskController);

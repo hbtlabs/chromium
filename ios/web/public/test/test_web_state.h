@@ -23,11 +23,18 @@ class TestWebState : public WebState {
   ~TestWebState() override;
 
   // WebState implementation.
+  WebStateDelegate* GetDelegate() override;
+  void SetDelegate(WebStateDelegate* delegate) override;
+  bool IsWebUsageEnabled() const override;
+  void SetWebUsageEnabled(bool enabled) override;
   UIView* GetView() override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const OpenURLParams& params) override {}
   NavigationManager* GetNavigationManager() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
+  void ExecuteJavaScript(const base::string16& javascript) override;
+  void ExecuteJavaScript(const base::string16& javascript,
+                         const JavaScriptResultCallback& callback) override;
   const std::string& GetContentsMimeType() const override;
   const std::string& GetContentLanguageHeader() const override;
   bool ContentIsHTML() const override;
@@ -63,6 +70,7 @@ class TestWebState : public WebState {
   void SetTrustLevel(URLVerificationTrustLevel trust_level);
 
  private:
+  bool web_usage_enabled_;
   GURL url_;
   base::string16 title_;
   URLVerificationTrustLevel trust_level_;

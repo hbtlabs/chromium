@@ -1002,8 +1002,8 @@ void ChunkDemuxer::OnSourceInitDone(
   base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
 }
 
-ChunkDemuxerStream*
-ChunkDemuxer::CreateDemuxerStream(DemuxerStream::Type type) {
+ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
+    DemuxerStream::Type type) {
   switch (type) {
     case DemuxerStream::AUDIO:
       if (audio_)
