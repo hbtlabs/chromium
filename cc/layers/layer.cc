@@ -1120,7 +1120,6 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   bool use_paint_properties = paint_properties_.source_frame_number ==
                               layer_tree_host_->source_frame_number();
 
-  layer->SetTransformOrigin(transform_origin_);
   layer->SetBackgroundColor(background_color_);
   layer->SetSafeOpaqueBackgroundColor(safe_opaque_background_color_);
   layer->SetBounds(use_paint_properties ? paint_properties_.bounds
@@ -1468,7 +1467,7 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
 
   RectToProto(update_rect_, base->mutable_update_rect());
 
-  // TODO(nyquist): Figure out what to do with LayerAnimationController.
+  // TODO(nyquist): Figure out what to do with ElementAnimations.
   // See crbug.com/570376.
 
   update_rect_ = gfx::Rect();

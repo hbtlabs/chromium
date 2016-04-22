@@ -32,7 +32,7 @@
 #define InspectorBaseAgent_h
 
 #include "core/CoreExport.h"
-#include "core/inspector/InstrumentingAgents.h"
+#include "core/InstrumentingAgents.h"
 #include "platform/heap/Handle.h"
 #include "platform/inspector_protocol/Backend.h"
 #include "platform/inspector_protocol/Dispatcher.h"
@@ -56,7 +56,6 @@ public:
 
     virtual void disable(ErrorString*) { }
     virtual void restore() { }
-    virtual void discardAgent() { }
     virtual void didCommitLoadForLocalFrame(LocalFrame*) { }
     virtual void flushPendingProtocolNotifications() { }
 
@@ -90,7 +89,6 @@ public:
         m_frontend = nullptr;
         m_state = nullptr;
         m_instrumentingAgents = nullptr;
-        discardAgent();
     }
 
     DEFINE_INLINE_VIRTUAL_TRACE()

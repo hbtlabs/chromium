@@ -337,6 +337,7 @@ class NET_EXPORT_PRIVATE SpdyFramer {
     SPDY_COMPRESS_FAILURE,             // There was an error compressing.
     SPDY_GOAWAY_FRAME_CORRUPT,         // GOAWAY frame could not be parsed.
     SPDY_RST_STREAM_FRAME_CORRUPT,     // RST_STREAM frame could not be parsed.
+    SPDY_INVALID_PADDING,              // HEADERS or DATA frame padding invalid
     SPDY_INVALID_DATA_FRAME_FLAGS,     // Data frame has invalid flags.
     SPDY_INVALID_CONTROL_FRAME_FLAGS,  // Control frame has invalid flags.
     SPDY_UNEXPECTED_FRAME,             // Frame received out of order.
@@ -709,10 +710,11 @@ class NET_EXPORT_PRIVATE SpdyFramer {
   // frame data is streamed to the visitor.
   static const size_t kControlFrameBufferSize;
 
-  // The maximum size of the control frames that we support.
-  // This limit is arbitrary. We can enforce it here or at the application
-  // layer. We chose the framing layer, but this can be changed (or removed)
-  // if necessary later down the line.
+  // The maximum size of the control frames that we send, including the size of
+  // the header. This limit is arbitrary. We can enforce it here or at the
+  // application layer. We chose the framing layer, but this can be changed (or
+  // removed) if necessary later down the line.
+  // TODO(diannahu): Rename to make it clear that this limit is for sending.
   static const size_t kMaxControlFrameSize;
 
   SpdyState state_;

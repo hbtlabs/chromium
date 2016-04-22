@@ -114,7 +114,6 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/SubstituteData.h"
-#include "core/frame/Console.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
@@ -302,8 +301,7 @@ public:
         if (!frame()->document() || !frame()->document()->layoutView())
             return 0;
 
-        // TODO(crbug.com/603230): Synchronized painting is unnecessary in this lifecycle update.
-        frame()->view()->updateAllLifecyclePhases();
+        frame()->view()->updateAllLifecyclePhasesExceptPaint();
         if (!frame()->document() || !frame()->document()->layoutView())
             return 0;
 
@@ -322,8 +320,7 @@ public:
         if (!frame()->document() || !frame()->document()->layoutView())
             return;
 
-        // TODO(crbug.com/603230): Synchronized painting is unnecessary in this lifecycle update.
-        frame()->view()->updateAllLifecyclePhases();
+        frame()->view()->updateAllLifecyclePhasesExceptPaint();
         if (!frame()->document() || !frame()->document()->layoutView())
             return;
 

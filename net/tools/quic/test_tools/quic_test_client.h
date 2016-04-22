@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -22,6 +23,8 @@
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_client.h"
 #include "net/tools/quic/test_tools/simple_client.h"
+
+using base::StringPiece;
 
 namespace net {
 

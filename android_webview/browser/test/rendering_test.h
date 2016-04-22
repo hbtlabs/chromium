@@ -29,6 +29,8 @@ class TestSynchronousCompositor;
 namespace android_webview {
 
 class BrowserViewRenderer;
+class CompositorFrameConsumer;
+class CompositorFrameProducer;
 class FakeWindow;
 struct ParentCompositorDrawConstraints;
 
@@ -51,8 +53,7 @@ class RenderingTest : public testing::Test,
                      const gfx::Vector2dF& overscroll_velocity) override {}
 
   // RenderThreadManagerClient overrides.
-  void OnParentDrawConstraintsUpdated() override;
-  bool RequestDrawGL(bool wait_for_completion) override;
+  bool RequestInvokeGL(bool wait_for_completion) override;
   void DetachFunctorFromView() override;
 
   // WindowHooks overrides.
@@ -66,10 +67,15 @@ class RenderingTest : public testing::Test,
                     AwDrawGLInfo* draw_info) override;
   void DidDrawOnRT(RenderThreadManager* functor) override {}
 
+  virtual void OnParentDrawConstraintsUpdated() {}
+
  protected:
 
   RenderingTest();
   ~RenderingTest() override;
+
+  CompositorFrameConsumer* GetCompositorFrameConsumer();
+  CompositorFrameProducer* GetCompositorFrameProducer();
 
   virtual void SetUpTestHarness();
   virtual void StartTest();

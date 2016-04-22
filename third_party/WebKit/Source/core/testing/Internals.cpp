@@ -97,7 +97,6 @@
 #include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstanceCounters.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTreeAsText.h"
@@ -2547,11 +2546,6 @@ bool Internals::setScrollbarVisibilityInScrollableArea(Node* node, bool visible)
     if (ScrollableArea* scrollableArea = scrollableAreaForNode(node))
         return scrollableArea->scrollAnimator().setScrollbarsVisibleForTesting(visible);
     return false;
-}
-
-void Internals::forceRestrictIFramePermissions()
-{
-    RuntimeEnabledFeatures::setRestrictIFramePermissionsEnabled(true);
 }
 
 double Internals::monotonicTimeToZeroBasedDocumentTime(double platformTime, ExceptionState& exceptionState)

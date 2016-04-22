@@ -1933,8 +1933,6 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
     case CSSPropertyOpacity:
         return cssValuePool().createValue(style.opacity(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyOrphans:
-        if (style.hasAutoOrphans())
-            return cssValuePool().createIdentifierValue(CSSValueAuto);
         return cssValuePool().createValue(style.orphans(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyOutlineColor:
         return allowVisitedStyle ? cssValuePool().createColorValue(style.visitedDependentColor(CSSPropertyOutlineColor).rgb()) : currentColorOrValidColor(style, style.outlineColor());
@@ -2806,6 +2804,8 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
             return cssValuePool().createIdentifierValue(CSSValueNone);
         if (style.contain() == ContainsStrict)
             return cssValuePool().createIdentifierValue(CSSValueStrict);
+        if (style.contain() == ContainsContent)
+            return cssValuePool().createIdentifierValue(CSSValueContent);
 
         CSSValueList* list = CSSValueList::createSpaceSeparated();
         if (style.containsStyle())
@@ -2814,6 +2814,8 @@ CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, const Comp
             list->append(cssValuePool().createIdentifierValue(CSSValueLayout));
         if (style.containsPaint())
             list->append(cssValuePool().createIdentifierValue(CSSValuePaint));
+        if (style.containsSize())
+            list->append(cssValuePool().createIdentifierValue(CSSValueSize));
         ASSERT(list->length());
         return list;
     }

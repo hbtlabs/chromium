@@ -47,7 +47,6 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorTraceEvents.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -380,7 +379,11 @@ void FrameFetchContext::willStartLoadingResource(Resource* resource, ResourceReq
 {
     TRACE_EVENT_ASYNC_BEGIN1("blink.net", "Resource", resource, "data", loadResourceTraceData(resource->identifier(), resource->url(), resource->resourceRequest().priority()));
 
-    if (m_documentLoader)
+    if (!m_documentLoader)
+        return;
+    if (resource->getType() == Resource::MainResource)
+        m_documentLoader->applicationCacheHost()->willStartLoadingMainResource(request);
+    else
         m_documentLoader->applicationCacheHost()->willStartLoadingResource(request);
 }
 
@@ -446,11 +449,8 @@ bool FrameFetchContext::allowResponse(Resource::Type type, const ResourceRequest
 
 ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Type type, const ResourceRequest& resourceRequest, const KURL& url, const ResourceLoaderOptions& options, bool forPreload, FetchRequest::OriginRestriction originRestriction, ContentSecurityPolicy::RedirectStatus redirectStatus) const
 {
-    InstrumentingAgents* agents = InspectorInstrumentation::instrumentingAgentsFor(frame());
-    if (agents && agents->inspectorResourceAgent()) {
-        if (agents->inspectorResourceAgent()->shouldBlockRequest(resourceRequest))
-            return ResourceRequestBlockedReasonInspector;
-    }
+    if (InspectorInstrumentation::shouldBlockRequest(frame(), resourceRequest))
+        return ResourceRequestBlockedReasonInspector;
 
     SecurityOrigin* securityOrigin = options.securityOrigin.get();
     if (!securityOrigin && m_document)

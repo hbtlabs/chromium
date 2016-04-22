@@ -632,7 +632,6 @@ public:
         V8SVGFEConvolveMatrixElement_PreserveAlpha_AttributeGetter = 791,
         V8SVGStyleElement_Disabled_AttributeGetter = 798,
         V8SVGStyleElement_Disabled_AttributeSetter = 799,
-        ElementCreateShadowRootMultipleWithUserAgentShadowRoot = 800,
         InputTypeFileSecureOrigin = 801,
         InputTypeFileInsecureOrigin = 802,
         ElementAttachShadow = 804,
@@ -1126,6 +1125,17 @@ public:
         V8Node_IsConnected_AttributeGetter = 1307,
         ShadowRootDelegatesFocus = 1308,
         MixedShadowRootV0AndV1 = 1309,
+        ImageDocumentInFrame = 1310,
+        MediaDocument = 1311,
+        MediaDocumentInFrame = 1312,
+        PluginDocument = 1313,
+        PluginDocumentInFrame = 1314,
+        SinkDocument = 1315,
+        SinkDocumentInFrame = 1316,
+        TextDocument = 1317,
+        TextDocumentInFrame = 1318,
+        ViewSourceDocument = 1319,
+        FileAPINativeLineEndings = 1320,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

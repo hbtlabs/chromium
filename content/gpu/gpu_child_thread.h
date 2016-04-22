@@ -64,13 +64,11 @@ class GpuChildThread : public ChildThreadImpl,
                  bool dead_on_arrival,
                  const gpu::GPUInfo& gpu_info,
                  const DeferredMessages& deferred_messages,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                 gpu::SyncPointManager* sync_point_manager);
+                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
   GpuChildThread(const gpu::GpuPreferences& gpu_preferences,
                  const InProcessChildThreadParams& params,
-                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                 gpu::SyncPointManager* sync_point_manager);
+                 gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory);
 
   ~GpuChildThread() override;
 
@@ -89,7 +87,6 @@ class GpuChildThread : public ChildThreadImpl,
 
   // gpu::GpuChannelManagerDelegate implementation.
   void SetActiveURL(const GURL& url) override;
-  void AddSubscription(int32_t client_id, unsigned int target) override;
   void DidCreateOffscreenContext(const GURL& active_url) override;
   void DidDestroyChannel(int client_id) override;
   void DidDestroyOffscreenContext(const GURL& active_url) override;
@@ -97,7 +94,6 @@ class GpuChildThread : public ChildThreadImpl,
                       gpu::error::ContextLostReason reason,
                       const GURL& active_url) override;
   void GpuMemoryUmaStats(const gpu::GPUMemoryUmaStats& params) override;
-  void RemoveSubscription(int32_t client_id, unsigned int target) override;
 #if defined(OS_MACOSX)
   void SendAcceleratedSurfaceBuffersSwapped(
       int32_t surface_id,
@@ -138,9 +134,6 @@ class GpuChildThread : public ChildThreadImpl,
   void OnDestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                 int client_id,
                                 const gpu::SyncToken& sync_token);
-  void OnUpdateValueState(int client_id,
-                          unsigned int target,
-                          const gpu::ValueState& state);
 #if defined(OS_ANDROID)
   void OnWakeUpGpu();
 #endif
@@ -162,8 +155,8 @@ class GpuChildThread : public ChildThreadImpl,
   sandbox::TargetServices* target_services_;
 #endif
 
-  // Non-owning.
-  gpu::SyncPointManager* sync_point_manager_;
+  // Can be null if overridden by ContentGpuClient.
+  std::unique_ptr<gpu::SyncPointManager> owned_sync_point_manager_;
 
   std::unique_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
 

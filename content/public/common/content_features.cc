@@ -82,8 +82,8 @@ const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // An experimental User Agent Intervention on WebFonts loading.
-const base::Feature kWebFontsIntervention{"WebFontsIntervention",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kWebFontsInterventionV2{"WebFontsInterventionV2",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Makes WebRTC use ECDSA certs by default (i.e., when no cert type was
 // specified in JS).

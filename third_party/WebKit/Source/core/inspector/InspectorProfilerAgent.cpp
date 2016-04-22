@@ -32,7 +32,6 @@
 #include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/frame/UseCounter.h"
-#include "core/inspector/InstrumentingAgents.h"
 #include "platform/v8_inspector/public/V8ProfilerAgent.h"
 
 namespace blink {
@@ -78,18 +77,6 @@ void InspectorProfilerAgent::restore()
     m_v8ProfilerAgent->restore();
     ErrorString errorString;
     enable(&errorString);
-}
-
-// Protocol implementation.
-void InspectorProfilerAgent::consoleProfile(ExecutionContext* context, const String16& title)
-{
-    UseCounter::count(context, UseCounter::DevToolsConsoleProfile);
-    m_v8ProfilerAgent->consoleProfile(title);
-}
-
-void InspectorProfilerAgent::consoleProfileEnd(const String16& title)
-{
-    m_v8ProfilerAgent->consoleProfileEnd(title);
 }
 
 void InspectorProfilerAgent::enable(ErrorString* errorString)

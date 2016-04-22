@@ -1,10 +1,11 @@
 <!doctype html>
-<html i18n-values="dir:textdirection;lang:language">
+<html dir="$i18n{textdirection}" lang="$i18n{language}">
 <head>
   <meta charset="utf8">
   <title>$i18n{title}</title>
 
   <link rel="stylesheet" href="chrome://resources/css/text_defaults_md.css">
+  <link rel="stylesheet" href="chrome://resources/css/md_colors.css">
 
   <style>
     html,
@@ -14,7 +15,7 @@
     }
 
     body {
-      background: #f2f2f2;
+      background: var(--md-background-color);
       display: flex;
       flex-direction: column;
       min-width: 800px;
@@ -54,11 +55,15 @@
     .loading #loading-toolbar {
       -webkit-padding-start: 24px;
       align-items: center;
-      background: rgb(63, 85, 102);
       color: #fff;
       flex-direction: row;
       font-weight: 400;
       height: 56px;
+    }
+
+    history-toolbar,
+    .loading #loading-toolbar {
+      background: var(--md-toolbar-color);
     }
 
     .loading #loading-message {
@@ -73,6 +78,7 @@
 
 <body class="loading">
   <history-toolbar class="paper-header" id="toolbar"></history-toolbar>
+
   <div id="main-container">
     <history-side-bar id="history-side-bar"></history-side-bar>
     <history-list id="history-list"></history-list>
@@ -91,13 +97,6 @@
   <script src="history.js"></script>
 
   <link rel="import" href="chrome://history/elements.html" async id="bundle">
-
-  <!--
-    Prepare strings and perform i18n substitutions.
-    TODO(tsergeant): Remove once we are fully converted to
-    ReplaceTemplateExpressions. It is currently only used for the <html> tag.
-  -->
-  <link rel="import" href="chrome://resources/html/i18n_template.html" async>
 </body>
 
 </html>

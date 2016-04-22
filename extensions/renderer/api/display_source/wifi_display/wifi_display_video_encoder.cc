@@ -4,33 +4,43 @@
 
 #include "extensions/renderer/api/display_source/wifi_display/wifi_display_video_encoder.h"
 
-#include "media/base/bind_to_current_loop.h"
+#include "base/logging.h"
 
 namespace extensions {
-
-using InitParameters = WiFiDisplayVideoEncoder::InitParameters;
-using VideoEncoderCallback = WiFiDisplayVideoEncoder::VideoEncoderCallback;
 
 WiFiDisplayVideoEncoder::InitParameters::InitParameters() = default;
 WiFiDisplayVideoEncoder::InitParameters::InitParameters(const InitParameters&) =
     default;
 WiFiDisplayVideoEncoder::InitParameters::~InitParameters() = default;
 
-WiFiDisplayVideoEncoder::WiFiDisplayVideoEncoder() = default;
-WiFiDisplayVideoEncoder::~WiFiDisplayVideoEncoder() = default;
-
-void WiFiDisplayVideoEncoder::SetCallbacks(
-    const EncodedFrameCallback& encoded_callback,
-    const base::Closure& error_callback) {
-  encoded_callback_ = media::BindToCurrentLoop(encoded_callback);
-  error_callback_ = media::BindToCurrentLoop(error_callback);
+WiFiDisplayVideoEncoder::WiFiDisplayVideoEncoder(
+    scoped_refptr<base::SingleThreadTaskRunner> media_task_runner)
+    : media_task_runner_(std::move(media_task_runner)), send_idr_(false) {
+  DCHECK(media_task_runner_);
 }
 
+WiFiDisplayVideoEncoder::~WiFiDisplayVideoEncoder() = default;
+
+// static
 void WiFiDisplayVideoEncoder::Create(
     const InitParameters& params,
     const VideoEncoderCallback& encoder_callback) {
   NOTIMPLEMENTED();
   encoder_callback.Run(nullptr);
+}
+
+void WiFiDisplayVideoEncoder::InsertRawVideoFrame(
+    const scoped_refptr<media::VideoFrame>& video_frame,
+    base::TimeTicks reference_time) {
+  DCHECK(!encoded_callback_.is_null());
+  media_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&WiFiDisplayVideoEncoder::InsertFrameOnMediaThread,
+                            this, video_frame, reference_time, send_idr_));
+  send_idr_ = false;
+}
+
+void WiFiDisplayVideoEncoder::RequestIDRPicture() {
+  send_idr_ = true;
 }
 
 }  // namespace extensions

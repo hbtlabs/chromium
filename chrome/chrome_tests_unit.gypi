@@ -454,6 +454,7 @@
       'browser/extensions/api/permissions/permissions_api_helpers_unittest.cc',
       'browser/extensions/api/preference/preference_api_prefs_unittest.cc',
       'browser/extensions/api/proxy/proxy_api_helpers_unittest.cc',
+      'browser/extensions/api/runtime/chrome_runtime_api_delegate_unittest.cc',
       'browser/extensions/api/signed_in_devices/id_mapping_helper_unittest.cc',
       'browser/extensions/api/signed_in_devices/signed_in_devices_api_unittest.cc',
       'browser/extensions/api/signed_in_devices/signed_in_devices_manager_unittest.cc',
@@ -1051,6 +1052,7 @@
       'browser/chromeos/net/client_cert_store_chromeos_unittest.cc',
       'browser/chromeos/net/network_portal_detector_impl_unittest.cc',
       'browser/chromeos/net/network_portal_notification_controller_unittest.cc',
+      'browser/chromeos/net/wake_on_wifi_manager_unittest.cc',
       'browser/chromeos/options/network_property_ui_data_unittest.cc',
       'browser/chromeos/ownership/fake_owner_settings_service.cc',
       'browser/chromeos/ownership/fake_owner_settings_service.h',
@@ -1603,6 +1605,7 @@
       'browser/signin/cross_device_promo_unittest.cc',
       'browser/signin/signin_global_error_unittest.cc',
       'browser/sync/sync_global_error_unittest.cc',
+      'browser/ui/webui/signin/signin_create_profile_handler_unittest.cc',
       'browser/ui/webui/signin/signin_supervised_user_import_handler_unittest.cc',
       'browser/ui/webui/signin/sync_confirmation_handler_unittest.cc',
       'browser/upgrade_detector_impl_unittest.cc',
@@ -2077,7 +2080,7 @@
             '../win8/win8.gyp:test_support_win8',
           ],
           'sources': [
-            'app/chrome_crash_reporter_client.cc',
+            'app/chrome_crash_reporter_client_win.cc',
           ],
         }],
         ['OS=="win" or OS=="mac"', {

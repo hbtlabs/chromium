@@ -20,6 +20,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "base/pending_task.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
@@ -169,6 +170,10 @@
 #include "content/browser/plugin_service_impl.h"
 #endif
 
+#if defined(ENABLE_MOJO_CDM) && defined(ENABLE_PEPPER_CDMS)
+#include "content/browser/media/cdm_service_impl.h"
+#endif
+
 #if defined(USE_X11)
 #include "ui/base/x/x11_util_internal.h"
 #include "ui/gfx/x/x11_connection.h"  // nogncheck
@@ -183,6 +188,10 @@
 #if defined(MOJO_SHELL_CLIENT)
 #include "services/shell/public/cpp/connector.h"
 #include "ui/views/mus/window_manager_connection.h"
+#endif
+
+#if defined(ENABLE_VULKAN)
+#include "gpu/vulkan/vulkan_implementation.h"
 #endif
 
 // One of the linux specific headers defines this as a macro.
@@ -586,6 +595,11 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
             base::ThreadTaskRunnerHandle::Get()));
   }
 
+  {
+    base::SetRecordActionTaskRunner(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI));
+  }
+
 #if defined(OS_WIN)
   if (base::win::GetVersion() >= base::win::VERSION_WIN8)
     screen_orientation_delegate_.reset(new ScreenOrientationDelegateWin());
@@ -731,6 +745,13 @@ int BrowserMainLoop::PreCreateThreads() {
     TRACE_EVENT0("startup", "BrowserMainLoop::CreateThreads:PluginService");
     PluginService::GetInstance()->Init();
   }
+#endif
+
+#if defined(ENABLE_MOJO_CDM) && defined(ENABLE_PEPPER_CDMS)
+  // Prior to any processing happening on the IO thread, we create the
+  // CDM service as it is predominantly used from the IO thread. This must
+  // be called on the main thread since it involves file path checks.
+  CdmService::GetInstance()->Init();
 #endif
 
 #if defined(OS_MACOSX)
@@ -1186,6 +1207,13 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   // Up the priority of the UI thread.
   base::PlatformThread::SetCurrentThreadPriority(base::ThreadPriority::DISPLAY);
+#endif
+
+#if defined(ENABLE_VULKAN)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableVulkan)) {
+    gpu::InitializeVulkan();
+  }
 #endif
 
   bool always_uses_gpu = true;

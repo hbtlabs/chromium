@@ -27,7 +27,6 @@ namespace gpu {
 
 struct GpuPreferences;
 class TransferBufferManager;
-class ValueStateMap;
 
 namespace gles2 {
 
@@ -42,8 +41,6 @@ class ProgramManager;
 class SamplerManager;
 class ShaderManager;
 class TextureManager;
-class SubscriptionRefSet;
-class ValuebufferManager;
 class MemoryTracker;
 struct DisallowedFeatures;
 
@@ -59,8 +56,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
       const scoped_refptr<FramebufferCompletenessCache>&
           framebuffer_completeness_cache,
       const scoped_refptr<FeatureInfo>& feature_info,
-      const scoped_refptr<SubscriptionRefSet>& subscription_ref_set,
-      const scoped_refptr<ValueStateMap>& pending_valuebuffer_state,
       bool bind_generates_resource);
 
   // This should only be called by GLES2Decoder. This must be paired with a
@@ -134,6 +129,18 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
 
   int32_t max_program_texel_offset() const { return max_program_texel_offset_; }
 
+  uint32_t max_transform_feedback_separate_attribs() const {
+    return max_transform_feedback_separate_attribs_;
+  }
+
+  uint32_t max_uniform_buffer_bindings() const {
+    return max_uniform_buffer_bindings_;
+  }
+
+  uint32_t uniform_buffer_offset_alignment() const {
+    return uniform_buffer_offset_alignment_;
+  }
+
   FeatureInfo* feature_info() {
     return feature_info_.get();
   }
@@ -152,14 +159,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
 
   RenderbufferManager* renderbuffer_manager() const {
     return renderbuffer_manager_.get();
-  }
-
-  ValuebufferManager* valuebuffer_manager() const {
-    return valuebuffer_manager_.get();
-  }
-
-  ValueStateMap* pending_valuebuffer_state() const {
-    return pending_valuebuffer_state_.get();
   }
 
   TextureManager* texture_manager() const {
@@ -258,8 +257,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   scoped_refptr<ShaderTranslatorCache> shader_translator_cache_;
   scoped_refptr<FramebufferCompletenessCache> framebuffer_completeness_cache_;
   scoped_refptr<TransferBufferManager> transfer_buffer_manager_;
-  scoped_refptr<SubscriptionRefSet> subscription_ref_set_;
-  scoped_refptr<ValueStateMap> pending_valuebuffer_state_;
 
   bool enforce_gl_minimums_;
   bool bind_generates_resource_;
@@ -280,6 +277,10 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   int32_t min_program_texel_offset_;
   int32_t max_program_texel_offset_;
 
+  uint32_t max_transform_feedback_separate_attribs_;
+  uint32_t max_uniform_buffer_bindings_;
+  uint32_t uniform_buffer_offset_alignment_;
+
   ProgramCache* program_cache_;
 
   std::unique_ptr<BufferManager> buffer_manager_;
@@ -297,8 +298,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   std::unique_ptr<ShaderManager> shader_manager_;
 
   std::unique_ptr<SamplerManager> sampler_manager_;
-
-  std::unique_ptr<ValuebufferManager> valuebuffer_manager_;
 
   scoped_refptr<FeatureInfo> feature_info_;
 

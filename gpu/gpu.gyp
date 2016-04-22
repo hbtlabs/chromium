@@ -237,7 +237,6 @@
         'command_buffer/service/gles2_cmd_decoder_unittest_framebuffers.cc',
         'command_buffer/service/gles2_cmd_decoder_unittest_programs.cc',
         'command_buffer/service/gles2_cmd_decoder_unittest_textures.cc',
-        'command_buffer/service/gles2_cmd_decoder_unittest_valuebuffer.cc',
         'command_buffer/service/gpu_service_test.cc',
         'command_buffer/service/gpu_service_test.h',
         'command_buffer/service/gpu_tracer_unittest.cc',
@@ -259,7 +258,6 @@
         'command_buffer/service/test_helper.h',
         'command_buffer/service/texture_manager_unittest.cc',
         'command_buffer/service/transfer_buffer_manager_unittest.cc',
-        'command_buffer/service/valuebuffer_manager_unittest.cc',
         'command_buffer/service/vertex_array_manager_unittest.cc',
         'command_buffer/service/vertex_attrib_manager_unittest.cc',
         'config/gpu_blacklist_unittest.cc',
@@ -341,16 +339,8 @@
         }],
         ['OS == "mac"', {
           'sources': [
-            'ipc/service/ca_layer_tree_unittest_mac.mm',
             'ipc/service/gpu_memory_buffer_factory_io_surface_unittest.cc',
           ],
-          'link_settings': {
-            'libraries': [
-              '$(SDKROOT)/System/Library/Frameworks/CoreMedia.framework',
-              '$(SDKROOT)/System/Library/Frameworks/AVFoundation.framework',
-              '$(SDKROOT)/System/Library/Frameworks/QuartzCore.framework',
-            ],
-          },
         }],
         ['use_ozone == 1', {
           'sources': [

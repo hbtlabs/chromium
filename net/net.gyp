@@ -208,10 +208,6 @@
           ],
         }],
         [ 'OS == "android"', {
-          'sources!': [
-            # See bug http://crbug.com/344533.
-            'disk_cache/blockfile/index_table_v3_unittest.cc',
-          ],
           'dependencies': [
             'net_javatests',
           ],
@@ -375,18 +371,8 @@
                 'action_name': 'copy_test_data',
                 'variables': {
                   'test_data_files': [
-                    'data/certificate_policies_unittest/',
-                    'data/name_constraints_unittest/',
-                    'data/parse_certificate_unittest/',
-                    'data/parse_ocsp_unittest/',
-                    'data/ssl/certificates/',
-                    'data/test.html',
-                    'data/url_request_unittest/',
-                    'data/verify_certificate_chain_unittest/',
-                    'data/verify_name_match_unittest/names/',
-                    'data/verify_signed_data_unittest/',
-                    'third_party/nist-pkits/certs/',
-                    'third_party/nist-pkits/crls/',
+                    '<@(net_test_support_data_sources)',
+                    '<@(net_unittests_data_sources)',
                   ],
                   'test_data_prefix': 'net',
                 },
@@ -419,9 +405,6 @@
               # OS is not "linux" or "freebsd" or "openbsd".
               'socket/unix_domain_client_socket_posix_unittest.cc',
               'socket/unix_domain_server_socket_posix_unittest.cc',
-
-              # See bug http://crbug.com/344533.
-              'disk_cache/blockfile/index_table_v3_unittest.cc',
             ],
         }],
         ['OS == "android"', {
@@ -1311,6 +1294,8 @@
             'tools/quic/quic_client.h',
             'tools/quic/quic_default_packet_writer.cc',
             'tools/quic/quic_default_packet_writer.h',
+            'tools/quic/quic_epoll_alarm_factory.cc',
+            'tools/quic/quic_epoll_alarm_factory.h',
             'tools/quic/quic_epoll_clock.cc',
             'tools/quic/quic_epoll_clock.h',
             'tools/quic/quic_epoll_connection_helper.cc',

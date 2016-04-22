@@ -2050,7 +2050,6 @@ TEST_F(WebViewTest, DispatchesDomFocusOutDomFocusInOnViewToggleFocus)
     EXPECT_STREQ("DOMFocusOutDOMFocusIn", element.textContent().utf8().data());
 }
 
-#if !ENABLE(INPUT_MULTIPLE_FIELDS_UI)
 static void openDateTimeChooser(WebView* webView, HTMLInputElement* inputElement)
 {
     inputElement->focus();
@@ -2073,6 +2072,8 @@ static void openDateTimeChooser(WebView* webView, HTMLInputElement* inputElement
 #endif
 TEST_F(WebViewTest, MAYBE_ChooseValueFromDateTimeChooser)
 {
+    bool originalMultipleFieldsFlag = RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled();
+    RuntimeEnabledFeatures::setInputMultipleFieldsUIEnabled(false);
     DateTimeChooserWebViewClient client;
     std::string url = m_baseURL + "date_time_chooser.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "date_time_chooser.html");
@@ -2140,8 +2141,8 @@ TEST_F(WebViewTest, MAYBE_ChooseValueFromDateTimeChooser)
     // Clear the WebViewClient from the webViewHelper to avoid use-after-free in the
     // WebViewHelper destructor.
     m_webViewHelper.reset();
+    RuntimeEnabledFeatures::setInputMultipleFieldsUIEnabled(originalMultipleFieldsFlag);
 }
-#endif
 
 TEST_F(WebViewTest, DispatchesFocusBlurOnViewToggle)
 {
@@ -2165,16 +2166,16 @@ TEST_F(WebViewTest, SmartClipData)
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
         "normal; font-variant: normal; font-weight: normal; letter-spacing: "
-        "normal; line-height: normal; orphans: auto; text-align: start; "
+        "normal; line-height: normal; orphans: 2; text-align: start; "
         "text-indent: 0px; text-transform: none; white-space: normal; widows: "
-        "1; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
+        "2; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
         "conditioner</div><div id=\"div5\" style=\"padding: 10px; margin: "
         "10px; border: 2px solid skyblue; float: left; width: "
         "190px; height: 30px; color: rgb(0, 0, 0); font-family: myahem; "
         "font-size: 8px; font-style: normal; font-variant: normal; "
         "font-weight: normal; letter-spacing: normal; line-height: normal; "
-        "orphans: auto; text-align: start; text-indent: 0px; text-transform: "
-        "none; white-space: normal; widows: 1; word-spacing: 0px; "
+        "orphans: 2; text-align: start; text-indent: 0px; text-transform: "
+        "none; white-space: normal; widows: 2; word-spacing: 0px; "
         "-webkit-text-stroke-width: 0px;\">Price 10,000,000won</div>";
     WebString clipText;
     WebString clipHtml;
@@ -2198,16 +2199,16 @@ TEST_F(WebViewTest, SmartClipDataWithPinchZoom)
         "solid skyblue; float: left; width: 190px; height: 30px; "
         "color: rgb(0, 0, 0); font-family: myahem; font-size: 8px; font-style: "
         "normal; font-variant: normal; font-weight: normal; letter-spacing: "
-        "normal; line-height: normal; orphans: auto; text-align: start; "
+        "normal; line-height: normal; orphans: 2; text-align: start; "
         "text-indent: 0px; text-transform: none; white-space: normal; widows: "
-        "1; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
+        "2; word-spacing: 0px; -webkit-text-stroke-width: 0px;\">Air "
         "conditioner</div><div id=\"div5\" style=\"padding: 10px; margin: "
         "10px; border: 2px solid skyblue; float: left; width: "
         "190px; height: 30px; color: rgb(0, 0, 0); font-family: myahem; "
         "font-size: 8px; font-style: normal; font-variant: normal; "
         "font-weight: normal; letter-spacing: normal; line-height: normal; "
-        "orphans: auto; text-align: start; text-indent: 0px; text-transform: "
-        "none; white-space: normal; widows: 1; word-spacing: 0px; "
+        "orphans: 2; text-align: start; text-indent: 0px; text-transform: "
+        "none; white-space: normal; widows: 2; word-spacing: 0px; "
         "-webkit-text-stroke-width: 0px;\">Price 10,000,000won</div>";
     WebString clipText;
     WebString clipHtml;

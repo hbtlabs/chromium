@@ -34,6 +34,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.content_public.common.MediaMetadata;
 
 import javax.annotation.Nullable;
 
@@ -553,8 +554,10 @@ public class MediaNotificationManager {
         // TODO(avayvod) work out what we should do in this case. See https://crbug.com/585395.
         if (mMediaNotificationInfo.contentIntent != null) {
             mNotificationBuilder.setContentIntent(PendingIntent.getActivity(mContext,
-                    mMediaNotificationInfo.tabId,
-                    mMediaNotificationInfo.contentIntent, 0));
+                    mMediaNotificationInfo.tabId, mMediaNotificationInfo.contentIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT));
+            // Set FLAG_UPDATE_CURRENT so that the intent extras is updated, otherwise the
+            // intent extras will stay the same for the same tab.
         }
 
         mNotificationBuilder.setVisibility(
@@ -637,10 +640,7 @@ public class MediaNotificationManager {
     }
 
     private void setMediaStyleLayoutForNotificationBuilder(NotificationCompat.Builder builder) {
-        // TODO(zqzhang): After we ship the new style, we should see how to present the
-        // metadata.artist and metadata.album. See http://crbug.com/599937
-        builder.setContentTitle(mMediaNotificationInfo.metadata.getTitle());
-        builder.setContentText(mMediaNotificationInfo.origin);
+        setMediaStyleNotificationText(builder);
         // TODO(zqzhang): Update the default icon when a new one in provided.
         // See http://crbug.com/600396.
         if (mMediaNotificationInfo.largeIcon != null) {
@@ -759,5 +759,27 @@ public class MediaNotificationManager {
 
         BitmapDrawable bitmapDrawable = (BitmapDrawable) drawable;
         return bitmapDrawable.getBitmap();
+    }
+
+    private void setMediaStyleNotificationText(NotificationCompat.Builder builder) {
+        builder.setContentTitle(mMediaNotificationInfo.metadata.getTitle());
+        String artistAndAlbumText = getArtistAndAlbumText(mMediaNotificationInfo.metadata);
+        // TODO(zqzhang): update this when N is released.
+        if (TextUtils.equals(Build.VERSION.CODENAME, "N") || !artistAndAlbumText.isEmpty()) {
+            builder.setContentText(artistAndAlbumText);
+            builder.setSubText(mMediaNotificationInfo.origin);
+        } else {
+            // Leaving ContentText empty looks bad, so move origin up to the ContentText.
+            builder.setContentText(mMediaNotificationInfo.origin);
+        }
+    }
+
+    private String getArtistAndAlbumText(MediaMetadata metadata) {
+        String artist = (metadata.getArtist() == null) ? "" : metadata.getArtist();
+        String album = (metadata.getAlbum() == null) ? "" : metadata.getAlbum();
+        if (artist.isEmpty() || album.isEmpty()) {
+            return artist + album;
+        }
+        return artist + " - " + album;
     }
 }

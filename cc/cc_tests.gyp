@@ -12,7 +12,6 @@
       'animation/animation_unittest.cc',
       'animation/element_animations_unittest.cc',
       'animation/keyframed_animation_curve_unittest.cc',
-      'animation/layer_animation_controller_unittest.cc',
       'animation/scroll_offset_animation_curve_unittest.cc',
       'animation/transform_operations_unittest.cc',
       'base/contiguous_container_unittest.cc',
@@ -424,6 +423,7 @@
         '../ui/gfx/gfx.gyp:gfx_test_support',
         '../ui/gl/gl.gyp:gl',
         '../ui/gl/gl.gyp:gl_test_support',
+        'cc.gyp:cc',
         'cc.gyp:cc_proto',
       ],
       'sources': [

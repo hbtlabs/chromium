@@ -40,6 +40,7 @@
 #include "net/quic/crypto/quic_random.h"
 #include "net/quic/crypto/quic_server_info.h"
 #include "net/quic/port_suggester.h"
+#include "net/quic/quic_chromium_alarm_factory.h"
 #include "net/quic/quic_chromium_client_session.h"
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_chromium_packet_reader.h"
@@ -757,7 +758,7 @@ void QuicStreamFactory::set_quic_server_info_factory(
 }
 
 bool QuicStreamFactory::CanUseExistingSession(const QuicServerId& server_id,
-                                              StringPiece origin_host) {
+                                              base::StringPiece origin_host) {
   // TODO(zhongyi): delete active_sessions_.empty() checks once the
   // android crash issue(crbug.com/498823) is resolved.
   if (active_sessions_.empty())
@@ -1546,17 +1547,21 @@ int QuicStreamFactory::CreateSession(
   }
 
   if (!helper_.get()) {
-    helper_.reset(new QuicChromiumConnectionHelper(
-        base::ThreadTaskRunnerHandle::Get().get(), clock_.get(),
-        random_generator_));
+    helper_.reset(
+        new QuicChromiumConnectionHelper(clock_.get(), random_generator_));
+  }
+
+  if (!alarm_factory_.get()) {
+    alarm_factory_.reset(new QuicChromiumAlarmFactory(
+        base::ThreadTaskRunnerHandle::Get().get(), clock_.get()));
   }
   QuicConnectionId connection_id = random_generator_->RandUint64();
   InitializeCachedStateInCryptoConfig(server_id, server_info, &connection_id);
 
   QuicChromiumPacketWriter* writer = new QuicChromiumPacketWriter(socket.get());
   QuicConnection* connection = new QuicConnection(
-      connection_id, addr, helper_.get(), writer, true /* owns_writer */,
-      Perspective::IS_CLIENT, supported_versions_);
+      connection_id, addr, helper_.get(), alarm_factory_.get(), writer,
+      true /* owns_writer */, Perspective::IS_CLIENT, supported_versions_);
   writer->SetConnection(connection);
   connection->SetMaxPacketLength(max_packet_length_);
 

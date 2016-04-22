@@ -1188,6 +1188,7 @@
       'browser/ui/views/tabs/tab_drag_controller_interactive_uitest.cc',
       'browser/ui/views/tabs/tab_drag_controller_interactive_uitest.h',
       'browser/ui/views/toolbar/toolbar_action_view_interactive_uitest.cc',
+      'browser/ui/views/toolbar/toolbar_button_interactive_uitest.cc',
       'browser/ui/views/toolbar/toolbar_view_interactive_uitest.cc',
       'browser/ui/views/translate/translate_bubble_test_utils_views.cc',
       'test/base/interactive_test_utils_views.cc',
@@ -2069,6 +2070,7 @@
         ['use_x11==1', {
           'dependencies': [
             '../build/linux/system.gyp:x11',
+            '../ui/events/keycodes/events_keycodes.gyp:keycodes_x11',
             '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
           ]
         }]

@@ -9,11 +9,13 @@
 
 #include "ash/ash_export.h"
 #include "ash/wm/common/workspace/workspace_types.h"
+#include "ui/views/widget/widget.h"
 
 namespace ash {
 namespace wm {
 
 class WmGlobals;
+class WmRootWindowControllerObserver;
 class WmWindow;
 
 // Provides state associated with a root of a window hierarchy.
@@ -31,6 +33,16 @@ class ASH_EXPORT WmRootWindowController {
 
   // Returns the window associated with this WmRootWindowController.
   virtual WmWindow* GetWindow() = 0;
+
+  // Configures |init_params| prior to initializing |widget|.
+  // |shell_container_id| is the id of the container to parent |widget| to.
+  virtual void ConfigureWidgetInitParamsForContainer(
+      views::Widget* widget,
+      int shell_container_id,
+      views::Widget::InitParams* init_params) = 0;
+
+  virtual void AddObserver(WmRootWindowControllerObserver* observer) = 0;
+  virtual void RemoveObserver(WmRootWindowControllerObserver* observer) = 0;
 };
 
 }  // namespace wm

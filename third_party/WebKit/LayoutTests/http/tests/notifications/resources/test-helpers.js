@@ -66,3 +66,50 @@ function getActiveServiceWorkerWithMessagePort(test, script, scope)
         });
     });
 }
+
+// Sends a message with |data| over |port|. Returns a promise that either rejects when a bad
+// response message is received, or otherwise resolves with the response data.
+function sendCommand(port, data)
+{
+    return new Promise((resolve, reject) => {
+        port.postMessage(data);
+        port.addEventListener('message', function listener(event) {
+            port.removeEventListener('message', listener);
+            if (typeof event.data != 'object' || !event.data.command) {
+                reject(new Error('Invalid message from the Service Worker.'));
+            } else {
+                resolve(event.data);
+            }
+        });
+    });
+}
+
+// Simulates a click on the notification whose title equals |title|. The |actionIndex| specifies
+// which action button to activate, where -1 means the notification itself is clicked, not an action
+// button.
+function simulateNotificationClick(title, actionIndex, port)
+{
+    return new Promise((resolve, reject) => {
+        testRunner.simulateWebNotificationClick(title, actionIndex);
+        port.addEventListener('message', function listener(event) {
+            port.removeEventListener('message', listener);
+            if (typeof event.data != 'object' || event.data.command != 'click') {
+                reject(new Error('Invalid message from the Service Worker.'));
+            } else {
+                resolve(event.data);
+            }
+        });
+    });
+}
+
+// Sets up a listener for events of |type| on |target|. The listener is removed the first time the
+// event fires. Returns a promise that resolves with the fired event.
+function listenOnce(target, type)
+{
+    return new Promise((resolve, reject) => {
+        target.addEventListener(type, function listener(event) {
+            target.removeEventListener(type, listener);
+            resolve(event);
+        });
+    });
+}

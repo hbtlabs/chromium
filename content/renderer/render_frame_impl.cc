@@ -756,7 +756,7 @@ bool IsContentWithCertificateErrorsRelevantToUI(
 // possible to load such a URL and find different content.
 bool UseWebMediaPlayerImpl(const GURL& url) {
   // WMPI does not support HLS.
-  if (media::MediaCodecUtil::IsHLSPath(url))
+  if (media::MediaCodecUtil::IsHLSURL(url))
     return false;
 
   // Don't use WMPI if the container likely contains a codec we can't decode in
@@ -766,6 +766,10 @@ bool UseWebMediaPlayerImpl(const GURL& url) {
       !media::HasPlatformDecoderSupport()) {
     return false;
   }
+
+  // Indicates if the Android MediaPlayer should be used instead of WMPI.
+  if (GetContentClient()->renderer()->ShouldUseMediaPlayerForURL(url))
+    return false;
 
   // Otherwise enable WMPI if indicated via experiment or command line.
   return media::IsUnifiedMediaPipelineEnabled();
@@ -1124,7 +1128,7 @@ void RenderFrameImpl::Initialize() {
 
 void RenderFrameImpl::InitializeBlameContext(RenderFrameImpl* parent_frame) {
   DCHECK(!blame_context_);
-  blame_context_ = base::WrapUnique(new FrameBlameContext(this, parent_frame));
+  blame_context_ = new FrameBlameContext(this, parent_frame);
   blame_context_->Initialize();
 }
 
@@ -2444,7 +2448,7 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
 
   scoped_refptr<media::MediaLog> media_log(new RenderMediaLog());
 #if defined(OS_ANDROID)
-  if (!media_surface_manager_)
+  if (UseWebMediaPlayerImpl(url) && !media_surface_manager_)
     media_surface_manager_ = new RendererSurfaceViewManager(this);
 #endif
   media::WebMediaPlayerParams params(
@@ -2460,8 +2464,7 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
       initial_cdm, media_surface_manager_, media_session);
 
 #if defined(OS_ANDROID)
-  if (GetContentClient()->renderer()->ShouldUseMediaPlayerForURL(url) ||
-      !UseWebMediaPlayerImpl(url)) {
+  if (!UseWebMediaPlayerImpl(url)) {
     return CreateAndroidWebMediaPlayer(client, encrypted_client, params);
   }
 #endif  // defined(OS_ANDROID)
@@ -2555,7 +2558,7 @@ blink::WebCookieJar* RenderFrameImpl::cookieJar() {
 
 blink::BlameContext* RenderFrameImpl::frameBlameContext() {
   DCHECK(blame_context_);
-  return blame_context_.get();
+  return blame_context_;
 }
 
 blink::WebServiceWorkerProvider*
@@ -4913,8 +4916,8 @@ void RenderFrameImpl::OnSerializeAsMHTML(
 
   // Generate MHTML parts.
   if (success) {
-    data = WebFrameSerializer::generateMHTMLParts(mhtml_boundary, GetWebFrame(),
-                                                  false, &delegate);
+    data = WebFrameSerializer::generateMHTMLParts(
+        mhtml_boundary, GetWebFrame(), params.mhtml_binary_encoding, &delegate);
     // TODO(jcivelli): write the chunks in deferred tasks to give a chance to
     //                 the message loop to process other events.
     if (file.WriteAtCurrentPos(data.data(), data.size()) < 0) {

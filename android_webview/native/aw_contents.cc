@@ -310,16 +310,12 @@ void AwContents::SetAwGLFunctor(AwGLFunctor* functor) {
   if (functor == functor_) {
     return;
   }
-  if (functor_) {
-    functor_->SetBrowserViewRenderer(nullptr);
-  }
   functor_ = functor;
   if (functor_) {
-    browser_view_renderer_.SetRenderThreadManager(
-        functor_->GetRenderThreadManager());
-    functor_->SetBrowserViewRenderer(&browser_view_renderer_);
+    browser_view_renderer_.SetCompositorFrameConsumer(
+        functor_->GetCompositorFrameConsumer());
   } else {
-    browser_view_renderer_.SetRenderThreadManager(nullptr);
+    browser_view_renderer_.SetCompositorFrameConsumer(nullptr);
   }
 }
 
@@ -411,6 +407,7 @@ void AwContents::GenerateMHTML(JNIEnv* env,
   base::FilePath target_path(ConvertJavaStringToUTF8(env, jpath));
   web_contents_->GenerateMHTML(
       target_path,
+      false /* use_binary_encoding */,
       base::Bind(&GenerateMHTMLCallback, base::Owned(j_callback), target_path));
 }
 
@@ -745,10 +742,6 @@ void AwContents::OnReceivedTouchIconUrl(const std::string& url,
 
   Java_AwContents_onReceivedTouchIconUrl(
       env, obj.obj(), ConvertUTF8ToJavaString(env, url).obj(), precomposed);
-}
-
-void AwContents::OnParentDrawConstraintsUpdated() {
-  browser_view_renderer_.OnParentDrawConstraintsUpdated();
 }
 
 void AwContents::PostInvalidate() {

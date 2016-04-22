@@ -43,9 +43,9 @@
 #include "cc/surfaces/surface_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/display_compositor/gl_helper.h"
 #include "content/browser/android/child_process_launcher_android.h"
 #include "content/browser/compositor/browser_compositor_overlay_candidate_validator_android.h"
-#include "content/browser/compositor/gl_helper.h"
 #include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -524,7 +524,7 @@ void CompositorImpl::CreateOutputSurface() {
   GURL url("chrome://gpu/CompositorImpl::CreateOutputSurface");
   gpu::SurfaceHandle surface_handle =
       GpuSurfaceTracker::Get()->GetSurfaceHandle(surface_id_);
-  constexpr bool share_resources = true;
+  constexpr bool share_resources = false;
   constexpr bool automatic_flushes = false;
 
   gpu::SharedMemoryLimits limits;

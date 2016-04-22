@@ -60,6 +60,11 @@ const AtomicString& DOMWindow::interfaceName() const
     return EventTargetNames::DOMWindow;
 }
 
+const DOMWindow* DOMWindow::toDOMWindow() const
+{
+    return this;
+}
+
 Location* DOMWindow::location() const
 {
     if (!m_location)
@@ -335,7 +340,7 @@ void DOMWindow::close(ExecutionContext* context)
     if (!frame()->shouldClose())
         return;
 
-    InspectorInstrumentation::allowNativeBreakpoint(context, "close", true);
+    InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, "close", true);
 
     page->chromeClient().closeWindowSoon();
 

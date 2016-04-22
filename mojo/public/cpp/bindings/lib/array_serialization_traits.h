@@ -169,7 +169,8 @@ struct ArraySerializer<MojomType, UserType, ArraySerializerType::HANDLE> {
     size_t size = Traits::GetSize(input);
     for (size_t i = 0; i < size; ++i) {
       // Transfer ownership of the handle.
-      output->at(i) = Traits::GetAt(input, i).release();
+      output->at(i) =
+          context->handles.AddHandle(Traits::GetAt(input, i).release());
       MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
           !validate_params->element_is_nullable && !output->at(i).is_valid(),
           VALIDATION_ERROR_UNEXPECTED_INVALID_HANDLE,
@@ -180,10 +181,11 @@ struct ArraySerializer<MojomType, UserType, ArraySerializerType::HANDLE> {
   static bool DeserializeElements(Data* input,
                                   UserType* output,
                                   SerializationContext* context) {
+    using HandleType = typename Element::RawHandleType;
     Traits::Resize(*output, input->size());
     for (size_t i = 0; i < input->size(); ++i) {
-      Traits::GetAt(*output, i) =
-          MakeScopedHandle(FetchAndReset(&input->at(i)));
+      Traits::GetAt(*output, i) = MakeScopedHandle(HandleType(
+          context->handles.TakeHandle(input->at(i)).value()));
     }
     return true;
   }
@@ -441,7 +443,7 @@ struct ArraySerializationStrategy<MojomType, UserType, true> {
                         SerializationContext* context) {
     DCHECK(!Traits::IsNull(input));
     DCHECK(validate_params);
-    // TODO(rockot): We may want to support nullable (i.e. scoped_ptr<T>)
+    // TODO(rockot): We may want to support nullable (i.e. std::unique_ptr<T>)
     // elements here.
     DCHECK(!validate_params->element_is_nullable);
     size_t element_count = Traits::GetSize(input);

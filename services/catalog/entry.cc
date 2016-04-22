@@ -5,10 +5,8 @@
 #include "services/catalog/entry.h"
 
 #include "base/values.h"
-#include "mojo/util/filename_util.h"
 #include "services/catalog/store.h"
 #include "services/shell/public/cpp/names.h"
-#include "url/gurl.h"
 
 namespace catalog {
 namespace {
@@ -106,31 +104,31 @@ Entry::Entry(const std::string& name)
 Entry::Entry(const Entry& other) = default;
 Entry::~Entry() {}
 
-scoped_ptr<base::DictionaryValue> Entry::Serialize() const {
-  scoped_ptr<base::DictionaryValue> value(new base::DictionaryValue);
+std::unique_ptr<base::DictionaryValue> Entry::Serialize() const {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue);
   value->SetInteger(Store::kManifestVersionKey, 1);
   value->SetString(Store::kNameKey, name_);
   value->SetString(Store::kDisplayNameKey, display_name_);
   value->SetString(Store::kQualifierKey, qualifier_);
-  scoped_ptr<base::DictionaryValue> spec(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> spec(new base::DictionaryValue);
 
-  scoped_ptr<base::DictionaryValue> provided(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> provided(new base::DictionaryValue);
   for (const auto& i : capabilities_.provided) {
-    scoped_ptr<base::ListValue> interfaces(new base::ListValue);
+    std::unique_ptr<base::ListValue> interfaces(new base::ListValue);
     for (const auto& interface_name : i.second)
       interfaces->AppendString(interface_name);
     provided->Set(i.first, std::move(interfaces));
   }
   spec->Set(Store::kCapabilities_ProvidedKey, std::move(provided));
 
-  scoped_ptr<base::DictionaryValue> required(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> required(new base::DictionaryValue);
   for (const auto& i : capabilities_.required) {
-    scoped_ptr<base::DictionaryValue> request(new base::DictionaryValue);
-    scoped_ptr<base::ListValue> classes(new base::ListValue);
+    std::unique_ptr<base::DictionaryValue> request(new base::DictionaryValue);
+    std::unique_ptr<base::ListValue> classes(new base::ListValue);
     for (const auto& class_name : i.second.classes)
       classes->AppendString(class_name);
     request->Set(Store::kCapabilities_ClassesKey, std::move(classes));
-    scoped_ptr<base::ListValue> interfaces(new base::ListValue);
+    std::unique_ptr<base::ListValue> interfaces(new base::ListValue);
     for (const auto& interface_name : i.second.interfaces)
       interfaces->AppendString(interface_name);
     request->Set(Store::kCapabilities_InterfacesKey, std::move(interfaces));
@@ -143,8 +141,8 @@ scoped_ptr<base::DictionaryValue> Entry::Serialize() const {
 }
 
 // static
-scoped_ptr<Entry> Entry::Deserialize(const base::DictionaryValue& value) {
-  scoped_ptr<Entry> entry(new Entry);
+std::unique_ptr<Entry> Entry::Deserialize(const base::DictionaryValue& value) {
+  std::unique_ptr<Entry> entry(new Entry);
   int manifest_version = 0;
   if (value.HasKey(Store::kManifestVersionKey))
     CHECK(value.GetInteger(Store::kManifestVersionKey, &manifest_version));
@@ -188,7 +186,7 @@ scoped_ptr<Entry> Entry::Deserialize(const base::DictionaryValue& value) {
     for (size_t i = 0; i < applications->GetSize(); ++i) {
       const base::DictionaryValue* application = nullptr;
       applications->GetDictionary(i, &application);
-      scoped_ptr<Entry> child = Entry::Deserialize(*application);
+      std::unique_ptr<Entry> child = Entry::Deserialize(*application);
       if (child) {
         child->set_package(entry.get());
         // Caller must assume ownership of these items.
@@ -231,7 +229,7 @@ shell::mojom::ResolveResultPtr
   result->qualifier = input.qualifier();
   result->capabilities =
       shell::mojom::CapabilitySpec::From(input.capabilities());
-  result->package_url = mojo::util::FilePathToFileURL(package.path()).spec();
+  result->package_path = package.path();
   return result;
 }
 

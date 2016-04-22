@@ -31,11 +31,11 @@
 #ifndef TimeInputType_h
 #define TimeInputType_h
 
-#include "core/html/forms/BaseDateAndTimeInputType.h"
+#include "core/html/forms/BaseTemporalInputType.h"
 
 namespace blink {
 
-class TimeInputType final : public BaseDateAndTimeInputType {
+class TimeInputType final : public BaseTemporalInputType {
 public:
     static InputType* create(HTMLInputElement&);
 
@@ -51,7 +51,7 @@ private:
     void warnIfValueIsInvalid(const String&) const override;
     String localizeValue(const String&) const override;
 
-    // BaseDateAndTimeInputType functions
+    // BaseTemporalInputType functions
     String formatDateTimeFieldsState(const DateTimeFieldsState&) const override;
     void setupLayoutParameters(DateTimeEditElement::LayoutParameters&, const DateComponents&) const override;
     bool isValidFormat(bool hasYear, bool hasMonth, bool hasWeek, bool hasDay, bool hasAMPM, bool hasHour, bool hasMinute, bool hasSecond) const override;

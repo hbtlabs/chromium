@@ -3337,7 +3337,7 @@ Even if you have downloaded files from this website before, the website might ha
             Shared memory
           </message>
           <message name="IDS_TASK_MANAGER_SWAPPED_MEM_COLUMN" desc="Task manager process swapped memory column. Shows the size of the memory that lives in the swap space.">
-            Swapped nemory
+            Swapped memory
           </message>
           <message name="IDS_TASK_MANAGER_PROFILE_NAME_COLUMN" desc="The name of the column with the name of the profile in which the page is running, if any.">
             Profile
@@ -5618,6 +5618,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
           <message name="IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION" desc="Description for the flag for using media style notification">
               Use Android MediaStyle notifications for Chrome media notifications.
           </message>
+          <message name="IDS_FLAGS_IMPORTANT_SITES_IN_CBD_NAME" desc="Title for the flag for including important sites whitelisting in the clear browsing dialog.">
+              Important sites options in clear browsing data dialog
+          </message>
+          <message name="IDS_FLAGS_IMPORTANT_SITES_IN_CBD_DESCRIPTION" desc="Description for the flag for using important sites whitelisting in the clear browsing dialog.">
+              Include the option to whitelist important sites in the clear browsing data dialog.
+          </message>
       </if>
       <if expr="use_ash">
         <message name="IDS_FLAGS_ASH_MAXIMIZE_MODE_WINDOW_BACKDROP_NAME" desc="Title for the flag which can be used for window backdrops in TouchView.">
@@ -6526,12 +6532,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Enable hardware-accelerated mjpeg decode for captured frame where available.
         </message>
       </if>
-      <message name="IDS_FLAGS_RESTRICT_IFRAME_PERMISSIONS_NAME" desc="Name of the flag to enable the restricted iframe permissions model.">
-        Restrict iframe permissions.
-      </message>
-      <message name="IDS_FLAGS_RESTRICT_IFRAME_PERMISSIONS_DESCRIPTION" desc="Description of the flag to enable the restricted iframe permissions model.">
-        Causes all iframes to be denied all permissions by default. Allowing particular permissions for an iframe may involve listing the names of these permissions as values of new iframe attributes.
-      </message>
       <if expr="enable_task_manager">
         <message name="IDS_FLAGS_NEW_TASK_MANAGER_NAME" desc="Name of the flag for the new implementation of the task manager.">
           New task manager
@@ -6564,6 +6564,9 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_PROGRESS_BAR_ANIMATION_SMOOTH" desc="Smooth progress bar animation style">
           Smooth
+        </message>
+        <message name="IDS_FLAGS_PROGRESS_BAR_ANIMATION_SMOOTH_INDETERMINATE" desc="Smooth progress bar animation style with an indeterminate animation" translateable="false">
+          Smooth indeterminate
         </message>
         <message name="IDS_FLAGS_PROGRESS_BAR_ANIMATION_FAST_START" desc="Fast start progress bar animation style">
           Fast start
@@ -9229,8 +9232,14 @@ I don't think this site should be blocked!
         <message name="IDS_ABOUT_PAGE_CHANNEL_CHANGE_PAGE_CANCEL_BUTTON" desc="The label for the button for cancelling channel change.">
           Cancel
         </message>
+        <message name="IDS_ARC_VERSION_LABEL" desc="Label for ARC version">
+          ARC Version
+        </message>
       </if> <!-- chromeos -->
 
+      <message name="IDS_ARC_LABEL" desc="Label for ARC">
+        ARC
+      </message>
       <message name="IDS_PLATFORM_LABEL" desc="Label for Platform">
         Platform
       </message>
@@ -14448,17 +14457,11 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
     </if>
 
     <if expr="is_android">
-      <message name="IDS_FLAGS_OFFLINE_PAGES_NAME" desc="Name for the flag to enable offline pages.">
-        Enable offline pages
+      <message name="IDS_FLAGS_OFFLINE_BOOKMARKS_NAME" desc="Name for the flag to enable offline bookmarks.">
+        Enable offline bookmarks
       </message>
-      <message name="IDS_FLAGS_OFFLINE_PAGES_DESCRIPTION" desc="Description for the flag to enable offline pages.">
-        Enable storing pages locally for offline use.
-      </message>
-      <message name="IDS_FLAGS_ENABLE_OFFLINE_PAGES_AS_BOOKMARKS" desc="Option to enable offline pages feature using name 'bookmarks' shown in user-visible strings">
-        Enabled as bookmarks
-      </message>
-      <message name="IDS_FLAGS_ENABLE_OFFLINE_PAGES_AS_SAVED_PAGES" desc="Option to enable offline pages feature using name 'saved pages' shown in user-visible strings">
-        Enabled as saved pages
+      <message name="IDS_FLAGS_OFFLINE_BOOKMARKS_DESCRIPTION" desc="Description for the flag to enable offline bookmarks.">
+        Enable saving bookmarked pages for offline viewing.
       </message>
       <message name="IDS_FLAGS_NTP_OFFLINE_PAGES_NAME" desc="Name for the flag to enable badging of offline pages on the NTP.">
         Enable NTP offline pages
@@ -14676,10 +14679,10 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       Enable Brotli Content-Encoding support.
     </message>
     <message name="IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME" desc="Title for the flag to enable WebFonts User Agent Intervention.">
-      User Agent Intervention for WebFonts loading.
+      New version of User Agent Intervention for WebFonts loading.
     </message>
     <message name="IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_DESCRIPTION" desc="Description for the flag to enable WebFonts User Agent Intervention.">
-      Enable User Agent Intervention for WebFonts loading.
+      Enable New version of User Agent Intervention for WebFonts loading.
     </message>
     <message name="IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_TRIGGER_NAME" desc="Title for the flag to trigger WebFonts User Agent Intervention always.">
       Trigger User Agent Intervention for WebFonts loading always.

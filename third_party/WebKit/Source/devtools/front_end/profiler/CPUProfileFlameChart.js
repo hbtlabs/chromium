@@ -97,7 +97,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
      */
     totalTime: function()
     {
-        return this._cpuProfile.profileHead.totalTime;
+        return this._cpuProfile.profileHead.total;
     },
 
     /**
@@ -639,13 +639,6 @@ WebInspector.CPUProfileFlameChart.OverviewPane.prototype = {
      * @param {number} endTime
      */
     updateRangeSelection: function(startTime, endTime)
-    {
-    },
-
-    /**
-     * @override
-     */
-    endRangeSelection: function()
     {
     },
 

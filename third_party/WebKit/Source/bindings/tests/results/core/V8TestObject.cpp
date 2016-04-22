@@ -174,13 +174,6 @@ static void FEATURE3_ORIGIN_TRIAL_ENABLED_CONST1ConstantGetterCallback(v8::Local
     v8SetReturnValueInt(info, 5);
 }
 
-template<class CallbackInfo>
-static bool TestObjectCreateDataProperty(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const CallbackInfo& info)
-{
-    ASSERT(info.This()->IsObject());
-    return v8CallBoolean(v8::Local<v8::Object>::Cast(info.This())->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), name, v8Value));
-}
-
 static void stringifierAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Object> holder = info.Holder();
@@ -1592,7 +1585,7 @@ static void stringFrozenArrayAttributeAttributeGetter(const v8::FunctionCallback
 {
     v8::Local<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toImpl(holder);
-    v8SetReturnValue(info, toV8(impl->stringFrozenArrayAttribute(), info.Holder(), info.GetIsolate()));
+    v8SetReturnValue(info, freezeV8Object(toV8(impl->stringFrozenArrayAttribute(), info.Holder(), info.GetIsolate()), info.GetIsolate()));
 }
 
 static void stringFrozenArrayAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1621,7 +1614,7 @@ static void testInterfaceEmptyFrozenArrayAttributeAttributeGetter(const v8::Func
 {
     v8::Local<v8::Object> holder = info.Holder();
     TestObject* impl = V8TestObject::toImpl(holder);
-    v8SetReturnValue(info, toV8(impl->testInterfaceEmptyFrozenArrayAttribute(), info.Holder(), info.GetIsolate()));
+    v8SetReturnValue(info, freezeV8Object(toV8(impl->testInterfaceEmptyFrozenArrayAttribute(), info.Holder(), info.GetIsolate()), info.GetIsolate()));
 }
 
 static void testInterfaceEmptyFrozenArrayAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -4133,7 +4126,7 @@ static void replaceableReadonlyLongAttributeAttributeGetterCallback(const v8::Fu
 static void replaceableReadonlyLongAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "replaceableReadonlyLongAttribute");
-    TestObjectCreateDataProperty(propertyName, v8Value, info);
+    v8CallBoolean(info.This()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value));
 }
 
 static void replaceableReadonlyLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -6384,7 +6377,7 @@ static void voidMethodNullableSequenceLongArgMethodCallback(const v8::FunctionCa
 static void longFrozenArrayMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     TestObject* impl = V8TestObject::toImpl(info.Holder());
-    v8SetReturnValue(info, toV8(impl->longFrozenArrayMethod(), info.Holder(), info.GetIsolate()));
+    v8SetReturnValue(info, freezeV8Object(toV8(impl->longFrozenArrayMethod(), info.Holder(), info.GetIsolate()), info.GetIsolate()));
 }
 
 static void longFrozenArrayMethodMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info)

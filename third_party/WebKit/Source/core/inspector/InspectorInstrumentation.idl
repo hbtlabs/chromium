@@ -134,12 +134,6 @@ class XMLHttpRequest;
     [Debugger]
     void didExecuteScript(const InspectorInstrumentationCookie&);
 
-    [DOMDebugger]
-    InspectorInstrumentationCookie willHandleEvent([Keep] EventTarget*, Event*, EventListener* listener, bool useCapture);
-
-    [DOMDebugger]
-    void cancelPauseOnNextStatement(const InspectorInstrumentationCookie&);
-
     [Page]
     void didUpdateLayout(LocalFrame*);
 
@@ -263,9 +257,6 @@ class XMLHttpRequest;
     [Page]
     void didRunJavaScriptDialog(const InspectorInstrumentationCookie&, bool result);
 
-    [DOMDebugger]
-    InspectorInstrumentationCookie allowNativeBreakpoint(ExecutionContext*, const String& name, bool sync);
-
     [Worker]
     void didStartWorker(ExecutionContext*, WorkerInspectorProxy* proxy, bool waitingForDebugger);
 
@@ -351,12 +342,6 @@ class ConsoleMessage;
     [Console]
     void addMessageToConsole(ExecutionContext* context, ConsoleMessage* consoleMessage);
 
-    [Profiler]
-    void consoleProfile([Keep] ExecutionContext* context, const String& title);
-
-    [Profiler]
-    void consoleProfileEnd(ExecutionContext* context, const String& title);
-
     [Console]
     void consoleMessagesCleared(ExecutionContext* context);
 }
@@ -370,4 +355,7 @@ interface InspectorOverrides {
 
     [Resource]
     bool shouldForceCORSPreflight(Document*);
+
+    [Resource]
+    bool shouldBlockRequest(LocalFrame*, const ResourceRequest&);
 }

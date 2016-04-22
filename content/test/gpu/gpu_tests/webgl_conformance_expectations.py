@@ -60,6 +60,36 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('WebglExtension.WEBGL_draw_buffers',
         ['win', 'd3d9'])
 
+    # Android general
+    self.Fail('WebglExtension.EXT_disjoint_timer_query',
+        ['android'])
+    self.Fail('WebglExtension.EXT_frag_depth',
+        ['android'])
+    self.Fail('WebglExtension.EXT_shader_texture_lod',
+        ['android'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_astc',
+        ['android'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_pvrtc',
+        ['android'])
+    self.Fail('WebglExtension.WEBGL_compressed_texture_s3tc',
+        ['android'])
+    self.Fail('WebglExtension.WEBGL_depth_texture',
+        ['android'])
+    self.Fail('WebglExtension.WEBGL_draw_buffers',
+        ['android'])
+
+    # Nexus 5
+    self.Fail('WebglExtension.OES_texture_float_linear',
+        ['android', ('qualcomm', 'Adreno (TM) 330')])
+
+    # Nexus 6
+    self.Fail('WebglExtension.EXT_sRGB',
+        ['android', ('qualcomm', 'Adreno (TM) 420')])
+
+    # Nexus 9
+    self.Fail('WebglExtension.WEBGL_compressed_texture_atc',
+        ['android', ('nvidia', 'NVIDIA Tegra')])
+
     # ========================
     # Conformance expectations
     # ========================
@@ -91,8 +121,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/glsl/bugs/' +
               'pow-of-small-constant-in-user-defined-function.html',
         ['win'], bug=485641)
-    self.Fail('conformance/glsl/bugs/sampler-struct-function-arg.html',
-        ['win'], bug=485642)
     # Note that the following test seems to pass, but it may still be flaky.
     self.Fail('conformance/glsl/constructors/' +
               'glsl-construct-vec-mat-index.html',
@@ -172,6 +200,8 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['mavericks', ('nvidia', 0xfe9)], bug=586536)
 
     # Mac Retina AMD failures
+    self.Flaky('conformance/extensions/oes-texture-float-with-video.html',
+        ['mac', ('amd', 0x6821)], bug=599272)
     self.Fail('conformance/textures/image_bitmap_from_image/*',
         ['mac', ('amd', 0x6821)], bug=589930)
 

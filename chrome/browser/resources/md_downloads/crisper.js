@@ -93,7 +93,7 @@ function assertInstanceof(value, type, opt_message) {
  * @template T
  */
 function PromiseResolver() {
-  /** @private {function(T): void} */
+  /** @private {function(T=): void} */
   this.resolve_;
 
   /** @private {function(*=): void} */
@@ -111,7 +111,7 @@ PromiseResolver.prototype = {
   get promise() { return this.promise_; },
   set promise(p) { assertNotReached(); },
 
-  /** @return {function(T): void} */
+  /** @return {function(T=): void} */
   get resolve() { return this.resolve_; },
   set resolve(r) { assertNotReached(); },
 
@@ -6137,23 +6137,6 @@ cr.define('downloads', function() {
         value: '',
       },
 
-      i18n_: {
-        readOnly: true,
-        type: Object,
-        value: function() {
-          return {
-            cancel: loadTimeData.getString('controlCancel'),
-            discard: loadTimeData.getString('dangerDiscard'),
-            pause: loadTimeData.getString('controlPause'),
-            remove: loadTimeData.getString('controlRemoveFromList'),
-            resume: loadTimeData.getString('controlResume'),
-            restore: loadTimeData.getString('dangerRestore'),
-            retry: loadTimeData.getString('controlRetry'),
-            save: loadTimeData.getString('dangerSave'),
-          };
-        },
-      },
-
       isActive_: {
         computed: 'computeIsActive_(' +
             'data.state, data.file_externally_removed)',
@@ -11211,13 +11194,6 @@ cr.define('downloads', function() {
 
   return {Manager: Manager};
 });
-// Copyright (c) 2012 The Chromium Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
-// <include src="../../../../ui/webui/resources/js/i18n_template_no_process.js">
-
-i18nTemplate.process(document, loadTimeData);
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.

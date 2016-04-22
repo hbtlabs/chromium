@@ -18,9 +18,6 @@
     # is refactored into media/ipc.
     '../gpu/gpu.gyp:gpu_ipc_service',
 
-    # TODO: the dependency on gl_in_process_context should be decoupled from
-    # content and moved to android_webview. See crbug.com/365797.
-    '../gpu/gpu.gyp:gl_in_process_context',
     '../gpu/gpu.gyp:gpu',
     '../gpu/skia_bindings/skia_bindings.gyp:gpu_skia_bindings',
     '../ipc/ipc.gyp:ipc',
@@ -104,6 +101,7 @@
       'public/common/browser_plugin_guest_mode.h',
       'public/common/browser_side_navigation_policy.cc',
       'public/common/browser_side_navigation_policy.h',
+      'public/common/cdm_info.h',
       'public/common/child_process_host.h',
       'public/common/child_process_host_delegate.cc',
       'public/common/child_process_host_delegate.h',
@@ -442,6 +440,7 @@
       'common/manifest_manager_messages.h',
       'common/media/aec_dump_messages.h',
       'common/media/audio_messages.h',
+      'common/media/cdm_info.cc',
       'common/media/cdm_messages.h',
       'common/media/cdm_messages_enums.h',
       'common/media/media_param_traits.cc',

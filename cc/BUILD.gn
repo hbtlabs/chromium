@@ -26,10 +26,6 @@ component("cc") {
     "animation/element_animations.h",
     "animation/keyframed_animation_curve.cc",
     "animation/keyframed_animation_curve.h",
-    "animation/layer_animation_controller.cc",
-    "animation/layer_animation_controller.h",
-    "animation/layer_animation_value_observer.h",
-    "animation/layer_animation_value_provider.h",
     "animation/scroll_offset_animation_curve.cc",
     "animation/scroll_offset_animation_curve.h",
     "animation/target_property.cc",
@@ -265,6 +261,9 @@ component("cc") {
     "output/texture_mailbox_deleter.h",
     "output/viewport_selection_bound.cc",
     "output/viewport_selection_bound.h",
+    "output/vulkan_context_provider.h",
+    "output/vulkan_in_process_context_provider.cc",
+    "output/vulkan_in_process_context_provider.h",
     "playback/clip_display_item.cc",
     "playback/clip_display_item.h",
     "playback/clip_path_display_item.cc",
@@ -562,9 +561,6 @@ component("cc") {
 
   if (enable_vulkan) {
     sources += [
-      "output/vulkan_context_provider.h",
-      "output/vulkan_in_process_context_provider.cc",
-      "output/vulkan_in_process_context_provider.h",
       "output/vulkan_renderer.cc",
       "output/vulkan_renderer.h",
     ]
@@ -764,7 +760,6 @@ test("cc_unittests") {
     "animation/animation_unittest.cc",
     "animation/element_animations_unittest.cc",
     "animation/keyframed_animation_curve_unittest.cc",
-    "animation/layer_animation_controller_unittest.cc",
     "animation/scroll_offset_animation_curve_unittest.cc",
     "animation/transform_operations_unittest.cc",
     "base/contiguous_container_unittest.cc",
@@ -926,9 +921,11 @@ test("cc_unittests") {
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
-  data = [
-    "test/data/",
-  ]
+  if (!is_android) {
+    data = [
+      "test/data/",
+    ]
+  }
 
   deps = [
     ":cc",

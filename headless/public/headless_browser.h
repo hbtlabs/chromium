@@ -37,9 +37,13 @@ class HEADLESS_EXPORT HeadlessBrowser {
 
   // Create a new browser tab which navigates to |initial_url|. |size| is in
   // physical pixels.
-  virtual std::unique_ptr<HeadlessWebContents> CreateWebContents(
-      const GURL& initial_url,
-      const gfx::Size& size) = 0;
+  // We require the user to pass an initial URL to ensure that the renderer
+  // gets initialized and eventually becomes ready to be inspected. See
+  // HeadlessWebContents::Observer::DevToolsTargetReady.
+  virtual HeadlessWebContents* CreateWebContents(const GURL& initial_url,
+                                                 const gfx::Size& size) = 0;
+
+  virtual std::vector<HeadlessWebContents*> GetAllWebContents() = 0;
 
   // Returns a task runner for submitting work to the browser main thread.
   virtual scoped_refptr<base::SingleThreadTaskRunner> BrowserMainThread()
@@ -82,6 +86,10 @@ struct HeadlessBrowser::Options {
   // Optional message pump that overrides the default. Must outlive the browser.
   base::MessagePump* message_pump;
 
+  // Comma-separated list of rules that control how hostnames are mapped. See
+  // chrome::switches::kHostRules for a description for the format.
+  std::string host_resolver_rules;
+
  private:
   Options(int argc, const char** argv);
 };
@@ -96,6 +104,7 @@ class HeadlessBrowser::Options::Builder {
   Builder& EnableDevToolsServer(const net::IPEndPoint& endpoint);
   Builder& SetMessagePump(base::MessagePump* message_pump);
   Builder& SetProxyServer(const net::HostPortPair& proxy_server);
+  Builder& SetHostResolverRules(const std::string& host_resolver_rules);
 
   Options Build();
 

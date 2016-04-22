@@ -29,6 +29,7 @@ var availableTests = [
     };
 
     chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(callback);
+    chrome.passwordsPrivate.getSavedPasswordList(callback);
   },
 
   function removePasswordException() {
@@ -52,6 +53,7 @@ var availableTests = [
 
     chrome.passwordsPrivate.onPasswordExceptionsListChanged.addListener(
         callback);
+    chrome.passwordsPrivate.getPasswordExceptionList(callback);
   },
 
   function requestPlaintextPassword() {
@@ -63,6 +65,26 @@ var availableTests = [
     chrome.passwordsPrivate.onPlaintextPasswordRetrieved.addListener(callback);
     chrome.passwordsPrivate.requestPlaintextPassword(
         {originUrl: 'http://www.test.com', username: 'test@test.com'});
+  },
+
+  function getSavedPasswordList() {
+    var callback = function(list) {
+      chrome.test.assertTrue(!!list);
+      // Ensure that the callback is invoked.
+      chrome.test.succeed();
+    };
+
+    chrome.passwordsPrivate.getSavedPasswordList(callback);
+  },
+
+  function getPasswordExceptionList() {
+    var callback = function(list) {
+      chrome.test.assertTrue(!!list);
+      // Ensure that the callback is invoked.
+      chrome.test.succeed();
+    };
+
+    chrome.passwordsPrivate.getPasswordExceptionList(callback);
   },
 ];
 

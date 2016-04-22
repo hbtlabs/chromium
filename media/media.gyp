@@ -471,6 +471,8 @@
         'cdm/cdm_adapter.h',
         'cdm/cdm_allocator.cc',
         'cdm/cdm_allocator.h',
+        'cdm/cdm_file_io.h',
+        'cdm/cdm_file_io.h',
         'cdm/cdm_helpers.cc',
         'cdm/cdm_helpers.h',
         'cdm/default_cdm_factory.cc',
@@ -768,6 +770,7 @@
                 '../build/linux/system.gyp:xext',
                 '../build/linux/system.gyp:xfixes',
                 '../build/linux/system.gyp:xtst',
+                '../ui/events/keycodes/events_keycodes.gyp:keycodes_x11',
                 '../ui/gfx/x/gfx_x11.gyp:gfx_x11',
               ],
             }, {  # else: use_x11==0
@@ -1099,6 +1102,7 @@
       'dependencies': [
         'audio_test_config',
         'media',
+        'media_features',
         'media_test_support',
         'shared_memory_support',
         '../base/base.gyp:base',
@@ -1375,6 +1379,7 @@
         '../ui/gfx/gfx.gyp:gfx_geometry',
         '../ui/gfx/gfx.gyp:gfx_test_support',
         'media',
+        'media_features',
         'media_test_support',
         'shared_memory_support',
       ],
@@ -1528,6 +1533,7 @@
       'type': 'static_library',
       'dependencies': [
         'media',
+        'media_features',
         'shared_memory_support',
         '../base/base.gyp:base',
         '../skia/skia.gyp:skia',

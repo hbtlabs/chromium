@@ -30,6 +30,7 @@ namespace cc {
 class SingleThreadTaskGraphRunner;
 class SoftwareOutputDevice;
 class SurfaceManager;
+class VulkanInProcessContextProvider;
 }
 
 namespace content {
@@ -68,7 +69,7 @@ class GpuProcessTransportFactory
   // ImageTransportFactory implementation.
   ui::ContextFactory* GetContextFactory() override;
   cc::SurfaceManager* GetSurfaceManager() override;
-  GLHelper* GetGLHelper() override;
+  display_compositor::GLHelper* GetGLHelper() override;
   void AddObserver(ImageTransportFactoryObserver* observer) override;
   void RemoveObserver(ImageTransportFactoryObserver* observer) override;
 #if defined(OS_MACOSX)
@@ -95,15 +96,22 @@ class GpuProcessTransportFactory
   void OnLostMainThreadSharedContextInsideCallback();
   void OnLostMainThreadSharedContext();
 
+  scoped_refptr<cc::VulkanInProcessContextProvider>
+  SharedVulkanContextProvider();
+
   typedef std::map<ui::Compositor*, PerCompositorData*> PerCompositorDataMap;
   PerCompositorDataMap per_compositor_data_;
   scoped_refptr<ContextProviderCommandBuffer> shared_main_thread_contexts_;
-  std::unique_ptr<GLHelper> gl_helper_;
+  std::unique_ptr<display_compositor::GLHelper> gl_helper_;
   base::ObserverList<ImageTransportFactoryObserver> observer_list_;
   std::unique_ptr<cc::SurfaceManager> surface_manager_;
   uint32_t next_surface_id_namespace_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<ContextProviderCommandBuffer> shared_worker_context_provider_;
+
+  bool shared_vulkan_context_provider_initialized_ = false;
+  scoped_refptr<cc::VulkanInProcessContextProvider>
+      shared_vulkan_context_provider_;
 
 #if defined(OS_WIN)
   std::unique_ptr<OutputDeviceBacking> software_backing_;

@@ -44,7 +44,6 @@
 #include "components/flags_ui/flags_ui_switches.h"
 #include "components/nacl/common/nacl_switches.h"
 #include "components/offline_pages/offline_page_feature.h"
-#include "components/offline_pages/offline_page_switches.h"
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/proximity_auth/switches.h"
@@ -415,9 +414,11 @@ const FeatureEntry::Choice kProgressBarAnimationChoices[] = {
   { IDS_GENERIC_EXPERIMENT_CHOICE_DISABLED,
       switches::kProgressBarAnimation, "disabled" },
   { IDS_FLAGS_PROGRESS_BAR_ANIMATION_LINEAR,
-        switches::kProgressBarAnimation, "linear" },
+      switches::kProgressBarAnimation, "linear" },
   { IDS_FLAGS_PROGRESS_BAR_ANIMATION_SMOOTH,
       switches::kProgressBarAnimation, "smooth" },
+  { IDS_FLAGS_PROGRESS_BAR_ANIMATION_SMOOTH_INDETERMINATE,
+      switches::kProgressBarAnimation, "smooth-indeterminate" },
   { IDS_FLAGS_PROGRESS_BAR_ANIMATION_FAST_START,
       switches::kProgressBarAnimation, "fast-start" },
 };
@@ -486,16 +487,6 @@ const FeatureEntry::Choice kUpdateMenuItemSummaryChoices[] = {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-const FeatureEntry::Choice kEnableOfflinePagesChoices[] = {
-    {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
-    {IDS_FLAGS_ENABLE_OFFLINE_PAGES_AS_BOOKMARKS,
-     switches::kEnableOfflinePagesAsBookmarks, ""},
-    {IDS_FLAGS_ENABLE_OFFLINE_PAGES_AS_SAVED_PAGES,
-     switches::kEnableOfflinePagesAsSavedPages, ""},
-    {IDS_GENERIC_EXPERIMENT_CHOICE_DISABLED, switches::kDisableOfflinePages,
-     ""},
-};
-
 const FeatureEntry::Choice kHerbPrototypeChoices[] = {
     {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
     {IDS_GENERIC_EXPERIMENT_CHOICE_DISABLED,
@@ -1573,9 +1564,9 @@ const FeatureEntry kFeatureEntries[] = {
      MULTI_VALUE_TYPE(kProgressBarAnimationChoices)},
 #endif  // defined(OS_ANDROID)
 #if defined(OS_ANDROID)
-    {"offline-pages-mode", IDS_FLAGS_OFFLINE_PAGES_NAME,
-     IDS_FLAGS_OFFLINE_PAGES_DESCRIPTION, kOsAndroid,
-     MULTI_VALUE_TYPE(kEnableOfflinePagesChoices)},
+    {"offline-bookmarks", IDS_FLAGS_OFFLINE_BOOKMARKS_NAME,
+     IDS_FLAGS_OFFLINE_BOOKMARKS_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(offline_pages::kOfflineBookmarksFeature)},
     {"offline-pages-background-loading",
      IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_NAME,
      IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_DESCRIPTION, kOsAndroid,
@@ -1723,10 +1714,10 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-unsafe-es3-apis", IDS_FLAGS_WEBGL2_NAME,
      IDS_FLAGS_WEBGL2_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableUnsafeES3APIs)},
-    {"enable-webfonts-intervention",
+    {"enable-webfonts-intervention-v2",
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME,
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_DESCRIPTION, kOsAll,
-     FEATURE_VALUE_TYPE(features::kWebFontsIntervention)},
+     FEATURE_VALUE_TYPE(features::kWebFontsInterventionV2)},
     {"enable-webfonts-intervention-trigger",
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_TRIGGER_NAME,
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_TRIGGER_DESCRIPTION, kOsAll,
@@ -1818,6 +1809,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_NAME,
      IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kMediaStyleNotification)},
+    {"important-sites-in-cbd",
+     IDS_FLAGS_IMPORTANT_SITES_IN_CBD_NAME,
+     IDS_FLAGS_IMPORTANT_SITES_IN_CBD_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kImportantSitesInCBD)},
 #endif
     {"enable-pointer-events",  // FLAGS:RECORD_UMA
       IDS_FLAGS_EXPERIMENTAL_POINTER_EVENT_NAME,

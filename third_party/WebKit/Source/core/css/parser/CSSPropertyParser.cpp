@@ -1224,14 +1224,6 @@ bool CSSPropertyParser::consumeAnimationShorthand(const StylePropertyShorthand& 
     return m_range.atEnd();
 }
 
-static CSSValue* consumeWidowsOrOrphans(CSSParserTokenRange& range)
-{
-    // Support for auto is non-standard and for backwards compatibility.
-    if (range.peek().id() == CSSValueAuto)
-        return consumeIdent(range);
-    return consumePositiveInteger(range);
-}
-
 static CSSValue* consumeZIndex(CSSParserTokenRange& range)
 {
     if (range.peek().id() == CSSValueAuto)
@@ -1384,7 +1376,7 @@ static CSSValue* consumeTextDecorationLine(CSSParserTokenRange& range)
     return list;
 }
 
-// none | strict | [ layout || style || paint ]
+// none | strict | content | [ layout || style || paint || size ]
 static CSSValue* consumeContain(CSSParserTokenRange& range)
 {
     CSSValueID id = range.peek().id();
@@ -1392,12 +1384,12 @@ static CSSValue* consumeContain(CSSParserTokenRange& range)
         return consumeIdent(range);
 
     CSSValueList* list = CSSValueList::createSpaceSeparated();
-    if (id == CSSValueStrict) {
+    if (id == CSSValueStrict || id == CSSValueContent) {
         list->append(consumeIdent(range));
         return list;
     }
     while (true) {
-        CSSPrimitiveValue* ident = consumeIdent<CSSValuePaint, CSSValueLayout, CSSValueStyle>(range);
+        CSSPrimitiveValue* ident = consumeIdent<CSSValuePaint, CSSValueLayout, CSSValueStyle, CSSValueSize>(range);
         if (!ident)
             break;
         if (list->hasValue(ident))
@@ -1819,9 +1811,10 @@ static CSSPrimitiveValue* consumeBaselineShift(CSSParserTokenRange& range)
     return consumeLengthOrPercent(range, SVGAttributeMode, ValueRangeAll);
 }
 
-static CSSValue* createCSSImageValue(const AtomicString& rawValue, const CSSParserContext& context)
+static CSSValue* createCSSImageValueWithReferrer(const AtomicString& rawValue, const CSSParserContext& context)
 {
     CSSValue* imageValue = CSSImageValue::create(rawValue, context.completeURL(rawValue));
+    toCSSImageValue(imageValue)->setReferrer(context.referrer());
     return imageValue;
 }
 
@@ -1835,7 +1828,7 @@ static CSSValue* consumeImageSet(CSSParserTokenRange& range, const CSSParserCont
         if (urlValue.isNull())
             return nullptr;
 
-        CSSValue* image = createCSSImageValue(urlValue, context);
+        CSSValue* image = createCSSImageValueWithReferrer(urlValue, context);
         imageSet->append(image);
 
         const CSSParserToken& token = args.consumeIncludingWhitespace();
@@ -1862,7 +1855,7 @@ static CSSValue* consumeCursor(CSSParserTokenRange& range, const CSSParserContex
         CSSValue* image = nullptr;
         AtomicString uri(consumeUrl(range));
         if (!uri.isNull()) {
-            image = createCSSImageValue(uri, context);
+            image = createCSSImageValueWithReferrer(uri, context);
         } else if (range.peek().type() == FunctionToken && range.peek().functionId() == CSSValueWebkitImageSet) {
             image = consumeImageSet(range, context);
             if (!image)
@@ -2311,7 +2304,7 @@ static CSSValue* consumeImage(CSSParserTokenRange& range, CSSParserContext conte
 {
     AtomicString uri(consumeUrl(range));
     if (!uri.isNull())
-        return createCSSImageValue(uri, context);
+        return createCSSImageValueWithReferrer(uri, context);
     if (range.peek().type() == FunctionToken) {
         CSSValueID id = range.peek().functionId();
         if (id == CSSValueWebkitImageSet)
@@ -3574,10 +3567,9 @@ CSSValue* CSSPropertyParser::parseSingleValue(CSSPropertyID unresolvedProperty)
     case CSSPropertyShapeImageThreshold:
         return consumeNumber(m_range, ValueRangeAll);
     case CSSPropertyWebkitBoxOrdinalGroup:
-        return consumePositiveInteger(m_range);
     case CSSPropertyOrphans:
     case CSSPropertyWidows:
-        return consumeWidowsOrOrphans(m_range);
+        return consumePositiveInteger(m_range);
     case CSSPropertyTextDecorationColor:
         ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
         return consumeColor(m_range, m_context.mode());
@@ -3846,6 +3838,7 @@ static CSSValue* consumeFontFaceSrcURI(CSSParserTokenRange& range, const CSSPars
     if (url.isNull())
         return nullptr;
     CSSFontFaceSrcValue* uriValue(CSSFontFaceSrcValue::create(url, context.completeURL(url), context.shouldCheckContentSecurityPolicy()));
+    uriValue->setReferrer(context.referrer());
 
     if (range.peek().functionId() != CSSValueFormat)
         return uriValue;

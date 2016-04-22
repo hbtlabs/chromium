@@ -33,7 +33,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/TreeScope.h"
 #include "core/dom/shadow/SlotAssignment.h"
-#include "wtf/DoublyLinkedList.h"
 
 namespace blink {
 
@@ -43,6 +42,7 @@ class ExceptionState;
 class HTMLShadowElement;
 class InsertionPoint;
 class ShadowRootRareData;
+class ShadowRootRareDataV0;
 class StyleSheetList;
 
 enum class ShadowRootType {
@@ -52,10 +52,9 @@ enum class ShadowRootType {
     Closed
 };
 
-class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope, public DoublyLinkedListNode<ShadowRoot> {
+class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(ShadowRoot);
-    friend class WTF::DoublyLinkedListNode<ShadowRoot>;
 public:
     // FIXME: Current implementation does not work well if a shadow root is dynamically created.
     // So multiple shadow subtrees in several elements are prohibited.
@@ -76,9 +75,12 @@ public:
     Element* host() const { return toElement(parentOrShadowHostNode()); }
     ElementShadow* owner() const { return host() ? host()->shadow() : 0; }
 
-    ShadowRoot* youngerShadowRoot() const { return prev(); }
-
+    ShadowRoot* youngerShadowRoot() const;
+    ShadowRoot* olderShadowRoot() const;
     ShadowRoot* olderShadowRootForBindings() const;
+
+    void setYoungerShadowRoot(ShadowRoot&);
+    void setOlderShadowRoot(ShadowRoot&);
 
     String mode() const { return (type() == ShadowRootType::V0 || type() == ShadowRootType::Open) ? "open" : "closed"; };
 
@@ -121,6 +123,7 @@ public:
     void didRemoveSlot();
     const HeapVector<Member<HTMLSlotElement>>& descendantSlots();
 
+    void assignV1();
     void distributeV1();
 
     HTMLSlotElement* assignedSlotFor(const Node& node) const
@@ -133,10 +136,7 @@ public:
     using TreeScope::setDocument;
     using TreeScope::setParentTreeScope;
 
-public:
     Element* activeElement() const;
-
-    ShadowRoot* olderShadowRoot() const { return next(); }
 
     String innerHTML() const;
     void setInnerHTML(const String&, ExceptionState&);
@@ -156,7 +156,8 @@ private:
 
     void childrenChanged(const ChildrenChange&) override;
 
-    ShadowRootRareData* ensureShadowRootRareData();
+    ShadowRootRareData& ensureShadowRootRareData();
+    ShadowRootRareDataV0& ensureShadowRootRareDataV0();
 
     void addChildShadowRoot();
     void removeChildShadowRoot();
@@ -171,9 +172,8 @@ private:
     void invalidateDescendantSlots();
     unsigned descendantSlotCount() const;
 
-    Member<ShadowRoot> m_prev;
-    Member<ShadowRoot> m_next;
     Member<ShadowRootRareData> m_shadowRootRareData;
+    Member<ShadowRootRareDataV0> m_shadowRootRareDataV0;
     Member<SlotAssignment> m_slotAssignment;
     unsigned m_numberOfStyles : 26;
     unsigned m_type : 2;
@@ -199,6 +199,8 @@ inline ShadowRoot* Element::shadowRootIfV1() const
 DEFINE_NODE_TYPE_CASTS(ShadowRoot, isShadowRoot());
 DEFINE_TYPE_CASTS(ShadowRoot, TreeScope, treeScope, treeScope->rootNode().isShadowRoot(), treeScope.rootNode().isShadowRoot());
 DEFINE_TYPE_CASTS(TreeScope, ShadowRoot, shadowRoot, true, true);
+
+CORE_EXPORT std::ostream& operator<<(std::ostream&, const ShadowRootType&);
 
 } // namespace blink
 

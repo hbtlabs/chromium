@@ -52,7 +52,7 @@ const unsigned cMaxLineDepth = 200;
 class BreakingContext {
     STACK_ALLOCATED();
 public:
-    BreakingContext(InlineBidiResolver& resolver, LineInfo& inLineInfo, LineWidth& lineWidth, LayoutTextInfo& inLayoutTextInfo, FloatingObject* inLastFloatFromPreviousLine, bool appliedStartWidth, LineLayoutBlockFlow block)
+    BreakingContext(InlineBidiResolver& resolver, LineInfo& inLineInfo, LineWidth& lineWidth, LayoutTextInfo& inLayoutTextInfo, bool appliedStartWidth, LineLayoutBlockFlow block)
         : m_resolver(resolver)
         , m_current(resolver.position())
         , m_lineBreak(resolver.position())
@@ -63,7 +63,6 @@ public:
         , m_blockStyle(block.style())
         , m_lineInfo(inLineInfo)
         , m_layoutTextInfo(inLayoutTextInfo)
-        , m_lastFloatFromPreviousLine(inLastFloatFromPreviousLine)
         , m_width(lineWidth)
         , m_currWS(NORMAL)
         , m_lastWS(NORMAL)
@@ -135,8 +134,6 @@ private:
     LineInfo& m_lineInfo;
 
     LayoutTextInfo& m_layoutTextInfo;
-
-    FloatingObject* m_lastFloatFromPreviousLine;
 
     LineWidth m_width;
 
@@ -305,7 +302,7 @@ inline void BreakingContext::handleBR(EClear& clear)
         // cleanly. Otherwise the <br> has no effect on whether the line is
         // empty or not.
         if (m_startingNewParagraph)
-            m_lineInfo.setEmpty(false, m_block, &m_width);
+            m_lineInfo.setEmpty(false);
         m_trailingObjects.clear();
         m_lineInfo.setPreviousLineBrokeCleanly(true);
 
@@ -397,7 +394,7 @@ inline void BreakingContext::handleFloat()
     // it after moving to next line (in newLine() func)
     // FIXME: Bug 110372: Properly position multiple stacked floats with non-rectangular shape outside.
     if (m_floatsFitOnLine && m_width.fitsOnLine(m_block.logicalWidthForFloat(*floatingObject).toFloat(), ExcludeWhitespace)) {
-        m_block.positionNewFloatOnLine(*floatingObject, m_lastFloatFromPreviousLine, m_lineInfo, m_width);
+        m_block.positionNewFloats(&m_width);
         if (m_lineBreak.getLineLayoutItem() == m_current.getLineLayoutItem()) {
             ASSERT(!m_lineBreak.offset());
             m_lineBreak.increment();
@@ -444,7 +441,7 @@ inline void BreakingContext::handleEmptyInline()
         // An empty inline that only has line-height, vertical-align or font-metrics will
         // not force linebox creation (and thus affect the height of the line) if the rest of the line is empty.
         if (requiresLineBox)
-            m_lineInfo.setEmpty(false, m_block, &m_width);
+            m_lineInfo.setEmpty(false);
         if (m_ignoringSpaces) {
             // If we are in a run of ignored spaces then ensure we get a linebox if lineboxes are eventually
             // created for the line...
@@ -484,7 +481,7 @@ inline void BreakingContext::handleReplaced()
     if (m_ignoringSpaces)
         m_lineMidpointState.stopIgnoringSpaces(InlineIterator(0, m_current.getLineLayoutItem(), 0));
 
-    m_lineInfo.setEmpty(false, m_block, &m_width);
+    m_lineInfo.setEmpty(false);
     m_ignoringSpaces = false;
     m_currentCharacterIsSpace = false;
     m_trailingObjects.clear();
@@ -717,7 +714,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
         m_currentCharacterIsSpace = c == spaceCharacter || c == tabulationCharacter || (!m_preservesNewline && (c == newlineCharacter));
 
         if (!m_collapseWhiteSpace || !m_currentCharacterIsSpace) {
-            m_lineInfo.setEmpty(false, m_block, &m_width);
+            m_lineInfo.setEmpty(false);
             m_width.setTrailingWhitespaceWidth(0);
         }
 
@@ -784,14 +781,6 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
         float lastWidthMeasurement;
         WordMeasurement& wordMeasurement = calculateWordWidth(wordMeasurements, layoutText, lastSpace, lastWidthMeasurement, wordSpacingForWordMeasurement, font, wordTrailingSpaceWidth, c);
         lastWidthMeasurement += lastSpaceWordSpacing;
-
-        midWordBreak = false;
-        if (canBreakMidWord && !m_width.fitsOnLine(lastWidthMeasurement)
-            && rewindToMidWordBreak(layoutText, style, font, breakAll, wordMeasurement)) {
-            lastWidthMeasurement = wordMeasurement.width;
-            midWordBreak = true;
-        }
-
         m_width.addUncommittedWidth(lastWidthMeasurement);
 
         // We keep track of the total width contributed by trailing space as we often want to exclude it when determining
@@ -810,6 +799,16 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
         // If we haven't hit a breakable position yet and already don't fit on the line try to move below any floats.
         if (!m_width.committedWidth() && m_autoWrap && !m_width.fitsOnLine() && !widthMeasurementAtLastBreakOpportunity)
             m_width.fitBelowFloats(m_lineInfo.isFirstLine());
+
+        midWordBreak = false;
+        if (canBreakMidWord && !m_width.fitsOnLine()) {
+            m_width.addUncommittedWidth(-wordMeasurement.width);
+            if (rewindToMidWordBreak(layoutText, style, font, breakAll, wordMeasurement)) {
+                lastWidthMeasurement = wordMeasurement.width + lastSpaceWordSpacing;
+                midWordBreak = true;
+            }
+            m_width.addUncommittedWidth(wordMeasurement.width);
+        }
 
         // If there is a soft-break available at this whitespace position then take it.
         applyWordSpacing = wordSpacing && m_currentCharacterIsSpace;

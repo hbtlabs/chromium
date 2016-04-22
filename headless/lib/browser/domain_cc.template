@@ -12,32 +12,46 @@ namespace headless {
 
 namespace {{domain.domain | camelcase_to_hacker_style}} {
 
-Domain::Domain(internal::MessageDispatcher* dispatcher) : dispatcher_(dispatcher) {}
+ExperimentalDomain* Domain::GetExperimental() {
+  return static_cast<ExperimentalDomain*>(this);
+}
 
-Domain::~Domain() {}
+  {% if "events" in domain %}
+void Domain::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void Domain::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+  {% endif %}
+
   {% for command in domain.commands %}
     {# Skip redirected commands. #}
     {% if "redirect" in command %}{% continue %}{% endif %}
 
+    {% set class_name = 'ExperimentalDomain' if command.hidden else 'Domain' %}
     {% set method_name = command.name | to_title_case %}
     {% if "parameters" in command and "returns" in command %}
-void Domain::{{method_name}}(std::unique_ptr<{{method_name}}Params> params, base::Callback<void(std::unique_ptr<{{method_name}}Result>)> callback) {
+void {{class_name}}::{{method_name}}(std::unique_ptr<{{method_name}}Params> params, base::Callback<void(std::unique_ptr<{{method_name}}Result>)> callback) {
   dispatcher_->SendMessage("{{domain.domain}}.{{command.name}}", params->Serialize(), base::Bind(&Domain::Handle{{method_name}}Response, callback));
     {% elif "parameters" in command %}
-void Domain::{{method_name}}(std::unique_ptr<{{method_name}}Params> params, base::Callback<void()> callback) {
+void {{class_name}}::{{method_name}}(std::unique_ptr<{{method_name}}Params> params, base::Callback<void()> callback) {
   dispatcher_->SendMessage("{{domain.domain}}.{{command.name}}", params->Serialize(), std::move(callback));
     {% elif "returns" in command %}
-void Domain::{{method_name}}(base::Callback<void(std::unique_ptr<{{method_name}}Result>)> callback) {
+void {{class_name}}::{{method_name}}(base::Callback<void(std::unique_ptr<{{method_name}}Result>)> callback) {
   dispatcher_->SendMessage("{{domain.domain}}.{{command.name}}", base::Bind(&Domain::Handle{{method_name}}Response, std::move(callback)));
     {% else %}
-void Domain::{{method_name}}(base::Callback<void()> callback) {
+void {{class_name}}::{{method_name}}(base::Callback<void()> callback) {
   dispatcher_->SendMessage("{{domain.domain}}.{{command.name}}", std::move(callback));
     {% endif %}
 }
     {# Generate convenience methods that take the required parameters directly. #}
     {% if not "parameters" in command %}{% continue %}{% endif %}
+    {# Don't generate these for hidden commands. #}
+    {% if command.hidden %}{% continue %}{% endif %}
 
-void Domain::{{method_name}}({##}
+void {{class_name}}::{{method_name}}({##}
     {% for parameter in command.parameters -%}
         {% if parameter.get("optional", False) -%}
           {% break %}
@@ -80,6 +94,48 @@ void Domain::Handle{{method_name}}Response(base::Callback<void(std::unique_ptr<{
   callback.Run(std::move(result));
 }
 {% endfor %}
+{% if "events" in domain %}
+  {% for event in domain.events %}
+
+{# Generate dispatchers which call registered observers for an event. #}
+void Domain::Dispatch{{event.name | to_title_case}}Event(const base::Value& params) {
+  ErrorReporter errors;
+  std::unique_ptr<{{event.name | to_title_case}}Params> parsed_params({{event.name | to_title_case}}Params::Parse(params, &errors));
+  DCHECK(!errors.HasErrors());
+  FOR_EACH_OBSERVER(ExperimentalObserver, observers_, On{{event.name | to_title_case}}(*parsed_params));
+}
+  {% endfor %}
+{% endif %}
+
+Domain::Domain(internal::MessageDispatcher* dispatcher)
+    : dispatcher_(dispatcher) {
+  {% if "events" in domain %}
+    {# Register all events in this domain. #}
+    {% for event in domain.events %}
+  dispatcher_->RegisterEventHandler(
+      "{{domain.domain}}.{{event.name}}",
+      base::Bind(&Domain::Dispatch{{event.name | to_title_case}}Event,
+                 base::Unretained(this)));
+    {% endfor %}
+  {% endif %}
+}
+
+Domain::~Domain() {}
+
+ExperimentalDomain::ExperimentalDomain(internal::MessageDispatcher* dispatcher)
+    : Domain(dispatcher) {}
+
+ExperimentalDomain::~ExperimentalDomain() {}
+
+  {% if "events" in domain %}
+void ExperimentalDomain::AddObserver(ExperimentalObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void ExperimentalDomain::RemoveObserver(ExperimentalObserver* observer) {
+  observers_.RemoveObserver(observer);
+}
+  {% endif %}
 
 }  // namespace {{domain.domain | camelcase_to_hacker_style}}
 

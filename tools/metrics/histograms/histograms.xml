@@ -5958,6 +5958,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ContentSettings.Exceptions">
+  <owner>lshang@chromium.org</owner>
+  <summary>
+    The number of user defined content setting exceptions at browser start.
+    Suffixed with the name of content setting types.
+  </summary>
+</histogram>
+
 <histogram name="ContentSettings.LastSettingParsed" enum="LastSettingParsed">
   <obsolete>
     Deprecated 2015-10-05 in Issue 433475. Histogram was used temorarily for
@@ -8383,6 +8391,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     any interaction with windows font cache service from sandboxed renderer
     process. Please note that windows font cache services is different from our
     cache file approach (later referred here as cache-file mode)
+  </summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.Fallback.CacheSize" units="Count">
+  <owner>kulshin@chromium.org</owner>
+  <summary>Records how many font families are in the fallback cache.</summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.FallbackResult"
+    enum="DirectWriteFontFallbackResult">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    Measures the effectiveness of the font fallback proxy. This tracks if we
+    were able to find a suitable font to render the character, and whether an
+    IPC was necessary.
   </summary>
 </histogram>
 
@@ -12071,6 +12094,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     sending a click event. This stat counts the number of taps that are delayed
     by the double-tap delay versus those that are sent immediately on mobile
     sites.
+  </summary>
+</histogram>
+
+<histogram name="Event.Touch.TargetAndDispatchResult"
+    enum="TouchTargetAndDispatchResultType">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    An enumeration identifying 3 properties: 1) a classification of the event
+    target whether it is a root scroll listener (window, document, body) or not;
+    2) the result of the dispatch; 3) whether the document was scrollable or
+    not.
   </summary>
 </histogram>
 
@@ -20960,6 +20994,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Video height as reported by the Netflix application.  May be reported
     multiple times as network conditions change during playback.
+  </summary>
+</histogram>
+
+<histogram name="Media.Notification.Click" enum="MediaNotificationClickSource">
+  <owner>mlamouri@chromium.org</owner>
+  <owner>avayvod@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    The type of media notification the user clicked to go back to Chrome.
   </summary>
 </histogram>
 
@@ -49209,6 +49252,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="SimpleCache.IndexWriteReason"
+    enum="SimpleCacheIndexWriteReason">
+  <owner>gavinp@chromium.org</owner>
+  <summary>
+    The reason an index was written to disk. Recorded every time an index is
+    saved.
+  </summary>
+</histogram>
+
+<histogram name="SimpleCache.IndexWriteReasonAtLoad"
+    enum="SimpleCacheIndexWriteReason">
+  <owner>gavinp@chromium.org</owner>
+  <summary>
+    Recorded immediately after loading a fresh index (INDEX_STATE_FRESH or
+    INDEX_STATE_FRESH_CONCURRENT_UPDATES), the reason the loaded index was
+    written to disk.
+  </summary>
+</histogram>
+
 <histogram name="SimpleCache.IndexWriteToDiskTime" units="ms">
   <obsolete>
     Deprecated 2013-05 in favour of
@@ -49285,6 +49347,33 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="SimpleCache.ReadResult" enum="SimpleCacheReadResult">
   <owner>gavinp@chromium.org</owner>
   <summary>The outcome of Entry::ReadData in the simple cache.</summary>
+</histogram>
+
+<histogram name="SimpleCache.StaleIndexExtraEntryCount" units="entries">
+  <owner>gavinp@chromium.org</owner>
+  <summary>
+    Count of the number of entries recorded in the index, but not actually
+    present in the cache. Recorded each time a stale index is found and a
+    directory rescan is required.
+  </summary>
+</histogram>
+
+<histogram name="SimpleCache.StaleIndexMissedEntryCount" units="entries">
+  <owner>gavinp@chromium.org</owner>
+  <summary>
+    Count of the number of entries present in a cache, but not recorded in the
+    index. Recorded each time a stale index is found and a directory rescan is
+    required.
+  </summary>
+</histogram>
+
+<histogram name="SimpleCache.StaleIndexQuality"
+    enum="SimpleCacheStaleIndexQuality">
+  <owner>gavinp@chromium.org</owner>
+  <summary>
+    The quality of a &quot;stale&quot; index compared to a full directory
+    rescan. Recorded immediately after every directory scan for stale indexes.
+  </summary>
 </histogram>
 
 <histogram name="SimpleCache.SyncCheckEOFHasCrc" enum="BooleanHasCrc">
@@ -49440,6 +49529,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The number of days between launches of an origin saved to homescreen or as a
     bookmark app shortcut. Recorded at the second and each following launch of a
     specific origin from a shortcut, independently per origin.
+  </summary>
+</histogram>
+
+<histogram name="SiteEngagementService.EngagementPercentageForHTTPS">
+  <owner>calamity@chromium.org</owner>
+  <owner>dominickn@chromium.org</owner>
+  <owner>felt@chromium.org</owner>
+  <summary>
+    The percentage of total site engagement accumulated by this profile for
+    HTTPS URLs as a proportion of all engagement for HTTPS and HTTP URLs.
+    Recorded at startup per non-incognito profile, and then upon the first
+    engagement-increasing event every hour thereafter.
   </summary>
 </histogram>
 
@@ -51636,6 +51737,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     True if a created blob exceeded the internal in-memory storage memory limit
     for blobs.
+  </summary>
+</histogram>
+
+<histogram name="Storage.Blob.InvalidReference" enum="RefcountOperation">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Counts the number of times we have an invalid refcount operation. An invalid
+    increment means the blob didn't exist, and an invalid decrement means we
+    don't have any record of the blob in our host.
+  </summary>
+</histogram>
+
+<histogram name="Storage.Blob.InvalidURLRegister" enum="RefcountOperation">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Counts the number of times we have an invalid url registration operation. An
+    invalid increment means the blob isn't in use by the host yet or the url is
+    already mapped. An invalid decrement means the url isn't registered.
   </summary>
 </histogram>
 
@@ -65514,6 +65633,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="Failed"/>
 </enum>
 
+<enum name="DirectWriteFontFallbackResult" type="int">
+  <int value="0" label="Failed: no font matched"/>
+  <int value="1" label="Success: mapped from cache"/>
+  <int value="2" label="Success: mapped using IPC"/>
+</enum>
+
 <enum name="DirectWriteFontLoaderType" type="int">
   <int value="0" label="File: system font directory"/>
   <int value="1" label="File: outside sandbox whitelist"/>
@@ -69130,6 +69255,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1115" label="AUTOTESTPRIVATE_GETVISIBLENOTIFICATIONS"/>
   <int value="1116" label="WEBRTCLOGGINGPRIVATE_STARTRTCEVENTLOGGING"/>
   <int value="1117" label="WEBRTCLOGGINGPRIVATE_STOPRTCEVENTLOGGING"/>
+  <int value="1118" label="PASSWORDSPRIVATE_GETSAVEDPASSWORDLIST"/>
+  <int value="1119" label="PASSWORDSPRIVATE_GETPASSWORDEXCEPTIONLIST"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -71068,6 +71195,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1307" label="V8Node_IsConnected_AttributeGetter"/>
   <int value="1308" label="ShadowRootDelegatesFocus"/>
   <int value="1309" label="MixedShadowRootV0AndV1"/>
+  <int value="1310" label="ImageDocumentInFrame"/>
+  <int value="1311" label="MediaDocument"/>
+  <int value="1312" label="MediaDocumentInFrame"/>
+  <int value="1313" label="PluginDocument"/>
+  <int value="1314" label="PluginDocumentInFrame"/>
+  <int value="1315" label="SinkDocument"/>
+  <int value="1316" label="SinkDocumentInFrame"/>
+  <int value="1317" label="TextDocument"/>
+  <int value="1318" label="TextDocumentInFrame"/>
+  <int value="1319" label="ViewSourceDocument"/>
+  <int value="1320" label="FileAPINativeLineEndings"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -72803,6 +72941,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </int>
   <int value="6" label="Illegal data returned by debugd.">
     The perf data sent back to Chrome by debugd is invalid.
+  </int>
+  <int value="7" label="Already collecting.">
+    A perf data collection was already active.
   </int>
 </enum>
 
@@ -75526,6 +75667,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1649778035" label="disable-clear-browsing-data-counters"/>
   <int value="-1630419335" label="enable-download-notification"/>
   <int value="-1619757314" label="touch-scrolling-mode"/>
+  <int value="-1618707999" label="enable-webfonts-intervention-v2"/>
   <int value="-1614912400" label="enable-link-disambiguation-popup"/>
   <int value="-1605567628" label="disable-overlay-scrollbar"/>
   <int value="-1599538279" label="enable-md-policy-page"/>
@@ -77121,6 +77263,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="MediaStream"/>
 </enum>
 
+<enum name="MediaNotificationClickSource" type="int">
+  <int value="0" label="Media"/>
+  <int value="1" label="Presentation"/>
+  <int value="2" label="MediaFling"/>
+</enum>
+
 <enum name="MediaOutputProtectionStatus" type="int">
   <int value="0" label="Queried"/>
   <int value="1" label="No external link"/>
@@ -77157,6 +77305,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="14" label="ConnectRouteByRouteId"/>
   <int value="15" label="EnableMdnsDiscovery"/>
   <int value="16" label="UpdateMediaSinks"/>
+  <int value="17" label="SearchSinks"/>
 </enum>
 
 <enum name="MediaRouteProviderWakeup" type="int">
@@ -79978,6 +80127,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="125017713" label="PPB_CameraCapabilities_Private;0.1"/>
   <int value="126651696" label="PPB_ContentDecryptor_Private;0.12"/>
   <int value="138418890" label="PPB_Memory(Dev);0.1"/>
+  <int value="150724524" label="PPB_Graphics2D;1.2"/>
   <int value="153443470" label="PPB_URLResponseInfo;1.0"/>
   <int value="153532707" label="PPB_Buffer(Dev);0.4"/>
   <int value="156766028" label="PPB_UMA_Private;0.3"/>
@@ -82020,6 +82170,11 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="9" label="DownloadError"/>
 </enum>
 
+<enum name="RefcountOperation" type="int">
+  <int value="0" label="Decrement"/>
+  <int value="1" label="Increment"/>
+</enum>
+
 <enum name="RemotePlaybackDeviceType" type="int">
   <int value="0" label="Cast Generic Media Player"/>
   <int value="1" label="Cast YouTube Player"/>
@@ -83867,6 +84022,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="New Cache"/>
 </enum>
 
+<enum name="SimpleCacheIndexWriteReason" type="int">
+  <int value="0" label="Shutdown"/>
+  <int value="1" label="Startup Merge"/>
+  <int value="2" label="Saved While Idle"/>
+  <int value="3" label="Stopped (Android only)"/>
+</enum>
+
 <enum name="SimpleCacheOpenEntryIndexState" type="int">
   <int value="0" label="No index"/>
   <int value="1" label="Hit"/>
@@ -83890,6 +84052,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="4" label="Fast Empty Return"/>
   <int value="5" label="Synchronous Read Failure"/>
   <int value="6" label="Synchronous Checksum Failure"/>
+</enum>
+
+<enum name="SimpleCacheStaleIndexQuality" type="int">
+  <int value="0" label="OK"/>
+  <int value="1" label="Missed Entries"/>
+  <int value="2" label="Extra Entries"/>
+  <int value="3" label="Both"/>
 </enum>
 
 <enum name="SimpleCacheSyncCheckEOFResult" type="int">
@@ -84127,6 +84296,7 @@ To add a new entry, add it with any value and run test to compute valid value.
 
   <int value="37" label="Invalid control frame size."/>
   <int value="38" label="Invalid stream ID."/>
+  <int value="39" label="Invalid padding length."/>
 </enum>
 
 <enum name="SpdyProtocolVersion" type="int">
@@ -86068,6 +86238,22 @@ To add a new entry, add it with any value and run test to compute valid value.
   </int>
 </enum>
 
+<enum name="TouchTargetAndDispatchResultType" type="int">
+  <int value="0"
+      label="Non-root-scroller, non-scrollable document, not handled"/>
+  <int value="1"
+      label="Non-root-scroller, non-scrollable document, handled application"/>
+  <int value="2" label="Non-root-scroller, scrollable document, not handled"/>
+  <int value="3"
+      label="Non-root-scroller, scrollable document, handled application"/>
+  <int value="4" label="Root-scroller, non-scrollable document, not handled"/>
+  <int value="5"
+      label="Root-scroller, non-scrollable document, handled application"/>
+  <int value="6" label="Root-scroller, scrollable document, not handled"/>
+  <int value="7"
+      label="Root-scroller, scrollable document, handled application"/>
+</enum>
+
 <enum name="TPMResultCodeEnum" type="int">
   <int value="0" label="TPM_SUCCESS"/>
   <int value="1" label="TPM_E_AUTHFAIL"/>
@@ -86828,6 +87014,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="13" label="VP9 Profile1"/>
   <int value="14" label="VP9 Profile2"/>
   <int value="15" label="VP9 Profile3"/>
+  <int value="16" label="HEVC Main"/>
+  <int value="17" label="HEVC Main10"/>
+  <int value="18" label="HEVC Main Still-picture"/>
 </enum>
 
 <enum name="VideoDecodeAcceleratorError" type="int">
@@ -88012,6 +88201,8 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="SimpleCache.IndexRestoreTime"/>
   <affected-histogram name="SimpleCache.IndexWriteInterval.Background"/>
   <affected-histogram name="SimpleCache.IndexWriteInterval.Foreground"/>
+  <affected-histogram name="SimpleCache.IndexWriteReason"/>
+  <affected-histogram name="SimpleCache.IndexWriteReasonAtLoad"/>
   <affected-histogram name="SimpleCache.IndexWriteToDiskTime.Background"/>
   <affected-histogram name="SimpleCache.IndexWriteToDiskTime.Foreground"/>
   <affected-histogram name="SimpleCache.KeyMatchedOnOpen"/>
@@ -88020,6 +88211,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="SimpleCache.OpenEntryIndexState"/>
   <affected-histogram name="SimpleCache.ReadIsParallelizable"/>
   <affected-histogram name="SimpleCache.ReadResult"/>
+  <affected-histogram name="SimpleCache.StaleIndexExtraEntryCount"/>
+  <affected-histogram name="SimpleCache.StaleIndexMissedEntryCount"/>
+  <affected-histogram name="SimpleCache.StaleIndexQuality"/>
   <affected-histogram name="SimpleCache.SyncCheckEOFHasCrc"/>
   <affected-histogram name="SimpleCache.SyncCheckEOFResult"/>
   <affected-histogram name="SimpleCache.SyncCloseResult"/>
@@ -88372,6 +88566,37 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="PLT.BeginToFinish_LinkLoadReload"/>
   <affected-histogram name="PLT.BeginToFinish_NormalLoad"/>
   <affected-histogram name="PLT.LoadType"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="ContentSettingsType" separator=".">
+  <suffix name="app-banner" label="App banner exceptions"/>
+  <suffix name="auto-select-certificate" label="Auto-select cert exceptions"/>
+  <suffix name="automatic-downloads" label="Automatic downloads exceptions"/>
+  <suffix name="background-sync" label="Background sync exceptions"/>
+  <suffix name="bluetooth-guard" label="Bluetooth guard exceptions"/>
+  <suffix name="cookies" label="Cookies exceptions"/>
+  <suffix name="durable-storage" label="Durable Storage Exceptions"/>
+  <suffix name="fullscreen" label="Fullscreen exceptions"/>
+  <suffix name="geolocation" label="Geolocation exceptions"/>
+  <suffix name="images" label="Images exceptions"/>
+  <suffix name="javascript" label="JavaScript exceptions"/>
+  <suffix name="keygen" label="Keygen exceptions"/>
+  <suffix name="media-stream-camera" label="Camera exceptions"/>
+  <suffix name="media-stream-mic" label="Microphone exceptions"/>
+  <suffix name="midi-sysex" label="Midi exceptions"/>
+  <suffix name="mixed-script" label="Mixed script exceptions"/>
+  <suffix name="mouselock" label="Mouse lock exceptions"/>
+  <suffix name="notifications" label="Notification exceptions"/>
+  <suffix name="plugins" label="Plugins exceptions"/>
+  <suffix name="popups" label="Popups exceptions"/>
+  <suffix name="ppapi-broker" label="Ppapi broker exceptions"/>
+  <suffix name="protected-media-identifier" label="Protected media exceptions"/>
+  <suffix name="protocol-handler" label="Protocol handler exceptions"/>
+  <suffix name="push-messaging" label="Push messaging exceptions"/>
+  <suffix name="site-engagement" label="Site engagement exceptions"/>
+  <suffix name="ssl-cert-decisions" label="SSL cert decisions exceptions"/>
+  <suffix name="usb-chooser-data" label="USB chooser data exceptions"/>
+  <affected-histogram name="ContentSettings.Exceptions"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ContextMenuType" separator=".">

@@ -735,6 +735,8 @@
       'browser/ui/app_list/arc/arc_app_icon_loader.h',
       'browser/ui/app_list/arc/arc_app_item.cc',
       'browser/ui/app_list/arc/arc_app_item.h',
+      'browser/ui/app_list/arc/arc_app_launcher.cc',
+      'browser/ui/app_list/arc/arc_app_launcher.h',
       'browser/ui/app_list/arc/arc_app_list_prefs.cc',
       'browser/ui/app_list/arc/arc_app_list_prefs.h',
       'browser/ui/app_list/arc/arc_app_list_prefs_factory.cc',
@@ -3291,6 +3293,7 @@
                 '../build/linux/system.gyp:gio',
                 '../ui/events/devices/events_devices.gyp:events_devices',
                 '../ui/events/devices/x11/events_devices_x11.gyp:events_devices_x11',
+                '../ui/events/keycodes/events_keycodes.gyp:keycodes_x11',
               ],
             }],
             ['use_udev==1', {
@@ -3369,6 +3372,7 @@
             '../components/components.gyp:feedback_proto',
             '../device/bluetooth/bluetooth.gyp:device_bluetooth',
             'chrome_features.gyp:chrome_common_features',
+            'profile_reset_report_proto',
           ],
           'sources': [
             '<@(chrome_browser_ui_non_mobile_sources)',

@@ -5,47 +5,27 @@
 #ifndef EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_VIDEO_ENCODER_H_
 #define EXTENSIONS_RENDERER_API_DISPLAY_SOURCE_WIFI_DISPLAY_WIFI_DISPLAY_VIDEO_ENCODER_H_
 
-#include <string>
-
 #include "base/memory/shared_memory.h"
-#include "base/stl_util.h"
+#include "extensions/renderer/api/display_source/wifi_display/wifi_display_media_encoder.h"
 #include "media/base/video_frame.h"
 #include "media/video/video_encode_accelerator.h"
 #include "third_party/wds/src/libwds/public/video_format.h"
 
 namespace extensions {
 
-// This structure represents an encoded video frame.
-struct WiFiDisplayEncodedFrame {
-  const uint8_t* bytes() const {
-    return reinterpret_cast<uint8_t*>(
-        string_as_array(const_cast<std::string*>(&data)));
-  }
-  uint8_t* mutable_bytes() {
-    return reinterpret_cast<uint8_t*>(string_as_array(&data));
-  }
-
-  base::TimeTicks pts;  // Presentation timestamp.
-  base::TimeTicks dts;  // Decoder timestamp.
-  std::string data;
-  bool key_frame;
-};
+using WiFiDisplayEncodedFrame = WiFiDisplayEncodedUnit;
 
 // This interface represents H.264 video encoder used by the
 // Wi-Fi Display media pipeline.
 // Threading: the client code should belong to a single thread.
-class WiFiDisplayVideoEncoder :
-    public base::RefCountedThreadSafe<WiFiDisplayVideoEncoder> {
+class WiFiDisplayVideoEncoder : public WiFiDisplayMediaEncoder {
  public:
-  using EncodedFrameCallback =
-      base::Callback<void(const WiFiDisplayEncodedFrame&)>;
-
   using VideoEncoderCallback =
       base::Callback<void(scoped_refptr<WiFiDisplayVideoEncoder>)>;
 
   using ReceiveVideoEncodeAcceleratorCallback =
       base::Callback<void(scoped_refptr<base::SingleThreadTaskRunner>,
-      std::unique_ptr<media::VideoEncodeAccelerator>)>;
+                          std::unique_ptr<media::VideoEncodeAccelerator>)>;
   using CreateVideoEncodeAcceleratorCallback =
       base::Callback<void(const ReceiveVideoEncodeAcceleratorCallback&)>;
 
@@ -71,34 +51,31 @@ class WiFiDisplayVideoEncoder :
   // A factory method that creates a new encoder instance from the given
   // |params|, the encoder instance is returned as an argument of
   // |result_callback| ('nullptr' argument means encoder creation failure).
-  static void Create(
-      const InitParameters& params,
-      const VideoEncoderCallback& encoder_callback);
+  static void Create(const InitParameters& params,
+                     const VideoEncoderCallback& encoder_callback);
 
   // Encodes the given raw frame. The resulting encoded frame is passed
   // as an |encoded_callback|'s argument which is set via 'SetCallbacks'
   // method.
-  virtual void InsertRawVideoFrame(
-      const scoped_refptr<media::VideoFrame>& video_frame,
-      base::TimeTicks reference_time) = 0;
+  void InsertRawVideoFrame(const scoped_refptr<media::VideoFrame>& video_frame,
+                           base::TimeTicks reference_time);
 
   // Requests the next encoded frame to be an instantaneous decoding refresh
   // (IDR) picture.
-  virtual void RequestIDRPicture() = 0;
-
-  // Sets callbacks for the obtained encoder instance:
-  // |encoded_callback| is invoked to return the next encoded frame
-  // |error_callback| is invoked to report a fatal encoder error
-  void SetCallbacks(const EncodedFrameCallback& encoded_callback,
-                    const base::Closure& error_callback);
+  void RequestIDRPicture();
 
  protected:
-  friend class base::RefCountedThreadSafe<WiFiDisplayVideoEncoder>;
-  WiFiDisplayVideoEncoder();
-  virtual ~WiFiDisplayVideoEncoder();
+  explicit WiFiDisplayVideoEncoder(
+      scoped_refptr<base::SingleThreadTaskRunner> media_task_runner);
+  ~WiFiDisplayVideoEncoder() override;
 
-  EncodedFrameCallback encoded_callback_;
-  base::Closure error_callback_;
+  virtual void InsertFrameOnMediaThread(
+      scoped_refptr<media::VideoFrame> video_frame,
+      base::TimeTicks reference_time,
+      bool send_idr) = 0;
+
+  scoped_refptr<base::SingleThreadTaskRunner> media_task_runner_;
+  bool send_idr_;
 };
 
 }  // namespace extensions

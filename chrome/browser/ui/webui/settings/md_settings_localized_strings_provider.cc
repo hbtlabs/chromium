@@ -21,6 +21,7 @@
 #include "chrome/grit/settings_google_chrome_strings.h"
 #include "chrome/grit/settings_strings.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/password_manager/core/browser/password_manager_constants.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -28,7 +29,6 @@
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/devicetype_utils.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/ui/webui/chromeos/ui_account_tweaks.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/user_manager/user.h"
@@ -599,6 +599,12 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"editPasswordUsernameLabel", IDS_SETTINGS_PASSWORDS_USERNAME},
       {"editPasswordPasswordLabel", IDS_SETTINGS_PASSWORDS_PASSWORD},
   };
+  html_source->AddString(
+      "managePasswordsLabel",
+      l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS,
+          base::ASCIIToUTF16(
+              password_manager::kPasswordManagerAccountDashboardURL)));
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
 }
@@ -928,8 +934,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddDownloadsStrings(html_source);
 
 #if defined(OS_CHROMEOS)
-  if (EasyUnlockService::Get(profile)->IsAllowed())
-    AddEasyUnlockStrings(html_source);
+  AddEasyUnlockStrings(html_source);
   AddInternetStrings(html_source);
 #endif
   AddLanguagesStrings(html_source);

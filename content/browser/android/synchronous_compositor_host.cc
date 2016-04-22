@@ -6,17 +6,21 @@
 
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/containers/hash_tables.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "content/browser/android/in_process/synchronous_compositor_renderer_statics.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "content/browser/web_contents/web_contents_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/android/sync_compositor_messages.h"
 #include "content/public/browser/android/synchronous_compositor_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/common/content_switches.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -25,6 +29,38 @@
 #include "ui/gfx/skia_util.h"
 
 namespace content {
+
+// static
+void SynchronousCompositor::SetClientForWebContents(
+    WebContents* contents,
+    SynchronousCompositorClient* client) {
+  DCHECK(contents);
+  DCHECK(client);
+  WebContentsAndroid* web_contents_android =
+      static_cast<WebContentsImpl*>(contents)->GetWebContentsAndroid();
+  DCHECK(!web_contents_android->synchronous_compositor_client());
+  web_contents_android->set_synchronous_compositor_client(client);
+}
+
+// static
+std::unique_ptr<SynchronousCompositorHost> SynchronousCompositorHost::Create(
+    RenderWidgetHostViewAndroid* rwhva,
+    WebContents* web_contents) {
+  DCHECK(web_contents);
+  WebContentsAndroid* web_contents_android =
+      static_cast<WebContentsImpl*>(web_contents)->GetWebContentsAndroid();
+  if (!web_contents_android->synchronous_compositor_client())
+    return nullptr;  // Not using sync compositing.
+
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  bool async_input =
+      !command_line->HasSwitch(switches::kSyncInputForSyncCompositor);
+  bool use_in_proc_software_draw =
+      command_line->HasSwitch(switches::kSingleProcess);
+  return base::WrapUnique(new SynchronousCompositorHost(
+      rwhva, web_contents_android->synchronous_compositor_client(), async_input,
+      use_in_proc_software_draw));
+}
 
 SynchronousCompositorHost::SynchronousCompositorHost(
     RenderWidgetHostViewAndroid* rwhva,

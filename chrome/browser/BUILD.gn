@@ -646,8 +646,8 @@ source_set("browser") {
   }
   if (is_win && enable_kasko_failed_rdv_reports) {
     sources += [
-      "//chrome/app/chrome_crash_reporter_client.cc",
-      "//chrome/app/chrome_crash_reporter_client.h",
+      "//chrome/app/chrome_crash_reporter_client_win.cc",
+      "//chrome/app/chrome_crash_reporter_client_win.h",
     ]
     deps += [ "//components/crash/content/app:lib" ]
   }
@@ -1032,7 +1032,6 @@ grit("resources") {
 
   deps = [
     ":chrome_internal_resources_gen",
-    "//chrome/browser/resources/safe_browsing:make_file_types_protobuf",
 
     # Depend only on the generated mojo bindings since we read the .mojom.js
     # file, rather than the whole mojo target which will link the C++ bindings.

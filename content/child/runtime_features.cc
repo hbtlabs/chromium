@@ -172,8 +172,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::enablePresentationAPI(false);
 
-  if (base::FeatureList::IsEnabled(features::kWebFontsIntervention)) {
-    WebRuntimeFeatures::enableWebFontsIntervention(true);
+  if (base::FeatureList::IsEnabled(features::kWebFontsInterventionV2)) {
+    WebRuntimeFeatures::enableWebFontsInterventionV2(true);
     if (command_line.HasSwitch(switches::kEnableWebFontsInterventionTrigger))
       WebRuntimeFeatures::enableWebFontsInterventionTrigger(true);
   }

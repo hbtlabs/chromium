@@ -25,6 +25,7 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer_collections.h"
+#include "cc/layers/layer_impl_test_properties.h"
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/performance_properties.h"
 #include "cc/layers/render_surface_impl.h"
@@ -79,8 +80,6 @@ class CC_EXPORT LayerImpl {
   typedef LayerImplList RenderSurfaceListType;
   typedef LayerImplList LayerListType;
   typedef RenderSurfaceImpl RenderSurfaceType;
-
-  enum RenderingContextConstants { NO_RENDERING_CONTEXT = 0 };
 
   static std::unique_ptr<LayerImpl> Create(LayerTreeImpl* tree_impl, int id) {
     return base::WrapUnique(new LayerImpl(tree_impl, id));
@@ -238,8 +237,11 @@ class CC_EXPORT LayerImpl {
   void SetHideLayerAndSubtree(bool hide);
   bool hide_layer_and_subtree() const { return hide_layer_and_subtree_; }
 
-  void SetTransformOrigin(const gfx::Point3F& transform_origin);
-  gfx::Point3F transform_origin() const { return transform_origin_; }
+  LayerImplTestProperties* test_properties() {
+    if (!test_properties_)
+      test_properties_.reset(new LayerImplTestProperties());
+    return test_properties_.get();
+  }
 
   void SetBackgroundColor(SkColor background_color);
   SkColor background_color() const { return background_color_; }
@@ -637,10 +639,11 @@ class CC_EXPORT LayerImpl {
   int layer_id_;
   LayerTreeImpl* layer_tree_impl_;
 
+  std::unique_ptr<LayerImplTestProperties> test_properties_;
+
   gfx::Vector2dF bounds_delta_;
 
   // Properties synchronized from the associated Layer.
-  gfx::Point3F transform_origin_;
   gfx::Size bounds_;
   int scroll_clip_layer_id_;
 
@@ -700,10 +703,6 @@ class CC_EXPORT LayerImpl {
   int effect_tree_index_;
   int clip_tree_index_;
   int scroll_tree_index_;
-
-  // The global depth value of the center of the layer. This value is used
-  // to sort layers from back to front.
-  float draw_depth_;
 
   FilterOperations filters_;
   FilterOperations background_filters_;

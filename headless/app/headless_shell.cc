@@ -89,7 +89,7 @@ class HeadlessShell : public HeadlessWebContents::Observer {
  private:
   HeadlessBrowser* browser_;  // Not owned.
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
-  std::unique_ptr<HeadlessWebContents> web_contents_;
+  HeadlessWebContents* web_contents_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessShell);
 };
@@ -125,6 +125,11 @@ int main(int argc, const char** argv) {
       return EXIT_FAILURE;
     }
     builder.SetProxyServer(parsed_proxy_server);
+  }
+
+  if (command_line.HasSwitch(switches::kHostResolverRules)) {
+    builder.SetHostResolverRules(
+        command_line.GetSwitchValueASCII(switches::kHostResolverRules));
   }
 
   return HeadlessBrowserMain(

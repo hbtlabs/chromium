@@ -213,6 +213,12 @@ CHAR-LIMIT guidelines:
       <message name="IDS_SIGN_IN_TO_CHROME_SUMMARY" desc="Summary for the button to sign in to Chrome, explaining benefits of signing in.">
         Sign in to get your bookmarks, history, passwords, and other settings on all your devices
       </message>
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS" desc="Title of Google activity controls preference in signed in accouts settings screen">
+        Google Activity Controls
+      </message>
+      <message name="IDS_SIGN_IN_GOOGLE_ACTIVITY_CONTROLS_MESSAGE" desc="Message of Google activity controls preference in signed in accouts settings screen">
+        Control how Google uses your browsing history to personalize Search and other Google services.
+      </message>
 
       <!-- Search engine preferences -->
       <message name="IDS_PREFS_SEARCH_ENGINE" desc="Title for Search Engine preferences. [CHAR-LIMIT=32]">
@@ -2351,6 +2357,14 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_PAYMENTS_ERROR_MESSAGE" desc="The text that informs the user that there is error in verifying and charging the payment.">
         Error processing payment
+      </message>
+
+      <!-- Migration strings -->
+      <message name="IDS_TAB_SWITCHER_CALLOUT_HEADER" desc="Header for the Tab Switcher callout.">
+        Quickly switch tabs
+      </message>
+      <message name="IDS_TAB_SWITCHER_CALLOUT_BODY" desc="Indicates that clicking the tab switcher button gives you quick access to your tabs.">
+        Tap this button for quick access to your tabs.
       </message>
     </messages>
   </release>

@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
@@ -13,7 +15,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
+#include "base/memory/ptr_util.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "jni/InstanceIDBridge_jni.h"
@@ -24,15 +26,28 @@ using base::android::ConvertUTF8ToJavaString;
 
 namespace instance_id {
 
+InstanceIDAndroid::ScopedBlockOnAsyncTasksForTesting::
+    ScopedBlockOnAsyncTasksForTesting() {
+  JNIEnv* env = AttachCurrentThread();
+  previous_value_ =
+      Java_InstanceIDBridge_setBlockOnAsyncTasksForTesting(env, true);
+}
+
+InstanceIDAndroid::ScopedBlockOnAsyncTasksForTesting::
+    ~ScopedBlockOnAsyncTasksForTesting() {
+  JNIEnv* env = AttachCurrentThread();
+  Java_InstanceIDBridge_setBlockOnAsyncTasksForTesting(env, previous_value_);
+}
+
 // static
 bool InstanceIDAndroid::RegisterJni(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
 
 // static
-scoped_ptr<InstanceID> InstanceID::Create(const std::string& app_id,
-                                          gcm::InstanceIDHandler* unused) {
-  return make_scoped_ptr(new InstanceIDAndroid(app_id));
+std::unique_ptr<InstanceID> InstanceID::Create(const std::string& app_id,
+                                               gcm::InstanceIDHandler* unused) {
+  return base::WrapUnique(new InstanceIDAndroid(app_id));
 }
 
 InstanceIDAndroid::InstanceIDAndroid(const std::string& app_id)

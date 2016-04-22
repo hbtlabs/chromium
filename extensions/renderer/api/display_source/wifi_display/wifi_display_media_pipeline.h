@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -47,8 +48,7 @@ class WiFiDisplayMediaPipeline {
       const ErrorCallback& error_callback);
   ~WiFiDisplayMediaPipeline();
   // Note: to be called only once.
-  void Initialize(
-      const InitCompletionCallback& callback);
+  void Initialize(const InitCompletionCallback& callback);
 
   void InsertRawVideoFrame(
       const scoped_refptr<media::VideoFrame>& video_frame,
@@ -57,6 +57,9 @@ class WiFiDisplayMediaPipeline {
   void RequestIDRPicture();
 
  private:
+  using InitStepCompletionCallback = InitCompletionCallback;
+  enum InitializationStep : unsigned;
+
   WiFiDisplayMediaPipeline(
       wds::SessionType type,
       const WiFiDisplayVideoEncoder::InitParameters& video_parameters,
@@ -66,13 +69,16 @@ class WiFiDisplayMediaPipeline {
       const RegisterMediaServiceCallback& service_callback,
       const ErrorCallback& error_callback);
 
-  void CreateVideoEncoder();
   void CreateMediaPacketizer();
+  void OnInitialize(const InitCompletionCallback& callback,
+                    InitializationStep current_step,
+                    bool success);
   void OnVideoEncoderCreated(
+      const InitStepCompletionCallback& callback,
       scoped_refptr<WiFiDisplayVideoEncoder> video_encoder);
-  void OnMediaServiceRegistered();
+  void OnMediaServiceRegistered(const InitCompletionCallback& callback);
 
-  void OnEncodedVideoFrame(const WiFiDisplayEncodedFrame& frame);
+  void OnEncodedVideoFrame(std::unique_ptr<WiFiDisplayEncodedFrame> frame);
 
   bool OnPacketizedMediaDatagramPacket(
      WiFiDisplayMediaDatagramPacket media_datagram_packet);
@@ -88,7 +94,6 @@ class WiFiDisplayMediaPipeline {
 
   RegisterMediaServiceCallback service_callback_;
   ErrorCallback error_callback_;
-  InitCompletionCallback init_completion_callback_;
   WiFiDisplayMediaServicePtr media_service_;
 
   base::WeakPtrFactory<WiFiDisplayMediaPipeline> weak_factory_;

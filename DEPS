@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '9134686fd9ce384e9163b44942538d033b5bff11',
+  'skia_revision': 'ada338ab4edbe0ac644663aca6da205122fa5dac',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '2a883daa864b04b5551b539f68365a4af5c2843d',
+  'v8_revision': 'b37e6fa57b2cb01e4b43c2931566d8e9f243b324',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'b0a531059e96765819c6230c6e8eb22a304bd2d8',
+  'angle_revision': 'b97a3e774f1909ee99a7adc2ce40ddad026ebf00',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -59,7 +59,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'e3bbfa29b9d38dbbb77c12692eba3c40a7fb2870',
+  'pdfium_revision': '0f6425fff33e4096b4e1fbfb954edae1349c0145',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -67,7 +67,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '0fe4d8bef5918f84a7f260c34c26dd13c0d70ade',
+  'boringssl_revision': 'f01fb5dc0e9d2227a20fe33f7bf76c2160ecf9c9',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -83,7 +83,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': 'f640889e8f9f0347fcccc8842aeb0b6fbed1cdd3',
+  'nacl_revision': 'da301fb59c80e98c055e7fb93ac706099d5808cb',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.
@@ -96,11 +96,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'c09ac1b3f0c5cf62c947462c905731683d2e81f4',
+  'catapult_revision': 'a1d076c6fbbd2c0de17d3666a480afedc0b551cf',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': '1d3e15006639ad8c1aadd2d7bac4dab9a6be7da6', # from svn revision 265174
+  'libfuzzer_revision': '84041ac212d33703dc5c48d918dc7a9212b14bd3', # from svn revision 266838
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -180,7 +180,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'f70ad1e4dd026599aea7e0b7c11bf82eabdb34f2',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '51b33d0828fc8c4a8c808325e521ac794226ac05',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -788,7 +788,7 @@ hooks = [
     'action': ['python',
                'src/build/get_syzygy_binaries.py',
                '--output-dir=src/third_party/syzygy/binaries',
-               '--revision=e6784a6b60fa2449a3cabb8ede9c6b98ef902c06',
+               '--revision=1a6e67fecbd5363c425107b2dee4be8f23dbea35',
                '--overwrite',
     ],
   },

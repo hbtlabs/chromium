@@ -177,7 +177,7 @@ void SerializedScriptValue::transferArrayBuffers(v8::Isolate* isolate, const Arr
 
             DOMArrayBufferBase* toTransfer = arrayBuffers[i];
             if (!isNeuterable)
-                toTransfer = DOMArrayBuffer::create(arrayBuffers[i]->buffer());
+                toTransfer = DOMArrayBuffer::create(arrayBuffers[i]->buffer()->data(), arrayBuffers[i]->buffer()->byteLength());
             bool result = toTransfer->transfer(contents->at(i));
             if (!result) {
                 exceptionState.throwDOMException(DataCloneError, "ArrayBuffer at index " + String::number(i) + " could not be transferred.");
@@ -211,7 +211,7 @@ v8::Local<v8::Value> SerializedScriptValue::deserialize(v8::Isolate* isolate, Me
 
 bool SerializedScriptValue::extractTransferables(v8::Isolate* isolate, v8::Local<v8::Value> value, int argumentIndex, Transferables& transferables, ExceptionState& exceptionState)
 {
-    if (isUndefinedOrNull(value))
+    if (value.IsEmpty() || value->IsUndefined())
         return true;
 
     uint32_t length = 0;

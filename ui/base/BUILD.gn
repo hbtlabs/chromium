@@ -115,6 +115,8 @@ component("base") {
     "cocoa/menu_controller.mm",
     "cocoa/nib_loading.h",
     "cocoa/nib_loading.mm",
+    "cocoa/nscolor_additions.h",
+    "cocoa/nscolor_additions.mm",
     "cocoa/nsgraphics_context_additions.h",
     "cocoa/nsgraphics_context_additions.mm",
     "cocoa/nsview_additions.h",
@@ -166,10 +168,6 @@ component("base") {
     "dragdrop/os_exchange_data_provider_win.cc",
     "dragdrop/os_exchange_data_provider_win.h",
     "hit_test.h",
-    "ios/cru_context_menu_controller.h",
-    "ios/cru_context_menu_controller.mm",
-    "ios/cru_context_menu_holder.h",
-    "ios/cru_context_menu_holder.mm",
     "l10n/formatter.cc",
     "l10n/formatter.h",
     "l10n/l10n_font_util.cc",
@@ -405,6 +403,7 @@ component("base") {
 
   if (use_aura) {
     deps += [ "//ui/events" ]
+    sources += [ "window_tracker_template.h" ]
   } else {
     sources -= [
       "cursor/cursor.cc",
@@ -435,6 +434,7 @@ component("base") {
     }
     deps += [
       "//ui/events/devices/x11",
+      "//ui/events/keycodes:x11",
       "//ui/gfx/x",
     ]
   }
@@ -521,6 +521,7 @@ component("base") {
     libs += [
       "Accelerate.framework",
       "AudioUnit.framework",
+      "Carbon.framework",
       "CoreVideo.framework",
     ]
   }
@@ -727,7 +728,6 @@ bundle_data("ui_base_unittests_bundle_data") {
 test("ui_base_unittests") {
   sources = [
     "clipboard/clipboard_util_mac_unittest.mm",
-    "ios/cru_context_menu_controller_unittest.mm",
     "l10n/l10n_util_mac_unittest.mm",
     "l10n/l10n_util_unittest.cc",
     "l10n/l10n_util_win_unittest.cc",
@@ -778,6 +778,7 @@ test("ui_base_unittests") {
       "cocoa/fullscreen_window_manager_unittest.mm",
       "cocoa/hover_image_button_unittest.mm",
       "cocoa/menu_controller_unittest.mm",
+      "cocoa/nscolor_additions_unittest.mm",
       "cocoa/nsgraphics_context_additions_unittest.mm",
       "cocoa/nsview_additions_unittest.mm",
       "cocoa/three_part_image_unittest.mm",

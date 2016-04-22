@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "content/public/test/browser_test.h"
+#include "headless/public/domains/network.h"
 #include "headless/public/domains/page.h"
 #include "headless/public/domains/runtime.h"
 #include "headless/public/headless_browser.h"
@@ -49,14 +50,16 @@ class HeadlessDevToolsClientTest : public HeadlessBrowserTest,
 
     web_contents_->GetDevToolsTarget()->DetachClient(devtools_client_.get());
     web_contents_->RemoveObserver(this);
+    web_contents_->Close();
     web_contents_ = nullptr;
   }
 
-  std::unique_ptr<HeadlessWebContents> web_contents_;
+  HeadlessWebContents* web_contents_;
   std::unique_ptr<HeadlessDevToolsClient> devtools_client_;
 };
 
-class HeadlessDevToolsClientNavigationTest : public HeadlessDevToolsClientTest {
+class HeadlessDevToolsClientNavigationTest : public HeadlessDevToolsClientTest,
+                                             page::ExperimentalObserver {
  public:
   void RunDevToolsClientTest() override {
     EXPECT_TRUE(embedded_test_server()->Start());
@@ -64,14 +67,18 @@ class HeadlessDevToolsClientNavigationTest : public HeadlessDevToolsClientTest {
         page::NavigateParams::Builder()
             .SetUrl(embedded_test_server()->GetURL("/hello.html").spec())
             .Build();
+    devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetPage()->Enable();
     devtools_client_->GetPage()->Navigate(std::move(params));
   }
 
-  // TODO(skyostil): Wait for a load event once we support them.
-  void DidFinishNavigation(bool success) override {
-    EXPECT_TRUE(success);
+  void OnLoadEventFired(const page::LoadEventFiredParams& params) override {
+    devtools_client_->GetPage()->GetExperimental()->RemoveObserver(this);
     FinishAsynchronousTest();
   }
+
+  // Check that events with no parameters still get a parameters object.
+  void OnFrameResized(const page::FrameResizedParams& params) override {}
 };
 
 DEVTOOLS_CLIENT_TEST_F(HeadlessDevToolsClientNavigationTest);
@@ -116,11 +123,11 @@ class HeadlessDevToolsClientCallbackTest : public HeadlessDevToolsClientTest {
 
   void RunDevToolsClientTest() override {
     // Null callback without parameters.
-    devtools_client_->GetRuntime()->Run();
+    devtools_client_->GetPage()->Enable();
     // Null callback with parameters.
     devtools_client_->GetRuntime()->Evaluate("true");
     // Non-null callback without parameters.
-    devtools_client_->GetRuntime()->Disable(
+    devtools_client_->GetPage()->Disable(
         base::Bind(&HeadlessDevToolsClientCallbackTest::OnFirstResult,
                    base::Unretained(this)));
     // Non-null callback with parameters.
@@ -144,5 +151,63 @@ class HeadlessDevToolsClientCallbackTest : public HeadlessDevToolsClientTest {
 };
 
 DEVTOOLS_CLIENT_TEST_F(HeadlessDevToolsClientCallbackTest);
+
+class HeadlessDevToolsClientObserverTest : public HeadlessDevToolsClientTest,
+                                           network::Observer {
+ public:
+  void RunDevToolsClientTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetNetwork()->AddObserver(this);
+    devtools_client_->GetNetwork()->Enable();
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/hello.html").spec());
+  }
+
+  void OnRequestWillBeSent(
+      const network::RequestWillBeSentParams& params) override {
+    EXPECT_EQ("GET", params.GetRequest()->GetMethod());
+    EXPECT_EQ(embedded_test_server()->GetURL("/hello.html").spec(),
+              params.GetRequest()->GetUrl());
+  }
+
+  void OnResponseReceived(
+      const network::ResponseReceivedParams& params) override {
+    EXPECT_EQ(200, params.GetResponse()->GetStatus());
+    EXPECT_EQ("OK", params.GetResponse()->GetStatusText());
+    std::string content_type;
+    EXPECT_TRUE(params.GetResponse()->GetHeaders()->GetString("Content-Type",
+                                                              &content_type));
+    EXPECT_EQ("text/html", content_type);
+
+    devtools_client_->GetNetwork()->RemoveObserver(this);
+    FinishAsynchronousTest();
+  }
+};
+
+DEVTOOLS_CLIENT_TEST_F(HeadlessDevToolsClientObserverTest);
+
+class HeadlessDevToolsClientExperimentalTest
+    : public HeadlessDevToolsClientTest,
+      page::ExperimentalObserver {
+ public:
+  void RunDevToolsClientTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    // Check that experimental commands require parameter objects.
+    devtools_client_->GetRuntime()->GetExperimental()->Run(
+        runtime::RunParams::Builder().Build());
+
+    devtools_client_->GetPage()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/hello.html").spec());
+  }
+
+  void OnFrameStoppedLoading(
+      const page::FrameStoppedLoadingParams& params) override {
+    FinishAsynchronousTest();
+  }
+};
+
+DEVTOOLS_CLIENT_TEST_F(HeadlessDevToolsClientExperimentalTest);
 
 }  // namespace headless

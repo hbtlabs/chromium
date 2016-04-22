@@ -451,15 +451,8 @@ void DocumentLoader::ensureWriter(const AtomicString& mimeType, const KURL& over
     if ((m_substituteData.isValid() && m_substituteData.forceSynchronousLoad()) || !Document::threadedParsingEnabledForTesting())
         parsingPolicy = ForceSynchronousParsing;
 
-    m_writer = createWriterFor(init, mimeType, encoding, false, parsingPolicy);
+    m_writer = createWriterFor(init, mimeType, encoding, false, parsingPolicy, overridingURL);
     m_writer->setDocumentWasLoadedAsPartOfNavigation();
-
-    // This should be set before receivedFirstData().
-    if (!overridingURL.isEmpty())
-        m_frame->document()->setBaseURLOverride(overridingURL);
-
-    // Call receivedFirstData() exactly once per load.
-    frameLoader()->receivedFirstData();
     m_frame->document()->maybeHandleHttpRefresh(m_response.httpHeaderField(HTTPNames::Refresh), Document::HttpRefreshFromHeader);
 }
 
@@ -630,20 +623,12 @@ void DocumentLoader::startLoadingMainResource()
     ASSERT(!timing().fetchStart());
     timing().markFetchStart();
 
-    m_applicationCacheHost->willStartLoadingMainResource(m_request);
-
     DEFINE_STATIC_LOCAL(ResourceLoaderOptions, mainResourceLoadOptions,
         (DoNotBufferData, AllowStoredCredentials, ClientRequestedCredentials, CheckContentSecurityPolicy, DocumentContext));
     FetchRequest fetchRequest(m_request, FetchInitiatorTypeNames::document, mainResourceLoadOptions);
     m_mainResource = RawResource::fetchMainResource(fetchRequest, fetcher(), m_substituteData);
     if (!m_mainResource) {
-        m_request = ResourceRequest();
-        // If the load was aborted by clearing m_request, it's possible the ApplicationCacheHost
-        // is now in a state where starting an empty load will be inconsistent. Replace it with
-        // a new ApplicationCacheHost.
-        if (m_applicationCacheHost)
-            m_applicationCacheHost->detachFromDocumentLoader();
-        m_applicationCacheHost = ApplicationCacheHost::create(this);
+        m_request = ResourceRequest(blankURL());
         maybeLoadEmpty();
         return;
     }
@@ -660,7 +645,7 @@ void DocumentLoader::endWriting(DocumentWriter* writer)
     m_writer.clear();
 }
 
-DocumentWriter* DocumentLoader::createWriterFor(const DocumentInit& init, const AtomicString& mimeType, const AtomicString& encoding, bool dispatch, ParserSynchronizationPolicy parsingPolicy)
+DocumentWriter* DocumentLoader::createWriterFor(const DocumentInit& init, const AtomicString& mimeType, const AtomicString& encoding, bool dispatchWindowObjectAvailable, ParserSynchronizationPolicy parsingPolicy, const KURL& overridingURL)
 {
     LocalFrame* frame = init.frame();
 
@@ -672,7 +657,18 @@ DocumentWriter* DocumentLoader::createWriterFor(const DocumentInit& init, const 
 
     Document* document = frame->localDOMWindow()->installNewDocument(mimeType, init);
 
-    frame->loader().didBeginDocument(dispatch);
+    // This should be set before receivedFirstData().
+    if (!overridingURL.isEmpty())
+        frame->document()->setBaseURLOverride(overridingURL);
+
+    frame->loader().didInstallNewDocument(dispatchWindowObjectAvailable);
+
+    // This must be called before DocumentWriter is created, otherwise HTML parser
+    // will use stale values from HTMLParserOption.
+    if (!dispatchWindowObjectAvailable)
+        frame->loader().receivedFirstData();
+
+    frame->loader().didBeginDocument();
 
     return DocumentWriter::create(document, parsingPolicy, mimeType, encoding);
 }

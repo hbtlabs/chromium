@@ -59,7 +59,7 @@
 #include "chrome/browser/android/metrics/variations_session.h"
 #include "chrome/browser/android/mojo/chrome_service_registrar_android.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
-#include "chrome/browser/android/ntp/most_visited_sites.h"
+#include "chrome/browser/android/ntp/most_visited_sites_bridge.h"
 #include "chrome/browser/android/ntp/new_tab_page_prefs.h"
 #include "chrome/browser/android/ntp/ntp_snippets_bridge.h"
 #include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
@@ -306,13 +306,13 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"LogoBridge", RegisterLogoBridge},
     {"MediaDrmCredentialManager",
      MediaDrmCredentialManager::RegisterMediaDrmCredentialManager},
-    {"MostVisitedSites", MostVisitedSites::Register},
+    {"MostVisitedSites", MostVisitedSitesBridge::Register},
     {"NativeInfoBar", RegisterNativeInfoBar},
     {"ExternalEstimateProviderAndroid",
      RegisterExternalEstimateProviderAndroid},
     {"NewTabPagePrefs", NewTabPagePrefs::RegisterNewTabPagePrefs},
     {"NotificationUIManager",
-     NotificationUIManagerAndroid::RegisterNotificationUIManager},
+     NotificationUIManagerAndroid::RegisterNotificationPlatformBridge},
     {"NTPSnippetsBridge", NTPSnippetsBridge::Register},
     {"NTPSnippetsLauncher", NTPSnippetsLauncher::Register},
     {"OAuth2TokenServiceDelegateAndroid",

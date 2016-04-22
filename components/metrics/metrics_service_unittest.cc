@@ -6,14 +6,15 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <string>
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/metrics/user_metrics.h"
 #include "base/threading/platform_thread.h"
 #include "components/metrics/client_info.h"
 #include "components/metrics/metrics_log.h"
@@ -33,8 +34,8 @@ namespace {
 void StoreNoClientInfoBackup(const ClientInfo& /* client_info */) {
 }
 
-scoped_ptr<ClientInfo> ReturnNoBackup() {
-  return scoped_ptr<ClientInfo>();
+std::unique_ptr<ClientInfo> ReturnNoBackup() {
+  return std::unique_ptr<ClientInfo>();
 }
 
 class TestMetricsService : public MetricsService {
@@ -72,6 +73,7 @@ class TestMetricsLog : public MetricsLog {
 class MetricsServiceTest : public testing::Test {
  public:
   MetricsServiceTest() : is_metrics_reporting_enabled_(false) {
+    base::SetRecordActionTaskRunner(message_loop.task_runner());
     MetricsService::RegisterPrefs(testing_local_state_.registry());
     metrics_state_manager_ = MetricsStateManager::Create(
         GetLocalState(),
@@ -156,8 +158,9 @@ class MetricsServiceTest : public testing::Test {
 
   bool is_metrics_reporting_enabled_;
   TestingPrefServiceSimple testing_local_state_;
-  scoped_ptr<MetricsStateManager> metrics_state_manager_;
+  std::unique_ptr<MetricsStateManager> metrics_state_manager_;
   base::MessageLoop message_loop;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsServiceTest);
 };
@@ -173,7 +176,8 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAfterCleanShutDown) {
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
   // No initial stability log should be generated.
@@ -213,7 +217,7 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAtProviderRequest) {
   TestMetricsProvider* test_provider = new TestMetricsProvider();
   test_provider->set_has_initial_stability_metrics(true);
   service.RegisterMetricsProvider(
-      scoped_ptr<MetricsProvider>(test_provider));
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
 
@@ -277,7 +281,8 @@ TEST_F(MetricsServiceTest, InitialStabilityLogAfterCrash) {
       GetMetricsStateManager(), &client, GetLocalState());
   // Add a provider.
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
   service.InitializeMetricsRecordingState();
 
   // The initial stability log should be generated and persisted in unsent logs.
@@ -328,11 +333,8 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   // Ensure that time has advanced by at least a tick before proceeding.
   WaitUntilTimeChanges(base::TimeTicks::Now());
 
-  service.log_manager_.BeginLoggingWithLog(scoped_ptr<MetricsLog>(
-      new MetricsLog("clientID",
-                     1,
-                     MetricsLog::INITIAL_STABILITY_LOG,
-                     &client,
+  service.log_manager_.BeginLoggingWithLog(std::unique_ptr<MetricsLog>(
+      new MetricsLog("clientID", 1, MetricsLog::INITIAL_STABILITY_LOG, &client,
                      GetLocalState())));
   // Save the time when the log was started (it's okay for this to be greater
   // than the time recorded by the above call since it's used to ensure the
@@ -371,7 +373,7 @@ TEST_F(MetricsServiceTest, RegisterSyntheticTrial) {
   // Start a new log and ensure all three trials appear in it.
   service.log_manager_.FinishCurrentLog();
   service.log_manager_.BeginLoggingWithLog(
-      scoped_ptr<MetricsLog>(new MetricsLog(
+      std::unique_ptr<MetricsLog>(new MetricsLog(
           "clientID", 1, MetricsLog::ONGOING_LOG, &client, GetLocalState())));
   service.GetSyntheticFieldTrialsOlderThan(
       service.log_manager_.current_log()->creation_time(), &synthetic_trials);
@@ -389,7 +391,8 @@ TEST_F(MetricsServiceTest,
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
   service.Stop();
@@ -403,7 +406,8 @@ TEST_F(MetricsServiceTest, MetricsProvidersInitialized) {
       GetMetricsStateManager(), &client, GetLocalState());
 
   TestMetricsProvider* test_provider = new TestMetricsProvider();
-  service.RegisterMetricsProvider(scoped_ptr<MetricsProvider>(test_provider));
+  service.RegisterMetricsProvider(
+      std::unique_ptr<MetricsProvider>(test_provider));
 
   service.InitializeMetricsRecordingState();
 
