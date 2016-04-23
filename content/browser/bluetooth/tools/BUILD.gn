@@ -2,9 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/symlink.gni")
-
-if (current_toolchain == host_toolchain) {
 executable("bluetooth_metrics_hash") {
   sources = [
     "bluetooth_metrics_hash.cc",
@@ -14,11 +11,4 @@ executable("bluetooth_metrics_hash") {
     "//base",
     "//device/bluetooth",
   ]
-}
-} else {
-  # Aliases for compatibility with GYP.
-  binary_symlink("bluetooth_metrics_hash") {
-    binary_label = ":$target_name($host_toolchain)"
-    binary_output_name = "bluetooth_metrics_hash"
-  }
 }
