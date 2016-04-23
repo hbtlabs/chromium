@@ -5,16 +5,16 @@
 import("//build/symlink.gni")
 
 if (current_toolchain == host_toolchain) {
-  executable("bluetooth_metrics_hash") {
-    sources = [
-      "bluetooth_metrics_hash.cc",
-    ]
+executable("bluetooth_metrics_hash") {
+  sources = [
+    "bluetooth_metrics_hash.cc",
+  ]
 
-    deps = [
-      "//base",
-      "//device/bluetooth",
-    ]
-  }
+  deps = [
+    "//base",
+    "//device/bluetooth",
+  ]
+}
 } else {
   # Aliases for compatibility with GYP.
   binary_symlink("bluetooth_metrics_hash") {
