@@ -10,7 +10,6 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/Frame.h"
@@ -82,7 +81,7 @@ public:
         // |updater| must be garbage collected. The other arguments
         // all must have the lifetime of the give loader.
         SRIVerifier(PassOwnPtr<WebDataConsumerHandle> handle, CompositeDataConsumerHandle::Updater* updater, Response* response, FetchManager::Loader* loader, String integrityMetadata, const KURL& url)
-            : m_handle(handle)
+            : m_handle(std::move(handle))
             , m_updater(updater)
             , m_response(response)
             , m_loader(loader)
@@ -294,7 +293,7 @@ void FetchManager::Loader::didReceiveResponse(unsigned long, const ResourceRespo
     FetchResponseData* responseData = nullptr;
     CompositeDataConsumerHandle::Updater* updater = nullptr;
     if (m_request->integrity().isEmpty())
-        responseData = FetchResponseData::createWithBuffer(new BodyStreamBuffer(createFetchDataConsumerHandleFromWebHandle(handle)));
+        responseData = FetchResponseData::createWithBuffer(new BodyStreamBuffer(createFetchDataConsumerHandleFromWebHandle(std::move(handle))));
     else
         responseData = FetchResponseData::createWithBuffer(new BodyStreamBuffer(createFetchDataConsumerHandleFromWebHandle(CompositeDataConsumerHandle::create(createWaitingDataConsumerHandle(), &updater))));
     responseData->setStatus(response.httpStatusCode());
@@ -358,7 +357,7 @@ void FetchManager::Loader::didReceiveResponse(unsigned long, const ResourceRespo
         m_resolver.clear();
     } else {
         ASSERT(!m_integrityVerifier);
-        m_integrityVerifier = new SRIVerifier(handle, updater, r, this, m_request->integrity(), response.url());
+        m_integrityVerifier = new SRIVerifier(std::move(handle), updater, r, this, m_request->integrity(), response.url());
     }
 }
 

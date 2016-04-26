@@ -5,6 +5,7 @@
 #include "ash/wm/dock/docked_window_layout_manager.h"
 
 #include "ash/ash_switches.h"
+#include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -19,6 +20,7 @@
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/panels/panel_layout_manager.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
@@ -76,8 +78,7 @@ class DockedWindowLayoutManagerTest
           test::TestShelfDelegate::instance();
       shelf_delegate->AddShelfItem(window);
       PanelLayoutManager* manager =
-          static_cast<PanelLayoutManager*>(GetPanelContainer(window)->
-              layout_manager());
+          PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
       manager->Relayout();
     }
     return window;
@@ -93,27 +94,20 @@ class DockedWindowLayoutManagerTest
           test::TestShelfDelegate::instance();
       shelf_delegate->AddShelfItem(window);
       PanelLayoutManager* manager =
-          static_cast<PanelLayoutManager*>(GetPanelContainer(window)->
-              layout_manager());
+          PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
       manager->Relayout();
     }
     return window;
-  }
-
-  aura::Window* GetPanelContainer(aura::Window* panel) {
-    return Shell::GetContainer(panel->GetRootWindow(),
-                               kShellWindowId_PanelContainer);
   }
 
   static WindowResizer* CreateSomeWindowResizer(
       aura::Window* window,
       const gfx::Point& point_in_parent,
       int window_component) {
-    return CreateWindowResizer(
-        window,
-        point_in_parent,
-        window_component,
-        aura::client::WINDOW_MOVE_SOURCE_MOUSE).release();
+    return CreateWindowResizer(wm::WmWindowAura::Get(window), point_in_parent,
+                               window_component,
+                               aura::client::WINDOW_MOVE_SOURCE_MOUSE)
+        .release();
   }
 
   void DragStart(aura::Window* window) {

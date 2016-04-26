@@ -136,7 +136,7 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     int surface_id = kNoSurfaceID;
 
     // Coded size of the video frame hint, subject to change.
-    gfx::Size initial_expected_coded_size;
+    gfx::Size initial_expected_coded_size = gfx::Size(320, 240);
 
     OutputMode output_mode = OutputMode::ALLOCATE;
   };
@@ -335,8 +335,9 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
 
 namespace std {
 
-// Specialize std::default_delete so that scoped_ptr<VideoDecodeAccelerator>
-// uses "Destroy()" instead of trying to use the destructor.
+// Specialize std::default_delete so that
+// std::unique_ptr<VideoDecodeAccelerator> uses "Destroy()" instead of trying to
+// use the destructor.
 template <>
 struct MEDIA_EXPORT default_delete<media::VideoDecodeAccelerator> {
   void operator()(media::VideoDecodeAccelerator* vda) const;

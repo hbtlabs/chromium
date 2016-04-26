@@ -12816,15 +12816,25 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
           OK, got it
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_CREATED_TITLE" desc="Title for the confirmation dialog that appears after a supervised user has been created.">
-          <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> has been created as a supervised user!
+          <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> is now a supervised user
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_CREATED_TEXT" desc="Informative text for the confirmation dialog that appears after a supervised user has been created.">
           A supervised user named <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> has been created. To set which websites this supervised user can view, you can configure restrictions and settings by visiting <ph name="BEGIN_LINK">&lt;a target="_blank" href="$3"&gt;</ph><ph name="DISPLAY_LINK">$4</ph><ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. If you do not change the default settings, <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can browse all sites on the web.
 
 Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex></ph> for these and further instructions.
         </message>
+        <message name="IDS_SUPERVISED_USER_CREATED_TEXT_PART1" desc="Informative text for the confirmation dialog that appears after a supervised user has been created.">
+          To set which websites <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can view, you can configure restrictions and settings by visiting <ph name="BEGIN_LINK">&lt;a target="_blank" href="$2"&gt;</ph><ph name="DISPLAY_LINK">$3</ph><ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>. If you do not change the default settings, <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can browse everything on the web.
+        </message>
+        <message name="IDS_SUPERVISED_USER_CREATED_TEXT_PART2" desc="Informative text for the confirmation dialog that appears after a supervised user has been created.">
+
+To prevent <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> from accessing your account, make sure you exit and childlock when you're not using Chrome. To do this, click your profile name in the upper-right corner, and select "Exit and childlock."
+<ph name="BEGIN_LINK">&lt;a target="_blank" href="https://support.google.com/chrome/?p=ui_supervised_users&amp;hl=[GRITLANGCODE]"&gt;</ph>Learn more<ph name="END_LINK">&lt;/a&gt;</ph>
+
+Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex></ph> for further instructions.
+        </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_CREATED_DONE_BUTTON" desc="Text for the button that closes the dialog without making any additional changes, on the supervised user creation confirmation dialog.">
-          Got it
+          OK, got it
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_CREATED_SWITCH_BUTTON" desc="Text for the button that opens a window for the new supervised user, on the supervised user creation confirmation dialog.">
           Switch to <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph>
@@ -12836,6 +12846,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
         <message name="IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TEXT" desc="Text that instructs the user to choose one of the displayed supervised users to import to this device.">
           Choose a supervised user to add to this device.
+        </message>
+        <message name="IDS_IMPORT_NO_EXISTING_SUPERVISED_USER_TEXT" desc="Message shown to the custodian when they open the 'supervised user import' overlay but have no existing supervised users to import.">
+          There are no supervised users to add to this device.
         </message>
         <message name="IDS_CREATE_NEW_LEGACY_SUPERVISED_USER_LINK" desc="The text for the link button that takes the user back from the dialog for importing an existing supervised user to the user creation dialog.">
           Create a new supervised user
@@ -12850,13 +12863,13 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
           Oops! Looks like you have no existing supervised users to import. Please create one or more from another device then you can import them here.
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_IMPORT_LOCAL_ERROR" desc="Message shown when a local error (for example, a disk error) occurs during supervised user import.">
-          Oops! The supervised user couldn't be imported. Please check your hard drive space and permissions and try again.
+          The supervised user couldn't be imported. Please check your hard drive space and permissions and try again.
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_IMPORT_REMOTE_ERROR" desc="Message shown when a remote error (for example, a network error) occurs during supervised user import.">
-          Oops! The supervised user couldn't be imported. Please check your network connection and try again later.
+          The supervised user couldn't be imported. Please check your network connection and try again later.
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR" desc="Message shown when a sign-in error occurs during supervised user import.">
-          Oops! Looks like there's a problem with your credentials. Please make sure you're signed in properly and try again.
+          Looks like there's a problem with your credentials. Please make sure you're signed in properly and try again.
         </message>
         <message name="IDS_LEGACY_SUPERVISED_USER_SELECT_AVATAR_TITLE" desc="Title for the dialog used to select an avatar for a supervised user being imported. The dialog is shown only when the supervised user being imported has no Chrome synced avatar.">
           Select an avatar for this supervised user

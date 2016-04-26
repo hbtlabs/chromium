@@ -285,6 +285,11 @@ const static NameToPseudoStruct pseudoTypeWithoutArgumentsMap[] = {
 {"-internal-list-box",            CSSSelector::PseudoListBox},
 {"-internal-media-controls-cast-button", CSSSelector::PseudoWebKitCustomElement},
 {"-internal-media-controls-overlay-cast-button", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-item", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-item-input", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-kind-captions", CSSSelector::PseudoWebKitCustomElement},
+{"-internal-media-controls-text-track-list-kind-subtitles", CSSSelector::PseudoWebKitCustomElement},
 {"-internal-spatial-navigation-focus", CSSSelector::PseudoSpatialNavigationFocus},
 {"-webkit-any-link",              CSSSelector::PseudoAnyLink},
 {"-webkit-autofill",              CSSSelector::PseudoAutofill},
@@ -751,7 +756,7 @@ void CSSSelector::setArgument(const AtomicString& value)
 void CSSSelector::setSelectorList(PassOwnPtr<CSSSelectorList> selectorList)
 {
     createRareData();
-    m_data.m_rareData->m_selectorList = selectorList;
+    m_data.m_rareData->m_selectorList = std::move(selectorList);
 }
 
 static bool validateSubSelector(const CSSSelector* selector)

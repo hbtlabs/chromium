@@ -122,6 +122,7 @@
 #include "public/web/WebViewClient.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "web/TextFinder.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "web/WebViewImpl.h"
@@ -3756,7 +3757,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPageMatchRects)
         EXPECT_EQ(mainFrame->selectNearestFindMatch(resultRect.center(), 0), resultIndex + 1);
 
         // Check that the find result ordering matches with our expectations.
-        Range* result = mainFrame->activeMatchFrame()->activeMatch();
+        Range* result = mainFrame->textFinder()->activeMatchFrame()->textFinder()->activeMatch();
         ASSERT_TRUE(result);
         result->setEnd(result->endContainer(), result->endOffset() + 3);
         EXPECT_EQ(result->text(), String::format("%s %02d", kFindString, resultIndex));
@@ -4637,6 +4638,7 @@ protected:
     void runTest(const char* testFile)
     {
         registerMockedHttpURLLoad(testFile);
+        m_webViewHelper.webView()->setFocus(true);
         FrameTestHelpers::loadFrame(m_webViewHelper.webView()->mainFrame(), m_baseURL + testFile);
         m_webViewHelper.webView()->updateAllLifecyclePhases();
 
@@ -4750,6 +4752,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     webViewHelper.webView()->settings()->setDefaultFontSize(12);
     webViewHelper.webView()->setDefaultPageScaleLimits(1, 1);
     webViewHelper.resize(WebSize(viewWidth, viewHeight));
+    webViewHelper.webView()->setFocus(true);
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "select_range_basic.html");
 
     // The frame starts with no selection.

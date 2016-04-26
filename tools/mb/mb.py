@@ -569,9 +569,12 @@ class MetaBuildWrapper(object):
         if not self.Exists(self.ToAbsPath(config)):
           raise MBErr('args file "%s" not found' % config)
         vals = {
-          'type': 'gn',
           'args_file': config,
+          'cros_passthrough': False,
           'gn_args': '',
+          'gyp_crosscompile': False,
+          'gyp_defines': '',
+          'type': 'gn',
         }
       else:
         if not config in self.configs:
@@ -604,10 +607,12 @@ class MetaBuildWrapper(object):
     gn_args = ' '.join(contents.get('gn_args', []))
 
     return {
-        'type': contents.get('mb_type', ''),
+        'args_file': '',
+        'cros_passthrough': False,
         'gn_args': gn_args,
-        'gyp_defines': gyp_defines,
         'gyp_crosscompile': False,
+        'gyp_defines': gyp_defines,
+        'type': contents.get('mb_type', ''),
     }
 
   def ReadConfigFile(self):
@@ -648,11 +653,15 @@ class MetaBuildWrapper(object):
 
   def FlattenConfig(self, config):
     mixins = self.configs[config]
+    # TODO(dpranke): We really should provide a constructor for the
+    # default set of values.
     vals = {
-      'type': None,
+      'args_file': '',
+      'cros_passthrough': False,
       'gn_args': [],
       'gyp_defines': '',
       'gyp_crosscompile': False,
+      'type': None,
     }
 
     visited = []
@@ -669,8 +678,9 @@ class MetaBuildWrapper(object):
       visited.append(m)
 
       mixin_vals = self.mixins[m]
-      if 'type' in mixin_vals:
-        vals['type'] = mixin_vals['type']
+
+      if 'cros_passthrough' in mixin_vals:
+        vals['cros_passthrough'] = mixin_vals['cros_passthrough']
       if 'gn_args' in mixin_vals:
         if vals['gn_args']:
           vals['gn_args'] += ' ' + mixin_vals['gn_args']
@@ -683,6 +693,9 @@ class MetaBuildWrapper(object):
           vals['gyp_defines'] += ' ' + mixin_vals['gyp_defines']
         else:
           vals['gyp_defines'] = mixin_vals['gyp_defines']
+      if 'type' in mixin_vals:
+        vals['type'] = mixin_vals['type']
+
       if 'mixins' in mixin_vals:
         self.FlattenMixins(mixin_vals['mixins'], vals, visited)
     return vals
@@ -887,7 +900,16 @@ class MetaBuildWrapper(object):
     return [gn_path, subcommand, path] + list(args)
 
   def GNArgs(self, vals):
-    gn_args = vals['gn_args']
+    if vals['cros_passthrough']:
+      if not 'GN_ARGS' in os.environ:
+        raise MBErr('MB is expecting GN_ARGS to be in the environment')
+      gn_args = os.environ['GN_ARGS']
+      if not 'target_os="chromeos"' in gn_args:
+        raise MBErr('GN_ARGS is missing target_os="chromeos": (GN_ARGS=%s)' %
+                    gn_args)
+    else:
+      gn_args = vals['gn_args']
+
     if self.args.goma_dir:
       gn_args += ' goma_dir="%s"' % self.args.goma_dir
 
@@ -1049,7 +1071,16 @@ class MetaBuildWrapper(object):
     return output_dir
 
   def GYPCmd(self, output_dir, vals):
-    gyp_defines = vals['gyp_defines']
+    if vals['cros_passthrough']:
+      if not 'GYP_DEFINES' in os.environ:
+        raise MBErr('MB is expecting GYP_DEFINES to be in the environment')
+      gyp_defines = os.environ['GYP_DEFINES']
+      if not 'chromeos=1' in gyp_defines:
+        raise MBErr('GYP_DEFINES is missing chromeos=1: (GYP_DEFINES=%s)' %
+                    gyp_defines)
+    else:
+      gyp_defines = vals['gyp_defines']
+
     goma_dir = self.args.goma_dir
 
     # GYP uses shlex.split() to split the gyp defines into separate arguments,
@@ -1079,6 +1110,21 @@ class MetaBuildWrapper(object):
     # Ensure that we have an environment that only contains
     # the exact values of the GYP variables we need.
     env = os.environ.copy()
+
+    # This is a terrible hack to work around the fact that
+    # //tools/clang/scripts/update.py is invoked by GYP and GN but
+    # currently relies on an environment variable to figure out
+    # what revision to embed in the command line #defines.
+    # For GN, we've made this work via a gn arg that will cause update.py
+    # to get an additional command line arg, but getting that to work
+    # via GYP_DEFINES has proven difficult, so we rewrite the GYP_DEFINES
+    # to get rid of the arg and add the old var in, instead.
+    # See crbug.com/582737 for more on this. This can hopefully all
+    # go away with GYP.
+    if 'llvm_force_head_revision=1' in gyp_defines:
+      env['LLVM_FORCE_HEAD_REVISION'] = '1'
+      gyp_defines = gyp_defines.replace('llvm_force_head_revision=1', '')
+
     env['GYP_GENERATORS'] = 'ninja'
     if 'GYP_CHROMIUM_NO_ACTION' in env:
       del env['GYP_CHROMIUM_NO_ACTION']

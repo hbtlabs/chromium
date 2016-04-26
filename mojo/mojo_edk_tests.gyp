@@ -59,6 +59,7 @@
         'public/cpp/bindings/tests/array_common_test.h',
         'public/cpp/bindings/tests/array_unittest.cc',
         'public/cpp/bindings/tests/associated_interface_unittest.cc',
+        'public/cpp/bindings/tests/bind_task_runner_unittest.cc',
         'public/cpp/bindings/tests/binding_callback_unittest.cc',
         'public/cpp/bindings/tests/binding_unittest.cc',
         'public/cpp/bindings/tests/bounds_checker_unittest.cc',
@@ -103,6 +104,23 @@
         'public/cpp/bindings/tests/union_unittest.cc',
         'public/cpp/bindings/tests/validation_unittest.cc',
         'public/cpp/bindings/tests/variant_test_util.h',
+      ],
+      'conditions': [
+        ['OS=="ios"', {
+          'dependencies!': [
+            'mojo_public.gyp:mojo_public_test_interfaces_blink',
+          ],
+          'sources!': [
+            'public/cpp/bindings/tests/pickle_unittest.cc',
+            'public/cpp/bindings/tests/pickled_struct_blink.cc',
+            'public/cpp/bindings/tests/pickled_struct_blink.h',
+            'public/cpp/bindings/tests/pickled_struct_chromium.cc',
+            'public/cpp/bindings/tests/pickled_struct_chromium.h',
+            'public/cpp/bindings/tests/rect_blink.h',
+            'public/cpp/bindings/tests/rect_blink_traits.h',
+            'public/cpp/bindings/tests/struct_traits_unittest.cc',
+          ],
+        }],
       ],
     },
     {

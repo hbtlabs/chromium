@@ -675,7 +675,7 @@ QuicStreamFactory::QuicStreamFactory(
     crypto_config_.SetChannelIDSource(
         new ChannelIDSourceChromium(channel_id_service));
   }
-  if (enable_token_binding && channel_id_service && IsTokenBindingSupported())
+  if (enable_token_binding && channel_id_service)
     crypto_config_.tb_key_params.push_back(kP256);
   crypto::EnsureOpenSSLInit();
   bool has_aes_hardware_support = !!EVP_has_aes_hardware();
@@ -1538,8 +1538,6 @@ int QuicStreamFactory::CreateSession(
     return rv;
   }
 
-  UMA_HISTOGRAM_COUNTS("Net.QuicEphemeralPortsSuggested",
-                       port_suggester->call_count());
   if (enable_port_selection) {
     DCHECK_LE(1u, port_suggester->call_count());
   } else {
@@ -1630,9 +1628,10 @@ void QuicStreamFactory::ActivateSession(const QuicServerId& server_id,
 
 int64_t QuicStreamFactory::GetServerNetworkStatsSmoothedRttInMicroseconds(
     const QuicServerId& server_id) const {
+  url::SchemeHostPort server("https", server_id.host_port_pair().host(),
+                             server_id.host_port_pair().port());
   const ServerNetworkStats* stats =
-      http_server_properties_->GetServerNetworkStats(
-          server_id.host_port_pair());
+      http_server_properties_->GetServerNetworkStats(server);
   if (stats == nullptr)
     return 0;
   return stats->srtt.InMicroseconds();
@@ -1695,12 +1694,13 @@ void QuicStreamFactory::MaybeInitialize() {
     return;
 
   has_initialized_data_ = true;
-  for (const std::pair<const HostPortPair, AlternativeServiceInfoVector>&
+  for (const std::pair<const url::SchemeHostPort, AlternativeServiceInfoVector>&
            key_value : http_server_properties_->alternative_service_map()) {
+    HostPortPair host_port_pair(key_value.first.host(), key_value.first.port());
     for (const AlternativeServiceInfo& alternative_service_info :
          key_value.second) {
       if (alternative_service_info.alternative_service.protocol == QUIC) {
-        quic_supported_servers_at_startup_.insert(key_value.first);
+        quic_supported_servers_at_startup_.insert(host_port_pair);
         break;
       }
     }
@@ -1744,8 +1744,9 @@ void QuicStreamFactory::ProcessGoingAwaySession(
     ServerNetworkStats network_stats;
     network_stats.srtt = base::TimeDelta::FromMicroseconds(stats.srtt_us);
     network_stats.bandwidth_estimate = stats.estimated_bandwidth;
-    http_server_properties_->SetServerNetworkStats(server_id.host_port_pair(),
-                                                   network_stats);
+    url::SchemeHostPort server("https", server_id.host_port_pair().host(),
+                               server_id.host_port_pair().port());
+    http_server_properties_->SetServerNetworkStats(server, network_stats);
     return;
   }
 

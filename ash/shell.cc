@@ -60,6 +60,7 @@
 #include "ash/wm/ash_focus_rules.h"
 #include "ash/wm/ash_native_cursor_manager.h"
 #include "ash/wm/aura/wm_globals_aura.h"
+#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/common/root_window_finder.h"
 #include "ash/wm/event_client_impl.h"
 #include "ash/wm/lock_state_controller.h"
@@ -855,6 +856,10 @@ Shell::~Shell() {
 
 void Shell::Init(const ShellInitParams& init_params) {
   in_mus_ = init_params.in_mus;
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  DCHECK(in_mus_) << "linux desktop does not support ash.";
+#endif
 
   wm_globals_.reset(new wm::WmGlobalsAura);
   window_positioner_.reset(new WindowPositioner(wm_globals_.get()));

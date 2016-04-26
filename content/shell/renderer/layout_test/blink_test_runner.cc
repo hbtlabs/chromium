@@ -53,8 +53,8 @@
 #include "content/shell/renderer/layout_test/blink_test_helpers.h"
 #include "content/shell/renderer/layout_test/layout_test_render_thread_observer.h"
 #include "content/shell/renderer/layout_test/leak_detector.h"
-#include "media/audio/audio_parameters.h"
 #include "media/base/audio_capturer_source.h"
+#include "media/base/audio_parameters.h"
 #include "media/base/video_capturer_source.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
@@ -208,7 +208,6 @@ class MockAudioCapturerSource : public media::AudioCapturerSource {
 BlinkTestRunner::BlinkTestRunner(RenderView* render_view)
     : RenderViewObserver(render_view),
       RenderViewObserverTracker<BlinkTestRunner>(render_view),
-      proxy_(NULL),
       is_main_window_(false),
       focus_on_next_commit_(false),
       leak_detector_(new LeakDetector(this)) {

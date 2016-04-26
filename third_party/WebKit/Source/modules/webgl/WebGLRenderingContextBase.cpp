@@ -30,7 +30,6 @@
 #include "bindings/modules/v8/WebGLAny.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMTypedArray.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/dom/FlexibleArrayBufferView.h"
 #include "core/fetch/ImageResource.h"
 #include "core/frame/ImageBitmap.h"
@@ -810,7 +809,7 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(HTMLCanvasElement* passedCa
     m_maxViewportDims[0] = m_maxViewportDims[1] = 0;
     contextProvider->contextGL()->GetIntegerv(GL_MAX_VIEWPORT_DIMS, m_maxViewportDims);
 
-    RefPtr<DrawingBuffer> buffer = createDrawingBuffer(contextProvider);
+    RefPtr<DrawingBuffer> buffer = createDrawingBuffer(std::move(contextProvider));
     if (!buffer) {
         m_contextLostMode = SyntheticLostContext;
         return;
@@ -841,7 +840,7 @@ PassRefPtr<DrawingBuffer> WebGLRenderingContextBase::createDrawingBuffer(PassOwn
     bool wantAntialiasing = m_requestedAttributes.antialias();
     DrawingBuffer::PreserveDrawingBuffer preserve = m_requestedAttributes.preserveDrawingBuffer() ? DrawingBuffer::Preserve : DrawingBuffer::Discard;
     return DrawingBuffer::create(
-        contextProvider,
+        std::move(contextProvider),
         clampedCanvasSize(),
         premultipliedAlpha,
         wantAlphaChannel,

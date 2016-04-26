@@ -207,8 +207,14 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
 
 // The DomDistillerViewerSource renders untrusted content, so ensure no bindings
 // are enabled when requesting to view an arbitrary URL.
+// Flaky on Linux: see http://crbug.com/606040.
+#if defined(OS_LINUX)
+#define MAYBE_NoWebUIBindingsViewUrl DISABLED_NoWebUIBindingsViewUrl
+#else
+#define MAYBE_NoWebUIBindingsViewUrl NoWebUIBindingsViewUrl
+#endif
 IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
-                       NoWebUIBindingsViewUrl) {
+                       MAYBE_NoWebUIBindingsViewUrl) {
   // We should expect distillation for any valid URL.
   expect_distillation_ = true;
   expect_distiller_page_ = true;
@@ -524,7 +530,14 @@ IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, MultiPageArticle) {
   EXPECT_THAT(result, HasSubstr("Page 2 content"));
 }
 
-IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest, PrefChange) {
+// Flaky on Ubuntu-12.04 bots: https://crbug.com/606037
+#if defined(OS_LINUX)
+#define MAYBE_PrefChange DISABLED_PrefChange
+#else
+#define MAYBE_PrefChange PrefChange
+#endif
+IN_PROC_BROWSER_TEST_F(DomDistillerViewerSourceBrowserTest,
+                       MAYBE_PrefChange) {
   PrefTest(false);
 }
 

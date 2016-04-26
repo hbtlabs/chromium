@@ -15,9 +15,9 @@
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu_image_decode_controller.h"
-#include "skia/ext/refptr.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/GrTexture.h"
@@ -61,19 +61,18 @@ class ImageDecodeTaskImpl : public TileTask {
  public:
   ImageDecodeTaskImpl(GpuImageDecodeController* controller,
                       const DrawImage& draw_image,
-                      uint64_t source_prepare_tiles_id)
+                      const ImageDecodeController::TracingInfo& tracing_info)
       : TileTask(true),
         controller_(controller),
         image_(draw_image),
-        image_ref_(skia::SharePtr(draw_image.image())),
-        source_prepare_tiles_id_(source_prepare_tiles_id) {
+        tracing_info_(tracing_info) {
     DCHECK(!SkipImage(draw_image));
   }
 
   // Overridden from Task:
   void RunOnWorkerThread() override {
     TRACE_EVENT2("cc", "ImageDecodeTaskImpl::RunOnWorkerThread", "mode", "gpu",
-                 "source_prepare_tiles_id", source_prepare_tiles_id_);
+                 "source_prepare_tiles_id", tracing_info_.prepare_tiles_id);
     controller_->DecodeImage(image_);
   }
 
@@ -89,8 +88,7 @@ class ImageDecodeTaskImpl : public TileTask {
  private:
   GpuImageDecodeController* controller_;
   DrawImage image_;
-  skia::RefPtr<const SkImage> image_ref_;
-  const uint64_t source_prepare_tiles_id_;
+  const ImageDecodeController::TracingInfo tracing_info_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageDecodeTaskImpl);
 };
@@ -103,20 +101,22 @@ class ImageUploadTaskImpl : public TileTask {
   ImageUploadTaskImpl(GpuImageDecodeController* controller,
                       const DrawImage& draw_image,
                       scoped_refptr<TileTask> decode_dependency,
-                      uint64_t source_prepare_tiles_id)
+                      const ImageDecodeController::TracingInfo& tracing_info)
       : TileTask(false),
         controller_(controller),
         image_(draw_image),
-        image_ref_(skia::SharePtr(draw_image.image())),
-        source_prepare_tiles_id_(source_prepare_tiles_id) {
+        tracing_info_(tracing_info) {
     DCHECK(!SkipImage(draw_image));
-    dependencies_.push_back(std::move(decode_dependency));
+    // If an image is already decoded and locked, we will not generate a
+    // decode task.
+    if (decode_dependency)
+      dependencies_.push_back(std::move(decode_dependency));
   }
 
   // Override from Task:
   void RunOnWorkerThread() override {
     TRACE_EVENT2("cc", "ImageUploadTaskImpl::RunOnWorkerThread", "mode", "gpu",
-                 "source_prepare_tiles_id", source_prepare_tiles_id_);
+                 "source_prepare_tiles_id", tracing_info_.prepare_tiles_id);
     controller_->UploadImage(image_);
   }
 
@@ -131,8 +131,7 @@ class ImageUploadTaskImpl : public TileTask {
  private:
   GpuImageDecodeController* controller_;
   DrawImage image_;
-  skia::RefPtr<const SkImage> image_ref_;
-  uint64_t source_prepare_tiles_id_;
+  const ImageDecodeController::TracingInfo tracing_info_;
 
   DISALLOW_COPY_AND_ASSIGN(ImageUploadTaskImpl);
 };
@@ -163,20 +162,34 @@ GpuImageDecodeController::GpuImageDecodeController(ContextProvider* context,
       bytes_used_(0) {
   // Acquire the context_lock so that we can safely retrieve the
   // GrContextThreadSafeProxy. This proxy can then be used with no lock held.
-  ContextProvider::ScopedContextLock context_lock(context_);
-  context_threadsafe_proxy_ =
-      skia::AdoptRef(context->GrContext()->threadSafeProxy());
+  {
+    ContextProvider::ScopedContextLock context_lock(context_);
+    context_threadsafe_proxy_ = sk_sp<GrContextThreadSafeProxy>(
+        context->GrContext()->threadSafeProxy());
+  }
+
+  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
+  // Don't register a dump provider in these cases.
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "cc::GpuImageDecodeController",
+        base::ThreadTaskRunnerHandle::Get());
+  }
 }
 
 GpuImageDecodeController::~GpuImageDecodeController() {
   // SetShouldAggressivelyFreeResources will zero our limits and free all
   // outstanding image memory.
   SetShouldAggressivelyFreeResources(true);
+
+  // It is safe to unregister, even if we didn't register in the constructor.
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
 }
 
 bool GpuImageDecodeController::GetTaskForImageAndRef(
     const DrawImage& draw_image,
-    uint64_t prepare_tiles_id,
+    const TracingInfo& tracing_info,
     scoped_refptr<TileTask>* task) {
   if (SkipImage(draw_image)) {
     *task = nullptr;
@@ -191,6 +204,12 @@ bool GpuImageDecodeController::GetTaskForImageAndRef(
     ImageData* image_data = found->second.get();
     if (image_data->is_at_raster) {
       // Image is at-raster, just return, this usage will be at-raster as well.
+      *task = nullptr;
+      return false;
+    }
+
+    if (image_data->decode.decode_failure) {
+      // We have already tried and failed to decode this image, so just return.
       *task = nullptr;
       return false;
     }
@@ -241,8 +260,8 @@ bool GpuImageDecodeController::GetTaskForImageAndRef(
   // in UploadTaskCompleted.
   RefImage(draw_image);
   existing_task = make_scoped_refptr(new ImageUploadTaskImpl(
-      this, draw_image, GetImageDecodeTaskAndRef(draw_image, prepare_tiles_id),
-      prepare_tiles_id));
+      this, draw_image, GetImageDecodeTaskAndRef(draw_image, tracing_info),
+      tracing_info));
 
   // Ref the image again - this ref is owned by the caller, and it is their
   // responsibility to release it by calling UnrefImage.
@@ -296,10 +315,11 @@ DecodedDrawImage GpuImageDecodeController::GetDecodedImageForDraw(
   // in DrawWithImageFinished.
   UnrefImageDecode(draw_image);
 
-  SkImage* image = image_data->upload.image.get();
+  sk_sp<SkImage> image = image_data->upload.image;
   DCHECK(image || image_data->decode.decode_failure);
 
-  DecodedDrawImage decoded_draw_image(image, draw_image.filter_quality());
+  DecodedDrawImage decoded_draw_image(std::move(image),
+                                      draw_image.filter_quality());
   decoded_draw_image.set_at_raster_decode(image_data->is_at_raster);
   return decoded_draw_image;
 }
@@ -347,6 +367,64 @@ void GpuImageDecodeController::SetShouldAggressivelyFreeResources(
   }
 }
 
+bool GpuImageDecodeController::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  for (const auto& image_pair : image_data_) {
+    const ImageData* image_data = image_pair.second.get();
+    const uint32_t image_id = image_pair.first;
+
+    // If we have discardable decoded data, dump this here.
+    if (image_data->decode.data) {
+      std::string discardable_dump_name = base::StringPrintf(
+          "cc/image_memory/controller_%p/discardable/image_%d", this, image_id);
+      base::trace_event::MemoryAllocatorDump* dump =
+          image_data->decode.data->CreateMemoryAllocatorDump(
+              discardable_dump_name.c_str(), pmd);
+
+      // If our image is locked, dump the "locked_size" as an additional column.
+      // This lets us see the amount of discardable which is contributing to
+      // memory pressure.
+      if (image_data->decode.is_locked) {
+        dump->AddScalar("locked_size",
+                        base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                        image_data->size);
+      }
+    }
+
+    // If we have an uploaded image (that is actually on the GPU, not just a CPU
+    // wrapper), upload it here.
+    if (image_data->upload.image && image_data->mode == DecodedDataMode::GPU) {
+      std::string gpu_dump_name = base::StringPrintf(
+          "cc/image_memory/controller_%p/gpu/image_%d", this, image_id);
+      base::trace_event::MemoryAllocatorDump* dump =
+          pmd->CreateAllocatorDump(gpu_dump_name);
+      dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                      base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                      image_data->size);
+
+      // Create a global shred GUID to associate this data with its GPU process
+      // counterpart.
+      GLuint gl_id = skia::GrBackendObjectToGrGLTextureInfo(
+                         image_data->upload.image->getTextureHandle(
+                             false /* flushPendingGrContextIO */))
+                         ->fID;
+      base::trace_event::MemoryAllocatorDumpGuid guid =
+          gfx::GetGLTextureClientGUIDForTracing(
+              context_->ContextSupport()->ShareGroupTracingGUID(), gl_id);
+
+      // kImportance is somewhat arbitrary - we chose 3 to be higher than the
+      // value used in the GPU process (1), and Skia (2), causing us to appear
+      // as the owner in memory traces.
+      const int kImportance = 3;
+      pmd->CreateSharedGlobalAllocatorDump(guid);
+      pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+    }
+  }
+
+  return true;
+}
+
 void GpuImageDecodeController::DecodeImage(const DrawImage& draw_image) {
   base::AutoLock lock(lock_);
   auto found = image_data_.Peek(draw_image.image()->uniqueID());
@@ -392,7 +470,7 @@ void GpuImageDecodeController::UploadTaskCompleted(
 // the requested decode.
 scoped_refptr<TileTask> GpuImageDecodeController::GetImageDecodeTaskAndRef(
     const DrawImage& draw_image,
-    uint64_t prepare_tiles_id) {
+    const TracingInfo& tracing_info) {
   lock_.AssertAcquired();
 
   const uint32_t image_id = draw_image.image()->uniqueID();
@@ -418,7 +496,7 @@ scoped_refptr<TileTask> GpuImageDecodeController::GetImageDecodeTaskAndRef(
     // DecodeTaskCompleted.
     RefImageDecode(draw_image);
     existing_task = make_scoped_refptr(
-        new ImageDecodeTaskImpl(this, draw_image, prepare_tiles_id));
+        new ImageDecodeTaskImpl(this, draw_image, tracing_info));
   }
   return existing_task;
 }
@@ -679,22 +757,22 @@ void GpuImageDecodeController::UploadImageIfNecessary(
   // cleaned up so we don't exceed our memory limit during this upload.
   DeletePendingImages();
 
-  skia::RefPtr<SkImage> uploaded_image;
+  sk_sp<SkImage> uploaded_image;
   {
     base::AutoUnlock unlock(lock_);
     switch (image_data->mode) {
       case DecodedDataMode::CPU: {
         SkImageInfo image_info = CreateImageInfoForDrawImage(draw_image);
-        uploaded_image = skia::AdoptRef(SkImage::NewFromRaster(
-            image_info, image_data->decode.data->data(),
-            image_info.minRowBytes(), [](const void*, void*) {}, nullptr));
+        SkPixmap pixmap(image_info, image_data->decode.data->data(),
+                        image_info.minRowBytes());
+        uploaded_image =
+            SkImage::MakeFromRaster(pixmap, [](const void*, void*) {}, nullptr);
         break;
       }
       case DecodedDataMode::GPU: {
-        uploaded_image =
-            skia::AdoptRef(SkImage::NewFromDeferredTextureImageData(
-                context_->GrContext(), image_data->decode.data->data(),
-                SkBudgeted::kNo));
+        uploaded_image = SkImage::MakeFromDeferredTextureImageData(
+            context_->GrContext(), image_data->decode.data->data(),
+            SkBudgeted::kNo);
         break;
       }
     }

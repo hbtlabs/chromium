@@ -89,7 +89,7 @@ static PassOwnPtr<BlobData> createBlobDataForFileSystemURL(const KURL& fileSyste
 }
 
 // static
-File* File::create(ExecutionContext* context, const HeapVector<BlobOrStringOrArrayBufferViewOrArrayBuffer>& fileBits, const String& fileName, const FilePropertyBag& options, ExceptionState& exceptionState)
+File* File::create(ExecutionContext* context, const HeapVector<ArrayBufferOrArrayBufferViewOrBlobOrUSVString>& fileBits, const String& fileName, const FilePropertyBag& options, ExceptionState& exceptionState)
 {
     ASSERT(options.hasType());
     if (!options.type().containsOnlyASCII()) {
@@ -262,7 +262,7 @@ unsigned long long File::size() const
 
 Blob* File::slice(long long start, long long end, const String& contentType, ExceptionState& exceptionState) const
 {
-    if (hasBeenClosed()) {
+    if (isClosed()) {
         exceptionState.throwDOMException(InvalidStateError, "File has been closed.");
         return nullptr;
     }
@@ -311,7 +311,7 @@ void File::captureSnapshot(long long& snapshotSize, double& snapshotModification
 
 void File::close(ExecutionContext* executionContext, ExceptionState& exceptionState)
 {
-    if (hasBeenClosed()) {
+    if (isClosed()) {
         exceptionState.throwDOMException(InvalidStateError, "Blob has been closed.");
         return;
     }

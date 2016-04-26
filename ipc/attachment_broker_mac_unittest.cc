@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <sys/mman.h>
 
+#include <memory>
 #include <tuple>
 
 #include "base/command_line.h"
@@ -18,7 +19,6 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
 #include "base/memory/free_deleter.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/shared_memory.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/spin_wait.h"
@@ -86,13 +86,14 @@ base::mac::ScopedMachSendRight GetMachPortFromBrokeredAttachment(
 }
 
 // Makes a Mach port backed SharedMemory region and fills it with |contents|.
-scoped_ptr<base::SharedMemory> MakeSharedMemory(const std::string& contents) {
+std::unique_ptr<base::SharedMemory> MakeSharedMemory(
+    const std::string& contents) {
   base::SharedMemoryHandle shm(contents.size());
   if (!shm.IsValid()) {
     LOG(ERROR) << "Failed to make SharedMemoryHandle.";
     return nullptr;
   }
-  scoped_ptr<base::SharedMemory> shared_memory(
+  std::unique_ptr<base::SharedMemory> shared_memory(
       new base::SharedMemory(shm, false));
   shared_memory->Map(contents.size());
   memcpy(shared_memory->memory(), contents.c_str(), contents.size());
@@ -141,7 +142,7 @@ bool GetSharedMemoryHandlesFromMsg2(const IPC::Message& message,
 }
 
 // Returns |nullptr| on error.
-scoped_ptr<base::SharedMemory> MapSharedMemoryHandle(
+std::unique_ptr<base::SharedMemory> MapSharedMemoryHandle(
     const base::SharedMemoryHandle& shm,
     bool read_only) {
   if (!shm.IsValid()) {
@@ -155,7 +156,7 @@ scoped_ptr<base::SharedMemory> MapSharedMemoryHandle(
     return nullptr;
   }
 
-  scoped_ptr<base::SharedMemory> shared_memory(
+  std::unique_ptr<base::SharedMemory> shared_memory(
       new base::SharedMemory(shm, read_only));
   shared_memory->Map(size);
   return shared_memory;
@@ -165,7 +166,7 @@ scoped_ptr<base::SharedMemory> MapSharedMemoryHandle(
 // consumes a reference to the underlying Mach port.
 bool CheckContentsOfSharedMemoryHandle(const base::SharedMemoryHandle& shm,
                                        const std::string& contents) {
-  scoped_ptr<base::SharedMemory> shared_memory(
+  std::unique_ptr<base::SharedMemory> shared_memory(
       MapSharedMemoryHandle(shm, false));
 
   if (memcmp(shared_memory->memory(), contents.c_str(), contents.size()) != 0) {
@@ -181,7 +182,7 @@ bool CheckContentsOfFileDescriptor(const base::FileDescriptor& file_descriptor,
                                    const std::string& contents) {
   base::ScopedFD fd_closer(file_descriptor.fd);
   lseek(file_descriptor.fd, 0, SEEK_SET);
-  scoped_ptr<char, base::FreeDeleter> buffer(
+  std::unique_ptr<char, base::FreeDeleter> buffer(
       static_cast<char*>(malloc(contents.size())));
   if (!base::ReadFromFD(file_descriptor.fd, buffer.get(), contents.size()))
     return false;
@@ -221,9 +222,9 @@ bool CheckContentsOfTwoEquivalentSharedMemoryHandles(
     const base::SharedMemoryHandle& handle1,
     const base::SharedMemoryHandle& handle2,
     const std::string& contents) {
-  scoped_ptr<base::SharedMemory> shared_memory1(
+  std::unique_ptr<base::SharedMemory> shared_memory1(
       MapSharedMemoryHandle(handle1, false));
-  scoped_ptr<base::SharedMemory> shared_memory2(
+  std::unique_ptr<base::SharedMemory> shared_memory2(
       MapSharedMemoryHandle(handle2, false));
 
   if (memcmp(shared_memory1->memory(), contents.c_str(), contents.size()) !=
@@ -422,6 +423,12 @@ class IPCAttachmentBrokerMacTest : public IPCTestBase {
 
   // Setup shared between tests.
   void CommonSetUp(const char* name) {
+    PreConnectSetUp(name);
+    PostConnectSetUp();
+  }
+
+  // All of setup before the channel is connected.
+  void PreConnectSetUp(const char* name) {
     Init(name);
     MachPreForkSetUp();
 
@@ -431,6 +438,10 @@ class IPCAttachmentBrokerMacTest : public IPCTestBase {
     broker_->AddObserver(&observer_, task_runner());
     CreateChannel(&proxy_listener_);
     broker_->RegisterBrokerCommunicationChannel(channel());
+  }
+
+  // All of setup including the connection and everything after.
+  void PostConnectSetUp() {
     ASSERT_TRUE(ConnectChannel());
     ASSERT_TRUE(StartClient());
 
@@ -469,7 +480,8 @@ class IPCAttachmentBrokerMacTest : public IPCTestBase {
   // Makes a SharedMemory region, fills it with |contents|, sends the handle
   // over Chrome IPC, and unmaps the region.
   void SendMessage1(const std::string& contents) {
-    scoped_ptr<base::SharedMemory> shared_memory(MakeSharedMemory(contents));
+    std::unique_ptr<base::SharedMemory> shared_memory(
+        MakeSharedMemory(contents));
     IPC::Message* message =
         new TestSharedMemoryHandleMsg1(100, shared_memory->handle(), 200);
     sender()->Send(message);
@@ -486,7 +498,7 @@ class IPCAttachmentBrokerMacTest : public IPCTestBase {
 
  private:
   ProxyListener proxy_listener_;
-  scoped_ptr<IPC::AttachmentBrokerUnprivilegedMac> broker_;
+  std::unique_ptr<IPC::AttachmentBrokerUnprivilegedMac> broker_;
   AttachmentBrokerObserver observer_;
 
   // A port on which the main process listens for mach messages from the child
@@ -511,7 +523,7 @@ struct ChildProcessGlobals {
   // gets a chance to unregister itself as an observer. This doesn't matter
   // outside of tests, since neither port_provider nor broker will ever be
   // destroyed.
-  scoped_ptr<IPC::AttachmentBrokerPrivilegedMac> broker;
+  std::unique_ptr<IPC::AttachmentBrokerPrivilegedMac> broker;
   base::mac::ScopedMachSendRight server_task_port;
 
   // Total resident memory before running the message loop.
@@ -527,7 +539,7 @@ using OnMessageReceivedCallback = void (*)(IPC::Sender* sender,
 
 // Sets up the Mach communication ports with the server. Returns a set of
 // globals that must live at least as long as the test.
-scoped_ptr<ChildProcessGlobals> CommonChildProcessSetUp() {
+std::unique_ptr<ChildProcessGlobals> CommonChildProcessSetUp() {
   base::CommandLine cmd_line = *base::CommandLine::ForCurrentProcess();
   std::string service_name =
       cmd_line.GetSwitchValueASCII(g_service_switch_name);
@@ -543,7 +555,7 @@ scoped_ptr<ChildProcessGlobals> CommonChildProcessSetUp() {
   base::mac::ScopedMachSendRight server_task_port(
       IPC::ReceiveMachPort(client_port.get()));
 
-  scoped_ptr<ChildProcessGlobals> globals(new ChildProcessGlobals);
+  std::unique_ptr<ChildProcessGlobals> globals(new ChildProcessGlobals);
   globals->broker.reset(
       new IPC::AttachmentBrokerPrivilegedMac(&globals->port_provider));
   globals->port_provider.InsertEntry(getppid(), server_task_port.get());
@@ -555,14 +567,14 @@ scoped_ptr<ChildProcessGlobals> CommonChildProcessSetUp() {
 int CommonPrivilegedProcessMain(OnMessageReceivedCallback callback,
                                 const char* channel_name) {
   LOG(INFO) << "Privileged process start.";
-  scoped_ptr<ChildProcessGlobals> globals(CommonChildProcessSetUp());
+  std::unique_ptr<ChildProcessGlobals> globals(CommonChildProcessSetUp());
 
   mach_msg_type_number_t active_names_at_start = IPC::GetActiveNameCount();
 
   base::MessageLoopForIO main_message_loop;
   ProxyListener listener;
 
-  scoped_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
+  std::unique_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
       IPCTestBase::GetChannelName(channel_name), &listener));
   globals->broker->RegisterCommunicationChannel(channel.get(), nullptr);
   CHECK(channel->Connect());
@@ -679,7 +691,7 @@ TEST_F(IPCAttachmentBrokerMacTest, SendTwoMessagesSameSharedMemoryHandle) {
   CommonSetUp("SendTwoMessagesSameSharedMemoryHandle");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
 
     for (int i = 0; i < 2; ++i) {
@@ -725,9 +737,9 @@ TEST_F(IPCAttachmentBrokerMacTest,
   CommonSetUp("SendOneMessageWithTwoDifferentSharedMemoryHandles");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory1(
+    std::unique_ptr<base::SharedMemory> shared_memory1(
         MakeSharedMemory(kDataBuffer1));
-    scoped_ptr<base::SharedMemory> shared_memory2(
+    std::unique_ptr<base::SharedMemory> shared_memory2(
         MakeSharedMemory(kDataBuffer2));
     IPC::Message* message = new TestSharedMemoryHandleMsg2(
         shared_memory1->handle(), shared_memory2->handle());
@@ -768,7 +780,7 @@ TEST_F(IPCAttachmentBrokerMacTest,
   CommonSetUp("SendOneMessageWithTwoSameSharedMemoryHandles");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
     IPC::Message* message = new TestSharedMemoryHandleMsg2(
         shared_memory->handle(), shared_memory->handle());
@@ -813,9 +825,9 @@ TEST_F(IPCAttachmentBrokerMacTest, SendPosixFDAndMachPort) {
   CommonSetUp("SendPosixFDAndMachPort");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory1(
+    std::unique_ptr<base::SharedMemory> shared_memory1(
         MakeSharedMemory(kDataBuffer1));
-    scoped_ptr<base::SharedMemory> shared_memory2(
+    std::unique_ptr<base::SharedMemory> shared_memory2(
         MakeSharedMemory(kDataBuffer2));
 
     base::FileDescriptor file_descriptor1(
@@ -869,15 +881,15 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(SendPosixFDAndMachPort) {
 // process sending an attachment to another unprivileged process.
 TEST_F(IPCAttachmentBrokerMacTest, SendSharedMemoryHandleToSelf) {
   SetBroker(new MockBroker);
-  CommonSetUp("SendSharedMemoryHandleToSelf");
-
+  PreConnectSetUp("SendSharedMemoryHandleToSelf");
   // Technically, the channel is an endpoint, but we need the proxy listener to
   // receive the messages so that it can quit the message loop.
   channel()->SetAttachmentBrokerEndpoint(false);
+  PostConnectSetUp();
   get_proxy_listener()->set_listener(get_broker());
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
     mach_port_urefs_t ref_count = IPC::GetMachRefCount(
         shared_memory->handle().GetMemoryObject(), MACH_PORT_RIGHT_SEND);
@@ -932,14 +944,18 @@ TEST_F(IPCAttachmentBrokerMacTest, SendSharedMemoryHandleChannelProxy) {
   SetBroker(new IPC::AttachmentBrokerUnprivilegedMac);
   get_broker()->AddObserver(get_observer(), task_runner());
 
-  scoped_ptr<base::Thread> thread(
+  std::unique_ptr<base::Thread> thread(
       new base::Thread("ChannelProxyTestServerThread"));
   base::Thread::Options options;
   options.message_loop_type = base::MessageLoop::TYPE_IO;
   thread->StartWithOptions(options);
 
-  CreateChannelProxy(get_proxy_listener(), thread->task_runner().get());
+  set_channel_proxy(std::unique_ptr<IPC::ChannelProxy>(new IPC::ChannelProxy(
+      get_proxy_listener(), thread->task_runner().get())));
   get_broker()->RegisterBrokerCommunicationChannel(channel_proxy());
+  channel_proxy()->Init(
+      CreateChannelFactory(GetTestChannelHandle(), thread->task_runner().get()),
+      true);
 
   ASSERT_TRUE(StartClient());
 
@@ -981,7 +997,7 @@ TEST_F(IPCAttachmentBrokerMacTest, ShareToProcess) {
   CommonSetUp("ShareToProcess");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
     base::SharedMemoryHandle new_handle;
     ASSERT_TRUE(shared_memory->ShareToProcess(0, &new_handle));
@@ -1011,7 +1027,7 @@ TEST_F(IPCAttachmentBrokerMacTest, ShareReadOnlyToProcess) {
   CommonSetUp("ShareReadOnlyToProcess");
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
     base::SharedMemoryHandle new_handle;
     ASSERT_TRUE(shared_memory->ShareReadOnlyToProcess(0, &new_handle));
@@ -1030,12 +1046,12 @@ void ShareReadOnlyToProcessCallback(IPC::Sender* sender,
   base::SharedMemoryHandle shm(GetSharedMemoryHandleFromMsg1(message));
 
   // Try to map the memory as writable.
-  scoped_ptr<base::SharedMemory> shared_memory(
+  std::unique_ptr<base::SharedMemory> shared_memory(
       MapSharedMemoryHandle(shm, false));
   ASSERT_EQ(nullptr, shared_memory->memory());
 
   // Now try as read-only.
-  scoped_ptr<base::SharedMemory> shared_memory2(
+  std::unique_ptr<base::SharedMemory> shared_memory2(
       MapSharedMemoryHandle(shm.Duplicate(), true));
   int current_prot, max_prot;
   ASSERT_TRUE(IPC::GetMachProtections(shared_memory2->memory(),
@@ -1058,15 +1074,15 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(ShareReadOnlyToProcess) {
 // not have the task port for the parent process.
 TEST_F(IPCAttachmentBrokerMacTest, SendSharedMemoryHandleToSelfDelayedPort) {
   SetBroker(new MockBroker);
-  CommonSetUp("SendSharedMemoryHandleToSelfDelayedPort");
-
+  PreConnectSetUp("SendSharedMemoryHandleToSelfDelayedPort");
   // Technically, the channel is an endpoint, but we need the proxy listener to
   // receive the messages so that it can quit the message loop.
   channel()->SetAttachmentBrokerEndpoint(false);
+  PostConnectSetUp();
   get_proxy_listener()->set_listener(get_broker());
 
   {
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MakeSharedMemory(kDataBuffer1));
     mach_port_urefs_t ref_count = IPC::GetMachRefCount(
         shared_memory->handle().GetMemoryObject(), MACH_PORT_RIGHT_SEND);
@@ -1168,7 +1184,7 @@ void MemoryUsageLargeMessageCallback(IPC::Sender* sender,
             globals->initial_resident_size + g_expected_memory_increase);
 
   base::SharedMemoryHandle shm(GetSharedMemoryHandleFromMsg1(message));
-  scoped_ptr<base::SharedMemory> shared_memory(
+  std::unique_ptr<base::SharedMemory> shared_memory(
       MapSharedMemoryHandle(shm, false));
   EXPECT_LE(GetResidentSize(),
             globals->initial_resident_size + g_expected_memory_increase);
@@ -1231,7 +1247,7 @@ void MemoryUsageManyMessagesCallback(IPC::Sender* sender,
     // Map the shared memory, and make sure that its pages are counting towards
     // resident size.
     base::SharedMemoryHandle shm(GetSharedMemoryHandleFromMsg1(message));
-    scoped_ptr<base::SharedMemory> shared_memory(
+    std::unique_ptr<base::SharedMemory> shared_memory(
         MapSharedMemoryHandle(shm, false));
 
     char* addr = static_cast<char*>(shared_memory->memory());

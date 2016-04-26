@@ -77,6 +77,7 @@ public:
 
     // Called to update imperative animation state. This should be called before
     // paint, although the client can rate-limit these calls.
+    // |lastFrameTimeMonotonic| is in seconds.
     virtual void beginFrame(double lastFrameTimeMonotonic) { }
 
     // Called to run through the entire set of document lifecycle phases needed
@@ -93,7 +94,9 @@ public:
     // warranted before painting again).
     virtual void paint(WebCanvas*, const WebRect& viewPort) { }
 
-    virtual void paintCompositedDeprecated(WebCanvas*, const WebRect&) { }
+    // Similar to paint() but ignores compositing decisions, squashing all
+    // contents of the WebWidget into the output given to the WebCanvas.
+    virtual void paintIgnoringCompositing(WebCanvas*, const WebRect&) {}
 
     // Run layout and paint of all pending document changes asynchronously.
     // The caller is resposible for keeping the WebLayoutAndPaintAsyncCallback

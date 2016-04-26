@@ -9,13 +9,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <memory>
+
 #if defined(OS_POSIX)
 #include <unistd.h>
 #endif
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -224,10 +225,10 @@ void NaClListener::Listen() {
                                       &shutdown_event_);
   filter_ = channel_->CreateSyncMessageFilter();
   channel_->AddFilter(new FileTokenMessageFilter());
-  channel_->Init(channel_name, IPC::Channel::MODE_CLIENT, true);
   IPC::AttachmentBroker* global = IPC::AttachmentBroker::GetGlobal();
   if (global && !global->IsPrivilegedBroker())
     global->RegisterBrokerCommunicationChannel(channel_.get());
+  channel_->Init(channel_name, IPC::Channel::MODE_CLIENT, true);
   main_loop_ = base::MessageLoop::current();
   main_loop_->Run();
 }

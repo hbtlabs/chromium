@@ -125,7 +125,7 @@ HTMLInputElement::HTMLInputElement(Document& document, HTMLFormElement* form, bo
     // to destroy them when the |type| attribute gets set by the parser to
     // something else than 'text'.
     , m_inputType(createdByParser ? nullptr : InputType::createText(*this))
-    , m_inputTypeView(m_inputType)
+    , m_inputTypeView(m_inputType ? m_inputType->createView() : nullptr)
 {
     setHasCustomStyleCallbacks();
 }
@@ -254,14 +254,14 @@ String HTMLInputElement::validationMessage() const
     if (customError())
         return customValidationMessage();
 
-    return m_inputType->validationMessage().first;
+    return m_inputType->validationMessage(*m_inputTypeView).first;
 }
 
 String HTMLInputElement::validationSubMessage() const
 {
     if (!willValidate() || customError())
         return String();
-    return m_inputType->validationMessage().second;
+    return m_inputType->validationMessage(*m_inputTypeView).second;
 }
 
 double HTMLInputElement::minimum() const
@@ -1699,7 +1699,7 @@ const AtomicString& HTMLInputElement::defaultAutocapitalize() const
 
 String HTMLInputElement::defaultToolTip() const
 {
-    return m_inputType->defaultToolTip();
+    return m_inputType->defaultToolTip(*m_inputTypeView);
 }
 
 bool HTMLInputElement::shouldAppearIndeterminate() const

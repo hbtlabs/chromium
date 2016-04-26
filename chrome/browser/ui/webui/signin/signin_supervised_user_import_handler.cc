@@ -15,8 +15,9 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_attributes_entry.h"
+#include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
-#include "chrome/browser/profiles/profile_info_cache.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -43,6 +44,25 @@ SigninSupervisedUserImportHandler::SigninSupervisedUserImportHandler()
 }
 
 SigninSupervisedUserImportHandler::~SigninSupervisedUserImportHandler() {
+}
+
+void SigninSupervisedUserImportHandler::GetLocalizedValues(
+    base::DictionaryValue* localized_strings) {
+  DCHECK(localized_strings);
+
+  localized_strings->SetString("supervisedUserImportTitle",
+      l10n_util::GetStringUTF16(
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TITLE));
+  localized_strings->SetString("supervisedUserImportText",
+      l10n_util::GetStringUTF16(
+          IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_TEXT));
+  localized_strings->SetString("noSupervisedUserImportText",
+      l10n_util::GetStringUTF16(IDS_IMPORT_NO_EXISTING_SUPERVISED_USER_TEXT));
+  localized_strings->SetString("supervisedUserImportOk",
+      l10n_util::GetStringUTF16(IDS_IMPORT_EXISTING_LEGACY_SUPERVISED_USER_OK));
+  localized_strings->SetString("supervisedUserAlreadyOnThisDevice",
+      l10n_util::GetStringUTF16(
+          IDS_LEGACY_SUPERVISED_USER_ALREADY_ON_THIS_DEVICE));
 }
 
 void SigninSupervisedUserImportHandler::RegisterMessages() {
@@ -172,10 +192,9 @@ void SigninSupervisedUserImportHandler::SendExistingSupervisedUsers(
     Profile* profile,
     const base::DictionaryValue* dict) {
   DCHECK(dict);
-  ProfileInfoCache& cache =
-      g_browser_process->profile_manager()->GetProfileInfoCache();
   std::vector<ProfileAttributesEntry*> entries =
-      cache.GetAllProfilesAttributes();
+      g_browser_process->profile_manager()->GetProfileAttributesStorage().
+          GetAllProfilesAttributes();
 
   // Collect the ids of local supervised user profiles.
   std::set<std::string> supervised_user_ids;

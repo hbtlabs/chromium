@@ -302,6 +302,7 @@
     'content_browsertests_webrtc_sources': [
       'browser/media/webrtc/webrtc_audio_debug_recordings_browsertest.cc',
       'browser/media/webrtc/webrtc_browsertest.cc',
+      'browser/media/webrtc/webrtc_canvas_capture_browsertest.cc',
       'browser/media/webrtc/webrtc_datachannel_browsertest.cc',
       'browser/media/webrtc/webrtc_getusermedia_browsertest.cc',
       'browser/media/webrtc/webrtc_internals_browsertest.cc',
@@ -837,7 +838,6 @@
         '../components/components.gyp:display_compositor',
         '../components/scheduler/scheduler.gyp:scheduler',
         '../components/scheduler/scheduler.gyp:scheduler_test_support',
-        '../gpu/blink/gpu_blink.gyp:gpu_blink',
         '../gpu/gpu.gyp:gpu_ipc_common',
         '../gpu/gpu.gyp:gpu_ipc_service_test_support',
         '../ipc/mojo/ipc_mojo.gyp:*',
@@ -2101,7 +2101,7 @@
             'additional_src_dirs': ['public/android/javatests/', ],
             'is_test_apk': 1,
             'test_type': 'instrumentation',
-            'isolate_file': 'content_shell_test_apk.isolate',
+            'isolate_file': 'content_shell_test_data.isolate',
           },
           'includes': [
             '../build/java_apk.gypi',
@@ -2159,7 +2159,7 @@
                   '../build/isolate.gypi',
                 ],
                 'sources': [
-                  'content_shell_test_apk_run.isolate',
+                  'content_shell_test_apk.isolate',
                 ],
               },
               {

@@ -413,8 +413,9 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tagName, Document& docum
     , m_seeking(false)
     , m_sentStalledEvent(false)
     , m_sentEndEvent(false)
-    , m_closedCaptionsVisible(false)
     , m_ignorePreloadNone(false)
+    , m_textTracksVisible(false)
+    , m_shouldPerformAutomaticTrackSelection(true)
     , m_tracksAreReady(true)
     , m_processingPreferenceChange(false)
     , m_remoteRoutesAvailable(false)
@@ -995,7 +996,8 @@ void HTMLMediaElement::loadResource(const WebMediaPlayerSource& source, ContentT
 
     bool attemptLoad = true;
 
-    if (source.isMediaStream() || url.protocolIs(mediaSourceBlobProtocol)) {
+    bool isStreamOrBlobUrl = source.isMediaStream() || url.protocolIs(mediaSourceBlobProtocol);
+    if (isStreamOrBlobUrl) {
         bool isMediaStream = source.isMediaStream() || (source.isURL() && isMediaStreamURL(url.getString()));
         if (isMediaStream) {
             m_autoplayHelper->removeUserGestureRequirement(GesturelessPlaybackEnabledByStream);
@@ -1017,7 +1019,10 @@ void HTMLMediaElement::loadResource(const WebMediaPlayerSource& source, ContentT
     if (attemptLoad && canLoadResource) {
         ASSERT(!webMediaPlayer());
 
-        if (effectivePreloadType() == WebMediaPlayer::PreloadNone) {
+        // Conditionally defer the load if effective preload is 'none'.
+        // Skip this optional deferral for MediaStream sources or any blob URL,
+        // including MediaSource blob URLs.
+        if (!isStreamOrBlobUrl && effectivePreloadType() == WebMediaPlayer::PreloadNone) {
             WTF_LOG(Media, "HTMLMediaElement::loadResource(%p) : Delaying load because preload == 'none'", this);
             deferLoad();
         } else {
@@ -1229,6 +1234,11 @@ void HTMLMediaElement::textTrackModeChanged(TextTrack* track)
 
     ASSERT(textTracks()->contains(track));
     textTracks()->scheduleChangeEvent();
+}
+
+void HTMLMediaElement::disableAutomaticTextTrackSelection()
+{
+    m_shouldPerformAutomaticTrackSelection = false;
 }
 
 bool HTMLMediaElement::isSafeToLoadURL(const KURL& url, InvalidURLAction actionIfInvalid)
@@ -1755,6 +1765,11 @@ void HTMLMediaElement::finishSeek()
 HTMLMediaElement::ReadyState HTMLMediaElement::getReadyState() const
 {
     return m_readyState;
+}
+
+bool HTMLMediaElement::hasVideo() const
+{
+    return webMediaPlayer() && webMediaPlayer()->hasVideo();
 }
 
 bool HTMLMediaElement::hasAudio() const
@@ -2587,10 +2602,13 @@ void HTMLMediaElement::honorUserPreferencesForAutomaticTextTrackSelection()
     if (!m_textTracks || !m_textTracks->length())
         return;
 
+    if (!m_shouldPerformAutomaticTrackSelection)
+        return;
+
     AutomaticTrackSelection::Configuration configuration;
     if (m_processingPreferenceChange)
         configuration.disableCurrentlyEnabledTracks = true;
-    if (m_closedCaptionsVisible)
+    if (m_textTracksVisible)
         configuration.forceEnableSubtitleOrCaptionTrack = true;
 
     Settings* settings = document().settings();
@@ -3260,9 +3278,9 @@ bool HTMLMediaElement::hasClosedCaptions() const
     return false;
 }
 
-bool HTMLMediaElement::closedCaptionsVisible() const
+bool HTMLMediaElement::textTracksVisible() const
 {
-    return m_closedCaptionsVisible;
+    return m_textTracksVisible;
 }
 
 static void assertShadowRootChildren(ShadowRoot& shadowRoot)
@@ -3318,28 +3336,8 @@ void HTMLMediaElement::mediaControlsDidBecomeVisible()
     // When the user agent starts exposing a user interface for a video element,
     // the user agent should run the rules for updating the text track rendering
     // of each of the text tracks in the video element's list of text tracks ...
-    if (isHTMLVideoElement() && closedCaptionsVisible())
+    if (isHTMLVideoElement() && textTracksVisible())
         ensureTextTrackContainer().updateDisplay(*this, TextTrackContainer::DidStartExposingControls);
-}
-
-void HTMLMediaElement::setClosedCaptionsVisible(bool closedCaptionVisible)
-{
-    WTF_LOG(Media, "HTMLMediaElement::setClosedCaptionsVisible(%p, %s)", this, boolString(closedCaptionVisible));
-
-    if (!hasClosedCaptions())
-        return;
-
-    m_closedCaptionsVisible = closedCaptionVisible;
-
-    markCaptionAndSubtitleTracksAsUnconfigured();
-    m_processingPreferenceChange = true;
-    honorUserPreferencesForAutomaticTextTrackSelection();
-    m_processingPreferenceChange = false;
-
-    // As track visibility changed while m_processingPreferenceChange was set,
-    // there was no call to updateTextTrackDisplay(). This call is not in the
-    // spec, see the note in configureTextTrackDisplay().
-    updateTextTrackDisplay();
 }
 
 void HTMLMediaElement::setTextTrackKindUserPreferenceForAllMediaElements(Document* document)
@@ -3360,13 +3358,13 @@ void HTMLMediaElement::automaticTrackSelectionForUpdatedUserPreference()
 
     markCaptionAndSubtitleTracksAsUnconfigured();
     m_processingPreferenceChange = true;
-    m_closedCaptionsVisible = false;
+    m_textTracksVisible = false;
     honorUserPreferencesForAutomaticTextTrackSelection();
     m_processingPreferenceChange = false;
 
     // If a track is set to 'showing' post performing automatic track selection,
-    // set closed captions state to visible to update the CC button and display the track.
-    m_closedCaptionsVisible = m_textTracks->hasShowingTracks();
+    // set text tracks state to visible to update the CC button and display the track.
+    m_textTracksVisible = m_textTracks->hasShowingTracks();
     updateTextTrackDisplay();
 }
 
@@ -3491,7 +3489,7 @@ void HTMLMediaElement::configureTextTrackDisplay()
         return;
 
     bool haveVisibleTextTrack = m_textTracks->hasShowingTracks();
-    m_closedCaptionsVisible = haveVisibleTextTrack;
+    m_textTracksVisible = haveVisibleTextTrack;
 
     if (!haveVisibleTextTrack && !mediaControls())
         return;
@@ -3630,7 +3628,7 @@ void HTMLMediaElement::createPlaceholderTracksIfNecessary()
         addAudioTrack("audio", WebMediaPlayerClient::AudioTrackKindMain, "Audio Track", "", true);
 
     // Create a placeholder video track if the player says it has video but it didn't explicitly announce the tracks.
-    if (webMediaPlayer() && webMediaPlayer()->hasVideo() && !videoTracks().length())
+    if (hasVideo() && !videoTracks().length())
         addVideoTrack("video", WebMediaPlayerClient::VideoTrackKindMain, "Video Track", "", true);
 }
 

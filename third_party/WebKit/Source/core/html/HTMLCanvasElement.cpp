@@ -202,7 +202,7 @@ void HTMLCanvasElement::registerRenderingContextFactory(PassOwnPtr<CanvasRenderi
     CanvasRenderingContext::ContextType type = renderingContextFactory->getContextType();
     ASSERT(type < CanvasRenderingContext::ContextTypeCount);
     ASSERT(!renderingContextFactories()[type]);
-    renderingContextFactories()[type] = renderingContextFactory;
+    renderingContextFactories()[type] = std::move(renderingContextFactory);
 }
 
 CanvasRenderingContext* HTMLCanvasElement::getCanvasRenderingContext(const String& type, const CanvasContextCreationAttributes& attributes)
@@ -595,7 +595,6 @@ String HTMLCanvasElement::toDataURLInternal(const String& mimeType, const double
     String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToDataURL);
 
     ImageData* imageData = toImageData(sourceBuffer, SnapshotReasonToDataURL);
-    ScopedDisposal<ImageData> disposer(imageData);
 
     return ImageDataBuffer(imageData->size(), imageData->data()->data()).toDataURL(encodingMimeType, quality);
 }
@@ -640,8 +639,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
     String encodingMimeType = toEncodingMimeType(mimeType, EncodeReasonToBlobCallback);
 
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
-    // imageData unref its data, which we still keep alive for the async toBlob thread
-    ScopedDisposal<ImageData> disposer(imageData);
+
     CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback);
 
     if (encodingMimeType == DefaultMimeType)
@@ -801,7 +799,7 @@ void HTMLCanvasElement::createImageBufferInternal(PassOwnPtr<ImageBufferSurface>
     int msaaSampleCount = 0;
     OwnPtr<ImageBufferSurface> surface;
     if (externalSurface) {
-        surface = externalSurface;
+        surface = std::move(externalSurface);
     } else {
         surface = createImageBufferSurface(size(), &msaaSampleCount);
     }
@@ -906,7 +904,7 @@ void HTMLCanvasElement::createImageBufferUsingSurfaceForTesting(PassOwnPtr<Image
     discardImageBuffer();
     setWidth(surface->size().width());
     setHeight(surface->size().height());
-    createImageBufferInternal(surface);
+    createImageBufferInternal(std::move(surface));
 }
 
 void HTMLCanvasElement::ensureUnacceleratedImageBuffer()

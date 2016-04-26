@@ -115,7 +115,7 @@ public:
     void updateAllLifecyclePhases() override;
     void paint(WebCanvas*, const WebRect&) override;
 #if OS(ANDROID)
-    void paintCompositedDeprecated(WebCanvas*, const WebRect&) override;
+    void paintIgnoringCompositing(WebCanvas*, const WebRect&) override;
 #endif
     void layoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
     void compositeAndReadbackAsync(WebCompositeAndReadbackAsyncCallback*) override;
@@ -434,7 +434,7 @@ public:
     WebViewScheduler* scheduler() const override;
     void setVisibilityState(WebPageVisibilityState, bool) override;
 
-    bool hasOpenedPopup() const { return m_pagePopup.get(); }
+    bool hasOpenedPopup() const { return m_pagePopup; }
 
     // Returns true if the event leads to scrolling.
     static bool mapKeyCodeForScroll(
@@ -524,6 +524,8 @@ public:
 
     bool isTransparent() const;
     void setIsTransparent(bool value);
+
+    double lastFrameTimeMonotonic() const { return m_lastFrameTimeMonotonic; }
 
 private:
     InspectorOverlay* inspectorOverlay();
@@ -751,6 +753,8 @@ private:
 
     // Manages the layer tree created for this page in Slimming Paint v2.
     PaintArtifactCompositor m_paintArtifactCompositor;
+
+    double m_lastFrameTimeMonotonic;
 };
 
 DEFINE_TYPE_CASTS(WebViewImpl, WebWidget, widget, widget->isWebView(), widget.isWebView());

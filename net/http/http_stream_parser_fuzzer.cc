@@ -15,7 +15,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -32,9 +31,6 @@
 //
 // |data| is used to create a FuzzedSocket.
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  // Needed for thread checks and waits.
-  base::MessageLoopForIO message_loop;
-
   net::TestCompletionCallback callback;
   net::BoundTestNetLog bound_test_net_log;
   std::unique_ptr<net::FuzzedSocket> fuzzed_socket(
@@ -65,7 +61,10 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   result = parser.ReadResponseHeaders(callback.callback());
   result = callback.GetResult(result);
 
-  while (result > 0) {
+  if (result < 0)
+    return 0;
+
+  while (true) {
     scoped_refptr<net::IOBufferWithSize> io_buffer(
         new net::IOBufferWithSize(64));
     result = parser.ReadResponseBody(io_buffer.get(), io_buffer->size(),
@@ -74,8 +73,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     // Releasing the pointer to IOBuffer immediately is more likely to lead to a
     // use-after-free.
     io_buffer = nullptr;
-
-    result = callback.GetResult(result);
+    if (callback.GetResult(result) <= 0)
+      break;
   }
 
   return 0;

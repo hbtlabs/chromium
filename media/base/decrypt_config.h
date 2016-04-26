@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_ptr.h"
 #include "media/base/media_export.h"
 
 namespace media {
@@ -55,6 +54,10 @@ class MEDIA_EXPORT DecryptConfig {
   const std::string& key_id() const { return key_id_; }
   const std::string& iv() const { return iv_; }
   const std::vector<SubsampleEntry>& subsamples() const { return subsamples_; }
+
+  // Returns true if the corresponding decoder buffer requires decryption and
+  // false if that buffer is clear despite the presense of DecryptConfig.
+  bool is_encrypted() const { return !key_id_.empty() && !iv_.empty(); }
 
   // Returns true if all fields in |config| match this config.
   bool Matches(const DecryptConfig& config) const;

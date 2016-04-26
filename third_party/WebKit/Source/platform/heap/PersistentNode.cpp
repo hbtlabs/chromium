@@ -8,6 +8,15 @@
 
 namespace blink {
 
+namespace {
+
+class DummyGCBase final : public GarbageCollected<DummyGCBase> {
+public:
+    DEFINE_INLINE_TRACE() { }
+};
+
+}
+
 PersistentRegion::~PersistentRegion()
 {
     PersistentNodeSlots* slots = m_slots;
@@ -43,6 +52,21 @@ void PersistentRegion::ensurePersistentNodeSlots(void* self, TraceCallback trace
     }
     slots->m_next = m_slots;
     m_slots = slots;
+}
+
+void PersistentRegion::releasePersistentNode(PersistentNode* persistentNode, ThreadState::PersistentClearCallback callback)
+{
+    ASSERT(!persistentNode->isUnused());
+    // 'self' is in use, containing the persistent wrapper object.
+    void* self = persistentNode->self();
+    if (callback) {
+        (*callback)(self);
+        ASSERT(persistentNode->isUnused());
+        return;
+    }
+    Persistent<DummyGCBase>* persistent = reinterpret_cast<Persistent<DummyGCBase>*>(self);
+    persistent->clear();
+    ASSERT(persistentNode->isUnused());
 }
 
 // This function traces all PersistentNodes. If we encounter
@@ -95,6 +119,7 @@ void PersistentRegion::tracePersistentNodes(Visitor* visitor)
     ASSERT(persistentCount == m_persistentCount);
 }
 
+
 namespace {
 class GCObject final : public GarbageCollected<GCObject> {
 public:
@@ -119,7 +144,7 @@ void CrossThreadPersistentRegion::prepareForThreadStateTermination(ThreadState* 
                 continue;
 
             // 'self' is in use, containing the cross-thread persistent wrapper object.
-            CrossThreadPersistent<GCObject>* persistent = reinterpret_cast<CrossThreadPersistent<GCObject>*>(slots->m_slot[i].self());
+            CrossThreadPersistent<DummyGCBase>* persistent = reinterpret_cast<CrossThreadPersistent<DummyGCBase>*>(slots->m_slot[i].self());
             ASSERT(persistent);
             void* rawObject = persistent->atomicGet();
             if (!rawObject)

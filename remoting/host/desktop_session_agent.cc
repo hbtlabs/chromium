@@ -13,6 +13,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
+#include "ipc/attachment_broker.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
@@ -142,7 +143,7 @@ class SharedMemoryFactoryImpl : public webrtc::SharedMemoryFactory {
               buffer->size())));
     }
 
-    return rtc_make_scoped_ptr(buffer.release());
+    return rtc::scoped_ptr<webrtc::SharedMemory>(buffer.release());
   }
 
  private:
@@ -215,6 +216,10 @@ void DesktopSessionAgent::OnChannelError() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   // Make sure the channel is closed.
+  if (IPC::AttachmentBroker::GetGlobal()) {
+    IPC::AttachmentBroker::GetGlobal()->DeregisterCommunicationChannel(
+        network_channel_.get());
+  }
   network_channel_.reset();
   desktop_pipe_.Close();
 
@@ -310,7 +315,7 @@ void DesktopSessionAgent::OnStartSessionAgent(
   video_capturer_ = desktop_environment_->CreateVideoCapturer();
   video_capturer_->Start(this);
   video_capturer_->SetSharedMemoryFactory(
-      rtc_make_scoped_ptr(new SharedMemoryFactoryImpl(
+      rtc::scoped_ptr<webrtc::SharedMemoryFactory>(new SharedMemoryFactoryImpl(
           base::Bind(&DesktopSessionAgent::SendToNetwork, this))));
   mouse_cursor_monitor_ = desktop_environment_->CreateMouseCursorMonitor();
   mouse_cursor_monitor_->Init(this, webrtc::MouseCursorMonitor::SHAPE_ONLY);
@@ -413,6 +418,10 @@ void DesktopSessionAgent::Stop() {
   delegate_.reset();
 
   // Make sure the channel is closed.
+  if (IPC::AttachmentBroker::GetGlobal()) {
+    IPC::AttachmentBroker::GetGlobal()->DeregisterCommunicationChannel(
+        network_channel_.get());
+  }
   network_channel_.reset();
 
   if (started_) {

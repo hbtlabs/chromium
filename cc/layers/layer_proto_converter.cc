@@ -10,6 +10,7 @@
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
+#include "cc/layers/solid_color_scrollbar_layer.h"
 #include "cc/proto/layer.pb.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_common.h"
@@ -85,8 +86,7 @@ void LayerProtoConverter::RecursivelyFindAllLayers(Layer* root_layer,
                                                    LayerIdMap* layer_id_map) {
   LayerTreeHostCommon::CallFunctionForEveryLayer(
       root_layer->layer_tree_host(),
-      [layer_id_map](Layer* layer) { (*layer_id_map)[layer->id()] = layer; },
-      CallFunctionLayerType::ALL_LAYERS);
+      [layer_id_map](Layer* layer) { (*layer_id_map)[layer->id()] = layer; });
 }
 
 // static
@@ -109,6 +109,14 @@ scoped_refptr<Layer> LayerProtoConverter::FindOrAllocateAndConstruct(
       return PictureLayer::Create(EmptyContentLayerClient::GetInstance());
     case proto::LayerNode::HEADS_UP_DISPLAY_LAYER:
       return HeadsUpDisplayLayer::Create();
+    case proto::LayerNode::SOLID_COLOR_SCROLLBAR_LAYER:
+      // Create and return a SolidColorScrollbarLayer with invalid properties
+      // (orientation, thumb thickness, starting track, left_side_scroll, layer
+      // id etc.).
+      // These properties will be set correctly in the later step when we run
+      // through LayerTreeHost and deserialize them for each layer.
+      return SolidColorScrollbarLayer::Create(ScrollbarOrientation::HORIZONTAL,
+                                              -1, -1, false, Layer::INVALID_ID);
   }
   // TODO(nyquist): Add the rest of the necessary LayerTypes. This function
   // should not return null.

@@ -688,6 +688,53 @@ class LayerTreeHostTestPushPropertiesTo : public LayerTreeHostTest {
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPushPropertiesTo);
 
+class LayerTreeHostTestDamageWithReplica : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    scoped_refptr<Layer> root = Layer::Create();
+    layer_tree_host()->SetRootLayer(root);
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override {
+    index_ = 0;
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void DidCommit() override {
+    switch (layer_tree_host()->source_frame_number()) {
+      case 0:
+        break;
+      case 1:
+        scoped_refptr<Layer> replica_layer = Layer::Create();
+        layer_tree_host()->root_layer()->SetReplicaLayer(replica_layer.get());
+        break;
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    switch (index_) {
+      case 0:
+        impl->sync_tree()->ResetAllChangeTracking(
+            PropertyTrees::ResetFlags::ALL_TREES);
+        EXPECT_FALSE(impl->sync_tree()->root_layer()->LayerPropertyChanged());
+        PostSetNeedsCommitToMainThread();
+        index_++;
+        break;
+      case 1:
+        EXPECT_TRUE(impl->sync_tree()->root_layer()->LayerPropertyChanged());
+        EndTest();
+        break;
+    }
+  }
+
+  void AfterTest() override {}
+
+  int index_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestDamageWithReplica);
+
 // Verify damage status of property trees is preserved after commit.
 class LayerTreeHostTestPropertyTreesChangedSync : public LayerTreeHostTest {
  protected:
@@ -695,7 +742,7 @@ class LayerTreeHostTestPropertyTreesChangedSync : public LayerTreeHostTest {
     scoped_refptr<Layer> root = Layer::Create();
     scoped_refptr<Layer> child = Layer::Create();
     // This is to force the child to create a transform and effect node.
-    child->SetForceRenderSurface(true);
+    child->SetForceRenderSurfaceForTesting(true);
     root->AddChild(std::move(child));
     layer_tree_host()->SetRootLayer(root);
     LayerTreeHostTest::SetupTree();
@@ -1358,7 +1405,7 @@ class LayerTreeHostTestUndrawnLayersDamageLater : public LayerTreeHostTest {
       case 3:
         // Test owning the surface.
         parent_layer_->SetOpacity(0.5f);
-        parent_layer_->SetForceRenderSurface(true);
+        parent_layer_->SetForceRenderSurfaceForTesting(true);
         break;
       case 4:
         EndTest();
@@ -2344,7 +2391,7 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
     parent_layer_ = FakePictureLayer::Create(&client_);
     parent_layer_->SetIsDrawable(true);
     parent_layer_->SetBounds(gfx::Size(50, 50));
-    parent_layer_->SetForceRenderSurface(true);
+    parent_layer_->SetForceRenderSurfaceForTesting(true);
 
     child_layer_ = FakePictureLayer::Create(&client_);
     child_layer_->SetIsDrawable(true);
@@ -3773,6 +3820,7 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
     page_scale_layer->AddChild(inner_viewport_scroll_layer);
 
     scoped_refptr<Layer> content_layer = FakePictureLayer::Create(&client_);
+    content_layer_id_ = content_layer->id();
     content_layer->SetBounds(gfx::Size(10, 10));
     inner_viewport_scroll_layer->AddChild(content_layer);
 
@@ -3795,7 +3843,7 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
     num_draws_++;
     LayerImpl* content_layer_impl =
-        host_impl->active_tree()->InnerViewportScrollLayer()->children()[0];
+        host_impl->active_tree()->LayerById(content_layer_id_);
     gfx::Transform expected_draw_transform;
     switch (num_draws_) {
       case 1:
@@ -3833,6 +3881,7 @@ class LayerTreeHostTestElasticOverscroll : public LayerTreeHostTest {
   FakeContentLayerClient client_;
   scoped_refptr<Layer> root_layer_;
   ScrollElasticityHelper* scroll_elasticity_helper_;
+  int content_layer_id_;
   int num_draws_;
 };
 
@@ -6177,16 +6226,14 @@ class LayerTreeTestPageScaleFlags : public LayerTreeTest {
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
-        host_impl->sync_tree(),
-        [this](LayerImpl* layer) {
+        host_impl->sync_tree(), [this](LayerImpl* layer) {
           const std::vector<int>& list =
               layer->IsAffectedByPageScale()
                   ? this->affected_by_page_scale_
                   : this->not_affected_by_page_scale_;
           EXPECT_TRUE(std::find(list.begin(), list.end(), layer->id()) !=
                       list.end());
-        },
-        CallFunctionLayerType::ALL_LAYERS);
+        });
 
     EndTest();
   }

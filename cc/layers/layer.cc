@@ -77,7 +77,7 @@ Layer::Layer()
       use_parent_backface_visibility_(false),
       use_local_transform_for_backface_visibility_(false),
       should_check_backface_visibility_(false),
-      force_render_surface_(false),
+      force_render_surface_for_testing_(false),
       transform_is_invertible_(true),
       has_render_surface_(false),
       subtree_property_changed_(false),
@@ -902,11 +902,11 @@ void Layer::SetTouchEventHandlerRegion(const Region& region) {
   SetNeedsCommit();
 }
 
-void Layer::SetForceRenderSurface(bool force) {
+void Layer::SetForceRenderSurfaceForTesting(bool force) {
   DCHECK(IsPropertyChangeAllowed());
-  if (force_render_surface_ == force)
+  if (force_render_surface_for_testing_ == force)
     return;
-  force_render_surface_ = force;
+  force_render_surface_for_testing_ = force;
   SetNeedsCommit();
 }
 
@@ -1137,15 +1137,12 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer->SetClipTreeIndex(clip_tree_index());
   layer->SetScrollTreeIndex(scroll_tree_index());
   layer->set_offset_to_transform_parent(offset_to_transform_parent_);
-  layer->SetDoubleSided(double_sided_);
   layer->SetDrawsContent(DrawsContent());
   layer->SetHideLayerAndSubtree(hide_layer_and_subtree_);
-  layer->SetHasRenderSurface(has_render_surface_);
   // subtree_property_changed_ is propagated to all descendants while building
   // property trees. So, it is enough to check it only for the current layer.
   if (subtree_property_changed_)
     layer->NoteLayerPropertyChanged();
-  layer->SetForceRenderSurface(force_render_surface_);
   if (!layer->FilterIsAnimatingOnImplOnly() && !FilterIsAnimating())
     layer->SetFilters(filters_);
   DCHECK(!(FilterIsAnimating() && layer->FilterIsAnimatingOnImplOnly()));
@@ -1159,12 +1156,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
     layer->SetOpacity(opacity_);
   DCHECK(!(OpacityIsAnimating() && layer->OpacityIsAnimatingOnImplOnly()));
   layer->SetBlendMode(blend_mode_);
-  layer->SetIsRootForIsolatedGroup(is_root_for_isolated_group_);
   layer->SetPosition(position_);
-  layer->SetIsContainerForFixedPositionLayers(
-      IsContainerForFixedPositionLayers());
-  layer->SetPositionConstraint(position_constraint_);
-  layer->SetShouldFlattenTransform(should_flatten_transform_);
   layer->set_should_flatten_transform_from_property_tree(
       should_flatten_transform_from_property_tree_);
   layer->set_draw_blend_mode(draw_blend_mode_);
@@ -1173,10 +1165,9 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
       use_local_transform_for_backface_visibility_);
   layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);
   if (!layer->TransformIsAnimatingOnImplOnly() && !TransformIsAnimating())
-    layer->SetTransformAndInvertibility(transform_, transform_is_invertible_);
+    layer->SetTransform(transform_);
   DCHECK(!(TransformIsAnimating() && layer->TransformIsAnimatingOnImplOnly()));
   layer->Set3dSortingContextId(sorting_context_id_);
-  layer->SetNumDescendantsThatDrawContent(num_descendants_that_draw_content_);
 
   layer->SetScrollClipLayer(scroll_clip_layer_id_);
   layer->set_user_scrollable_horizontal(user_scrollable_horizontal_);
@@ -1626,12 +1617,7 @@ Layer::TakeDebugInfo() {
 }
 
 void Layer::SetHasRenderSurface(bool has_render_surface) {
-  if (has_render_surface_ == has_render_surface)
-    return;
   has_render_surface_ = has_render_surface;
-  // We do not need SetNeedsCommit here, since this is only ever called
-  // during a commit, from CalculateDrawProperties using property trees.
-  SetNeedsPushProperties();
 }
 
 void Layer::SetSubtreePropertyChanged() {

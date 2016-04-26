@@ -41,7 +41,7 @@ class VideoFrameCompositorTest : public testing::Test,
         opaque_(false) {
     compositor_->SetVideoFrameProviderClient(this);
     compositor_->set_tick_clock_for_testing(
-        scoped_ptr<base::TickClock>(tick_clock_));
+        std::unique_ptr<base::TickClock>(tick_clock_));
     // Disable background rendering by default.
     compositor_->set_background_rendering_for_testing(false);
   }
@@ -114,7 +114,7 @@ class VideoFrameCompositorTest : public testing::Test,
 
   base::MessageLoop message_loop;
   base::SimpleTestTickClock* tick_clock_;  // Owned by |compositor_|
-  scoped_ptr<VideoFrameCompositor> compositor_;
+  std::unique_ptr<VideoFrameCompositor> compositor_;
 
   int did_receive_frame_count_;
   int natural_size_changed_count_;
@@ -155,28 +155,28 @@ TEST_F(VideoFrameCompositorTest, NaturalSizeChanged) {
   EXPECT_EQ(empty_size, natural_size());
   EXPECT_EQ(0, natural_size_changed_count());
 
-  // Callback isn't fired for the first frame.
+  // Callback is fired for the first frame.
   compositor()->PaintFrameUsingOldRenderingPath(initial_frame);
-  EXPECT_EQ(empty_size, natural_size());
-  EXPECT_EQ(0, natural_size_changed_count());
+  EXPECT_EQ(initial_size, natural_size());
+  EXPECT_EQ(1, natural_size_changed_count());
 
   // Callback should be fired once.
   compositor()->PaintFrameUsingOldRenderingPath(larger_frame);
   EXPECT_EQ(larger_size, natural_size());
-  EXPECT_EQ(1, natural_size_changed_count());
+  EXPECT_EQ(2, natural_size_changed_count());
 
   compositor()->PaintFrameUsingOldRenderingPath(larger_frame);
   EXPECT_EQ(larger_size, natural_size());
-  EXPECT_EQ(1, natural_size_changed_count());
+  EXPECT_EQ(2, natural_size_changed_count());
 
   // Callback is fired once more when switching back to initial size.
   compositor()->PaintFrameUsingOldRenderingPath(initial_frame);
   EXPECT_EQ(initial_size, natural_size());
-  EXPECT_EQ(2, natural_size_changed_count());
+  EXPECT_EQ(3, natural_size_changed_count());
 
   compositor()->PaintFrameUsingOldRenderingPath(initial_frame);
   EXPECT_EQ(initial_size, natural_size());
-  EXPECT_EQ(2, natural_size_changed_count());
+  EXPECT_EQ(3, natural_size_changed_count());
 
   natural_size_changed_count_ = 0;
   natural_size_ = empty_size;
@@ -189,28 +189,28 @@ TEST_F(VideoFrameCompositorTest, NaturalSizeChanged) {
       .WillOnce(Return(initial_frame));
   StartVideoRendererSink();
 
-  // Starting the sink will issue one Render() call, ensure the callback isn't
+  // Starting the sink will issue one Render() call, ensure the callback is
   // fired for the first frame.
-  EXPECT_EQ(0, natural_size_changed_count());
-  EXPECT_EQ(empty_size, natural_size());
+  EXPECT_EQ(1, natural_size_changed_count());
+  EXPECT_EQ(initial_size, natural_size());
 
   // Once another frame is received with a different size it should fire.
   EXPECT_TRUE(
       compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
   RenderFrame();
   EXPECT_EQ(larger_size, natural_size());
-  EXPECT_EQ(1, natural_size_changed_count());
+  EXPECT_EQ(2, natural_size_changed_count());
 
   EXPECT_TRUE(
       compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
   RenderFrame();
   EXPECT_EQ(initial_size, natural_size());
-  EXPECT_EQ(2, natural_size_changed_count());
+  EXPECT_EQ(3, natural_size_changed_count());
 
   EXPECT_FALSE(
       compositor()->UpdateCurrentFrame(base::TimeTicks(), base::TimeTicks()));
   EXPECT_EQ(initial_size, natural_size());
-  EXPECT_EQ(2, natural_size_changed_count());
+  EXPECT_EQ(3, natural_size_changed_count());
   RenderFrame();
 
   StopVideoRendererSink(true);

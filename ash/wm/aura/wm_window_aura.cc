@@ -5,6 +5,7 @@
 #include "ash/wm/aura/wm_window_aura.h"
 
 #include "ash/screen_util.h"
+#include "ash/shelf/shelf_util.h"
 #include "ash/wm/aura/aura_layout_manager_adapter.h"
 #include "ash/wm/aura/wm_globals_aura.h"
 #include "ash/wm/aura/wm_root_window_controller_aura.h"
@@ -89,6 +90,15 @@ WmWindow* WmWindowAura::Get(aura::Window* window) {
 }
 
 // static
+std::vector<WmWindow*> WmWindowAura::FromAuraWindows(
+    const std::vector<aura::Window*>& aura_windows) {
+  std::vector<WmWindow*> result(aura_windows.size());
+  for (size_t i = 0; i < aura_windows.size(); ++i)
+    result[i] = Get(aura_windows[i]);
+  return result;
+}
+
+// static
 const aura::Window* WmWindowAura::GetAuraWindow(const WmWindow* wm_window) {
   return static_cast<const WmWindowAura*>(wm_window)->aura_window();
 }
@@ -104,6 +114,14 @@ WmRootWindowController* WmWindowAura::GetRootWindowController() {
 
 WmGlobals* WmWindowAura::GetGlobals() const {
   return WmGlobalsAura::Get();
+}
+
+void WmWindowAura::SetName(const std::string& name) {
+  window_->SetName(name);
+}
+
+void WmWindowAura::SetShellWindowId(int id) {
+  window_->set_id(id);
 }
 
 int WmWindowAura::GetShellWindowId() {
@@ -184,10 +202,21 @@ bool WmWindowAura::GetBoolProperty(WmWindowProperty key) {
 
     case WmWindowProperty::ALWAYS_ON_TOP:
       return window_->GetProperty(aura::client::kAlwaysOnTopKey);
+
+    default:
+      NOTREACHED();
+      break;
   }
 
-  NOTREACHED();
   return false;
+}
+
+int WmWindowAura::GetIntProperty(WmWindowProperty key) {
+  if (key == WmWindowProperty::SHELF_ID)
+    return GetShelfIDForWindow(window_);
+
+  NOTREACHED();
+  return 0;
 }
 
 const WindowState* WmWindowAura::GetWindowState() const {
@@ -217,12 +246,7 @@ const WmWindow* WmWindowAura::GetTransientParent() const {
 }
 
 std::vector<WmWindow*> WmWindowAura::GetTransientChildren() {
-  const std::vector<aura::Window*> aura_windows(
-      ::wm::GetTransientChildren(window_));
-  std::vector<WmWindow*> wm_windows(aura_windows.size());
-  for (size_t i = 0; i < aura_windows.size(); ++i)
-    wm_windows[i] = Get(aura_windows[i]);
-  return wm_windows;
+  return FromAuraWindows(::wm::GetTransientChildren(window_));
 }
 
 void WmWindowAura::SetLayoutManager(
@@ -445,6 +469,10 @@ void WmWindowAura::Deactivate() {
   DeactivateWindow(window_);
 }
 
+void WmWindowAura::SetFullscreen() {
+  window_->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_FULLSCREEN);
+}
+
 void WmWindowAura::Maximize() {
   return window_->SetProperty(aura::client::kShowStateKey,
                               ui::SHOW_STATE_MAXIMIZED);
@@ -462,11 +490,7 @@ void WmWindowAura::Unminimize() {
 }
 
 std::vector<WmWindow*> WmWindowAura::GetChildren() {
-  const std::vector<aura::Window*>& aura_children = window_->children();
-  std::vector<WmWindow*> result(aura_children.size());
-  for (size_t i = 0; i < aura_children.size(); ++i)
-    result[i] = Get(aura_children[i]);
-  return result;
+  return FromAuraWindows(window_->children());
 }
 
 WmWindow* WmWindowAura::GetChildByShellWindowId(int id) {
@@ -516,6 +540,8 @@ void WmWindowAura::OnWindowPropertyChanged(aura::Window* window,
     wm_property = WmWindowProperty::SNAP_CHILDREN_TO_PIXEL_BOUDARY;
   } else if (key == aura::client::kAlwaysOnTopKey) {
     wm_property = WmWindowProperty::ALWAYS_ON_TOP;
+  } else if (key == kShelfID) {
+    wm_property = WmWindowProperty::SHELF_ID;
   } else {
     return;
   }

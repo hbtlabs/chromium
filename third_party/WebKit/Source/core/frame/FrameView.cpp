@@ -1671,8 +1671,8 @@ void FrameView::updateCompositedSelectionIfNeeded()
     ASSERT(page);
 
     CompositedSelection selection;
-    Frame* focusedFrame = page->focusController().focusedOrMainFrame();
-    LocalFrame* localFrame = focusedFrame->isLocalFrame() ? toLocalFrame(focusedFrame) : nullptr;
+    LocalFrame* focusedFrame = page->focusController().focusedFrame();
+    LocalFrame* localFrame = (focusedFrame && (focusedFrame->localFrameRoot() == m_frame->localFrameRoot())) ? focusedFrame : nullptr;
     if (!localFrame || !computeCompositedSelection(*localFrame, selection)) {
         page->chromeClient().clearCompositedSelection();
         return;
@@ -1781,6 +1781,7 @@ void FrameView::layoutOrthogonalWritingModeRoots()
 void FrameView::scheduleRelayout()
 {
     ASSERT(m_frame->view() == this);
+    RELEASE_ASSERT(!isInPerformLayout());
 
     if (!m_layoutSchedulingEnabled)
         return;
@@ -1803,6 +1804,7 @@ void FrameView::scheduleRelayout()
 void FrameView::scheduleRelayoutOfSubtree(LayoutObject* relayoutRoot)
 {
     ASSERT(m_frame->view() == this);
+    RELEASE_ASSERT(!isInPerformLayout());
 
     // FIXME: Should this call shouldScheduleLayout instead?
     if (!m_frame->document()->isActive())
@@ -3254,7 +3256,6 @@ void FrameView::windowResizerRectChanged()
 
 bool FrameView::hasOverlayScrollbars() const
 {
-
     return (m_horizontalScrollbar && m_horizontalScrollbar->isOverlayScrollbar())
         || (m_verticalScrollbar && m_verticalScrollbar->isOverlayScrollbar());
 }

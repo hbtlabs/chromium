@@ -73,6 +73,19 @@ cr.define('settings', function() {
       supportsSpellcheck: true,
       supportsUI: true,
     }];
+
+    /** @type {!Array<!chrome.languageSettingsPrivate.InputMethod>} */
+    this.componentExtensionImes = [{
+      id: '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us::eng',
+      displayName: 'US keyboard',
+      languageCodes: ['en', 'en-US'],
+      enabled: true,
+    }, {
+      id: '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us:dvorak:eng',
+      displayName: 'US Dvorak keyboard',
+      languageCodes: ['en', 'en-US'],
+      enabled: true,
+    }];
   }
 
   FakeLanguageSettingsPrivate.prototype = {
@@ -151,7 +164,15 @@ cr.define('settings', function() {
      * @param {function(!chrome.languageSettingsPrivate.InputMethodLists):void}
      *     callback
      */
-    getInputMethodLists: wrapAssertNotReached('getInputMethodLists'),
+    getInputMethodLists: function(callback) {
+      if (!cr.isChromeOS)
+        assertNotReached();
+      callback({
+        componentExtensionImes:
+            JSON.parse(JSON.stringify(this.componentExtensionImes)),
+        thirdPartyExtensionImes: [],
+      });
+    },
 
     /**
      * Adds the input method to the current user's list of enabled input
@@ -165,7 +186,18 @@ cr.define('settings', function() {
      * methods, disabling the input method for the current user. Chrome OS only.
      * @param {string} inputMethodId
      */
-    removeInputMethod: wrapAssertNotReached('removeInputMethod'),
+    removeInputMethod: function(inputMethodId) {
+      assert(cr.isChromeOS);
+      var inputMethod = this.componentExtensionImes.find(function(ime) {
+        return ime.id == inputMethodId;
+      });
+      assertTrue(!!inputMethod);
+      inputMethod.enabled = false;
+      this.settingsPrefs_.set(
+          'prefs.settings.language.preload_engines.value',
+          this.settingsPrefs_.prefs.settings.language.preload_engines.value
+              .replace(inputMethodId, ''));
+    },
 
     /**
      * Called when the pref for the dictionaries used for spell checking changes

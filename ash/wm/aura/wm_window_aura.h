@@ -25,6 +25,9 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   // be null, in which case null is returned.
   static WmWindow* Get(aura::Window* window);
 
+  static std::vector<WmWindow*> FromAuraWindows(
+      const std::vector<aura::Window*>& aura_windows);
+
   static aura::Window* GetAuraWindow(WmWindow* wm_window) {
     return const_cast<aura::Window*>(
         GetAuraWindow(const_cast<const WmWindow*>(wm_window)));
@@ -38,6 +41,8 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   const WmWindow* GetRootWindow() const override;
   WmRootWindowController* GetRootWindowController() override;
   WmGlobals* GetGlobals() const override;
+  void SetName(const std::string& name) override;
+  void SetShellWindowId(int id) override;
   int GetShellWindowId() override;
   WmWindow* GetChildByShellWindowId(int id) override;
   ui::wm::WindowType GetType() const override;
@@ -56,6 +61,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   bool GetTargetVisibility() const override;
   bool IsVisible() const override;
   bool GetBoolProperty(WmWindowProperty key) override;
+  int GetIntProperty(WmWindowProperty key) override;
   const WindowState* GetWindowState() const override;
   WmWindow* GetToplevelWindow() override;
   void SetParentUsingContext(WmWindow* context,
@@ -110,6 +116,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   bool IsActive() const override;
   void Activate() override;
   void Deactivate() override;
+  void SetFullscreen() override;
   void Maximize() override;
   void Minimize() override;
   void Unminimize() override;

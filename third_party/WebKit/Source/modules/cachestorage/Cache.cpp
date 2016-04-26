@@ -12,7 +12,6 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "bindings/modules/v8/V8Response.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/cachestorage/CacheStorageError.h"
 #include "modules/fetch/BodyStreamBuffer.h"
@@ -363,7 +362,7 @@ private:
 
 Cache* Cache::create(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCache> webCache)
 {
-    return new Cache(fetcher, webCache);
+    return new Cache(fetcher, std::move(webCache));
 }
 
 ScriptPromise Cache::match(ScriptState* scriptState, const RequestInfo& request, const CacheQueryOptions& options, ExceptionState& exceptionState)
@@ -475,7 +474,7 @@ WebServiceWorkerCache::QueryParams Cache::toWebQueryParams(const CacheQueryOptio
 
 Cache::Cache(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCache> webCache)
     : m_scopedFetcher(fetcher)
-    , m_webCache(webCache)
+    , m_webCache(std::move(webCache))
 {
 }
 

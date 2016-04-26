@@ -8,7 +8,7 @@
 
 #include "base/bind.h"
 #include "components/mus/common/util.h"
-#include "components/mus/public/cpp/event_matcher.h"
+#include "components/mus/public/cpp/event_matcher_util.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
@@ -73,7 +73,9 @@ mus::Window* RootWindowController::GetWindowForContainer(
 }
 
 bool RootWindowController::WindowIsContainer(const mus::Window* window) const {
-  return window && window->parent() == root_;
+  return window &&
+         window->local_id() > ContainerToLocalId(mojom::Container::ROOT) &&
+         window->local_id() < ContainerToLocalId(mojom::Container::COUNT);
 }
 
 mus::WindowManagerClient* RootWindowController::window_manager_client() {

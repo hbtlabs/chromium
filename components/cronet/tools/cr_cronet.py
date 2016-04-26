@@ -29,10 +29,8 @@ def install(release_arg):
              ' --apk=ChromiumNetTestSupport.apk')
 
 
-def test(release_arg, extra_options):
-  return run('build/android/test_runner.py instrumentation '+ \
-             release_arg + ' --test-apk=CronetTestInstrumentation' + \
-             ' --fast-local-dev',
+def test(out_dir, extra_options):
+  return run(out_dir + '/bin/run_cronet_test_instrumentation_apk ' + \
              extra_options)
 
 def test_ios(out_dir, extra_options):
@@ -88,7 +86,7 @@ def main():
   gyp_defines = 'GYP_DEFINES="OS=' + target_os + ' enable_websockets=0 '+ \
       'disable_file_support=1 disable_ftp_support=1 '+ \
       'enable_errorprone=1 use_platform_icu_alternatives=1 ' + \
-      'disable_brotli_filter=1 use_openssl=1"'
+      'disable_brotli_filter=1"'
   gn_args = 'target_os="' + target_os + '" enable_websockets=false '+ \
       'disable_file_support=true disable_ftp_support=true '+ \
       'use_errorprone_java_compiler=true use_platform_icu_alternatives=true '+ \
@@ -116,10 +114,10 @@ def main():
     if (options.command=='proguard'):
       return run ('ninja -C ' + out_dir + ' cronet_sample_proguard_apk')
     if (options.command=='test'):
-      return install(release_arg) or test(release_arg, extra_options)
+      return install(release_arg) or test(out_dir, extra_options)
     if (options.command=='build-test'):
       return build(out_dir, test_target) or install(release_arg) or \
-          test(release_arg, extra_options)
+          test(out_dir, extra_options)
     if (options.command=='stack'):
       return stack(out_dir)
     if (options.command=='debug'):

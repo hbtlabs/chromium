@@ -94,7 +94,7 @@ void MainThreadDebugger::setClientMessageLoop(PassOwnPtr<ClientMessageLoop> clie
 {
     ASSERT(!m_clientMessageLoop);
     ASSERT(clientMessageLoop);
-    m_clientMessageLoop = clientMessageLoop;
+    m_clientMessageLoop = std::move(clientMessageLoop);
 }
 
 void MainThreadDebugger::contextCreated(ScriptState* scriptState, LocalFrame* frame, SecurityOrigin* origin)
@@ -122,8 +122,8 @@ int MainThreadDebugger::contextGroupId(LocalFrame* frame)
 MainThreadDebugger* MainThreadDebugger::instance()
 {
     ASSERT(isMainThread());
-    v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
+    V8PerIsolateData* data = V8PerIsolateData::from(V8PerIsolateData::mainThreadIsolate());
+    ASSERT(data->threadDebugger() && !data->threadDebugger()->isWorker());
     return static_cast<MainThreadDebugger*>(data->threadDebugger());
 }
 
@@ -131,7 +131,7 @@ void MainThreadDebugger::interruptMainThreadAndRun(PassOwnPtr<InspectorTaskRunne
 {
     MutexLocker locker(creationMutex());
     if (s_instance) {
-        s_instance->m_taskRunner->appendTask(task);
+        s_instance->m_taskRunner->appendTask(std::move(task));
         s_instance->m_taskRunner->interruptAndRunAllTasksDontWait(s_instance->m_isolate);
     }
 }

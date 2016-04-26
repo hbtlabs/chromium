@@ -444,6 +444,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     , m_displayMode(WebDisplayModeBrowser)
     , m_elasticOverscroll(FloatSize())
     , m_scheduler(adoptPtr(Platform::current()->currentThread()->scheduler()->createWebViewScheduler(this).release()))
+    , m_lastFrameTimeMonotonic(0)
 {
     Page::PageClients pageClients;
     pageClients.chromeClient = m_chromeClientImpl.get();
@@ -1959,6 +1960,8 @@ void WebViewImpl::beginFrame(double lastFrameTimeMonotonic)
     if (!mainFrameImpl())
         return;
 
+    m_lastFrameTimeMonotonic = lastFrameTimeMonotonic;
+
     DocumentLifecycle::AllowThrottlingScope throttlingScope(mainFrameImpl()->frame()->document()->lifecycle());
     PageWidgetDelegate::animate(*m_page, lastFrameTimeMonotonic);
 }
@@ -2027,13 +2030,11 @@ void WebViewImpl::paint(WebCanvas* canvas, const WebRect& rect)
 }
 
 #if OS(ANDROID)
-void WebViewImpl::paintCompositedDeprecated(WebCanvas* canvas, const WebRect& rect)
+void WebViewImpl::paintIgnoringCompositing(WebCanvas* canvas, const WebRect& rect)
 {
-    // Note: This method exists on OS(ANDROID) and will hopefully be
-    //       removed once the link disambiguation feature renders using
-    //       the compositor.
+    // This is called on a composited WebViewImpl, but we will ignore it,
+    // producing all possible content of the WebViewImpl into the WebCanvas.
     DCHECK(isAcceleratedCompositingActive());
-
     PageWidgetDelegate::paintIgnoringCompositing(*m_page, canvas, rect, *m_page->deprecatedLocalMainFrame());
 }
 #endif

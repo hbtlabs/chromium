@@ -7,6 +7,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
@@ -23,6 +24,11 @@ using net::HttpRequestHeaders;
 using net::URLRequestStatus;
 
 namespace ntp_snippets {
+
+namespace {
+
+const char kStatusMessageURLRequestErrorFormat[] = "URLRequestStatus error %d";
+const char kStatusMessageHTTPErrorFormat[] = "HTTP error %d";
 
 const char kContentSnippetsServerFormat[] =
     "https://chromereader-pa.googleapis.com/v1/fetch?key=%s";
@@ -50,7 +56,7 @@ const char kRequestParameterFormat[] =
     "%s"
     "    },"
     "    \"global_scoring_params\": {"
-    "      \"num_to_return\": 10"
+    "      \"num_to_return\": %i"
     "    }"
     "  }"
     "}";
@@ -61,6 +67,8 @@ const char kHostRestrictFormat[] =
     "        \"value\": \"%s\""
     "      }";
 
+}  // namespace
+
 NTPSnippetsFetcher::NTPSnippetsFetcher(
     scoped_refptr<base::SequencedTaskRunner> file_task_runner,
     scoped_refptr<URLRequestContextGetter> url_request_context_getter,
@@ -69,15 +77,15 @@ NTPSnippetsFetcher::NTPSnippetsFetcher(
       url_request_context_getter_(url_request_context_getter),
       is_stable_channel_(is_stable_channel) {}
 
-NTPSnippetsFetcher::~NTPSnippetsFetcher() {
-}
+NTPSnippetsFetcher::~NTPSnippetsFetcher() {}
 
 scoped_ptr<NTPSnippetsFetcher::SnippetsAvailableCallbackList::Subscription>
 NTPSnippetsFetcher::AddCallback(const SnippetsAvailableCallback& callback) {
   return callback_list_.Add(callback);
 }
 
-void NTPSnippetsFetcher::FetchSnippets(const std::set<std::string>& hosts) {
+void NTPSnippetsFetcher::FetchSnippets(const std::set<std::string>& hosts,
+                                       int count) {
   // TODO(treib): What to do if there's already a pending request?
   const std::string& key = is_stable_channel_
                                ? google_apis::GetAPIKey()
@@ -96,7 +104,8 @@ void NTPSnippetsFetcher::FetchSnippets(const std::set<std::string>& hosts) {
     host_restricts += base::StringPrintf(kHostRestrictFormat, host.c_str());
   url_fetcher_->SetUploadData("application/json",
                               base::StringPrintf(kRequestParameterFormat,
-                                                 host_restricts.c_str()));
+                                                 host_restricts.c_str(),
+                                                 count));
 
   // Fetchers are sometimes cancelled because a network change was detected.
   url_fetcher_->SetAutomaticallyRetryOnNetworkChanges(3);
@@ -110,25 +119,27 @@ void NTPSnippetsFetcher::FetchSnippets(const std::set<std::string>& hosts) {
 void NTPSnippetsFetcher::OnURLFetchComplete(const URLFetcher* source) {
   DCHECK_EQ(url_fetcher_.get(), source);
 
+  std::string message;
   const URLRequestStatus& status = source->GetStatus();
   if (!status.is_success()) {
-    DLOG(WARNING) << "URLRequestStatus error " << status.error()
-                  << " while trying to download " << source->GetURL().spec();
-    return;
-  }
-
-  int response_code = source->GetResponseCode();
-  if (response_code != net::HTTP_OK) {
-    DLOG(WARNING) << "HTTP error " << response_code
-                  << " while trying to download " << source->GetURL().spec();
-    return;
+    message = base::StringPrintf(kStatusMessageURLRequestErrorFormat,
+                                 status.error());
+  } else if (source->GetResponseCode() != net::HTTP_OK) {
+    message = base::StringPrintf(kStatusMessageHTTPErrorFormat,
+                                 source->GetResponseCode());
   }
 
   std::string response;
-  bool stores_result_to_string = source->GetResponseAsString(&response);
-  DCHECK(stores_result_to_string);
+  if (!message.empty()) {
+    DLOG(WARNING) << message << " while trying to download "
+                  << source->GetURL().spec();
 
-  callback_list_.Notify(response);
+  } else {
+    bool stores_result_to_string = source->GetResponseAsString(&response);
+    DCHECK(stores_result_to_string);
+  }
+
+  callback_list_.Notify(response, message);
 }
 
 }  // namespace ntp_snippets

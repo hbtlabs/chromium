@@ -22,13 +22,24 @@
           'dependencies': [
             '../third_party/earl_grey/earl_grey.gyp:EarlGrey',
             'ios_web_shell.gyp:ios_web_shell',
+            'ios_web.gyp:ios_web_test_support',
           ],
           'sources': [
+            'public/test/http_server_util.h',
+            'public/test/http_server_util.mm',
+            'shell/test/navigation_test_util.h',
+            'shell/test/navigation_test_util.mm',
+            'shell/test/shell_matchers.h',
+            'shell/test/shell_matchers.mm',
             'shell/test/web_shell_navigation_egtest.mm',
+            'shell/test/web_shell_test_util.h',
+            'shell/test/web_shell_test_util.mm',
+            'shell/test/web_view_matchers.h',
+            'shell/test/web_view_matchers.mm',
           ],
           'xcode_settings': {
             'WRAPPER_EXTENSION': 'xctest',
-            'TEST_HOST': '$(CONFIGURATION_BUILD_DIR)/<(test_host)',
+            'TEST_HOST': '${BUILT_PRODUCTS_DIR}/<(test_host)',
             'BUNDLE_LOADER': '$(TEST_HOST)',
             'conditions':[
               ['"<(GENERATOR)"!="xcode" or "<(GENERATOR_FLAVOR)"=="ninja"', {
@@ -47,16 +58,6 @@
               'XCTest.framework',
             ],
           },
-          'postbuilds': [
-            {
-              'postbuild_name': 'Copy xctest to TEST_HOST',
-              'action': [
-                'ditto',
-                '${BUILT_PRODUCTS_DIR}/ios_web_shell_test.xctest',
-                '${BUILT_PRODUCTS_DIR}/<(test_host_name).app/PlugIns/ios_web_shell_test.xctest',
-              ],
-            },
-          ],
         },
       ],
     }, { # GENERATOR == ninja or GENERATOR_FLAVOR == ninja

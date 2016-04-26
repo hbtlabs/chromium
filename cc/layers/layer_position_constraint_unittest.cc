@@ -155,14 +155,18 @@ class LayerPositionConstraintTest : public testing::Test {
       SetScrollOffsetDelta(grand_child_impl_, gfx::Vector2dF());
     }
     root_impl_ = layer_tree_host_->CommitAndCreateLayerImplTree();
-    inner_viewport_container_layer_impl_ = root_impl_->children()[0];
-    scroll_layer_impl_ = inner_viewport_container_layer_impl_->children()[0];
-    outer_viewport_container_layer_impl_ = scroll_layer_impl_->children()[0];
+    layer_tree_impl_ = root_impl_->layer_tree_impl();
+    inner_viewport_container_layer_impl_ =
+        layer_tree_impl_->LayerById(inner_viewport_container_layer_->id());
+    scroll_layer_impl_ = layer_tree_impl_->LayerById(scroll_layer_->id());
+    outer_viewport_container_layer_impl_ =
+        layer_tree_impl_->LayerById(outer_viewport_container_layer_->id());
     child_transform_layer_impl_ =
-        outer_viewport_container_layer_impl_->children()[0];
-    child_impl_ = child_transform_layer_impl_->children()[0];
-    grand_child_impl_ = child_impl_->children()[0];
-    great_grand_child_impl_ = grand_child_impl_->children()[0];
+        layer_tree_impl_->LayerById(child_transform_layer_->id());
+    child_impl_ = layer_tree_impl_->LayerById(child_->id());
+    grand_child_impl_ = layer_tree_impl_->LayerById(grand_child_->id());
+    great_grand_child_impl_ =
+        layer_tree_impl_->LayerById(great_grand_child_->id());
   }
 
  protected:
@@ -177,6 +181,7 @@ class LayerPositionConstraintTest : public testing::Test {
   scoped_refptr<Layer> child_;
   scoped_refptr<Layer> grand_child_;
   scoped_refptr<Layer> great_grand_child_;
+  LayerTreeImpl* layer_tree_impl_;
   LayerImpl* root_impl_;
   LayerImpl* inner_viewport_container_layer_impl_;
   LayerImpl* scroll_layer_impl_;
@@ -435,7 +440,7 @@ TEST_F(LayerPositionConstraintTest,
   // for when checking the scroll delta.
   child_->SetIsContainerForFixedPositionLayers(true);
   grand_child_->SetPosition(gfx::PointF(8.f, 6.f));
-  grand_child_->SetForceRenderSurface(true);
+  grand_child_->SetForceRenderSurfaceForTesting(true);
   great_grand_child_->SetPositionConstraint(fixed_to_top_left_);
 
   gfx::Transform rotation_about_z;
@@ -559,9 +564,9 @@ TEST_F(LayerPositionConstraintTest,
   // Actually set up the scenario here.
   child_->SetIsContainerForFixedPositionLayers(true);
   grand_child_->SetPosition(gfx::PointF(8.f, 6.f));
-  grand_child_->SetForceRenderSurface(true);
+  grand_child_->SetForceRenderSurfaceForTesting(true);
   great_grand_child_->SetPosition(gfx::PointF(40.f, 60.f));
-  great_grand_child_->SetForceRenderSurface(true);
+  great_grand_child_->SetForceRenderSurfaceForTesting(true);
   fixed_position_child->SetPositionConstraint(fixed_to_top_left_);
 
   // The additional rotation, which is non-commutative with translations, helps
@@ -575,7 +580,8 @@ TEST_F(LayerPositionConstraintTest,
   fixed_position_child->SetTransform(rotation_about_z);
 
   CommitAndUpdateImplPointers();
-  LayerImpl* fixed_position_child_impl = great_grand_child_impl_->children()[0];
+  LayerImpl* fixed_position_child_impl =
+      layer_tree_impl_->LayerById(fixed_position_child->id());
 
   // Case 1: scroll delta of 0, 0
   SetScrollOffsetDelta(child_impl_, gfx::Vector2d(0, 0));
@@ -671,7 +677,8 @@ TEST_F(LayerPositionConstraintTest,
   // Case 4: Bottom-right fixed-position layer.
   fixed_position_child->SetPositionConstraint(fixed_to_bottom_right_);
   CommitAndUpdateImplPointers();
-  fixed_position_child_impl = great_grand_child_impl_->children()[0];
+  fixed_position_child_impl =
+      layer_tree_impl_->LayerById(fixed_position_child->id());
   SetScrollOffsetDelta(child_impl_, gfx::Vector2d(10, 30));
   SetFixedContainerSizeDelta(child_impl_, gfx::Vector2d(20, 20));
   ExecuteCalculateDrawProperties(root_impl_);
@@ -715,9 +722,9 @@ TEST_F(
   // Actually set up the scenario here.
   child_transform_layer_->SetIsContainerForFixedPositionLayers(true);
   grand_child_->SetPosition(gfx::PointF(8.f, 6.f));
-  grand_child_->SetForceRenderSurface(true);
+  grand_child_->SetForceRenderSurfaceForTesting(true);
   great_grand_child_->SetPosition(gfx::PointF(40.f, 60.f));
-  great_grand_child_->SetForceRenderSurface(true);
+  great_grand_child_->SetForceRenderSurfaceForTesting(true);
   fixed_position_child->SetPositionConstraint(fixed_to_top_left_);
 
   // The additional rotations, which are non-commutative with translations, help
@@ -732,7 +739,8 @@ TEST_F(
   fixed_position_child->SetTransform(rotation_about_z);
 
   CommitAndUpdateImplPointers();
-  LayerImpl* fixed_position_child_impl = great_grand_child_impl_->children()[0];
+  LayerImpl* fixed_position_child_impl =
+      layer_tree_impl_->LayerById(fixed_position_child->id());
 
   // Case 1: scroll delta of 0, 0
   SetScrollOffsetDelta(child_impl_, gfx::Vector2d(0, 0));
@@ -828,7 +836,7 @@ TEST_F(LayerPositionConstraintTest,
   // that render target is completely irrelevant; it should not affect the
   // scroll compensation.
   child_->SetIsContainerForFixedPositionLayers(true);
-  child_->SetForceRenderSurface(true);
+  child_->SetForceRenderSurfaceForTesting(true);
   grand_child_->SetPositionConstraint(fixed_to_top_left_);
 
   CommitAndUpdateImplPointers();
@@ -1051,7 +1059,8 @@ TEST_F(LayerPositionConstraintTest,
   LayerImpl* container1 = child_impl_;
   LayerImpl* fixed_to_container1 = grand_child_impl_;
   LayerImpl* container2 = great_grand_child_impl_;
-  LayerImpl* fixed_to_container2 = container2->children()[0];
+  LayerImpl* fixed_to_container2 =
+      layer_tree_impl_->LayerById(great_great_grand_child->id());
 
   SetScrollOffsetDelta(container1, gfx::Vector2d(0, 15));
   container1->SetDrawsContent(true);

@@ -39,9 +39,11 @@
 #include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorDebuggerAgent.h"
+#include "core/inspector/InspectorPageAgent.h"
 #include "core/inspector/InspectorProfilerAgent.h"
 #include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorSession.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/page/Page.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
@@ -72,8 +74,8 @@ AsyncTask::AsyncTask(ExecutionContext* context, void* task, bool enabled)
     if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
         return;
     for (InspectorSession* session : *m_instrumentingSessions) {
-        if (session->instrumentingAgents()->inspectorDebuggerAgent())
-            session->instrumentingAgents()->inspectorDebuggerAgent()->asyncTaskStarted(m_task);
+        if (session->instrumentingAgents()->inspectorSession())
+            session->instrumentingAgents()->inspectorSession()->asyncTaskStarted(m_task);
     }
 }
 
@@ -82,8 +84,8 @@ AsyncTask::~AsyncTask()
     if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
         return;
     for (InspectorSession* session : *m_instrumentingSessions) {
-        if (session->instrumentingAgents()->inspectorDebuggerAgent())
-            session->instrumentingAgents()->inspectorDebuggerAgent()->asyncTaskFinished(m_task);
+        if (session->instrumentingAgents()->inspectorSession())
+            session->instrumentingAgents()->inspectorSession()->asyncTaskFinished(m_task);
     }
 }
 
@@ -123,50 +125,64 @@ NativeBreakpoint::~NativeBreakpoint()
     }
 }
 
+StyleRecalc::StyleRecalc(Document* document)
+    : m_instrumentingSessions(instrumentingSessionsFor(document))
+{
+    if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
+        return;
+    for (InspectorSession* session : *m_instrumentingSessions) {
+        if (session->instrumentingAgents()->inspectorResourceAgent())
+            session->instrumentingAgents()->inspectorResourceAgent()->willRecalculateStyle(document);
+    }
+}
+
+StyleRecalc::~StyleRecalc()
+{
+    if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
+        return;
+    for (InspectorSession* session : *m_instrumentingSessions) {
+        if (session->instrumentingAgents()->inspectorResourceAgent())
+            session->instrumentingAgents()->inspectorResourceAgent()->didRecalculateStyle();
+        if (session->instrumentingAgents()->inspectorPageAgent())
+            session->instrumentingAgents()->inspectorPageAgent()->didRecalculateStyle();
+    }
+}
+
+JavaScriptDialog::JavaScriptDialog(LocalFrame* frame, const String& message, ChromeClient::DialogType dialogType)
+    : m_instrumentingSessions(instrumentingSessionsFor(frame))
+    , m_result(false)
+{
+    if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
+        return;
+    for (InspectorSession* session : *m_instrumentingSessions) {
+        if (session->instrumentingAgents()->inspectorPageAgent())
+            session->instrumentingAgents()->inspectorPageAgent()->willRunJavaScriptDialog(message, dialogType);
+    }
+}
+
+void JavaScriptDialog::setResult(bool result)
+{
+    m_result = result;
+}
+
+JavaScriptDialog::~JavaScriptDialog()
+{
+    if (!m_instrumentingSessions || m_instrumentingSessions->isEmpty())
+        return;
+    for (InspectorSession* session : *m_instrumentingSessions) {
+        if (session->instrumentingAgents()->inspectorPageAgent())
+            session->instrumentingAgents()->inspectorPageAgent()->didRunJavaScriptDialog(m_result);
+    }
+}
+
 int FrontendCounter::s_frontendCounter = 0;
 
 // Keep in sync with kDevToolsRequestInitiator defined in devtools_network_controller.cc
 const char kInspectorEmulateNetworkConditionsClientId[] = "X-DevTools-Emulate-Network-Conditions-Client-Id";
-}
 
-InspectorInstrumentationCookie::InspectorInstrumentationCookie()
-    : m_instrumentingSessions(nullptr)
+bool isDebuggerPaused(LocalFrame*)
 {
-}
-
-InspectorInstrumentationCookie::InspectorInstrumentationCookie(InstrumentingSessions* sessions)
-    : m_instrumentingSessions(sessions)
-{
-}
-
-InspectorInstrumentationCookie::InspectorInstrumentationCookie(const InspectorInstrumentationCookie& other)
-    : m_instrumentingSessions(other.m_instrumentingSessions)
-{
-}
-
-InspectorInstrumentationCookie& InspectorInstrumentationCookie::operator=(const InspectorInstrumentationCookie& other)
-{
-    if (this != &other)
-        m_instrumentingSessions = other.m_instrumentingSessions;
-    return *this;
-}
-
-InspectorInstrumentationCookie::~InspectorInstrumentationCookie()
-{
-}
-
-namespace InspectorInstrumentation {
-
-bool isDebuggerPaused(LocalFrame* frame)
-{
-    InstrumentingSessions* instrumentingSessions = instrumentingSessionsFor(frame);
-    if (!instrumentingSessions || instrumentingSessions->isEmpty())
-        return false;
-    for (InspectorSession* session : *instrumentingSessions) {
-        if (InspectorDebuggerAgent* debuggerAgent = session->instrumentingAgents()->inspectorDebuggerAgent())
-            return debuggerAgent->isPaused();
-    }
-    return false;
+    return MainThreadDebugger::instance()->debugger()->isPaused();
 }
 
 void didReceiveResourceResponseButCanceled(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r)

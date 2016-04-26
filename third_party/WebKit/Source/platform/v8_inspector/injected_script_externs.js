@@ -8,20 +8,10 @@ function InjectedScriptHostClass()
 }
 
 /**
- */
-InjectedScriptHostClass.prototype.clearConsoleMessages = function() {}
-
-/**
  * @param {*} objectId
  * @param {!Object} hints
  */
 InjectedScriptHostClass.prototype.inspect = function(objectId, hints) {}
-
-/**
- * @param {number} num
- * @return {*}
- */
-InjectedScriptHostClass.prototype.inspectedObject = function(num) {}
 
 /**
  * @param {*} obj
@@ -64,26 +54,6 @@ InjectedScriptHostClass.prototype.getInternalProperties = function(obj) {}
  * @return {!Object|undefined}
  */
 InjectedScriptHostClass.prototype.getEventListeners = function(target) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.debugFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.undebugFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.monitorFunction = function(fn) {}
-
-/**
- * @param {*} fn
- */
-InjectedScriptHostClass.prototype.unmonitorFunction = function(fn) {}
 
 /**
  * @param {!Function} fn

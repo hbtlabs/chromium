@@ -8,7 +8,6 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTServer.h"
@@ -19,7 +18,7 @@ namespace blink {
 
 BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBluetoothDevice> webDevice)
     : ActiveDOMObject(context)
-    , m_webDevice(webDevice)
+    , m_webDevice(std::move(webDevice))
     , m_adData(BluetoothAdvertisingData::create(m_webDevice->txPower, m_webDevice->rssi))
     , m_gatt(BluetoothRemoteGATTServer::create(this))
 {
@@ -30,7 +29,7 @@ BluetoothDevice::BluetoothDevice(ExecutionContext* context, PassOwnPtr<WebBlueto
 BluetoothDevice* BluetoothDevice::take(ScriptPromiseResolver* resolver, PassOwnPtr<WebBluetoothDevice> webDevice)
 {
     ASSERT(webDevice);
-    BluetoothDevice* device = new BluetoothDevice(resolver->getExecutionContext(), webDevice);
+    BluetoothDevice* device = new BluetoothDevice(resolver->getExecutionContext(), std::move(webDevice));
     device->suspendIfNeeded();
     return device;
 }

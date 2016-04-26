@@ -161,6 +161,7 @@
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebColorSuggestion.h"
+#include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 #include "third_party/WebKit/public/web/WebFrameSerializer.h"
@@ -205,7 +206,7 @@
 #include "content/renderer/media/android/renderer_media_player_manager.h"
 #include "content/renderer/media/android/renderer_media_session_manager.h"
 #include "content/renderer/media/android/renderer_surface_view_manager.h"
-#include "content/renderer/media/android/stream_texture_factory_impl.h"
+#include "content/renderer/media/android/stream_texture_factory.h"
 #include "content/renderer/media/android/webmediaplayer_android.h"
 #include "content/renderer/media/android/webmediasession_android.h"
 #include "media/base/android/media_codec_util.h"
@@ -1649,9 +1650,7 @@ void RenderFrameImpl::OnContextMenuClosed(
     }
   } else {
     if (custom_context.link_followed.is_valid())
-        frame_->sendPings(context_menu_node_, custom_context.link_followed);
-    // Internal request, forward to WebKit.
-    context_menu_node_.reset();
+      frame_->sendPings(custom_context.link_followed);
   }
 
   render_view()->webview()->didCloseContextMenu();
@@ -1687,9 +1686,10 @@ void RenderFrameImpl::OnCut() {
 
 void RenderFrameImpl::OnCopy() {
   base::AutoReset<bool> handling_select_range(&handling_select_range_, true);
-  WebNode current_node = context_menu_node_.isNull() ?
-      GetFocusedElement() : context_menu_node_;
-  frame_->executeCommand(WebString::fromUTF8("Copy"), current_node);
+  WebNode current_node = frame_->contextMenuNode();
+  frame_->executeCommand(WebString::fromUTF8("Copy"), current_node.isNull()
+                                                          ? GetFocusedElement()
+                                                          : current_node);
 }
 
 void RenderFrameImpl::OnPaste() {
@@ -2236,10 +2236,6 @@ void RenderFrameImpl::CancelContextMenu(int request_id) {
   pending_context_menus_.Remove(request_id);
 }
 
-blink::WebNode RenderFrameImpl::GetContextMenuNode() const {
-  return context_menu_node_;
-}
-
 blink::WebPlugin* RenderFrameImpl::CreatePlugin(
     blink::WebFrame* frame,
     const WebPluginInfo& info,
@@ -2359,8 +2355,25 @@ void RenderFrameImpl::EnsureMojoBuiltinsAreAvailable(
 
 void RenderFrameImpl::AddMessageToConsole(ConsoleMessageLevel level,
                                           const std::string& message) {
-  if (devtools_agent_)
-    devtools_agent_->AddMessageToConsole(level, message);
+  blink::WebConsoleMessage::Level target_level =
+      blink::WebConsoleMessage::LevelLog;
+  switch (level) {
+    case CONSOLE_MESSAGE_LEVEL_DEBUG:
+      target_level = blink::WebConsoleMessage::LevelDebug;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_LOG:
+      target_level = blink::WebConsoleMessage::LevelLog;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_WARNING:
+      target_level = blink::WebConsoleMessage::LevelWarning;
+      break;
+    case CONSOLE_MESSAGE_LEVEL_ERROR:
+      target_level = blink::WebConsoleMessage::LevelError;
+      break;
+  }
+
+  blink::WebConsoleMessage wcm(target_level, WebString::fromUTF8(message));
+  frame_->addMessageToConsole(wcm);
 }
 
 bool RenderFrameImpl::IsUsingLoFi() const {
@@ -3652,7 +3665,6 @@ void RenderFrameImpl::showContextMenu(const blink::WebContextMenuData& data) {
   //                 data encoded images.  We should have a way to save them.
   if (params.src_url.spec().size() > url::kMaxURLChars)
     params.src_url = GURL();
-  context_menu_node_ = data.node;
 
 #if defined(OS_ANDROID)
   gfx::Rect start_rect;
@@ -3663,10 +3675,6 @@ void RenderFrameImpl::showContextMenu(const blink::WebContextMenuData& data) {
 #endif
 
   Send(new FrameHostMsg_ContextMenu(routing_id_, params));
-}
-
-void RenderFrameImpl::clearContextMenu() {
-  context_menu_node_.reset();
 }
 
 void RenderFrameImpl::willSendRequest(

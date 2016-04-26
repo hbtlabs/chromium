@@ -399,6 +399,7 @@ component("base") {
       "x/selection_utils.cc",
       "x/selection_utils.h",
     ]
+    deps += [ "//ui/events/platform/x11" ]
   }
 
   if (use_aura) {
@@ -883,7 +884,7 @@ test("ui_base_unittests") {
   }
 
   if (use_pango) {
-    configs += [ "//build/config/linux:pangocairo" ]
+    configs += [ "//build/config/linux/pangocairo" ]
   }
 
   if (use_x11) {
@@ -941,6 +942,8 @@ test("ui_base_unittests") {
       "//ui/resources:ui_test_pak",  # TODO(brettw): this does nothing.
       "//third_party/mesa:osmesa",
     ]
+  } else if (is_android) {
+    data += [ "test/data/data_pack_unittest/truncated-header.pak" ]
   }
   if (is_linux || is_win) {
     data += [

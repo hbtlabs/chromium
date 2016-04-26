@@ -232,8 +232,8 @@ class ChromeRenderProcessHostTestWithCommandLine
   }
 };
 
-// Disable on Mac due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessPerTab DISABLED_ProcessPerTab
 #else
 #define MAYBE_ProcessPerTab ProcessPerTab
@@ -361,8 +361,8 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, Backgrounding) {
 #endif
 
 // TODO(nasko): crbug.com/173137
-// Disable on Mac 10.9 due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessOverflow DISABLED_ProcessOverflow
 #else
 #define MAYBE_ProcessOverflow ProcessOverflow
@@ -374,8 +374,8 @@ IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest, MAYBE_ProcessOverflow) {
   TestProcessOverflow();
 }
 
-// Disable on Mac 10.9 due to ongoing flakiness. (crbug.com/442785)
-#if defined(OS_MACOSX)
+// Disable on Windows and Mac due to ongoing flakiness. (crbug.com/442785)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #define MAYBE_ProcessOverflowCommandLine DISABLED_ProcessOverflowCommandLine
 #else
 #define MAYBE_ProcessOverflowCommandLine ProcessOverflowCommandLine
@@ -515,8 +515,15 @@ class WindowDestroyer : public content::WebContentsObserver {
 // Test to ensure that while iterating through all listeners in
 // RenderProcessHost and invalidating them, we remove them properly and don't
 // access already freed objects. See http://crbug.com/255524.
+// Crashes on Win/Linux only.  http://crbug.com/606485.
+#if defined(OS_WIN) || defined(OS_LINUX)
+#define MAYBE_CloseAllTabsDuringProcessDied \
+  DISABLED_CloseAllTabsDuringProcessDied
+#else
+#define MAYBE_CloseAllTabsDuringProcessDied CloseAllTabsDuringProcessDied
+#endif
 IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostTest,
-                       CloseAllTabsDuringProcessDied) {
+                       MAYBE_CloseAllTabsDuringProcessDied) {
   GURL url(chrome::kChromeUIOmniboxURL);
 
   ui_test_utils::NavigateToURL(browser(), url);

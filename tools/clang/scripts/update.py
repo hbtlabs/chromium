@@ -26,7 +26,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '266460'
+CLANG_REVISION = '267383'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -324,7 +324,7 @@ def AddGnuWinToPath():
     return
 
   gnuwin_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'gnuwin')
-  GNUWIN_VERSION = '1'
+  GNUWIN_VERSION = '3'
   GNUWIN_STAMP = os.path.join(gnuwin_dir, 'stamp')
   if ReadStampFile(GNUWIN_STAMP) == GNUWIN_VERSION:
     print 'GNU Win tools already up to date.'
@@ -799,6 +799,9 @@ def main():
                       'picks /opt/foo/bin/gcc')
   parser.add_argument('--lto-gold-plugin', action='store_true',
                       help='build LLVM Gold plugin with LTO')
+  parser.add_argument('--llvm-force-head-revision', action='store_true',
+                      help=('use the revision in the repo when printing '
+                            'the revision'))
   parser.add_argument('--print-revision', action='store_true',
                       help='print current clang revision and exit.')
   parser.add_argument('--print-clang-version', action='store_true',
@@ -842,7 +845,7 @@ def main():
 
   global CLANG_REVISION, PACKAGE_VERSION
   if args.print_revision:
-    if use_head_revision:
+    if use_head_revision or args.llvm_force_head_revision:
       print GetSvnRevision(LLVM_DIR)
     else:
       print PACKAGE_VERSION

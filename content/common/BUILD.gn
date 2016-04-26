@@ -160,7 +160,6 @@ source_set("common") {
     "//components/tracing:startup_tracing",
     "//device/bluetooth",
     "//gpu",
-    "//gpu/blink",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_cmd_helper",
     "//gpu/command_buffer/client:gles2_implementation",
@@ -288,7 +287,7 @@ source_set("common") {
   }
 
   if (use_pango) {
-    configs += [ "//build/config/linux:pangocairo" ]
+    configs += [ "//build/config/linux/pangocairo" ]
     if (use_ozone) {
       # If we're using pango, never use this ozone file (it was removed in all
       # non-ozone cases above).

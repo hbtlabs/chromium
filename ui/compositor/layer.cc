@@ -31,7 +31,6 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/display.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -54,7 +53,6 @@ Layer::Layer()
       compositor_(NULL),
       parent_(NULL),
       visible_(true),
-      force_render_surface_(false),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
       background_blur_radius_(0),
@@ -78,7 +76,6 @@ Layer::Layer(LayerType type)
       compositor_(NULL),
       parent_(NULL),
       visible_(true),
-      force_render_surface_(false),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
       background_blur_radius_(0),
@@ -509,7 +506,6 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   cc_layer_->SetLayerClient(this);
   cc_layer_->SetTransformOrigin(gfx::Point3F());
   cc_layer_->SetContentsOpaque(fills_bounds_opaquely_);
-  cc_layer_->SetForceRenderSurface(force_render_surface_);
   cc_layer_->SetIsDrawable(type_ != LAYER_NOT_DRAWN);
   cc_layer_->SetHideLayerAndSubtree(!visible_);
 
@@ -769,14 +765,6 @@ bool Layer::PrepareTextureMailbox(
   *mailbox = mailbox_;
   *release_callback = std::move(mailbox_release_callback_);
   return true;
-}
-
-void Layer::SetForceRenderSurface(bool force) {
-  if (force_render_surface_ == force)
-    return;
-
-  force_render_surface_ = force;
-  cc_layer_->SetForceRenderSurface(force_render_surface_);
 }
 
 class LayerDebugInfo : public base::trace_event::ConvertableToTraceFormat {

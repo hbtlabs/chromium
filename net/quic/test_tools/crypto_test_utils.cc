@@ -4,9 +4,19 @@
 
 #include "net/quic/test_tools/crypto_test_utils.h"
 
+#include <openssl/bn.h>
+#include <openssl/ec.h>
+#include <openssl/ecdsa.h>
+#include <openssl/evp.h>
+#include <openssl/obj_mac.h>
+#include <openssl/sha.h>
+
 #include <memory>
 
 #include "base/strings/string_util.h"
+#include "crypto/openssl_util.h"
+#include "crypto/scoped_openssl_types.h"
+#include "crypto/secure_hash.h"
 #include "net/quic/crypto/channel_id.h"
 #include "net/quic/crypto/common_cert_set.h"
 #include "net/quic/crypto/crypto_handshake.h"
@@ -115,6 +125,138 @@ class AsyncTestChannelIDSource : public ChannelIDSource,
   std::unique_ptr<ChannelIDSource> sync_source_;
   std::unique_ptr<ChannelIDSourceCallback> callback_;
   std::unique_ptr<ChannelIDKey> channel_id_key_;
+};
+
+class TestChannelIDKey : public ChannelIDKey {
+ public:
+  explicit TestChannelIDKey(EVP_PKEY* ecdsa_key) : ecdsa_key_(ecdsa_key) {}
+  ~TestChannelIDKey() override {}
+
+  // ChannelIDKey implementation.
+
+  bool Sign(StringPiece signed_data, string* out_signature) const override {
+    crypto::ScopedEVP_MD_CTX md_ctx(EVP_MD_CTX_create());
+    if (!md_ctx ||
+        EVP_DigestSignInit(md_ctx.get(), nullptr, EVP_sha256(), nullptr,
+                           ecdsa_key_.get()) != 1) {
+      return false;
+    }
+
+    EVP_DigestUpdate(md_ctx.get(), ChannelIDVerifier::kContextStr,
+                     strlen(ChannelIDVerifier::kContextStr) + 1);
+    EVP_DigestUpdate(md_ctx.get(), ChannelIDVerifier::kClientToServerStr,
+                     strlen(ChannelIDVerifier::kClientToServerStr) + 1);
+    EVP_DigestUpdate(md_ctx.get(), signed_data.data(), signed_data.size());
+
+    size_t sig_len;
+    if (!EVP_DigestSignFinal(md_ctx.get(), nullptr, &sig_len)) {
+      return false;
+    }
+
+    std::unique_ptr<uint8_t[]> der_sig(new uint8_t[sig_len]);
+    if (!EVP_DigestSignFinal(md_ctx.get(), der_sig.get(), &sig_len)) {
+      return false;
+    }
+
+    uint8_t* derp = der_sig.get();
+    crypto::ScopedECDSA_SIG sig(
+        d2i_ECDSA_SIG(nullptr, const_cast<const uint8_t**>(&derp), sig_len));
+    if (sig.get() == nullptr) {
+      return false;
+    }
+
+    // The signature consists of a pair of 32-byte numbers.
+    static const size_t kSignatureLength = 32 * 2;
+    std::unique_ptr<uint8_t[]> signature(new uint8_t[kSignatureLength]);
+    if (!BN_bn2bin_padded(&signature[0], 32, sig->r) ||
+        !BN_bn2bin_padded(&signature[32], 32, sig->s)) {
+      return false;
+    }
+
+    *out_signature =
+        string(reinterpret_cast<char*>(signature.get()), kSignatureLength);
+
+    return true;
+  }
+
+  string SerializeKey() const override {
+    // i2d_PublicKey will produce an ANSI X9.62 public key which, for a P-256
+    // key, is 0x04 (meaning uncompressed) followed by the x and y field
+    // elements as 32-byte, big-endian numbers.
+    static const int kExpectedKeyLength = 65;
+
+    int len = i2d_PublicKey(ecdsa_key_.get(), nullptr);
+    if (len != kExpectedKeyLength) {
+      return "";
+    }
+
+    uint8_t buf[kExpectedKeyLength];
+    uint8_t* derp = buf;
+    i2d_PublicKey(ecdsa_key_.get(), &derp);
+
+    return string(reinterpret_cast<char*>(buf + 1), kExpectedKeyLength - 1);
+  }
+
+ private:
+  crypto::ScopedEVP_PKEY ecdsa_key_;
+};
+
+class TestChannelIDSource : public ChannelIDSource {
+ public:
+  ~TestChannelIDSource() override {}
+
+  // ChannelIDSource implementation.
+
+  QuicAsyncStatus GetChannelIDKey(
+      const string& hostname,
+      std::unique_ptr<ChannelIDKey>* channel_id_key,
+      ChannelIDSourceCallback* /*callback*/) override {
+    channel_id_key->reset(new TestChannelIDKey(HostnameToKey(hostname)));
+    return QUIC_SUCCESS;
+  }
+
+ private:
+  static EVP_PKEY* HostnameToKey(const string& hostname) {
+    // In order to generate a deterministic key for a given hostname the
+    // hostname is hashed with SHA-256 and the resulting digest is treated as a
+    // big-endian number. The most-significant bit is cleared to ensure that
+    // the resulting value is less than the order of the group and then it's
+    // taken as a private key. Given the private key, the public key is
+    // calculated with a group multiplication.
+    SHA256_CTX sha256;
+    SHA256_Init(&sha256);
+    SHA256_Update(&sha256, hostname.data(), hostname.size());
+
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    SHA256_Final(digest, &sha256);
+
+    // Ensure that the digest is less than the order of the P-256 group by
+    // clearing the most-significant bit.
+    digest[0] &= 0x7f;
+
+    crypto::ScopedBIGNUM k(BN_new());
+    CHECK(BN_bin2bn(digest, sizeof(digest), k.get()) != nullptr);
+
+    crypto::ScopedEC_GROUP p256(
+        EC_GROUP_new_by_curve_name(NID_X9_62_prime256v1));
+    CHECK(p256);
+
+    crypto::ScopedEC_KEY ecdsa_key(EC_KEY_new());
+    CHECK(ecdsa_key && EC_KEY_set_group(ecdsa_key.get(), p256.get()));
+
+    crypto::ScopedEC_POINT point(EC_POINT_new(p256.get()));
+    CHECK(EC_POINT_mul(p256.get(), point.get(), k.get(), nullptr, nullptr,
+                       nullptr));
+
+    EC_KEY_set_private_key(ecdsa_key.get(), k.get());
+    EC_KEY_set_public_key(ecdsa_key.get(), point.get());
+
+    crypto::ScopedEVP_PKEY pkey(EVP_PKEY_new());
+    // EVP_PKEY_set1_EC_KEY takes a reference so no |release| here.
+    EVP_PKEY_set1_EC_KEY(pkey.get(), ecdsa_key.get());
+
+    return pkey.release();
+  }
 };
 
 }  // anonymous namespace
@@ -232,34 +374,39 @@ void CryptoTestUtils::SetupCryptoServerConfigForTest(
 
 // static
 void CryptoTestUtils::CommunicateHandshakeMessages(
-    PacketSavingConnection* a_conn,
-    QuicCryptoStream* a,
-    PacketSavingConnection* b_conn,
-    QuicCryptoStream* b) {
-  CommunicateHandshakeMessagesAndRunCallbacks(a_conn, a, b_conn, b, nullptr);
+    PacketSavingConnection* client_conn,
+    QuicCryptoStream* client,
+    PacketSavingConnection* server_conn,
+    QuicCryptoStream* server) {
+  CommunicateHandshakeMessagesAndRunCallbacks(client_conn, client, server_conn,
+                                              server, nullptr);
 }
 
 // static
 void CryptoTestUtils::CommunicateHandshakeMessagesAndRunCallbacks(
-    PacketSavingConnection* a_conn,
-    QuicCryptoStream* a,
-    PacketSavingConnection* b_conn,
-    QuicCryptoStream* b,
+    PacketSavingConnection* client_conn,
+    QuicCryptoStream* client,
+    PacketSavingConnection* server_conn,
+    QuicCryptoStream* server,
     CallbackSource* callback_source) {
-  size_t a_i = 0, b_i = 0;
-  while (!a->handshake_confirmed()) {
-    ASSERT_GT(a_conn->encrypted_packets_.size(), a_i);
-    VLOG(1) << "Processing " << a_conn->encrypted_packets_.size() - a_i
-            << " packets a->b";
-    MovePackets(a_conn, &a_i, b, b_conn);
+  size_t client_i = 0, server_i = 0;
+  while (!client->handshake_confirmed()) {
+    ASSERT_GT(client_conn->encrypted_packets_.size(), client_i);
+    VLOG(1) << "Processing "
+            << client_conn->encrypted_packets_.size() - client_i
+            << " packets client->server";
+    MovePackets(client_conn, &client_i, server, server_conn,
+                Perspective::IS_SERVER);
     if (callback_source) {
       callback_source->RunPendingCallbacks();
     }
 
-    ASSERT_GT(b_conn->encrypted_packets_.size(), b_i);
-    VLOG(1) << "Processing " << b_conn->encrypted_packets_.size() - b_i
-            << " packets b->a";
-    MovePackets(b_conn, &b_i, a, a_conn);
+    ASSERT_GT(server_conn->encrypted_packets_.size(), server_i);
+    VLOG(1) << "Processing "
+            << server_conn->encrypted_packets_.size() - server_i
+            << " packets server->client";
+    MovePackets(server_conn, &server_i, client, client_conn,
+                Perspective::IS_CLIENT);
     if (callback_source) {
       callback_source->RunPendingCallbacks();
     }
@@ -268,24 +415,26 @@ void CryptoTestUtils::CommunicateHandshakeMessagesAndRunCallbacks(
 
 // static
 pair<size_t, size_t> CryptoTestUtils::AdvanceHandshake(
-    PacketSavingConnection* a_conn,
-    QuicCryptoStream* a,
-    size_t a_i,
-    PacketSavingConnection* b_conn,
-    QuicCryptoStream* b,
-    size_t b_i) {
-  VLOG(1) << "Processing " << a_conn->encrypted_packets_.size() - a_i
-          << " packets a->b";
-  MovePackets(a_conn, &a_i, b, b_conn);
+    PacketSavingConnection* client_conn,
+    QuicCryptoStream* client,
+    size_t client_i,
+    PacketSavingConnection* server_conn,
+    QuicCryptoStream* server,
+    size_t server_i) {
+  VLOG(1) << "Processing " << client_conn->encrypted_packets_.size() - client_i
+          << " packets client->server";
+  MovePackets(client_conn, &client_i, server, server_conn,
+              Perspective::IS_SERVER);
 
-  VLOG(1) << "Processing " << b_conn->encrypted_packets_.size() - b_i
-          << " packets b->a";
-  if (b_conn->encrypted_packets_.size() - b_i == 2) {
+  VLOG(1) << "Processing " << server_conn->encrypted_packets_.size() - server_i
+          << " packets server->client";
+  if (server_conn->encrypted_packets_.size() - server_i == 2) {
     VLOG(1) << "here";
   }
-  MovePackets(b_conn, &b_i, a, a_conn);
+  MovePackets(server_conn, &server_i, client, client_conn,
+              Perspective::IS_CLIENT);
 
-  return std::make_pair(a_i, b_i);
+  return std::make_pair(client_i, server_i);
 }
 
 // static
@@ -610,11 +759,17 @@ CryptoHandshakeMessage CryptoTestUtils::Message(const char* message_tag, ...) {
 }
 
 // static
+ChannelIDSource* CryptoTestUtils::ChannelIDSourceForTesting() {
+  return new TestChannelIDSource();
+}
+
+// static
 void CryptoTestUtils::MovePackets(PacketSavingConnection* source_conn,
                                   size_t* inout_packet_index,
                                   QuicCryptoStream* dest_stream,
-                                  PacketSavingConnection* dest_conn) {
-  SimpleQuicFramer framer(source_conn->supported_versions());
+                                  PacketSavingConnection* dest_conn,
+                                  Perspective dest_perspective) {
+  SimpleQuicFramer framer(source_conn->supported_versions(), dest_perspective);
   CryptoFramer crypto_framer;
   CryptoFramerVisitor crypto_visitor;
 

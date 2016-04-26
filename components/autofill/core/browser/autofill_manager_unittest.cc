@@ -933,6 +933,12 @@ class AutofillManagerTest : public testing::Test {
 #endif  // defined(OS_IOS)
   }
 
+  // Convenience method to cast the FullCardRequest into a CardUnmaskDelegate.
+  CardUnmaskDelegate* full_card_unmask_delegate() {
+    DCHECK(autofill_manager_->full_card_request_);
+    return (CardUnmaskDelegate*)autofill_manager_->full_card_request_.get();
+  }
+
  protected:
   base::MessageLoop message_loop_;
   MockAutofillClient autofill_client_;
@@ -1517,6 +1523,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestionsRepeatedObfuscatedNumber) {
                           "5231567890123456",  // Mastercard
                           "05", "2999");
   credit_card->set_guid("00000000-0000-0000-0000-000000000007");
+  credit_card->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(15));
   autofill_manager_->AddCreditCard(credit_card);
 
   // Set up our form data.
@@ -1778,8 +1785,8 @@ TEST_F(AutofillManagerTest, FillAddressForm) {
   const char guid[] = "00000000-0000-0000-0000-000000000001";
   AutofillProfile* profile = autofill_manager_->GetProfileWithGUID(guid);
   ASSERT_TRUE(profile);
-  EXPECT_EQ(0U, profile->use_count());
-  EXPECT_EQ(base::Time(), profile->use_date());
+  EXPECT_EQ(1U, profile->use_count());
+  EXPECT_NE(base::Time(), profile->use_date());
 
   int response_page_id = 0;
   FormData response_data;
@@ -1789,7 +1796,7 @@ TEST_F(AutofillManagerTest, FillAddressForm) {
   ExpectFilledAddressFormElvis(response_page_id, response_data, kDefaultPageID,
                                false);
 
-  EXPECT_EQ(1U, profile->use_count());
+  EXPECT_EQ(2U, profile->use_count());
   EXPECT_NE(base::Time(), profile->use_date());
 }
 
@@ -4148,10 +4155,10 @@ TEST_F(AutofillManagerTest, DontOfferToSavePaymentsCard) {
       form.fields[i].value = ASCIIToUTF16("2017");
   }
 
-  AutofillManager::UnmaskResponse response;
+  CardUnmaskDelegate::UnmaskResponse response;
   response.should_store_pan = false;
   response.cvc = ASCIIToUTF16("123");
-  autofill_manager_->OnUnmaskResponse(response);
+  full_card_unmask_delegate()->OnUnmaskResponse(response);
   autofill_manager_->OnDidGetRealPan(AutofillClient::SUCCESS,
                                      "4012888888881881");
   autofill_manager_->OnFormSubmitted(form);
@@ -4162,24 +4169,18 @@ TEST_F(AutofillManagerTest, FillInUpdatedExpirationDate) {
   CreditCard card;
   PrepareForRealPanResponse(&form, &card);
 
-  AutofillManager::UnmaskResponse response;
+  CardUnmaskDelegate::UnmaskResponse response;
   response.should_store_pan = false;
   response.cvc = ASCIIToUTF16("123");
   response.exp_month = ASCIIToUTF16("02");
   response.exp_year = ASCIIToUTF16("2018");
-  autofill_manager_->OnUnmaskResponse(response);
+  full_card_unmask_delegate()->OnUnmaskResponse(response);
   autofill_manager_->OnDidGetRealPan(AutofillClient::SUCCESS,
                                      "4012888888881881");
-
-  EXPECT_EQ(ASCIIToUTF16("02"),
-            autofill_manager_->unmask_request_.card.GetRawInfo(
-                CREDIT_CARD_EXP_MONTH));
-  EXPECT_EQ(ASCIIToUTF16("2018"),
-            autofill_manager_->unmask_request_.card.GetRawInfo(
-                CREDIT_CARD_EXP_4_DIGIT_YEAR));
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit an address form in order to establish a recent
@@ -4213,6 +4214,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_FeatureNotEnabled) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(false);
 
   // Create, fill and submit an address form in order to establish a recent
@@ -4247,6 +4249,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_FeatureNotEnabled) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit an address form in order to establish a recent
@@ -4284,6 +4287,11 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
 
 TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
   autofill_manager_->set_credit_card_upload_enabled(true);
+
+  // Remove the profiles that were created in the TestPersonalDataManager
+  // constructor because they would result in conflicting names that would
+  // prevent the upload.
+  personal_data_.ClearAutofillProfiles();
 
   // Create, fill and submit an address form in order to establish a recent
   // profile which can be selected for the upload request.
@@ -4337,6 +4345,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Don't fill or submit an address form.
@@ -4367,6 +4376,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit an address form in order to establish a recent
@@ -4403,6 +4413,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit two address forms with different zip codes.
@@ -4447,6 +4458,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesHavePrefixMatch) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit two address forms with different zip codes.
@@ -4491,6 +4503,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesHavePrefixMatch) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoZipCodeAvailable) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit an address form in order to establish a recent
@@ -4534,6 +4547,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoZipCodeAvailable) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NamesMatchLoosely) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit two address forms with different names.
@@ -4581,6 +4595,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesMatchLoosely) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Create, fill and submit two address forms with different names.
@@ -4625,6 +4640,7 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_UploadDetailsFails) {
+  personal_data_.ClearAutofillProfiles();
   autofill_manager_->set_credit_card_upload_enabled(true);
 
   // Anything other than "en-US" will cause GetUploadDetails to return a failure

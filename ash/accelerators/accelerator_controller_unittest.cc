@@ -23,6 +23,7 @@
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
 #include "ash/volume_control_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/common/window_positioning_utils.h"
 #include "ash/wm/common/wm_event.h"
 #include "ash/wm/lock_state_controller.h"
@@ -278,9 +279,8 @@ class AcceleratorControllerTest : public test::AshTestBase {
     test::TestShelfDelegate* shelf_delegate =
       test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
-    PanelLayoutManager* manager = static_cast<PanelLayoutManager*>(
-        Shell::GetContainer(window->GetRootWindow(),
-                            kShellWindowId_PanelContainer)->layout_manager());
+    PanelLayoutManager* manager =
+        PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
     manager->Relayout();
     return window;
   }

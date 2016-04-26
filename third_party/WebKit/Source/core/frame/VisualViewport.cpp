@@ -33,6 +33,8 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/PageScaleConstraints.h"
+#include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/Settings.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutView.h"
@@ -211,44 +213,62 @@ void VisualViewport::setScale(float scale)
 
 double VisualViewport::scrollLeft()
 {
+    if (!mainFrame())
+        return 0;
+
     updateLayoutIgnorePendingStylesheets();
 
-    return visibleRect().x();
+    return adjustScrollForAbsoluteZoom(visibleRect().x(), mainFrame()->pageZoomFactor());
 }
 
 double VisualViewport::scrollTop()
 {
+    if (!mainFrame())
+        return 0;
+
     updateLayoutIgnorePendingStylesheets();
 
-    return visibleRect().y();
+    return adjustScrollForAbsoluteZoom(visibleRect().y(), mainFrame()->pageZoomFactor());
 }
 
 void VisualViewport::setScrollLeft(double x)
 {
+    if (!mainFrame())
+        return;
+
     updateLayoutIgnorePendingStylesheets();
 
-    setLocation(FloatPoint(x, visibleRect().y()));
+    setLocation(FloatPoint(x * mainFrame()->pageZoomFactor(), location().y()));
 }
 
 void VisualViewport::setScrollTop(double y)
 {
+    if (!mainFrame())
+        return;
+
     updateLayoutIgnorePendingStylesheets();
 
-    setLocation(FloatPoint(visibleRect().x(), y));
+    setLocation(FloatPoint(location().x(), y * mainFrame()->pageZoomFactor()));
 }
 
 double VisualViewport::clientWidth()
 {
+    if (!mainFrame())
+        return 0;
+
     updateLayoutIgnorePendingStylesheets();
 
-    return visibleRect().width();
+    return adjustScrollForAbsoluteZoom(visibleSize().width(), mainFrame()->pageZoomFactor());
 }
 
 double VisualViewport::clientHeight()
 {
+    if (!mainFrame())
+        return 0;
+
     updateLayoutIgnorePendingStylesheets();
 
-    return visibleRect().height();
+    return adjustScrollForAbsoluteZoom(visibleSize().height(), mainFrame()->pageZoomFactor());
 }
 
 double VisualViewport::pageScale()

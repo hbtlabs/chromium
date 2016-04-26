@@ -40,7 +40,10 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
         }
     ],
     "DocumentWriteEvaluator": [
@@ -91,6 +94,11 @@
             "group_name": "Enabled"
         }
     ],
+    "MojoChannel": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -113,14 +121,6 @@
     ],
     "RefreshTokenDeviceId": [
         {
-            "group_name": "Enabled"
-        }
-    ],
-    "RenderingPipelineThrottling": [
-        {
-            "enable_features": [
-                "RenderingPipelineThrottling"
-            ],
             "group_name": "Enabled"
         }
     ],
@@ -266,15 +266,6 @@
                 "token-binding"
             ],
             "group_name": "TokenBinding"
-        }
-    ],
-    "V8SerializeOptions": [
-        {
-            "enable_features": [
-                "V8_Serialize_Eager",
-                "V8_Serialize_Age_Code"
-            ],
-            "group_name": "SerializeEagerAndAgeCode"
         }
     ],
     "VarationsServiceControl": [

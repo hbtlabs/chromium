@@ -32,20 +32,15 @@
 #define BaseClickableWithKeyInputType_h
 
 #include "core/CoreExport.h"
-#include "core/html/forms/InputType.h"
+#include "core/html/forms/InputTypeView.h"
 
 namespace blink {
 
-// Base of input types that dispatches a simulated click on space/return key.
-class CORE_EXPORT BaseClickableWithKeyInputType : public InputType {
-public:
-    static void handleKeydownEvent(HTMLInputElement&, KeyboardEvent*);
-    static void handleKeypressEvent(HTMLInputElement&, KeyboardEvent*);
-    static void handleKeyupEvent(InputTypeView&, KeyboardEvent*);
-    static void accessKeyAction(HTMLInputElement&, bool sendMouseEvents);
-
+// An InputTypeView class that dispatches a simulated click on space/return key.
+// TODO(tkent): Rename this to FooBarInputTypeView.
+class CORE_EXPORT BaseClickableWithKeyInputType : public InputTypeView {
 protected:
-    BaseClickableWithKeyInputType(HTMLInputElement& element) : InputType(element) { }
+    BaseClickableWithKeyInputType(HTMLInputElement& element) : InputTypeView(element) {}
 
 private:
     void handleKeydownEvent(KeyboardEvent*) override;

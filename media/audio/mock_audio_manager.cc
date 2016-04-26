@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
@@ -90,9 +90,9 @@ std::string MockAudioManager::GetAssociatedOutputDeviceID(
   return std::string();
 }
 
-scoped_ptr<AudioLog> MockAudioManager::CreateAudioLog(
+std::unique_ptr<AudioLog> MockAudioManager::CreateAudioLog(
     AudioLogFactory::AudioComponent component) {
-  return scoped_ptr<AudioLog>();
+  return nullptr;
 }
 
 }  // namespace media.

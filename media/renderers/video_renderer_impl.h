@@ -9,10 +9,10 @@
 #include <stdint.h>
 
 #include <deque>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_ptr.h"
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/condition_variable.h"
@@ -76,9 +76,12 @@ class MEDIA_EXPORT VideoRendererImpl
   void StartPlayingFrom(base::TimeDelta timestamp) override;
   void OnTimeStateChanged(bool time_progressing) override;
 
-  void SetTickClockForTesting(scoped_ptr<base::TickClock> tick_clock);
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
   void SetGpuMemoryBufferVideoForTesting(
-      scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool);
+      std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool);
+  size_t frames_queued_for_testing() const {
+    return algorithm_->frames_queued();
+  }
 
   // VideoRendererSink::RenderCallback implementation.
   scoped_refptr<VideoFrame> Render(base::TimeTicks deadline_min,
@@ -155,6 +158,22 @@ class MEDIA_EXPORT VideoRendererImpl
   // duration is before |start_timestamp_|.
   bool IsBeforeStartTime(base::TimeDelta timestamp);
 
+  // Attempts to remove frames which are no longer effective for rendering when
+  // |buffering_state_| == BUFFERING_HAVE_NOTHING or |was_background_rendering_|
+  // is true.  If the current media time as provided by |wall_clock_time_cb_| is
+  // null, no frame expiration will be done.
+  //
+  // When background rendering the method will expire all frames before the
+  // current wall clock time since it's expected that there will be long delays
+  // between each Render() call in this state.
+  //
+  // When in the underflow state the method will first attempt to remove expired
+  // frames before the current media time plus duration. If |sink_started_| is
+  // true, nothing more can be done. However, if false, and there are still no
+  // effective frames in the queue, the entire frame queue will be released to
+  // avoid any stalling.
+  void RemoveFramesForUnderflowOrBackgroundRendering();
+
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // Sink which calls into VideoRendererImpl via Render() for video frames.  Do
@@ -169,10 +188,10 @@ class MEDIA_EXPORT VideoRendererImpl
   base::Lock lock_;
 
   // Provides video frames to VideoRendererImpl.
-  scoped_ptr<VideoFrameStream> video_frame_stream_;
+  std::unique_ptr<VideoFrameStream> video_frame_stream_;
 
   // Pool of GpuMemoryBuffers and resources used to create hardware frames.
-  scoped_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
+  std::unique_ptr<GpuMemoryBufferVideoFramePool> gpu_memory_buffer_pool_;
 
   scoped_refptr<MediaLog> media_log_;
 
@@ -242,11 +261,11 @@ class MEDIA_EXPORT VideoRendererImpl
   int frames_decoded_;
   int frames_dropped_;
 
-  scoped_ptr<base::TickClock> tick_clock_;
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   // Algorithm for selecting which frame to render; manages frames and all
   // timing related information.
-  scoped_ptr<VideoRendererAlgorithm> algorithm_;
+  std::unique_ptr<VideoRendererAlgorithm> algorithm_;
 
   // Indicates that Render() was called with |background_rendering| set to true,
   // so we've entered a background rendering mode where dropped frames are not

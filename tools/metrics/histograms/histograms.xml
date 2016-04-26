@@ -386,6 +386,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.MultiWindowMode.IsTabletScreenWidthBelow600"
+    enum="Boolean">
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Records whether the screen width is below 600dp when the activity is in
+    Android N multi-window mode. True if the screen width is less than 600dp and
+    false if is greater than or equal to 600dp.
+  </summary>
+</histogram>
+
+<histogram name="Android.MultiWindowMode.TabletScreenWidth" units="dp">
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Records the screen width in dp when the activity is in Android N
+    multi-window mode and the width is below 600dp.
+  </summary>
+</histogram>
+
 <histogram name="Android.NTP.Impression" enum="NTPImpressionType">
   <owner>finkm@chromium.org</owner>
   <summary>
@@ -924,6 +942,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>elijahtaylor@google.com</owner>
   <owner>mitsuji@google.com</owner>
   <summary>Arc OptIn cancelation reason.</summary>
+</histogram>
+
+<histogram name="Arc.ShutdownTime" units="ms">
+  <owner>elijahtaylor@google.com</owner>
+  <summary>
+    The time it takes for ARC to shut down. This value is recorded on ARC
+    shutdown as the time is takes for the init process to exit after setting
+    'sys.powerctl shutdown'. It is reported on the next ARC startup to avoid
+    sending data during shutdown.
+  </summary>
 </histogram>
 
 <histogram name="Arc.State" enum="BooleanEnabled">
@@ -12075,6 +12103,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The result of handling of MouseWheel, TouchStart, TouchMove, TouchEnd events
     in the renderer.
+  </summary>
+</histogram>
+
+<histogram name="Event.PassiveListeners.ForcedNonBlockingLatency"
+    units="microseconds">
+  <owner>dtapuska@chromium.org</owner>
+  <summary>
+    Time between when a forced non-blocking event was generated and the event
+    processed. This histogram tracks the benefit of forcing non-blocking events
+    listeners.
   </summary>
 </histogram>
 
@@ -27025,6 +27063,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </details>
 </histogram>
 
+<histogram name="Net.Prefetch.HitBytes" units="bytes">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Bytes read for requests that were served from a cache entry filled by a
+    prefetch request. An entry is considered filled by a prefetch if its
+    unused_since_prefetch bit is true.
+  </summary>
+</histogram>
+
 <histogram name="Net.Prefetch.Pattern" enum="PrefetchStatus">
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -27053,6 +27100,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>jkarlin@chromium.org</owner>
   <summary>
     Time spent on prefetch requests before the request was canceled.
+  </summary>
+</histogram>
+
+<histogram name="Net.Prefetch.TimeSpentOnPrefetchHit" units="ms">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    Time spent on requests that were served from a cache entry filled by a
+    prefetch request. An entry is considered filled by a prefetch if its
+    unused_since_prefetch bit is true.
   </summary>
 </histogram>
 
@@ -27577,6 +27633,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.QuicEphemeralPortsSuggested">
+  <obsolete>
+    Deprecated as of 04/2016.
+  </obsolete>
   <owner>rch@chromium.org</owner>
   <summary>The number of ports suggested per server.</summary>
 </histogram>
@@ -40869,10 +40928,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Length of time to retrieve profile.</summary>
 </histogram>
 
+<histogram name="Profile.GetProfileInfoPath.OutsideUserDir" enum="BooleanHit">
+  <owner>anthonyvd@chromium.org</owner>
+  <summary>
+    Whether Profile::GetProfileInfoPath is called with a profile outside the
+    user data directory. We expect this to never happen but need to verify in
+    stable. This metric may be removed after M54.
+  </summary>
+</histogram>
+
 <histogram name="Profile.HistorySize" units="MB">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kouhei@chromium.org</owner>
   <summary>Size of the history database.</summary>
+</histogram>
+
+<histogram name="Profile.InitProfileUserPrefs.OutsideUserDir" enum="BooleanHit">
+  <owner>anthonyvd@chromium.org</owner>
+  <summary>
+    Whether Profile::InitProfileUserPrefs is called with a profile outside the
+    user data directory. We expect this to never happen but need to verify in
+    stable. This metric may be removed after M54.
+  </summary>
 </histogram>
 
 <histogram name="Profile.LaunchBrowser" enum="ProfileType">
@@ -42310,6 +42387,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>wiltzius@chromium.org</owner>
   <summary>
     Probability distribution for enumerated varieties of page loads.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.LockExistingCachedImage" enum="BooleanSuccess">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    For each attempted lock of a cached image, records whether it was
+    successful.
   </summary>
 </histogram>
 
@@ -53315,6 +53400,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Sync.SessionsAssociationTime" units="ms">
   <owner>zea@chromium.org</owner>
   <summary>Time taken during session association.</summary>
+</histogram>
+
+<histogram name="Sync.SessionsBadForeignHashOnMergeCount"
+    units="Sessions Entries">
+  <owner>skym@chromium.org</owner>
+  <summary>
+    Number of foreign sessions entries detected with bad client tag hash value
+    during MergeDataAndStartSyncing. These will be immediately deleted. The
+    overwhelming majority of clients should report a value of 0 upon startup.
+  </summary>
 </histogram>
 
 <histogram name="Sync.SessionsConfigureFailure" enum="SyncConfigureResult">
@@ -69257,6 +69352,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1117" label="WEBRTCLOGGINGPRIVATE_STOPRTCEVENTLOGGING"/>
   <int value="1118" label="PASSWORDSPRIVATE_GETSAVEDPASSWORDLIST"/>
   <int value="1119" label="PASSWORDSPRIVATE_GETPASSWORDEXCEPTIONLIST"/>
+  <int value="1120" label="INPUTMETHODPRIVATE_OPENOPTIONSPAGE"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -71206,6 +71302,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1318" label="TextDocumentInFrame"/>
   <int value="1319" label="ViewSourceDocument"/>
   <int value="1320" label="FileAPINativeLineEndings"/>
+  <int value="1321" label="PointerEventAttributeCount"/>
+  <int value="1322" label="CompositedReplication"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -84177,7 +84275,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="0" label="Snippets were shown to the user"/>
   <int value="1" label="User scrolled through the snippets"/>
   <int value="2" label="User clicked on a snippet into the host website"/>
-  <int value="3" label="User swiped a snippet away"/>
+  <int value="3" label="User swiped a snippet away (obsolete)"/>
+  <int value="4" label="User swiped a snippet away after visiting"/>
+  <int value="5" label="User swiped a snippet away without visiting"/>
 </enum>
 
 <enum name="SocketStreamConnectionType" type="int">
@@ -88737,9 +88837,6 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="None" label="With no detected network"/>
   <suffix name="Bluetooth" label="On Bluetooth network"/>
   <affected-histogram name="DataReductionProxy.AutoLoFiAccuracy"/>
-  <obsolete>
-    Replaced by DataReductionProxy.LoFi.Accuracy.
-  </obsolete>
   <affected-histogram name="DataReductionProxy.AutoLoFiRequestHeaderState"/>
   <affected-histogram name="DataReductionProxy.LoFi.Accuracy.15"/>
   <affected-histogram name="DataReductionProxy.LoFi.Accuracy.30"/>
@@ -89991,6 +90088,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="LocalStorage.BrowserTimeToPrimeLocalStorage"/>
   <affected-histogram name="LocalStorage.MojoTimeToPrimeFor"/>
   <affected-histogram name="LocalStorage.RendererTimeToPrimeLocalStorage"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="LockExistingCachedImage" separator=".">
+  <suffix name="Software.EVENTUALLY" label="Eventually bin for software"/>
+  <suffix name="Software.NOW" label="Now bin for software"/>
+  <suffix name="Software.SOON" label="Soon bin for software"/>
+  <affected-histogram name="Renderer4.LockExistingCachedImage"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="LowMemoryMargin">

@@ -1481,7 +1481,7 @@ cr.define('login', function() {
      * a in-progress message.
      * @param {boolean} Whether any actual query to the statistics have failed.
      * Should be true only if there is an error and the corresponding statistic
-     * is also unavailable in ProfileInfoCache.
+     * is also unavailable in ProfileAttributesStorage.
      */
     RemoveWarningDialogSetMessage_: function(isInitial, hasErrors) {
       var stats_elements = this.statsMapElements;
@@ -1682,8 +1682,10 @@ cr.define('login', function() {
         if (this.multiProfilesPolicyApplied)
           this.userTypeBubbleElement.classList.add('bubble-shown');
 
-        // Prevent default so that we don't trigger 'focus' event.
-        e.preventDefault();
+        // Prevent default so that we don't trigger 'focus' event and
+        // stop propagation so that the 'click' event does not bubble
+        // up and accidentally closes the bubble tooltip.
+        stopEventPropagation(e);
       }
     },
 

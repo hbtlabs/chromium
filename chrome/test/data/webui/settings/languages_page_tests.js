@@ -65,13 +65,13 @@ cr.define('settings_languages_page', function() {
       for (var i = 0; i < languageSettingsPrivate.languages.length;
            i++) {
         assertEquals(languageSettingsPrivate.languages[i].code,
-                     languageHelper.languages.supportedLanguages[i].code);
+                     languageHelper.languages.supported[i].code);
       }
-      assertEquals(2, languageHelper.languages.enabledLanguages.length);
+      assertEquals(2, languageHelper.languages.enabled.length);
       assertEquals('en-US',
-                   languageHelper.languages.enabledLanguages[0].language.code);
+                   languageHelper.languages.enabled[0].language.code);
       assertEquals('sw',
-                   languageHelper.languages.enabledLanguages[1].language.code);
+                   languageHelper.languages.enabled[1].language.code);
       assertEquals('en', languageHelper.languages.translateTarget);
 
       // TODO(michaelpg): Test other aspects of the model.
@@ -89,5 +89,20 @@ cr.define('settings_languages_page', function() {
 
       // TODO(michaelpg): Test other modifications.
     });
+
+    if (cr.isChromeOS) {
+      test('modifying input methods', function() {
+        assertEquals(2, languageHelper.languages.inputMethods.enabled.length);
+        var inputMethods = languageHelper.getInputMethodsForLanguage('en-US');
+        assertEquals(2, inputMethods.length);
+
+        var dvorak =
+            '_comp_ime_fgoepimhcoialccpbmpnnblemnepkkaoxkb:us:dvorak:eng';
+        languageHelper.removeInputMethod(dvorak);
+        assertEquals(1, languageHelper.languages.inputMethods.enabled.length);
+
+        // TODO(michaelpg): Test other modifications.
+      });
+    }
   });
 });

@@ -22,13 +22,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_checker.h"
 #include "media/audio/audio_io.h"
-#include "media/audio/audio_parameters.h"
+#include "media/base/audio_parameters.h"
 
 namespace media {
 
@@ -178,11 +180,11 @@ class AUHALStream : public AudioOutputStream {
   bool stopped_;
 
   // Container for retrieving data from AudioSourceCallback::OnMoreData().
-  scoped_ptr<AudioBus> output_bus_;
+  std::unique_ptr<AudioBus> output_bus_;
 
   // Dynamically allocated FIFO used when CoreAudio asks for unexpected frame
   // sizes.
-  scoped_ptr<AudioPullFifo> audio_fifo_;
+  std::unique_ptr<AudioPullFifo> audio_fifo_;
 
   // Current buffer delay.  Set by Render().
   uint32_t current_hardware_pending_bytes_;

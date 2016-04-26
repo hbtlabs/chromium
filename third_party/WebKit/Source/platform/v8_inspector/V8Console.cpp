@@ -5,10 +5,13 @@
 #include "platform/v8_inspector/V8Console.h"
 
 #include "platform/inspector_protocol/String16.h"
+#include "platform/v8_inspector/InjectedScript.h"
 #include "platform/v8_inspector/InspectedContext.h"
+#include "platform/v8_inspector/V8DebuggerAgentImpl.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
 #include "platform/v8_inspector/V8ProfilerAgentImpl.h"
+#include "platform/v8_inspector/V8RuntimeAgentImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/ConsoleAPITypes.h"
@@ -118,6 +121,20 @@ public:
         return toProtocolString(titleValue);
     }
 
+    v8::MaybeLocal<v8::Object> firstArgAsObject()
+    {
+        if (m_info.Length() < 1 || !m_info[0]->IsObject())
+            return v8::MaybeLocal<v8::Object>();
+        return m_info[0].As<v8::Object>();
+    }
+
+    v8::MaybeLocal<v8::Function> firstArgAsFunction()
+    {
+        if (m_info.Length() < 1 || !m_info[0]->IsFunction())
+            return v8::MaybeLocal<v8::Function>();
+        return m_info[0].As<v8::Function>();
+    }
+
     v8::MaybeLocal<v8::Map> privateMap(const char* name)
     {
         v8::Local<v8::Object> console = ensureConsole();
@@ -172,14 +189,30 @@ public:
 
     V8ProfilerAgentImpl* profilerAgent()
     {
+        if (V8InspectorSessionImpl* session = currentSession()) {
+            if (session && session->profilerAgentImpl()->enabled())
+                return session->profilerAgentImpl();
+        }
+        return nullptr;
+    }
+
+    V8DebuggerAgentImpl* debuggerAgent()
+    {
+        if (V8InspectorSessionImpl* session = currentSession()) {
+            if (session && session->debuggerAgentImpl()->enabled())
+                return session->debuggerAgentImpl();
+        }
+        return nullptr;
+    }
+
+    V8InspectorSessionImpl* currentSession()
+    {
         InspectedContext* inspectedContext = ensureInspectedContext();
         if (!inspectedContext)
             return nullptr;
-        V8InspectorSessionImpl* session = inspectedContext->debugger()->sessionForContextGroup(inspectedContext->contextGroupId());
-        if (session && session->profilerAgentImpl()->enabled())
-            return session->profilerAgentImpl();
-        return nullptr;
+        return inspectedContext->debugger()->sessionForContextGroup(inspectedContext->contextGroupId());
     }
+
 private:
     const v8::FunctionCallbackInfo<v8::Value>& m_info;
     v8::Isolate* m_isolate;
@@ -328,6 +361,8 @@ void V8Console::assertCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
     if (helper.firstArgToBoolean(false))
         return;
     helper.addMessage(AssertMessageType, ErrorMessageLevel, true, 1);
+    if (V8DebuggerAgentImpl* debuggerAgent = helper.debuggerAgent())
+        debuggerAgent->breakProgramOnException(protocol::Debugger::Paused::ReasonEnum::Assert, nullptr);
 }
 
 void V8Console::markTimelineCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -432,8 +467,138 @@ void V8Console::memorySetterCallback(const v8::FunctionCallbackInfo<v8::Value>& 
     // We can't make the attribute readonly as it breaks existing code that relies on being able to assign to console.memory in strict mode. Instead, the setter just ignores the passed value.  http://crbug.com/468611
 }
 
-v8::MaybeLocal<v8::Object> V8Console::create(v8::Local<v8::Context> context, InspectedContext* inspectedContext, bool hasMemoryAttribute)
+void V8Console::keysCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
+    v8::Isolate* isolate = info.GetIsolate();
+    info.GetReturnValue().Set(v8::Array::New(isolate));
+
+    ConsoleHelper helper(info);
+    v8::Local<v8::Object> obj;
+    if (!helper.firstArgAsObject().ToLocal(&obj))
+        return;
+    v8::Local<v8::Array> names;
+    if (!obj->GetOwnPropertyNames(isolate->GetCurrentContext()).ToLocal(&names))
+        return;
+    info.GetReturnValue().Set(names);
+}
+
+void V8Console::valuesCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    v8::Isolate* isolate = info.GetIsolate();
+    info.GetReturnValue().Set(v8::Array::New(isolate));
+
+    ConsoleHelper helper(info);
+    v8::Local<v8::Object> obj;
+    if (!helper.firstArgAsObject().ToLocal(&obj))
+        return;
+    v8::Local<v8::Array> names;
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    if (!obj->GetOwnPropertyNames(context).ToLocal(&names))
+        return;
+    v8::Local<v8::Array> values = v8::Array::New(isolate, names->Length());
+    for (size_t i = 0; i < names->Length(); ++i) {
+        v8::Local<v8::Value> key;
+        if (!names->Get(context, i).ToLocal(&key))
+            continue;
+        v8::Local<v8::Value> value;
+        if (!obj->Get(context, key).ToLocal(&value))
+            continue;
+        if (!values->Set(context, i, value).FromMaybe(false))
+            continue;
+    }
+    info.GetReturnValue().Set(values);
+}
+
+static void setFunctionBreakpoint(ConsoleHelper& helper, v8::Local<v8::Function> function, V8DebuggerAgentImpl::BreakpointSource source, const String16& condition, bool enable)
+{
+    V8DebuggerAgentImpl* debuggerAgent = helper.debuggerAgent();
+    if (!debuggerAgent)
+        return;
+    String16 scriptId = String16::number(function->ScriptId());
+    int lineNumber = function->GetScriptLineNumber();
+    int columnNumber = function->GetScriptColumnNumber();
+    if (lineNumber == v8::Function::kLineOffsetNotFound || columnNumber == v8::Function::kLineOffsetNotFound)
+        return;
+    if (enable)
+        debuggerAgent->setBreakpointAt(scriptId, lineNumber, columnNumber, source, condition);
+    else
+        debuggerAgent->removeBreakpointAt(scriptId, lineNumber, columnNumber, source);
+}
+
+void V8Console::debugFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    ConsoleHelper helper(info);
+    v8::Local<v8::Function> function;
+    if (!helper.firstArgAsFunction().ToLocal(&function))
+        return;
+    setFunctionBreakpoint(helper, function, V8DebuggerAgentImpl::DebugCommandBreakpointSource, String16(), true);
+}
+
+void V8Console::undebugFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    ConsoleHelper helper(info);
+    v8::Local<v8::Function> function;
+    if (!helper.firstArgAsFunction().ToLocal(&function))
+        return;
+    setFunctionBreakpoint(helper, function, V8DebuggerAgentImpl::DebugCommandBreakpointSource, String16(), false);
+}
+
+void V8Console::monitorFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    ConsoleHelper helper(info);
+    v8::Local<v8::Function> function;
+    if (!helper.firstArgAsFunction().ToLocal(&function))
+        return;
+    v8::Local<v8::Value> name = function->GetName();
+    if (!name->IsString() || !v8::Local<v8::String>::Cast(name)->Length())
+        name = function->GetInferredName();
+    String16 functionName = toProtocolStringWithTypeCheck(name);
+    String16Builder builder;
+    builder.append("console.log(\"function ");
+    if (functionName.isEmpty())
+        builder.append("(anonymous function)");
+    else
+        builder.append(functionName);
+    builder.append(" called\" + (arguments.length > 0 ? \" with arguments: \" + Array.prototype.join.call(arguments, \", \") : \"\")) && false");
+    setFunctionBreakpoint(helper, function, V8DebuggerAgentImpl::MonitorCommandBreakpointSource, builder.toString(), true);
+}
+
+void V8Console::unmonitorFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    ConsoleHelper helper(info);
+    v8::Local<v8::Function> function;
+    if (!helper.firstArgAsFunction().ToLocal(&function))
+        return;
+    setFunctionBreakpoint(helper, function, V8DebuggerAgentImpl::MonitorCommandBreakpointSource, String16(), false);
+}
+
+void V8Console::lastEvaluationResultCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    ConsoleHelper helper(info);
+    InspectedContext* context = helper.ensureInspectedContext();
+    if (!context)
+        return;
+    if (InjectedScript* injectedScript = context->getInjectedScript())
+        info.GetReturnValue().Set(injectedScript->lastEvaluationResult());
+}
+
+void V8Console::inspectedObject(const v8::FunctionCallbackInfo<v8::Value>& info, unsigned num)
+{
+    ASSERT(num < V8InspectorSessionImpl::kInspectedObjectBufferSize);
+    ConsoleHelper helper(info);
+    if (V8InspectorSessionImpl* session = helper.currentSession()) {
+        V8RuntimeAgent::Inspectable* object = session->inspectedObject(num);
+        v8::Isolate* isolate = info.GetIsolate();
+        if (object)
+            info.GetReturnValue().Set(object->get(isolate->GetCurrentContext()));
+        else
+            info.GetReturnValue().Set(v8::Undefined(isolate));
+    }
+}
+
+v8::MaybeLocal<v8::Object> V8Console::createConsole(InspectedContext* inspectedContext, bool hasMemoryAttribute)
+{
+    v8::Local<v8::Context> context = inspectedContext->context();
     v8::Isolate* isolate = context->GetIsolate();
     v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
 
@@ -477,6 +642,68 @@ v8::MaybeLocal<v8::Object> V8Console::create(v8::Local<v8::Context> context, Ins
 
     console->SetPrivate(context, inspectedContextPrivateKey(isolate), v8::External::New(isolate, inspectedContext));
     return console;
+}
+
+v8::Local<v8::Object> V8Console::createCommandLineAPI(InspectedContext* inspectedContext)
+{
+    v8::Local<v8::Context> context = inspectedContext->context();
+    v8::Isolate* isolate = context->GetIsolate();
+    v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
+
+    v8::Local<v8::Object> commandLineAPI = v8::Object::New(isolate);
+
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "dir", V8Console::dirCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "dirxml", V8Console::dirxmlCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "profile", V8Console::profileCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "profileEnd", V8Console::profileEndCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "clear", V8Console::clearCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "table", V8Console::tableCallback);
+
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "keys", V8Console::keysCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "values", V8Console::valuesCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "debug", V8Console::debugFunctionCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "undebug", V8Console::undebugFunctionCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "monitor", V8Console::monitorFunctionCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "unmonitor", V8Console::unmonitorFunctionCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$_", V8Console::lastEvaluationResultCallback);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$0", V8Console::inspectedObject0);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$1", V8Console::inspectedObject1);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$2", V8Console::inspectedObject2);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$3", V8Console::inspectedObject3);
+    createBoundFunctionProperty(context, commandLineAPI, commandLineAPI, "$4", V8Console::inspectedObject4);
+
+    commandLineAPI->SetPrivate(context, inspectedContextPrivateKey(isolate), v8::External::New(isolate, inspectedContext));
+    return commandLineAPI;
+}
+
+void V8Console::clearInspectedContextIfNeeded(v8::Local<v8::Context> context, v8::Local<v8::Object> console)
+{
+    v8::Isolate* isolate = context->GetIsolate();
+    console->SetPrivate(context, inspectedContextPrivateKey(isolate), v8::External::New(isolate, nullptr));
+}
+
+bool V8Debugger::isCommandLineAPIMethod(const String16& name)
+{
+    DEFINE_STATIC_LOCAL(protocol::HashSet<String16>, methods, ());
+    if (methods.size() == 0) {
+        const char* members[] = { "$", "$$", "$x", "dir", "dirxml", "keys", "values", "profile", "profileEnd",
+            "monitorEvents", "unmonitorEvents", "inspect", "copy", "clear", "getEventListeners",
+            "debug", "undebug", "monitor", "unmonitor", "table" };
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(members); ++i)
+            methods.add(members[i]);
+    }
+    return methods.find(name) != methods.end();
+}
+
+bool V8Debugger::isCommandLineAPIGetter(const String16& name)
+{
+    DEFINE_STATIC_LOCAL(protocol::HashSet<String16>, getters, ());
+    if (getters.size() == 0) {
+        const char* members[] = { "$0", "$1", "$2", "$3", "$4", "$_" };
+        for (size_t i = 0; i < WTF_ARRAY_LENGTH(members); ++i)
+            getters.add(members[i]);
+    }
+    return getters.find(name) != getters.end();
 }
 
 } // namespace blink

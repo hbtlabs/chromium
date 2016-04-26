@@ -13,10 +13,6 @@
 #include "base/macros.h"
 #include "ui/wm/public/window_move_client.h"
 
-namespace aura {
-class Window;
-}
-
 namespace gfx {
 class Rect;
 }
@@ -65,12 +61,6 @@ class ASH_EXPORT WindowResizer {
   wm::WmWindow* GetTarget() const {
     return window_state_ ? window_state_->window() : nullptr;
   }
-  // Deprecated.
-  // TODO(sky): remove.
-  aura::Window* GetAuraTarget() const {
-    return window_state_ ? window_state_->aura_window() : nullptr;
-  }
-
   // See comment for |DragDetails::initial_location_in_parent|.
   const gfx::Point& GetInitialLocation() const {
     return window_state_->drag_details()->initial_location_in_parent;
@@ -108,11 +98,10 @@ class ASH_EXPORT WindowResizer {
   DISALLOW_COPY_AND_ASSIGN(WindowResizer);
 };
 
-// Creates a WindowResizer for |window|. This can return a scoped_ptr
-// initialized with NULL if |window| should not be resized nor dragged.
-// TODO(sky): move this to its own file. This is aura specific.
+// Creates a WindowResizer for |window|. Returns a unique_ptr with null if
+// |window| should not be resized nor dragged.
 ASH_EXPORT std::unique_ptr<WindowResizer> CreateWindowResizer(
-    aura::Window* window,
+    wm::WmWindow* window,
     const gfx::Point& point_in_parent,
     int window_component,
     aura::client::WindowMoveSource source);

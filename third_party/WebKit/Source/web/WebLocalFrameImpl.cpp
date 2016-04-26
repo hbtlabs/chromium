@@ -746,7 +746,7 @@ void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
 {
     DCHECK(frame());
 
-    MessageLevel webCoreMessageLevel;
+    MessageLevel webCoreMessageLevel = LogMessageLevel;
     switch (message.level) {
     case WebConsoleMessage::LevelDebug:
         webCoreMessageLevel = DebugMessageLevel;
@@ -760,9 +760,10 @@ void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
     case WebConsoleMessage::LevelError:
         webCoreMessageLevel = ErrorMessageLevel;
         break;
-    default:
-        NOTREACHED();
-        return;
+    // Unsupported values.
+    case WebConsoleMessage::LevelInfo:
+    case WebConsoleMessage::LevelRevokedError:
+        break;
     }
 
     frame()->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, webCoreMessageLevel, message.text, message.url, message.lineNumber, message.columnNumber));
@@ -1449,6 +1450,7 @@ DEFINE_TRACE(WebLocalFrameImpl)
     visitor->trace(m_textFinder);
     visitor->trace(m_printContext);
     visitor->trace(m_geolocationClientProxy);
+    visitor->trace(m_contextMenuNode);
     visitor->template registerWeakMembers<WebFrame, &WebFrame::clearWeakFrames>(this);
     WebFrame::traceFrames(visitor, this);
     WebFrameImplBase::trace(visitor);
@@ -1628,9 +1630,9 @@ WebDataSourceImpl* WebLocalFrameImpl::provisionalDataSourceImpl() const
 
 void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
 {
-    WebLocalFrameImpl* mainFrameImpl = viewImpl()->mainFrameImpl();
+    DCHECK(!parent());
 
-    if (this != mainFrameImpl->activeMatchFrame())
+    if (!m_textFinder || this != m_textFinder->activeMatchFrame())
         return;
 
     if (Range* activeMatch = m_textFinder->activeMatch()) {
@@ -1836,10 +1838,11 @@ WebLocalFrame* WebLocalFrameImpl::traverseNextLocal(bool wrap) const
     return nextLocalFrame ? nextLocalFrame->toWebLocalFrame() : nullptr;
 }
 
-void WebLocalFrameImpl::sendPings(const WebNode& contextNode, const WebURL& destinationURL)
+void WebLocalFrameImpl::sendPings(const WebURL& destinationURL)
 {
     DCHECK(frame());
-    Element* anchor = contextNode.constUnwrap<Node>()->enclosingLinkEventParentOrSelf();
+    DCHECK(m_contextMenuNode.get());
+    Element* anchor = m_contextMenuNode->enclosingLinkEventParentOrSelf();
     if (isHTMLAnchorElement(anchor))
         toHTMLAnchorElement(anchor)->sendPings(destinationURL);
 }
@@ -2081,20 +2084,9 @@ void WebLocalFrameImpl::willDetachParent()
     }
 }
 
-WebLocalFrameImpl* WebLocalFrameImpl::activeMatchFrame() const
+TextFinder* WebLocalFrameImpl::textFinder() const
 {
-    DCHECK(!parent());
-
-    if (m_textFinder)
-        return m_textFinder->activeMatchFrame();
-    return 0;
-}
-
-Range* WebLocalFrameImpl::activeMatch() const
-{
-    if (m_textFinder)
-        return m_textFinder->activeMatch();
-    return 0;
+    return m_textFinder;
 }
 
 TextFinder& WebLocalFrameImpl::ensureTextFinder()

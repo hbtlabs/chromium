@@ -5,7 +5,9 @@
 #include "ash/wm/toplevel_window_event_handler.h"
 
 #include "ash/shell.h"
+#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/common/wm_event.h"
+#include "ash/wm/common/wm_window_observer.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
@@ -88,7 +90,7 @@ int GetWindowComponent(aura::Window* window, const ui::LocatedEvent& event) {
 // the window is destroyed ResizerWindowDestroyed() is invoked back on the
 // ToplevelWindowEventHandler to clean up.
 class ToplevelWindowEventHandler::ScopedWindowResizer
-    : public aura::WindowObserver,
+    : public wm::WmWindowObserver,
       public wm::WindowStateObserver {
  public:
   ScopedWindowResizer(ToplevelWindowEventHandler* handler,
@@ -101,7 +103,7 @@ class ToplevelWindowEventHandler::ScopedWindowResizer
   WindowResizer* resizer() { return resizer_.get(); }
 
   // WindowObserver overrides:
-  void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowDestroying(wm::WmWindow* window) override;
 
   // WindowStateObserver overrides:
   void OnPreWindowStateTypeChange(wm::WindowState* window_state,
@@ -123,9 +125,9 @@ ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
     : handler_(handler),
       resizer_(resizer),
       grabbed_capture_(false) {
-  aura::Window* target = resizer_->GetAuraTarget();
+  wm::WmWindow* target = resizer_->GetTarget();
   target->AddObserver(this);
-  wm::GetWindowState(target)->AddObserver(this);
+  target->GetWindowState()->AddObserver(this);
 
   if (!target->HasCapture()) {
     grabbed_capture_ = true;
@@ -134,9 +136,9 @@ ToplevelWindowEventHandler::ScopedWindowResizer::ScopedWindowResizer(
 }
 
 ToplevelWindowEventHandler::ScopedWindowResizer::~ScopedWindowResizer() {
-  aura::Window* target = resizer_->GetAuraTarget();
+  wm::WmWindow* target = resizer_->GetTarget();
   target->RemoveObserver(this);
-  wm::GetWindowState(target)->RemoveObserver(this);
+  target->GetWindowState()->RemoveObserver(this);
   if (grabbed_capture_)
     target->ReleaseCapture();
 }
@@ -154,8 +156,8 @@ ToplevelWindowEventHandler::ScopedWindowResizer::OnPreWindowStateTypeChange(
 }
 
 void ToplevelWindowEventHandler::ScopedWindowResizer::OnWindowDestroying(
-    aura::Window* window) {
-  DCHECK_EQ(resizer_->GetAuraTarget(), window);
+    wm::WmWindow* window) {
+  DCHECK_EQ(resizer_->GetTarget(), window);
   handler_->ResizerWindowDestroyed();
 }
 
@@ -234,7 +236,8 @@ void ToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
     return;
 
   if (window_resizer_.get() &&
-      window_resizer_->resizer()->GetAuraTarget() != target) {
+      wm::WmWindowAura::GetAuraWindow(
+          window_resizer_->resizer()->GetTarget()) != target) {
     return;
   }
 
@@ -451,8 +454,10 @@ bool ToplevelWindowEventHandler::AttemptToStartDrag(
     aura::client::WindowMoveSource source) {
   if (window_resizer_.get())
     return false;
-  WindowResizer* resizer = CreateWindowResizer(window, point_in_parent,
-      window_component, source).release();
+  WindowResizer* resizer =
+      CreateWindowResizer(wm::WmWindowAura::Get(window), point_in_parent,
+                          window_component, source)
+          .release();
   if (!resizer)
     return false;
 

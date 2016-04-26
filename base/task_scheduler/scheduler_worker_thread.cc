@@ -14,13 +14,13 @@
 namespace base {
 namespace internal {
 
-std::unique_ptr<SchedulerWorkerThread>
-SchedulerWorkerThread::CreateSchedulerWorkerThread(
+std::unique_ptr<SchedulerWorkerThread> SchedulerWorkerThread::Create(
     ThreadPriority thread_priority,
-    Delegate* delegate,
+    std::unique_ptr<Delegate> delegate,
     TaskTracker* task_tracker) {
   std::unique_ptr<SchedulerWorkerThread> worker_thread(
-      new SchedulerWorkerThread(thread_priority, delegate, task_tracker));
+      new SchedulerWorkerThread(thread_priority, std::move(delegate),
+                                task_tracker));
 
   if (worker_thread->thread_handle_.is_null())
     return nullptr;
@@ -45,10 +45,10 @@ void SchedulerWorkerThread::JoinForTesting() {
 }
 
 SchedulerWorkerThread::SchedulerWorkerThread(ThreadPriority thread_priority,
-                                             Delegate* delegate,
+                                             std::unique_ptr<Delegate> delegate,
                                              TaskTracker* task_tracker)
     : wake_up_event_(false, false),
-      delegate_(delegate),
+      delegate_(std::move(delegate)),
       task_tracker_(task_tracker) {
   DCHECK(delegate_);
   DCHECK(task_tracker_);
@@ -77,13 +77,13 @@ void SchedulerWorkerThread::ThreadMain() {
 
     const bool sequence_became_empty = sequence->PopTask();
 
-    // If |sequence| isn't empty immediately after the pop, enqueue it to
+    // If |sequence| isn't empty immediately after the pop, re-enqueue it to
     // maintain the invariant that a non-empty Sequence is always referenced by
     // either a PriorityQueue or a SchedulerWorkerThread. If it is empty and
     // there are live references to it, it will be enqueued when a Task is added
     // to it. Otherwise, it will be destroyed at the end of this scope.
     if (!sequence_became_empty)
-      delegate_->EnqueueSequence(std::move(sequence));
+      delegate_->ReEnqueueSequence(std::move(sequence));
 
     // Calling WakeUp() guarantees that this SchedulerWorkerThread will run
     // Tasks from Sequences returned by the GetWork() method of |delegate_|

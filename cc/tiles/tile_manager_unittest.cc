@@ -35,6 +35,7 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace cc {
@@ -1031,7 +1032,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   // Create a fully transparent child layer so that its tile priorities are not
   // considered to be valid.
   pending_child_layer->SetDrawsContent(true);
-  pending_child_layer->SetForceRenderSurface(true);
+  pending_child_layer->test_properties()->force_render_surface = true;
 
   host_impl_.AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   bool update_lcd_text = false;
@@ -1766,8 +1767,7 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
         SkSurface::MakeRasterN32Premul(size.width(), size.height());
     ASSERT_NE(surface, nullptr);
     surface->getCanvas()->clear(SK_ColorBLUE);
-    skia::RefPtr<SkImage> blue_image =
-        skia::AdoptRef(surface->newImageSnapshot());
+    sk_sp<SkImage> blue_image = surface->makeImageSnapshot();
 
     std::unique_ptr<FakeRecordingSource> recording_source =
         FakeRecordingSource::CreateFilledRecordingSource(size);
@@ -1777,7 +1777,7 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
     SkPaint paint;
     paint.setColor(SK_ColorGREEN);
     recording_source->add_draw_rect_with_paint(gfx::Rect(size), paint);
-    recording_source->add_draw_image(blue_image.get(), gfx::Point());
+    recording_source->add_draw_image(std::move(blue_image), gfx::Point());
     recording_source->Rerecord();
     scoped_refptr<RasterSource> raster =
         RasterSource::CreateFromRecordingSource(recording_source.get(), false);

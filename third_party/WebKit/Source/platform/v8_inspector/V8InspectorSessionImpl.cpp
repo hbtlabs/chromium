@@ -26,13 +26,14 @@ PassOwnPtr<V8InspectorSessionImpl> V8InspectorSessionImpl::create(V8DebuggerImpl
 V8InspectorSessionImpl::V8InspectorSessionImpl(V8DebuggerImpl* debugger, int contextGroupId)
     : m_contextGroupId(contextGroupId)
     , m_debugger(debugger)
+    , m_client(nullptr)
     , m_injectedScriptHost(InjectedScriptHost::create(debugger, this))
     , m_customObjectFormatterEnabled(false)
+    , m_instrumentationCounter(0)
     , m_runtimeAgent(adoptPtr(new V8RuntimeAgentImpl(this)))
     , m_debuggerAgent(adoptPtr(new V8DebuggerAgentImpl(this)))
     , m_heapProfilerAgent(adoptPtr(new V8HeapProfilerAgentImpl(this)))
     , m_profilerAgent(adoptPtr(new V8ProfilerAgentImpl(this)))
-    , m_clearConsoleCallback(nullptr)
 {
 }
 
@@ -62,6 +63,11 @@ V8RuntimeAgent* V8InspectorSessionImpl::runtimeAgent()
     return m_runtimeAgent.get();
 }
 
+void V8InspectorSessionImpl::setClient(V8InspectorSessionClient* client)
+{
+    m_client = client;
+}
+
 void V8InspectorSessionImpl::reset()
 {
     m_debuggerAgent->reset();
@@ -71,7 +77,7 @@ void V8InspectorSessionImpl::reset()
 
 void V8InspectorSessionImpl::discardInjectedScripts()
 {
-    m_injectedScriptHost->clearInspectedObjects();
+    m_inspectedObjects.clear();
     const V8DebuggerImpl::ContextByIdMap* contexts = m_debugger->contextGroup(m_contextGroupId);
     if (!contexts)
         return;
@@ -117,11 +123,6 @@ InjectedScript* V8InspectorSessionImpl::findInjectedScript(ErrorString* errorStr
     return objectId ? findInjectedScript(errorString, objectId->contextId()) : nullptr;
 }
 
-void V8InspectorSessionImpl::addInspectedObject(PassOwnPtr<V8RuntimeAgent::Inspectable> inspectable)
-{
-    m_injectedScriptHost->addInspectedObject(inspectable);
-}
-
 void V8InspectorSessionImpl::releaseObjectGroup(const String16& objectGroup)
 {
     const V8DebuggerImpl::ContextByIdMap* contexts = m_debugger->contextGroup(m_contextGroupId);
@@ -161,6 +162,30 @@ void V8InspectorSessionImpl::reportAllContexts(V8RuntimeAgentImpl* agent)
         return;
     for (auto& idContext : *contexts)
         agent->reportExecutionContextCreated(idContext.second);
+}
+
+void V8InspectorSessionImpl::changeInstrumentationCounter(int delta)
+{
+    ASSERT(m_instrumentationCounter + delta >= 0);
+    if (!m_instrumentationCounter && m_client)
+        m_client->startInstrumenting();
+    m_instrumentationCounter += delta;
+    if (!m_instrumentationCounter && m_client)
+        m_client->stopInstrumenting();
+}
+
+void V8InspectorSessionImpl::addInspectedObject(PassOwnPtr<V8RuntimeAgent::Inspectable> inspectable)
+{
+    m_inspectedObjects.prepend(inspectable);
+    while (m_inspectedObjects.size() > kInspectedObjectBufferSize)
+        m_inspectedObjects.removeLast();
+}
+
+V8RuntimeAgent::Inspectable* V8InspectorSessionImpl::inspectedObject(unsigned num)
+{
+    if (num >= m_inspectedObjects.size())
+        return nullptr;
+    return m_inspectedObjects[num].get();
 }
 
 } // namespace blink

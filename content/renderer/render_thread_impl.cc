@@ -168,7 +168,7 @@
 #include "content/renderer/android/synchronous_compositor_external_begin_frame_source.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/media/android/renderer_demuxer_android.h"
-#include "content/renderer/media/android/stream_texture_factory_impl.h"
+#include "content/renderer/media/android/stream_texture_factory.h"
 #include "media/base/android/media_codec_util.h"
 #endif
 
@@ -837,13 +837,9 @@ void RenderThreadImpl::Init(
   DCHECK(parsed_num_raster_threads) << string_value;
   DCHECK_GT(num_raster_threads, 0);
 
-#if defined(OS_ANDROID)
-  // Note: Currently, enabling image decode tasks only provides a benefit if
-  // we use high quality interpolation filters, which are disabled on android.
-  are_image_decode_tasks_enabled_ = false;
-#else
+  // TODO(vmpstr): If the flag sticks, we should clean it up and always have
+  // image decode tasks.
   are_image_decode_tasks_enabled_ = true;
-#endif
 
   raster_worker_pool_->Start(num_raster_threads);
 
@@ -1532,7 +1528,7 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
       LOG(ERROR) << "Failed to establish GPU channel for media player";
       stream_texture_factory_ = NULL;
     } else {
-      stream_texture_factory_ = StreamTextureFactoryImpl::Create(
+      stream_texture_factory_ = StreamTextureFactory::Create(
           shared_main_thread_contexts_, gpu_channel_host.get());
     }
   }

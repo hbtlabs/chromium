@@ -17,6 +17,7 @@ namespace blink {
 class JavaScriptCallFrame;
 class PromiseTracker;
 class V8InspectorSessionImpl;
+class V8Regex;
 class V8StackTraceImpl;
 
 namespace protocol {
@@ -50,8 +51,6 @@ public:
     void clearFrontend() override;
     void restore() override;
     void disable(ErrorString*) override;
-
-    bool isPaused() override;
 
     // Part of the protocol.
     void enable(ErrorString*) override;
@@ -130,19 +129,18 @@ public:
         PassOwnPtr<protocol::Runtime::CallArgument> newValue,
         const String16& callFrame) override;
     void setAsyncCallStackDepth(ErrorString*, int depth) override;
+    void setBlackboxPatterns(ErrorString*,
+        PassOwnPtr<protocol::Array<String16>> patterns) override;
     void setBlackboxedRanges(ErrorString*,
         const String16& scriptId,
         PassOwnPtr<protocol::Array<protocol::Debugger::ScriptPosition>> positions) override;
 
     void schedulePauseOnNextStatement(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) override;
     void cancelPauseOnNextStatement() override;
-    bool canBreakProgram() override;
     void breakProgram(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) override;
     void breakProgramOnException(const String16& breakReason, PassOwnPtr<protocol::DictionaryValue> data) override;
-    void willExecuteScript(int scriptId) override;
-    void didExecuteScript() override;
 
-    bool enabled() override;
+    bool enabled();
     V8DebuggerImpl& debugger() override { return *m_debugger; }
 
     void setBreakpointAt(const String16& scriptId, int lineNumber, int columnNumber, BreakpointSource, const String16& condition = String16());
@@ -163,6 +161,8 @@ public:
     void didParseSource(const V8DebuggerParsedScript&);
     bool v8AsyncTaskEventsEnabled() const;
     void didReceiveV8AsyncTaskEvent(v8::Local<v8::Context>, const String16& eventType, const String16& eventName, int id);
+    void willExecuteScript(int scriptId);
+    void didExecuteScript();
 
     v8::Isolate* isolate() { return m_isolate; }
     int maxAsyncCallChainDepth() { return m_maxAsyncCallStackDepth; }
@@ -195,6 +195,8 @@ private:
 
     void internalSetAsyncCallStackDepth(int);
     void increaseCachedSkipStackGeneration();
+
+    bool setBlackboxPattern(ErrorString*, const String16& pattern);
 
     using ScriptsMap = protocol::HashMap<String16, V8DebuggerScript>;
     using BreakpointIdToDebuggerBreakpointIdsMap = protocol::HashMap<String16, protocol::Vector<String16>>;
@@ -241,6 +243,7 @@ private:
     protocol::Vector<void*> m_currentTasks;
 #endif
     protocol::Vector<OwnPtr<V8StackTraceImpl>> m_currentStacks;
+    OwnPtr<V8Regex> m_blackboxPattern;
     protocol::HashMap<String16, protocol::Vector<std::pair<int, int>>> m_blackboxedPositions;
 };
 

@@ -21,6 +21,7 @@
 #include "ash/test/shelf_view_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
+#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_state_aura.h"
@@ -80,16 +81,15 @@ class PanelLayoutManagerTest : public test::AshTestBase {
   }
 
   views::Widget* GetCalloutWidgetForPanel(aura::Window* panel) {
-    PanelLayoutManager* manager =
-        static_cast<PanelLayoutManager*>(GetPanelContainer(panel)->
-                                         layout_manager());
+    wm::WmWindow* wm_panel = wm::WmWindowAura::Get(panel);
+    PanelLayoutManager* manager = PanelLayoutManager::Get(wm_panel);
     DCHECK(manager);
-    PanelLayoutManager::PanelList::iterator found = std::find(
-        manager->panel_windows_.begin(), manager->panel_windows_.end(),
-        panel);
+    PanelLayoutManager::PanelList::iterator found =
+        std::find(manager->panel_windows_.begin(),
+                  manager->panel_windows_.end(), wm_panel);
     DCHECK(found != manager->panel_windows_.end());
     DCHECK(found->callout_widget);
-    return reinterpret_cast<views::Widget*>(found->callout_widget);
+    return found->CalloutWidget();
   }
 
   void PanelInScreen(aura::Window* panel) {

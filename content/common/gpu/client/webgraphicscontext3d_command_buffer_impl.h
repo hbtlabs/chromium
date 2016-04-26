@@ -18,7 +18,6 @@
 #include "base/synchronization/lock.h"
 #include "content/common/content_export.h"
 #include "content/common/gpu/client/command_buffer_metrics.h"
-#include "gpu/blink/webgraphicscontext3d_impl.h"
 #include "gpu/command_buffer/common/gles2_cmd_utils.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/common/surface_handle.h"
@@ -43,13 +42,8 @@ class GLES2Interface;
 
 namespace content {
 
-const size_t kDefaultCommandBufferSize = 1024 * 1024;
-const size_t kDefaultStartTransferBufferSize = 1 * 1024 * 1024;
-const size_t kDefaultMinTransferBufferSize = 1 * 256 * 1024;
-const size_t kDefaultMaxTransferBufferSize = 16 * 1024 * 1024;
-
 class WebGraphicsContext3DCommandBufferImpl
-    : public gpu_blink::WebGraphicsContext3DImpl {
+    : public NON_EXPORTED_BASE(blink::WebGraphicsContext3D) {
  public:
   enum MappedMemoryReclaimLimit {
     kNoLimit = 0,
@@ -99,6 +93,19 @@ class WebGraphicsContext3DCommandBufferImpl
     DISALLOW_COPY_AND_ASSIGN(ShareGroup);
   };
 
+  class WebGraphicsContextLostCallback {
+   public:
+    virtual void onContextLost() = 0;
+
+   protected:
+    virtual ~WebGraphicsContextLostCallback() {}
+  };
+
+  // If surface_handle is not kNullSurfaceHandle, this creates a
+  // CommandBufferProxy that renders directly to a view. The view and
+  // the associated window must not be destroyed until the returned
+  // CommandBufferProxy has been destroyed, otherwise the GPU process might
+  // attempt to render to an invalid window handle.
   CONTENT_EXPORT WebGraphicsContext3DCommandBufferImpl(
       gpu::SurfaceHandle surface_handle,
       const GURL& active_url,
@@ -119,6 +126,10 @@ class WebGraphicsContext3DCommandBufferImpl
 
   gpu::gles2::GLES2Implementation* GetImplementation() {
     return real_gl_.get();
+  }
+
+  void SetContextLostCallback(WebGraphicsContextLostCallback* callback) {
+    context_lost_callback_ = callback;
   }
 
   CONTENT_EXPORT bool InitializeOnCurrentThread(
@@ -146,22 +157,13 @@ class WebGraphicsContext3DCommandBufferImpl
 
   void Destroy();
 
-  // Create a CommandBufferProxy that renders directly to a view. The view and
-  // the associated window must not be destroyed until the returned
-  // CommandBufferProxy has been destroyed, otherwise the GPU process might
-  // attempt to render to an invalid window handle.
-  //
-  // NOTE: on Mac OS X, this entry point is only used to set up the
-  // accelerated compositor's output. On this platform, we actually pass
-  // a gpu::SurfaceHandle in place of the gfx::NativeViewId,
-  // because the facility to allocate a fake PluginWindowHandle is
-  // already in place. We could add more entry points and messages to
-  // allocate both fake PluginWindowHandles and NativeViewIds and map
-  // from fake NativeViewIds to PluginWindowHandles, but this seems like
-  // unnecessary complexity at the moment.
   bool CreateContext(const gpu::SharedMemoryLimits& memory_limits);
 
   void OnContextLost();
+
+  bool initialized_ = false;
+  bool initialize_failed_ = false;
+  WebGraphicsContextLostCallback* context_lost_callback_ = nullptr;
 
   bool automatic_flushes_;
   gpu::gles2::ContextCreationAttribHelper attributes_;

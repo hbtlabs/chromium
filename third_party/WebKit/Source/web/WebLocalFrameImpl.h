@@ -207,7 +207,7 @@ public:
     WebLocalFrameImpl* localRoot() override;
     WebLocalFrame* traversePreviousLocal(bool wrap) const override;
     WebLocalFrame* traverseNextLocal(bool wrap) const override;
-    void sendPings(const WebNode& contextNode, const WebURL& destinationURL) override;
+    void sendPings(const WebURL& destinationURL) override;
     WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const override;
     WebURLRequest requestForReload(WebFrameLoadType, const WebURL&) const override;
     void load(const WebURLRequest&, WebFrameLoadType, const WebHistoryItem&,
@@ -285,15 +285,6 @@ public:
     WebDataSourceImpl* dataSourceImpl() const;
     WebDataSourceImpl* provisionalDataSourceImpl() const;
 
-    // Returns which frame has an active match. This function should only be
-    // called on the main frame, as it is the only frame keeping track. Returned
-    // value can be 0 if no frame has an active match.
-    WebLocalFrameImpl* activeMatchFrame() const;
-
-    // Returns the active match in the current frame. Could be a null range if
-    // the local frame has no active match.
-    Range* activeMatch() const;
-
     // When a Find operation ends, we want to set the selection to what was active
     // and set focus to the first focusable node we find (starting with the first
     // node in the matched range and going up the inheritance chain). If we find
@@ -320,6 +311,7 @@ public:
 
     static void selectWordAroundPosition(LocalFrame*, VisiblePosition);
 
+    TextFinder* textFinder() const;
     // Returns the text finder object if it already exists.
     // Otherwise creates it and then returns.
     TextFinder& ensureTextFinder();
@@ -333,6 +325,10 @@ public:
     // DevTools front-end bindings.
     void setDevToolsFrontend(WebDevToolsFrontendImpl* frontend) { m_webDevToolsFrontend = frontend; }
     WebDevToolsFrontendImpl* devToolsFrontend() { return m_webDevToolsFrontend; }
+
+    WebNode contextMenuNode() const { return m_contextMenuNode.get(); }
+    void setContextMenuNode(Node* node) { m_contextMenuNode = node; }
+    void clearContextMenuNode() { m_contextMenuNode.clear(); }
 
     DECLARE_TRACE();
 
@@ -390,6 +386,8 @@ private:
     Member<GeolocationClientProxy> m_geolocationClientProxy;
 
     WebDevToolsFrontendImpl* m_webDevToolsFrontend;
+
+    Member<Node> m_contextMenuNode;
 
     // Oilpan: WebLocalFrameImpl must remain alive until close() is called.
     // Accomplish that by keeping a self-referential Persistent<>. It is

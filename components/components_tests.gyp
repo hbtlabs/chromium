@@ -49,6 +49,7 @@
       'autofill/core/browser/legal_message_line_unittest.cc',
       'autofill/core/browser/name_field_unittest.cc',
       'autofill/core/browser/password_generator_unittest.cc',
+      'autofill/core/browser/payments/full_card_request_unittest.cc',
       'autofill/core/browser/personal_data_manager_unittest.cc',
       'autofill/core/browser/phone_field_unittest.cc',
       'autofill/core/browser/phone_number_i18n_unittest.cc',
@@ -433,6 +434,7 @@
       'omnibox/browser/shortcuts_database_unittest.cc',
       'omnibox/browser/shortcuts_provider_unittest.cc',
       'omnibox/browser/suggestion_answer_unittest.cc',
+      'omnibox/browser/url_prefix_unittest.cc',
       'omnibox/browser/zero_suggest_provider_unittest.cc',
     ],
     'open_from_clipboard_unittest_sources': [
@@ -1040,6 +1042,7 @@
         '../sync/sync.gyp:test_support_sync_api',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        '../third_party/cld_2/cld_2.gyp:cld2_static',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
         '../third_party/libaddressinput/libaddressinput.gyp:libaddressinput_util',
@@ -1209,11 +1212,6 @@
             'components.gyp:browser_watcher',
             'components.gyp:browser_watcher_client',
           ]
-        }],
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Unit tests should always use statically-linked CLD data.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_static', ],
         }],
         ['OS != "ios"', {
           'sources': [

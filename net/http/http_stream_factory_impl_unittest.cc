@@ -341,16 +341,13 @@ void PreconnectHelperForURL(int num_streams,
   MockHttpStreamFactoryImplForPreconnect* mock_factory =
       new MockHttpStreamFactoryImplForPreconnect(session);
   peer.SetHttpStreamFactory(std::unique_ptr<HttpStreamFactory>(mock_factory));
-  SSLConfig ssl_config;
-  session->ssl_config_service()->GetSSLConfig(&ssl_config);
 
   HttpRequestInfo request;
   request.method = "GET";
   request.url = url;
   request.load_flags = 0;
 
-  session->http_stream_factory()->PreconnectStreams(num_streams, request,
-                                                    ssl_config, ssl_config);
+  session->http_stream_factory()->PreconnectStreams(num_streams, request);
   mock_factory->WaitForPreconnects();
 }
 
@@ -876,8 +873,10 @@ TEST_P(HttpStreamFactoryTest, UsePreConnectIfNoZeroRTT) {
     alternative_service_info_vector.push_back(
         AlternativeServiceInfo(alternative_service, expiration));
     HostPortPair host_port_pair(alternative_service.host_port_pair());
+    url::SchemeHostPort server("https", host_port_pair.host(),
+                               host_port_pair.port());
     http_server_properties.SetAlternativeServices(
-        host_port_pair, alternative_service_info_vector);
+        server, alternative_service_info_vector);
 
     SpdySessionDependencies session_deps(
         GetParam(), ProxyService::CreateFixed("http_proxy"));
@@ -920,8 +919,10 @@ TEST_P(HttpStreamFactoryTest, QuicDisablePreConnectIfZeroRtt) {
     alternative_service_info_vector.push_back(
         AlternativeServiceInfo(alternative_service, expiration));
     HostPortPair host_port_pair(alternative_service.host_port_pair());
+    url::SchemeHostPort server("https", host_port_pair.host(),
+                               host_port_pair.port());
     http_server_properties.SetAlternativeServices(
-        host_port_pair, alternative_service_info_vector);
+        server, alternative_service_info_vector);
 
     SpdySessionDependencies session_deps(GetParam());
 
@@ -954,10 +955,7 @@ TEST_P(HttpStreamFactoryTest, QuicDisablePreConnectIfZeroRtt) {
     request.url = url;
     request.load_flags = 0;
 
-    SSLConfig ssl_config;
-    session->ssl_config_service()->GetSSLConfig(&ssl_config);
-    session->http_stream_factory()->PreconnectStreams(num_streams, request,
-                                                      ssl_config, ssl_config);
+    session->http_stream_factory()->PreconnectStreams(num_streams, request);
     EXPECT_EQ(-1, transport_conn_pool->last_num_streams());
   }
 }
@@ -1530,9 +1528,9 @@ class HttpStreamFactoryBidirectionalQuicTest
     base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
     alternative_service_info_vector.push_back(
         AlternativeServiceInfo(alternative_service, expiration));
-    HostPortPair host_port_pair(alternative_service.host_port_pair());
+    url::SchemeHostPort server("https", "www.example.org", 443);
     http_server_properties_.SetAlternativeServices(
-        host_port_pair, alternative_service_info_vector);
+        server, alternative_service_info_vector);
   };
 
   test::QuicTestPacketMaker& packet_maker() { return packet_maker_; }
@@ -1966,8 +1964,11 @@ TEST_P(HttpStreamFactoryTest, DISABLED_OrphanedWebSocketStream) {
   request_info.load_flags = 0;
 
   base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
+  HostPortPair host_port_pair("www.google.com", 8888);
+
   session->http_server_properties()->SetAlternativeService(
-      HostPortPair("www.google.com", 8888),
+      url::SchemeHostPort(request_info.url.scheme(), host_port_pair.host(),
+                          host_port_pair.port()),
       AlternativeService(NPN_HTTP_2, "www.google.com", 9999), expiration);
 
   SSLConfig ssl_config;

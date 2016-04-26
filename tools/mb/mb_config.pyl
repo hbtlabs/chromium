@@ -83,12 +83,6 @@
 
     'chromium.fyi': {
       'ChromiumOS Linux Tests': 'tbd',
-      'ClangToTAndroidASan':
-        'android_clang_no_chrome_plugins_asan_gn_debug_bot_minimal_symbols',
-      'ClangToTLinux': 'tbd',
-      'ClangToTLinux (dbg)': 'tbd',
-      'ClangToTLinuxASan': 'tbd',
-      'ClangToTLinuxUBSanVptr': 'tbd',
       'ClangToTMac': 'tbd',
       'ClangToTMac (dbg)': 'tbd',
       'ClangToTMacASan': 'tbd',
@@ -145,9 +139,17 @@
         'swarming_gyp_clang_official_release_bot_minimal_symbols_x64',
       'CrWinGoma': 'gyp_release_bot_minimal_symbols_x86',
       'CrWinGoma(dll)': 'gyp_shared_release_bot_minimal_symbols_x86',
+      'ClangToTAndroidASan':
+        'android_clang_tot_asan_gn_debug_bot_minimal_symbols',
       'ClangToTAndroidASan tester': 'none',
+      'ClangToTLinux':
+        'swarming_gyp_clang_tot_linux_dump_symbols_shared_release',
       'ClangToTLinux tester': 'none',
+      'ClangToTLinux (dbg)': 'swarming_gyp_clang_tot_shared_debug',
+      'ClangToTLinuxASan': 'swarming_gyp_clang_tot_asan_lsan_static_release',
       'ClangToTLinuxASan tester': 'none',
+      'ClangToTLinuxUBSanVptr':
+        'swarming_gyp_clang_tot_edge_ubsan_no_recover_hack_static_release',
       'ClangToTLinuxUBSanVptr tester': 'none',
       'ClangToTMac tester': 'none',
       'ClangToTMacASan tester': 'none',
@@ -511,8 +513,8 @@
     },
 
     'chromium.webkit': {
-      'Android Builder': 'android_gn_release_bot_minimal_symbols',
-      'WebKit Android (Nexus4)': 'none',
+      'Android Builder': 'gyp_release_bot_android',
+      'WebKit Android (Nexus4)': 'gyp_release_bot_android',
       'WebKit Linux (dbg)': 'swarming_gn_debug_bot_x64',
       'WebKit Linux ASAN': 'swarming_gn_asan_lsan_release_bot_x64',
       'WebKit Linux Leak': 'swarming_gn_release_bot_x64',
@@ -893,9 +895,8 @@
       'android', 'blink_logging', 'gyp', 'debug_static_bot', 'arm64',
     ],
 
-    'android_clang_no_chrome_plugins_asan_gn_debug_bot_minimal_symbols': [
-      'android', 'clang_no_chrome_plugins', 'asan', 'gn',
-      'debug_bot_minimal_symbols',
+    'android_clang_tot_asan_gn_debug_bot_minimal_symbols': [
+      'android', 'clang_tot', 'asan', 'gn', 'debug_bot_minimal_symbols',
     ],
 
     'android_clang_asan_findbugs_gyp_debug_bot_minimal_symbols': [
@@ -1048,7 +1049,7 @@
     # that the GYP_DEFINES (or GN args) are set by the `cros chrome-sdk`
     # wrapper and need to be looked at specially.
     'cros_chrome_sdk_gyp': [
-      'gyp', 'error',
+      'gyp', 'cros_chrome_sdk',
     ],
 
     # The 'findit' config is used by the *_variable_* bots, which run
@@ -1301,6 +1302,10 @@
       'gyp', 'release_bot',
     ],
 
+    'gyp_release_bot_android': [
+      'gyp', 'release_bot', 'android',
+    ],
+
     'gyp_release_bot_x86': [
       'gyp', 'release_bot', 'x86',
     ],
@@ -1492,6 +1497,26 @@
 
     'swarming_chromeos_ozone_gyp_release_bot': [
       'chromeos_with_codecs', 'goma', 'gyp', 'ozone', 'static', 'swarming',
+    ],
+
+    'swarming_gyp_clang_tot_edge_ubsan_no_recover_hack_static_release': [
+      'swarming', 'gyp', 'clang_tot', 'edge', 'ubsan_no_recover_hack',
+      'static', 'release',
+    ],
+
+    'swarming_gyp_clang_tot_asan_lsan_static_release': [
+      'swarming', 'gyp', 'clang_tot', 'asan', 'lsan', 'static', 'release',
+    ],
+
+    'swarming_gyp_clang_tot_shared_debug': [
+      'swarming', 'gyp', 'clang_tot', 'shared', 'debug',
+    ],
+
+    'swarming_gyp_clang_tot_linux_dump_symbols_shared_release': [
+      # Enable debug info, as on official builders, to catch issues with
+      # optimized debug info.
+      'swarming', 'gyp', 'clang_tot', 'linux_dump_symbols',
+      'shared', 'release',
     ],
 
     'swarming_gyp_debug_trybot': [
@@ -1891,9 +1916,9 @@
       'mixins': ['chromeos', 'chromeos_codecs'],
     },
 
-    'clang_no_chrome_plugins': {
-      'gn_args': 'clang_use_chrome_plugins=false',
-      'gyp_defines': 'clang_use_chrome_plugins=0',
+    'clang_tot': {
+      'gn_args': 'llvm_force_head_revision=true clang_use_chrome_plugins=false',
+      'gyp_defines': 'llvm_force_head_revision=1 clang_use_chrome_plugins=0',
       'mixins': ['clang'],
     },
 
@@ -1909,6 +1934,17 @@
       'gyp_defines': ('disable_file_support=1 disable_ftp_support=1 '
                       'enable_websockets=0 use_platform_icu_alternatives=1 '
                       'disable_brotli_filter=1'),
+    },
+
+    'cros_chrome_sdk': {
+      # This is used so that the cros chrome_sdk (simplechrome) builders
+      # can manage the list of GYP_DEFINES and gn args in their .ebuild
+      # files and just pass through the desired arguments, hence not
+      # really using MB. If a bot uses this mixin, we expect that
+      # both GYP_DEFINES and GN_ARGS are set in the environment,
+      # and that GYP_DEFINES has chromeos=1 and GN_ARGS has
+      # target_os="chromeos" in it.
+      'cros_passthrough': True,
     },
 
     'crosscompile': {
@@ -2024,7 +2060,7 @@
 
     'hybrid': {
       'gn_args': 'error', # TODO(GYP): figure out the equivalent for this
-      'gyp_defines': 'v8_target_arch=arm target_arch=ia32, host_arch=x86_64',
+      'gyp_defines': 'v8_target_arch=arm target_arch=ia32 host_arch=x86_64',
       'mixins': ['disable_nacl'],
     },
 
@@ -2042,6 +2078,11 @@
     'line_tables': {
       'gn_args': '', # TODO(GYP): check that this is not needed
       'gyp_defines': 'debug_extra_cflags="-gline-tables-only"',
+    },
+
+    'linux_dump_symbols': {
+      'gn_args': 'error', # TODO(crbug.com/605819): implement this.
+      'gyp_defines': 'linux_dump_symbols=1',
     },
 
     'ubsan_security': { 'gn_args': 'is_ubsan_security=true' },
@@ -2181,6 +2222,14 @@
     'ubsan': {
       'gn_args': 'is_ubsan=true',
       'gyp_defines': 'ubsan=1',
+    },
+
+    'ubsan_no_recover_hack': {
+      # TODO(krasin): Remove when https://llvm.org/bugs/show_bug.cgi?id=25569
+      # is fixed and just use ubsan_vptr instead.
+      'mixins': ['ubsan_vptr'],
+      'gn_args': 'error', # TODO(GYP): need a GN equivalent for this
+      'gyp_defines': 'release_extra_cflags=-fno-sanitize-recover=undefined',
     },
 
     'ubsan_vptr': {

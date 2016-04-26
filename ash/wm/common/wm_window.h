@@ -57,6 +57,10 @@ class ASH_EXPORT WmWindow {
   // TODO(sky): fix constness.
   virtual WmGlobals* GetGlobals() const = 0;
 
+  // Used for debugging.
+  virtual void SetName(const std::string& name) = 0;
+
+  virtual void SetShellWindowId(int id) = 0;
   virtual int GetShellWindowId() = 0;
   virtual WmWindow* GetChildByShellWindowId(int id) = 0;
 
@@ -88,6 +92,7 @@ class ASH_EXPORT WmWindow {
   virtual bool IsVisible() const = 0;
 
   virtual bool GetBoolProperty(WmWindowProperty key) = 0;
+  virtual int GetIntProperty(WmWindowProperty key) = 0;
 
   WindowState* GetWindowState() {
     return const_cast<WindowState*>(
@@ -167,6 +172,8 @@ class ASH_EXPORT WmWindow {
   virtual bool IsActive() const = 0;
   virtual void Activate() = 0;
   virtual void Deactivate() = 0;
+
+  virtual void SetFullscreen() = 0;
 
   virtual void Maximize() = 0;
   virtual void Minimize() = 0;

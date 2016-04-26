@@ -16,7 +16,7 @@
 #include "cc/base/cc_export.h"
 #include "cc/resources/resource_format.h"
 #include "cc/tiles/image_decode_controller.h"
-#include "skia/ext/refptr.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 
 class SkImageTextureData;
 
@@ -49,7 +49,9 @@ class ContextProvider;
 // used in raster. Cache entries for at-raster tasks are marked as such, which
 // prevents future tasks from taking a dependency on them and extending their
 // lifetime longer than is necessary.
-class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
+class CC_EXPORT GpuImageDecodeController
+    : public ImageDecodeController,
+      public base::trace_event::MemoryDumpProvider {
  public:
   explicit GpuImageDecodeController(ContextProvider* context,
                                     ResourceFormat decode_format);
@@ -60,7 +62,7 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
   // Finds the existing uploaded image for the provided DrawImage. Creates an
   // upload task to upload the image if an exsiting image does not exist.
   bool GetTaskForImageAndRef(const DrawImage& image,
-                             uint64_t prepare_tiles_id,
+                             const TracingInfo& tracing_info,
                              scoped_refptr<TileTask>* task) override;
   void UnrefImage(const DrawImage& image) override;
   DecodedDrawImage GetDecodedImageForDraw(const DrawImage& draw_image) override;
@@ -69,6 +71,10 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
   void ReduceCacheUsage() override;
   void SetShouldAggressivelyFreeResources(
       bool aggressively_free_resources) override;
+
+  // MemoryDumpProvider overrides.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
 
   // Called by Decode / Upload tasks.
   void DecodeImage(const DrawImage& image);
@@ -108,7 +114,7 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
     ~UploadedImageData();
 
     // May be null if image not yet uploaded / prepared.
-    skia::RefPtr<SkImage> image;
+    sk_sp<SkImage> image;
     // True if the image is counting against our memory limits.
     bool budgeted;
     uint32_t ref_count;
@@ -135,8 +141,9 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
 
   // Similar to GetTaskForImageAndRef, but gets the dependent decode task
   // rather than the upload task, if necessary.
-  scoped_refptr<TileTask> GetImageDecodeTaskAndRef(const DrawImage& image,
-                                                   uint64_t prepare_tiles_id);
+  scoped_refptr<TileTask> GetImageDecodeTaskAndRef(
+      const DrawImage& image,
+      const TracingInfo& tracing_info);
 
   void RefImageDecode(const DrawImage& draw_image);
   void UnrefImageDecode(const DrawImage& draw_image);
@@ -164,7 +171,7 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
 
   const ResourceFormat format_;
   ContextProvider* context_;
-  skia::RefPtr<GrContextThreadSafeProxy> context_threadsafe_proxy_;
+  sk_sp<GrContextThreadSafeProxy> context_threadsafe_proxy_;
 
   // All members below this point must only be accessed while holding |lock_|.
   base::Lock lock_;
@@ -183,7 +190,7 @@ class CC_EXPORT GpuImageDecodeController : public ImageDecodeController {
   // We can't release GPU backed SkImages without holding the context lock,
   // so we add them to this list and defer deletion until the next time the lock
   // is held.
-  std::vector<skia::RefPtr<SkImage>> images_pending_deletion_;
+  std::vector<sk_sp<SkImage>> images_pending_deletion_;
 };
 
 }  // namespace cc

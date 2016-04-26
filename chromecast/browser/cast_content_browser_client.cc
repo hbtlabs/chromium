@@ -32,6 +32,7 @@
 #include "chromecast/browser/service/cast_service_simple.h"
 #include "chromecast/browser/url_request_context_factory.h"
 #include "chromecast/common/global_descriptors.h"
+#include "chromecast/media/audio/cast_audio_manager.h"
 #include "chromecast/media/cma/backend/media_pipeline_backend_manager.h"
 #include "chromecast/public/media/media_pipeline_backend.h"
 #include "components/crash/content/app/breakpad_linux.h"
@@ -273,6 +274,14 @@ void CastContentBrowserClient::OverrideWebkitPrefs(
 
   // Enable 5% margins for WebVTT cues to keep within title-safe area
   prefs->text_track_margin_percentage = 5;
+
+#if defined(OS_ANDROID)
+  // Enable the television style for viewport so that all cast apps have a
+  // 1280px wide layout viewport by default.
+  DCHECK(prefs->viewport_enabled);
+  DCHECK(prefs->viewport_meta_enabled);
+  prefs->viewport_style = content::ViewportStyle::TELEVISION;
+#endif  // defined(OS_ANDROID)
 }
 
 void CastContentBrowserClient::ResourceDispatcherHostCreated() {
@@ -418,6 +427,12 @@ void CastContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
 }
 
 #else
+::media::ScopedAudioManagerPtr CastContentBrowserClient::CreateAudioManager(
+    ::media::AudioLogFactory* audio_log_factory) {
+  return ::media::ScopedAudioManagerPtr(new media::CastAudioManager(
+      GetMediaTaskRunner(), GetMediaTaskRunner(), audio_log_factory,
+      media_pipeline_backend_manager()));
+}
 
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {

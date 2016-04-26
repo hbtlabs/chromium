@@ -143,9 +143,9 @@ HeapVector<Member<Element>> elementsFromRect(LayoutRect rect, Document& document
 }
 
 // Blends the colors from the given gradient with the existing colors.
-void blendWithColorsFromGradient(CSSGradientValue* gradient, HeapVector<Color>& colors, bool& foundNonTransparentColor, bool& foundOpaqueColor, const LayoutObject& layoutObject)
+void blendWithColorsFromGradient(CSSGradientValue* gradient, Vector<Color>& colors, bool& foundNonTransparentColor, bool& foundOpaqueColor, const LayoutObject& layoutObject)
 {
-    HeapVector<Color> stopColors;
+    Vector<Color> stopColors;
     gradient->getStopColors(stopColors, layoutObject);
 
     if (colors.isEmpty()) {
@@ -168,7 +168,7 @@ void blendWithColorsFromGradient(CSSGradientValue* gradient, HeapVector<Color>& 
 }
 
 // Gets the colors from an image style, if one exists and it is a gradient.
-void addColorsFromImageStyle(const ComputedStyle& style, HeapVector<Color>& colors, bool& foundOpaqueColor, bool& foundNonTransparentColor, const LayoutObject& layoutObject)
+void addColorsFromImageStyle(const ComputedStyle& style, Vector<Color>& colors, bool& foundOpaqueColor, bool& foundNonTransparentColor, const LayoutObject& layoutObject)
 {
     const FillLayer& backgroundLayers = style.backgroundLayers();
     if (!backgroundLayers.hasImage())
@@ -199,7 +199,7 @@ void addColorsFromImageStyle(const ComputedStyle& style, HeapVector<Color>& colo
 // walking up all the elements returned by a hit test (but not going beyond
 // |topElement|) covering the area of the rect, and blending their background
 // colors.
-bool getColorsFromRect(LayoutRect rect, Document& document, Element* topElement, HeapVector<Color>& colors)
+bool getColorsFromRect(LayoutRect rect, Document& document, Element* topElement, Vector<Color>& colors)
 {
     HeapVector<Member<Element>> elementsUnderRect = elementsFromRect(rect, document);
 
@@ -619,6 +619,7 @@ InspectorCSSAgent::InspectorCSSAgent(InspectorDOMAgent* domAgent, InspectedFrame
     , m_resourceContainer(resourceContainer)
     , m_creatingViaInspectorStyleSheet(false)
     , m_isSettingStyleSheetText(false)
+    , m_resourceContentLoaderClientId(resourceContentLoader->createClientId())
 {
 }
 
@@ -666,7 +667,7 @@ void InspectorCSSAgent::enable(ErrorString* errorString, PassOwnPtr<EnableCallba
         return;
     }
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, true);
-    m_resourceContentLoader->ensureResourcesContentLoaded(bind(&InspectorCSSAgent::resourceContentLoaded, this, prpCallback));
+    m_resourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, bind(&InspectorCSSAgent::resourceContentLoaded, this, passed(std::move(prpCallback))));
 }
 
 void InspectorCSSAgent::resourceContentLoaded(PassOwnPtr<EnableCallback> callback)
@@ -695,6 +696,7 @@ void InspectorCSSAgent::disable(ErrorString*)
     m_domAgent->setDOMListener(nullptr);
     m_instrumentingAgents->setInspectorCSSAgent(0);
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, false);
+    m_resourceContentLoader->cancel(m_resourceContentLoaderClientId);
 }
 
 void InspectorCSSAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
@@ -1215,7 +1217,7 @@ void InspectorCSSAgent::setStyleTexts(ErrorString* errorString, PassOwnPtr<proto
 {
     FrontendOperationScope scope;
     HeapVector<Member<StyleSheetAction>> actions;
-    if (!multipleStyleTextsActions(errorString, edits, &actions))
+    if (!multipleStyleTextsActions(errorString, std::move(edits), &actions))
         return;
 
     TrackExceptionState exceptionState;
@@ -1347,7 +1349,7 @@ void InspectorCSSAgent::forcePseudoState(ErrorString* errorString, int nodeId, P
     if (!element)
         return;
 
-    unsigned forcedPseudoState = computePseudoClassMask(forcedPseudoClasses);
+    unsigned forcedPseudoState = computePseudoClassMask(std::move(forcedPseudoClasses));
     NodeIdToForcedPseudoState::iterator it = m_nodeIdToForcedPseudoState.find(nodeId);
     unsigned currentForcedPseudoState = it == m_nodeIdToForcedPseudoState.end() ? 0 : it->value;
     bool needStyleRecalc = forcedPseudoState != currentForcedPseudoState;
@@ -2029,7 +2031,7 @@ void InspectorCSSAgent::getBackgroundColors(ErrorString* errorString, int nodeId
     if (textBounds.size().isEmpty())
         return;
 
-    HeapVector<Color> colors;
+    Vector<Color> colors;
     FrameView* view = element->document().view();
     if (!view) {
         *errorString = "No view.";

@@ -547,13 +547,7 @@
       # enable_basic_printing. It's possible to build Chrome with preview only.
       'enable_print_preview%': 1,
 
-      # Set the version of CLD.
-      #   1: (DEPRECATED! See http://crbug.com/528305 for info) Use only CLD1.
-      #   2: Use only CLD2.
-      'cld_version%': 2,
-
       # For CLD2, the size of the tables that should be included in the build
-      # Only evaluated if cld_version == 2.
       # See third_party/cld_2/cld_2.gyp for more information.
       #   0: Small tables, high accuracy
       #   2: Large tables, higher accuracy
@@ -1252,7 +1246,6 @@
     'enable_print_preview%': '<(enable_print_preview)',
     'enable_spellcheck%': '<(enable_spellcheck)',
     'use_browser_spellchecker%': '<(use_browser_spellchecker)',
-    'cld_version%': '<(cld_version)',
     'cld2_table_size%': '<(cld2_table_size)',
     'enable_captive_portal_detection%': '<(enable_captive_portal_detection)',
     'disable_file_support%': '<(disable_file_support)',
@@ -2657,13 +2650,15 @@
 
         # TODO(thakis): Enable this, crbug.com/507717
         '-Wno-shift-negative-value',
+
+        # TODO(thakis): https://crbug.com/604888
+        '-Wno-undefined-var-template',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
     'defines': [
       # Don't use deprecated V8 APIs anywhere.
       'V8_DEPRECATION_WARNINGS',
-      'CLD_VERSION=<(cld_version)',
     ],
     'include_dirs': [
       '<(SHARED_INTERMEDIATE_DIR)',
@@ -3073,10 +3068,6 @@
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
-      }],
-      ['"<!(python <(DEPTH)/tools/clang/scripts/update.py --print-revision)"!="266460-1"', {
-        # TODO(thakis): https://crbug.com/604888
-        'variables': { 'clang_warning_flags': ['-Wno-undefined-var-template']},
       }],
       ['chromium_code==0', {
         'variables': {

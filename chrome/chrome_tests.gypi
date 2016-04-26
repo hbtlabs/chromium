@@ -1173,7 +1173,6 @@
       'browser/ui/views/certificate_selector_browsertest.cc',
       'browser/ui/views/constrained_window_views_browsertest.cc',
       'browser/ui/views/extensions/extension_dialog_interactive_uitest.cc',
-      'browser/ui/views/find_bar_controller_interactive_uitest.cc',
       'browser/ui/views/find_bar_views_interactive_uitest.cc',
       'browser/ui/views/frame/browser_view_focus_uitest.cc',
       'browser/ui/views/frame/browser_view_interactive_uitest.cc',
@@ -1673,6 +1672,7 @@
         '../sync/sync.gyp:sync',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        '../third_party/cld_2/cld_2.gyp:cld2_platform_impl',
         '../third_party/hunspell/hunspell.gyp:hunspell',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
@@ -1695,12 +1695,6 @@
         '<@(chrome_interactive_ui_test_sources)',
       ],
       'conditions': [
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Interactive tests should use whatever CLD2 data access mode that
-            # the application embedder is using.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_platform_impl', ],
-        }],
         ['use_x11==1', {
           'dependencies': [
             '../build/linux/system.gyp:xtst',
@@ -2199,6 +2193,7 @@
         '../testing/gtest.gyp:gtest',
         '../testing/perf/perf_test.gyp:*',
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation',
+        '../third_party/cld_2/cld_2.gyp:cld2_platform_impl',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
         '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
@@ -2299,11 +2294,6 @@
           'sources': [
             '<@(chrome_browser_tests_display_source_apitest)',
           ],
-        }],
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Because the browser_tests use translate, they need CLD data.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_platform_impl', ],
         }],
         ['enable_one_click_signin==0', {
           'sources!': [
@@ -2764,6 +2754,7 @@
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         '../testing/perf/perf_test.gyp:*',
+        '../third_party/cld_2/cld_2.gyp:cld2_platform_impl',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
         '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
@@ -2818,12 +2809,6 @@
         },
       ],
       'conditions': [
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Interactive tests should use whatever CLD2 data access mode that
-            # the application embedder is using.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_platform_impl', ],
-        }],
         ['OS=="win"', {
           'sources': [
             '<(SHARED_INTERMEDIATE_DIR)/chrome_version/other_version.rc',
@@ -2968,6 +2953,10 @@
         '../sync/sync.gyp:sync',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        # Language detection is irrelevant to sync, so it can depend on
+        # any implementation for CLD2. Dynamic is smaller, so go with
+        # dynamic.
+        '../third_party/cld_2/cld_2.gyp:cld2_dynamic',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
         '../third_party/leveldatabase/leveldatabase.gyp:leveldatabase',
@@ -2986,13 +2975,6 @@
         '<@(sync_integration_tests_sources)',
       ],
       'conditions': [
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Language detection is irrelevant to sync, so it can depend on
-            # any implementation for CLD2. Dynamic is smaller, so go with
-            # dynamic.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_dynamic', ],
-        }],
         ['OS=="linux"', {
           'dependencies': [
             '../build/linux/system.gyp:ssl',
@@ -3076,6 +3058,10 @@
         '../sync/sync.gyp:sync',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
+        # Language detection is irrelevant to sync, so it can depend on
+        # any implementation for CLD2. Dynamic is smaller, so go with
+        # dynamic.
+        '../third_party/cld_2/cld_2.gyp:cld2_dynamic',
       ],
       'include_dirs': [
         '..',
@@ -3089,13 +3075,6 @@
         '<@(sync_performance_tests_sources)',
       ],
       'conditions': [
-        [ 'cld_version==2', {
-          'dependencies': [
-            # Language detection is irrelevant to sync, so it can depend on
-            # any implementation for CLD2. Dynamic is smaller, so go with
-            # dynamic.
-            '<(DEPTH)/third_party/cld_2/cld_2.gyp:cld2_dynamic', ],
-        }],
         ['OS=="linux"', {
           'dependencies': [
             '../build/linux/system.gyp:ssl',

@@ -4,7 +4,10 @@
 
 #include "components/tracing/child_trace_message_filter.h"
 
+#include <memory>
+
 #include "base/memory/ref_counted_memory.h"
+#include "base/memory/scoped_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/trace_event/trace_event.h"
 #include "components/tracing/child_memory_dump_manager_delegate_impl.h"
@@ -254,12 +257,13 @@ void ChildTraceMessageFilter::OnSetUMACallback(
   if (!existing_histogram)
     return;
 
-  scoped_ptr<base::HistogramSamples> samples =
+  std::unique_ptr<base::HistogramSamples> samples =
       existing_histogram->SnapshotSamples();
   if (!samples)
     return;
 
-  scoped_ptr<base::SampleCountIterator> sample_iterator = samples->Iterator();
+  std::unique_ptr<base::SampleCountIterator> sample_iterator =
+      samples->Iterator();
   if (!sample_iterator)
     return;
 

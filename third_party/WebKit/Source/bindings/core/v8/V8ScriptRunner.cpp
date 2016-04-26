@@ -33,8 +33,8 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/ScriptResource.h"
-#include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/inspector/ThreadDebugger.h"
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
@@ -404,9 +404,9 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::runCompiledScript(v8::Isolate* isolate
             return v8::MaybeLocal<v8::Value>();
         }
         v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kRunMicrotasks);
-        InspectorInstrumentationCookie cookie = InspectorInstrumentation::willExecuteScript(context, script->GetUnboundScript()->GetId());
+        ThreadDebugger::willExecuteScript(isolate, script->GetUnboundScript()->GetId());
         result = script->Run(isolate->GetCurrentContext());
-        InspectorInstrumentation::didExecuteScript(cookie);
+        ThreadDebugger::didExecuteScript(isolate);
     }
 
     crashIfIsolateIsDead(isolate);
@@ -439,10 +439,11 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::runCompiledInternalScript(v8::Isolate*
 
 v8::MaybeLocal<v8::Value> V8ScriptRunner::callFunction(v8::Local<v8::Function> function, ExecutionContext* context, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> args[], v8::Isolate* isolate)
 {
-    TRACE_EVENT1("devtools.timeline,v8", "FunctionCall", "data", InspectorFunctionCallEvent::data(context, function));
+    TRACE_EVENT0("v8", "v8.callFunction");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("v8", "V8Execution");
 
-    if (v8::MicrotasksScope::GetCurrentDepth(isolate) >= kMaxRecursionDepth)
+    int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
+    if (depth >= kMaxRecursionDepth)
         return v8::MaybeLocal<v8::Value>(throwStackOverflowExceptionIfNeeded(isolate));
 
     RELEASE_ASSERT(!context->isIteratingOverObservers());
@@ -451,11 +452,15 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::callFunction(v8::Local<v8::Function> f
         throwScriptForbiddenException(isolate);
         return v8::MaybeLocal<v8::Value>();
     }
+    if (!depth)
+        TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data", InspectorFunctionCallEvent::data(context, function));
     v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kRunMicrotasks);
-    InspectorInstrumentationCookie cookie = InspectorInstrumentation::willExecuteScript(context, function->ScriptId());
+    ThreadDebugger::willExecuteScript(isolate, function->ScriptId());
     v8::MaybeLocal<v8::Value> result = function->Call(isolate->GetCurrentContext(), receiver, argc, args);
     crashIfIsolateIsDead(isolate);
-    InspectorInstrumentation::didExecuteScript(cookie);
+    ThreadDebugger::didExecuteScript(isolate);
+    if (!depth)
+        TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
     return result;
 }
 
