@@ -28,7 +28,6 @@ class BluetoothChooserAndroid : public content::BluetoothChooser {
   void ShowDiscoveryState(DiscoveryState state) override;
   void AddDevice(const std::string& device_id,
                  const base::string16& device_name) override;
-  void RemoveDevice(const std::string& device_id) override;
 
   // Report the dialog's result.
   void OnDialogFinished(JNIEnv* env,

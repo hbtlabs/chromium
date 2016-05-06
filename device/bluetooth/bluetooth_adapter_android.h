@@ -128,6 +128,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapterAndroid final
   void RemovePairingDelegateInternal(
       BluetoothDevice::PairingDelegate* pairing_delegate) override;
 
+  void PurgeTimedOutDevices();
+
+  scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
+
   // Java object org.chromium.device.bluetooth.ChromeBluetoothAdapter.
   base::android::ScopedJavaGlobalRef<jobject> j_adapter_;
 

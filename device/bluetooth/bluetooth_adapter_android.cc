@@ -8,6 +8,8 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/bind.h"
+#include "base/location.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/thread_task_runner_handle.h"
@@ -175,6 +177,7 @@ void BluetoothAdapterAndroid::CreateOrUpdateDeviceOnScan(
     BluetoothDeviceAndroid* device_android =
         BluetoothDeviceAndroid::Create(this, bluetooth_device_wrapper);
     device_android->UpdateAdvertisedUUIDs(advertised_uuids);
+    device_android->UpdateTimestamp();
     devices_.add(device_address,
                  std::unique_ptr<BluetoothDevice>(device_android));
     FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
@@ -183,6 +186,7 @@ void BluetoothAdapterAndroid::CreateOrUpdateDeviceOnScan(
     // Existing device.
     BluetoothDeviceAndroid* device_android =
         static_cast<BluetoothDeviceAndroid*>(iter->second);
+    device_android->UpdateTimestamp();
     if (device_android->UpdateAdvertisedUUIDs(advertised_uuids)) {
       FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                         DeviceChanged(this, device_android));
@@ -191,11 +195,21 @@ void BluetoothAdapterAndroid::CreateOrUpdateDeviceOnScan(
 }
 
 BluetoothAdapterAndroid::BluetoothAdapterAndroid() : weak_ptr_factory_(this) {
+  ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  PurgeTimedOutDevices();
 }
 
 BluetoothAdapterAndroid::~BluetoothAdapterAndroid() {
   Java_ChromeBluetoothAdapter_onBluetoothAdapterAndroidDestruction(
       AttachCurrentThread(), j_adapter_.obj());
+}
+
+void BluetoothAdapterAndroid::PurgeTimedOutDevices() {
+  RemoveTimedOutDevices();
+  ui_task_runner_->PostDelayedTask(
+      FROM_HERE, base::Bind(&BluetoothAdapterAndroid::PurgeTimedOutDevices,
+                            weak_ptr_factory_.GetWeakPtr()),
+      base::TimeDelta::FromMilliseconds(5000));
 }
 
 void BluetoothAdapterAndroid::AddDiscoverySession(

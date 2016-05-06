@@ -392,6 +392,7 @@ public class ItemChooserDialog {
      * @param id The id of the item to affect.
      * @param enabled Whether the item should be enabled or not.
      */
+    @VisibleForTesting
     public void setEnabled(String id, boolean enabled) {
         mItemAdapter.setEnabled(id, enabled);
     }

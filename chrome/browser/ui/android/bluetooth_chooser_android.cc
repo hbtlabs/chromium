@@ -103,14 +103,6 @@ void BluetoothChooserAndroid::AddDevice(const std::string& device_id,
       env, java_dialog_.obj(), java_device_id.obj(), java_device_name.obj());
 }
 
-void BluetoothChooserAndroid::RemoveDevice(const std::string& device_id) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> java_device_id =
-      ConvertUTF16ToJavaString(env, base::UTF8ToUTF16(device_id));
-  Java_BluetoothChooserDialog_removeDevice(env, java_dialog_.obj(),
-                                           java_device_id.obj());
-}
-
 void BluetoothChooserAndroid::OnDialogFinished(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,

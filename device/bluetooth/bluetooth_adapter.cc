@@ -357,6 +357,38 @@ BluetoothAdapter::GetMergedDiscoveryFilterHelper(
   return result;
 }
 
+void BluetoothAdapter::RemoveTimedOutDevices() {
+  std::set<std::string> removed_devices;
+  for (DevicesMap::const_iterator it = devices_.begin(); it != devices_.end();
+       ++it) {
+    BluetoothDevice* device = it->second;
+
+    if (device->IsPaired() || device->IsConnected())
+      continue;
+
+    base::Time last_update_time = device->GetLastUpdateTime();
+
+    bool device_expired =
+        (base::Time::NowFromSystemTime() - last_update_time) > timeoutSec;
+    VLOG(1) << "device: " << device->GetAddress()
+            << ", last_update: " << last_update_time
+            << ", exp: " << device_expired;
+
+    if (!device_expired)
+      continue;
+    removed_devices.insert(it->first);
+
+    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
+                      DeviceRemoved(this, device));
+    removed_devices.insert(it->first);
+  }
+
+  for (const std::string& device_address : removed_devices) {
+    size_t num_removed = devices_.erase(device_address);
+    DCHECK_EQ(num_removed, 1U);
+  }
+}
+
 // static
 void BluetoothAdapter::RecordBluetoothDiscoverySessionStartOutcome(
     UMABluetoothDiscoverySessionOutcome outcome) {
@@ -372,5 +404,9 @@ void BluetoothAdapter::RecordBluetoothDiscoverySessionStopOutcome(
       "Bluetooth.DiscoverySession.Stop.Outcome", static_cast<int>(outcome),
       static_cast<int>(UMABluetoothDiscoverySessionOutcome::COUNT));
 }
+
+// static
+const base::TimeDelta BluetoothAdapter::timeoutSec =
+    base::TimeDelta::FromSeconds(180);
 
 }  // namespace device

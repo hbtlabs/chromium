@@ -200,6 +200,10 @@ class CONTENT_EXPORT BluetoothDispatcherHost final
   // render_process_id_.
   url::Origin GetOrigin(int frame_routing_id);
 
+  // Populate the chooser with existing devices.
+  void PopulateWithExistingDevices(RequestDeviceSession* session,
+                                   int chooser_id);
+
   int render_process_id_;
 
   // Maps a (thread_id,request_id) to information about its requestDevice call,
