@@ -362,30 +362,12 @@ class scoped_refptr {
     swap(&r.ptr_);
   }
 
+  explicit operator bool() const { return ptr_ != nullptr; }
+
  private:
   template <typename U> friend class scoped_refptr;
 
-  // Implement "Safe Bool Idiom"
-  // https://en.wikibooks.org/wiki/More_C%2B%2B_Idioms/Safe_bool
-  //
-  // Allow scoped_refptr<T> to be used in boolean expressions such as
-  //   if (ref_ptr_instance)
-  // But do not become convertible to a real bool (which is dangerous).
-  //   Implementation requires:
-  //     typedef Testable
-  //     operator Testable() const
-  //     operator==
-  //     operator!=
-  //
-  // == and != operators must be declared explicitly or dissallowed, as
-  // otherwise "ptr1 == ptr2" will compile but do the wrong thing (i.e., convert
-  // to Testable and then do the comparison).
-  //
-  // C++11 provides for "explicit operator bool()", however it is currently
-  // banned due to MSVS2013. https://chromium-cpp.appspot.com/#core-blacklist
  public:
-  explicit operator bool() const { return ptr_ != nullptr; }
-
   template <typename U>
   bool operator==(const scoped_refptr<U>& rhs) const {
     return ptr_ == rhs.get();
