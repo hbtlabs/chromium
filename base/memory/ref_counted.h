@@ -383,9 +383,8 @@ class scoped_refptr {
   //
   // C++11 provides for "explicit operator bool()", however it is currently
   // banned due to MSVS2013. https://chromium-cpp.appspot.com/#core-blacklist
-  typedef T* scoped_refptr::*Testable;
  public:
-  operator Testable() const { return ptr_ ? &scoped_refptr::ptr_ : nullptr; }
+  explicit operator bool() const { return ptr_ != nullptr; }
 
   template <typename U>
   bool operator==(const scoped_refptr<U>& rhs) const {
