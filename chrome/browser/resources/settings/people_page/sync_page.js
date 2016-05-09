@@ -54,28 +54,9 @@ Polymer({
      * Whether the "create passphrase" inputs should be shown. These inputs
      * give the user the opportunity to use a custom passphrase instead of
      * authenticating with his Google credentials.
+     * @private
      */
-    creatingNewPassphrase: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
-     * True if subpage needs the user's old Google password. This can happen
-     * when the user changes his password after encrypting his sync data.
-     *
-     * TODO(tommycli): FROM the C++ handler, the syncPrefs.usePassphrase field
-     * is true if and only if there is a custom non-Google Sync password.
-     *
-     * But going TO the C++ handler, the syncPrefs.usePassphrase field is true
-     * if there is either a custom or Google password. There is a separate
-     * syncPrefs.isGooglePassphrase field.
-     *
-     * We keep an extra state variable here because we mutate the
-     * syncPrefs.usePassphrase field in the OK button handler.
-     * Remove this once we fix refactor the legacy SyncSetupHandler.
-     */
-    askOldGooglePassphrase: {
+    creatingNewPassphrase_: {
       type: Boolean,
       value: false,
     },
@@ -117,10 +98,7 @@ Polymer({
   handleSyncPrefsChanged_: function(syncPrefs) {
     this.syncPrefs = syncPrefs;
 
-    this.askOldGooglePassphrase =
-        this.syncPrefs.showPassphrase && !this.syncPrefs.usePassphrase;
-
-    this.creatingNewPassphrase = false;
+    this.creatingNewPassphrase_ = false;
 
     this.$.pages.selected = 'main';
   },
@@ -152,43 +130,44 @@ Polymer({
    * @private
    */
   onSingleSyncDataTypeChanged_: function() {
-    // The usePassphrase field is true if and only if the user is creating a
-    // new passphrase or confirming an existing one. See the comment on the
-    // syncPrefs property.
-    // TODO(tommycli): Clean up the C++ handler to handle passwords separately.
-    this.syncPrefs.usePassphrase = false;
-
-    this.browserProxy_.setSyncPrefs(this.syncPrefs).then(
+    this.browserProxy_.setSyncDatatypes(this.syncPrefs).then(
         this.handlePageStatusChanged_.bind(this));
   },
 
   /**
-   * TODO(tommycli): Hook this up to a password submit button.
-   * Sends the entered password to the browser.
+   * Sends the newly created custom sync passphrase to the browser.
    * @private
    */
-  onPasswordSubmitTap_: function() {
-    if (this.creatingNewPassphrase) {
-      // If a new password has been entered but it is invalid, do not send the
-      // sync state to the API.
-      if (!this.validateCreatedPassphrases_())
-        return;
+  onSaveNewPassphraseTap_: function() {
+    assert(this.creatingNewPassphrase_);
 
-      this.syncPrefs.encryptAllData = true;
-    }
+    // If a new password has been entered but it is invalid, do not send the
+    // sync state to the API.
+    if (!this.validateCreatedPassphrases_())
+      return;
 
-    this.syncPrefs.isGooglePassphrase = this.askOldGooglePassphrase;
-    this.syncPrefs.usePassphrase =
-        this.creatingNewPassphrase || this.syncPrefs.showPassphrase;
+    this.syncPrefs.encryptAllData = true;
+    this.syncPrefs.setNewPassphrase = true;
+    this.syncPrefs.passphrase = this.$$('#passphraseInput').value;
 
-    if (this.syncPrefs.usePassphrase) {
-      var field = this.creatingNewPassphrase ?
-          this.$$('#passphraseInput') : this.$$('#existingPassphraseInput');
-      this.syncPrefs.passphrase = field.value;
-      field.value = '';
-    }
+    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
+        this.handlePageStatusChanged_.bind(this));
+  },
 
-    this.browserProxy_.setSyncPrefs(this.syncPrefs).then(
+  /**
+   * Sends the user-entered existing password to re-enable sync.
+   * @private
+   */
+  onSubmitExistingPassphraseTap_: function() {
+    assert(!this.creatingNewPassphrase_);
+
+    this.syncPrefs.setNewPassphrase = false;
+
+    var existingPassphraseInput = this.$$('#existingPassphraseInput');
+    this.syncPrefs.passphrase = existingPassphraseInput.value;
+    existingPassphraseInput.value = '';
+
+    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
         this.handlePageStatusChanged_.bind(this));
   },
 
@@ -217,7 +196,7 @@ Polymer({
    * @private
    */
   onEncryptionRadioSelectionChanged_: function(event) {
-    this.creatingNewPassphrase =
+    this.creatingNewPassphrase_ =
         event.target.selected == RadioButtonNames.ENCRYPT_WITH_PASSPHRASE;
   },
 
@@ -226,17 +205,9 @@ Polymer({
    * @private
    */
   selectedEncryptionRadio_: function() {
-    return this.encryptionRadiosDisabled_() ?
+    return this.syncPrefs.passphraseTypeIsCustom ?
         RadioButtonNames.ENCRYPT_WITH_PASSPHRASE :
         RadioButtonNames.ENCRYPT_WITH_GOOGLE;
-  },
-
-  /**
-   * Computed binding returning the selected encryption radio button.
-   * @private
-   */
-  encryptionRadiosDisabled_: function() {
-    return this.syncPrefs.usePassphrase || this.syncPrefs.encryptAllData;
   },
 
   /**

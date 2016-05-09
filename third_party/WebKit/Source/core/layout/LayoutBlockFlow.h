@@ -289,6 +289,8 @@ public:
     void simplifiedNormalFlowInlineLayout();
     bool recalcInlineChildrenOverflowAfterStyleChange();
 
+    PositionWithAffinity positionForPoint(const LayoutPoint&) override;
+
 #ifndef NDEBUG
     void showLineTreeAndMark(const InlineBox* = nullptr, const char* = nullptr, const InlineBox* = nullptr, const char* = nullptr, const LayoutObject* = nullptr) const;
 #endif
@@ -325,7 +327,11 @@ protected:
     void setLogicalTopForChild(LayoutBox& child, LayoutUnit logicalTop);
     void determineLogicalLeftPositionForChild(LayoutBox& child);
 
+    void addOutlineRects(Vector<LayoutRect>&, const LayoutPoint& additionalOffset, IncludeBlockVisualOverflowOrNot) const override;
+
     PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
+
+    bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
 
 private:
     bool layoutBlockFlow(bool relayoutChildren, LayoutUnit& pageLogicalHeight, SubtreeLayoutScope&);
@@ -357,7 +363,7 @@ private:
 
     LayoutUnit lowestFloatLogicalBottom(FloatingObject::Type = FloatingObject::FloatLeftRight) const;
 
-    bool hitTestFloats(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset) final;
+    bool hitTestFloats(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset);
 
     void invalidatePaintForOverhangingFloats(bool paintAllDescendants) final;
     void invalidatePaintForOverflow() final;
@@ -582,7 +588,6 @@ protected:
     OwnPtr<FloatingObjects> m_floatingObjects;
 
     friend class MarginInfo;
-    friend class LineBreaker;
     friend class LineWidth; // needs to know FloatingObject
 
 // FIXME-BLOCKFLOW: These methods have implementations in

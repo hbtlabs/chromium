@@ -68,7 +68,7 @@ PlatformWindowMus::PlatformWindowMus(ui::PlatformWindowDelegate* delegate,
                                      mus::Window* mus_window)
     : delegate_(delegate),
       mus_window_(mus_window),
-      show_state_(mus::mojom::ShowState::RESTORED),
+      show_state_(mus::mojom::ShowState::DEFAULT),
       last_cursor_(mus::mojom::Cursor::CURSOR_NULL),
       mus_window_destroyed_(false) {
   DCHECK(delegate_);
@@ -103,10 +103,6 @@ PlatformWindowMus::~PlatformWindowMus() {
   mus_window_->set_input_event_handler(nullptr);
   if (!mus_window_destroyed_)
     mus_window_->Destroy();
-}
-
-void PlatformWindowMus::Activate() {
-  mus_window_->SetFocus();
 }
 
 void PlatformWindowMus::SetCursorById(mus::mojom::Cursor cursor) {
@@ -165,7 +161,7 @@ void PlatformWindowMus::Minimize() {
 }
 
 void PlatformWindowMus::Restore() {
-  SetShowState(mus::mojom::ShowState::RESTORED);
+  SetShowState(mus::mojom::ShowState::NORMAL);
 }
 
 void PlatformWindowMus::SetCursor(ui::PlatformCursor cursor) {
@@ -246,12 +242,14 @@ void PlatformWindowMus::OnWindowSharedPropertyChanged(
     case mus::mojom::ShowState::MAXIMIZED:
       state = ui::PLATFORM_WINDOW_STATE_MAXIMIZED;
       break;
-    case mus::mojom::ShowState::RESTORED:
+    case mus::mojom::ShowState::DEFAULT:
+    case mus::mojom::ShowState::INACTIVE:
+    case mus::mojom::ShowState::NORMAL:
+    case mus::mojom::ShowState::DOCKED:
+      // TODO(sky): support docked.
       state = ui::PLATFORM_WINDOW_STATE_NORMAL;
       break;
-    case mus::mojom::ShowState::IMMERSIVE:
-    case mus::mojom::ShowState::PRESENTATION:
-      // This may not be sufficient.
+    case mus::mojom::ShowState::FULLSCREEN:
       state = ui::PLATFORM_WINDOW_STATE_FULLSCREEN;
       break;
   }

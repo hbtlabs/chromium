@@ -12,7 +12,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.View;
@@ -27,6 +26,7 @@ import org.chromium.base.ApplicationStatus.ApplicationStateListener;
 import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLine;
 import org.chromium.base.CommandLineInitUtil;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ResourceExtractor;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
@@ -206,6 +206,8 @@ public class ChromeApplication extends ContentApplication {
     public void onCreate() {
         UmaUtils.recordMainEntryPointTime();
         super.onCreate();
+        ContextUtils.initApplicationContext(this);
+
         UiUtils.setKeyboardShowingDelegate(new UiUtils.KeyboardShowingDelegate() {
             @Override
             public boolean disableKeyboardCheck(Context context, View view) {
@@ -596,7 +598,7 @@ public class ChromeApplication extends ContentApplication {
      */
     protected void removeSessionCookies() {
         long lastKnownBootTimestamp =
-                PreferenceManager.getDefaultSharedPreferences(this).getLong(PREF_BOOT_TIMESTAMP, 0);
+                ContextUtils.getAppSharedPreferences().getLong(PREF_BOOT_TIMESTAMP, 0);
         long bootTimestamp = System.currentTimeMillis() - SystemClock.uptimeMillis();
         long difference = bootTimestamp - lastKnownBootTimestamp;
 
@@ -604,7 +606,7 @@ public class ChromeApplication extends ContentApplication {
         if (Math.abs(difference) > BOOT_TIMESTAMP_MARGIN_MS) {
             nativeRemoveSessionCookies();
 
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+            SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
             SharedPreferences.Editor editor = prefs.edit();
             editor.putLong(PREF_BOOT_TIMESTAMP, bootTimestamp);
             editor.apply();
@@ -672,6 +674,10 @@ public class ChromeApplication extends ContentApplication {
      */
     public PrintingController getPrintingController() {
         return mPrintingController;
+    }
+
+    public AppLinkHandler createAppLinkHandler() {
+        return new AppLinkHandler();
     }
 
     /**
@@ -815,11 +821,11 @@ public class ChromeApplication extends ContentApplication {
     }
 
     private boolean hasLocaleChanged(String newLocale) {
-        String previousLocale = PreferenceManager.getDefaultSharedPreferences(this).getString(
+        String previousLocale = ContextUtils.getAppSharedPreferences().getString(
                 PREF_LOCALE, "");
 
         if (!previousLocale.equals(newLocale)) {
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+            SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
             SharedPreferences.Editor editor = prefs.edit();
             editor.putString(PREF_LOCALE, newLocale);
             editor.apply();
@@ -848,7 +854,7 @@ public class ChromeApplication extends ContentApplication {
      */
     private void cacheNativeFlags() {
         if (sIsFinishedCachingNativeFlags) return;
-        FeatureUtilities.cacheNativeFlags();
+        FeatureUtilities.cacheNativeFlags(this);
         sIsFinishedCachingNativeFlags = true;
     }
 }

@@ -11,13 +11,11 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -52,9 +50,6 @@ const int kWifiFetchingHourMax = 22;
 
 const int kDefaultExpiryTimeMins = 24 * 60;
 
-const char kStatusMessageEmptyHosts[] = "Cannot fetch for empty hosts list.";
-const char kStatusMessageEmptyList[] = "Invalid / empty list.";
-const char kStatusMessageJsonErrorFormat[] = "Received invalid JSON (error %s)";
 const char kStatusMessageOK[] = "OK";
 
 base::TimeDelta GetFetchingInterval(const char* switch_name,
@@ -132,25 +127,6 @@ std::set<std::string> GetSuggestionsHostsImpl(
   return hosts;
 }
 
-// Parses snippets from |list| and adds them to |snippets|. Returns true on
-// success, false if anything went wrong.
-bool AddSnippetsFromListValue(const base::ListValue& list,
-                              NTPSnippetsService::NTPSnippetStorage* snippets) {
-  for (const base::Value* const value : list) {
-    const base::DictionaryValue* dict = nullptr;
-    if (!value->GetAsDictionary(&dict))
-      return false;
-
-    std::unique_ptr<NTPSnippet> snippet =
-        NTPSnippet::CreateFromDictionary(*dict);
-    if (!snippet)
-      return false;
-
-    snippets->push_back(std::move(snippet));
-  }
-  return true;
-}
-
 std::unique_ptr<base::ListValue> SnippetsToListValue(
     const NTPSnippetsService::NTPSnippetStorage& snippets) {
   std::unique_ptr<base::ListValue> list(new base::ListValue);
@@ -179,7 +155,6 @@ NTPSnippetsService::NTPSnippetsService(
     const std::string& application_language_code,
     NTPSnippetsScheduler* scheduler,
     std::unique_ptr<NTPSnippetsFetcher> snippets_fetcher,
-    const ParseJSONCallback& parse_json_callback,
     std::unique_ptr<ImageFetcher> image_fetcher)
     : enabled_(false),
       pref_service_(pref_service),
@@ -188,11 +163,9 @@ NTPSnippetsService::NTPSnippetsService(
       application_language_code_(application_language_code),
       scheduler_(scheduler),
       snippets_fetcher_(std::move(snippets_fetcher)),
-      parse_json_callback_(parse_json_callback),
-      image_fetcher_(std::move(image_fetcher)),
-      weak_ptr_factory_(this) {
-  snippets_fetcher_subscription_ = snippets_fetcher_->AddCallback(base::Bind(
-      &NTPSnippetsService::OnSnippetsDownloaded, base::Unretained(this)));
+      image_fetcher_(std::move(image_fetcher)) {
+  snippets_fetcher_->SetCallback(base::Bind(
+      &NTPSnippetsService::OnFetchFinished, base::Unretained(this)));
 }
 
 NTPSnippetsService::~NTPSnippetsService() {}
@@ -238,17 +211,7 @@ void NTPSnippetsService::FetchSnippets() {
 
 void NTPSnippetsService::FetchSnippetsFromHosts(
     const std::set<std::string>& hosts) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDontRestrict)) {
-    snippets_fetcher_->FetchSnippets(std::set<std::string>(), kMaxSnippetCount);
-    return;
-  }
-  if (!hosts.empty()) {
-    snippets_fetcher_->FetchSnippets(hosts, kMaxSnippetCount);
-  } else {
-    last_fetch_status_ = kStatusMessageEmptyHosts;
-    LoadingSnippetsFinished();
-  }
+  snippets_fetcher_->FetchSnippetsFromHosts(hosts, kMaxSnippetCount);
 }
 
 void NTPSnippetsService::RescheduleFetching() {
@@ -362,69 +325,23 @@ void NTPSnippetsService::OnSuggestionsChanged(
   FetchSnippetsFromHosts(hosts);
 }
 
-void NTPSnippetsService::OnSnippetsDownloaded(
-    const std::string& snippets_json, const std::string& status) {
-  if (!snippets_json.empty()) {
-    DCHECK(status.empty());
-
-    last_fetch_json_ = snippets_json;
-
-    parse_json_callback_.Run(
-        snippets_json,
-        base::Bind(&NTPSnippetsService::OnJsonParsed,
-                   weak_ptr_factory_.GetWeakPtr(), snippets_json),
-        base::Bind(&NTPSnippetsService::OnJsonError,
-                   weak_ptr_factory_.GetWeakPtr(), snippets_json));
-  } else {
+void NTPSnippetsService::OnFetchFinished(NTPSnippetStorage snippets,
+                                         const std::string& status) {
+  if (!status.empty()) {
     last_fetch_status_ = status;
-    LoadingSnippetsFinished();
-  }
-}
-
-void NTPSnippetsService::OnJsonParsed(const std::string& snippets_json,
-                                      std::unique_ptr<base::Value> parsed) {
-  if (!LoadFromFetchedValue(*parsed)) {
-    LOG(WARNING) << "Received invalid snippets: " << snippets_json;
-    last_fetch_status_ = kStatusMessageEmptyList;
   } else {
     last_fetch_status_ = kStatusMessageOK;
+    // Sparse histogram used because the number of snippets is small (bound by
+    // kMaxSnippetCount).
+    DCHECK_LE(snippets.size(), static_cast<size_t>(kMaxSnippetCount));
+    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticlesFetched",
+                                snippets.size());
+    MergeSnippets(std::move(snippets));
   }
-
   LoadingSnippetsFinished();
 }
 
-void NTPSnippetsService::OnJsonError(const std::string& snippets_json,
-                                     const std::string& error) {
-  LOG(WARNING) << "Received invalid JSON (" << error << "): " << snippets_json;
-  last_fetch_status_ = base::StringPrintf(kStatusMessageJsonErrorFormat,
-                                          error.c_str());
-
-  LoadingSnippetsFinished();
-}
-
-bool NTPSnippetsService::LoadFromFetchedValue(const base::Value& value) {
-  const base::DictionaryValue* top_dict = nullptr;
-  if (!value.GetAsDictionary(&top_dict))
-    return false;
-
-  const base::ListValue* list = nullptr;
-  if (!top_dict->GetList("recos", &list))
-    return false;
-
-  NTPSnippetStorage new_snippets;
-  if (!AddSnippetsFromListValue(*list, &new_snippets))
-    return false;
-
-  // Sparse histogram used because the number of snippets is small (bound by
-  // kMaxSnippetCount).
-  DCHECK_LE(new_snippets.size(), static_cast<size_t>(kMaxSnippetCount));
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticlesFetched",
-                              new_snippets.size());
-
-  return MergeSnippets(std::move(new_snippets));
-}
-
-bool NTPSnippetsService::MergeSnippets(NTPSnippetStorage new_snippets) {
+void NTPSnippetsService::MergeSnippets(NTPSnippetStorage new_snippets) {
   // Remove new snippets that we already have, or that have been discarded.
   new_snippets.erase(
       std::remove_if(new_snippets.begin(), new_snippets.end(),
@@ -471,17 +388,14 @@ bool NTPSnippetsService::MergeSnippets(NTPSnippetStorage new_snippets) {
   snippets_.insert(snippets_.begin(),
                    std::make_move_iterator(new_snippets.begin()),
                    std::make_move_iterator(new_snippets.end()));
-
-  return true;
 }
 
 void NTPSnippetsService::LoadSnippetsFromPrefs() {
   NTPSnippetStorage prefs_snippets;
-  bool success = AddSnippetsFromListValue(
-      *pref_service_->GetList(prefs::kSnippets), &prefs_snippets) &&
-      MergeSnippets(std::move(prefs_snippets));
+  bool success = NTPSnippet::AddFromListValue(
+      *pref_service_->GetList(prefs::kSnippets), &prefs_snippets);
   DCHECK(success) << "Failed to parse snippets from prefs";
-
+  MergeSnippets(std::move(prefs_snippets));
   LoadingSnippetsFinished();
 }
 
@@ -491,7 +405,7 @@ void NTPSnippetsService::StoreSnippetsToPrefs() {
 
 void NTPSnippetsService::LoadDiscardedSnippetsFromPrefs() {
   discarded_snippets_.clear();
-  bool success = AddSnippetsFromListValue(
+  bool success = NTPSnippet::AddFromListValue(
       *pref_service_->GetList(prefs::kDiscardedSnippets), &discarded_snippets_);
   DCHECK(success) << "Failed to parse discarded snippets from prefs";
 }

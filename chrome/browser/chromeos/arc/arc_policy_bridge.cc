@@ -115,7 +115,7 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map) {
                policy_map, 2 /*BlockGeolocation*/, &filtered_policies);
   MapBoolToBool("unmuteMicrophoneDisabled", policy::key::kAudioCaptureAllowed,
                 policy_map, true, &filtered_policies);
-  MapBoolToBool("usbFileTransferDisabled",
+  MapBoolToBool("mountPhysicalMediaDisabled",
                 policy::key::kExternalStorageDisabled, policy_map, false,
                 &filtered_policies);
 
@@ -185,7 +185,7 @@ void ArcPolicyBridge::OnPolicyInstanceClosed() {
 void ArcPolicyBridge::GetPolicies(const GetPoliciesCallback& callback) {
   VLOG(1) << "ArcPolicyBridge::GetPolicies";
   if (!is_managed_) {
-    callback.Run(mojo::String(nullptr));
+    callback.Run(mojo::String(""));
     return;
   }
   const policy::PolicyNamespace policy_namespace(policy::POLICY_DOMAIN_CHROME,

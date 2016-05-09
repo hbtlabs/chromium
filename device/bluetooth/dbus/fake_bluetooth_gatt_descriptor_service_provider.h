@@ -29,7 +29,7 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorServiceProvider
       const dbus::ObjectPath& object_path,
       std::unique_ptr<BluetoothGattAttributeValueDelegate> delegate,
       const std::string& uuid,
-      const std::vector<std::string>& permissions,
+      const std::vector<std::string>& flags,
       const dbus::ObjectPath& characteristic_path);
   ~FakeBluetoothGattDescriptorServiceProvider() override;
 
@@ -61,7 +61,10 @@ class DEVICE_BLUETOOTH_EXPORT FakeBluetoothGattDescriptorServiceProvider
   dbus::ObjectPath object_path_;
 
   // 128-bit GATT descriptor UUID.
-  std::string uuid_;
+  const std::string uuid_;
+
+  // Permissions for this descriptor.
+  const std::vector<std::string> flags_;
 
   // Object path of the characteristic that this descriptor belongs to.
   dbus::ObjectPath characteristic_path_;

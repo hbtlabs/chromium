@@ -75,14 +75,14 @@ struct SyncConfigInfo {
   bool sync_nothing;
   syncer::ModelTypeSet data_types;
   std::string passphrase;
-  bool passphrase_is_gaia;
+  bool set_new_passphrase;
 };
 
 SyncConfigInfo::SyncConfigInfo()
     : encrypt_all(false),
       sync_everything(false),
       sync_nothing(false),
-      passphrase_is_gaia(false) {}
+      set_new_passphrase(false) {}
 
 SyncConfigInfo::~SyncConfigInfo() {}
 
@@ -128,24 +128,24 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
   }
 
   // Passphrase settings.
-  bool have_passphrase;
-  if (!result->GetBoolean("usePassphrase", &have_passphrase)) {
-    DLOG(ERROR) << "GetConfiguration() not passed a usePassphrase value";
+  if (result->GetString("passphrase", &config->passphrase) &&
+      !config->passphrase.empty() &&
+      !result->GetBoolean("setNewPassphrase", &config->set_new_passphrase)) {
+    DLOG(ERROR) << "GetConfiguration() not passed a set_new_passphrase value";
     return false;
   }
-
-  if (have_passphrase) {
-    if (!result->GetBoolean("isGooglePassphrase",
-                            &config->passphrase_is_gaia)) {
-      DLOG(ERROR) << "GetConfiguration() not passed isGooglePassphrase value";
-      return false;
-    }
-    if (!result->GetString("passphrase", &config->passphrase)) {
-      DLOG(ERROR) << "GetConfiguration() not passed a passphrase value";
-      return false;
-    }
-  }
   return true;
+}
+
+// Guaranteed to return a valid result (or crash).
+void ParseConfigurationArguments(const base::ListValue* args,
+                                 SyncConfigInfo* config,
+                                 const base::Value** callback_id) {
+  std::string json;
+  if (args->Get(0, callback_id) && args->GetString(1, &json) && !json.empty())
+    CHECK(GetConfiguration(json, config));
+  else
+    NOTREACHED();
 }
 
 }  // namespace
@@ -162,19 +162,7 @@ const char PeopleHandler::kPassphraseFailedPageStatus[] = "passphraseFailed";
 PeopleHandler::PeopleHandler(Profile* profile)
     : profile_(profile),
       configuring_sync_(false),
-      sync_service_observer_(this) {
-  PrefService* prefs = profile_->GetPrefs();
-  profile_pref_registrar_.Init(prefs);
-  profile_pref_registrar_.Add(
-      prefs::kSigninAllowed,
-      base::Bind(&PeopleHandler::OnSigninAllowedPrefChange,
-                 base::Unretained(this)));
-
-  ProfileSyncService* sync_service(
-      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_));
-  if (sync_service)
-    sync_service_observer_.Add(sync_service);
-}
+      sync_service_observer_(this) {}
 
 PeopleHandler::~PeopleHandler() {
   // Early exit if running unit tests (no actual WebUI is attached).
@@ -197,8 +185,11 @@ void PeopleHandler::RegisterMessages() {
       "SyncSetupDidClosePage",
       base::Bind(&PeopleHandler::OnDidClosePage, base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "SyncSetupConfigure",
-      base::Bind(&PeopleHandler::HandleConfigure, base::Unretained(this)));
+      "SyncSetupSetDatatypes",
+      base::Bind(&PeopleHandler::HandleSetDatatypes, base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "SyncSetupSetEncryption",
+      base::Bind(&PeopleHandler::HandleSetEncryption, base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "SyncSetupShowSetupUI",
       base::Bind(&PeopleHandler::HandleShowSetupUI, base::Unretained(this)));
@@ -225,6 +216,25 @@ void PeopleHandler::RegisterMessages() {
       "SyncSetupStartSignIn",
       base::Bind(&PeopleHandler::HandleStartSignin, base::Unretained(this)));
 #endif
+}
+
+void PeopleHandler::OnJavascriptAllowed() {
+  PrefService* prefs = profile_->GetPrefs();
+  profile_pref_registrar_.Init(prefs);
+  profile_pref_registrar_.Add(
+      prefs::kSigninAllowed,
+      base::Bind(&PeopleHandler::OnSigninAllowedPrefChange,
+                 base::Unretained(this)));
+
+  ProfileSyncService* sync_service(
+      ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_));
+  if (sync_service)
+    sync_service_observer_.Add(sync_service);
+}
+
+void PeopleHandler::OnJavascriptDisallowed() {
+  profile_pref_registrar_.RemoveAll();
+  sync_service_observer_.RemoveAll();
 }
 
 #if !defined(OS_CHROMEOS)
@@ -316,9 +326,9 @@ void PeopleHandler::DisplaySpinner() {
                               base::TimeDelta::FromSeconds(kTimeoutSec), this,
                               &PeopleHandler::DisplayTimeout);
 
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("page-status-changed"),
-                                   base::StringValue(kSpinnerPageStatus));
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("page-status-changed"),
+                         base::StringValue(kSpinnerPageStatus));
 }
 
 // TODO(kochi): Handle error conditions other than timeout.
@@ -330,9 +340,9 @@ void PeopleHandler::DisplayTimeout() {
   // Do not listen to sync startup events.
   sync_startup_tracker_.reset();
 
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("page-status-changed"),
-                                   base::StringValue(kTimeoutPageStatus));
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("page-status-changed"),
+                         base::StringValue(kTimeoutPageStatus));
 }
 
 void PeopleHandler::OnDidClosePage(const base::ListValue* args) {
@@ -364,29 +374,12 @@ ProfileSyncService* PeopleHandler::GetSyncService() const {
              : nullptr;
 }
 
-void PeopleHandler::HandleConfigure(const base::ListValue* args) {
-  CHECK_EQ(2U, args->GetSize());
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
-
+void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
   DCHECK(!sync_startup_tracker_);
-  std::string json;
-  if (!args->GetString(1, &json)) {
-    NOTREACHED() << "Could not read JSON argument";
-    return;
-  }
-  if (json.empty()) {
-    NOTREACHED();
-    return;
-  }
 
   SyncConfigInfo configuration;
-  if (!GetConfiguration(json, &configuration)) {
-    // The page sent us something that we didn't understand.
-    // This probably indicates a programming error.
-    NOTREACHED();
-    return;
-  }
+  const base::Value* callback_id = nullptr;
+  ParseConfigurationArguments(args, &configuration, &callback_id);
 
   // Start configuring the ProfileSyncService using the configuration passed
   // to us from the JS layer.
@@ -414,6 +407,38 @@ void PeopleHandler::HandleConfigure(const base::ListValue* args) {
 
     service->RequestStop(ProfileSyncService::CLEAR_DATA);
     service->SetSetupInProgress(false);
+    return;
+  }
+
+  service->OnUserChoseDatatypes(configuration.sync_everything,
+                                configuration.data_types);
+  MarkFirstSetupComplete();
+
+  // Choosing data types to sync never fails.
+  ResolveJavascriptCallback(*callback_id,
+                            base::StringValue(kConfigurePageStatus));
+
+  ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CUSTOMIZE);
+  if (!configuration.sync_everything)
+    ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
+}
+
+void PeopleHandler::HandleSetEncryption(const base::ListValue* args) {
+  DCHECK(!sync_startup_tracker_);
+
+  SyncConfigInfo configuration;
+  const base::Value* callback_id = nullptr;
+  ParseConfigurationArguments(args, &configuration, &callback_id);
+
+  // Start configuring the ProfileSyncService using the configuration passed
+  // to us from the JS layer.
+  ProfileSyncService* service = GetSyncService();
+
+  // If the sync engine has shutdown for some reason, just close the sync
+  // dialog.
+  if (!service || !service->IsBackendInitialized()) {
+    CloseSyncSetup();
+    ResolveJavascriptCallback(*callback_id, base::StringValue(kDonePageStatus));
     return;
   }
 
@@ -447,79 +472,39 @@ void PeopleHandler::HandleConfigure(const base::ListValue* args) {
       // it either means that the pending keys were resolved somehow since the
       // time the UI was displayed (re-encryption, pending passphrase change,
       // etc) or the user wants to re-encrypt.
-      if (!configuration.passphrase_is_gaia &&
+      if (configuration.set_new_passphrase &&
           !service->IsUsingSecondaryPassphrase()) {
-        // User passed us a secondary passphrase, and the data is encrypted
-        // with a GAIA passphrase so they must want to encrypt.
         service->SetEncryptionPassphrase(configuration.passphrase,
                                          ProfileSyncService::EXPLICIT);
       }
     }
   }
 
-  bool user_was_prompted_for_passphrase =
-      service->IsPassphraseRequiredForDecryption();
-  service->OnUserChoseDatatypes(configuration.sync_everything,
-                                configuration.data_types);
-
-  // Need to call IsPassphraseRequiredForDecryption() *after* calling
-  // OnUserChoseDatatypes() because the user may have just disabled the
-  // encrypted datatypes (in which case we just want to exit, not prompt the
-  // user for a passphrase).
   if (passphrase_failed || service->IsPassphraseRequiredForDecryption()) {
-    // We need a passphrase, or the user's attempt to set a passphrase failed -
-    // prompt them again. This covers a few subtle cases:
-    // 1) The user enters an incorrect passphrase *and* disabled the encrypted
-    //    data types. In that case we want to notify the user that the
-    //    passphrase was incorrect even though there are no longer any encrypted
-    //    types enabled (IsPassphraseRequiredForDecryption() == false).
-    // 2) The user doesn't enter any passphrase. In this case, we won't call
-    //    SetDecryptionPassphrase() (passphrase_failed == false), but we still
-    //    want to display an error message to let the user know that their
-    //    blank passphrase entry is not acceptable.
-    // 3) The user just enabled an encrypted data type - in this case we don't
-    //    want to display an "invalid passphrase" error, since it's the first
-    //    time the user is seeing the prompt.
+    // If the user doesn't enter any passphrase, we won't call
+    // SetDecryptionPassphrase() (passphrase_failed == false), but we still
+    // want to display an error message to let the user know that their blank
+    // passphrase entry is not acceptable.
 
     // TODO(tommycli): Switch this to RejectJavascriptCallback once the
     // Sync page JavaScript has been further refactored.
-    std::string page_status =
-        passphrase_failed || user_was_prompted_for_passphrase
-            ? kPassphraseFailedPageStatus
-            : kConfigurePageStatus;
-    ResolveJavascriptCallback(*callback_id, base::StringValue(page_status));
+    ResolveJavascriptCallback(*callback_id,
+                              base::StringValue(kPassphraseFailedPageStatus));
   } else {
-    // Suppress the sign in promo once the user starts sync. This way the user
-    // doesn't see the sign in promo even if they sign out later on.
-    signin::SetUserSkippedPromo(profile_);
-
-    ProfileSyncService* service = GetSyncService();
-    DCHECK(service);
-    if (!service->IsFirstSetupComplete()) {
-      // This is the first time configuring sync, so log it.
-      base::FilePath profile_file_path = profile_->GetPath();
-      ProfileMetrics::LogProfileSyncSignIn(profile_file_path);
-
-      // We're done configuring, so notify ProfileSyncService that it is OK to
-      // start syncing.
-      service->SetSetupInProgress(false);
-      service->SetFirstSetupComplete();
-    }
-
+    MarkFirstSetupComplete();
     ResolveJavascriptCallback(*callback_id,
                               base::StringValue(kConfigurePageStatus));
   }
 
-  ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CUSTOMIZE);
   if (configuration.encrypt_all)
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_ENCRYPT);
-  if (configuration.passphrase_is_gaia && !configuration.passphrase.empty())
+  if (!configuration.set_new_passphrase && !configuration.passphrase.empty())
     ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_PASSPHRASE);
-  if (!configuration.sync_everything)
-    ProfileMetrics::LogProfileSyncInfo(ProfileMetrics::SYNC_CHOOSE);
 }
 
 void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
+  AllowJavascript();
+
   if (!GetSyncService()) {
     CloseUI();
     return;
@@ -718,9 +703,9 @@ void PeopleHandler::FocusUI() {
 
 void PeopleHandler::CloseUI() {
   CloseSyncSetup();
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("page-status-changed"),
-                                   base::StringValue(kDonePageStatus));
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("page-status-changed"),
+                         base::StringValue(kDonePageStatus));
 }
 
 void PeopleHandler::GoogleSigninSucceeded(const std::string& /* account_id */,
@@ -845,8 +830,9 @@ void PeopleHandler::PushSyncPrefs() {
   //   encryptionEnabled: true if sync supports encryption
   //   encryptAllData: true if user wants to encrypt all data (not just
   //       passwords)
-  //   usePassphrase: true if the data is encrypted with a secondary passphrase
-  //   show_passphrase: true if a passphrase is needed to decrypt the sync data
+  //   passphraseRequired: true if a passphrase is needed to start sync
+  //   passphraseTypeIsCustom: true if the passphrase type is custom
+  //
   base::DictionaryValue args;
 
   // Tell the UI layer which data types are registered/enabled by the user.
@@ -875,11 +861,11 @@ void PeopleHandler::PushSyncPrefs() {
   // We call IsPassphraseRequired() here, instead of calling
   // IsPassphraseRequiredForDecryption(), because we want to show the passphrase
   // UI even if no encrypted data types are enabled.
-  args.SetBoolean("showPassphrase", service->IsPassphraseRequired());
+  args.SetBoolean("passphraseRequired", service->IsPassphraseRequired());
 
   // To distinguish between FROZEN_IMPLICIT_PASSPHRASE and CUSTOM_PASSPHRASE
-  // we only set usePassphrase for CUSTOM_PASSPHRASE.
-  args.SetBoolean("usePassphrase",
+  // we only set passphraseTypeIsCustom for CUSTOM_PASSPHRASE.
+  args.SetBoolean("passphraseTypeIsCustom",
                   service->GetPassphraseType() == syncer::CUSTOM_PASSPHRASE);
   base::Time passphrase_time = service->GetExplicitPassphraseTime();
   syncer::PassphraseType passphrase_type = service->GetPassphraseType();
@@ -919,9 +905,8 @@ void PeopleHandler::PushSyncPrefs() {
                    GetStringUTF16(IDS_SYNC_FULL_ENCRYPTION_DATA));
   }
 
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("sync-prefs-changed"),
-                                   args);
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("sync-prefs-changed"), args);
 
   // Make sure the tab used for the Gaia sign in does not cover the settings
   // tab.
@@ -933,13 +918,33 @@ LoginUIService* PeopleHandler::GetLoginUIService() const {
 }
 
 void PeopleHandler::UpdateSyncStatus() {
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("sync-status-changed"),
-                                   *GetSyncStatusDictionary());
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("sync-status-changed"),
+                         *GetSyncStatusDictionary());
 }
 
 void PeopleHandler::OnSigninAllowedPrefChange() {
   UpdateSyncStatus();
+}
+
+void PeopleHandler::MarkFirstSetupComplete() {
+  // Suppress the sign in promo once the user starts sync. This way the user
+  // doesn't see the sign in promo even if they sign out later on.
+  signin::SetUserSkippedPromo(profile_);
+
+  ProfileSyncService* service = GetSyncService();
+  DCHECK(service);
+  if (service->IsFirstSetupComplete())
+    return;
+
+  // This is the first time configuring sync, so log it.
+  base::FilePath profile_file_path = profile_->GetPath();
+  ProfileMetrics::LogProfileSyncSignIn(profile_file_path);
+
+  // We're done configuring, so notify ProfileSyncService that it is OK to
+  // start syncing.
+  service->SetSetupInProgress(false);
+  service->SetFirstSetupComplete();
 }
 
 }  // namespace settings

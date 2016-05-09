@@ -22,6 +22,7 @@
 #include "build/build_config.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/frame_tree.h"
+#include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
@@ -37,6 +38,7 @@
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/cert_store.h"
+#include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -595,6 +597,12 @@ class MockCertStore : public CertStore {
   std::map<int, scoped_refptr<net::X509Certificate>> certs_;
 
   DISALLOW_COPY_AND_ASSIGN(MockCertStore);
+};
+
+class TestInterstitialDelegate : public InterstitialPageDelegate {
+ private:
+  // InterstitialPageDelegate:
+  std::string GetHTMLContents() override { return "<p>Interstitial</p>"; }
 };
 
 }  // namespace
@@ -3476,6 +3484,41 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, SubframePostMessage) {
   EXPECT_EQ(1, GetReceivedMessages(root));
 }
 
+// Check that renderer initiated navigations which commit a new RenderFrameHost
+// do not crash if the original RenderFrameHost was being covered by an
+// interstitial. See crbug.com/607964.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       NavigateOpenerWithInterstitial) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/title1.html")));
+
+  // Open a popup and navigate it to bar.com.
+  ShellAddedObserver new_shell_observer;
+  EXPECT_TRUE(ExecuteScript(web_contents(), "window.open('about:blank');"));
+  Shell* popup = new_shell_observer.GetShell();
+  EXPECT_TRUE(NavigateToURL(popup, embedded_test_server()->GetURL(
+                                       "bar.com", "/navigate_opener.html")));
+
+  // Show an interstitial in the opener.
+  TestInterstitialDelegate* delegate = new TestInterstitialDelegate;
+  WebContentsImpl* opener_contents =
+      static_cast<WebContentsImpl*>(web_contents());
+  GURL interstitial_url("http://interstitial");
+  InterstitialPageImpl* interstitial = new InterstitialPageImpl(
+      opener_contents, static_cast<RenderWidgetHostDelegate*>(opener_contents),
+      true, interstitial_url, delegate);
+  interstitial->Show();
+  WaitForInterstitialAttach(opener_contents);
+
+  // Now, navigate the opener cross-process using the popup while it still has
+  // an interstitial. This should not crash.
+  TestNavigationObserver navigation_observer(opener_contents);
+  EXPECT_TRUE(
+      ExecuteScript(popup->web_contents(),
+                    "window.domAutomationController.send(navigateOpener());"));
+  navigation_observer.Wait();
+}
+
 // Check that postMessage can be sent from a subframe on a cross-process opener
 // tab, and that its event.source points to a valid proxy.
 IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
@@ -6278,6 +6321,102 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
   SimulateMouseClick(root->current_frame_host()->GetRenderWidgetHost(), 1, 1);
 
   EXPECT_TRUE(observer.WasUserInteractionReceived());
+}
+
+// Ensures that navigating to data: URLs present in session history will
+// correctly commit the navigation in the same process as the parent frame.
+// See https://crbug.com/606996.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       NavigateSubframeToDataUrlInSessionHistory) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  EXPECT_EQ(2U, root->child_count());
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   |--Site B ------- proxies for A\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  TestNavigationObserver observer(shell()->web_contents());
+  FrameTreeNode* child = root->child_at(0);
+
+  // Navigate iframe to a data URL, which will commit in a new SiteInstance.
+  GURL data_url("data:text/html,dataurl");
+  NavigateFrameToURL(child, data_url);
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+  EXPECT_EQ(data_url, observer.last_navigation_url());
+  scoped_refptr<SiteInstanceImpl> orig_site_instance =
+    child->current_frame_host()->GetSiteInstance();
+  EXPECT_NE(root->current_frame_host()->GetSiteInstance(), orig_site_instance);
+
+  // Navigate it to another cross-site url.
+  GURL cross_site_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  NavigateFrameToURL(child, cross_site_url);
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+  EXPECT_EQ(cross_site_url, observer.last_navigation_url());
+  EXPECT_EQ(3, web_contents()->GetController().GetEntryCount());
+  EXPECT_NE(orig_site_instance, child->current_frame_host()->GetSiteInstance());
+
+  // Go back and ensure the data: URL committed in the same SiteInstance as the
+  // original navigation.
+  EXPECT_TRUE(web_contents()->GetController().CanGoBack());
+  TestFrameNavigationObserver frame_observer(child);
+  web_contents()->GetController().GoBack();
+  frame_observer.WaitForCommit();
+  EXPECT_EQ(orig_site_instance, child->current_frame_host()->GetSiteInstance());
+}
+
+// Ensures that navigating to about:blank URLs present in session history will
+// correctly commit the navigation in the same process as the one used for
+// the original navigation.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest,
+                       NavigateSubframeToAboutBlankInSessionHistory) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b,b)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+  EXPECT_EQ(2U, root->child_count());
+  EXPECT_EQ(
+      " Site A ------------ proxies for B\n"
+      "   |--Site B ------- proxies for A\n"
+      "   +--Site B ------- proxies for A\n"
+      "Where A = http://a.com/\n"
+      "      B = http://b.com/",
+      DepictFrameTree(root));
+
+  TestNavigationObserver observer(shell()->web_contents());
+  FrameTreeNode* child = root->child_at(0);
+
+  // Navigate iframe to about:blank, which will commit in a new SiteInstance.
+  GURL about_blank_url("about:blank");
+  NavigateFrameToURL(child, about_blank_url);
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+  EXPECT_EQ(about_blank_url, observer.last_navigation_url());
+  scoped_refptr<SiteInstanceImpl> orig_site_instance =
+    child->current_frame_host()->GetSiteInstance();
+  EXPECT_NE(root->current_frame_host()->GetSiteInstance(), orig_site_instance);
+
+  // Navigate it to another cross-site url.
+  GURL cross_site_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
+  NavigateFrameToURL(child, cross_site_url);
+  EXPECT_TRUE(observer.last_navigation_succeeded());
+  EXPECT_EQ(cross_site_url, observer.last_navigation_url());
+  EXPECT_EQ(3, web_contents()->GetController().GetEntryCount());
+  EXPECT_NE(orig_site_instance, child->current_frame_host()->GetSiteInstance());
+
+  // Go back and ensure the about:blank URL committed in the same SiteInstance
+  // as the original navigation.
+  EXPECT_TRUE(web_contents()->GetController().CanGoBack());
+  TestFrameNavigationObserver frame_observer(child);
+  web_contents()->GetController().GoBack();
+  frame_observer.WaitForCommit();
+  EXPECT_EQ(orig_site_instance, child->current_frame_host()->GetSiteInstance());
 }
 
 }  // namespace content

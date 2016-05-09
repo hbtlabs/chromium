@@ -9,6 +9,7 @@
 #include "components/mus/public/interfaces/window_manager_constants.mojom.h"
 #include "mash/wm/public/interfaces/ash_window_type.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
+#include "ui/wm/public/window_types.h"
 
 namespace gfx {
 class Rect;
@@ -52,6 +53,8 @@ mus::mojom::WindowType GetWindowType(const mus::Window* window);
 mus::mojom::WindowType GetWindowType(
     const mus::Window::SharedProperties& window);
 
+ui::wm::WindowType GetWmWindowType(const mus::Window* window);
+
 mojom::AshWindowType GetAshWindowType(const mus::Window* window);
 
 base::string16 GetWindowTitle(const mus::Window* window);
@@ -60,6 +63,8 @@ mojo::Array<uint8_t> GetWindowAppIcon(const mus::Window* window);
 
 void SetAppID(mus::Window* window, const base::string16& app_id);
 base::string16 GetAppID(const mus::Window* window);
+
+bool GetWindowIgnoredByShelf(mus::Window* window);
 
 }  // namespace wm
 }  // namespace mash

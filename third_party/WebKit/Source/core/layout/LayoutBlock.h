@@ -324,6 +324,7 @@ protected:
     // this condition.
     virtual bool shouldIgnoreOverflowPropertyForInlineBlockBaseline() const { return false; }
 
+    bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
     void updateHitTestResult(HitTestResult&, const LayoutPoint&) override;
 
     // Delay update scrollbar until finishDelayUpdateScrollInfo() will be
@@ -397,16 +398,17 @@ private:
     TrackedLayoutBoxListHashSet* positionedObjectsInternal() const;
     TrackedLayoutBoxListHashSet* percentHeightDescendantsInternal() const;
 
-    Node* nodeForHitTest() const;
+    Node* nodeForHitTest() const final;
 
     // Returns true if the positioned movement-only layout succeeded.
     bool tryLayoutDoingPositionedMovementOnly();
 
     bool avoidsFloats() const override { return true; }
 
-    bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
-    // FIXME-BLOCKFLOW: Remove virtualizaion when all callers have moved to LayoutBlockFlow
-    virtual bool hitTestFloats(HitTestResult&, const HitTestLocation&, const LayoutPoint&) { return false; }
+    bool isInSelfHitTestingPhase(HitTestAction hitTestAction) const final
+    {
+        return hitTestAction == HitTestBlockBackground || hitTestAction == HitTestChildBlockBackground;
+    }
 
     bool isPointInOverflowControl(HitTestResult&, const LayoutPoint& locationInContainer, const LayoutPoint& accumulatedOffset) const;
 
@@ -431,7 +433,6 @@ private:
     bool isInlineBoxWrapperActuallyChild() const;
 
     Position positionForBox(InlineBox*, bool start = true) const;
-    PositionWithAffinity positionForPointWithInlineChildren(const LayoutPoint&);
 
     // End helper functions and structs used by layoutBlockChildren.
 
@@ -439,19 +440,6 @@ private:
     bool widthAvailableToChildrenHasChanged();
 
 public:
-    // Specify which page or column to associate with an offset, if said offset is exactly at a page
-    // or column boundary.
-    enum PageBoundaryRule { AssociateWithFormerPage, AssociateWithLatterPage };
-
-    LayoutUnit pageLogicalHeightForOffset(LayoutUnit) const;
-    LayoutUnit pageRemainingLogicalHeightForOffset(LayoutUnit, PageBoundaryRule) const;
-
-    // Calculate the strut to insert in order fit content of size |contentLogicalHeight|.
-    // |strutToNextPage| is the strut to add to |offset| to merely get to the top of the next page
-    // or column. This is what will be returned if the content can actually fit there. Otherwise,
-    // return the distance to the next fragmentainer that can fit this piece of content.
-    LayoutUnit calculatePaginationStrutToFitContent(LayoutUnit offset, LayoutUnit strutToNextPage, LayoutUnit contentLogicalHeight) const;
-
     static void collapseAnonymousBlockChild(LayoutBlock* parent, LayoutBlock* child);
 protected:
     bool isPageLogicalHeightKnown(LayoutUnit logicalOffset) const { return pageLogicalHeightForOffset(logicalOffset); }
@@ -475,6 +463,9 @@ protected:
     // Adjust from painting offsets to the local coords of this layoutObject
     void offsetForContents(LayoutPoint&) const;
 
+    PositionWithAffinity positionForPointRespectingEditingBoundaries(LineLayoutBox child, const LayoutPoint& pointInParentCoordinates);
+    PositionWithAffinity positionForPointIfOutsideAtomicInlineLevel(const LayoutPoint&);
+
     virtual bool updateLogicalWidthAndColumnWidth();
 
     virtual bool canCollapseAnonymousBlockChild() const { return true; }
@@ -497,8 +488,6 @@ protected:
     // LayoutRubyBase objects need to be able to split and merge, moving their children around
     // (calling moveChildTo, moveAllChildrenTo, and makeChildrenNonInline).
     friend class LayoutRubyBase;
-    // FIXME-BLOCKFLOW: Remove this when the line layout stuff has all moved out of LayoutBlock
-    friend class LineBreaker;
 
     // FIXME: This is temporary as we move code that accesses block flow
     // member variables out of LayoutBlock and into LayoutBlockFlow.

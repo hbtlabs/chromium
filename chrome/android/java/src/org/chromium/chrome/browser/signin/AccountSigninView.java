@@ -20,6 +20,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.ProfileDataCache;
+import org.chromium.chrome.browser.ntp.NtpColorUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.ProfileDownloader;
 import org.chromium.chrome.browser.signin.AccountTrackerService.OnSystemAccountsSeededListener;
@@ -193,7 +194,7 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
      * This is currently used in the Recent Tabs Promo and the bookmarks page.
      */
     public void configureForRecentTabsOrBookmarksPage() {
-        setBackgroundResource(R.color.ntp_bg);
+        setBackgroundColor(NtpColorUtils.getBackgroundColorResource(getResources()));
         mCancelButtonTextId = R.string.cancel;
         setUpCancelButton();
     }
@@ -514,20 +515,14 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
     }
 
     private void setPositiveButtonEnabled() {
-        mPositiveButton.setButtonColor(
-                ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color));
         mPositiveButton.setTextColor(
                 ApiCompatibilityUtils.getColor(getResources(), R.color.signin_head_background));
-        mPositiveButton.setAlpha(1f);
         mPositiveButton.setEnabled(true);
     }
 
     private void setPositiveButtonDisabled() {
-        mPositiveButton.setButtonColor(ApiCompatibilityUtils.getColor(
-                getResources(), R.color.signin_button_disabled_color));
-        mPositiveButton.setTextColor(
-                ApiCompatibilityUtils.getColor(getResources(), R.color.fre_text_color));
-        mPositiveButton.setAlpha(0.26f);
+        mPositiveButton.setTextColor(ApiCompatibilityUtils.getColor(
+                getResources(), R.color.signin_disabled_button_text_color));
         mPositiveButton.setEnabled(false);
     }
 

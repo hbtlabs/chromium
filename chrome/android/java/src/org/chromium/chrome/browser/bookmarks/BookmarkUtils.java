@@ -10,15 +10,17 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
-import android.preference.PreferenceManager;
 import android.provider.Browser;
 import android.text.TextUtils;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.CommandLine;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
@@ -170,7 +172,7 @@ public class BookmarkUtils {
      * {@link #getLastUsedUrl(Context)}
      */
     static void setLastUsedUrl(Context context, String url) {
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
+        ContextUtils.getAppSharedPreferences().edit()
                 .putString(PREF_LAST_USED_URL, url).apply();
     }
 
@@ -179,7 +181,7 @@ public class BookmarkUtils {
      */
     @VisibleForTesting
     static String getLastUsedUrl(Context context) {
-        return PreferenceManager.getDefaultSharedPreferences(context).getString(
+        return ContextUtils.getAppSharedPreferences().getString(
                 PREF_LAST_USED_URL, UrlConstants.BOOKMARKS_URL);
     }
 
@@ -187,7 +189,7 @@ public class BookmarkUtils {
      * Save the last used {@link BookmarkId} as a folder to put new bookmarks to.
      */
     static void setLastUsedParent(Context context, BookmarkId bookmarkId) {
-        PreferenceManager.getDefaultSharedPreferences(context).edit()
+        ContextUtils.getAppSharedPreferences().edit()
                 .putString(PREF_LAST_USED_PARENT, bookmarkId.toString()).apply();
     }
 
@@ -196,7 +198,7 @@ public class BookmarkUtils {
      *         has never selected a parent folder to use.
      */
     static BookmarkId getLastUsedParent(Context context) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences preferences = ContextUtils.getAppSharedPreferences();
         if (!preferences.contains(PREF_LAST_USED_PARENT)) return null;
 
         return BookmarkId.getBookmarkIdFromString(
@@ -275,5 +277,14 @@ public class BookmarkUtils {
         if (context instanceof BookmarkActivity) {
             ((Activity) context).finish();
         }
+    }
+
+    /**
+     * @return Whether "all bookmarks" section is enabled.
+     */
+    static boolean isAllBookmarksViewEnabled() {
+        String flag = CommandLine.getInstance()
+                .getSwitchValue(ChromeSwitches.ENABLE_ALL_BOOKMARKS_VIEW, "false");
+        return flag.equals("true");
     }
 }

@@ -73,7 +73,7 @@ class ArcPolicyBridgeTest : public testing::Test {
 
 TEST_F(ArcPolicyBridgeTest, UnmanagedTest) {
   policy_bridge()->OverrideIsManagedForTesting(false);
-  policy_bridge()->GetPolicies(PolicyStringCallback(nullptr));
+  policy_bridge()->GetPolicies(PolicyStringCallback(""));
 }
 
 TEST_F(ArcPolicyBridgeTest, EmptyPolicyTest) {
@@ -170,7 +170,7 @@ TEST_F(ArcPolicyBridgeTest, ExternalStorageDisabledTest) {
                    policy::POLICY_SOURCE_CLOUD,
                    new base::FundamentalValue(true), nullptr);
   policy_bridge()->GetPolicies(
-      PolicyStringCallback("{\"usbFileTransferDisabled\":true}"));
+      PolicyStringCallback("{\"mountPhysicalMediaDisabled\":true}"));
 }
 
 TEST_F(ArcPolicyBridgeTest, URLBlacklistTest) {

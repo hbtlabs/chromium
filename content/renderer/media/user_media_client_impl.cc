@@ -219,7 +219,6 @@ void UserMediaClientImpl::requestUserMedia(
       controls.audio.requested = true;
       // Check if this input device should be used to select a matching output
       // device for audio rendering.
-      enable_automatic_output_device_selection = true;  // On by default.
       GetConstraintValueAsBoolean(
           user_media_request.audioConstraints(),
           &blink::WebMediaTrackConstraintSet::renderToAssociatedSink,
@@ -615,7 +614,7 @@ void UserMediaClientImpl::InitializeSourceObject(
       base::UTF8ToUTF16(device.device.id),
       type,
       base::UTF8ToUTF16(device.device.name),
-      false /* remote */, true /* readonly */);
+      false /* remote */);
 
   DVLOG(1) << "Initialize source object :"
            << "id = " << webkit_source->id().utf8()

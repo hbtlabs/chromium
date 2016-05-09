@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '675576f023c8fa10cdb0c18bc0a6c214e0bab069',
+  'skia_revision': '167ab9198025e577efe033612d2e009633abb54b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '55251cefb8b149f88914dbc401aa302936b129c9',
+  'v8_revision': '3db2255f8ecef84efc5fb1f2c259aee060f092cc',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -59,7 +59,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '696fc8b70c19cf35fd10bc10f547aae74fc6333c',
+  'pdfium_revision': 'e00f75c2318d55dfa261f1915decd2545c44ccfb',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '7f79936489814713fdfffc252e68b7d3ea62f017',
+  'catapult_revision': '8d108d1cc70893c2a1ac81449daacad4877fd9b0',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -180,7 +180,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '8d5834e0ad646278c5e66a59c995ac87d15191da',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'fe36f23047d30b6238fa83ebc885d5aea8b9ec43',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -189,7 +189,7 @@ deps = {
    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'b2ccb9c189069d45d201c988184e9e0796b96270',
 
   'src/third_party/ffmpeg':
-   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '40ac6f0443064be7cd085baf538e70fe2a9afc19',
+   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'db898be2c922f59c85a91e0e0c06f1e8828ce4b8',
 
   'src/third_party/libjingle/source/talk':
     Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + 'ca22ce254a986a0b0878d27c4789dacc2eb418a5', # commit position 12581

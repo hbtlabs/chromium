@@ -33,16 +33,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProviderImpl
       std::unique_ptr<BluetoothGattAttributeValueDelegate> delegate,
       const std::string& uuid,
       const std::vector<std::string>& flags,
-      const std::vector<std::string>& permissions,
       const dbus::ObjectPath& service_path);
 
   ~BluetoothGattCharacteristicServiceProviderImpl() override;
-
-  // For testing.
-  BluetoothGattCharacteristicServiceProviderImpl(
-      const dbus::ObjectPath& object_path,
-      const std::string& uuid,
-      const dbus::ObjectPath& service_path);
 
   // BluetoothGattCharacteristicServiceProvider override.
   void SendValueChanged(const std::vector<uint8_t>& value) override;
@@ -65,6 +58,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProviderImpl
   // characteristic.
   void GetAll(dbus::MethodCall* method_call,
               dbus::ExportedObject::ResponseSender response_sender);
+
+  // Called by BlueZ when a remote central is requesting to read the value of
+  // this characteristic.
+  void ReadValue(dbus::MethodCall* method_call,
+                 dbus::ExportedObject::ResponseSender response_sender);
+
+  // Called by BlueZ when a remote central is requesting to write the value of
+  // this characteristic.
+  void WriteValue(dbus::MethodCall* method_call,
+                  dbus::ExportedObject::ResponseSender response_sender);
 
   // Called by dbus:: when a method is exported.
   void OnExported(const std::string& interface_name,
@@ -93,6 +96,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProviderImpl
   void OnSet(dbus::MethodCall* method_call,
              dbus::ExportedObject::ResponseSender response_sender);
 
+  // Called by the Delegate in response to a method to call to read the value
+  // of this characteristic.
+  void OnReadValue(dbus::MethodCall* method_call,
+                   dbus::ExportedObject::ResponseSender response_sender,
+                   const std::vector<uint8_t>& value);
+
+  // Called by the Delegate in response to a method to call to write the value
+  // of this characteristic.
+  void OnWriteValue(dbus::MethodCall* method_call,
+                    dbus::ExportedObject::ResponseSender response_sender);
+
   // Called by the Delegate in response to a failed method call to get or set
   // the characteristic value.
   void OnFailure(dbus::MethodCall* method_call,
@@ -105,6 +119,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothGattCharacteristicServiceProviderImpl
 
   // 128-bit characteristic UUID of this object.
   std::string uuid_;
+
+  // Properties and permissions for this characteristic.
+  std::vector<std::string> flags_;
 
   // D-Bus bus object is exported on, not owned by this object and must
   // outlive it.

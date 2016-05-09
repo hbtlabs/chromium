@@ -8,59 +8,99 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
-#include "base/callback_list.h"
 #include "base/memory/weak_ptr.h"
+#include "components/ntp_snippets/ntp_snippet.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
+
+namespace base {
+class Value;
+}
 
 namespace ntp_snippets {
 
 // Fetches snippet data for the NTP from the server
 class NTPSnippetsFetcher : public net::URLFetcherDelegate {
  public:
-  // If problems occur (explained in |status_message|), |snippets_json| is
-  // empty; otherwise, |status_message| is empty.
+  // Callbacks for JSON parsing, needed because the parsing is platform-
+  // dependent.
+  using SuccessCallback = base::Callback<void(std::unique_ptr<base::Value>)>;
+  using ErrorCallback = base::Callback<void(const std::string&)>;
+  using ParseJSONCallback = base::Callback<
+      void(const std::string&, const SuccessCallback&, const ErrorCallback&)>;
+
+  // |snippets| contains parsed snippets. If problems occur (explained in
+  // |status_message|), |status_message| is non-empty; otherwise,
+  // |status_message| is empty.
   using SnippetsAvailableCallback =
-      base::Callback<void(const std::string& snippets_json,
+      base::Callback<void(NTPSnippet::PtrVector snippets,
                           const std::string& status_message)>;
-  using SnippetsAvailableCallbackList =
-      base::CallbackList<void(const std::string&, const std::string&)>;
+
+  // Enumeration listing all possible outcomes for fetch attempts. Used for UMA
+  // histograms, so do not change existing values.
+  enum class FetchResult {
+    SUCCESS,
+    EMPTY_HOSTS,
+    URL_REQUEST_STATUS_ERROR,
+    HTTP_ERROR,
+    JSON_PARSE_ERROR,
+    INVALID_SNIPPET_CONTENT_ERROR,
+    RESULT_MAX
+  };
 
   NTPSnippetsFetcher(
       scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+      const ParseJSONCallback& parse_json_callback,
       bool is_stable_channel);
   ~NTPSnippetsFetcher() override;
 
-  // Adds a callback that is called when a new set of snippets are downloaded.
-  std::unique_ptr<SnippetsAvailableCallbackList::Subscription> AddCallback(
-      const SnippetsAvailableCallback& callback) WARN_UNUSED_RESULT;
+  // Set a callback that is called when a new set of snippets are downloaded,
+  // overriding any previously set callback.
+  void SetCallback(const SnippetsAvailableCallback& callback);
 
-  // Fetches snippets from the server. |hosts| can be used to restrict the
-  // results to a set of hosts, e.g. "www.google.com". If it is empty, no
-  // restrictions are applied.
+  // Fetches snippets from the server. |hosts| restricts the results to a set of
+  // hosts, e.g. "www.google.com". An empty host set produces an error.
   //
   // If an ongoing fetch exists, it will be cancelled and a new one started,
-  // without triggering additional callbacks (i.e. not noticeable by
-  // subscribers).
-  void FetchSnippets(const std::set<std::string>& hosts, int count);
+  // without triggering an additional callback (i.e. not noticeable by
+  // subscriber of SetCallback()).
+  void FetchSnippetsFromHosts(const std::set<std::string>& hosts, int count);
+
+  // Returns the last json fetched from the server.
+  const std::string& last_json() const {
+    return last_fetch_json_;
+  }
 
  private:
   // URLFetcherDelegate implementation.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
 
+  void OnJsonParsed(std::unique_ptr<base::Value> parsed);
+  void OnJsonError(const std::string& error);
+  void FetchFinishedWithError(FetchResult result,
+                              const std::string& extra_message);
+  // Records result to UMA histogram.
+  void RecordUmaFetchResult(FetchResult result);
+
   // Holds the URL request context.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
+
+  const ParseJSONCallback parse_json_callback_;
+  std::string last_fetch_json_;
 
   // The fetcher for downloading the snippets.
   std::unique_ptr<net::URLFetcher> url_fetcher_;
 
-  // The callbacks to notify when new snippets get fetched.
-  SnippetsAvailableCallbackList callback_list_;
+  // The callback to notify when new snippets get fetched.
+  SnippetsAvailableCallback snippets_available_callback_;
 
   // Flag for picking the right (stable/non-stable) API key for Chrome Reader
   bool is_stable_channel_;
+
+  base::WeakPtrFactory<NTPSnippetsFetcher> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsFetcher);
 };

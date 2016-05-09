@@ -569,7 +569,7 @@ WebInspector.ExecutionContext.prototype = {
 
                 var resultSet = {};
                 try {
-                    for (var o = object; o; o = o.__proto__) {
+                    for (var o = object; o; o = Object.getPrototypeOf(o)) {
                         if (type === "array" && o === object && ArrayBuffer.isView(o) && o.length > 9999)
                             continue;
                         var names = Object.getOwnPropertyNames(o);
@@ -594,7 +594,7 @@ WebInspector.ExecutionContext.prototype = {
             {
                 if (!object)
                     receivedPropertyNames.call(this, null);
-                else if (object.type === "object")
+                else if (object.type === "object" || object.type === "function")
                     object.callFunctionJSON(getCompletions, [WebInspector.RemoteObject.toCallArgument(object.subtype)], receivedPropertyNames.bind(this));
                 else if (object.type === "string" || object.type === "number" || object.type === "boolean")
                     this.evaluate("(" + getCompletions + ")(\"" + result.type + "\")", "completion", false, true, true, false, false, receivedPropertyNamesFromEval.bind(this));

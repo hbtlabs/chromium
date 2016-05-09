@@ -14,7 +14,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequenced_task_runner.h"
 #include "base/timer/timer.h"
@@ -30,7 +29,6 @@ class PrefService;
 class SkBitmap;
 
 namespace base {
-class ListValue;
 class Value;
 }
 
@@ -49,15 +47,9 @@ class NTPSnippetsServiceObserver;
 // Stores and vends fresh content data for the NTP.
 class NTPSnippetsService : public KeyedService {
  public:
-  using NTPSnippetStorage = std::vector<std::unique_ptr<NTPSnippet>>;
+  using NTPSnippetStorage = NTPSnippet::PtrVector;
   using const_iterator =
       InnerIterator<NTPSnippetStorage::const_iterator, const NTPSnippet>;
-
-  // Callbacks for JSON parsing.
-  using SuccessCallback = base::Callback<void(std::unique_ptr<base::Value>)>;
-  using ErrorCallback = base::Callback<void(const std::string&)>;
-  using ParseJSONCallback = base::Callback<
-      void(const std::string&, const SuccessCallback&, const ErrorCallback&)>;
 
   using ImageFetchedCallback =
       base::Callback<void(const GURL&, const SkBitmap*)>;
@@ -73,7 +65,6 @@ class NTPSnippetsService : public KeyedService {
       const std::string& application_language_code,
       NTPSnippetsScheduler* scheduler,
       std::unique_ptr<NTPSnippetsFetcher> snippets_fetcher,
-      const ParseJSONCallback& parse_json_callback,
       std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher);
   ~NTPSnippetsService() override;
 
@@ -97,7 +88,7 @@ class NTPSnippetsService : public KeyedService {
 
   // Returns the last json from the snippets fetcher.
   const std::string& last_json() const {
-    return last_fetch_json_;
+    return snippets_fetcher_->last_json();
   }
 
   // (Re)schedules the periodic fetching of snippets. This is necessary because
@@ -148,22 +139,15 @@ class NTPSnippetsService : public KeyedService {
   static int GetMaxSnippetCountForTesting();
 
  private:
-  friend class NTPSnippetsServiceTest;
-
   void OnSuggestionsChanged(const suggestions::SuggestionsProfile& suggestions);
-  void OnSnippetsDownloaded(const std::string& snippets_json,
-                            const std::string& status);
-
-  void OnJsonParsed(const std::string& snippets_json,
-                    std::unique_ptr<base::Value> parsed);
-  void OnJsonError(const std::string& snippets_json, const std::string& error);
+  void OnFetchFinished(NTPSnippetStorage snippets, const std::string& status);
 
   // Expects a top-level dictionary containing a "recos" list, each element of
   // which will be parsed as a snippet.
   bool LoadFromFetchedValue(const base::Value& value);
 
   // Merges newly available snippets with the previously available list.
-  bool MergeSnippets(NTPSnippetStorage new_snippets);
+  void MergeSnippets(NTPSnippetStorage new_snippets);
   // TODO(treib): Investigate a better storage, maybe LevelDB or SQLite?
   void LoadSnippetsFromPrefs();
   void StoreSnippetsToPrefs();
@@ -211,23 +195,12 @@ class NTPSnippetsService : public KeyedService {
   // The snippets fetcher.
   std::unique_ptr<NTPSnippetsFetcher> snippets_fetcher_;
 
-  // The subscription to the snippets fetcher.
-  std::unique_ptr<
-      NTPSnippetsFetcher::SnippetsAvailableCallbackList::Subscription>
-      snippets_fetcher_subscription_;
-
   std::string last_fetch_status_;
-
-  std::string last_fetch_json_;
 
   // Timer that calls us back when the next snippet expires.
   base::OneShotTimer expiry_timer_;
 
-  ParseJSONCallback parse_json_callback_;
-
   std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
-
-  base::WeakPtrFactory<NTPSnippetsService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsService);
 };

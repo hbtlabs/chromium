@@ -6,18 +6,21 @@
 #define VRGetDevicesCallback_h
 
 #include "platform/heap/Handle.h"
-#include "public/platform/modules/vr/WebVRClient.h"
+#include "public/platform/WebCallbacks.h"
+#include "public/platform/WebVector.h"
+#include "public/platform/modules/vr/WebVR.h"
 
 namespace blink {
 
-class VRHardwareUnitCollection;
+class VRDisplayCollection;
 class ScriptPromiseResolver;
-class WebVRClient;
 
+// Success and failure callbacks for getDevices.
+using WebVRGetDevicesCallback = WebCallbacks<const WebVector<WebVRDevice>&, void>;
 class VRGetDevicesCallback final : public WebVRGetDevicesCallback {
     USING_FAST_MALLOC(VRGetDevicesCallback);
 public:
-    VRGetDevicesCallback(ScriptPromiseResolver*, VRHardwareUnitCollection*);
+    VRGetDevicesCallback(ScriptPromiseResolver*, VRDisplayCollection*);
     ~VRGetDevicesCallback() override;
 
     void onSuccess(const WebVector<WebVRDevice>&) override;
@@ -25,7 +28,7 @@ public:
 
 private:
     Persistent<ScriptPromiseResolver> m_resolver;
-    Persistent<VRHardwareUnitCollection> m_hardwareUnits;
+    Persistent<VRDisplayCollection> m_displays;
 };
 
 } // namespace blink

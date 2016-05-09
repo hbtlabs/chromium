@@ -45,12 +45,6 @@ public abstract class ChromeSwitches {
      */
     public static final String DISABLE_CRASH_DUMP_UPLOAD = "disable-dump-upload";
 
-    /** Enable debug logs for the video casting feature. */
-    public static final String ENABLE_CAST_DEBUG_LOGS = "enable-cast-debug";
-
-    /** Prevent automatic reconnection to current Cast video when Chrome restarts. */
-    public static final String DISABLE_CAST_RECONNECTION = "disable-cast-reconnection";
-
     /** Whether or not to enable the experimental tablet tab stack. */
     public static final String ENABLE_TABLET_TAB_STACK = "enable-tablet-tab-stack";
 
@@ -226,6 +220,9 @@ public abstract class ChromeSwitches {
     public static final String HERB_FLAVOR_DILL = "Dill";
     public static final String HERB_FLAVOR_ELDERBERRY = "Elderberry";
 
+    public static final String DISABLE_APP_LINK = "disable-app-link";
+    public static final String ENABLE_APP_LINK = "enable-app-link";
+
     /**
      * Enable tab switcher in document mode (merged tabs and apps option).
      */
@@ -236,6 +233,11 @@ public abstract class ChromeSwitches {
      * Set the partner-defined homepage URL, for testing.
      */
     public static final String PARTNER_HOMEPAGE_FOR_TESTING = "partner-homepage-for-testing";
+
+    /**
+     * Enables the all bookmarks section in bookmark manager.
+     */
+    public static final String ENABLE_ALL_BOOKMARKS_VIEW = "enable-all-bookmarks-view";
 
     // Prevent instantiation.
     private ChromeSwitches() {}

@@ -514,20 +514,42 @@ public:
         ThreadedTesterBase::test(new ThreadedHeapTester);
     }
 
+    ~ThreadedHeapTester() override
+    {
+        // Verify that the threads cleared their CTPs when
+        // terminating, preventing access to a finalized heap.
+        for (auto& globalIntWrapper : m_crossPersistents) {
+            ASSERT(globalIntWrapper.get());
+            EXPECT_FALSE(globalIntWrapper.get()->get());
+        }
+    }
+
 protected:
     using GlobalIntWrapperPersistent = CrossThreadPersistent<IntWrapper>;
+
+    Mutex m_mutex;
+    Vector<OwnPtr<GlobalIntWrapperPersistent>> m_crossPersistents;
 
     PassOwnPtr<GlobalIntWrapperPersistent> createGlobalPersistent(int value)
     {
         return adoptPtr(new GlobalIntWrapperPersistent(IntWrapper::create(value)));
     }
 
+    void addGlobalPersistent()
+    {
+        MutexLocker lock(m_mutex);
+        m_crossPersistents.append(createGlobalPersistent(0x2a2a2a2a));
+    }
+
     void runThread() override
     {
-        OwnPtr<GlobalIntWrapperPersistent> longLivingPersistent;
         ThreadState::attachCurrentThread(false);
 
-        longLivingPersistent = createGlobalPersistent(0x2a2a2a2a);
+        // Add a cross-thread persistent from this thread; the test object
+        // verifies that it will have been cleared out after the threads
+        // have all detached, running their termination GCs while doing so.
+        addGlobalPersistent();
+
         int gcCount = 0;
         while (!done()) {
             ThreadState::current()->safePoint(BlinkGC::NoHeapPointersOnStack);
@@ -562,12 +584,6 @@ protected:
             SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
             testing::yieldCurrentThread();
         }
-
-        // Intentionally leak the cross-thread persistent so as to verify
-        // that later GCs correctly handle cross-thread persistents that
-        // refer to finalized objects after their heaps have been detached
-        // and freed.
-        EXPECT_TRUE(longLivingPersistent.leakPtr());
 
         ThreadState::detachCurrentThread();
         atomicDecrement(&m_threadsToFinish);
@@ -6498,13 +6514,26 @@ public:
     }
 
 private:
+    void runWhileAttached();
+
     void runThread() override
     {
         ThreadState::attachCurrentThread(false);
         EXPECT_EQ(42, threadSpecificIntWrapper().value());
+        runWhileAttached();
         ThreadState::detachCurrentThread();
         atomicDecrement(&m_threadsToFinish);
     }
+
+    class HeapObject;
+    friend class HeapObject;
+
+    using WeakHeapObjectSet = PersistentHeapHashSet<WeakMember<HeapObject>>;
+
+    static WeakHeapObjectSet& weakHeapObjectSet();
+
+    using HeapObjectSet = PersistentHeapHashSet<Member<HeapObject>>;
+    static HeapObjectSet& heapObjectSet();
 
     static IntWrapper& threadSpecificIntWrapper()
     {
@@ -6519,6 +6548,69 @@ private:
         return *handle;
     }
 };
+
+class ThreadedClearOnShutdownTester::HeapObject final : public GarbageCollectedFinalized<ThreadedClearOnShutdownTester::HeapObject> {
+public:
+    static HeapObject* create(bool testDestructor)
+    {
+        return new HeapObject(testDestructor);
+    }
+
+    ~HeapObject()
+    {
+        if (!m_testDestructor)
+            return;
+
+        // Verify that the weak reference is gone.
+        EXPECT_FALSE(weakHeapObjectSet().contains(this));
+
+        // Add a new member to the static singleton; this will
+        // re-initializes the persistent node of the collection
+        // object. Done while terminating the test thread, so
+        // verify that this brings about the release of the
+        // persistent also.
+        heapObjectSet().add(create(false));
+    }
+
+    DEFINE_INLINE_TRACE() { }
+
+private:
+    explicit HeapObject(bool testDestructor)
+        : m_testDestructor(testDestructor)
+    {
+    }
+
+    bool m_testDestructor;
+};
+
+ThreadedClearOnShutdownTester::WeakHeapObjectSet& ThreadedClearOnShutdownTester::weakHeapObjectSet()
+{
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(
+        ThreadSpecific<WeakHeapObjectSet>, singleton,
+        new ThreadSpecific<WeakHeapObjectSet>);
+    if (!singleton.isSet())
+        singleton->registerAsStaticReference();
+
+    return *singleton;
+}
+
+ThreadedClearOnShutdownTester::HeapObjectSet& ThreadedClearOnShutdownTester::heapObjectSet()
+{
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(
+        ThreadSpecific<HeapObjectSet>, singleton,
+        new ThreadSpecific<HeapObjectSet>);
+    if (!singleton.isSet())
+        singleton->registerAsStaticReference();
+
+    return *singleton;
+}
+
+void ThreadedClearOnShutdownTester::runWhileAttached()
+{
+    EXPECT_EQ(42, threadSpecificIntWrapper().value());
+    // Creates a thread-specific singleton to a weakly held object.
+    weakHeapObjectSet().add(HeapObject::create(true));
+}
 
 } // namespace
 

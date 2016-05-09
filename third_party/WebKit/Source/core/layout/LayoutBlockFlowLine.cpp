@@ -1576,6 +1576,7 @@ void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& pa
 
             if (o->isAtomicInlineLevel() || o->isFloating() || o->isOutOfFlowPositioned()) {
                 LayoutBox* box = toLayoutBox(o);
+                box->setMayNeedPaintInvalidation();
 
                 updateBlockChildDirtyBitsBeforeLayout(relayoutChildren, *box);
 
@@ -2071,7 +2072,7 @@ void LayoutBlockFlow::invalidateDisplayItemClientsOfFirstLine()
 PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
     if (containsFloats())
-        paintInvalidationState.enclosingSelfPaintingLayer(*this).setNeedsPaintPhaseFloat();
+        paintInvalidationState.paintingLayer().setNeedsPaintPhaseFloat();
 
     PaintInvalidationReason reason = LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
     if (reason == PaintInvalidationNone)

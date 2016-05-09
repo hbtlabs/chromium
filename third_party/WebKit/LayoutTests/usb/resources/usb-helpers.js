@@ -34,10 +34,12 @@ function runGarbageCollection() {
 
 function usbMocks(mojo) {
   return define('USB Mocks', [
+    'mojo/public/js/bindings',
+    'mojo/public/js/connection',
     'device/usb/public/interfaces/chooser_service.mojom',
     'device/usb/public/interfaces/device_manager.mojom',
     'device/usb/public/interfaces/device.mojom',
-  ], (chooserService, deviceManager, device) => {
+  ], (bindings, connection, chooserService, deviceManager, device) => {
     function assertDeviceInfoEquals(device, info) {
       assert_equals(device.guid, info.guid);
       assert_equals(device.usbVersionMajor, info.usb_version_major);
@@ -126,21 +128,12 @@ function usbMocks(mojo) {
       assert_equals(endpoint.packetSize, info.packet_size);
     }
 
-    class MockDevice extends device.Device.stubClass {
-      constructor(info, pipe, closeHandler) {
-        super();
+    class MockDevice {
+      constructor(info) {
         this.info_ = info;
-        this.pipe_ = pipe;
-        this.router_ = new mojo.router.Router(pipe);
-        this.router_.setIncomingReceiver(this);
-        this.router_.setErrorHandler(() => {
-          if (this.opened_)
-            this.close();
-        });
         this.opened_ = false;
         this.currentConfiguration_ = undefined;
         this.claimedInterfaces_ = new Map();
-        this.closeHandler_ = closeHandler;
       }
 
       getDeviceInfo() {
@@ -165,7 +158,6 @@ function usbMocks(mojo) {
       close() {
         assert_true(this.opened_);
         this.opened_ = false;
-        this.closeHandler_();
         return Promise.resolve({ error: device.OpenDeviceError.OK });
       }
 
@@ -330,54 +322,48 @@ function usbMocks(mojo) {
       }
     };
 
-    class MockDeviceManager extends deviceManager.DeviceManager.stubClass {
+    class MockDeviceManager {
       constructor() {
-        super();
-        this.router_ = null;
         this.mockDevices_ = new Map();
-        this.addedDevices_ = [];
-        this.removedDevices_ = [];
-        this.deviceChangePromiseResolvers_ = [];
         this.deviceCloseHandler_ = null;
+        this.client_ = null;
+      }
+
+      bindToPipe(pipe) {
+        this.stub_ = connection.bindHandleToStub(
+            pipe, deviceManager.DeviceManager);
+        bindings.StubBindings(this.stub_).delegate = this;
       }
 
       reset() {
         this.mockDevices_.forEach(device => {
-          for (var handle of device.handles)
-            mojo.core.close(handle.pipe_);
-          this.removedDevices_.push(device.info);
+          for (var stub of device.stubs)
+            bindings.StubBindings(stub).close();
         });
         this.mockDevices_.clear();
-        this.maybeResolveDeviceChangePromise();
       }
 
       addMockDevice(info) {
         let device = {
           info: info,
-          handles: []
+          stubs: []
         };
         this.mockDevices_.set(info.guid, device);
-        this.addedDevices_.push(info);
-        this.maybeResolveDeviceChangePromise();
+        if (this.client_)
+          this.client_.onDeviceAdded(info);
       }
 
       removeMockDevice(info) {
         let device = this.mockDevices_.get(info.guid);
-        for (var handle of device.handles)
-          mojo.core.close(handle.pipe_);
+        for (var stub of device.stubs)
+          bindings.StubBindings(stub).close();
         this.mockDevices_.delete(info.guid);
-        this.removedDevices_.push(info);
-        this.maybeResolveDeviceChangePromise();
+        if (this.client_)
+          this.client_.onDeviceRemoved(info);
       }
 
       setDeviceCloseHandler(handler) {
         this.deviceCloseHandler_ = handler;
-      }
-
-      bindToPipe(pipe) {
-        assert_equals(this.router_, null);
-        this.router_ = new mojo.router.Router(pipe);
-        this.router_.setIncomingReceiver(this);
       }
 
       getDevices(options) {
@@ -388,60 +374,35 @@ function usbMocks(mojo) {
         return Promise.resolve({ results: devices });
       }
 
-      getDeviceChanges() {
-        let promise = new Promise((resolve, reject) => {
-          this.deviceChangePromiseResolvers_.push(resolve);
-        });
-        this.maybeResolveDeviceChangePromise();
-        return promise;
-      }
-
-      maybeResolveDeviceChangePromise() {
-        if (this.addedDevices_.length == 0 &&
-            this.removedDevices_.length == 0) {
-          return;
-        }
-
-        let resolve = this.deviceChangePromiseResolvers_.shift();
-        if (resolve === undefined)
-          return;
-
-        resolve({
-          changes: {
-            devices_added: this.addedDevices_,
-            devices_removed: this.removedDevices_
-          }
-        });
-        this.addedDevices_ = [];
-        this.removedDevices_ = [];
-      }
-
-      getDevice(guid, pipe) {
+      getDevice(guid, stub) {
         let device = this.mockDevices_.get(guid);
         if (device === undefined) {
-          mojo.core.close(pipe);
+          bindings.StubBindings(stub).close();
         } else {
-          var mock = new MockDevice(device.info, pipe, () => {
+          var mock = new MockDevice(device.info);
+          bindings.StubBindings(stub).delegate = mock;
+          bindings.StubBindings(stub).connectionErrorHandler = () => {
             if (this.deviceCloseHandler_)
               this.deviceCloseHandler_(device.info);
-          });
-          device.handles.push(mock);
+          };
+          device.stubs.push(stub);
         }
+      }
+
+      setClient(client) {
+        this.client_ = client;
       }
     }
 
-    class MockChooserService
-        extends chooserService.ChooserService.stubClass {
+    class MockChooserService {
       constructor() {
-        super();
-        this.router_ = null;
         this.chosenDevice_ = null;
       }
 
       bindToPipe(pipe) {
-        assert_equals(this.router_, null);
-        this.router_ = new mojo.router.Router(pipe);
-        this.router_.setIncomingReceiver(this);
+        this.stub_ = connection.bindHandleToStub(
+            pipe, chooserService.ChooserService);
+        bindings.StubBindings(this.stub_).delegate = this;
       }
 
       setChosenDevice(deviceInfo) {

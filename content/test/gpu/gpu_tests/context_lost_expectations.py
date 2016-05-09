@@ -31,16 +31,16 @@ class ContextLostExpectations(GpuTestExpectations):
     self.Skip('ContextLost.WebGLContextLostFromSelectElement',
               ['lion', 'debug'], bug=498149)
 
-    # Flakily failing due to assertion failure on trybots. Flaky retry
-    # mechanism is not working for this failure mode. Skip
-    # temporarily. See also Issue 608923.
-    self.Skip('GpuCrash.GPUProcessCrashesExactlyOnce',
-              ['linux', 'mac', 'win'], bug=608946)
+    # Flaky on linux_chromium_rel_ng and mac_chromium_rel_ng bots.
+    self.Flaky('GpuCrash.GPUProcessCrashesExactlyOnce',
+               ['linux'], bug=608923)
+    self.Flaky('GpuCrash.GPUProcessCrashesExactlyOnce',
+               ['mac'], bug=608923)
 
     # 'Browser must support tab control' raised on Android
     self.Fail('GpuCrash.GPUProcessCrashesExactlyOnce',
               ['android'], bug=609629)
     self.Fail('ContextLost.WebGLContextLostFromGPUProcessExit',
               ['android'], bug=609629)
-    self.Fail('ContextLost.WebGLContextListInHiddenTab',
+    self.Fail('ContextLost.WebGLContextLostInHiddenTab',
               ['android'], bug=609629)

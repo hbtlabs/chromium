@@ -13,6 +13,7 @@
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "ui/gfx/display.h"
 
 namespace mus {
 class WindowManagerClient;
@@ -67,6 +68,8 @@ class RootWindowController : public mus::WindowObserver,
 
   void OnAccelerator(uint32_t id, const ui::Event& event);
 
+  const gfx::Display& display() const { return display_; }
+
   ShelfLayoutManager* GetShelfLayoutManager();
   StatusLayoutManager* GetStatusLayoutManager();
 
@@ -79,7 +82,7 @@ class RootWindowController : public mus::WindowObserver,
   // WindowTreeDelegate:
   void OnEmbed(mus::Window* root) override;
   void OnConnectionLost(mus::WindowTreeConnection* connection) override;
-  void OnEventObserved(const ui::Event& event) override;
+  void OnEventObserved(const ui::Event& event, mus::Window* target) override;
 
   // mus::WindowObserver:
   void OnWindowDestroyed(mus::Window* window) override;
@@ -99,7 +102,7 @@ class RootWindowController : public mus::WindowObserver,
 
   std::unique_ptr<ShadowController> shadow_controller_;
 
-  mus::mojom::DisplayPtr display_;
+  gfx::Display display_;
 
   DISALLOW_COPY_AND_ASSIGN(RootWindowController);
 };

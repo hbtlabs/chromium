@@ -35,7 +35,6 @@ BackspaceDefaultHandler status=test
 CacheIgnoreSearchOption status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
-ColumnFill status=stable
 CompositedSelectionUpdate
 CompositorWorker status=experimental
 ContextMenu status=experimental
@@ -80,7 +79,6 @@ ForceDisplayList2dCanvas
 ForceDisable2dCanvasCopyOnWrite
 ExecCommandInJavaScript status=test
 ComputedAccessibilityInfo status=experimental
-EventListenerOptions status=stable
 ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
 ExperimentalFramework status=stable
@@ -204,6 +202,7 @@ StyleMatchedPropertiesCache status=stable
 // be shipped would be enabled. Instead, remove the flag from the shipping
 // interface.
 ExperimentalStream status=experimental
+StorageEstimate status=experimental
 Suborigins status=experimental
 // Many websites disable mouse support when touch APIs are available.  We'd
 // like to enable this always but can't until more websites fix this bug.

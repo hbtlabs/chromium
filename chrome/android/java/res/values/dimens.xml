@@ -112,9 +112,12 @@
     <dimen name="password_generation_horizontal_margin">10dp</dimen>
     <dimen name="password_generation_text_vertical_margin">12dp</dimen>
 
-    <!--  Preferences dimensions -->
+    <!-- Preferences dimensions -->
     <dimen name="pref_autofill_field_horizontal_padding">3dp</dimen>
     <dimen name="pref_autofill_field_top_padding">10dp</dimen>
+
+    <!-- Site Settings dimensions -->
+    <dimen name="site_setttings_icon_padding">4.6dp</dimen>
 
     <!-- Minimum height/width for a touchable item -->
     <dimen name="min_touch_target_size">48dp</dimen>
@@ -260,6 +263,7 @@
     <dimen name="ntp_shadow_height">9dp</dimen>
     <dimen name="snippets_thumbnail_size">72dp</dimen>
     <dimen name="snippets_padding_and_peeking_card_height">16dp</dimen>
+    <dimen name="snippets_vertical_spacing">1dp</dimen>
 
     <!-- Interests page -->
     <dimen name="ntp_interest_item_text_size">20sp</dimen>
@@ -314,9 +318,15 @@
     <dimen name="payments_section_vertical_spacing">10dp</dimen>
     <dimen name="payments_section_small_spacing">8dp</dimen>
     <dimen name="payments_section_large_spacing">16dp</dimen>
+    <dimen name="payments_section_largest_spacing">32dp</dimen>
     <dimen name="payments_section_descriptive_item_spacing">40dp</dimen>
     <dimen name="payments_section_separator_height">1dp</dimen>
     <dimen name="payments_section_logo_height">36dp</dimen>
     <dimen name="payments_section_logo_width">56dp</dimen>
+    <dimen name="payments_ui_max_dialog_width">600dp</dimen>
     <dimen name="payments_ui_translation">100dp</dimen>
+
+    <!-- Dialog dimensions.
+         https://www.google.com/design/spec/components/dialogs.html#dialogs-simple-dialogs -->
+    <dimen name="dialog_width_unit">56dp</dimen>  <!-- MD dialog widths are multiples of this. -->
 </resources>

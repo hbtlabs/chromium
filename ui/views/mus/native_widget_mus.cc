@@ -377,6 +377,17 @@ void NativeWidgetMus::NotifyFrameChanged(
   }
 }
 
+// static
+Widget* NativeWidgetMus::GetWidgetForWindow(mus::Window* window) {
+  if (!window)
+    return nullptr;
+  NativeWidgetMus* native_widget =
+      window->GetLocalProperty(kNativeWidgetMusKey);
+  if (!native_widget)
+    return nullptr;
+  return native_widget->GetWidget();
+}
+
 aura::Window* NativeWidgetMus::GetRootWindow() {
   return window_tree_host_->window();
 }
@@ -435,6 +446,8 @@ void NativeWidgetMus::UpdateClientArea() {
 void NativeWidgetMus::ConfigurePropertiesForNewWindow(
     const Widget::InitParams& init_params,
     std::map<std::string, std::vector<uint8_t>>* properties) {
+  properties->insert(init_params.mus_properties.begin(),
+                     init_params.mus_properties.end());
   if (!init_params.bounds.IsEmpty()) {
     (*properties)[mus::mojom::WindowManager::kUserSetBounds_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(init_params.bounds);
@@ -796,8 +809,8 @@ bool NativeWidgetMus::IsVisible() const {
 }
 
 void NativeWidgetMus::Activate() {
-  if (window_tree_host_)
-    window_tree_host_->platform_window()->Activate();
+  if (window_)
+    window_->SetFocus();
 }
 
 void NativeWidgetMus::Deactivate() {

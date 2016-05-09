@@ -77,7 +77,6 @@ crbug.com/538697 [ Win7 Debug ] printing/webgl-oversized-printing.html [ Crash ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-strokeRect-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-paths-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-transform-shadow-in-worker.html [ Failure ]
-crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-pattern-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-gradients-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-drawImage-in-worker.html [ Failure ]
 
@@ -514,9 +513,9 @@ crbug.com/412381 imported/web-platform-tests/mediacapture-streams/GUM-trivial-co
 crbug.com/412381 imported/web-platform-tests/mediacapture-streams/GUM-unknownkey-option-param.html [ Failure ]
 crbug.com/412381 imported/web-platform-tests/mediacapture-streams/MediaStream-MediaElement-preload-none.html [ Pass Timeout Failure ]
 
-crbug.com/325673 imported/web-platform-tests/custom-elements/concepts/custom-elements-type-allowed-chars-first-char.html [ Failure Timeout ]
-crbug.com/325673 imported/web-platform-tests/custom-elements/concepts/custom-elements-type-allowed-chars.html [ Failure Timeout ]
-crbug.com/325673 imported/web-platform-tests/custom-elements/concepts/custom-elements-type-naming.html [ Failure ]
+crbug.com/325673 imported/web-platform-tests/custom-elements/v0/concepts/custom-elements-type-allowed-chars-first-char.html [ Failure Timeout ]
+crbug.com/325673 imported/web-platform-tests/custom-elements/v0/concepts/custom-elements-type-allowed-chars.html [ Failure Timeout ]
+crbug.com/325673 imported/web-platform-tests/custom-elements/v0/concepts/custom-elements-type-naming.html [ Failure ]
 
 crbug.com/396825 fast/repaint/outline-change-invalidation.html [ NeedsManualRebaseline ]
 crbug.com/396825 fast/repaint/outline-clip-change.html [ NeedsManualRebaseline ]
@@ -536,7 +535,7 @@ crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/styles/test-00
 crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/user-interaction/focus-navigation/test-002.html [ Failure ]
 crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/user-interaction/focus-navigation/test-003.html [ Failure ]
 crbug.com/505364 imported/web-platform-tests/shadow-dom/untriaged/user-interaction/focus-navigation/test-004.html [ Failure ]
-crbug.com/505364 imported/web-platform-tests/custom-elements/instantiating-custom-elements/extensions-to-document-interface/create-element-interface-type-is-a-type-extension.html [ Failure ]
+crbug.com/505364 imported/web-platform-tests/custom-elements/v0/instantiating/extensions-to-document-interface/create-element-interface-type-is-a-type-extension.html [ Failure ]
 crbug.com/505364 imported/csswg-test/css-scoping-1/css-scoping-shadow-slot-display-override.html [ Failure ]
 
 crbug.com/517840 imported/web-platform-tests/webrtc/rtcpeerconnection/rtcpeerconnection-idl.html [ Failure Timeout ]
@@ -750,7 +749,6 @@ crbug.com/396775 compositing/overflow/reflected-overlay-scrollbars-should-appear
 crbug.com/396775 virtual/prefer_compositing_to_lcd_text/compositing/overflow/reflected-overlay-scrollbars-should-appear-without-compositing.html [ Failure ]
 
 crbug.com/381684 [ Mac Win ] fonts/family-fallback-gardiner.html [ Skip ]
-
 crbug.com/467635 fast/dom/HTMLImageElement/image-sizes-meta-viewport.html [ Skip ]
 
 # crbug.com/396823 [ Mac ] fast/multicol/multicol-with-child-renderLayer-for-input.html [ Failure ]
@@ -1179,6 +1177,11 @@ crbug.com/531286 virtual/gpu/fast/canvas/yuv-video-on-accelerated-canvas.html [ 
 
 crbug.com/596752 virtual/threaded/inspector/tracing/decode-resize.html [ Pass Failure ]
 
+crbug.com/610300 [ Linux Trusty ] css3/fonts/font-style-matching-4.html [ Failure Pass ]
+crbug.com/610300 [ Linux Trusty ] css3/fonts/font-style-matching-5.html [ Failure Pass ]
+crbug.com/610300 [ Linux Trusty ] css3/fonts/font-style-matching-7.html [ Failure Pass ]
+crbug.com/610300 [ Linux Trusty ] css3/fonts/font-style-matching-8.html [ Failure Pass ]
+
 crbug.com/524646 [ Mac10.10 ] fast/dom/shadow/shadowdom-for-button.html [ Failure ]
 
 crbug.com/538717 [ Win Mac Linux ] http/tests/permissions/chromium/test-request-multiple-window.html [ Failure Pass Timeout ]
@@ -1207,8 +1210,6 @@ crbug.com/581468 http/tests/inspector/resource-tree/resource-tree-non-unique-url
 crbug.com/571710 http/tests/inspector/search/source-frame-search.html [ Timeout Pass ]
 
 crbug.com/571721 inspector/console/console-xpath.html [ Timeout Pass ]
-
-crbug.com/602785 css3/filters/effect-reference-subregion-hw.html [ NeedsManualRebaseline ]
 
 crbug.com/580378 [ Mac ] fast/replaced/width100percent-searchfield.html [ Failure Pass ]
 
@@ -1244,7 +1245,8 @@ crbug.com/587136 [ Linux Debug ] http/tests/security/xss-DENIED-cross-origin-sta
 
 crbug.com/587593 [ Android ] fast/js/pic/cached-single-entry-transition.html [ Pass Failure ]
 
-crbug.com/587779 [ Linux Mac10.10 Mac10.11 Retina ] fast/dynamic/window-resize-scrollbars-test.html [ Timeout Failure Pass ]
+crbug.com/587779 [ Linux Mac10.9 Mac10.10 Mac10.11 Retina ] fast/dynamic/window-resize-scrollbars-test.html [ Timeout Failure Pass ]
+
 crbug.com/588103 fast/xmlhttprequest/xmlhttprequest-responsetype-arraybuffer.html [ Pass Failure ]
 
 crbug.com/594672 fast/events/iframe-object-onload.html [ Failure Pass ]
@@ -1257,10 +1259,6 @@ crbug.com/594672 virtual/pointerevent/fast/events/updateLayoutForHitTest.html [ 
 crbug.com/594672 virtual/trustedeventsdefaultaction/fast/events/iframe-object-onload.html [ Failure Pass ]
 crbug.com/594672 virtual/trustedeventsdefaultaction/fast/events/scale-and-scroll-iframe-body.html [ Failure Pass ]
 crbug.com/594672 virtual/trustedeventsdefaultaction/fast/events/updateLayoutForHitTest.html [ Failure Pass ]
-
-crbug.com/605515 svg/batik/filters/feTile.svg                                   [ NeedsManualRebaseline ]
-crbug.com/605515 svg/batik/text/textFeatures.svg                                [ NeedsManualRebaseline ]
-crbug.com/605515 svg/batik/text/smallFonts.svg                                  [ NeedsManualRebaseline ]
 
 crbug.com/540528 [ Linux ] intersection-observer/remove-element.html [ Leak ]
 crbug.com/603728 [ Linux ] virtual/gpu-rasterization/fast/images/color-profile-filter.html [ Failure Timeout Pass ]
@@ -1288,8 +1286,13 @@ crbug.com/453002 [ Win ] fast/text/orientation-sideways.html [ Failure Pass ]
 crbug.com/587737 [ Mac10.11 Retina ] virtual/gpu-rasterization/fast/images/color-profile-filter.html [ Timeout Failure ]
 
 crbug.com/602933 fast/canvas/canvas-incremental-repaint.html [ NeedsManualRebaseline ]
-crbug.com/602933 virtual/gpu/fast/canvas/canvas-incremental-repaint.html [ NeedsManualRebaseline ]
-crbug.com/602933 virtual/display_list_2d_canvas/fast/canvas/canvas-incremental-repaint.html [ NeedsManualRebaseline ]
+
+crbug.com/606196 fast/writing-mode/text-combine-various-fonts.html [ NeedsRebaseline ]
+crbug.com/606196 [ Win ] fast/text/emphasis.html [ NeedsRebaseline ]
+crbug.com/606196 fast/writing-mode/japanese-rl-selection.html [ NeedsRebaseline ]
+crbug.com/606196 fast/text/emphasis-vertical.html [ NeedsRebaseline ]
+crbug.com/606196 fast/writing-mode/japanese-lr-selection.html [ NeedsRebaseline ]
+crbug.com/606196 [ Win ] fast/text/unicode-fallback-font.html [ NeedsRebaseline ]
 
 crbug.com/599975 [ Android ] media/video-autoplay.html [ Crash Timeout ]
 
@@ -1311,7 +1314,7 @@ crbug.com/593679 virtual/scalefactor200withzoom/fast/hidpi/static/calendar-picke
 
 crbug.com/605525 [ Win ] http/tests/xmlhttprequest/redirect-cross-origin-post.html [ Failure Pass ]
 
-crbug.com/603703 [ Linux ] imported/web-platform-tests/web-animations/animation-timeline/document-timeline.html [ Failure Pass ]
+crbug.com/603703 [ Linux Mac ] imported/web-platform-tests/web-animations/animation-timeline/document-timeline.html [ Failure Pass ]
 
 crbug.com/600248 imported/web-platform-tests/web-animations/animation-effect-timing/endDelay.html [ Failure ]
 crbug.com/600248 imported/web-platform-tests/web-animations/animation/constructor.html [ Failure Timeout ]

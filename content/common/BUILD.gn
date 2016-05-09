@@ -39,7 +39,6 @@ source_set("common") {
     "//base/third_party/dynamic_annotations",
     "//build/util:webkit_version",
     "//cc",
-    "//cc/blink",
     "//cc/surfaces",
     "//components/mus/public/interfaces",
     "//components/tracing",
@@ -73,7 +72,7 @@ source_set("common") {
     "//services/shell/runner/common",
     "//skia",
     "//storage/common",
-    "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:blink_minimal",
     "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
@@ -231,7 +230,6 @@ mojom("mojo_bindings") {
     "render_widget_window_tree_client_factory.mojom",
     "service_worker/embedded_worker_setup.mojom",
     "storage_partition_service.mojom",
-    "vr_service.mojom",
   ]
 
   import_dirs = [ "//mojo/services" ]

@@ -31,6 +31,7 @@ namespace base {
 class SequencedTaskRunner;
 class Time;
 class TimeDelta;
+class TimeTicks;
 }
 
 namespace offline_pages {
@@ -40,8 +41,10 @@ static const int64_t kInvalidOfflineId = 0;
 
 struct ClientId;
 
+class ClientPolicyController;
 struct OfflinePageItem;
 class OfflinePageMetadataStore;
+class OfflinePageStorageManager;
 
 // Service for saving pages offline, storing the offline copy and metadata, and
 // retrieving them upon request.
@@ -74,8 +77,9 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
     STORE_FAILURE,
     ALREADY_EXISTS,
     // Certain pages, i.e. file URL or NTP, will not be saved because these
-    // are already locally accisible.
+    // are already locally accessible.
     SKIPPED,
+    SECURITY_CERTIFICATE_ERROR,
     // NOTE: always keep this entry at the end. Add new result types only
     // immediately above this line. Make sure to update the corresponding
     // histogram enum accordingly.
@@ -175,8 +179,9 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
                              const DeletePageCallback& callback);
 
   // Deletes offline pages related to the passed |offline_ids|.
-  void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
-                              const DeletePageCallback& callback);
+  // Making virtual for test purposes.
+  virtual void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
+                                      const DeletePageCallback& callback);
 
   // Wipes out all the data by deleting all saved files and clearing the store.
   void ClearAll(const base::Closure& callback);
@@ -197,7 +202,8 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
                               const CheckPagesExistOfflineCallback& callback);
 
   // Gets all available offline pages.
-  void GetAllPages(const MultipleOfflinePageItemCallback& callback);
+  // Making virtual for test purposes.
+  virtual void GetAllPages(const MultipleOfflinePageItemCallback& callback);
 
   // Gets all offline ids where the offline page has the matching client id.
   void GetOfflineIdsForClientId(const ClientId& client_id,
@@ -257,10 +263,22 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
                                int64_t free_space_bytes,
                                bool reporting_after_delete);
 
+  // Returns the policy controller.
+  // Making virtual for test purposes.
+  virtual ClientPolicyController* GetPolicyController();
+
   // Methods for testing only:
   OfflinePageMetadataStore* GetStoreForTesting();
 
-  bool is_loaded() const { return is_loaded_; }
+  OfflinePageStorageManager* GetStorageManager();
+
+  // Making virtual for test purposes.
+  virtual bool is_loaded() const;
+
+ protected:
+  // Adding a protected constructor for testing-only purposes in
+  // offline_page_storage_manager_unittest.cc
+  OfflinePageModel();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OfflinePageModelTest, MarkPageForDeletion);
@@ -268,7 +286,7 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
   typedef ScopedVector<OfflinePageArchiver> PendingArchivers;
 
   // Callback for ensuring archive directory is created.
-  void OnEnsureArchivesDirCreatedDone();
+  void OnEnsureArchivesDirCreatedDone(const base::TimeTicks& start_time);
 
   void GetAllPagesAfterLoadDone(
       const MultipleOfflinePageItemCallback& callback);
@@ -293,7 +311,8 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
                              const HasPagesCallback& callback) const;
 
   // Callback for loading pages from the offline page metadata store.
-  void OnLoadDone(OfflinePageMetadataStore::LoadStatus load_status,
+  void OnLoadDone(const base::TimeTicks& start_time,
+                  OfflinePageMetadataStore::LoadStatus load_status,
                   const std::vector<OfflinePageItem>& offline_pages);
 
   // Steps for saving a page offline.
@@ -380,6 +399,13 @@ class OfflinePageModel : public KeyedService, public base::SupportsUserData {
 
   // Delayed tasks that should be invoked after the loading is done.
   std::vector<base::Closure> delayed_tasks_;
+
+  // Controller of the client policies.
+  std::unique_ptr<ClientPolicyController> policy_controller_;
+
+  // Manager for the storage consumed by archives and responsible for
+  // automatic page clearing.
+  std::unique_ptr<OfflinePageStorageManager> storage_manager_;
 
   base::WeakPtrFactory<OfflinePageModel> weak_ptr_factory_;
 

@@ -25781,6 +25781,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Net.DailyContentSavingPercent_DataReductionProxyEnabled_Video"
+    units="%">
+  <owner>bengr@chromium.org</owner>
+  <owner>bolian@chromium.org</owner>
+  <summary>
+    The percentage of data saving in the previous calendar day while the data
+    reduction proxy was enabled. A negative saving will be shown as zero. This
+    only counts responses while the data reduction proxy is enabled. The metric
+    is reported when the first response in the current day is received. If no
+    video bytes were received while the data reduction proxy was enabled, the
+    metric will not be reported.
+  </summary>
+</histogram>
+
 <histogram name="Net.DailyContentSavingPercent_ViaDataReductionProxy" units="%">
   <owner>bengr@chromium.org</owner>
   <owner>bolian@chromium.org</owner>
@@ -25789,6 +25803,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     reduction proxy. A negative saving will be shown as zero. This only counts
     responses via the data reduction proxy. The metric is reported when the
     first response in the current day is received.
+  </summary>
+</histogram>
+
+<histogram name="Net.DailyContentSavingPercent_ViaDataReductionProxy_Video"
+    units="%">
+  <owner>bengr@chromium.org</owner>
+  <owner>bolian@chromium.org</owner>
+  <summary>
+    The percentage of data saving in the previous calendar day via the data
+    reduction proxy. A negative saving will be shown as zero. This only counts
+    responses via the data reduction proxy. The metric is reported when the
+    first response in the current day is received. If no video bytes were
+    received via the data reduction proxy, the metric will not be reported.
   </summary>
 </histogram>
 
@@ -33216,6 +33243,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.OfflineUrlsLoadTime" units="ms">
+  <owner>dewittj@chromium.org</owner>
+  <summary>
+    The amount of time spent waiting for the offline page model to return which
+    New Tab Page URLs are available offline.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.OtherSessionsMenu" enum="OtherSessionsActions">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <obsolete>
@@ -33348,6 +33383,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>mastiz@chromium.org</owner>
   <summary>
     Response or error codes encountered when attempting to fetch snippets.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.FetchResult" enum="NtpSnippetsFetchResult">
+  <owner>mastiz@chromium.org</owner>
+  <summary>
+    Result of attempting a fetch, logged once per issued trigger.
   </summary>
 </histogram>
 
@@ -34226,6 +34268,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>jianli@chromium.org</owner>
   <summary>
     Whether an attempt to load the offline pages metadata store was successful.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Model.ArchiveDirCreationTime" units="ms">
+  <owner>dewittj@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    The amount of time to create the offline pages archive directory.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Model.ConstructionToLoadedEventTime" units="ms">
+  <owner>dewittj@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    The amount of time to create the offline pages archive directory and load
+    the offline page model.
   </summary>
 </histogram>
 
@@ -35550,9 +35609,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="PageLoad.Timing2.NavigationToFirstContentfulPaint" units="ms">
   <owner>ksakamoto@chromium.org</owner>
   <summary>
-    The time from navigation start to first &quot;contentful&quot; paint. For
-    now, this is the minimum of PageLoad.Timing2.NavigationToFirstTextPaint and
-    PageLoad.Timing2.NavigationToFirstImagePaint.
+    The time from navigation start to first &quot;contentful&quot; paint.
   </summary>
 </histogram>
 
@@ -49451,6 +49508,22 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     True if the chrome.packed.7z archive contains a patch (in which case a diff
     update is taking place) or false if it contains a full archive (in which
     case a new install or a full update is taking place).
+  </summary>
+</histogram>
+
+<histogram name="Setup.Install.PeakPagefileUsage" units="KB">
+  <owner>huangs@chromium.org</owner>
+  <summary>
+    The peak page file usage by setup.exe in KB during install or uninstall
+    attempt.
+  </summary>
+</histogram>
+
+<histogram name="Setup.Install.PeakWorkingSetSize" units="KB">
+  <owner>huangs@chromium.org</owner>
+  <summary>
+    The peak working set size of setup.exe in KB during install or uninstall
+    attempt.
   </summary>
 </histogram>
 
@@ -72277,6 +72350,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1340" label="URLMethodRevokeObjectURLServiceWorker"/>
   <int value="1341" label="DocumentCreateEventPaymentRequestUpdateEvent"/>
   <int value="1342" label="CredentialManagerGetReturnedCredential"/>
+  <int value="1343" label="GeolocationInsecureOriginDeprecatedNotRemoved"/>
+  <int value="1344"
+      label="GeolocationInsecureOriginIframeDeprecatedNotRemoved"/>
+  <int value="1345" label="ProgressElementWithNoneAppearance"/>
+  <int value="1346" label="ProgressElementWithProgressBarAppearance"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -76903,6 +76981,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1235586511" label="enable-datasaver-prompt"/>
   <int value="-1218608640" label="disable-offline-load-stale-cache"/>
   <int value="-1216837777" label="clear-data-reduction-proxy-data-savings"/>
+  <int value="-1212855900" label="enable-all-bookmarks-view"/>
   <int value="-1212273428" label="enable-experimental-app-list"/>
   <int value="-1212167260" label="disable-app-window-cycling"/>
   <int value="-1203742042" label="enable-gesture-selection"/>
@@ -77291,6 +77370,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1658644418" label="disable-app-list-voice-search"/>
   <int value="1661925474" label="silent-debugger-extension-api"/>
   <int value="1668611601" label="enable-encrypted-media"/>
+  <int value="1689123607" label="enable-app-link"/>
   <int value="1689183477" label="enable-merge-key-char-events"/>
   <int value="1694854500" label="disable-save-password-bubble"/>
   <int value="1696139514" label="enable-ble-advertising-in-apps"/>
@@ -77326,6 +77406,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1865799183" label="javascript-harmony"/>
   <int value="1881036528" label="disable-multilingual-spellchecker"/>
   <int value="1881174782" label="disable-brotli"/>
+  <int value="1889076955" label="disable-app-link"/>
   <int value="1891210939" label="enable-blink-features"/>
   <int value="1892201400" label="enable-password-separated-signin-flow"/>
   <int value="1896456311" label="enable-password-save-in-page-navigation"/>
@@ -79909,6 +79990,15 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="NTP Promo link clicked"/>
 </enum>
 
+<enum name="NtpSnippetsFetchResult" type="int">
+  <int value="0" label="Success"/>
+  <int value="1" label="Empty hosts"/>
+  <int value="2" label="URLRequestStatus error"/>
+  <int value="3" label="HTTP error"/>
+  <int value="4" label="JSON parse error"/>
+  <int value="5" label="Invalid snippet content"/>
+</enum>
+
 <enum name="NtpSuggestionsType" type="int">
   <int value="0" label="Client suggestion"/>
   <int value="1" label="Server suggestion"/>
@@ -79970,6 +80060,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="5" label="Store failure"/>
   <int value="6" label="Already exists"/>
   <int value="7" label="Skipped"/>
+  <int value="8" label="Security certificate error"/>
 </enum>
 
 <enum name="OfflinePagesSharedPageWasOffline" type="int">
@@ -89980,10 +90071,6 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Net.DailyContentLength"/>
   <affected-histogram name="Net.DailyContentLength_DataReductionProxyEnabled"/>
   <affected-histogram name="Net.DailyContentLength_ViaDataReductionProxy"/>
-  <affected-histogram
-      name="Net.DailyContentSavingPercent_DataReductionProxyEnabled"/>
-  <affected-histogram
-      name="Net.DailyContentSavingPercent_ViaDataReductionProxy"/>
   <affected-histogram name="Net.DailyOriginalContentLength"/>
   <affected-histogram
       name="Net.DailyOriginalContentLength_DataReductionProxyEnabled"/>
@@ -90962,6 +91049,16 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="KeysetLoaded" label="Latency for keyset config is loaded"/>
   <suffix name="LayoutLoaded" label="Latency for layout definition is loaded"/>
   <affected-histogram name="InputMethod.VirtualKeyboard.InitLatency"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="ImmediatePageLoadTiming" separator=".">
+  <suffix name="Immediate"
+      label="Logged immediately after a timing update is observed, unlike
+             normal PageLoad timing metrics, which are logged at the end of a
+             page's lifetime. This metric is temporary and is intended to
+             help loading-dev to understand the impact of logging metrics at
+             the end of a page load."/>
+  <affected-histogram name="PageLoad.Timing2.NavigationToFirstContentfulPaint"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="IndexedDBLevelDBErrnoMethods" separator=".">

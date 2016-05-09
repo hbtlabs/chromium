@@ -40,6 +40,8 @@ interface WindowManager {
   const string kWindowType_Property = "prop:window-type";
   // The window's title. Type: mojom::String
   const string kWindowTitle_Property = "prop:window-title";
+  // A flag controlling the window's presence on the mash shelf. Type: bool
+  const string kWindowIgnoredByShelf_Property = "prop:window-ignored-by-shelf";
   // The application ID (eg. 'mojo:foo'). Type: mojom::String
   const string kAppID_Property = "prop:app-id";
 
@@ -81,6 +83,7 @@ interface WindowManagerClient {
   // target window. The id is defined by the client and can be used to more
   // easily identify the accelerator's action. If an accelerator with the same
   // id or the same matcher already exists, then the accelerator is not added.
+  // Accelerator ids 1 << 31 and above are reserved for internal use.
   AddAccelerator(uint32 id, EventMatcher matcher) => (bool success);
   RemoveAccelerator(uint32 id);
 

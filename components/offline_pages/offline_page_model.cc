@@ -18,7 +18,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/offline_page_item.h"
+#include "components/offline_pages/offline_page_storage_manager.h"
 #include "components/offline_pages/proto/offline_pages.pb.h"
 #include "url/gurl.h"
 
@@ -67,6 +69,9 @@ SavePageResult ToSavePageResult(ArchiverResult archiver_result) {
     case ArchiverResult::ERROR_CANCELED:
       result = SavePageResult::CANCELLED;
       break;
+    case ArchiverResult::ERROR_SECURITY_CERTIFICATE:
+      result = SavePageResult::SECURITY_CERTIFICATE_ERROR;
+      break;
     default:
       NOTREACHED();
       result = SavePageResult::CONTENT_UNAVAILABLE;
@@ -107,6 +112,10 @@ bool OfflinePageModel::CanSavePage(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS();
 }
 
+// protected
+OfflinePageModel::OfflinePageModel()
+    : is_loaded_(false), weak_ptr_factory_(this) {}
+
 OfflinePageModel::OfflinePageModel(
     std::unique_ptr<OfflinePageMetadataStore> store,
     const base::FilePath& archives_dir,
@@ -115,11 +124,13 @@ OfflinePageModel::OfflinePageModel(
       archives_dir_(archives_dir),
       is_loaded_(false),
       task_runner_(task_runner),
+      policy_controller_(new ClientPolicyController()),
+      storage_manager_(new OfflinePageStorageManager(this)),
       weak_ptr_factory_(this) {
   task_runner_->PostTaskAndReply(
       FROM_HERE, base::Bind(EnsureArchivesDirCreated, archives_dir_),
       base::Bind(&OfflinePageModel::OnEnsureArchivesDirCreatedDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
 }
 
 OfflinePageModel::~OfflinePageModel() {
@@ -497,8 +508,20 @@ void OfflinePageModel::RecordStorageHistograms(int64_t total_space_bytes,
   }
 }
 
+ClientPolicyController* OfflinePageModel::GetPolicyController() {
+  return policy_controller_.get();
+}
+
 OfflinePageMetadataStore* OfflinePageModel::GetStoreForTesting() {
   return store_.get();
+}
+
+OfflinePageStorageManager* OfflinePageModel::GetStorageManager() {
+  return storage_manager_.get();
+}
+
+bool OfflinePageModel::is_loaded() const {
+  return is_loaded_;
 }
 
 void OfflinePageModel::OnCreateArchiveDone(const GURL& requested_url,
@@ -568,12 +591,17 @@ void OfflinePageModel::OnMarkPageAccesseDone(
   // should not have any impact to the UI.
 }
 
-void OfflinePageModel::OnEnsureArchivesDirCreatedDone() {
+void OfflinePageModel::OnEnsureArchivesDirCreatedDone(
+    const base::TimeTicks& start_time) {
+  UMA_HISTOGRAM_TIMES("OfflinePages.Model.ArchiveDirCreationTime",
+                      base::TimeTicks::Now() - start_time);
+
   store_->Load(base::Bind(&OfflinePageModel::OnLoadDone,
-                          weak_ptr_factory_.GetWeakPtr()));
+                          weak_ptr_factory_.GetWeakPtr(), start_time));
 }
 
 void OfflinePageModel::OnLoadDone(
+    const base::TimeTicks& start_time,
     OfflinePageMetadataStore::LoadStatus load_status,
     const std::vector<OfflinePageItem>& offline_pages) {
   DCHECK(!is_loaded_);
@@ -583,6 +611,9 @@ void OfflinePageModel::OnLoadDone(
 
   if (load_status == OfflinePageMetadataStore::LOAD_SUCCEEDED)
     CacheLoadedData(offline_pages);
+
+  UMA_HISTOGRAM_TIMES("OfflinePages.Model.ConstructionToLoadedEventTime",
+                      base::TimeTicks::Now() - start_time);
 
   // Run all the delayed tasks.
   for (const auto& delayed_task : delayed_tasks_)

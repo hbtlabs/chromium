@@ -4493,6 +4493,15 @@ Even if you have downloaded files from this website before, the website might ha
         <message name="IDS_MD_EXTENSIONS_ITEM_SOURCE" desc="The label above an extension's source, which indicates where the extension came from (webstore, third-party, local disk, etc).">
           Source
         </message>
+        <message name="IDS_MD_EXTENSIONS_ITEM_SOURCE_POLICY" desc="The text to indicate that an extension has been added by enterprise policy.">
+          Added by policy
+        </message>
+        <message name="IDS_MD_EXTENSIONS_ITEM_SOURCE_SIDELOADED" desc="The text to indicate that an extension has been added by a third-party program on the user's machine.">
+          Added by a third-party
+        </message>
+        <message name="IDS_MD_EXTENSIONS_ITEM_SOURCE_UNPACKED" desc="The text to indicate that an extension is loaded as an unpacked extension, as is done by developers.">
+          Unpacked extension
+        </message>
         <message name="IDS_MD_EXTENSIONS_ITEM_VERSION" desc="The label above an extension's version.">
           Version
         </message>
@@ -5584,7 +5593,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
           WebRTC H.264 software video encoder/decoder
         </message>
         <message name="IDS_FLAGS_WEBRTC_H264_WITH_OPENH264_FFMPEG_DESCRIPTION" desc="Description of chrome:flags option to enable WebRTC H.264 sw encoder/decoder">
-          When enabled, an H.264 software video encoder/decoder pair is included. (If a hardware decoder is also available it may be used instead of this decoder).
+          When enabled, an H.264 software video encoder/decoder pair is included. If a hardware encoder/decoder is also available it may be used instead of this encoder/decoder.
         </message>
       </if>
       <message name="IDS_FLAGS_WEBVR_NAME" desc="Name of the 'Enable WebVR' flag.">
@@ -6380,6 +6389,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Enable the new Translate bubble UX is offered instead of the infobar.
         </message>
       </if>
+      <message name="IDS_FLAGS_TRANSLATE_2016Q2_UI_NAME" desc="Name of the flag to enable the Translate 2016Q2 UI.">
+        Translate 2016Q2 UI
+      </message>
+      <message name="IDS_FLAGS_TRANSLATE_2016Q2_UI_DESCRIPTION" desc="Description for the flag to enable the Translate 2016Q2 UI.">
+        Improved triggering logic and look for Translate Bubble UI
+      </message>
       <message name="IDS_FLAGS_VIEWS_RECT_BASED_TARGETING_NAME" desc="Name of about:flags option for rect-based targeting in views">
         Rect-based targeting in views
       </message>
@@ -14780,6 +14795,21 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
     <message name="IDS_FLAGS_ENABLE_SCROLL_ANCHORING_DESCRIPTION" desc="Description of the scroll anchoring flag">
       Adjusts scroll position to prevent visible jumps when offscreen content changes.
     </message>
+    <message name="IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_DEFAULT" desc="Text to indicate that it'll use the platform settings to enable/disable all bookmarks view.">
+      Default
+    </message>
+    <message name="IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_ENABLED" desc="Text to indicate the all bookmarks view is enabled.">
+      Enabled
+    </message>
+    <message name="IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_DISABLED" desc="Text to indicate the all bookmarks view is disabled.">
+      Disabled
+    </message>
+    <message name="IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_NAME" desc="Name of the show all bookmarks view flag">
+      Enable "all bookmarks" section in bookmark manager.
+    </message>
+    <message name="IDS_FLAGS_SHOW_ALL_BOOKMARKS_VIEW_DESCRIPTION" desc="Description of the show all bookmarks view flag">
+      Enables the all bookmarks view as the default destination of the bookmark manager.
+    </message>
 
     <if expr="chromeos">
       <message name="IDS_FLAGS_ENABLE_NATIVE_CUPS_NAME" desc="Name of the native cups flag.">
@@ -14841,6 +14871,14 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       Never show this again.
     </message>
 
+    <if expr="is_android">
+      <message name="IDS_FLAGS_ENABLE_APP_LINK_NAME" desc="Name for the flag to enable the app link feature.">
+        App Link
+      </message>
+      <message name="IDS_FLAGS_ENABLE_APP_LINK_DESCRIPTION" desc="Description for flag to enable app link feature.">
+        Enable App Link.
+      </message>
+    </if>
     </messages>
   </release>
 </grit>

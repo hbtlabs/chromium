@@ -7,8 +7,8 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "components/mus/common/event_matcher_util.h"
 #include "components/mus/common/util.h"
-#include "components/mus/public/cpp/event_matcher_util.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
@@ -23,6 +23,7 @@
 #include "mash/wm/window_manager.h"
 #include "mash/wm/window_manager_application.h"
 #include "services/shell/public/cpp/connector.h"
+#include "ui/mojo/display/display_type_converters.h"
 
 namespace mash {
 namespace wm {
@@ -46,7 +47,7 @@ RootWindowController* RootWindowController::CreateFromDisplay(
     mus::mojom::DisplayPtr display,
     mojo::InterfaceRequest<mus::mojom::WindowTreeClient> client_request) {
   RootWindowController* controller = new RootWindowController(app);
-  controller->display_ = std::move(display);
+  controller->display_ = display.To<gfx::Display>();
   mus::WindowTreeConnection::CreateForWindowManager(
       controller, std::move(client_request),
       mus::WindowTreeConnection::CreateType::DONT_WAIT_FOR_EMBED,
@@ -165,7 +166,8 @@ void RootWindowController::OnConnectionLost(
   delete this;
 }
 
-void RootWindowController::OnEventObserved(const ui::Event& event) {
+void RootWindowController::OnEventObserved(const ui::Event& event,
+                                           mus::Window* target) {
   // Does not use EventObservers.
 }
 
@@ -203,7 +205,7 @@ void RootWindowController::CreateContainers() {
                   mojom::Container::USER_WORKSPACE);
   CreateContainer(mojom::Container::USER_WINDOWS,
                   mojom::Container::USER_PRIVATE);
-  CreateContainer(mojom::Container::USER_STICKY_WINDOWS,
+  CreateContainer(mojom::Container::USER_ALWAYS_ON_TOP_WINDOWS,
                   mojom::Container::USER_PRIVATE);
   CreateContainer(mojom::Container::USER_PRESENTATION_WINDOWS,
                   mojom::Container::USER_PRIVATE);

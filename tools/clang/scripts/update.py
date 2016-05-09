@@ -23,10 +23,11 @@ import time
 import urllib2
 import zipfile
 
+
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '268419'
+CLANG_REVISION = '268813'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -166,6 +167,14 @@ def WriteStampFile(s, path=STAMP_FILE):
 
 def GetSvnRevision(svn_repo):
   """Returns current revision of the svn repo at svn_repo."""
+  if sys.platform == 'darwin':
+    # mac_files toolchain must be set for hermetic builds.
+    root = os.path.dirname(os.path.dirname(os.path.dirname(
+        os.path.dirname(__file__))))
+    sys.path.append(os.path.join(root, 'build'))
+    import mac_toolchain
+
+    mac_toolchain.SetToolchainEnvironment()
   svn_info = subprocess.check_output('svn info ' + svn_repo, shell=True)
   m = re.search(r'Revision: (\d+)', svn_info)
   return m.group(1)
@@ -306,13 +315,13 @@ def DownloadHostGcc(args):
 def AddCMakeToPath():
   """Download CMake and add it to PATH."""
   if sys.platform == 'win32':
-    zip_name = 'cmake-3.2.2-win32-x86.zip'
+    zip_name = 'cmake-3.4.3-win32-x86.zip'
     cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR,
-                             'cmake-3.2.2-win32-x86', 'bin')
+                             'cmake-3.4.3-win32-x86', 'bin')
   else:
     suffix = 'Darwin' if sys.platform == 'darwin' else 'Linux'
-    zip_name = 'cmake322_%s.tgz' % suffix
-    cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'cmake322', 'bin')
+    zip_name = 'cmake343_%s.tgz' % suffix
+    cmake_dir = os.path.join(LLVM_BUILD_TOOLS_DIR, 'cmake343', 'bin')
   if not os.path.exists(cmake_dir):
     DownloadAndUnpack(CDS_URL + '/tools/' + zip_name, LLVM_BUILD_TOOLS_DIR)
   os.environ['PATH'] = cmake_dir + os.pathsep + os.environ.get('PATH', '')
@@ -624,8 +633,7 @@ def UpdateClang(args):
         [cxx] + cxxflags + ['-print-file-name=libstdc++.so.6']).rstrip()
     CopyFile(libstdcpp, os.path.join(LLVM_BUILD_DIR, 'lib'))
 
-  # TODO(thakis): Remove "-d explain" once http://crbug.com/569337 is fixed.
-  RunCommand(['ninja', '-d', 'explain'], msvc_arch='x64')
+  RunCommand(['ninja'], msvc_arch='x64')
 
   if args.tools:
     # If any Chromium tools were built, install those now.

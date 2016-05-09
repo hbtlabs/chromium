@@ -6,6 +6,10 @@ package org.chromium.chrome.browser.payments;
 
 import android.test.suitebuilder.annotation.MediumTest;
 
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.autofill.AutofillTestHelper;
+import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -19,31 +23,34 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
 
     @Override
     public void onMainActivityStarted()
-            throws InterruptedException, ExecutionException, TimeoutException {}
+            throws InterruptedException, ExecutionException, TimeoutException {
+        new AutofillTestHelper().setCreditCard(new CreditCard("", "https://example.com", true, true,
+                "Jon Doe", "4111111111111111", "1111", "12", "2050", "visa", R.drawable.pr_visa));
+    }
 
     @MediumTest
-    public void testCloseDialog()
-            throws InterruptedException, ExecutionException, TimeoutException {
-        triggerPaymentUI();
-        clickClosePaymentUIButton();
+    public void testCloseDialog() throws InterruptedException, ExecutionException,
+            TimeoutException {
+        triggerUIAndWait(mReadyToClose);
+        clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
 
     @MediumTest
-    public void testEditAndCloseDialog()
-            throws InterruptedException, ExecutionException, TimeoutException {
-        triggerPaymentUI();
-        clickSecondaryPaymentUIButton();
-        clickClosePaymentUIButton();
+    public void testEditAndCloseDialog() throws InterruptedException, ExecutionException,
+            TimeoutException {
+        triggerUIAndWait(mReadyForInput);
+        clickAndWait(R.id.button_secondary, mReadyToClose);
+        clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
 
     @MediumTest
-    public void testEditAndCancelDialog()
-            throws InterruptedException, ExecutionException, TimeoutException {
-        triggerPaymentUI();
-        clickSecondaryPaymentUIButton();
-        clickSecondaryPaymentUIButton();
+    public void testEditAndCancelDialog() throws InterruptedException, ExecutionException,
+            TimeoutException {
+        triggerUIAndWait(mReadyForInput);
+        clickAndWait(R.id.button_secondary, mReadyForInput);
+        clickAndWait(R.id.button_secondary, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
 }

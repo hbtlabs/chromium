@@ -54,6 +54,7 @@
 #include "components/signin/core/common/signin_switches.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/tracing/tracing_switches.h"
+#include "components/translate/core/browser/translate_prefs.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_features.h"
@@ -513,6 +514,14 @@ const FeatureEntry::Choice kHerbPrototypeChoices[] = {
      switches::kTabManagementExperimentTypeDill, ""},
     {IDS_FLAGS_HERB_PROTOTYPE_FLAVOR_ELDERBERRY,
      switches::kTabManagementExperimentTypeElderberry, ""},
+};
+
+const FeatureEntry::Choice kEnableAllBookmarksViewChoices[] = {
+  { IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_DEFAULT, "", ""},
+  { IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_ENABLED,
+    switches::kEnableAllBookmarksView, "true" },
+  { IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_CHOICE_DISABLED,
+    switches::kEnableAllBookmarksView, "false" },
 };
 #endif  // defined(OS_ANDROID)
 
@@ -1140,6 +1149,9 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(app_list::switches::kResetAppListInstallState)},
 #endif
 #if defined(OS_ANDROID)
+    {"enable-all-bookmarks-view", IDS_FLAGS_ENABLE_ALL_BOOKMARKS_VIEW_NAME,
+     IDS_FLAGS_SHOW_ALL_BOOKMARKS_VIEW_DESCRIPTION, kOsAndroid,
+     MULTI_VALUE_TYPE(kEnableAllBookmarksViewChoices)},
     {"enable-accessibility-tab-switcher",
      IDS_FLAGS_ACCESSIBILITY_TAB_SWITCHER_NAME,
      IDS_FLAGS_ACCESSIBILITY_TAB_SWITCHER_DESCRIPTION, kOsAndroid,
@@ -1186,6 +1198,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_TRANSLATE_NEW_UX_DESCRIPTION, kOsMac,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableTranslateNewUX,
                                switches::kDisableTranslateNewUX)},
+#endif
+#if defined(OS_LINUX) || defined(OS_WIN) || defined(OS_CHROMEOS)
+    {"translate-2016q2-ui", IDS_FLAGS_TRANSLATE_2016Q2_UI_NAME,
+     IDS_FLAGS_TRANSLATE_2016Q2_UI_DESCRIPTION, kOsCrOS | kOsWin | kOsLinux,
+     FEATURE_VALUE_TYPE(translate::kTranslateUI2016Q2)},
 #endif
 #if defined(OS_MACOSX)
     {"enable-native-notifications", IDS_NOTIFICATIONS_NATIVE_FLAG,
@@ -1654,6 +1671,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_NAME,
      IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_DESCRIPTION, kOsAndroid,
      SINGLE_VALUE_TYPE(switches::kEnableTabSwitcherInDocumentMode)},
+     {"app-link", IDS_FLAGS_ENABLE_APP_LINK_NAME,
+     IDS_FLAGS_ENABLE_APP_LINK_DESCRIPTION, kOsAndroid,
+     ENABLE_DISABLE_VALUE_TYPE(
+       switches::kEnableAppLink,
+       switches::kDisableAppLink)},
 #endif  // OS_ANDROID
     {"enable-md-feedback", IDS_FLAGS_ENABLE_MATERIAL_DESIGN_FEEDBACK_NAME,
      IDS_FLAGS_ENABLE_MATERIAL_DESIGN_FEEDBACK_DESCRIPTION, kOsDesktop,
