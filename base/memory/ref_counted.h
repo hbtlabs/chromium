@@ -364,10 +364,6 @@ class scoped_refptr {
 
   explicit operator bool() const { return ptr_ != nullptr; }
 
- private:
-  template <typename U> friend class scoped_refptr;
-
- public:
   template <typename U>
   bool operator==(const scoped_refptr<U>& rhs) const {
     return ptr_ == rhs.get();
@@ -387,6 +383,10 @@ class scoped_refptr {
   T* ptr_;
 
  private:
+  // Friend required for move constructors that set r.ptr_ to null.
+  template <typename U>
+  friend class scoped_refptr;
+
   // Non-inline helpers to allow:
   //     class Opaque;
   //     extern template class scoped_refptr<Opaque>;
