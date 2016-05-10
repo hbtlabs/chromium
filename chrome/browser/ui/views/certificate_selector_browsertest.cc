@@ -74,11 +74,11 @@ class CertificateSelectorTest : public InProcessBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     client_1_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "client_1.pem");
-    ASSERT_NE(nullptr, client_1_);
+    ASSERT_FALSE(client_1_);
 
     client_2_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "client_2.pem");
-    ASSERT_NE(nullptr, client_2_);
+    ASSERT_FALSE(client_2_);
   }
 
   void SetUpOnMainThread() override {
