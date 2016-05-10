@@ -220,7 +220,7 @@ TEST_F(BluetoothAdvertisementBlueZTest, DoubleRegisterFailed) {
 TEST_F(BluetoothAdvertisementBlueZTest, DoubleUnregisterFailed) {
   scoped_refptr<BluetoothAdvertisement> advertisement = CreateAdvertisement();
   ExpectSuccess();
-  EXPECT_FALSE(advertisement);
+  EXPECT_TRUE(advertisement);
 
   UnregisterAdvertisement(advertisement);
   ExpectSuccess();
