@@ -2308,14 +2308,33 @@ TEST_F(RendererSchedulerImplTest,
 }
 
 TEST_F(RendererSchedulerImplTest,
-       ExpensiveLoadingTasksNotBlockedIfNavigationExpected) {
+       ExpensiveLoadingTasksBlockedIfChildFrameNavigationExpected) {
   std::vector<std::string> run_order;
 
   DoMainFrame();
   scheduler_->SetHasVisibleRenderWidgetWithTouchHandler(true);
   SimulateExpensiveTasks(loading_task_runner_);
   ForceTouchStartToBeExpectedSoon();
-  scheduler_->AddPendingNavigation();
+  scheduler_->AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kChildFrame);
+
+  PostTestTasks(&run_order, "L1 D1");
+  RunUntilIdle();
+
+  // The expensive loading task gets blocked.
+  EXPECT_THAT(run_order, testing::ElementsAre(std::string("D1")));
+}
+
+TEST_F(RendererSchedulerImplTest,
+       ExpensiveLoadingTasksNotBlockedIfMainFrameNavigationExpected) {
+  std::vector<std::string> run_order;
+
+  DoMainFrame();
+  scheduler_->SetHasVisibleRenderWidgetWithTouchHandler(true);
+  SimulateExpensiveTasks(loading_task_runner_);
+  ForceTouchStartToBeExpectedSoon();
+  scheduler_->AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
 
   PostTestTasks(&run_order, "L1 D1");
   RunUntilIdle();
@@ -2331,7 +2350,8 @@ TEST_F(RendererSchedulerImplTest,
 
   // After the nagigation has been cancelled, the expensive loading tasks should
   // get blocked.
-  scheduler_->RemovePendingNavigation();
+  scheduler_->RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
   run_order.clear();
 
   PostTestTasks(&run_order, "L1 D1");
@@ -2348,15 +2368,17 @@ TEST_F(RendererSchedulerImplTest,
 
 TEST_F(
     RendererSchedulerImplTest,
-    ExpensiveLoadingTasksNotBlockedIfNavigationExpected_MultipleNavigations) {
+    ExpensiveLoadingTasksNotBlockedIfMainFrameNavigationExpected_Multiple) {
   std::vector<std::string> run_order;
 
   DoMainFrame();
   scheduler_->SetHasVisibleRenderWidgetWithTouchHandler(true);
   SimulateExpensiveTasks(loading_task_runner_);
   ForceTouchStartToBeExpectedSoon();
-  scheduler_->AddPendingNavigation();
-  scheduler_->AddPendingNavigation();
+  scheduler_->AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
+  scheduler_->AddPendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
 
   PostTestTasks(&run_order, "L1 D1");
   RunUntilIdle();
@@ -2372,7 +2394,8 @@ TEST_F(
 
 
   run_order.clear();
-  scheduler_->RemovePendingNavigation();
+  scheduler_->RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
   // Navigation task expected ref count non-zero so expensive tasks still not
   // blocked.
   PostTestTasks(&run_order, "L1 D1");
@@ -2389,7 +2412,8 @@ TEST_F(
 
 
   run_order.clear();
-  scheduler_->RemovePendingNavigation();
+  scheduler_->RemovePendingNavigation(
+      blink::WebScheduler::NavigatingFrameType::kMainFrame);
   // Navigation task expected ref count is now zero, the expensive loading tasks
   // should get blocked.
   PostTestTasks(&run_order, "L1 D1");
@@ -2672,6 +2696,9 @@ TEST_F(RendererSchedulerImplTest,
        SYNCHRONIZED_GESTURE_TimerTaskThrottling_task_expensive) {
   SimulateCompositorGestureStart(TouchEventPolicy::SEND_TOUCH_START);
 
+  base::TimeTicks first_throttled_run_time =
+      ThrottlingHelper::ThrottledRunTime(clock_->NowTicks());
+
   size_t count = 0;
   // With the compositor task taking 10ms, there is not enough time to run this
   // 7ms timer task in the 16ms frame.
@@ -2700,11 +2727,18 @@ TEST_F(RendererSchedulerImplTest,
         base::Bind(&RendererSchedulerImplTest::SimulatedCompositorTaskPending,
                    base::Unretained(this)));
     EXPECT_EQ(UseCase::SYNCHRONIZED_GESTURE, CurrentUseCase()) << "i = " << i;
-    EXPECT_TRUE(scheduler_->TimerTaskRunner()->IsQueueEnabled()) << "i = " << i;
+
+    // Before the policy is updated the queue will be enabled. Subsequently it
+    // will be disabled until the throttled queue is pumped.
+    bool expect_queue_enabled =
+        (i == 0) || (clock_->NowTicks() > first_throttled_run_time);
+    EXPECT_EQ(expect_queue_enabled,
+              scheduler_->TimerTaskRunner()->IsQueueEnabled())
+        << "i = " << i;
   }
 
   // Task is throttled but not completely blocked.
-  EXPECT_EQ(13u, count);
+  EXPECT_EQ(12u, count);
 }
 
 TEST_F(RendererSchedulerImplTest,

@@ -17,8 +17,6 @@ BluetoothGattServerTest::BluetoothGattServerTest() {}
 BluetoothGattServerTest::~BluetoothGattServerTest() {}
 
 void BluetoothGattServerTest::StartGattSetup() {
-  InitWithFakeAdapter();
-  delegate_ = base::WrapUnique(new TestBluetoothLocalGattServiceDelegate());
   service_ = BluetoothLocalGattService::Create(
       adapter_.get(), BluetoothUUID(kTestUUIDGenericAttribute), true, nullptr,
       delegate_.get());
@@ -28,26 +26,19 @@ void BluetoothGattServerTest::StartGattSetup() {
 void BluetoothGattServerTest::CompleteGattSetup() {
   service_->Register(GetCallback(Call::EXPECTED),
                      GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(1, callback_count_);
-  EXPECT_EQ(0, error_callback_count_);
 }
 
 void BluetoothGattServerTest::SetUp() {
   BluetoothTest::SetUp();
-
   last_read_value_ = std::vector<uint8_t>();
+  InitWithFakeAdapter();
+  delegate_ = base::WrapUnique(new TestBluetoothLocalGattServiceDelegate());
 }
 
 void BluetoothGattServerTest::TearDown() {
-  int callback_count = callback_count_;
-  int error_callback_count = error_callback_count_;
-  service_->Unregister(GetCallback(Call::EXPECTED),
-                       GetGattErrorCallback(Call::NOT_EXPECTED));
-  EXPECT_EQ(callback_count + 1, callback_count_);
-  EXPECT_EQ(error_callback_count, error_callback_count_);
-
-  delegate_ = nullptr;
-
+  if (service_.get())
+    service_->Delete();
+  delegate_.reset();
   BluetoothTest::TearDown();
 }
 

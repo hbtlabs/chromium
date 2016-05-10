@@ -12,6 +12,9 @@
 
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
+#include "base/time/tick_clock.h"
+#include "base/time/time.h"
 #include "components/ntp_snippets/ntp_snippet.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -32,12 +35,12 @@ class NTPSnippetsFetcher : public net::URLFetcherDelegate {
   using ParseJSONCallback = base::Callback<
       void(const std::string&, const SuccessCallback&, const ErrorCallback&)>;
 
-  // |snippets| contains parsed snippets. If problems occur (explained in
-  // |status_message|), |status_message| is non-empty; otherwise,
-  // |status_message| is empty.
+  using OptionalSnippets = base::Optional<NTPSnippet::PtrVector>;
+  // |snippets| contains parsed snippets if a fetch succeeded. If problems
+  // occur, |snippets| contains no value (no actual vector in base::Optional).
+  // Error details can be retrieved using last_status().
   using SnippetsAvailableCallback =
-      base::Callback<void(NTPSnippet::PtrVector snippets,
-                          const std::string& status_message)>;
+      base::Callback<void(OptionalSnippets snippets)>;
 
   // Enumeration listing all possible outcomes for fetch attempts. Used for UMA
   // histograms, so do not change existing values.
@@ -69,9 +72,17 @@ class NTPSnippetsFetcher : public net::URLFetcherDelegate {
   // subscriber of SetCallback()).
   void FetchSnippetsFromHosts(const std::set<std::string>& hosts, int count);
 
+  // Debug string representing the status/result of the last fetch attempt.
+  const std::string& last_status() const { return last_status_; }
+
   // Returns the last json fetched from the server.
   const std::string& last_json() const {
     return last_fetch_json_;
+  }
+
+  // Overrides internal clock for testing purposes.
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock) {
+    tick_clock_ = std::move(tick_clock);
   }
 
  private:
@@ -80,15 +91,16 @@ class NTPSnippetsFetcher : public net::URLFetcherDelegate {
 
   void OnJsonParsed(std::unique_ptr<base::Value> parsed);
   void OnJsonError(const std::string& error);
-  void FetchFinishedWithError(FetchResult result,
-                              const std::string& extra_message);
-  // Records result to UMA histogram.
-  void RecordUmaFetchResult(FetchResult result);
+  void FetchFinished(OptionalSnippets snippets,
+                     FetchResult result,
+                     const std::string& extra_message);
 
   // Holds the URL request context.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
   const ParseJSONCallback parse_json_callback_;
+  base::TimeTicks fetch_start_time_;
+  std::string last_status_;
   std::string last_fetch_json_;
 
   // The fetcher for downloading the snippets.
@@ -99,6 +111,9 @@ class NTPSnippetsFetcher : public net::URLFetcherDelegate {
 
   // Flag for picking the right (stable/non-stable) API key for Chrome Reader
   bool is_stable_channel_;
+
+  // Allow for an injectable tick clock for testing.
+  std::unique_ptr<base::TickClock> tick_clock_;
 
   base::WeakPtrFactory<NTPSnippetsFetcher> weak_ptr_factory_;
 

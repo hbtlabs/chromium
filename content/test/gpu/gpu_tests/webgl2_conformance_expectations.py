@@ -29,7 +29,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Conformance expectations
     # ========================
     # All platforms.
-    self.Skip('deqp/functional/gles3/builtinprecision*.html', bug=483282)
+    self.Skip('deqp/functional/gles3/builtinprecision/*.html', bug=483282)
     self.Skip('deqp/functional/gles3/draw.html', bug=483282)
     self.Skip('deqp/functional/gles3/fbocolorbuffer.html', bug=483282)
     self.Skip('deqp/functional/gles3/fbocompleteness.html', bug=483282)
@@ -56,11 +56,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('deqp/functional/gles3/shaderoperator.html', bug=483282)
     self.Skip('deqp/functional/gles3/shaderpackingfunction.html', bug=483282)
     self.Skip('deqp/functional/gles3/shaderstatequery.html', bug=483282)
-    self.Skip('deqp/functional/gles3/shadertexturefunction*.html', bug=483282)
+    self.Skip('deqp/functional/gles3/shadertexturefunction/*.html', bug=483282)
     self.Skip('deqp/functional/gles3/sync.html', bug=483282)
     self.Skip('deqp/functional/gles3/textureformat.html', bug=483282)
     self.Skip('deqp/functional/gles3/textureshadow.html', bug=483282)
-    self.Skip('deqp/functional/gles3/texturespecification*.html', bug=483282)
+    self.Skip('deqp/functional/gles3/texturespecification/*.html', bug=483282)
     self.Skip('deqp/functional/gles3/texturewrap.html', bug=483282)
     self.Skip('deqp/functional/gles3/transformfeedback.html', bug=483282)
     self.Skip('deqp/functional/gles3/uniformapi.html', bug=483282)
@@ -405,8 +405,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
         ['linux'], bug=483282)
     self.Fail('conformance2/rendering/draw-buffers.html',
-        ['linux'], bug=483282)
-    self.Fail('conformance2/textures/misc/tex-unpack-params.html',
         ['linux'], bug=483282)
     # We want to mark this Flaky for all of Linux however we currently skip
     # all the tests on Intel. Tag this with AMD and Nvidia to avoid an

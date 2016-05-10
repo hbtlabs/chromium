@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '167ab9198025e577efe033612d2e009633abb54b',
+  'skia_revision': '622c8d5de12f264e496e8d4664a2eea9333922d0',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '3db2255f8ecef84efc5fb1f2c259aee060f092cc',
+  'v8_revision': 'ed8976dee7e70fad5dd9fdb34c25ce5c57354e27',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'a314b61c16be864567920bab145881576457205e',
+  'angle_revision': '8c9e4d54d3300317a8f5e5441064760c445727c8',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '8d108d1cc70893c2a1ac81449daacad4877fd9b0',
+  'catapult_revision': 'aac9bda5ff292fdd66e6a548836ce9777fa73055',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -180,7 +180,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'fe36f23047d30b6238fa83ebc885d5aea8b9ec43',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'a7670bc1d871a246ac10e2cd64479a3010ca3f9f',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -495,7 +495,7 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/kennethreitz/requests.git' + '@' + 'f172b30356d821d180fa4ecfa3e71c7274a32de4',
 
     'src/third_party/custom_tabs_client/src':
-      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + '37c00b1d922f5f6f8460621693896a68f6e0bf7b',
+      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + 'ad2979cf08f5bd7fb22c286731db2f43c8a25d8e',
   },
 }
 

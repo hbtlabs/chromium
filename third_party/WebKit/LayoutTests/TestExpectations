@@ -925,6 +925,8 @@ crbug.com/498021 [ Linux ] fast/encoding/invalid-UTF-8.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/emoticons.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/international/hindi-spacing.html [ Failure ]
 
+crbug.com/610574 [ Win ] fast/text/unicode-fallback-font.html [ Failure ]
+
 # Significant Slimming Paint failure.
 crbug.com/459305 [ Mac ] svg/custom/foreign-object-skew.svg [ Failure ]
 
@@ -1021,8 +1023,6 @@ crbug.com/474798 virtual/spv2/paint/invalidation/spv2/justify-self-change-keepin
 crbug.com/582230 fast/css-grid-layout/relayout-align-items-changed.html [ Skip ]
 crbug.com/582230 fast/repaint/align-items-change.html [ Skip ]
 crbug.com/582230 fast/repaint/align-items-overflow-change.html [ Skip ]
-
-crbug.com/548695 fast/forms/datalist/update-range-with-datalist.html [ Failure ]
 
 # Temporarily disabled after chromium change
 crbug.com/492511 [ Mac ] fast/text/atsui-negative-spacing-features.html [ Failure ]
@@ -1287,13 +1287,6 @@ crbug.com/587737 [ Mac10.11 Retina ] virtual/gpu-rasterization/fast/images/color
 
 crbug.com/602933 fast/canvas/canvas-incremental-repaint.html [ NeedsManualRebaseline ]
 
-crbug.com/606196 fast/writing-mode/text-combine-various-fonts.html [ NeedsRebaseline ]
-crbug.com/606196 [ Win ] fast/text/emphasis.html [ NeedsRebaseline ]
-crbug.com/606196 fast/writing-mode/japanese-rl-selection.html [ NeedsRebaseline ]
-crbug.com/606196 fast/text/emphasis-vertical.html [ NeedsRebaseline ]
-crbug.com/606196 fast/writing-mode/japanese-lr-selection.html [ NeedsRebaseline ]
-crbug.com/606196 [ Win ] fast/text/unicode-fallback-font.html [ NeedsRebaseline ]
-
 crbug.com/599975 [ Android ] media/video-autoplay.html [ Crash Timeout ]
 
 # DocumentWriteEvaluator is still experimental
@@ -1330,6 +1323,8 @@ crbug.com/605059 [ Retina ] fast/text/international/rtl-negative-letter-spacing.
 
 crbug.com/606302 [ Win7 ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure Pass ]
 
+crbug.com/610464 [ Win7 Debug ] inspector/components/throttler.html [ Failure Pass ]
+
 crbug.com/606649 fast/dom/gc-dom-tree-lifetime.html [ Pass Timeout ]
 
 # TODO(jlebel): Remove when methods are implemented.
@@ -1354,17 +1349,6 @@ crbug.com/609064 [ Mac ] bluetooth/getCharacteristics/get-same-characteristics.h
 crbug.com/609064 [ Mac ] bluetooth/getCharacteristics/invalid-characteristic-name.html [ Skip ]
 crbug.com/609064 [ Mac ] bluetooth/getCharacteristics/service-is-removed-with-uuid.html [ Skip ]
 crbug.com/609064 [ Mac ] bluetooth/getCharacteristics/service-is-removed.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/delayed-discovery-no-permission-absent-service.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/delayed-discovery-no-permission-present-service.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/delayed-discovery-service-found.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/delayed-discovery-service-not-found.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/device-goes-out-of-range.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/get-same-service.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/invalid-service-name.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/no-permission-absent-service.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/no-permission-present-service.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/service-found.html [ Skip ]
-crbug.com/603183 [ Mac ] bluetooth/getPrimaryService/service-not-found.html [ Skip ]
 crbug.com/609068 [ Mac ] bluetooth/notifications/add-listener-after-promise.html [ Skip ]
 crbug.com/609068 [ Mac ] bluetooth/notifications/add-multiple-event-listeners.html [ Skip ]
 crbug.com/609068 [ Mac ] bluetooth/notifications/characteristic-does-not-support-notifications.html [ Skip ]
@@ -1402,3 +1386,5 @@ crbug.com/609067 [ Mac ] bluetooth/writeValue/value-too-long.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-fails.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-succeeds.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-updates-value.html [ Skip ]
+
+crbug.com/610567 usb/usbDevice-iframe.html [ Failure Pass Timeout ]
