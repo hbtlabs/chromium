@@ -550,7 +550,7 @@ TEST(ProxyScriptDeciderTest, AutodetectFailCustomFails1) {
   EXPECT_EQ(kFailedDownloading,
             decider.Start(config, base::TimeDelta(), true,
                           callback.callback()));
-  EXPECT_FALSE(decider.Script_data());
+  EXPECT_FALSE(decider.script_data());
 }
 
 // Fails at WPAD (downloading), and fails at custom PAC (parsing).
