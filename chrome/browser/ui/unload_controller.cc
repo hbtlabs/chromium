@@ -6,7 +6,7 @@
 
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/ui/browser.h"
@@ -69,7 +69,7 @@ bool UnloadController::RunUnloadEventsHelper(content::WebContents* contents) {
     // them. Once they have fired, we'll get a message back saying whether
     // to proceed closing the page or not, which sends us back to this method
     // with the NeedToFireBeforeUnload bit cleared.
-    contents->DispatchBeforeUnload(false);
+    contents->DispatchBeforeUnload();
     return true;
   }
   return false;
@@ -297,7 +297,7 @@ void UnloadController::ProcessPendingTabs() {
       // and then call beforeunload handlers for |web_contents|.
       // See DevToolsWindow::InterceptPageBeforeUnload for details.
       if (!DevToolsWindow::InterceptPageBeforeUnload(web_contents))
-        web_contents->DispatchBeforeUnload(false);
+        web_contents->DispatchBeforeUnload();
     } else {
       ClearUnloadState(web_contents, true);
     }

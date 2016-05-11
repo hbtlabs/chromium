@@ -14,8 +14,8 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
@@ -197,7 +197,8 @@ std::unique_ptr<CommandBufferProxyImpl> GpuChannelHost::CreateCommandBuffer(
     gpu::GpuStreamPriority stream_priority,
     const std::vector<int32_t>& attribs,
     const GURL& active_url,
-    gfx::GpuPreference gpu_preference) {
+    gfx::GpuPreference gpu_preference,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   DCHECK(!share_group || (stream_id == share_group->stream_id()));
   TRACE_EVENT1("gpu", "GpuChannelHost::CreateViewCommandBuffer",
                "surface_handle", surface_handle);
@@ -237,7 +238,8 @@ std::unique_ptr<CommandBufferProxyImpl> GpuChannelHost::CreateCommandBuffer(
 
   std::unique_ptr<CommandBufferProxyImpl> command_buffer =
       base::WrapUnique(new CommandBufferProxyImpl(this, route_id, stream_id));
-  AddRoute(route_id, command_buffer->AsWeakPtr());
+  AddRouteWithTaskRunner(route_id, command_buffer->AsWeakPtr(),
+                         std::move(task_runner));
   if (!command_buffer->Initialize())
     return nullptr;
 
@@ -338,8 +340,8 @@ int32_t GpuChannelHost::GenerateRouteID() {
 
 int32_t GpuChannelHost::GenerateStreamID() {
   const int32_t stream_id = next_stream_id_.GetNext();
-  DCHECK_NE(0, stream_id);
-  DCHECK_NE(kDefaultStreamId, stream_id);
+  DCHECK_NE(gpu::GPU_STREAM_INVALID, stream_id);
+  DCHECK_NE(gpu::GPU_STREAM_DEFAULT, stream_id);
   return stream_id;
 }
 

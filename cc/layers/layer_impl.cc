@@ -721,9 +721,6 @@ void LayerImpl::UpdatePropertyTreeForScrollingAndAnimationIfNeeded() {
   if (scrollable())
     UpdatePropertyTreeScrollOffset();
 
-  if (HasAnyAnimationTargetingProperty(TargetProperty::OPACITY))
-    UpdatePropertyTreeOpacity();
-
   if (HasAnyAnimationTargetingProperty(TargetProperty::TRANSFORM)) {
     UpdatePropertyTreeTransform();
     UpdatePropertyTreeTransformIsAnimated(
@@ -754,6 +751,7 @@ void LayerImpl::OnOpacityAnimated(float opacity) {
   UpdatePropertyTreeOpacity();
   SetNeedsPushProperties();
   layer_tree_impl()->set_needs_update_draw_properties();
+  layer_tree_impl()->AddToOpacityAnimationsMap(id(), opacity);
 }
 
 void LayerImpl::OnTransformAnimated(const gfx::Transform& transform) {
@@ -782,6 +780,27 @@ void LayerImpl::OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset) {
 void LayerImpl::OnTransformIsPotentiallyAnimatingChanged(bool is_animating) {
   UpdatePropertyTreeTransformIsAnimated(is_animating);
   was_ever_ready_since_last_transform_animation_ = false;
+}
+
+void LayerImpl::OnOpacityIsCurrentlyAnimatingChanged(
+    bool is_currently_animating) {
+  DCHECK(layer_tree_impl_);
+  EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
+  EffectNode* node = effect_tree.Node(effect_tree_index());
+
+  if (node->owner_id == id())
+    node->data.is_currently_animating_opacity = is_currently_animating;
+}
+
+void LayerImpl::OnOpacityIsPotentiallyAnimatingChanged(
+    bool has_potential_animation) {
+  DCHECK(layer_tree_impl_);
+  EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
+  EffectNode* node = effect_tree.Node(effect_tree_index());
+  if (node->owner_id == id()) {
+    node->data.has_potential_opacity_animation = has_potential_animation;
+    effect_tree.set_needs_update(true);
+  }
 }
 
 bool LayerImpl::IsActive() const {

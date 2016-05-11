@@ -52,7 +52,6 @@ source_set("browser") {
     "//content/browser/speech/proto",
     "//content/common",
     "//content/public/common:common_sources",
-    "//content/public/common:mojo_bindings",
     "//crypto",
     "//device/battery",
     "//device/bluetooth",
@@ -88,6 +87,7 @@ source_set("browser") {
     "//storage/common",
     "//third_party/WebKit/public:blink_headers",
     "//third_party/WebKit/public:image_resources",
+    "//third_party/WebKit/public:mojo_bindings",
     "//third_party/WebKit/public:resources",
     "//third_party/angle:angle_common",
     "//third_party/icu",
@@ -123,10 +123,11 @@ source_set("browser") {
                         ".",
                         "//content")
 
-  # TODO(GYP) these generated files are listed as sources in content_browser.
-  # This is a bit suspicious. The GN grit template will make a source set
-  # containing the generated code so it should be sufficient to just depend
-  # on the grit rule. But maybe some of these will need to be added?
+  # TODO(GYP_GONE) these generated files are listed as sources in
+  # content_browser.  This is a bit suspicious. The GN grit template will make
+  # a source set containing the generated code so it should be sufficient to
+  # just depend on the grit rule. But maybe some of these will need to be
+  # added?
   #
   # Need this annoying rebase_path call to match what happened with the
   # sources.
@@ -160,12 +161,6 @@ source_set("browser") {
     deps += [ "//printing" ]
   }
 
-  # TODO(GYP)
-  #   [chrome_multiple_dll!=1', {
-  #     'dependencies': [
-  #       '../third_party/WebKit/public/blink.gyp:blink',
-  #     ],
-  #   }],
   if (!is_mac) {
     deps += [ "//sandbox" ]
   }
@@ -379,10 +374,16 @@ source_set("browser") {
       "geolocation/empty_wifi_data_provider.h",
     ]
     deps += [
+      "//media",
       "//sandbox/mac:sandbox",
       "//third_party/mozilla",
       "//third_party/sudden_motion_sensor",
       "//ui/accelerated_widget_mac",
+    ]
+    libs += [
+      "Carbon.framework",
+      "QuartzCore.framework",
+      "IOSurface.framework",
     ]
   }
 

@@ -29,7 +29,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -63,8 +63,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/resource_context.h"
-#include "content/public/browser/resource_dispatcher_host.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_dispatcher.h"
@@ -957,12 +956,16 @@ bool DownloadsDownloadFunction::RunAsync() {
   if (include_incognito() && GetProfile()->HasOffTheRecordProfile())
     current_profile = GetProfile()->GetOffTheRecordProfile();
 
+  content::StoragePartition* storage_partition =
+      BrowserContext::GetStoragePartition(
+          render_frame_host()->GetProcess()->GetBrowserContext(),
+          render_frame_host()->GetSiteInstance());
   std::unique_ptr<content::DownloadUrlParameters> download_params(
       new content::DownloadUrlParameters(
           download_url, render_frame_host()->GetProcess()->GetID(),
           render_view_host_do_not_use()->GetRoutingID(),
           render_frame_host()->GetRoutingID(),
-          current_profile->GetResourceContext()));
+          storage_partition->GetURLRequestContext()));
 
   base::FilePath creator_suggested_filename;
   if (options.filename.get()) {

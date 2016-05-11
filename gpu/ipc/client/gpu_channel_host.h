@@ -78,10 +78,6 @@ class GPU_EXPORT GpuChannelHost
       base::WaitableEvent* shutdown_event,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
 
-  static const int32_t kDefaultStreamId = gpu::GPU_STREAM_DEFAULT;
-  static const gpu::GpuStreamPriority kDefaultStreamPriority =
-      gpu::GpuStreamPriority::NORMAL;
-
   bool IsLost() const {
     DCHECK(channel_filter_.get());
     return channel_filter_->IsLost();
@@ -117,7 +113,8 @@ class GPU_EXPORT GpuChannelHost
       gpu::GpuStreamPriority stream_priority,
       const std::vector<int32_t>& attribs,
       const GURL& active_url,
-      gfx::GpuPreference gpu_preference);
+      gfx::GpuPreference gpu_preference,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // Destroy a command buffer created by this channel.
   void DestroyCommandBuffer(CommandBufferProxyImpl* command_buffer);

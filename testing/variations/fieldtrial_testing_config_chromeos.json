@@ -41,6 +41,17 @@
             }
         }
     ],
+    "DisallowFetchForDocWrittenScriptsInMainFrame": [
+        {
+            "disable_features": [
+                "DocumentWriteEvaluator"
+            ],
+            "group_name": "DocumentWriteScriptBlockGroup",
+            "params": {
+                "disallowFetchForDocWrittenScriptsInMainFrame": "true"
+            }
+        }
+    ],
     "EnableGoogleCachedCopyTextExperiment": [
         {
             "group_name": "Button"
@@ -79,6 +90,14 @@
     "MojoChannel": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
     "OfferUploadCreditCards": [
@@ -221,6 +240,17 @@
                 "token-binding"
             ],
             "group_name": "TokenBinding"
+        }
+    ],
+    "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "none"
+        },
+        {
+            "group_name": "normal"
+        },
+        {
+            "group_name": "aggressive"
         }
     ],
     "VarationsServiceControl": [

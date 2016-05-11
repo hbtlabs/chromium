@@ -34,7 +34,7 @@
 #include "cc/resources/resource_provider.h"
 #include "cc/tiles/tile_priority.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
+#include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/point3_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -96,6 +96,8 @@ class CC_EXPORT LayerImpl {
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
   void OnTransformIsPotentiallyAnimatingChanged(bool is_animating);
+  void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
+  void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
   bool IsActive() const;
   bool OpacityCanAnimateOnImplThread() const { return false; }
 
@@ -551,9 +553,6 @@ class CC_EXPORT LayerImpl {
   void ClearChildList();
 
   void ValidateQuadResourcesInternal(DrawQuad* quad) const;
-
-  void NoteLayerPropertyChangedForDescendantsInternal();
-  void PushLayerPropertyChangedForSubtreeInternal();
 
   virtual const char* LayerTypeAsString() const;
 

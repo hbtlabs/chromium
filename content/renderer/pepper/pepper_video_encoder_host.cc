@@ -527,10 +527,9 @@ bool PepperVideoEncoderHost::EnsureGpuChannel() {
 
   std::vector<int32_t> attribs(1, PP_GRAPHICS3DATTRIB_NONE);
   command_buffer_ = channel->CreateCommandBuffer(
-      gpu::kNullSurfaceHandle, gfx::Size(), nullptr,
-      gpu::GpuChannelHost::kDefaultStreamId,
-      gpu::GpuChannelHost::kDefaultStreamPriority, attribs, GURL::EmptyGURL(),
-      gfx::PreferIntegratedGpu);
+      gpu::kNullSurfaceHandle, gfx::Size(), nullptr, gpu::GPU_STREAM_DEFAULT,
+      gpu::GpuStreamPriority::NORMAL, attribs, GURL::EmptyGURL(),
+      gfx::PreferIntegratedGpu, base::ThreadTaskRunnerHandle::Get());
   if (!command_buffer_) {
     Close();
     return false;

@@ -24,10 +24,10 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
@@ -226,7 +226,7 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
       const std::vector<ui::LatencyInfo>&,
       gfx::SwapResult,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac)>
-          swap_buffers_completion_callback_;
+      swap_buffers_completion_callback_;
   std::unique_ptr<cc::OverlayCandidateValidator> overlay_candidate_validator_;
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
 };
@@ -552,7 +552,7 @@ void CompositorImpl::RequestNewOutputSurface() {
 
   BrowserGpuChannelHostFactory* factory =
       BrowserGpuChannelHostFactory::instance();
-  if (!factory->GetGpuChannel() || factory->GetGpuChannel()->IsLost()) {
+  if (!factory->GetGpuChannel()) {
     factory->EstablishGpuChannel(
         CAUSE_FOR_GPU_LAUNCH_DISPLAY_COMPOSITOR_CONTEXT,
         base::Bind(&CompositorImpl::OnGpuChannelEstablished,
@@ -641,13 +641,14 @@ void CompositorImpl::CreateOutputSurface() {
 
     BrowserGpuChannelHostFactory* factory =
         BrowserGpuChannelHostFactory::instance();
-    // This channel might be lost (and even if it isn't right now, it might
-    // still get marked as lost from the IO thread, at any point in time
-    // really).
-    // But from here on just try and always lead to either
-    // DidInitializeOutputSurface() or DidFailToInitializeOutputSurface().
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
         factory->GetGpuChannel());
+    // If the channel was already lost, we'll get null back here and need to
+    // try again.
+    if (!gpu_channel_host) {
+      RequestNewOutputSurface();
+      return;
+    }
 
     GURL url("chrome://gpu/CompositorImpl::CreateOutputSurface");
     constexpr bool automatic_flushes = false;
@@ -672,7 +673,8 @@ void CompositorImpl::CreateOutputSurface() {
     limits.mapped_memory_reclaim_limit = full_screen_texture_size_in_bytes;
 
     context_provider = new ContextProviderCommandBuffer(
-        std::move(gpu_channel_host), surface_handle_, url,
+        std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+        gpu::GpuStreamPriority::NORMAL, surface_handle_, url,
         gfx::PreferIntegratedGpu, automatic_flushes, limits, attributes,
         nullptr, command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
     DCHECK(context_provider.get());

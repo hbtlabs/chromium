@@ -105,12 +105,15 @@
             "group_name": "Enabled"
         }
     ],
-    "DocumentWriteEvaluator": [
+    "DisallowFetchForDocWrittenScriptsInMainFrame": [
         {
             "enable_features": [
                 "DocumentWriteEvaluator"
             ],
-            "group_name": "Enabled"
+            "group_name": "DocumentWriteEvaluatorGroup",
+            "params": {
+                "disallowFetchForDocWrittenScriptsInMainFrame": "false"
+            }
         }
     ],
     "EnableMediaThreadForMediaPlayback": [
@@ -198,6 +201,14 @@
                 "WiFi.DefaultMedianKbps": "2736",
                 "WiFi.DefaultMedianRTTMsec": "168"
             }
+        }
+    ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
     "OfferUploadCreditCards": [
@@ -443,6 +454,17 @@
             "params": {
                 "enable_update_menu_item": "false"
             }
+        }
+    ],
+    "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "none"
+        },
+        {
+            "group_name": "normal"
+        },
+        {
+            "group_name": "aggressive"
         }
     ],
     "VarationsServiceControl": [

@@ -407,7 +407,6 @@
       'network_time/network_time_tracker_unittest.cc',
     ],
     'ntp_snippets_unittest_sources': [
-      'ntp_snippets/inner_iterator_unittest.cc',
       'ntp_snippets/ntp_snippets_fetcher_unittest.cc',
       'ntp_snippets/ntp_snippets_service_unittest.cc',
     ],
@@ -901,8 +900,6 @@
     ],
     'web_resource_unittest_sources': [
       'web_resource/eula_accepted_notifier_unittest.cc',
-      'web_resource/promo_resource_service_mobile_ntp_unittest.cc',
-      'web_resource/promo_resource_service_unittest.cc',
       'web_resource/resource_request_allowed_notifier_unittest.cc',
     ],
     'web_restrictions_unittest_sources' : [
@@ -1478,6 +1475,7 @@
           'sources': [
             'arc/arc_bridge_service_unittest.cc',
             'arc/ime/arc_ime_service_unittest.cc',
+            'arc/intent_helper/activity_icon_loader_unittest.cc',
             'arc/intent_helper/font_size_util_unittest.cc',
             'pairing/message_buffer_unittest.cc',
             'timers/alarm_timer_unittest.cc',

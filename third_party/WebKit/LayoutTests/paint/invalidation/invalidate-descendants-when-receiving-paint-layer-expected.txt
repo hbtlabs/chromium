@@ -8,11 +8,11 @@
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow DIV id='child'",
-          "reason": "layer"
+          "reason": "subtree"
         },
         {
           "object": "LayoutBlockFlow DIV id='target'",
-          "reason": "layer"
+          "reason": "subtree"
         }
       ],
       "children": [
@@ -28,19 +28,14 @@
               "drawsContent": true,
               "paintInvalidations": [
                 {
-                  "object": "LayoutBlockFlow (relative positioned) DIV",
-                  "rect": [0, 52, 784, 49],
-                  "reason": "incremental"
-                },
-                {
                   "object": "LayoutBlockFlow DIV id='child'",
                   "rect": [1, 1, 100, 100],
-                  "reason": "layer"
+                  "reason": "subtree"
                 },
                 {
                   "object": "LayoutBlockFlow DIV id='target'",
-                  "rect": [1, 1, 100, 100],
-                  "reason": "layer"
+                  "rect": [1, 1, 50, 50],
+                  "reason": "subtree"
                 }
               ]
             },
@@ -52,12 +47,12 @@
                 {
                   "object": "LayoutBlockFlow DIV id='child'",
                   "rect": [0, 0, 100, 100],
-                  "reason": "style change"
+                  "reason": "subtree"
                 },
                 {
                   "object": "LayoutBlockFlow DIV id='target'",
-                  "rect": [0, 0, 100, 100],
-                  "reason": "style change"
+                  "rect": [0, 0, 50, 50],
+                  "reason": "subtree"
                 }
               ]
             }

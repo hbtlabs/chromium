@@ -46,12 +46,15 @@
             }
         }
     ],
-    "DocumentWriteEvaluator": [
+    "DisallowFetchForDocWrittenScriptsInMainFrame": [
         {
             "enable_features": [
                 "DocumentWriteEvaluator"
             ],
-            "group_name": "Enabled"
+            "group_name": "DocumentWriteEvaluatorGroup",
+            "params": {
+                "disallowFetchForDocWrittenScriptsInMainFrame": "false"
+            }
         }
     ],
     "EnableGoogleCachedCopyTextExperiment": [
@@ -102,6 +105,14 @@
     "MojoChannel": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
     "OfferUploadCreditCards": [
@@ -276,6 +287,17 @@
                 "token-binding"
             ],
             "group_name": "TokenBinding"
+        }
+    ],
+    "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "none"
+        },
+        {
+            "group_name": "normal"
+        },
+        {
+            "group_name": "aggressive"
         }
     ],
     "VarationsServiceControl": [

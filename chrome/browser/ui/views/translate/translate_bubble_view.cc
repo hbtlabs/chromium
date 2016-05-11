@@ -85,6 +85,8 @@ views::Link* CreateLink(views::LinkListener* listener,
   return CreateLink(listener, l10n_util::GetStringUTF16(resource_id), id);
 }
 
+// TODO(ftang) Restore icons in CreateViewAfterTranslate and CreateViewError
+// without causing layout issues; see http://crbug.com/610351
 void AddIconToLayout(views::GridLayout* layout) {
   views::ImageView* icon = new views::ImageView();
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
@@ -396,6 +398,8 @@ void TranslateBubbleView::HandleButtonPressed(
     TranslateBubbleView::ButtonID sender_id) {
   switch (sender_id) {
     case BUTTON_ID_TRANSLATE: {
+      if (always_translate_checkbox_)
+        model_->SetAlwaysTranslate(always_translate_checkbox_->checked());
       model_->Translate();
       ReportUiAction(translate::TRANSLATE_BUTTON_CLICKED);
       break;
@@ -589,7 +593,7 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
     layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
     layout->SkipColumns(1);
     always_translate_checkbox_ = new views::Checkbox(
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS));
+        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS_DO_THIS));
     always_translate_checkbox_->SetChecked(
         model_->ShouldAlwaysTranslateBeCheckedByDefault());
     always_translate_checkbox_->set_id(BUTTON_ID_ALWAYS_TRANSLATE);
@@ -701,11 +705,9 @@ views::View* TranslateBubbleView::CreateViewAfterTranslate() {
   };
 
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI()) {
-    cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
-                  GridLayout::USE_PREF, 0, 0);
-    cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
-  }
+
+  // TODO(ftang) Restore icon without causing layout defects: crbug.com/610351
+
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
@@ -719,8 +721,6 @@ views::View* TranslateBubbleView::CreateViewAfterTranslate() {
                 GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI())
-    AddIconToLayout(layout);
   layout->AddView(label);
   layout->AddView(
       CreateLink(this, IDS_TRANSLATE_BUBBLE_ADVANCED, LINK_ID_ADVANCED));
@@ -751,11 +751,9 @@ views::View* TranslateBubbleView::CreateViewError() {
   };
 
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI()) {
-    cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
-                  GridLayout::USE_PREF, 0, 0);
-    cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
-  }
+
+  // TODO(ftang) Restore icon without causing layout defects: crbug.com/610351
+
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(0, views::kRelatedButtonHSpacing);
@@ -769,8 +767,6 @@ views::View* TranslateBubbleView::CreateViewError() {
                 GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI())
-    AddIconToLayout(layout);
   layout->AddView(label);
   layout->AddView(
       CreateLink(this, IDS_TRANSLATE_BUBBLE_ADVANCED, LINK_ID_ADVANCED));

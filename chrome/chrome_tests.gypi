@@ -39,9 +39,9 @@
       '../extensions/renderer/script_context_browsertest.cc'
     ],
     'chrome_browser_tests_display_source_apitest': [
-      'browser/extensions/api/display_source/display_source_wifi_display_apitest.cc',
-      '../extensions/browser/api/display_source/display_source_apitestbase.h',
       '../extensions/browser/api/display_source/display_source_apitestbase.cc',
+      '../extensions/browser/api/display_source/display_source_apitestbase.h',
+      'browser/extensions/api/display_source/display_source_wifi_display_apitest.cc',
     ],
     'chrome_browser_tests_sources': [
       # The list of sources which is only used by chrome browser tests.
@@ -454,9 +454,13 @@
       'browser/task_management/providers/web_contents/extension_tag_browsertest.cc',
       'browser/task_management/providers/web_contents/subframe_task_browsertest.cc',
       'browser/task_management/providers/web_contents/tab_contents_tag_browsertest.cc',
-      'browser/task_manager/task_manager_browsertest.cc',
-      'browser/task_manager/task_manager_browsertest_util.cc',
-      'browser/task_manager/task_manager_browsertest_util.h',
+      'browser/task_management/task_manager_browsertest.cc',
+      'browser/task_management/task_manager_browsertest_util.cc',
+      'browser/task_management/task_manager_browsertest_util.h',
+      'browser/task_management/task_manager_tester.cc',
+      'browser/task_management/task_manager_tester.h',
+      'browser/task_manager/legacy_task_manager_tester.cc',
+      'browser/task_manager/legacy_task_manager_tester.h',
       'browser/themes/theme_service_browsertest.cc',
       'browser/tracing/chrome_tracing_delegate_browsertest.cc',
       'browser/translate/cld_data_harness.cc',
@@ -706,9 +710,9 @@
       'browser/chromeos/accessibility/speech_monitor.cc',
       'browser/chromeos/accessibility/speech_monitor.h',
       'browser/chromeos/accessibility/touch_exploration_controller_browsertest.cc',
-      'browser/chromeos/app_mode/kiosk_crash_restore_browsertest.cc',
       'browser/chromeos/app_mode/kiosk_app_manager_browsertest.cc',
       'browser/chromeos/app_mode/kiosk_app_update_service_browsertest.cc',
+      'browser/chromeos/app_mode/kiosk_crash_restore_browsertest.cc',
       'browser/chromeos/attestation/attestation_policy_browsertest.cc',
       'browser/chromeos/customization/customization_document_browsertest.cc',
       'browser/chromeos/customization/customization_wallpaper_downloader_browsertest.cc',
@@ -2237,7 +2241,7 @@
           },
           'inputs': [
             '<(gypv8sh)',
-            '<(PRODUCT_DIR)/d8<(EXECUTABLE_SUFFIX)',
+            '<(PRODUCT_DIR)/v8_shell<(EXECUTABLE_SUFFIX)',
             '<(mock_js)',
             '<(test_api_js)',
             '<(js2gtest)',
@@ -2634,7 +2638,7 @@
           'dependencies': [
             '../components/components.gyp:copresence',
             # build time dependency.
-            '../v8/src/d8.gyp:d8#host',
+            '../v8/samples/samples.gyp:v8_shell#host',
           ],
         }],
         ['enable_app_list==1', {
@@ -2775,7 +2779,7 @@
           },
           'inputs': [
             '<(gypv8sh)',
-            '<(PRODUCT_DIR)/d8<(EXECUTABLE_SUFFIX)',
+            '<(PRODUCT_DIR)/v8_shell<(EXECUTABLE_SUFFIX)',
             '<(mock_js)',
             '<(test_api_js)',
             '<(js2gtest)',

@@ -6,7 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/arc/arc_bridge_bootstrap.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_bridge_service_impl.h"
@@ -34,7 +34,9 @@ ArcBridgeService* g_arc_bridge_service_for_testing = nullptr;
 
 }  // namespace
 
-ArcServiceManager::ArcServiceManager() {
+ArcServiceManager::ArcServiceManager(
+    scoped_refptr<base::TaskRunner> blocking_task_runner)
+    : blocking_task_runner_(blocking_task_runner) {
   DCHECK(!g_arc_service_manager);
   g_arc_service_manager = this;
 

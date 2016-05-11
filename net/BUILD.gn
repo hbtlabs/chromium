@@ -337,6 +337,8 @@ component("net") {
 
   if (is_mac) {
     libs = [
+      "CFNetwork.framework",
+      "CoreServices.framework",
       "Foundation.framework",
       "Security.framework",
       "SystemConfiguration.framework",
@@ -1322,6 +1324,20 @@ if (!is_ios) {
   executable("quic_server") {
     sources = [
       "tools/quic/quic_simple_server_bin.cc",
+    ]
+    deps = [
+      ":net",
+      ":simple_quic_tools",
+      "//base",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
+      "//third_party/boringssl",
+      "//third_party/protobuf:protobuf_lite",
+    ]
+  }
+  executable("quic_packet_printer") {
+    sources = [
+      "tools/quic/quic_packet_printer_bin.cc",
     ]
     deps = [
       ":net",

@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '622c8d5de12f264e496e8d4664a2eea9333922d0',
+  'skia_revision': 'dd964893908c1f91b3ca928a157fef99effd6f49',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'ed8976dee7e70fad5dd9fdb34c25ce5c57354e27',
+  'v8_revision': '6a2488ee0c06028392b0aa5fe3bbf7cd31977ed3',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'aac9bda5ff292fdd66e6a548836ce9777fa73055',
+  'catapult_revision': '767a2ce27e51f8357eae74dabe55caed2f76749d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -127,6 +127,15 @@ deps = {
 
   'src/testing/gmock':
    Var('chromium_git') + '/external/googlemock.git' + '@' + '0421b6f358139f02e102c9c332ce19a33faf75be', # from svn revision 566
+
+   'src/third_party/glslang/src':
+   Var('chromium_git') + '/external/github.com/google/glslang.git' + '@' + '210c6bf4d8119dc5f8ac21da2d4c87184f7015e0',
+
+   'src/third_party/shaderc/src':
+   Var('chromium_git') + '/external/github.com/google/shaderc.git' + '@' + 'cd8793c34907073025af2622c28bcee64e9879a4',
+
+   'src/third_party/SPIRV-Tools/src':
+   Var('chromium_git') + '/external/github.com/KhronosGroup/SPIRV-Tools.git' + '@' + '9166854ac93ef81b026e943ccd230fed6c8b8d3c',
 
   'src/third_party/angle':
    Var('chromium_git') + '/angle/angle.git' + '@' +  Var('angle_revision'),
@@ -189,7 +198,7 @@ deps = {
    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'b2ccb9c189069d45d201c988184e9e0796b96270',
 
   'src/third_party/ffmpeg':
-   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'db898be2c922f59c85a91e0e0c06f1e8828ce4b8',
+   Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '20d74768dcd9886f90fe14719d3513b356b11053',
 
   'src/third_party/libjingle/source/talk':
     Var('chromium_git') + '/external/webrtc/trunk/talk.git' + '@' + 'ca22ce254a986a0b0878d27c4789dacc2eb418a5', # commit position 12581
@@ -204,10 +213,10 @@ deps = {
    Var('chromium_git') + '/chromium/deps/yasm/patched-yasm.git' + '@' + '7da28c6c7c6a1387217352ce02b31754deb54d2a',
 
   'src/third_party/libjpeg_turbo':
-   Var('chromium_git') + '/chromium/deps/libjpeg_turbo.git' + '@' + '51655203fbc949e6423dcd13ce22fe30ab5b5ea2',
+   Var('chromium_git') + '/chromium/deps/libjpeg_turbo.git' + '@' + '414f2433e6634942b9ceea9450bdc21dcc5520cf',
 
   'src/third_party/flac':
-   Var('chromium_git') + '/chromium/deps/flac.git' + '@' + '2c4b86af352b23498315c016dc207e3fb2733fc0',
+   Var('chromium_git') + '/chromium/deps/flac.git' + '@' + '812243a85937e06102ba312c6caf8823e243b35b',
 
   'src/third_party/flatbuffers/src':
    Var('chromium_git') + '/external/github.com/google/flatbuffers.git' + '@' + '6f751d5d26fd566f8c9060358101a2596677f9cf',
@@ -219,7 +228,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '7f5ce33d9f92d82db07aa35b37976ca7e5c991d4', # commit position 12625
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '0ddcbd41f75d94717296f78a720a20370de57e80', # commit position 12681
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),

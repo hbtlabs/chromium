@@ -17,7 +17,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
@@ -4031,12 +4031,15 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
 
       // Tests that saving an identical profile except a slightly different
       // postal code results in a merge with the new value kept.
-      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "R2C0A1"}}, {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
-      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}}, {{ADDRESS_HOME_ZIP, "R2C0A1"}},
-        {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C 0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C 0A1"}}},
+      {{{ADDRESS_HOME_ZIP, "r2c 0a1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}},
+       {{ADDRESS_HOME_ZIP, "R2C0A1"}}},
 
       // Tests that saving an identical profile plus a new piece of information
       // on the address line 2 results in a merge and that the original empty
@@ -4102,11 +4105,18 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
        {{ADDRESS_HOME_STATE, "CA"}}},
 
       // Tests that saving an identical profile except that the state is the
-      // full form instead of the abbreviation results in a  merge and that the
+      // full form instead of the abbreviation results in a merge and that the
       // original state gets overwritten.
       {ProfileFields(),
        {{ADDRESS_HOME_STATE, "California"}},
        {{ADDRESS_HOME_STATE, "California"}}},
+
+      // Tests that saving and identical profile except that the company name
+      // has different punctuation and case results in a merge and that the
+      // syntax of the new profile replaces the old one.
+      {{{COMPANY_NAME, "Stark inc"}},
+       {{COMPANY_NAME, "Stark Inc."}},
+       {{COMPANY_NAME, "Stark Inc."}}},
   };
 
   for (TestCase test_case : test_cases) {

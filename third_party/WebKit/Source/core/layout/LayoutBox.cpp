@@ -56,6 +56,7 @@
 #include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
+#include "core/page/scrolling/SnapCoordinator.h"
 #include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/PaintLayer.h"
@@ -145,6 +146,7 @@ void LayoutBox::willBeDestroyed()
 void LayoutBox::insertedIntoTree()
 {
     LayoutBoxModelObject::insertedIntoTree();
+    addScrollSnapMapping();
 
     if (isOrthogonalWritingModeRoot())
         markOrthogonalWritingModeRoot();
@@ -155,6 +157,7 @@ void LayoutBox::willBeRemovedFromTree()
     if (!documentBeingDestroyed() && isOrthogonalWritingModeRoot())
         unmarkOrthogonalWritingModeRoot();
 
+    clearScrollSnapMapping();
     LayoutBoxModelObject::willBeRemovedFromTree();
 }
 
@@ -301,6 +304,8 @@ void LayoutBox::styleDidChange(StyleDifference diff, const ComputedStyle* oldSty
         LayoutFlowThread* flowThread = flowThreadContainingBlock();
         if (flowThread && flowThread != this)
             flowThread->flowThreadDescendantStyleDidChange(this, diff, *oldStyle);
+
+        updateScrollSnapMappingAfterStyleChange(&newStyle, oldStyle);
     }
 
     ASSERT(!isInline() || isAtomicInlineLevel()); // Non-atomic inlines should be LayoutInline or LayoutText, not LayoutBox.
@@ -371,6 +376,38 @@ void LayoutBox::updateGridPositionAfterStyleChange(const ComputedStyle* oldStyle
     // It should be possible to not dirty the grid in some cases (like moving an explicitly placed grid item).
     // For now, it's more simple to just always recompute the grid.
     toLayoutGrid(parent())->dirtyGrid();
+}
+
+void LayoutBox::updateScrollSnapMappingAfterStyleChange(const ComputedStyle* newStyle, const ComputedStyle* oldStyle)
+{
+    SnapCoordinator* snapCoordinator = document().snapCoordinator();
+    if (!snapCoordinator)
+        return;
+
+    // Scroll snap type has no effect on the viewport defining element instead
+    // they are handled by the LayoutView.
+    bool allowsSnapContainer = node() != document().viewportDefiningElement();
+
+    ScrollSnapType oldSnapType = oldStyle ? oldStyle->getScrollSnapType() : ScrollSnapTypeNone;
+    ScrollSnapType newSnapType = newStyle && allowsSnapContainer ? newStyle->getScrollSnapType() : ScrollSnapTypeNone;
+    if (oldSnapType != newSnapType)
+        snapCoordinator->snapContainerDidChange(*this, newSnapType);
+
+    Vector<LengthPoint> emptyVector;
+    const Vector<LengthPoint>& oldSnapCoordinate = oldStyle ? oldStyle->scrollSnapCoordinate() : emptyVector;
+    const Vector<LengthPoint>& newSnapCoordinate = newStyle ? newStyle->scrollSnapCoordinate() : emptyVector;
+    if (oldSnapCoordinate != newSnapCoordinate)
+        snapCoordinator->snapAreaDidChange(*this, newSnapCoordinate);
+}
+
+void LayoutBox::addScrollSnapMapping()
+{
+    updateScrollSnapMappingAfterStyleChange(style(), nullptr);
+}
+
+void LayoutBox::clearScrollSnapMapping()
+{
+    updateScrollSnapMappingAfterStyleChange(nullptr, style());
 }
 
 void LayoutBox::updateFromStyle()
@@ -543,7 +580,7 @@ void LayoutBox::scrollRectToVisible(const LayoutRect& rect, const ScrollAlignmen
         newRect = getScrollableArea()->scrollIntoView(rect, alignX, alignY, scrollType);
     } else if (!parentBox && canBeProgramaticallyScrolled()) {
         if (FrameView* frameView = this->frameView()) {
-            HTMLFrameOwnerElement* ownerElement = document().ownerElement();
+            HTMLFrameOwnerElement* ownerElement = document().localOwner();
             if (!isDisallowedAutoscroll(ownerElement, frameView)) {
                 if (makeVisibleInVisualViewport) {
                     frameView->getScrollableArea()->scrollIntoView(rect, alignX, alignY, scrollType);
@@ -855,8 +892,8 @@ IntSize LayoutBox::calculateAutoscrollDirection(const IntPoint& pointInRootFrame
 LayoutBox* LayoutBox::findAutoscrollable(LayoutObject* layoutObject)
 {
     while (layoutObject && !(layoutObject->isBox() && toLayoutBox(layoutObject)->canAutoscroll())) {
-        if (!layoutObject->parent() && layoutObject->node() == layoutObject->document() && layoutObject->document().ownerElement())
-            layoutObject = layoutObject->document().ownerElement()->layoutObject();
+        if (!layoutObject->parent() && layoutObject->node() == layoutObject->document() && layoutObject->document().localOwner())
+            layoutObject = layoutObject->document().localOwner()->layoutObject();
         else
             layoutObject = layoutObject->parent();
     }
@@ -950,12 +987,27 @@ bool LayoutBox::needsPreferredWidthsRecalculation() const
     return style()->paddingStart().hasPercent() || style()->paddingEnd().hasPercent();
 }
 
+IntSize LayoutBox::originAdjustmentForScrollbars() const
+{
+    IntSize size;
+    int adjustmentWidth = verticalScrollbarWidth();
+    if (hasFlippedBlocksWritingMode()
+        || (isHorizontalWritingMode() && shouldPlaceBlockDirectionScrollbarOnLogicalLeft())) {
+        size.expand(adjustmentWidth, 0);
+    }
+    return size;
+}
+
 IntSize LayoutBox::scrolledContentOffset() const
 {
     ASSERT(hasOverflowClip());
     ASSERT(hasLayer());
     // FIXME: Return DoubleSize here. crbug.com/414283.
-    return flooredIntSize(getScrollableArea()->scrollOffset());
+    PaintLayerScrollableArea* scrollableArea = getScrollableArea();
+    IntSize result = flooredIntSize(scrollableArea->scrollOffset()) + originAdjustmentForScrollbars();
+    if (isHorizontalWritingMode() && shouldPlaceBlockDirectionScrollbarOnLogicalLeft())
+        result.expand(-verticalScrollbarWidth(), 0);
+    return result;
 }
 
 bool LayoutBox::mapScrollingContentsRectToBoxSpace(LayoutRect& rect, ApplyOverflowClipFlag applyOverflowClip, VisualRectFlags visualRectFlags) const
@@ -1201,6 +1253,12 @@ bool LayoutBox::nodeAtPoint(HitTestResult& result, const HitTestLocation& locati
             return false;
     }
 
+    bool shouldHitTestSelf = isInSelfHitTestingPhase(action);
+
+    if (shouldHitTestSelf && hasOverflowClip()
+        && hitTestOverflowControl(result, locationInContainer, adjustedLocation))
+        return true;
+
     // TODO(pdr): We should also check for css clip in the !isSelfPaintingLayer
     //            case, similar to overflow clip below.
     bool skipChildren = false;
@@ -1227,7 +1285,7 @@ bool LayoutBox::nodeAtPoint(HitTestResult& result, const HitTestLocation& locati
         return false;
 
     // Now hit test ourselves.
-    if (isInSelfHitTestingPhase(action) && visibleToHitTestRequest(result.hitTestRequest())) {
+    if (shouldHitTestSelf && visibleToHitTestRequest(result.hitTestRequest())) {
         LayoutRect boundsRect(adjustedLocation, size());
         if (locationInContainer.intersects(boundsRect)) {
             updateHitTestResult(result, flipForWritingMode(locationInContainer.point() - toLayoutSize(adjustedLocation)));
@@ -1981,14 +2039,10 @@ bool LayoutBox::needsForcedBreakBefore(EBreak previousBreakAfterValue) const
 
 LayoutRect LayoutBox::localOverflowRectForPaintInvalidation() const
 {
-    if (style()->visibility() != VISIBLE) {
-        PaintLayer* layer = enclosingLayer();
-        layer->updateDescendantDependentFlags();
-        if (layer->subtreeIsInvisible())
-            return LayoutRect();
-    }
+    if (style()->visibility() != VISIBLE)
+        return LayoutRect();
 
-    return visualOverflowRect();
+    return selfVisualOverflowRect();
 }
 
 void LayoutBox::inflateVisualRectForReflectionAndFilterUnderContainer(LayoutRect& rect, const LayoutObject& container, const LayoutBoxModelObject* ancestorToStopAt) const
@@ -3872,10 +3926,10 @@ bool LayoutBox::hasNonCompositedScrollbars() const
     return false;
 }
 
-PaintInvalidationReason LayoutBox::getPaintInvalidationReason(const LayoutBoxModelObject& paintInvalidationContainer,
+PaintInvalidationReason LayoutBox::getPaintInvalidationReason(const PaintInvalidationState& paintInvalidationState,
     const LayoutRect& oldBounds, const LayoutPoint& oldLocation, const LayoutRect& newBounds, const LayoutPoint& newLocation) const
 {
-    PaintInvalidationReason invalidationReason = LayoutBoxModelObject::getPaintInvalidationReason(paintInvalidationContainer, oldBounds, oldLocation, newBounds, newLocation);
+    PaintInvalidationReason invalidationReason = LayoutBoxModelObject::getPaintInvalidationReason(paintInvalidationState, oldBounds, oldLocation, newBounds, newLocation);
     if (isFullPaintInvalidationReason(invalidationReason))
         return invalidationReason;
 
@@ -3894,7 +3948,7 @@ PaintInvalidationReason LayoutBox::getPaintInvalidationReason(const LayoutBoxMod
     // because the difference between oldBounds and newBounds doesn't cover all area needing invalidation.
     // FIXME: Should also consider ancestor transforms since paintInvalidationContainer. crbug.com/426111.
     if (invalidationReason == PaintInvalidationIncremental
-        && paintInvalidationContainer != this
+        && paintInvalidationState.paintInvalidationContainer() != this
         && hasLayer() && layer()->transform() && !layer()->transform()->isIdentityOrTranslation())
         return PaintInvalidationBoundsChange;
 
@@ -4127,6 +4181,16 @@ void LayoutBox::addOverflowFromChild(LayoutBox* child, const LayoutSize& delta)
     addContentsVisualOverflow(childVisualOverflowRect);
 }
 
+bool LayoutBox::hasTopOverflow() const
+{
+    return !style()->isLeftToRightDirection() && !isHorizontalWritingMode();
+}
+
+bool LayoutBox::hasLeftOverflow() const
+{
+    return !style()->isLeftToRightDirection() && isHorizontalWritingMode();
+}
+
 void LayoutBox::addLayoutOverflow(const LayoutRect& rect)
 {
     if (rect.isEmpty())
@@ -4142,24 +4206,14 @@ void LayoutBox::addLayoutOverflow(const LayoutRect& rect)
         // Overflow is in the block's coordinate space and thus is flipped for vertical-rl writing
         // mode.  At this stage that is actually a simplification, since we can treat vertical-lr/rl
         // as the same.
-        bool hasTopOverflow = !style()->isLeftToRightDirection() && !isHorizontalWritingMode();
-        bool hasLeftOverflow = !style()->isLeftToRightDirection() && isHorizontalWritingMode();
-        if (isFlexibleBox() && style()->isReverseFlexDirection()) {
-            LayoutFlexibleBox* flexibleBox = toLayoutFlexibleBox(this);
-            if (flexibleBox->isHorizontalFlow())
-                hasLeftOverflow = true;
-            else
-                hasTopOverflow = true;
-        }
-
-        if (!hasTopOverflow)
-            overflowRect.shiftYEdgeTo(std::max(overflowRect.y(), clientBox.y()));
-        else
+        if (hasTopOverflow())
             overflowRect.shiftMaxYEdgeTo(std::min(overflowRect.maxY(), clientBox.maxY()));
-        if (!hasLeftOverflow)
-            overflowRect.shiftXEdgeTo(std::max(overflowRect.x(), clientBox.x()));
         else
+            overflowRect.shiftYEdgeTo(std::max(overflowRect.y(), clientBox.y()));
+        if (hasLeftOverflow())
             overflowRect.shiftMaxXEdgeTo(std::min(overflowRect.maxX(), clientBox.maxX()));
+        else
+            overflowRect.shiftXEdgeTo(std::max(overflowRect.x(), clientBox.x()));
 
         // Now re-test with the adjusted rectangle and see if it has become unreachable or fully
         // contained.
@@ -4448,8 +4502,7 @@ LayoutRect LayoutBox::visualOverflowRect() const
         return borderBoxRect();
     if (hasOverflowClip())
         return m_overflow->selfVisualOverflowRect();
-    // TODO(wangxianzhu): We should use normal unionRect() which ignores empty rects.
-    return unionRectEvenIfEmpty(m_overflow->selfVisualOverflowRect(), m_overflow->contentsVisualOverflowRect());
+    return unionRect(m_overflow->selfVisualOverflowRect(), m_overflow->contentsVisualOverflowRect());
 }
 
 LayoutUnit LayoutBox::offsetLeft() const
@@ -4853,6 +4906,52 @@ LayoutUnit LayoutBox::calculatePaginationStrutToFitContent(LayoutUnit offset, La
     // Start searching for a suitable offset at the top of the next page or column.
     LayoutUnit flowThreadOffset = offsetFromLogicalTopOfFirstPage() + nextPageLogicalTop;
     return strutToNextPage + flowThread->nextLogicalTopForUnbreakableContent(flowThreadOffset, contentLogicalHeight) - flowThreadOffset;
+}
+
+LayoutBox* LayoutBox::snapContainer() const
+{
+    return m_rareData ? m_rareData->m_snapContainer : nullptr;
+}
+
+void LayoutBox::setSnapContainer(LayoutBox* newContainer)
+{
+    LayoutBox* oldContainer = snapContainer();
+    if (oldContainer == newContainer)
+        return;
+
+    if (oldContainer)
+        oldContainer->removeSnapArea(*this);
+
+    ensureRareData().m_snapContainer = newContainer;
+
+    if (newContainer)
+        newContainer->addSnapArea(*this);
+}
+
+void LayoutBox::clearSnapAreas()
+{
+    if (SnapAreaSet* areas = snapAreas()) {
+        for (auto& snapArea : *areas)
+            snapArea->m_rareData->m_snapContainer = nullptr;
+        areas->clear();
+    }
+}
+
+void LayoutBox::addSnapArea(const LayoutBox& snapArea)
+{
+    ensureRareData().ensureSnapAreas().add(&snapArea);
+}
+
+void LayoutBox::removeSnapArea(const LayoutBox& snapArea)
+{
+    if (m_rareData && m_rareData->m_snapAreas) {
+        m_rareData->m_snapAreas->remove(&snapArea);
+    }
+}
+
+SnapAreaSet* LayoutBox::snapAreas() const
+{
+    return m_rareData ? m_rareData->m_snapAreas.get() : nullptr;
 }
 
 } // namespace blink

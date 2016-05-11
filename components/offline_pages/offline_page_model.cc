@@ -16,7 +16,7 @@
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -25,7 +25,6 @@
 #include "url/gurl.h"
 
 using ArchiverResult = offline_pages::OfflinePageArchiver::ArchiverResult;
-using SavePageResult = offline_pages::OfflinePageModel::SavePageResult;
 
 namespace offline_pages {
 
@@ -257,7 +256,7 @@ void OfflinePageModel::ClearAll(const base::Closure& callback) {
 }
 
 void OfflinePageModel::DeletePagesByURLPredicate(
-    const base::Callback<bool(const GURL&)>& predicate,
+    const UrlPredicate& predicate,
     const DeletePageCallback& callback) {
   if (!is_loaded_) {
     delayed_tasks_.push_back(
@@ -270,7 +269,7 @@ void OfflinePageModel::DeletePagesByURLPredicate(
 }
 
 void OfflinePageModel::DoDeletePagesByURLPredicate(
-    const base::Callback<bool(const GURL&)>& predicate,
+    const UrlPredicate& predicate,
     const DeletePageCallback& callback) {
   DCHECK(is_loaded_);
 
@@ -429,6 +428,26 @@ const OfflinePageItem* OfflinePageModel::MaybeGetPageByOfflineURL(
   return nullptr;
 }
 
+void OfflinePageModel::GetBestPageForOnlineURL(
+    const GURL& online_url,
+    const SingleOfflinePageItemCallback callback) {
+  RunWhenLoaded(
+      base::Bind(&OfflinePageModel::GetBestPageForOnlineURLWhenLoadDone,
+                 weak_ptr_factory_.GetWeakPtr(), online_url, callback));
+}
+
+void OfflinePageModel::GetBestPageForOnlineURLWhenLoadDone(
+    const GURL& online_url,
+    const SingleOfflinePageItemCallback& callback) const {
+  SingleOfflinePageItemResult result;
+
+  const OfflinePageItem* best_page = MaybeGetBestPageForOnlineURL(online_url);
+  if (best_page != nullptr)
+    result = *best_page;
+
+  callback.Run(result);
+}
+
 void OfflinePageModel::GetPagesByOnlineURL(
     const GURL& online_url,
     const MultipleOfflinePageItemCallback& callback) {
@@ -450,13 +469,16 @@ void OfflinePageModel::GetPagesByOnlineURLWhenLoadDone(
   callback.Run(result);
 }
 
-const OfflinePageItem* OfflinePageModel::MaybeGetPageByOnlineURL(
+const OfflinePageItem* OfflinePageModel::MaybeGetBestPageForOnlineURL(
     const GURL& online_url) const {
+  const OfflinePageItem* result = nullptr;
   for (const auto& id_page_pair : offline_pages_) {
-    if (id_page_pair.second.url == online_url)
-      return &(id_page_pair.second);
+    if (id_page_pair.second.url == online_url) {
+      if (!result || id_page_pair.second.creation_time > result->creation_time)
+        result = &(id_page_pair.second);
+    }
   }
-  return nullptr;
+  return result;
 }
 
 void OfflinePageModel::CheckForExternalFileDeletion() {
@@ -750,7 +772,7 @@ void OfflinePageModel::OnFindPagesMissingArchiveFile(
 
 void OfflinePageModel::OnRemoveOfflinePagesMissingArchiveFileDone(
     const std::vector<std::pair<int64_t, ClientId>>& offline_client_id_pairs,
-    OfflinePageModel::DeletePageResult /* result */) {
+    DeletePageResult /* result */) {
   for (const auto& id_pair : offline_client_id_pairs) {
     FOR_EACH_OBSERVER(Observer, observers_,
                       OfflinePageDeleted(id_pair.first, id_pair.second));

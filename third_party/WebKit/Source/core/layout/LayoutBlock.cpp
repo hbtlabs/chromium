@@ -249,70 +249,67 @@ static bool borderOrPaddingLogicalDimensionChanged(const ComputedStyle& oldStyle
         || oldStyle.paddingBottom() != newStyle.paddingBottom();
 }
 
-static bool canMergeContiguousAnonymousBlocks(LayoutObject* prev, LayoutObject* next)
+static bool isMergeableAnonymousBlock(const LayoutBlockFlow* block)
 {
-    if ((prev && (!prev->isAnonymousBlock() || toLayoutBlock(prev)->continuation() || toLayoutBlock(prev)->beingDestroyed()))
-        || (next && (!next->isAnonymousBlock() || toLayoutBlock(next)->continuation() || toLayoutBlock(next)->beingDestroyed())))
-        return false;
-
-    if ((prev && (prev->isRubyRun() || prev->isRubyBase()))
-        || (next && (next->isRubyRun() || next->isRubyBase())))
-        return false;
-
-    return true;
+    return block->isAnonymousBlock() && !block->continuation() && !block->beingDestroyed() && !block->isRubyRun() && !block->isRubyBase();
 }
 
-static bool mergeContiguousAnonymousBlocks(LayoutObject* prev, LayoutObject*& next)
+bool LayoutBlock::mergeSiblingContiguousAnonymousBlock(LayoutBlockFlow* siblingThatMayBeDeleted)
 {
-    if (!prev || !next || !canMergeContiguousAnonymousBlocks(prev, next))
+    if (!isLayoutBlockFlow())
         return false;
 
-    prev->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::AnonymousBlockChange);
-    LayoutBlockFlow* nextBlock = toLayoutBlockFlow(next);
-    LayoutBlockFlow* prevBlock = toLayoutBlockFlow(prev);
+    // Note: |this| and |siblingThatMayBeDeleted| may not be adjacent siblings at this point. There
+    // may be an object between them which is about to be removed.
+
+    if (!isMergeableAnonymousBlock(toLayoutBlockFlow(this)) || !isMergeableAnonymousBlock(siblingThatMayBeDeleted))
+        return false;
+
+    setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::AnonymousBlockChange);
 
     // If the inlineness of children of the two block don't match, we'd need special code here
     // (but there should be no need for it).
-    ASSERT(nextBlock->childrenInline() == prevBlock->childrenInline());
+    ASSERT(siblingThatMayBeDeleted->childrenInline() == childrenInline());
     // Take all the children out of the |next| block and put them in
     // the |prev| block.
-    nextBlock->moveAllChildrenIncludingFloatsTo(prevBlock, nextBlock->hasLayer() || prevBlock->hasLayer());
+    siblingThatMayBeDeleted->moveAllChildrenIncludingFloatsTo(this, siblingThatMayBeDeleted->hasLayer() || hasLayer());
     // Delete the now-empty block's lines and nuke it.
-    nextBlock->deleteLineBoxTree();
-    nextBlock->destroy();
-    next = nullptr;
+    siblingThatMayBeDeleted->deleteLineBoxTree();
+    siblingThatMayBeDeleted->destroy();
     return true;
 }
 
-static void addNextFloatingOrOutOfFlowSiblingsToBlock(LayoutBlock* block)
+void LayoutBlock::reparentSubsequentFloatingOrOutOfFlowSiblings()
 {
-    if (!block->parent() || !block->parent()->isLayoutBlockFlow())
+    if (!parent() || !parent()->isLayoutBlockFlow())
         return;
-    if (block->beingDestroyed() || block->documentBeingDestroyed())
+    if (beingDestroyed() || documentBeingDestroyed())
         return;
-
-    LayoutObject* child = block->nextSibling();
+    LayoutBlockFlow* parentBlockFlow = toLayoutBlockFlow(parent());
+    LayoutObject* child = nextSibling();
     while (child && child->isFloatingOrOutOfFlowPositioned()) {
         LayoutObject* sibling = child->nextSibling();
-        toLayoutBlock(block->parent())->moveChildTo(block, child, nullptr, false);
+        parentBlockFlow->moveChildTo(this, child, nullptr, false);
         child = sibling;
     }
 
-    LayoutObject* next = block->nextSibling();
-    mergeContiguousAnonymousBlocks(block, next);
+    if (LayoutObject* next = nextSibling()) {
+        if (next->isLayoutBlockFlow())
+            mergeSiblingContiguousAnonymousBlock(toLayoutBlockFlow(next));
+    }
 }
 
-static void addPreviousFloatingOrOutOfFlowSiblingsToBlock(LayoutBlock* block)
+void LayoutBlock::reparentPrecedingFloatingOrOutOfFlowSiblings()
 {
-    if (!block->parent() || !block->parent()->isLayoutBlockFlow())
+    if (!parent() || !parent()->isLayoutBlockFlow())
         return;
-    if (block->beingDestroyed() || block->documentBeingDestroyed())
+    if (beingDestroyed() || documentBeingDestroyed())
         return;
-
-    LayoutObject* child = block->previousSibling();
+    LayoutBlockFlow* parentBlockFlow = toLayoutBlockFlow(parent());
+    LayoutObject* child = previousSibling();
     while (child && child->isFloatingOrOutOfFlowPositioned()) {
         LayoutObject* sibling = child->previousSibling();
-        toLayoutBlock(block->parent())->moveChildTo(block, child, block->firstChild(), false);
+        parentBlockFlow->moveChildTo(this, child, firstChild(), false);
         child = sibling;
     }
 }
@@ -328,7 +325,7 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
             LayoutBlock* newParent = toLayoutBlock(previousSibling());
             toLayoutBlock(parent())->moveChildTo(newParent, this, nullptr, false);
             // The anonymous block we've moved to may now be adjacent to former siblings of ours that it can contain also.
-            addNextFloatingOrOutOfFlowSiblingsToBlock(newParent);
+            newParent->reparentSubsequentFloatingOrOutOfFlowSiblings();
         } else if (nextSibling() && nextSibling()->isAnonymousBlock()) {
             toLayoutBlock(parent())->moveChildTo(toLayoutBlock(nextSibling()), this, nextSibling()->slowFirstChild(), false);
         }
@@ -377,34 +374,7 @@ bool LayoutBlock::allowsOverflowClip() const
     return node() != document().viewportDefiningElement();
 }
 
-inline static void invalidateDisplayItemClientForStartOfContinuationsIfNeeded(const LayoutBlock& block)
-{
-    // If the block is a continuation or containing block of an inline continuation, invalidate the
-    // start object of the continuations if it has focus ring because change of continuation may change
-    // the shape of the focus ring.
-    if (!block.isAnonymous())
-        return;
-
-    LayoutObject* startOfContinuations = nullptr;
-    if (LayoutInline* inlineElementContinuation = block.inlineElementContinuation()) {
-        // This block is an anonymous block continuation.
-        startOfContinuations = inlineElementContinuation->node()->layoutObject();
-    } else if (LayoutObject* firstChild = block.firstChild()) {
-        // This block is the anonymous containing block of an inline element continuation.
-        if (firstChild->isElementContinuation())
-            startOfContinuations = firstChild->node()->layoutObject();
-    }
-    if (startOfContinuations && startOfContinuations->styleRef().outlineStyleIsAuto())
-        startOfContinuations->invalidateDisplayItemClient(*startOfContinuations);
-}
-
-void LayoutBlock::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason) const
-{
-    LayoutBox::invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
-    invalidateDisplayItemClientForStartOfContinuationsIfNeeded(*this);
-}
-
-void LayoutBlock::addChildIgnoringContinuation(LayoutObject* newChild, LayoutObject* beforeChild)
+void LayoutBlock::addChild(LayoutObject* newChild, LayoutObject* beforeChild)
 {
     if (beforeChild && beforeChild->parent() != this) {
         LayoutObject* beforeChildContainer = beforeChild->parent();
@@ -478,9 +448,9 @@ void LayoutBlock::addChildIgnoringContinuation(LayoutObject* newChild, LayoutObj
             LayoutBlock* newBox = createAnonymousBlock();
             LayoutBox::addChild(newBox, beforeChild);
             // Reparent adjacent floating or out-of-flow siblings to the new box.
-            addPreviousFloatingOrOutOfFlowSiblingsToBlock(newBox);
+            newBox->reparentPrecedingFloatingOrOutOfFlowSiblings();
             newBox->addChild(newChild);
-            addNextFloatingOrOutOfFlowSiblingsToBlock(newBox);
+            newBox->reparentSubsequentFloatingOrOutOfFlowSiblings();
             return;
         }
     }
@@ -490,11 +460,6 @@ void LayoutBlock::addChildIgnoringContinuation(LayoutObject* newChild, LayoutObj
     if (madeBoxesNonInline && parent() && isAnonymousBlock() && parent()->isLayoutBlock())
         toLayoutBlock(parent())->removeLeftoverAnonymousBlock(this);
     // this object may be dead here
-}
-
-void LayoutBlock::addChild(LayoutObject* newChild, LayoutObject* beforeChild)
-{
-    addChildIgnoringContinuation(newChild, beforeChild);
 }
 
 static void getInlineRun(LayoutObject* start, LayoutObject* boundary,
@@ -694,7 +659,13 @@ void LayoutBlock::removeChild(LayoutObject* oldChild)
     // fold the inline content back together.
     LayoutObject* prev = oldChild->previousSibling();
     LayoutObject* next = oldChild->nextSibling();
-    bool mergedAnonymousBlocks = !oldChild->documentBeingDestroyed() && !oldChild->isInline() && !oldChild->virtualContinuation() && mergeContiguousAnonymousBlocks(prev, next);
+    bool mergedAnonymousBlocks = false;
+    if (prev && next && !oldChild->isInline() && !oldChild->virtualContinuation() && prev->isLayoutBlockFlow() && next->isLayoutBlockFlow()) {
+        if (toLayoutBlockFlow(prev)->mergeSiblingContiguousAnonymousBlock(toLayoutBlockFlow(next))) {
+            mergedAnonymousBlocks = true;
+            next = nullptr;
+        }
+    }
 
     LayoutBox::removeChild(oldChild);
 
@@ -704,41 +675,6 @@ void LayoutBlock::removeChild(LayoutObject* oldChild)
         // box.  We can go ahead and pull the content right back up into our
         // box.
         collapseAnonymousBlockChild(this, toLayoutBlock(child));
-    }
-
-    if (!firstChild()) {
-        // If this was our last child be sure to clear out our line boxes.
-        if (childrenInline())
-            deleteLineBoxTree();
-
-        // If we are an empty anonymous block in the continuation chain,
-        // we need to remove ourself and fix the continuation chain.
-        if (!beingDestroyed() && isAnonymousBlockContinuation() && !oldChild->isListMarker()) {
-            LayoutObject* containingBlockIgnoringAnonymous = containingBlock();
-            while (containingBlockIgnoringAnonymous && containingBlockIgnoringAnonymous->isAnonymous())
-                containingBlockIgnoringAnonymous = containingBlockIgnoringAnonymous->containingBlock();
-            for (LayoutObject* curr = this; curr; curr = curr->previousInPreOrder(containingBlockIgnoringAnonymous)) {
-                if (curr->virtualContinuation() != this)
-                    continue;
-
-                // Found our previous continuation. We just need to point it to
-                // |this|'s next continuation.
-                LayoutBoxModelObject* nextContinuation = continuation();
-                if (curr->isLayoutInline())
-                    toLayoutInline(curr)->setContinuation(nextContinuation);
-                else if (curr->isLayoutBlock())
-                    toLayoutBlock(curr)->setContinuation(nextContinuation);
-                else
-                    ASSERT_NOT_REACHED();
-
-                break;
-            }
-            setContinuation(nullptr);
-            destroy();
-        }
-    } else if (!beingDestroyed() && !oldChild->isFloatingOrOutOfFlowPositioned() && isLayoutBlockFlow() && !oldChild->isAnonymousBlock()) {
-        // If the child we're removing means that we can now treat all children as inline without the need for anonymous blocks, then do that.
-        makeChildrenInlineIfPossible();
     }
 }
 
@@ -1481,28 +1417,16 @@ bool LayoutBlock::isPointInOverflowControl(HitTestResult& result, const LayoutPo
     return layer()->getScrollableArea()->hitTestOverflowControls(result, roundedIntPoint(locationInContainer - toLayoutSize(accumulatedOffset)));
 }
 
-Node* LayoutBlock::nodeForHitTest() const
+bool LayoutBlock::hitTestOverflowControl(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& adjustedLocation)
 {
-    // If we are in the margins of block elements that are part of a
-    // continuation we're actually still inside the enclosing element
-    // that was split. Use the appropriate inner node.
-    return isAnonymousBlockContinuation() ? continuation()->node() : node();
-}
-
-bool LayoutBlock::nodeAtPoint(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction hitTestAction)
-{
-    LayoutPoint adjustedLocation(accumulatedOffset + location());
-    LayoutSize localOffset = toLayoutSize(adjustedLocation);
-
-    if (isInSelfHitTestingPhase(hitTestAction)
-        && visibleToHitTestRequest(result.hitTestRequest())
+    if (visibleToHitTestRequest(result.hitTestRequest())
         && isPointInOverflowControl(result, locationInContainer.point(), adjustedLocation)) {
-        updateHitTestResult(result, locationInContainer.point() - localOffset);
+        updateHitTestResult(result, locationInContainer.point() - toLayoutSize(adjustedLocation));
         // FIXME: isPointInOverflowControl() doesn't handle rect-based tests yet.
         if (result.addNodeToListBasedTestResult(nodeForHitTest(), locationInContainer) == StopHitTesting)
             return true;
     }
-    return LayoutBox::nodeAtPoint(result, locationInContainer, accumulatedOffset, hitTestAction);
+    return false;
 }
 
 bool LayoutBlock::hitTestChildren(HitTestResult& result, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction hitTestAction)
@@ -1987,9 +1911,9 @@ int LayoutBlock::inlineBlockBaseline(LineDirectionMode lineDirection) const
     return -1;
 }
 
-LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const
+const LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const
 {
-    LayoutBlock* firstLineBlock = const_cast<LayoutBlock*>(this);
+    const LayoutBlock* firstLineBlock = this;
     bool hasPseudo = false;
     while (true) {
         hasPseudo = firstLineBlock->style()->hasPseudoStyle(PseudoIdFirstLine);
@@ -2012,55 +1936,15 @@ LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const
     return firstLineBlock;
 }
 
-LayoutBlockFlow* LayoutBlock::nearestInnerBlockWithFirstLine() const
+LayoutBlockFlow* LayoutBlock::nearestInnerBlockWithFirstLine()
 {
     if (childrenInline())
-        return toLayoutBlockFlow(const_cast<LayoutBlock*>(this));
+        return toLayoutBlockFlow(this);
     for (LayoutObject* child = firstChild(); child && !child->isFloatingOrOutOfFlowPositioned() && child->isLayoutBlockFlow(); child = toLayoutBlock(child)->firstChild()) {
         if (child->childrenInline())
             return toLayoutBlockFlow(child);
     }
     return nullptr;
-}
-
-void LayoutBlock::absoluteRects(Vector<IntRect>& rects, const LayoutPoint& accumulatedOffset) const
-{
-    // For blocks inside inlines, we go ahead and include margins so that we run right up to the
-    // inline boxes above and below us (thus getting merged with them to form a single irregular
-    // shape).
-    if (isAnonymousBlockContinuation()) {
-        // FIXME: This is wrong for vertical writing-modes.
-        // https://bugs.webkit.org/show_bug.cgi?id=46781
-        LayoutRect rect(accumulatedOffset, size());
-        rect.expand(collapsedMarginBoxLogicalOutsets());
-        rects.append(pixelSnappedIntRect(rect));
-        continuation()->absoluteRects(rects, accumulatedOffset - toLayoutSize(location() +
-            inlineElementContinuation()->containingBlock()->location()));
-    } else {
-        rects.append(pixelSnappedIntRect(accumulatedOffset, size()));
-    }
-}
-
-void LayoutBlock::absoluteQuads(Vector<FloatQuad>& quads) const
-{
-    // For blocks inside inlines, we go ahead and include margins so that we run right up to the
-    // inline boxes above and below us (thus getting merged with them to form a single irregular
-    // shape).
-    if (isAnonymousBlockContinuation()) {
-        // FIXME: This is wrong for vertical writing-modes.
-        // https://bugs.webkit.org/show_bug.cgi?id=46781
-        LayoutRect localRect(LayoutPoint(), size());
-        localRect.expand(collapsedMarginBoxLogicalOutsets());
-        quads.append(localToAbsoluteQuad(FloatRect(localRect)));
-        continuation()->absoluteQuads(quads);
-    } else {
-        quads.append(LayoutBox::localToAbsoluteQuad(FloatRect(0, 0, size().width().toFloat(), size().height().toFloat())));
-    }
-}
-
-LayoutObject* LayoutBlock::hoverAncestor() const
-{
-    return isAnonymousBlockContinuation() ? continuation() : LayoutBox::hoverAncestor();
 }
 
 void LayoutBlock::updateDragState(bool dragOn)

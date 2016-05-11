@@ -8,7 +8,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/download_constants.h"
 #include "components/history/core/browser/download_row.h"
 #include "components/history/core/browser/history_backend.h"
@@ -127,7 +127,8 @@ bool HistoryBackendDBBaseTest::AddDownload(uint32_t id,
   DownloadRow download(
       base::FilePath(FILE_PATH_LITERAL("current-path")),
       base::FilePath(FILE_PATH_LITERAL("target-path")), url_chain,
-      GURL("http://referrer.example.com/"), GURL("http://tab-url.example.com/"),
+      GURL("http://referrer.example.com/"), GURL("http://site-url.example.com"),
+      GURL("http://tab-url.example.com/"),
       GURL("http://tab-referrer-url.example.com/"), std::string(),
       "application/vnd.oasis.opendocument.text", "application/octet-stream",
       time, time, std::string(), std::string(), 0, 512, state,

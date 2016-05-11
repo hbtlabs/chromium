@@ -57,6 +57,8 @@ enum ApplyOverflowClipFlag {
     ApplyNonScrollOverflowClip
 };
 
+using SnapAreaSet = HashSet<const LayoutBox*>;
+
 struct LayoutBoxRareData {
     WTF_MAKE_NONCOPYABLE(LayoutBoxRareData); USING_FAST_MALLOC(LayoutBoxRareData);
 public:
@@ -66,6 +68,8 @@ public:
         , m_overrideLogicalContentWidth(-1)
         , m_previousBorderBoxSize(LayoutUnit(-1), LayoutUnit(-1))
         , m_percentHeightContainer(nullptr)
+        , m_snapContainer(nullptr)
+        , m_snapAreas(nullptr)
     {
     }
 
@@ -85,6 +89,19 @@ public:
     LayoutUnit m_paginationStrut;
 
     LayoutBlock* m_percentHeightContainer;
+    // For snap area, the owning snap container.
+    LayoutBox* m_snapContainer;
+    // For snap container, the descendant snap areas that contribute snap
+    // points.
+    OwnPtr<SnapAreaSet> m_snapAreas;
+
+    SnapAreaSet& ensureSnapAreas()
+    {
+        if (!m_snapAreas)
+            m_snapAreas = adoptPtr(new SnapAreaSet);
+
+        return *m_snapAreas;
+    }
 };
 
 // LayoutBox implements the full CSS box model.
@@ -379,6 +396,13 @@ public:
 
     LayoutRect selfVisualOverflowRect() const { return m_overflow ? m_overflow->selfVisualOverflowRect() : borderBoxRect(); }
     LayoutRect contentsVisualOverflowRect() const { return m_overflow ? m_overflow->contentsVisualOverflowRect() : LayoutRect(); }
+
+    // These methods don't mean the box *actually* has top/left overflow.  They mean that
+    // *if* the box overflows, it will overflow to the top/left rather than the bottom/right.
+    // This happens when child content is laid out right-to-left (e.g. direction:rtl) or
+    // or bottom-to-top (e.g. direction:rtl writing-mode:vertical-rl).
+    virtual bool hasTopOverflow() const;
+    virtual bool hasLeftOverflow() const;
 
     void addLayoutOverflow(const LayoutRect&);
     void addSelfVisualOverflow(const LayoutRect&);
@@ -871,6 +895,8 @@ public:
 
     virtual bool needsPreferredWidthsRecalculation() const;
 
+    // See README.md for an explanation of scroll origin.
+    virtual IntSize originAdjustmentForScrollbars() const;
     IntSize scrolledContentOffset() const;
 
     // Maps a rect in scrolling contents space to box space and apply overflow clip if needed.
@@ -931,6 +957,12 @@ public:
     void setPercentHeightContainer(LayoutBlock*);
     void removeFromPercentHeightContainer();
     void clearPercentHeightDescendants();
+    // For snap areas, returns the snap container that owns us.
+    LayoutBox* snapContainer() const;
+    void setSnapContainer(LayoutBox*);
+    // For snap containers, returns all associated snap areas.
+    SnapAreaSet* snapAreas() const;
+    void clearSnapAreas();
 
     bool hitTestClippedOutByRoundedBorder(const HitTestLocation& locationInContainer, const LayoutPoint& borderBoxLocation) const;
 
@@ -959,11 +991,12 @@ protected:
 
     LayoutObject* splitAnonymousBoxesAroundChild(LayoutObject* beforeChild);
 
+    virtual bool hitTestOverflowControl(HitTestResult&, const HitTestLocation&, const LayoutPoint&) { return false; }
     virtual bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction);
     void addLayerHitTestRects(LayerHitTestRects&, const PaintLayer* currentCompositedLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const override;
     void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
 
-    PaintInvalidationReason getPaintInvalidationReason(const LayoutBoxModelObject& paintInvalidationContainer,
+    PaintInvalidationReason getPaintInvalidationReason(const PaintInvalidationState&,
         const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
         const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer) const override;
     void incrementallyInvalidatePaint(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer) override;
@@ -993,6 +1026,9 @@ private:
 
     void updateShapeOutsideInfoAfterStyleChange(const ComputedStyle&, const ComputedStyle* oldStyle);
     void updateGridPositionAfterStyleChange(const ComputedStyle*);
+    void updateScrollSnapMappingAfterStyleChange(const ComputedStyle*, const ComputedStyle* oldStyle);
+    void clearScrollSnapMapping();
+    void addScrollSnapMapping();
 
     bool autoWidthShouldFitContent() const;
     LayoutUnit shrinkToFitLogicalWidth(LayoutUnit availableLogicalWidth, LayoutUnit bordersPlusPadding) const;
@@ -1077,6 +1113,9 @@ private:
     void inflateVisualRectForReflectionAndFilterUnderContainer(LayoutRect&, const LayoutObject& container, const LayoutBoxModelObject* ancestorToStopAt) const;
 
     LayoutRectOutsets m_marginBoxOutsets;
+
+    void addSnapArea(const LayoutBox&);
+    void removeSnapArea(const LayoutBox&);
 
 protected:
     // The logical width of the element if it were to break its lines at every

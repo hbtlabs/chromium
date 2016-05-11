@@ -37,8 +37,6 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/inspector/WorkerDebuggerAgent.h"
-#include "core/inspector/WorkerInspectorController.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
@@ -411,10 +409,11 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
         m_mainScriptLoader->script(),
         m_mainScriptLoader->releaseCachedMetadata(),
         startMode,
-        document->contentSecurityPolicy()->headers(),
+        document->contentSecurityPolicy()->headers().get(),
         starterOrigin,
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),
+        m_mainScriptLoader->originTrialTokens(),
         static_cast<V8CacheOptions>(m_workerStartData.v8CacheOptions));
 
     m_mainScriptLoader.clear();

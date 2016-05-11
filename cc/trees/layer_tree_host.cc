@@ -22,7 +22,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/animation/animation_events.h"
@@ -988,14 +988,21 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
                  "LayerTreeHostCommon::ComputeVisibleRectsWithPropertyTrees");
     PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
     bool can_render_to_separate_surface = true;
-    PropertyTreeBuilder::BuildPropertyTrees(
-        root_layer, page_scale_layer, inner_viewport_scroll_layer_.get(),
-        outer_viewport_scroll_layer_.get(), overscroll_elasticity_layer_.get(),
-        elastic_overscroll_, page_scale_factor_, device_scale_factor_,
-        gfx::Rect(device_viewport_size_), identity_transform, &property_trees_);
-    TRACE_EVENT_INSTANT1("cc", "LayerTreeHost::UpdateLayers_BuiltPropertyTrees",
-                         TRACE_EVENT_SCOPE_THREAD, "property_trees",
-                         property_trees_.AsTracedValue());
+    if (!settings_.use_layer_lists) {
+      // If use_layer_lists is set, then the property trees should have been
+      // built by the client already.
+      PropertyTreeBuilder::BuildPropertyTrees(
+          root_layer, page_scale_layer, inner_viewport_scroll_layer_.get(),
+          outer_viewport_scroll_layer_.get(),
+          overscroll_elasticity_layer_.get(), elastic_overscroll_,
+          page_scale_factor_, device_scale_factor_,
+          gfx::Rect(device_viewport_size_), identity_transform,
+          &property_trees_);
+      TRACE_EVENT_INSTANT1("cc",
+                           "LayerTreeHost::UpdateLayers_BuiltPropertyTrees",
+                           TRACE_EVENT_SCOPE_THREAD, "property_trees",
+                           property_trees_.AsTracedValue());
+    }
     draw_property_utils::UpdateRenderSurfaces(root_layer, &property_trees_);
     draw_property_utils::UpdatePropertyTrees(&property_trees_,
                                              can_render_to_separate_surface);
@@ -1354,6 +1361,28 @@ void LayerTreeHost::ElementTransformIsPotentiallyAnimatingChanged(
   Layer* layer = LayerById(element_id);
   DCHECK(layer);
   layer->OnTransformIsPotentiallyAnimatingChanged(is_animating);
+}
+
+void LayerTreeHost::ElementOpacityIsAnimatingChanged(
+    ElementId element_id,
+    ElementListType list_type,
+    AnimationChangeType change_type,
+    bool is_animating) {
+  Layer* layer = LayerById(element_id);
+  if (layer) {
+    switch (change_type) {
+      case AnimationChangeType::POTENTIAL:
+        layer->OnOpacityIsPotentiallyAnimatingChanged(is_animating);
+        break;
+      case AnimationChangeType::RUNNING:
+        layer->OnOpacityIsCurrentlyAnimatingChanged(is_animating);
+        break;
+      case AnimationChangeType::BOTH:
+        layer->OnOpacityIsPotentiallyAnimatingChanged(is_animating);
+        layer->OnOpacityIsCurrentlyAnimatingChanged(is_animating);
+        break;
+    }
+  }
 }
 
 gfx::ScrollOffset LayerTreeHost::GetScrollOffsetForAnimation(

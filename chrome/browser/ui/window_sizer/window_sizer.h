@@ -13,14 +13,9 @@
 
 class Browser;
 
-namespace gfx {
+namespace display {
 class Display;
 class Screen;
-}
-
-namespace display {
-using Display = gfx::Display;
-using Screen = gfx::Screen;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

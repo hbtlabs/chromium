@@ -24,8 +24,8 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/apps/app_url_redirector.h"
@@ -2774,10 +2774,17 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
     content::ServiceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
   // WebUSB is an experimental web API. It will only work if the experiment
-  // is enabled and WebUSB feature is enabled.
+  // is enabled and WebUSB feature is enabled. It should also not be available
+  // to apps and extensions.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableExperimentalWebPlatformFeatures) &&
-      base::FeatureList::IsEnabled(features::kWebUsb)) {
+      base::FeatureList::IsEnabled(features::kWebUsb)
+#if defined(ENABLE_EXTENSIONS)
+      &&
+      !render_frame_host->GetSiteInstance()->GetSiteURL().SchemeIs(
+          extensions::kExtensionScheme)
+#endif
+          ) {
     registry->AddService(
         base::Bind(&CreateUsbDeviceManager, render_frame_host));
     registry->AddService(

@@ -194,6 +194,7 @@
 #include "core/page/PointerLockController.h"
 #include "core/page/scrolling/RootScroller.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
+#include "core/page/scrolling/SnapCoordinator.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGScriptElement.h"
 #include "core/svg/SVGTitleElement.h"
@@ -598,10 +599,10 @@ void Document::setRootScroller(Element* newScroller, ExceptionState& exceptionSt
 {
     DCHECK(newScroller);
 
-    if (ownerElement()) {
+    if (!frame() || !frame()->isMainFrame()) {
         exceptionState.throwDOMException(
             WrongDocumentError,
-            "Root scroller cannot be set on a document within a frame.");
+            "Root scroller can only be set on the top window's document.");
         return;
     }
 
@@ -628,7 +629,8 @@ void Document::setRootScroller(Element* newScroller, ExceptionState& exceptionSt
 
 Element* Document::rootScroller()
 {
-    if (ownerElement())
+    // TODO(bokan): Should child frames return the documentElement or nullptr?
+    if (!isInMainFrame())
         return documentElement();
 
     FrameHost* host = frameHost();
@@ -641,6 +643,11 @@ Element* Document::rootScroller()
     updateLayoutIgnorePendingStylesheets();
 
     return rootScroller->get();
+}
+
+bool Document::isInMainFrame() const
+{
+    return frame() && frame()->isMainFrame();
 }
 
 AtomicString Document::convertLocalName(const AtomicString& name)
@@ -1619,6 +1626,9 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         columnGap = overflowStyle->columnGap();
     }
 
+    ScrollSnapType snapType = overflowStyle->getScrollSnapType();
+    const LengthPoint& snapDestination = overflowStyle->scrollSnapDestination();
+
     RefPtr<ComputedStyle> documentStyle = layoutView()->mutableStyle();
     if (documentStyle->getWritingMode() != rootWritingMode
         || documentStyle->direction() != rootDirection
@@ -1627,7 +1637,9 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         || documentStyle->imageRendering() != imageRendering
         || documentStyle->overflowX() != overflowX
         || documentStyle->overflowY() != overflowY
-        || documentStyle->columnGap() != columnGap) {
+        || documentStyle->columnGap() != columnGap
+        || documentStyle->getScrollSnapType() != snapType
+        || documentStyle->scrollSnapDestination() != snapDestination) {
         RefPtr<ComputedStyle> newStyle = ComputedStyle::clone(*documentStyle);
         newStyle->setWritingMode(rootWritingMode);
         newStyle->setDirection(rootDirection);
@@ -1637,6 +1649,8 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         newStyle->setOverflowX(overflowX);
         newStyle->setOverflowY(overflowY);
         newStyle->setColumnGap(columnGap);
+        newStyle->setScrollSnapType(snapType);
+        newStyle->setScrollSnapDestination(snapDestination);
         layoutView()->setStyle(newStyle);
         setupFontBuilder(*newStyle);
     }
@@ -1886,7 +1900,7 @@ void Document::updateLayout()
         return;
     }
 
-    if (HTMLFrameOwnerElement* owner = ownerElement())
+    if (HTMLFrameOwnerElement* owner = localOwner())
         owner->document().updateLayout();
 
     updateLayoutTree();
@@ -1924,9 +1938,9 @@ void Document::layoutUpdated()
             m_documentTiming.markFirstLayout();
     }
 
-    if (!ownerElement() && frameHost()) {
-        if (RootScroller* rootScroller = frameHost()->rootScroller())
-            rootScroller->didUpdateTopDocumentLayout();
+    if (isInMainFrame() && frameHost()) {
+        DCHECK(frameHost()->rootScroller());
+        frameHost()->rootScroller()->didUpdateTopDocumentLayout();
     }
 }
 
@@ -2649,7 +2663,7 @@ void Document::implicitClose()
     // We used to force a synchronous display and flush here.  This really isn't
     // necessary and can in fact be actively harmful if pages are loading at a rate of > 60fps
     // (if your platform is syncing flushes and limiting them to 60fps).
-    if (!ownerElement() || (ownerElement()->layoutObject() && !ownerElement()->layoutObject()->needsLayout())) {
+    if (!localOwner() || (localOwner()->layoutObject() && !localOwner()->layoutObject()->needsLayout())) {
         updateLayoutTree();
 
         // Always do a layout after loading if needed.
@@ -4031,7 +4045,7 @@ void Document::addListenerTypeIfNeeded(const AtomicString& eventType)
     }
 }
 
-HTMLFrameOwnerElement* Document::ownerElement() const
+HTMLFrameOwnerElement* Document::localOwner() const
 {
     if (!frame())
         return 0;
@@ -4041,9 +4055,10 @@ HTMLFrameOwnerElement* Document::ownerElement() const
 
 bool Document::isInInvisibleSubframe() const
 {
-    if (!ownerElement())
-        return false; // this is the root element
+    if (!localOwner())
+        return false; // this is a local root element
 
+    // TODO(bokan): This looks like it doesn't work in OOPIF.
     DCHECK(frame());
     return !frame()->ownerLayoutObject();
 }
@@ -4631,7 +4646,7 @@ Document& Document::topDocument() const
     // FIXME: Not clear what topDocument() should do in the OOPI case--should it return the topmost
     // available Document, or something else?
     Document* doc = const_cast<Document*>(this);
-    for (HTMLFrameOwnerElement* element = doc->ownerElement(); element; element = doc->ownerElement())
+    for (HTMLFrameOwnerElement* element = doc->localOwner(); element; element = doc->localOwner())
         doc = &element->document();
 
     DCHECK(doc);
@@ -5513,6 +5528,14 @@ bool Document::threadedParsingEnabledForTesting()
     return s_threadedParsingEnabledForTesting;
 }
 
+SnapCoordinator* Document::snapCoordinator()
+{
+    if (RuntimeEnabledFeatures::cssScrollSnapPointsEnabled() && !m_snapCoordinator)
+        m_snapCoordinator = SnapCoordinator::create();
+
+    return m_snapCoordinator.get();
+}
+
 void Document::setContextFeatures(ContextFeatures& features)
 {
     m_contextFeatures = &features;
@@ -5543,7 +5566,7 @@ void Document::updateHoverActiveState(const HitTestRequest& request, Element* in
     Element* innerElementInDocument = innerElement;
     while (innerElementInDocument && innerElementInDocument->document() != this) {
         innerElementInDocument->document().updateHoverActiveState(request, innerElementInDocument);
-        innerElementInDocument = innerElementInDocument->document().ownerElement();
+        innerElementInDocument = innerElementInDocument->document().localOwner();
     }
 
     updateDistribution();
@@ -5953,11 +5976,18 @@ DEFINE_TRACE(Document)
     visitor->trace(m_canvasFontCache);
     visitor->trace(m_intersectionObserverController);
     visitor->trace(m_intersectionObserverData);
+    visitor->trace(m_snapCoordinator);
     Supplementable<Document>::trace(visitor);
     TreeScope::trace(visitor);
     ContainerNode::trace(visitor);
     ExecutionContext::trace(visitor);
     SecurityContext::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(Document)
+{
+    visitor->traceWrappers(m_importsController);
+    ContainerNode::traceWrappers(visitor);
 }
 
 template class CORE_TEMPLATE_EXPORT Supplement<Document>;

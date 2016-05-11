@@ -154,6 +154,7 @@ public:
     void removeFloatingObjects();
 
     void addChild(LayoutObject* newChild, LayoutObject* beforeChild = nullptr) override;
+    void removeChild(LayoutObject*) override;
 
     void moveAllChildrenIncludingFloatsTo(LayoutBlock* toBlock, bool fullRemoveInsert);
 
@@ -311,6 +312,10 @@ protected:
 
     void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
 
+    void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const override;
+    void absoluteQuads(Vector<FloatQuad>&) const override;
+    LayoutObject* hoverAncestor() const final;
+
     LayoutUnit logicalRightOffsetForLine(LayoutUnit logicalTop, LayoutUnit fixedOffset, IndentTextOrNot applyTextIndent, LayoutUnit logicalHeight = LayoutUnit()) const
     {
         return adjustLogicalRightOffsetForLine(logicalRightFloatOffsetForLine(logicalTop, fixedOffset, logicalHeight), applyTextIndent);
@@ -331,6 +336,7 @@ protected:
 
     PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
 
+    Node* nodeForHitTest() const final;
     bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
 
 private:
@@ -367,6 +373,8 @@ private:
 
     void invalidatePaintForOverhangingFloats(bool paintAllDescendants) final;
     void invalidatePaintForOverflow() final;
+    void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason) const override;
+
     void paintFloats(const PaintInfo&, const LayoutPoint&) const final;
     virtual void clipOutFloatingObjects(const LayoutBlock*, ClipScope&, const LayoutPoint&, const LayoutSize&) const;
     void clearFloats(EClear);

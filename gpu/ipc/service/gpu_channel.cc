@@ -24,7 +24,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
@@ -792,8 +792,10 @@ void GpuChannel::HandleMessage(
   HandleMessageHelper(msg);
 
   // If we get descheduled or yield while processing a message.
-  if (stub && stub->HasUnprocessedCommands()) {
-    DCHECK_EQ((uint32_t)GpuCommandBufferMsg_AsyncFlush::ID, msg.type());
+  if ((stub && stub->HasUnprocessedCommands()) ||
+      !message_queue->IsScheduled()) {
+    DCHECK((uint32_t)GpuCommandBufferMsg_AsyncFlush::ID == msg.type() ||
+           (uint32_t)GpuCommandBufferMsg_WaitSyncToken::ID == msg.type());
     message_queue->PauseMessageProcessing();
   } else {
     message_queue->FinishMessageProcessing();

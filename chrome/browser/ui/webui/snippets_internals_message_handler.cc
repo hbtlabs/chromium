@@ -35,6 +35,7 @@ std::unique_ptr<base::DictionaryValue> PrepareSnippet(
     int index,
     bool discarded) {
   std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
+  entry->SetString("snippetId", snippet.id());
   entry->SetString("title", snippet.title());
   entry->SetString("siteTitle", snippet.best_source().publisher_name);
   entry->SetString("snippet", snippet.snippet());
@@ -42,9 +43,10 @@ std::unique_ptr<base::DictionaryValue> PrepareSnippet(
                    TimeFormatShortDateAndTime(snippet.publish_date()));
   entry->SetString("expires",
                    TimeFormatShortDateAndTime(snippet.expiry_date()));
-  entry->SetString("url", snippet.url().spec());
+  entry->SetString("url", snippet.best_source().url.spec());
   entry->SetString("ampUrl", snippet.best_source().amp_url.spec());
   entry->SetString("salientImageUrl", snippet.salient_image_url().spec());
+  entry->SetDouble("score", snippet.score());
 
   if (discarded)
     entry->SetString("id", "discarded-snippet-" + base::IntToString(index));
@@ -177,8 +179,9 @@ void SnippetsInternalsMessageHandler::SendSnippets() {
   std::unique_ptr<base::ListValue> snippets_list(new base::ListValue);
 
   int index = 0;
-  for (auto& snippet : *ntp_snippets_service_)
-    snippets_list->Append(PrepareSnippet(snippet, index++, false));
+  for (const std::unique_ptr<ntp_snippets::NTPSnippet>& snippet :
+       ntp_snippets_service_->snippets())
+    snippets_list->Append(PrepareSnippet(*snippet, index++, false));
 
   base::DictionaryValue result;
   result.Set("list", std::move(snippets_list));
@@ -194,7 +197,7 @@ void SnippetsInternalsMessageHandler::SendDiscardedSnippets() {
   std::unique_ptr<base::ListValue> snippets_list(new base::ListValue);
 
   int index = 0;
-  for (auto& snippet : ntp_snippets_service_->discarded_snippets())
+  for (const auto& snippet : ntp_snippets_service_->discarded_snippets())
     snippets_list->Append(PrepareSnippet(*snippet, index++, true));
 
   base::DictionaryValue result;

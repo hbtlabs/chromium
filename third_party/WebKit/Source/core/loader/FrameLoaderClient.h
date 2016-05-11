@@ -41,6 +41,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/weborigin/Referrer.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
@@ -225,8 +226,6 @@ public:
 
     virtual void dispatchWillStartUsingPeerConnectionHandler(WebRTCPeerConnectionHandler*) { }
 
-    virtual void didRequestAutocomplete(HTMLFormElement*) = 0;
-
     virtual bool allowWebGL(bool enabledPerSettings) { return enabledPerSettings; }
 
     // If an HTML document is being loaded, informs the embedder that the document will have its <body> attached soon.
@@ -260,6 +259,9 @@ public:
     virtual void suddenTerminationDisablerChanged(bool present, SuddenTerminationDisablerType) { }
 
     virtual LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) { return nullptr; }
+
+    // Effective connection type when this frame was loaded.
+    virtual WebEffectiveConnectionType getEffectiveConnectionType() { return WebEffectiveConnectionType::TypeUnknown; }
 };
 
 } // namespace blink

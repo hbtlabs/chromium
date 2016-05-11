@@ -20,7 +20,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/common/chrome_switches.h"
@@ -345,6 +345,7 @@ class CastVideoSink : public base::SupportsWeakPtr<CastVideoSink>,
   // Attach this sink to a video track represented by |track_|.
   // Data received from the track will be submitted to |frame_input|.
   void AddToTrack(
+      bool is_sink_secure,
       const scoped_refptr<media::cast::VideoFrameInput>& frame_input) {
     DCHECK(deliverer_);
     deliverer_->WillConnectToTrack(AsWeakPtr(), frame_input);
@@ -353,9 +354,9 @@ class CastVideoSink : public base::SupportsWeakPtr<CastVideoSink>,
         base::TimeDelta::FromMilliseconds(kRefreshIntervalMilliseconds),
         base::Bind(&CastVideoSink::OnRefreshTimerFired,
                    base::Unretained(this)));
-    MediaStreamVideoSink::ConnectToTrack(track_,
-                                         base::Bind(&Deliverer::OnVideoFrame,
-                                                    deliverer_));
+    MediaStreamVideoSink::ConnectToTrack(
+        track_, base::Bind(&Deliverer::OnVideoFrame, deliverer_),
+        is_sink_secure);
   }
 
  private:
@@ -685,8 +686,8 @@ void CastRtpStream::Start(const CastRtpParams& params,
         media::BindToCurrentLoop(base::Bind(&CastRtpStream::DidEncounterError,
                                             weak_factory_.GetWeakPtr()))));
     cast_session_->StartVideo(
-        config,
-        base::Bind(&CastVideoSink::AddToTrack, video_sink_->AsWeakPtr()),
+        config, base::Bind(&CastVideoSink::AddToTrack, video_sink_->AsWeakPtr(),
+                           !params.payload.aes_key.empty()),
         base::Bind(&CastRtpStream::DidEncounterError,
                    weak_factory_.GetWeakPtr()));
     start_callback.Run();

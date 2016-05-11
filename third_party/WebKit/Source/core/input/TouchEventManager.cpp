@@ -177,7 +177,7 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
             touchInfo.touchNode.get(),
             point.id(),
             point.screenPos(),
-            touchInfo.adjustedPagePoint,
+            touchInfo.contentPoint,
             touchInfo.adjustedRadius,
             point.rotationAngle(),
             point.force(),
@@ -239,7 +239,7 @@ WebInputEventResult TouchEventManager::dispatchTouchEvents(
 
             // Only report for top level documents with a single touch on
             // touch-start or the first touch-move.
-            if (touchStartOrFirstTouchMove && touchInfos.size() == 1 && event.cancelable() && !m_frame->document()->ownerElement()) {
+            if (touchStartOrFirstTouchMove && touchInfos.size() == 1 && event.cancelable() && m_frame->isMainFrame()) {
                 DEFINE_STATIC_LOCAL(EnumerationHistogram, rootDocumentListenerHistogram, ("Event.Touch.TargetAndDispatchResult", TouchTargetAndDispatchResultTypeMax));
                 rootDocumentListenerHistogram.count(toTouchTargetHistogramValue(eventTarget, domDispatchResult));
 
@@ -381,7 +381,7 @@ void TouchEventManager::setAllPropertiesOfTouchInfos(
 
         touchInfo.touchNode = touchNode;
         touchInfo.targetFrame = targetFrame;
-        touchInfo.adjustedPagePoint = pagePoint.scaledBy(scaleFactor);
+        touchInfo.contentPoint = pagePoint.scaledBy(scaleFactor);
         touchInfo.adjustedRadius = touchInfo.point.radius().scaledBy(scaleFactor);
         touchInfo.knownTarget = knownTarget;
         touchInfo.consumed = false;

@@ -167,6 +167,9 @@ const char kDisableGpuMemoryBufferVideoFrames[] =
 // This switch is intended only for tests.
 const char kDisableGpuProcessCrashLimit[] = "disable-gpu-process-crash-limit";
 
+// Disable async GL worker context. Overrides kEnableGpuAsyncWorkerContext.
+const char kDisableGpuAsyncWorkerContext[] = "disable-gpu-async-worker-context";
+
 // Disable GPU rasterization, i.e. rasterize on the CPU only.
 // Overrides the kEnableGpuRasterization and kForceGpuRasterization flags.
 const char kDisableGpuRasterization[]       = "disable-gpu-rasterization";
@@ -368,6 +371,9 @@ const char kEnableFeatures[] = "enable-features";
 // Enable Web Bluetooth.
 const char kEnableWebBluetooth[] = "enable-web-bluetooth";
 
+// Makes the GL worker context run asynchronously by using a separate stream.
+const char kEnableGpuAsyncWorkerContext[] = "enable-gpu-async-worker-context";
+
 // Specify that all compositor resources should be backed by GPU memory buffers.
 const char kEnableGpuMemoryBufferCompositorResources[] =
     "enable-gpu-memory-buffer-compositor-resources";
@@ -424,6 +430,10 @@ const char kV8NativesPassedByFD[] = "v8-natives-passed-by-fd";
 // Signals that the V8 startup snapshot file has been transfered to the child
 // process by a file descriptor.
 const char kV8SnapshotPassedByFD[] = "v8-snapshot-passed-by-fd";
+
+// Set strategies to cache V8 data in CacheStorage. (off, normal, or aggressive)
+const char kV8CacheStrategiesForCacheStorage[] =
+    "v8-cache-strategies-for-cache-storage";
 
 // Cause the OS X sandbox write to syslog every time an access to a resource
 // is denied by the sandbox.

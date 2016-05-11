@@ -72,7 +72,6 @@ struct SyncConfigInfo {
 
   bool encrypt_all;
   bool sync_everything;
-  bool sync_nothing;
   syncer::ModelTypeSet data_types;
   std::string passphrase;
   bool set_new_passphrase;
@@ -81,7 +80,6 @@ struct SyncConfigInfo {
 SyncConfigInfo::SyncConfigInfo()
     : encrypt_all(false),
       sync_everything(false),
-      sync_nothing(false),
       set_new_passphrase(false) {}
 
 SyncConfigInfo::~SyncConfigInfo() {}
@@ -98,14 +96,6 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
     DLOG(ERROR) << "GetConfiguration() not passed a syncAllDataTypes value";
     return false;
   }
-
-  if (!result->GetBoolean("syncNothing", &config->sync_nothing)) {
-    DLOG(ERROR) << "GetConfiguration() not passed a syncNothing value";
-    return false;
-  }
-
-  DCHECK(!(config->sync_everything && config->sync_nothing))
-      << "syncAllDataTypes and syncNothing cannot both be true";
 
   syncer::ModelTypeNameMap type_names = syncer::GetUserSelectableTypeNameMap();
 
@@ -223,8 +213,7 @@ void PeopleHandler::OnJavascriptAllowed() {
   profile_pref_registrar_.Init(prefs);
   profile_pref_registrar_.Add(
       prefs::kSigninAllowed,
-      base::Bind(&PeopleHandler::OnSigninAllowedPrefChange,
-                 base::Unretained(this)));
+      base::Bind(&PeopleHandler::UpdateSyncStatus, base::Unretained(this)));
 
   ProfileSyncService* sync_service(
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_));
@@ -390,23 +379,6 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
   if (!service || !service->IsBackendInitialized()) {
     CloseSyncSetup();
     ResolveJavascriptCallback(*callback_id, base::StringValue(kDonePageStatus));
-    return;
-  }
-
-  // Disable sync, but remain signed in if the user selected "Sync nothing" in
-  // the advanced settings dialog. Note: In order to disable sync across
-  // restarts on Chrome OS, we must call RequestStop(CLEAR_DATA), which
-  // suppresses sync startup in addition to disabling it.
-  if (configuration.sync_nothing) {
-    ProfileSyncService::SyncEvent(
-        ProfileSyncService::STOP_FROM_ADVANCED_DIALOG);
-
-    CloseSyncSetup();
-    ResolveJavascriptCallback(*callback_id,
-                              base::StringValue(kConfigurePageStatus));
-
-    service->RequestStop(ProfileSyncService::CLEAR_DATA);
-    service->SetSetupInProgress(false);
     return;
   }
 
@@ -686,6 +658,7 @@ void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
   // via the "Advanced..." button or through One-Click signin (cases 4-6), or
   // they are re-enabling sync after having disabled it (case 7).
   PushSyncPrefs();
+  FocusUI();
 }
 
 void PeopleHandler::OpenConfigureSync() {
@@ -693,6 +666,7 @@ void PeopleHandler::OpenConfigureSync() {
     return;
 
   PushSyncPrefs();
+  FocusUI();
 }
 
 void PeopleHandler::FocusUI() {
@@ -721,6 +695,10 @@ void PeopleHandler::GoogleSignedOut(const std::string& /* account_id */,
 
 void PeopleHandler::OnStateChanged() {
   UpdateSyncStatus();
+
+  // When the SyncService changes its state, we should also push the updated
+  // sync preferences.
+  PushSyncPrefs();
 }
 
 std::unique_ptr<base::DictionaryValue>
@@ -824,7 +802,6 @@ void PeopleHandler::PushSyncPrefs() {
 
   // Setup args for the sync configure screen:
   //   syncAllDataTypes: true if the user wants to sync everything
-  //   syncNothing: true if the user wants to sync nothing
   //   <data_type>Registered: true if the associated data type is supported
   //   <data_type>Synced: true if the user wants to sync that specific data type
   //   encryptionEnabled: true if sync supports encryption
@@ -853,7 +830,6 @@ void PeopleHandler::PushSyncPrefs() {
   }
   sync_driver::SyncPrefs sync_prefs(profile_->GetPrefs());
   args.SetBoolean("syncAllDataTypes", sync_prefs.HasKeepEverythingSynced());
-  args.SetBoolean("syncNothing", false);  // Always false during initial setup.
   args.SetBoolean("encryptAllData", service->IsEncryptEverythingEnabled());
   args.SetBoolean("encryptAllDataAllowed",
                   service->IsEncryptEverythingAllowed());
@@ -907,10 +883,6 @@ void PeopleHandler::PushSyncPrefs() {
 
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("sync-prefs-changed"), args);
-
-  // Make sure the tab used for the Gaia sign in does not cover the settings
-  // tab.
-  FocusUI();
 }
 
 LoginUIService* PeopleHandler::GetLoginUIService() const {
@@ -921,10 +893,6 @@ void PeopleHandler::UpdateSyncStatus() {
   CallJavascriptFunction("cr.webUIListenerCallback",
                          base::StringValue("sync-status-changed"),
                          *GetSyncStatusDictionary());
-}
-
-void PeopleHandler::OnSigninAllowedPrefChange() {
-  UpdateSyncStatus();
 }
 
 void PeopleHandler::MarkFirstSetupComplete() {

@@ -5502,6 +5502,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     name="Compositing.Browser.DisplayListRecordingSource.UpdateInvalidatedAreaPerMs"
     units="pixels/ms">
   <owner>paint-dev@chromium.org</owner>
+  <obsolete>
+    Deprecated 05/2016. See Blink.Paint.UpdateTime as a related alternate
+    metric.
+  </obsolete>
   <summary>
     Area of invalidated content, in pixels, divided by update (i.e. record), in
     milliseconds. Recorded when display list recording source is updated (in a
@@ -5511,6 +5515,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Compositing.Browser.DisplayListRecordingSource.UpdateUs"
     units="microseconds">
+  <obsolete>
+    Deprecated 05/2016. See Blink.Paint.UpdateTime as a related alternate
+    metric.
+  </obsolete>
   <owner>paint-dev@chromium.org</owner>
   <summary>
     Time spent updating (i.e. recording) a display list, in microseconds.
@@ -5743,6 +5751,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram
     name="Compositing.Renderer.DisplayListRecordingSource.UpdateInvalidatedAreaPerMs"
     units="pixels/ms">
+  <obsolete>
+    Deprecated 05/2016. See Blink.Paint.UpdateTime as a related alternate
+    metric.
+  </obsolete>
   <owner>paint-dev@chromium.org</owner>
   <summary>
     Area of invalidated content, in pixels, divided by update (i.e. record), in
@@ -5753,6 +5765,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Compositing.Renderer.DisplayListRecordingSource.UpdateUs"
     units="microseconds">
+  <obsolete>
+    Deprecated 05/2016. See Blink.Paint.UpdateTime as a related alternate
+    metric.
+  </obsolete>
   <owner>paint-dev@chromium.org</owner>
   <summary>
     Time spent updating (i.e. recording) a display list, in microseconds.
@@ -47380,7 +47396,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Search.AddSearchProvider" enum="AddSearchProvider">
   <obsolete>
-    Use Search.AddSearchProvider2 instead.
+    Replaced by Search.AddSearchProvider2, which is also now obsolete.
   </obsolete>
   <owner>estade@chromium.org</owner>
   <summary>
@@ -47390,6 +47406,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Search.AddSearchProvider2" enum="AddSearchProvider">
+  <obsolete>
+    AddSearchProvider was removed 05/2016.
+  </obsolete>
   <owner>estade@chromium.org</owner>
   <summary>
     Measures usage of window.external.AddSearchProvider and user interaction
@@ -51790,6 +51809,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     whenever a TLS connection does not have valid Certificate Transparency
     information associated with it. This records the error code when Chrome
     fails to send an Expect CT report.
+  </summary>
+</histogram>
+
+<histogram name="SSL.ExpectCTReportSendingAttempt">
+  <owner>estark@chromium.org</owner>
+  <summary>
+    Sites can opt in to Expect CT, a reporting feature that sends a report
+    whenever a TLS connection does not have valid Certificate Transparency
+    information associated with it. This metric fires whenever Chrome attempts
+    to send an Expect CT report.
   </summary>
 </histogram>
 
@@ -58718,6 +58747,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The buffer size (in audio frames) for WebAudio rendering recommended by the
     audio hardware.  Recorded for every WebAudio AudioContext that is created.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.BiquadFilter.Q.Highpass">
+  <owner>rtoy@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <summary>
+    The Q value (in 0.25 dB steps) used for a highpass BiquadFilter. Recorded
+    each time the value is set for a highpass filter via the .value setter or
+    the automation methods linearRampToValueAtTime, exponentialValueAtTime, and
+    setValueAtTime.
+  </summary>
+</histogram>
+
+<histogram name="WebAudio.BiquadFilter.Q.Lowpass">
+  <owner>rtoy@chromium.org</owner>
+  <owner>hongchan@chromium.org</owner>
+  <summary>
+    The Q value (in 0.25 dB steps) used for a lowpass BiquadFilter. Recorded
+    each time the value is set for a lowpass filter via the .value setter or the
+    automation methods linearRampToValueAtTime, exponentialValueAtTime, and
+    setValueAtTime.
   </summary>
 </histogram>
 
@@ -69207,6 +69258,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="BLUETOOTH_LOW_ENERGY_ON_CHARACTERISTIC_WRITE_REQUEST"/>
   <int value="399" label="BLUETOOTH_LOW_ENERGY_ON_DESCRIPTOR_READ_REQUEST"/>
   <int value="400" label="BLUETOOTH_LOW_ENERGY_ON_DESCRIPTOR_WRITE_REQUEST"/>
+  <int value="401" label="ACCESSIBILITY_PRIVATE_ON_ACCESSIBILITY_GESTURE"/>
 </enum>
 
 <enum name="ExtensionFileWriteResult" type="int">
@@ -74365,6 +74417,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="20" label="Display compositor context">
     CAUSE_FOR_GPU_LAUNCH_DISPLAY_COMPOSITOR_CONTEXT
   </int>
+  <int value="21" label="Media worker context">
+    CAUSE_FOR_GPU_LAUNCH_MEDIA_CONTEXT
+  </int>
 </enum>
 
 <enum name="GzipEncodingFixupResult" type="int">
@@ -77189,6 +77244,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="324631366" label="enable-drive-search-in-app-launcher"/>
   <int value="330138076" label="enable-clear-browsing-data-counters"/>
   <int value="346711293" label="enable-save-password-bubble"/>
+  <int value="348854923" label="v8-cache-strategies-for-cache-storage"/>
   <int value="358399482" label="enable-high-dpi-fixed-position-compositing"/>
   <int value="360599302" label="enable-gpu-rasterization"/>
   <int value="365467768" label="prefetch-search-results"/>
@@ -77338,6 +77394,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1359972809" label="enable-gesture-deletion"/>
   <int value="1361047396" label="disable-click-delay"/>
   <int value="1367671275" label="enable-proximity-auth-proximity-detection"/>
+  <int value="1371092708" label="disable-desktop-capture-picker-old-ui"/>
   <int value="1371907429" label="enable-wallet-card-import"/>
   <int value="1372680885" label="enable-mtp-write-support"/>
   <int value="1373777956" label="disable-threaded-gpu-rasterization"/>
@@ -84042,9 +84099,12 @@ To add a new entry, add it with any value and run test to compute valid value.
 
 <enum name="SB2RemoteCallThreatSubType" type="int">
   <int value="0" label="No subtype added"/>
-  <int value="1" label="Landing URL"/>
-  <int value="2" label="Distribution URL"/>
+  <int value="1" label="Potentially Harmful App Landing URL"/>
+  <int value="2" label="Potentially Harmful App Distribution URL"/>
   <int value="3" label="Unknown"/>
+  <int value="4" label="Social Engineering Ads URL"/>
+  <int value="5" label="Social Engineering Landing URL"/>
+  <int value="6" label="Phishing URL"/>
 </enum>
 
 <enum name="SB2SideEffectFreeWhitelistStatus" type="int">
@@ -89994,6 +90054,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="VideoCapture"
       label="A VideoCapture GPU command buffer context"/>
   <suffix name="WebGL" label="A WebGL GPU command buffer context"/>
+  <suffix name="Media" label="The media worker command buffer context"/>
   <affected-histogram name="GPU.ContextLost"/>
 </histogram_suffixes>
 

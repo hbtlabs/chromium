@@ -161,8 +161,6 @@ public:
 
     void dispatchWillStartUsingPeerConnectionHandler(WebRTCPeerConnectionHandler*) override;
 
-    void didRequestAutocomplete(HTMLFormElement*) override;
-
     bool allowWebGL(bool enabledPerSettings) override;
 
     void dispatchWillInsertBody() override;
@@ -183,6 +181,8 @@ public:
     BlameContext* frameBlameContext() override;
 
     LinkResource* createServiceWorkerLinkResource(HTMLLinkElement*) override;
+
+    WebEffectiveConnectionType getEffectiveConnectionType() override;
 
 private:
     explicit FrameLoaderClientImpl(WebLocalFrameImpl*);

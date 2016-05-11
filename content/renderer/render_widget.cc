@@ -81,6 +81,7 @@
 #include "third_party/WebKit/public/web/WebRange.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "third_party/WebKit/public/web/WebWidget.h"
 #include "third_party/skia/include/core/SkShader.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/point_conversions.h"
@@ -106,8 +107,6 @@
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #endif
-
-#include "third_party/WebKit/public/web/WebWidget.h"
 
 using blink::WebCompositionUnderline;
 using blink::WebCursorInfo;
@@ -247,7 +246,8 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       popup_origin_scale_for_emulation_(0.f),
       frame_swap_message_queue_(new FrameSwapMessageQueue()),
       resizing_mode_selector_(new ResizingModeSelector()),
-      has_host_context_menu_location_(false) {
+      has_host_context_menu_location_(false),
+      has_focus_(false) {
   if (!swapped_out)
     RenderProcess::current()->AddRefProcess();
   DCHECK(RenderThread::Get());
@@ -671,8 +671,13 @@ void RenderWidget::OnMouseCaptureLost() {
 }
 
 void RenderWidget::OnSetFocus(bool enable) {
+  has_focus_ = enable;
+
   if (webwidget_)
     webwidget_->setFocus(enable);
+
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    RenderWidgetSetFocus(enable));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -750,7 +755,7 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
   }
 
   scoped_refptr<ContextProviderCommandBuffer> worker_context_provider =
-      RenderThreadImpl::current()->SharedWorkerContextProvider();
+      RenderThreadImpl::current()->SharedCompositorWorkerContextProvider();
   if (!worker_context_provider) {
     // Cause the compositor to wait and try again.
     return nullptr;
@@ -777,13 +782,19 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
 
   constexpr bool automatic_flushes = false;
 
-  // The compositor context shares resources with the worker context.
-  scoped_refptr<ContextProviderCommandBuffer> context_provider(
-      new ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), gpu::kNullSurfaceHandle,
-          GetURLForGraphicsContext3D(), gfx::PreferIntegratedGpu,
-          automatic_flushes, limits, attributes, worker_context_provider.get(),
-          command_buffer_metrics::RENDER_COMPOSITOR_CONTEXT));
+    // The compositor context shares resources with the worker context unless
+    // the worker is async.
+    ContextProviderCommandBuffer* share_context = worker_context_provider.get();
+    if (compositor_deps_->IsAsyncWorkerContextEnabled())
+      share_context = nullptr;
+
+    scoped_refptr<ContextProviderCommandBuffer> context_provider(
+        new ContextProviderCommandBuffer(
+            std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+            gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
+            GetURLForGraphicsContext3D(), gfx::PreferIntegratedGpu,
+            automatic_flushes, limits, attributes, share_context,
+            command_buffer_metrics::RENDER_COMPOSITOR_CONTEXT));
 
 #if defined(OS_ANDROID)
   if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
@@ -819,6 +830,10 @@ void RenderWidget::DidCommitAndDrawCompositorFrame() {
   // NOTE: Tests may break if this event is renamed or moved. See
   // tab_capture_performancetest.cc.
   TRACE_EVENT0("gpu", "RenderWidget::DidCommitAndDrawCompositorFrame");
+
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    DidCommitAndDrawCompositorFrame());
+
   // Notify subclasses that we initiated the paint operation.
   DidInitiatePaint();
 }
@@ -1064,6 +1079,9 @@ bool RenderWidget::WillHandleGestureEvent(const blink::WebGestureEvent& event) {
 }
 
 bool RenderWidget::WillHandleMouseEvent(const blink::WebMouseEvent& event) {
+  FOR_EACH_OBSERVER(RenderFrameImpl, render_frames_,
+                    RenderWidgetWillHandleMouseEvent());
+
   if (owner_delegate_)
     return owner_delegate_->RenderWidgetWillHandleMouseEvent(event);
 
@@ -1691,11 +1709,6 @@ bool RenderWidget::SetDeviceColorProfile(
 }
 
 void RenderWidget::OnOrientationChange() {
-}
-
-void RenderWidget::DidInitiatePaint() {
-  if (owner_delegate_)
-    owner_delegate_->RenderWidgetDidCommitAndDrawCompositorFrame();
 }
 
 void RenderWidget::DidFlushPaint() {

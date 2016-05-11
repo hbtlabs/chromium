@@ -595,7 +595,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
                   const std::vector<int32_t>& attribs) override;
   void Destroy(bool have_context) override;
   void SetSurface(const scoped_refptr<gfx::GLSurface>& surface) override;
-  void ProduceFrontBuffer(const Mailbox& mailbox) override;
+  void ReleaseSurface() override;
+  void TakeFrontBuffer(const Mailbox& mailbox) override;
+  void ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
   bool ResizeOffscreenFrameBuffer(const gfx::Size& size) override;
   void UpdateParentTextureInfo();
   bool MakeCurrent() override;
@@ -618,7 +620,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   }
   void RestoreGlobalState() const override { state_.RestoreGlobalState(NULL); }
   void RestoreProgramBindings() const override {
-    state_.RestoreProgramBindings();
+    state_.RestoreProgramSettings(nullptr, false);
   }
   void RestoreTextureUnitBindings(unsigned unit) const override {
     state_.RestoreTextureUnitBindings(unit, NULL);
@@ -2061,6 +2063,33 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   std::unique_ptr<BackTexture> offscreen_saved_color_texture_;
   scoped_refptr<TextureRef>
       offscreen_saved_color_texture_info_;
+
+  // When a client requests ownership of the swapped front buffer, all
+  // information is saved in this structure, and |in_use| is set to true. When a
+  // client releases ownership, |in_use| is set to false.
+  //
+  // An instance of this struct, with |in_use| = false may be reused instead of
+  // making a new BackTexture.
+  struct SavedBackTexture {
+    std::unique_ptr<BackTexture> back_texture;
+    scoped_refptr<TextureRef> texture_ref;
+    bool in_use;
+  };
+  std::vector<SavedBackTexture> saved_back_textures_;
+
+  // If there's a SavedBackTexture that's not in use, takes that. Otherwise,
+  // generates a new back texture.
+  void CreateBackTexture();
+  size_t create_back_texture_count_for_test_ = 0;
+
+  // Releases all saved BackTextures that are not in use by a client.
+  void ReleaseNotInUseBackTextures();
+
+  // Releases all saved BackTextures.
+  void ReleaseAllBackTextures();
+
+  size_t GetSavedBackTextureCountForTest() override;
+  size_t GetCreatedBackTextureCountForTest() override;
 
   // The copy that is used as the destination for multi-sample resolves.
   std::unique_ptr<BackFramebuffer> offscreen_resolved_frame_buffer_;
@@ -3771,6 +3800,7 @@ void GLES2DecoderImpl::DeleteTransformFeedbacksHelper(
 }
 
 bool GLES2DecoderImpl::MakeCurrent() {
+  DCHECK(surface_);
   if (!context_.get())
     return false;
 
@@ -4198,6 +4228,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
     offscreen_saved_color_texture_->Invalidate();
     offscreen_saved_color_texture_info_ = NULL;
   }
+  ReleaseAllBackTextures();
   if (have_context) {
     if (copy_texture_CHROMIUM_.get()) {
       copy_texture_CHROMIUM_->Destroy();
@@ -4339,16 +4370,28 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
 void GLES2DecoderImpl::SetSurface(
     const scoped_refptr<gfx::GLSurface>& surface) {
   DCHECK(context_->IsCurrent(NULL));
-  DCHECK(surface_.get());
+  DCHECK(surface);
   surface_ = surface;
   RestoreCurrentFramebufferBindings();
 }
 
-void GLES2DecoderImpl::ProduceFrontBuffer(const Mailbox& mailbox) {
-  if (!offscreen_saved_color_texture_.get()) {
-    LOG(ERROR) << "Called ProduceFrontBuffer on a non-offscreen context";
+void GLES2DecoderImpl::ReleaseSurface() {
+  if (!context_.get())
+    return;
+  if (WasContextLost()) {
+    DLOG(ERROR) << "  GLES2DecoderImpl: Trying to release lost context.";
     return;
   }
+  context_->ReleaseCurrent(surface_.get());
+  surface_ = nullptr;
+}
+
+void GLES2DecoderImpl::TakeFrontBuffer(const Mailbox& mailbox) {
+  if (!offscreen_saved_color_texture_.get()) {
+    DLOG(ERROR) << "Called TakeFrontBuffer on a non-offscreen context";
+    return;
+  }
+
   if (!offscreen_saved_color_texture_info_.get()) {
     GLuint service_id = offscreen_saved_color_texture_->id();
     offscreen_saved_color_texture_info_ = TextureRef::Create(
@@ -4357,8 +4400,94 @@ void GLES2DecoderImpl::ProduceFrontBuffer(const Mailbox& mailbox) {
                                  GL_TEXTURE_2D);
     UpdateParentTextureInfo();
   }
+
   mailbox_manager()->ProduceTexture(
       mailbox, offscreen_saved_color_texture_info_->texture());
+
+  // Save the BackTexture and TextureRef.
+  SavedBackTexture save;
+  save.back_texture.swap(offscreen_saved_color_texture_);
+  save.texture_ref = offscreen_saved_color_texture_info_;
+  offscreen_saved_color_texture_info_ = nullptr;
+  save.in_use = true;
+  saved_back_textures_.push_back(std::move(save));
+
+  CreateBackTexture();
+}
+
+void GLES2DecoderImpl::ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) {
+  Texture* texture = mailbox_manager()->ConsumeTexture(mailbox);
+  for (auto it = saved_back_textures_.begin(); it != saved_back_textures_.end();
+       ++it) {
+    if (texture != it->texture_ref->texture())
+      continue;
+
+    if (is_lost || it->back_texture->size() != offscreen_size_) {
+      it->back_texture->Invalidate();
+      saved_back_textures_.erase(it);
+      return;
+    }
+
+    it->in_use = false;
+    return;
+  }
+
+  DLOG(ERROR) << "Attempting to return a frontbuffer that was not saved.";
+}
+
+void GLES2DecoderImpl::CreateBackTexture() {
+  for (auto it = saved_back_textures_.begin(); it != saved_back_textures_.end();
+       ++it) {
+    if (it->in_use)
+      continue;
+
+    if (it->back_texture->size() != offscreen_size_)
+      continue;
+    offscreen_saved_color_texture_ = std::move(it->back_texture);
+    offscreen_saved_color_texture_info_ = it->texture_ref;
+    saved_back_textures_.erase(it);
+    return;
+  }
+
+  ++create_back_texture_count_for_test_;
+  offscreen_saved_color_texture_.reset(
+      new BackTexture(memory_tracker(), &state_));
+  offscreen_saved_color_texture_->Create();
+  offscreen_saved_color_texture_->AllocateStorage(
+      offscreen_size_, offscreen_saved_color_format_, false);
+  offscreen_saved_frame_buffer_->AttachRenderTexture(
+      offscreen_saved_color_texture_.get());
+}
+
+void GLES2DecoderImpl::ReleaseNotInUseBackTextures() {
+  for (auto& saved_back_texture : saved_back_textures_) {
+    if (!saved_back_texture.in_use)
+      saved_back_texture.back_texture->Invalidate();
+  }
+
+  auto to_remove =
+      std::remove_if(saved_back_textures_.begin(), saved_back_textures_.end(),
+                     [](const SavedBackTexture& saved_back_texture) {
+                       return !saved_back_texture.in_use;
+                     });
+  saved_back_textures_.erase(to_remove, saved_back_textures_.end());
+}
+
+void GLES2DecoderImpl::ReleaseAllBackTextures() {
+  for (auto& saved_back_texture : saved_back_textures_) {
+    // The texture will be destroyed by texture_ref's destructor.
+    DCHECK(saved_back_texture.texture_ref);
+    saved_back_texture.back_texture->Invalidate();
+  }
+  saved_back_textures_.clear();
+}
+
+size_t GLES2DecoderImpl::GetSavedBackTextureCountForTest() {
+  return saved_back_textures_.size();
+}
+
+size_t GLES2DecoderImpl::GetCreatedBackTextureCountForTest() {
+  return create_back_texture_count_for_test_;
 }
 
 bool GLES2DecoderImpl::ResizeOffscreenFrameBuffer(const gfx::Size& size) {
@@ -7998,27 +8127,35 @@ void GLES2DecoderImpl::DoUniformMatrix4x3fv(
 }
 
 void GLES2DecoderImpl::DoUseProgram(GLuint program_id) {
+  const char* function_name = "glUseProgram";
   GLuint service_id = 0;
-  Program* program = NULL;
+  Program* program = nullptr;
   if (program_id) {
-    program = GetProgramInfoNotShader(program_id, "glUseProgram");
+    program = GetProgramInfoNotShader(program_id, function_name);
     if (!program) {
       return;
     }
     if (!program->IsValid()) {
       // Program was not linked successfully. (ie, glLinkProgram)
       LOCAL_SET_GL_ERROR(
-          GL_INVALID_OPERATION, "glUseProgram", "program not linked");
+          GL_INVALID_OPERATION, function_name, "program not linked");
       return;
     }
     service_id = program->service_id();
+  }
+  if (state_.bound_transform_feedback.get() &&
+      state_.bound_transform_feedback->active() &&
+      !state_.bound_transform_feedback->paused()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
+        "transformfeedback is active and not paused");
+    return;
   }
   if (state_.current_program.get()) {
     program_manager()->UnuseProgram(shader_manager(),
                                     state_.current_program.get());
   }
   state_.current_program = program;
-  LogClientServiceMapping("glUseProgram", program_id, service_id);
+  LogClientServiceMapping(function_name, program_id, service_id);
   glUseProgram(service_id);
   if (state_.current_program.get()) {
     program_manager()->UseProgram(state_.current_program.get());
@@ -8672,7 +8809,6 @@ error::Error GLES2DecoderImpl::DoDrawElements(const char* function_name,
       } else {
         glDrawElementsInstancedANGLE(mode, count, type, indices, primcount);
       }
-
       if (state_.enable_flags.primitive_restart_fixed_index &&
           feature_info_->feature_flags().
               emulate_primitive_restart_fixed_index) {
@@ -13037,6 +13173,10 @@ void GLES2DecoderImpl::DoSwapBuffers() {
         offscreen_saved_frame_buffer_->Create();
         glFinish();
       }
+
+      // The size has changed, so none of the cached BackTextures are useful
+      // anymore.
+      ReleaseNotInUseBackTextures();
 
       // Allocate the offscreen saved color texture.
       DCHECK(offscreen_saved_color_format_);

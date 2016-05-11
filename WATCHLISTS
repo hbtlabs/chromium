@@ -203,6 +203,10 @@
                   '|chrome/test/data/extensions/api_test/cast_'\
                   '|content/public/renderer/media_stream_',
     },
+    'cast_certificate': {
+      'filepath': 'components/cast_certificate/'\
+                  '|components/test/data/cast_certificate/',
+    },
     'certificate_transparency': {
       'filepath': 'components/certificate_transparency/'\
                   '|components/packed_ct_ev_whitelist/'\
@@ -888,6 +892,14 @@
     'version_assembly': {
       'filepath': 'chrome/app/version_assembly',
     },
+    'video': {
+      'filepath': 'content/browser/renderer_host/media/|'\
+                  'content/renderer/media/|'\
+                  'media/capture/video/|'\
+                  'media/filters/|'\
+                  'media/gpu/|'\
+                  '.*video.*',
+    },
     'video_capture': {
       'filepath': 'chrome/browser/media/.*(capture|media|webrtc)'\
                   '|content/browser/renderer_host/media/.*(capture|media)'\
@@ -910,15 +922,6 @@
     'webrtc_browser_tests': {
       'filepath': 'chrome/browser/media/.*webrtc.*browsertest|'\
                   'content/browser/media/.*webrtc.*browsertest',
-    },
-    'webrtc_media': {
-      'filepath': 'chrome/browser/media/|'\
-                  'content/browser/renderer_host/media/|'\
-                  'content/common/gpu/media/|'\
-                  'content/renderer/media/|'\
-                  'media/base/android/|'\
-                  'media/capture/|'\
-                  'video.*_accelerat',
     },
     'website_settings': {
       'filepath': 'chrome/browser/content_settings/'\
@@ -1360,9 +1363,11 @@
                'dtrainor+watch-blimp@chromium.org',
                'jessicag+watch-blimp@chromium.org',
                'kmarshall+watch-blimp@chromium.org',
+               'khushalsagar+watch-blimp@chromium.org',
                'maniscalco+watch-blimp@chromium.org',
                'marcinjb+watch-blimp@chromium.org',
                'nyquist+watch-blimp@chromium.org',
+               'shaktisahu+watch-blimp@chromium.org',
                'sriramsr+watch-blimp@chromium.org'],
     'blink_tools': ['dpranke@chromium.org'],
     'bookmarks': ['noyau+watch@chromium.org', 'tfarina@chromium.org'],
@@ -1385,6 +1390,10 @@
              'jasonroberts+watch@google.com',
              'miu+watch@chromium.org',
              'xjz+watch@chromium.org'],
+    'cast_certificate': ['dougsteed+watch@chromium.org',
+                         'ryanchung+watch@chromium.org',
+                         'sheretov+watch@chromium.org',
+                         'vadimgo+watch@chromium.org'],
     'cc': ['cc-bugs@chromium.org'],
     'certificate_transparency': ['eranm@chromium.org', 'certificate-transparency-chrome@googlegroups.com'],
     'chrome_elf': ['caitkp+watch@chromium.org',],
@@ -1534,6 +1543,7 @@
                       'fgorski+watch@chromium.org',
                       'petewil+watch@chromium.org',
                       'romax+watch@chromium.org',
+		      'chili+watch@chromium.org',
                       'dewittj+watch@chromium.org'],
     'omnibox': ['suzhe@chromium.org'],
     'options': ['dbeam+watch-options@chromium.org',
@@ -1618,13 +1628,13 @@
                  'glider+watch@chromium.org'],
     'version_assembly': ['caitkp+watch@chromium.org',
                          'gab+watch@chromium.org'],
+    'video': ['posciak+watch@chromium.org'],
     'video_capture': ['mcasas+watch+vc@chromium.org'],
     'views': ['tfarina@chromium.org'],
     'virtual_keyboard': ['dfaden+virtualkb@google.com',
                          'groby+virtualkb@chromium.org'],
     'webrtc_browser_tests': ['phoglund+watch@chromium.org',
                              'tnakamura+watch@chromium.org'],
-    'webrtc_media': ['posciak+watch@chromium.org'],
     'website_settings': ['markusheintz@chromium.org',
                          'raymes+watch@chromium.org',
                          'msramek+watch@chromium.org'],

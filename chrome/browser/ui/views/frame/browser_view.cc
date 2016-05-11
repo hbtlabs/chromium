@@ -19,7 +19,7 @@
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/chrome_dll_resource.h"
@@ -67,7 +67,6 @@
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/browser/ui/views/download/download_in_progress_dialog_view.h"
 #include "chrome/browser/ui/views/download/download_shelf_view.h"
-#include "chrome/browser/ui/views/edit_search_engine_dialog.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/browser/ui/views/extensions/bookmark_app_confirmation_view.h"
 #include "chrome/browser/ui/views/extensions/extension_keybinding_registry_views.h"
@@ -180,10 +179,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
-#endif
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "content/public/common/mojo_shell_connection.h"
 #endif
 
 #if defined(OS_LINUX)
@@ -1221,12 +1216,6 @@ gfx::Rect BrowserView::GetRootWindowResizerRect() const {
   // Views does not support resizer rects because they caused page cycler
   // performance regressions when they were added. See crrev.com/9654
   return gfx::Rect();
-}
-
-void BrowserView::ConfirmAddSearchProvider(TemplateURL* template_url,
-                                           Profile* profile) {
-  EditSearchEngineDialog::Show(GetNativeWindow(), template_url, nullptr,
-                               profile);
 }
 
 void BrowserView::ShowUpdateChromeDialog() {
@@ -2362,15 +2351,6 @@ bool BrowserView::ShouldUseImmersiveFullscreenForUrl(const GURL& url) const {
 }
 
 void BrowserView::LoadAccelerators() {
-  // TODO(beng): for some reason GetFocusManager() returns null in this case,
-  //             investigate, but for now just disable accelerators in this
-  //             mode.
-#if defined(MOJO_SHELL_CLIENT)
-  if (content::MojoShellConnection::Get() &&
-      content::MojoShellConnection::Get()->UsingExternalShell())
-    return;
-#endif
-
   views::FocusManager* focus_manager = GetFocusManager();
   DCHECK(focus_manager);
 

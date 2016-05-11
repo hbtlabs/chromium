@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceCheckSecurity::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceCheckSecurity::domTemplate, V8TestInterfaceCheckSecurity::trace, 0, 0, V8TestInterfaceCheckSecurity::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceCheckSecurity", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestInterfaceCheckSecurity::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceCheckSecurity::domTemplate, V8TestInterfaceCheckSecurity::trace, V8TestInterfaceCheckSecurity::traceWrappers, 0, 0, V8TestInterfaceCheckSecurity::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceCheckSecurity", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -232,16 +232,7 @@ static void doNotCheckSecurityVoidMethodOriginSafeMethodGetter(const v8::Propert
     // Return the function by default, unless the user script has overwritten it.
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
-    // Check whether or not the user script has overwritten the property, which
-    // is stored in a private value (aka hidden value).
-    //
-    // It is unsafe to use info.Holder() because OriginSafeMethodGetter is called
-    // back without checking the type of info.Holder().
-    v8::Local<v8::Object> holder = info.This()->FindInstanceInPrototypeChain(interfaceTemplate);
-    if (holder.IsEmpty()) {
-        return;
-    }
-    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
+    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
     if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
@@ -280,16 +271,7 @@ static void doNotCheckSecurityPerWorldBindingsVoidMethodOriginSafeMethodGetter(c
     // Return the function by default, unless the user script has overwritten it.
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
-    // Check whether or not the user script has overwritten the property, which
-    // is stored in a private value (aka hidden value).
-    //
-    // It is unsafe to use info.Holder() because OriginSafeMethodGetter is called
-    // back without checking the type of info.Holder().
-    v8::Local<v8::Object> holder = info.This()->FindInstanceInPrototypeChain(interfaceTemplate);
-    if (holder.IsEmpty()) {
-        return;
-    }
-    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
+    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
     if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
@@ -328,16 +310,7 @@ static void doNotCheckSecurityPerWorldBindingsVoidMethodOriginSafeMethodGetterFo
     // Return the function by default, unless the user script has overwritten it.
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
-    // Check whether or not the user script has overwritten the property, which
-    // is stored in a private value (aka hidden value).
-    //
-    // It is unsafe to use info.Holder() because OriginSafeMethodGetter is called
-    // back without checking the type of info.Holder().
-    v8::Local<v8::Object> holder = info.This()->FindInstanceInPrototypeChain(interfaceTemplate);
-    if (holder.IsEmpty()) {
-        return;
-    }
-    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
+    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
     if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
@@ -376,16 +349,7 @@ static void doNotCheckSecurityUnforgeableVoidMethodOriginSafeMethodGetter(const 
     // Return the function by default, unless the user script has overwritten it.
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
-    // Check whether or not the user script has overwritten the property, which
-    // is stored in a private value (aka hidden value).
-    //
-    // It is unsafe to use info.Holder() because OriginSafeMethodGetter is called
-    // back without checking the type of info.Holder().
-    v8::Local<v8::Object> holder = info.This()->FindInstanceInPrototypeChain(interfaceTemplate);
-    if (holder.IsEmpty()) {
-        return;
-    }
-    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
+    TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
     if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }

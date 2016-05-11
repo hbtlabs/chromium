@@ -126,6 +126,7 @@ using {{struct.name}}Ptr = mojo::NativeStructPtr;
 {%-   else %}
 class {{struct.name}};
 class {{struct.name}}_Reader;
+class {{struct.name}}DataView;
 {%-     if struct|should_inline %}
 using {{struct.name}}Ptr = mojo::InlinedStructPtr<{{struct.name}}>;
 {%-     else %}
@@ -182,6 +183,7 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%  for struct in structs %}
 {%    if struct|should_inline and not struct|is_native_only_kind %}
 {%      include "wrapper_class_declaration.tmpl" %}
+{%      include "struct_data_view_declaration.tmpl" %}
 {%    endif %}
 {%- endfor %}
 
@@ -189,15 +191,9 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%  for struct in structs %}
 {%    if not struct|should_inline and not struct|is_native_only_kind %}
 {%      include "wrapper_class_declaration.tmpl" %}
+{%      include "struct_data_view_declaration.tmpl" %}
 {%    endif %}
 {%- endfor %}
-
-{#--- Union Serialization Helpers -#}
-{%  if unions %}
-{%    for union in unions %}
-{%      include "union_serialization_declaration.tmpl" %}
-{%-   endfor %}
-{%- endif %}
 
 {%- for struct in structs %}
 {%-   for enum in struct.enums %}
@@ -228,6 +224,13 @@ namespace mojo {
 {%      include "struct_serialization_declaration.tmpl" %}
 {%-   endif %}
 {%- endfor %}
+
+{#--- Union Serialization Helpers -#}
+{%  if unions %}
+{%-   for union in unions %}
+{%      include "union_serialization_declaration.tmpl" %}
+{%-   endfor %}
+{%- endif %}
 
 }  // namespace mojo
 

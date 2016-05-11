@@ -61,8 +61,7 @@ syncer::ModelTypeSet GetAllTypes() {
 
 enum SyncAllDataConfig {
   SYNC_ALL_DATA,
-  CHOOSE_WHAT_TO_SYNC,
-  SYNC_NOTHING
+  CHOOSE_WHAT_TO_SYNC
 };
 
 enum EncryptAllConfig {
@@ -82,7 +81,6 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
   if (extra_values)
     result.MergeDictionary(extra_values);
   result.SetBoolean("syncAllDataTypes", sync_all == SYNC_ALL_DATA);
-  result.SetBoolean("syncNothing", sync_all == SYNC_NOTHING);
   result.SetBoolean("encryptAllData", encrypt_all == ENCRYPT_ALL_DATA);
   if (!passphrase.empty())
     result.SetString("passphrase", passphrase);
@@ -96,8 +94,6 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
   result.SetBoolean("tabsSynced", types.Has(syncer::PROXY_TABS));
   result.SetBoolean("themesSynced", types.Has(syncer::THEMES));
   result.SetBoolean("typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  result.SetBoolean("wifiCredentialsSynced",
-                    types.Has(syncer::WIFI_CREDENTIALS));
   std::string args;
   base::JSONWriter::Write(result, &args);
   return args;
@@ -135,7 +131,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
                                   SyncAllDataConfig config,
                                   syncer::ModelTypeSet types) {
   CheckBool(dictionary, "syncAllDataTypes", config == SYNC_ALL_DATA);
-  CheckBool(dictionary, "syncNothing", config == SYNC_NOTHING);
   CheckBool(dictionary, "appsSynced", types.Has(syncer::APPS));
   CheckBool(dictionary, "autofillSynced", types.Has(syncer::AUTOFILL));
   CheckBool(dictionary, "bookmarksSynced", types.Has(syncer::BOOKMARKS));
@@ -145,8 +140,6 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
   CheckBool(dictionary, "tabsSynced", types.Has(syncer::PROXY_TABS));
   CheckBool(dictionary, "themesSynced", types.Has(syncer::THEMES));
   CheckBool(dictionary, "typedUrlsSynced", types.Has(syncer::TYPED_URLS));
-  CheckBool(dictionary, "wifiCredentialsSynced",
-            types.Has(syncer::WIFI_CREDENTIALS));
 }
 
 }  // namespace
@@ -530,19 +523,6 @@ TEST_F(PeopleHandlerTest, TestSyncEverything) {
   ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
 }
 
-TEST_F(PeopleHandlerTest, TestSyncNothing) {
-  std::string args = GetConfiguration(
-      NULL, SYNC_NOTHING, GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
-  base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestCallbackId));
-  list_args.Append(new base::StringValue(args));
-  EXPECT_CALL(*mock_pss_, RequestStop(ProfileSyncService::CLEAR_DATA));
-  SetupInitializedProfileSyncService();
-  handler_->HandleSetDatatypes(&list_args);
-
-  ExpectPageStatusResponse(PeopleHandler::kConfigurePageStatus);
-}
-
 TEST_F(PeopleHandlerTest, TestPassphraseStillRequired) {
   std::string args = GetConfiguration(
       NULL, SYNC_ALL_DATA, GetAllTypes(), std::string(), ENCRYPT_PASSWORDS);
@@ -783,7 +763,6 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   CheckBool(dictionary, "extensionsRegistered", true);
   CheckBool(dictionary, "passwordsRegistered", true);
   CheckBool(dictionary, "preferencesRegistered", true);
-  CheckBool(dictionary, "wifiCredentialsRegistered", true);
   CheckBool(dictionary, "tabsRegistered", true);
   CheckBool(dictionary, "themesRegistered", true);
   CheckBool(dictionary, "typedUrlsRegistered", true);

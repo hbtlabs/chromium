@@ -18,8 +18,8 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_video_capture_device.h"
@@ -852,7 +852,24 @@ bool VideoCaptureManager::TakePhoto(
       GetDeviceEntryForMediaStreamDevice(session_it->second);
   if (!device_info)
     return false;
-  return device_info->video_capture_device()->TakePhoto(photo_callback);
+  device_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&VideoCaptureManager::DoTakePhotoOnDeviceThread, this,
+                 device_info->video_capture_device(), photo_callback));
+  return true;
+}
+
+void VideoCaptureManager::DoTakePhotoOnDeviceThread(
+    media::VideoCaptureDevice* device,
+    const media::VideoCaptureDevice::TakePhotoCallback& photo_callback) {
+  DCHECK(IsOnDeviceThread());
+  if (device->TakePhoto(photo_callback))
+    return;
+
+  // TakePhoto() failed synchronously: Make sure |photo_callback| is Run().
+  std::unique_ptr<std::vector<uint8_t>> empty_vector(
+      new std::vector<uint8_t>());
+  photo_callback.Run("", std::move(empty_vector));
 }
 
 void VideoCaptureManager::DoStopDeviceOnDeviceThread(

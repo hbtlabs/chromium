@@ -3,20 +3,18 @@
 # failure. Expected outputs will be adjusted for the better once Oilpan
 # has been well and truly enabled always.
 
-crbug.com/501229 fast/forms/associatedFormControls-leak-nodes.html [ Failure Pass ]
+# With Oilpan, the parent pointer in the CSSRule hierarchy is
+# strong. This is the intended behavior.
+crbug.com/345630 fast/dom/StyleSheet/gc-parent-rule.html [ Failure ]
+crbug.com/345630 fast/dom/StyleSheet/gc-parent-stylesheet.html [ Failure ]
+crbug.com/345655 fast/dom/StyleSheet/detached-parent-rule-without-wrapper.html [ Failure ]
+crbug.com/345655 fast/dom/StyleSheet/detached-stylesheet-without-wrapper.html [ Failure ]
+crbug.com/370906 fast/dom/StyleSheet/gc-declaration-parent-rule.html [ Failure ]
 
-crbug.com/420008 inspector/tracing/worker-js-frames.html [ Pass Timeout Failure ]
-crbug.com/420008 virtual/threaded/inspector/tracing/worker-js-frames.html [ Pass Timeout Failure ]
 crbug.com/596940 inspector-protocol/runtime/runtime-execution-contexts-events.html [ Pass Timeout ]
 crbug.com/597572 [ Debug ] http/tests/inspector/resource-tree/resource-tree-reload.html [ Pass Failure ]
 
 crbug.com/569901 crbug.com/24182 [ Debug ] jquery/manipulation.html [ Timeout Pass ]
-
-crbug.com/299010 [ Win Linux ] fast/forms/text/text-font-height-mismatch.html [ Pass Failure ]
-crbug.com/581990 [ Win ] fast/writing-mode/english-lr-text.html [ Pass Failure ]
-
-# See also crbug.com/521730 for the these two text/emphasis tests (non-Oilpan) Win10 failures.
-crbug.com/574660 [ Win7 ] fast/text/emphasis-combined-text.html [ Pass Failure ]
 
 # ====== Oilpan-only failures until here ======
 
@@ -178,7 +176,6 @@ crbug.com/526594 [ Win ] plugins/webview-plugin-lifecycle.html [ Failure ]
 crbug.com/519001 storage/indexeddb/pending-version-change-stuck-works-with-terminate.html [ Pass Timeout ]
 crbug.com/519002 storage/indexeddb/pending-version-change-stuck.html [ Pass Timeout ]
 crbug.com/410949 http/tests/security/local-image-from-remote-whitelisted.html [ Failure Pass ]
-crbug.com/518902 accessibility/AccessibilityScrollbar-leak.html [ Failure Pass ]
 crbug.com/518915 [ Android ] accessibility/aria-labelledby-on-input.html [ Crash Pass ]
 crbug.com/445100 fast/block/float/marquee-shrink-to-avoid-floats.html [ Failure Pass ]
 
@@ -395,8 +392,7 @@ crbug.com/600618 virtual/spv2/svg/custom/object-current-scale.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-height.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-width-height.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/object-sizing-explicit-width.xhtml [ Pass ]
-# TODO(wangxianzhu): Restore this line after rebaseline.
-# crbug.com/600618 virtual/spv2/svg/custom/object-sizing-no-width-height-change-content-box-size.xhtml [ Pass ]
+crbug.com/600618 virtual/spv2/svg/custom/object-sizing-no-width-height-change-content-box-size.xhtml [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/svg-root-padding-left.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/custom/svg-root-padding-top.html [ Pass ]
 crbug.com/600618 virtual/spv2/svg/css/max-height.html [ Pass ]
@@ -472,6 +468,8 @@ crbug.com/596780 virtual/spv2/compositing/visibility/layer-visible-content.html 
 
 # This test has a paint invalidation failure that needs to be investigated.
 crbug.com/600618 virtual/spv2/svg/as-image/svg-image-with-data-uri.html [ Failure Crash ]
+
+crbug.com/610788 [ Win ] compositing/squashing/squash-with-ancestor-blending.html [ Failure Pass ]
 
 # In imported/web-platform-tests/html/, we prefer checking in failure
 # expectation files. The following tests with [ Failure ] don't have failure
@@ -1096,7 +1094,6 @@ crbug.com/521730 [ Win10 ] printing/simultaneous-position-float-change.html [ Fa
 crbug.com/521730 [ Win10 ] printing/webgl-repeated-printing-preservedrawingbuffer.html [ Failure ]
 crbug.com/521730 [ Win10 ] virtual/threaded/printing/simultaneous-position-float-change.html [ Failure ]
 crbug.com/521730 [ Win10 ] virtual/threaded/printing/webgl-repeated-printing-preservedrawingbuffer.html [ Failure ]
-crbug.com/521730 [ Win10 ] fast/text/emphasis-combined-text.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/writing-mode/border-vertical-lr.html [ Failure ]
 crbug.com/521730 [ Win10 ] media/track/track-cue-rendering-vertical.html [ Failure ]
 crbug.com/521730 [ Win10 ] fast/forms/month/month-appearance-pseudo-elements.html [ Failure ]
@@ -1386,5 +1383,3 @@ crbug.com/609067 [ Mac ] bluetooth/writeValue/value-too-long.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-fails.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-succeeds.html [ Skip ]
 crbug.com/609067 [ Mac ] bluetooth/writeValue/write-updates-value.html [ Skip ]
-
-crbug.com/610567 usb/usbDevice-iframe.html [ Failure Pass Timeout ]

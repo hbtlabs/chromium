@@ -28,7 +28,6 @@
 #include "cc/output/filter_operations.h"
 #include "cc/trees/property_tree.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkImageFilter.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/point3_f.h"
@@ -505,6 +504,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnTransformAnimated(const gfx::Transform& transform);
   void OnScrollOffsetAnimated(const gfx::ScrollOffset& scroll_offset);
   void OnTransformIsPotentiallyAnimatingChanged(bool is_animating);
+  void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
+  void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
   bool HasActiveAnimationForTesting() const;
 
  protected:

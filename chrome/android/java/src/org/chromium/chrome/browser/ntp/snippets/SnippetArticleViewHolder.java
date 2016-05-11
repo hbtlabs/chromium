@@ -84,9 +84,7 @@ public class SnippetArticleViewHolder extends NewTabPageViewHolder implements Vi
             }
 
             @Override
-            public void onViewDetachedFromWindow(View v) {
-                cancelImageFetch();
-            }
+            public void onViewDetachedFromWindow(View v) {}
         });
     }
 
@@ -121,7 +119,7 @@ public class SnippetArticleViewHolder extends NewTabPageViewHolder implements Vi
         } else {
             mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
             mImageCallback = new FetchImageCallback(this, item);
-            mNewTabPageManager.fetchSnippetImage(item.mUrl, mImageCallback);
+            mNewTabPageManager.fetchSnippetImage(item, mImageCallback);
         }
 
         updateFavicon(item);

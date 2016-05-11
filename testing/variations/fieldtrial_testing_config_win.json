@@ -64,12 +64,15 @@
             "group_name": "SettingsText"
         }
     ],
-    "DocumentWriteEvaluator": [
+    "DisallowFetchForDocWrittenScriptsInMainFrame": [
         {
-            "enable_features": [
+            "disable_features": [
                 "DocumentWriteEvaluator"
             ],
-            "group_name": "Enabled"
+            "group_name": "DocumentWriteScriptBlockGroup",
+            "params": {
+                "disallowFetchForDocWrittenScriptsInMainFrameOnSlowConnections": "true"
+            }
         }
     ],
     "EnableGoogleCachedCopyTextExperiment": [
@@ -169,6 +172,14 @@
                 "WiFi.DefaultMedianKbps": "2736",
                 "WiFi.DefaultMedianRTTMsec": "168"
             }
+        }
+    ],
+    "NetworkTimeQueries": [
+        {
+            "enable_features": [
+                "NetworkTimeServiceQuerying"
+            ],
+            "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
     "NewProfileManagement": [
@@ -385,6 +396,17 @@
     "TriggeredResetFieldTrial": [
         {
             "group_name": "On"
+        }
+    ],
+    "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "none"
+        },
+        {
+            "group_name": "normal"
+        },
+        {
+            "group_name": "aggressive"
         }
     ],
     "VarationsServiceControl": [

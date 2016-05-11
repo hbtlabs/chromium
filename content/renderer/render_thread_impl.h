@@ -196,6 +196,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // CompositorDependencies implementation.
   bool IsGpuRasterizationForced() override;
   bool IsGpuRasterizationEnabled() override;
+  bool IsAsyncWorkerContextEnabled() override;
   int GetGpuRasterizationMSAASampleCount() override;
   bool IsLcdTextEnabled() override;
   bool IsDistanceFieldTextEnabled() override;
@@ -339,8 +340,10 @@ class CONTENT_EXPORT RenderThreadImpl
   // A TaskRunner instance that runs tasks on the raster worker pool.
   base::TaskRunner* GetWorkerTaskRunner();
 
-  // Returns a shared worker context provider that can be used on any thread.
-  scoped_refptr<ContextProviderCommandBuffer> SharedWorkerContextProvider();
+  // Returns a worker context provider that will be bound on the compositor
+  // thread.
+  scoped_refptr<ContextProviderCommandBuffer>
+  SharedCompositorWorkerContextProvider();
 
   // Causes the idle handler to skip sending idle notifications
   // on the two next scheduled calls, so idle notifications are
@@ -515,6 +518,9 @@ class CONTENT_EXPORT RenderThreadImpl
 
   void ReleaseFreeMemory();
 
+  void OnSyncMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
+
   // These objects live solely on the render thread.
   std::unique_ptr<AppCacheDispatcher> appcache_dispatcher_;
   std::unique_ptr<DomStorageDispatcher> dom_storage_dispatcher_;
@@ -654,6 +660,7 @@ class CONTENT_EXPORT RenderThreadImpl
   // Compositor settings.
   bool is_gpu_rasterization_enabled_;
   bool is_gpu_rasterization_forced_;
+  bool is_async_worker_context_enabled_;
   int gpu_rasterization_msaa_sample_count_;
   bool is_lcd_text_enabled_;
   bool is_distance_field_text_enabled_;

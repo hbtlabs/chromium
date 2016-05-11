@@ -18,7 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/scheduler/child/web_scheduler_impl.h"
 #include "components/scheduler/child/web_task_runner_impl.h"
@@ -77,6 +77,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
+#include "gpu/ipc/common/gpu_stream_constants.h"
 #include "ipc/ipc_sync_message_filter.h"
 #include "media/audio/audio_output_device.h"
 #include "media/base/audio_hardware_config.h"
@@ -1091,7 +1092,8 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
 
   scoped_refptr<ContextProviderCommandBuffer> provider(
       new ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), gpu::kNullSurfaceHandle,
+          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+          gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
           GURL(top_document_web_url), gpu_preference, automatic_flushes,
           gpu::SharedMemoryLimits(), attributes, share_context,
           command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_WEBGL));
@@ -1326,6 +1328,12 @@ void RendererBlinkPlatformImpl::queryStorageUsageAndQuota(
 blink::WebTrialTokenValidator*
 RendererBlinkPlatformImpl::trialTokenValidator() {
   return &trial_token_validator_;
+}
+
+void RendererBlinkPlatformImpl::workerContextCreated(
+    const v8::Local<v8::Context>& worker) {
+  GetContentClient()->renderer()->DidInitializeWorkerContextOnWorkerThread(
+      worker);
 }
 
 }  // namespace content

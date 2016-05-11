@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/drive/file_task_executor.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
+#include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
 #include "chrome/browser/chromeos/file_manager/file_browser_handlers.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
 #include "chrome/browser/chromeos/file_manager/open_util.h"
@@ -129,9 +130,6 @@ bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
     kFileManagerAppId,
     kVideoPlayerAppId,
     kGalleryAppId,
-    extension_misc::kQuickOfficeComponentExtensionId,
-    extension_misc::kQuickOfficeInternalExtensionId,
-    extension_misc::kQuickOfficeExtensionId,
   };
 
   for (size_t i = 0; i < arraysize(kBuiltInApps); ++i) {
@@ -141,14 +139,6 @@ bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
   return false;
 }
 
-void FindArcTasks(Profile* profile,
-                  const std::vector<extensions::EntryInfo>& entries,
-                  std::unique_ptr<std::vector<FullTaskDescriptor>> result_list,
-                  const FindTasksCallback& callback) {
-  // TODO(kinaba): implement.
-  callback.Run(std::move(result_list));
-}
-
 void ExecuteByArcAfterMimeTypesCollected(
     Profile* profile,
     const TaskDescriptor& task,
@@ -156,9 +146,11 @@ void ExecuteByArcAfterMimeTypesCollected(
     const FileTaskFinishedCallback& done,
     extensions::app_file_handler_util::MimeTypeCollector* mime_collector,
     std::unique_ptr<std::vector<std::string>> mime_types) {
-  // TODO(kinaba): implement.
-  NOTIMPLEMENTED();
-  done.Run(extensions::api::file_manager_private::TASK_RESULT_FAILED);
+  if (ExecuteArcTask(profile, task, file_urls, *mime_types)) {
+    done.Run(extensions::api::file_manager_private::TASK_RESULT_MESSAGE_SENT);
+  } else {
+    done.Run(extensions::api::file_manager_private::TASK_RESULT_FAILED);
+  }
 }
 
 void PostProcessFoundTasks(
@@ -558,6 +550,24 @@ void FindFileBrowserHandlerTasks(
   }
 }
 
+void FindExtensionAndAppTasks(
+    Profile* profile,
+    const std::vector<extensions::EntryInfo>& entries,
+    const std::vector<GURL>& file_urls,
+    const FindTasksCallback& callback,
+    std::unique_ptr<std::vector<FullTaskDescriptor>> result_list) {
+  // 3. Continues from FindAllTypesOfTasks. Find and append file handler tasks.
+  FindFileHandlerTasks(profile, entries, result_list.get());
+
+  // 4. Find and append file browser handler tasks. We know there aren't
+  // duplicates because "file_browser_handlers" and "file_handlers" shouldn't
+  // be used in the same manifest.json.
+  FindFileBrowserHandlerTasks(profile, file_urls, result_list.get());
+
+  // Done. Apply post-filtering and callback.
+  PostProcessFoundTasks(profile, entries, callback, std::move(result_list));
+}
+
 void FindAllTypesOfTasks(Profile* profile,
                          const drive::DriveAppRegistry* drive_app_registry,
                          const std::vector<extensions::EntryInfo>& entries,
@@ -567,23 +577,14 @@ void FindAllTypesOfTasks(Profile* profile,
   std::unique_ptr<std::vector<FullTaskDescriptor>> result_list(
       new std::vector<FullTaskDescriptor>);
 
-  // Find Drive app tasks, if the drive app registry is present.
+  // 1. Find Drive app tasks, if the drive app registry is present.
   if (drive_app_registry)
     FindDriveAppTasks(*drive_app_registry, entries, result_list.get());
 
-  // Find and append file handler tasks. We know there aren't duplicates
-  // because Drive apps and platform apps are entirely different kinds of
-  // tasks.
-  FindFileHandlerTasks(profile, entries, result_list.get());
-
-  // Find and append file browser handler tasks. We know there aren't
-  // duplicates because "file_browser_handlers" and "file_handlers" shouldn't
-  // be used in the same manifest.json.
-  FindFileBrowserHandlerTasks(profile, file_urls, result_list.get());
-
-  // Find and append ARC handler tasks.
+  // 2. Find and append ARC handler tasks.
   FindArcTasks(profile, entries, std::move(result_list),
-               base::Bind(&PostProcessFoundTasks, profile, entries, callback));
+               base::Bind(&FindExtensionAndAppTasks, profile, entries,
+                          file_urls, callback));
 }
 
 void ChooseAndSetDefaultTask(const PrefService& pref_service,

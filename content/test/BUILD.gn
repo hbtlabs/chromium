@@ -362,7 +362,7 @@ if (is_android) {
   }
 }
 
-# TODO(GYP): Delete this after we've converted everything to GN.
+# TODO(GYP_GONE): Delete this after we've converted everything to GN.
 # The _run targets exist only for compatibility w/ GYP.
 group("content_site_isolation_browsertests_run") {
   testonly = true
@@ -650,7 +650,6 @@ test("content_unittests") {
     "//content/public/browser",
     "//content/public/child",
     "//content/public/common",
-    "//content/public/common:mojo_bindings",
     "//content/public/renderer",
     "//content/renderer:for_content_tests",
     "//crypto",
@@ -681,6 +680,7 @@ test("content_unittests") {
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/WebKit/public:blink",
+    "//third_party/WebKit/public:mojo_bindings",
     "//third_party/icu",
     "//third_party/leveldatabase",
     "//third_party/libjingle",

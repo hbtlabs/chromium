@@ -157,6 +157,7 @@ class SegmentedString;
 class SelectorQueryCache;
 class SerializedScriptValue;
 class Settings;
+class SnapCoordinator;
 class StyleEngine;
 class StyleResolver;
 class StyleSheet;
@@ -691,9 +692,9 @@ public:
     void updateViewportDescription();
     void processReferrerPolicy(const String& policy);
 
-    // Returns the owning element in the parent document.
-    // Returns nullptr if this is the top level document.
-    HTMLFrameOwnerElement* ownerElement() const;
+    // Returns the owning element in the parent document. Returns nullptr if
+    // this is the top level document or the owner is remote.
+    HTMLFrameOwnerElement* localOwner() const;
 
     // Returns true if this document belongs to a frame that the parent document
     // made invisible (for instance by setting as style display:none).
@@ -1014,6 +1015,8 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
+
     bool hasSVGFilterElementsRequiringLayerUpdate() const { return m_layerUpdateSVGFilterElements.size(); }
 
     AtomicString convertLocalName(const AtomicString&);
@@ -1049,6 +1052,8 @@ public:
     }
     int nodeCount() const { return m_nodeCount; }
 
+    SnapCoordinator* snapCoordinator();
+
     using WeakDocumentSet = HeapHashSet<WeakMember<Document>>;
     static WeakDocumentSet& liveDocumentSet();
 
@@ -1064,6 +1069,8 @@ public:
 
     void setRootScroller(Element*, ExceptionState&);
     Element* rootScroller();
+
+    bool isInMainFrame() const;
 
 protected:
     Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
@@ -1385,6 +1392,8 @@ private:
     int m_nodeCount;
 
     bool m_mayContainV0Shadow = false;
+
+    Member<SnapCoordinator> m_snapCoordinator;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Document>;

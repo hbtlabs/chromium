@@ -11,9 +11,9 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_local.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/child/notifications/notification_data_conversions.h"
 #include "content/child/request_extra_data.h"
@@ -172,7 +172,7 @@ struct ServiceWorkerContextClient::WorkerContextData {
   using SkipWaitingCallbacksMap =
       IDMap<blink::WebServiceWorkerSkipWaitingCallbacks, IDMapOwnPointer>;
   using SyncEventCallbacksMap =
-      IDMap<const mojo::Callback<void(mojom::ServiceWorkerEventStatus)>,
+      IDMap<const mojo::Callback<void(blink::mojom::ServiceWorkerEventStatus)>,
             IDMapOwnPointer>;
 
   explicit WorkerContextData(ServiceWorkerContextClient* owner)
@@ -552,9 +552,9 @@ void ServiceWorkerContextClient::didHandleSyncEvent(
   if (!callback)
     return;
   if (result == blink::WebServiceWorkerEventResultCompleted) {
-    callback->Run(mojom::ServiceWorkerEventStatus::COMPLETED);
+    callback->Run(blink::mojom::ServiceWorkerEventStatus::COMPLETED);
   } else {
-    callback->Run(mojom::ServiceWorkerEventStatus::REJECTED);
+    callback->Run(blink::mojom::ServiceWorkerEventStatus::REJECTED);
   }
   context_->sync_event_callbacks.Remove(request_id);
 }

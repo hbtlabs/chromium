@@ -11,7 +11,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/commands/command_service.h"
 #include "chrome/browser/extensions/api/developer_private/inspectable_views_finder.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
@@ -502,6 +502,14 @@ void ExtensionInfoGenerator::CreateExtensionInfoHelper(
     info->prettified_path.reset(new std::string(
       extensions::path_util::PrettifyPath(extension.path()).AsUTF8Unsafe()));
   }
+
+  // Permissions.
+  PermissionMessages messages =
+      extension.permissions_data()->GetPermissionMessages();
+  // TODO(devlin): We need to include retained device/file info. We also need
+  // to indicate which can be removed and which can't.
+  for (const PermissionMessage& message : messages)
+    info->permissions.push_back(base::UTF16ToUTF8(message.message()));
 
   // Runs on all urls.
   ScriptingPermissionsModifier permissions_modifier(

@@ -114,7 +114,7 @@
       'CrWin7Goma(dbg)': 'gyp_debug_bot_minimal_symbols_x86',
       'CrWin7Goma(dll)': 'gyp_shared_release_bot_minimal_symbols_x86',
       'CrWinClang':
-        'swarming_gn_clang_official_release_bot_minimal_symbols_x86',
+        'swarming_gyp_clang_official_release_bot_minimal_symbols_x86',
       'CrWinClang(dbg)':
         'swarming_gyp_clang_debug_bot_minimal_symbols_x86',
       'CrWinClang(dbg) tester': 'none',
@@ -148,19 +148,19 @@
         'swarming_gyp_clang_tot_official_minimal_symbols_static_release_x86',
       'ClangToTWin tester': 'none',
       'ClangToTWin(dbg)':
-        'swarming_gn_clang_tot_minimal_symbols_shared_debug_x86',
+        'swarming_gyp_clang_tot_minimal_symbols_shared_debug_x86',
       'ClangToTWin(dbg) tester': 'none',
       'ClangToTWin(dll)':
         'swarming_gyp_clang_tot_minimal_symbols_shared_release_x86',
       'ClangToTWin(dll) tester': 'none',
       'ClangToTWin64':
-        'swarming_gn_clang_tot_official_minimal_symbols_static_release_x64',
+        'swarming_gyp_clang_tot_official_minimal_symbols_static_release_x64',
       'ClangToTWin64 tester': 'none',
       'ClangToTWin64(dbg)':
         'swarming_gyp_clang_tot_minimal_symbols_shared_debug_x64',
       'ClangToTWin64(dbg) tester': 'none',
       'ClangToTWin64(dll)':
-        'swarming_gn_clang_tot_minimal_symbols_shared_release_x64',
+        'swarming_gyp_clang_tot_minimal_symbols_shared_release_x64',
       'ClangToTWin64(dll) tester': 'none',
       'ClangToTiOS': 'ios_gyp',
       'Closure Compilation Linux': 'closure_compilation',
@@ -175,7 +175,7 @@
           '_static_v8_heap_x86_full_symbols_release'),
       'CrWinAsanCov tester': 'none',
       'CrWinClang(shared)':
-        'swarming_gn_clang_shared_release_bot_minimal_symbols_x86',
+        'swarming_gyp_clang_shared_release_bot_minimal_symbols_x86',
       'CrWinClang(shared) tester': 'none',
       'CrWinClang64 tester': 'none',
       'CrWinClang64(dbg)': 'win_clang_debug_bot',
@@ -204,6 +204,7 @@
       'MD Top Chrome Linux material': 'gn_debug_bot',
       'LTO Linux Perf': 'gn_official_goma_lto',
       'Libfuzzer Upload Linux ASan': 'gn_release_libfuzzer_asan',
+      'Libfuzzer Upload Linux ASan Debug': 'gn_debug_libfuzzer_asan',
       'Libfuzzer Upload Linux MSan': 'gn_release_libfuzzer_msan',
       'Libfuzzer Upload Linux UBSan': 'gn_release_libfuzzer_ubsan',
       'Linux ARM': 'swarming_gn_release_bot_arm',
@@ -346,7 +347,7 @@
     'chromium.mac': {
       'Mac Builder': 'swarming_gpu_tests_gyp_release_bot',
       'Mac Builder (dbg)': 'swarming_gyp_debug_bot',
-      'Mac GN (dbg)': 'gn_debug_static_bot',
+      'Mac GN (dbg)': 'gn_debug_bot',
       'Mac GN': 'gn_release_bot',
       'Mac10.10 Tests': 'none',
       'Mac10.11 Tests': 'none',
@@ -761,7 +762,7 @@
       'mac_chromium_compile_dbg_ng': 'swarming_gyp_debug_trybot',
       'mac_chromium_compile_rel_ng': 'swarming_gpu_tests_gyp_release_trybot',
       'mac_chromium_dbg_ng': 'swarming_gyp_debug_trybot',
-      'mac_chromium_gn_dbg': 'gn_debug_static_bot',
+      'mac_chromium_gn_dbg': 'gn_debug_bot',
       'mac_chromium_gn_rel': 'gn_release_trybot',
       'mac_chromium_gn_upload': 'gn_release_bot',
       'mac_chromium_rel_ng': 'swarming_gpu_tests_gyp_release_trybot',
@@ -1090,8 +1091,9 @@
       'gn', 'debug_bot_minimal_symbols', 'x86',
     ],
 
-    'gn_debug_static_bot': [
-      'gn', 'debug_static_bot',
+    'gn_debug_libfuzzer_asan': [
+      'gn', 'debug', 'libfuzzer', 'asan', 'proprietary_codecs', 'pdf_xfa',
+      'disable_nacl',
     ],
 
     'gn_debug_static_bot_chrome_with_codecs': [
@@ -1680,8 +1682,8 @@
       'minimal_symbols', 'x64',
     ],
 
-    'swarming_gn_clang_official_release_bot_minimal_symbols_x86': [
-      'swarming', 'gn', 'clang', 'official', 'release_bot',
+    'swarming_gyp_clang_official_release_bot_minimal_symbols_x86': [
+      'swarming', 'gyp', 'clang', 'official', 'release_bot',
       'minimal_symbols', 'x86',
     ],
 
@@ -1693,8 +1695,8 @@
       'swarming', 'gyp', 'clang', 'official', 'release_trybot', 'x86',
     ],
 
-    'swarming_gn_clang_shared_release_bot_minimal_symbols_x86': [
-      'swarming', 'gn', 'clang', 'shared_release_bot', 'minimal_symbols',
+    'swarming_gyp_clang_shared_release_bot_minimal_symbols_x86': [
+      'swarming', 'gyp', 'clang', 'shared_release_bot', 'minimal_symbols',
       'x86',
     ],
 
@@ -1733,8 +1735,8 @@
       'x64',
     ],
 
-    'swarming_gn_clang_tot_minimal_symbols_shared_debug_x86': [
-      'swarming', 'gn', 'clang_tot', 'minimal_symbols', 'shared', 'debug',
+    'swarming_gyp_clang_tot_minimal_symbols_shared_debug_x86': [
+      'swarming', 'gyp', 'clang_tot', 'minimal_symbols', 'shared', 'debug',
       'x86',
     ],
 
@@ -1752,8 +1754,8 @@
       'swarming', 'gyp', 'clang_tot', 'minimal_symbols', 'shared', 'release',
     ],
 
-    'swarming_gn_clang_tot_minimal_symbols_shared_release_x64': [
-      'swarming', 'gn', 'clang_tot', 'minimal_symbols', 'shared', 'release',
+    'swarming_gyp_clang_tot_minimal_symbols_shared_release_x64': [
+      'swarming', 'gyp', 'clang_tot', 'minimal_symbols', 'shared', 'release',
       'x64',
     ],
 
@@ -1762,8 +1764,8 @@
       'x86',
     ],
 
-    'swarming_gn_clang_tot_official_minimal_symbols_static_release_x64': [
-      'swarming', 'gn', 'clang_tot', 'official', 'minimal_symbols', 'static',
+    'swarming_gyp_clang_tot_official_minimal_symbols_static_release_x64': [
+      'swarming', 'gyp', 'clang_tot', 'official', 'minimal_symbols', 'static',
       'release', 'x64',
     ],
 

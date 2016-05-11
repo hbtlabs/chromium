@@ -43,6 +43,7 @@ namespace blink {
 
 namespace V8RuntimeAgentImplState {
 static const char customObjectFormatterEnabled[] = "customObjectFormatterEnabled";
+static const char runtimeEnabled[] = "runtimeEnabled";
 };
 
 using protocol::Runtime::ExceptionDetails;
@@ -99,6 +100,8 @@ void V8RuntimeAgentImpl::evaluate(
 
     if (doNotPauseOnExceptionsAndMuteConsole.fromMaybe(false))
         scope.ignoreExceptionsAndMuteConsole();
+    if (userGesture.fromMaybe(false))
+        scope.pretendUserGesture();
 
     if (includeCommandLineAPI.fromMaybe(false) && !scope.installCommandLineAPI())
         return;
@@ -161,6 +164,8 @@ void V8RuntimeAgentImpl::callFunctionOn(ErrorString* errorString,
 
     if (doNotPauseOnExceptionsAndMuteConsole.fromMaybe(false))
         scope.ignoreExceptionsAndMuteConsole();
+    if (userGesture.fromMaybe(false))
+        scope.pretendUserGesture();
 
     v8::MaybeLocal<v8::Value> maybeFunctionValue = m_debugger->compileAndRunInternalScript(scope.context(), toV8String(m_debugger->isolate(), "(" + expression + ")"));
     // Re-initialize after running client's code, as it could have destroyed context or session.
@@ -253,7 +258,7 @@ void V8RuntimeAgentImpl::releaseObjectGroup(ErrorString*, const String16& object
 
 void V8RuntimeAgentImpl::run(ErrorString* errorString)
 {
-    *errorString = "Not paused";
+    m_session->client()->resumeStartup();
 }
 
 void V8RuntimeAgentImpl::setCustomObjectFormatterEnabled(ErrorString*, bool enabled)
@@ -361,6 +366,8 @@ void V8RuntimeAgentImpl::clearFrontend()
 
 void V8RuntimeAgentImpl::restore()
 {
+    if (!m_state->booleanProperty(V8RuntimeAgentImplState::runtimeEnabled, false))
+        return;
     m_frontend->executionContextsCleared();
     ErrorString error;
     enable(&error);
@@ -374,6 +381,7 @@ void V8RuntimeAgentImpl::enable(ErrorString* errorString)
         return;
     m_session->changeInstrumentationCounter(+1);
     m_enabled = true;
+    m_state->setBoolean(V8RuntimeAgentImplState::runtimeEnabled, true);
     v8::HandleScope handles(m_debugger->isolate());
     m_session->reportAllContexts(this);
 }
@@ -383,6 +391,7 @@ void V8RuntimeAgentImpl::disable(ErrorString* errorString)
     if (!m_enabled)
         return;
     m_enabled = false;
+    m_state->setBoolean(V8RuntimeAgentImplState::runtimeEnabled, false);
     m_session->discardInjectedScripts();
     reset();
     m_session->changeInstrumentationCounter(-1);

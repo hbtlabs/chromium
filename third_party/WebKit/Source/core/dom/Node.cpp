@@ -777,7 +777,7 @@ bool Node::isInert() const
     const HTMLDialogElement* dialog = document().activeModalDialog();
     if (dialog && this != document() && (!canParticipateInFlatTree() || !FlatTreeTraversal::containsIncludingPseudoElement(*dialog, *this)))
         return true;
-    return document().ownerElement() && document().ownerElement()->isInert();
+    return document().localOwner() && document().localOwner()->isInert();
 }
 
 unsigned Node::nodeIndex() const
@@ -2350,6 +2350,14 @@ DEFINE_TRACE(Node)
 
     visitor->trace(m_treeScope);
     EventTarget::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(Node)
+{
+    visitor->traceWrappers(parentOrShadowHostOrTemplateHostNode());
+    visitor->traceWrappers(m_previous);
+    visitor->traceWrappers(m_next);
+    EventTarget::traceWrappers(visitor);
 }
 
 unsigned Node::lengthOfContents() const

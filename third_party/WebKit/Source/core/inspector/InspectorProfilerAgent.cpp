@@ -35,18 +35,8 @@
 
 namespace blink {
 
-namespace ProfilerAgentState {
-static const char profilerEnabled[] = "profilerEnabled";
-}
-
-InspectorProfilerAgent* InspectorProfilerAgent::create(V8ProfilerAgent* agent, Client* client)
-{
-    return new InspectorProfilerAgent(agent, client);
-}
-
-InspectorProfilerAgent::InspectorProfilerAgent(V8ProfilerAgent* agent, Client* client)
+InspectorProfilerAgent::InspectorProfilerAgent(V8ProfilerAgent* agent)
     : InspectorBaseAgent<InspectorProfilerAgent, protocol::Frontend::Profiler>("Profiler")
-    , m_client(client)
     , m_v8ProfilerAgent(agent)
 {
 }
@@ -71,22 +61,16 @@ void InspectorProfilerAgent::dispose()
 
 void InspectorProfilerAgent::restore()
 {
-    if (!m_state->booleanProperty(ProfilerAgentState::profilerEnabled, false))
-        return;
     m_v8ProfilerAgent->restore();
-    ErrorString errorString;
-    enable(&errorString);
 }
 
 void InspectorProfilerAgent::enable(ErrorString* errorString)
 {
     m_v8ProfilerAgent->enable(errorString);
-    m_state->setBoolean(ProfilerAgentState::profilerEnabled, true);
 }
 
 void InspectorProfilerAgent::disable(ErrorString* errorString)
 {
-    m_state->setBoolean(ProfilerAgentState::profilerEnabled, false);
     m_v8ProfilerAgent->disable(errorString);
 }
 
@@ -98,14 +82,10 @@ void InspectorProfilerAgent::setSamplingInterval(ErrorString* error, int interva
 void InspectorProfilerAgent::start(ErrorString* error)
 {
     m_v8ProfilerAgent->start(error);
-    if (m_client && error->isEmpty())
-        m_client->profilingStarted();
 }
 
 void InspectorProfilerAgent::stop(ErrorString* errorString, OwnPtr<protocol::Profiler::CPUProfile>* profile)
 {
-    if (m_client)
-        m_client->profilingStopped();
     m_v8ProfilerAgent->stop(errorString, profile);
 }
 

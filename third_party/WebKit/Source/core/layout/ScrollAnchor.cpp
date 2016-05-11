@@ -48,16 +48,12 @@ static LayoutBoxItem scrollerLayoutBoxItem(const ScrollableArea* scroller)
     return box;
 }
 
-static Corner cornerFromCandidateRect(LayoutRect candidateRect, LayoutRect visibleRect)
+static Corner cornerFromCandidateRect(const LayoutObject* layoutObject)
 {
-    if (visibleRect.contains(candidateRect.minXMinYCorner()))
-        return Corner::TopLeft;
-    if (visibleRect.contains(candidateRect.maxXMinYCorner()))
+    ASSERT(layoutObject);
+    if (layoutObject->style()->isFlippedBlocksWritingMode()
+        || !layoutObject->style()->isLeftToRightDirection())
         return Corner::TopRight;
-    if (visibleRect.contains(candidateRect.minXMaxYCorner()))
-        return Corner::BottomLeft;
-    if (visibleRect.contains(candidateRect.maxXMaxYCorner()))
-        return Corner::BottomRight;
     return Corner::TopLeft;
 }
 
@@ -66,8 +62,6 @@ static LayoutPoint cornerPointOfRect(LayoutRect rect, Corner whichCorner)
     switch (whichCorner) {
     case Corner::TopLeft: return rect.minXMinYCorner();
     case Corner::TopRight: return rect.maxXMinYCorner();
-    case Corner::BottomLeft: return rect.minXMaxYCorner();
-    case Corner::BottomRight: return rect.maxXMaxYCorner();
     }
     ASSERT_NOT_REACHED();
     return LayoutPoint();
@@ -89,8 +83,13 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject, const Scrolla
     }
     LayoutRect relativeBounds = LayoutRect(layoutObject->localToAncestorQuad(
         FloatRect(localBounds), scrollerLayoutBox(scroller)).boundingBox());
+    // When the scroller is the FrameView, localToAncestorQuad returns document coords,
+    // so we must subtract scroll offset to get viewport coords. We discard the fractional
+    // part of the scroll offset so that the rounding in restore() matches the snapping of
+    // the anchor node to the pixel grid of the layer it paints into. For non-FrameView
+    // scrollers, we rely on the flooring behavior of LayoutBox::scrolledContentOffset.
     if (scroller->isFrameView())
-        relativeBounds.moveBy(-LayoutPoint(scroller->scrollPositionDouble()));
+        relativeBounds.moveBy(-flooredIntPoint(scroller->scrollPositionDouble()));
     return relativeBounds;
 }
 
@@ -127,7 +126,7 @@ ScrollAnchor::ExamineResult ScrollAnchor::examine(const LayoutObject* candidate)
     if (occupiesSpace && visibleRect.intersects(candidateRect)) {
         return ExamineResult(
             visibleRect.contains(candidateRect) ? Return : Constrain,
-            cornerFromCandidateRect(candidateRect, visibleRect));
+            cornerFromCandidateRect(candidate));
     } else {
         return ExamineResult(Skip);
     }
@@ -181,21 +180,27 @@ void ScrollAnchor::restore()
     if (!m_anchorObject)
         return;
 
-    LayoutSize adjustment = computeRelativeOffset(m_anchorObject, m_scroller, m_corner) - m_savedRelativeOffset;
+    // The anchor node can report fractional positions, but it is DIP-snapped when
+    // painting (crbug.com/610805), so we must round the offsets to determine the
+    // visual delta. If we scroll by the delta in LayoutUnits, the snapping of the
+    // anchor node may round differently from the snapping of the scroll position.
+    // (For example, anchor moving from 2.4px -> 2.6px is really 2px -> 3px, so we
+    // should scroll by 1px instead of 0.2px.) This is true regardless of whether
+    // the ScrollableArea actually uses fractional scroll positions.
+    IntSize adjustment =
+        roundedIntSize(computeRelativeOffset(m_anchorObject, m_scroller, m_corner)) -
+        roundedIntSize(m_savedRelativeOffset);
     if (!adjustment.isZero()) {
+        DoublePoint desiredPos = m_scroller->scrollPositionDouble() + adjustment;
         ScrollAnimatorBase* animator = m_scroller->existingScrollAnimator();
         if (!animator || !animator->hasRunningAnimation()) {
-            m_scroller->setScrollPosition(
-                m_scroller->scrollPositionDouble() + DoubleSize(adjustment),
-                AnchoringScroll);
+            m_scroller->setScrollPosition(desiredPos, AnchoringScroll);
         } else {
             // If in the middle of a scroll animation, stop the animation, make
             // the adjustment, and continue the animation on the pending delta.
             FloatSize pendingDelta = animator->desiredTargetPosition() - FloatPoint(m_scroller->scrollPositionDouble());
             animator->cancelAnimation();
-            m_scroller->setScrollPosition(
-                m_scroller->scrollPositionDouble() + DoubleSize(adjustment),
-                AnchoringScroll);
+            m_scroller->setScrollPosition(desiredPos, AnchoringScroll);
             animator->userScroll(ScrollByPixel, pendingDelta);
         }
         // Update UMA metric.

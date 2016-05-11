@@ -9,7 +9,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
@@ -68,11 +68,6 @@ void SoftwareBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
 #if defined(OS_MACOSX)
 void SoftwareBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {
-}
-
-bool SoftwareBrowserCompositorOutputSurface::
-    SurfaceShouldNotShowFramesAfterSuspendForRecycle() const {
-  return false;
 }
 #endif
 

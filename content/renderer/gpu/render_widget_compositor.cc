@@ -17,7 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/lock.h"
 #include "base/sys_info.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -293,6 +293,8 @@ void RenderWidgetCompositor::Initialize(float device_scale_factor) {
       compositor_deps_->IsGpuRasterizationForced();
   settings.gpu_rasterization_enabled =
       compositor_deps_->IsGpuRasterizationEnabled();
+  settings.async_worker_context_enabled =
+      compositor_deps_->IsAsyncWorkerContextEnabled();
 
   settings.can_use_lcd_text = compositor_deps_->IsLcdTextEnabled();
   settings.use_distance_field_text =

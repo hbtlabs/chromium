@@ -13,9 +13,9 @@
 #include "base/metrics/histogram.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/base/histograms.h"
 #include "cc/output/compositor_frame.h"
@@ -75,6 +75,7 @@
 #include "components/display_compositor/compositor_overlay_candidate_validator_mac.h"
 #include "content/browser/compositor/software_output_device_mac.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
+#include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #include "ui/base/cocoa/remote_layer_api.h"
 #include "ui/base/ui_base_switches.h"
 #elif defined(OS_ANDROID)
@@ -129,7 +130,8 @@ scoped_refptr<content::ContextProviderCommandBuffer> CreateContextCommon(
 
   GURL url("chrome://gpu/GpuProcessTransportFactory::CreateContextCommon");
   return make_scoped_refptr(new content::ContextProviderCommandBuffer(
-      std::move(gpu_channel_host), surface_handle, url,
+      std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
+      gpu::GpuStreamPriority::NORMAL, surface_handle, url,
       gfx::PreferIntegratedGpu, automatic_flushes, gpu::SharedMemoryLimits(),
       attributes, shared_context_provider, type));
 }
@@ -276,11 +278,6 @@ void GpuProcessTransportFactory::CreateOutputSurface(
   if (!data) {
     data = CreatePerCompositorData(compositor.get());
   } else {
-#if defined(OS_MACOSX)
-    // TODO(piman): Use GpuSurfaceTracker to map ids to surfaces instead of an
-    // output_surface_map_ here.
-    output_surface_map_.Remove(data->surface_handle);
-#endif
     data->surface = nullptr;
   }
 
@@ -395,6 +392,12 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
                 "125248"
                 " GpuProcessTransportFactory::EstablishedGpuChannel"
                 "::Compositor"));
+#if defined(OS_MACOSX)
+        // On Mac, GpuCommandBufferMsg_SwapBuffersCompleted must be handled in
+        // a nested message loop during resize.
+        context_provider->SetDefaultTaskRunner(
+            ui::WindowResizeHelperMac::Get()->task_runner());
+#endif
         if (!context_provider->BindToCurrentThread())
           context_provider = nullptr;
       }
@@ -476,11 +479,6 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
     }
   }
 
-#if defined(OS_MACOSX)
-  // TODO(piman): Use GpuSurfaceTracker to map ids to surfaces instead of an
-  // output_surface_map_ here.
-  output_surface_map_.AddWithID(surface.get(), data->surface_handle);
-#endif
   data->surface = surface.get();
   if (data->reflector)
     data->reflector->OnSourceSurfaceReady(data->surface);
@@ -547,12 +545,6 @@ void GpuProcessTransportFactory::RemoveCompositor(ui::Compositor* compositor) {
     return;
   PerCompositorData* data = it->second;
   DCHECK(data);
-#if defined(OS_MACOSX)
-  // TODO(piman): Use GpuSurfaceTracker to map ids to surfaces instead of an
-  // output_surface_map_ here.
-  if (data->surface)
-    output_surface_map_.Remove(data->surface_handle);
-#endif
 #if !defined(GPU_SURFACE_HANDLE_IS_ACCELERATED_WINDOW)
   if (data->surface_handle)
     GpuSurfaceTracker::Get()->RemoveSurface(data->surface_handle);
@@ -678,16 +670,6 @@ void GpuProcessTransportFactory::SetCompositorSuspendedForRecycle(
   DCHECK(data);
   if (data->surface)
     data->surface->SetSurfaceSuspendedForRecycle(suspended);
-}
-
-bool GpuProcessTransportFactory::
-    SurfaceShouldNotShowFramesAfterSuspendForRecycle(
-        gpu::SurfaceHandle surface_handle) const {
-  BrowserCompositorOutputSurface* surface =
-      output_surface_map_.Lookup(surface_handle);
-  if (surface)
-    return surface->SurfaceShouldNotShowFramesAfterSuspendForRecycle();
-  return false;
 }
 #endif
 

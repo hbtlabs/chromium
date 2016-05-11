@@ -132,6 +132,7 @@ component("midi") {
   if (is_mac) {
     libs += [
       "CoreAudio.framework",
+      "CoreFoundation.framework",
       "CoreMIDI.framework",
     ]
   }
@@ -184,6 +185,7 @@ test("midi_unittests") {
 
   if (is_mac) {
     sources += [ "midi_manager_mac_unittest.cc" ]
+    libs = [ "CoreMidi.framework" ]
   }
 
   if (use_alsa && use_udev) {

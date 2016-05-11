@@ -19,7 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_mock_time_task_runner.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/offline_pages/client_policy_controller.h"
 #include "components/offline_pages/offline_page_client_policy.h"
@@ -28,19 +28,9 @@
 #include "components/offline_pages/offline_page_storage_manager.h"
 #include "components/offline_pages/offline_page_test_archiver.h"
 #include "components/offline_pages/offline_page_test_store.h"
+#include "components/offline_pages/offline_page_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
-
-using SavePageResult = offline_pages::OfflinePageModel::SavePageResult;
-using DeletePageResult = offline_pages::OfflinePageModel::DeletePageResult;
-using SingleOfflinePageItemResult =
-    offline_pages::OfflinePageModel::SingleOfflinePageItemResult;
-using MultipleOfflinePageItemResult =
-    offline_pages::OfflinePageModel::MultipleOfflinePageItemResult;
-using CheckPagesExistOfflineResult =
-    offline_pages::OfflinePageModel::CheckPagesExistOfflineResult;
-using MultipleOfflineIdResult =
-    offline_pages::OfflinePageModel::MultipleOfflineIdResult;
 
 namespace offline_pages {
 
@@ -123,14 +113,16 @@ class OfflinePageModelTest
 
   MultipleOfflinePageItemResult GetAllPages();
 
-  void SavePage(const GURL& url, ClientId client_id);
+  // Returns the offline ID of the saved page.
+  std::pair<SavePageResult, int64_t> SavePage(const GURL& url,
+                                              ClientId client_id);
 
   void SavePageWithArchiverResult(const GURL& url,
                                   ClientId client_id,
                                   OfflinePageArchiver::ArchiverResult result);
 
   void DeletePage(int64_t offline_id,
-                  const OfflinePageModel::DeletePageCallback& callback) {
+                  const DeletePageCallback& callback) {
     std::vector<int64_t> offline_ids;
     offline_ids.push_back(offline_id);
     model()->DeletePagesByOfflineId(offline_ids, callback);
@@ -233,9 +225,8 @@ void OfflinePageModelTest::SetLastPathCreatedByArchiver(
   last_archiver_path_ = file_path;
 }
 
-void OfflinePageModelTest::OnSavePageDone(
-    OfflinePageModel::SavePageResult result,
-    int64_t offline_id) {
+void OfflinePageModelTest::OnSavePageDone(SavePageResult result,
+                                          int64_t offline_id) {
   last_save_result_ = result;
   last_save_offline_id_ = offline_id;
 }
@@ -308,10 +299,13 @@ OfflinePageTestStore* OfflinePageModelTest::GetStore() {
   return static_cast<OfflinePageTestStore*>(model()->GetStoreForTesting());
 }
 
-void OfflinePageModelTest::SavePage(const GURL& url, ClientId client_id) {
+std::pair<SavePageResult, int64_t> OfflinePageModelTest::SavePage(
+    const GURL& url,
+    ClientId client_id) {
   SavePageWithArchiverResult(
       url, client_id,
       OfflinePageArchiver::ArchiverResult::SUCCESSFULLY_CREATED);
+  return std::make_pair(last_save_result_, last_save_offline_id_);
 }
 
 void OfflinePageModelTest::SavePageWithArchiverResult(
@@ -981,6 +975,27 @@ TEST_F(OfflinePageModelTest, ClearPagesFromOneSource) {
   EXPECT_EQ(1UL, GetStore()->GetAllPages().size());
   EXPECT_EQ(2, last_cleared_pages_count());
   EXPECT_EQ(DeletePageResult::SUCCESS, last_clear_page_result());
+}
+
+TEST_F(OfflinePageModelTest, GetBestPage) {
+  // We will save 3 pages - two for the same URL, and one for a different URL.
+  // Correct behavior will pick the most recently saved page for the correct
+  // URL.
+  std::pair<SavePageResult, int64_t> saved_pages[3];
+  saved_pages[0] = SavePage(kTestUrl, kTestClientId1);
+  saved_pages[1] = SavePage(kTestUrl, kTestClientId1);
+  saved_pages[2] = SavePage(kTestUrl2, kTestClientId2);
+
+  for (const auto& save_result : saved_pages) {
+    ASSERT_EQ(OfflinePageModel::SavePageResult::SUCCESS,
+              std::get<0>(save_result));
+  }
+
+  const OfflinePageItem* offline_page =
+      model()->MaybeGetBestPageForOnlineURL(kTestUrl);
+  ASSERT_TRUE(nullptr != offline_page);
+
+  EXPECT_EQ(std::get<1>(saved_pages[1]), offline_page->offline_id);
 }
 
 TEST(CommandLineFlagsTest, OfflineBookmarks) {

@@ -45,6 +45,7 @@
 #include "ui/app_list/app_list_switches.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/compositor/compositor_switches.h"
+#include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
@@ -82,6 +83,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableCastStreamingHWEncoding,
     ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
+    ::switches::kDisableGpuAsyncWorkerContext,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
     ::switches::kDisableGpuWatchdog,
@@ -102,6 +104,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kForceDisplayList2dCanvas,
     ::switches::kDisableGpuSandbox,
     ::switches::kEnableDistanceFieldText,
+    ::switches::kEnableGpuAsyncWorkerContext,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableImageColorProfiles,

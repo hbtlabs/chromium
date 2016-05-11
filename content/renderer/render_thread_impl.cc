@@ -30,10 +30,10 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -161,7 +161,6 @@
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/layout.h"
 #include "ui/base/ui_base_switches.h"
-#include "v8/include/v8.h"
 
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
@@ -242,6 +241,17 @@ const size_t kImageCacheSingleAllocationByteLimit = 64 * 1024 * 1024;
 base::LazyInstance<base::ThreadLocalPointer<RenderThreadImpl> >
     lazy_tls = LAZY_INSTANCE_INITIALIZER;
 
+// v8::MemoryPressureLevel should correspond to base::MemoryPressureListener.
+static_assert(static_cast<v8::MemoryPressureLevel>(
+    base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE) ==
+        v8::MemoryPressureLevel::kNone, "none level not align");
+static_assert(static_cast<v8::MemoryPressureLevel>(
+    base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE) ==
+        v8::MemoryPressureLevel::kModerate, "moderate level not align");
+static_assert(static_cast<v8::MemoryPressureLevel>(
+    base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) ==
+        v8::MemoryPressureLevel::kCritical, "critical level not align");
+
 class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
  public:
   explicit WebThreadForCompositor(base::Thread::Options options)
@@ -301,13 +311,6 @@ void NotifyTimezoneChangeOnThisThread() {
   if (!isolate)
     return;
   v8::Date::DateTimeConfigurationChangeNotification(isolate);
-}
-
-void LowMemoryNotificationOnThisThread() {
-  v8::Isolate* isolate = v8::Isolate::GetCurrent();
-  if (!isolate)
-    return;
-  isolate->LowMemoryNotification();
 }
 
 class RenderFrameSetupImpl : public mojom::RenderFrameSetup {
@@ -403,7 +406,9 @@ void StringToUintVector(const std::string& str, std::vector<unsigned>* vector) {
 
 scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
-    command_buffer_metrics::ContextType type) {
+    command_buffer_metrics::ContextType type,
+    int32_t stream_id,
+    gpu::GpuStreamPriority stream_priority) {
   DCHECK(gpu_channel_host);
   // This is used to create a few different offscreen contexts:
   // - The shared main thread context (offscreen) used by blink for canvas.
@@ -418,9 +423,10 @@ scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
   attributes.lose_context_when_out_of_memory = true;
-  constexpr bool automatic_flushes = false;
+  const bool automatic_flushes = false;
   return make_scoped_refptr(new ContextProviderCommandBuffer(
-      std::move(gpu_channel_host), gpu::kNullSurfaceHandle,
+      std::move(gpu_channel_host), stream_id, stream_priority,
+      gpu::kNullSurfaceHandle,
       GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext"),
       gfx::PreferIntegratedGpu, automatic_flushes, gpu::SharedMemoryLimits(),
       attributes, nullptr, type));
@@ -743,6 +749,8 @@ void RenderThreadImpl::Init(
       command_line.HasSwitch(switches::kEnableGpuRasterization);
   is_gpu_rasterization_forced_ =
       command_line.HasSwitch(switches::kForceGpuRasterization);
+  is_async_worker_context_enabled_ =
+      command_line.HasSwitch(switches::kEnableGpuAsyncWorkerContext);
 
   if (command_line.HasSwitch(switches::kGpuRasterizationMSAASampleCount)) {
     std::string string_value = command_line.GetSwitchValueASCII(
@@ -775,7 +783,9 @@ void RenderThreadImpl::Init(
 #endif
 
   memory_pressure_listener_.reset(new base::MemoryPressureListener(
-      base::Bind(&RenderThreadImpl::OnMemoryPressure, base::Unretained(this))));
+      base::Bind(&RenderThreadImpl::OnMemoryPressure, base::Unretained(this)),
+      base::Bind(&RenderThreadImpl::OnSyncMemoryPressure,
+                 base::Unretained(this))));
 
   int num_raster_threads = 0;
   std::string string_value =
@@ -1400,34 +1410,40 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
+      EstablishGpuChannelSync(CAUSE_FOR_GPU_LAUNCH_MEDIA_CONTEXT);
+  if (!gpu_channel_host)
+    return nullptr;
+  scoped_refptr<ContextProviderCommandBuffer> media_context_provider =
+      CreateOffscreenContext(
+          gpu_channel_host, command_buffer_metrics::RENDER_WORKER_CONTEXT,
+          gpu::GPU_STREAM_DEFAULT, gpu::GpuStreamPriority::NORMAL);
+  if (!media_context_provider->BindToCurrentThread())
+    return nullptr;
+  media_context_provider->SetupLock();
+
   scoped_refptr<base::SingleThreadTaskRunner> media_task_runner =
       GetMediaThreadTaskRunner();
-  scoped_refptr<ContextProviderCommandBuffer> shared_context_provider =
-      SharedWorkerContextProvider();
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host = GetGpuChannel();
-  if (shared_context_provider && gpu_channel_host) {
-    const bool enable_video_accelerator =
-        !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode);
-    const bool enable_gpu_memory_buffer_video_frames =
+  const bool enable_video_accelerator =
+      !cmd_line->HasSwitch(switches::kDisableAcceleratedVideoDecode);
+  const bool enable_gpu_memory_buffer_video_frames =
 #if defined(OS_MACOSX) || defined(OS_LINUX)
-        !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
+      !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
 #else
-        cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
+      cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
 #endif
-    std::vector<unsigned> image_texture_targets;
-    std::string video_frame_image_texture_target_string =
-        cmd_line->GetSwitchValueASCII(switches::kVideoImageTextureTarget);
-    StringToUintVector(video_frame_image_texture_target_string,
-                       &image_texture_targets);
+  std::vector<unsigned> image_texture_targets;
+  std::string video_frame_image_texture_target_string =
+      cmd_line->GetSwitchValueASCII(switches::kVideoImageTextureTarget);
+  StringToUintVector(video_frame_image_texture_target_string,
+                     &image_texture_targets);
 
-    gpu_factories_.push_back(RendererGpuVideoAcceleratorFactories::Create(
-        std::move(gpu_channel_host), base::ThreadTaskRunnerHandle::Get(),
-        media_task_runner, shared_context_provider,
-        enable_gpu_memory_buffer_video_frames, image_texture_targets,
-        enable_video_accelerator));
-    return gpu_factories_.back();
-  }
-  return nullptr;
+  gpu_factories_.push_back(RendererGpuVideoAcceleratorFactories::Create(
+      std::move(gpu_channel_host), base::ThreadTaskRunnerHandle::Get(),
+      media_task_runner, std::move(media_context_provider),
+      enable_gpu_memory_buffer_video_frames, image_texture_targets,
+      enable_video_accelerator));
+  return gpu_factories_.back();
 }
 
 scoped_refptr<ContextProviderCommandBuffer>
@@ -1447,7 +1463,8 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
 
   shared_main_thread_contexts_ = CreateOffscreenContext(
       std::move(gpu_channel_host),
-      command_buffer_metrics::RENDERER_MAINTHREAD_CONTEXT);
+      command_buffer_metrics::RENDERER_MAINTHREAD_CONTEXT,
+      gpu::GPU_STREAM_DEFAULT, gpu::GpuStreamPriority::NORMAL);
   if (!shared_main_thread_contexts_->BindToCurrentThread())
     shared_main_thread_contexts_ = nullptr;
   return shared_main_thread_contexts_;
@@ -1525,6 +1542,10 @@ bool RenderThreadImpl::IsGpuRasterizationForced() {
 
 bool RenderThreadImpl::IsGpuRasterizationEnabled() {
   return is_gpu_rasterization_enabled_;
+}
+
+bool RenderThreadImpl::IsAsyncWorkerContextEnabled() {
+  return is_async_worker_context_enabled_;
 }
 
 int RenderThreadImpl::GetGpuRasterizationMSAASampleCount() {
@@ -1873,25 +1894,13 @@ void RenderThreadImpl::OnCreateNewSharedWorker(
 
 void RenderThreadImpl::OnMemoryPressure(
     base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  TRACE_EVENT0("memory","RenderThreadImpl::OnMemoryPressure");
   ReleaseFreeMemory();
 
   // Do not call into blink if it is not initialized.
   if (blink_platform_impl_) {
     blink::WebMemoryPressureListener::onMemoryPressure(
         static_cast<blink::WebMemoryPressureLevel>(memory_pressure_level));
-
-    if (blink::mainThreadIsolate()) {
-      // Trigger full v8 garbage collection on memory pressure notifications.
-      // This will potentially hang the renderer for a long time, however, when
-      // we receive a memory pressure notification, we might be about to be
-      // killed. Because of the janky hang don't do this to foreground
-      // renderers.
-      if (RendererIsHidden()) {
-        blink::mainThreadIsolate()->LowMemoryNotification();
-        RenderThread::Get()->PostTaskToAllWebWorkers(
-            base::Bind(&LowMemoryNotificationOnThisThread));
-      }
-    }
 
     if (memory_pressure_level ==
         base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
@@ -1933,7 +1942,7 @@ base::TaskRunner* RenderThreadImpl::GetWorkerTaskRunner() {
 }
 
 scoped_refptr<ContextProviderCommandBuffer>
-RenderThreadImpl::SharedWorkerContextProvider() {
+RenderThreadImpl::SharedCompositorWorkerContextProvider() {
   DCHECK(IsMainThread());
   // Try to reuse existing shared worker context provider.
   if (shared_worker_context_provider_) {
@@ -1952,9 +1961,17 @@ RenderThreadImpl::SharedWorkerContextProvider() {
     return shared_worker_context_provider_;
   }
 
+  int32_t stream_id = gpu::GPU_STREAM_DEFAULT;
+  gpu::GpuStreamPriority stream_priority = gpu::GpuStreamPriority::NORMAL;
+  if (is_async_worker_context_enabled_) {
+    stream_id = gpu_channel_host->GenerateStreamID();
+    stream_priority = gpu::GpuStreamPriority::LOW;
+  }
+
   shared_worker_context_provider_ =
       CreateOffscreenContext(std::move(gpu_channel_host),
-                             command_buffer_metrics::RENDER_WORKER_CONTEXT);
+                             command_buffer_metrics::RENDER_WORKER_CONTEXT,
+                             stream_id, stream_priority);
   if (!shared_worker_context_provider_->BindToCurrentThread())
     shared_worker_context_provider_ = nullptr;
   if (shared_worker_context_provider_)
@@ -2050,6 +2067,26 @@ void RenderThreadImpl::PendingRenderFrameConnect::OnConnectionError() {
       RenderThreadImpl::current()->pending_render_frame_connects_.erase(
           routing_id_);
   DCHECK_EQ(1u, erased);
+}
+
+void RenderThreadImpl::OnSyncMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  if (!blink::mainThreadIsolate())
+    return;
+
+  v8::MemoryPressureLevel v8_memory_pressure_level =
+      static_cast<v8::MemoryPressureLevel>(memory_pressure_level);
+
+  // In order to reduce performance impact, translate critical level to
+  // moderate level for foregroud renderer.
+  if (!RendererIsHidden() &&
+      v8_memory_pressure_level == v8::MemoryPressureLevel::kCritical)
+    v8_memory_pressure_level = v8::MemoryPressureLevel::kModerate;
+
+  blink::mainThreadIsolate()->MemoryPressureNotification(
+      v8_memory_pressure_level);
+  blink::MemoryPressureNotificationToWorkerThreadIsolates(
+      v8_memory_pressure_level);
 }
 
 }  // namespace content

@@ -238,8 +238,6 @@ public:
     LayoutUnit collapsedMarginBeforeForChild(const LayoutBox& child) const;
     LayoutUnit collapsedMarginAfterForChild(const LayoutBox& child) const;
 
-    bool nodeAtPoint(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
-
     virtual void scrollbarsChanged(bool /*horizontalScrollbarChanged*/, bool /*verticalScrollbarChanged*/);
 
     LayoutUnit availableLogicalWidthForContent() const { return (logicalRightOffsetForContent() - logicalLeftOffsetForContent()).clampNegativeToZero(); }
@@ -274,11 +272,25 @@ public:
     // </div>
 
     // Returns the nearest enclosing block (including this block) that contributes a first-line style to our first line.
-    LayoutBlock* enclosingFirstLineStyleBlock() const;
+    const LayoutBlock* enclosingFirstLineStyleBlock() const;
     // Returns this block or the nearest inner block containing the actual first line.
-    LayoutBlockFlow* nearestInnerBlockWithFirstLine() const;
+    LayoutBlockFlow* nearestInnerBlockWithFirstLine();
 
 protected:
+    // Merge children of |siblingThatMayBeDeleted| into this object if possible, and delete
+    // |siblingThatMayBeDeleted|. Returns true if we were able to merge. In that case,
+    // |siblingThatMayBeDeleted| will be dead. We'll only be able to merge if both blocks are
+    // anonymous.
+    // TODO(mstensho): This belongs in LayoutBlockFlow, but needs to live here until we have been
+    // able to move all callers down to LayoutBlockFlow.
+    bool mergeSiblingContiguousAnonymousBlock(LayoutBlockFlow* siblingThatMayBeDeleted);
+
+    // Reparent subsequent or preceding adjacent floating or out-of-flow siblings into this object.
+    // TODO(mstensho): This belongs in LayoutBlockFlow, but needs to live here until we have been
+    // able to move all callers down to LayoutBlockFlow first.
+    void reparentSubsequentFloatingOrOutOfFlowSiblings();
+    void reparentPrecedingFloatingOrOutOfFlowSiblings();
+
     void willBeDestroyed() override;
 
     void dirtyForLayoutFromPercentageHeightDescendants(SubtreeLayoutScope&);
@@ -322,6 +334,7 @@ protected:
     // this condition.
     virtual bool shouldIgnoreOverflowPropertyForInlineBlockBaseline() const { return false; }
 
+    bool hitTestOverflowControl(HitTestResult&, const HitTestLocation&, const LayoutPoint& adjustedLocation) override;
     bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
     void updateHitTestResult(HitTestResult&, const LayoutPoint&) override;
 
@@ -375,8 +388,6 @@ protected:
     // isInline.
     bool isInlineBlockOrInlineTable() const final { return isInline() && isAtomicInlineLevel(); }
 
-    void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason) const override;
-
 private:
     LayoutObjectChildList* virtualChildren() final { return children(); }
     const LayoutObjectChildList* virtualChildren() const final { return children(); }
@@ -391,12 +402,8 @@ private:
 
     void dirtyLinesFromChangedChild(LayoutObject* child) final { m_lineBoxes.dirtyLinesFromChangedChild(LineLayoutItem(this), LineLayoutItem(child)); }
 
-    void addChildIgnoringContinuation(LayoutObject* newChild, LayoutObject* beforeChild) override;
-
     TrackedLayoutBoxListHashSet* positionedObjectsInternal() const;
     TrackedLayoutBoxListHashSet* percentHeightDescendantsInternal() const;
-
-    Node* nodeForHitTest() const final;
 
     // Returns true if the positioned movement-only layout succeeded.
     bool tryLayoutDoingPositionedMovementOnly();
@@ -412,14 +419,10 @@ private:
 
     void computeBlockPreferredLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const;
 
-    LayoutObject* hoverAncestor() const final;
     void updateDragState(bool dragOn) final;
     void childBecameNonInline(LayoutObject* child) final;
 
     bool isSelectionRoot() const;
-
-    void absoluteRects(Vector<IntRect>&, const LayoutPoint& accumulatedOffset) const override;
-    void absoluteQuads(Vector<FloatQuad>&) const override;
 
 public:
     bool hasCursorCaret() const;

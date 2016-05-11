@@ -24,8 +24,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
-#include "base/thread_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
@@ -1630,7 +1630,6 @@ void ProfileSyncService::UpdateSelectedTypesHistogram(
     sync_driver::user_selectable_type::TYPED_URLS,
     sync_driver::user_selectable_type::EXTENSIONS,
     sync_driver::user_selectable_type::APPS,
-    sync_driver::user_selectable_type::WIFI_CREDENTIAL,
     sync_driver::user_selectable_type::PROXY_TABS,
   };
 

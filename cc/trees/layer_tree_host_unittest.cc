@@ -14,7 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/animation/timing_function.h"
 #include "cc/debug/frame_rate_counter.h"
 #include "cc/input/scroll_elasticity_helper.h"
@@ -53,7 +53,6 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "skia/ext/refptr.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
@@ -834,6 +833,59 @@ class LayerTreeHostTestPropertyTreesChangedSync : public LayerTreeHostTest {
 };
 
 SINGLE_THREAD_TEST_F(LayerTreeHostTestPropertyTreesChangedSync);
+
+class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    root_ = Layer::Create();
+    layer_tree_host()->SetRootLayer(root_);
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    EffectTree& effect_tree = layer_tree_host()->property_trees()->effect_tree;
+    EffectNode* node = effect_tree.Node(root_->effect_tree_index());
+    switch (layer_tree_host()->source_frame_number()) {
+      case 1:
+        node->data.opacity = 0.5f;
+        node->data.is_currently_animating_opacity = true;
+        break;
+      case 2:
+        node->data.is_currently_animating_opacity = false;
+        break;
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    EffectTree& effect_tree = impl->sync_tree()->property_trees()->effect_tree;
+    EffectNode* node =
+        effect_tree.Node(impl->sync_tree()->root_layer()->effect_tree_index());
+    switch (impl->sync_tree()->source_frame_number()) {
+      case 0:
+        impl->sync_tree()->root_layer()->OnOpacityAnimated(0.75f);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 1:
+        EXPECT_EQ(node->data.opacity, 0.75f);
+        impl->sync_tree()->root_layer()->OnOpacityAnimated(0.75f);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 2:
+        EXPECT_EQ(node->data.opacity, 0.5f);
+        EndTest();
+        break;
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> root_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestEffectTreeSync);
 
 // Verify damage status is updated even when the transform tree doesn't need
 // to be updated at draw time.

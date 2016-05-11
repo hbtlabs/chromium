@@ -42,7 +42,6 @@
 #include "core/frame/FrameTypes.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/shadow/TextControlInnerElements.h"
@@ -112,7 +111,6 @@
 #include "public/web/WebClientRedirectPolicy.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebContentSecurityPolicy.h"
-#include "public/web/WebFormElement.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebFrameLoadType.h"
 #include "public/web/WebGeolocationError.h"
@@ -647,11 +645,6 @@ STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersion_1_1,
 STATIC_ASSERT_ENUM(WebURLResponse::HTTPVersion_2_0,
     ResourceResponse::HTTPVersion_2_0);
 
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultSuccess, HTMLFormElement::AutocompleteResultSuccess);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorDisabled, HTMLFormElement::AutocompleteResultErrorDisabled);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorCancel, HTMLFormElement::AutocompleteResultErrorCancel);
-STATIC_ASSERT_ENUM(WebFormElement::AutocompleteResultErrorInvalid, HTMLFormElement::AutocompleteResultErrorInvalid);
-
 STATIC_ASSERT_ENUM(WebURLRequest::PriorityUnresolved, ResourceLoadPriorityUnresolved);
 STATIC_ASSERT_ENUM(WebURLRequest::PriorityVeryLow, ResourceLoadPriorityVeryLow);
 STATIC_ASSERT_ENUM(WebURLRequest::PriorityLow, ResourceLoadPriorityLow);
@@ -713,6 +706,11 @@ STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsDefault, V8CacheOptionsDefault);
 STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsNone, V8CacheOptionsNone);
 STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsParse, V8CacheOptionsParse);
 STATIC_ASSERT_ENUM(WebSettings::V8CacheOptionsCode, V8CacheOptionsCode);
+
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Default, V8CacheStrategiesForCacheStorage::Default);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::None, V8CacheStrategiesForCacheStorage::None);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Normal, V8CacheStrategiesForCacheStorage::Normal);
+STATIC_ASSERT_ENUM(WebSettings::V8CacheStrategiesForCacheStorage::Aggressive, V8CacheStrategiesForCacheStorage::Aggressive);
 
 STATIC_ASSERT_ENUM(WebSecurityPolicy::PolicyAreaNone, SchemeRegistry::PolicyAreaNone);
 STATIC_ASSERT_ENUM(WebSecurityPolicy::PolicyAreaImage, SchemeRegistry::PolicyAreaImage);

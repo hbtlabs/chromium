@@ -41,8 +41,6 @@
 #include "cc/trees/layer_tree_settings.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/task_runner_provider.h"
-#include "skia/ext/refptr.h"
-#include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace gfx {
@@ -280,6 +278,10 @@ class CC_EXPORT LayerTreeHostImpl
       ElementId element_id,
       ElementListType list_type,
       bool is_animating) override;
+  void ElementOpacityIsAnimatingChanged(ElementId element_id,
+                                        ElementListType list_type,
+                                        AnimationChangeType change_type,
+                                        bool is_animating) override;
   void ScrollOffsetAnimationFinished() override;
   gfx::ScrollOffset GetScrollOffsetForAnimation(
       ElementId element_id) const override;

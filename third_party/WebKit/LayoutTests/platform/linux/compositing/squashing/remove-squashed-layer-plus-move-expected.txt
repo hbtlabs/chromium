@@ -7,19 +7,19 @@
       "drawsContent": true,
       "paintInvalidations": [
         {
-          "object": "LayoutBlockFlow (anonymous)",
-          "rect": [8, 118, 1410, 55],
-          "reason": "bounds change"
-        },
-        {
-          "object": "LayoutBlockFlow (anonymous)",
-          "rect": [8, 63, 1410, 55],
-          "reason": "bounds change"
-        },
-        {
           "object": "LayoutBlockFlow DIV id='container'",
           "rect": [8, 8, 769, 109],
           "reason": "invalidate paint rectangle"
+        },
+        {
+          "object": "LayoutBlockFlow (anonymous)",
+          "rect": [8, 118, 769, 55],
+          "reason": "bounds change"
+        },
+        {
+          "object": "LayoutBlockFlow (anonymous)",
+          "rect": [8, 63, 769, 55],
+          "reason": "bounds change"
         },
         {
           "object": "LayoutBlockFlow DIV id='container'",
@@ -67,7 +67,7 @@
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
                   "rect": [0, 110, 1000, 50],
-                  "reason": "layer"
+                  "reason": "subtree"
                 },
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
@@ -77,7 +77,7 @@
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
                   "rect": [0, 55, 100, 50],
-                  "reason": "layer"
+                  "reason": "subtree"
                 },
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",

@@ -795,7 +795,6 @@ component("base") {
     "third_party/nspr/prtime.cc",
     "third_party/nspr/prtime.h",
     "third_party/superfasthash/superfasthash.c",
-    "thread_task_runner_handle.cc",
     "thread_task_runner_handle.h",
     "threading/non_thread_safe.h",
     "threading/non_thread_safe_impl.cc",
@@ -835,6 +834,8 @@ component("base") {
     "threading/thread_local_win.cc",
     "threading/thread_restrictions.cc",
     "threading/thread_restrictions.h",
+    "threading/thread_task_runner_handle.cc",
+    "threading/thread_task_runner_handle.h",
     "threading/watchdog.cc",
     "threading/watchdog.h",
     "threading/worker_pool.cc",
@@ -1528,6 +1529,10 @@ component("i18n") {
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  if (is_mac) {
+    libs = [ "CoreFoundation.framework" ]
+  }
 }
 
 test("base_perftests") {
@@ -2006,6 +2011,13 @@ test("base_unittests") {
     set_sources_assignment_filter(sources_assignment_filter)
 
     # TODO(GYP): dep on copy_test_data_ios action.
+  }
+
+  if (is_mac) {
+    libs = [
+      "CoreFoundation.framework",
+      "Foundation.framework",
+    ]
   }
 
   if (is_linux) {

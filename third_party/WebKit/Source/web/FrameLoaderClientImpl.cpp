@@ -954,12 +954,6 @@ void FrameLoaderClientImpl::dispatchWillStartUsingPeerConnectionHandler(WebRTCPe
     m_webFrame->client()->willStartUsingPeerConnectionHandler(handler);
 }
 
-void FrameLoaderClientImpl::didRequestAutocomplete(HTMLFormElement* form)
-{
-    if (m_webFrame->autofillClient())
-        m_webFrame->autofillClient()->didRequestAutocomplete(WebFormElement(form));
-}
-
 bool FrameLoaderClientImpl::allowWebGL(bool enabledPerSettings)
 {
     if (m_webFrame->client())
@@ -1037,6 +1031,13 @@ BlameContext* FrameLoaderClientImpl::frameBlameContext()
 LinkResource* FrameLoaderClientImpl::createServiceWorkerLinkResource(HTMLLinkElement* owner)
 {
     return ServiceWorkerLinkResource::create(owner);
+}
+
+WebEffectiveConnectionType FrameLoaderClientImpl::getEffectiveConnectionType()
+{
+    if (m_webFrame->client())
+        return m_webFrame->client()->getEffectiveConnectionType();
+    return WebEffectiveConnectionType::TypeUnknown;
 }
 
 } // namespace blink

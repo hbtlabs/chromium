@@ -12,7 +12,7 @@
 #include "base/memory/shared_memory.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
-#include "base/thread_task_runner_handle.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "gpu/command_buffer/client/gpu_control_client.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
@@ -64,7 +64,7 @@ CommandBufferProxyImpl::CommandBufferProxyImpl(
       weak_this_(AsWeakPtr()),
       callback_thread_(base::ThreadTaskRunnerHandle::Get()) {
   DCHECK(channel_);
-  DCHECK(stream_id);
+  DCHECK_NE(stream_id, GPU_STREAM_INVALID);
 }
 
 CommandBufferProxyImpl::~CommandBufferProxyImpl() {
@@ -584,7 +584,7 @@ bool CommandBufferProxyImpl::CanWaitUnverifiedSyncToken(
 
   // If waiting on a different stream, flush pending commands on that stream.
   const int32_t release_stream_id = sync_token->extra_data_field();
-  if (release_stream_id == 0)
+  if (release_stream_id == gpu::GPU_STREAM_INVALID)
     return false;
 
   if (release_stream_id != stream_id_)
@@ -612,13 +612,23 @@ void CommandBufferProxyImpl::SignalQuery(uint32_t query,
   signal_tasks_.insert(std::make_pair(signal_id, callback));
 }
 
-bool CommandBufferProxyImpl::ProduceFrontBuffer(const gpu::Mailbox& mailbox) {
+void CommandBufferProxyImpl::TakeFrontBuffer(const gpu::Mailbox& mailbox) {
   CheckLock();
   if (last_state_.error != gpu::error::kNoError)
-    return false;
+    return;
 
-  Send(new GpuCommandBufferMsg_ProduceFrontBuffer(route_id_, mailbox));
-  return true;
+  Send(new GpuCommandBufferMsg_TakeFrontBuffer(route_id_, mailbox));
+}
+
+void CommandBufferProxyImpl::ReturnFrontBuffer(const gpu::Mailbox& mailbox,
+                                               const gpu::SyncToken& sync_token,
+                                               bool is_lost) {
+  CheckLock();
+  if (last_state_.error != gpu::error::kNoError)
+    return;
+
+  Send(new GpuCommandBufferMsg_WaitSyncToken(route_id_, sync_token));
+  Send(new GpuCommandBufferMsg_ReturnFrontBuffer(route_id_, mailbox, is_lost));
 }
 
 gpu::error::Error CommandBufferProxyImpl::GetLastError() {

@@ -95,7 +95,11 @@ def _LoadToolchainEnv(cpu, sdk_dir):
     for k in env:
       entries = [os.path.join(*([os.path.join(sdk_dir, 'bin')] + e))
                  for e in env[k]]
-      env[k] = os.pathsep.join(entries)
+      # clang-cl wants INCLUDE to be ;-separated even on non-Windows,
+      # lld-link wants LIB to be ;-separated even on non-Windows.  Path gets :.
+      # The separator for INCLUDE here must match the one used in main() below.
+      sep = os.pathsep if k == 'PATH' else ';'
+      env[k] = sep.join(entries)
     # PATH is a bit of a special case, it's in addition to the current PATH.
     env['PATH'] = env['PATH'] + os.pathsep + os.environ['PATH']
     # Augment with the current env to pick up TEMP and friends.
@@ -167,21 +171,23 @@ def _CopyTool(source_path):
 
 
 def main():
-  if len(sys.argv) != 6:
+  if len(sys.argv) != 7:
     print('Usage setup_toolchain.py '
           '<visual studio path> <win tool path> <win sdk path> '
-          '<runtime dirs> <target_cpu>')
+          '<runtime dirs> <target_cpu> <include prefix>')
     sys.exit(2)
   tool_source = sys.argv[2]
   win_sdk_path = sys.argv[3]
   runtime_dirs = sys.argv[4]
   target_cpu = sys.argv[5]
+  include_prefix = sys.argv[6]
 
   _CopyTool(tool_source)
 
   cpus = ('x86', 'x64')
   assert target_cpu in cpus
   vc_bin_dir = ''
+  include = ''
 
   # TODO(scottmg|goma): Do we need an equivalent of
   # ninja_use_custom_environment_files?
@@ -196,6 +202,10 @@ def main():
         if os.path.exists(os.path.join(path, 'cl.exe')):
           vc_bin_dir = os.path.realpath(path)
           break
+      # The separator for INCLUDE here must match the one used in
+      # _LoadToolchainEnv() above.
+      include = ' '.join([include_prefix + p
+                          for p in env['INCLUDE'].split(';')])
 
     env_block = _FormatAsEnvironmentBlock(env)
     with open('environment.' + cpu, 'wb') as f:
@@ -208,11 +218,14 @@ def main():
       env['LIBPATH'] = env['LIBPATH'].replace(r'\VC\LIB', r'\VC\LIB\STORE')
     env_block = _FormatAsEnvironmentBlock(env)
     with open('environment.winrt_' + cpu, 'wb') as f:
-        f.write(env_block)
+      f.write(env_block)
 
   assert vc_bin_dir
+  assert '"' not in vc_bin_dir
   print 'vc_bin_dir = "%s"' % vc_bin_dir
-
+  assert include
+  assert '"' not in include
+  print 'include_flags = "%s"' % include
 
 if __name__ == '__main__':
   main()
