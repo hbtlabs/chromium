@@ -111,6 +111,10 @@ uint16_t BluetoothLowEnergyDeviceMac::GetAppearance() const {
   return 0;
 }
 
+std::string BluetoothLowEnergyDeviceMac::GetNameOrEmpty() const {
+  return base::SysNSStringToUTF8([peripheral_ name]);
+}
+
 int BluetoothLowEnergyDeviceMac::GetRSSI() const {
   return rssi_;
 }
@@ -220,10 +224,6 @@ void BluetoothLowEnergyDeviceMac::ConnectToServiceInsecurely(
 
 NSDate* BluetoothLowEnergyDeviceMac::GetLastUpdateTime() const {
   return last_update_time_.get();
-}
-
-std::string BluetoothLowEnergyDeviceMac::GetDeviceName() const {
-  return base::SysNSStringToUTF8([peripheral_ name]);
 }
 
 void BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {

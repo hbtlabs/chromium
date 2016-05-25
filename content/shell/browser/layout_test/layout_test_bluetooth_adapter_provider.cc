@@ -770,7 +770,7 @@ LayoutTestBluetoothAdapterProvider::GetGenericAccessService(
                 BluetoothRemoteGattCharacteristic::PROPERTY_WRITE));
 
     // Read response.
-    std::string device_name_str = device->GetDeviceName();
+    std::string device_name_str = device->GetNameOrEmpty();
     std::vector<uint8_t> device_name_value(device_name_str.begin(),
                                            device_name_str.end());
 

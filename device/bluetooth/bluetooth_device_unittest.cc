@@ -116,8 +116,8 @@ TEST_F(BluetoothTest, LowEnergyDeviceNoUUIDs) {
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 
 #if defined(OS_ANDROID)
-// GetDeviceName for Device with no name.
-TEST_F(BluetoothTest, GetDeviceName_NullName) {
+// GetNameOrEmpty for Device with no name.
+TEST_F(BluetoothTest, GetNameOrEmpty_NullName) {
   if (!PlatformSupportsLowEnergy()) {
     LOG(WARNING) << "Low Energy Bluetooth unavailable, skipping unit test.";
     return;
@@ -125,7 +125,7 @@ TEST_F(BluetoothTest, GetDeviceName_NullName) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
-  EXPECT_EQ("", device->GetDeviceName());
+  EXPECT_EQ("", device->GetNameOrEmpty());
 }
 #endif  // defined(OS_ANDROID)
 

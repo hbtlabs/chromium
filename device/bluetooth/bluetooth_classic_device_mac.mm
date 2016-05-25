@@ -70,10 +70,6 @@ uint32_t BluetoothClassicDeviceMac::GetBluetoothClass() const {
   return [device_ classOfDevice];
 }
 
-std::string BluetoothClassicDeviceMac::GetDeviceName() const {
-  return base::SysNSStringToUTF8([device_ name]);
-}
-
 void BluetoothClassicDeviceMac::CreateGattConnectionImpl() {
   // Classic devices do not support GATT connection.
   DidFailToConnectGatt(ERROR_UNSUPPORTED_DEVICE);
@@ -107,6 +103,10 @@ uint16_t BluetoothClassicDeviceMac::GetAppearance() const {
   // on mac, win, and android platforms for chrome
   NOTIMPLEMENTED();
   return 0;
+}
+
+std::string BluetoothClassicDeviceMac::GetNameOrEmpty() const {
+  return base::SysNSStringToUTF8([device_ name]);
 }
 
 bool BluetoothClassicDeviceMac::IsPaired() const {
