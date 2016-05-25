@@ -129,8 +129,9 @@ void BluetoothDispatcher::OnRequestDeviceSuccess(
     uuids[i] = WebString::fromUTF8(device.uuids[i].c_str());
 
   pending_requests_.Lookup(request_id)
-      ->onSuccess(base::WrapUnique(new WebBluetoothDeviceInit(
-          WebString::fromUTF8(device.id), WebString(device.name), uuids)));
+      ->onSuccess(base::WrapUnique(
+          new WebBluetoothDeviceInit(WebString::fromUTF8(device.id),
+                                     WebString::fromUTF8(device.name), uuids)));
   pending_requests_.Remove(request_id);
 }
 

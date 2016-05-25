@@ -8,18 +8,12 @@
 
 namespace content {
 
-BluetoothDevice::BluetoothDevice()
-    : id(""),
-      name(base::string16()),
-      uuids() {}
+BluetoothDevice::BluetoothDevice() : id(""), name(""), uuids() {}
 
-BluetoothDevice::BluetoothDevice(
-    const std::string& id,
-    const base::string16& name,
-    const std::vector<std::string>& uuids)
-    : id(id),
-      name(name),
-      uuids(uuids) {}
+BluetoothDevice::BluetoothDevice(const std::string& id,
+                                 const std::string& name,
+                                 const std::vector<std::string>& uuids)
+    : id(id), name(name), uuids(uuids) {}
 
 BluetoothDevice::~BluetoothDevice() {
 }

@@ -160,6 +160,8 @@ LayoutTestBluetoothAdapterProvider::GetBluetoothAdapter(
     return GetMissingCharacteristicHeartRateAdapter();
   if (fake_adapter_name == "HeartRateAdapter")
     return GetHeartRateAdapter();
+  if (fake_adapter_name == "UnnamedHeartRateAdapter")
+    return GetUnnamedHeartRateAdapter();
   if (fake_adapter_name == "DisconnectingHeartRateAdapter")
     return GetDisconnectingHeartRateAdapter();
   if (fake_adapter_name == "BlacklistTestAdapter")
@@ -436,6 +438,24 @@ LayoutTestBluetoothAdapterProvider::GetHeartRateAdapter() {
 
 // static
 scoped_refptr<NiceMockBluetoothAdapter>
+LayoutTestBluetoothAdapterProvider::GetUnnamedHeartRateAdapter() {
+  scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
+  std::unique_ptr<NiceMockBluetoothDevice> device(
+      GetHeartRateDevice(adapter.get(), ""));
+
+  // TODO(ortuno): Implement the rest of the service's characteristics
+  // See: http://crbug.com/529975
+
+  device->AddMockService(GetGenericAccessService(device.get()));
+  device->AddMockService(GetHeartRateService(adapter.get(), device.get()));
+
+  adapter->AddMockDevice(std::move(device));
+
+  return adapter;
+}
+
+// static
+scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetDisconnectingHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   NiceMockBluetoothAdapter* adapter_ptr = adapter.get();
@@ -660,12 +680,13 @@ LayoutTestBluetoothAdapterProvider::GetUnconnectableDevice(
 // static
 std::unique_ptr<NiceMockBluetoothDevice>
 LayoutTestBluetoothAdapterProvider::GetHeartRateDevice(
-    MockBluetoothAdapter* adapter) {
+    MockBluetoothAdapter* adapter,
+    const std::string& device_name) {
   BluetoothDevice::UUIDList uuids;
   uuids.push_back(BluetoothUUID(kGenericAccessServiceUUID));
   uuids.push_back(BluetoothUUID(kHeartRateServiceUUID));
 
-  return GetConnectableDevice(adapter, "Heart Rate Device", uuids);
+  return GetConnectableDevice(adapter, device_name, uuids);
 }
 
 // Services

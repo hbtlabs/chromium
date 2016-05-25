@@ -72,7 +72,7 @@ bool MatchesFilter(const device::BluetoothDevice& device,
                    const content::BluetoothScanFilter& filter) {
   DCHECK(!IsEmptyOrInvalidFilter(filter));
 
-  const std::string device_name = base::UTF16ToUTF8(device.GetNameOrEmpty());
+  const std::string device_name = device.GetNameOrEmpty();
 
   if (!filter.name.empty() && (device_name != filter.name)) {
       return false;

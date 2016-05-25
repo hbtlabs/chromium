@@ -20,7 +20,7 @@ namespace content {
 struct CONTENT_EXPORT BluetoothDevice {
   BluetoothDevice();
   BluetoothDevice(const std::string& id,
-                  const base::string16& name,
+                  const std::string& name,
                   const std::vector<std::string>& uuids);
   ~BluetoothDevice();
 
@@ -28,7 +28,7 @@ struct CONTENT_EXPORT BluetoothDevice {
       const device::BluetoothDevice::UUIDList& uuid_list);
 
   std::string id;
-  base::string16 name;
+  std::string name;
   std::vector<std::string> uuids;  // 128bit UUIDs with dashes. 36 chars.
 };
 
