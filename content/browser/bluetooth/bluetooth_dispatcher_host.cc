@@ -72,7 +72,7 @@ bool MatchesFilter(const device::BluetoothDevice& device,
                    const content::BluetoothScanFilter& filter) {
   DCHECK(!IsEmptyOrInvalidFilter(filter));
 
-  const std::string device_name = base::UTF16ToUTF8(device.GetName());
+  const std::string device_name = base::UTF16ToUTF8(device.GetNameOrEmpty());
 
   if (!filter.name.empty() && (device_name != filter.name)) {
       return false;
@@ -725,8 +725,8 @@ void BluetoothDispatcherHost::FinishClosingChooser(
   }
 
   content::BluetoothDevice device_ipc(
-      device_id_for_origin,  // id
-      device->GetName(),     // name
+      device_id_for_origin,      // id
+      device->GetNameOrEmpty(),  // name
       content::BluetoothDevice::UUIDsFromBluetoothUUIDs(
           filtered_uuids));  // uuids
   RecordRequestDeviceOutcome(UMARequestDeviceOutcome::SUCCESS);
