@@ -22,12 +22,12 @@
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "ui/gfx/buffer_types.h"
+#include "ui/gfx/geometry/mojo/geometry.mojom.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/mojo/geometry/geometry.mojom.h"
 
-namespace gfx {
+namespace gl {
 class GLContext;
 class GLSurface;
 }
@@ -149,8 +149,8 @@ class CommandBufferDriver : base::NonThreadSafe {
   std::unique_ptr<gpu::CommandExecutor> executor_;
   scoped_refptr<gpu::SyncPointOrderData> sync_point_order_data_;
   std::unique_ptr<gpu::SyncPointClient> sync_point_client_;
-  scoped_refptr<gfx::GLContext> context_;
-  scoped_refptr<gfx::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<GpuState> gpu_state_;
 
   scoped_refptr<base::SingleThreadTaskRunner> context_lost_task_runner_;

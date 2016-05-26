@@ -39,6 +39,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -49,6 +50,7 @@
 #include "platform/KeyboardCodes.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/web/WebWidgetClient.h"
+#include "web/CompositorProxyClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebInputEventConversion.h"
@@ -194,6 +196,8 @@ void WebFrameWidgetImpl::resizeVisualViewport(const WebSize& newSize)
     // to use Page messages.  https://crbug.com/599688.
     page()->frameHost().visualViewport().setSize(newSize);
     page()->frameHost().visualViewport().clampToBoundaries();
+
+    view()->didUpdateFullScreenSize();
 }
 
 void WebFrameWidgetImpl::updateMainFrameLayoutSize()
@@ -218,12 +222,12 @@ void WebFrameWidgetImpl::setIgnoreInputEvents(bool newValue)
 
 void WebFrameWidgetImpl::didEnterFullScreen()
 {
-    // FIXME: Implement full screen for out-of-process iframes.
+    view()->didEnterFullScreen();
 }
 
 void WebFrameWidgetImpl::didExitFullScreen()
 {
-    // FIXME: Implement full screen for out-of-process iframes.
+    view()->didExitFullScreen();
 }
 
 void WebFrameWidgetImpl::beginFrame(double lastFrameTimeMonotonic)
@@ -397,6 +401,11 @@ void WebFrameWidgetImpl::scheduleAnimation()
     }
     if (m_client)
         m_client->scheduleAnimation();
+}
+
+CompositorProxyClient* WebFrameWidgetImpl::createCompositorProxyClient()
+{
+    return new CompositorProxyClientImpl();
 }
 
 void WebFrameWidgetImpl::applyViewportDeltas(

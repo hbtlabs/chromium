@@ -94,6 +94,7 @@
 #include "content/renderer/gpu/gpu_benchmarking_extension.h"
 #include "content/renderer/history_controller.h"
 #include "content/renderer/history_serialization.h"
+#include "content/renderer/http_body_conversions.h"
 #include "content/renderer/image_downloader/image_downloader_impl.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/internal_document_state_data.h"
@@ -547,38 +548,12 @@ WebURLRequest CreateURLRequestForNavigation(
 // to the WebURLRequest used to commit the navigation. This ensures that the
 // POST data will be in the PageState sent to the browser on commit.
 void AddHTTPBodyToRequest(WebURLRequest* request,
-                          scoped_refptr<ResourceRequestBody> body) {
+                          const scoped_refptr<ResourceRequestBody>& body) {
   WebHTTPBody http_body;
   http_body.initialize();
   http_body.setIdentifier(body->identifier());
-  for (const ResourceRequestBody::Element& element : *(body->elements())) {
-    long long length = -1;
-    switch (element.type()) {
-      case storage::DataElement::TYPE_BYTES:
-        http_body.appendData(WebData(element.bytes(), element.length()));
-        break;
-      case storage::DataElement::TYPE_FILE:
-        if (element.length() != std::numeric_limits<uint64_t>::max())
-          length = element.length();
-        http_body.appendFileRange(
-            element.path().AsUTF16Unsafe(), element.offset(), length,
-            element.expected_modification_time().ToDoubleT());
-        break;
-      case storage::DataElement::TYPE_FILE_FILESYSTEM:
-        http_body.appendFileSystemURLRange(
-            element.filesystem_url(), element.offset(), element.length(),
-            element.expected_modification_time().ToDoubleT());
-        break;
-      case storage::DataElement::TYPE_BLOB:
-        http_body.appendBlob(WebString::fromUTF8(element.blob_uuid()));
-        break;
-      default:
-        // TYPE_BYTES_DESCRIPTION and TYPE_DISK_CACHE_ENTRY should not be
-        // encountered.
-        NOTREACHED();
-        break;
-    }
-  }
+  for (const ResourceRequestBody::Element& element : *(body->elements()))
+    AppendHttpBodyElement(element, &http_body);
   request->setHTTPBody(http_body);
 }
 
@@ -639,7 +614,8 @@ CommonNavigationParams MakeCommonNavigationParams(
       request->url(), referrer, extra_data->transition_type(),
       FrameMsg_Navigate_Type::NORMAL, true, should_replace_current_entry,
       ui_timestamp, report_type, GURL(), GURL(), extra_data->lofi_state(),
-      base::TimeTicks::Now(), request->httpMethod().latin1());
+      base::TimeTicks::Now(), request->httpMethod().latin1(),
+      GetRequestBodyForWebURLRequest(*request));
 }
 
 media::Context3D GetSharedMainThreadContext3D(
@@ -1228,20 +1204,6 @@ void RenderFrameImpl::InitializeBlameContext(RenderFrameImpl* parent_frame) {
   blame_context_->Initialize();
 }
 
-void RenderFrameImpl::OnGotZoomLevel(const GURL& url, double zoom_level) {
-  // TODO(wjmaclean): We should see if this restriction is really necessary,
-  // since it isn't enforced in other parts of the page zoom system (e.g.
-  // when a users changes the zoom of a currently displayed page). Android
-  // has no UI for this, so in theory the following code would normally just use
-  // the default zoom anyways.
-#if !defined(OS_ANDROID)
-  // On Android, page zoom isn't used, and in case of WebView, text zoom is used
-  // for legacy WebView text scaling emulation. Thus, the code that resets
-  // the zoom level from this map will be effectively resetting text zoom level.
-  host_zoom_levels_[url] = zoom_level;
-#endif
-}
-
 RenderWidget* RenderFrameImpl::GetRenderWidget() {
   RenderFrameImpl* local_root =
       RenderFrameImpl::FromWebFrame(frame_->localRoot());
@@ -1593,7 +1555,7 @@ void RenderFrameImpl::OnNavigate(
   TRACE_EVENT2("navigation", "RenderFrameImpl::OnNavigate", "id", routing_id_,
                "url", common_params.url.possibly_invalid_spec());
   NavigateInternal(common_params, start_params, request_params,
-                   std::unique_ptr<StreamOverrideParameters>(), nullptr);
+                   std::unique_ptr<StreamOverrideParameters>());
 }
 
 void RenderFrameImpl::BindServiceRegistry(
@@ -4011,12 +3973,6 @@ void RenderFrameImpl::willSendRequest(
 
   if (!render_view_->renderer_preferences_.enable_referrers)
     request.setHTTPReferrer(WebString(), blink::WebReferrerPolicyDefault);
-
-  if (extra_data->is_main_frame()) {
-    frame_host_->GetHostZoomLevel(
-        request_url, base::Bind(&RenderFrameImpl::OnGotZoomLevel,
-                                weak_factory_.GetWeakPtr(), request_url));
-  }
 }
 
 void RenderFrameImpl::didReceiveResponse(
@@ -4588,7 +4544,7 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     // Set zoom level, but don't do it for full-page plugin since they don't use
     // the same zoom settings.
     HostZoomLevels::iterator host_zoom =
-        host_zoom_levels_.find(GURL(request.url()));
+        render_view_->host_zoom_levels_.find(GURL(request.url()));
     if (render_view_->webview()->mainFrame()->isWebLocalFrame() &&
         render_view_->webview()->mainFrame()->document().isPluginDocument()) {
       // Reset the zoom levels for plugins.
@@ -4596,15 +4552,15 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     } else {
       // If the zoom level is not found, then do nothing. In-page navigation
       // relies on not changing the zoom level in this case.
-      if (host_zoom != host_zoom_levels_.end())
+      if (host_zoom != render_view_->host_zoom_levels_.end())
         render_view_->SetZoomLevel(host_zoom->second);
     }
 
-    if (host_zoom != host_zoom_levels_.end()) {
+    if (host_zoom != render_view_->host_zoom_levels_.end()) {
       // This zoom level was merely recorded transiently for this load.  We can
       // erase it now.  If at some point we reload this page, the browser will
       // send us a new, up-to-date zoom level.
-      host_zoom_levels_.erase(host_zoom);
+      render_view_->host_zoom_levels_.erase(host_zoom);
     }
 
     // Update contents MIME type for main frame.
@@ -4731,8 +4687,7 @@ void RenderFrameImpl::OnCommitNavigation(
     const ResourceResponseHead& response,
     const GURL& stream_url,
     const CommonNavigationParams& common_params,
-    const RequestNavigationParams& request_params,
-    scoped_refptr<ResourceRequestBody> post_data) {
+    const RequestNavigationParams& request_params) {
   CHECK(IsBrowserSideNavigationEnabled());
   // This will override the url requested by the WebURLLoader, as well as
   // provide it with the response to the request.
@@ -4742,7 +4697,7 @@ void RenderFrameImpl::OnCommitNavigation(
   stream_override->response = response;
 
   NavigateInternal(common_params, StartNavigationParams(), request_params,
-                   std::move(stream_override), post_data);
+                   std::move(stream_override));
 }
 
 // PlzNavigate
@@ -5344,8 +5299,7 @@ void RenderFrameImpl::NavigateInternal(
     const CommonNavigationParams& common_params,
     const StartNavigationParams& start_params,
     const RequestNavigationParams& request_params,
-    std::unique_ptr<StreamOverrideParameters> stream_params,
-    scoped_refptr<ResourceRequestBody> post_data) {
+    std::unique_ptr<StreamOverrideParameters> stream_params) {
   bool browser_side_navigation = IsBrowserSideNavigationEnabled();
 
   // Lower bound for browser initiated navigation start time.
@@ -5406,8 +5360,8 @@ void RenderFrameImpl::NavigateInternal(
       CreateURLRequestForNavigation(common_params, std::move(stream_params),
                                     frame_->isViewSourceModeEnabled());
 
-  if (IsBrowserSideNavigationEnabled() && post_data)
-    AddHTTPBodyToRequest(&request, post_data);
+  if (IsBrowserSideNavigationEnabled() && common_params.post_data)
+    AddHTTPBodyToRequest(&request, common_params.post_data);
 
   // Used to determine whether this frame is actually loading a request as part
   // of a history navigation.
@@ -5498,18 +5452,9 @@ void RenderFrameImpl::NavigateInternal(
       }
     }
 
-    if (common_params.method == "POST" && !browser_side_navigation) {
-      // Set post data.
-      WebHTTPBody http_body;
-      http_body.initialize();
-      const char* data = nullptr;
-      if (start_params.browser_initiated_post_data.size()) {
-        data = reinterpret_cast<const char*>(
-            &start_params.browser_initiated_post_data.front());
-      }
-      http_body.appendData(
-          WebData(data, start_params.browser_initiated_post_data.size()));
-      request.setHTTPBody(http_body);
+    if (common_params.method == "POST" && !browser_side_navigation &&
+        common_params.post_data) {
+      AddHTTPBodyToRequest(&request, common_params.post_data);
     }
 
     // A session history navigation should have been accompanied by state.
@@ -5768,8 +5713,7 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request,
                             GetLoadFlagsForWebURLRequest(*request),
                             request->hasUserGesture(),
                             request->skipServiceWorker(),
-                            GetRequestContextTypeForWebURLRequest(*request)),
-      GetRequestBodyForWebURLRequest(*request)));
+                            GetRequestContextTypeForWebURLRequest(*request))));
 }
 
 void RenderFrameImpl::LoadDataURL(
@@ -6093,8 +6037,6 @@ void RenderFrameImpl::RegisterMojoServices() {
     GetServiceRegistry()->AddService(base::Bind(
         &ImageDownloaderImpl::CreateMojoService, base::Unretained(this)));
   }
-
-  GetServiceRegistry()->ConnectToRemoteService(mojo::GetProxy(&frame_host_));
 }
 
 template <typename Interface>

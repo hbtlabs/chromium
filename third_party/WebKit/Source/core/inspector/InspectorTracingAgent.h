@@ -18,8 +18,8 @@ class InspectedFrames;
 class InspectorWorkerAgent;
 
 class CORE_EXPORT InspectorTracingAgent final
-    : public InspectorBaseAgent<InspectorTracingAgent, protocol::Frontend::Tracing>
-    , public protocol::Backend::Tracing {
+    : public InspectorBaseAgent<InspectorTracingAgent, protocol::Tracing::Frontend>
+    , public protocol::Tracing::Backend {
     WTF_MAKE_NONCOPYABLE(InspectorTracingAgent);
 public:
     class Client {
@@ -42,8 +42,8 @@ public:
     void disable(ErrorString*) override;
 
     // Protocol method implementations.
-    void start(ErrorString*, const Maybe<String>& categories, const Maybe<String>& options, const Maybe<double>& bufferUsageReportingInterval, const Maybe<String>& transferMode, const Maybe<protocol::Tracing::TraceConfig>&, PassOwnPtr<StartCallback>) override;
-    void end(ErrorString*, PassOwnPtr<EndCallback>) override;
+    void start(ErrorString*, const Maybe<String>& categories, const Maybe<String>& options, const Maybe<double>& bufferUsageReportingInterval, const Maybe<String>& transferMode, const Maybe<protocol::Tracing::TraceConfig>&, std::unique_ptr<StartCallback>) override;
+    void end(ErrorString*, std::unique_ptr<EndCallback>) override;
 
     // Methods for other agents to use.
     void setLayerTreeId(int);

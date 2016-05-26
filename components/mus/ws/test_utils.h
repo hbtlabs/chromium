@@ -154,11 +154,13 @@ class WindowManagerStateTestApi {
                                   bool in_nonclient_area,
                                   const ui::Event& event,
                                   Accelerator* accelerator) {
-    wms_->DispatchInputEventToWindow(target, in_nonclient_area, event,
-                                     accelerator);
+    wms_->DispatchInputEventToWindow(
+        target, in_nonclient_area, event, accelerator);
   }
 
-  void OnEventAckTimeout() { wms_->OnEventAckTimeout(); }
+  void OnEventAckTimeout(ConnectionSpecificId client_id) {
+    wms_->OnEventAckTimeout(client_id);
+  }
 
   mojom::WindowTree* tree_awaiting_input_ack() {
     return wms_->tree_awaiting_input_ack_;
@@ -239,7 +241,10 @@ class TestWindowManager : public mojom::WindowManager {
                      mojo::Array<uint8_t> value) override {}
   void WmCreateTopLevelWindow(
       uint32_t change_id,
+      ConnectionSpecificId requesting_client_id,
       mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) override;
+  void WmClientJankinessChanged(ConnectionSpecificId client_id,
+                                bool janky) override;
   void OnAccelerator(uint32_t id, mojom::EventPtr event) override;
 
   bool got_create_top_level_window_;
@@ -291,10 +296,6 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
                               uint32_t transient_window_id) override;
   void OnTransientWindowRemoved(uint32_t window_id,
                                 uint32_t transient_window_id) override;
-  void OnWindowViewportMetricsChanged(
-      mojo::Array<uint32_t> window_ids,
-      mojom::ViewportMetricsPtr old_metrics,
-      mojom::ViewportMetricsPtr new_metrics) override;
   void OnWindowHierarchyChanged(
       uint32_t window,
       uint32_t old_parent,

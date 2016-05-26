@@ -60,11 +60,10 @@
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/paint/PaintLayer.h"
 #include "platform/Logging.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
 #include "platform/text/TextBoundaries.h"
+#include "platform/text/TextBreakIterator.h"
 
 namespace blink {
 
@@ -1923,7 +1922,7 @@ static InlineBoxPosition computeInlineBoxPositionTemplate(const PositionTemplate
     InlineBox* inlineBox = nullptr;
     int caretOffset = position.computeEditingOffset();
     Node* const anchorNode = position.anchorNode();
-    LayoutObject* layoutObject = anchorNode->isShadowRoot() ? toShadowRoot(anchorNode)->host()->layoutObject() : anchorNode->layoutObject();
+    LayoutObject* layoutObject = anchorNode->isShadowRoot() ? toShadowRoot(anchorNode)->host().layoutObject() : anchorNode->layoutObject();
 
     DCHECK(layoutObject) << position;
 

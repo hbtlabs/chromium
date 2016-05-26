@@ -22,7 +22,6 @@
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
 #include "content/common/accessibility_mode_enums.h"
-#include "content/common/frame_host.mojom.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/mojo/service_registry_impl.h"
 #include "content/public/common/console_message_level.h"
@@ -684,7 +683,6 @@ class CONTENT_EXPORT RenderFrameImpl
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, ShowPopupThenNavigate);
   FRIEND_TEST_ALL_PREFIXES(RendererAccessibilityTest,
                            AccessibilityMessagesQueueWhileSwappedOut);
-  FRIEND_TEST_ALL_PREFIXES(RenderFrameImplTest, ZoomLimit);
 
   // A wrapper class used as the callback for JavaScript executed
   // in an isolated world.
@@ -802,8 +800,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnCommitNavigation(const ResourceResponseHead& response,
                           const GURL& stream_url,
                           const CommonNavigationParams& common_params,
-                          const RequestNavigationParams& request_params,
-                          scoped_refptr<ResourceRequestBody> post_data);
+                          const RequestNavigationParams& request_params);
   void OnFailedNavigation(const CommonNavigationParams& common_params,
                           const RequestNavigationParams& request_params,
                           bool has_stale_copy_in_cache,
@@ -851,8 +848,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const CommonNavigationParams& common_params,
       const StartNavigationParams& start_params,
       const RequestNavigationParams& request_params,
-      std::unique_ptr<StreamOverrideParameters> stream_params,
-      scoped_refptr<ResourceRequestBody> body);
+      std::unique_ptr<StreamOverrideParameters> stream_params);
 
   // Update current main frame's encoding and send it to browser window.
   // Since we want to let users see the right encoding info from menu
@@ -1006,8 +1002,6 @@ class CONTENT_EXPORT RenderFrameImpl
                      bool final_status_update);
 
   void InitializeBlameContext(RenderFrameImpl* parent_frame);
-
-  void OnGotZoomLevel(const GURL& url, double zoom_level);
 
   // Stores the WebLocalFrame we are associated with.  This is null from the
   // constructor until BindToWebFrame is called, and it is null after
@@ -1201,9 +1195,6 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<blink::WebAppBannerClient> app_banner_client_;
 
   std::unique_ptr<blink::WebBluetooth> bluetooth_;
-
-  HostZoomLevels host_zoom_levels_;
-  mojom::FrameHostPtr frame_host_;
 
   // Manages play, pause notifications for WebMediaPlayer implementations; its
   // lifetime is tied to the RenderFrame via the RenderFrameObserver interface.

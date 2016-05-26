@@ -41,6 +41,7 @@
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/gles2_cmd_clear_framebuffer.h"
 #include "gpu/command_buffer/service/gles2_cmd_copy_texture_chromium.h"
+#include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gles2_cmd_validation.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_state_tracer.h"
@@ -127,8 +128,8 @@ void GetShaderPrecisionFormatImpl(GLenum shader_type,
       break;
   }
 
-  if (gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2 &&
-      gfx::g_driver_gl.fn.glGetShaderPrecisionFormatFn) {
+  if (gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2 &&
+      gl::g_driver_gl.fn.glGetShaderPrecisionFormatFn) {
     // This function is sometimes defined even though it's really just
     // a stub, so we need to set range and precision as if it weren't
     // defined before calling it.
@@ -190,6 +191,13 @@ GLuint GetClientId(const MANAGER_TYPE* manager, const OBJECT_TYPE* object) {
 template <typename OBJECT_TYPE>
 GLuint GetServiceId(const OBJECT_TYPE* object) {
   return object ? object->service_id() : 0;
+}
+
+bool CheckUniqueIds(GLsizei n, const GLuint* client_ids) {
+  if (n <= 0)
+    return true;
+  std::unordered_set<uint32_t> unique_ids(client_ids, client_ids + n);
+  return unique_ids.size() == static_cast<size_t>(n);
 }
 
 struct Vec4f {
@@ -507,12 +515,9 @@ class BackFramebuffer {
 };
 
 struct FenceCallback {
-  FenceCallback()
-      : fence(gfx::GLFence::Create()) {
-    DCHECK(fence);
-  }
+  FenceCallback() : fence(gl::GLFence::Create()) { DCHECK(fence); }
   std::vector<base::Closure> callbacks;
-  std::unique_ptr<gfx::GLFence> fence;
+  std::unique_ptr<gl::GLFence> fence;
 };
 
 // }  // anonymous namespace.
@@ -544,17 +549,18 @@ void GLES2Decoder::BeginDecoding() {}
 
 void GLES2Decoder::EndDecoding() {}
 
+error::Error GLES2Decoder::DoCommand(unsigned int command,
+                                     unsigned int arg_count,
+                                     const void* cmd_data) {
+  return DoCommands(1, cmd_data, arg_count + 1, 0);
+}
+
 // This class implements GLES2Decoder so we don't have to expose all the GLES2
 // cmd stuff to outside this class.
 class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
  public:
   explicit GLES2DecoderImpl(ContextGroup* group);
   ~GLES2DecoderImpl() override;
-
-  // Overridden from AsyncAPIInterface.
-  Error DoCommand(unsigned int command,
-                  unsigned int arg_count,
-                  const void* args) override;
 
   error::Error DoCommands(unsigned int num_commands,
                           const void* buffer,
@@ -571,14 +577,14 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   const char* GetCommandName(unsigned int command_id) const override;
 
   // Overridden from GLES2Decoder.
-  bool Initialize(const scoped_refptr<gfx::GLSurface>& surface,
-                  const scoped_refptr<gfx::GLContext>& context,
+  bool Initialize(const scoped_refptr<gl::GLSurface>& surface,
+                  const scoped_refptr<gl::GLContext>& context,
                   bool offscreen,
                   const gfx::Size& offscreen_size,
                   const DisallowedFeatures& disallowed_features,
                   const ContextCreationAttribHelper& attrib_helper) override;
   void Destroy(bool have_context) override;
-  void SetSurface(const scoped_refptr<gfx::GLSurface>& surface) override;
+  void SetSurface(const scoped_refptr<gl::GLSurface>& surface) override;
   void ReleaseSurface() override;
   void TakeFrontBuffer(const Mailbox& mailbox) override;
   void ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
@@ -586,7 +592,7 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   void UpdateParentTextureInfo();
   bool MakeCurrent() override;
   GLES2Util* GetGLES2Util() override { return &util_; }
-  gfx::GLContext* GetGLContext() override { return context_.get(); }
+  gl::GLContext* GetGLContext() override { return context_.get(); }
   ContextGroup* GetContextGroup() override { return group_.get(); }
   Capabilities GetCapabilities() override;
   void RestoreState(const ContextState* prev_state) override;
@@ -1993,8 +1999,8 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   #undef GLES2_CMD_OP
 
   // The GL context this decoder renders to on behalf of the client.
-  scoped_refptr<gfx::GLSurface> surface_;
-  scoped_refptr<gfx::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
 
   // The ContextGroup for this decoder uses to track resources.
   scoped_refptr<ContextGroup> group_;
@@ -2046,9 +2052,12 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   GLsizei offscreen_target_samples_;
   GLboolean offscreen_target_buffer_preserved_;
 
-  // The copy that is saved when SwapBuffers is called.
-  std::unique_ptr<BackFramebuffer> offscreen_saved_frame_buffer_;
+  // The saved copy of the backbuffer after a call to SwapBuffers.
   std::unique_ptr<BackTexture> offscreen_saved_color_texture_;
+
+  // For simplicity, |offscreen_saved_color_texture_| is always bound to
+  // |offscreen_saved_frame_buffer_|.
+  std::unique_ptr<BackFramebuffer> offscreen_saved_frame_buffer_;
   scoped_refptr<TextureRef>
       offscreen_saved_color_texture_info_;
 
@@ -2673,6 +2682,9 @@ GLenum BackFramebuffer::CheckStatus() {
 }
 
 GLES2Decoder* GLES2Decoder::Create(ContextGroup* group) {
+  if (group->gpu_preferences().use_passthrough_cmd_decoder) {
+    return CreateGLES2DecoderPassthroughImpl(group);
+  }
   return new GLES2DecoderImpl(group);
 }
 
@@ -2740,8 +2752,8 @@ GLES2DecoderImpl::~GLES2DecoderImpl() {
 }
 
 bool GLES2DecoderImpl::Initialize(
-    const scoped_refptr<gfx::GLSurface>& surface,
-    const scoped_refptr<gfx::GLContext>& context,
+    const scoped_refptr<gl::GLSurface>& surface,
+    const scoped_refptr<gl::GLContext>& context,
     bool offscreen,
     const gfx::Size& offscreen_size,
     const DisallowedFeatures& disallowed_features,
@@ -2915,7 +2927,7 @@ bool GLES2DecoderImpl::Initialize(
     }
     offscreen_target_buffer_preserved_ = attrib_helper.buffer_preserved;
 
-    if (gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2) {
+    if (gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2) {
       const bool rgb8_supported =
           context_->HasExtension("GL_OES_rgb8_rgba8");
       // The only available default render buffer formats in GLES2 have very
@@ -4217,7 +4229,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
   state_.indexed_uniform_buffer_bindings = nullptr;
 
   if (offscreen_saved_color_texture_info_.get()) {
-    DCHECK(offscreen_target_color_texture_);
+    DCHECK(offscreen_saved_color_texture_);
     DCHECK_EQ(offscreen_saved_color_texture_info_->service_id(),
               offscreen_saved_color_texture_->id());
     offscreen_saved_color_texture_->Invalidate();
@@ -4362,8 +4374,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
 #endif
 }
 
-void GLES2DecoderImpl::SetSurface(
-    const scoped_refptr<gfx::GLSurface>& surface) {
+void GLES2DecoderImpl::SetSurface(const scoped_refptr<gl::GLSurface>& surface) {
   DCHECK(context_->IsCurrent(NULL));
   DCHECK(surface);
   surface_ = surface;
@@ -4399,7 +4410,9 @@ void GLES2DecoderImpl::TakeFrontBuffer(const Mailbox& mailbox) {
   mailbox_manager()->ProduceTexture(
       mailbox, offscreen_saved_color_texture_info_->texture());
 
-  // Save the BackTexture and TextureRef.
+  // Save the BackTexture and TextureRef. There's no need to update
+  // |offscreen_saved_frame_buffer_| since CreateBackTexture() will take care of
+  // that.
   SavedBackTexture save;
   save.back_texture.swap(offscreen_saved_color_texture_);
   save.texture_ref = offscreen_saved_color_texture_info_;
@@ -4440,6 +4453,8 @@ void GLES2DecoderImpl::CreateBackTexture() {
       continue;
     offscreen_saved_color_texture_ = std::move(it->back_texture);
     offscreen_saved_color_texture_info_ = it->texture_ref;
+    offscreen_saved_frame_buffer_->AttachRenderTexture(
+        offscreen_saved_color_texture_.get());
     saved_back_textures_.erase(it);
     return;
   }
@@ -4661,16 +4676,6 @@ const char* GLES2DecoderImpl::GetCommandName(unsigned int command_id) const {
     return gles2::GetCommandName(static_cast<CommandId>(command_id));
   }
   return GetCommonCommandName(static_cast<cmd::CommandId>(command_id));
-}
-
-// Decode a command, and call the corresponding GL functions.
-// NOTE: DoCommand() is slower than calling DoCommands() on larger batches
-// of commands at once, and is now only used for tests that need to track
-// individual commands.
-error::Error GLES2DecoderImpl::DoCommand(unsigned int command,
-                                         unsigned int arg_count,
-                                         const void* cmd_data) {
-  return DoCommands(1, cmd_data, arg_count + 1, 0);
 }
 
 // Decode multiple commands, and call the corresponding GL functions.
@@ -5659,7 +5664,7 @@ bool GLES2DecoderImpl::GetHelper(
       break;
   }
 
-  if (gfx::GetGLImplementation() != gfx::kGLImplementationEGLGLES2) {
+  if (gl::GetGLImplementation() != gl::kGLImplementationEGLGLES2) {
     switch (pname) {
       case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
         *num_written = 1;
@@ -13142,11 +13147,10 @@ void GLES2DecoderImpl::DoSwapBuffers() {
 
   int this_frame_number = frame_number_++;
   // TRACE_EVENT for gpu tests:
-  TRACE_EVENT_INSTANT2("test_gpu", "SwapBuffersLatency",
-                       TRACE_EVENT_SCOPE_THREAD,
-                       "GLImpl", static_cast<int>(gfx::GetGLImplementation()),
-                       "width", (is_offscreen ? offscreen_size_.width() :
-                                 surface_->GetSize().width()));
+  TRACE_EVENT_INSTANT2(
+      "test_gpu", "SwapBuffersLatency", TRACE_EVENT_SCOPE_THREAD, "GLImpl",
+      static_cast<int>(gl::GetGLImplementation()), "width",
+      (is_offscreen ? offscreen_size_.width() : surface_->GetSize().width()));
   TRACE_EVENT2("gpu", "GLES2DecoderImpl::DoSwapBuffers",
                "offscreen", is_offscreen,
                "frame", this_frame_number);
@@ -13243,6 +13247,8 @@ void GLES2DecoderImpl::DoSwapBuffers() {
         offscreen_saved_color_texture_.swap(offscreen_target_color_texture_);
         offscreen_target_frame_buffer_->AttachRenderTexture(
             offscreen_target_color_texture_.get());
+        offscreen_saved_frame_buffer_->AttachRenderTexture(
+            offscreen_saved_color_texture_.get());
       }
 
       // Ensure the side effects of the copy are visible to the parent
@@ -13721,7 +13727,7 @@ error::Error GLES2DecoderImpl::HandleDiscardBackbufferCHROMIUM(
 bool GLES2DecoderImpl::GenQueriesEXTHelper(
     GLsizei n, const GLuint* client_ids) {
   for (GLsizei ii = 0; ii < n; ++ii) {
-    if (query_manager_->GetQuery(client_ids[ii])) {
+    if (query_manager_->IsValidQuery(client_ids[ii])) {
       return false;
     }
   }
@@ -14072,7 +14078,7 @@ void GLES2DecoderImpl::DoTexImageIOSurface2DCHROMIUM(
     GLenum target, GLsizei width, GLsizei height,
     GLuint io_surface_id, GLuint plane) {
 #if defined(OS_MACOSX)
-  if (gfx::GetGLImplementation() != gfx::kGLImplementationDesktopGL) {
+  if (gl::GetGLImplementation() != gl::kGLImplementationDesktopGL) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_OPERATION,
         "glTexImageIOSurface2DCHROMIUM", "only supported on desktop GL.");

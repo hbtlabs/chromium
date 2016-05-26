@@ -49,7 +49,7 @@ class DirectOutputSurface : public cc::OutputSurface {
       const scoped_refptr<cc::ContextProvider>& context_provider,
       const scoped_refptr<cc::ContextProvider>& worker_context_provider,
       std::unique_ptr<cc::BeginFrameSource> begin_frame_source)
-      : cc::OutputSurface(context_provider, worker_context_provider),
+      : cc::OutputSurface(context_provider, worker_context_provider, nullptr),
         begin_frame_source_(std::move(begin_frame_source)),
         weak_ptr_factory_(this) {}
 
@@ -103,9 +103,9 @@ InProcessContextFactory::InProcessContextFactory(
       use_test_surface_(true),
       context_factory_for_test_(context_factory_for_test),
       surface_manager_(surface_manager) {
-  DCHECK_NE(gfx::GetGLImplementation(), gfx::kGLImplementationNone)
+  DCHECK_NE(gl::GetGLImplementation(), gl::kGLImplementationNone)
       << "If running tests, ensure that main() is calling "
-      << "gfx::GLSurfaceTestSupport::InitializeOneOff()";
+      << "gl::GLSurfaceTestSupport::InitializeOneOff()";
 }
 
 InProcessContextFactory::~InProcessContextFactory() {

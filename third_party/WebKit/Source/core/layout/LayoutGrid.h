@@ -147,7 +147,7 @@ private:
     void prepareChildForPositionedLayout(LayoutBox&);
     void layoutPositionedObjects(bool relayoutChildren, PositionedLayoutBehavior = DefaultLayout);
     void offsetAndBreadthForPositionedChild(const LayoutBox&, GridTrackSizingDirection, LayoutUnit& offset, LayoutUnit& breadth);
-    void populateGridPositions(GridSizingData&);
+    void populateGridPositionsForDirection(GridSizingData&, GridTrackSizingDirection);
 
     typedef struct GridItemsSpanGroupRange GridItemsSpanGroupRange;
     LayoutUnit currentItemSizeForTrackSizeComputationPhase(TrackSizeComputationPhase, LayoutBox&, GridTrackSizingDirection, GridSizingData&);
@@ -199,16 +199,8 @@ private:
     size_t gridItemSpan(const LayoutBox&, GridTrackSizingDirection);
     bool spanningItemCrossesFlexibleSizedTracks(const GridSpan&, GridTrackSizingDirection) const;
 
-    size_t gridColumnCount() const
-    {
-        ASSERT(!m_gridIsDirty);
-        return m_grid[0].size();
-    }
-    size_t gridRowCount() const
-    {
-        ASSERT(!m_gridIsDirty);
-        return m_grid.size();
-    }
+    size_t gridColumnCount() const;
+    size_t gridRowCount() const;
 
     bool hasDefiniteLogicalSize(GridTrackSizingDirection) const;
 

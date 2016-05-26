@@ -28,7 +28,7 @@ ProgrammaticScrollAnimator::~ProgrammaticScrollAnimator()
 void ProgrammaticScrollAnimator::resetAnimationState()
 {
     ScrollAnimatorCompositorCoordinator::resetAnimationState();
-    m_animationCurve.clear();
+    m_animationCurve.reset();
     m_startTime = 0.0;
 }
 
@@ -52,7 +52,6 @@ void ProgrammaticScrollAnimator::animateToOffset(FloatPoint offset)
     m_targetOffset = offset;
     m_animationCurve = adoptPtr(CompositorFactory::current().createScrollOffsetAnimationCurve(
         compositorOffsetFromBlinkOffset(m_targetOffset),
-        CompositorAnimationCurve::TimingFunctionTypeEaseInOut,
         CompositorScrollOffsetAnimationCurve::ScrollDurationDeltaBased));
 
     m_scrollableArea->registerForAnimation();

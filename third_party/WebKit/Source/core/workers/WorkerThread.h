@@ -45,7 +45,6 @@ class WaitableEvent;
 class WorkerBackingThread;
 class WorkerGlobalScope;
 class WorkerInspectorController;
-class WorkerMicrotaskRunner;
 class WorkerReportingProxy;
 class WorkerThreadStartupData;
 
@@ -75,9 +74,6 @@ public:
     void terminateAndWait();
     static void terminateAndWaitForAllWorkers();
 
-    // Called on the worker thread. Disposes |m_workerGlobalScope|.
-    void prepareForShutdown();
-
     virtual WorkerBackingThread& workerBackingThread() = 0;
     virtual bool shouldAttachThreadDebugger() const { return true; }
     v8::Isolate* isolate();
@@ -88,6 +84,7 @@ public:
     WaitableEvent* terminationEvent() { return m_terminationEvent.get(); }
 
     bool isCurrentThread();
+
     WorkerLoaderProxy* workerLoaderProxy() const
     {
         RELEASE_ASSERT(m_workerLoaderProxy);
@@ -128,31 +125,31 @@ protected:
     virtual void postInitialize() { }
 
 private:
+    class WorkerMicrotaskRunner;
+
     std::unique_ptr<CrossThreadClosure> createWorkerThreadTask(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
 
-    // Called on the worker thread.
-    void initialize(PassOwnPtr<WorkerThreadStartupData>);
-    void performTask(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
-    void performShutdownTask();
-    void runDebuggerTask(std::unique_ptr<CrossThreadClosure>);
-    void runDebuggerTaskDontWait();
+    void initializeOnWorkerThread(PassOwnPtr<WorkerThreadStartupData>);
+    void prepareForShutdownOnWorkerThread();
+    void performShutdownOnWorkerThread();
+    void performTaskOnWorkerThread(std::unique_ptr<ExecutionContextTask>, bool isInstrumented);
+    void runDebuggerTaskOnWorkerThread(std::unique_ptr<CrossThreadClosure>);
+    void runDebuggerTaskDontWaitOnWorkerThread();
 
     bool m_started = false;
     bool m_terminated = false;
     bool m_readyToShutdown = false;
     bool m_pausedInDebugger = false;
     bool m_runningDebuggerTask = false;
-    bool m_shouldTerminateV8Execution = false;
 
     OwnPtr<InspectorTaskRunner> m_inspectorTaskRunner;
-    OwnPtr<WebThread::TaskObserver> m_microtaskRunner;
+    OwnPtr<WorkerMicrotaskRunner> m_microtaskRunner;
 
     RefPtr<WorkerLoaderProxy> m_workerLoaderProxy;
     WorkerReportingProxy& m_workerReportingProxy;
 
     // This lock protects |m_workerGlobalScope|, |m_terminated|,
-    // |m_readyToShutdown|, |m_runningDebuggerTask|,
-    // |m_shouldTerminateV8Execution| and |m_microtaskRunner|.
+    // |m_readyToShutdown|, |m_runningDebuggerTask| and |m_microtaskRunner|.
     Mutex m_threadStateMutex;
 
     Persistent<WorkerGlobalScope> m_workerGlobalScope;

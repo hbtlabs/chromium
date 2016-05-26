@@ -26,16 +26,11 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLIFrameElement.h"
-#include "core/html/HTMLVideoElement.h"
-#include "core/inspector/InspectorTraceEvents.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutMedia.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutQuote.h"
-#include "core/layout/LayoutScrollbarPart.h"
 #include "core/layout/ViewFragmentationContext.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
@@ -90,7 +85,6 @@ LayoutView::LayoutView(Document* document)
     , m_selectionEnd(nullptr)
     , m_selectionStartPos(-1)
     , m_selectionEndPos(-1)
-    , m_pageLogicalHeight(0)
     , m_pageLogicalHeightChanged(false)
     , m_layoutState(nullptr)
     , m_layoutQuoteHead(nullptr)
@@ -251,7 +245,7 @@ void LayoutView::layout()
         if (!m_fragmentationContext)
             m_fragmentationContext = adoptPtr(new ViewFragmentationContext(*this));
     } else if (m_fragmentationContext) {
-        m_fragmentationContext.clear();
+        m_fragmentationContext.reset();
     }
 
     SubtreeLayoutScope layoutScope(*this);
@@ -997,7 +991,7 @@ void LayoutView::willBeDestroyed()
     if (PaintLayer* layer = this->layer())
         layer->setNeedsRepaint();
     LayoutBlockFlow::willBeDestroyed();
-    m_compositor.clear();
+    m_compositor.reset();
 }
 
 void LayoutView::registerMediaForPositionChangeNotification(LayoutMedia& media)

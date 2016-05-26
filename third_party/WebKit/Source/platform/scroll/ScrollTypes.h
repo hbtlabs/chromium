@@ -143,6 +143,12 @@ enum ScrollGranularity {
     ScrollByPrecisePixel
 };
 
+enum ScrollInertialPhase {
+    ScrollInertialPhaseUnknown,
+    ScrollInertialPhaseNonMomentum,
+    ScrollInertialPhaseMomentum
+};
+
 enum ScrollbarOrientation { HorizontalScrollbar, VerticalScrollbar };
 
 enum ScrollbarMode { ScrollbarAuto, ScrollbarAlwaysOff, ScrollbarAlwaysOn };
@@ -175,6 +181,12 @@ enum ScrollbarOverlayStyle {
     ScrollbarOverlayStyleDefault,
     ScrollbarOverlayStyleDark,
     ScrollbarOverlayStyleLight
+};
+
+enum ScrollBehavior {
+    ScrollBehaviorAuto,
+    ScrollBehaviorInstant,
+    ScrollBehaviorSmooth,
 };
 
 // The result of an attempt to scroll. If didScroll is true, then unusedScrollDelta gives

@@ -88,6 +88,10 @@
 #include "third_party/cros_system_api/switches/chrome_switches.h"
 #endif
 
+#if defined(OS_MACOSX)
+#include "chrome/browser/ui/browser_dialogs.h"
+#endif
+
 #if defined(ENABLE_APP_LIST)
 #include "ui/app_list/app_list_switches.h"
 #endif
@@ -303,6 +307,14 @@ const FeatureEntry::Choice kGpuRasterizationMSAASampleCountChoices[] = {
     switches::kGpuRasterizationMSAASampleCount, "8" },
   { IDS_FLAGS_GPU_RASTERIZATION_MSAA_SAMPLE_COUNT_SIXTEEN,
     switches::kGpuRasterizationMSAASampleCount, "16" },
+};
+
+const FeatureEntry::Choice kMHTMLGeneratorOptionChoices[] = {
+  { IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
+  { IDS_FLAGS_MHTML_SKIP_NOSTORE_MAIN,
+    switches::kMHTMLGeneratorOption, switches::kMHTMLSkipNostoreMain },
+  { IDS_FLAGS_MHTML_SKIP_NOSTORE_ALL,
+    switches::kMHTMLGeneratorOption, switches::kMHTMLSkipNostoreAll },
 };
 
 const FeatureEntry::Choice kEnableGpuRasterizationChoices[] = {
@@ -690,6 +702,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_SAVE_PAGE_AS_MHTML_NAME,
      IDS_FLAGS_SAVE_PAGE_AS_MHTML_DESCRIPTION, kOsMac | kOsWin | kOsLinux,
      SINGLE_VALUE_TYPE(switches::kSavePageAsMHTML)},
+    {"mhtml-generator-option",
+     IDS_FLAGS_MHTML_GENERATOR_OPTION_NAME,
+     IDS_FLAGS_MHTML_GENERATOR_OPTION_DESCRIPTION, kOsMac | kOsWin | kOsLinux,
+     MULTI_VALUE_TYPE(kMHTMLGeneratorOptionChoices)},
     {"enable-quic", IDS_FLAGS_QUIC_NAME, IDS_FLAGS_QUIC_DESCRIPTION, kOsAll,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableQuic, switches::kDisableQuic)},
     {"enable-alternative-services", IDS_FLAGS_ALTSVC_NAME,
@@ -846,8 +862,7 @@ const FeatureEntry kFeatureEntries[] = {
         "disable-display-color-calibration",
         IDS_FLAGS_DISPLAY_COLOR_CALIBRATION_NAME,
         IDS_FLAGS_DISPLAY_COLOR_CALIBRATION_DESCRIPTION, kOsCrOS,
-        SINGLE_DISABLE_VALUE_TYPE(
-            ::switches::kDisableDisplayColorCalibration),
+        SINGLE_DISABLE_VALUE_TYPE(::switches::kDisableDisplayColorCalibration),
     },
     {
         "disable-quirks-client", IDS_FLAGS_DISABLE_QUIRKS_CLIENT_NAME,
@@ -1092,6 +1107,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-fullscreen-app-list", IDS_FLAGS_FULLSCREEN_APP_LIST_NAME,
      IDS_FLAGS_FULLSCREEN_APP_LIST_DESCRIPTION, kOsCrOS,
      SINGLE_VALUE_TYPE(ash::switches::kAshEnableFullscreenAppList)},
+    {"enable-storage-manager", IDS_FLAGS_STORAGE_MANAGER_NAME,
+     IDS_FLAGS_STORAGE_MANAGER_DESCRIPTION, kOsCrOS,
+     SINGLE_VALUE_TYPE(chromeos::switches::kEnableStorageManager)},
 #endif
     {"enable-simple-cache-backend", IDS_FLAGS_SIMPLE_CACHE_BACKEND_NAME,
      IDS_FLAGS_SIMPLE_CACHE_BACKEND_DESCRIPTION,
@@ -1250,6 +1268,11 @@ const FeatureEntry kFeatureEntries[] = {
     {"num-raster-threads", IDS_FLAGS_NUM_RASTER_THREADS_NAME,
      IDS_FLAGS_NUM_RASTER_THREADS_DESCRIPTION, kOsAll,
      MULTI_VALUE_TYPE(kNumRasterThreadsChoices)},
+    {"enable-permission-action-reporting",
+     IDS_FLAGS_PERMISSION_ACTION_REPORTING_NAME,
+     IDS_FLAGS_PERMISSION_ACTION_REPORTING_DESCRIPTION, kOsAll,
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnablePermissionActionReporting,
+                               switches::kDisablePermissionActionReporting)},
     {"enable-permissions-blacklist", IDS_FLAGS_PERMISSIONS_BLACKLIST_NAME,
      IDS_FLAGS_PERMISSIONS_BLACKLIST_DESCRIPTION, kOsAll,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnablePermissionsBlacklist,
@@ -1541,11 +1564,6 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_WEBRTC_DTLS12_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableWebRtcDtls12)},
 #endif
-#if defined(ENABLE_WEBRTC)
-    {"enable-webrtc-ecdsa", IDS_FLAGS_WEBRTC_ECDSA_NAME,
-     IDS_FLAGS_WEBRTC_ECDSA_DESCRIPTION, kOsAll,
-     FEATURE_VALUE_TYPE(features::kWebRtcEcdsaDefault)},
-#endif
 #if defined(OS_MACOSX)
     {"app-info-dialog", IDS_FLAGS_APP_INFO_DIALOG_NAME,
      IDS_FLAGS_APP_INFO_DIALOG_DESCRIPTION, kOsMac,
@@ -1560,9 +1578,12 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_APP_WINDOW_CYCLING_DESCRIPTION, kOsMac,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableAppWindowCycling,
                                switches::kDisableAppWindowCycling)},
-    {"mac-views-dialogs", IDS_FLAGS_MAC_VIEWS_DIALOGS_NAME,
-     IDS_FLAGS_MAC_VIEWS_DIALOGS_DESCRIPTION, kOsMac,
-     SINGLE_VALUE_TYPE(switches::kEnableMacViewsDialogs)},
+    {"mac-views-native-dialogs", IDS_FLAGS_MAC_VIEWS_NATIVE_DIALOGS_NAME,
+     IDS_FLAGS_MAC_VIEWS_NATIVE_DIALOGS_DESCRIPTION, kOsMac,
+     FEATURE_VALUE_TYPE(chrome::kMacViewsNativeDialogs)},
+    {"mac-views-webui-dialogs", IDS_FLAGS_MAC_VIEWS_WEBUI_DIALOGS_NAME,
+     IDS_FLAGS_MAC_VIEWS_WEBUI_DIALOGS_DESCRIPTION, kOsMac,
+     FEATURE_VALUE_TYPE(chrome::kMacViewsWebUIDialogs)},
 #endif
 #if defined(ENABLE_WEBVR)
     {"enable-webvr", IDS_FLAGS_WEBVR_NAME, IDS_FLAGS_WEBVR_DESCRIPTION, kOsAll,
@@ -1683,11 +1704,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_NAME,
      IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_DESCRIPTION, kOsAndroid,
      SINGLE_VALUE_TYPE(switches::kEnableTabSwitcherInDocumentMode)},
-     {"app-link", IDS_FLAGS_ENABLE_APP_LINK_NAME,
+    {"app-link", IDS_FLAGS_ENABLE_APP_LINK_NAME,
      IDS_FLAGS_ENABLE_APP_LINK_DESCRIPTION, kOsAndroid,
-     ENABLE_DISABLE_VALUE_TYPE(
-       switches::kEnableAppLink,
-       switches::kDisableAppLink)},
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableAppLink,
+                               switches::kDisableAppLink)},
 #endif  // OS_ANDROID
     {"enable-md-feedback", IDS_FLAGS_ENABLE_MATERIAL_DESIGN_FEEDBACK_NAME,
      IDS_FLAGS_ENABLE_MATERIAL_DESIGN_FEEDBACK_DESCRIPTION, kOsDesktop,
@@ -1837,11 +1857,9 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_NATIVE_CUPS_NAME,
      IDS_FLAGS_ENABLE_NATIVE_CUPS_DESCRIPTION, kOsCrOS,
      SINGLE_VALUE_TYPE(switches::kEnableNativeCups)},
-    {"enable-files-details-panel",
-      IDS_FLAGS_ENABLE_FILES_DETAILS_PANEL_NAME,
-      IDS_FLAGS_ENABLE_FILES_DETAILS_PANEL_DESCRIPTION,
-      kOsCrOS,
-      SINGLE_VALUE_TYPE(chromeos::switches::kEnableFilesDetailsPanel)},
+    {"enable-files-details-panel", IDS_FLAGS_ENABLE_FILES_DETAILS_PANEL_NAME,
+     IDS_FLAGS_ENABLE_FILES_DETAILS_PANEL_DESCRIPTION, kOsCrOS,
+     SINGLE_VALUE_TYPE(chromeos::switches::kEnableFilesDetailsPanel)},
 #endif // defined(OS_CHROMEOS)
 #if !defined(OS_ANDROID) && !defined(OS_IOS) && defined(GOOGLE_CHROME_BUILD)
     {"enable-google-branded-context-menu",
@@ -1853,7 +1871,8 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-fullscreen-in-tab-detaching",
      IDS_FLAGS_TAB_DETACHING_IN_FULLSCREEN_NAME,
      IDS_FLAGS_TAB_DETACHING_IN_FULLSCREEN_DESCRIPTION, kOsMac,
-     SINGLE_VALUE_TYPE(switches::kEnableFullscreenTabDetaching)},
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableFullscreenTabDetaching,
+                               switches::kDisableFullscreenTabDetaching)},
 #endif
 #if defined(OS_ANDROID)
     {"media-style-notification", IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_NAME,

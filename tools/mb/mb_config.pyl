@@ -133,7 +133,7 @@
       'ClangToTAndroidASan': 'android_clang_tot_asan',
       'ClangToTAndroidASan tester': 'none',
       'ClangToTLinux':
-        'swarming_gyp_clang_tot_linux_dump_symbols_shared_release',
+        'swarming_gn_clang_tot_linux_full_symbols_shared_release',
       'ClangToTLinux tester': 'none',
       'ClangToTLinux (dbg)': 'swarming_clang_tot_shared_debug',
       'ClangToTLinuxASan': 'swarming_gyp_clang_tot_asan_lsan_static_release',
@@ -714,7 +714,7 @@
       'linux_chromium_archive_rel_ng': 'noswarming_gn_release_bot',
       'linux_chromium_asan_rel_ng': 'swarming_asan_lsan_gyp_release_trybot',
       'linux_chromium_asan_variable': 'findit',
-      'linux_chromium_browser_side_navigation_rel': 'gyp_release_trybot',
+      'linux_chromium_browser_side_navigation_rel': 'gn_release_trybot',
       'linux_chromium_cast_variable': 'findit',
       'linux_chromium_cfi_rel_ng': 'gn_cfi_release_static_dcheck_always_on',
       'linux_chromium_chromeos_asan_rel_ng':
@@ -758,8 +758,8 @@
       'linux_chromium_webkit_leak_variable': 'findit',
       'linux_chromium_webkit_msan_variable': 'findit',
       'linux_chromium_webkit_variable': 'findit',
-      'linux_nacl_sdk': 'nacl_annotator',
-      'linux_nacl_sdk_build': 'nacl_annotator',
+      'linux_nacl_sdk': 'gn_release_bot',
+      'linux_nacl_sdk_build': 'gn_release_bot',
       'linux_optional_gpu_tests_rel':
         'swarming_gpu_fyi_tests_gn_release_trybot',
       'linux_site_isolation': 'gn_release_trybot',
@@ -1342,10 +1342,6 @@
       'gyp', 'release_bot_minimal_symbols', 'x86'
     ],
 
-    'gyp_release_trybot': [
-      'gyp', 'release_trybot',
-    ],
-
     'gyp_release_trybot_x64': [
       'gyp', 'release_trybot', 'x64',
     ],
@@ -1594,7 +1590,7 @@
 
     'swarming_gpu_fyi_tests_gn_release_trybot': [
       'swarming', 'gpu_tests', 'internal_gles2_conform_tests', 'gn',
-      'release_bot', 'angle_deqp_tests',
+      'release_trybot', 'angle_deqp_tests',
     ],
 
     'swarming_gpu_fyi_tests_gyp_clang_debug_trybot_x86': [
@@ -1738,11 +1734,10 @@
       'static', 'release',
     ],
 
-    'swarming_gyp_clang_tot_linux_dump_symbols_shared_release': [
+    'swarming_gn_clang_tot_linux_full_symbols_shared_release': [
       # Enable debug info, as on official builders, to catch issues with
       # optimized debug info.
-      'swarming', 'gyp', 'clang_tot', 'linux_dump_symbols',
-      'shared', 'release',
+      'swarming', 'gn', 'clang_tot', 'full_symbols', 'shared', 'release',
     ],
 
     'swarming_gyp_clang_tot_minimal_symbols_shared_debug': [
@@ -2100,11 +2095,6 @@
     'line_tables': {
       'gn_args': '', # TODO(GYP): check that this is not needed
       'gyp_defines': 'debug_extra_cflags="-gline-tables-only"',
-    },
-
-    'linux_dump_symbols': {
-      'gn_args': 'error', # TODO(crbug.com/605819): implement this.
-      'gyp_defines': 'linux_dump_symbols=1',
     },
 
     'ubsan_security': { 'gn_args': 'is_ubsan_security=true' },

@@ -25,24 +25,19 @@
 
 #include "core/layout/LayoutBoxModelObject.h"
 
-#include "core/dom/NodeComputedStyle.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutInline.h"
-#include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
-#include "core/style/BorderEdge.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
-#include "platform/geometry/TransformState.h"
-#include "wtf/CurrentTime.h"
 
 namespace blink {
 
@@ -206,7 +201,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         if (!layer() && layerCreationAllowedForSubtree()) {
             if (wasFloatingBeforeStyleChanged && isFloating())
                 setChildNeedsLayout();
-            createLayer(type);
+            createLayer();
             if (parent() && !needsLayout()) {
                 // FIXME: We should call a specialized version of this function.
                 layer()->updateLayerPositionsAfterLayout();
@@ -228,10 +223,6 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
     }
 
     if (layer()) {
-        // FIXME: Ideally we shouldn't need this setter but we can't easily infer an overflow-only layer
-        // from the style.
-        layer()->setLayerType(type);
-
         layer()->styleDidChange(diff, oldStyle);
         if (hadLayer && layer()->isSelfPaintingLayer() != layerWasSelfPainting)
             setChildNeedsLayout();
@@ -331,10 +322,10 @@ void LayoutBoxModelObject::invalidateStickyConstraints()
         ancestorOverflowLayer->getScrollableArea()->invalidateAllStickyConstraints();
 }
 
-void LayoutBoxModelObject::createLayer(PaintLayerType type)
+void LayoutBoxModelObject::createLayer()
 {
     ASSERT(!m_layer);
-    m_layer = adoptPtr(new PaintLayer(this, type));
+    m_layer = adoptPtr(new PaintLayer(this));
     setHasLayer(true);
     m_layer->insertOnlyThisLayerAfterStyleChange();
 }
@@ -444,11 +435,20 @@ void LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRe
 
 void LayoutBoxModelObject::invalidateDisplayItemClientOnBacking(const DisplayItemClient& displayItemClient, PaintInvalidationReason invalidationReason) const
 {
+    displayItemClient.setDisplayItemsUncached();
+
+    // We need to inform the GraphicsLayer about this paint invalidation only when we are tracking
+    // paint invalidation or ENABLE(ASSERT).
+#if !ENABLE(ASSERT)
+    if (!frameView()->isTrackingPaintInvalidations())
+        return;
+#endif
+
     if (layer()->groupedMapping()) {
         if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer())
-            squashingLayer->invalidateDisplayItemClient(displayItemClient, invalidationReason);
+            squashingLayer->displayItemClientWasInvalidated(displayItemClient, invalidationReason);
     } else if (CompositedLayerMapping* compositedLayerMapping = layer()->compositedLayerMapping()) {
-        compositedLayerMapping->invalidateDisplayItemClient(displayItemClient, invalidationReason);
+        compositedLayerMapping->displayItemClientWasInvalidated(displayItemClient, invalidationReason);
     }
 }
 

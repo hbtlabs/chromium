@@ -6,7 +6,6 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/UseCounter.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/Histogram.h"
@@ -246,7 +245,7 @@ void ScrollAnchor::adjust(IntSize adjustment)
     ScrollAnimatorBase* animator = m_scroller->existingScrollAnimator();
     if (!animator || !animator->hasRunningAnimation()) {
         m_scroller->setScrollPosition(desiredPos, AnchoringScroll);
-        animator->updateImplOnlyScrollOffsetAnimation(FloatSize(adjustment));
+        animator->adjustImplOnlyScrollOffsetAnimation(FloatSize(adjustment));
     } else {
         // If in the middle of a scroll animation, stop the animation, make
         // the adjustment, and continue the animation on the pending delta.

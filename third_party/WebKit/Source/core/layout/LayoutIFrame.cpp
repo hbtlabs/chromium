@@ -25,15 +25,9 @@
 
 #include "core/layout/LayoutIFrame.h"
 
-#include "core/HTMLNames.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/LocalFrame.h"
-#include "core/html/HTMLIFrameElement.h"
 #include "core/layout/LayoutAnalyzer.h"
 
 namespace blink {
-
-using namespace HTMLNames;
 
 LayoutIFrame::LayoutIFrame(Element* element)
     : LayoutPart(element)
@@ -66,7 +60,7 @@ void LayoutIFrame::layout()
     // No kids to layout as a replaced element.
     updateLogicalHeight();
 
-    m_overflow.clear();
+    m_overflow.reset();
     addVisualEffectOverflow();
     updateLayerTransformAfterLayout();
 

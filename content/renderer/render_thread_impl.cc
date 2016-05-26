@@ -430,7 +430,7 @@ scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
       std::move(gpu_channel_host), stream_id, stream_priority,
       gpu::kNullSurfaceHandle,
       GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext"),
-      gfx::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
+      gl::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
       attributes, nullptr, type));
 }
 
@@ -1284,7 +1284,8 @@ void RenderThreadImpl::RecordComputedAction(const std::string& action) {
 
 std::unique_ptr<base::SharedMemory>
 RenderThreadImpl::HostAllocateSharedMemoryBuffer(size_t size) {
-  return ChildThreadImpl::AllocateSharedMemory(size, thread_safe_sender());
+  return ChildThreadImpl::AllocateSharedMemory(size, thread_safe_sender(),
+                                               nullptr);
 }
 
 cc::SharedBitmapManager* RenderThreadImpl::GetSharedBitmapManager() {

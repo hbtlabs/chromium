@@ -6,15 +6,26 @@
 #define CustomElement_h
 
 #include "core/CoreExport.h"
+#include "core/dom/Document.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
 
+class Document;
+class HTMLElement;
+class QualifiedName;
+
 class CORE_EXPORT CustomElement {
     STATIC_ONLY(CustomElement);
 public:
     static bool isValidName(const AtomicString& name);
+
+    static bool shouldCreateCustomElement(Document&, const AtomicString& localName);
+    static bool shouldCreateCustomElement(Document&, const QualifiedName&);
+
+    static HTMLElement* createCustomElement(Document&, const AtomicString& localName, CreateElementFlags);
+    static HTMLElement* createCustomElement(Document&, const QualifiedName&, CreateElementFlags);
 };
 
 } // namespace blink

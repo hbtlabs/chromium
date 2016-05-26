@@ -44,8 +44,6 @@
 #include "core/html/shadow/MediaControls.h"
 #include "core/html/track/TextTrackList.h"
 #include "core/input/EventHandler.h"
-#include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutVideo.h"
 #include "core/layout/api/LayoutSliderItem.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
@@ -501,7 +499,7 @@ String MediaControlTextTrackListElement::getTextTrackLabel(TextTrack* track)
 Element* MediaControlTextTrackListElement::createTextTrackListItem(TextTrack* track)
 {
     int trackIndex = track ? track->trackIndex() : trackIndexOffValue;
-    HTMLLabelElement* trackItem = HTMLLabelElement::create(document(), nullptr);
+    HTMLLabelElement* trackItem = HTMLLabelElement::create(document());
     trackItem->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-item"));
     HTMLInputElement* trackItemInput = HTMLInputElement::create(document(), nullptr, false);
     trackItemInput->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-item-input"));

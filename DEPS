@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '5d04fda87747d82f4039cecf3e72b62ddf1ca76d',
+  'skia_revision': '0e5b249e549a540bd89d525369b950c9e4404235',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'a7c8a488faa5c22b465719632e8c78e700805f0d',
+  'v8_revision': '055bfa771a7bd763305d3bafd43e39459abc95a4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'a0d3aa4116accbe011ec91984467684334190138',
+  'angle_revision': '901b379f0cb6368658874f40e244b01d6bfc4039',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -96,11 +96,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '79b9b448fdf104c85a5a0843e0377208d81dc190',
+  'catapult_revision': '2e8e05bc6d936a94d9684ce0bf10835f6e81f617',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': 'd05583bdc4ae06542f00e0837ceba145a0b6a7e7', # from svn revision 268547
+  'libfuzzer_revision': 'feca8e579ba4e1fc889bfda9e6ff1c870c42013f', # from svn revision 270598
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -144,7 +144,7 @@ deps = {
    Var('chromium_git') + '/external/colorama.git' + '@' + '799604a1041e9b3bc5d2789ecbd7e8db2e18e6b8',
 
   'src/third_party/icu':
-   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '54f86bb1d1d02968576d21c16d7134ec35c30fbc',
+   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '4745cccafba8cdb646263fa48b959f386722c155',
 
   'src/third_party/hunspell_dictionaries':
    Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
@@ -189,7 +189,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '533c47b9f75721c14dbbe297eefd05d215117621',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '3b5957b247eb4f0e4deed47eb4b7f1f6fdda252e',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',

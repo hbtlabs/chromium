@@ -29,11 +29,13 @@
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gl/android/scoped_java_surface.h"
 
-namespace gfx {
+namespace gl {
 class SurfaceTexture;
 }
 
 namespace media {
+
+class SharedMemoryRegion;
 
 // A VideoDecodeAccelerator implementation for Android.
 // This class decodes the input encoded stream by using Android's MediaCodec
@@ -56,7 +58,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // |kNoSurfaceID| it refers to a SurfaceView that the strategy must render
     // to.
     // Returns the Java surface to configure MediaCodec with.
-    virtual gfx::ScopedJavaSurface Initialize(int surface_view_id) = 0;
+    virtual gl::ScopedJavaSurface Initialize(int surface_view_id) = 0;
 
     // Called before the AVDA does any Destroy() work.  This will be
     // the last call that the BackingStrategy receives.
@@ -65,7 +67,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
     // This returns the SurfaceTexture created by Initialize, or nullptr if
     // the strategy was initialized with a SurfaceView.
-    virtual scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture() const = 0;
+    virtual scoped_refptr<gl::SurfaceTexture> GetSurfaceTexture() const = 0;
 
     // Return the GL texture target that the PictureBuffer textures use.
     virtual uint32_t GetTextureTarget() const = 0;
@@ -192,7 +194,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
     // The surface that MediaCodec is configured to output to. It's created by
     // the backing strategy.
-    gfx::ScopedJavaSurface surface_;
+    gl::ScopedJavaSurface surface_;
 
     // The MediaCrypto object is used in the MediaCodec.configure() in case of
     // an encrypted stream.
@@ -378,9 +380,23 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // The resolution of the stream.
   gfx::Size size_;
 
+  // Handy structure to remember a BitstreamBuffer and also its shared memory,
+  // if any.  The goal is to prevent leaving a BitstreamBuffer's shared memory
+  // handle open.
+  struct BitstreamRecord {
+    BitstreamRecord(const media::BitstreamBuffer&);
+    BitstreamRecord(BitstreamRecord&& other);
+    ~BitstreamRecord();
+
+    media::BitstreamBuffer buffer;
+
+    // |memory| is not mapped, and may be null if buffer has no data.
+    std::unique_ptr<SharedMemoryRegion> memory;
+  };
+
   // Encoded bitstream buffers to be passed to media codec, queued until an
   // input buffer is available.
-  std::queue<media::BitstreamBuffer> pending_bitstream_buffers_;
+  std::queue<BitstreamRecord> pending_bitstream_records_;
 
   // A map of presentation timestamp to bitstream buffer id for the bitstream
   // buffers that have been submitted to the decoder but haven't yet produced an
@@ -433,6 +449,11 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // True if and only if VDA initialization is deferred, and we have not yet
   // called NotifyInitializationComplete.
   bool deferred_initialization_pending_;
+
+  // Indicates if ResetCodecState() should be called upon the next call to
+  // Decode(). Allows us to avoid trashing the last few frames of a playback
+  // when the EOS buffer is received.
+  bool codec_needs_reset_;
 
   // Copy of the VDA::Config we were given.
   Config config_;

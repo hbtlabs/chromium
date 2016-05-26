@@ -104,7 +104,6 @@ public:
     void setConeOuterGain(double);
 
     void markPannerAsDirty(unsigned);
-    void updateDirtyState();
 
     double tailTime() const override { return m_panner ? m_panner->tailTime() : 0; }
     double latencyTime() const override { return m_panner ? m_panner->latencyTime() : 0; }
@@ -148,6 +147,7 @@ private:
 
     bool isAzimuthElevationDirty() const { return m_isAzimuthElevationDirty; }
     bool isDistanceConeGainDirty() const { return m_isDistanceConeGainDirty; }
+    void updateDirtyState();
 
     // This Persistent doesn't make a reference cycle including the owner
     // PannerNode.
@@ -206,7 +206,7 @@ private:
 class PannerNode final : public AudioNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PannerNode* create(AbstractAudioContext&, float sampleRate);
+    static PannerNode* create(AbstractAudioContext&, ExceptionState&);
     PannerHandler& pannerHandler() const;
 
     DECLARE_VIRTUAL_TRACE();
@@ -241,7 +241,7 @@ public:
     void setConeOuterGain(double);
 
 private:
-    PannerNode(AbstractAudioContext&, float sampleRate);
+    PannerNode(AbstractAudioContext&);
 
     Member<AudioParam> m_positionX;
     Member<AudioParam> m_positionY;

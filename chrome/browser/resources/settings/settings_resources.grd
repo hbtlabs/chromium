@@ -181,14 +181,17 @@
       <structure name="IDR_SETTINGS_CR_SETTINGS_DIALOG_JS"
                  file="settings_dialog.js"
                  type="chrome_html" />
-      <structure name="IDR_SETTINGS_CR_SETTINGS_PAGE_CSS"
-                 file="settings_page.css"
+      <structure name="IDR_SETTINGS_CR_SETTINGS_PAGE_CSS_HTML"
+                 file="settings_page_css.html"
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_MAIN_PAGE_BEHAVIOR_HTML"
                  file="settings_page/main_page_behavior.html"
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_MAIN_PAGE_BEHAVIOR_JS"
                  file="settings_page/main_page_behavior.js"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_SETTINGS_ROOT_CSS_HTML"
+                 file="settings_root_css.html"
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_SETTINGS_SHARED_CSS_HTML"
                  file="settings_shared_css.html"
@@ -380,7 +383,7 @@
       <structure name="IDR_SETTINGS_RESET_PAGE_HTML"
                  file="reset_page/reset_page.html"
                  type="chrome_html"
-                 flattenhtml="true" />
+                 preprocess="true" />
       <structure name="IDR_SETTINGS_RESET_PAGE_JS"
                  file="reset_page/reset_page.js"
                  type="chrome_html" />
@@ -694,7 +697,7 @@
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_SYSTEM_PAGE_HTML"
                  file="system_page/system_page.html"
-                 flattenhtml="true"
+                 preprocess="true"
                  type="chrome_html" />
       <structure name="IDR_SETTINGS_SYSTEM_PAGE_JS"
                  file="system_page/system_page.js"

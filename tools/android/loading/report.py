@@ -13,6 +13,8 @@ from loading_graph_view import LoadingGraphView
 import loading_trace
 import metrics
 from network_activity_lens import NetworkActivityLens
+import prefetch_view
+import request_dependencies_lens
 from user_satisfied_lens import (
     FirstTextPaintLens, FirstContentfulPaintLens, FirstSignificantPaintLens)
 
@@ -28,11 +30,14 @@ class LoadingReport(object):
       tracking_rules: ([str]) List of tracking filtering rules.
     """
     self.trace = trace
-    self._text_msec = FirstTextPaintLens(self.trace).SatisfiedMs()
-    self._contentful_paint_msec = (
-        FirstContentfulPaintLens(self.trace).SatisfiedMs())
-    self._significant_paint_msec = (
-        FirstSignificantPaintLens(self.trace).SatisfiedMs())
+
+    first_text_paint_lens = FirstTextPaintLens(self.trace)
+    first_contentful_paint_lens = FirstContentfulPaintLens(self.trace)
+    first_significant_paint_lens = FirstSignificantPaintLens(self.trace)
+
+    self._text_msec = first_text_paint_lens.SatisfiedMs()
+    self._contentful_paint_msec = first_contentful_paint_lens.SatisfiedMs()
+    self._significant_paint_msec = first_significant_paint_lens.SatisfiedMs()
 
     navigation_start_events = trace.tracing_track.GetMatchingEvents(
         'blink.user_timing', 'navigationStart')
@@ -51,8 +56,6 @@ class LoadingReport(object):
     else:
       self._contentful_byte_frac = float('Nan')
       self._significant_byte_frac = float('Nan')
-    self._ad_report = self._AdRequestsReport(
-        trace, ad_rules or [], tracking_rules or [])
 
     graph = LoadingGraphView.FromTrace(trace)
     self._contentful_inversion = graph.GetInversionsAtTime(
@@ -60,25 +63,33 @@ class LoadingReport(object):
     self._significant_inversion = graph.GetInversionsAtTime(
         self._significant_paint_msec)
     self._transfer_size = metrics.TotalTransferSize(trace)[1]
-    self._cpu_busyness = self._ComputeCpuBusyness(trace)
 
-  def _ComputeCpuBusyness(self, trace):
+    dependencies_lens = request_dependencies_lens.RequestDependencyLens(
+        self.trace)
+    requests = self.trace.request_track.GetEvents()
+    preloaded_requests = \
+       prefetch_view.PrefetchSimulationView.PreloadedRequests(
+           requests[0], dependencies_lens, self.trace)
+    self._first_text_preloaded_requests = LoadingReport._ComputePreloadInfo(
+        preloaded_requests, first_text_paint_lens)
+    self._contentful_preloaded_requests = LoadingReport._ComputePreloadInfo(
+        preloaded_requests, first_contentful_paint_lens)
+    self._significant_preloaded_requests = LoadingReport._ComputePreloadInfo(
+        preloaded_requests, first_significant_paint_lens)
+    self._preloaded_requests = len(preloaded_requests)
+
     activity = ActivityLens(trace)
-    load_start = self._navigation_start_msec
-    load_end = self._load_end_msec
-    contentful = self._contentful_paint_msec
-    significant = self._significant_paint_msec
+    self._cpu_busyness = self._ComputeCpuBusyness(activity)
 
-    return {
-        'activity_load_frac': (
-            activity.MainRendererThreadBusyness(load_start, load_end)
-            / float(load_end - load_start)),
-        'activity_contentful_paint_frac': (
-            activity.MainRendererThreadBusyness(load_start, contentful)
-            / float(contentful - load_start)),
-        'activity_significant_paint_frac': (
-            activity.MainRendererThreadBusyness(load_start, significant)
-            / float(significant - load_start))}
+    content_lens = ContentClassificationLens(
+        trace, ad_rules or [], tracking_rules or [])
+    has_ad_rules = bool(ad_rules)
+    has_tracking_rules = bool(tracking_rules)
+    self._ad_report = self._AdRequestsReport(
+        trace, content_lens, has_ad_rules, has_tracking_rules)
+    self._ads_cost = self._AdsAndTrackingCpuCost(
+        self._navigation_start_msec, self._load_end_msec, content_lens,
+        activity, has_tracking_rules or has_ad_rules)
 
   def GenerateReport(self):
     """Returns a report as a dict."""
@@ -92,6 +103,13 @@ class LoadingReport(object):
         'plt_ms': self._load_end_msec - self._navigation_start_msec,
         'contentful_byte_frac': self._contentful_byte_frac,
         'significant_byte_frac': self._significant_byte_frac,
+        'preloaded_requests': self._preloaded_requests,
+        'first_text_preloaded_requests':
+            self._first_text_preloaded_requests,
+        'contentful_preloaded_requests':
+            self._contentful_preloaded_requests,
+        'significant_preloaded_requests':
+            self._significant_preloaded_requests,
 
         # Take the first (earliest) inversions.
         'contentful_inversion': (self._contentful_inversion[0].url
@@ -103,6 +121,7 @@ class LoadingReport(object):
         'transfer_size': self._transfer_size}
     report.update(self._ad_report)
     report.update(self._cpu_busyness)
+    report.update(self._ads_cost)
     return report
 
   @classmethod
@@ -113,29 +132,34 @@ class LoadingReport(object):
     return LoadingReport(trace, ad_rules_filename, tracking_rules_filename)
 
   @classmethod
-  def _AdRequestsReport(cls, trace, ad_rules, tracking_rules):
-    has_rules = bool(ad_rules) or bool(tracking_rules)
+  def _ComputePreloadInfo(cls, preloaded_requests, user_lens):
+    preloaded_critical_requests = [r for r in preloaded_requests
+          if r in user_lens.CriticalRequests()]
+    return len(preloaded_critical_requests)
+
+  @classmethod
+  def _AdRequestsReport(
+      cls, trace, content_lens, has_ad_rules, has_tracking_rules):
     requests = trace.request_track.GetEvents()
+    has_rules = has_ad_rules or has_tracking_rules
     result = {
         'request_count': len(requests),
-        'ad_requests': 0 if ad_rules else None,
-        'tracking_requests': 0 if tracking_rules else None,
+        'ad_requests': 0 if has_ad_rules else None,
+        'tracking_requests': 0 if has_tracking_rules else None,
         'ad_or_tracking_requests': 0 if has_rules else None,
         'ad_or_tracking_initiated_requests': 0 if has_rules else None,
         'ad_or_tracking_initiated_transfer_size': 0 if has_rules else None}
-    content_classification_lens = ContentClassificationLens(
-        trace, ad_rules, tracking_rules)
     if not has_rules:
       return result
-    for request in trace.request_track.GetEvents():
-      is_ad = content_classification_lens.IsAdRequest(request)
-      is_tracking = content_classification_lens.IsTrackingRequest(request)
-      if ad_rules:
+    for request in requests:
+      is_ad = content_lens.IsAdRequest(request)
+      is_tracking = content_lens.IsTrackingRequest(request)
+      if has_ad_rules:
         result['ad_requests'] += int(is_ad)
-      if tracking_rules:
+      if has_tracking_rules:
         result['tracking_requests'] += int(is_tracking)
       result['ad_or_tracking_requests'] += int(is_ad or is_tracking)
-    ad_tracking_requests = content_classification_lens.AdAndTrackingRequests()
+    ad_tracking_requests = content_lens.AdAndTrackingRequests()
     result['ad_or_tracking_initiated_requests'] = len(ad_tracking_requests)
     result['ad_or_tracking_initiated_transfer_size'] = metrics.TransferSize(
         ad_tracking_requests)[1]
@@ -153,6 +177,80 @@ class LoadingReport(object):
     # Main frame onLoad() didn't finish. Take the end of the last completed
     # request.
     return max(r.end_msec or -1 for r in trace.request_track.GetEvents())
+
+  def _ComputeCpuBusyness(self, activity):
+    load_start = self._navigation_start_msec
+    load_end = self._load_end_msec
+    contentful = self._contentful_paint_msec
+    significant = self._significant_paint_msec
+
+    load_time = float(load_end - load_start)
+    contentful_time = float(contentful - load_start)
+    significant_time = float(significant - load_start)
+
+    result = {
+        'activity_load_frac': (
+            activity.MainRendererThreadBusyness(load_start, load_end)
+            / load_time),
+        'activity_contentful_paint_frac': (
+            activity.MainRendererThreadBusyness(load_start, contentful)
+            / contentful_time),
+        'activity_significant_paint_frac': (
+            activity.MainRendererThreadBusyness(load_start, significant)
+            / significant_time)}
+
+    activity_load = activity.ComputeActivity(load_start, load_end)
+    activity_contentful = activity.ComputeActivity(load_start, contentful)
+    activity_significant = activity.ComputeActivity(load_start, significant)
+
+    result['parsing_load_frac'] = (
+        sum(activity_load['parsing'].values()) / load_time)
+    result['script_load_frac'] = (
+        sum(activity_load['script'].values()) / load_time)
+    result['parsing_contentful_frac'] = (
+        sum(activity_contentful['parsing'].values()) / contentful_time)
+    result['script_contentful_frac'] = (
+        sum(activity_contentful['script'].values()) / contentful_time)
+    result['parsing_significant_frac'] = (
+        sum(activity_significant['parsing'].values()) / significant_time)
+    result['script_significant_frac'] = (
+        sum(activity_significant['script'].values()) / significant_time)
+    return result
+
+  @classmethod
+  def _AdsAndTrackingCpuCost(
+      cls, start_msec, end_msec, content_lens, activity, has_rules):
+    """Returns the CPU cost associated with Ads and tracking between timestamps.
+
+    Can return an overestimate, as execution slices are tagged by URL, and not
+    by requests.
+
+    Args:
+      start_msec: (float)
+      end_msec: (float)
+      content_lens: (ContentClassificationLens)
+      activity: (ActivityLens)
+
+    Returns:
+      {'ad_and_tracking_script_frac': float,
+       'ad_and_tracking_parsing_frac': float}
+    """
+    result = {'ad_or_tracking_script_frac': None,
+              'ad_or_tracking_parsing_frac': None}
+    if not has_rules:
+      return result
+
+    duration = float(end_msec - start_msec)
+    requests = content_lens.AdAndTrackingRequests()
+    urls = {r.url for r in requests}
+    cpu_breakdown = activity.ComputeActivity(start_msec, end_msec)
+    result['ad_or_tracking_script_frac'] = sum(
+            value for (url, value) in cpu_breakdown['script'].items()
+            if url in urls) / duration
+    result['ad_or_tracking_parsing_frac'] = sum(
+            value for (url, value) in cpu_breakdown['parsing'].items()
+            if url in urls) / duration
+    return result
 
 
 def _Main(args):

@@ -29,7 +29,6 @@
 #include "content/common/accessibility_mode_enums.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
-#include "content/common/frame_host.mojom.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/image_downloader/image_downloader.mojom.h"
@@ -37,8 +36,6 @@
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_message_type.h"
-#include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/http/http_response_headers.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
@@ -99,11 +96,9 @@ struct GlobalRequestID;
 struct Referrer;
 struct ResourceResponse;
 
-class CONTENT_EXPORT RenderFrameHostImpl
-    : public RenderFrameHost,
-      NON_EXPORTED_BASE(public mojom::FrameHost),
-      public BrowserAccessibilityDelegate,
-      public SiteInstanceImpl::Observer {
+class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
+                                           public BrowserAccessibilityDelegate,
+                                           public SiteInstanceImpl::Observer {
  public:
   using AXTreeSnapshotCallback =
       base::Callback<void(
@@ -155,10 +150,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   blink::WebPageVisibilityState GetVisibilityState() override;
   bool IsRenderFrameLive() override;
   int GetProxyCount() override;
-
-  // mojom::FrameHost
-  void GetHostZoomLevel(const GURL& url,
-                        const GetHostZoomLevelCallback& callback) override;
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
@@ -505,8 +496,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                         std::unique_ptr<StreamHandle> body,
                         const CommonNavigationParams& common_params,
                         const RequestNavigationParams& request_params,
-                        bool is_view_source,
-                        scoped_refptr<ResourceRequestBody> post_data);
+                        bool is_view_source);
 
   // PlzNavigate
   // Indicates that a navigation failed and that this RenderFrame should display
@@ -662,8 +652,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
                      blink::WebTextDirection title_direction);
   void OnUpdateEncoding(const std::string& encoding);
   void OnBeginNavigation(const CommonNavigationParams& common_params,
-                         const BeginNavigationParams& begin_params,
-                         scoped_refptr<ResourceRequestBody> body);
+                         const BeginNavigationParams& begin_params);
   void OnDispatchLoad();
   void OnAccessibilityEvents(
       const std::vector<AccessibilityHostMsg_EventParams>& params,
@@ -762,8 +751,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FrameTreeNode* FindAndVerifyChild(int32_t child_frame_routing_id,
                                     bad_message::BadMessageReason reason);
 
-  void BindFrameHostService(mojom::FrameHostRequest request);
-
   // Creates a Web Bluetooth Service owned by the frame.
   void CreateWebBluetoothService(
       mojo::InterfaceRequest<blink::mojom::WebBluetoothService> request);
@@ -784,8 +771,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   RenderViewHostImpl* render_view_host_;
 
   RenderFrameHostDelegate* delegate_;
-
-  mojo::Binding<mojom::FrameHost> frame_host_binding_;
 
   // The SiteInstance associated with this RenderFrameHost. All content drawn
   // in this RenderFrameHost is part of this SiteInstance. Cannot change over

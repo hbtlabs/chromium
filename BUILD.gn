@@ -240,6 +240,8 @@ group("both_gn_and_gyp") {
       "//ios/chrome/app",
       "//ios/chrome/browser",
       "//ios/chrome/common",
+      "//ios/chrome/share_extension:packed_resources",
+      "//ios/chrome/today_extension:packed_resources",
       "//ios/net:ios_net_unittests",
       "//ios/public/provider/chrome/browser",
       "//ios/public/provider/web",
@@ -249,6 +251,10 @@ group("both_gn_and_gyp") {
       "//ios/web:ios_web_unittests",
       "//ios/web/shell:ios_web_shell",
     ]
+
+    if (!is_component_build) {
+      deps += [ "//components/cronet/ios:cronet_package" ]
+    }
   }
 
   deps += root_extra_deps

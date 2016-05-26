@@ -258,6 +258,8 @@ void FrameLoader::saveScrollState()
 
 void FrameLoader::dispatchUnloadEvent()
 {
+    NavigationCounterForUnload counter;
+
     // If the frame is unloading, the provisional loader should no longer be
     // protected. It will be detached soon.
     m_protectProvisionalLoader = false;
@@ -1419,7 +1421,10 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
         return;
 
     m_frame->document()->cancelParsing();
-    detachDocumentLoader(m_provisionalDocumentLoader);
+    if (m_provisionalDocumentLoader) {
+        FrameNavigationDisabler navigationDisabler(*m_frame);
+        detachDocumentLoader(m_provisionalDocumentLoader);
+    }
 
     // beforeunload fired above, and detaching a DocumentLoader can fire
     // events, which can detach this frame.

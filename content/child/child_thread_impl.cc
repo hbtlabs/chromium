@@ -66,7 +66,6 @@
 #include "ipc/mojo/ipc_channel_mojo.h"
 #include "ipc/mojo/scoped_ipc_support.h"
 #include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/named_platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 
 #if defined(OS_POSIX)
@@ -229,18 +228,9 @@ base::LazyInstance<QuitClosure> g_quit_closure = LAZY_INSTANCE_INITIALIZER;
 void InitializeMojoIPCChannel() {
   mojo::edk::ScopedPlatformHandle platform_channel;
 #if defined(OS_WIN)
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-      mojo::edk::PlatformChannelPair::kMojoPlatformChannelHandleSwitch)) {
-    platform_channel =
-        mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
-            *base::CommandLine::ForCurrentProcess());
-  } else {
-    // If this process is elevated, it will have a pipe path passed on the
-    // command line.
-    platform_channel =
-        mojo::edk::NamedPlatformChannelPair::PassClientHandleFromParentProcess(
-            *base::CommandLine::ForCurrentProcess());
-  }
+  platform_channel =
+      mojo::edk::PlatformChannelPair::PassClientHandleFromParentProcess(
+          *base::CommandLine::ForCurrentProcess());
 #elif defined(OS_POSIX)
   platform_channel.reset(mojo::edk::PlatformHandle(
       base::GlobalDescriptors::GetInstance()->Get(kMojoIPCChannel)));
@@ -593,13 +583,14 @@ IPC::MessageRouter* ChildThreadImpl::GetRouter() {
 std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size) {
   DCHECK(base::MessageLoop::current() == message_loop());
-  return AllocateSharedMemory(buf_size, this);
+  return AllocateSharedMemory(buf_size, this, nullptr);
 }
 
 // static
 std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     size_t buf_size,
-    IPC::Sender* sender) {
+    IPC::Sender* sender,
+    bool* out_of_memory) {
   std::unique_ptr<base::SharedMemory> shared_buf;
   // Ask the browser to create the shared memory, since this is blocked by the
   // sandbox on most platforms.
@@ -609,11 +600,15 @@ std::unique_ptr<base::SharedMemory> ChildThreadImpl::AllocateSharedMemory(
     if (base::SharedMemory::IsHandleValid(shared_mem_handle)) {
       shared_buf.reset(new base::SharedMemory(shared_mem_handle, false));
     } else {
-      NOTREACHED() << "Browser failed to allocate shared memory";
+      LOG(WARNING) << "Browser failed to allocate shared memory";
+      if (out_of_memory)
+        *out_of_memory = true;
       return nullptr;
     }
   } else {
     // Send is allowed to fail during shutdown. Return null in this case.
+    if (out_of_memory)
+      *out_of_memory = false;
     return nullptr;
   }
   return shared_buf;

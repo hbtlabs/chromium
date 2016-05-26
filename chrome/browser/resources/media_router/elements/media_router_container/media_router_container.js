@@ -152,15 +152,6 @@ Polymer({
     },
 
     /**
-     * Whether the browser is currently incognito.
-     * @type {boolean}
-     */
-    isOffTheRecord: {
-      type: Boolean,
-      value: false,
-    },
-
-    /**
      * Records whether the search input is focused when a window blur event is
      * received. This is used to handle search focus edge cases. See
      * |setSearchFocusHandlers_| for details.
@@ -424,7 +415,6 @@ Polymer({
   ready: function() {
     this.elementReadyTimeMs_ = performance.now();
     this.showSinkList_();
-    this.putSearchAtBottom_();
 
     Polymer.RenderStatus.afterNextRender(this, function() {
       // Import the elements that aren't needed at startup. This reduces
@@ -439,6 +429,9 @@ Polymer({
           return;
         }
         that.updateElementPositioning_();
+        if (that.currentView_ == media_router.MediaRouterView.SINK_LIST) {
+          that.putSearchAtBottom_();
+        }
       };
       this.importHref('chrome://resources/polymer/v1_0/neon-animation/' +
           'web-animations.html', onload);
@@ -455,7 +448,6 @@ Polymer({
         this.$$('#focus-placeholder').remove();
 
       document.addEventListener('keydown', this.onKeydown_.bind(this), true);
-      this.setSearchFocusHandlers_();
       this.listen(this, 'focus', 'onFocus_');
       this.listen(this, 'header-height-changed', 'updateElementPositioning_');
       this.listen(this, 'header-or-arrow-click', 'toggleCastModeHidden_');
@@ -2054,6 +2046,7 @@ Polymer({
   searchEnabledChanged_: function(searchEnabled) {
     if (searchEnabled) {
       this.async(function() {
+        this.setSearchFocusHandlers_();
         this.putSearchAtBottom_();
       });
     }
@@ -2079,7 +2072,6 @@ Polymer({
    * @private
    */
   setSearchFocusHandlers_: function() {
-    var search = this.$$('#sink-search');
     var searchInput = this.$$('#sink-search-input');
     var that = this;
 
@@ -2095,15 +2087,13 @@ Polymer({
     // |showSearchResults_()|.
     window.addEventListener('blur', function() {
       that.isSearchFocusedOnWindowBlur_ =
-          that.shadowRoot.activeElement == search;
+          that.shadowRoot.activeElement == searchInput;
     });
-    if (this.hasConditionalElement_(search)) {
-      searchInput.addEventListener('focus', function() {
-        if (!that.isSearchFocusedOnWindowBlur_) {
-          that.showSearchResults_();
-        }
-      });
-    }
+    searchInput.addEventListener('focus', function() {
+      if (!that.isSearchFocusedOnWindowBlur_) {
+        that.showSearchResults_();
+      }
+    });
   },
 
   /**

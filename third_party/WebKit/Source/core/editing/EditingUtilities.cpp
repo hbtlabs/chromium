@@ -1326,7 +1326,7 @@ HTMLElement* createDefaultParagraphElement(Document& document)
 
 HTMLElement* createHTMLElement(Document& document, const QualifiedName& name)
 {
-    return HTMLElementFactory::createHTMLElement(name.localName(), document, 0, false);
+    return HTMLElementFactory::createHTMLElement(name.localName(), document, 0, CreatedByCloneNode);
 }
 
 bool isTabHTMLSpanElement(const Node* node)
@@ -1746,13 +1746,13 @@ DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target, const Str
     return target->dispatchEvent(beforeInputEvent);
 }
 
-DispatchEventResult dispatchBeforeInputFromComposition(EventTarget* target, InputEvent::InputType inputType, const String& data)
+DispatchEventResult dispatchBeforeInputFromComposition(EventTarget* target, InputEvent::InputType inputType, const String& data, InputEvent::EventCancelable cancelable)
 {
     if (!RuntimeEnabledFeatures::inputEventEnabled())
         return DispatchEventResult::NotCanceled;
     if (!target)
         return DispatchEventResult::NotCanceled;
-    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::NotCancelable, InputEvent::EventIsComposing::IsComposing);
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, cancelable, InputEvent::EventIsComposing::IsComposing);
     return target->dispatchEvent(beforeInputEvent);
 }
 

@@ -87,6 +87,7 @@ class WebLayerTreeView;
 class WebLocalFrame;
 class WebLocalFrameImpl;
 class WebImage;
+class CompositorMutatorImpl;
 class WebPagePopupImpl;
 class WebPlugin;
 class WebRemoteFrame;
@@ -278,6 +279,9 @@ public:
     void setShowFPSCounter(bool) override;
     void setShowScrollBottleneckRects(bool) override;
     void acceptLanguagesChanged() override;
+
+    void willEnterFullScreen(WebRemoteFrame*) override;
+    void didUpdateFullScreenSize();
 
     float defaultMinimumPageScaleFactor() const;
     float defaultMaximumPageScaleFactor() const;
@@ -503,6 +507,7 @@ public:
     void forceNextWebGLContextCreationToFail() override;
     void forceNextDrawingBufferCreationToFail() override;
 
+    CompositorProxyClient* createCompositorProxyClient();
     IntSize mainFrameSize();
     WebDisplayMode displayMode() const { return m_displayMode; }
 

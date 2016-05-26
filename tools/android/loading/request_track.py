@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import re
+import sys
 import urlparse
 
 import devtools_monitor
@@ -263,8 +264,16 @@ class Request(object):
         break
     return result
 
+  def SetHTTPResponseHeader(self, header, header_value):
+    """Sets the value of a HTTP response header."""
+    assert header.islower()
+    for name in self.response_headers.keys():
+      if name.lower() == header:
+        del self.response_headers[name]
+    self.response_headers[header] = header_value
+
   def GetResponseHeaderValue(self, header, value):
-    """Returns True iff the response headers |header| contains |value|."""
+    """Returns a copy of |value| iff response |header| contains it."""
     header_values = self.GetHTTPResponseHeader(header)
     if not header_values:
       return None
@@ -373,6 +382,26 @@ class Request(object):
     return json.dumps(self.ToJsonDict(), sort_keys=True, indent=2)
 
 
+def _ParseStringToInt(string):
+  """Parses a string to an integer like base::StringToInt64().
+
+  Returns:
+    Parsed integer.
+  """
+  string = string.strip()
+  while string:
+    try:
+      parsed_integer = int(string)
+      if parsed_integer > sys.maxint:
+        return sys.maxint
+      if parsed_integer < -sys.maxint - 1:
+        return -sys.maxint - 1
+      return parsed_integer
+    except ValueError:
+      string = string[:-1]
+  return 0
+
+
 class CachingPolicy(object):
   """Represents the caching policy at an arbitrary time for a cached response.
   """
@@ -420,7 +449,7 @@ class CachingPolicy(object):
     # net/http/http_response_headers.cc, itself following RFC 2616.
     if not self.IsCacheable():
       return self.FETCH
-    freshness = self._GetFreshnessLifetimes()
+    freshness = self.GetFreshnessLifetimes()
     if freshness[0] == 0 and freshness[1] == 0:
       return self.VALIDATION_SYNC
     age = self._GetCurrentAge(timestamp)
@@ -430,7 +459,7 @@ class CachingPolicy(object):
       return self.VALIDATION_ASYNC
     return self.VALIDATION_SYNC
 
-  def _GetFreshnessLifetimes(self):
+  def GetFreshnessLifetimes(self):
     """Returns [freshness, stale-while-revalidate freshness] in seconds."""
     # This is adapted from GetFreshnessLifetimes() in
     # //net/http/http_response_headers.cc (which follows the RFC).
@@ -444,11 +473,11 @@ class CachingPolicy(object):
         'Cache-Control', 'must-revalidate')
     swr_header = r.GetCacheControlDirective('stale-while-revalidate')
     if not must_revalidate and swr_header:
-      result[1] = int(swr_header)
+      result[1] = _ParseStringToInt(swr_header)
 
     max_age_header = r.GetCacheControlDirective('max-age')
     if max_age_header:
-      result[0] = int(max_age_header)
+      result[0] = _ParseStringToInt(max_age_header)
       return result
 
     date = self._GetDateValue('Date') or self._response_time

@@ -10,6 +10,10 @@
 #include "wtf/Assertions.h"
 #include "wtf/text/WTFString.h"
 
+#define CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS 1
+// TODO(wangxianzhu): Restore the following line after we fix crbug.com/609218.
+// #define CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS DCHECK_IS_ON()
+
 namespace blink {
 
 // Holds a unique cache generation id of display items and paint controllers.
@@ -53,9 +57,17 @@ private:
 // no longer dereferenced unless we can make sure the client is still valid.
 class PLATFORM_EXPORT DisplayItemClient {
 public:
-#if DCHECK_IS_ON()
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
     DisplayItemClient();
     virtual ~DisplayItemClient();
+
+    // Tests if this DisplayItemClient object has been created and has not been deleted yet.
+    bool isAlive() const;
+    // Called when any DisplayItem of this DisplayItemClient is added into PaintController
+    // using PaintController::createAndAppend().
+    void beginShouldKeepAlive() const;
+    // Called when the DisplayItems of this DisplayItemClient are committed in PaintController.
+    void endShouldKeepAlive() const;
 #else
     virtual ~DisplayItemClient() { }
 #endif
@@ -69,13 +81,6 @@ public:
     virtual bool displayItemsAreCached(DisplayItemCacheGeneration) const = 0;
     virtual void setDisplayItemsCached(DisplayItemCacheGeneration) const = 0;
     virtual void setDisplayItemsUncached() const = 0;
-
-#if DCHECK_IS_ON()
-    // Tests if a DisplayItemClient object has been created and has not been deleted yet.
-    static bool isAlive(const DisplayItemClient&);
-#endif
-
-protected:
 };
 
 #define DISPLAY_ITEM_CACHE_STATUS_IMPLEMENTATION \

@@ -268,7 +268,7 @@ Element* Element::cloneElementWithoutChildren()
 
 Element* Element::cloneElementWithoutAttributesAndChildren()
 {
-    return document().createElement(tagQName(), false);
+    return document().createElement(tagQName(), CreatedByCloneNode);
 }
 
 Attr* Element::detachAttribute(size_t index)
@@ -2670,10 +2670,6 @@ void Element::setPointerCapture(int pointerId, ExceptionState& exceptionState)
             exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else if (!inShadowIncludingDocument())
             exceptionState.throwDOMException(InvalidStateError, "InvalidStateError");
-        // TODO(crbug.com/579553): This next "else if" is a hack to notify JS that we don't (yet) support
-        // explicit set/release of touch pointers (which are implicitly captured for performance reasons).
-        else if (document().frame()->eventHandler().getPointerEventType(pointerId) == WebPointerProperties::PointerType::Touch)
-            exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else
             document().frame()->eventHandler().setPointerCapture(pointerId, this);
     }
@@ -2683,10 +2679,6 @@ void Element::releasePointerCapture(int pointerId, ExceptionState& exceptionStat
 {
     if (document().frame()) {
         if (!document().frame()->eventHandler().isPointerEventActive(pointerId))
-            exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
-        // TODO(crbug.com/579553): This next "else if" is a hack to notify JS that we don't (yet) support
-        // explicit set/release of touch pointers (which are implicitly captured for performance reasons).
-        else if (document().frame()->eventHandler().getPointerEventType(pointerId) == WebPointerProperties::PointerType::Touch)
             exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else
             document().frame()->eventHandler().releasePointerCapture(pointerId, this);
@@ -3056,15 +3048,31 @@ void Element::setContainsFullScreenElement(bool flag)
     pseudoStateChanged(CSSSelector::PseudoFullScreenAncestor);
 }
 
-static Element* parentCrossingFrameBoundaries(Element* element)
+// Unlike Node::parentNode, this can cross frame boundaries.
+static Element* nextAncestorElement(Element* element)
 {
     DCHECK(element);
-    return element->parentElement() ? element->parentElement() : element->document().localOwner();
+    if (element->parentElement())
+        return element->parentElement();
+
+    Frame* frame = element->document().frame();
+    if (!frame || !frame->owner())
+        return nullptr;
+
+    // Find the next LocalFrame on the ancestor chain, and return the
+    // corresponding <iframe> element for the remote child if it exists.
+    while (frame->tree().parent() && frame->tree().parent()->isRemoteFrame())
+        frame = frame->tree().parent();
+
+    if (frame->owner() && frame->owner()->isLocal())
+        return toHTMLFrameOwnerElement(frame->owner());
+
+    return nullptr;
 }
 
 void Element::setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(bool flag)
 {
-    for (Element* element = parentCrossingFrameBoundaries(this); element; element = parentCrossingFrameBoundaries(element))
+    for (Element* element = nextAncestorElement(this); element; element = nextAncestorElement(element))
         element->setContainsFullScreenElement(flag);
 }
 

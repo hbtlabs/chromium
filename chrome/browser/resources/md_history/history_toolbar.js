@@ -59,7 +59,8 @@ Polymer({
     groupedRange: {
       type: Number,
       value: 0,
-      reflectToAttribute: true
+      reflectToAttribute: true,
+      notify: true
     },
 
     // The start time of the query range.
@@ -88,7 +89,8 @@ Polymer({
       return;
 
     this.searchTerm = search;
-    var searchField = /** @type {SearchField} */(this.$['search-input']);
+    var searchField = /** @type {!CrToolbarElement} */(this.$['main-toolbar'])
+                          .getSearchField();
     searchField.showAndFocus().then(function(showing) {
       if (showing) searchField.setValue(search);
     });
@@ -104,7 +106,7 @@ Polymer({
 
   attached: function() {
     this.searchFieldDelegate_ = new ToolbarSearchFieldDelegate(this);
-    /** @type {SearchField} */(this.$['search-input'])
+    /** @type {!CrToolbarElement} */(this.$['main-toolbar']).getSearchField()
         .setDelegate(this.searchFieldDelegate_);
   },
 

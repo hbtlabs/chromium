@@ -1004,6 +1004,10 @@ template("junit_binary") {
 #   srcjars: List of srcjars to be included in this library, together with the
 #     ones obtained from srcjar_deps.
 #
+#   input_jars_paths: A list of paths to the jars that should be included
+#     in the classpath. These are in addition to library .jars that
+#     appear in deps.
+#
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
 #   enable_incremental_javac_override: Overrides the global
@@ -1093,6 +1097,10 @@ template("java_prebuilt") {
 #     will be added to java_files and be included in this library.
 #   srcjars: List of srcjars to be included in this library, together with the
 #     ones obtained from srcjar_deps.
+#
+#   input_jars_paths: A list of paths to the jars that should be included
+#     in the classpath. These are in addition to library .jars that
+#     appear in deps.
 #
 #   chromium_code: If true, extra analysis warning/errors will be enabled.
 #   enable_errorprone: If true, enables the errorprone compiler.
@@ -2133,6 +2141,12 @@ template("unittest_apk") {
     # This trivial assert is needed in case both unittests_binary and apk_name
     # are defined, as otherwise test_suite_name would not be used.
     assert(test_suite_name != "")
+
+    if (defined(invoker.proguard_enabled) && invoker.proguard_enabled) {
+      assert(invoker.proguard_configs != [])
+      proguard_enabled = true
+      proguard_configs = invoker.proguard_configs
+    }
 
     if (!defined(apk_name)) {
       apk_name = test_suite_name

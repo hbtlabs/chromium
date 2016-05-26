@@ -181,7 +181,7 @@ void GraphicsContext::setShadow(const FloatSize& offset, float blur, const Color
         // to disable rendering of the source primitive.  When not shadow-only, we
         // clear the looper.
         if (shadowMode != DrawShadowOnly)
-            drawLooperBuilder.clear();
+            drawLooperBuilder.reset();
 
         setDrawLooper(std::move(drawLooperBuilder));
         return;
@@ -323,24 +323,6 @@ void GraphicsContext::compositePicture(PassRefPtr<SkPicture> picture, const Floa
     m_canvas->saveLayer(&sourceBounds, &picturePaint);
     m_canvas->restore();
     m_canvas->restore();
-}
-
-void GraphicsContext::fillPolygon(size_t numPoints, const FloatPoint* points, const Color& color,
-    bool shouldAntialias)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(numPoints > 2);
-
-    SkPath path;
-    setPathFromPoints(&path, numPoints, points);
-
-    SkPaint paint(immutableState()->fillPaint());
-    paint.setAntiAlias(shouldAntialias);
-    paint.setColor(color.rgb());
-
-    drawPath(path, paint);
 }
 
 void GraphicsContext::drawFocusRingPath(const SkPath& path, const Color& color, int width)
@@ -1104,18 +1086,6 @@ void GraphicsContext::clipOut(const Path& pathToClip)
     path.toggleInverseFillType();
 }
 
-void GraphicsContext::clipPolygon(size_t numPoints, const FloatPoint* points, bool antialiased)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(numPoints > 2);
-
-    SkPath path;
-    setPathFromPoints(&path, numPoints, points);
-    clipPath(path, antialiased ? AntiAliased : NotAntiAliased);
-}
-
 void GraphicsContext::clipOutRoundedRect(const FloatRoundedRect& rect)
 {
     if (contextDisabled())
@@ -1252,17 +1222,6 @@ void GraphicsContext::adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2
             p1.setY(p1.y() + 0.5f);
             p2.setY(p2.y() + 0.5f);
         }
-    }
-}
-
-void GraphicsContext::setPathFromPoints(SkPath* path, size_t numPoints, const FloatPoint* points)
-{
-    path->incReserve(numPoints);
-    path->moveTo(WebCoreFloatToSkScalar(points[0].x()),
-                 WebCoreFloatToSkScalar(points[0].y()));
-    for (size_t i = 1; i < numPoints; ++i) {
-        path->lineTo(WebCoreFloatToSkScalar(points[i].x()),
-                     WebCoreFloatToSkScalar(points[i].y()));
     }
 }
 

@@ -30,13 +30,15 @@ extern "C" {
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
-namespace gfx {
+namespace gl {
 
 namespace {
 
 Display* g_display = nullptr;
 bool g_glx_context_create = false;
 bool g_glx_create_context_robustness_supported = false;
+bool g_glx_create_context_profile_supported = false;
+bool g_glx_create_context_profile_es2_supported = false;
 bool g_glx_texture_from_pixmap_supported = false;
 bool g_glx_oml_sync_control_supported = false;
 
@@ -115,8 +117,7 @@ GLXFBConfig GetConfigForWindow(Display* display,
   return nullptr;
 }
 
-class OMLSyncControlVSyncProvider
-    : public gfx::SyncControlVSyncProvider {
+class OMLSyncControlVSyncProvider : public gl::SyncControlVSyncProvider {
  public:
   explicit OMLSyncControlVSyncProvider(GLXWindow glx_window)
       : SyncControlVSyncProvider(),
@@ -223,7 +224,8 @@ class SGIVideoSyncProviderThreadShim {
     DCHECK(nullptr != context_);
   }
 
-  void GetVSyncParameters(const VSyncProvider::UpdateVSyncCallback& callback) {
+  void GetVSyncParameters(
+      const gfx::VSyncProvider::UpdateVSyncCallback& callback) {
     base::TimeTicks now;
     {
       // Don't allow |window_| destruction while we're probing vsync.
@@ -254,7 +256,7 @@ class SGIVideoSyncProviderThreadShim {
  private:
   // For initialization of display_ in GLSurface::InitializeOneOff before
   // the sandbox goes up.
-  friend class gfx::GLSurfaceGLX;
+  friend class gl::GLSurfaceGLX;
 
   static Display* display_;
 
@@ -298,7 +300,7 @@ class SGIVideoSyncVSyncProvider
   }
 
   void GetVSyncParameters(
-      const VSyncProvider::UpdateVSyncCallback& callback) override {
+      const gfx::VSyncProvider::UpdateVSyncCallback& callback) override {
     if (kGetVSyncParametersMinSeconds > 0) {
       base::TimeTicks now = base::TimeTicks::Now();
       base::TimeDelta delta = now - last_get_vsync_parameters_time_;
@@ -310,7 +312,7 @@ class SGIVideoSyncVSyncProvider
     // Only one outstanding request per surface.
     if (!pending_callback_) {
       pending_callback_.reset(
-          new VSyncProvider::UpdateVSyncCallback(callback));
+          new gfx::VSyncProvider::UpdateVSyncCallback(callback));
       vsync_thread_->message_loop()->PostTask(
           FROM_HERE,
           base::Bind(&SGIVideoSyncProviderThreadShim::GetVSyncParameters,
@@ -334,7 +336,7 @@ class SGIVideoSyncVSyncProvider
   // Thread shim through which the sync provider is accessed on |vsync_thread_|.
   std::unique_ptr<SGIVideoSyncProviderThreadShim> shim_;
 
-  std::unique_ptr<VSyncProvider::UpdateVSyncCallback> pending_callback_;
+  std::unique_ptr<gfx::VSyncProvider::UpdateVSyncCallback> pending_callback_;
 
   // Raw pointers to sync primitives owned by the shim_.
   // These will only be referenced before we post a task to destroy
@@ -391,6 +393,10 @@ bool GLSurfaceGLX::InitializeOneOff() {
       HasGLXExtension("GLX_ARB_create_context");
   g_glx_create_context_robustness_supported =
       HasGLXExtension("GLX_ARB_create_context_robustness");
+  g_glx_create_context_profile_supported =
+      HasGLXExtension("GLX_ARB_create_context_profile");
+  g_glx_create_context_profile_es2_supported =
+      HasGLXExtension("GLX_ARB_create_context_es2_profile");
   g_glx_texture_from_pixmap_supported =
       HasGLXExtension("GLX_EXT_texture_from_pixmap");
   g_glx_oml_sync_control_supported =
@@ -424,6 +430,16 @@ bool GLSurfaceGLX::IsCreateContextSupported() {
 // static
 bool GLSurfaceGLX::IsCreateContextRobustnessSupported() {
   return g_glx_create_context_robustness_supported;
+}
+
+// static
+bool GLSurfaceGLX::IsCreateContextProfileSupported() {
+  return g_glx_create_context_profile_supported;
+}
+
+// static
+bool GLSurfaceGLX::IsCreateContextES2ProfileSupported() {
+  return g_glx_create_context_profile_es2_supported;
 }
 
 // static
@@ -554,7 +570,7 @@ void* NativeViewGLSurfaceGLX::GetHandle() {
 }
 
 bool NativeViewGLSurfaceGLX::SupportsPostSubBuffer() {
-  return gfx::g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer;
+  return gl::g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer;
 }
 
 void* NativeViewGLSurfaceGLX::GetConfig() {
@@ -567,12 +583,12 @@ gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(int x,
                                                       int y,
                                                       int width,
                                                       int height) {
-  DCHECK(gfx::g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer);
+  DCHECK(gl::g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer);
   glXCopySubBufferMESA(g_display, GetDrawableHandle(), x, y, width, height);
   return gfx::SwapResult::SWAP_ACK;
 }
 
-VSyncProvider* NativeViewGLSurfaceGLX::GetVSyncProvider() {
+gfx::VSyncProvider* NativeViewGLSurfaceGLX::GetVSyncProvider() {
   return vsync_provider_.get();
 }
 
@@ -645,4 +661,4 @@ UnmappedNativeViewGLSurfaceGLX::~UnmappedNativeViewGLSurfaceGLX() {
   Destroy();
 }
 
-}  // namespace gfx
+}  // namespace gl

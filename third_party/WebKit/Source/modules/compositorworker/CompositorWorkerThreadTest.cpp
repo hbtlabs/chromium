@@ -5,7 +5,9 @@
 #include "modules/compositorworker/CompositorWorkerThread.h"
 
 #include "bindings/core/v8/ScriptSourceCode.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8GCController.h"
+#include "core/dom/CompositorProxyClient.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
@@ -34,7 +36,7 @@ public:
     }
 
     // (Empty) WorkerReportingProxy implementation:
-    virtual void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId) {}
+    virtual void reportException(const String& errorMessage, PassOwnPtr<SourceLocation>) {}
     void reportConsoleMessage(ConsoleMessage*) override {}
     void postMessageToPageInspector(const String&) override {}
     void postWorkerConsoleAgentEnabled() override {}
@@ -55,6 +57,17 @@ private:
     }
 
     Persistent<ExecutionContext> m_executionContext;
+};
+
+class TestCompositorProxyClient
+    : public GarbageCollected<TestCompositorProxyClient>
+    , public CompositorProxyClient {
+    USING_GARBAGE_COLLECTED_MIXIN(TestCompositorProxyClient);
+public:
+    TestCompositorProxyClient() {}
+
+    void setGlobalScope(WorkerGlobalScope*) override {}
+    void runAnimationFrameCallbacks() override {}
 };
 
 class CompositorWorkerTestPlatform : public TestingPlatformSupport {
@@ -90,14 +103,15 @@ public:
 
     void TearDown() override
     {
-        m_page.clear();
+        m_page.reset();
         CompositorWorkerThread::resetSharedBackingThreadForTest();
     }
 
     PassOwnPtr<CompositorWorkerThread> createCompositorWorker()
     {
         OwnPtr<CompositorWorkerThread> workerThread = CompositorWorkerThread::create(nullptr, *m_objectProxy, 0);
-        WorkerClients* clients = nullptr;
+        WorkerClients* clients = WorkerClients::create();
+        provideCompositorProxyClientTo(clients, new TestCompositorProxyClient);
         workerThread->start(WorkerThreadStartupData::create(
             KURL(ParsedURLString, "http://fake.url/"),
             "fake user agent",

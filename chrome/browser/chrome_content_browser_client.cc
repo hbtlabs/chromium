@@ -198,6 +198,10 @@
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/user_manager/user_manager.h"
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/browser/chromeos/chrome_interface_factory.h"
+#include "chrome/browser/ui/ash/ash_util.h"
+#endif  // MOJO_SHELL_CLIENT
 #elif defined(OS_LINUX)
 #include "chrome/browser/chrome_browser_main_linux.h"
 #elif defined(OS_ANDROID)
@@ -989,7 +993,7 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       data_reduction_proxy_settings));
   host->AddFilter(new startup_metric_utils::StartupMetricMessageFilter());
 
-  host->Send(new ChromeViewMsg_SetIsIncognitoProcess(
+  host->GetImmediateSender()->Send(new ChromeViewMsg_SetIsIncognitoProcess(
       profile->IsOffTheRecord()));
 
   for (size_t i = 0; i < extra_parts_.size(); ++i)
@@ -1006,7 +1010,8 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
     GetRendererContentSettingRules(
         HostContentSettingsMapFactory::GetForProfile(profile), &rules);
   }
-  host->Send(new ChromeViewMsg_SetContentSettingRules(rules));
+  host->GetImmediateSender()->Send(
+      new ChromeViewMsg_SetContentSettingRules(rules));
 }
 
 GURL ChromeContentBrowserClient::GetEffectiveURL(
@@ -1092,16 +1097,6 @@ void ChromeContentBrowserClient::GetAdditionalWebUISchemes(
     std::vector<std::string>* additional_schemes) {
   additional_schemes->push_back(chrome::kChromeSearchScheme);
   additional_schemes->push_back(dom_distiller::kDomDistillerScheme);
-}
-
-void ChromeContentBrowserClient::GetAdditionalWebUIHostsToIgnoreParititionCheck(
-    std::vector<std::string>* hosts) {
-  hosts->push_back(chrome::kChromeUIExtensionIconHost);
-  hosts->push_back(chrome::kChromeUIFaviconHost);
-  hosts->push_back(chrome::kChromeUIThemeHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost2);
-  hosts->push_back(chrome::kChromeUIThumbnailListHost);
 }
 
 bool ChromeContentBrowserClient::LogWebUIUrl(const GURL& web_ui_url) const {
@@ -2922,11 +2917,7 @@ ChromeContentBrowserClient::GetDevToolsManagerDelegate() {
 }
 
 content::TracingDelegate* ChromeContentBrowserClient::GetTracingDelegate() {
-#if !defined(OS_ANDROID)
   return new ChromeTracingDelegate();
-#else
-  return nullptr;
-#endif
 }
 
 bool ChromeContentBrowserClient::IsPluginAllowedToCallRequestOSFileHandle(
@@ -2951,6 +2942,17 @@ bool ChromeContentBrowserClient::IsPluginAllowedToUseDevChannelAPIs(
 #else
   return false;
 #endif
+}
+
+void ChromeContentBrowserClient::AddMojoShellConnectionListeners() {
+#if defined(OS_CHROMEOS)
+#if defined(MOJO_SHELL_CLIENT)
+  if (chrome::IsRunningInMash()) {
+    content::MojoShellConnection::Get()->AddListener(
+        base::WrapUnique(new chromeos::ChromeInterfaceFactory));
+  }
+#endif  // MOJO_SHELL_CLIENT
+#endif  // OS_CHROMEOS
 }
 
 void ChromeContentBrowserClient::OverridePageVisibilityState(

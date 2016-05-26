@@ -24,7 +24,6 @@
 #include "core/layout/LayoutBlock.h"
 
 #include "core/HTMLNames.h"
-#include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
@@ -42,39 +41,22 @@
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutFlowThread.h"
 #include "core/layout/LayoutGrid.h"
-#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
-#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTableCell.h"
-#include "core/layout/LayoutTextCombine.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
+#include "core/layout/api/LineLayoutBox.h"
 #include "core/layout/api/LineLayoutItem.h"
-#include "core/layout/line/GlyphOverflow.h"
-#include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/page/Page.h"
 #include "core/paint/BlockPainter.h"
-#include "core/paint/BoxPainter.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
-#include "core/style/ContentData.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/geometry/FloatQuad.h"
-#include "platform/geometry/TransformState.h"
 #include "wtf/StdLibExtras.h"
-#include "wtf/TemporaryChange.h"
-
-using namespace WTF;
-using namespace Unicode;
 
 namespace blink {
-
-using namespace HTMLNames;
 
 struct SameSizeAsLayoutBlock : public LayoutBox {
     LayoutObjectChildList children;
@@ -479,7 +461,7 @@ void LayoutBlock::addOverflowFromChildren()
 
 void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
 {
-    m_overflow.clear();
+    m_overflow.reset();
 
     // Add overflow from children.
     addOverflowFromChildren();
@@ -1466,7 +1448,7 @@ bool LayoutBlock::hasLineIfEmpty() const
     if (node()->isRootEditableElement())
         return true;
 
-    if (node()->isShadowRoot() && isHTMLInputElement(*toShadowRoot(node())->host()))
+    if (node()->isShadowRoot() && isHTMLInputElement(toShadowRoot(node())->host()))
         return true;
 
     return false;

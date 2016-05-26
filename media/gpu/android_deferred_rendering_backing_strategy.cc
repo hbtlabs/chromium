@@ -37,25 +37,35 @@ AndroidDeferredRenderingBackingStrategy::
 AndroidDeferredRenderingBackingStrategy::
     ~AndroidDeferredRenderingBackingStrategy() {}
 
-gfx::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
+gl::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
     int surface_view_id) {
   shared_state_ = new AVDASharedState();
 
-  // Create a texture for the SurfaceTexture to use.  We don't attach it here
-  // so that it gets attached in the compositor gl context in the common case.
-  GLuint service_id = 0;
+  // Create a texture for the SurfaceTexture to use.
+  GLuint service_id;
   glGenTextures(1, &service_id);
   DCHECK(service_id);
   shared_state_->set_surface_texture_service_id(service_id);
 
-  gfx::ScopedJavaSurface surface;
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_EXTERNAL_OES, service_id);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  state_provider_->GetGlDecoder()->RestoreTextureUnitBindings(0);
+  state_provider_->GetGlDecoder()->RestoreActiveTexture();
+  DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+
+  gl::ScopedJavaSurface surface;
   if (surface_view_id != media::VideoDecodeAccelerator::Config::kNoSurfaceID) {
     surface = gpu::GpuSurfaceLookup::GetInstance()->AcquireJavaSurface(
         surface_view_id);
   } else {
     bool using_virtual_context = false;
-    if (gfx::GLContext* context = gfx::GLContext::GetCurrent()) {
-      if (gfx::GLShareGroup* share_group = context->share_group())
+    if (gl::GLContext* context = gl::GLContext::GetCurrent()) {
+      if (gl::GLShareGroup* share_group = context->share_group())
         using_virtual_context = !!share_group->GetSharedContext();
     }
     UMA_HISTOGRAM_BOOLEAN("Media.AVDA.VirtualContext", using_virtual_context);
@@ -65,9 +75,9 @@ gfx::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
     // attach when needed.  However, given that it also fails a lot, we just
     // don't do it at all.  If virtual contexts are in use, then it doesn't
     // even save us a context switch.
-    surface_texture_ = gfx::SurfaceTexture::Create(service_id);
+    surface_texture_ = gl::SurfaceTexture::Create(service_id);
     shared_state_->DidAttachSurfaceTexture();
-    surface = gfx::ScopedJavaSurface(surface_texture_.get());
+    surface = gl::ScopedJavaSurface(surface_texture_.get());
   }
 
   return surface;
@@ -99,7 +109,7 @@ void AndroidDeferredRenderingBackingStrategy::Cleanup(
     glDeleteTextures(1, &service_id);
 }
 
-scoped_refptr<gfx::SurfaceTexture>
+scoped_refptr<gl::SurfaceTexture>
 AndroidDeferredRenderingBackingStrategy::GetSurfaceTexture() const {
   return surface_texture_;
 }
@@ -346,7 +356,7 @@ void AndroidDeferredRenderingBackingStrategy::CopySurfaceTextureToPictures(
   GLuint tmp_texture_id;
   glGenTextures(1, &tmp_texture_id);
   {
-    gfx::ScopedTextureBinder texture_binder(GL_TEXTURE_2D, tmp_texture_id);
+    gl::ScopedTextureBinder texture_binder(GL_TEXTURE_2D, tmp_texture_id);
     // The target texture's size will exactly match the source.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -373,7 +383,7 @@ void AndroidDeferredRenderingBackingStrategy::CopySurfaceTextureToPictures(
   // the EGLImage with the PictureBuffer textures they will remain valid even
   // after we delete the 2D texture and EGLImage.
   const EGLImageKHR egl_image = eglCreateImageKHR(
-      gfx::GLSurfaceEGL::GetHardwareDisplay(), eglGetCurrentContext(),
+      gl::GLSurfaceEGL::GetHardwareDisplay(), eglGetCurrentContext(),
       EGL_GL_TEXTURE_2D_KHR, reinterpret_cast<EGLClientBuffer>(tmp_texture_id),
       nullptr /* attrs */);
 
@@ -390,14 +400,14 @@ void AndroidDeferredRenderingBackingStrategy::CopySurfaceTextureToPictures(
         state_provider_->GetTextureForPicture(entry.second);
     if (!texture_ref)
       continue;
-    gfx::ScopedTextureBinder texture_binder(
+    gl::ScopedTextureBinder texture_binder(
         GL_TEXTURE_EXTERNAL_OES, texture_ref->texture()->service_id());
     glEGLImageTargetTexture2DOES(GL_TEXTURE_EXTERNAL_OES, egl_image);
     DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
   }
 
   EGLBoolean result =
-      eglDestroyImageKHR(gfx::GLSurfaceEGL::GetHardwareDisplay(), egl_image);
+      eglDestroyImageKHR(gl::GLSurfaceEGL::GetHardwareDisplay(), egl_image);
   if (result == EGL_FALSE) {
     DLOG(ERROR) << "Error destroying EGLImage: " << ui::GetLastEGLErrorString();
   }

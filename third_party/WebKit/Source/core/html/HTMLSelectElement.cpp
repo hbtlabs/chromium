@@ -61,7 +61,6 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutListBox.h"
 #include "core/layout/LayoutMenuList.h"
-#include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/ChromeClient.h"
@@ -502,7 +501,7 @@ void HTMLSelectElement::setLength(unsigned newLen, ExceptionState& exceptionStat
 
     if (diff < 0) { // Add dummy elements.
         do {
-            appendChild(document().createElement(optionTag, false), exceptionState);
+            appendChild(document().createElement(optionTag, CreatedByCreateElement), exceptionState);
             if (exceptionState.hadException())
                 break;
         } while (++diff);
@@ -2032,8 +2031,16 @@ HTMLSelectElement::PopupUpdater::PopupUpdater(HTMLSelectElement& select)
     : m_select(select)
 {
     m_observer = MutationObserver::create(this);
+    Vector<String> filter;
+    filter.reserveCapacity(4);
+    // Observe only attributes which affect popup content.
+    filter.append(String("disabled"));
+    filter.append(String("label"));
+    filter.append(String("selected"));
+    filter.append(String("value"));
     MutationObserverInit init;
     init.setAttributes(true);
+    init.setAttributeFilter(filter);
     init.setCharacterData(true);
     init.setChildList(true);
     init.setSubtree(true);

@@ -5,8 +5,8 @@
 #include "cc/tiles/gpu_image_decode_controller.h"
 
 #include "cc/playback/draw_image.h"
-#include "cc/raster/tile_task.h"
 #include "cc/test/test_context_provider.h"
+#include "cc/test/test_tile_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -40,34 +40,6 @@ SkMatrix CreateMatrix(const SkSize& scale, bool is_decomposable) {
   return matrix;
 }
 
-void ScheduleTask(TileTask* task) {
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-}
-
-void RunTask(TileTask* task) {
-  // TODO(prashant.n): Once ScheduleOnOriginThread() and
-  // CompleteOnOriginThread() functions are removed, modify this function
-  // accordingly. (crbug.com/599863)
-  task->state().DidSchedule();
-  task->state().DidStart();
-  task->RunOnWorkerThread();
-  task->state().DidFinish();
-}
-
-void CompleteTask(TileTask* task) {
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
-}
-
-void ProcessTask(TileTask* task) {
-  ScheduleTask(task);
-  RunTask(task);
-  CompleteTask(task);
-}
-
 TEST(GpuImageDecodeControllerTest, GetTaskForImageSameImage) {
   auto context_provider = TestContextProvider::Create();
   context_provider->BindToCurrentThread();
@@ -94,8 +66,8 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageSameImage) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task.get() == another_task.get());
 
-  ProcessTask(task->dependencies()[0].get());
-  ProcessTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task.get());
 
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
@@ -130,10 +102,10 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageDifferentImage) {
   EXPECT_TRUE(second_task);
   EXPECT_TRUE(first_task.get() != second_task.get());
 
-  ProcessTask(first_task->dependencies()[0].get());
-  ProcessTask(first_task.get());
-  ProcessTask(second_task->dependencies()[0].get());
-  ProcessTask(second_task.get());
+  TestTileTaskRunner::ProcessTask(first_task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(first_task.get());
+  TestTileTaskRunner::ProcessTask(second_task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(second_task.get());
 
   controller.UnrefImage(first_draw_image);
   controller.UnrefImage(second_draw_image);
@@ -159,12 +131,12 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyDecodedAndLocked) {
   EXPECT_TRUE(task->dependencies()[0]);
 
   // Run the decode but don't complete it (this will keep the decode locked).
-  ScheduleTask(task->dependencies()[0].get());
-  RunTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ScheduleTask(task->dependencies()[0].get());
+  TestTileTaskRunner::RunTask(task->dependencies()[0].get());
 
   // Cancel the upload.
-  ScheduleTask(task.get());
-  CompleteTask(task.get());
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Get the image again - we should have an upload task, but no dependent
   // decode task, as the decode was already locked.
@@ -175,10 +147,10 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyDecodedAndLocked) {
   EXPECT_TRUE(another_task);
   EXPECT_EQ(another_task->dependencies().size(), 0u);
 
-  ProcessTask(another_task.get());
+  TestTileTaskRunner::ProcessTask(another_task.get());
 
   // Finally, complete the original decode task.
-  CompleteTask(task->dependencies()[0].get());
+  TestTileTaskRunner::CompleteTask(task->dependencies()[0].get());
 
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
@@ -204,11 +176,11 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyDecodedNotLocked) {
   EXPECT_TRUE(task->dependencies()[0]);
 
   // Run the decode.
-  ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
 
   // Cancel the upload.
-  ScheduleTask(task.get());
-  CompleteTask(task.get());
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Unref the image.
   controller.UnrefImage(draw_image);
@@ -223,8 +195,8 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyDecodedNotLocked) {
   EXPECT_EQ(another_task->dependencies().size(), 1u);
   EXPECT_TRUE(task->dependencies()[0]);
 
-  ProcessTask(another_task->dependencies()[0].get());
-  ProcessTask(another_task.get());
+  TestTileTaskRunner::ProcessTask(another_task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(another_task.get());
 
   controller.UnrefImage(draw_image);
 }
@@ -248,9 +220,9 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyUploaded) {
   EXPECT_EQ(task->dependencies().size(), 1u);
   EXPECT_TRUE(task->dependencies()[0]);
 
-  ProcessTask(task->dependencies()[0].get());
-  ScheduleTask(task.get());
-  RunTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ScheduleTask(task.get());
+  TestTileTaskRunner::RunTask(task.get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -258,7 +230,7 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageAlreadyUploaded) {
   EXPECT_TRUE(need_unref);
   EXPECT_FALSE(another_task);
 
-  CompleteTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
@@ -281,8 +253,7 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  ProcessTask(task->dependencies()[0].get());
-  ScheduleTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -290,8 +261,9 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(another_task.get() == task.get());
 
-  // Didn't run the task, complete it (it was canceled).
-  CompleteTask(task.get());
+  // Didn't run the task, so cancel it.
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Fully cancel everything (so the raster would unref things).
   controller.UnrefImage(draw_image);
@@ -305,8 +277,8 @@ TEST(GpuImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
 
-  ProcessTask(third_task->dependencies()[0].get());
-  ProcessTask(third_task.get());
+  TestTileTaskRunner::ProcessTask(third_task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(third_task.get());
 
   controller.UnrefImage(draw_image);
 }
@@ -329,8 +301,7 @@ TEST(GpuImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  ProcessTask(task->dependencies()[0].get());
-  ScheduleTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -338,8 +309,9 @@ TEST(GpuImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(another_task.get() == task.get());
 
-  // Didn't run the task, complete it (it was canceled).
-  CompleteTask(task.get());
+  // Didn't run the task, so cancel it.
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Note that here, everything is reffed, but a new task is created. This is
   // possible with repeated schedule/cancel operations.
@@ -350,8 +322,8 @@ TEST(GpuImageDecodeControllerTest,
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
 
-  ProcessTask(third_task->dependencies()[0].get());
-  ProcessTask(third_task.get());
+  TestTileTaskRunner::ProcessTask(third_task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(third_task.get());
 
   // 3 Unrefs!
   controller.UnrefImage(draw_image);
@@ -376,10 +348,10 @@ TEST(GpuImageDecodeControllerTest, NoTaskForImageAlreadyFailedDecoding) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  ProcessTask(task->dependencies()[0].get());
-  ScheduleTask(task.get());
-  // Didn't run the task, complete it (it was canceled).
-  CompleteTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  // Didn't run the task, so cancel it.
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   controller.SetImageDecodingFailedForTesting(draw_image);
 
@@ -409,8 +381,8 @@ TEST(GpuImageDecodeControllerTest, GetDecodedImageForDraw) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  ProcessTask(task->dependencies()[0].get());
-  ProcessTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task.get());
 
   // Must hold context lock before calling GetDecodedImageForDraw /
   // DrawWithImageFinished.
@@ -443,8 +415,8 @@ TEST(GpuImageDecodeControllerTest, GetLargeDecodedImageForDraw) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  ProcessTask(task->dependencies()[0].get());
-  ProcessTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task.get());
 
   // Must hold context lock before calling GetDecodedImageForDraw /
   // DrawWithImageFinished.
@@ -688,10 +660,10 @@ TEST(GpuImageDecodeControllerTest, CanceledTasksDoNotCountAgainstBudget) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
-  ScheduleTask(task->dependencies()[0].get());
-  CompleteTask(task->dependencies()[0].get());
-  ScheduleTask(task.get());
-  CompleteTask(task.get());
+  TestTileTaskRunner::CancelTask(task->dependencies()[0].get());
+  TestTileTaskRunner::CompleteTask(task->dependencies()[0].get());
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   controller.UnrefImage(draw_image);
   EXPECT_EQ(0u, controller.GetBytesUsedForTesting());
@@ -716,8 +688,8 @@ TEST(GpuImageDecodeControllerTest, ShouldAggressivelyFreeResources) {
     EXPECT_TRUE(task);
   }
 
-  ProcessTask(task->dependencies()[0].get());
-  ProcessTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task.get());
 
   controller.UnrefImage(draw_image);
 
@@ -746,8 +718,8 @@ TEST(GpuImageDecodeControllerTest, ShouldAggressivelyFreeResources) {
     EXPECT_TRUE(task);
   }
 
-  ProcessTask(task->dependencies()[0].get());
-  ProcessTask(task.get());
+  TestTileTaskRunner::ProcessTask(task->dependencies()[0].get());
+  TestTileTaskRunner::ProcessTask(task.get());
 
   // The image should be in our cache after un-ref.
   controller.UnrefImage(draw_image);

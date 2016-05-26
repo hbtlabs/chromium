@@ -22,7 +22,12 @@ namespace {
 class TestAdapter : public PrerenderAdapter {
  public:
   explicit TestAdapter(PrerenderAdapter::Observer* observer)
-      : PrerenderAdapter(observer), observer_(observer) {}
+      : PrerenderAdapter(observer),
+        active_(false),
+        disabled_(false),
+        observer_(observer),
+        web_contents_(nullptr),
+        final_status_(prerender::FinalStatus::FINAL_STATUS_MAX) {}
   ~TestAdapter() override {}
 
   // PrerenderAdapter implementation.

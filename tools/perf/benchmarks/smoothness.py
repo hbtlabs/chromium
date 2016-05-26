@@ -261,23 +261,6 @@ class SmoothnessSimpleMobilePages(_Smoothness):
 
 
 @benchmark.Enabled('android')
-class SmoothnessFlingSimpleMobilePages(_Smoothness):
-  """Measures rendering statistics for flinging a simple mobile sites page set.
-  """
-  page_set = page_sets.SimpleMobileSitesFlingPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    # As the fling parameters cannot be analytically determined to not
-    # overscroll, disable overscrolling explicitly. Overscroll behavior is
-    # orthogonal to fling performance, and its activation is only more noise.
-    options.AppendExtraBrowserArgs('--disable-overscroll-edge-effect')
-
-  @classmethod
-  def Name(cls):
-    return 'smoothness.fling.simple_mobile_sites'
-
-
-@benchmark.Enabled('android')
 class SmoothnessToughPinchZoomCases(_Smoothness):
   """Measures rendering statistics for pinch-zooming in the tough pinch zoom
   cases.
@@ -512,21 +495,6 @@ class SmoothnessScrollingToughAdCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.scrolling_tough_ad_cases'
-
-
-@benchmark.Disabled('android-reference')  # crbug.com/588786
-@benchmark.Disabled('mac', 'win')  # crbug.com/522619 (mac/win)
-class SmoothnessBidirectionallyScrollingToughAdCases(_Smoothness):
-  """Measures rendering statistics while scrolling advertisements."""
-  page_set = page_sets.BidirectionallyScrollingToughAdCasesPageSet
-
-  def SetExtraBrowserOptions(self, options):
-    # Don't accidentally reload the page while scrolling.
-    options.AppendExtraBrowserArgs('--disable-pull-to-refresh-effect')
-
-  @classmethod
-  def Name(cls):
-    return 'smoothness.bidirectionally_scrolling_tough_ad_cases'
 
 
 class SmoothnessToughWebGLAdCases(_Smoothness):

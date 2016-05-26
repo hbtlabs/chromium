@@ -454,6 +454,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Android.StrictMode.DocumentModeSharedPrefs" units="ms">
+  <obsolete>
+    Deprecated 05/2016 in Issue 582539 with the removal of document mode.
+  </obsolete>
   <owner>hartmanng@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -463,6 +466,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Android.StrictMode.DocumentTabStateLoad" units="ms">
+  <obsolete>
+    Deprecated 05/2016 in Issue 582539 with the removal of document mode.
+  </obsolete>
   <owner>wnwen@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -3434,6 +3440,31 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Blink.Binding.InitializeWindowProxy" units="ms">
+  <owner>peria@chromium.org</owner>
+  <summary>Time spent initializing WindowProxy during a page loading.</summary>
+</histogram>
+
+<histogram name="Blink.Canvas.DrawImage" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <summary>Time spent on 2D canvas drawImage API call.</summary>
+</histogram>
+
+<histogram name="Blink.Canvas.GetImageData" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <summary>Time spent on 2D canvas getImageData API call.</summary>
+</histogram>
+
+<histogram name="Blink.Canvas.PutImageData" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <summary>Time spent on 2D canvas putImageData API call.</summary>
+</histogram>
+
+<histogram name="Blink.Canvas.ToDataURL" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <summary>Time spent on 2D canvas toDataURL API call.</summary>
+</histogram>
+
 <histogram name="Blink.Compositing.UpdateTime" units="microseconds">
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -3441,9 +3472,52 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Blink.DecodedImage.CanvasExpanded"
+    enum="BooleanCanvasExpanded">
+  <owner>ryansturm@chromium.org</owner>
+  <owner>bengr@google.com</owner>
+  <summary>
+    The original canvas dimensions were sufficient to determine image size. This
+    is logged once per image header decode, which happens typically twice per
+    image on the page.
+  </summary>
+</histogram>
+
+<histogram name="Blink.DecodedImage.EffectiveDimensionsLocation" units="bytes">
+  <owner>ryansturm@chromium.org</owner>
+  <owner>bengr@google.com</owner>
+  <summary>
+    How many bytes of the file were read before an image width and height were
+    determined. This is logged once per image header decode, which happens
+    typically twice per image on the page.
+  </summary>
+</histogram>
+
 <histogram name="Blink.DecodedImage.Orientation" enum="DecodedImageOrientation">
   <owner>rob.buis@samsung.org</owner>
   <summary>Image orientation inferred during decode.</summary>
+</histogram>
+
+<histogram name="Blink.DecodedImage.XCanvasExpansion" units="bytes">
+  <owner>ryansturm@chromium.org</owner>
+  <owner>bengr@google.com</owner>
+  <summary>
+    How much the canvas width needed to be expanded as a result of the first
+    frame's width and x-offset being larger than the initial canvas width. This
+    is logged once per image header decode, which happens typically twice per
+    image on the page.
+  </summary>
+</histogram>
+
+<histogram name="Blink.DecodedImage.YCanvasExpansion" units="bytes">
+  <owner>ryansturm@chromium.org</owner>
+  <owner>bengr@google.com</owner>
+  <summary>
+    How much the canvas height needed to be expanded as a result of the first
+    frame's height and y-offset being larger than the initial canvas height.
+    This is logged once per image header decode, which happens typically twice
+    per image on the page.
+  </summary>
 </histogram>
 
 <histogram name="Blink.DecodedImageType" enum="DecodedImageType">
@@ -11898,6 +11972,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Event.Latency.BlockingTime.TouchMoveDefaultAllowed"
+    units="microseconds">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Time between the renderer main thread receiving a touchmove event and acking
+    it, for events which were not preventDefaulted.
+  </summary>
+</histogram>
+
+<histogram name="Event.Latency.BlockingTime.TouchMoveDefaultPrevented"
+    units="microseconds">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Time between the renderer main thread receiving a touchmove event and acking
+    it, for events which were preventDefaulted.
+  </summary>
+</histogram>
+
 <histogram name="Event.Latency.Browser" units="microseconds">
   <owner>rbyers@chromium.org</owner>
   <summary>
@@ -12226,6 +12318,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Duration of a recursive hitTest operation. The hit test is recursive when
     the AllowChildFrameContent flag is set. See also Event.Latency.HitTest.
+  </summary>
+</histogram>
+
+<histogram name="Event.Latency.QueueingTime.TouchMoveDefaultAllowed"
+    units="microseconds">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Time between sending a touchmove event to the renderer main thread and when
+    the renderer begins to process that event, for events which were not
+    preventDefaulted.
+  </summary>
+</histogram>
+
+<histogram name="Event.Latency.QueueingTime.TouchMoveDefaultPrevented"
+    units="microseconds">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    Time between sending a touchmove event to the renderer main thread and when
+    the renderer begins to process that event, for events which were
+    preventDefaulted.
   </summary>
 </histogram>
 
@@ -17788,6 +17900,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Net error results from restartable cache read errors.</summary>
 </histogram>
 
+<histogram name="HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    For each http cache transaction for which a cache entry exists but it cannot
+    be used because the entry's age is beyond its freshness: counts how many
+    freshness periods have elapsed since the entry was last used (x1000).
+  </summary>
+</histogram>
+
 <histogram name="HttpCache.ValidationCause" enum="HttpCacheValidationCause">
   <owner>jkarlin@chromium.org</owner>
   <summary>For each validation attempt, the cause for the validation.</summary>
@@ -22054,11 +22175,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Media.Vpx.VideoDecoderBuffersInUseByDecoder">
+  <obsolete>
+    Deprecated 05/2016.
+  </obsolete>
   <owner>dcastagna@chromium.org</owner>
   <summary>Number of frame buffers used by Vpx decoder.</summary>
 </histogram>
 
 <histogram name="Media.Vpx.VideoDecoderBuffersInUseByDecoderAndVideoFrame">
+  <obsolete>
+    Deprecated 05/2016.
+  </obsolete>
   <owner>dcastagna@chromium.org</owner>
   <summary>
     Number of frame buffers currently in use by both Vpx decoder and a
@@ -25193,6 +25320,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     preferences and cache. This tracks positive values (when the difference
     between preferences size is greater than memory cache size). Non positive
     values are tracked by Net.AlternativeServiceServers.MoreOrEqualCacheEntries.
+  </summary>
+</histogram>
+
+<histogram name="Net.AlternativeServiceTypeForRequest"
+    enum="AlternativeServiceType">
+  <owner>bnc@chromium.org</owner>
+  <summary>
+    Information about the AlternativeService used for each request.
   </summary>
 </histogram>
 
@@ -33762,6 +33897,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.Snippets.CardClickedAge" units="min">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Android: The age of the snippets card on the NTP, that is clicked through to
+    the host website of the content. The age is measured from the moment the
+    content has been published. In each &quot;_x_y&quot; suffix of the
+    histogram, only snippets on positions \gt;=x and \lt;=y are tracked.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardClickedScore" units="score">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Android: The score of the snippets card on the NTP, that is clicked through
+    to the host website of the content. The recorded score is from the moment
+    the snippet was fetched, it could have changed since. In each &quot;_x&quot;
+    suffix  of the histogram, only snippets on positions \lt;=x are tracked.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.Snippets.CardExpanded">
   <owner>knn@chromium.org</owner>
   <summary>
@@ -37219,6 +37374,44 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Permissions.Prompt.Accepted" enum="PermissionBubbleType">
+  <owner>benwells@chromium.org</owner>
+  <owner>tsergeant@chromium.org</owner>
+  <summary>
+    Tracks the permission bubbles (merged and non-merged) that are accepted.
+    Merged bubbles are considered accepted if all permissions are allowed.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.Prompt.Denied" enum="PermissionBubbleType">
+  <owner>benwells@chromium.org</owner>
+  <owner>tsergeant@chromium.org</owner>
+  <summary>
+    Tracks the permission bubbles (merged and non-merged) that are denied.
+    Merged bubbles are considered denied if any permission is denied.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.Prompt.MergedBubbleAccepted"
+    enum="PermissionBubbleType">
+  <owner>benwells@chromium.org</owner>
+  <owner>tsergeant@chromium.org</owner>
+  <summary>
+    Tracks acceptance of permission bubble request types that have been merged
+    into coalesced bubbles.
+  </summary>
+</histogram>
+
+<histogram name="Permissions.Prompt.MergedBubbleDenied"
+    enum="PermissionBubbleType">
+  <owner>benwells@chromium.org</owner>
+  <owner>tsergeant@chromium.org</owner>
+  <summary>
+    Tracks denial of permission bubble request types that have been merged into
+    coalesced bubbles.
+  </summary>
+</histogram>
+
 <histogram name="Permissions.Prompt.MergedBubbleTypes"
     enum="PermissionBubbleType">
   <owner>benwells@chromium.org</owner>
@@ -37311,7 +37504,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>mmocny@chromium.org</owner>
   <summary>
     Round trip time to the metadata server for a Physical Web URL resolution
-    which the client requests during a foreground scan.
+    which the client requests during a foreground scan, that is not explicitly
+    requested via a refresh.
+  </summary>
+</histogram>
+
+<histogram name="PhysicalWeb.ResolveTime.Refresh" units="ms">
+  <owner>cco3@chromium.org</owner>
+  <owner>mattreynolds@chromium.org</owner>
+  <owner>mmocny@chromium.org</owner>
+  <summary>
+    Round trip time to the metadata server for a Physical Web URL resolution
+    which the client requests during a foreground scan, that is explicitly
+    requested via a refresh.
   </summary>
 </histogram>
 
@@ -41103,16 +41308,36 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="PreloadScanner.Counts" units="preloads">
   <owner>csharrison@chromium.org</owner>
+  <obsolete>
+    Deprecated 5/25/2016 in favor of PreloadScanner.Counts2
+  </obsolete>
   <summary>The number of preloads generated by the preload scanner.</summary>
 </histogram>
 
 <histogram name="PreloadScanner.Counts.Miss" units="preloads">
   <owner>csharrison@chromium.org</owner>
+  <obsolete>
+    Deprecated 5/25/2016 in favor of PreloadScanner.Counts2.Miss
+  </obsolete>
   <summary>
     The number of unused preloads generated by the preload scanner. Note that
     some link rel preloads are not referenced until after this point, so they
     will be falsely marked as preload misses. These will show up in the Raw
     bucket.
+  </summary>
+</histogram>
+
+<histogram name="PreloadScanner.Counts2" units="preloads">
+  <owner>csharrison@chromium.org</owner>
+  <summary>The number of preloads generated by the preload scanner.</summary>
+</histogram>
+
+<histogram name="PreloadScanner.Counts2.Miss" units="preloads">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The number of unused preloads generated by the preload scanner. Note that
+    some link rel preloads are not referenced until after this point, so they
+    will be falsely marked as preload misses.
   </summary>
 </histogram>
 
@@ -45182,30 +45407,78 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="SafeBrowsing.FileTypeUpdate.Result"
+<histogram name="SafeBrowsing.FileTypeUpdate.DynamicUpdateResult"
     enum="SBFileTypeUpdateResult">
   <owner>nparker@chromium.org</owner>
   <summary>
     The result of reading/parsing/accepting a new proto for the FileTypePolices
     repo of file extensions and their meta data.
+
+      This is for the file types loaded from the component-update system. This
+    includes both those loaded from disk shortly after startup, and those
+    received over the network when the component version changes
   </summary>
 </histogram>
 
-<histogram name="SafeBrowsing.FileTypeUpdate.TypeCount"
+<histogram name="SafeBrowsing.FileTypeUpdate.DynamicUpdateTypeCount"
     units="number of file types">
   <owner>nparker@chromium.org</owner>
   <summary>
     Number of file types (aka file extensions) present in the FileTypePolicies
     proto loaded.
+
+      This is for the file types loaded from the component-update system. This
+    includes both those loaded from disk shortly after startup, and those
+    received over the network when the component version changes
   </summary>
 </histogram>
 
-<histogram name="SafeBrowsing.FileTypeUpdate.Version"
+<histogram name="SafeBrowsing.FileTypeUpdate.DynamicUpdateVersion"
     units="FileTypePolicies Version">
   <owner>nparker@chromium.org</owner>
   <summary>
     Integer version number citing which version of the proto data chrome just
     loaded.  Latest version is in download_file_types.asciipb.
+
+      This is for the file types loaded from the component-update system. This
+    includes both those loaded from disk shortly after startup, and those
+    received over the network when the component version changes
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.FileTypeUpdate.ResourceBundleResult"
+    enum="SBFileTypeUpdateResult">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    The result of reading/parsing/accepting a new proto for the FileTypePolices
+    repo of file extensions and their meta data.
+
+      This is for the file types loaded from the resource bundle packaged with
+    Chrome, which is always loaded at startup.
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.FileTypeUpdate.ResourceBundleTypeCount"
+    units="number of file types">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    Number of file types (aka file extensions) present in the FileTypePolicies
+    proto loaded.
+
+      This is for the file types loaded from the resource bundle packaged with
+    Chrome, which is always loaded at startup.
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.FileTypeUpdate.ResourceBundleVersion"
+    units="FileTypePolicies Version">
+  <owner>nparker@chromium.org</owner>
+  <summary>
+    Integer version number citing which version of the proto data chrome just
+    loaded.  Latest version is in download_file_types.asciipb.
+
+      This is for the file types loaded from the resource bundle packaged with
+    Chrome, which is always loaded at startup.
   </summary>
 </histogram>
 
@@ -45272,10 +45545,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="SafeBrowsing.UnverifiedDownloads.Allowed"
     enum="SBClientDownloadExtensions">
   <owner>asanka@chromium.org</owner>
-  <obsolete>
-    Deprected. This was a temporary measure until PPAPI based download code
-    paths were migrated to use SafeBrowsing.
-  </obsolete>
   <summary>
     File types that were allowed to be downloaded without verifying their
     content nor their source URLs with Safe Browsing.
@@ -45285,10 +45554,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="SafeBrowsing.UnverifiedDownloads.AllowedByWhitelist"
     enum="SBClientDownloadExtensions">
   <owner>asanka@chromium.org</owner>
-  <obsolete>
-    Deprected. This was a temporary measure until PPAPI based download code
-    paths were migrated to use SafeBrowsing.
-  </obsolete>
   <summary>
     File types that were allowed to be downloaded without verifying their
     content nor their source URLs with Safe Browsing due to the requestor URL
@@ -45300,10 +45565,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="SafeBrowsing.UnverifiedDownloads.AllowedDueToDisabledService"
     enum="SBClientDownloadExtensions">
   <owner>asanka@chromium.org</owner>
-  <obsolete>
-    Deprected. This was a temporary measure until PPAPI based download code
-    paths were migrated to use SafeBrowsing.
-  </obsolete>
   <summary>
     File types that were allowed to be downloaded without verifying their
     content nor their source URLs with Safe Browsing due to the SafeBrowsing
@@ -45314,10 +45575,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="SafeBrowsing.UnverifiedDownloads.AlternateExtensionCount">
   <owner>asanka@chromium.org</owner>
-  <obsolete>
-    Deprected. This was a temporary measure until PPAPI based download code
-    paths were migrated to use SafeBrowsing.
-  </obsolete>
   <summary>
     Count of alternate extensions that were supplied when attempting to download
     a file without verifying their content nor their source URLs with Safe
@@ -45328,10 +45585,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="SafeBrowsing.UnverifiedDownloads.Blocked"
     enum="SBClientDownloadExtensions">
   <owner>asanka@chromium.org</owner>
-  <obsolete>
-    Deprected. This was a temporary measure until PPAPI based download code
-    paths were migrated to use SafeBrowsing.
-  </obsolete>
   <summary>
     File types that were blocked from downloaded without verifying their content
     nor their source URLs with Safe Browsing.
@@ -47580,6 +47833,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     main-side updates are compared to the impl-side updates. If there are no
     mid-frame updates, this metric is a good proxy for how well the main and
     impl threads are synchronized.
+  </summary>
+</histogram>
+
+<histogram name="Scheduling.PendingTreeDuration" units="microseconds">
+  <owner>ericrk@chromium.org</owner>
+  <summary>
+    Time between creating a pending tree and activating that tree. This differs
+    from Scheduling.ActivateDuration in that it includes time taken to raster
+    the pending tree, not just the time to activate it.
+
+    The interval is recorded each time a pending tree is activated.
   </summary>
 </histogram>
 
@@ -50291,6 +50555,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Tracks migration to per-partition zoom-level preferences during profile
     initialization.
+  </summary>
+</histogram>
+
+<histogram name="SettingsAppMonitor.InitializationResult" enum="BooleanSuccess">
+  <owner>grt@chromium.org</owner>
+  <summary>
+    Indicates whether or not the Windows Settings app monitor was initialized.
   </summary>
 </histogram>
 
@@ -62885,6 +63156,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="4" label="ALTERNATE_PROTOCOL_USAGE_BROKEN"/>
 </enum>
 
+<enum name="AlternativeServiceType" type="int">
+  <int value="0" label="No alternative service"/>
+  <int value="1" label="QUIC, destination same as origin"/>
+  <int value="2" label="QUIC, destination different from origin"/>
+  <int value="3" label="Not QUIC, destination same as origin"/>
+  <int value="4" label="Not QUIC, destination different from origin"/>
+</enum>
+
 <enum name="AndroidActivityId" type="int">
   <int value="1" label="Unknown"/>
   <int value="2" label="Main"/>
@@ -64442,6 +64721,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <enum name="BooleanCanCheckUrl" type="int">
   <int value="0" label="Skipped"/>
   <int value="1" label="Can check"/>
+</enum>
+
+<enum name="BooleanCanvasExpanded" type="int">
+  <int value="0" label="Original canvas dimensions were sufficient"/>
+  <int value="1" label="First image frame dimension were needed"/>
 </enum>
 
 <enum name="BooleanChanged" type="int">
@@ -71550,6 +71834,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1129" label="BLUETOOTHLOWENERGY_REMOVESERVICE"/>
   <int value="1130" label="AUTOFILLPRIVATE_GETADDRESSLIST"/>
   <int value="1131" label="AUTOFILLPRIVATE_GETCREDITCARDLIST"/>
+  <int value="1132" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONSTART"/>
+  <int value="1133" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONADJUST"/>
+  <int value="1134" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONRESET"/>
+  <int value="1135" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONCOMPLETE"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -73559,6 +73847,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1376" label="OpacityWithPreserve3DQuirk"/>
   <int value="1377" label="CSSSelectorPseudoReadOnly"/>
   <int value="1378" label="CSSSelectorPseudoReadWrite"/>
+  <int value="1379" label="UnloadHandler_Navigation"/>
+  <int value="1380" label="TouchStartUserGestureUtilized"/>
+  <int value="1381" label="TouchMoveUserGestureUtilized"/>
+  <int value="1382" label="TouchEndDuringScrollUserGestureUtilized"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -78131,6 +78423,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1832575380" label="show-saved-copy"/>
   <int value="-1832221649" label="disable-out-of-process-pac"/>
   <int value="-1821058653" label="enable-delay-agnostic-aec"/>
+  <int value="-1804485171" label="disable-fullscreen-tab-detaching"/>
   <int value="-1798337879" label="enable-md-downloads"/>
   <int value="-1772172557" label="enable-osk-overscroll"/>
   <int value="-1767470652" label="out-of-process-pdf"/>
@@ -78172,6 +78465,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1497338981" label="disable-accelerated-overflow-scroll"/>
   <int value="-1490298774" label="enable-captive-portal-bypass-proxy-option"/>
   <int value="-1482685863" label="enable-request-tablet-site"/>
+  <int value="-1478876902" label="disable-permission-action-reporting"/>
   <int value="-1467332609" label="tab-management-experiment-type-anise"/>
   <int value="-1460462432" label="disable-media-source"/>
   <int value="-1440152291" label="disable-gesture-typing"/>
@@ -78454,6 +78748,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="610545308" label="enable-potentially-annoying-security-features"/>
   <int value="625273056" label="disable-boot-animation"/>
   <int value="630947363" label="touch-events"/>
+  <int value="636425179" label="mhtml-generator-option"/>
   <int value="643725031" label="disable-touch-feedback"/>
   <int value="646738320" label="disable-gesture-editing"/>
   <int value="650602639" label="enable-autofill-keyboard-accessory-view"/>
@@ -78532,6 +78827,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1150622273" label="enable-apps-file-associations"/>
   <int value="1163255347" label="ash-enable-touch-view-touch-feedback"/>
   <int value="1166169237" label="disable-delay-agnostic-aec"/>
+  <int value="1167613030" label="enable-permission-action-reporting"/>
   <int value="1174088940" label="enable-wasm"/>
   <int value="1181056275" label="enable-cloud-backup"/>
   <int value="1183431946" label="v8-cache-options"/>
@@ -78617,6 +78913,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1731522433" label="enable-offer-store-unmasked-wallet-cards"/>
   <int value="1747279677" label="disable-delegated-renderer"/>
   <int value="1752168018" label="enable-stale-while-revalidate"/>
+  <int value="1772454319" label="enable-storage-manager"/>
   <int value="1775475563" label="malware-interstitial-v3"/>
   <int value="1776475705" label="show-composited-layer-borders"/>
   <int value="1777059507" label="trust-autofill-server-name-types"/>
@@ -86791,6 +87088,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="5" label="Can't Read Key"/>
   <int value="6" label="Key Mismatch"/>
   <int value="7" label="Hash Mismatch"/>
+  <int value="8" label="Sparse Open Failed"/>
 </enum>
 
 <enum name="SimpleCacheSyncSHA256Result" type="int">
@@ -86804,6 +87102,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="Pretruncate Failure"/>
   <int value="2" label="Write Failure"/>
   <int value="3" label="Truncate Failure"/>
+  <int value="4" label="Lazy Stream Entry Doomed"/>
+  <int value="5" label="Lazy Create Failure"/>
+  <int value="6" label="Lazy Initialization Failure"/>
 </enum>
 
 <enum name="SimpleCacheWriteDependencyType" type="int">
@@ -91005,6 +91306,40 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="WebRTC.Stun.BatchSuccessPercent.UnknownNAT"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="BlinkCanvasDrawImageType" separator=".">
+  <suffix name="Canvas"/>
+  <suffix name="ImageBitmap"/>
+  <suffix name="Others"/>
+  <suffix name="SVG"/>
+  <suffix name="Video"/>
+  <affected-histogram name="Blink.Canvas.DrawImage"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="BlinkCanvasDurationBySource" separator=".">
+  <suffix name="CPU"/>
+  <suffix name="DisplayList"/>
+  <suffix name="GPU"/>
+  <affected-histogram name="Blink.Canvas.DrawImage.Canvas"/>
+  <affected-histogram name="Blink.Canvas.DrawImage.ImageBitmap"/>
+  <affected-histogram name="Blink.Canvas.DrawImage.Others"/>
+  <affected-histogram name="Blink.Canvas.DrawImage.SVG"/>
+  <affected-histogram name="Blink.Canvas.DrawImage.Video"/>
+  <affected-histogram name="Blink.Canvas.GetImageData"/>
+  <affected-histogram name="Blink.Canvas.PutImageData"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="BlinkCanvasToDataURLTime" separator=".">
+  <suffix name="BMP"/>
+  <suffix name="GIF"/>
+  <suffix name="ICON"/>
+  <suffix name="JPEG"/>
+  <suffix name="PNG"/>
+  <suffix name="TIFF"/>
+  <suffix name="Unknown"/>
+  <suffix name="WEBP"/>
+  <affected-histogram name="Blink.Canvas.ToDataURL"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="BlinkGCReason">
   <suffix name="IdleGC" label="Idle GC"/>
   <suffix name="PreciseGC" label="Precise GC"/>
@@ -91033,6 +91368,8 @@ To add a new entry, add it with any value and run test to compute valid value.
              content-length &gt;= 100 bytes."/>
   <suffix name="Font" label="Showing cache patterns only for font resources."/>
   <affected-histogram name="HttpCache.Pattern"/>
+  <affected-histogram
+      name="HttpCache.StaleEntry.FreshnessPeriodsSinceLastUsed"/>
   <affected-histogram name="HttpCache.ValidationCause"/>
 </histogram_suffixes>
 
@@ -91356,6 +91693,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Scheduling.BeginMainFrameStartToCommitDuration"/>
   <affected-histogram name="Scheduling.CommitInterval"/>
   <affected-histogram name="Scheduling.DrawInterval"/>
+  <affected-histogram name="Scheduling.PendingTreeDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="CompositorTimingHistorySubcategory" separator=".">
@@ -92560,6 +92898,18 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="PLT.BeginToFinish_LinkLoadReload"/>
   <affected-histogram name="PLT.BeginToFinish_LinkLoadStaleOk"/>
   <affected-histogram name="PLT.BeginToFinish_NormalLoad"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="ImageDecoderFileTypes" separator=".">
+  <suffix name="BMP" label="Image decoded as BMP"/>
+  <suffix name="GIF" label="Image decoded as GIF"/>
+  <suffix name="ICO" label="Image decoded as ICO"/>
+  <suffix name="JPEG" label="Image decoded as JPEG"/>
+  <suffix name="PNG" label="Image decoded as PNG"/>
+  <affected-histogram name="Blink.DecodedImage.CanvasExpanded"/>
+  <affected-histogram name="Blink.DecodedImage.EffectiveDimensionsLocation"/>
+  <affected-histogram name="Blink.DecodedImage.XCanvasExpansion"/>
+  <affected-histogram name="Blink.DecodedImage.YCanvasExpansion"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="IMEAutoCorrect" separator=".">
@@ -95023,6 +95373,15 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="NaCl.Perf.Size.PNaClTranslatedNexe"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="PositionVariants">
+  <suffix name="0_0" label="Only snippets on position 0"/>
+  <suffix name="1_2" label="Only snippets on position 1-2"/>
+  <suffix name="3_4" label="Only snippets on position 3-4"/>
+  <suffix name="5_9" label="Only snippets on position 5-9"/>
+  <affected-histogram name="NewTabPage.Snippets.CardClickedAge"/>
+  <affected-histogram name="NewTabPage.Snippets.CardClickedScore"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="PpapiPluginName">
   <suffix name="libpepflashplayer.so" label="Flash player on Linux or Cros"/>
   <suffix name="libwidevinecdmadapter.so"
@@ -95858,6 +96217,8 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Blink.MemoryCache.RevalidationPolicy.Preload"/>
   <affected-histogram name="PreloadScanner.Counts"/>
   <affected-histogram name="PreloadScanner.Counts.Miss"/>
+  <affected-histogram name="PreloadScanner.Counts2"/>
+  <affected-histogram name="PreloadScanner.Counts2.Miss"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="SafeBrowsingLists" separator=".">
@@ -95913,21 +96274,6 @@ To add a new entry, add it with any value and run test to compute valid value.
              unsafe. Logged as the request is canceled."/>
   <affected-histogram name="SB2.ResourceTypes"/>
   <affected-histogram name="SB2.ResourceTypes2"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="SBFileTypeUpdateSource" separator=""
-    ordering="prefix">
-  <suffix name="ResourceBundle"
-      label="The file types loaded from the resource bundle packaged with
-             Chrome. This is always loaded at startup."/>
-  <suffix name="DynamicUpdate"
-      label="The file types loaded from the component-update system. This
-             includes both those loaded from disk shortly after startup, and
-             those received over the network when the component version
-             changes."/>
-  <affected-histogram name="SafeBrowsing.FileTypeUpdate.Result"/>
-  <affected-histogram name="SafeBrowsing.FileTypeUpdate.TypeCount"/>
-  <affected-histogram name="SafeBrowsing.FileTypeUpdate.Version"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="SBInterstitial">

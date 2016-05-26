@@ -32,6 +32,7 @@
 
 #include "bindings/core/v8/ScriptCallStack.h"
 #include "core/InstrumentingAgents.h"
+#include "core/events/Event.h"
 #include "core/events/EventTarget.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/frame/FrameHost.h"
@@ -73,7 +74,7 @@ AsyncTask::~AsyncTask()
         session->asyncTaskFinished(m_task);
 }
 
-NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, const String& name, bool sync)
+NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, const char* name, bool sync)
     : m_instrumentingAgents(instrumentingAgentsFor(context))
     , m_sync(sync)
 {

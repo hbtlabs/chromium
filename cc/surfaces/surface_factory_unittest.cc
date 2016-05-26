@@ -62,19 +62,26 @@ gpu::SyncToken GenTestSyncToken(int id) {
   return token;
 }
 
-class SurfaceFactoryTest : public testing::Test {
+class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
  public:
   SurfaceFactoryTest()
       : factory_(new SurfaceFactory(&manager_, &client_)),
-        surface_id_(3),
+        surface_id_(0, 3, 0),
         frame_sync_token_(GenTestSyncToken(4)),
         consumer_sync_token_(GenTestSyncToken(5)) {
+    manager_.AddObserver(this);
     factory_->Create(surface_id_);
+  }
+
+  // SurfaceDamageObserver implementation.
+  void OnSurfaceDamaged(SurfaceId id, bool* changed) override {
+    *changed = true;
   }
 
   ~SurfaceFactoryTest() override {
     if (!surface_id_.is_null())
       factory_->Destroy(surface_id_);
+    manager_.RemoveObserver(this);
   }
 
   void SubmitCompositorFrameWithResources(ResourceId* resource_ids,
@@ -412,7 +419,7 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
 }
 
 TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
-  SurfaceId surface_id(6);
+  SurfaceId surface_id(0, 6, 0);
   factory_->Create(surface_id);
   Surface* surface = manager_.GetSurfaceForId(surface_id);
   ASSERT_NE(nullptr, surface);
@@ -426,6 +433,35 @@ TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
   factory_->Destroy(surface_id);
 }
 
+void CreateSurfaceDrawCallback(SurfaceFactory* factory,
+                               uint32_t* execute_count,
+                               SurfaceDrawStatus* result,
+                               SurfaceDrawStatus drawn) {
+  SurfaceId new_id(0, 7, 0);
+  factory->Create(new_id);
+  factory->Destroy(new_id);
+  *execute_count += 1;
+  *result = drawn;
+}
+
+TEST_F(SurfaceFactoryTest, AddDuringDestroy) {
+  SurfaceId surface_id(0, 6, 0);
+  factory_->Create(surface_id);
+  std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
+  frame->delegated_frame_data.reset(new DelegatedFrameData);
+
+  uint32_t execute_count = 0;
+  SurfaceDrawStatus drawn = SurfaceDrawStatus::DRAW_SKIPPED;
+  factory_->SubmitCompositorFrame(
+      surface_id, std::move(frame),
+      base::Bind(&CreateSurfaceDrawCallback, base::Unretained(factory_.get()),
+                 &execute_count, &drawn));
+  EXPECT_EQ(0u, execute_count);
+  factory_->Destroy(surface_id);
+  EXPECT_EQ(1u, execute_count);
+  EXPECT_EQ(SurfaceDrawStatus::DRAW_SKIPPED, drawn);
+}
+
 void DrawCallback(uint32_t* execute_count,
                   SurfaceDrawStatus* result,
                   SurfaceDrawStatus drawn) {
@@ -435,7 +471,7 @@ void DrawCallback(uint32_t* execute_count,
 
 // Tests doing a DestroyAll before shutting down the factory;
 TEST_F(SurfaceFactoryTest, DestroyAll) {
-  SurfaceId id(7);
+  SurfaceId id(0, 7, 0);
   factory_->Create(id);
 
   std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
@@ -458,7 +494,7 @@ TEST_F(SurfaceFactoryTest, DestroyAll) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroySequence) {
-  SurfaceId id2(5);
+  SurfaceId id2(0, 5, 0);
   factory_->Create(id2);
 
   manager_.RegisterSurfaceIdNamespace(0);
@@ -491,7 +527,7 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
 // Sequences to be ignored.
 TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
   uint32_t id_namespace = 9u;
-  SurfaceId id(5);
+  SurfaceId id(id_namespace, 5, 0);
   factory_->Create(id);
 
   manager_.RegisterSurfaceIdNamespace(id_namespace);
@@ -510,7 +546,7 @@ TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroyCycle) {
-  SurfaceId id2(5);
+  SurfaceId id2(0, 5, 0);
   factory_->Create(id2);
 
   manager_.RegisterSurfaceIdNamespace(0);

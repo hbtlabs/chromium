@@ -44,14 +44,18 @@ _log = get_logger(__file__)
 
 class Builder(object):
 
-    def __init__(self, name, buildbot):
-        self._name = name
+    def __init__(self, builder_name, buildbot, master_name='chromium.webkit'):
+        self._name = builder_name
+        self._master_name = master_name
         self._buildbot = buildbot
         self._builds_cache = {}
         self._revision_to_build_number = None
 
     def name(self):
         return self._name
+
+    def master_name(self):
+        return self._master_name
 
     def results_url(self):
         return config_urls.chromium_results_url_base_for_builder(self._name)
@@ -85,7 +89,8 @@ class Builder(object):
         return urllib.quote(self._name)
 
     def url(self):
-        return "%s/builders/%s" % (self._buildbot.buildbot_url, self.url_encoded_name())
+        buildbot_url = config_urls.chromium_buildbot_url(self.master_name())
+        return "%s/builders/%s" % (buildbot_url, self.url_encoded_name())
 
     # This provides a single place to mock
     def _fetch_build(self, build_number):
@@ -217,11 +222,8 @@ class Build(object):
 
 
 class BuildBot(object):
-    _builder_factory = Builder
-    _default_url = config_urls.chromium_buildbot_url
 
-    def __init__(self, url=None):
-        self.buildbot_url = url if url else self._default_url
+    def __init__(self):
         self._builder_by_name = {}
 
     def _parse_last_build_cell(self, builder, cell):
@@ -283,7 +285,8 @@ class BuildBot(object):
         # cause keys to be missing which you might otherwise expect.
         # FIXME: The bot sends a *huge* amount of data for each request, we should
         # find a way to reduce the response size further.
-        json_url = "%s/json/builders/%s/builds/%s?filter=1" % (self.buildbot_url, urllib.quote(builder.name()), build_number)
+        buildbot_url = config_urls.chromium_buildbot_url(builder.master_name())
+        json_url = "%s/json/builders/%s/builds/%s?filter=1" % (buildbot_url, urllib.quote(builder.name()), build_number)
         try:
             return json.load(urllib2.urlopen(json_url))
         except urllib2.URLError, err:
@@ -295,10 +298,6 @@ class BuildBot(object):
             build_url = Build.build_url(builder, build_number)
             _log.error("Error decoding json data from %s: %s" % (build_url, err))
             return None
-
-    def _fetch_one_box_per_builder(self):
-        build_status_url = "%s/one_box_per_builder" % self.buildbot_url
-        return urllib2.urlopen(build_status_url)
 
     def _file_cell_text(self, file_cell):
         """Traverses down through firstChild elements until one containing a string is found, then returns that string"""
@@ -330,21 +329,27 @@ class BuildBot(object):
     def builders(self):
         return [self.builder_with_name(status["name"]) for status in self.builder_statuses()]
 
-    # This method pulls from /one_box_per_builder as an efficient way to get information about
     def builder_statuses(self):
-        soup = BeautifulSoup(self._fetch_one_box_per_builder())
+        buildbot_url = config_urls.chromium_buildbot_url('chromium.webkit')
+        builders_page_url = "%s/builders" % buildbot_url
+        builders_page_content = urllib2.urlopen(builders_page_url)
+        soup = BeautifulSoup(builders_page_content)
         return [self._parse_builder_status_from_row(status_row) for status_row in soup.find('table').findAll('tr')]
 
-    def builder_with_name(self, name):
+    def builder_with_name(self, name, master_name='chromium.webkit'):
         builder = self._builder_by_name.get(name)
         if not builder:
-            builder = self._builder_factory(name, self)
+            builder = Builder(name, self, master_name=master_name)
             self._builder_by_name[name] = builder
         return builder
 
-    # This makes fewer requests than calling Builder.latest_build would.  It grabs all builder
-    # statuses in one request using self.builder_statuses (fetching /one_box_per_builder instead of builder pages).
     def _latest_builds_from_builders(self):
+        """Fetches a list of latest builds.
+
+        This makes fewer requests than calling Builder.latest_build would.
+        It grabs all builder statuses in one request by fetching from .../builders
+        instead of builder pages.
+        """
         builder_statuses = self.builder_statuses()
         return [self.builder_with_name(status["name"]).build(status["build_number"]) for status in builder_statuses]
 
@@ -355,7 +360,8 @@ class BuildBot(object):
             build = build.previous_build()
 
     def _fetch_builder_page(self, builder):
-        builder_page_url = "%s/builders/%s?numbuilds=100" % (self.buildbot_url, urllib2.quote(builder.name()))
+        buildbot_url = config_urls.chromium_buildbot_url('chromium.webkit')
+        builder_page_url = "%s/builders/%s?numbuilds=100" % (buildbot_url, urllib2.quote(builder.name()))
         return urllib2.urlopen(builder_page_url)
 
     def _revisions_for_builder(self, builder):

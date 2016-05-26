@@ -38,7 +38,6 @@
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/geolocation/geolocation_service_context.h"
-#include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
@@ -72,7 +71,6 @@
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -211,7 +209,6 @@ RenderFrameHostImpl::RenderFrameHostImpl(SiteInstance* site_instance,
                                          bool hidden)
     : render_view_host_(render_view_host),
       delegate_(delegate),
-      frame_host_binding_(this),
       site_instance_(static_cast<SiteInstanceImpl*>(site_instance)),
       process_(site_instance->GetProcess()),
       cross_process_frame_connector_(NULL),
@@ -1647,13 +1644,12 @@ void RenderFrameHostImpl::OnUpdateEncoding(const std::string& encoding_name) {
 
 void RenderFrameHostImpl::OnBeginNavigation(
     const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
-    scoped_refptr<ResourceRequestBody> body) {
+    const BeginNavigationParams& begin_params) {
   CHECK(IsBrowserSideNavigationEnabled());
   CommonNavigationParams validated_params = common_params;
   GetProcess()->FilterURL(false, &validated_params.url);
   frame_tree_node()->navigator()->OnBeginNavigation(
-      frame_tree_node(), validated_params, begin_params, body);
+      frame_tree_node(), validated_params, begin_params);
 }
 
 void RenderFrameHostImpl::OnDispatchLoad() {
@@ -1826,7 +1822,40 @@ void RenderFrameHostImpl::OnAccessibilitySnapshotResponse(
   }
 }
 
+// TODO(alexmos): When the allowFullscreen flag is known in the browser
+// process, use it to double-check that fullscreen can be entered here.
 void RenderFrameHostImpl::OnToggleFullscreen(bool enter_fullscreen) {
+  // Entering fullscreen from a cross-process subframe also affects all
+  // renderers for ancestor frames, which will need to apply fullscreen CSS to
+  // appropriate ancestor <iframe> elements, fire fullscreenchange events, etc.
+  // Thus, walk through the ancestor chain of this frame and for each (parent,
+  // child) pair, send a message about the pending fullscreen change to the
+  // child's proxy in parent's SiteInstance. The renderer process will use this
+  // to find the <iframe> element in the parent frame that will need fullscreen
+  // styles. This is done at most once per SiteInstance: for example, with a
+  // A-B-A-B hierarchy, if the bottom frame goes fullscreen, this only needs to
+  // notify its parent, and Blink-side logic will take care of applying
+  // necessary changes to the other two ancestors.
+  if (enter_fullscreen &&
+      SiteIsolationPolicy::AreCrossProcessFramesPossible()) {
+    std::set<SiteInstance*> notified_instances;
+    notified_instances.insert(GetSiteInstance());
+    for (FrameTreeNode* node = frame_tree_node_; node->parent();
+         node = node->parent()) {
+      SiteInstance* parent_site_instance =
+          node->parent()->current_frame_host()->GetSiteInstance();
+      if (ContainsKey(notified_instances, parent_site_instance))
+        continue;
+
+      RenderFrameProxyHost* child_proxy =
+          node->render_manager()->GetRenderFrameProxyHost(parent_site_instance);
+      child_proxy->Send(
+          new FrameMsg_WillEnterFullscreen(child_proxy->GetRoutingID()));
+      notified_instances.insert(parent_site_instance);
+    }
+  }
+
+  // TODO(alexmos): See if this can use the last committed origin instead.
   if (enter_fullscreen)
     delegate_->EnterFullscreenMode(last_committed_url().GetOrigin());
   else
@@ -1834,6 +1863,12 @@ void RenderFrameHostImpl::OnToggleFullscreen(bool enter_fullscreen) {
 
   // The previous call might change the fullscreen state. We need to make sure
   // the renderer is aware of that, which is done via the resize message.
+  // Typically, this will be sent as part of the call on the |delegate_| above
+  // when resizing the native windows, but sometimes fullscreen can be entered
+  // without causing a resize, so we need to ensure that the resize message is
+  // sent in that case. We always send this to the main frame's widget, and if
+  // there are any OOPIF widgets, this will also trigger them to resize via
+  // frameRectsChanged.
   render_view_host_->GetWidget()->WasResized();
 }
 
@@ -1988,9 +2023,6 @@ void RenderFrameHostImpl::RegisterMojoServices() {
   }
 #endif
 
-  GetServiceRegistry()->AddService<mojom::FrameHost>(base::Bind(
-      &RenderFrameHostImpl::BindFrameHostService, base::Unretained(this)));
-
   GetContentClient()->browser()->RegisterRenderFrameMojoServices(
       GetServiceRegistry(), this);
 }
@@ -2106,10 +2138,10 @@ void RenderFrameHostImpl::NavigateToInterstitialURL(const GURL& data_url) {
       data_url, Referrer(), ui::PAGE_TRANSITION_LINK,
       FrameMsg_Navigate_Type::NORMAL, false, false, base::TimeTicks::Now(),
       FrameMsg_UILoadMetricsReportType::NO_REPORT, GURL(), GURL(), LOFI_OFF,
-      base::TimeTicks::Now(), "GET");
+      base::TimeTicks::Now(), "GET", nullptr);
   if (IsBrowserSideNavigationEnabled()) {
     CommitNavigation(nullptr, nullptr, common_params, RequestNavigationParams(),
-                     false, nullptr);
+                     false);
   } else {
     Navigate(common_params, StartNavigationParams(), RequestNavigationParams());
   }
@@ -2246,8 +2278,7 @@ void RenderFrameHostImpl::CommitNavigation(
     std::unique_ptr<StreamHandle> body,
     const CommonNavigationParams& common_params,
     const RequestNavigationParams& request_params,
-    bool is_view_source,
-    scoped_refptr<ResourceRequestBody> post_data) {
+    bool is_view_source) {
   DCHECK((response && body.get()) ||
           !ShouldMakeNetworkRequestForURL(common_params.url));
   UpdatePermissionsForNavigation(common_params, request_params);
@@ -2268,7 +2299,7 @@ void RenderFrameHostImpl::CommitNavigation(
   const ResourceResponseHead head = response ?
       response->head : ResourceResponseHead();
   Send(new FrameMsg_CommitNavigation(routing_id_, head, body_url, common_params,
-                                     request_params, post_data));
+                                     request_params));
 
   // If a network request was made, update the LoFi state.
   if (ShouldMakeNetworkRequestForURL(common_params.url))
@@ -2580,21 +2611,6 @@ int RenderFrameHostImpl::GetProxyCount() {
   return frame_tree_node_->render_manager()->GetProxyCount();
 }
 
-void RenderFrameHostImpl::GetHostZoomLevel(
-    const GURL& url,
-    const GetHostZoomLevelCallback& callback) {
-  RenderProcessHost* render_process_host =
-      RenderProcessHost::FromID(GetProcess()->GetID());
-  double zoom_level = 0.0;
-  if (render_process_host) {
-    const HostZoomMapImpl* host_zoom_map = static_cast<const HostZoomMapImpl*>(
-        render_process_host->GetStoragePartition()->GetHostZoomMap());
-    zoom_level = host_zoom_map->GetZoomLevelForView(url, GetProcess()->GetID(),
-                                                    routing_id_);
-  }
-  callback.Run(zoom_level);
-}
-
 #if defined(OS_MACOSX)
 
 void RenderFrameHostImpl::DidSelectPopupMenuItem(int selected_index) {
@@ -2821,14 +2837,6 @@ void RenderFrameHostImpl::AXContentTreeDataToAXTreeData(
       focused_frame_tree_node->current_frame_host();
   DCHECK(focused_frame);
   dst->focused_tree_id = focused_frame->GetAXTreeID();
-}
-
-void RenderFrameHostImpl::BindFrameHostService(
-    mojom::FrameHostRequest request) {
-  frame_host_binding_.Bind(std::move(request));
-  frame_host_binding_.set_connection_error_handler(
-      base::Bind(&mojo::Binding<mojom::FrameHost>::Unbind,
-                 base::Unretained(&frame_host_binding_)));
 }
 
 void RenderFrameHostImpl::CreateWebBluetoothService(

@@ -54,18 +54,12 @@ void AVDASharedState::WaitForFrameAvailable() {
 }
 
 void AVDASharedState::DidAttachSurfaceTexture() {
-  context_ = gfx::GLContext::GetCurrent();
-  surface_ = gfx::GLSurface::GetCurrent();
+  context_ = gl::GLContext::GetCurrent();
+  surface_ = gl::GLSurface::GetCurrent();
   DCHECK(context_);
   DCHECK(surface_);
 
   surface_texture_is_attached_ = true;
-}
-
-void AVDASharedState::DidDetachSurfaceTexture() {
-  context_ = nullptr;
-  surface_ = nullptr;
-  surface_texture_is_attached_ = false;
 }
 
 void AVDASharedState::CodecChanged(media::MediaCodecBridge* codec) {

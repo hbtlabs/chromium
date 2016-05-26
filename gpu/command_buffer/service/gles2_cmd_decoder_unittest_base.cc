@@ -28,7 +28,7 @@
 #include "ui/gl/gl_mock.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
-using ::gfx::MockGLInterface;
+using ::gl::MockGLInterface;
 using ::testing::_;
 using ::testing::AnyNumber;
 using ::testing::AtMost;
@@ -180,11 +180,11 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   // For easier substring/extension matching
   DCHECK(normalized_init.extensions.empty() ||
          *normalized_init.extensions.rbegin() == ' ');
-  gfx::SetGLGetProcAddressProc(gfx::MockGLInterface::GetGLProcAddress);
-  gfx::GLSurfaceTestSupport::InitializeOneOffWithMockBindings();
+  gl::SetGLGetProcAddressProc(gl::MockGLInterface::GetGLProcAddress);
+  gl::GLSurfaceTestSupport::InitializeOneOffWithMockBindings();
 
   gl_.reset(new StrictMock<MockGLInterface>());
-  ::gfx::MockGLInterface::SetGLInterface(gl_.get());
+  ::gl::MockGLInterface::SetGLInterface(gl_.get());
 
   SetupMockGLBehaviors();
 
@@ -203,7 +203,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
 
   InSequence sequence;
 
-  surface_ = new gfx::GLSurfaceStub;
+  surface_ = new gl::GLSurfaceStub;
   surface_->SetSize(gfx::Size(kBackBufferWidth, kBackBufferHeight));
 
   // Context needs to be created before initializing ContextGroup, which will
@@ -214,7 +214,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   context_->SetGLVersionString(normalized_init.gl_version.c_str());
 
   context_->GLContextStubWithExtensions::MakeCurrent(surface_.get());
-  gfx::GLSurfaceTestSupport::InitializeDynamicMockBindings(context_.get());
+  gl::GLSurfaceTestSupport::InitializeDynamicMockBindings(context_.get());
 
   TestHelper::SetupContextGroupInitExpectations(
       gl_.get(),
@@ -344,15 +344,34 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   EXPECT_CALL(*gl_, BindFramebufferEXT(GL_FRAMEBUFFER, 0))
       .Times(1)
       .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, GetIntegerv(GL_ALPHA_BITS, _))
-      .WillOnce(SetArgumentPointee<1>(normalized_init.has_alpha ? 8 : 0))
-      .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, GetIntegerv(GL_DEPTH_BITS, _))
-      .WillOnce(SetArgumentPointee<1>(normalized_init.has_depth ? 24 : 0))
-      .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, GetIntegerv(GL_STENCIL_BITS, _))
-      .WillOnce(SetArgumentPointee<1>(normalized_init.has_stencil ? 8 : 0))
-      .RetiresOnSaturation();
+
+  if (group_->feature_info()->gl_version_info().is_desktop_core_profile) {
+    EXPECT_CALL(*gl_, GetFramebufferAttachmentParameterivEXT(
+                          GL_FRAMEBUFFER, GL_BACK_LEFT,
+                          GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, _))
+        .WillOnce(SetArgumentPointee<3>(normalized_init.has_alpha ? 8 : 0))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetFramebufferAttachmentParameterivEXT(
+                          GL_FRAMEBUFFER, GL_DEPTH,
+                          GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE, _))
+        .WillOnce(SetArgumentPointee<3>(normalized_init.has_depth ? 24 : 0))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetFramebufferAttachmentParameterivEXT(
+                          GL_FRAMEBUFFER, GL_STENCIL,
+                          GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, _))
+        .WillOnce(SetArgumentPointee<3>(normalized_init.has_stencil ? 8 : 0))
+        .RetiresOnSaturation();
+  } else {
+    EXPECT_CALL(*gl_, GetIntegerv(GL_ALPHA_BITS, _))
+        .WillOnce(SetArgumentPointee<1>(normalized_init.has_alpha ? 8 : 0))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetIntegerv(GL_DEPTH_BITS, _))
+        .WillOnce(SetArgumentPointee<1>(normalized_init.has_depth ? 24 : 0))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, GetIntegerv(GL_STENCIL_BITS, _))
+        .WillOnce(SetArgumentPointee<1>(normalized_init.has_stencil ? 8 : 0))
+        .RetiresOnSaturation();
+  }
 
   if (!group_->feature_info()->gl_version_info().BehavesLikeGLES()) {
     EXPECT_CALL(*gl_, Enable(GL_VERTEX_PROGRAM_POINT_SIZE))
@@ -360,6 +379,12 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
         .RetiresOnSaturation();
 
     EXPECT_CALL(*gl_, Enable(GL_POINT_SPRITE))
+        .Times(1)
+        .RetiresOnSaturation();
+  } else if (group_->feature_info()
+                 ->gl_version_info()
+                 .is_desktop_core_profile) {
+    EXPECT_CALL(*gl_, Enable(GL_PROGRAM_POINT_SIZE))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -475,6 +500,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
       .WillOnce(SetArgumentPointee<1>(kServiceElementBufferId))
       .RetiresOnSaturation();
   GenHelper<cmds::GenBuffersImmediate>(client_element_buffer_id_);
+  GenHelper<cmds::GenQueriesEXTImmediate>(client_query_id_);
 
   DoCreateProgram(client_program_id_, kServiceProgramId);
   DoCreateShader(GL_VERTEX_SHADER, client_shader_id_, kServiceShaderId);
@@ -486,7 +512,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
     reset_unsafe_es3_apis_enabled = true;
   }
 
-  const gfx::GLVersionInfo* version = context_->GetVersionInfo();
+  const gl::GLVersionInfo* version = context_->GetVersionInfo();
   if (version->IsAtLeastGL(3, 3) || version->IsAtLeastGLES(3, 0)) {
     EXPECT_CALL(*gl_, GenSamplers(_, _))
         .WillOnce(SetArgumentPointee<1>(kServiceSamplerId))
@@ -546,9 +572,9 @@ void GLES2DecoderTestBase::ResetDecoder() {
   decoder_.reset();
   group_->Destroy(mock_decoder_.get(), false);
   engine_.reset();
-  ::gfx::MockGLInterface::SetGLInterface(NULL);
+  ::gl::MockGLInterface::SetGLInterface(NULL);
   gl_.reset();
-  gfx::ClearGLBindings();
+  gl::ClearGLBindings();
 }
 
 void GLES2DecoderTestBase::TearDown() {
@@ -1453,16 +1479,15 @@ void GLES2DecoderTestBase::AddExpectationsForRestoreAttribState(GLuint attrib) {
       .RetiresOnSaturation();
 
   if (attrib != 0 ||
-      gfx::GetGLImplementation() == gfx::kGLImplementationEGLGLES2) {
+      gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2) {
+    // TODO(bajones): Not sure if I can tell which of these will be called
+    EXPECT_CALL(*gl_, EnableVertexAttribArray(attrib))
+        .Times(testing::AtMost(1))
+        .RetiresOnSaturation();
 
-      // TODO(bajones): Not sure if I can tell which of these will be called
-      EXPECT_CALL(*gl_, EnableVertexAttribArray(attrib))
-          .Times(testing::AtMost(1))
-          .RetiresOnSaturation();
-
-      EXPECT_CALL(*gl_, DisableVertexAttribArray(attrib))
-          .Times(testing::AtMost(1))
-          .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, DisableVertexAttribArray(attrib))
+        .Times(testing::AtMost(1))
+        .RetiresOnSaturation();
   }
 }
 

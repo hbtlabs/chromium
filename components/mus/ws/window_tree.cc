@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
+#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/ws/default_access_policy.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_manager.h"
@@ -25,10 +26,10 @@
 #include "components/mus/ws/window_manager_state.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_tree_binding.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/converters/ime/ime_type_converters.h"
-#include "mojo/converters/input_events/input_events_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
+#include "ui/display/display.h"
+#include "ui/events/mojo/input_events_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/platform_window/text_input_state.h"
 
 using mojo::Array;
@@ -399,6 +400,14 @@ void WindowTree::OnAccelerator(uint32_t accelerator_id,
                                           mojom::Event::From(event));
 }
 
+void WindowTree::ConnectionJankinessChanged(WindowTree* tree) {
+  tree->janky_ = !tree->janky_;
+  if (window_manager_internal_) {
+    window_manager_internal_->WmClientJankinessChanged(
+        tree->id(), tree->janky());
+  }
+}
+
 void WindowTree::ProcessWindowBoundsChanged(const ServerWindow* window,
                                             const gfx::Rect& old_bounds,
                                             const gfx::Rect& new_bounds,
@@ -421,27 +430,6 @@ void WindowTree::ProcessClientAreaChanged(
   client()->OnClientAreaChanged(
       client_window_id.id, mojo::Insets::From(new_client_area),
       mojo::Array<mojo::RectPtr>::From(new_additional_client_areas));
-}
-
-void WindowTree::ProcessViewportMetricsChanged(
-    Display* display,
-    const mojom::ViewportMetrics& old_metrics,
-    const mojom::ViewportMetrics& new_metrics,
-    bool originated_change) {
-  mojo::Array<Id> window_ids;
-  for (const ServerWindow* root : roots_) {
-    if (GetDisplay(root) == display) {
-      ClientWindowId client_window_id;
-      const bool known = IsWindowKnown(root, &client_window_id);
-      DCHECK(known);
-      window_ids.push_back(client_window_id.id);
-    }
-  }
-  if (window_ids.size() == 0u)
-    return;
-
-  client()->OnWindowViewportMetricsChanged(
-      std::move(window_ids), old_metrics.Clone(), new_metrics.Clone());
 }
 
 void WindowTree::ProcessWillChangeWindowHierarchy(
@@ -863,6 +851,15 @@ mojom::WindowDataPtr WindowTree::WindowToWindowData(
     const ServerWindow* window) {
   DCHECK(IsWindowKnown(window));
   const ServerWindow* parent = window->parent();
+
+  // Get the associated display before |parent| may be reset.
+  int64_t display_id = display::Display::kInvalidDisplayID;
+  const Display* display = display_manager()->GetDisplayContaining(window);
+  if (!display && parent)
+    display = display_manager()->GetDisplayContaining(parent);
+  if (display)
+    display_id = display->id();
+
   // If the parent isn't known, it means the parent is not visible to us (not
   // in roots), and should not be sent over.
   if (parent && !IsWindowKnown(parent))
@@ -876,8 +873,7 @@ mojom::WindowDataPtr WindowTree::WindowToWindowData(
   window_data->properties =
       mojo::Map<String, Array<uint8_t>>::From(window->properties());
   window_data->visible = window->visible();
-  window_data->viewport_metrics =
-      window_server_->GetViewportMetricsForWindow(window);
+  window_data->display_id = display_id;
   return window_data;
 }
 
@@ -1030,7 +1026,7 @@ void WindowTree::NewTopLevelWindow(
       new WaitingForTopLevelWindowInfo(client_window_id, wm_change_id));
 
   wms->tree()->window_manager_internal_->WmCreateTopLevelWindow(
-      wm_change_id, std::move(transport_properties));
+      wm_change_id, id_, std::move(transport_properties));
 }
 
 void WindowTree::DeleteWindow(uint32_t change_id, Id transport_window_id) {
@@ -1139,13 +1135,41 @@ void WindowTree::ReleaseCapture(uint32_t change_id, Id window_id) {
 
 void WindowTree::SetEventObserver(mojom::EventMatcherPtr matcher,
                                   uint32_t observer_id) {
-  if (!matcher.is_null() && observer_id != 0) {
-    event_observer_matcher_.reset(new EventMatcher(*matcher));
-    event_observer_id_ = observer_id;
-  } else {
+  if (matcher.is_null() || observer_id == 0) {
+    // Clear any existing event observer.
     event_observer_matcher_.reset();
     event_observer_id_ = 0;
+    return;
   }
+
+  // Do not allow key events to be observed, as a compromised app could register
+  // itself as an event observer and spy on keystrokes to another app.
+  if (!matcher->type_matcher) {
+    DVLOG(1) << "SetEventObserver must specify an event type.";
+    return;
+  }
+  const mojom::EventType event_type_whitelist[] = {
+      mojom::EventType::POINTER_CANCEL,
+      mojom::EventType::POINTER_DOWN,
+      mojom::EventType::POINTER_MOVE,
+      mojom::EventType::POINTER_UP,
+      mojom::EventType::MOUSE_EXIT,
+      mojom::EventType::WHEEL,
+  };
+  bool allowed = false;
+  for (mojom::EventType event_type : event_type_whitelist) {
+    if (matcher->type_matcher->type == event_type) {
+      allowed = true;
+      break;
+    }
+  }
+  if (!allowed) {
+    DVLOG(1) << "SetEventObserver event type not allowed";
+    return;
+  }
+
+  event_observer_matcher_.reset(new EventMatcher(*matcher));
+  event_observer_id_ = observer_id;
 }
 
 void WindowTree::SetWindowBounds(uint32_t change_id,
@@ -1265,6 +1289,9 @@ void WindowTree::OnWindowInputEventAck(uint32_t event_id,
     NOTIMPLEMENTED() << "Wrong event acked.";
   }
   event_ack_id_ = 0;
+
+  if (janky_)
+    event_source_wms_->tree()->ConnectionJankinessChanged(this);
 
   WindowManagerState* event_source_wms = event_source_wms_;
   event_source_wms_ = nullptr;

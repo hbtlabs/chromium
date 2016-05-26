@@ -80,8 +80,6 @@ TransformTree::TransformTree()
       device_scale_factor_(1.f),
       device_transform_scale_factor_(1.f) {}
 
-TransformTree::TransformTree(const TransformTree& other) = default;
-
 TransformTree::~TransformTree() {
 }
 
@@ -1503,8 +1501,6 @@ ScrollTree::ScrollTree()
     : currently_scrolling_node_id_(-1),
       layer_id_to_scroll_offset_map_(ScrollTree::ScrollOffsetMap()) {}
 
-ScrollTree::ScrollTree(const ScrollTree& other) = default;
-
 ScrollTree::~ScrollTree() {}
 
 ScrollTree& ScrollTree::operator=(const ScrollTree& from) {
@@ -1919,8 +1915,6 @@ PropertyTrees::PropertyTrees()
   scroll_tree.SetPropertyTrees(this);
 }
 
-PropertyTrees::PropertyTrees(const PropertyTrees& other) = default;
-
 PropertyTrees::~PropertyTrees() {}
 
 bool PropertyTrees::operator==(const PropertyTrees& other) const {
@@ -2056,6 +2050,32 @@ void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
     target_effect_node->data.opacity = source_opacity;
     target_tree->effect_tree.set_needs_update(true);
   }
+}
+
+void PropertyTrees::RemoveIdFromIdToIndexMaps(int id) {
+  transform_id_to_index_map.erase(id);
+  effect_id_to_index_map.erase(id);
+  clip_id_to_index_map.erase(id);
+  scroll_id_to_index_map.erase(id);
+}
+
+bool PropertyTrees::IsInIdToIndexMap(TreeType tree_type, int id) {
+  std::unordered_map<int, int>* id_to_index_map = nullptr;
+  switch (tree_type) {
+    case TRANSFORM:
+      id_to_index_map = &transform_id_to_index_map;
+      break;
+    case EFFECT:
+      id_to_index_map = &effect_id_to_index_map;
+      break;
+    case CLIP:
+      id_to_index_map = &clip_id_to_index_map;
+      break;
+    case SCROLL:
+      id_to_index_map = &scroll_id_to_index_map;
+      break;
+  }
+  return id_to_index_map->find(id) != id_to_index_map->end();
 }
 
 void PropertyTrees::UpdateChangeTracking() {
