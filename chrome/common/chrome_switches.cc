@@ -293,6 +293,11 @@ const char kDisableOutOfProcessPac[] = "disable-out-of-process-pac";
 // for blacklisted sites.
 const char kDisablePermissionsBlacklist[] = "disable-permissions-blacklist";
 
+// Disables permission action reporting to Safe Browsing servers for opted in
+// users.
+const char kDisablePermissionActionReporting[] =
+    "disable-permission-action-reporting";
+
 // Disable pop-up blocking.
 const char kDisablePopupBlocking[]          = "disable-popup-blocking";
 
@@ -462,6 +467,11 @@ const char kDisablePanels[]                 = "disable-panels";
 // Enables the Permissions Blacklist, which blocks access to permissions
 // for blacklisted sites.
 const char kEnablePermissionsBlacklist[] = "enable-permissions-blacklist";
+
+// Enables permission action reporting to Safe Browsing servers for opted in
+// users.
+const char kEnablePermissionActionReporting[] =
+    "enable-permission-action-reporting";
 
 // Enables a number of potentially annoying security features (strict mixed
 // content mode, powerful feature restrictions, etc.)
@@ -1121,6 +1131,10 @@ const char kDisableAppInfoDialogMac[] = "disable-app-info-dialog-mac";
 // Disables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kDisableAppWindowCycling[] = "disable-app-window-cycling";
 
+// Disables tab detaching in fullscreen mode on Mac.
+const char kDisableFullscreenTabDetaching[] =
+    "disable-fullscreen-tab-detaching";
+
 // Disables app shim creation for hosted apps on Mac.
 const char kDisableHostedAppShimCreation[] = "disable-hosted-app-shim-creation";
 
@@ -1153,10 +1167,6 @@ const char kEnableHostedAppsInWindows[] = "enable-hosted-apps-in-windows";
 // Enables use of toolkit-views based native app windows.
 const char kEnableMacViewsNativeAppWindows[] =
     "enable-mac-views-native-app-windows";
-
-// Causes Chrome to use an equivalent toolkit-views version of a browser dialog
-// when available, rather than a Cocoa one.
-const char kEnableMacViewsDialogs[] = "enable-mac-views-dialogs";
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";

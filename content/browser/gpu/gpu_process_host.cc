@@ -205,7 +205,7 @@ class GpuSandboxedProcessLauncherDelegate
   bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
     if (base::win::GetVersion() > base::win::VERSION_XP) {
       if (cmd_line_->GetSwitchValueASCII(switches::kUseGL) ==
-          gfx::kGLImplementationDesktopName) {
+          gl::kGLImplementationDesktopName) {
         // Open GL path.
         policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
                               sandbox::USER_LIMITED);
@@ -981,11 +981,11 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
 
   base::CommandLine* cmd_line = new base::CommandLine(exe_path);
 #endif
-  BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
   cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
   cmd_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
                               mojo_application_host_->GetToken());
+  BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
 
 #if defined(OS_WIN)
   if (GetContentClient()->browser()->ShouldUseWindowsPrefetchArgument())

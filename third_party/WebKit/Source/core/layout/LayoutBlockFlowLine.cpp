@@ -22,12 +22,9 @@
 
 #include "core/dom/AXObjectCache.h"
 #include "core/layout/BidiRunForLine.h"
-#include "core/layout/LayoutCounter.h"
-#include "core/layout/LayoutListMarker.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutRubyRun.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/TextRunConstructor.h"
 #include "core/layout/VerticalPositionCache.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/api/SelectionState.h"
@@ -1321,7 +1318,6 @@ void LayoutBlockFlow::computeInlinePreferredLogicalWidths(LayoutUnit& minLogical
             // values (if any of them are larger than our current min/max). We then look at
             // the width of the last non-breakable run and use that to start a new line
             // (unless we end in whitespace).
-            const ComputedStyle& childStyle = child->styleRef();
             LayoutUnit childMin;
             LayoutUnit childMax;
 
@@ -1349,6 +1345,7 @@ void LayoutBlockFlow::computeInlinePreferredLogicalWidths(LayoutUnit& minLogical
 
                 bool clearPreviousFloat;
                 if (child->isFloating()) {
+                    const ComputedStyle& childStyle = child->styleRef();
                     clearPreviousFloat = (prevFloat
                         && ((prevFloat->styleRef().floating() == LeftFloat && (childStyle.clear() & ClearLeft))
                             || (prevFloat->styleRef().floating() == RightFloat && (childStyle.clear() & ClearRight))));

@@ -23,6 +23,7 @@
 #include "core/inspector/ScriptArguments.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -71,7 +72,7 @@ void ThreadDebugger::beginUserGesture()
 
 void ThreadDebugger::endUserGesture()
 {
-    m_userGestureIndicator.clear();
+    m_userGestureIndicator.reset();
 }
 
 String16 ThreadDebugger::valueSubtype(v8::Local<v8::Value> value)

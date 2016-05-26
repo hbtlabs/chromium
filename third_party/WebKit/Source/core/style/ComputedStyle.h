@@ -27,18 +27,13 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
-#include "core/animation/css/CSSAnimationData.h"
-#include "core/animation/css/CSSTransitionData.h"
-#include "core/css/CSSPrimitiveValue.h"
 #include "core/style/BorderValue.h"
 #include "core/style/CounterDirectives.h"
 #include "core/style/DataRef.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "core/style/LineClampValue.h"
 #include "core/style/NinePieceImage.h"
-#include "core/style/OutlineValue.h"
 #include "core/style/SVGComputedStyle.h"
-#include "core/style/ShapeValue.h"
 #include "core/style/StyleBackgroundData.h"
 #include "core/style/StyleBoxData.h"
 #include "core/style/StyleContentAlignmentData.h"
@@ -54,7 +49,6 @@
 #include "core/style/StyleRareInheritedData.h"
 #include "core/style/StyleRareNonInheritedData.h"
 #include "core/style/StyleReflection.h"
-#include "core/style/StyleScrollSnapData.h"
 #include "core/style/StyleSelfAlignmentData.h"
 #include "core/style/StyleSurroundData.h"
 #include "core/style/StyleTransformData.h"
@@ -65,23 +59,20 @@
 #include "platform/LengthBox.h"
 #include "platform/LengthPoint.h"
 #include "platform/LengthSize.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ThemeTypes.h"
-#include "platform/fonts/FontBaseline.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/geometry/FloatRoundedRect.h"
 #include "platform/geometry/LayoutRectOutsets.h"
 #include "platform/graphics/Color.h"
-#include "platform/graphics/GraphicsTypes.h"
-#include "platform/scroll/ScrollableArea.h"
+#include "platform/scroll/ScrollTypes.h"
 #include "platform/text/TextDirection.h"
-#include "platform/text/TextRun.h"
 #include "platform/text/UnicodeBidi.h"
 #include "platform/transforms/TransformOperations.h"
 #include "wtf/Forward.h"
 #include "wtf/LeakAnnotations.h"
 #include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
-#include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
 template<typename T, typename U> inline bool compareEqual(const T& t, const U& u) { return t == static_cast<T>(u); }
@@ -111,12 +102,15 @@ class FilterOperations;
 class AppliedTextDecoration;
 class BorderData;
 struct BorderEdge;
+class CSSAnimationData;
+class CSSTransitionData;
 class CSSVariableData;
 class Font;
 class FontMetrics;
 class RotateTransformOperation;
 class ScaleTransformOperation;
 class ShadowList;
+class ShapeValue;
 class StyleImage;
 class StyleInheritedData;
 class StylePath;
@@ -1938,25 +1932,14 @@ private:
 
 // FIXME: Reduce/remove the dependency on zoom adjusted int values.
 // The float or LayoutUnit versions of layout values should be used.
-inline int adjustForAbsoluteZoom(int value, float zoomFactor)
-{
-    if (zoomFactor == 1)
-        return value;
-    // Needed because computeLengthInt truncates (rather than rounds) when scaling up.
-    float fvalue = value;
-    if (zoomFactor > 1) {
-        if (value < 0)
-            fvalue -= 0.5f;
-        else
-            fvalue += 0.5f;
-    }
-
-    return roundForImpreciseConversion<int>(fvalue / zoomFactor);
-}
+int adjustForAbsoluteZoom(int value, float zoomFactor);
 
 inline int adjustForAbsoluteZoom(int value, const ComputedStyle* style)
 {
-    return adjustForAbsoluteZoom(value, style->effectiveZoom());
+    float zoomFactor = style->effectiveZoom();
+    if (zoomFactor == 1)
+        return value;
+    return adjustForAbsoluteZoom(value, zoomFactor);
 }
 
 inline float adjustFloatForAbsoluteZoom(float value, const ComputedStyle& style)

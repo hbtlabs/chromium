@@ -34,6 +34,7 @@
 #include "core/dom/Fullscreen.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/ImageBitmap.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
@@ -202,7 +203,7 @@ void HTMLVideoElement::paintCurrentFrame(SkCanvas* canvas, const IntRect& destRe
     if (!paint || !SkXfermode::AsMode(paint->getXfermode(), &mode))
         mode = SkXfermode::kSrcOver_Mode;
 
-    // TODO(junov, philipj): crbug.com/456529 Pass the whole SkPaint instead of only alpha and xfermode
+    // TODO(junov, foolip): crbug.com/456529 Pass the whole SkPaint instead of only alpha and xfermode
     webMediaPlayer()->paint(canvas, destRect, paint ? paint->getAlpha() : 0xFF, mode);
 }
 

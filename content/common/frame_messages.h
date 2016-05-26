@@ -341,6 +341,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::CommonNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(lofi_state)
   IPC_STRUCT_TRAITS_MEMBER(navigation_start)
   IPC_STRUCT_TRAITS_MEMBER(method)
+  IPC_STRUCT_TRAITS_MEMBER(post_data)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::BeginNavigationParams)
@@ -353,7 +354,6 @@ IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::StartNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(extra_headers)
-  IPC_STRUCT_TRAITS_MEMBER(browser_initiated_post_data)
 #if defined(OS_ANDROID)
   IPC_STRUCT_TRAITS_MEMBER(has_user_gesture)
 #endif
@@ -807,6 +807,12 @@ IPC_MESSAGE_ROUTED2(FrameMsg_DidUpdateOrigin,
 // support cross-process focused frame changes.
 IPC_MESSAGE_ROUTED0(FrameMsg_SetFocusedFrame)
 
+// Sent to a frame proxy when its real frame is preparing to enter fullscreen
+// in another process.  Actually entering fullscreen will be done separately as
+// part of ViewMsg_Resize, once the browser process has resized the tab for
+// fullscreen.
+IPC_MESSAGE_ROUTED0(FrameMsg_WillEnterFullscreen)
+
 // Send to the RenderFrame to set text tracks state and style settings.
 // Sent for top-level frames.
 IPC_MESSAGE_ROUTED1(FrameMsg_SetTextTrackSettings,
@@ -845,12 +851,11 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SelectPopupMenuItem,
 // Tells the renderer that a navigation is ready to commit.  The renderer should
 // request |stream_url| to get access to the stream containing the body of the
 // response.
-IPC_MESSAGE_ROUTED5(FrameMsg_CommitNavigation,
+IPC_MESSAGE_ROUTED4(FrameMsg_CommitNavigation,
                     content::ResourceResponseHead,    /* response */
                     GURL,                             /* stream_url */
                     content::CommonNavigationParams,  /* common_params */
-                    content::RequestNavigationParams, /* request_params */
-                    scoped_refptr<content::ResourceRequestBody> /* post_data */)
+                    content::RequestNavigationParams) /* request_params */
 
 // PlzNavigate
 // Tells the renderer that a navigation failed with the error code |error_code|
@@ -1352,10 +1357,9 @@ IPC_MESSAGE_ROUTED5(FrameHostMsg_DidLoadResourceFromMemoryCache,
 
 // PlzNavigate
 // Tells the browser to perform a navigation.
-IPC_MESSAGE_ROUTED3(FrameHostMsg_BeginNavigation,
+IPC_MESSAGE_ROUTED2(FrameHostMsg_BeginNavigation,
                     content::CommonNavigationParams,
-                    content::BeginNavigationParams,
-                    scoped_refptr<content::ResourceRequestBody>)
+                    content::BeginNavigationParams)
 
 // Sent as a response to FrameMsg_VisualStateRequest.
 // The message is delivered using RenderWidget::QueueMessage.

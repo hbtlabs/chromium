@@ -25,6 +25,8 @@ class LoadingReportTestCase(unittest.TestCase):
   _SECOND_REQUEST_DATA_LENGTH = 1024
   _TOPLEVEL_EVENT_OFFSET = 10
   _TOPLEVEL_EVENT_DURATION = 100
+  _SCRIPT_EVENT_DURATION = 50
+  _PARSING_EVENT_DURATION = 60
 
   def setUp(self):
     self.trace_creator = test_utils.TraceCreator()
@@ -36,6 +38,10 @@ class LoadingReportTestCase(unittest.TestCase):
     self.requests[1].timing.receive_headers_end = 0
     self.requests[0].encoded_data_length = self._FIRST_REQUEST_DATA_LENGTH
     self.requests[1].encoded_data_length = self._SECOND_REQUEST_DATA_LENGTH
+
+    self.ad_domain = 'i-ve-got-the-best-ads.com'
+    self.ad_url = 'http://www.' + self.ad_domain + '/i-m-really-rich.js'
+    self.requests[0].url = self.ad_url
 
     self.trace_events = [
         {'args': {'name': 'CrRendererMain'}, 'cat': '__metadata',
@@ -67,7 +73,17 @@ class LoadingReportTestCase(unittest.TestCase):
          * self.MILLI_TO_MICRO,
          'pid': 1, 'tid': 1, 'ph': 'X',
          'dur': self._TOPLEVEL_EVENT_DURATION * self.MILLI_TO_MICRO,
-         'cat': 'toplevel', 'name': 'MessageLoop::RunTask'}]
+         'cat': 'toplevel', 'name': 'MessageLoop::RunTask'},
+        {'ts': self._NAVIGATION_START_TIME * self.MILLI_TO_MICRO,
+         'pid': 1, 'tid': 1, 'ph': 'X',
+         'dur': self._PARSING_EVENT_DURATION * self.MILLI_TO_MICRO,
+         'cat': 'devtools.timeline', 'name': 'ParseHTML',
+         'args': {'beginData': {'url': ''}}},
+        {'ts': self._NAVIGATION_START_TIME * self.MILLI_TO_MICRO,
+         'pid': 1, 'tid': 1, 'ph': 'X',
+         'dur': self._SCRIPT_EVENT_DURATION * self.MILLI_TO_MICRO,
+         'cat': 'devtools.timeline', 'name': 'EvaluateScript',
+         'args': {'data': {'scriptName': ''}}}]
 
   def _MakeTrace(self):
     trace = self.trace_creator.CreateTrace(
@@ -88,12 +104,18 @@ class LoadingReportTestCase(unittest.TestCase):
                            loading_report['plt_ms'])
     self.assertAlmostEqual(0.34, loading_report['contentful_byte_frac'], 2)
     self.assertAlmostEqual(0.1844, loading_report['significant_byte_frac'], 2)
+    self.assertEqual(1, loading_report['preloaded_requests'])
+    self.assertEqual(1, loading_report['first_text_preloaded_requests'])
+    self.assertEqual(1, loading_report['contentful_preloaded_requests'])
+    self.assertEqual(1, loading_report['significant_preloaded_requests'])
     self.assertIsNone(loading_report['contentful_inversion'])
     self.assertIsNone(loading_report['significant_inversion'])
     self.assertIsNone(loading_report['ad_requests'])
     self.assertIsNone(loading_report['ad_or_tracking_requests'])
     self.assertIsNone(loading_report['ad_or_tracking_initiated_requests'])
     self.assertIsNone(loading_report['ad_or_tracking_initiated_transfer_size'])
+    self.assertIsNone(loading_report['ad_or_tracking_script_frac'])
+    self.assertIsNone(loading_report['ad_or_tracking_parsing_frac'])
     self.assertEqual(
         self._FIRST_REQUEST_DATA_LENGTH + self._SECOND_REQUEST_DATA_LENGTH
         + metrics.HTTP_OK_LENGTH * 2,
@@ -126,11 +148,9 @@ class LoadingReportTestCase(unittest.TestCase):
                            loading_report['plt_ms'])
 
   def testAdTrackingRules(self):
-    ad_domain = 'i-ve-got-the-best-ads.com'
-    self.requests[0].url = 'http://www.' + ad_domain
     trace = self._MakeTrace()
     loading_report = report.LoadingReport(
-        trace, [ad_domain], []).GenerateReport()
+        trace, [self.ad_domain], []).GenerateReport()
     self.assertEqual(1, loading_report['ad_requests'])
     self.assertEqual(1, loading_report['ad_or_tracking_requests'])
     self.assertEqual(1, loading_report['ad_or_tracking_initiated_requests'])
@@ -151,6 +171,41 @@ class LoadingReportTestCase(unittest.TestCase):
         float(self._TOPLEVEL_EVENT_DURATION - self._TOPLEVEL_EVENT_OFFSET)
         / (self._LOAD_END_TIME - self._NAVIGATION_START_TIME),
         loading_report['activity_load_frac'])
+
+  def testActivityBreakdown(self):
+    loading_report = report.LoadingReport(self._MakeTrace()).GenerateReport()
+    load_time = float(self._LOAD_END_TIME - self._NAVIGATION_START_TIME)
+    contentful_time = float(
+        self._CONTENTFUL_PAINT - self._NAVIGATION_START_TIME)
+
+    self.assertAlmostEqual(self._SCRIPT_EVENT_DURATION / load_time,
+                           loading_report['script_load_frac'])
+    self.assertAlmostEqual(
+        (self._PARSING_EVENT_DURATION - self._SCRIPT_EVENT_DURATION)
+        / load_time,
+        loading_report['parsing_load_frac'])
+
+    self.assertAlmostEqual(1., loading_report['script_significant_frac'])
+    self.assertAlmostEqual(0., loading_report['parsing_significant_frac'])
+
+    self.assertAlmostEqual(self._SCRIPT_EVENT_DURATION / contentful_time,
+                           loading_report['script_contentful_frac'])
+    self.assertAlmostEqual(
+        (self._PARSING_EVENT_DURATION - self._SCRIPT_EVENT_DURATION)
+        / contentful_time, loading_report['parsing_contentful_frac'])
+
+  def testAdsAndTrackingCost(self):
+    load_time = float(self._LOAD_END_TIME - self._NAVIGATION_START_TIME)
+    self.trace_events.append(
+       {'ts':  load_time / 3. * self.MILLI_TO_MICRO,
+        'pid': 1, 'tid': 1, 'ph': 'X',
+        'dur': load_time / 2. * self.MILLI_TO_MICRO,
+        'cat': 'devtools.timeline', 'name': 'EvaluateScript',
+        'args': {'data': {'scriptName': self.ad_url}}})
+    loading_report = report.LoadingReport(
+        self._MakeTrace(), [self.ad_domain]).GenerateReport()
+    self.assertAlmostEqual(.5, loading_report['ad_or_tracking_script_frac'])
+    self.assertAlmostEqual(0., loading_report['ad_or_tracking_parsing_frac'])
 
 
 if __name__ == '__main__':

@@ -15,9 +15,9 @@
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/ws/ids.h"
 #include "components/mus/ws/test_change_tracker.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "services/shell/public/cpp/shell_test.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 using mojo::Array;
 using mojo::Callback;
@@ -28,7 +28,6 @@ using shell::ShellClient;
 using mojo::String;
 using mus::mojom::ErrorCode;
 using mus::mojom::EventPtr;
-using mus::mojom::ViewportMetricsPtr;
 using mus::mojom::WindowDataPtr;
 using mus::mojom::WindowTree;
 using mus::mojom::WindowTreeClient;
@@ -323,12 +322,6 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
                                 uint32_t transient_window_id) override {
     tracker()->OnTransientWindowRemoved(window_id, transient_window_id);
   }
-  void OnWindowViewportMetricsChanged(mojo::Array<uint32_t> window_ids,
-                                      ViewportMetricsPtr old_metrics,
-                                      ViewportMetricsPtr new_metrics) override {
-    // Don't track the metrics as they are available at an indeterministic time
-    // on Android.
-  }
   void OnWindowHierarchyChanged(Id window,
                                 Id old_parent,
                                 Id new_parent,
@@ -408,7 +401,12 @@ class TestWindowTreeClientImpl : public mojom::WindowTreeClient,
   }
   void WmCreateTopLevelWindow(
       uint32_t change_id,
+      ConnectionSpecificId requesting_client_id,
       mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) override {
+    NOTIMPLEMENTED();
+  }
+  void WmClientJankinessChanged(ConnectionSpecificId client_id,
+                                bool janky) override {
     NOTIMPLEMENTED();
   }
   void OnAccelerator(uint32_t id, mojom::EventPtr event) override {

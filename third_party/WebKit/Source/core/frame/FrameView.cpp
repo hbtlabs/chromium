@@ -45,6 +45,7 @@
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/Settings.h"
 #include "core/frame/TopControls.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTextFormControlElement.h"
@@ -55,11 +56,9 @@
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutCounter.h"
 #include "core/layout/LayoutEmbeddedObject.h"
-#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutScrollbar.h"
 #include "core/layout/LayoutScrollbarPart.h"
-#include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/ScrollAlignment.h"
 #include "core/layout/TextAutosizer.h"
@@ -224,7 +223,7 @@ void FrameView::reset()
     m_visuallyNonEmptyPixelCount = 0;
     m_isVisuallyNonEmpty = false;
     clearFragmentAnchor();
-    m_viewportConstrainedObjects.clear();
+    m_viewportConstrainedObjects.reset();
     m_layoutSubtreeRootList.clear();
     m_orthogonalWritingModeRootList.clear();
 }
@@ -825,7 +824,7 @@ void FrameView::prepareLayoutAnalyzer()
     bool isTracing = false;
     TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("blink.debug.layout"), &isTracing);
     if (!isTracing) {
-        m_analyzer.clear();
+        m_analyzer.reset();
         return;
     }
     if (!m_analyzer)
@@ -2899,8 +2898,10 @@ void FrameView::setTracksPaintInvalidations(bool trackPaintInvalidations)
     for (Frame* frame = m_frame->tree().top(); frame; frame = frame->tree().traverseNext()) {
         if (!frame->isLocalFrame())
             continue;
-        if (LayoutViewItem layoutView = toLocalFrame(frame)->contentLayoutItem())
+        if (LayoutViewItem layoutView = toLocalFrame(frame)->contentLayoutItem()) {
+            layoutView.frameView()->m_isTrackingPaintInvalidations = trackPaintInvalidations;
             layoutView.compositor()->setTracksPaintInvalidations(trackPaintInvalidations);
+        }
     }
 
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("blink.invalidation"),

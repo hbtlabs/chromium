@@ -58,9 +58,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('deqp/functional/gles3/shaderstatequery.html', bug=483282)
     self.Skip('deqp/functional/gles3/shadertexturefunction/*.html', bug=483282)
     self.Skip('deqp/functional/gles3/sync.html', bug=483282)
-    self.Skip('deqp/functional/gles3/textureformat.html', bug=483282)
     self.Skip('deqp/functional/gles3/textureshadow.html', bug=483282)
-    self.Skip('deqp/functional/gles3/texturewrap.html', bug=483282)
     self.Skip('deqp/functional/gles3/transformfeedback.html', bug=483282)
     self.Skip('deqp/functional/gles3/uniformapi.html', bug=483282)
     self.Skip('deqp/functional/gles3/uniformbuffers.html', bug=483282)
@@ -70,7 +68,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('conformance2/glsl3/forbidden-operators.html', bug=483282)
 
-    self.Fail('conformance2/misc/expando-loss-2.html', bug=483282)
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
     self.Fail('conformance2/vertex_arrays/vertex-array-object.html', bug=483282)
 
@@ -295,6 +292,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         'tex-2d-rgba8-rgba-unsigned_byte.html',
         ['win', 'debug'], bug=542901)
 
+    # Win / NVidia
+    self.Fail('deqp/functional/gles3/textureformat/compressed_cube.html',
+        ['win', 'nvidia'], bug=614573)
+
     # Win / AMD
     # It's unfortunate that this suppression needs to be so broad, but
     # basically any test that uses readPixels is potentially flaky, and
@@ -308,6 +309,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'texstorage3d_format_depth_stencil.html',
         ['win', ('amd', 0x6779)], bug=614178)
+    self.Fail('deqp/functional/gles3/textureformat/compressed_cube.html',
+        ['win', ('amd', 0x6779)], bug=614573)
 
     # Win / Intel
     self.Fail('conformance2/buffers/uniform-buffers.html',
@@ -322,6 +325,16 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'texstorage3d_format_depth_stencil.html',
+        ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_00.html',
+        ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_02.html',
+        ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_03.html',
+        ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/sized_depth_stencil.html',
+        ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/compressed_cube.html',
         ['win', 'intel'], bug=614418)
 
     # Mac only.
@@ -338,6 +351,16 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('deqp/functional/gles3/texturespecification/' +
         'basic_copytexsubimage2d.html',
         ['mac'], bug=577144)
+    self.Fail('deqp/functional/gles3/textureformat/unsized_2d_array.html',
+        ['mac'], bug=577144)
+    self.Fail('deqp/functional/gles3/textureformat/unsized_3d.html',
+        ['mac'], bug=577144)
+    self.Fail('deqp/functional/gles3/textureformat/compressed_2d.html',
+        ['mac'], bug=612205)
+    self.Fail('deqp/functional/gles3/textureformat/compressed_cube.html',
+        ['mac'], bug=612205)
+    self.Fail('deqp/functional/gles3/texturewrap/e*',
+        ['mac'], bug=612205)
 
     self.Fail('deqp/data/gles3/shaders/qualification_order.html',
         ['mac'], bug=483282)
@@ -600,6 +623,9 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'texstorage3d_format_depth_stencil.html',
+        ['linux', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/texturespecification/' +
+        'texstorage3d_format_size.html',
         ['linux', 'amd'], bug=483282)
 
     # Conflicting expectations to test that the

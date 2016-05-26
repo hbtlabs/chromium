@@ -133,7 +133,7 @@ struct PaintLayerRareData {
 
     OwnPtr<PaintLayerReflectionInfo> reflectionInfo;
 
-    OwnPtr<PaintLayerFilterInfo> filterInfo;
+    Persistent<PaintLayerFilterInfo> filterInfo;
 
     // The accumulated subpixel offset of a composited layer's composited bounds compared to absolute coordinates.
     LayoutSize subpixelAccumulation;
@@ -209,7 +209,7 @@ struct PaintLayerRareData {
 class CORE_EXPORT PaintLayer : public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(PaintLayer);
 public:
-    PaintLayer(LayoutBoxModelObject*, PaintLayerType);
+    PaintLayer(LayoutBoxModelObject*);
     ~PaintLayer() override;
 
     // DisplayItemClient methods
@@ -239,7 +239,9 @@ public:
     // FIXME: Many people call this function while it has out-of-date information.
     bool isSelfPaintingLayer() const { return m_isSelfPaintingLayer; }
 
-    void setLayerType(PaintLayerType layerType) { m_layerType = layerType; ASSERT(static_cast<PaintLayerType>(m_layerType) == layerType); }
+    // PaintLayers which represent LayoutParts may become self-painting due to being composited.
+    // If this is the case, this method returns true.
+    bool isSelfPaintingOnlyBecauseIsCompositedPart() const;
 
     bool isTransparent() const { return layoutObject()->isTransparent() || layoutObject()->style()->hasBlendMode() || layoutObject()->hasMask(); }
 
@@ -696,7 +698,7 @@ public:
             m_clipRectsCache = adoptPtr(new ClipRectsCache);
         return *m_clipRectsCache;
     }
-    void clearClipRectsCache() const { m_clipRectsCache.clear(); }
+    void clearClipRectsCache() const { m_clipRectsCache.reset(); }
 
     void dirty3DTransformedDescendantStatus();
     // Both updates the status, and returns true if descendants of this have 3d.
@@ -786,7 +788,7 @@ private:
         m_needsPaintPhaseDescendantBlockBackgrounds |= layer.m_needsPaintPhaseDescendantBlockBackgrounds;
     }
 
-    unsigned m_layerType : 2; // PaintLayerType
+    bool isSelfPaintingLayerForIntrinsicOrScrollingReasons() const;
 
     // Self-painting layer is an optimization where we avoid the heavy Layer painting
     // machinery for a Layer allocated only to handle the overflow clip case.

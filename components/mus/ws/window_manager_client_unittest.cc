@@ -17,9 +17,9 @@
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_connection_observer.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_util.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/mojo/geometry/geometry_util.h"
 
 namespace mus {
 namespace ws {
@@ -62,6 +62,8 @@ class TestWindowManagerDelegate : public WindowManagerDelegate {
       std::map<std::string, std::vector<uint8_t>>* properties) override {
     return nullptr;
   }
+  void OnWmClientJankinessChanged(const std::set<Window*>& client_windows,
+                                  bool janky) override {}
   void OnAccelerator(uint32_t id, const ui::Event& event) override {}
 
  private:

@@ -134,7 +134,7 @@ void DocumentWebSocketChannel::BlobLoader::didFail(FileError::ErrorCode errorCod
     // |this| is deleted here.
 }
 
-DocumentWebSocketChannel::DocumentWebSocketChannel(Document* document, WebSocketChannelClient* client, const String& sourceURL, unsigned lineNumber, WebSocketHandle *handle)
+DocumentWebSocketChannel::DocumentWebSocketChannel(Document* document, WebSocketChannelClient* client, PassOwnPtr<SourceLocation> location, WebSocketHandle *handle)
     : ContextLifecycleObserver(document)
     , m_handle(adoptPtr(handle ? handle : Platform::current()->createWebSocketHandle()))
     , m_client(client)
@@ -142,8 +142,7 @@ DocumentWebSocketChannel::DocumentWebSocketChannel(Document* document, WebSocket
     , m_sendingQuota(0)
     , m_receivedDataSizeForFlowControl(receivedDataSizeForFlowControlHighWaterMark * 2) // initial quota
     , m_sentSizeOfTopMessage(0)
-    , m_sourceURLAtConstruction(sourceURL)
-    , m_lineNumberAtConstruction(lineNumber)
+    , m_locationAtConstruction(std::move(location))
 {
 }
 
@@ -256,14 +255,14 @@ void DocumentWebSocketChannel::close(int code, const String& reason)
     processSendQueue();
 }
 
-void DocumentWebSocketChannel::fail(const String& reason, MessageLevel level, const String& sourceURL, unsigned lineNumber)
+void DocumentWebSocketChannel::fail(const String& reason, MessageLevel level, PassOwnPtr<SourceLocation> location)
 {
     WTF_LOG(Network, "DocumentWebSocketChannel %p fail(%s)", this, reason.utf8().data());
     // m_handle and m_client can be null here.
 
     InspectorInstrumentation::didReceiveWebSocketFrameError(document(), m_identifier, reason);
     const String message = "WebSocket connection to '" + m_url.elidedString() + "' failed: " + reason;
-    getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, level, message, sourceURL, lineNumber, 0));
+    getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, level, message, std::move(location)));
 
     if (m_client)
         m_client->didError();
@@ -281,7 +280,7 @@ void DocumentWebSocketChannel::disconnect()
         InspectorInstrumentation::didCloseWebSocket(document(), m_identifier);
     }
     abortAsyncOperations();
-    m_handle.clear();
+    m_handle.reset();
     m_client = nullptr;
     m_identifier = 0;
 }
@@ -391,7 +390,7 @@ void DocumentWebSocketChannel::abortAsyncOperations()
 
 void DocumentWebSocketChannel::handleDidClose(bool wasClean, unsigned short code, const String& reason)
 {
-    m_handle.clear();
+    m_handle.reset();
     abortAsyncOperations();
     if (!m_client) {
         return;
@@ -519,7 +518,7 @@ void DocumentWebSocketChannel::didClose(WebSocketHandle* handle, bool wasClean, 
     ASSERT(m_handle);
     ASSERT(handle == m_handle);
 
-    m_handle.clear();
+    m_handle.reset();
 
     if (m_identifier) {
         TRACE_EVENT_INSTANT1("devtools.timeline", "WebSocketDestroy", TRACE_EVENT_SCOPE_THREAD, "data", InspectorWebSocketEvent::data(document(), m_identifier));

@@ -1,10 +1,10 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
-<link rel="import" href="chrome://md-settings/icons.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
-<link rel="import" href="chrome://md-settings/site_settings/constants.html">
-<link rel="import" href="chrome://md-settings/site_settings/site_settings_behavior.html">
-<link rel="import" href="chrome://md-settings/site_settings/site_settings_prefs_browser_proxy.html">
+<link rel="import" href="/icons.html">
+<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="/site_settings/constants.html">
+<link rel="import" href="/site_settings/site_settings_behavior.html">
+<link rel="import" href="/site_settings/site_settings_prefs_browser_proxy.html">
 
 <dom-module id="settings-site-settings-page">
   <template>
@@ -54,25 +54,6 @@
       </div>
     </div>
     <div class="settings-box two-line"
-        category$="[[ContentSettingsTypes.JAVASCRIPT]]"
-        on-tap="onTapCategory">
-      <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.JAVASCRIPT)]]" item-icon=""></iron-icon>
-      <div class="middle">
-        [[computeTitleForContentCategory(ContentSettingsTypes.JAVASCRIPT)]]
-        <div id="javascript" class="secondary"></div>
-      </div>
-    </div>
-    <div class="settings-box two-line"
-        category$="[[ContentSettingsTypes.POPUPS]]" on-tap="onTapCategory">
-      <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.POPUPS)]]" item-icon=""></iron-icon>
-      <div class="middle">
-        [[computeTitleForContentCategory(ContentSettingsTypes.POPUPS)]]
-        <div id="popups" class="secondary"></div>
-      </div>
-    </div>
-    <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.NOTIFICATIONS]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
@@ -83,12 +64,31 @@
       </div>
     </div>
     <div class="settings-box two-line"
+        category$="[[ContentSettingsTypes.JAVASCRIPT]]"
+        on-tap="onTapCategory">
+      <iron-icon icon="[[computeIconForContentCategory(
+          ContentSettingsTypes.JAVASCRIPT)]]" item-icon=""></iron-icon>
+      <div class="middle">
+        [[computeTitleForContentCategory(ContentSettingsTypes.JAVASCRIPT)]]
+        <div id="javascript" class="secondary"></div>
+      </div>
+    </div>
+    <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.IMAGES]]" on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
           ContentSettingsTypes.IMAGES)]]" item-icon=""></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.IMAGES)]]
         <div id="images" class="secondary"></div>
+      </div>
+    </div>
+    <div class="settings-box two-line"
+        category$="[[ContentSettingsTypes.POPUPS]]" on-tap="onTapCategory">
+      <iron-icon icon="[[computeIconForContentCategory(
+          ContentSettingsTypes.POPUPS)]]" item-icon=""></iron-icon>
+      <div class="middle">
+        [[computeTitleForContentCategory(ContentSettingsTypes.POPUPS)]]
+        <div id="popups" class="secondary"></div>
       </div>
     </div>
   </template>

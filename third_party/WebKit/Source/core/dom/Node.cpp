@@ -973,9 +973,10 @@ bool Node::canStartSelection() const
 
     if (layoutObject()) {
         const ComputedStyle& style = layoutObject()->styleRef();
-        // We allow selections to begin within an element that has -webkit-user-select: none set,
-        // but if the element is draggable then dragging should take priority over selection.
-        if (style.userDrag() == DRAG_ELEMENT && style.userSelect() == SELECT_NONE)
+        // We don't allow selections to begin within an element that has
+        // -webkit-user-select: none set,
+        // https://drafts.csswg.org/css-ui-4/#valdef-user-select-none
+        if (style.userSelect() == SELECT_NONE)
             return false;
     }
     ContainerNode* parent = FlatTreeTraversal::parent(*this);
@@ -1040,7 +1041,7 @@ bool Node::isChildOfV0ShadowHost() const
 Element* Node::shadowHost() const
 {
     if (ShadowRoot* root = containingShadowRoot())
-        return root->host();
+        return &root->host();
     return nullptr;
 }
 
@@ -1078,7 +1079,7 @@ Element* Node::parentOrShadowHostElement() const
         return nullptr;
 
     if (parent->isShadowRoot())
-        return toShadowRoot(parent)->host();
+        return &toShadowRoot(parent)->host();
 
     if (!parent->isElementNode())
         return nullptr;
@@ -2341,15 +2342,21 @@ void Node::setCustomElementState(CustomElementState newState)
 
     DCHECK(isHTMLElement());
     DCHECK_NE(V0Upgraded, getV0CustomElementState());
+#if DCHECK_IS_ON()
+    bool wasDefined = toElement(this)->isDefined();
+#endif
 
     setFlag(CustomElementFlag);
     if (newState == CustomElementState::Custom)
         setFlag(CustomElementCustomFlag);
     DCHECK(newState == getCustomElementState());
 
-    // TODO(kojii): Should fire pseudoStateChanged() when :defined selector is
-    // ready.
-    // toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
+    // When the state goes from Uncustomized to Undefined, and then to Custom,
+    // isDefined is always flipped.
+#if DCHECK_IS_ON()
+    DCHECK_NE(wasDefined, toElement(this)->isDefined());
+#endif
+    toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
 }
 
 void Node::setV0CustomElementState(V0CustomElementState newState)

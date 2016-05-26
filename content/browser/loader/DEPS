@@ -23,6 +23,7 @@ specific_include_rules = {
     "+content/public/common/resource_response.h",
 
     # TODO: these all have to be removed.
+    "+content/browser/host_zoom_map_impl.h",
     "+content/browser/resource_context_impl.h",
     "+content/public/common/content_features.h",
 
@@ -94,7 +95,7 @@ specific_include_rules = {
     "+content/public/browser/resource_throttle.h",
 
     # TODO: these all have to be removed.
-    "+content/public/browser/power_save_blocker.h",
+    "+content/public/browser/power_save_blocker_factory.h",
   ],
   "resource_dispatcher_host_impl\.(cc|h)": [
     "-content",

@@ -120,6 +120,7 @@ MediaCaptureFromVideo status=test
 MediaConstraints status=experimental
 MediaDevices status=stable
 MediaDocumentDownloadButton
+MediaGetSettings status=test
 MediaRecorder status=stable
 MediaSession
 MediaSourceExperimental status=experimental
@@ -214,7 +215,7 @@ TraceWrappables
 TrustedEventsDefaultAction
 UnsafeES3APIs
 UnsandboxedAuxiliary status=stable
-UserSelectAll status=experimental
+UserSelectAll status=stable
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
 WebBluetooth

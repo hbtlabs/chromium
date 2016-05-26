@@ -139,6 +139,12 @@ bool CSPDirectiveList::checkDynamic(SourceListDirective* directive) const
     return !directive || directive->allowDynamic();
 }
 
+void CSPDirectiveList::reportMixedContent(const KURL& mixedURL) const
+{
+    if (strictMixedContentChecking())
+        m_policy->reportViolation(ContentSecurityPolicy::BlockAllMixedContent, ContentSecurityPolicy::BlockAllMixedContent, String(), mixedURL, m_reportEndpoints, m_header, ContentSecurityPolicy::URLViolation);
+}
+
 bool CSPDirectiveList::checkSource(SourceListDirective* directive, const KURL& url, ContentSecurityPolicy::RedirectStatus redirectStatus) const
 {
     // If |url| is empty, fall back to the policy URL to ensure that <object>'s
@@ -417,14 +423,20 @@ bool CSPDirectiveList::allowAncestors(LocalFrame* frame, const KURL& url, Conten
     return reportingStatus == ContentSecurityPolicy::SendReport ? checkAncestorsAndReportViolation(m_frameAncestors.get(), frame, url) : checkAncestors(m_frameAncestors.get(), frame);
 }
 
-bool CSPDirectiveList::allowScriptNonce(const String& nonce) const
+CSPDirectiveList::NoncePolicyDisposition CSPDirectiveList::allowScriptNonce(const String& nonce) const
 {
-    return checkNonce(operativeDirective(m_scriptSrc.get()), nonce);
+    SourceListDirective* directive = operativeDirective(m_scriptSrc.get());
+    if (!directive)
+        return NoncePolicyDisposition::NoDirective;
+    return checkNonce(directive, nonce) ? NoncePolicyDisposition::Allowed : NoncePolicyDisposition::Denied;
 }
 
-bool CSPDirectiveList::allowStyleNonce(const String& nonce) const
+CSPDirectiveList::NoncePolicyDisposition CSPDirectiveList::allowStyleNonce(const String& nonce) const
 {
-    return checkNonce(operativeDirective(m_styleSrc.get()), nonce);
+    SourceListDirective* directive = operativeDirective(m_styleSrc.get());
+    if (!directive)
+        return NoncePolicyDisposition::NoDirective;
+    return checkNonce(directive, nonce) ? NoncePolicyDisposition::Allowed : NoncePolicyDisposition::Denied;
 }
 
 bool CSPDirectiveList::allowScriptHash(const CSPHashValue& hashValue, ContentSecurityPolicy::InlineType type) const
@@ -639,18 +651,17 @@ void CSPDirectiveList::treatAsPublicAddress(const String& name, const String& va
 
 void CSPDirectiveList::enforceStrictMixedContentChecking(const String& name, const String& value)
 {
-    if (m_reportOnly) {
-        m_policy->reportInvalidInReportOnly(name);
-        return;
-    }
     if (m_strictMixedContentCheckingEnforced) {
         m_policy->reportDuplicateDirective(name);
         return;
     }
-    m_strictMixedContentCheckingEnforced = true;
-    m_policy->enforceStrictMixedContentChecking();
     if (!value.isEmpty())
         m_policy->reportValueForEmptyDirective(name, value);
+
+    m_strictMixedContentCheckingEnforced = true;
+
+    if (!m_reportOnly)
+        m_policy->enforceStrictMixedContentChecking();
 }
 
 void CSPDirectiveList::enableInsecureRequestsUpgrade(const String& name, const String& value)

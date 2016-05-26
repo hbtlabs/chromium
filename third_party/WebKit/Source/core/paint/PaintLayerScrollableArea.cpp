@@ -55,7 +55,6 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutFlexibleBox.h"
-#include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutScrollbar.h"
 #include "core/layout/LayoutScrollbarPart.h"
@@ -976,7 +975,7 @@ static inline const LayoutObject& layoutObjectForScrollbar(const LayoutObject& l
 
         if (ShadowRoot* shadowRoot = node->containingShadowRoot()) {
             if (shadowRoot->type() == ShadowRootType::UserAgent)
-                return *shadowRoot->host()->layoutObject();
+                return *shadowRoot->host().layoutObject();
         }
     }
 

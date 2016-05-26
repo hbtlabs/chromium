@@ -19,7 +19,7 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 
-namespace gfx {
+namespace gl {
 
 // Base class for GLX surfaces.
 class GL_EXPORT GLSurfaceGLX : public GLSurface {
@@ -35,6 +35,8 @@ class GL_EXPORT GLSurfaceGLX : public GLSurface {
   static bool HasGLXExtension(const char* name);
   static bool IsCreateContextSupported();
   static bool IsCreateContextRobustnessSupported();
+  static bool IsCreateContextProfileSupported();
+  static bool IsCreateContextES2ProfileSupported();
   static bool IsTextureFromPixmapSupported();
   static bool IsOMLSyncControlSupported();
 
@@ -70,7 +72,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
   bool SupportsPostSubBuffer() override;
   void* GetConfig() override;
   gfx::SwapResult PostSubBuffer(int x, int y, int width, int height) override;
-  VSyncProvider* GetVSyncProvider() override;
+  gfx::VSyncProvider* GetVSyncProvider() override;
 
  protected:
   ~NativeViewGLSurfaceGLX() override;
@@ -95,7 +97,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX,
   GLXFBConfig config_;
   gfx::Size size_;
 
-  std::unique_ptr<VSyncProvider> vsync_provider_;
+  std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeViewGLSurfaceGLX);
 };
@@ -129,6 +131,6 @@ class GL_EXPORT UnmappedNativeViewGLSurfaceGLX : public GLSurfaceGLX {
   DISALLOW_COPY_AND_ASSIGN(UnmappedNativeViewGLSurfaceGLX);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_SURFACE_GLX_H_

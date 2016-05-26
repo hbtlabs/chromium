@@ -31,8 +31,10 @@
 #include "core/HTMLNames.h"
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSValuePool.h"
+#include "core/css/StylePropertySet.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/html/HTMLTableCaptionElement.h"
@@ -41,7 +43,6 @@
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTableSectionElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/layout/LayoutTable.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/StdLibExtras.h"
 
@@ -374,7 +375,7 @@ void HTMLTableElement::parseAttribute(const QualifiedName& name, const AtomicStr
             m_rulesAttr = AllRules;
     } else if (name == cellpaddingAttr) {
         if (!value.isEmpty())
-            m_padding = max(0, value.toInt());
+            m_padding = std::max(0, value.toInt());
         else
             m_padding = 1;
     } else if (name == colsAttr) {

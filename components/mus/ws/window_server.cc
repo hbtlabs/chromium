@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
+#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_binding.h"
 #include "components/mus/ws/display_manager.h"
@@ -22,10 +23,9 @@
 #include "components/mus/ws/window_server_delegate.h"
 #include "components/mus/ws/window_tree.h"
 #include "components/mus/ws/window_tree_binding.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/input_events/input_events_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
 #include "services/shell/public/cpp/connection.h"
+#include "ui/events/mojo/input_events_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace mus {
@@ -425,16 +425,6 @@ void WindowServer::SetPaintCallback(
                                     << "allowed only in tests.";
   DCHECK(window_paint_callback_.is_null() || callback.is_null());
   window_paint_callback_ = callback;
-}
-
-void WindowServer::ProcessViewportMetricsChanged(
-    Display* display,
-    const mojom::ViewportMetrics& old_metrics,
-    const mojom::ViewportMetrics& new_metrics) {
-  for (auto& pair : tree_map_) {
-    pair.second->ProcessViewportMetricsChanged(
-        display, old_metrics, new_metrics, IsOperationSource(pair.first));
-  }
 }
 
 bool WindowServer::GetAndClearInFlightWindowManagerChange(

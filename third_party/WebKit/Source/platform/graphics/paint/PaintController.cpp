@@ -65,6 +65,11 @@ void PaintController::processNewItem(DisplayItem& displayItem)
     DCHECK(!m_constructionDisabled);
     DCHECK(!skippingCache() || !displayItem.isCached());
 
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    if (!skippingCache() && (displayItem.isCacheable() || displayItem.isCached()))
+        displayItem.client().beginShouldKeepAlive();
+#endif
+
     if (displayItem.isCached())
         ++m_numCachedNewItems;
 
@@ -123,26 +128,19 @@ void PaintController::endScope()
     endSkippingCache();
 }
 
-void PaintController::invalidate(const DisplayItemClient& client)
+void PaintController::displayItemClientWasInvalidated(const DisplayItemClient& client)
 {
 #if DCHECK_IS_ON()
     // Slimming paint v1 CompositedLayerMapping may invalidate client on extra layers.
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() || clientCacheIsValid(client))
         m_invalidations.append(client.debugName());
-#endif
 
-    invalidateUntracked(client);
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && m_trackedPaintInvalidationObjects)
-        m_trackedPaintInvalidationObjects->append(client.debugName());
-}
-
-void PaintController::invalidateUntracked(const DisplayItemClient& client)
-{
-    // This can be called during painting, but we can't invalidate already painted clients.
-    client.setDisplayItemsUncached();
-#if DCHECK_IS_ON()
+    // Should not invalidate already painted clients.
     DCHECK(!m_newDisplayItemIndicesByClient.contains(&client));
 #endif
+
+    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && m_trackedPaintInvalidationObjects)
+        m_trackedPaintInvalidationObjects->append(client.debugName());
 }
 
 void PaintController::invalidateAll()
@@ -158,8 +156,8 @@ void PaintController::invalidateAll()
 
 bool PaintController::clientCacheIsValid(const DisplayItemClient& client) const
 {
-#if DCHECK_IS_ON()
-    DCHECK(DisplayItemClient::isAlive(client));
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    CHECK(client.isAlive());
 #endif
     if (skippingCache())
         return false;
@@ -169,7 +167,8 @@ bool PaintController::clientCacheIsValid(const DisplayItemClient& client) const
 void PaintController::invalidatePaintOffset(const DisplayItemClient& client)
 {
     DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-    invalidate(client);
+    displayItemClientWasInvalidated(client);
+    client.setDisplayItemsUncached();
 
 #if DCHECK_IS_ON()
     DCHECK(!paintOffsetWasInvalidated(client));
@@ -261,17 +260,6 @@ void PaintController::copyCachedSubsequence(const DisplayItemList& currentList, 
     } while (!endSubsequenceId.matches(updatedList.last()));
 }
 
-void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutObject)
-{
-#if DCHECK_IS_ON()
-    m_newDisplayItemList.assertDisplayItemClientsAreAlive();
-#endif
-    commitNewDisplayItemsInternal(offsetFromLayoutObject);
-#if DCHECK_IS_ON()
-    m_currentPaintArtifact.getDisplayItemList().assertDisplayItemClientsAreAlive();
-#endif
-}
-
 static IntRect visualRectForDisplayItem(const DisplayItem& displayItem, const LayoutSize& offsetFromLayoutObject)
 {
     LayoutRect visualRect = displayItem.client().visualRect();
@@ -290,7 +278,7 @@ static IntRect visualRectForDisplayItem(const DisplayItem& displayItem, const La
 // Coefficients are related to the ratio of out-of-order CachedDisplayItems
 // and the average number of (Drawing|Subsequence)DisplayItems per client.
 //
-void PaintController::commitNewDisplayItemsInternal(const LayoutSize& offsetFromLayoutObject)
+void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutObject)
 {
     TRACE_EVENT2("blink,benchmark", "PaintController::commitNewDisplayItems",
         "current_display_list_size", (int)m_currentPaintArtifact.getDisplayItemList().size(),
@@ -318,8 +306,9 @@ void PaintController::commitNewDisplayItemsInternal(const LayoutSize& offsetFrom
 
         for (const auto& item : m_newDisplayItemList) {
             m_newDisplayItemList.appendVisualRect(visualRectForDisplayItem(item, offsetFromLayoutObject));
-            if (item.isDrawing())
-                gpuAnalyzer.analyze(static_cast<const DrawingDisplayItem&>(item).picture());
+            // No reason to continue the analysis once we have a veto.
+            if (gpuAnalyzer.suitableForGpuRasterization())
+                item.analyzeForGpuRasterization(gpuAnalyzer);
         }
         m_currentPaintArtifact = PaintArtifact(std::move(m_newDisplayItemList), m_newPaintChunks.releasePaintChunks(), gpuAnalyzer.suitableForGpuRasterization());
         m_newDisplayItemList = DisplayItemList(kInitialDisplayItemListCapacityBytes);
@@ -441,8 +430,12 @@ void PaintController::updateCacheGeneration()
 {
     m_currentCacheGeneration = DisplayItemCacheGeneration::next();
     for (const DisplayItem& displayItem : m_currentPaintArtifact.getDisplayItemList()) {
-        if (displayItem.isCacheable())
-            displayItem.client().setDisplayItemsCached(m_currentCacheGeneration);
+        if (!displayItem.isCacheable())
+            continue;
+        displayItem.client().setDisplayItemsCached(m_currentCacheGeneration);
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+        displayItem.client().endShouldKeepAlive();
+#endif
     }
 }
 

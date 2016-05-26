@@ -15,8 +15,6 @@ component("mus") {
   sources = [
     "aura_init.cc",
     "aura_init.h",
-    "display_converter.cc",
-    "display_converter.h",
     "display_list.cc",
     "display_list.h",
     "input_method_mus.cc",
@@ -24,6 +22,8 @@ component("mus") {
     "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
+    "platform_window_mus.cc",
+    "platform_window_mus.h",
     "screen_mus.cc",
     "screen_mus.h",
     "screen_mus_delegate.h",
@@ -57,11 +57,9 @@ component("mus") {
     "//components/bitmap_uploader",
     "//components/mus/gles2:lib",
     "//components/mus/public/cpp",
+    "//components/mus/public/cpp/surfaces",
     "//components/mus/public/interfaces",
-    "//mojo/converters/geometry",
     "//mojo/converters/ime",
-    "//mojo/converters/input_events",
-    "//mojo/converters/surfaces",
     "//mojo/public/c/system:for_component",
     "//mojo/public/cpp/bindings",
     "//services/catalog/public/cpp",
@@ -75,14 +73,15 @@ component("mus") {
     "//ui/events",
     "//ui/events:events_base",
     "//ui/events/devices",
+    "//ui/events/mojo",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
     "//ui/mojo/display",
     "//ui/mojo/ime:interfaces_cpp_sources",
     "//ui/native_theme",
     "//ui/platform_window",
-    "//ui/platform_window/stub",
     "//ui/views",
     "//ui/wm",
   ]
@@ -120,11 +119,6 @@ group("for_shared_library") {
   public_deps = [
     ":mus",
   ]
-  if (!is_component_build) {
-    deps = [
-      "//mojo/gles2",
-    ]
-  }
 }
 
 source_set("test_support") {
@@ -304,8 +298,5 @@ mojo_application_manifest("interactive_ui_tests_manifest") {
 group("for_component") {
   public_deps = [
     ":mus",
-  ]
-  deps = [
-    "//mojo/gles2",
   ]
 }

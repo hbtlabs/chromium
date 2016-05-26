@@ -43,7 +43,6 @@ class TracedValue;
 
 class CORE_EXPORT ScriptCallStack final : public RefCounted<ScriptCallStack> {
 public:
-    static PassRefPtr<ScriptCallStack> create(v8::Isolate*, v8::Local<v8::StackTrace>, size_t maxStackSize = V8StackTrace::maxCallStackSizeToCapture);
     static PassRefPtr<ScriptCallStack> capture(size_t maxStackSize = V8StackTrace::maxCallStackSizeToCapture);
     static PassRefPtr<ScriptCallStack> captureForConsole();
 
@@ -54,14 +53,14 @@ public:
     unsigned topLineNumber() const;
     unsigned topColumnNumber() const;
 
-    PassOwnPtr<protocol::Runtime::StackTrace> buildInspectorObject() const;
+    std::unique_ptr<protocol::Runtime::StackTrace> buildInspectorObject() const;
     void toTracedValue(TracedValue*, const char* name) const;
     String toString() const;
-    PassOwnPtr<V8StackTrace> copyStackTrace() const;
+    std::unique_ptr<V8StackTrace> copyStackTrace() const;
 
 private:
-    explicit ScriptCallStack(PassOwnPtr<V8StackTrace>);
-    OwnPtr<V8StackTrace> m_stackTrace;
+    explicit ScriptCallStack(std::unique_ptr<V8StackTrace>);
+    std::unique_ptr<V8StackTrace> m_stackTrace;
 };
 
 } // namespace blink

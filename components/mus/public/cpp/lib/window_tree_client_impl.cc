@@ -22,11 +22,11 @@
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/cpp/window_tree_connection_observer.h"
 #include "components/mus/public/cpp/window_tree_delegate.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/input_events/input_events_type_converters.h"
 #include "services/shell/public/cpp/connector.h"
 #include "ui/events/event.h"
+#include "ui/events/mojo/input_events_type_converters.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace mus {
@@ -51,8 +51,7 @@ Window* AddWindowToConnection(WindowTreeClientImpl* client,
   private_window.set_connection(client);
   private_window.set_server_id(window_data->window_id);
   private_window.set_visible(window_data->visible);
-  private_window.LocalSetViewportMetrics(mojom::ViewportMetrics(),
-                                         *window_data->viewport_metrics);
+  private_window.LocalSetDisplay(window_data->display_id);
   private_window.set_properties(
       window_data->properties
           .To<std::map<std::string, std::vector<uint8_t>>>());
@@ -454,6 +453,14 @@ void WindowTreeClientImpl::AddWindow(Window* window) {
 void WindowTreeClientImpl::OnWindowDestroyed(Window* window) {
   windows_.erase(server_id(window));
 
+  for (auto& entry : embedded_windows_) {
+    auto it = entry.second.find(window);
+    if (it != entry.second.end()) {
+      entry.second.erase(it);
+      break;
+    }
+  }
+
   // Remove any InFlightChanges associated with the window.
   std::set<uint32_t> in_flight_change_ids_to_remove;
   for (const auto& pair : in_flight_map_) {
@@ -714,11 +721,10 @@ void WindowTreeClientImpl::OnTopLevelCreated(uint32_t change_id,
   Window* window = change->window();
   WindowPrivate window_private(window);
 
-  // Drawn state and ViewportMetrics always come from the server (they can't
-  // be modified locally).
+  // Drawn state and display-id always come from the server (they can't be
+  // modified locally).
   window_private.LocalSetParentDrawn(drawn);
-  window_private.LocalSetViewportMetrics(mojom::ViewportMetrics(),
-                                         *data->viewport_metrics);
+  window_private.LocalSetDisplay(data->display_id);
 
   // The default visibilty is false, we only need update visibility if it
   // differs from that.
@@ -809,30 +815,6 @@ void WindowTreeClientImpl::OnTransientWindowRemoved(
   // with an in flight delete from the server.
   if (window && transient_window)
     WindowPrivate(window).LocalRemoveTransientWindow(transient_window);
-}
-
-namespace {
-
-void SetViewportMetricsOnDecendants(Window* root,
-                                    const mojom::ViewportMetrics& old_metrics,
-                                    const mojom::ViewportMetrics& new_metrics) {
-  WindowPrivate(root).LocalSetViewportMetrics(old_metrics, new_metrics);
-  const Window::Children& children = root->children();
-  for (size_t i = 0; i < children.size(); ++i)
-    SetViewportMetricsOnDecendants(children[i], old_metrics, new_metrics);
-}
-
-}  // namespace
-
-void WindowTreeClientImpl::OnWindowViewportMetricsChanged(
-    mojo::Array<uint32_t> window_ids,
-    mojom::ViewportMetricsPtr old_metrics,
-    mojom::ViewportMetricsPtr new_metrics) {
-  for (size_t i = 0; i < window_ids.size(); ++i) {
-    Window* window = GetWindowByServerId(window_ids[i]);
-    if (window)
-      SetViewportMetricsOnDecendants(window, *old_metrics, *new_metrics);
-  }
 }
 
 void WindowTreeClientImpl::OnWindowHierarchyChanged(
@@ -1072,14 +1054,27 @@ void WindowTreeClientImpl::WmSetProperty(uint32_t change_id,
 
 void WindowTreeClientImpl::WmCreateTopLevelWindow(
     uint32_t change_id,
+    ConnectionSpecificId requesting_client_id,
     mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties) {
   std::map<std::string, std::vector<uint8_t>> properties =
       transport_properties.To<std::map<std::string, std::vector<uint8_t>>>();
   Window* window =
       window_manager_delegate_->OnWmCreateTopLevelWindow(&properties);
+  embedded_windows_[requesting_client_id].insert(window);
   if (window_manager_internal_client_) {
     window_manager_internal_client_->OnWmCreatedTopLevelWindow(
         change_id, server_id(window));
+  }
+}
+
+void WindowTreeClientImpl::WmClientJankinessChanged(
+    ConnectionSpecificId client_id,
+    bool janky) {
+  if (window_manager_delegate_) {
+    auto it = embedded_windows_.find(client_id);
+    CHECK(it != embedded_windows_.end());
+    window_manager_delegate_->OnWmClientJankinessChanged(
+        embedded_windows_[client_id], janky);
   }
 }
 

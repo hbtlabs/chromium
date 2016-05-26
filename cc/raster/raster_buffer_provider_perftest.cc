@@ -129,15 +129,7 @@ class PerfImageDecodeTaskImpl : public TileTask {
   void RunOnWorkerThread() override {}
 
   // Overridden from TileTask:
-  void ScheduleOnOriginThread(RasterBufferProvider* provider) override {}
-  void CompleteOnOriginThread(RasterBufferProvider* provider) override {
-    Reset();
-  }
-
-  void Reset() {
-    state().Reset();
-    did_complete_ = false;
-  }
+  void OnTaskCompleted() override {}
 
  protected:
   ~PerfImageDecodeTaskImpl() override {}
@@ -146,34 +138,40 @@ class PerfImageDecodeTaskImpl : public TileTask {
   DISALLOW_COPY_AND_ASSIGN(PerfImageDecodeTaskImpl);
 };
 
+class PerfRasterBufferProviderHelper {
+ public:
+  virtual std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
+      const Resource* resource,
+      uint64_t resource_content_id,
+      uint64_t previous_content_id) = 0;
+  virtual void ReleaseBufferForRaster(std::unique_ptr<RasterBuffer> buffer) = 0;
+};
+
 class PerfRasterTaskImpl : public TileTask {
  public:
-  PerfRasterTaskImpl(std::unique_ptr<ScopedResource> resource,
+  PerfRasterTaskImpl(PerfRasterBufferProviderHelper* helper,
+                     std::unique_ptr<ScopedResource> resource,
+                     std::unique_ptr<RasterBuffer> raster_buffer,
                      TileTask::Vector* dependencies)
-      : TileTask(true, dependencies), resource_(std::move(resource)) {}
+      : TileTask(true, dependencies),
+        helper_(helper),
+        resource_(std::move(resource)),
+        raster_buffer_(std::move(raster_buffer)) {}
 
   // Overridden from Task:
   void RunOnWorkerThread() override {}
 
   // Overridden from TileTask:
-  void ScheduleOnOriginThread(RasterBufferProvider* provider) override {
-    // No tile ids are given to support partial updates.
-    raster_buffer_ = provider->AcquireBufferForRaster(resource_.get(), 0, 0);
-  }
-  void CompleteOnOriginThread(RasterBufferProvider* provider) override {
-    provider->ReleaseBufferForRaster(std::move(raster_buffer_));
-    Reset();
-  }
-
-  void Reset() {
-    state().Reset();
-    did_complete_ = false;
+  void OnTaskCompleted() override {
+    if (helper_)
+      helper_->ReleaseBufferForRaster(std::move(raster_buffer_));
   }
 
  protected:
   ~PerfRasterTaskImpl() override {}
 
  private:
+  PerfRasterBufferProviderHelper* helper_;
   std::unique_ptr<ScopedResource> resource_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
 
@@ -187,7 +185,9 @@ class RasterBufferProviderPerfTestBase {
   enum NamedTaskSet { REQUIRED_FOR_ACTIVATION, REQUIRED_FOR_DRAW, ALL };
 
   RasterBufferProviderPerfTestBase()
-      : context_provider_(make_scoped_refptr(new PerfContextProvider)),
+      : compositor_context_provider_(
+            make_scoped_refptr(new PerfContextProvider)),
+        worker_context_provider_(make_scoped_refptr(new PerfContextProvider)),
         task_runner_(new base::TestSimpleTaskRunner),
         task_graph_runner_(new SynchronousTaskGraphRunner),
         timer_(kWarmupRuns,
@@ -200,7 +200,8 @@ class RasterBufferProviderPerfTestBase {
       image_decode_tasks->push_back(new PerfImageDecodeTaskImpl);
   }
 
-  void CreateRasterTasks(unsigned num_raster_tasks,
+  void CreateRasterTasks(PerfRasterBufferProviderHelper* helper,
+                         unsigned num_raster_tasks,
                          const TileTask::Vector& image_decode_tasks,
                          RasterTaskVector* raster_tasks) {
     const gfx::Size size(1, 1);
@@ -211,9 +212,35 @@ class RasterBufferProviderPerfTestBase {
       resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
                          RGBA_8888);
 
+      // No tile ids are given to support partial updates.
+      std::unique_ptr<RasterBuffer> raster_buffer;
+      if (helper)
+        raster_buffer = helper->AcquireBufferForRaster(resource.get(), 0, 0);
       TileTask::Vector dependencies = image_decode_tasks;
       raster_tasks->push_back(
-          new PerfRasterTaskImpl(std::move(resource), &dependencies));
+          new PerfRasterTaskImpl(helper, std::move(resource),
+                                 std::move(raster_buffer), &dependencies));
+    }
+  }
+
+  void ResetRasterTasks(const RasterTaskVector& raster_tasks) {
+    for (auto& raster_task : raster_tasks) {
+      for (auto& decode_task : raster_task->dependencies())
+        decode_task->state().Reset();
+
+      raster_task->state().Reset();
+    }
+  }
+
+  void CancelRasterTasks(const RasterTaskVector& raster_tasks) {
+    for (auto& raster_task : raster_tasks) {
+      for (auto& decode_task : raster_task->dependencies()) {
+        if (!decode_task->state().IsCanceled())
+          decode_task->state().DidCancel();
+      }
+
+      if (!raster_task->state().IsCanceled())
+        raster_task->state().DidCancel();
     }
   }
 
@@ -248,7 +275,8 @@ class RasterBufferProviderPerfTestBase {
   }
 
  protected:
-  scoped_refptr<ContextProvider> context_provider_;
+  scoped_refptr<ContextProvider> compositor_context_provider_;
+  scoped_refptr<ContextProvider> worker_context_provider_;
   FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<FakeOutputSurface> output_surface_;
   std::unique_ptr<ResourceProvider> resource_provider_;
@@ -259,6 +287,7 @@ class RasterBufferProviderPerfTestBase {
 
 class RasterBufferProviderPerfTest
     : public RasterBufferProviderPerfTestBase,
+      public PerfRasterBufferProviderHelper,
       public testing::TestWithParam<RasterBufferProviderType> {
  public:
   // Overridden from testing::Test:
@@ -272,16 +301,18 @@ class RasterBufferProviderPerfTest
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
         Create3dOutputSurfaceAndResourceProvider();
-        raster_buffer_provider = OneCopyRasterBufferProvider::Create(
-            task_runner_.get(), context_provider_.get(),
-            resource_provider_.get(), std::numeric_limits<int>::max(), false,
+        raster_buffer_provider = base::MakeUnique<OneCopyRasterBufferProvider>(
+            task_runner_.get(), compositor_context_provider_.get(),
+            worker_context_provider_.get(), resource_provider_.get(),
+            std::numeric_limits<int>::max(), false,
             std::numeric_limits<int>::max(),
             PlatformColor::BestTextureFormat());
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_GPU:
         Create3dOutputSurfaceAndResourceProvider();
-        raster_buffer_provider = GpuRasterBufferProvider::Create(
-            context_provider_.get(), resource_provider_.get(), false, 0);
+        raster_buffer_provider = base::MakeUnique<GpuRasterBufferProvider>(
+            compositor_context_provider_.get(), worker_context_provider_.get(),
+            resource_provider_.get(), false, 0);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareOutputSurfaceAndResourceProvider();
@@ -300,6 +331,20 @@ class RasterBufferProviderPerfTest
     tile_task_manager_->CheckForCompletedTasks();
   }
 
+  // Overridden from PerfRasterBufferProviderHelper:
+  std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
+      const Resource* resource,
+      uint64_t resource_content_id,
+      uint64_t previous_content_id) override {
+    return tile_task_manager_->GetRasterBufferProvider()
+        ->AcquireBufferForRaster(resource, resource_content_id,
+                                 previous_content_id);
+  }
+  void ReleaseBufferForRaster(std::unique_ptr<RasterBuffer> buffer) override {
+    tile_task_manager_->GetRasterBufferProvider()->ReleaseBufferForRaster(
+        std::move(buffer));
+  }
+
   void RunMessageLoopUntilAllTasksHaveCompleted() {
     task_graph_runner_->RunUntilIdle();
     task_runner_->RunUntilIdle();
@@ -311,7 +356,8 @@ class RasterBufferProviderPerfTest
     TileTask::Vector image_decode_tasks;
     RasterTaskVector raster_tasks;
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
-    CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
+    CreateRasterTasks(this, num_raster_tasks, image_decode_tasks,
+                      &raster_tasks);
 
     // Avoid unnecessary heap allocations by reusing the same graph.
     TaskGraph graph;
@@ -319,6 +365,7 @@ class RasterBufferProviderPerfTest
     timer_.Reset();
     do {
       graph.Reset();
+      ResetRasterTasks(raster_tasks);
       BuildTileTaskGraph(&graph, raster_tasks);
       tile_task_manager_->ScheduleTasks(&graph);
       tile_task_manager_->CheckForCompletedTasks();
@@ -328,6 +375,7 @@ class RasterBufferProviderPerfTest
     TaskGraph empty;
     tile_task_manager_->ScheduleTasks(&empty);
     RunMessageLoopUntilAllTasksHaveCompleted();
+    tile_task_manager_->CheckForCompletedTasks();
 
     perf_test::PrintResult("schedule_tasks", TestModifierString(), test_name,
                            timer_.LapsPerSecond(), "runs/s", true);
@@ -341,7 +389,7 @@ class RasterBufferProviderPerfTest
     RasterTaskVector raster_tasks[kNumVersions];
     for (size_t i = 0; i < kNumVersions; ++i) {
       CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks[i]);
-      CreateRasterTasks(num_raster_tasks, image_decode_tasks[i],
+      CreateRasterTasks(this, num_raster_tasks, image_decode_tasks[i],
                         &raster_tasks[i]);
     }
 
@@ -352,6 +400,8 @@ class RasterBufferProviderPerfTest
     timer_.Reset();
     do {
       graph.Reset();
+      // Reset the tasks as for scheduling new state tasks are needed.
+      ResetRasterTasks(raster_tasks[count % kNumVersions]);
       BuildTileTaskGraph(&graph, raster_tasks[count % kNumVersions]);
       tile_task_manager_->ScheduleTasks(&graph);
       tile_task_manager_->CheckForCompletedTasks();
@@ -362,6 +412,7 @@ class RasterBufferProviderPerfTest
     TaskGraph empty;
     tile_task_manager_->ScheduleTasks(&empty);
     RunMessageLoopUntilAllTasksHaveCompleted();
+    tile_task_manager_->CheckForCompletedTasks();
 
     perf_test::PrintResult("schedule_alternate_tasks", TestModifierString(),
                            test_name, timer_.LapsPerSecond(), "runs/s", true);
@@ -373,7 +424,8 @@ class RasterBufferProviderPerfTest
     TileTask::Vector image_decode_tasks;
     RasterTaskVector raster_tasks;
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
-    CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
+    CreateRasterTasks(this, num_raster_tasks, image_decode_tasks,
+                      &raster_tasks);
 
     // Avoid unnecessary heap allocations by reusing the same graph.
     TaskGraph graph;
@@ -397,7 +449,8 @@ class RasterBufferProviderPerfTest
 
  private:
   void Create3dOutputSurfaceAndResourceProvider() {
-    output_surface_ = FakeOutputSurface::Create3d(context_provider_);
+    output_surface_ = FakeOutputSurface::Create3d(compositor_context_provider_,
+                                                  worker_context_provider_);
     CHECK(output_surface_->BindToClient(&output_surface_client_));
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_.get(), nullptr, &gpu_memory_buffer_manager_);
@@ -471,7 +524,8 @@ class RasterBufferProviderCommonPerfTest
  public:
   // Overridden from testing::Test:
   void SetUp() override {
-    output_surface_ = FakeOutputSurface::Create3d(context_provider_);
+    output_surface_ = FakeOutputSurface::Create3d(compositor_context_provider_,
+                                                  worker_context_provider_);
     CHECK(output_surface_->BindToClient(&output_surface_client_));
     resource_provider_ =
         FakeResourceProvider::Create(output_surface_.get(), nullptr);
@@ -483,7 +537,8 @@ class RasterBufferProviderCommonPerfTest
     TileTask::Vector image_decode_tasks;
     RasterTaskVector raster_tasks;
     CreateImageDecodeTasks(num_image_decode_tasks, &image_decode_tasks);
-    CreateRasterTasks(num_raster_tasks, image_decode_tasks, &raster_tasks);
+    CreateRasterTasks(nullptr, num_raster_tasks, image_decode_tasks,
+                      &raster_tasks);
 
     // Avoid unnecessary heap allocations by reusing the same graph.
     TaskGraph graph;
@@ -494,6 +549,8 @@ class RasterBufferProviderCommonPerfTest
       BuildTileTaskGraph(&graph, raster_tasks);
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
+
+    CancelRasterTasks(raster_tasks);
 
     perf_test::PrintResult("build_raster_task_graph", "", test_name,
                            timer_.LapsPerSecond(), "runs/s", true);

@@ -42,6 +42,7 @@ public class PhysicalWebUma {
     private static final String PREFS_LOCATION_GRANTED_COUNT = "PhysicalWeb.Prefs.LocationGranted";
     private static final String PWS_BACKGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Background";
     private static final String PWS_FOREGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Foreground";
+    private static final String PWS_REFRESH_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Refresh";
     private static final String OPT_IN_NOTIFICATION_PRESS_DELAYS =
             "PhysicalWeb.ReferralDelay.OptInNotification";
     private static final String STANDARD_NOTIFICATION_PRESS_DELAYS =
@@ -53,8 +54,11 @@ public class PhysicalWebUma {
             "PhysicalWeb.TotalUrls.OnRefresh";
     private static final String ACTIVITY_REFERRALS = "PhysicalWeb.ActivityReferral";
     private static final String PHYSICAL_WEB_STATE = "PhysicalWeb.State";
+    // Physical Web action names
     private static final String LAUNCH_FROM_PREFERENCES = "LaunchFromPreferences";
     private static final String LAUNCH_FROM_DIAGNOSTICS = "LaunchFromDiagnostics";
+    private static final String CHROME_START = "ChromeStart";
+    // Physical Web state names
     private static final String BLUETOOTH = "Bluetooth";
     private static final String DATA_CONNECTION = "DataConnection";
     private static final String LOCATION_PERMISSION = "LocationPermission";
@@ -145,11 +149,21 @@ public class PhysicalWebUma {
     }
 
     /**
-     * Records a response time from PWS for a resolution during a foreground scan.
+     * Records a response time from PWS for a resolution during a foreground scan that is not
+     * explicitly user-initiated through a refresh.
      * @param duration The length of time PWS took to respond.
      */
     public static void onForegroundPwsResolution(Context context, long duration) {
         handleTime(context, PWS_FOREGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Records a response time from PWS for a resolution during a foreground scan that is explicitly
+     * user-initiated through a refresh.
+     * @param duration The length of time PWS took to respond.
+     */
+    public static void onRefreshPwsResolution(Context context, long duration) {
+        handleTime(context, PWS_REFRESH_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -203,6 +217,13 @@ public class PhysicalWebUma {
             default:
                 break;
         }
+    }
+
+    /**
+     * Records the Physical Web state on Chrome startup.
+     */
+    public static void onChromeStart(Context context) {
+        recordPhysicalWebState(context, CHROME_START);
     }
 
     /**
@@ -324,6 +345,7 @@ public class PhysicalWebUma {
             uploadActions(PREFS_LOCATION_GRANTED_COUNT);
             uploadTimes(PWS_BACKGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(PWS_FOREGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
+            uploadTimes(PWS_REFRESH_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(STANDARD_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
             uploadTimes(OPT_IN_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
             uploadCounts(TOTAL_URLS_INITIAL_COUNTS);
@@ -345,6 +367,14 @@ public class PhysicalWebUma {
             uploadEnums(createStateString(DATA_CONNECTION, LAUNCH_FROM_PREFERENCES),
                     BOOLEAN_BOUNDARY);
             uploadEnums(createStateString(PREFERENCE, LAUNCH_FROM_PREFERENCES), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_SERVICES, CHROME_START),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(LOCATION_PERMISSION, CHROME_START),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(BLUETOOTH, CHROME_START), TRISTATE_BOUNDARY);
+            uploadEnums(createStateString(DATA_CONNECTION, CHROME_START),
+                    BOOLEAN_BOUNDARY);
+            uploadEnums(createStateString(PREFERENCE, CHROME_START), TRISTATE_BOUNDARY);
             removePref(HAS_DEFERRED_METRICS_KEY);
         }
 

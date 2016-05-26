@@ -788,7 +788,7 @@ void HTMLMediaElement::invokeLoadAlgorithm()
 
         cueTimeline().updateActiveCues(0);
     } else if (!m_paused) {
-        // TODO(philipj): There is a proposal to always reset the paused state
+        // TODO(foolip): There is a proposal to always reset the paused state
         // in the media element load algorithm, to avoid a bogus play() promise
         // rejection: https://github.com/whatwg/html/issues/869
         // This is where that change would have an effect, and it is measured to
@@ -1692,7 +1692,10 @@ void HTMLMediaElement::seek(double time)
     DVLOG(MEDIA_LOG_LEVEL) << "seek(" << (void*)this << ", " << time << ")";
 
     // 2 - If the media element's readyState is HAVE_NOTHING, abort these steps.
-    if (m_readyState == HAVE_NOTHING)
+    // FIXME: remove m_webMediaPlayer check once we figure out how
+    // m_webMediaPlayer is going out of sync with readystate.
+    // m_webMediaPlayer is cleared but readystate is not set to HAVE_NOTHING.
+    if (!m_webMediaPlayer || m_readyState == HAVE_NOTHING)
         return;
 
     // Ignore preload none and start load if necessary.
@@ -1993,7 +1996,7 @@ WebMediaPlayer::Preload HTMLMediaElement::preloadType() const
     // The spec does not define an invalid value default:
     // https://www.w3.org/Bugs/Public/show_bug.cgi?id=28950
 
-    // TODO(philipj): Try to make "metadata" the default preload state:
+    // TODO(foolip): Try to make "metadata" the default preload state:
     // https://crbug.com/310450
     UseCounter::count(document(), UseCounter::HTMLMediaElementPreloadDefault);
     return WebMediaPlayer::PreloadAuto;
@@ -3118,7 +3121,7 @@ void HTMLMediaElement::clearMediaPlayerAndAudioSourceProviderClientWithoutLockin
     getAudioSourceProvider().setClient(nullptr);
     if (m_webMediaPlayer) {
         m_audioSourceProvider.wrap(nullptr);
-        m_webMediaPlayer.clear();
+        m_webMediaPlayer.reset();
     }
 }
 

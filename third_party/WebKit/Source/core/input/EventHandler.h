@@ -87,8 +87,7 @@ class Widget;
 
 enum class DragInitiator;
 
-class CORE_EXPORT EventHandler final : public GarbageCollectedFinalized<EventHandler>
-    , public UserGestureUtilizedCallback {
+class CORE_EXPORT EventHandler final : public GarbageCollectedFinalized<EventHandler> {
 
     WTF_MAKE_NONCOPYABLE(EventHandler);
 public:
@@ -185,9 +184,6 @@ public:
     // Returns whether pointerId is active or not
     bool isPointerEventActive(int);
 
-    // Returns the type of the pointer corresponding to given pointerId
-    WebPointerProperties::PointerType getPointerEventType(int);
-
     void setPointerCapture(int, EventTarget*);
     void releasePointerCapture(int, EventTarget*);
     void elementRemoved(EventTarget*);
@@ -212,7 +208,6 @@ public:
     void capsLockStateMayHaveChanged(); // Only called by FrameSelection
 
     WebInputEventResult handleTouchEvent(const PlatformTouchEvent&);
-    void userGestureUtilized() override;
 
     bool useHandCursor(Node*, bool isOverLink);
 

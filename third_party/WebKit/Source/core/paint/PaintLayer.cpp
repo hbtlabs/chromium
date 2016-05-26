@@ -57,12 +57,9 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/HitTestingTransformState.h"
 #include "core/layout/LayoutFlowThread.h"
-#include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutReplica.h"
-#include "core/layout/LayoutScrollbar.h"
-#include "core/layout/LayoutScrollbarPart.h"
 #include "core/layout/LayoutTreeAsText.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -135,9 +132,8 @@ PaintLayerRareData::~PaintLayerRareData()
 {
 }
 
-PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject, PaintLayerType type)
-    : m_layerType(type)
-    , m_hasSelfPaintingLayerDescendant(false)
+PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject)
+    : m_hasSelfPaintingLayerDescendant(false)
     , m_hasSelfPaintingLayerDescendantDirty(false)
     , m_isRootLayer(layoutObject->isLayoutView())
     , m_visibleContentStatusDirty(true)
@@ -190,6 +186,8 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layoutObject, PaintLayerType type)
 
 PaintLayer::~PaintLayer()
 {
+    if (m_rareData && m_rareData->filterInfo)
+        m_rareData->filterInfo->clearLayer();
     if (layoutObject()->frame() && layoutObject()->frame()->page()) {
         if (ScrollingCoordinator* scrollingCoordinator = layoutObject()->frame()->page()->scrollingCoordinator())
             scrollingCoordinator->willDestroyLayer(this);
@@ -412,7 +410,7 @@ void PaintLayer::updateTransform(const ComputedStyle* oldStyle, const ComputedSt
         if (hasTransform)
             ensureRareData().transform = TransformationMatrix::create();
         else
-            m_rareData->transform.clear();
+            m_rareData->transform.reset();
 
         // PaintLayers with transforms act as clip rects roots, so clear the cached clip rects here.
         clipper().clearClipRectsIncludingDescendants();
@@ -757,14 +755,11 @@ bool PaintLayer::update3DTransformedDescendantStatus()
 void PaintLayer::updateLayerPosition()
 {
     LayoutPoint localPoint;
-    LayoutPoint inlineBoundingBoxOffset; // We don't put this into the Layer x/y for inlines, so we need to subtract it out when done.
 
     if (layoutObject()->isInline() && layoutObject()->isLayoutInline()) {
         LayoutInline* inlineFlow = toLayoutInline(layoutObject());
         IntRect lineBox = enclosingIntRect(inlineFlow->linesBoundingBox());
         m_size = lineBox.size();
-        inlineBoundingBoxOffset = lineBox.location();
-        localPoint.moveBy(inlineBoundingBoxOffset);
     } else if (LayoutBox* box = layoutBox()) {
         m_size = pixelSnappedIntSize(box->size(), box->location());
         localPoint.moveBy(box->topLeftLocation());
@@ -813,9 +808,6 @@ void PaintLayer::updateLayerPosition()
     } else if (m_rareData) {
         m_rareData->offsetForInFlowPosition = LayoutSize();
     }
-
-    // FIXME: We'd really like to just get rid of the concept of a layer rectangle and rely on the layoutObjects.
-    localPoint.moveBy(-inlineBoundingBoxOffset);
 
     if (m_location != localPoint) {
         setNeedsRepaint();
@@ -895,7 +887,7 @@ PaintLayer* PaintLayer::containingLayerForOutOfFlowPositioned(const PaintLayer* 
 PaintLayer* PaintLayer::enclosingTransformedAncestor() const
 {
     PaintLayer* curr = parent();
-    while (curr && !curr->isRootLayer() && !curr->layoutObject()->hasTransformRelatedProperty())
+    while (curr && !curr->isRootLayer() && !curr->transform())
         curr = curr->parent();
 
     return curr;
@@ -989,7 +981,7 @@ void PaintLayer::updateAncestorDependentCompositingInputs(const AncestorDependen
 {
     m_ancestorDependentCompositingInputs = compositingInputs;
     if (rareCompositingInputs.isDefault())
-        m_rareAncestorDependentCompositingInputs.clear();
+        m_rareAncestorDependentCompositingInputs.reset();
     else
         m_rareAncestorDependentCompositingInputs = adoptPtr(new RareAncestorDependentCompositingInputs(rareCompositingInputs));
     m_hasAncestorWithClipPath = hasAncestorWithClipPath;
@@ -2349,7 +2341,7 @@ void PaintLayer::clearCompositedLayerMapping(bool layerBeingDestroyed)
     }
 
     if (m_rareData)
-        m_rareData->compositedLayerMapping.clear();
+        m_rareData->compositedLayerMapping.reset();
 
     if (!layerBeingDestroyed)
         updateOrRemoveFilterEffectBuilder();
@@ -2449,13 +2441,23 @@ bool PaintLayer::childBackgroundIsKnownToBeOpaqueInRect(const LayoutRect& localR
     return false;
 }
 
+bool PaintLayer::isSelfPaintingLayerForIntrinsicOrScrollingReasons() const
+{
+    return layoutObject()->layerTypeRequired() == NormalPaintLayer
+        || (m_scrollableArea && m_scrollableArea->hasOverlayScrollbars())
+        || needsCompositedScrolling();
+}
+
 bool PaintLayer::shouldBeSelfPaintingLayer() const
 {
     if (layoutObject()->isLayoutPart() && toLayoutPart(layoutObject())->requiresAcceleratedCompositing())
         return true;
-    return m_layerType == NormalPaintLayer
-        || (m_scrollableArea && m_scrollableArea->hasOverlayScrollbars())
-        || needsCompositedScrolling();
+    return isSelfPaintingLayerForIntrinsicOrScrollingReasons();
+}
+
+bool PaintLayer::isSelfPaintingOnlyBecauseIsCompositedPart() const
+{
+    return shouldBeSelfPaintingLayer() && !isSelfPaintingLayerForIntrinsicOrScrollingReasons();
 }
 
 void PaintLayer::updateSelfPaintingLayer()
@@ -2671,7 +2673,7 @@ PaintLayerFilterInfo& PaintLayer::ensureFilterInfo()
 {
     PaintLayerRareData& rareData = ensureRareData();
     if (!rareData.filterInfo)
-        rareData.filterInfo = adoptPtr(new PaintLayerFilterInfo(this));
+        rareData.filterInfo = new PaintLayerFilterInfo(this);
     return *rareData.filterInfo;
 }
 

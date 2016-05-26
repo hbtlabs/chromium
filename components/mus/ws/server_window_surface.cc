@@ -7,12 +7,12 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
+#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_delegate.h"
 #include "components/mus/ws/server_window_surface_manager.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -110,7 +110,7 @@ bool ServerWindowSurface::ConvertSurfaceDrawQuad(
   // Surface ids originate from the client, meaning they are ClientWindowIds
   // and can only be resolved by the client that submitted the frame.
   const ClientWindowId other_client_window_id(
-      input->surface_quad_state->surface.To<cc::SurfaceId>().id);
+      input->surface_quad_state->surface->local_id);
   ServerWindow* other_window = window()->delegate()->FindWindowForSurface(
       window(), mojom::SurfaceType::DEFAULT, other_client_window_id);
   if (!other_window) {

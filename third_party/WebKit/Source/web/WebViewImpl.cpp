@@ -147,11 +147,13 @@
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPluginAction.h"
 #include "public/web/WebRange.h"
+#include "public/web/WebScopedUserGesture.h"
 #include "public/web/WebSelection.h"
 #include "public/web/WebTextInputInfo.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWindowFeatures.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
+#include "web/CompositorProxyClientImpl.h"
 #include "web/ContextFeaturesClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
 #include "web/DatabaseClientImpl.h"
@@ -687,7 +689,7 @@ bool WebViewImpl::scrollBy(const WebFloatSize& delta, const WebFloatSize& veloci
         WebGestureEvent syntheticScrollBegin = createGestureScrollEventFromFling(WebInputEvent::GestureScrollBegin, WebGestureDeviceTouchpad);
         syntheticScrollBegin.data.scrollBegin.deltaXHint = delta.width;
         syntheticScrollBegin.data.scrollBegin.deltaYHint = delta.height;
-        syntheticScrollBegin.data.scrollBegin.inertial = true;
+        syntheticScrollBegin.data.scrollBegin.inertialPhase = WebGestureEvent::MomentumPhase;
         handleGestureEvent(syntheticScrollBegin);
 
         WebGestureEvent syntheticScrollUpdate = createGestureScrollEventFromFling(WebInputEvent::GestureScrollUpdate, WebGestureDeviceTouchpad);
@@ -695,11 +697,11 @@ bool WebViewImpl::scrollBy(const WebFloatSize& delta, const WebFloatSize& veloci
         syntheticScrollUpdate.data.scrollUpdate.deltaY = delta.height;
         syntheticScrollUpdate.data.scrollUpdate.velocityX = velocity.width;
         syntheticScrollUpdate.data.scrollUpdate.velocityY = velocity.height;
-        syntheticScrollUpdate.data.scrollUpdate.inertial = true;
+        syntheticScrollUpdate.data.scrollUpdate.inertialPhase = WebGestureEvent::MomentumPhase;
         bool scrollUpdateHandled = handleGestureEvent(syntheticScrollUpdate) != WebInputEventResult::NotHandled;
 
         WebGestureEvent syntheticScrollEnd = createGestureScrollEventFromFling(WebInputEvent::GestureScrollEnd, WebGestureDeviceTouchpad);
-        syntheticScrollEnd.data.scrollEnd.inertial = true;
+        syntheticScrollEnd.data.scrollEnd.inertialPhase = WebGestureEvent::MomentumPhase;
         handleGestureEvent(syntheticScrollEnd);
         return scrollUpdateHandled;
     } else {
@@ -709,7 +711,7 @@ bool WebViewImpl::scrollBy(const WebFloatSize& delta, const WebFloatSize& veloci
         syntheticGestureEvent.data.scrollUpdate.deltaY = delta.height;
         syntheticGestureEvent.data.scrollUpdate.velocityX = velocity.width;
         syntheticGestureEvent.data.scrollUpdate.velocityY = velocity.height;
-        syntheticGestureEvent.data.scrollUpdate.inertial = true;
+        syntheticGestureEvent.data.scrollUpdate.inertialPhase = WebGestureEvent::MomentumPhase;
 
         return handleGestureEvent(syntheticGestureEvent) != WebInputEventResult::NotHandled;
     }
@@ -968,7 +970,7 @@ void WebViewImpl::transferActiveWheelFlingAnimation(const WebActiveWheelFlingPar
 bool WebViewImpl::endActiveFlingAnimation()
 {
     if (m_gestureAnimation) {
-        m_gestureAnimation.clear();
+        m_gestureAnimation.reset();
         m_flingSourceDevice = WebGestureDeviceUninitialized;
         if (m_layerTreeView)
             m_layerTreeView->didStopFlinging();
@@ -1945,6 +1947,35 @@ void WebViewImpl::resize(const WebSize& newSize)
         newSize, topControls().height(), topControls().shrinkViewport());
 }
 
+void WebViewImpl::willEnterFullScreen(WebRemoteFrame* fullscreenFrame)
+{
+    FrameOwner* owner = toWebRemoteFrameImpl(fullscreenFrame)->frame()->owner();
+    HTMLFrameOwnerElement* ownerElement = toHTMLFrameOwnerElement(owner);
+
+    // Let FullscreenController know that |ownerElement| is an ancestor of the
+    // actual fullscreen element, so that it can be treated a little
+    // differently:
+    // - it will need :-webkit-full-screen-ancestor style in addition to
+    //   :-webkit-full-screen.
+    // - it does not need to resend the ToggleFullscreen IPC to the browser
+    //   process.
+    m_fullscreenController->setFullscreenIsForCrossProcessAncestor();
+
+    // Call requestFullscreen() on |ownerElement| to make it the provisional
+    // fullscreen element in FullscreenController, and to prepare
+    // fullscreenchange events that will need to fire on it and its (local)
+    // ancestors. The events will be triggered if/when fullscreen is entered.
+    // Note that requestFullscreen() requires a user gesture.
+    //
+    // TODO(alexmos): currently, this assumes prefixed requests, but in the
+    // future, this should plumb in information about which request type
+    // (prefixed or unprefixed) to use for firing fullscreen events.
+    {
+        WebScopedUserGesture userGesture;
+        Fullscreen::from(ownerElement->document()).requestFullscreen(*ownerElement, Fullscreen::PrefixedRequest);
+    }
+}
+
 void WebViewImpl::didEnterFullScreen()
 {
     m_fullscreenController->didEnterFullScreen();
@@ -1953,6 +1984,11 @@ void WebViewImpl::didEnterFullScreen()
 void WebViewImpl::didExitFullScreen()
 {
     m_fullscreenController->didExitFullScreen();
+}
+
+void WebViewImpl::didUpdateFullScreenSize()
+{
+    m_fullscreenController->updateSize();
 }
 
 void WebViewImpl::beginFrame(double lastFrameTimeMonotonic)
@@ -1972,7 +2008,7 @@ void WebViewImpl::beginFrame(double lastFrameTimeMonotonic)
             PlatformGestureEvent endScrollEvent(PlatformEvent::GestureScrollEnd,
                 m_positionOnFlingStart, m_globalPositionOnFlingStart,
                 IntSize(), 0, PlatformEvent::NoModifiers, lastFlingSourceDevice == WebGestureDeviceTouchpad ? PlatformGestureSourceTouchpad : PlatformGestureSourceTouchscreen);
-            endScrollEvent.setScrollGestureData(0, 0, ScrollByPrecisePixel, 0, 0, true, false, -1 /* null plugin id */);
+            endScrollEvent.setScrollGestureData(0, 0, ScrollByPrecisePixel, 0, 0, ScrollInertialPhaseMomentum, false, -1 /* null plugin id */);
 
             mainFrameImpl()->frame()->eventHandler().handleGestureScrollEnd(endScrollEvent);
         }
@@ -2767,7 +2803,7 @@ void WebViewImpl::willCloseLayerTreeView()
     if (m_linkHighlightsTimeline) {
         m_linkHighlights.clear();
         detachCompositorAnimationTimeline(m_linkHighlightsTimeline.get());
-        m_linkHighlightsTimeline.clear();
+        m_linkHighlightsTimeline.reset();
     }
 
     if (m_layerTreeView)
@@ -4133,7 +4169,7 @@ void WebViewImpl::setZoomFactorOverride(float zoomFactor)
 void WebViewImpl::setPageOverlayColor(WebColor color)
 {
     if (m_pageColorOverlay)
-        m_pageColorOverlay.clear();
+        m_pageColorOverlay.reset();
 
     if (color == Color::transparent)
         return;
@@ -4509,6 +4545,11 @@ void WebViewImpl::forceNextWebGLContextCreationToFail()
 void WebViewImpl::forceNextDrawingBufferCreationToFail()
 {
     DrawingBuffer::forceNextDrawingBufferCreationToFail();
+}
+
+CompositorProxyClient* WebViewImpl::createCompositorProxyClient()
+{
+    return new CompositorProxyClientImpl();
 }
 
 void WebViewImpl::updatePageOverlays()

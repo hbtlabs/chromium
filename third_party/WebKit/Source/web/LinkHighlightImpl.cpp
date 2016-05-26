@@ -31,12 +31,12 @@
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/animation/CompositorFloatAnimationCurve.h"
+#include "platform/animation/TimingFunction.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -103,7 +103,7 @@ LinkHighlightImpl::~LinkHighlightImpl()
     if (m_owningWebViewImpl->linkHighlightsTimeline())
         m_owningWebViewImpl->linkHighlightsTimeline()->playerDestroyed(*this);
     m_compositorPlayer->setAnimationDelegate(nullptr);
-    m_compositorPlayer.clear();
+    m_compositorPlayer.reset();
 
     clearGraphicsLayerLinkHighlightPointer();
     releaseResources();
@@ -292,13 +292,15 @@ void LinkHighlightImpl::startHighlightAnimationIfNeeded()
 
     OwnPtr<CompositorFloatAnimationCurve> curve = adoptPtr(CompositorFactory::current().createFloatAnimationCurve());
 
-    curve->add(CompositorFloatKeyframe(0, startOpacity));
+    const auto easeType = CubicBezierTimingFunction::EaseType::EASE;
+
+    curve->addCubicBezierKeyframe(CompositorFloatKeyframe(0, startOpacity), easeType);
     // Make sure we have displayed for at least minPreFadeDuration before starting to fade out.
     float extraDurationRequired = std::max(0.f, minPreFadeDuration - static_cast<float>(monotonicallyIncreasingTime() - m_startTime));
     if (extraDurationRequired)
-        curve->add(CompositorFloatKeyframe(extraDurationRequired, startOpacity));
+        curve->addCubicBezierKeyframe(CompositorFloatKeyframe(extraDurationRequired, startOpacity), easeType);
     // For layout tests we don't fade out.
-    curve->add(CompositorFloatKeyframe(fadeDuration + extraDurationRequired, layoutTestMode() ? startOpacity : 0));
+    curve->addCubicBezierKeyframe(CompositorFloatKeyframe(fadeDuration + extraDurationRequired, layoutTestMode() ? startOpacity : 0), easeType);
 
     OwnPtr<CompositorAnimation> animation = adoptPtr(CompositorFactory::current().createAnimation(*curve, CompositorTargetProperty::OPACITY));
 

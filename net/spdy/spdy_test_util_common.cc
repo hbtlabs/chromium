@@ -216,11 +216,6 @@ class PriorityGetter : public BufferedSpdyFramerVisitorInterface {
                          size_t len) override {}
   void OnStreamEnd(SpdyStreamId stream_id) override {}
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override {}
-  SpdyHeadersHandlerInterface* OnHeaderFrameStart(
-      SpdyStreamId stream_id) override {
-    return nullptr;
-  }
-  void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override {}
   void OnSettings(bool clear_persisted) override {}
   void OnSetting(SpdySettingsIds id, uint8_t flags, uint32_t value) override {}
   void OnPing(SpdyPingId unique_id, bool is_ack) override {}
@@ -495,7 +490,8 @@ SpdyURLRequestContext::~SpdyURLRequestContext() {
 }
 
 bool HasSpdySession(SpdySessionPool* pool, const SpdySessionKey& key) {
-  return pool->FindAvailableSession(key, GURL(), BoundNetLog()) != NULL;
+  return static_cast<bool>(
+      pool->FindAvailableSession(key, GURL(), BoundNetLog()));
 }
 
 namespace {
@@ -551,7 +547,7 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
       http_session->spdy_session_pool()->CreateAvailableSessionFromSocket(
           key, std::move(connection), net_log, OK, is_secure);
   // Failure is reported asynchronously.
-  EXPECT_TRUE(spdy_session != NULL);
+  EXPECT_TRUE(spdy_session);
   EXPECT_TRUE(HasSpdySession(http_session->spdy_session_pool(), key));
   return spdy_session;
 }
@@ -654,7 +650,7 @@ base::WeakPtr<SpdySession> CreateFakeSpdySessionHelper(
       pool->CreateAvailableSessionFromSocket(
           key, std::move(handle), BoundNetLog(), OK, true /* is_secure */);
   // Failure is reported asynchronously.
-  EXPECT_TRUE(spdy_session != NULL);
+  EXPECT_TRUE(spdy_session);
   EXPECT_TRUE(HasSpdySession(pool, key));
   return spdy_session;
 }

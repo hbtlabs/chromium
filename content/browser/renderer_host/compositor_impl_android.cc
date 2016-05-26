@@ -139,11 +139,11 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
  public:
   OutputSurfaceWithoutParent(
       CompositorImpl* compositor,
-      const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+      scoped_refptr<ContextProviderCommandBuffer> context_provider,
       const base::Callback<void(gpu::Capabilities)>&
           populate_gpu_capabilities_callback,
       std::unique_ptr<ExternalBeginFrameSource> begin_frame_source)
-      : cc::OutputSurface(context_provider),
+      : cc::OutputSurface(std::move(context_provider), nullptr, nullptr),
         compositor_(compositor),
         populate_gpu_capabilities_callback_(populate_gpu_capabilities_callback),
         swap_buffers_completion_callback_(
@@ -687,7 +687,7 @@ void CompositorImpl::CreateOutputSurface() {
     context_provider = new ContextProviderCommandBuffer(
         std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
         gpu::GpuStreamPriority::NORMAL, surface_handle_, url,
-        gfx::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
+        gl::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
         attributes, nullptr,
         command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
     DCHECK(context_provider.get());

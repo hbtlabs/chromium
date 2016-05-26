@@ -4,6 +4,7 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 
+#include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
@@ -19,7 +20,7 @@ namespace blink {
 
 namespace {
 
-PassOwnPtr<V8StackTrace> captureStackTrace()
+std::unique_ptr<V8StackTrace> captureStackTrace()
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
@@ -39,18 +40,18 @@ PassOwnPtr<V8StackTrace> captureStackTrace()
 // static
 PassOwnPtr<SourceLocation> SourceLocation::capture(const String& url, unsigned lineNumber, unsigned columnNumber)
 {
-    OwnPtr<V8StackTrace> stackTrace = captureStackTrace();
+    std::unique_ptr<V8StackTrace> stackTrace = captureStackTrace();
     if (stackTrace && !stackTrace->isEmpty())
-        return SourceLocation::create(stackTrace->topSourceURL(), stackTrace->topLineNumber(), stackTrace->topColumnNumber(), std::move(stackTrace), 0);
+        return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
     return SourceLocation::create(url, lineNumber, columnNumber, std::move(stackTrace));
 }
 
 // static
 PassOwnPtr<SourceLocation> SourceLocation::capture(ExecutionContext* executionContext)
 {
-    OwnPtr<V8StackTrace> stackTrace = captureStackTrace();
+    std::unique_ptr<V8StackTrace> stackTrace = captureStackTrace();
     if (stackTrace && !stackTrace->isEmpty())
-        return SourceLocation::create(stackTrace->topSourceURL(), stackTrace->topLineNumber(), stackTrace->topColumnNumber(), std::move(stackTrace), 0);
+        return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
 
     Document* document = executionContext && executionContext->isDocument() ? toDocument(executionContext) : nullptr;
     if (document) {
@@ -66,12 +67,53 @@ PassOwnPtr<SourceLocation> SourceLocation::capture(ExecutionContext* executionCo
 }
 
 // static
-PassOwnPtr<SourceLocation> SourceLocation::create(const String& url, unsigned lineNumber, unsigned columnNumber, PassOwnPtr<V8StackTrace> stackTrace, int scriptId)
+PassOwnPtr<SourceLocation> SourceLocation::fromMessage(v8::Isolate* isolate, v8::Local<v8::Message> message, ExecutionContext* executionContext)
+{
+    v8::Local<v8::StackTrace> stack = message->GetStackTrace();
+    std::unique_ptr<V8StackTrace> stackTrace = nullptr;
+    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
+    if (data && data->threadDebugger())
+        stackTrace = data->threadDebugger()->debugger()->createStackTrace(stack);
+
+    int scriptId = message->GetScriptOrigin().ScriptID()->Value();
+    if (!stack.IsEmpty() && stack->GetFrameCount() > 0) {
+        int topScriptId = stack->GetFrame(0)->GetScriptId();
+        if (topScriptId == scriptId)
+            scriptId = 0;
+    }
+
+    int lineNumber = 0;
+    int columnNumber = 0;
+    if (v8Call(message->GetLineNumber(isolate->GetCurrentContext()), lineNumber)
+        && v8Call(message->GetStartColumn(isolate->GetCurrentContext()), columnNumber))
+        ++columnNumber;
+
+    if ((!scriptId || !lineNumber) && stackTrace && !stackTrace->isEmpty())
+        return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
+
+    String url = toCoreStringWithUndefinedOrNullCheck(message->GetScriptOrigin().ResourceName());
+    if (url.isNull())
+        url = executionContext->url();
+    return SourceLocation::create(url, lineNumber, columnNumber, std::move(stackTrace), scriptId);
+}
+
+// static
+PassOwnPtr<SourceLocation> SourceLocation::create(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
 {
     return adoptPtr(new SourceLocation(url, lineNumber, columnNumber, std::move(stackTrace), scriptId));
 }
 
-SourceLocation::SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, PassOwnPtr<V8StackTrace> stackTrace, int scriptId)
+// static
+PassOwnPtr<SourceLocation> SourceLocation::createFromNonEmptyV8StackTrace(std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
+{
+    // Retrieve the data before passing the ownership to SourceLocation.
+    const String& url = stackTrace->topSourceURL();
+    unsigned lineNumber = stackTrace->topLineNumber();
+    unsigned columnNumber = stackTrace->topColumnNumber();
+    return adoptPtr(new SourceLocation(url, lineNumber, columnNumber, std::move(stackTrace), scriptId));
+}
+
+SourceLocation::SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
     : m_url(url)
     , m_lineNumber(lineNumber)
     , m_columnNumber(columnNumber)
@@ -97,6 +139,11 @@ void SourceLocation::toTracedValue(TracedValue* value, const char* name) const
     value->setInteger("columnNumber", m_stackTrace->topColumnNumber());
     value->endDictionary();
     value->endArray();
+}
+
+PassOwnPtr<SourceLocation> SourceLocation::clone() const
+{
+    return adoptPtr(new SourceLocation(m_url, m_lineNumber, m_columnNumber, m_stackTrace ? m_stackTrace->clone() : nullptr, m_scriptId));
 }
 
 } // namespace blink

@@ -681,6 +681,9 @@ crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-va
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-value-all-002.html [ Failure ]
 crbug.com/492664 imported/csswg-test/css-writing-modes-3/text-combine-upright-value-all-003.html [ Failure ]
 
+crbug.com/614917 printing/list-item-with-empty-first-line.html [ Failure ]
+crbug.com/614917 virtual/threaded/printing/list-item-with-empty-first-line.html [ Failure ]
+
 # These CSS Writing Modes Level 3 tests pass but causes 1px diff on images, notified to the submitter.
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-htb-001.xht [ Failure ]
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/block-flow-direction-vrl-002.xht [ Failure ]
@@ -791,6 +794,15 @@ crbug.com/357427 http/tests/workers/terminate-during-sync-operation-file.html [ 
 crbug.com/357427 http/tests/workers/terminate-during-sync-operation-filesystem.html [ Crash Pass Timeout ]
 crbug.com/613887 http/tests/preload/meta-viewport-link-headers.html [ Failure Pass ]
 crbug.com/564403 http/tests/inspector/service-workers/service-worker-manager.html [ Failure Pass ]
+
+crbug.com/613728 fast/table/border-collapsing/cached-cell-append.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-change-tbody-border-width.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-change-col-border-width.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-cell-remove.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-69296.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-change-colgroup-border-width.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-change-cell-border-width.html [ Failure ]
+crbug.com/613728 fast/table/border-collapsing/cached-change-table-border-width.html [ Failure ]
 
 crbug.com/306222 fast/hidpi/image-srcset-relative-svg-canvas.html [ Skip ]
 crbug.com/306222 fast/hidpi/image-srcset-relative-svg-canvas-2x.html [ Skip ]
@@ -1180,23 +1192,6 @@ crbug.com/538717 [ Win Mac Linux ] http/tests/permissions/chromium/test-request-
 
 crbug.com/543369 [ Linux ] fast/forms/select-popup/popup-menu-appearance-tall.html [ Failure ]
 crbug.com/613510 fast/forms/suggestion-picker/date-suggestion-picker-appearance-rtl.html [ Pass Timeout ]
-crbug.com/590117 fast/css/input-search-padding.html [ NeedsRebaseline ]
-crbug.com/590117 fast/css/text-overflow-input.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/control-restrict-line-height.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/input-appearance-height.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/placeholder-position.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/search-appearance-basic.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/search-cancel-button-style-sharing.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/search-display-none-cancel-button.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/search-rtl.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/search-vertical-alignment.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/search/searchfield-heights.html [ NeedsRebaseline ]
-crbug.com/590117 fast/forms/text/placeholder-pseudo-style.html [ NeedsRebaseline ]
-crbug.com/590117 fast/repaint/search-field-cancel.html [ NeedsRebaseline ]
-crbug.com/590117 fast/replaced/width100percent-searchfield.html [ NeedsRebaseline ]
-crbug.com/590117 scrollbars/custom-scrollbar-appearance-property.html [ NeedsRebaseline ]
-crbug.com/590117 virtual/prefer_compositing_to_lcd_text/scrollbars/custom-scrollbar-appearance-property.html [ NeedsRebaseline ]
-crbug.com/590117 virtual/rootlayerscrolls/scrollbars/custom-scrollbar-appearance-property.html [ NeedsRebaseline ]
 
 crbug.com/546215 [ Android ] fast/inline-block/overflow-clip.html [ Failure ]
 
@@ -1304,13 +1299,13 @@ crbug.com/600261 imported/wpt/mediacapture-streams/MediaStream-MediaElement-srcO
 
 crbug.com/605525 [ Win ] http/tests/xmlhttprequest/redirect-cross-origin-post.html [ Failure Pass ]
 
-crbug.com/603703 [ Linux Mac ] imported/wpt/web-animations/animation-timeline/document-timeline.html [ Failure Pass ]
+crbug.com/603703 [ Linux Mac ] imported/wpt/web-animations/interfaces/AnimationTimeline/document-timeline.html [ Failure Pass ]
 
-crbug.com/600248 imported/wpt/web-animations/animation-effect-timing/endDelay.html [ Failure ]
-crbug.com/600248 imported/wpt/web-animations/animation/constructor.html [ Failure Timeout ]
-crbug.com/600248 imported/wpt/web-animations/animation/finished.html [ Pass Failure ]
-crbug.com/600248 imported/wpt/web-animations/animation/oncancel.html [ Pass Failure ]
-crbug.com/600248 imported/wpt/web-animations/animation/onfinish.html [ Pass Failure ]
+crbug.com/600248 imported/wpt/web-animations/interfaces/AnimationEffectTiming/endDelay.html [ Failure ]
+crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/constructor.html [ Failure Timeout ]
+crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/finished.html [ Pass Failure ]
+crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/oncancel.html [ Pass Failure ]
+crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/onfinish.html [ Pass Failure ]
 
 crbug.com/611658 [ Win7 ] fast/forms/text/text-font-height-mismatch.html [ Failure ]
 crbug.com/611658 [ Win7 ] fast/text/emphasis-combined-text.html [ Failure ]

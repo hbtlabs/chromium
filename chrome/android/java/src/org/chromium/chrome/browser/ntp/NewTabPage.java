@@ -6,10 +6,8 @@ package org.chromium.chrome.browser.ntp;
 
 import android.annotation.TargetApi;
 import android.app.Activity;
-import android.app.ActivityManager;
 import android.app.Dialog;
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
@@ -30,14 +28,12 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
-import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
 import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
@@ -53,6 +49,7 @@ import org.chromium.chrome.browser.ntp.interests.InterestsPage.InterestsClickLis
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.SnippetsObserver;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites;
@@ -71,10 +68,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
-import org.chromium.chrome.browser.tabmodel.document.DocumentTabModel;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.NetworkChangeNotifier;
@@ -142,10 +136,6 @@ public class NewTabPage
 
     private boolean mIsLoaded;
 
-    // Whether the NTP is in the foreground (might be loaded or not).
-    // TODO(mastiz): Replace with tab.isHidden() since they should be equivalent.
-    private boolean mIsVisible;
-
     // Whether destroy() has been called.
     private boolean mIsDestroyed;
 
@@ -194,7 +184,10 @@ public class NewTabPage
      * @return Whether the passed in URL is used to render the NTP.
      */
     public static boolean isNTPUrl(String url) {
-        return url != null && url.startsWith(UrlConstants.NTP_URL);
+        // Also handle the legacy chrome://newtab URL since that will redirect to
+        // chrome-native://newtab natively.
+        return url != null
+                && (url.startsWith(UrlConstants.NTP_URL) || url.startsWith("chrome://newtab"));
     }
 
     public static void launchInterestsDialog(Activity activity, final Tab tab) {
@@ -212,15 +205,6 @@ public class NewTabPage
         };
 
         page.setListener(listener);
-        dialog.show();
-    }
-
-    public static void launchRecentTabsDialog(Activity activity, Tab tab) {
-        DocumentRecentTabsManager manager = new DocumentRecentTabsManager(tab, activity);
-        NativePage page = new RecentTabsPage(activity, manager);
-        page.updateForUrl(UrlConstants.RECENT_TABS_URL);
-        Dialog dialog = new NativePageDialog(activity, page);
-        manager.setDialog(dialog);
         dialog.show();
     }
 
@@ -260,7 +244,7 @@ public class NewTabPage
         @Override
         public boolean isToolbarEnabled() {
             return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_TOOLBAR)
-                    && !ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS);
+                    && !SnippetsConfig.isEnabled();
         }
 
         @Override
@@ -298,27 +282,12 @@ public class NewTabPage
             } else {
                 return false;
             }
-            if (FeatureUtilities.isDocumentMode(mActivity)) {
-                ActivityManager am =
-                        (ActivityManager) mActivity.getSystemService(Activity.ACTIVITY_SERVICE);
-                DocumentTabModel tabModel =
-                        ChromeApplication.getDocumentTabModelSelector().getModel(false);
-                for (ActivityManager.AppTask task : am.getAppTasks()) {
-                    Intent baseIntent = DocumentUtils.getBaseIntentFromTask(task);
-                    int tabId = ActivityDelegate.getTabIdFromIntent(baseIntent);
-                    String tabUrl = tabModel.getCurrentUrlForDocument(tabId);
-                    if (matchURLs(tabUrl, url, matchByHost)) {
-                        task.moveToFront();
-                        return true;
-                    }
-                }
-            } else {
-                TabModel tabModel = mTabModelSelector.getModel(false);
-                for (int i = tabModel.getCount() - 1; i >= 0; --i) {
-                    if (matchURLs(tabModel.getTabAt(i).getUrl(), url, matchByHost)) {
-                        TabModelUtils.setIndex(tabModel, i);
-                        return true;
-                    }
+
+            TabModel tabModel = mTabModelSelector.getModel(false);
+            for (int i = tabModel.getCount() - 1; i >= 0; --i) {
+                if (matchURLs(tabModel.getTabAt(i).getUrl(), url, matchByHost)) {
+                    TabModelUtils.setIndex(tabModel, i);
+                    return true;
                 }
             }
             return false;
@@ -396,11 +365,7 @@ public class NewTabPage
         public void navigateToRecentTabs() {
             if (mIsDestroyed) return;
             RecordUserAction.record("MobileNTPSwitchToOpenTabs");
-            if (FeatureUtilities.isDocumentMode(mActivity)) {
-                launchRecentTabsDialog(mActivity, mTab);
-            } else {
-                mTab.loadUrl(new LoadUrlParams(UrlConstants.RECENT_TABS_URL));
-            }
+            mTab.loadUrl(new LoadUrlParams(UrlConstants.RECENT_TABS_URL));
         }
 
         @Override
@@ -569,7 +534,7 @@ public class NewTabPage
             StartupMetrics.getInstance().recordOpenedNTP();
             NewTabPageUma.recordNTPImpression(NewTabPageUma.NTP_IMPRESSION_REGULAR);
             // If not visible when loading completes, wait until onShown is received.
-            if (mIsVisible) recordNTPShown();
+            if (!mTab.isHidden()) recordNTPShown();
 
             int tileTypes[] = new int[items.length];
             for (int i = 0; i < items.length; i++) {
@@ -638,13 +603,11 @@ public class NewTabPage
             public void onShown(Tab tab) {
                 // Showing the NTP is only meaningful when the page has been loaded already.
                 if (mIsLoaded) recordNTPShown();
-                mIsVisible = true;
             }
 
             @Override
             public void onHidden(Tab tab) {
                 if (mIsLoaded) recordNTPInteractionTime();
-                mIsVisible = false;
             }
         };
         mTab.addObserver(mTabObserver);
@@ -652,7 +615,7 @@ public class NewTabPage
         mLogoBridge = new LogoBridge(mProfile);
         updateSearchProviderHasLogo();
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS)) {
+        if (SnippetsConfig.isEnabled()) {
             mSnippetsBridge = new SnippetsBridge(mProfile);
         }
 
@@ -813,7 +776,7 @@ public class NewTabPage
     public void destroy() {
         assert !mIsDestroyed;
         assert getView().getParent() == null : "Destroy called before removed from window";
-        if (mIsLoaded && mIsVisible) recordNTPInteractionTime();
+        if (mIsLoaded && !mTab.isHidden()) recordNTPInteractionTime();
 
         if (mFaviconHelper != null) {
             mFaviconHelper.destroy();

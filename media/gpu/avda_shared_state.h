@@ -13,7 +13,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_surface.h"
 
-namespace gfx {
+namespace gl {
 class SurfaceTexture;
 }
 
@@ -45,9 +45,9 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
 
   // Context that the surface texture is bound to, or nullptr if it is not in
   // the attached state.
-  gfx::GLContext* context() const { return context_.get(); }
+  gl::GLContext* context() const { return context_.get(); }
 
-  gfx::GLSurface* surface() const { return surface_.get(); }
+  gl::GLSurface* surface() const { return surface_.get(); }
 
   bool surface_texture_is_attached() const {
     return surface_texture_is_attached_;
@@ -72,10 +72,6 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   // update surface_texture_is_attached(), and set the context() and surface()
   // to match.
   void DidAttachSurfaceTexture();
-
-  // Call this when the SurfaceTexture is detached from its GL context.  This
-  // will cause us to forget the last binding.
-  void DidDetachSurfaceTexture();
 
   // Helper method for coordinating the interactions between
   // MediaCodec::ReleaseOutputBuffer() and WaitForFrameAvailable() when
@@ -116,8 +112,8 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
 
   // Context and surface that the surface texture is attached to, if it is
   // currently attached.
-  scoped_refptr<gfx::GLContext> context_;
-  scoped_refptr<gfx::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
 
   // Maps a picture buffer id to a AVDACodecImage.
   std::map<int, AVDACodecImage*> codec_images_;

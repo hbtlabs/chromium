@@ -88,6 +88,7 @@
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
+#include "core/style/CursorData.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformKeyboardEvent.h"
@@ -139,7 +140,7 @@ bool shouldRefetchEventTarget(const MouseEventWithHitTestResults& mev)
     Node* targetNode = mev.innerNode();
     if (!targetNode || !targetNode->parentNode())
         return true;
-    return targetNode->isShadowRoot() && isHTMLInputElement(*toShadowRoot(targetNode)->host());
+    return targetNode->isShadowRoot() && isHTMLInputElement(toShadowRoot(targetNode)->host());
 }
 
 // TODO(bokan): This method can go away once all scrolls happen through the
@@ -1742,11 +1743,6 @@ bool EventHandler::isPointerEventActive(int pointerId)
     return m_pointerEventManager.isActive(pointerId);
 }
 
-WebPointerProperties::PointerType EventHandler::getPointerEventType(int pointerId)
-{
-    return m_pointerEventManager.getPointerEventType(pointerId);
-}
-
 void EventHandler::setPointerCapture(int pointerId, EventTarget* target)
 {
     // TODO(crbug.com/591387): This functionality should be per page not per frame.
@@ -2372,7 +2368,7 @@ WebInputEventResult EventHandler::handleGestureScrollEnd(const PlatformGestureEv
         if (RuntimeEnabledFeatures::scrollCustomizationEnabled()) {
             OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
             scrollStateData->is_ending = true;
-            scrollStateData->is_in_inertial_phase = gestureEvent.inertial();
+            scrollStateData->is_in_inertial_phase = gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
             scrollStateData->from_user_input = true;
             scrollStateData->is_direct_manipulation = true;
             scrollStateData->delta_consumed_for_scroll_sequence = m_deltaConsumedForScrollSequence;
@@ -2482,7 +2478,7 @@ WebInputEventResult EventHandler::handleGestureScrollUpdate(const PlatformGestur
             scrollStateData->velocity_x = velocity.width();
             scrollStateData->velocity_y = velocity.height();
             scrollStateData->should_propagate = !gestureEvent.preventPropagation();
-            scrollStateData->is_in_inertial_phase = gestureEvent.inertial();
+            scrollStateData->is_in_inertial_phase = gestureEvent.inertialPhase() == ScrollInertialPhaseMomentum;
             scrollStateData->from_user_input = true;
             scrollStateData->delta_consumed_for_scroll_sequence = m_deltaConsumedForScrollSequence;
             ScrollState* scrollState = ScrollState::create(std::move(scrollStateData));
@@ -3640,13 +3636,6 @@ WebInputEventResult EventHandler::handleTouchEvent(const PlatformTouchEvent& eve
     TRACE_EVENT0("blink", "EventHandler::handleTouchEvent");
 
     return m_pointerEventManager.handleTouchEvents(event);
-}
-
-void EventHandler::userGestureUtilized()
-{
-    // This is invoked for UserGestureIndicators created in TouchEventManger::handleTouchEvent which perhaps
-    // represent touch actions which shouldn't be considered a user-gesture.
-    UseCounter::count(m_frame, UseCounter::TouchDragUserGestureUsed);
 }
 
 void EventHandler::setLastKnownMousePosition(const PlatformMouseEvent& event)

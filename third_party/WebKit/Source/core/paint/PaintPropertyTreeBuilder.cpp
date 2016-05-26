@@ -5,9 +5,9 @@
 #include "core/paint/PaintPropertyTreeBuilder.h"
 
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutView.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"

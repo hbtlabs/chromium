@@ -22,7 +22,7 @@
 #include "mash/wm/property_util.h"
 #include "mash/wm/public/interfaces/container.mojom.h"
 #include "mash/wm/root_window_controller.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mash {
 namespace wm {
@@ -191,6 +191,13 @@ bool WindowManager::OnWmSetProperty(
 mus::Window* WindowManager::OnWmCreateTopLevelWindow(
     std::map<std::string, std::vector<uint8_t>>* properties) {
   return NewTopLevelWindow(properties);
+}
+
+void WindowManager::OnWmClientJankinessChanged(
+    const std::set<mus::Window*>& client_windows,
+    bool janky) {
+  for (auto window : client_windows)
+    SetWindowIsJanky(window, janky);
 }
 
 void WindowManager::OnAccelerator(uint32_t id, const ui::Event& event) {

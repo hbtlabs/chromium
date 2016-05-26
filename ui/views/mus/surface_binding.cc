@@ -21,13 +21,13 @@
 #include "cc/resources/shared_bitmap_manager.h"
 #include "components/mus/public/cpp/context_provider.h"
 #include "components/mus/public/cpp/output_surface.h"
+#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_connection.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/shell/public/cpp/connector.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 
 namespace views {

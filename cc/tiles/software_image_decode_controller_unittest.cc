@@ -5,8 +5,8 @@
 #include "cc/tiles/software_image_decode_controller.h"
 
 #include "cc/playback/draw_image.h"
-#include "cc/raster/tile_task.h"
 #include "cc/resources/resource_format.h"
+#include "cc/test/test_tile_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -509,6 +509,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImage) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task.get() == another_task.get());
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
 }
@@ -555,6 +557,10 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(high_quality_task.get() != low_quality_task.get());
   EXPECT_TRUE(medium_quality_task.get() != low_quality_task.get());
 
+  TestTileTaskRunner::ProcessTask(high_quality_task.get());
+  TestTileTaskRunner::ProcessTask(medium_quality_task.get());
+  TestTileTaskRunner::ProcessTask(low_quality_task.get());
+
   controller.UnrefImage(high_quality_draw_image);
   controller.UnrefImage(medium_quality_draw_image);
   controller.UnrefImage(low_quality_draw_image);
@@ -587,6 +593,9 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImageDifferentSize) {
   EXPECT_TRUE(quarter_size_task);
   EXPECT_TRUE(half_size_task.get() != quarter_size_task.get());
 
+  TestTileTaskRunner::ProcessTask(half_size_task.get());
+  TestTileTaskRunner::ProcessTask(quarter_size_task.get());
+
   controller.UnrefImage(half_size_draw_image);
   controller.UnrefImage(quarter_size_draw_image);
 }
@@ -618,6 +627,9 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageDifferentImage) {
   EXPECT_TRUE(second_task);
   EXPECT_TRUE(first_task.get() != second_task.get());
 
+  TestTileTaskRunner::ProcessTask(first_task.get());
+  TestTileTaskRunner::ProcessTask(second_task.get());
+
   controller.UnrefImage(first_draw_image);
   controller.UnrefImage(second_draw_image);
 }
@@ -637,10 +649,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyDecoded) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-  task->RunOnWorkerThread();
+  TestTileTaskRunner::ScheduleTask(task.get());
+  TestTileTaskRunner::RunTask(task.get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -648,9 +658,7 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyDecoded) {
   EXPECT_TRUE(need_unref);
   EXPECT_FALSE(another_task);
 
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CompleteTask(task.get());
 
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
@@ -671,10 +679,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-  task->RunOnWorkerThread();
+  TestTileTaskRunner::ScheduleTask(task.get());
+  TestTileTaskRunner::RunTask(task.get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -682,9 +688,7 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
   EXPECT_TRUE(need_unref);
   EXPECT_FALSE(another_task);
 
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CompleteTask(task.get());
 
   scoped_refptr<TileTask> third_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -712,10 +716,6 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
       draw_image, ImageDecodeController::TracingInfo(), &another_task);
@@ -723,9 +723,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(another_task.get() == task.get());
 
   // Didn't run the task, complete it (it was canceled).
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Fully cancel everything (so the raster would unref things).
   controller.UnrefImage(draw_image);
@@ -738,6 +737,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
+
+  TestTileTaskRunner::ProcessTask(third_task.get());
 
   controller.UnrefImage(draw_image);
 }
@@ -758,10 +759,6 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
       draw_image, ImageDecodeController::TracingInfo(), &another_task);
@@ -769,9 +766,8 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(another_task.get() == task.get());
 
   // Didn't run the task, complete it (it was canceled).
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Note that here, everything is reffed, but a new task is created. This is
   // possible with repeated schedule/cancel operations.
@@ -781,6 +777,8 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
+
+  TestTileTaskRunner::ProcessTask(third_task.get());
 
   // 3 Unrefs!
   controller.UnrefImage(draw_image);
@@ -803,15 +801,7 @@ TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDraw) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -844,15 +834,7 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -952,15 +934,7 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage another_decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1005,19 +979,11 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   // If we finish the draw here, then we will use it for the locked decode
   // instead of decoding again.
   controller.DrawWithImageFinished(draw_image, decoded_draw_image);
 
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage another_decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1093,6 +1059,8 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityFilterIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1118,6 +1086,8 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityScaledSubrectIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1147,6 +1117,8 @@ TEST(SoftwareImageDecodeControllerTest, NoneQualityScaledSubrectIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1175,6 +1147,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt01_5ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1206,6 +1180,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt1_0ScaleIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1235,6 +1211,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_75ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1266,6 +1244,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_5ScaleIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1295,6 +1275,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_49ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1326,6 +1308,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_1ScaleIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1355,6 +1339,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_01ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1417,6 +1403,8 @@ TEST(SoftwareImageDecodeControllerTest,
       draw_image_49, ImageDecodeController::TracingInfo(), &task_49);
   EXPECT_TRUE(task_49);
   EXPECT_TRUE(need_unref_49);
+
+  TestTileTaskRunner::ProcessTask(task_49.get());
 
   DecodedDrawImage decoded_draw_image_50 =
       controller.GetDecodedImageForDraw(draw_image_50);

@@ -32,6 +32,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutPart.h"
@@ -665,7 +666,7 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
         m_lastMainThreadScrollingReasons = mainThreadScrollingReasons;
         if (mainThreadScrollingReasons) {
             if (ScrollAnimatorBase* scrollAnimator = layer->getScrollableArea()->existingScrollAnimator())
-                scrollAnimator->takeoverCompositorAnimation();
+                scrollAnimator->takeOverCompositorAnimation();
             scrollLayer->addMainThreadScrollingReasons(mainThreadScrollingReasons);
         } else {
             // Clear all main thread scrolling reasons except the one that's set
@@ -689,7 +690,7 @@ void ScrollingCoordinator::willCloseLayerTreeView(WebLayerTreeView& layerTreeVie
 {
     if (m_programmaticScrollAnimatorTimeline) {
         layerTreeView.detachCompositorAnimationTimeline(m_programmaticScrollAnimatorTimeline->animationTimeline());
-        m_programmaticScrollAnimatorTimeline.clear();
+        m_programmaticScrollAnimatorTimeline.reset();
     }
 }
 

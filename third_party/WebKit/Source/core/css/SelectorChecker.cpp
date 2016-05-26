@@ -916,6 +916,9 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
         return context.scope == &element;
     case CSSSelector::PseudoUnresolved:
         return element.isUnresolvedV0CustomElement();
+    case CSSSelector::PseudoDefined:
+        DCHECK(RuntimeEnabledFeatures::customElementsV1Enabled());
+        return element.isDefined();
     case CSSSelector::PseudoHost:
     case CSSSelector::PseudoHostContext:
         return checkPseudoHost(context, result);
@@ -929,7 +932,7 @@ bool SelectorChecker::checkPseudoClass(const SelectorCheckingContext& context, M
         if (ShadowRoot* root = element.containingShadowRoot()) {
             if (root->type() != ShadowRootType::UserAgent)
                 return false;
-            const ComputedStyle* style = root->host()->computedStyle();
+            const ComputedStyle* style = root->host().computedStyle();
             return style && style->hasAppearance();
         }
         return false;

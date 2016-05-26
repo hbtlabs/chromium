@@ -41,6 +41,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorChooserClient.h"
@@ -1071,6 +1072,12 @@ void ChromeClientImpl::registerViewportLayers() const
 void ChromeClientImpl::didUpdateTopControls() const
 {
     m_webView->didUpdateTopControls();
+}
+
+CompositorProxyClient* ChromeClientImpl::createCompositorProxyClient(LocalFrame* frame)
+{
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(frame);
+    return webFrame->localRoot()->frameWidget()->createCompositorProxyClient();
 }
 
 void ChromeClientImpl::registerPopupOpeningObserver(PopupOpeningObserver* observer)

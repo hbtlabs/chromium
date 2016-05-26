@@ -99,6 +99,9 @@ class ScrollbarLayerTest : public testing::Test {
   ScrollbarLayerTest() : fake_client_(FakeLayerTreeHostClient::DIRECT_3D) {
     layer_tree_settings_.single_thread_proxy_scheduler = false;
     layer_tree_settings_.use_zero_copy = true;
+    layer_tree_settings_.scrollbar_animator = LayerTreeSettings::LINEAR_FADE;
+    layer_tree_settings_.scrollbar_fade_delay_ms = 20;
+    layer_tree_settings_.scrollbar_fade_duration_ms = 20;
 
     scrollbar_layer_id_ = -1;
 
@@ -522,31 +525,88 @@ TEST_F(ScrollbarLayerTest, ScrollbarLayerOpacity) {
   layer_tree_root->SetBounds(gfx::Size(2, 2));
   scroll_layer->SetBounds(gfx::Size(10, 10));
 
-  layer_tree_host_->UpdateLayers();
-
-  LayerImpl* layer_impl_tree_root =
-      layer_tree_host_->CommitAndCreateLayerImplTree();
-
-  scrollbar_layer->SetOpacity(0.5f);
+  // A solid color scrollbar layer's opacity is initialized to 0 on main thread
   layer_tree_host_->UpdateLayers();
   EffectNode* node = layer_tree_host_->property_trees()->effect_tree.Node(
       scrollbar_layer->effect_tree_index());
-  EXPECT_EQ(node->data.opacity, 0.5f);
+  EXPECT_EQ(node->data.opacity, 0.f);
 
+  // This tests that the initial opacity(0) of the scrollbar gets pushed onto
+  // the pending tree and then onto the active tree.
   LayerTreeHostImpl* host_impl = layer_tree_host_->host_impl();
   host_impl->CreatePendingTree();
-  layer_impl_tree_root = layer_tree_host_->CommitAndCreatePendingTree();
+  LayerImpl* layer_impl_tree_root =
+      layer_tree_host_->CommitAndCreatePendingTree();
   LayerTreeImpl* layer_tree_impl = layer_impl_tree_root->layer_tree_impl();
   EXPECT_TRUE(layer_tree_impl->IsPendingTree());
-  layer_tree_impl->property_trees()->effect_tree.Node(
+  node = layer_tree_impl->property_trees()->effect_tree.Node(
       scrollbar_layer->effect_tree_index());
-  EXPECT_EQ(node->data.opacity, 0.5f);
-  // The active tree opacity should not change with activation for scrollbar
-  // layer.
+  EXPECT_EQ(node->data.opacity, 0.f);
   host_impl->ActivateSyncTree();
   layer_tree_impl = host_impl->active_tree();
   node = layer_tree_impl->property_trees()->effect_tree.Node(
       scrollbar_layer->effect_tree_index());
+  EXPECT_EQ(node->data.opacity, 0.f);
+
+  // This tests that activation does not change the opacity of scrollbar layer.
+  LayerImpl* scrollbar_layer_impl =
+      layer_tree_impl->LayerById(scrollbar_layer->id());
+  scrollbar_layer_impl->OnOpacityAnimated(0.25f);
+  host_impl->CreatePendingTree();
+  layer_impl_tree_root = layer_tree_host_->CommitAndCreatePendingTree();
+  layer_tree_impl = layer_impl_tree_root->layer_tree_impl();
+  EXPECT_TRUE(layer_tree_impl->IsPendingTree());
+  node = layer_tree_impl->property_trees()->effect_tree.Node(
+      scrollbar_layer->effect_tree_index());
+  EXPECT_EQ(node->data.opacity, 0.f);
+  host_impl->ActivateSyncTree();
+  layer_tree_impl = host_impl->active_tree();
+  node = layer_tree_impl->property_trees()->effect_tree.Node(
+      scrollbar_layer->effect_tree_index());
+  EXPECT_EQ(node->data.opacity, 0.25f);
+}
+
+TEST_F(ScrollbarLayerTest, ScrollbarLayerPushProperties) {
+  // Pushing changed bounds of scroll layer can lead to calling
+  // OnOpacityAnimated on scrollbar layer which means OnOpacityAnimated should
+  // be independent of scrollbar layer's properties as scrollbar layer can push
+  // its properties after scroll layer.
+  const int kThumbThickness = 3;
+  const int kTrackStart = 0;
+  std::unique_ptr<Scrollbar> scrollbar(new FakeScrollbar(false, true, true));
+
+  scoped_refptr<Layer> layer_tree_root = Layer::Create();
+  scoped_refptr<Layer> scroll_layer = Layer::Create();
+  scroll_layer->SetScrollClipLayerId(layer_tree_root->id());
+  scoped_refptr<Layer> child1 = Layer::Create();
+  scoped_refptr<Layer> scrollbar_layer;
+  const bool kIsLeftSideVerticalScrollbar = false;
+  scrollbar_layer = SolidColorScrollbarLayer::Create(
+      scrollbar->Orientation(), kThumbThickness, kTrackStart,
+      kIsLeftSideVerticalScrollbar, child1->id());
+  scroll_layer->SetScrollClipLayerId(layer_tree_root->id());
+  scrollbar_layer->ToScrollbarLayer()->SetScrollLayer(scroll_layer->id());
+  scroll_layer->AddChild(child1);
+  scroll_layer->InsertChild(scrollbar_layer, 1);
+  layer_tree_root->AddChild(scroll_layer);
+  layer_tree_host_->SetRootLayer(layer_tree_root);
+
+  layer_tree_root->SetBounds(gfx::Size(2, 2));
+  scroll_layer->SetBounds(gfx::Size(10, 10));
+  layer_tree_host_->UpdateLayers();
+  layer_tree_host_->CommitAndCreateLayerImplTree();
+  LayerTreeHostImpl* host_impl = layer_tree_host_->host_impl();
+  EXPECT_TRUE(host_impl->ScrollbarAnimationControllerForId(scroll_layer->id()));
+
+  scroll_layer->SetBounds(gfx::Size(20, 20));
+  scroll_layer->SetForceRenderSurfaceForTesting(true);
+  layer_tree_host_->UpdateLayers();
+  host_impl->CreatePendingTree();
+  layer_tree_host_->CommitAndCreatePendingTree();
+  host_impl->ActivateSyncTree();
+  EffectNode* node =
+      host_impl->active_tree()->property_trees()->effect_tree.Node(
+          scrollbar_layer->effect_tree_index());
   EXPECT_EQ(node->data.opacity, 1.f);
 }
 

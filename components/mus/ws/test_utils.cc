@@ -11,9 +11,9 @@
 #include "components/mus/ws/server_window_surface_manager_test_api.h"
 #include "components/mus/ws/window_manager_access_policy.h"
 #include "components/mus/ws/window_manager_factory_service.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -154,10 +154,14 @@ WindowTree* TestDisplayBinding::CreateWindowTree(ServerWindow* root) {
 
 void TestWindowManager::WmCreateTopLevelWindow(
     uint32_t change_id,
+    ConnectionSpecificId requesting_client_id,
     mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) {
   got_create_top_level_window_ = true;
   change_id_ = change_id;
 }
+
+void TestWindowManager::WmClientJankinessChanged(ConnectionSpecificId client_id,
+                                                 bool janky) {}
 
 void TestWindowManager::OnAccelerator(uint32_t id, mojom::EventPtr event) {
   on_accelerator_called_ = true;
@@ -219,14 +223,6 @@ void TestWindowTreeClient::OnTransientWindowAdded(
 void TestWindowTreeClient::OnTransientWindowRemoved(
     uint32_t window_id,
     uint32_t transient_window_id) {}
-
-void TestWindowTreeClient::OnWindowViewportMetricsChanged(
-    mojo::Array<uint32_t> window_ids,
-    mojom::ViewportMetricsPtr old_metrics,
-    mojom::ViewportMetricsPtr new_metrics) {
-  tracker_.OnWindowViewportMetricsChanged(std::move(old_metrics),
-                                          std::move(new_metrics));
-}
 
 void TestWindowTreeClient::OnWindowHierarchyChanged(
     uint32_t window,

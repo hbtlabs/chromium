@@ -74,18 +74,19 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
 
   // Prefer an external decoder since one will only exist if it is hardware
   // accelerated.
-  if (decoder_factory_)
-    decoder_factory_->CreateVideoDecoders(media_task_runner, &video_decoders);
+  if (gpu_factories) {
+    // |gpu_factories_| requires that its entry points be called on its
+    // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
+    // factories, require that their message loops are identical.
+    DCHECK(gpu_factories->GetTaskRunner() == media_task_runner.get());
 
-  // |gpu_factories_| requires that its entry points be called on its
-  // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
-  // factories, require that their message loops are identical.
-  DCHECK(!gpu_factories ||
-         (gpu_factories->GetTaskRunner() == media_task_runner.get()));
-
-  if (gpu_factories)
+    if (decoder_factory_) {
+      decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
+                                            &video_decoders);
+    }
     video_decoders.push_back(
         new GpuVideoDecoder(gpu_factories, request_surface_cb));
+  }
 
 #if !defined(MEDIA_DISABLE_LIBVPX)
   video_decoders.push_back(new VpxVideoDecoder());

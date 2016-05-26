@@ -31,7 +31,6 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
-#include "core/animation/AnimationClock.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/DocumentEncodingData.h"
 #include "core/dom/DocumentInit.h"
@@ -47,14 +46,10 @@
 #include "core/fetch/ClientHintsPreferences.h"
 #include "core/frame/DOMTimerCoordinator.h"
 #include "core/frame/HostsUsingFeatures.h"
-#include "core/frame/LocalDOMWindow.h"
-#include "core/frame/VisualViewport.h"
-#include "core/html/CollectionType.h"
 #include "core/html/parser/ParserSynchronizationPolicy.h"
 #include "core/page/PageVisibilityState.h"
 #include "platform/Length.h"
 #include "platform/Timer.h"
-#include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "public/platform/WebFocusType.h"
@@ -65,6 +60,7 @@
 
 namespace blink {
 
+class AnimationClock;
 class AnimationTimeline;
 class AXObjectCache;
 class Attr;
@@ -128,6 +124,7 @@ class IntersectionObserverController;
 class LayoutPoint;
 class LayoutViewItem;
 class LiveNodeListBase;
+class LocalDOMWindow;
 class Locale;
 class LocalFrame;
 class Location;
@@ -169,6 +166,7 @@ class TouchList;
 class TransformSource;
 class TreeWalker;
 class VisitedLinkState;
+class VisualViewport;
 class WebGLRenderingContext;
 enum class SelectionBehaviorOnFocus;
 struct AnnotatedRegionValue;
@@ -212,6 +210,23 @@ enum ShadowCascadeOrder {
     ShadowCascadeNone,
     ShadowCascadeV0,
     ShadowCascadeV1
+};
+
+enum CreateElementFlags {
+    CreatedByParser = 1 << 0,
+    // Synchronous custom elements flag:
+    // https://dom.spec.whatwg.org/#concept-create-element
+    SynchronousCustomElements = 0 << 1,
+    AsynchronousCustomElements = 1 << 1,
+
+    // Aliases by callers.
+    // Clone a node: https://dom.spec.whatwg.org/#concept-node-clone
+    CreatedByCloneNode = AsynchronousCustomElements,
+    CreatedByImportNode = CreatedByCloneNode,
+    // https://dom.spec.whatwg.org/#dom-document-createelement
+    CreatedByCreateElement = SynchronousCustomElements,
+    // https://html.spec.whatwg.org/#create-an-element-for-the-token
+    CreatedByFragmentParser = CreatedByParser | AsynchronousCustomElements,
 };
 
 using DocumentClassFlags = unsigned char;
@@ -292,7 +307,7 @@ public:
     Attr* createAttributeNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&, bool shouldIgnoreNamespaceChecks = false);
     Node* importNode(Node* importedNode, bool deep, ExceptionState&);
     Element* createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, ExceptionState&);
-    Element* createElement(const QualifiedName&, bool createdByParser);
+    Element* createElement(const QualifiedName&, CreateElementFlags);
 
     Element* elementFromPoint(int x, int y) const;
     HeapVector<Member<Element>> elementsFromPoint(int x, int y) const;
@@ -933,7 +948,7 @@ public:
     void cancelIdleCallback(int id);
 
     EventTarget* errorEventTarget() final;
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) final;
+    void logExceptionToConsole(const String& errorMessage, PassOwnPtr<SourceLocation>) final;
 
     void initDNSPrefetch();
 

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "components/mus/public/cpp/surfaces/custom_surface_converter.h"
 #include "components/mus/public/interfaces/window_manager_factory.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
@@ -25,7 +26,6 @@
 #include "components/mus/ws/server_window_observer.h"
 #include "components/mus/ws/user_id_tracker.h"
 #include "components/mus/ws/window_manager_factory_registry.h"
-#include "mojo/converters/surfaces/custom_surface_converter.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -173,9 +173,6 @@ class WindowServer : public ServerWindowDelegate,
       const gfx::Insets& new_client_area,
       const std::vector<gfx::Rect>& new_additional_client_areas);
   void ProcessLostCapture(const ServerWindow* window);
-  void ProcessViewportMetricsChanged(Display* display,
-                                     const mojom::ViewportMetrics& old_metrics,
-                                     const mojom::ViewportMetrics& new_metrics);
   void ProcessWillChangeWindowHierarchy(const ServerWindow* window,
                                         const ServerWindow* new_parent,
                                         const ServerWindow* old_parent);

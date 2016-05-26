@@ -499,7 +499,7 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
       return false;
     }
 
-    if (!gfx::g_driver_egl.ext.b_EGL_KHR_fence_sync) {
+    if (!gl::g_driver_egl.ext.b_EGL_KHR_fence_sync) {
       LOG(ERROR) << "Initialize(): context does not have EGL_KHR_fence_sync";
       return false;
     }
@@ -1595,14 +1595,14 @@ void V4L2SliceVideoDecodeAccelerator::CreateEGLImageFor(
     return;
   }
 
-  gfx::GLContext* gl_context = get_gl_context_cb_.Run();
+  gl::GLContext* gl_context = get_gl_context_cb_.Run();
   if (!gl_context || !make_context_current_cb_.Run()) {
     DLOG(ERROR) << "No GL context";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
   }
 
-  gfx::ScopedTextureBinder bind_restore(GL_TEXTURE_EXTERNAL_OES, 0);
+  gl::ScopedTextureBinder bind_restore(GL_TEXTURE_EXTERNAL_OES, 0);
 
   EGLImageKHR egl_image =
       device_->CreateEGLImage(egl_display_, gl_context->GetHandle(), texture_id,
@@ -1666,17 +1666,15 @@ void V4L2SliceVideoDecodeAccelerator::AssignEGLImage(
 
 void V4L2SliceVideoDecodeAccelerator::ImportBufferForPicture(
     int32_t picture_buffer_id,
-    const std::vector<gfx::GpuMemoryBufferHandle>& gpu_memory_buffer_handles) {
+    const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle) {
   DVLOGF(3) << "picture_buffer_id=" << picture_buffer_id;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
   auto passed_dmabuf_fds(base::WrapUnique(new std::vector<base::ScopedFD>()));
 #if defined(USE_OZONE)
-  for (const auto& handle : gpu_memory_buffer_handles) {
-    int fd = -1;
-    fd = handle.native_pixmap_handle.fds[0].fd;
-    DCHECK_NE(fd, -1);
-    passed_dmabuf_fds->push_back(base::ScopedFD(fd));
+  for (const auto& fd : gpu_memory_buffer_handle.native_pixmap_handle.fds) {
+    DCHECK_NE(fd.fd, -1);
+    passed_dmabuf_fds->push_back(base::ScopedFD(fd.fd));
   }
 #endif
 

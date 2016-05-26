@@ -147,8 +147,12 @@
         <include name="IDR_EXTENSION_LIST_JS" file="resources\extensions\extension_list.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_EXTENSIONS_JS" file="resources\extensions\extensions.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_EXTENSIONS_JS" file="resources\md_extensions\extensions.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ANIMATION_HELPER_HTML" file="resources\md_extensions\animation_helper.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_ANIMATION_HELPER_JS" file="resources\md_extensions\animation_helper.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML" file="resources\md_extensions\detail_view.html" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_DETAIL_VIEW_JS" file="resources\md_extensions\detail_view.js" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML" file="resources\md_extensions\keyboard_shortcuts.html" type="BINDATA" />
+        <include name="IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_JS" file="resources\md_extensions\keyboard_shortcuts.js" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_CSS" file="resources\md_extensions\manager.css" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_HTML" file="resources\md_extensions\manager.html" type="BINDATA" />
         <include name="IDR_MD_EXTENSIONS_MANAGER_JS" file="resources\md_extensions\manager.js" type="BINDATA" />
@@ -204,6 +208,8 @@
         <include name="IDR_MD_HISTORY_BROWSER_SERVICE_JS" file="resources\md_history\browser_service.js" type="BINDATA" />
         <include name="IDR_MD_HISTORY_CONSTANTS_HTML" file="resources\md_history\constants.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_CONSTANTS_JS" file="resources\md_history\constants.js" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_GROUPED_LIST_HTML" file="resources\md_history\grouped_list.html" type="BINDATA" />
+        <include name="IDR_MD_HISTORY_GROUPED_LIST_JS" file="resources\md_history\grouped_list.js" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_HTML" file="resources\md_history\history.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_ITEM_HTML" file="resources\md_history\history_item.html" type="BINDATA" />
         <include name="IDR_MD_HISTORY_HISTORY_ITEM_JS" file="resources\md_history\history_item.js" type="BINDATA" />

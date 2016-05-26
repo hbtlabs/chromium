@@ -25,9 +25,10 @@
 #define LayoutBoxModelObject_h
 
 #include "core/CoreExport.h"
+#include "core/layout/BackgroundBleedAvoidance.h"
+#include "core/layout/ContentChangeType.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/scrolling/StickyPositionScrollingConstraints.h"
-#include "core/style/ShadowData.h"
 #include "platform/geometry/LayoutRect.h"
 
 namespace blink {
@@ -48,20 +49,6 @@ enum PaintLayerType {
 // Modes for some of the line-related functions.
 enum LinePositionMode { PositionOnContainingLine, PositionOfInteriorLineBoxes };
 enum LineDirectionMode { HorizontalLine, VerticalLine };
-typedef unsigned BorderEdgeFlags;
-
-enum BackgroundBleedAvoidance {
-    BackgroundBleedNone,
-    BackgroundBleedShrinkBackground,
-    BackgroundBleedClipOnly,
-    BackgroundBleedClipLayer,
-};
-
-enum ContentChangeType {
-    ImageChanged,
-    CanvasChanged,
-    CanvasContextChanged
-};
 
 class InlineFlowBox;
 
@@ -377,7 +364,7 @@ public:
     virtual void moveChildrenTo(LayoutBoxModelObject* toBoxModelObject, LayoutObject* startChild, LayoutObject* endChild, LayoutObject* beforeChild, bool fullRemoveInsert = false);
 
 private:
-    void createLayer(PaintLayerType);
+    void createLayer();
 
     LayoutUnit computedCSSPadding(const Length&) const;
     bool isBoxModelObject() const final { return true; }

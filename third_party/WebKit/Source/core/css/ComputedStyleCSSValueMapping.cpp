@@ -25,6 +25,8 @@
 #include "core/css/ComputedStyleCSSValueMapping.h"
 
 #include "core/StylePropertyShorthand.h"
+#include "core/animation/css/CSSAnimationData.h"
+#include "core/animation/css/CSSTransitionData.h"
 #include "core/css/BasicShapeFunctions.h"
 #include "core/css/CSSBasicShapeValues.h"
 #include "core/css/CSSBorderImage.h"
@@ -53,6 +55,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ContentData.h"
+#include "core/style/CursorData.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
 #include "core/style/StyleVariableData.h"
@@ -1051,19 +1054,19 @@ static CSSValue* createTimingFunctionValue(const TimingFunction* timingFunction)
     case TimingFunction::kCubicBezierFunction:
         {
             const CubicBezierTimingFunction* bezierTimingFunction = toCubicBezierTimingFunction(timingFunction);
-            if (bezierTimingFunction->subType() != CubicBezierTimingFunction::Custom) {
+            if (bezierTimingFunction->getEaseType() != CubicBezierTimingFunction::EaseType::CUSTOM) {
                 CSSValueID valueId = CSSValueInvalid;
-                switch (bezierTimingFunction->subType()) {
-                case CubicBezierTimingFunction::Ease:
+                switch (bezierTimingFunction->getEaseType()) {
+                case CubicBezierTimingFunction::EaseType::EASE:
                     valueId = CSSValueEase;
                     break;
-                case CubicBezierTimingFunction::EaseIn:
+                case CubicBezierTimingFunction::EaseType::EASE_IN:
                     valueId = CSSValueEaseIn;
                     break;
-                case CubicBezierTimingFunction::EaseOut:
+                case CubicBezierTimingFunction::EaseType::EASE_OUT:
                     valueId = CSSValueEaseOut;
                     break;
-                case CubicBezierTimingFunction::EaseInOut:
+                case CubicBezierTimingFunction::EaseType::EASE_IN_OUT:
                     valueId = CSSValueEaseInOut;
                     break;
                 default:

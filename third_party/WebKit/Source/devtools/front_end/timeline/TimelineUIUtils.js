@@ -721,7 +721,7 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
         contentHelper.appendWarningRow(event);
     if (event.name === recordTypes.JSFrame) {
         var deoptReason = eventData["deoptReason"];
-        if (deoptReason && deoptReason != "no reason")
+        if (deoptReason && deoptReason !== "no reason")
             contentHelper.appendWarningRow(event, WebInspector.TimelineModel.WarningType.V8Deopt);
     }
 
@@ -1565,7 +1565,7 @@ WebInspector.TimelineUIUtils.asyncEventGroups = function()
         animation: new WebInspector.AsyncEventGroup(WebInspector.UIString("Animation")),
         console: new WebInspector.AsyncEventGroup(WebInspector.UIString("Console")),
         userTiming: new WebInspector.AsyncEventGroup(WebInspector.UIString("User Timing")),
-        input: new WebInspector.AsyncEventGroup(WebInspector.UIString("Input Events"))
+        input: new WebInspector.AsyncEventGroup(WebInspector.UIString("Input"))
     };
     return WebInspector.TimelineUIUtils._asyncEventGroups;
 }

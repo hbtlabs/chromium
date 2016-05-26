@@ -94,24 +94,6 @@
       ],
     },
     {
-      # GN version: //mojo/converters/geometry
-      'target_name': 'mojo_geometry_lib',
-      'type': '<(component)',
-      'defines': [
-        'MOJO_GEOMETRY_IMPLEMENTATION',
-      ],
-      'dependencies': [
-        '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
-        '../ui/gfx/gfx.gyp:gfx_geometry',
-        '<(mojo_system_for_component)',
-      ],
-      'sources': [
-        'converters/geometry/geometry_type_converters.cc',
-        'converters/geometry/geometry_type_converters.h',
-        'converters/geometry/mojo_geometry_export.h',
-      ],
-    },
-    {
       # GN version: //mojo/common:test_common_custom_types
       'target_name': 'mojo_test_common_custom_types',
       'type': 'static_library',
@@ -151,19 +133,6 @@
       'sources': [
         'common/common_custom_types_unittest.cc',
         'common/common_type_converters_unittest.cc',
-      ],
-    },
-    {
-      # GN version: //mojo/test:test_support
-      'target_name': 'mojo_test_support',
-      'type': 'static_library',
-      'dependencies': [
-        '../base/base.gyp:base',
-      ],
-      'sources': [
-        'test/test_utils.h',
-        'test/test_utils_posix.cc',
-        'test/test_utils_win.cc',
       ],
     },
   ],

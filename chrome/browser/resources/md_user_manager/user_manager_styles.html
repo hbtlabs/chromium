@@ -237,15 +237,16 @@
       }
 
       .action-box-remove-user-warning {
+        align-items: center;
         border-top: 1px solid rgba(0, 0, 0, .12);
+        display: flex;
+        flex-direction: column;
         font-size: inherit;
         line-height: 20px;
         padding: 12px;
-        text-align: center;
       }
 
       .action-box-remove-user-warning > * {
-        text-align: initial;
         word-wrap: break-word;
       }
 
@@ -262,12 +263,8 @@
         };
         --paper-button-flat-keyboard-focus: {
           background: rgb(173, 50, 36);
-          font-weight: 500;
         };
-        border-radius: 2px;
-        line-height: 32px;
-        min-width: 72px;
-        padding: 0 16px;
+        @apply(--action-button);
       }
     </style>
   </template>

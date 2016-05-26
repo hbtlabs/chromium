@@ -22,7 +22,7 @@
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/desktop_media_id.h"
-#include "content/public/browser/power_save_blocker.h"
+#include "content/public/browser/power_save_blocker_factory.h"
 #include "media/base/video_util.h"
 #include "media/capture/content/capture_resolution_chooser.h"
 #include "third_party/libyuv/include/libyuv/scale_argb.h"
@@ -126,6 +126,9 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
   // The type of the capturer.
   DesktopMediaID::Type capturer_type_;
 
+  // The system time when we receive the first frame.
+  base::TimeTicks first_ref_time_;
+
   std::unique_ptr<webrtc::BasicDesktopFrame> black_frame_;
 
   // TODO(jiayl): Remove power_save_blocker_ when there is an API to keep the
@@ -170,10 +173,10 @@ void DesktopCaptureDevice::Core::AllocateAndStart(
       params.resolution_change_policy));
 
   power_save_blocker_.reset(
-      PowerSaveBlocker::Create(
+      CreatePowerSaveBlocker(
           PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
-          PowerSaveBlocker::kReasonOther,
-          "DesktopCaptureDevice is running").release());
+          PowerSaveBlocker::kReasonOther, "DesktopCaptureDevice is running")
+          .release());
 
   desktop_capturer_->Start(this);
 
@@ -308,12 +311,15 @@ void DesktopCaptureDevice::Core::OnCaptureCompleted(
     output_data = frame->data();
   }
 
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (first_ref_time_.is_null())
+    first_ref_time_ = now;
   client_->OnIncomingCapturedData(
       output_data, output_bytes,
       media::VideoCaptureFormat(
           gfx::Size(output_size.width(), output_size.height()),
           requested_frame_rate_, media::PIXEL_FORMAT_ARGB),
-      0, base::TimeTicks::Now());
+      0, now, now - first_ref_time_);
 }
 
 void DesktopCaptureDevice::Core::OnCaptureTimer() {

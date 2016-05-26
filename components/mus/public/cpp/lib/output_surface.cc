@@ -8,15 +8,16 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/output_surface_client.h"
+#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/public/cpp/window_surface.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
 
 namespace mus {
 
 OutputSurface::OutputSurface(
     const scoped_refptr<cc::ContextProvider>& context_provider,
     std::unique_ptr<mus::WindowSurface> surface)
-    : cc::OutputSurface(context_provider), surface_(std::move(surface)) {
+    : cc::OutputSurface(context_provider, nullptr, nullptr),
+      surface_(std::move(surface)) {
   capabilities_.delegated_rendering = true;
 }
 

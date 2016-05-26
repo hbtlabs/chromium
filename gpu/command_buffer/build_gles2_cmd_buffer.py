@@ -2935,7 +2935,6 @@ _FUNCTION_INFO = {
     'resource_type': 'TransformFeedback',
     'resource_types': 'TransformFeedbacks',
     'unsafe': True,
-    'unit_test': False,
   },
   'GetActiveAttrib': {
     'type': 'Custom',
@@ -4610,6 +4609,34 @@ def CachedStateName(item):
     return 'cached_' + item['name']
   return item['name']
 
+def GuardState(state, operation):
+  if 'manual' in state:
+    assert state['manual']
+    return ""
+
+  result = []
+  result_end = []
+  if 'es3' in state:
+    assert state['es3']
+    result.append("  if (feature_info_->IsES3Capable()) {\n");
+    result_end.append("  }\n")
+  if 'extension_flag' in state:
+    result.append("  if (feature_info_->feature_flags().%s) {\n  " %
+                     (state['extension_flag']))
+    result_end.append("  }\n")
+  if 'gl_version_flag' in state:
+    name = state['gl_version_flag']
+    inverted = ''
+    if name[0] == '!':
+      inverted = '!'
+      name = name[1:]
+    result.append("  if (%sfeature_info_->gl_version_info().%s) {\n" %
+                      (inverted, name))
+    result_end.append("  }\n")
+
+  result.append(operation)
+  return ''.join(result + result_end)
+
 def ToGLExtensionString(extension_flag):
   """Returns GL-type extension string of a extension flag."""
   if extension_flag == "oes_compressed_etc1_rgb8_texture":
@@ -5227,35 +5254,6 @@ TEST_P(%(test_name)s, %(name)sInvalidArgs%(arg_index)d_%(value_index)d) {
                (func.return_type, func.original_name,
                 func.MakeTypedOriginalArgString("")))
 
-  def WriteMojoGLES2ImplHeader(self, func, f):
-    """Writes the Mojo GLES2 implementation header."""
-    f.write("%s %s(%s) override;\n" %
-               (func.return_type, func.original_name,
-                func.MakeTypedOriginalArgString("")))
-
-  def WriteMojoGLES2Impl(self, func, f):
-    """Writes the Mojo GLES2 implementation."""
-    f.write("%s MojoGLES2Impl::%s(%s) {\n" %
-               (func.return_type, func.original_name,
-                func.MakeTypedOriginalArgString("")))
-    is_core_gl_func = func.IsCoreGLFunction()
-    is_ext = bool(func.GetInfo("extension"))
-    is_safe = not func.IsUnsafe()
-    if is_core_gl_func or (is_safe and is_ext):
-      f.write("MojoGLES2MakeCurrent(context_);");
-      func_return = "gl" + func.original_name + "(" + \
-          func.MakeOriginalArgString("") + ");"
-      if func.return_type == "void":
-        f.write(func_return);
-      else:
-        f.write("return " + func_return);
-    else:
-      f.write("NOTREACHED() << \"Unimplemented %s.\";\n" %
-                 func.original_name);
-      if func.return_type != "void":
-        f.write("return 0;")
-    f.write("}")
-
   def WriteGLES2InterfaceStub(self, func, f):
     """Writes the GLES2 Interface stub declaration."""
     f.write("%s %s(%s) override;\n" %
@@ -5612,8 +5610,9 @@ class StateSetNamedParameter(TypeHandler):
                  (state['name'], args[1].name))
       f.write("        state_.%s = %s;\n" % (state['name'], args[1].name))
       if not func.GetInfo("no_gl"):
-        f.write("        %s(%s);\n" %
-                   (func.GetGLFunctionName(), func.MakeOriginalArgString("")))
+        operation = "        %s(%s);\n" % \
+                    (func.GetGLFunctionName(), func.MakeOriginalArgString(""))
+        f.write(GuardState(state, operation))
       f.write("      }\n")
       f.write("      break;\n")
     f.write("    default:\n")
@@ -6094,17 +6093,15 @@ class GENnHandler(TypeHandler):
 
   def WriteHandlerImplementation (self, func, f):
     """Overrriden from TypeHandler."""
-    f.write("  if (!%sHelper(n, %s)) {\n"
-               "    return error::kInvalidArguments;\n"
-               "  }\n" %
-               (func.name, func.GetLastOriginalArg().name))
+    raise NotImplementedError("GENn functions are immediate")
 
   def WriteImmediateHandlerImplementation(self, func, f):
     """Overrriden from TypeHandler."""
-    f.write("  if (!%sHelper(n, %s)) {\n"
+    param_name = func.GetLastOriginalArg().name
+    f.write("  if (!CheckUniqueIds(n, %s) || !%sHelper(n, %s)) {\n"
             "    return error::kInvalidArguments;\n"
             "  }\n" %
-            (func.original_name, func.GetLastOriginalArg().name))
+            (param_name, func.original_name, param_name))
 
   def WriteGLES2Implementation(self, func, f):
     """Overrriden from TypeHandler."""
@@ -6181,35 +6178,7 @@ TEST_F(GLES2ImplementationTest, %(name)s) {
 
   def WriteServiceUnitTest(self, func, f, *extras):
     """Overrriden from TypeHandler."""
-    valid_test = """
-TEST_P(%(test_name)s, %(name)sValidArgs) {
-  EXPECT_CALL(*gl_, %(gl_func_name)s(1, _))
-      .WillOnce(SetArgumentPointee<1>(kNewServiceId));
-  GetSharedMemoryAs<GLuint*>()[0] = kNewClientId;
-  SpecializedSetup<cmds::%(name)s, 0>(true);
-  cmds::%(name)s cmd;
-  cmd.Init(%(args)s);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  EXPECT_TRUE(Get%(resource_name)s(kNewClientId, &service_id) != NULL);
-}
-"""
-    self.WriteValidUnitTest(func, f, valid_test, {
-        'resource_name': func.GetInfo('resource_type'),
-      }, *extras)
-    invalid_test = """
-TEST_P(%(test_name)s, %(name)sInvalidArgs) {
-  EXPECT_CALL(*gl_, %(gl_func_name)s(_, _)).Times(0);
-  GetSharedMemoryAs<GLuint*>()[0] = client_%(resource_name)s_id_;
-  SpecializedSetup<cmds::%(name)s, 0>(false);
-  cmds::%(name)s cmd;
-  cmd.Init(%(args)s);
-  EXPECT_EQ(error::kInvalidArguments, ExecuteCmd(cmd));
-}
-"""
-    self.WriteValidUnitTest(func, f, invalid_test, {
-          'resource_name': func.GetInfo('resource_type').lower(),
-        }, *extras)
+    raise NotImplementedError("GENn functions are immediate")
 
   def WriteImmediateServiceUnitTest(self, func, f, *extras):
     """Overrriden from TypeHandler."""
@@ -6232,6 +6201,26 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
 }
 """
     self.WriteValidUnitTest(func, f, valid_test, {
+        'resource_name': func.GetInfo('resource_type'),
+      }, *extras)
+    duplicate_id_test = """
+TEST_P(%(test_name)s, %(name)sDuplicateIds) {
+  EXPECT_CALL(*gl_, %(gl_func_name)s(_, _)).Times(0);
+  cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
+  GLuint temp[3] = {kNewClientId, kNewClientId + 1, kNewClientId};
+  SpecializedSetup<cmds::%(name)s, 1>(true);"""
+    if func.IsUnsafe():
+      duplicate_id_test += """
+  decoder_->set_unsafe_es3_apis_enabled(true);"""
+    duplicate_id_test += """
+  cmd->Init(3, temp);
+  EXPECT_EQ(error::kInvalidArguments,
+            ExecuteImmediateCmd(*cmd, sizeof(temp)));
+  EXPECT_TRUE(Get%(resource_name)s(kNewClientId) == NULL);
+  EXPECT_TRUE(Get%(resource_name)s(kNewClientId + 1) == NULL);
+}
+    """
+    self.WriteValidUnitTest(func, f, duplicate_id_test, {
         'resource_name': func.GetInfo('resource_type'),
       }, *extras)
     invalid_test = """
@@ -9758,14 +9747,6 @@ class Function(object):
     """Writes the GLES2 Interface declaration."""
     self.type_handler.WriteGLES2InterfaceHeader(self, f)
 
-  def WriteMojoGLES2ImplHeader(self, f):
-    """Writes the Mojo GLES2 implementation header declaration."""
-    self.type_handler.WriteMojoGLES2ImplHeader(self, f)
-
-  def WriteMojoGLES2Impl(self, f):
-    """Writes the Mojo GLES2 implementation declaration."""
-    self.type_handler.WriteMojoGLES2Impl(self, f)
-
   def WriteGLES2InterfaceStub(self, f):
     """Writes the GLES2 Interface Stub declaration."""
     self.type_handler.WriteGLES2InterfaceStub(self, f)
@@ -10414,45 +10395,28 @@ void ContextState::InitState(const ContextState *prev_state) const {
             for item in state['states']:
               item_name = CachedStateName(item)
 
-              if 'manual' in item:
-                assert item['manual']
-                continue
-              if 'es3' in item:
-                assert item['es3']
-                f.write("  if (feature_info_->IsES3Capable()) {\n");
-              if 'extension_flag' in item:
-                f.write("  if (feature_info_->feature_flags().%s) {\n  " %
-                           item['extension_flag'])
+              operation = []
               if test_prev:
                 if isinstance(item['default'], list):
-                  f.write("  if (memcmp(prev_state->%s, %s, "
-                             "sizeof(%s) * %d)) {\n" %
-                             (item_name, item_name, item['type'],
-                              len(item['default'])))
+                  operation.append("  if (memcmp(prev_state->%s, %s, "
+                                      "sizeof(%s) * %d)) {\n" %
+                                      (item_name, item_name, item['type'],
+                                      len(item['default'])))
                 else:
-                  f.write("  if (prev_state->%s != %s) {\n  " %
-                             (item_name, item_name))
-              if 'gl_version_flag' in item:
-                item_name = item['gl_version_flag']
-                inverted = ''
-                if item_name[0] == '!':
-                  inverted = '!'
-                  item_name = item_name[1:]
-                f.write("  if (%sfeature_info_->gl_version_info().%s) {\n" %
-                           (inverted, item_name))
-              f.write("  gl%s(%s, %s);\n" %
-                         (state['func'],
-                          (item['enum_set']
-                             if 'enum_set' in item else item['enum']),
-                          item['name']))
-              if 'gl_version_flag' in item or 'es3' in item:
-                f.write("  }\n")
+                  operation.append("  if (prev_state->%s != %s) {\n  " %
+                                      (item_name, item_name))
+
+              operation.append("  gl%s(%s, %s);\n" %
+                             (state['func'],
+                             (item['enum_set']
+                                 if 'enum_set' in item else item['enum']),
+                             item['name']))
+
               if test_prev:
-                if 'extension_flag' in item:
-                  f.write("  ")
-                f.write("  }")
-              if 'extension_flag' in item:
-                f.write("  }")
+                operation.append("  }")
+
+              guarded_operation = GuardState(item, ''.join(operation))
+              f.write(guarded_operation)
           else:
             if 'extension_flag' in state:
               f.write("  if (feature_info_->feature_flags().%s)\n  " %
@@ -10656,6 +10620,7 @@ bool GLES2DecoderImpl::SetCapabilityState(GLenum cap, bool enabled) {
 }
 
 void GLES2DecoderTestBase::SetupInitStateExpectations(bool es3_capable) {
+  const auto& feature_info_ = group_->feature_info();
 """)
       # We need to sort the keys so the expectations match
       for state_name in sorted(_STATES.keys()):
@@ -10676,32 +10641,23 @@ void GLES2DecoderTestBase::SetupInitStateExpectations(bool es3_capable) {
             f.write("      .RetiresOnSaturation();\n")
         elif state['type'] == 'NamedParameter':
           for item in state['states']:
-            if 'manual' in item:
-              assert item['manual']
-              continue
-            if 'extension_flag' in item:
-              f.write("  if (group_->feature_info()->feature_flags().%s) {\n" %
-                         item['extension_flag'])
-              f.write("  ")
-            if 'es3' in item:
-              assert item['es3']
-              f.write("  if (es3_capable) {\n")
-              f.write("  ")
             expect_value = item['default']
             if isinstance(expect_value, list):
               # TODO: Currently we do not check array values.
               expect_value = "_"
 
-            f.write(
-                "  EXPECT_CALL(*gl_, %s(%s, %s))\n" %
-                (state['func'],
-                 (item['enum_set']
-                             if 'enum_set' in item else item['enum']),
-                 expect_value))
-            f.write("      .Times(1)\n")
-            f.write("      .RetiresOnSaturation();\n")
-            if 'extension_flag' in item or 'es3' in item:
-              f.write("  }\n")
+            operation = []
+            operation.append(
+                             "  EXPECT_CALL(*gl_, %s(%s, %s))\n" %
+                             (state['func'],
+                              (item['enum_set']
+                                  if 'enum_set' in item else item['enum']),
+                              expect_value))
+            operation.append("      .Times(1)\n")
+            operation.append("      .RetiresOnSaturation();\n")
+
+            guarded_operation = GuardState(item, ''.join(operation))
+            f.write(guarded_operation)
         else:
           if 'extension_flag' in state:
             f.write("  if (group_->feature_info()->feature_flags().%s) {\n" %
@@ -10782,62 +10738,6 @@ extern const NameToFunc g_gles2_function_table[] = {
     with CHeaderWriter(filename, comment) as f:
       for func in self.original_functions:
         func.WriteGLES2InterfaceHeader(f)
-    self.generated_cpp_filenames.append(filename)
-
-  def WriteMojoGLES2ImplHeader(self, filename):
-    """Writes the Mojo GLES2 implementation header."""
-    comment = ("// This file is included by gles2_interface.h to declare the\n"
-               "// GL api functions.\n")
-    code = """
-#include <memory>
-
-#include "gpu/command_buffer/client/gles2_interface.h"
-#include "mojo/public/c/gles2/gles2.h"
-
-namespace mojo {
-
-class MojoGLES2Impl : public gpu::gles2::GLES2Interface {
- public:
-  explicit MojoGLES2Impl(MojoGLES2Context context) {
-    context_ = context;
-  }
-  ~MojoGLES2Impl() override {}
-    """
-    with CHeaderWriter(filename, comment) as f:
-      f.write(code);
-      for func in self.original_functions:
-        func.WriteMojoGLES2ImplHeader(f)
-      code = """
- private:
-  MojoGLES2Context context_;
-};
-
-}  // namespace mojo
-      """
-      f.write(code);
-    self.generated_cpp_filenames.append(filename)
-
-  def WriteMojoGLES2Impl(self, filename):
-    """Writes the Mojo GLES2 implementation."""
-    code = """
-#include "mojo/gpu/mojo_gles2_impl_autogen.h"
-
-#include "base/logging.h"
-#include "mojo/public/c/gles2/chromium_extension.h"
-#include "mojo/public/c/gles2/gles2.h"
-
-namespace mojo {
-
-    """
-    with CWriter(filename) as f:
-      f.write(code);
-      for func in self.original_functions:
-        func.WriteMojoGLES2Impl(f)
-      code = """
-
-}  // namespace mojo
-    """
-      f.write(code);
     self.generated_cpp_filenames.append(filename)
 
   def WriteGLES2InterfaceStub(self, filename):
@@ -11281,31 +11181,6 @@ const size_t GLES2Util::enum_to_string_table_len_ =
         f.write("}\n\n")
     self.generated_cpp_filenames.append(filename)
 
-  def WriteMojoGLCallVisitor(self, filename):
-    """Provides the GL implementation for mojo"""
-    with CWriter(filename) as f:
-      for func in self.original_functions:
-        if not func.IsCoreGLFunction():
-          continue
-        f.write("VISIT_GL_CALL(%s, %s, (%s), (%s))\n" %
-                               (func.name, func.return_type,
-                                func.MakeTypedOriginalArgString(""),
-                                func.MakeOriginalArgString("")))
-    self.generated_cpp_filenames.append(filename)
-
-  def WriteMojoGLCallVisitorForExtension(self, filename):
-    """Provides the GL implementation for mojo for all extensions"""
-    with CWriter(filename) as f:
-      for func in self.original_functions:
-        if not func.GetInfo("extension"):
-          continue
-        if func.IsUnsafe():
-          continue
-        f.write("VISIT_GL_CALL(%s, %s, (%s), (%s))\n" %
-                               (func.name, func.return_type,
-                                func.MakeTypedOriginalArgString(""),
-                                func.MakeOriginalArgString("")))
-    self.generated_cpp_filenames.append(filename)
 
 def Format(generated_files):
   formatter = "clang-format"
@@ -11377,10 +11252,6 @@ def main(argv):
     "gpu/command_buffer/common/gles2_cmd_format_test_autogen.h")
   gen.WriteGLES2InterfaceHeader(
     "gpu/command_buffer/client/gles2_interface_autogen.h")
-  gen.WriteMojoGLES2ImplHeader(
-    "mojo/gpu/mojo_gles2_impl_autogen.h")
-  gen.WriteMojoGLES2Impl(
-    "mojo/gpu/mojo_gles2_impl_autogen.cc")
   gen.WriteGLES2InterfaceStub(
     "gpu/command_buffer/client/gles2_interface_stub_autogen.h")
   gen.WriteGLES2InterfaceStubImpl(
@@ -11425,9 +11296,6 @@ def main(argv):
     "gpu/command_buffer/common/gles2_cmd_utils_implementation_autogen.h")
   gen.WriteGLES2Header("gpu/GLES2/gl2chromium_autogen.h")
   mojo_gles2_prefix = ("mojo/public/c/gles2/gles2_call_visitor")
-  gen.WriteMojoGLCallVisitor(mojo_gles2_prefix + "_autogen.h")
-  gen.WriteMojoGLCallVisitorForExtension(
-      mojo_gles2_prefix + "_chromium_extension_autogen.h")
 
   Format(gen.generated_cpp_filenames)
 

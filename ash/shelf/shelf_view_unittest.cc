@@ -223,7 +223,7 @@ TEST_F(ShelfViewIconObserverTest, MAYBE_AddRemoveWithMultipleDisplays) {
 }
 
 TEST_F(ShelfViewIconObserverTest, BoundsChanged) {
-  ShelfWidget* widget = Shell::GetPrimaryRootWindowController()->shelf();
+  ShelfWidget* widget = Shell::GetPrimaryRootWindowController()->shelf_widget();
   gfx::Rect shelf_bounds = widget->GetWindowBoundsInScreen();
   shelf_bounds.set_width(shelf_bounds.width() / 2);
   ASSERT_GT(shelf_bounds.width(), 0);
@@ -254,6 +254,10 @@ class TestShelfDelegateForShelfView : public ShelfDelegate {
   void OnShelfAlignmentChanged(Shelf* shelf) override {}
 
   void OnShelfAutoHideBehaviorChanged(Shelf* shelf) override {}
+
+  void OnShelfAutoHideStateChanged(Shelf* shelf) override {}
+
+  void OnShelfVisibilityStateChanged(Shelf* shelf) override {}
 
   ShelfID GetShelfIDForAppID(const std::string& app_id) override {
     ShelfID id = 0;

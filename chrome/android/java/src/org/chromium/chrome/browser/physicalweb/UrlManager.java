@@ -58,8 +58,6 @@ import java.util.Set;
  */
 class UrlManager {
     private static final String TAG = "PhysicalWeb";
-    private static final String DEPRECATED_PREFS_NAME =
-            "org.chromium.chrome.browser.physicalweb.URL_CACHE";
     private static final String PREFS_VERSION_KEY = "physicalweb_version";
     private static final String PREFS_ALL_URLS_KEY = "physicalweb_all_urls";
     private static final String PREFS_NEARBY_URLS_KEY = "physicalweb_nearby_urls";
@@ -81,6 +79,7 @@ class UrlManager {
     private PwsClient mPwsClient;
 
     private final Comparator<String> mScanTimestampComparator = new Comparator<String>() {
+        @Override
         public int compare(String url1, String url2) {
             UrlInfo urlInfo1 = mUrlInfoMap.get(url1);
             UrlInfo urlInfo2 = mUrlInfoMap.get(url2);
@@ -153,32 +152,26 @@ class UrlManager {
     @VisibleForTesting
     public void addUrl(UrlInfo urlInfo) {
         Log.d(TAG, "URL found: %s", urlInfo);
-        mUrlsSortedByTimestamp.remove(urlInfo.getUrl());
-        mUrlInfoMap.put(urlInfo.getUrl(), urlInfo);
-        mUrlsSortedByTimestamp.add(urlInfo.getUrl());
+        urlInfo = updateCacheEntry(urlInfo);
         garbageCollect();
         putCachedUrlInfoMap();
 
         recordUpdate();
-        if (mNearbyUrls.contains(urlInfo.getUrl())) {
+        if (mNearbyUrls.contains(urlInfo.getUrl())
+                // In the rare event that our entry is immediately garbage collected from the cache,
+                // we should stop here.
+                || !mUrlInfoMap.containsKey(urlInfo.getUrl())) {
             return;
         }
         mNearbyUrls.add(urlInfo.getUrl());
         putCachedNearbyUrls();
 
-        boolean isOnboarding = PhysicalWeb.isOnboarding(mContext);
-        if (!isOnboarding && !mResolvedUrls.contains(urlInfo.getUrl())) {
+        if (!PhysicalWeb.isOnboarding(mContext) && !mResolvedUrls.contains(urlInfo.getUrl())) {
             // We need to resolve the URL.
             resolveUrl(urlInfo);
             return;
         }
-        notifyNewDisplayableUrl(urlInfo);
-
-        // Only trigger the notification if we did not previously have a displayable URL
-        // (i.e., we have exactly 1 displayble URL).
-        if (getUrls(isOnboarding).size() == 1) {
-            showNotification();
-        }
+        registerNewDisplayableUrl(urlInfo);
     }
 
     /**
@@ -221,7 +214,6 @@ class UrlManager {
      * Get the list of URLs which are both nearby and resolved through PWS.
      * @return A set of nearby and resolved URLs, sorted by distance.
      */
-    // TODO(conleyo) We will need to provide sorted URLs after distance is in place.
     @VisibleForTesting
     public List<UrlInfo> getUrls() {
         return getUrls(false);
@@ -231,7 +223,7 @@ class UrlManager {
      * Get the list of URLs which are both nearby and resolved through PWS.
      * @param allowUnresolved If true, include unresolved URLs only if the
      * resolved URL list is empty.
-     * @return A set of nearby URLs.
+     * @return A set of nearby URLs, sorted by distance.
      */
     @VisibleForTesting
     public List<UrlInfo> getUrls(boolean allowUnresolved) {
@@ -240,11 +232,19 @@ class UrlManager {
         Log.d(TAG, "Get URLs With: %d nearby, %d resolved, and %d in intersection.",
                 mNearbyUrls.size(), mResolvedUrls.size(), intersection.size());
 
+        List<UrlInfo> urlInfos = null;
         if (allowUnresolved && mResolvedUrls.isEmpty()) {
-            return getUrlInfoList(mNearbyUrls);
+            urlInfos = getUrlInfoList(mNearbyUrls);
+        } else {
+            urlInfos = getUrlInfoList(intersection);
         }
-
-        return getUrlInfoList(intersection);
+        Collections.sort(urlInfos, new Comparator<UrlInfo>() {
+            @Override
+            public int compare(UrlInfo urlInfo1, UrlInfo urlInfo2) {
+                return Double.compare(urlInfo1.getDistance(), urlInfo2.getDistance());
+            }
+        });
+        return urlInfos;
     }
 
     public Set<String> getNearbyUrls() {
@@ -288,6 +288,10 @@ class UrlManager {
         return result;
     }
 
+    /**
+     * Adds a URL that has been resolved by the PWS.
+     * @param urlInfo This needs to be a UrlInfo that exists in mUrlInfoMap
+     */
     private void addResolvedUrl(UrlInfo urlInfo) {
         Log.d(TAG, "PWS resolved: %s", urlInfo.getUrl());
         if (mResolvedUrls.contains(urlInfo.getUrl())) {
@@ -300,13 +304,7 @@ class UrlManager {
         if (!mNearbyUrls.contains(urlInfo.getUrl())) {
             return;
         }
-        notifyNewDisplayableUrl(urlInfo);
-
-        // Only trigger the notification if we did not previously have a displayable URL
-        // (i.e., we have exactly 1 displayble URL).
-        if (getUrls(PhysicalWeb.isOnboarding(mContext)).size() == 1) {
-            showNotification();
-        }
+        registerNewDisplayableUrl(urlInfo);
     }
 
     private void removeResolvedUrl(UrlInfo url) {
@@ -324,15 +322,9 @@ class UrlManager {
         // Check the version.
         final SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
         if (prefs.getInt(PREFS_VERSION_KEY, 0) != PREFS_VERSION) {
-            // Stored preferences are old, upgrade to the current version.
-            // TODO(cco3): This code may be deleted around m53.
             new AsyncTask<Void, Void, Void>() {
                 @Override
                 protected Void doInBackground(Void... params) {
-                    mContext.getSharedPreferences(
-                            DEPRECATED_PREFS_NAME, Context.MODE_PRIVATE).edit()
-                            .clear()
-                            .apply();
                     prefs.edit()
                             .putInt(PREFS_VERSION_KEY, PREFS_VERSION)
                             .apply();
@@ -404,6 +396,28 @@ class UrlManager {
         Intent intent = new Intent(mContext, PhysicalWebOptInActivity.class);
         PendingIntent pendingIntent = PendingIntent.getActivity(mContext, 0, intent, 0);
         return pendingIntent;
+    }
+
+    /**
+     * Updates a cache entry with new information.
+     * When we reencounter a URL, a subset of its metadata should update.  Only distance and
+     * scanTimestamp fall into this category.
+     * @param urlInfo This should be a freshly discovered UrlInfo, though it does not have to be
+     * previously undiscovered.
+     * @return The updated cache entry
+     */
+    private UrlInfo updateCacheEntry(UrlInfo urlInfo) {
+        UrlInfo currentUrlInfo = mUrlInfoMap.get(urlInfo.getUrl());
+        if (currentUrlInfo == null) {
+            mUrlInfoMap.put(urlInfo.getUrl(), urlInfo);
+            currentUrlInfo = urlInfo;
+        } else {
+            mUrlsSortedByTimestamp.remove(urlInfo.getUrl());
+            currentUrlInfo.setScanTimestamp(urlInfo.getScanTimestamp());
+            currentUrlInfo.setDistance(urlInfo.getDistance());
+        }
+        mUrlsSortedByTimestamp.add(urlInfo.getUrl());
+        return currentUrlInfo;
     }
 
     private void resolveUrl(final UrlInfo url) {
@@ -544,13 +558,26 @@ class UrlManager {
         alarmManager.cancel(pendingIntent);
     }
 
-    private void notifyNewDisplayableUrl(UrlInfo urlInfo) {
+    private void registerNewDisplayableUrl(UrlInfo urlInfo) {
+        // Notify listeners about the new displayable URL.
         Collection<UrlInfo> urlInfos = new ArrayList<>();
         urlInfos.add(urlInfo);
         Collection<UrlInfo> wrappedUrlInfos = Collections.unmodifiableCollection(urlInfos);
         for (Listener observer : mObservers) {
             observer.onDisplayableUrlsAdded(wrappedUrlInfos);
         }
+
+        // Only trigger the notification if we know we didn't have a notification up already
+        // (i.e., we have exactly 1 displayble URL) or this URL doesn't exist in the cache
+        // (and hence the user hasn't swiped away a notification for this URL recently).
+        if (getUrls(PhysicalWeb.isOnboarding(mContext)).size() != 1
+                && urlInfo.hasBeenDisplayed()) {
+            return;
+        }
+
+        // Show a notification and mark the URL as displayed.
+        showNotification();
+        urlInfo.setHasBeenDisplayed();
     }
 
     private void garbageCollect() {

@@ -80,6 +80,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLImageElement.h"
@@ -2161,7 +2162,7 @@ DOMArrayBuffer* Internals::serializeObject(PassRefPtr<SerializedScriptValue> val
 PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(DOMArrayBuffer* buffer) const
 {
     String value(static_cast<const UChar*>(buffer->data()), buffer->byteLength() / sizeof(UChar));
-    return SerializedScriptValueFactory::instance().createFromWire(value);
+    return SerializedScriptValue::create(value);
 }
 
 void Internals::forceReload(bool bypassCache)

@@ -166,8 +166,8 @@ TEST_F(ShelfWidgetTest, ShelfInitiallySizedAfterLogin) {
   for (Shell::RootWindowControllerList::const_iterator i = controllers.begin();
        i != controllers.end();
        ++i) {
-    if (!(*i)->shelf()->shelf()) {
-      shelf_widget = (*i)->shelf();
+    if (!(*i)->shelf_widget()->shelf()) {
+      shelf_widget = (*i)->shelf_widget();
       break;
     }
   }
@@ -341,6 +341,8 @@ class TestShelfDelegate : public ShelfDelegate {
   void OnShelfDestroyed(Shelf* shelf) override {}
   void OnShelfAlignmentChanged(Shelf* shelf) override {}
   void OnShelfAutoHideBehaviorChanged(Shelf* shelf) override {}
+  void OnShelfAutoHideStateChanged(Shelf* shelf) override {}
+  void OnShelfVisibilityStateChanged(Shelf* shelf) override {}
   ShelfID GetShelfIDForAppID(const std::string& app_id) override { return 0; }
   bool HasShelfIDToAppIDMapping(ShelfID id) const override { return false; }
   const std::string& GetAppIDForShelfID(ShelfID id) override {

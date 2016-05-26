@@ -22,9 +22,9 @@
 #include "components/mus/ws/window_tree.h"
 #include "components/mus/ws/window_tree_binding.h"
 #include "mojo/common/common_type_converters.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "ui/base/cursor/cursor.h"
+#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -310,9 +310,7 @@ void Display::OnViewportMetricsChanged(
     for (auto& pair : window_manager_state_map_)
       pair.second->root()->SetBounds(wm_bounds);
   }
-  // TODO(sky): if bounds changed, then need to update
-  // Display/WindowManagerState appropriately (e.g. notify observers).
-  window_server_->ProcessViewportMetricsChanged(this, old_metrics, new_metrics);
+  display_manager()->OnDisplayUpdate(this);
 }
 
 void Display::OnCompositorFrameDrawn() {

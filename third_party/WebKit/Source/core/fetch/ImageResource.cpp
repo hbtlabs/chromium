@@ -202,7 +202,7 @@ void ImageResource::destroyDecodedDataIfPossible()
         m_image = nullptr;
         setDecodedSize(0);
     } else if (m_image && !errorOccurred()) {
-        m_image->destroyDecodedData(true);
+        m_image->destroyDecodedData();
     }
 }
 
@@ -372,7 +372,6 @@ void ImageResource::updateImage(bool allDataReceived)
             clear();
             if (memoryCache()->contains(this))
                 memoryCache()->remove(this);
-            return;
         }
 
         // It would be nice to only redraw the decoded band of the image, but with the current design

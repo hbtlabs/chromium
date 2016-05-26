@@ -27,7 +27,7 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
                  const scoped_refptr<AVDASharedState>& shared_state,
                  media::VideoCodecBridge* codec,
                  const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder,
-                 const scoped_refptr<gfx::SurfaceTexture>& surface_texture);
+                 const scoped_refptr<gl::SurfaceTexture>& surface_texture);
 
   // gl::GLImage implementation
   void Destroy(bool have_context) override;
@@ -118,10 +118,6 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
   // RENDER_TO_FRONT_BUFFER and RENDER_TO_BACK_BUFFER do the same thing.
   void ReleaseOutputBuffer(UpdateMode update_mode);
 
-  // Attach the surface texture to our GL context to whatever texture is bound
-  // on the active unit.
-  void AttachSurfaceTextureToContext();
-
   // Make shared_state_->context() current if it isn't already.
   std::unique_ptr<ui::ScopedMakeCurrent> MakeCurrentIfNeeded();
 
@@ -147,7 +143,7 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
 
   // The SurfaceTexture to render to. This is null when rendering to a
   // SurfaceView.
-  const scoped_refptr<gfx::SurfaceTexture> surface_texture_;
+  const scoped_refptr<gl::SurfaceTexture> surface_texture_;
 
   // The texture that we're attached to.
   gpu::gles2::Texture* texture_;
