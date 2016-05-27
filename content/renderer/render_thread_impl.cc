@@ -87,7 +87,6 @@
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_thread_observer.h"
 #include "content/public/renderer/render_view_visitor.h"
-#include "content/renderer/bluetooth/bluetooth_message_filter.h"
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/cache_storage/cache_storage_dispatcher.h"
 #include "content/renderer/cache_storage/cache_storage_message_filter.h"
@@ -689,9 +688,6 @@ void RenderThreadImpl::Init(
 
   midi_message_filter_ = new MidiMessageFilter(GetIOMessageLoopProxy());
   AddFilter(midi_message_filter_.get());
-
-  bluetooth_message_filter_ = new BluetoothMessageFilter(thread_safe_sender());
-  AddFilter(bluetooth_message_filter_->GetFilter());
 
   AddFilter((new IndexedDBMessageFilter(thread_safe_sender()))->GetFilter());
 
@@ -1499,7 +1495,7 @@ bool RenderThreadImpl::EnableStreamTextureCopy() {
 
 AudioRendererMixerManager* RenderThreadImpl::GetAudioRendererMixerManager() {
   if (!audio_renderer_mixer_manager_) {
-    audio_renderer_mixer_manager_.reset(new AudioRendererMixerManager());
+    audio_renderer_mixer_manager_ = AudioRendererMixerManager::Create();
   }
 
   return audio_renderer_mixer_manager_.get();

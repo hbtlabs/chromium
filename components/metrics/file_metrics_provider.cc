@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
+#include "base/strings/string_piece.h"
 #include "base/task_runner.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_pref_names.h"
@@ -24,6 +25,15 @@
 
 
 namespace metrics {
+namespace {
+
+// The maximum size of a file that should be copied to memory on the I/O
+// thread. The choice of this number is a trade-off between avoiding disk
+// access on the main UI thread during metrics processing and the added
+// memory cost to copy a file that might not even be fully filled.
+const int64_t kMaxCopyToMemoryFileSize = 1 << 20;  // 1 MiB
+
+}  // namespace
 
 // This structure stores all the information about the sources being monitored
 // and their current reporting state.
@@ -128,7 +138,8 @@ void FileMetricsProvider::CheckAndMapNewMetricSourcesOnTaskRunner(
   // This method has all state information passed in |sources| and is intended
   // to run on a worker thread rather than the UI thread.
   for (std::unique_ptr<SourceInfo>& source : *sources) {
-    AccessResult result = CheckAndMapNewMetrics(source.get());
+    AccessResult result =
+        CheckAndMapNewMetrics(source.get(), kMaxCopyToMemoryFileSize);
     // Some results are not reported in order to keep the dashboard clean.
     if (result != ACCESS_RESULT_DOESNT_EXIST &&
         result != ACCESS_RESULT_NOT_MODIFIED) {
@@ -151,7 +162,8 @@ void FileMetricsProvider::CheckAndMapNewMetricSourcesOnTaskRunner(
 // to run on a worker thread rather than the UI thread.
 // static
 FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapNewMetrics(
-    SourceInfo* source) {
+    SourceInfo* source,
+    int64_t max_memory) {
   DCHECK(!source->mapped);
   DCHECK(!source->allocator);
 
@@ -196,7 +208,8 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapNewMetrics(
   source->last_seen = info.last_modified;
 
   // Test the validity of the file contents.
-  if (!base::FilePersistentMemoryAllocator::IsFileAcceptable(*source->mapped)) {
+  if (!base::FilePersistentMemoryAllocator::IsFileAcceptable(*source->mapped,
+                                                             true)) {
     source->mapped.reset();
     return ACCESS_RESULT_INVALID_CONTENTS;
   }
@@ -204,12 +217,15 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapNewMetrics(
   switch (source->type) {
     case SOURCE_HISTOGRAMS_ATOMIC_FILE:
     case SOURCE_HISTOGRAMS_ATOMIC_DIR:
-      // For an "atomic" file, copy the data into local memory but don't
+      // For an "atomic" file, maybe copy the data into local memory but don't
       // release the file so that it is held open to prevent access by other
       // processes. The copy means all I/O is done on this thread instead of
-      // the thread processing the data.
-      source->data.assign(source->mapped->data(),
-                          source->mapped->data() + source->mapped->length());
+      // the thread processing the data but also means copying to memory all
+      // of the file contents even if parts of it are empty.
+      if (info.size <= max_memory) {
+        source->data.assign(source->mapped->data(),
+                            source->mapped->data() + source->mapped->length());
+      }
       break;
   }
 
@@ -367,13 +383,14 @@ void FileMetricsProvider::CreateAllocatorForSource(SourceInfo* source) {
     // TODO(bcwhite): Make this do read/write when supported for "active".
     source->allocator.reset(new base::PersistentHistogramAllocator(
         base::WrapUnique(new base::FilePersistentMemoryAllocator(
-            std::move(source->mapped), 0, ""))));
+            std::move(source->mapped), 0, 0, base::StringPiece(), true))));
   } else {
     // Data was copied from the mapped file into memory. Create an allocator
     // on the copy thus eliminating disk I/O during data access.
     source->allocator.reset(new base::PersistentHistogramAllocator(
         base::WrapUnique(new base::PersistentMemoryAllocator(
-            &source->data[0], source->data.size(), 0, 0, "", true))));
+            &source->data[0], source->data.size(), 0, 0, base::StringPiece(),
+            true))));
   }
 }
 
@@ -484,8 +501,9 @@ bool FileMetricsProvider::HasInitialStabilityMetrics() {
 
     // This would normally be done on a background I/O thread but there
     // hasn't been a chance to run any at the time this method is called.
-    // Do the check in-line.
-    AccessResult result = CheckAndMapNewMetrics(source);
+    // Do the check in-line. Because there is no I/O thread, there is no
+    // benefit to an immediate copy-to-memory.
+    AccessResult result = CheckAndMapNewMetrics(source, /*max_memory=*/0);
     UMA_HISTOGRAM_ENUMERATION("UMA.FileMetricsProvider.InitialAccessResult",
                               result, ACCESS_RESULT_MAX);
 

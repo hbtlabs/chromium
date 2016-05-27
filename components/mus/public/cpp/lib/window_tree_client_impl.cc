@@ -31,9 +31,8 @@
 
 namespace mus {
 
-Id MakeTransportId(ConnectionSpecificId connection_id,
-                   ConnectionSpecificId local_id) {
-  return (connection_id << 16) | local_id;
+Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
+  return (client_id << 16) | local_id;
 }
 
 Id server_id(Window* window) {
@@ -41,9 +40,9 @@ Id server_id(Window* window) {
 }
 
 // Helper called to construct a local window object from transport data.
-Window* AddWindowToConnection(WindowTreeClientImpl* client,
-                              Window* parent,
-                              const mojom::WindowDataPtr& window_data) {
+Window* AddWindowToClient(WindowTreeClientImpl* client,
+                          Window* parent,
+                          const mojom::WindowDataPtr& window_data) {
   // We don't use the ctor that takes a WindowTreeConnection here, since it
   // will call back to the service and attempt to create a new window.
   Window* window = WindowPrivate::LocalCreate();
@@ -51,7 +50,6 @@ Window* AddWindowToConnection(WindowTreeClientImpl* client,
   private_window.set_connection(client);
   private_window.set_server_id(window_data->window_id);
   private_window.set_visible(window_data->visible);
-  private_window.LocalSetDisplay(window_data->display_id);
   private_window.set_properties(
       window_data->properties
           .To<std::map<std::string, std::vector<uint8_t>>>());
@@ -78,7 +76,7 @@ Window* BuildWindowTree(WindowTreeClientImpl* client,
       while (server_id(parents.back()) != windows[i]->parent_id)
         parents.pop_back();
     }
-    Window* window = AddWindowToConnection(
+    Window* window = AddWindowToClient(
         client, !parents.empty() ? parents.back() : NULL, windows[i]);
     if (!last_window)
       root = window;
@@ -123,7 +121,7 @@ WindowTreeClientImpl::WindowTreeClientImpl(
     WindowTreeDelegate* delegate,
     WindowManagerDelegate* window_manager_delegate,
     mojo::InterfaceRequest<mojom::WindowTreeClient> request)
-    : connection_id_(0),
+    : client_id_(0),
       next_window_id_(1),
       next_change_id_(1),
       delegate_(delegate),
@@ -176,8 +174,8 @@ void WindowTreeClientImpl::ConnectViaWindowTreeFactory(
   // Clients created with no root shouldn't delete automatically.
   delete_on_no_roots_ = false;
 
-  // The connection id doesn't really matter, we use 101 purely for debugging.
-  connection_id_ = 101;
+  // The client id doesn't really matter, we use 101 purely for debugging.
+  client_id_ = 101;
 
   mojom::WindowTreeFactoryPtr factory;
   connector->ConnectToInterface("mojo:mus", &factory);
@@ -198,16 +196,6 @@ void WindowTreeClientImpl::WaitForEmbed() {
 }
 
 void WindowTreeClientImpl::DestroyWindow(Window* window) {
-  // TODO(jonross): Also clear the focused window (crbug.com/611983)
-  if (window == capture_window_) {
-    InFlightCaptureChange reset_change(this, nullptr);
-    ApplyServerChangeToExistingInFlightChange(reset_change);
-    // Normally just updating the queued changes is sufficient. However since
-    // |window| is being destroyed, it will not be possible to notify its
-    // observers
-    // of the lost capture. Update local state now.
-    LocalSetCapture(nullptr);
-  }
   DCHECK(tree_);
   const uint32_t change_id = ScheduleInFlightChange(base::WrapUnique(
       new CrashInFlightChange(window, ChangeType::DELETE_WINDOW)));
@@ -263,8 +251,8 @@ void WindowTreeClientImpl::Reorder(Window* window,
 
 bool WindowTreeClientImpl::OwnsWindow(Window* window) const {
   // Windows created via CreateTopLevelWindow() are not owned by us, but have
-  // our connection id.
-  return HiWord(server_id(window)) == connection_id_ &&
+  // our client id.
+  return HiWord(server_id(window)) == client_id_ &&
          roots_.count(window) == 0;
 }
 
@@ -280,7 +268,7 @@ void WindowTreeClientImpl::SetBounds(Window* window,
 
 void WindowTreeClientImpl::SetCapture(Window* window) {
   // In order for us to get here we had to have exposed a window, which implies
-  // we got a connection.
+  // we got a client.
   DCHECK(tree_);
   if (capture_window_ == window)
     return;
@@ -292,7 +280,7 @@ void WindowTreeClientImpl::SetCapture(Window* window) {
 
 void WindowTreeClientImpl::ReleaseCapture(Window* window) {
   // In order for us to get here we had to have exposed a window, which implies
-  // we got a connection.
+  // we got a client.
   DCHECK(tree_);
   if (capture_window_ != window)
     return;
@@ -324,7 +312,7 @@ void WindowTreeClientImpl::ClearHitTestMask(Id window_id) {
 
 void WindowTreeClientImpl::SetFocus(Window* window) {
   // In order for us to get here we had to have exposed a window, which implies
-  // we got a connection.
+  // we got a client.
   DCHECK(tree_);
   const uint32_t change_id = ScheduleInFlightChange(
       base::WrapUnique(new InFlightFocusChange(this, focused_window_)));
@@ -450,6 +438,18 @@ void WindowTreeClientImpl::AddWindow(Window* window) {
   windows_[server_id(window)] = window;
 }
 
+void WindowTreeClientImpl::OnWindowDestroying(Window* window) {
+  // TODO(jonross): Also clear the focused window (crbug.com/611983)
+  if (window == capture_window_) {
+    InFlightCaptureChange reset_change(this, nullptr);
+    ApplyServerChangeToExistingInFlightChange(reset_change);
+    // Normally just updating the queued changes is sufficient. However since
+    // |window| is being destroyed, it will not be possible to notify its
+    // observers of the lost capture. Update local state now.
+    LocalSetCapture(nullptr);
+  }
+}
+
 void WindowTreeClientImpl::OnWindowDestroyed(Window* window) {
   windows_.erase(server_id(window));
 
@@ -517,7 +517,7 @@ Window* WindowTreeClientImpl::NewWindowImpl(
     const Window::SharedProperties* properties) {
   DCHECK(tree_);
   Window* window =
-      new Window(this, MakeTransportId(connection_id_, next_window_id_++));
+      new Window(this, MakeTransportId(client_id_, next_window_id_++));
   if (properties)
     window->properties_ = *properties;
   AddWindow(window);
@@ -543,17 +543,19 @@ Window* WindowTreeClientImpl::NewWindowImpl(
 }
 
 void WindowTreeClientImpl::OnEmbedImpl(mojom::WindowTree* window_tree,
-                                       ConnectionSpecificId connection_id,
+                                       ClientSpecificId client_id,
                                        mojom::WindowDataPtr root_data,
+                                       int64_t display_id,
                                        Id focused_window_id,
                                        bool drawn) {
   // WARNING: this is only called if WindowTreeClientImpl was created as the
   // result of an embedding.
   tree_ = window_tree;
-  connection_id_ = connection_id;
+  client_id_ = client_id;
 
   DCHECK(roots_.empty());
-  Window* root = AddWindowToConnection(this, nullptr, root_data);
+  Window* root = AddWindowToClient(this, nullptr, root_data);
+  WindowPrivate(root).LocalSetDisplay(display_id);
   roots_.insert(root);
 
   focused_window_ = GetWindowByServerId(focused_window_id);
@@ -654,9 +656,10 @@ void WindowTreeClientImpl::RemoveObserver(
   observers_.RemoveObserver(observer);
 }
 
-void WindowTreeClientImpl::OnEmbed(ConnectionSpecificId connection_id,
+void WindowTreeClientImpl::OnEmbed(ClientSpecificId client_id,
                                    mojom::WindowDataPtr root_data,
                                    mojom::WindowTreePtr tree,
+                                   int64_t display_id,
                                    Id focused_window_id,
                                    bool drawn) {
   DCHECK(!tree_ptr_);
@@ -668,7 +671,7 @@ void WindowTreeClientImpl::OnEmbed(ConnectionSpecificId connection_id,
                                                tree_ptr_.associated_group()));
   }
 
-  OnEmbedImpl(tree_ptr_.get(), connection_id, std::move(root_data),
+  OnEmbedImpl(tree_ptr_.get(), client_id, std::move(root_data), display_id,
               focused_window_id, drawn);
 }
 
@@ -703,6 +706,7 @@ void WindowTreeClientImpl::OnLostCapture(Id window_id) {
 
 void WindowTreeClientImpl::OnTopLevelCreated(uint32_t change_id,
                                              mojom::WindowDataPtr data,
+                                             int64_t display_id,
                                              bool drawn) {
   // The server ack'd the top level window we created and supplied the state
   // of the window at the time the server created it. For properties we do not
@@ -724,7 +728,7 @@ void WindowTreeClientImpl::OnTopLevelCreated(uint32_t change_id,
   // Drawn state and display-id always come from the server (they can't be
   // modified locally).
   window_private.LocalSetParentDrawn(drawn);
-  window_private.LocalSetDisplay(data->display_id);
+  window_private.LocalSetDisplay(display_id);
 
   // The default visibilty is false, we only need update visibility if it
   // differs from that.
@@ -1054,7 +1058,7 @@ void WindowTreeClientImpl::WmSetProperty(uint32_t change_id,
 
 void WindowTreeClientImpl::WmCreateTopLevelWindow(
     uint32_t change_id,
-    ConnectionSpecificId requesting_client_id,
+    ClientSpecificId requesting_client_id,
     mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties) {
   std::map<std::string, std::vector<uint8_t>> properties =
       transport_properties.To<std::map<std::string, std::vector<uint8_t>>>();
@@ -1067,9 +1071,8 @@ void WindowTreeClientImpl::WmCreateTopLevelWindow(
   }
 }
 
-void WindowTreeClientImpl::WmClientJankinessChanged(
-    ConnectionSpecificId client_id,
-    bool janky) {
+void WindowTreeClientImpl::WmClientJankinessChanged(ClientSpecificId client_id,
+                                                    bool janky) {
   if (window_manager_delegate_) {
     auto it = embedded_windows_.find(client_id);
     CHECK(it != embedded_windows_.end());

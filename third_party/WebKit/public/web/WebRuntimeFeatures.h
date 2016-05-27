@@ -94,6 +94,7 @@ public:
     BLINK_EXPORT static void enablePresentationAPI(bool);
     BLINK_EXPORT static void enablePushMessaging(bool);
     BLINK_EXPORT static void enableReducedReferrerGranularity(bool);
+    BLINK_EXPORT static void enableRenderingPipelineThrottling(bool);
     BLINK_EXPORT static void enableScriptedSpeech(bool);
     BLINK_EXPORT static void enableScrollAnchoring(bool);
     BLINK_EXPORT static void enableSharedWorker(bool);
@@ -102,7 +103,8 @@ public:
     BLINK_EXPORT static void enableUnsafeES3APIs(bool);
     BLINK_EXPORT static void enableV8IdleTasks(bool);
     BLINK_EXPORT static void enableWebBluetooth(bool);
-    BLINK_EXPORT static void enableWebFontsInterventionV2(bool);
+    BLINK_EXPORT static void enableWebFontsInterventionV2With2G(bool);
+    BLINK_EXPORT static void enableWebFontsInterventionV2WithSlow2G(bool);
     BLINK_EXPORT static void enableWebFontsInterventionTrigger(bool);
     BLINK_EXPORT static void enableWebGLDraftExtensions(bool);
     BLINK_EXPORT static void enableWebGLImageChromium(bool);

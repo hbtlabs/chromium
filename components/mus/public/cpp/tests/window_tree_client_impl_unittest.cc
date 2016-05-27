@@ -733,9 +733,9 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindow) {
 
   mojom::WindowDataPtr data = mojom::WindowData::New();
   data->window_id = server_id(root2);
-  data->display_id = 1;
+  const int64_t display_id = 1;
   setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                                false);
+                                                display_id, false);
 
   EXPECT_FALSE(WindowPrivate(root2).parent_drawn());
 
@@ -767,11 +767,11 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsPropertiesFromData) {
 
   mojom::WindowDataPtr data = mojom::WindowData::New();
   data->window_id = server_id(root2);
-  data->display_id = 1;
   data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
   data->visible = true;
+  const int64_t display_id = 1;
   setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                                true);
+                                                display_id, true);
 
   // Make sure all the properties took.
   EXPECT_TRUE(root2->IsDrawn());
@@ -825,12 +825,12 @@ TEST_F(WindowTreeClientImplTest, NewTopLevelWindowGetsAllChangesInFlight) {
   mojom::WindowDataPtr data = mojom::WindowData::New();
   data->window_id = server_id(root2);
   data->bounds = mojo::Rect::From(gfx::Rect(1, 2, 3, 4));
-  data->display_id = 1;
   data->visible = true;
   data->properties["xx"] = mojo::Array<uint8_t>::From(std::string("server_xx"));
   data->properties["yy"] = mojo::Array<uint8_t>::From(std::string("server_yy"));
-  setup.window_tree_client()->OnTopLevelCreated(new_window_in_flight_change_id,
-                                                std::move(data), true);
+  const int64_t display_id = 1;
+  setup.window_tree_client()->OnTopLevelCreated(
+      new_window_in_flight_change_id, std::move(data), display_id, true);
 
   // The only value that should take effect is the property for 'yy' as it was
   // not in flight.
@@ -896,15 +896,15 @@ TEST_F(WindowTreeClientImplTest, TopLevelWindowDestroyedBeforeCreateComplete) {
 
   mojom::WindowDataPtr data = mojom::WindowData::New();
   data->window_id = server_id(root2);
-  data->display_id = 1;
 
   // Destroy the window before the server has a chance to ack the window
   // creation.
   root2->Destroy();
   EXPECT_EQ(1u, setup.window_tree_connection()->GetRoots().size());
 
+  const int64_t display_id = 1;
   setup.window_tree_client()->OnTopLevelCreated(change_id, std::move(data),
-                                                true);
+                                                display_id, true);
   EXPECT_EQ(1u, setup.window_tree_connection()->GetRoots().size());
 }
 
@@ -1022,6 +1022,36 @@ TEST_F(WindowTreeClientImplTest, TwoWindowsRequestCapture) {
 
   setup.window_tree_client()->OnLostCapture(server_id(root));
   EXPECT_FALSE(root->HasCapture());
+}
+
+TEST_F(WindowTreeClientImplTest, WindowDestroyedWhileTransientChildHasCapture) {
+  WindowTreeSetup setup;
+  Window* root = setup.GetFirstRoot();
+  Window* transient_parent = setup.window_tree_connection()->NewWindow();
+  Window* transient_child = setup.window_tree_connection()->NewWindow();
+  transient_parent->SetVisible(true);
+  transient_child->SetVisible(true);
+  root->AddChild(transient_parent);
+  root->AddChild(transient_child);
+
+  transient_parent->AddTransientWindow(transient_child);
+
+  WindowTracker tracker;
+  tracker.Add(transient_parent);
+  tracker.Add(transient_child);
+  // Request a capture on the transient child, then destroy the transient
+  // parent. That will destroy both windows, and should reset the capture window
+  // correctly.
+  transient_child->SetCapture();
+  transient_parent->Destroy();
+  EXPECT_TRUE(tracker.windows().empty());
+
+  // Create a new Window, and attempt to place capture on that.
+  Window* child = setup.window_tree_connection()->NewWindow();
+  child->SetVisible(true);
+  root->AddChild(child);
+  child->SetCapture();
+  EXPECT_TRUE(child->HasCapture());
 }
 
 }  // namespace mus

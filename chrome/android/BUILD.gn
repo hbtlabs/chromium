@@ -120,6 +120,7 @@ android_library("chrome_java") {
   deps = [
     "//base:base_java",
     "//chrome/android/webapk/libs/client",
+    "//chrome/android/webapk/libs/common",
     "//components/safe_json/android:safe_json_java",
     "//components/variations/android:variations_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
@@ -148,6 +149,7 @@ android_library("chrome_java") {
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
+    "//third_party/custom_tabs_client:custom_tabs_support_lib",
     "//third_party/gif_player:gif_player_java",
     "//third_party/jsr-305:jsr_305_javalib",
     "//third_party/leakcanary:leakcanary_java",
@@ -178,7 +180,6 @@ android_library("chrome_java") {
     java_files = chrome_java_sources
 
     srcjar_deps += [
-      ":custom_tabs_service_aidl",
       "//chrome:page_info_connection_type_javagen",
       "//chrome:website_settings_action_javagen",
       "//components/infobars/core:infobar_enums_java",
@@ -312,16 +313,6 @@ zip("chrome_version_srcjar") {
   ]
 }
 
-#GYP: //chrome/android/chrome_apk.gyp:custom_tabs_service_aidl
-android_aidl("custom_tabs_service_aidl") {
-  import_include = "java/src/android/support/customtabs"
-  interface_file = "java/src/android/support/customtabs/common.aidl"
-  sources = [
-    "java/src/android/support/customtabs/ICustomTabsCallback.aidl",
-    "java/src/android/support/customtabs/ICustomTabsService.aidl",
-  ]
-}
-
 # GYP: //chrome/android/chrome_apk.gyp:chrome_test_java
 android_library("chrome_test_java") {
   testonly = true
@@ -334,6 +325,7 @@ android_library("chrome_test_java") {
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
     "//chrome/android:chrome_java_resources",
+    "//chrome/android/webapk/libs/common",
     "//chrome/test/android:chrome_java_test_support",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/dom_distiller/android:dom_distiller_core_java",
@@ -361,6 +353,7 @@ android_library("chrome_test_java") {
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/android_tools:legacy_http_javalib",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
+    "//third_party/custom_tabs_client:custom_tabs_support_lib",
     "//third_party/jsr-305:jsr_305_javalib",
     "//ui/android:ui_java",
     "//ui/android:ui_javatests",

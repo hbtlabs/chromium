@@ -1082,6 +1082,8 @@ public:
     ShadowCascadeOrder shadowCascadeOrder() const { return m_shadowCascadeOrder; }
     void setShadowCascadeOrder(ShadowCascadeOrder);
 
+    bool containsV1ShadowTree() const { return m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV1; }
+
     void setRootScroller(Element*, ExceptionState&);
     Element* rootScroller();
 
@@ -1364,7 +1366,7 @@ private:
 
     Member<ScriptedAnimationController> m_scriptedAnimationController;
     Member<ScriptedIdleTaskController> m_scriptedIdleTaskController;
-    Member<MainThreadTaskRunner> m_taskRunner;
+    OwnPtr<MainThreadTaskRunner> m_taskRunner;
     Member<TextAutosizer> m_textAutosizer;
 
     Member<V0CustomElementRegistrationContext> m_registrationContext;

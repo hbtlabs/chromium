@@ -2564,8 +2564,7 @@ blink::WebMediaPlayer* RenderFrameImpl::createMediaPlayer(
     media_renderer_factory.reset(new media::DefaultRendererFactory(
         media_log, GetDecoderFactory(),
         base::Bind(&RenderThreadImpl::GetGpuFactories,
-                   base::Unretained(render_thread)),
-        *render_thread->GetAudioHardwareConfig()));
+                   base::Unretained(render_thread))));
   }
 #endif  // defined(ENABLE_MOJO_RENDERER)
 
@@ -4342,13 +4341,9 @@ void RenderFrameImpl::unregisterProtocolHandler(const WebString& scheme,
 }
 
 blink::WebBluetooth* RenderFrameImpl::bluetooth() {
-  // ChildThreadImpl::current() is null in some tests.
-  if (!bluetooth_ && ChildThreadImpl::current()) {
-    bluetooth_.reset(new WebBluetoothImpl(
-        GetServiceRegistry(), ChildThreadImpl::current()->thread_safe_sender(),
-        routing_id_));
+  if (!bluetooth_.get()) {
+    bluetooth_.reset(new WebBluetoothImpl(GetServiceRegistry()));
   }
-
   return bluetooth_.get();
 }
 

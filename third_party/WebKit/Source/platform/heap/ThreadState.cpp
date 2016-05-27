@@ -34,6 +34,8 @@
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
+#include "platform/WebMemoryAllocatorDump.h"
+#include "platform/WebProcessMemoryDump.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
 #include "platform/heap/Handle.h"
@@ -41,8 +43,6 @@
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/Visitor.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebMemoryAllocatorDump.h"
-#include "public/platform/WebProcessMemoryDump.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
@@ -111,9 +111,6 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
     ASSERT(checkThread());
     ASSERT(!**s_threadSpecific);
     **s_threadSpecific = this;
-
-    // TODO(keishi) Remove when per thread heap is ready.
-    CHECK(!m_perThreadHeapEnabled);
 
     if (m_perThreadHeapEnabled) {
         m_heap = new ThreadHeap();

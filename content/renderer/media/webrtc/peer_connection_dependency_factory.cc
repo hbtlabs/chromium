@@ -32,7 +32,6 @@
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
-#include "content/renderer/media/peer_connection_identity_store.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
 #include "content/renderer/media/rtc_video_decoder_factory.h"
 #include "content/renderer/media/rtc_video_encoder_factory.h"
@@ -61,7 +60,6 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/webrtc/api/dtlsidentitystore.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
 #include "third_party/webrtc/base/ssladapter.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
@@ -290,12 +288,6 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   if (!GetPcFactory().get())
     return NULL;
 
-  std::unique_ptr<PeerConnectionIdentityStore> identity_store(
-      new PeerConnectionIdentityStore(
-          base::ThreadTaskRunnerHandle::Get(), GetWebRtcSignalingThread(),
-          GURL(web_frame->document().url()),
-          GURL(web_frame->document().firstPartyForCookies())));
-
   // Copy the flag from Preference associated with this WebFrame.
   P2PPortAllocator::Config port_config;
 
@@ -405,16 +397,8 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
 
   return GetPcFactory()
       ->CreatePeerConnection(config, std::move(port_allocator),
-                             std::move(identity_store), observer)
+                             nullptr, observer)
       .get();
-}
-
-// static
-rtc::scoped_refptr<rtc::RTCCertificate>
-PeerConnectionDependencyFactory::GenerateDefaultCertificate() {
-  std::unique_ptr<rtc::SSLIdentity> identity(rtc::SSLIdentity::Generate(
-      webrtc::kIdentityName, rtc::KeyParams::ECDSA(rtc::EC_NIST_P256)));
-  return rtc::RTCCertificate::Create(std::move(identity));
 }
 
 scoped_refptr<webrtc::MediaStreamInterface>
