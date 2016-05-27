@@ -88,6 +88,10 @@ const base::Feature kPaintOptimizations{"PaintOptimizations",
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Throttle Blink's rendering pipeline based on frame visibility.
+const base::Feature kRenderingPipelineThrottling{
+    "RenderingPipelineThrottling", base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -103,9 +107,10 @@ const base::Feature kStaleWhileRevalidate{"StaleWhileRevalidate2",
 const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-// An experimental User Agent Intervention on WebFonts loading.
-const base::Feature kWebFontsInterventionV2{"WebFontsInterventionV2",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+// Makes WebRTC use ECDSA certs by default (i.e., when no cert type was
+// specified in JS).
+const base::Feature kWebRtcEcdsaDefault {"WebRTC-EnableWebRtcEcdsa",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb

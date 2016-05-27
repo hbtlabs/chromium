@@ -55,15 +55,15 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void WaitForEmbed();
 
   bool connected() const { return tree_ != nullptr; }
-  ConnectionSpecificId connection_id() const { return connection_id_; }
+  ClientSpecificId client_id() const { return client_id_; }
 
   // API exposed to the window implementations that pushes local changes to the
   // service.
   void DestroyWindow(Window* window);
 
-  // These methods take TransportIds. For windows owned by the current
-  // connection, the connection id high word can be zero. In all cases, the
-  // TransportId 0x1 refers to the root window.
+  // These methods take TransportIds. For windows owned by the current client,
+  // the client id high word can be zero. In all cases, the TransportId 0x1
+  // refers to the root window.
   void AddChild(Window* parent, Id child_id);
   void RemoveChild(Window* parent, Id child_id);
 
@@ -76,7 +76,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                Id relative_window_id,
                mojom::OrderDirection direction);
 
-  // Returns true if the specified window was created by this connection.
+  // Returns true if the specified window was created by this client.
   bool OwnsWindow(Window* window) const;
 
   void SetBounds(Window* window,
@@ -124,6 +124,8 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   bool IsRoot(Window* window) const { return roots_.count(window) > 0; }
 
+  void OnWindowDestroying(Window* window);
+
   // Called after the window's observers have been notified of destruction (as
   // the last step of ~Window).
   void OnWindowDestroyed(Window* window);
@@ -163,8 +165,9 @@ class WindowTreeClientImpl : public WindowTreeConnection,
 
   // OnEmbed() calls into this. Exposed as a separate function for testing.
   void OnEmbedImpl(mojom::WindowTree* window_tree,
-                   ConnectionSpecificId connection_id,
+                   ClientSpecificId client_id,
                    mojom::WindowDataPtr root_data,
+                   int64_t display_id,
                    Id focused_window_id,
                    bool drawn);
 
@@ -184,9 +187,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void RemoveObserver(WindowTreeConnectionObserver* observer) override;
 
   // Overridden from WindowTreeClient:
-  void OnEmbed(ConnectionSpecificId connection_id,
+  void OnEmbed(ClientSpecificId client_id,
                mojom::WindowDataPtr root,
                mojom::WindowTreePtr tree,
+               int64_t display_id,
                Id focused_window_id,
                bool drawn) override;
   void OnEmbeddedAppDisconnected(Id window_id) override;
@@ -194,6 +198,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   void OnLostCapture(Id window_id) override;
   void OnTopLevelCreated(uint32_t change_id,
                          mojom::WindowDataPtr data,
+                         int64_t display_id,
                          bool drawn) override;
   void OnWindowBoundsChanged(Id window_id,
                              mojo::RectPtr old_bounds,
@@ -246,10 +251,10 @@ class WindowTreeClientImpl : public WindowTreeConnection,
                      const mojo::String& name,
                      mojo::Array<uint8_t> transit_data) override;
   void WmCreateTopLevelWindow(uint32_t change_id,
-                              ConnectionSpecificId requesting_client_id,
+                              ClientSpecificId requesting_client_id,
                               mojo::Map<mojo::String, mojo::Array<uint8_t>>
                                   transport_properties) override;
-  void WmClientJankinessChanged(ConnectionSpecificId client_id,
+  void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
   void OnAccelerator(uint32_t id, mus::mojom::EventPtr event) override;
 
@@ -271,11 +276,11 @@ class WindowTreeClientImpl : public WindowTreeConnection,
       const gfx::Insets& hit_area) override;
 
   // This is set once and only once when we get OnEmbed(). It gives the unique
-  // id for this connection.
-  ConnectionSpecificId connection_id_;
+  // id for this client.
+  ClientSpecificId client_id_;
 
   // Id assigned to the next window created.
-  ConnectionSpecificId next_window_id_;
+  ClientSpecificId next_window_id_;
 
   // Id used for the next change id supplied to the server.
   uint32_t next_change_id_;
@@ -288,7 +293,7 @@ class WindowTreeClientImpl : public WindowTreeConnection,
   std::set<Window*> roots_;
 
   IdToWindowMap windows_;
-  std::map<ConnectionSpecificId, std::set<Window*>> embedded_windows_;
+  std::map<ClientSpecificId, std::set<Window*>> embedded_windows_;
 
   Window* capture_window_;
 

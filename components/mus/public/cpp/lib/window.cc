@@ -479,6 +479,8 @@ Window::Window() : Window(nullptr, static_cast<Id>(-1)) {}
 
 Window::~Window() {
   FOR_EACH_OBSERVER(WindowObserver, observers_, OnWindowDestroying(this));
+  if (tree_client())
+    tree_client()->OnWindowDestroying(this);
 
   if (HasFocus()) {
     // The focused window is being removed. When this happens the server
@@ -606,6 +608,7 @@ void Window::LocalAddChild(Window* child) {
     RemoveChildImpl(child, &child->parent_->children_);
   children_.push_back(child);
   child->parent_ = this;
+  child->display_id_ = display_id_;
 }
 
 void Window::LocalRemoveChild(Window* child) {

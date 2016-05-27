@@ -12321,6 +12321,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Event.Latency.OS" units="microseconds">
+  <owner>sahel@chromium.org</owner>
+  <summary>Time between input event received by OS and sent to Chrome.</summary>
+</histogram>
+
 <histogram name="Event.Latency.QueueingTime.TouchMoveDefaultAllowed"
     units="microseconds">
   <owner>tdresser@chromium.org</owner>
@@ -23271,7 +23276,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Value of getMemoryClass() recorded once upon startup. This is an integer,
     device-specific constant correlated with the amount of memory available on
@@ -23283,7 +23287,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Reasons behind evictions of individual tabs, recorded upon each tab
     eviction.
@@ -23294,7 +23297,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Number of loaded (memory-resident) tabs when LowMemory notification is
     delivered.
@@ -23305,7 +23307,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Time between two consecutive LowMemory notification in one foreground
     session.
@@ -23329,7 +23330,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Memory notifications delivered through system callbacks to Chrome while in
     the background.
@@ -23341,7 +23341,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Memory notifications delivered through system callbacks to Chrome while in
     the foreground - we count LowMemory notification vs particular levels of
@@ -29926,6 +29925,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.SpdyPriorityCount">
+  <obsolete>
+    Removed 2016-05-26.
+  </obsolete>
   <owner>rch@chromium.org</owner>
   <summary>The count of streams at each priority over Spdy sessions.</summary>
 </histogram>
@@ -33942,9 +33944,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="NewTabPage.Snippets.CardShown">
   <owner>knn@chromium.org</owner>
   <summary>
-    Android: The position of the snippets card that is shown on the NTP.
-    Depending on the device screen size only some of the cards will be shown
-    unless the users scrolls through.
+    Android: The position of the snippets card that is shown on the NTP. Each
+    snippet (its position) is recorded whenever at least 1/3 of it height
+    becomes visible by scrolling through the NTP. Each snippet is recorded at
+    most once for a given instance of NTP and a given data set of snippets that
+    is shown. We track the position the snippet had in the list when NTP was
+    loaded. This tracked position is thus different from the position observed
+    by the user whenever before scrolling down to the given snippet, the user
+    discards some snippets in the top of the list. Previously (in the code
+    before 2016/05/27), this histogram was recorded each time a snippet became
+    visible (e.g. by scrolling up and down) at least by 1px; the first snippet
+    was thus recorded even without scrolling down.
   </summary>
 </histogram>
 
@@ -44299,6 +44309,25 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Renderer4.SoftwareDoDeferredUpdateDelay">
   <owner>wiltzius@chromium.org</owner>
   <summary>Time between frames when the page is not GPU accelerated.</summary>
+</histogram>
+
+<histogram name="Renderer4.SoftwareImageDecodeState"
+    enum="SoftwareImageDecodeState">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Software image decode usage statistics. Images are decoded and locked prior
+    to raster; this indicates how that decode is used during tile management.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.SoftwareImageDecodeState.FirstLockWasted"
+    enum="BooleanWasted">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Indication whether the first lock of an image decode was wasted (image was
+    not used). Images are decoded and locked prior to raster; this indicates
+    whether the decode was used or not during the first lock.
+  </summary>
 </histogram>
 
 <histogram name="Renderer4.SoftwarePaintDurationMS">
@@ -56160,7 +56189,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Tab.StatusWhenDisplayed" enum="TabStatus">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     The status of a tab collected each time the tab is displayed on Android,
     including user switching to the tab and displays of newly created tabs, such
@@ -56170,7 +56198,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Tab.StatusWhenSwitchedBackToForeground" enum="TabStatus">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     The status of a tab collected each time the user switches to it on mobile.
     That does not include tabs being created at the time the user switches to
@@ -56182,7 +56209,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     enum="TabStatus">
   <owner>lliabraa@chromium.org</owner>
   <owner>marq@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     The status of a tab collected each time the user switches to it on mobile
     with the data reduction proxy enabled. This is populated identically, and in
@@ -56350,7 +56376,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Tabs.CountAtStartup" units="tabs">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>The number of tabs open at cold launch.</summary>
 </histogram>
 
@@ -56656,7 +56681,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Tabs.SpeculativeRestoreApplicability"
     enum="SpeculativeRestoreApplicability">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Applicability of speculative tab restore, recorded every time a tab is
     switched. This allows to estimate the fraction of tab restores experienced
@@ -56669,7 +56693,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Tabs.SpeculativeRestorePredictionAccuracy.SideSwipe"
     enum="SpeculativeRestorePredictionAccuracy">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Accuracy of the tab switch predictions made when the user begins the side
     swipe gesture.
@@ -56679,7 +56702,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Tabs.SpeculativeRestorePredictionAccuracy.TabSwitcher"
     enum="SpeculativeRestorePredictionAccuracy">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Accuracy of the tab switch predictions made when the user enters the tab
     switcher.
@@ -56689,7 +56711,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="Tabs.SpeculativeRestoreTargetStatus"
     enum="SpeculativeRestoreTabStatus">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Status of a tab recorded when the tab is targeted with speculative restore.
   </summary>
@@ -56697,7 +56718,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Tabs.SpeculativeRestoreTimeAhead.SideSwipe" units="ms">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Time between starting the speculative load and actual tab switch for correct
     speculative load predictions made when the user begins the side swipe
@@ -56707,7 +56727,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Tabs.SpeculativeRestoreTimeAhead.TabSwitcher" units="ms">
   <owner>lliabraa@chromium.org</owner>
-  <owner>ppi@chromium.org</owner>
   <summary>
     Time between starting the speculative load and actual tab switch for correct
     speculative load predictions made when the user enters the tab switcher.
@@ -65208,6 +65227,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="Virtual context encountered"/>
 </enum>
 
+<enum name="BooleanWasted" type="int">
+  <int value="0" label="Not wasted"/>
+  <int value="1" label="Wasted"/>
+</enum>
+
 <enum name="BooleanWiped" type="int">
   <int value="0" label="Re-enabled"/>
   <int value="1" label="Wiped out"/>
@@ -69890,6 +69914,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
              SAML login pages"/>
   <int value="329" label="Permit locking the screen"/>
   <int value="330" label="Set certificate availability for ARC-apps"/>
+  <int value="331" label="Define domains allowed to access Google Apps"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -73851,6 +73876,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1380" label="TouchStartUserGestureUtilized"/>
   <int value="1381" label="TouchMoveUserGestureUtilized"/>
   <int value="1382" label="TouchEndDuringScrollUserGestureUtilized"/>
+  <int value="1383" label="CSSSelectorPseudoDefined"/>
+  <int value="1384" label="RTCPeerConnectionAddIceCandidatePromise"/>
+  <int value="1385" label="RTCPeerConnectionAddIceCandidateLegacy"/>
+  <int value="1386" label="RTCIceCandidateDefaultSdpMLineIndex"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -87239,6 +87268,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="wss"/>
 </enum>
 
+<enum name="SoftwareImageDecodeState" type="int">
+  <int value="0" label="Wasted"/>
+  <int value="1" label="Used"/>
+  <int value="2" label="Used, relock failed"/>
+  <int value="3" label="Wasted, relocked"/>
+  <int value="4" label="Used, relocked"/>
+</enum>
+
 <enum name="SpdyFrameFlowControlState" type="int">
   <int value="0" label="Send not stalled"/>
   <int value="1" label="Send stalled by stream"/>
@@ -91129,7 +91166,12 @@ To add a new entry, add it with any value and run test to compute valid value.
 </histogram_suffixes>
 
 <histogram_suffixes name="AndroidTabPersistentStoreTime" separator=".">
-  <suffix name="CleanupAllEncryptedTime"/>
+  <suffix name="CleanupAllEncryptedTime">
+    <obsolete>
+      Original code deleted in a refactoring.
+    </obsolete>
+  </suffix>
+  <suffix name="LoadStateInternalPrefetchTime"/>
   <suffix name="LoadStateInternalTime"/>
   <suffix name="LoadStateTime"/>
   <suffix name="ReadSavedStateTime"/>
@@ -92506,6 +92548,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="90"/>
   <suffix name="100"/>
   <affected-histogram name="SiteEngagementService.EngagementScoreBucket"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="EventLatencyOS" separator=".">
+  <suffix name="MOUSE_WHEEL"/>
+  <suffix name="TOUCH_MOVED"/>
+  <suffix name="TOUCH_PRESSED"/>
+  <suffix name="TOUCH_RELEASED"/>
+  <affected-histogram name="Event.Latency.OS"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ExitFunnels" separator=".">
@@ -95135,6 +95185,22 @@ To add a new entry, add it with any value and run test to compute valid value.
       name="PageLoad.Timing2.ParseBlockedOnScriptLoadFromDocumentWrite.ParseComplete"/>
   <affected-histogram name="PageLoad.Timing2.ParseDuration"/>
   <affected-histogram name="PageLoad.Timing2.ParseStartToFirstContentfulPaint"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="PageLoadMetricsClients.Reload" separator="."
+    ordering="prefix">
+  <suffix name="Clients.Reload"
+      label="PageLoadMetrics from a page that is reloaded"/>
+  <affected-histogram
+      name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="PageLoadMetricsClients.Reload.UserGesture"
+    separator=".">
+  <suffix name="UserGesture"
+      label="PageLoadMetrics from a page that is reloaded by a user gesture"/>
+  <affected-histogram
+      name="PageLoad.Clients.Reload.PaintTiming.NavigationToFirstContentfulPaint"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PageLoadType">

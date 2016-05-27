@@ -138,9 +138,6 @@ void PaintController::displayItemClientWasInvalidated(const DisplayItemClient& c
     // Should not invalidate already painted clients.
     DCHECK(!m_newDisplayItemIndicesByClient.contains(&client));
 #endif
-
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && m_trackedPaintInvalidationObjects)
-        m_trackedPaintInvalidationObjects->append(client.debugName());
 }
 
 void PaintController::invalidateAll()
@@ -149,9 +146,6 @@ void PaintController::invalidateAll()
     DCHECK(m_newDisplayItemList.isEmpty());
     m_currentPaintArtifact.reset();
     m_currentCacheGeneration.invalidate();
-
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() && m_trackedPaintInvalidationObjects)
-        m_trackedPaintInvalidationObjects->append("##ALL##");
 }
 
 bool PaintController::clientCacheIsValid(const DisplayItemClient& client) const
@@ -433,10 +427,10 @@ void PaintController::updateCacheGeneration()
         if (!displayItem.isCacheable())
             continue;
         displayItem.client().setDisplayItemsCached(m_currentCacheGeneration);
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-        displayItem.client().endShouldKeepAlive();
-#endif
     }
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
 #if DCHECK_IS_ON()

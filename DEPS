@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '0e5b249e549a540bd89d525369b950c9e4404235',
+  'skia_revision': '78d58d1084f0390c1c0f9123ac6e48efcd226f39',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '055bfa771a7bd763305d3bafd43e39459abc95a4',
+  'v8_revision': '8c974d6a65ab96c0807a22542b41918e15d53788',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '2e8e05bc6d936a94d9684ce0bf10835f6e81f617',
+  'catapult_revision': 'aa8636016c8a21b3d51efc88d26e877a70645535',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -225,7 +225,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'f382d5d812d911c175fdecc7c85ad0ffd6b74f4f', # commit position 12817
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '82733828f83b318c80e7bfffe01f00c690fb8c4c', # commit position 12942
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),

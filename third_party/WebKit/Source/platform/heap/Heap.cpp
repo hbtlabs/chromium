@@ -34,6 +34,8 @@
 #include "platform/Histogram.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
+#include "platform/WebMemoryAllocatorDump.h"
+#include "platform/WebProcessMemoryDump.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
 #include "platform/heap/MarkingVisitor.h"
@@ -42,8 +44,6 @@
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/ThreadState.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebMemoryAllocatorDump.h"
-#include "public/platform/WebProcessMemoryDump.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/DataLog.h"
@@ -326,6 +326,7 @@ Address ThreadHeap::checkAndMarkPointer(Visitor* visitor, Address address)
         ASSERT(page->contains(address));
         ASSERT(!page->orphaned());
         ASSERT(!m_heapDoesNotContainCache->lookup(address));
+        DCHECK(&visitor->heap() == &page->arena()->getThreadState()->heap());
         page->checkAndMarkPointer(visitor, address);
         return address;
     }
@@ -694,7 +695,7 @@ void ThreadHeap::reportMemoryUsageForTracing()
 #endif
 
     bool gcTracingEnabled;
-    TRACE_EVENT_CATEGORY_GROUP_ENABLED("blink_gc", &gcTracingEnabled);
+    TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("blink_gc"), &gcTracingEnabled);
     if (!gcTracingEnabled)
         return;
 

@@ -31,10 +31,10 @@ CONTENT_EXPORT extern const base::Feature kOptimizeLoadingIPCForSmallResources;
 CONTENT_EXPORT extern const base::Feature kOriginTrials;
 CONTENT_EXPORT extern const base::Feature kPaintOptimizations;
 CONTENT_EXPORT extern const base::Feature kPointerEvents;
+CONTENT_EXPORT extern const base::Feature kRenderingPipelineThrottling;
 CONTENT_EXPORT extern const base::Feature kScrollAnchoring;
 CONTENT_EXPORT extern const base::Feature kStaleWhileRevalidate;
 CONTENT_EXPORT extern const base::Feature kTokenBinding;
-CONTENT_EXPORT extern const base::Feature kWebFontsInterventionV2;
 CONTENT_EXPORT extern const base::Feature kWebRtcEcdsaDefault;
 CONTENT_EXPORT extern const base::Feature kWebUsb;
 

@@ -40,9 +40,14 @@ class DepsUpdater(object):
                 WPT_DEST_NAME,
                 'https://chromium.googlesource.com/external/w3c/web-platform-tests.git')
 
-            for resource in ['testharnessreport.js', 'vendor-prefix.js']:
+            for resource in ['testharnessreport.js', 'WebIDLParser.js']:
                 source = self.path_from_webkit_base('LayoutTests', 'resources', resource)
                 destination = self.path_from_webkit_base('LayoutTests', 'imported', WPT_DEST_NAME, 'resources', resource)
+                self.copyfile(source, destination)
+                self.run(['git', 'add', destination])
+            for resource in ['vendor-prefix.js']:
+                source = self.path_from_webkit_base('LayoutTests', 'resources', resource)
+                destination = self.path_from_webkit_base('LayoutTests', 'imported', WPT_DEST_NAME, 'common', resource)
                 self.copyfile(source, destination)
                 self.run(['git', 'add', destination])
 

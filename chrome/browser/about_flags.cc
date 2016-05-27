@@ -560,6 +560,19 @@ const FeatureEntry::Choice kEnableUseZoomForDSFChoices[] = {
     switches::kEnableUseZoomForDSF, "false" },
 };
 
+const FeatureEntry::Choice kEnableWebFontsInterventionV2Choices[] = {
+    {IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_V2_CHOICE_DEFAULT, "", ""},
+    {IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_V2_CHOICE_ENABLED_WITH_2G,
+     switches::kEnableWebFontsInterventionV2,
+     switches::kEnableWebFontsInterventionV2SwitchValueEnabledWith2G},
+    {IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_V2_CHOICE_ENABLED_WITH_SLOW2G,
+     switches::kEnableWebFontsInterventionV2,
+     switches::kEnableWebFontsInterventionV2SwitchValueEnabledWithSlow2G},
+    {IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_V2_CHOICE_DISABLED,
+     switches::kEnableWebFontsInterventionV2,
+     switches::kEnableWebFontsInterventionV2SwitchValueDisabled},
+};
+
 // RECORDING USER METRICS FOR FLAGS:
 // -----------------------------------------------------------------------------
 // The first line of the entry is the internal name. If you'd like to gather
@@ -708,9 +721,6 @@ const FeatureEntry kFeatureEntries[] = {
      MULTI_VALUE_TYPE(kMHTMLGeneratorOptionChoices)},
     {"enable-quic", IDS_FLAGS_QUIC_NAME, IDS_FLAGS_QUIC_DESCRIPTION, kOsAll,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableQuic, switches::kDisableQuic)},
-    {"enable-alternative-services", IDS_FLAGS_ALTSVC_NAME,
-     IDS_FLAGS_ALTSVC_DESCRIPTION, kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableAlternativeServices)},
     {"disable-javascript-harmony-shipping",
      IDS_FLAGS_JAVASCRIPT_HARMONY_SHIPPING_NAME,
      IDS_FLAGS_JAVASCRIPT_HARMONY_SHIPPING_DESCRIPTION, kOsAll,
@@ -1608,7 +1618,8 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableClearBrowsingDataCounters,
                                switches::kDisableClearBrowsingDataCounters)},
     {"simplified-fullscreen-ui", IDS_FLAGS_SIMPLIFIED_FULLSCREEN_UI_NAME,
-     IDS_FLAGS_SIMPLIFIED_FULLSCREEN_UI_DESCRIPTION, kOsAll,
+     IDS_FLAGS_SIMPLIFIED_FULLSCREEN_UI_DESCRIPTION,
+     kOsWin | kOsLinux | kOsCrOS | kOsAndroid,
      FEATURE_VALUE_TYPE(features::kSimplifiedFullscreenUI)},
     {"experimental-keyboard-lock-ui",
      IDS_FLAGS_EXPERIMENTAL_KEYBOARD_LOCK_UI_NAME,
@@ -1774,7 +1785,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-webfonts-intervention-v2",
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME,
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_DESCRIPTION, kOsAll,
-     FEATURE_VALUE_TYPE(features::kWebFontsInterventionV2)},
+     MULTI_VALUE_TYPE(kEnableWebFontsInterventionV2Choices)},
     {"enable-webfonts-intervention-trigger",
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_TRIGGER_NAME,
      IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_TRIGGER_DESCRIPTION, kOsAll,

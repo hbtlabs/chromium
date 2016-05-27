@@ -97,13 +97,17 @@ class LoadingReportTestCase(unittest.TestCase):
     self.assertEqual(self._TEXT_PAINT - self._NAVIGATION_START_TIME,
                      loading_report['first_text_ms'])
     self.assertEqual(self._SIGNIFICANT_PAINT - self._NAVIGATION_START_TIME,
-                     loading_report['significant_paint_ms'])
+                     loading_report['significant_ms'])
     self.assertEqual(self._CONTENTFUL_PAINT - self._NAVIGATION_START_TIME,
-                     loading_report['contentful_paint_ms'])
+                     loading_report['contentful_ms'])
     self.assertAlmostEqual(self._LOAD_END_TIME - self._NAVIGATION_START_TIME,
                            loading_report['plt_ms'])
     self.assertAlmostEqual(0.34, loading_report['contentful_byte_frac'], 2)
     self.assertAlmostEqual(0.1844, loading_report['significant_byte_frac'], 2)
+    self.assertEqual(2, loading_report['requests'])
+    self.assertEqual(1, loading_report['first_text_requests'])
+    self.assertEqual(1, loading_report['contentful_requests'])
+    self.assertEqual(1, loading_report['significant_requests'])
     self.assertEqual(1, loading_report['preloaded_requests'])
     self.assertEqual(1, loading_report['first_text_preloaded_requests'])
     self.assertEqual(1, loading_report['contentful_preloaded_requests'])
@@ -162,15 +166,15 @@ class LoadingReportTestCase(unittest.TestCase):
   def testThreadBusyness(self):
     loading_report = report.LoadingReport(self._MakeTrace()).GenerateReport()
     self.assertAlmostEqual(
-        1., loading_report['activity_significant_paint_frac'])
+        1., loading_report['significant_activity_frac'])
     self.assertAlmostEqual(
         float(self._TOPLEVEL_EVENT_DURATION - self._TOPLEVEL_EVENT_OFFSET)
         / (self._CONTENTFUL_PAINT - self._NAVIGATION_START_TIME),
-        loading_report['activity_contentful_paint_frac'])
+        loading_report['contentful_activity_frac'])
     self.assertAlmostEqual(
         float(self._TOPLEVEL_EVENT_DURATION - self._TOPLEVEL_EVENT_OFFSET)
         / (self._LOAD_END_TIME - self._NAVIGATION_START_TIME),
-        loading_report['activity_load_frac'])
+        loading_report['activity_frac'])
 
   def testActivityBreakdown(self):
     loading_report = report.LoadingReport(self._MakeTrace()).GenerateReport()
@@ -179,20 +183,20 @@ class LoadingReportTestCase(unittest.TestCase):
         self._CONTENTFUL_PAINT - self._NAVIGATION_START_TIME)
 
     self.assertAlmostEqual(self._SCRIPT_EVENT_DURATION / load_time,
-                           loading_report['script_load_frac'])
+                           loading_report['script_frac'])
     self.assertAlmostEqual(
         (self._PARSING_EVENT_DURATION - self._SCRIPT_EVENT_DURATION)
         / load_time,
-        loading_report['parsing_load_frac'])
+        loading_report['parsing_frac'])
 
-    self.assertAlmostEqual(1., loading_report['script_significant_frac'])
-    self.assertAlmostEqual(0., loading_report['parsing_significant_frac'])
+    self.assertAlmostEqual(1., loading_report['significant_script_frac'])
+    self.assertAlmostEqual(0., loading_report['significant_parsing_frac'])
 
     self.assertAlmostEqual(self._SCRIPT_EVENT_DURATION / contentful_time,
-                           loading_report['script_contentful_frac'])
+                           loading_report['contentful_script_frac'])
     self.assertAlmostEqual(
         (self._PARSING_EVENT_DURATION - self._SCRIPT_EVENT_DURATION)
-        / contentful_time, loading_report['parsing_contentful_frac'])
+        / contentful_time, loading_report['contentful_parsing_frac'])
 
   def testAdsAndTrackingCost(self):
     load_time = float(self._LOAD_END_TIME - self._NAVIGATION_START_TIME)

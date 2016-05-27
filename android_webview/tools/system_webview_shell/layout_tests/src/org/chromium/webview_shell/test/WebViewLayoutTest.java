@@ -4,7 +4,6 @@
 
 package org.chromium.webview_shell.test;
 
-import android.os.Environment;
 import android.test.ActivityInstrumentationTestCase2;
 import android.test.suitebuilder.annotation.MediumTest;
 
@@ -12,6 +11,7 @@ import junit.framework.ComparisonFailure;
 
 import org.chromium.base.Log;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.UrlUtils;
 import org.chromium.webview_shell.WebViewLayoutTestActivity;
 
 import java.io.BufferedReader;
@@ -34,8 +34,7 @@ public class WebViewLayoutTest
 
     private static final String TAG = "WebViewLayoutTest";
 
-    private static final String EXTERNAL_PREFIX =
-            Environment.getExternalStorageDirectory().getAbsolutePath() + "/";
+    private static final String EXTERNAL_PREFIX = UrlUtils.getIsolatedTestRoot() + "/";
     private static final String BASE_WEBVIEW_TEST_PATH =
             "android_webview/tools/system_webview_shell/test/data/";
     private static final String BASE_BLINK_TEST_PATH = "third_party/WebKit/LayoutTests/";
@@ -365,14 +364,14 @@ public class WebViewLayoutTest
     private HashMap<String, HashSet<String>> buildHashMap(String contents) {
         String[] lineByLine = contents.split("\\n");
 
-        HashSet subset = null;
+        HashSet<String> subset = null;
         HashMap<String, HashSet<String>> interfaces = new HashMap<String, HashSet<String>>();
         for (String line : lineByLine) {
             String s = trimAndRemoveComments(line);
             if (isInterfaceOrGlobalObject(s)) {
                 subset = interfaces.get(s);
                 if (subset == null) {
-                    subset = new HashSet();
+                    subset = new HashSet<String>();
                     interfaces.put(s, subset);
                 }
             } else if (isInterfaceProperty(s) && subset != null) {

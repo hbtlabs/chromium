@@ -750,6 +750,7 @@
       'browser/chromeos/first_run/goodies_displayer_browsertest.cc',
       'browser/chromeos/input_method/input_method_engine_browsertests.cc',
       'browser/chromeos/input_method/mode_indicator_browsertest.cc',
+      'browser/chromeos/login/bluetooth_host_pairing_browsertest.cc',
       'browser/chromeos/login/crash_restore_browsertest.cc',
       'browser/chromeos/login/demo_mode/demo_app_launcher_browsertest.cc',
       'browser/chromeos/login/easy_unlock/bootstrap_browsertest.cc',
@@ -987,6 +988,7 @@
       'test/data/webui/async_gen.js',
       'test/data/webui/certificate_viewer_dialog_test.js',
       'test/data/webui/chrome_send_browsertest.js',
+      'test/data/webui/cr_elements_browsertest.js',
       'test/data/webui/extensions/cr_extensions_browsertest.js',
       'test/data/webui/history_browsertest.js',
       'test/data/webui/md_downloads/downloads_browsertest.js',
@@ -1612,6 +1614,7 @@
       'type': 'static_library',
       'dependencies': [
         '../components/components.gyp:metrics_test_support',
+        '../components/components.gyp:os_crypt_test_support',
         '../components/components.gyp:password_manager_core_browser_test_support',
         '../skia/skia.gyp:skia',
         '../testing/gtest.gyp:gtest',
