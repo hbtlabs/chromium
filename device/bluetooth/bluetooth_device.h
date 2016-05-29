@@ -232,7 +232,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns the name of the device suitable for displaying, this may
   // be a synthesized string containing the address and localized type name
   // if the device has no obtained name.
-  virtual base::string16 GetName() const;
+  virtual base::string16 GetNameForDisplay() const;
 
   // Returns the name of the device, which may be empty. No correction is
   // performed as in |GetName|.
@@ -491,6 +491,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   FRIEND_TEST_ALL_PREFIXES(BluetoothTest, GetNameOrEmpty_NullName);
 
   BluetoothDevice(BluetoothAdapter* adapter);
+
+  // Returns the internal name of the Bluetooth device, used by GetName().
+  virtual std::string GetDeviceName() const = 0;
+
+  // Returns the internal name of the Bluetooth device, used by
+  // GetNameForDisplay().
+  virtual std::string GetDeviceName() const = 0;
 
   // Implements platform specific operations to initiate a GATT connection.
   // Subclasses must also call DidConnectGatt, DidFailToConnectGatt, or
