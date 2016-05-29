@@ -771,9 +771,8 @@ LayoutTestBluetoothAdapterProvider::GetGenericAccessService(
 
     // Read response.
     std::vector<uint8_t> device_name_value;
-    if (base::Optional<std::string> name = device->GetName()) {
+    if (base::Optional<std::string> name = device->GetName())
       device_name_value.assign(name.value().begin(), name.value().end());
-    }
     ON_CALL(*device_name, ReadRemoteCharacteristic(_, _))
         .WillByDefault(RunCallback<0>(device_name_value));
 

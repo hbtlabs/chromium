@@ -46,10 +46,10 @@ BluetoothDevice::ConnectionInfo::~ConnectionInfo() {}
 
 base::string16 BluetoothDevice::GetNameForDisplay() const {
   base::Optional<std::string> name = GetName();
-  if (!name || name.value().empty()) {
-    return GetAddressWithLocalizedDeviceTypeName();
-  } else {
+  if (name && !name.value().empty()) {
     return base::UTF8ToUTF16(name.value());
+  } else {
+    return GetAddressWithLocalizedDeviceTypeName();
   }
 }
 
