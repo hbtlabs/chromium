@@ -529,7 +529,8 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
   if (type == mojom::BluetoothPropertyType::ALL ||
       type == mojom::BluetoothPropertyType::BDNAME) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetName())));
+    // TODO(615720): Use the upcoming GetName (was GetDeviceName).
+    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetNameForDisplay())));
     properties.push_back(std::move(btp));
   }
   if (type == mojom::BluetoothPropertyType::ALL ||
@@ -568,7 +569,8 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
   if (type == mojom::BluetoothPropertyType::ALL ||
       type == mojom::BluetoothPropertyType::REMOTE_FRIENDLY_NAME) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetName())));
+    // TODO(615720): Use the upcoming GetName (was GetDeviceName).
+    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetNameForDisplay())));
     properties.push_back(std::move(btp));
   }
   if (type == mojom::BluetoothPropertyType::ALL ||

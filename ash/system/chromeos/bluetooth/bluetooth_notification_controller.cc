@@ -205,7 +205,7 @@ void BluetoothNotificationController::DisplayPinCode(
     const std::string& pincode) {
   base::string16 message = l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_BLUETOOTH_DISPLAY_PINCODE,
-          device->GetName(), base::UTF8ToUTF16(pincode));
+          device->GetNameForDisplay(), base::UTF8ToUTF16(pincode));
 
   NotifyPairing(device, message, false);
 }
@@ -214,7 +214,7 @@ void BluetoothNotificationController::DisplayPasskey(BluetoothDevice* device,
                                                      uint32_t passkey) {
   base::string16 message = l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_BLUETOOTH_DISPLAY_PASSKEY,
-          device->GetName(), base::UTF8ToUTF16(
+          device->GetNameForDisplay(), base::UTF8ToUTF16(
               base::StringPrintf("%06i", passkey)));
 
   NotifyPairing(device, message, false);
@@ -229,7 +229,7 @@ void BluetoothNotificationController::ConfirmPasskey(BluetoothDevice* device,
                                                      uint32_t passkey) {
   base::string16 message = l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_BLUETOOTH_CONFIRM_PASSKEY,
-          device->GetName(), base::UTF8ToUTF16(
+          device->GetNameForDisplay(), base::UTF8ToUTF16(
               base::StringPrintf("%06i", passkey)));
 
   NotifyPairing(device, message, true);
@@ -239,7 +239,7 @@ void BluetoothNotificationController::AuthorizePairing(
     BluetoothDevice* device) {
   base::string16 message = l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_BLUETOOTH_AUTHORIZE_PAIRING,
-          device->GetName());
+          device->GetNameForDisplay());
 
   NotifyPairing(device, message, true);
 }
@@ -334,7 +334,7 @@ void BluetoothNotificationController::NotifyPairedDevice(
       message_center::NOTIFICATION_TYPE_SIMPLE,
       kBluetoothDevicePairedNotificationId, base::string16() /* title */,
       l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_BLUETOOTH_PAIRED,
-                                 device->GetName()),
+                                 device->GetNameForDisplay()),
       bundle.GetImageNamed(IDR_AURA_NOTIFICATION_BLUETOOTH),
       base::string16() /* display source */, GURL(),
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,

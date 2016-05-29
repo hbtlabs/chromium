@@ -157,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(BluetoothApiTest, DeviceEvents) {
 
   EXPECT_CALL(*device2_.get(), GetDeviceName())
     .WillRepeatedly(testing::Return("the real d2"));
-  EXPECT_CALL(*device2_.get(), GetName())
+  EXPECT_CALL(*device2_.get(), GetNameForDisplay())
     .WillRepeatedly(testing::Return(base::UTF8ToUTF16("the real d2")));
   event_router()->DeviceChanged(mock_adapter_, device2_.get());
 
@@ -414,7 +414,7 @@ IN_PROC_BROWSER_TEST_F(BluetoothApiTest, DeviceInfo) {
     .WillRepeatedly(testing::Return("A4:17:31:00:00:00"));
   EXPECT_CALL(*device1_.get(), GetDeviceName())
     .WillRepeatedly(testing::Return("Chromebook Pixel"));
-  EXPECT_CALL(*device1_.get(), GetName())
+  EXPECT_CALL(*device1_.get(), GetNameForDisplay())
     .WillRepeatedly(testing::Return(base::UTF8ToUTF16("Chromebook Pixel")));
   EXPECT_CALL(*device1_.get(), GetBluetoothClass())
     .WillRepeatedly(testing::Return(0x080104));
