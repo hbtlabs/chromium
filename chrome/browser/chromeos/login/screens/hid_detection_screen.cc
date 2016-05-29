@@ -374,24 +374,24 @@ void HIDDetectionScreen::SetKeyboardDeviceName_(const std::string& name) {
 
 void HIDDetectionScreen::DeviceAdded(
     device::BluetoothAdapter* adapter, device::BluetoothDevice* device) {
-  VLOG(1) << "BT input device added id = " << device->GetDeviceID() <<
-      " name = " << device->GetNameForDisplay();
+  VLOG(1) << "BT input device added id = " << device->GetDeviceID()
+          << " name = " << device->GetNameForDisplay();
   TryPairingAsPointingDevice(device);
   TryPairingAsKeyboardDevice(device);
 }
 
 void HIDDetectionScreen::DeviceChanged(
     device::BluetoothAdapter* adapter, device::BluetoothDevice* device) {
-  VLOG(1) << "BT device changed id = " << device->GetDeviceID() << " name = " <<
-      device->GetNameForDisplay();
+  VLOG(1) << "BT device changed id = " << device->GetDeviceID()
+          << " name = " << device->GetNameForDisplay();
   TryPairingAsPointingDevice(device);
   TryPairingAsKeyboardDevice(device);
 }
 
 void HIDDetectionScreen::DeviceRemoved(
     device::BluetoothAdapter* adapter, device::BluetoothDevice* device) {
-  VLOG(1) << "BT device removed id = " << device->GetDeviceID() << " name = " <<
-      device->GetNameForDisplay();
+  VLOG(1) << "BT device removed id = " << device->GetDeviceID()
+          << " name = " << device->GetNameForDisplay();
 }
 
 void HIDDetectionScreen::OnInputDeviceAdded(

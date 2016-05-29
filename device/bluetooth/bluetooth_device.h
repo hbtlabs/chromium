@@ -488,8 +488,8 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
 
   BluetoothDevice(BluetoothAdapter* adapter);
 
-  // Returns the internal name of the Bluetooth device, used by 
-  // GetNameForDisplay(). 
+  // Returns the internal name of the Bluetooth device, used by
+  // GetNameForDisplay().
   virtual std::string GetDeviceName() const = 0;
 
   // Implements platform specific operations to initiate a GATT connection.
