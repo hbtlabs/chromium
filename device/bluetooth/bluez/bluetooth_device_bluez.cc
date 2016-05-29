@@ -257,13 +257,15 @@ uint16_t BluetoothDeviceBlueZ::GetAppearance() const {
   return properties->appearance.value();
 }
 
-std::string BluetoothDeviceBlueZ::GetNameOrEmpty() const {
+base::Optional<std::string> BluetoothDeviceBlueZ::GetName() const {
   bluez::BluetoothDeviceClient::Properties* properties =
       bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
           object_path_);
   DCHECK(properties);
 
-  return properties->alias.value();
+  if (properties->name.is_valid())
+    return base::Optional<std::string>(properties->name.value());
+  return base::Optional<std::string>();
 }
 
 bool BluetoothDeviceBlueZ::IsPaired() const {

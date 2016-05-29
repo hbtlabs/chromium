@@ -38,7 +38,8 @@ MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
       .WillByDefault(testing::Return(0));
   ON_CALL(*this, GetDeviceID())
       .WillByDefault(testing::Return(0));
-  ON_CALL(*this, GetNameOrEmpty()).WillByDefault(testing::Return(name_));
+  ON_CALL(*this, GetName())
+      .WillByDefault(testing::Return(base::Optional<std::string>(name_)));
   ON_CALL(*this, GetNameForDisplay())
       .WillByDefault(testing::Return(base::UTF8ToUTF16(name_)));
   ON_CALL(*this, GetDeviceType())
@@ -51,8 +52,6 @@ MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
       .WillByDefault(testing::Return(false));
   ON_CALL(*this, IsConnecting())
       .WillByDefault(testing::Return(false));
-  ON_CALL(*this, GetName())
-      .WillByDefault(testing::Return(base::UTF8ToUTF16(name_)));
   ON_CALL(*this, GetUUIDs()).WillByDefault(testing::Return(uuids_));
   ON_CALL(*this, ExpectingPinCode())
       .WillByDefault(testing::Return(false));
