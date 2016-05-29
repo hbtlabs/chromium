@@ -81,7 +81,7 @@ source_set("lib") {
   ]
 
   deps = [
-    "//ash/wm/common:ash_wm_common",
+    "//ash",
     "//base",
     "//components/mus/common:mus_common",
     "//components/mus/public/cpp",
@@ -94,12 +94,12 @@ source_set("lib") {
     "//services/tracing/public/cpp",
     "//skia",
     "//ui/aura",
+    "//ui/display/mojo",
     "//ui/events",
     "//ui/events/mojo",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/geometry/mojo",
-    "//ui/mojo/display",
     "//ui/resources",
     "//ui/strings",
     "//ui/views",
@@ -175,7 +175,7 @@ source_set("unittests") {
   deps = [
     ":lib",
     ":resources",
-    "//ash/wm/common:ash_wm_common",
+    "//ash",
     "//base",
     "//base/test:test_config",
     "//components/mus/common:mus_common",
@@ -196,8 +196,6 @@ source_set("unittests") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gfx/geometry/mojo",
-    "//ui/gfx/geometry/mojo:interfaces",
-    "//ui/gfx/geometry/mojo:util",
     "//ui/views/mus",
   ]
 

@@ -404,6 +404,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.NativeLibraryPreloader.Result.Browser"
+    enum="NativeLibraryPreloaderResult">
+  <owner>michaelbai@chromium.org</owner>
+  <summary>
+    The return value of NativeLibraryPreloader.loadLibrary() in browser process,
+    is recorded once per browser process start.
+  </summary>
+</histogram>
+
+<histogram name="Android.NativeLibraryPreloader.Result.Renderer"
+    enum="NativeLibraryPreloaderResult">
+  <owner>michaelbai@chromium.org</owner>
+  <summary>
+    The return value of NativeLibraryPreloader.loadLibrary() in renderer
+    process, is recorded once per renderer process start.
+  </summary>
+</histogram>
+
 <histogram name="Android.NTP.Impression" enum="NTPImpressionType">
   <owner>finkm@chromium.org</owner>
   <summary>
@@ -7623,6 +7641,29 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     proxy will either be unavailable (the feature hasn't been rolled out to this
     user yet), not enabled (the feature is available but the user doesn't have
     it turned on), or enabled (the feature is enabled and turned on).
+  </summary>
+</histogram>
+
+<histogram name="DataReductionProxy.SuccessfulRequestCompletionCounts"
+    units="count">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Count of the number of requests that were successfully fetched via data
+    reduction proxy. The bucket represents the index of the data reduction proxy
+    in the data reduction proxy list.
+  </summary>
+</histogram>
+
+<histogram
+    name="DataReductionProxy.SuccessfulRequestCompletionCounts.MainFrame"
+    units="count">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Count of the number of main frame requests that were successfully fetched
+    via data reduction proxy. The bucket represents the index of the data
+    reduction proxy in the data reduction proxy list.
   </summary>
 </histogram>
 
@@ -24524,6 +24565,27 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Navigation.Scheduled.MaybeCausedAbort"
+    enum="ScheduledNavigationType">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    window.location and other scheduled navigation changes can cause the current
+    provisional load to be aborted. Many times these are initiated without user
+    gesture. This histogram logs counts of the various aborters.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.Scheduled.MaybeCausedAbort.Time" units="ms">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    window.location and other scheduled navigation changes can cause the current
+    provisional load to be aborted. Many times these are initiated without user
+    gesture. This histogram logs the time between the aborted navigation start
+    and the scheduled navigation start, if the aborted navigation has a non-zero
+    navigationStart value.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.SchemePerUniqueOrigin" enum="NavigationScheme">
   <owner>palmer@chromium.org</owner>
   <owner>felt@chromium.org</owner>
@@ -34758,6 +34820,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Status code of wiping out the offline page data.</summary>
 </histogram>
 
+<histogram name="OfflinePages.ClearStorageResult"
+    enum="OfflinePagesClearStorageResult">
+  <owner>romax@chromium.org</owner>
+  <summary>Result of asking storage manager to clear storage.</summary>
+</histogram>
+
 <histogram name="OfflinePages.DeletePage.AccessCount">
   <owner>jianli@chromium.org</owner>
   <summary>
@@ -34839,6 +34907,31 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>dougarnett@chromium.org</owner>
   <summary>
     Whether a user-edited bookmark URL had a saved offline page.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.ExpirePage.BatchSize">
+  <owner>romax@chromium.org</owner>
+  <summary>Number of pages that are expired in a batch.</summary>
+</histogram>
+
+<histogram name="OfflinePages.ExpirePage.PageLifetime" units="minutes">
+  <owner>romax@chromium.org</owner>
+  <summary>
+    Length of time between when an offline page was created and was expired.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.ExpirePage.StoreUpdateResult"
+    enum="BooleanSuccess">
+  <owner>romax@chromium.org</owner>
+  <summary>Result of updating expired page in store.</summary>
+</histogram>
+
+<histogram name="OfflinePages.ExpirePage.TimeSinceLastAccess" units="minutes">
+  <owner>romax@chromium.org</owner>
+  <summary>
+    Length of time between when an offline page was last opened and was expired.
   </summary>
 </histogram>
 
@@ -80739,6 +80832,19 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="Hit"/>
 </enum>
 
+<enum name="NativeLibraryPreloaderResult" type="int">
+  <int value="0" label="SUCCESS"/>
+  <int value="1" label="WRONG_PACKAGE_NAME"/>
+  <int value="2" label="ADDRESS_SPACE_NOT_RESERVED"/>
+  <int value="3" label="FAILED_WAITING_FOR_RELRO"/>
+  <int value="4" label="FAILED_LISTING_WEBVIEW_PACKAGES"/>
+  <int value="5" label="FAILED_TO_OPEN_RELRO_FILE"/>
+  <int value="6" label="FAILED_TO_LOAD_LIBRARY"/>
+  <int value="7" label="FAILED_JNI_CALL"/>
+  <int value="8" label="FAILED_WAITING_FOR_WEBVIEW_REASON_UNKNOWN"/>
+  <int value="10" label="FAILED_TO_FIND_NAMESPACE"/>
+</enum>
+
 <enum name="NatTypeCounters" type="int">
   <int value="0" label="Not behind a NAT."/>
   <int value="1" label="Behind a NAT of unknown type."/>
@@ -81668,6 +81774,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="0" label="Success"/>
   <int value="1" label="Store reset failed"/>
   <int value="2" label="Store reload failed"/>
+</enum>
+
+<enum name="OfflinePagesClearStorageResult" type="int">
+  <int value="0" label="Success"/>
+  <int value="1" label="Unnecessary to clean"/>
+  <int value="2" label="Page expiration failed"/>
+  <int value="3" label="Page record deletion failed"/>
+  <int value="4" label="Both expiration and deletion failed"/>
 </enum>
 
 <enum name="OfflinePagesDeletePageResult" type="int">
@@ -86084,6 +86198,21 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="5" label="FAILED_VERSION_CHECK"/>
   <int value="6" label="FAILED_DEFAULT_SETTING_SET"/>
   <int value="7" label="FAILED_WRONG_SETTINGS_COUNT"/>
+</enum>
+
+<enum name="ScheduledNavigationType" type="int">
+  <int value="0" label="(no gesture) ScheduledReload"/>
+  <int value="1" label="(no gesture) ScheduledFormSubmission"/>
+  <int value="2" label="(no gesture) ScheduledURLNavigation"/>
+  <int value="3" label="(no gesture) ScheduledRedirect"/>
+  <int value="4" label="(no gesture) ScheduledLocationChange"/>
+  <int value="5" label="(no gesture) ScheduledPageBlock"/>
+  <int value="6" label="(gesture) ScheduledReload"/>
+  <int value="7" label="(gesture) ScheduledFormSubmission"/>
+  <int value="8" label="(gesture) ScheduledURLNavigation"/>
+  <int value="9" label="(gesture) ScheduledRedirect"/>
+  <int value="10" label="(gesture) ScheduledLocationChange"/>
+  <int value="11" label="(gesture) ScheduledPageBlock"/>
 </enum>
 
 <enum name="ScrollThread" type="int">
@@ -94931,11 +95060,13 @@ To add a new entry, add it with any value and run test to compute valid value.
 
 <histogram_suffixes name="OfflinePagesNamespace" separator=".">
   <suffix name="bookmark" label="Offline bookmark cache"/>
-  <suffix name="last-n" label="Offline recent pages"/>
+  <suffix name="last_n" label="Offline recent pages"/>
   <affected-histogram name="OfflinePages.DeletePage.AccessCount"/>
   <affected-histogram name="OfflinePages.DeletePage.LastOpenToCreated"/>
   <affected-histogram name="OfflinePages.DeletePage.PageSize"/>
   <affected-histogram name="OfflinePages.DeletePage.TimeSinceLastOpen"/>
+  <affected-histogram name="OfflinePages.ExpirePage.PageLifetime"/>
+  <affected-histogram name="OfflinePages.ExpirePage.TimeSinceLastAccess"/>
   <affected-histogram name="OfflinePages.FirstOpenSinceCreated"/>
   <affected-histogram name="OfflinePages.OpenSinceLastOpen"/>
   <affected-histogram name="OfflinePages.PageLifetime"/>

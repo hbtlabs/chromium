@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '78d58d1084f0390c1c0f9123ac6e48efcd226f39',
+  'skia_revision': 'abfd028c26ae065631c0a3865609be85e96cc324',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '8c974d6a65ab96c0807a22542b41918e15d53788',
+  'v8_revision': 'd438da31c71ff68d84f6f2ab44d4d133568851ad',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -59,7 +59,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '490d6128e6faef423fa6f965f792513e138bc04a',
+  'pdfium_revision': 'd23df55b95716a4b6021ab600b99fd31954c8052',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -83,7 +83,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '7d72623057456b133aae9e97f264b3a204e97edc',
+  'nacl_revision': 'a5ccf89172d4025f51ed708deead468a0fdf44ab',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling dEQP
   # and whatever else without interference from each other.
@@ -96,7 +96,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'aa8636016c8a21b3d51efc88d26e877a70645535',
+  'catapult_revision': '1254fd14d97fb9ed23c33ba3f2119e6235a59b62',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.

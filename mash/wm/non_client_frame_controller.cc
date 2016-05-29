@@ -28,7 +28,6 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/compositor/layer.h"
-#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget.h"
@@ -204,7 +203,8 @@ NonClientFrameController::NonClientFrameController(
     mus::Window* window,
     mus::WindowManagerClient* window_manager_client)
     : widget_(new views::Widget), window_(window) {
-  WmWindowMus::Get(window)->set_widget(widget_);
+  WmWindowMus::Get(window)->set_widget(
+      widget_, WmWindowMus::WidgetCreationType::FOR_CLIENT);
   window_->AddObserver(this);
 
   // To simplify things this code creates a Widget. While a Widget is created

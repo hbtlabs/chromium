@@ -24,7 +24,6 @@
 #include "mojo/common/common_type_converters.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "ui/base/cursor/cursor.h"
-#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -83,26 +82,18 @@ mojom::DisplayPtr Display::ToMojomDisplay() const {
   mojom::DisplayPtr display_ptr = mojom::Display::New();
   display_ptr = mojom::Display::New();
   display_ptr->id = id_;
-  display_ptr->bounds = mojo::Rect::New();
   // TODO(sky): Display should know it's origin.
-  display_ptr->bounds->x = 0;
-  display_ptr->bounds->y = 0;
-  display_ptr->bounds->width = root_->bounds().size().width();
-  display_ptr->bounds->height = root_->bounds().size().height();
+  display_ptr->bounds.SetRect(0, 0, root_->bounds().size().width(),
+                              root_->bounds().size().height());
   // TODO(sky): window manager needs an API to set the work area.
-  display_ptr->work_area = display_ptr->bounds.Clone();
-  display_ptr->device_pixel_ratio =
-      platform_display_->GetViewportMetrics().device_pixel_ratio;
+  display_ptr->work_area = display_ptr->bounds;
+  display_ptr->device_pixel_ratio = platform_display_->GetDeviceScaleFactor();
   display_ptr->rotation = platform_display_->GetRotation();
   // TODO(sky): make this real.
   display_ptr->is_primary = true;
   // TODO(sky): make this real.
   display_ptr->touch_support = mojom::TouchSupport::UNKNOWN;
   display_ptr->frame_decoration_values = mojom::FrameDecorationValues::New();
-  display_ptr->frame_decoration_values->normal_client_area_insets =
-      mojo::Insets::New();
-  display_ptr->frame_decoration_values->maximized_client_area_insets =
-      mojo::Insets::New();
   return display_ptr;
 }
 
@@ -121,10 +112,6 @@ void Display::ScheduleSurfaceDestruction(ServerWindow* window) {
     return;
   windows_needing_frame_destruction_.insert(window);
   window->AddObserver(this);
-}
-
-const mojom::ViewportMetrics& Display::GetViewportMetrics() const {
-  return platform_display_->GetViewportMetrics();
 }
 
 ServerWindow* Display::GetRootWithId(const WindowId& id) {
@@ -222,8 +209,8 @@ void Display::UpdateNativeCursor(int32_t cursor_id) {
   }
 }
 
-void Display::SetSize(mojo::SizePtr size) {
-  platform_display_->SetViewportSize(size.To<gfx::Size>());
+void Display::SetSize(const gfx::Size& size) {
+  platform_display_->SetViewportSize(size);
 }
 
 void Display::SetTitle(const mojo::String& title) {
@@ -292,20 +279,19 @@ void Display::OnDisplayClosed() {
   display_manager()->DestroyDisplay(this);
 }
 
-void Display::OnViewportMetricsChanged(
-    const mojom::ViewportMetrics& old_metrics,
-    const mojom::ViewportMetrics& new_metrics) {
+void Display::OnViewportMetricsChanged(const ViewportMetrics& old_metrics,
+                                       const ViewportMetrics& new_metrics) {
   if (!root_) {
     root_.reset(window_server_->CreateServerWindow(
         display_manager()->GetAndAdvanceNextRootId(),
         ServerWindow::Properties()));
-    root_->SetBounds(gfx::Rect(new_metrics.size_in_pixels.To<gfx::Size>()));
+    root_->SetBounds(gfx::Rect(new_metrics.size_in_pixels));
     root_->SetVisible(true);
     focus_controller_.reset(new FocusController(this, root_.get()));
     focus_controller_->AddObserver(this);
     InitWindowManagersIfNecessary();
   } else {
-    root_->SetBounds(gfx::Rect(new_metrics.size_in_pixels.To<gfx::Size>()));
+    root_->SetBounds(gfx::Rect(new_metrics.size_in_pixels));
     const gfx::Rect wm_bounds(root_->bounds().size());
     for (auto& pair : window_manager_state_map_)
       pair.second->root()->SetBounds(wm_bounds);
