@@ -105,8 +105,10 @@ uint16_t BluetoothClassicDeviceMac::GetAppearance() const {
   return 0;
 }
 
-std::string BluetoothClassicDeviceMac::GetNameOrEmpty() const {
-  return base::SysNSStringToUTF8([device_ name]);
+base::Optional<std::string> BluetoothClassicDeviceMac::GetName() const {
+  if ([device_ name])
+    return base::Optional<std::string>(base::SysNSStringToUTF8([device_ name]));
+  return base::Optional<std::string>();
 }
 
 bool BluetoothClassicDeviceMac::IsPaired() const {

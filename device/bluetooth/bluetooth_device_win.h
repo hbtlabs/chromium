@@ -41,7 +41,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
   uint16_t GetProductID() const override;
   uint16_t GetDeviceID() const override;
   uint16_t GetAppearance() const override;
-  std::string GetNameOrEmpty() const override;
+  base::Optional<std::string> GetName() const override;
   bool IsPaired() const override;
   bool IsConnected() const override;
   bool IsGattConnected() const override;
@@ -134,7 +134,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceWin : public BluetoothDevice {
   uint32_t bluetooth_class_;
 
   // The name of the device, as supplied by the remote device.
-  std::string name_;
+  base::Optional<std::string> name_;
 
   // The Bluetooth address of the device.
   std::string address_;

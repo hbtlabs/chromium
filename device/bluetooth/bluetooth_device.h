@@ -17,6 +17,7 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_uuid.h"
@@ -229,14 +230,13 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns the appearance of the device.
   virtual uint16_t GetAppearance() const = 0;
 
+  // Returns the name of the device, which may be empty.
+  virtual base::Optional<std::string> GetName() const = 0;
+
   // Returns the name of the device suitable for displaying, this may
   // be a synthesized string containing the address and localized type name
   // if the device has no obtained name.
-  virtual base::string16 GetName() const;
-
-  // Returns the name of the device, which may be empty. No correction is
-  // performed as in |GetName|.
-  virtual std::string GetNameOrEmpty() const = 0;
+  virtual base::string16 GetNameForDisplay() const;
 
   // Returns the type of the device, limited to those we support or are
   // aware of, by decoding the bluetooth class information. The returned
@@ -488,7 +488,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
                            BluetoothGattConnection_ErrorAfterConnection);
   FRIEND_TEST_ALL_PREFIXES(BluetoothTest,
                            BluetoothGattConnection_DisconnectGatt_Cleanup);
-  FRIEND_TEST_ALL_PREFIXES(BluetoothTest, GetNameOrEmpty_NullName);
+  FRIEND_TEST_ALL_PREFIXES(BluetoothTest, GetName_NullName);
 
   BluetoothDevice(BluetoothAdapter* adapter);
 

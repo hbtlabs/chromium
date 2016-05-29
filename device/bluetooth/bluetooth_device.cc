@@ -44,12 +44,12 @@ BluetoothDevice::ConnectionInfo::ConnectionInfo(
 
 BluetoothDevice::ConnectionInfo::~ConnectionInfo() {}
 
-base::string16 BluetoothDevice::GetName() const {
-  std::string name = GetNameOrEmpty();
-  if (name.empty()) {
-    return GetAddressWithLocalizedDeviceTypeName();
+base::string16 BluetoothDevice::GetNameForDisplay() const {
+  base::Optional<std::string> name = GetName();
+  if (name && !name.value().empty()) {
+    return base::UTF8ToUTF16(name.value());
   } else {
-    return base::UTF8ToUTF16(name);
+    return GetAddressWithLocalizedDeviceTypeName();
   }
 }
 
@@ -235,7 +235,7 @@ bool BluetoothDevice::IsPairable() const {
 bool BluetoothDevice::IsTrustable() const {
   // Sony PlayStation Dualshock3
   if ((GetVendorID() == 0x054c && GetProductID() == 0x0268 &&
-       GetNameOrEmpty() == "PLAYSTATION(R)3 Controller"))
+       GetName() == std::string("PLAYSTATION(R)3 Controller")))
     return true;
 
   return false;

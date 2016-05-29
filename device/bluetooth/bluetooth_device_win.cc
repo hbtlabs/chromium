@@ -87,7 +87,7 @@ uint16_t BluetoothDeviceWin::GetAppearance() const {
   return 0;
 }
 
-std::string BluetoothDeviceWin::GetNameOrEmpty() const {
+base::Optional<std::string> BluetoothDeviceWin::GetName() const {
   return name_;
 }
 

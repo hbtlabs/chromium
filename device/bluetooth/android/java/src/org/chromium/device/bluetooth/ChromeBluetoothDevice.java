@@ -104,9 +104,9 @@ final class ChromeBluetoothDevice {
         return mDevice.getAddress();
     }
 
-    // Implements BluetoothDeviceAndroid::GetNameOrEmpty.
+    // Implements BluetoothDeviceAndroid::GetName.
     @CalledByNative
-    private String getNameOrEmpty() {
+    private String getName() {
         return mDevice.getName();
     }
 
