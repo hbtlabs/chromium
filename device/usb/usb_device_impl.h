@@ -45,10 +45,7 @@ typedef struct libusb_device_handle* PlatformUsbDeviceHandle;
 
 class UsbDeviceImpl : public UsbDevice {
  public:
-// UsbDevice implementation:
-#if defined(OS_CHROMEOS)
-  void CheckUsbAccess(const ResultCallback& callback) override;
-#endif  // OS_CHROMEOS
+  // UsbDevice implementation:
   void Open(const OpenCallback& callback) override;
   const UsbConfigDescriptor* GetActiveConfiguration() const override;
 
@@ -63,7 +60,6 @@ class UsbDeviceImpl : public UsbDevice {
   void set_serial_number(const base::string16& value) {
     serial_number_ = value;
   }
-  void set_device_path(const std::string& value) { device_path_ = value; }
   void set_webusb_allowed_origins(
       std::unique_ptr<WebUsbAllowedOrigins> allowed_origins) {
     webusb_allowed_origins_ = std::move(allowed_origins);
@@ -98,31 +94,13 @@ class UsbDeviceImpl : public UsbDevice {
 
  private:
   void GetAllConfigurations();
-#if defined(OS_CHROMEOS)
-  void OnOpenRequestComplete(const OpenCallback& callback,
-                             dbus::FileDescriptor fd);
-  void OnOpenRequestError(const OpenCallback& callback,
-                          const std::string& error_name,
-                          const std::string& error_message);
-  void OpenOnBlockingThreadWithFd(dbus::FileDescriptor fd,
-                                  const OpenCallback& callback);
-#else
   void OpenOnBlockingThread(const OpenCallback& callback);
-#endif  // defined(OS_CHROMEOS)
-#if defined(OS_LINUX)
-  void Opened(base::ScopedFD fd, const OpenCallback& callback);
-#else
   void Opened(PlatformUsbDeviceHandle platform_handle,
               const OpenCallback& callback);
-#endif  // defined(OS_LINUX)
 
   base::ThreadChecker thread_checker_;
   PlatformUsbDevice platform_device_;
   bool visited_ = false;
-
-  // On Chrome OS device path is necessary to request access from the permission
-  // broker.
-  std::string device_path_;
 
   // The current device configuration descriptor. May be null if the device is
   // in an unconfigured state; if not null, it is a pointer to one of the

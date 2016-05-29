@@ -13,7 +13,6 @@
 #include "components/mus/ws/window_manager_factory_service.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 
 namespace mus {
 namespace ws {
@@ -26,8 +25,8 @@ class TestPlatformDisplay : public PlatformDisplay {
  public:
   explicit TestPlatformDisplay(int32_t* cursor_id_storage)
       : cursor_id_storage_(cursor_id_storage) {
-    display_metrics_.size_in_pixels = mojo::Size::From(gfx::Size(400, 300));
-    display_metrics_.device_pixel_ratio = 1.f;
+    display_metrics_.size_in_pixels = gfx::Size(400, 300);
+    display_metrics_.device_scale_factor = 1.f;
   }
   ~TestPlatformDisplay() override {}
 
@@ -36,8 +35,7 @@ class TestPlatformDisplay : public PlatformDisplay {
     // It is necessary to tell the delegate about the ViewportMetrics to make
     // sure that the DisplayBinding is correctly initialized (and a root-window
     // is created).
-    delegate->OnViewportMetricsChanged(mojom::ViewportMetrics(),
-                                       display_metrics_);
+    delegate->OnViewportMetricsChanged(ViewportMetrics(), display_metrics_);
   }
   void SchedulePaint(const ServerWindow* window,
                      const gfx::Rect& bounds) override {}
@@ -47,8 +45,8 @@ class TestPlatformDisplay : public PlatformDisplay {
   void ReleaseCapture() override {}
   void SetCursorById(int32_t cursor) override { *cursor_id_storage_ = cursor; }
   mojom::Rotation GetRotation() override { return mojom::Rotation::VALUE_0; }
-  const mojom::ViewportMetrics& GetViewportMetrics() override {
-    return display_metrics_;
+  float GetDeviceScaleFactor() override {
+    return display_metrics_.device_scale_factor;
   }
   void UpdateTextInputState(const ui::TextInputState& state) override {}
   void SetImeVisibility(bool visible) override {}
@@ -57,7 +55,7 @@ class TestPlatformDisplay : public PlatformDisplay {
       std::unique_ptr<cc::CopyOutputRequest> output_request) override {}
 
  private:
-  mojom::ViewportMetrics display_metrics_;
+  ViewportMetrics display_metrics_;
 
   int32_t* cursor_id_storage_;
 
@@ -207,16 +205,16 @@ void TestWindowTreeClient::OnTopLevelCreated(uint32_t change_id,
 }
 
 void TestWindowTreeClient::OnWindowBoundsChanged(uint32_t window,
-                                                 mojo::RectPtr old_bounds,
-                                                 mojo::RectPtr new_bounds) {
+                                                 const gfx::Rect& old_bounds,
+                                                 const gfx::Rect& new_bounds) {
   tracker_.OnWindowBoundsChanged(window, std::move(old_bounds),
                                  std::move(new_bounds));
 }
 
 void TestWindowTreeClient::OnClientAreaChanged(
     uint32_t window_id,
-    mojo::InsetsPtr new_client_area,
-    mojo::Array<mojo::RectPtr> new_additional_client_areas) {}
+    const gfx::Insets& new_client_area,
+    mojo::Array<gfx::Rect> new_additional_client_areas) {}
 
 void TestWindowTreeClient::OnTransientWindowAdded(
     uint32_t window_id,

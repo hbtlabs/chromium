@@ -25,7 +25,6 @@
 #include "components/mus/ws/window_tree_binding.h"
 #include "services/shell/public/cpp/connection.h"
 #include "ui/events/mojo/input_events_type_converters.h"
-#include "ui/gfx/geometry/mojo/geometry_type_converters.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace mus {
@@ -213,22 +212,6 @@ void WindowServer::OnTreeMessagedClient(ClientSpecificId id) {
 
 bool WindowServer::DidTreeMessageClient(ClientSpecificId id) const {
   return current_operation_ && current_operation_->DidMessageTree(id);
-}
-
-mojom::ViewportMetricsPtr WindowServer::GetViewportMetricsForWindow(
-    const ServerWindow* window) {
-  const Display* display = display_manager_->GetDisplayContaining(window);
-  if (display)
-    return display->GetViewportMetrics().Clone();
-
-  if (!display_manager_->displays().empty())
-    return (*display_manager_->displays().begin())
-        ->GetViewportMetrics()
-        .Clone();
-
-  mojom::ViewportMetricsPtr metrics = mojom::ViewportMetrics::New();
-  metrics->size_in_pixels = mojo::Size::New();
-  return metrics;
 }
 
 const WindowTree* WindowServer::GetTreeWithRoot(
