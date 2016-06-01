@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "ash/common/wm/shelf/wm_shelf_util.h"
 #include "ash/focus_cycler.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -22,7 +23,6 @@
 #include "ash/shell_delegate.h"
 #include "ash/shell_window_ids.h"
 #include "ash/wm/aura/wm_shelf_aura.h"
-#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "ash/wm/window_properties.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -105,8 +105,12 @@ void Shelf::SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior) {
       shelf_widget_->GetNativeWindow()->GetRootWindow());
 }
 
-ShelfAutoHideBehavior Shelf::GetAutoHideBehavior() const {
-  return auto_hide_behavior_;
+ShelfAutoHideState Shelf::GetAutoHideState() const {
+  return shelf_widget_->shelf_layout_manager()->auto_hide_state();
+}
+
+ShelfVisibilityState Shelf::GetVisibilityState() const {
+  return shelf_widget_->shelf_layout_manager()->visibility_state();
 }
 
 gfx::Rect Shelf::GetScreenBoundsOfItemIconForWindow(

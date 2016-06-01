@@ -53,7 +53,6 @@ static void ValidateRenderSurfaceForLayer(LayerImpl* layer) {
     return;
   DCHECK(!layer->mask_layer()) << "layer: " << layer->id();
   DCHECK(!layer->replica_layer()) << "layer: " << layer->id();
-  DCHECK(!layer->HasCopyRequest()) << "layer: " << layer->id();
 }
 
 #endif
@@ -63,6 +62,7 @@ void CalculateVisibleRects(
     const typename LayerType::LayerListType& visible_layer_list,
     const ClipTree& clip_tree,
     const TransformTree& transform_tree,
+    const EffectTree& effect_tree,
     bool non_root_surfaces_enabled) {
   for (auto& layer : visible_layer_list) {
     gfx::Size layer_bounds = layer->bounds();
@@ -79,7 +79,10 @@ void CalculateVisibleRects(
         transform_tree.Node(layer->transform_tree_index());
     if (!is_unclipped && !fully_visible) {
       // The entire layer is visible if it has copy requests.
-      if (layer->HasCopyRequest()) {
+      const EffectNode* effect_node =
+          effect_tree.Node(layer->effect_tree_index());
+      if (effect_node->data.has_copy_request &&
+          effect_node->owner_id == layer->id()) {
         layer->set_visible_layer_rect(gfx::Rect(layer_bounds));
         continue;
       }
@@ -310,7 +313,6 @@ static bool LayerNeedsUpdateInternal(LayerType* layer,
 void FindLayersThatNeedUpdates(LayerTreeImpl* layer_tree_impl,
                                const TransformTree& transform_tree,
                                const EffectTree& effect_tree,
-                               LayerImplList* update_layer_list,
                                std::vector<LayerImpl*>* visible_layer_list) {
   for (auto* layer_impl : *layer_tree_impl) {
     bool layer_is_drawn =
@@ -321,17 +323,8 @@ void FindLayersThatNeedUpdates(LayerTreeImpl* layer_tree_impl,
                              effect_tree))
       continue;
 
-    if (LayerNeedsUpdate(layer_impl, layer_is_drawn, transform_tree)) {
+    if (LayerNeedsUpdate(layer_impl, layer_is_drawn, transform_tree))
       visible_layer_list->push_back(layer_impl);
-      update_layer_list->push_back(layer_impl);
-    }
-
-    if (LayerImpl* mask_layer = layer_impl->mask_layer())
-      update_layer_list->push_back(mask_layer);
-    if (LayerImpl* replica_layer = layer_impl->replica_layer()) {
-      if (LayerImpl* mask_layer = replica_layer->mask_layer())
-        update_layer_list->push_back(mask_layer);
-    }
   }
 }
 
@@ -757,7 +750,6 @@ static void ComputeVisibleRectsInternal(
     LayerImpl* root_layer,
     PropertyTrees* property_trees,
     bool can_render_to_separate_surface,
-    LayerImplList* update_layer_list,
     std::vector<LayerImpl*>* visible_layer_list) {
   if (property_trees->non_root_surfaces_enabled !=
       can_render_to_separate_surface) {
@@ -775,12 +767,13 @@ static void ComputeVisibleRectsInternal(
                can_render_to_separate_surface);
   ComputeEffects(&property_trees->effect_tree);
 
-  FindLayersThatNeedUpdates(
-      root_layer->layer_tree_impl(), property_trees->transform_tree,
-      property_trees->effect_tree, update_layer_list, visible_layer_list);
+  FindLayersThatNeedUpdates(root_layer->layer_tree_impl(),
+                            property_trees->transform_tree,
+                            property_trees->effect_tree, visible_layer_list);
   CalculateVisibleRects<LayerImpl>(
       *visible_layer_list, property_trees->clip_tree,
-      property_trees->transform_tree, can_render_to_separate_surface);
+      property_trees->transform_tree, property_trees->effect_tree,
+      can_render_to_separate_surface);
 }
 
 void UpdatePropertyTrees(PropertyTrees* property_trees,
@@ -805,6 +798,7 @@ void ComputeVisibleRectsForTesting(PropertyTrees* property_trees,
                                    LayerList* update_layer_list) {
   CalculateVisibleRects<Layer>(*update_layer_list, property_trees->clip_tree,
                                property_trees->transform_tree,
+                               property_trees->effect_tree,
                                can_render_to_separate_surface);
 }
 
@@ -856,10 +850,9 @@ void ComputeVisibleRects(LayerImpl* root_layer,
       ValidateRenderSurfaceForLayer(layer);
 #endif
   }
-  LayerImplList update_layer_list;
   ComputeVisibleRectsInternal(root_layer, property_trees,
                               can_render_to_separate_surface,
-                              &update_layer_list, visible_layer_list);
+                              visible_layer_list);
 }
 
 bool LayerNeedsUpdate(Layer* layer,
@@ -1014,31 +1007,6 @@ static void SetSurfaceDrawOpacity(const EffectTree& tree,
   render_surface->SetDrawOpacity(draw_opacity);
 }
 
-static bool LayerCanUseLcdText(const LayerImpl* layer,
-                               bool layers_always_allowed_lcd_text,
-                               bool can_use_lcd_text,
-                               const TransformNode* transform_node,
-                               const EffectNode* effect_node) {
-  if (layers_always_allowed_lcd_text)
-    return true;
-  if (!can_use_lcd_text)
-    return false;
-  if (!layer->contents_opaque())
-    return false;
-
-  if (effect_node->data.screen_space_opacity != 1.f)
-    return false;
-  if (!transform_node->data.node_and_ancestors_have_only_integer_translation)
-    return false;
-  if (static_cast<int>(layer->offset_to_transform_parent().x()) !=
-      layer->offset_to_transform_parent().x())
-    return false;
-  if (static_cast<int>(layer->offset_to_transform_parent().y()) !=
-      layer->offset_to_transform_parent().y())
-    return false;
-  return true;
-}
-
 static gfx::Rect LayerDrawableContentRect(
     const LayerImpl* layer,
     const gfx::Rect& layer_bounds_in_target_space,
@@ -1077,13 +1045,9 @@ static gfx::Transform ReplicaToSurfaceTransform(
 }
 
 void ComputeLayerDrawProperties(LayerImpl* layer,
-                                const PropertyTrees* property_trees,
-                                bool layers_always_allowed_lcd_text,
-                                bool can_use_lcd_text) {
+                                const PropertyTrees* property_trees) {
   const TransformNode* transform_node =
       property_trees->transform_tree.Node(layer->transform_tree_index());
-  const EffectNode* effect_node =
-      property_trees->effect_tree.Node(layer->effect_tree_index());
   const ClipNode* clip_node =
       property_trees->clip_tree.Node(layer->clip_tree_index());
 
@@ -1112,9 +1076,6 @@ void ComputeLayerDrawProperties(LayerImpl* layer,
 
   layer->draw_properties().opacity =
       LayerDrawOpacity(layer, property_trees->effect_tree);
-  layer->draw_properties().can_use_lcd_text =
-      LayerCanUseLcdText(layer, layers_always_allowed_lcd_text,
-                         can_use_lcd_text, transform_node, effect_node);
   if (property_trees->non_root_surfaces_enabled) {
     layer->draw_properties().is_clipped = clip_node->data.layers_are_clipped;
   } else {

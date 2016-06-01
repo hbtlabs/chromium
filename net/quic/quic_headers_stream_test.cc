@@ -4,6 +4,8 @@
 
 #include "net/quic/quic_headers_stream.h"
 
+#include <string>
+
 #include "net/quic/quic_utils.h"
 #include "net/quic/spdy_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
@@ -83,7 +85,7 @@ class MockVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD7(OnHeaders,
                void(SpdyStreamId stream_id,
                     bool has_priority,
-                    SpdyPriority priority,
+                    int weight,
                     SpdyStreamId parent_stream_id,
                     bool exclusive,
                     bool fin,
@@ -222,7 +224,8 @@ class QuicHeadersStreamTest : public ::testing::TestWithParam<TestParams> {
     // Parse the outgoing data and check that it matches was was written.
     if (type == SYN_STREAM) {
       EXPECT_CALL(visitor_,
-                  OnHeaders(stream_id, kHasPriority, priority,
+                  OnHeaders(stream_id, kHasPriority,
+                            Spdy3PriorityToHttp2Weight(priority),
                             /*parent_stream_id=*/0,
                             /*exclusive=*/false, fin, kFrameComplete));
     } else {
@@ -353,15 +356,14 @@ TEST_P(QuicHeadersStreamTest, ProcessRawData) {
         // Replace with "WriteHeadersAndSaveData"
         SpdySerializedFrame frame;
         if (perspective() == Perspective::IS_SERVER) {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           headers_frame.set_has_priority(true);
+          headers_frame.set_weight(Spdy3PriorityToHttp2Weight(0));
           frame = framer_->SerializeFrame(headers_frame);
           EXPECT_CALL(session_, OnStreamHeadersPriority(stream_id, 0));
         } else {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           frame = framer_->SerializeFrame(headers_frame);
         }
@@ -384,8 +386,7 @@ TEST_P(QuicHeadersStreamTest, ProcessPushPromise) {
   for (QuicStreamId stream_id = kClientDataStreamId1;
        stream_id < kClientDataStreamId3; stream_id += 2) {
     QuicStreamId promised_stream_id = NextPromisedStreamId();
-    SpdyPushPromiseIR push_promise(stream_id, promised_stream_id);
-    push_promise.set_header_block(headers_);
+    SpdyPushPromiseIR push_promise(stream_id, promised_stream_id, headers_);
     SpdySerializedFrame frame(framer_->SerializeFrame(push_promise));
     if (perspective() == Perspective::IS_SERVER) {
       EXPECT_CALL(*connection_,
@@ -421,15 +422,14 @@ TEST_P(QuicHeadersStreamTest, EmptyHeaderHOLBlockedTime) {
     // Replace with "WriteHeadersAndSaveData"
     SpdySerializedFrame frame;
     if (perspective() == Perspective::IS_SERVER) {
-      SpdyHeadersIR headers_frame(stream_id);
-      headers_frame.set_header_block(headers_);
+      SpdyHeadersIR headers_frame(stream_id, headers_);
       headers_frame.set_fin(fin);
       headers_frame.set_has_priority(true);
+      headers_frame.set_weight(Spdy3PriorityToHttp2Weight(0));
       frame = framer_->SerializeFrame(headers_frame);
       EXPECT_CALL(session_, OnStreamHeadersPriority(stream_id, 0));
     } else {
-      SpdyHeadersIR headers_frame(stream_id);
-      headers_frame.set_header_block(headers_);
+      SpdyHeadersIR headers_frame(stream_id, headers_);
       headers_frame.set_fin(fin);
       frame = framer_->SerializeFrame(headers_frame);
     }
@@ -457,15 +457,14 @@ TEST_P(QuicHeadersStreamTest, NonEmptyHeaderHOLBlockedTime) {
     for (int stream_num = 0; stream_num < 10; ++stream_num) {
       stream_id = QuicClientDataStreamId(stream_num);
       if (perspective() == Perspective::IS_SERVER) {
-        SpdyHeadersIR headers_frame(stream_id);
-        headers_frame.set_header_block(headers_);
+        SpdyHeadersIR headers_frame(stream_id, headers_);
         headers_frame.set_fin(fin);
         headers_frame.set_has_priority(true);
+        headers_frame.set_weight(Spdy3PriorityToHttp2Weight(0));
         frames[stream_num] = framer_->SerializeFrame(headers_frame);
         EXPECT_CALL(session_, OnStreamHeadersPriority(stream_id, 0)).Times(1);
       } else {
-        SpdyHeadersIR headers_frame(stream_id);
-        headers_frame.set_header_block(headers_);
+        SpdyHeadersIR headers_frame(stream_id, headers_);
         headers_frame.set_fin(fin);
         frames[stream_num] = framer_->SerializeFrame(headers_frame);
       }
@@ -505,15 +504,14 @@ TEST_P(QuicHeadersStreamTest, ProcessLargeRawData) {
         // Replace with "WriteHeadersAndSaveData"
         SpdySerializedFrame frame;
         if (perspective() == Perspective::IS_SERVER) {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           headers_frame.set_has_priority(true);
+          headers_frame.set_weight(Spdy3PriorityToHttp2Weight(0));
           frame = framer_->SerializeFrame(headers_frame);
           EXPECT_CALL(session_, OnStreamHeadersPriority(stream_id, 0));
         } else {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           frame = framer_->SerializeFrame(headers_frame);
         }
@@ -647,15 +645,14 @@ TEST_P(QuicHeadersStreamTest, HpackDecoderDebugVisitor) {
         // Replace with "WriteHeadersAndSaveData"
         SpdySerializedFrame frame;
         if (perspective() == Perspective::IS_SERVER) {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           headers_frame.set_has_priority(true);
+          headers_frame.set_weight(Spdy3PriorityToHttp2Weight(0));
           frame = framer_->SerializeFrame(headers_frame);
           EXPECT_CALL(session_, OnStreamHeadersPriority(stream_id, 0));
         } else {
-          SpdyHeadersIR headers_frame(stream_id);
-          headers_frame.set_header_block(headers_);
+          SpdyHeadersIR headers_frame(stream_id, headers_);
           headers_frame.set_fin(fin);
           frame = framer_->SerializeFrame(headers_frame);
         }

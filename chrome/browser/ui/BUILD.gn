@@ -268,7 +268,6 @@ source_set("ui") {
       "//ash/strings",
       "//components/user_manager",
       "//mash/shelf/public/interfaces",
-      "//skia/public",
       "//ui/app_list/presenter",
       "//ui/app_list/presenter:mojom",
       "//ui/keyboard:mojom",
@@ -359,7 +358,6 @@ source_set("ui") {
     deps += [
       # aura uses some of ash resources.
       "//ash/resources",
-      "//ash/wm/common/resources",
       "//ui/aura",
       "//ui/keyboard",
       "//ui/keyboard:keyboard_with_content",
@@ -509,10 +507,10 @@ source_set("ui") {
                            ".",
                            "//chrome")
     if (use_aura) {
-      deps += [
-        "//build/linux:fontconfig",
-        "//dbus",
-      ]
+      deps += [ "//build/linux:fontconfig" ]
+      if (use_dbus) {
+        deps += [ "//dbus" ]
+      }
     }
     if (use_x11) {
       sources += rebase_path(gypi_values.chrome_browser_ui_x11_sources,

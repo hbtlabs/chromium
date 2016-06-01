@@ -80,7 +80,7 @@
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FramePainter.h"
 #include "core/paint/PaintLayer.h"
-#include "core/paint/PaintPropertyTreeBuilder.h"
+#include "core/paint/PrePaintTreeWalk.h"
 #include "core/plugins/PluginView.h"
 #include "core/style/ComputedStyle.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -161,6 +161,7 @@ FrameView::FrameView(LocalFrame* frame)
     , m_isUpdatingAllLifecyclePhases(false)
     , m_scrollAnchor(this)
     , m_needsScrollbarsUpdate(false)
+    , m_suppressAdjustViewSize(false)
 {
     ASSERT(m_frame);
     init();
@@ -531,6 +532,9 @@ void FrameView::setContentsSize(const IntSize& size)
 
 void FrameView::adjustViewSize()
 {
+    if (m_suppressAdjustViewSize)
+        return;
+
     LayoutViewItem layoutViewItem = this->layoutViewItem();
     if (layoutViewItem.isNull())
         return;
@@ -551,6 +555,15 @@ void FrameView::adjustViewSize()
     }
 
     setContentsSize(size);
+}
+
+void FrameView::adjustViewSizeAndLayout()
+{
+    adjustViewSize();
+    if (needsLayout()) {
+        TemporaryChange<bool> suppressAdjustViewSize(m_suppressAdjustViewSize, true);
+        layout();
+    }
 }
 
 void FrameView::calculateScrollbarModesFromOverflowStyle(const ComputedStyle* style, ScrollbarMode& hMode, ScrollbarMode& vMode)
@@ -1040,7 +1053,7 @@ void FrameView::layout()
     } // Reset m_layoutSchedulingEnabled to its previous value.
 
     if (!inSubtreeLayout && !document->printing())
-        adjustViewSize();
+        adjustViewSizeAndLayout();
 
     m_frameTimingRequestsDirty = true;
 
@@ -2407,7 +2420,7 @@ void FrameView::updateLifecycleToLayoutClean()
 void FrameView::scheduleVisualUpdateForPaintInvalidationIfNeeded()
 {
     LocalFrame* localFrameRoot = frame().localFrameRoot();
-    if (!localFrameRoot->view()->m_isUpdatingAllLifecyclePhases || lifecycle().state() >= DocumentLifecycle::PaintInvalidationClean) {
+    if (!localFrameRoot->view()->m_isUpdatingAllLifecyclePhases || lifecycle().state() >= DocumentLifecycle::PrePaintClean) {
         // Schedule visual update to process the paint invalidation in the next cycle.
         localFrameRoot->scheduleVisualUpdateUnlessThrottled();
     }
@@ -2486,9 +2499,9 @@ void FrameView::updatePaintProperties()
 
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
 
-    forAllNonThrottledFrameViews([](FrameView& frameView) { frameView.lifecycle().advanceTo(DocumentLifecycle::InUpdatePaintProperties); });
-    PaintPropertyTreeBuilder().buildPropertyTrees(*this);
-    forAllNonThrottledFrameViews([](FrameView& frameView) { frameView.lifecycle().advanceTo(DocumentLifecycle::UpdatePaintPropertiesClean); });
+    forAllNonThrottledFrameViews([](FrameView& frameView) { frameView.lifecycle().advanceTo(DocumentLifecycle::InPrePaint); });
+    PrePaintTreeWalk().walk(*this);
+    forAllNonThrottledFrameViews([](FrameView& frameView) { frameView.lifecycle().advanceTo(DocumentLifecycle::PrePaintClean); });
 }
 
 void FrameView::synchronizedPaint()
@@ -2773,7 +2786,7 @@ void FrameView::forceLayoutForPagination(const FloatSize& pageSize, const FloatS
         }
     }
 
-    adjustViewSize();
+    adjustViewSizeAndLayout();
 }
 
 IntRect FrameView::convertFromLayoutObject(const LayoutObject& layoutObject, const IntRect& layoutObjectRect) const
@@ -3864,14 +3877,19 @@ IntPoint FrameView::convertFromContainingWidgetToScrollbar(const Scrollbar& scro
     return newPoint;
 }
 
+static void setNeedsCompositingUpdate(LayoutViewItem layoutViewItem, CompositingUpdateType updateType)
+{
+    if (PaintLayerCompositor* compositor = !layoutViewItem.isNull() ? layoutViewItem.compositor() : nullptr)
+        compositor->setNeedsCompositingUpdate(updateType);
+}
+
 void FrameView::setParentVisible(bool visible)
 {
     if (isParentVisible() == visible)
         return;
 
     // As parent visibility changes, we may need to recomposite this frame view and potentially child frame views.
-    if (PaintLayerCompositor* compositor = !layoutViewItem().isNull() ? layoutViewItem().compositor() : nullptr)
-        compositor->setNeedsCompositingUpdate(CompositingUpdateRebuildTree);
+    setNeedsCompositingUpdate(layoutViewItem(), CompositingUpdateRebuildTree);
 
     Widget::setParentVisible(visible);
 
@@ -3886,6 +3904,7 @@ void FrameView::show()
 {
     if (!isSelfVisible()) {
         setSelfVisible(true);
+        setNeedsCompositingUpdate(layoutViewItem(), CompositingUpdateRebuildTree);
         updateScrollableAreaSet();
         if (isParentVisible()) {
             for (const auto& child : m_children)
@@ -3904,6 +3923,7 @@ void FrameView::hide()
                 child->setParentVisible(false);
         }
         setSelfVisible(false);
+        setNeedsCompositingUpdate(layoutViewItem(), CompositingUpdateRebuildTree);
         updateScrollableAreaSet();
     }
 

@@ -372,7 +372,6 @@ public:
         CSSSelectorPseudoHost = 469,
         CSSSelectorPseudoHostContext = 470,
         CSSDeepCombinator = 471,
-        SyncXHRWithCredentials = 472,
         // The above items are available in M37 branch.
 
         UseAsm = 473,
@@ -935,7 +934,7 @@ public:
         MediaDevicesEnumerateDevices = 1119,
         NonSecureSharedWorkerAccessedFromSecureContext = 1120,
         SecureSharedWorkerAccessedFromNonSecureContext = 1121,
-        EventDeepPath = 1123,
+        EventComposedPath = 1123,
         LinkHeaderPreload = 1124,
         MouseWheelEvent = 1125,
         WheelEvent = 1126,
@@ -952,7 +951,7 @@ public:
         V8PromiseChain = 1137,
         V8PromiseAccept = 1138,
         V8PromiseDefer = 1139,
-        EventScoped = 1140,
+        EventComposed = 1140,
         GeolocationInsecureOriginIframe = 1141,
         GeolocationSecureOriginIframe = 1142,
         RequestMIDIAccessIframe = 1143,
@@ -1198,6 +1197,8 @@ public:
         RTCPeerConnectionAddIceCandidatePromise = 1384,
         RTCPeerConnectionAddIceCandidateLegacy = 1385,
         RTCIceCandidateDefaultSdpMLineIndex = 1386,
+        DocumentCreateEventSensorErrorEvent = 1387,
+        DocumentCreateEventSensorReadingEvent = 1388,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

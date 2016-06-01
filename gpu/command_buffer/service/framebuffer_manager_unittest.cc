@@ -222,6 +222,7 @@ TEST_F(FramebufferInfoTest, AttachRenderbuffer) {
   const GLsizei kHeight4 = 32;
   const GLenum kFormat4 = GL_STENCIL_INDEX8;
   const GLsizei kSamples4 = 0;
+  const GLsizei kDifferentSamples4 = 1;
 
   EXPECT_FALSE(framebuffer_->HasUnclearedAttachment(GL_COLOR_ATTACHMENT0));
   EXPECT_FALSE(framebuffer_->HasUnclearedAttachment(GL_DEPTH_ATTACHMENT));
@@ -374,6 +375,16 @@ TEST_F(FramebufferInfoTest, AttachRenderbuffer) {
   EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
             framebuffer_->IsPossiblyComplete(feature_info_.get()));
 
+  // Change samples.
+  renderbuffer_manager_->SetInfo(
+      renderbuffer4, kDifferentSamples4, kFormat4, kWidth4, kHeight4);
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+  renderbuffer_manager_->SetInfo(
+      renderbuffer4, kSamples4, kFormat4, kWidth4, kHeight4);
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
   // Check changing an attachment.
   renderbuffer_manager_->SetInfo(
       renderbuffer4, kSamples4, kFormat4, kWidth4 + 1, kHeight4);
@@ -413,7 +424,7 @@ TEST_F(FramebufferInfoTest, AttachRenderbuffer) {
             framebuffer_->IsPossiblyComplete(feature_info_.get()));
 }
 
-TEST_F(FramebufferInfoTest, AttachTexture) {
+TEST_F(FramebufferInfoTest, AttachTexture2D) {
   const GLuint kTextureClient1Id = 33;
   const GLuint kTextureService1Id = 333;
   const GLuint kTextureClient2Id = 34;
@@ -554,6 +565,121 @@ TEST_F(FramebufferInfoTest, AttachTexture) {
   EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT),
             framebuffer_->IsPossiblyComplete(feature_info_.get()));
   EXPECT_TRUE(framebuffer_->IsCleared());
+}
+
+TEST_F(FramebufferInfoTest, AttachTextureCube) {
+  const GLuint kTextureClientId = 33;
+  const GLuint kTextureServiceId = 333;
+  const GLint kDepth = 1;
+  const GLint kBorder = 0;
+  const GLenum kType = GL_UNSIGNED_BYTE;
+  const GLsizei kWidth = 16;
+  const GLsizei kHeight = 16;
+  const GLint kLevel = 0;
+  const GLenum kFormat = GL_RGBA;
+  const GLenum kTarget = GL_TEXTURE_CUBE_MAP;
+  const GLsizei kSamples = 0;
+
+  const GLenum kTexTargets[] = {
+      GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+      GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+      GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
+      GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+      GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
+      GL_TEXTURE_CUBE_MAP_NEGATIVE_Z};
+
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
+  texture_manager_->CreateTexture(kTextureClientId, kTextureServiceId);
+  scoped_refptr<TextureRef> texture(
+      texture_manager_->GetTexture(kTextureClientId));
+  ASSERT_TRUE(texture.get());
+
+  texture_manager_->SetTarget(texture.get(), kTarget);
+  framebuffer_->AttachTexture(
+      GL_COLOR_ATTACHMENT0, texture.get(), kTexTargets[0], kLevel, kSamples);
+  EXPECT_FALSE(framebuffer_->HasUnclearedAttachment(GL_COLOR_ATTACHMENT0));
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+  EXPECT_TRUE(framebuffer_->IsCleared());
+  EXPECT_EQ(static_cast<GLenum>(0),
+            framebuffer_->GetReadBufferInternalFormat());
+
+  texture_manager_->SetLevelInfo(texture.get(), kTexTargets[0], kLevel,
+                                 kFormat, kWidth, kHeight, kDepth, kBorder,
+                                 kFormat, kType, gfx::Rect(kWidth, kHeight));
+  EXPECT_TRUE(framebuffer_->IsCleared());
+  EXPECT_EQ(static_cast<GLenum>(kFormat),
+            framebuffer_->GetReadBufferInternalFormat());
+  // Cube incomplete.
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
+  for (size_t ii = 1; ii < 6; ++ii) {
+    texture_manager_->SetLevelInfo(texture.get(), kTexTargets[ii], kLevel,
+                                   kFormat, kWidth, kHeight, kDepth, kBorder,
+                                   kFormat, kType, gfx::Rect(kWidth, kHeight));
+  }
+  // Cube complete.
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+}
+
+TEST_F(FramebufferInfoTest, AttachTextureLayer) {
+  const GLuint kTextureClientId = 33;
+  const GLuint kTextureServiceId = 333;
+  const GLint kBorder = 0;
+  const GLenum kType = GL_UNSIGNED_BYTE;
+  const GLsizei kWidth = 16;
+  const GLsizei kHeight = 32;
+  const GLint kDepth = 2;
+  const GLint kLevel = 0;
+  const GLenum kFormat = GL_RGBA;
+  const GLenum kTarget = GL_TEXTURE_2D_ARRAY;
+  const GLsizei kLayer = 0;
+  const GLint kWrongLayer = kDepth;
+
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
+  texture_manager_->CreateTexture(kTextureClientId, kTextureServiceId);
+  scoped_refptr<TextureRef> texture(
+      texture_manager_->GetTexture(kTextureClientId));
+  ASSERT_TRUE(texture.get());
+
+  framebuffer_->AttachTextureLayer(
+      GL_COLOR_ATTACHMENT0, texture.get(), kTarget, kLevel, kWrongLayer);
+  EXPECT_FALSE(framebuffer_->HasUnclearedAttachment(GL_COLOR_ATTACHMENT0));
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+  EXPECT_TRUE(framebuffer_->IsCleared());
+  EXPECT_EQ(static_cast<GLenum>(0),
+            framebuffer_->GetReadBufferInternalFormat());
+
+  texture_manager_->SetTarget(texture.get(), kTarget);
+  texture_manager_->SetLevelInfo(texture.get(), kTarget, kLevel,
+                                 kFormat, kWidth, kHeight, kDepth, kBorder,
+                                 kFormat, kType, gfx::Rect());
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+
+  framebuffer_->AttachTextureLayer(
+      GL_COLOR_ATTACHMENT0, texture.get(), kTarget, kLevel, kLayer);
+  EXPECT_TRUE(framebuffer_->HasUnclearedAttachment(GL_COLOR_ATTACHMENT0));
+  EXPECT_EQ(static_cast<GLenum>(GL_FRAMEBUFFER_COMPLETE),
+            framebuffer_->IsPossiblyComplete(feature_info_.get()));
+  EXPECT_FALSE(framebuffer_->IsCleared());
+  EXPECT_EQ(static_cast<GLenum>(kFormat),
+            framebuffer_->GetReadBufferInternalFormat());
+
+  const Framebuffer::Attachment* attachment =
+      framebuffer_->GetAttachment(GL_COLOR_ATTACHMENT0);
+  ASSERT_TRUE(attachment);
+  EXPECT_EQ(kWidth, attachment->width());
+  EXPECT_EQ(kHeight, attachment->height());
+  EXPECT_EQ(kFormat, attachment->internal_format());
+  EXPECT_FALSE(attachment->cleared());
 }
 
 TEST_F(FramebufferInfoTest, ClearPartiallyClearedAttachments) {

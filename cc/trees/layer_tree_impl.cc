@@ -93,7 +93,6 @@ LayerTreeImpl::~LayerTreeImpl() {
   // Need to explicitly clear the tree prior to destroying this so that
   // the LayerTreeImpl pointer is still valid in the LayerImpl dtor.
   DCHECK(!root_layer_);
-  DCHECK(layers_with_copy_output_request_.empty());
 }
 
 void LayerTreeImpl::Shutdown() {
@@ -330,6 +329,19 @@ static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
   }
 }
 
+void LayerTreeImpl::SetPropertyTrees(PropertyTrees* property_trees) {
+  property_trees_ = *property_trees;
+  property_trees->effect_tree.PushCopyRequestsTo(&property_trees_.effect_tree);
+  property_trees_.is_main_thread = false;
+  property_trees_.is_active = IsActiveTree();
+  property_trees_.transform_tree.set_source_to_parent_updates_allowed(false);
+  // The value of some effect node properties (like is_drawn) depends on
+  // whether we are on the active tree or not. So, we need to update the
+  // effect tree.
+  if (IsActiveTree())
+    property_trees_.effect_tree.set_needs_update(true);
+}
+
 void LayerTreeImpl::UpdatePropertyTreesForBoundsDelta() {
   DCHECK(IsActiveTree());
   LayerImpl* inner_container = InnerViewportContainerLayer();
@@ -359,7 +371,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   DCHECK_EQ(ui_resource_request_queue_.size(), 0u);
 
   LayerImpl* layer = target_tree->CurrentlyScrollingLayer();
-  target_tree->SetPropertyTrees(property_trees_);
+  target_tree->SetPropertyTrees(&property_trees_);
   target_tree->SetCurrentlyScrollingLayer(layer);
   target_tree->UpdatePropertyTreeScrollOffset(&property_trees_);
 
@@ -488,6 +500,11 @@ void LayerTreeImpl::AddToOpacityAnimationsMap(int id, float opacity) {
   opacity_animations_map_[id] = opacity;
 }
 
+void LayerTreeImpl::AddToTransformAnimationsMap(int id,
+                                                gfx::Transform transform) {
+  transform_animations_map_[id] = transform;
+}
+
 LayerTreeImpl::ElementLayers LayerTreeImpl::GetMutableLayers(
     uint64_t element_id) {
   auto iter = element_layers_map_.find(element_id);
@@ -567,17 +584,35 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
   if (!root_layer())
     return;
   for (auto& layer_id_to_opacity : opacity_animations_map_) {
-    if (LayerImpl* layer = LayerById(layer_id_to_opacity.first)) {
-      EffectNode* node =
-          property_trees_.effect_tree.Node(layer->effect_tree_index());
-      if (node->owner_id != layer->id() ||
-          !node->data.is_currently_animating_opacity)
+    const int id = layer_id_to_opacity.first;
+    if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
+      EffectNode* node = property_trees_.effect_tree.Node(
+          property_trees_.effect_id_to_index_map[id]);
+      if (!node->data.is_currently_animating_opacity ||
+          node->data.opacity == layer_id_to_opacity.second)
         continue;
       node->data.opacity = layer_id_to_opacity.second;
       property_trees_.effect_tree.set_needs_update(true);
     }
   }
   opacity_animations_map_.clear();
+
+  for (auto& layer_id_to_transform : transform_animations_map_) {
+    const int id = layer_id_to_transform.first;
+    if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::TRANSFORM,
+                                         id)) {
+      TransformNode* node = property_trees_.transform_tree.Node(
+          property_trees_.transform_id_to_index_map[id]);
+      if (!node->data.is_currently_animating ||
+          node->data.local == layer_id_to_transform.second)
+        continue;
+      node->data.local = layer_id_to_transform.second;
+      node->data.needs_local_transform_update = true;
+      property_trees_.transform_tree.set_needs_update(true);
+    }
+  }
+  transform_animations_map_.clear();
+
   LayerTreeHostCommon::CallFunctionForEveryLayer(this, [](LayerImpl* layer) {
     layer->UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
   });
@@ -777,33 +812,7 @@ void LayerTreeImpl::ClearViewportLayers() {
   outer_viewport_scroll_layer_id_ = Layer::INVALID_ID;
 }
 
-#if DCHECK_IS_ON()
-void SanityCheckCopyRequestCounts(LayerTreeImpl* layer_tree_impl) {
-  EffectTree& effect_tree = layer_tree_impl->property_trees()->effect_tree;
-  const int effect_tree_size = static_cast<int>(effect_tree.size());
-  std::vector<int> copy_requests_count_in_effect_tree(effect_tree_size);
-  for (auto* layer : *layer_tree_impl) {
-    if (layer->HasCopyRequest()) {
-      copy_requests_count_in_effect_tree[layer->effect_tree_index()]++;
-    }
-  }
-  for (int i = effect_tree_size - 1; i >= 0; i--) {
-    EffectNode* node = effect_tree.Node(i);
-    DCHECK_EQ(node->data.num_copy_requests_in_subtree,
-              copy_requests_count_in_effect_tree[i]);
-    if (node->parent_id >= 0)
-      copy_requests_count_in_effect_tree[node->parent_id] +=
-          copy_requests_count_in_effect_tree[i];
-  }
-}
-#endif
-
 bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
-#if DCHECK_IS_ON()
-  if (root_layer())
-    SanityCheckCopyRequestCounts(root_layer()->layer_tree_impl());
-#endif
-
   if (!needs_update_draw_properties_)
     return true;
 
@@ -840,7 +849,6 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         InnerViewportScrollLayer(), OuterViewportScrollLayer(),
         elastic_overscroll()->Current(IsActiveTree()),
         OverscrollElasticityLayer(), resource_provider()->max_texture_size(),
-        settings().can_use_lcd_text, settings().layers_always_allowed_lcd_text,
         can_render_to_separate_surface,
         settings().layer_transforms_should_scale_layer_contents,
         settings().verify_clip_tree_calculations, &render_surface_layer_list_,
@@ -1488,40 +1496,6 @@ void LayerTreeImpl::UnregisterScrollLayer(LayerImpl* layer) {
   clip_scroll_map_.erase(layer->scroll_clip_layer_id());
 }
 
-void LayerTreeImpl::AddLayerWithCopyOutputRequest(LayerImpl* layer) {
-  // Only the active tree needs to know about layers with copy requests, as
-  // they are aborted if not serviced during draw.
-  DCHECK(IsActiveTree());
-
-  // DCHECK(std::find(layers_with_copy_output_request_.begin(),
-  //                 layers_with_copy_output_request_.end(),
-  //                 layer) == layers_with_copy_output_request_.end());
-  // TODO(danakj): Remove this once crash is found crbug.com/309777
-  for (size_t i = 0; i < layers_with_copy_output_request_.size(); ++i) {
-    CHECK(layers_with_copy_output_request_[i] != layer)
-        << i << " of " << layers_with_copy_output_request_.size();
-  }
-  layers_with_copy_output_request_.push_back(layer);
-}
-
-void LayerTreeImpl::RemoveLayerWithCopyOutputRequest(LayerImpl* layer) {
-  // Only the active tree needs to know about layers with copy requests, as
-  // they are aborted if not serviced during draw.
-  DCHECK(IsActiveTree());
-
-  std::vector<LayerImpl*>::iterator it =
-      std::find(layers_with_copy_output_request_.begin(),
-                layers_with_copy_output_request_.end(), layer);
-  DCHECK(it != layers_with_copy_output_request_.end());
-  layers_with_copy_output_request_.erase(it);
-
-  // TODO(danakj): Remove this once crash is found crbug.com/309777
-  for (size_t i = 0; i < layers_with_copy_output_request_.size(); ++i) {
-    CHECK(layers_with_copy_output_request_[i] != layer)
-        << i << " of " << layers_with_copy_output_request_.size();
-  }
-}
-
 void LayerTreeImpl::AddSurfaceLayer(LayerImpl* layer) {
   DCHECK(std::find(surface_layers_.begin(), surface_layers_.end(), layer) ==
          surface_layers_.end());
@@ -1533,15 +1507,6 @@ void LayerTreeImpl::RemoveSurfaceLayer(LayerImpl* layer) {
       std::find(surface_layers_.begin(), surface_layers_.end(), layer);
   DCHECK(it != surface_layers_.end());
   surface_layers_.erase(it);
-}
-
-const std::vector<LayerImpl*>& LayerTreeImpl::LayersWithCopyOutputRequest()
-    const {
-  // Only the active tree needs to know about layers with copy requests, as
-  // they are aborted if not serviced during draw.
-  DCHECK(IsActiveTree());
-
-  return layers_with_copy_output_request_;
 }
 
 template <typename LayerType>

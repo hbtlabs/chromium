@@ -25,7 +25,6 @@
 #include "cc/quads/yuv_video_draw_quad.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "components/mus/public/cpp/surfaces/custom_surface_converter.h"
-#include "ui/gfx/mojo/transform_type_converters.h"
 
 using mus::mojom::Color;
 using mus::mojom::ColorPtr;
@@ -41,9 +40,6 @@ using mus::mojom::Quad;
 using mus::mojom::QuadPtr;
 using mus::mojom::RenderPassQuadState;
 using mus::mojom::RenderPassQuadStatePtr;
-using mus::mojom::ResourceFormat;
-using mus::mojom::ReturnedResource;
-using mus::mojom::ReturnedResourcePtr;
 using mus::mojom::SharedQuadState;
 using mus::mojom::SharedQuadStatePtr;
 using mus::mojom::SolidColorQuadState;
@@ -54,8 +50,6 @@ using mus::mojom::TextureQuadState;
 using mus::mojom::TextureQuadStatePtr;
 using mus::mojom::TileQuadState;
 using mus::mojom::TileQuadStatePtr;
-using mus::mojom::TransferableResource;
-using mus::mojom::TransferableResourcePtr;
 using mus::mojom::YUVColorSpace;
 using mus::mojom::YUVVideoQuadState;
 using mus::mojom::YUVVideoQuadStatePtr;
@@ -90,9 +84,9 @@ cc::SharedQuadState* ConvertSharedQuadState(
     const mus::mojom::SharedQuadStatePtr& input,
     cc::RenderPass* render_pass) {
   cc::SharedQuadState* state = render_pass->CreateAndAppendSharedQuadState();
-  state->SetAll(input->quad_to_target_transform.To<gfx::Transform>(),
-                input->quad_layer_bounds, input->visible_quad_layer_rect,
-                input->clip_rect, input->is_clipped, input->opacity,
+  state->SetAll(input->quad_to_target_transform, input->quad_layer_bounds,
+                input->visible_quad_layer_rect, input->clip_rect,
+                input->is_clipped, input->opacity,
                 static_cast<::SkXfermode::Mode>(input->blend_mode),
                 input->sorting_context_id);
   return state;
@@ -350,8 +344,7 @@ mus::mojom::SharedQuadStatePtr
 TypeConverter<mus::mojom::SharedQuadStatePtr, cc::SharedQuadState>::Convert(
     const cc::SharedQuadState& input) {
   mus::mojom::SharedQuadStatePtr state = SharedQuadState::New();
-  state->quad_to_target_transform =
-      Transform::From(input.quad_to_target_transform);
+  state->quad_to_target_transform = input.quad_to_target_transform;
   state->quad_layer_bounds = input.quad_layer_bounds;
   state->visible_quad_layer_rect = input.visible_quad_layer_rect;
   state->clip_rect = input.clip_rect;
@@ -369,8 +362,7 @@ PassPtr TypeConverter<PassPtr, cc::RenderPass>::Convert(
   pass->id = input.id;
   pass->output_rect = input.output_rect;
   pass->damage_rect = input.damage_rect;
-  pass->transform_to_root_target =
-      Transform::From(input.transform_to_root_target);
+  pass->transform_to_root_target = input.transform_to_root_target;
   pass->has_transparent_background = input.has_transparent_background;
   Array<QuadPtr> quads(input.quad_list.size());
   Array<mus::mojom::SharedQuadStatePtr> shared_quad_state(
@@ -407,7 +399,7 @@ std::unique_ptr<cc::RenderPass> ConvertToRenderPass(
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create(
       input->shared_quad_states.size(), input->quads.size());
   pass->SetAll(input->id, input->output_rect, input->damage_rect,
-               input->transform_to_root_target.To<gfx::Transform>(),
+               input->transform_to_root_target,
                input->has_transparent_background);
   for (size_t i = 0; i < input->shared_quad_states.size(); ++i) {
     ConvertSharedQuadState(input->shared_quad_states[i], pass.get());
@@ -436,62 +428,6 @@ TypeConverter<std::unique_ptr<cc::RenderPass>, PassPtr>::Convert(
 }
 
 // static
-TransferableResourcePtr
-TypeConverter<TransferableResourcePtr, cc::TransferableResource>::Convert(
-    const cc::TransferableResource& input) {
-  TransferableResourcePtr transferable = TransferableResource::New();
-  transferable->id = input.id;
-  transferable->format = static_cast<ResourceFormat>(input.format);
-  transferable->filter = input.filter;
-  transferable->size = input.size;
-  transferable->mailbox_holder = input.mailbox_holder;
-  transferable->read_lock_fences_enabled = input.read_lock_fences_enabled;
-  transferable->is_software = input.is_software;
-  transferable->is_overlay_candidate = input.is_overlay_candidate;
-  return transferable;
-}
-
-// static
-cc::TransferableResource
-TypeConverter<cc::TransferableResource, TransferableResourcePtr>::Convert(
-    const TransferableResourcePtr& input) {
-  cc::TransferableResource transferable;
-  transferable.id = input->id;
-  transferable.format = static_cast<cc::ResourceFormat>(input->format);
-  transferable.filter = input->filter;
-  transferable.size = input->size;
-  transferable.mailbox_holder = input->mailbox_holder;
-  transferable.read_lock_fences_enabled = input->read_lock_fences_enabled;
-  transferable.is_software = input->is_software;
-  transferable.is_overlay_candidate = input->is_overlay_candidate;
-  return transferable;
-}
-
-// static
-ReturnedResourcePtr
-TypeConverter<ReturnedResourcePtr, cc::ReturnedResource>::Convert(
-    const cc::ReturnedResource& input) {
-  ReturnedResourcePtr returned = ReturnedResource::New();
-  returned->id = input.id;
-  returned->sync_token = input.sync_token;
-  returned->count = input.count;
-  returned->lost = input.lost;
-  return returned;
-}
-
-// static
-cc::ReturnedResource
-TypeConverter<cc::ReturnedResource, ReturnedResourcePtr>::Convert(
-    const ReturnedResourcePtr& input) {
-  cc::ReturnedResource returned;
-  returned.id = input->id;
-  returned.sync_token = input->sync_token;
-  returned.count = input->count;
-  returned.lost = input->lost;
-  return returned;
-}
-
-// static
 CompositorFrameMetadataPtr
 TypeConverter<CompositorFrameMetadataPtr, cc::CompositorFrameMetadata>::Convert(
     const cc::CompositorFrameMetadata& input) {
@@ -517,7 +453,7 @@ TypeConverter<CompositorFramePtr, cc::CompositorFrame>::Convert(
   DCHECK(input.delegated_frame_data);
   cc::DelegatedFrameData* frame_data = input.delegated_frame_data.get();
   frame->resources =
-      Array<TransferableResourcePtr>::From(frame_data->resource_list);
+      mojo::Array<cc::TransferableResource>(frame_data->resource_list);
   frame->metadata = CompositorFrameMetadata::From(input.metadata);
   const cc::RenderPassList& pass_list = frame_data->render_pass_list;
   frame->passes = Array<PassPtr>::New(pass_list.size());
@@ -534,8 +470,7 @@ std::unique_ptr<cc::CompositorFrame> ConvertToCompositorFrame(
   std::unique_ptr<cc::DelegatedFrameData> frame_data(
       new cc::DelegatedFrameData);
   frame_data->device_scale_factor = 1.f;
-  frame_data->resource_list =
-      input->resources.To<cc::TransferableResourceArray>();
+  frame_data->resource_list = input->resources.PassStorage();
   frame_data->render_pass_list.reserve(input->passes.size());
   for (size_t i = 0; i < input->passes.size(); ++i) {
     std::unique_ptr<cc::RenderPass> pass = ConvertToRenderPass(

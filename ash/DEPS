@@ -9,7 +9,6 @@ include_rules = [
   "+gpu/config",
   "+grit/ash_resources.h",
   "+grit/ash_strings.h",
-  "+grit/ash_wm_common_resources.h",
   "+media",
   "+skia/ext",
   "+third_party/cros_system_api",
@@ -24,6 +23,15 @@ include_rules = [
 specific_include_rules = {
   "root_window_controller\.*": [
     "+ash/host"
+  ],
+  "root_window_controller_common\.*": [
+    "-ash",
+    "+ash/ash_export.h",
+    "+ash/common",
+    "+ash/root_window_controller_common.h",
+    "+ash/shell_window_ids.h",
+    "+ash/wm/root_window_layout_manager.h",
+    "-ui/aura",
   ],
   "shell.cc": [
     "+ash/host/ash_window_tree_host_init_params.h"

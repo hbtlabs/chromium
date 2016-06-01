@@ -47,7 +47,7 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(e.ariaAttributeChanged, this.onEventIfInRange);
   this.addListener_(e.checkedStateChanged, this.onEventIfInRange);
   this.addListener_(e.focus, this.onFocus);
-  this.addListener_(e.hover, this.onEventWithFlushedOutput);
+  this.addListener_(e.hover, this.onHover);
   this.addListener_(e.loadComplete, this.onLoadComplete);
   this.addListener_(e.menuEnd, this.onMenuEnd);
   this.addListener_(e.menuListItemSelected, this.onEventIfSelected);
@@ -160,6 +160,17 @@ DesktopAutomationHandler.prototype = {
   },
 
   /**
+   * @param {!AutomationEvent} evt
+   */
+  onHover: function(evt) {
+    if (ChromeVoxState.instance.currentRange &&
+        evt.target == ChromeVoxState.instance.currentRange.start.node)
+      return;
+    Output.flushNextSpeechUtterance();
+    this.onEventDefault(evt);
+  },
+
+  /**
    * Makes an announcement without changing focus.
    * @param {!AutomationEvent} evt
    */
@@ -239,8 +250,20 @@ DesktopAutomationHandler.prototype = {
           ChromeVoxState.instance.currentRange.start.node.root == focus.root)
         return;
 
+      var o = new Output();
+      if (focus.role == RoleType.rootWebArea) {
+        // Restore to previous position.
+        var url = focus.docUrl;
+        url = url.substring(0, url.indexOf('#')) || url;
+        var pos = cvox.ChromeVox.position[url];
+        if (pos) {
+          focus = AutomationUtil.hitTest(focus.root, pos) || focus;
+          if (focus != focus.root)
+            o.format('$name', focus.root);
+        }
+      }
       ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(focus));
-      new Output().withRichSpeechAndBraille(
+      o.withRichSpeechAndBraille(
           ChromeVoxState.instance.currentRange, null, evt.type).go();
     }.bind(this));
   },
@@ -331,7 +354,7 @@ DesktopAutomationHandler.prototype = {
       return;
 
     var currentRange = ChromeVoxState.instance.currentRange;
-    if (currentRange)
+    if (currentRange && currentRange.isValid())
       new Output().withLocation(currentRange, null, evt.type).go();
   },
 
@@ -342,8 +365,10 @@ DesktopAutomationHandler.prototype = {
     chrome.automation.getFocus(function(focus) {
       // Some cases (e.g. in overview mode), require overriding the assumption
       // that focus is an ancestor of a selection target.
-      var override =
-          evt.target.root == focus.root && focus.root.role == RoleType.desktop;
+      var override = evt.target.role == RoleType.menuItem ||
+          (evt.target.root == focus.root &&
+              focus.root.role == RoleType.desktop);
+      Output.flushNextSpeechUtterance();
       if (override || AutomationUtil.isDescendantOf(evt.target, focus))
         this.onEventDefault(evt);
     }.bind(this));

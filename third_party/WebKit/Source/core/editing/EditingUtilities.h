@@ -250,6 +250,7 @@ enum WhitespacePositionOption { NotConsiderNonCollapsibleWhitespace, ConsiderNon
 Position leadingWhitespacePosition(const Position&, TextAffinity, WhitespacePositionOption = NotConsiderNonCollapsibleWhitespace);
 Position trailingWhitespacePosition(const Position&, TextAffinity, WhitespacePositionOption = NotConsiderNonCollapsibleWhitespace);
 unsigned numEnclosingMailBlockquotes(const Position&);
+PositionWithAffinity positionRespectingEditingBoundary(const Position&, const LayoutPoint& localPoint, Node* targetNode);
 void updatePositionForNodeRemoval(Position&, Node&);
 
 // -------------------------------------------------------------------------
@@ -354,7 +355,7 @@ const String& nonBreakingSpaceString();
 // Functions dispatch InputEvent
 DispatchEventResult dispatchBeforeInputInsertText(EventTarget*, const String& data);
 DispatchEventResult dispatchBeforeInputFromComposition(EventTarget*, InputEvent::InputType, const String& data, InputEvent::EventCancelable);
-DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*, InputEvent::InputType, const String& data = "");
+DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*, InputEvent::InputType, const String& data, const RangeVector*);
 
 } // namespace blink
 

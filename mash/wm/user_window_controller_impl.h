@@ -9,11 +9,11 @@
 
 #include <memory>
 
+#include "ash/public/interfaces/user_window_controller.mojom.h"
 #include "base/macros.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/cpp/window_observer.h"
-#include "components/mus/public/cpp/window_tree_connection_observer.h"
-#include "mash/wm/public/interfaces/user_window_controller.mojom.h"
+#include "components/mus/public/cpp/window_tree_client_observer.h"
 
 namespace mash {
 namespace wm {
@@ -21,14 +21,14 @@ namespace wm {
 class RootWindowController;
 class WindowPropertyObserver;
 
-class UserWindowControllerImpl : public mojom::UserWindowController,
+class UserWindowControllerImpl : public ash::mojom::UserWindowController,
                                  public mus::WindowObserver,
-                                 public mus::WindowTreeConnectionObserver {
+                                 public mus::WindowTreeClientObserver {
  public:
   UserWindowControllerImpl();
   ~UserWindowControllerImpl() override;
 
-  mojom::UserWindowObserver* user_window_observer() const {
+  ash::mojom::UserWindowObserver* user_window_observer() const {
     return user_window_observer_.get();
   }
 
@@ -37,7 +37,7 @@ class UserWindowControllerImpl : public mojom::UserWindowController,
  private:
   void AssignIdIfNecessary(mus::Window* window);
 
-  // Removes observers from the window and connection.
+  // Removes observers from the window and client.
   void RemoveObservers(mus::Window* user_container);
 
   // Returns the window with the specified user id.
@@ -50,16 +50,17 @@ class UserWindowControllerImpl : public mojom::UserWindowController,
   void OnTreeChanging(const TreeChangeParams& params) override;
   void OnWindowDestroying(mus::Window* window) override;
 
-  // mus::WindowTreeConnectionObserver:
+  // mus::WindowTreeClientObserver:
   void OnWindowTreeFocusChanged(mus::Window* gained_focus,
                                 mus::Window* lost_focus) override;
 
   // mojom::UserWindowController:
-  void AddUserWindowObserver(mojom::UserWindowObserverPtr observer) override;
+  void AddUserWindowObserver(
+      ash::mojom::UserWindowObserverPtr observer) override;
   void FocusUserWindow(uint32_t window_id) override;
 
   RootWindowController* root_controller_;
-  mojom::UserWindowObserverPtr user_window_observer_;
+  ash::mojom::UserWindowObserverPtr user_window_observer_;
   std::unique_ptr<WindowPropertyObserver> window_property_observer_;
   uint32_t next_id_ = 1u;
 

@@ -13,6 +13,8 @@
 #include "ash/accelerators/focus_manager_factory.h"
 #include "ash/ash_switches.h"
 #include "ash/autoclick/autoclick_controller.h"
+#include "ash/common/wm/root_window_finder.h"
+#include "ash/common/wm/window_positioner.h"
 #include "ash/container_delegate.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/desktop_background_view.h"
@@ -63,8 +65,6 @@
 #include "ash/wm/ash_native_cursor_manager.h"
 #include "ash/wm/aura/wm_globals_aura.h"
 #include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/root_window_finder.h"
-#include "ash/wm/common/window_positioner.h"
 #include "ash/wm/event_client_impl.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
@@ -75,7 +75,6 @@
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/resize_shadow_controller.h"
-#include "ash/wm/root_window_layout_manager.h"
 #include "ash/wm/system_gesture_event_filter.h"
 #include "ash/wm/system_modal_container_event_filter.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
@@ -526,26 +525,6 @@ void Shell::UpdateShelfVisibility() {
        iter != controllers.end(); ++iter)
     if ((*iter)->shelf_widget())
       (*iter)->UpdateShelfVisibility();
-}
-
-void Shell::SetShelfAutoHideBehavior(ShelfAutoHideBehavior behavior,
-                                     aura::Window* root_window) {
-  Shelf::ForWindow(root_window)->SetAutoHideBehavior(behavior);
-}
-
-ShelfAutoHideBehavior Shell::GetShelfAutoHideBehavior(
-    aura::Window* root_window) const {
-  return Shelf::ForWindow(root_window)->auto_hide_behavior();
-}
-
-void Shell::SetShelfAlignment(wm::ShelfAlignment alignment,
-                              aura::Window* root_window) {
-  Shelf::ForWindow(root_window)->SetAlignment(alignment);
-}
-
-wm::ShelfAlignment Shell::GetShelfAlignment(
-    const aura::Window* root_window) const {
-  return Shelf::ForWindow(root_window)->alignment();
 }
 
 void Shell::OnShelfAlignmentChanged(aura::Window* root_window) {

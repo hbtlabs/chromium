@@ -200,6 +200,7 @@ group("both_gn_and_gyp") {
     # and whether there should be other targets that are iOS-only and missing.
     deps += [
       "//cc:cc_unittests",
+      "//chrome/test:telemetry_perf_unittests",
       "//chrome/test:unit_tests",
       "//components:components_browsertests",
       "//content/shell:content_shell",
@@ -235,26 +236,7 @@ group("both_gn_and_gyp") {
       "//url/ipc:url_ipc_unittests",
     ]
   } else {
-    deps += [
-      "//ios/chrome:ios_chrome_unittests",
-      "//ios/chrome/app",
-      "//ios/chrome/browser",
-      "//ios/chrome/common",
-      "//ios/chrome/share_extension:packed_resources",
-      "//ios/chrome/today_extension:packed_resources",
-      "//ios/net:ios_net_unittests",
-      "//ios/public/provider/chrome/browser",
-      "//ios/public/provider/web",
-      "//ios/testing:ocmock_support_unittest",
-      "//ios/third_party/earl_grey",
-      "//ios/web:ios_web_inttests",
-      "//ios/web:ios_web_unittests",
-      "//ios/web/shell:ios_web_shell",
-    ]
-
-    if (!is_component_build) {
-      deps += [ "//components/cronet/ios:cronet_package" ]
-    }
+    deps += [ "//ios:all" ]
   }
 
   deps += root_extra_deps
@@ -329,6 +311,8 @@ group("both_gn_and_gyp") {
       "//tools/android:android_tools",
       "//tools/android:memconsumer",
       "//tools/android:push_apps_to_background",
+      "//tools/android/audio_focus_grabber:audio_focus_grabber_apk",
+      "//tools/android/customtabs_benchmark:customtabs_benchmark_apk",
       "//tools/android/heap_profiler:heap_profiler_unittests",
       "//tools/android/kerberos/SpnegoAuthenticator:spnego_authenticator_apk",
       "//tools/cygprofile:cygprofile_unittests",
@@ -342,6 +326,7 @@ group("both_gn_and_gyp") {
     if (!is_component_build) {
       deps += [
         "//components/cronet/android:cronet_package",
+        "//components/cronet/android:cronet_perf_test_apk",
         "//components/cronet/android:cronet_sample_apk",
         "//components/cronet/android:cronet_sample_test_apk",
         "//components/cronet/android:cronet_test_apk",
@@ -358,6 +343,7 @@ group("both_gn_and_gyp") {
         "//chrome/android:chrome_junit_tests",
         "//chrome/android:chrome_public_apk",
         "//chrome/android:chrome_public_test_apk",
+        "//chrome/android:chrome_sync_shell_test_apk",
         "//chrome/test/chromedriver/test/webview_shell:chromedriver_webview_shell_apk",
         "//content/shell/android:content_shell_test_apk",
         "//third_party/custom_tabs_client:custom_tabs_client_example_apk",
@@ -365,7 +351,10 @@ group("both_gn_and_gyp") {
     }
 
     if (target_cpu != "x64") {
-      deps += [ "//third_party/android_platform:android_relocation_packer_unittests($host_toolchain)" ]
+      deps += [
+        "//content/shell/android:chromium_linker_test_apk",
+        "//third_party/android_platform:android_relocation_packer_unittests($host_toolchain)",
+      ]
     }
 
     if (has_chrome_android_internal) {
@@ -403,8 +392,6 @@ group("both_gn_and_gyp") {
     deps += [
       "//chrome:manpage",
       "//chrome:xdg_mime",
-      "//dbus:dbus_test_server",
-      "//dbus:dbus_unittests",
       "//net:disk_cache_memory_test",
       "//net:flip_in_mem_edsm_server",
       "//net:flip_in_mem_edsm_server_unittests",
@@ -413,6 +400,13 @@ group("both_gn_and_gyp") {
       "//sandbox/linux:chrome_sandbox",
       "//sandbox/linux:sandbox_linux_unittests",
     ]
+
+    if (use_dbus) {
+      deps += [
+        "//dbus:dbus_test_server",
+        "//dbus:dbus_unittests",
+      ]
+    }
 
     if (is_chromeos || use_ash) {
       deps += [ "//components/session_manager/core" ]
@@ -432,7 +426,9 @@ group("both_gn_and_gyp") {
     ]
   }
 
-  if (is_android || is_win || (is_linux && !is_chromeos)) {
+  # TODO(GYP): Figure out which of these should (and can) build
+  # for chromeos/ios.
+  if (!is_chromeos && !is_ios) {
     deps += [
       "//base:build_utf8_validator_tables",
       "//base:check_example",
@@ -455,8 +451,6 @@ group("both_gn_and_gyp") {
       "//ui/compositor:compositor_unittests",
     ]
 
-    # TODO(GYP): Figure out which of these should (and can) build
-    # for chromeos/mac/ios.
     if (!is_android) {
       deps += [
         "//chrome/test:load_library_perf_tests",
@@ -480,15 +474,10 @@ group("both_gn_and_gyp") {
         "//net:tld_cleanup",
         "//ppapi:pepper_hash_for_uma",
         "//ppapi:ppapi_perftests",
+        "//third_party/angle/src/tests:angle_end2end_tests",
         "//third_party/leveldatabase:env_chromium_unittests",
         "//third_party/libaddressinput:libaddressinput_unittests",
       ]
-    }
-    if (!is_android && !is_linux) {
-      # TODO(dpranke): Re-enable this once
-      # https://chromium-review.googlesource.com/#/c/312298/1 is rolled
-      # into chromium.
-      deps += [ "//third_party/angle/src/tests:angle_end2end_tests" ]
     }
 
     if (enable_extensions) {

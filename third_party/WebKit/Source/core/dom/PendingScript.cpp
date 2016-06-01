@@ -47,12 +47,11 @@ PendingScript::PendingScript(Element* element, ScriptResource* resource)
     , m_client(nullptr)
 {
     setScriptResource(resource);
+    ThreadState::current()->registerPreFinalizer(this);
 }
 
 PendingScript::~PendingScript()
 {
-    // Verify explicit dispose().
-    CHECK(!m_client && !m_element && !m_streamer);
 }
 
 void PendingScript::dispose()
@@ -186,6 +185,7 @@ DEFINE_TRACE(PendingScript)
 {
     visitor->trace(m_element);
     visitor->trace(m_streamer);
+    visitor->trace(m_client);
     ResourceOwner<ScriptResource>::trace(visitor);
 }
 

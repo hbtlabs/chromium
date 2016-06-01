@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/common/panels/panel_window_resizer.h"
+#include "ash/common/wm/panels/panel_window_resizer.h"
 
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -18,8 +20,6 @@
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/i18n/rtl.h"
@@ -239,20 +239,16 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachLeft) {
  if (!SupportsHostWindowResize())
     return;
 
-  ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
-                           shell->GetPrimaryRootWindow());
-  std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
-  DetachReattachTest(window.get(), 1, 0);
+ Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_LEFT);
+ std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
+ DetachReattachTest(window.get(), 1, 0);
 }
 
 TEST_F(PanelWindowResizerTest, PanelDetachReattachRight) {
   if (!SupportsHostWindowResize())
     return;
 
-  ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_RIGHT,
-                           shell->GetPrimaryRootWindow());
+  Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_RIGHT);
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), -1, 0);
 }
@@ -272,12 +268,9 @@ TEST_F(PanelWindowResizerTest, DetachThenHideShelf) {
 
   // Hide the shelf. This minimizes all attached windows but should ignore
   // the dragged window.
-  ShelfLayoutManager* layout_manager =
-      RootWindowController::ForWindow(window.get())
-          ->shelf_widget()
-          ->shelf_layout_manager();
-  layout_manager->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
-  layout_manager->UpdateVisibilityState();
+  Shelf* shelf = RootWindowController::ForWindow(window.get())->GetShelf();
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  shelf->shelf_layout_manager()->UpdateVisibilityState();
   RunAllPendingInMessageLoop();
   EXPECT_FALSE(state->IsMinimized());
   EXPECT_EQ(kShellWindowId_PanelContainer, window->parent()->id());
@@ -495,9 +488,7 @@ TEST_F(PanelWindowResizerTest, DragReordersPanelsVertical) {
   if (!SupportsHostWindowResize())
     return;
 
-  ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(wm::SHELF_ALIGNMENT_LEFT,
-                           shell->GetPrimaryRootWindow());
+  Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_LEFT);
   DragAlongShelfReorder(0, -1);
 }
 

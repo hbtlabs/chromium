@@ -30,6 +30,7 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
+#include "bindings/core/v8/V8PrivateProperty.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/frame/Deprecation.h"
 #include "core/inspector/MainThreadDebugger.h"
@@ -56,6 +57,7 @@ V8PerIsolateData::V8PerIsolateData()
     : m_isolateHolder(adoptPtr(new gin::IsolateHolder()))
     , m_stringCache(adoptPtr(new StringCache(isolate())))
     , m_hiddenValue(V8HiddenValue::create())
+    , m_privateProperty(V8PrivateProperty::create())
     , m_constructorMode(ConstructorMode::CreateNewObject)
     , m_useCounterDisabled(false)
     , m_isHandlingRecursionLevelError(false)
@@ -177,7 +179,7 @@ v8::Persistent<v8::Value>& V8PerIsolateData::ensureLiveRoot()
 {
     if (m_liveRoot.isEmpty())
         m_liveRoot.set(isolate(), v8::Null(isolate()));
-    return m_liveRoot.getUnsafe();
+    return m_liveRoot.get();
 }
 
 // willBeDestroyed() clear things that should be cleared before
@@ -207,6 +209,7 @@ void V8PerIsolateData::destroy(v8::Isolate* isolate)
         data->m_scriptRegexpScriptState->disposePerContextData();
     data->m_liveRoot.clear();
     data->m_hiddenValue.reset();
+    data->m_privateProperty.reset();
     data->m_stringCache->dispose();
     data->m_stringCache.reset();
     data->m_interfaceTemplateMapForNonMainWorld.clear();

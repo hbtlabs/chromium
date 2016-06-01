@@ -217,6 +217,10 @@ AlternativeService HttpStreamFactoryImpl::GetAlternativeServiceForInternal(
   if (original_url.SchemeIs("ftp"))
     return AlternativeService();
 
+  if (!session_->params().enable_alternative_service_for_insecure_origins &&
+      !original_url.SchemeIs("https"))
+    return AlternativeService();
+
   url::SchemeHostPort origin(original_url);
   HttpServerProperties& http_server_properties =
       *session_->http_server_properties();
@@ -263,6 +267,10 @@ AlternativeService HttpStreamFactoryImpl::GetAlternativeServiceForInternal(
     if (alternative_service.protocol >= NPN_SPDY_MINIMUM_VERSION &&
         alternative_service.protocol <= NPN_SPDY_MAXIMUM_VERSION) {
       if (!HttpStreamFactory::spdy_enabled())
+        continue;
+
+      // TODO(bnc): Re-enable when https://crbug.com/615413 is fixed.
+      if (origin.host() != alternative_service.host)
         continue;
 
       // Cache this entry if we don't have a non-broken Alt-Svc yet.

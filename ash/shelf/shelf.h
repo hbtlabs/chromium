@@ -47,6 +47,8 @@ namespace test {
 class ShelfTestAPI;
 }
 
+// Controller for shelf state. All access to state (visibility, auto-hide, etc.)
+// should occur via this class.
 class ASH_EXPORT Shelf {
  public:
   static const char kNativeViewName[];
@@ -55,6 +57,8 @@ class ASH_EXPORT Shelf {
   virtual ~Shelf();
 
   // Return the shelf for the primary display. NULL if no user is logged in yet.
+  // Useful for tests. For production code use ForWindow() because the user may
+  // have multiple displays.
   static Shelf* ForPrimaryDisplay();
 
   // Return the shelf for the display that |window| is currently on, or a shelf
@@ -72,8 +76,9 @@ class ASH_EXPORT Shelf {
     return auto_hide_behavior_;
   }
 
-  // TODO(msw): Remove this accessor, kept temporarily to simplify changes.
-  ShelfAutoHideBehavior GetAutoHideBehavior() const;
+  ShelfAutoHideState GetAutoHideState() const;
+
+  ShelfVisibilityState GetVisibilityState() const;
 
   // A helper functions that chooses values specific to a shelf alignment.
   template <typename T>

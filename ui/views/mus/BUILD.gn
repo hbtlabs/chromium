@@ -22,8 +22,6 @@ component("mus") {
     "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
-    "platform_window_mus.cc",
-    "platform_window_mus.h",
     "screen_mus.cc",
     "screen_mus.h",
     "screen_mus_delegate.h",
@@ -82,6 +80,7 @@ component("mus") {
     "//ui/platform_window",
     "//ui/platform_window/mojo",
     "//ui/platform_window/mojo:interfaces_cpp_sources",
+    "//ui/platform_window/stub",
     "//ui/views",
     "//ui/wm",
   ]
@@ -161,7 +160,12 @@ test("views_mus_unittests") {
 
   # TODO(sky): add more files.
   sources = [
+    "../controls/native/native_view_host_aura_unittest.cc",
+    "../controls/native/native_view_host_test_base.cc",
+    "../controls/native/native_view_host_test_base.h",
+    "../controls/native/native_view_host_unittest.cc",
     "../view_targeter_unittest.cc",
+    "../widget/native_widget_aura_unittest.cc",
     "../widget/native_widget_unittest.cc",
     "../widget/widget_unittest.cc",
     "display_list_unittest.cc",
