@@ -48,7 +48,8 @@ void BitmapUploader::Init(shell::Connector* connector) {
   gpu_service_->CreateOffscreenGLES2Context(GetProxy(&command_buffer_ptr));
   gles2_context_.reset(new mus::GLES2Context(std::vector<int32_t>(),
                                              std::move(command_buffer_ptr)));
-  DCHECK(gles2_context_->Initialize());
+  bool initialized = gles2_context_->Initialize();
+  DCHECK(initialized);
 }
 
 // Sets the color which is RGBA.
@@ -113,18 +114,17 @@ void BitmapUploader::Upload() {
     gpu::SyncToken sync_token;
     gl->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
-    mus::mojom::TransferableResourcePtr resource =
-        mus::mojom::TransferableResource::New();
-    resource->id = next_resource_id_++;
-    resource_to_texture_id_map_[resource->id] = texture_id;
-    resource->format = mus::mojom::ResourceFormat::RGBA_8888;
-    resource->filter = GL_LINEAR;
-    resource->size = bitmap_size;
-    resource->mailbox_holder =
+    cc::TransferableResource resource;
+    resource.id = next_resource_id_++;
+    resource_to_texture_id_map_[resource.id] = texture_id;
+    resource.format = cc::ResourceFormat::RGBA_8888;
+    resource.filter = GL_LINEAR;
+    resource.size = bitmap_size;
+    resource.mailbox_holder =
         gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D);
-    resource->read_lock_fences_enabled = false;
-    resource->is_software = false;
-    resource->is_overlay_candidate = false;
+    resource.read_lock_fences_enabled = false;
+    resource.is_software = false;
+    resource.is_overlay_candidate = false;
 
     mus::mojom::QuadPtr quad = mus::mojom::Quad::New();
     quad->material = mus::mojom::Material::TEXTURE_CONTENT;
@@ -152,7 +152,7 @@ void BitmapUploader::Upload() {
 
     mus::mojom::TextureQuadStatePtr texture_state =
         mus::mojom::TextureQuadState::New();
-    texture_state->resource_id = resource->id;
+    texture_state->resource_id = resource.id;
     texture_state->premultiplied_alpha = true;
     texture_state->uv_top_left.SetPoint(0.f, 0.f);
     texture_state->uv_bottom_right.SetPoint(1.f, 1.f);
@@ -211,16 +211,16 @@ void BitmapUploader::SetIdNamespace(uint32_t id_namespace) {
 
 void BitmapUploader::OnResourcesReturned(
     mus::WindowSurface* surface,
-    mojo::Array<mus::mojom::ReturnedResourcePtr> resources) {
+    mojo::Array<cc::ReturnedResource> resources) {
   gpu::gles2::GLES2Interface* gl = gles2_context_->interface();
   // TODO(jamesr): Recycle.
   for (size_t i = 0; i < resources.size(); ++i) {
-    mus::mojom::ReturnedResourcePtr resource = std::move(resources[i]);
-    DCHECK_EQ(1, resource->count);
-    gl->WaitSyncTokenCHROMIUM(resource->sync_token.GetConstData());
-    uint32_t texture_id = resource_to_texture_id_map_[resource->id];
+    cc::ReturnedResource resource = std::move(resources[i]);
+    DCHECK_EQ(1, resource.count);
+    gl->WaitSyncTokenCHROMIUM(resource.sync_token.GetConstData());
+    uint32_t texture_id = resource_to_texture_id_map_[resource.id];
     DCHECK_NE(0u, texture_id);
-    resource_to_texture_id_map_.erase(resource->id);
+    resource_to_texture_id_map_.erase(resource.id);
     gl->DeleteTextures(1, &texture_id);
   }
 }

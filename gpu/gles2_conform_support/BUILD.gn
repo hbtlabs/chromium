@@ -44,7 +44,6 @@ executable("gles2_conform_support") {
   sources = [
     "gles2_conform_support.c",
     "native/egl_native.cc",
-    "native/egl_native_win.cc",
     "native/main.cc",
   ]
   defines = [
@@ -142,11 +141,11 @@ if (internal_gles2_conform_tests) {
         "//third_party/angle:libEGL",
         "//third_party/angle:libGLESv2",
       ]
-      defines = [
+      defines += [
         "EGLAPI=",
         "EGLAPIENTRY=",
       ]
-      defines -= [ "NOMINMAX" ]
+      configs -= [ "//build/config/win:nominmax" ]
       cflags = [
         "/wd4018",  # signed/unsigned mismatch
         "/wd4101",  # unreferenced local variable
@@ -155,7 +154,7 @@ if (internal_gles2_conform_tests) {
       ]
     }
     if (is_mac) {
-      defines = [
+      defines += [
         "_STDINT",
         "_STDINT_H",
       ]

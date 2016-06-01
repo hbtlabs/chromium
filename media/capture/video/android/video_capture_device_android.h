@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_
-#define MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_
+#ifndef MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_
+#define MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_
 
 #include <jni.h>
 #include <string>
@@ -56,7 +56,7 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
   void AllocateAndStart(const VideoCaptureParams& params,
                         std::unique_ptr<Client> client) override;
   void StopAndDeAllocate() override;
-  bool TakePhoto(const TakePhotoCallback& photo_callback) override;
+  void TakePhoto(ScopedResultCallback<TakePhotoCallback> callback) override;
 
   // Implement org.chromium.media.VideoCapture.nativeOnFrameAvailable.
   void OnFrameAvailable(JNIEnv* env,
@@ -99,7 +99,8 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
 
   // List of |photo_callbacks_| in flight, being served in Java side.
   base::Lock photo_callbacks_lock_;
-  std::list<std::unique_ptr<TakePhotoCallback>> photo_callbacks_;
+  std::list<std::unique_ptr<ScopedResultCallback<TakePhotoCallback>>>
+      photo_callbacks_;
 
   Name device_name_;
   VideoCaptureFormat capture_format_;
@@ -112,4 +113,4 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_
+#endif  // MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_ANDROID_H_

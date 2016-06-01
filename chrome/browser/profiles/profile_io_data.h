@@ -54,6 +54,10 @@ namespace chrome_browser_net {
 class ResourcePrefetchPredictorObserver;
 }
 
+namespace certificate_transparency {
+class TreeStateTracker;
+}
+
 namespace content_settings {
 class CookieSettings;
 }
@@ -249,6 +253,10 @@ class ProfileIOData {
   // blacklist or whitelist policy.
   virtual policy::URLBlacklist::URLBlacklistState GetURLBlacklistState(
       const GURL& url) const;
+
+  // Returns the predictor service for this Profile. Returns nullptr if there is
+  // no Predictor, as is the case with OffTheRecord profiles.
+  virtual chrome_browser_net::Predictor* GetPredictor();
 
  protected:
   // A URLRequestContext for media that owns its HTTP factory, to ensure
@@ -605,6 +613,10 @@ class ProfileIOData {
 #endif
 
   mutable DevToolsNetworkControllerHandle network_controller_handle_;
+
+  mutable std::unique_ptr<certificate_transparency::TreeStateTracker>
+      ct_tree_tracker_;
+  mutable base::Closure ct_tree_tracker_unregistration_;
 
   const Profile::ProfileType profile_type_;
 

@@ -2,11 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/common/workspace/workspace_layout_manager.h"
+#include "ash/common/wm/workspace/workspace_layout_manager.h"
 
 #include <string>
 #include <utility>
 
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
+#include "ash/common/wm/workspace/workspace_window_resizer.h"
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -19,9 +22,6 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
-#include "ash/wm/common/workspace/workspace_window_resizer.h"
 #include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -797,9 +797,8 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
   window->SetProperty(aura::client::kAlwaysOnTopKey, true);
   window->Show();
 
-  ShelfLayoutManager* shelf_layout_manager =
-      Shelf::ForWindow(window.get())->shelf_layout_manager();
-  shelf_layout_manager->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  Shelf* shelf = Shelf::ForWindow(window.get());
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   window->SetBounds(ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()));
   gfx::Rect window_bounds = window->bounds();
@@ -809,6 +808,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
 
   // The window size should not get touched while we are in lock screen.
   Shell::GetInstance()->session_state_delegate()->LockScreen();
+  ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
   shelf_layout_manager->UpdateVisibilityState();
   EXPECT_EQ(window_bounds.ToString(), window->bounds().ToString());
 
@@ -998,24 +998,24 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, VerifyBackdropAndItsStacking) {
 // Tests that when hidding the shelf, that the backdrop resizes to fill the
 // entire workspace area.
 TEST_F(WorkspaceLayoutManagerBackdropTest, ShelfVisibilityChangesBounds) {
-  ShelfLayoutManager* shelf_layout_manager =
-      Shelf::ForPrimaryDisplay()->shelf_layout_manager();
+  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
   ShowTopWindowBackdrop(true);
   RunAllPendingInMessageLoop();
 
   ASSERT_EQ(SHELF_VISIBLE, shelf_layout_manager->visibility_state());
   gfx::Rect initial_bounds = default_container()->children()[0]->bounds();
-  shelf_layout_manager->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
   shelf_layout_manager->UpdateVisibilityState();
 
   // When the shelf is re-shown WorkspaceLayoutManager shrinks all children
   // including the backdrop.
-  shelf_layout_manager->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
   shelf_layout_manager->UpdateVisibilityState();
   gfx::Rect reduced_bounds = default_container()->children()[0]->bounds();
   EXPECT_LT(reduced_bounds.height(), initial_bounds.height());
 
-  shelf_layout_manager->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_ALWAYS_HIDDEN);
   shelf_layout_manager->UpdateVisibilityState();
 
   EXPECT_GT(default_container()->children()[0]->bounds().height(),

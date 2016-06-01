@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "ash/wm/common/wm_window.h"
+#include "ash/common/wm/wm_window.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/mus/public/cpp/window_observer.h"
@@ -97,10 +97,14 @@ class WmWindowMus : public ash::wm::WmWindow, public mus::WindowObserver {
     return ash::wm::WmWindow::GetWindowState();
   }
 
+  // See description of |children_use_extended_hit_region_|.
+  bool ShouldUseExtendedHitRegion() const;
+
   // WmWindow:
   const ash::wm::WmWindow* GetRootWindow() const override;
   ash::wm::WmRootWindowController* GetRootWindowController() override;
   ash::wm::WmGlobals* GetGlobals() const override;
+  void SetName(const char* name) override;
   base::string16 GetTitle() const override;
   void SetShellWindowId(int id) override;
   int GetShellWindowId() const override;
@@ -145,6 +149,8 @@ class WmWindowMus : public ash::wm::WmWindow, public mus::WindowObserver {
   void Animate(::wm::WindowAnimationType type) override;
   void StopAnimatingProperty(
       ui::LayerAnimationElement::AnimatableProperty property) override;
+  void SetChildWindowVisibilityChangesAnimated() override;
+  void SetMasksToBounds(bool value) override;
   void SetBounds(const gfx::Rect& bounds) override;
   void SetBoundsWithTransitionDelay(const gfx::Rect& bounds,
                                     base::TimeDelta delta) override;
@@ -194,7 +200,12 @@ class WmWindowMus : public ash::wm::WmWindow, public mus::WindowObserver {
   std::vector<ash::wm::WmWindow*> GetChildren() override;
   void ShowResizeShadow(int component) override;
   void HideResizeShadow() override;
+  void SetBoundsInScreenBehaviorForChildren(
+      BoundsInScreenBehavior behavior) override;
+  void SetSnapsChildrenToPhysicalPixelBoundary() override;
   void SnapToPixelBoundaryIfNecessary() override;
+  void SetChildrenUseExtendedHitRegion() override;
+  void SetDescendantsStayInSameRootWindow(bool value) override;
   void AddObserver(ash::wm::WmWindowObserver* observer) override;
   void RemoveObserver(ash::wm::WmWindowObserver* observer) override;
 
@@ -217,7 +228,7 @@ class WmWindowMus : public ash::wm::WmWindow, public mus::WindowObserver {
   mus::Window* window_;
 
   // The shell window id of this window. Shell window ids are defined in
-  // ash/wm/common/wm_shell_window_ids.h.
+  // ash/common/wm/wm_shell_window_ids.h.
   int shell_window_id_ = -1;
 
   std::unique_ptr<ash::wm::WindowState> window_state_;
@@ -233,6 +244,12 @@ class WmWindowMus : public ash::wm::WmWindow, public mus::WindowObserver {
   std::unique_ptr<gfx::Rect> restore_bounds_in_screen_;
 
   ui::WindowShowState restore_show_state_ = ui::SHOW_STATE_DEFAULT;
+
+  bool snap_children_to_pixel_boundary_ = false;
+
+  // If true child windows should get a slightly larger hit region to make
+  // resizing easier.
+  bool children_use_extended_hit_region_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WmWindowMus);
 };

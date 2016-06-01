@@ -5,6 +5,7 @@
 #include "ash/system/web_notification/web_notification_tray.h"
 
 #include "ash/ash_switches.h"
+#include "ash/common/wm/shelf/wm_shelf_util.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
@@ -19,7 +20,6 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_utils.h"
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
-#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -285,6 +285,10 @@ void WebNotificationTray::SetSystemTrayHeight(int height) {
   popup_alignment_delegate_->SetSystemTrayHeight(height);
 }
 
+int WebNotificationTray::system_tray_height_for_test() const {
+  return popup_alignment_delegate_->system_tray_height_for_test();
+}
+
 bool WebNotificationTray::ShowPopups() {
   if (message_center_bubble())
     return false;
@@ -301,9 +305,8 @@ void WebNotificationTray::HidePopups() {
 // Private methods.
 
 bool WebNotificationTray::ShouldShowMessageCenter() {
-  return status_area_widget()->login_status() != user::LOGGED_IN_LOCKED &&
-      !(status_area_widget()->system_tray() &&
-        status_area_widget()->system_tray()->HasNotificationBubble());
+  return !(status_area_widget()->system_tray() &&
+           status_area_widget()->system_tray()->HasNotificationBubble());
 }
 
 bool WebNotificationTray::ShouldBlockShelfAutoHide() const {
@@ -326,6 +329,7 @@ void WebNotificationTray::ShowMessageCenterBubble() {
 
 void WebNotificationTray::UpdateAfterLoginStatusChange(
     user::LoginStatus login_status) {
+  message_center()->SetLockedState(login_status == user::LOGGED_IN_LOCKED);
   OnMessageCenterTrayChanged();
 }
 
@@ -408,8 +412,7 @@ bool WebNotificationTray::IsContextMenuEnabled() const {
                                ->session_state_delegate()
                                ->IsInSecondaryLoginScreen();
 
-  return login_status != user::LOGGED_IN_NONE
-      && login_status != user::LOGGED_IN_LOCKED && !userAddingRunning;
+  return login_status != user::LOGGED_IN_NONE && !userAddingRunning;
 }
 
 message_center::MessageCenterTray* WebNotificationTray::GetMessageCenterTray() {
@@ -477,7 +480,6 @@ void WebNotificationTray::UpdateTrayContent() {
                                ->IsInSecondaryLoginScreen();
 
   SetVisible((status_area_widget()->login_status() != user::LOGGED_IN_NONE) &&
-             (status_area_widget()->login_status() != user::LOGGED_IN_LOCKED) &&
              !userAddingRunning);
   Layout();
   SchedulePaint();

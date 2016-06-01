@@ -26,6 +26,23 @@
 
 namespace content {
 
+namespace {
+
+bool MaybeForwardToServiceWorker(ServiceWorkerURLRequestJob* job,
+                                 const ServiceWorkerVersion* version) {
+  DCHECK(job);
+  DCHECK(version);
+  if (version->has_fetch_handler()) {
+    job->ForwardToServiceWorker();
+    return true;
+  }
+
+  job->FallbackToNetwork();
+  return false;
+}
+
+}  // namespace
+
 ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     base::WeakPtr<ServiceWorkerContextCore> context,
     base::WeakPtr<ServiceWorkerProviderHost> provider_host,
@@ -250,16 +267,17 @@ ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
     return;
   }
 
-  ServiceWorkerMetrics::CountControlledPageLoad(stripped_url_);
+  ServiceWorkerMetrics::CountControlledPageLoad(
+      stripped_url_, active_version->has_fetch_handler());
+  bool is_forwarded =
+      MaybeForwardToServiceWorker(job_.get(), active_version.get());
 
-  job_->ForwardToServiceWorker();
   TRACE_EVENT_ASYNC_END2(
       "ServiceWorker",
       "ServiceWorkerControlleeRequestHandler::PrepareForMainResource",
-      job_.get(),
-      "Status", status,
-      "Info",
-      "Forwarded to the ServiceWorker");
+      job_.get(), "Status", status, "Info",
+      (is_forwarded) ? "Forwarded to the ServiceWorker"
+                     : "Skipped the ServiceWorker which has no fetch handler");
 }
 
 void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
@@ -278,11 +296,13 @@ void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
     return;
   }
 
-  ServiceWorkerMetrics::CountControlledPageLoad(stripped_url_);
+  ServiceWorkerMetrics::CountControlledPageLoad(stripped_url_,
+                                                version->has_fetch_handler());
 
   provider_host_->AssociateRegistration(registration,
                                         false /* notify_controllerchange */);
-  job_->ForwardToServiceWorker();
+
+  MaybeForwardToServiceWorker(job_.get(), version);
 }
 
 void ServiceWorkerControlleeRequestHandler::DidUpdateRegistration(
@@ -352,7 +372,7 @@ void ServiceWorkerControlleeRequestHandler::PrepareForSubResource() {
   DCHECK(job_.get());
   DCHECK(context_);
   DCHECK(provider_host_->active_version());
-  job_->ForwardToServiceWorker();
+  MaybeForwardToServiceWorker(job_.get(), provider_host_->active_version());
 }
 
 void ServiceWorkerControlleeRequestHandler::OnPrepareToRestart() {

@@ -455,7 +455,7 @@ class CachingPolicy(object):
     age = self._GetCurrentAge(timestamp)
     if freshness[0] > age:
       return self.VALIDATION_NONE
-    if freshness[1] > age:
+    if (freshness[0] + freshness[1]) > age:
       return self.VALIDATION_ASYNC
     return self.VALIDATION_SYNC
 
@@ -796,7 +796,9 @@ class RequestTrack(devtools_monitor.Track):
     self._FinalizeRequest(request_id)
 
   def _LoadingFailed(self, request_id, _):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      logging.warning('An unknown request failed: %s' % request_id)
+      return
     (r, _) = self._requests_in_flight[request_id]
     r.failed = True
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)

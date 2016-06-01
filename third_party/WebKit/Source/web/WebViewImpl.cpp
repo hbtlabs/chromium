@@ -113,6 +113,7 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/CompositorFactory.h"
+#include "platform/graphics/CompositorMutatorClient.h"
 #include "platform/graphics/FirstPaintInvalidationTracking.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/Image.h"
@@ -153,6 +154,7 @@
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWindowFeatures.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
+#include "web/CompositorMutatorImpl.h"
 #include "web/CompositorProxyClientImpl.h"
 #include "web/ContextFeaturesClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
@@ -445,6 +447,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client)
     , m_shouldDispatchFirstLayoutAfterFinishedLoading(false)
     , m_displayMode(WebDisplayModeBrowser)
     , m_elasticOverscroll(FloatSize())
+    , m_mutator(nullptr)
     , m_scheduler(adoptPtr(Platform::current()->currentThread()->scheduler()->createWebViewScheduler(this).release()))
     , m_lastFrameTimeMonotonic(0)
 {
@@ -1946,35 +1949,6 @@ void WebViewImpl::resize(const WebSize& newSize)
         newSize, topControls().height(), topControls().shrinkViewport());
 }
 
-void WebViewImpl::willEnterFullScreen(WebRemoteFrame* fullscreenFrame)
-{
-    FrameOwner* owner = toWebRemoteFrameImpl(fullscreenFrame)->frame()->owner();
-    HTMLFrameOwnerElement* ownerElement = toHTMLFrameOwnerElement(owner);
-
-    // Let FullscreenController know that |ownerElement| is an ancestor of the
-    // actual fullscreen element, so that it can be treated a little
-    // differently:
-    // - it will need :-webkit-full-screen-ancestor style in addition to
-    //   :-webkit-full-screen.
-    // - it does not need to resend the ToggleFullscreen IPC to the browser
-    //   process.
-    m_fullscreenController->setFullscreenIsForCrossProcessAncestor();
-
-    // Call requestFullscreen() on |ownerElement| to make it the provisional
-    // fullscreen element in FullscreenController, and to prepare
-    // fullscreenchange events that will need to fire on it and its (local)
-    // ancestors. The events will be triggered if/when fullscreen is entered.
-    // Note that requestFullscreen() requires a user gesture.
-    //
-    // TODO(alexmos): currently, this assumes prefixed requests, but in the
-    // future, this should plumb in information about which request type
-    // (prefixed or unprefixed) to use for firing fullscreen events.
-    {
-        WebScopedUserGesture userGesture;
-        Fullscreen::from(ownerElement->document()).requestFullscreen(*ownerElement, Fullscreen::PrefixedRequest);
-    }
-}
-
 void WebViewImpl::didEnterFullScreen()
 {
     m_fullscreenController->didEnterFullScreen();
@@ -2813,6 +2787,7 @@ void WebViewImpl::willCloseLayerTreeView()
     else
         setRootGraphicsLayer(nullptr);
 
+    m_mutator = nullptr;
     m_layerTreeView = nullptr;
 }
 
@@ -4548,7 +4523,12 @@ void WebViewImpl::forceNextDrawingBufferCreationToFail()
 
 CompositorProxyClient* WebViewImpl::createCompositorProxyClient()
 {
-    return new CompositorProxyClientImpl();
+    if (!m_mutator) {
+        std::unique_ptr<CompositorMutatorClient> mutatorClient = CompositorMutatorImpl::createClient();
+        m_mutator = static_cast<CompositorMutatorImpl*>(mutatorClient->mutator());
+        m_layerTreeView->setMutatorClient(std::move(mutatorClient));
+    }
+    return new CompositorProxyClientImpl(m_mutator);
 }
 
 void WebViewImpl::updatePageOverlays()

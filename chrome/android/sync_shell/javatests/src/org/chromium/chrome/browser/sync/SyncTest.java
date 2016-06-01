@@ -197,7 +197,7 @@ public class SyncTest extends SyncTestBase {
     @LargeTest
     @Feature({"Sync"})
     public void testMasterSyncBlocksSyncStart() throws InterruptedException {
-        Account account = setUpTestAccountAndSignIn();
+        setUpTestAccountAndSignIn();
         stopSync();
         assertFalse(SyncTestUtil.isSyncRequested());
 

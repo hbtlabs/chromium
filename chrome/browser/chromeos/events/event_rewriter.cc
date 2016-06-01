@@ -8,8 +8,8 @@
 
 #include <vector>
 
+#include "ash/common/wm/window_state.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -1142,9 +1142,9 @@ EventRewriter::DeviceType EventRewriter::KeyboardDeviceAddedInternal(
 EventRewriter::DeviceType EventRewriter::KeyboardDeviceAdded(int device_id) {
   if (!ui::DeviceDataManager::HasInstance())
     return kDeviceUnknown;
-  const std::vector<ui::KeyboardDevice>& keyboards =
+  const std::vector<ui::InputDevice>& keyboard_devices =
       ui::DeviceDataManager::GetInstance()->keyboard_devices();
-  for (const auto& keyboard : keyboards) {
+  for (const auto& keyboard : keyboard_devices) {
     if (keyboard.id == device_id) {
       return KeyboardDeviceAddedInternal(
           keyboard.id, keyboard.name, keyboard.vendor_id, keyboard.product_id);

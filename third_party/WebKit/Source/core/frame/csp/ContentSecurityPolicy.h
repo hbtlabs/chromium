@@ -34,6 +34,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/network/ResourceRequest.h"
 #include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "wtf/HashSet.h"
@@ -64,6 +65,7 @@ typedef int SandboxFlags;
 typedef HeapVector<Member<CSPDirectiveList>> CSPDirectiveListVector;
 typedef HeapVector<Member<ConsoleMessage>> ConsoleMessageVector;
 typedef std::pair<String, ContentSecurityPolicyHeaderType> CSPHeaderAndType;
+using RedirectStatus = ResourceRequest::RedirectStatus;
 
 class CORE_EXPORT ContentSecurityPolicy : public GarbageCollectedFinalized<ContentSecurityPolicy> {
 public:
@@ -106,13 +108,6 @@ public:
     enum ReportingStatus {
         SendReport,
         SuppressReport
-    };
-
-    // When a resource is loaded after a redirect, source paths are
-    // ignored in the matching algorithm.
-    enum RedirectStatus {
-        DidRedirect,
-        DidNotRedirect
     };
 
     enum ExceptionStatus {
@@ -171,19 +166,19 @@ public:
     // plugin-types directives from the parent document.
     bool allowPluginTypeForDocument(const Document&, const String& type, const String& typeAttribute, const KURL&, ReportingStatus = SendReport) const;
 
-    bool allowScriptFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowObjectFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowChildFrameFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowImageFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowStyleFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowFontFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowMediaFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowConnectToSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowFormAction(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowBaseURI(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
-    bool allowWorkerContextFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
+    bool allowScriptFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowObjectFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowChildFrameFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowImageFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowStyleFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowFontFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowMediaFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowConnectToSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowFormAction(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowBaseURI(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
+    bool allowWorkerContextFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
 
-    bool allowManifestFromSource(const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
+    bool allowManifestFromSource(const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
 
     // |allowAncestors| does not need to know whether the resource was a
     // result of a redirect. After a redirect, source paths are usually
@@ -205,7 +200,7 @@ public:
     bool allowScriptWithHash(const String& source, InlineType) const;
     bool allowStyleWithHash(const String& source, InlineType) const;
 
-    bool allowRequest(WebURLRequest::RequestContext, const KURL&, RedirectStatus = DidNotRedirect, ReportingStatus = SendReport) const;
+    bool allowRequest(WebURLRequest::RequestContext, const KURL&, RedirectStatus = RedirectStatus::NoRedirect, ReportingStatus = SendReport) const;
 
     void usesScriptHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
     void usesStyleHashAlgorithms(uint8_t ContentSecurityPolicyHashAlgorithm);
@@ -243,11 +238,11 @@ public:
     // If a frame is passed in, the report will be sent using it as a context. If no frame is
     // passed in, the report will be sent via this object's |m_executionContext| (or dropped
     // on the floor if no such context is available).
-    void reportViolation(const String& directiveText, const String& effectiveDirective, const String& consoleMessage, const KURL& blockedURL, const Vector<String>& reportEndpoints, const String& header, ViolationType, LocalFrame* = nullptr);
+    void reportViolation(const String& directiveText, const String& effectiveDirective, const String& consoleMessage, const KURL& blockedURL, const Vector<String>& reportEndpoints, const String& header, ViolationType, LocalFrame* = nullptr, RedirectStatus = RedirectStatus::FollowedRedirect);
 
     // Called when mixed content is detected on a page; will trigger a violation report if
     // the 'block-all-mixed-content' directive is specified for a policy.
-    void reportMixedContent(const KURL& mixedURL);
+    void reportMixedContent(const KURL& mixedURL, RedirectStatus);
 
     void reportBlockedScriptExecutionToInspector(const String& directiveText) const;
 

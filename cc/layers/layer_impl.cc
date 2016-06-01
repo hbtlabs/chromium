@@ -70,7 +70,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       was_ever_ready_since_last_transform_animation_(true),
       background_color_(0),
       safe_opaque_background_color_(0),
-      opacity_(1.0),
       blend_mode_(SkXfermode::kSrcOver_Mode),
       draw_blend_mode_(SkXfermode::kSrcOver_Mode),
       transform_tree_index_(-1),
@@ -96,8 +95,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
 LayerImpl::~LayerImpl() {
   DCHECK_EQ(DRAW_MODE_NONE, current_draw_mode_);
 
-  if (!copy_requests_.empty() && layer_tree_impl_->IsActiveTree())
-    layer_tree_impl()->RemoveLayerWithCopyOutputRequest(this);
   layer_tree_impl_->UnregisterScrollLayer(this);
   layer_tree_impl_->UnregisterLayer(this);
   layer_tree_impl_->RemoveLayerShouldPushProperties(this);
@@ -205,57 +202,6 @@ void LayerImpl::SetEffectTreeIndex(int index) {
 void LayerImpl::SetScrollTreeIndex(int index) {
   scroll_tree_index_ = index;
   SetNeedsPushProperties();
-}
-
-void LayerImpl::PassCopyRequests(
-    std::vector<std::unique_ptr<CopyOutputRequest>>* requests) {
-  // In the case that a layer still has a copy request, this means that there's
-  // a commit to the active tree without a draw.  This only happens in some
-  // edge cases during lost context or visibility changes, so don't try to
-  // handle preserving these output requests (and their surface).
-  if (!copy_requests_.empty()) {
-    layer_tree_impl()->RemoveLayerWithCopyOutputRequest(this);
-    // Destroying these will abort them.
-    copy_requests_.clear();
-  }
-
-  if (requests->empty())
-    return;
-
-  bool was_empty = copy_requests_.empty();
-  for (auto& request : *requests)
-    copy_requests_.push_back(std::move(request));
-  requests->clear();
-
-  if (was_empty && layer_tree_impl()->IsActiveTree())
-    layer_tree_impl()->AddLayerWithCopyOutputRequest(this);
-}
-
-void LayerImpl::TakeCopyRequestsAndTransformToTarget(
-    std::vector<std::unique_ptr<CopyOutputRequest>>* requests) {
-  DCHECK(!copy_requests_.empty());
-  DCHECK(layer_tree_impl()->IsActiveTree());
-  DCHECK(has_render_surface());
-  DCHECK_EQ(render_target(), render_surface());
-
-  size_t first_inserted_request = requests->size();
-  for (auto& request : copy_requests_)
-    requests->push_back(std::move(request));
-  copy_requests_.clear();
-
-  for (size_t i = first_inserted_request; i < requests->size(); ++i) {
-    CopyOutputRequest* request = (*requests)[i].get();
-    if (!request->has_area())
-      continue;
-
-    gfx::Rect request_in_layer_space = request->area();
-    request_in_layer_space.Intersect(gfx::Rect(bounds()));
-    request->set_area(MathUtil::MapEnclosingClippedRect(
-        DrawTransform(), request_in_layer_space));
-  }
-
-  layer_tree_impl()->RemoveLayerWithCopyOutputRequest(this);
-  layer_tree_impl()->set_needs_update_draw_properties();
 }
 
 void LayerImpl::ClearRenderSurfaceLayerList() {
@@ -433,7 +379,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetNonFastScrollableRegion(non_fast_scrollable_region_);
   layer->SetTouchEventHandlerRegion(touch_event_handler_region_);
   layer->SetContentsOpaque(contents_opaque_);
-  layer->SetOpacity(opacity_);
   layer->SetBlendMode(blend_mode_);
   layer->SetPosition(position_);
   layer->set_should_flatten_transform_from_property_tree(
@@ -460,8 +405,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->SetEffectTreeIndex(effect_tree_index_);
   layer->SetScrollTreeIndex(scroll_tree_index_);
   layer->set_offset_to_transform_parent(offset_to_transform_parent_);
-
-  layer->PassCopyRequests(&copy_requests_);
 
   // If the main thread commits multiple times before the impl thread actually
   // draws, then damage tracking will become incorrect if we simply clobber the
@@ -497,8 +440,8 @@ gfx::Vector2dF LayerImpl::FixedContainerSizeDelta() const {
   return scroll_clip_layer->bounds_delta();
 }
 
-base::DictionaryValue* LayerImpl::LayerTreeAsJson() const {
-  base::DictionaryValue* result = new base::DictionaryValue;
+std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() const {
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
   result->SetInteger("LayerId", id());
   result->SetString("LayerType", LayerTypeAsString());
 
@@ -522,7 +465,7 @@ base::DictionaryValue* LayerImpl::LayerTreeAsJson() const {
 
   result->SetBoolean("DrawsContent", draws_content_);
   result->SetBoolean("Is3dSorted", Is3dSorted());
-  result->SetDouble("OPACITY", opacity());
+  result->SetDouble("OPACITY", Opacity());
   result->SetBoolean("ContentsOpaque", contents_opaque_);
 
   if (scrollable())
@@ -677,7 +620,7 @@ void LayerImpl::UpdatePropertyTreeTransformIsAnimated(bool is_animated) {
   }
 }
 
-void LayerImpl::UpdatePropertyTreeOpacity() {
+void LayerImpl::UpdatePropertyTreeOpacity(float opacity) {
   PropertyTrees* property_trees = layer_tree_impl()->property_trees();
   if (property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id())) {
     // A LayerImpl's own current state is insufficient for determining whether
@@ -687,7 +630,9 @@ void LayerImpl::UpdatePropertyTreeOpacity() {
     // started, but might have finished since then on the compositor thread.
     EffectNode* node = property_trees->effect_tree.Node(
         property_trees->effect_id_to_index_map[id()]);
-    node->data.opacity = opacity_;
+    if (node->data.opacity == opacity)
+      return;
+    node->data.opacity = opacity;
     node->data.effect_changed = true;
     property_trees->changed = true;
     property_trees->effect_tree.set_needs_update(true);
@@ -699,7 +644,6 @@ void LayerImpl::UpdatePropertyTreeForScrollingAndAnimationIfNeeded() {
     UpdatePropertyTreeScrollOffset();
 
   if (HasAnyAnimationTargetingProperty(TargetProperty::TRANSFORM)) {
-    UpdatePropertyTreeTransform();
     UpdatePropertyTreeTransformIsAnimated(
         HasPotentiallyRunningTransformAnimation());
   }
@@ -725,8 +669,7 @@ void LayerImpl::OnFilterAnimated(const FilterOperations& filters) {
 }
 
 void LayerImpl::OnOpacityAnimated(float opacity) {
-  SetOpacity(opacity);
-  UpdatePropertyTreeOpacity();
+  UpdatePropertyTreeOpacity(opacity);
   SetNeedsPushProperties();
   layer_tree_impl()->set_needs_update_draw_properties();
   layer_tree_impl()->AddToOpacityAnimationsMap(id(), opacity);
@@ -737,6 +680,7 @@ void LayerImpl::OnTransformAnimated(const gfx::Transform& transform) {
   SetTransform(transform);
   UpdatePropertyTreeTransform();
   was_ever_ready_since_last_transform_animation_ = false;
+  layer_tree_impl()->AddToTransformAnimationsMap(id(), transform);
   if (old_transform != transform) {
     SetNeedsPushProperties();
     layer_tree_impl()->set_needs_update_draw_properties();
@@ -988,11 +932,13 @@ void LayerImpl::SetContentsOpaque(bool opaque) {
   contents_opaque_ = opaque;
 }
 
-void LayerImpl::SetOpacity(float opacity) {
-  if (opacity_ == opacity)
-    return;
-
-  opacity_ = opacity;
+float LayerImpl::Opacity() const {
+  if (!layer_tree_impl()->property_trees()->IsInIdToIndexMap(
+          PropertyTrees::TreeType::EFFECT, id()))
+    return 1.f;
+  EffectNode* node =
+      layer_tree_impl()->property_trees()->effect_tree.Node(effect_tree_index_);
+  return node->data.opacity;
 }
 
 bool LayerImpl::OpacityIsAnimating() const {
@@ -1195,7 +1141,7 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetInteger("layer_id", id());
   MathUtil::AddToTracedValue("bounds", bounds_, state);
 
-  state->SetDouble("opacity", opacity());
+  state->SetDouble("opacity", Opacity());
 
   MathUtil::AddToTracedValue("position", position_, state);
 
@@ -1246,7 +1192,7 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
     state->EndDictionary();
   }
 
-  state->SetBoolean("can_use_lcd_text", can_use_lcd_text());
+  state->SetBoolean("can_use_lcd_text", CanUseLCDText());
   state->SetBoolean("contents_opaque", contents_opaque());
 
   state->SetBoolean("has_animation_bounds",
@@ -1320,6 +1266,33 @@ gfx::Transform LayerImpl::ScreenSpaceTransform() const {
   }
 
   return draw_properties().screen_space_transform;
+}
+
+bool LayerImpl::CanUseLCDText() const {
+  if (layer_tree_impl()->settings().layers_always_allowed_lcd_text)
+    return true;
+  if (!layer_tree_impl()->settings().can_use_lcd_text)
+    return false;
+  if (!contents_opaque())
+    return false;
+
+  if (layer_tree_impl()
+          ->property_trees()
+          ->effect_tree.Node(effect_tree_index())
+          ->data.screen_space_opacity != 1.f)
+    return false;
+  if (!layer_tree_impl()
+           ->property_trees()
+           ->transform_tree.Node(transform_tree_index())
+           ->data.node_and_ancestors_have_only_integer_translation)
+    return false;
+  if (static_cast<int>(offset_to_transform_parent().x()) !=
+      offset_to_transform_parent().x())
+    return false;
+  if (static_cast<int>(offset_to_transform_parent().y()) !=
+      offset_to_transform_parent().y())
+    return false;
+  return true;
 }
 
 Region LayerImpl::GetInvalidationRegionForDebugging() {

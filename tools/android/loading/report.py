@@ -107,6 +107,8 @@ class LoadingReport(object):
            requests[0], dependencies_lens, self.trace)
     self._requests = len(requests)
     self._preloaded_requests = len(preloaded_requests)
+    self._dns_requests, self._dns_cost_msec = metrics.DnsRequestsAndCost(trace)
+    self._connection_stats = metrics.ConnectionMetrics(trace)
 
     self._user_lens_reports = {}
     first_text_paint_lens = FirstTextPaintLens(self.trace)
@@ -139,12 +141,17 @@ class LoadingReport(object):
 
   def GenerateReport(self):
     """Returns a report as a dict."""
+    # NOTE: When changing the return value here, also update the schema
+    # (bigquery_schema.json) accordingly. See cloud/frontend/README.md for
+    # details.
     report = {
         'url': self.trace.url,
         'plt_ms': self._load_end_msec - self._navigation_start_msec,
         'requests': self._requests,
         'preloaded_requests': self._preloaded_requests,
-        'transfer_size': self._transfer_size}
+        'transfer_size': self._transfer_size,
+        'dns_requests': self._dns_requests,
+        'dns_cost_ms': self._dns_cost_msec}
 
     for user_lens_type, user_lens_report in self._user_lens_reports.iteritems():
       for key, value in user_lens_report.GenerateReport().iteritems():
@@ -153,6 +160,7 @@ class LoadingReport(object):
     report.update(self._cpu_busyness)
     report.update(self._ad_report)
     report.update(self._ads_cost)
+    report.update(self._connection_stats)
     return report
 
   @classmethod

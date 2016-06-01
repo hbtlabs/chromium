@@ -85,6 +85,7 @@ DEFINE_TRACE(ScriptLoader)
     visitor->trace(m_element);
     visitor->trace(m_resource);
     visitor->trace(m_pendingScript);
+    ScriptResourceClient::trace(visitor);
 }
 
 void ScriptLoader::didNotifySubtreeInsertionsToDocument()
@@ -465,8 +466,10 @@ void ScriptLoader::notifyFinished(Resource* resource)
     DCHECK(!m_willBeParserExecuted);
 
     Document* contextDocument = m_element->document().contextDocument();
-    if (!contextDocument)
+    if (!contextDocument) {
+        detach();
         return;
+    }
 
     ASSERT_UNUSED(resource, resource == m_resource);
 

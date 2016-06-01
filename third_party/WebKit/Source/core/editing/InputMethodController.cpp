@@ -413,7 +413,7 @@ void InputMethodController::setComposition(const String& text, const Vector<Comp
     // PlainTextRange::createRange as a workaround.
     const Position& startPosition = startRange.endPosition();
     const Position& endPosition = endRange.endPosition();
-    Range* selectedRange = Range::create(rootEditableElement->document(), startPosition, endPosition);
+    const EphemeralRange selectedRange(startPosition, endPosition);
     frame().selection().setSelectedRange(selectedRange, TextAffinity::Downstream, SelectionDirectionalMode::NonDirectional, NotUserTriggered);
 
     if (underlines.isEmpty()) {
@@ -542,8 +542,9 @@ void InputMethodController::extendSelectionAndDelete(int before, int after)
             break;
         ++before;
     } while (frame().selection().start() == frame().selection().end() && before <= static_cast<int>(selectionOffsets.start()));
-    // TODO(chongz): According to spec |data| should be "forward" or "backward".
-    dispatchBeforeInputEditorCommand(frame().document()->focusedElement(), InputEvent::InputType::DeleteContent);
+    // TODO(chongz): New spec might want to change InputType.
+    // https://github.com/w3c/editing/issues/125#issuecomment-213041256
+    dispatchBeforeInputEditorCommand(m_frame->document()->focusedElement(), InputEvent::InputType::DeleteContent, emptyString(), new RangeVector(1, m_frame->selection().firstRange()));
     TypingCommand::deleteSelection(*frame().document());
 }
 

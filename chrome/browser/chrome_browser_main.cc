@@ -131,7 +131,7 @@
 #include "components/rappor/rappor_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "components/translate/content/browser/browser_cld_utils.h"
 #include "components/translate/content/common/cld_data_source.h"
 #include "components/translate/core/browser/translate_download_manager.h"
@@ -671,10 +671,8 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
   // Initialize FieldTrialList to support FieldTrials that use one-time
   // randomization.
   metrics::MetricsService* metrics = browser_process_->metrics_service();
-  // TODO(asvitkine): Turn into a DCHECK after http://crbug.com/359406 is fixed.
-  CHECK(!field_trial_list_);
-  // TODO(asvitkine): Remove this after http://crbug.com/359406 is fixed.
-  base::FieldTrialList::EnableGlobalStateChecks();
+
+  DCHECK(!field_trial_list_);
   field_trial_list_.reset(
       new base::FieldTrialList(metrics->CreateEntropyProvider().release()));
 

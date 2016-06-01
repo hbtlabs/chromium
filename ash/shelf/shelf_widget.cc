@@ -5,6 +5,9 @@
 #include "ash/shelf/shelf_widget.h"
 
 #include "ash/ash_switches.h"
+#include "ash/common/wm/shelf/wm_shelf_constants.h"
+#include "ash/common/wm/shelf/wm_shelf_util.h"
+#include "ash/common/wm/wm_root_window_controller.h"
 #include "ash/focus_cycler.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_constants.h"
@@ -19,14 +22,10 @@
 #include "ash/shell_window_ids.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/shelf/wm_shelf_constants.h"
-#include "ash/wm/common/shelf/wm_shelf_util.h"
-#include "ash/wm/common/wm_root_window_controller.h"
 #include "ash/wm/status_area_layout_manager.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/workspace_controller.h"
 #include "grit/ash_resources.h"
-#include "grit/ash_wm_common_resources.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
@@ -453,7 +452,7 @@ void ShelfWidget::DelegateView::SetParentLayer(ui::Layer* layer) {
 void ShelfWidget::DelegateView::OnPaintBackground(gfx::Canvas* canvas) {
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
   gfx::ImageSkia shelf_background =
-      *rb->GetImageSkiaNamed(IDR_ASH_WM_COMMON_SHELF_BACKGROUND);
+      *rb->GetImageSkiaNamed(IDR_ASH_SHELF_BACKGROUND);
   const bool horizontal = wm::IsHorizontalAlignment(shelf_->GetAlignment());
   if (!horizontal) {
     shelf_background = gfx::ImageSkiaOperations::CreateRotatedImage(

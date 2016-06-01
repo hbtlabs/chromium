@@ -32,8 +32,8 @@
 #include "core/events/EventTarget.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/editing/Editor.h"
@@ -65,18 +65,20 @@ Settings* windowSettings(LocalDOMWindow* executingWindow)
     return nullptr;
 }
 
+bool isScrollBlockingEvent(const AtomicString& eventType)
+{
+    return eventType == EventTypeNames::touchstart
+        || eventType == EventTypeNames::touchmove
+        || eventType == EventTypeNames::mousewheel
+        || eventType == EventTypeNames::wheel;
+}
+
 double blockedEventsWarningThreshold(const ExecutionContext* context, const Event* event)
 {
     if (!event->cancelable())
         return 0.0;
-    const AtomicString& eventType = event->type();
-    if (eventType != EventTypeNames::touchstart
-        && eventType != EventTypeNames::touchmove
-        && eventType != EventTypeNames::touchend
-        && eventType != EventTypeNames::mousewheel
-        && eventType != EventTypeNames::wheel) {
+    if (!isScrollBlockingEvent(event->type()))
         return 0.0;
-    }
 
     if (!context->isDocument())
         return 0.0;
@@ -99,13 +101,10 @@ void reportBlockedEvent(ExecutionContext* context, const Event* event, Registere
         "Handling of '%s' input event was delayed for %ld ms due to main thread being busy. "
         "Consider marking event handler as 'passive' to make the page more responive.",
         event->type().getString().utf8().data(), lround(delayedSeconds * 1000));
-    ConsoleMessage* message = nullptr;
 
     v8::Local<v8::Function> function = eventListenerEffectiveFunction(v8Listener->isolate(), handler);
-    if (!function.IsEmpty())
-        message = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, messageText, String(), function->GetScriptLineNumber() + 1, function->GetScriptColumnNumber() + 1, nullptr, function->ScriptId());
-    else
-        message = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, messageText, String(), 0, 0);
+    OwnPtr<SourceLocation> location = SourceLocation::fromFunction(function);
+    ConsoleMessage* message = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, messageText, std::move(location));
     context->addConsoleMessage(message);
     registeredListener->setBlockedEventWarningEmitted();
 }
@@ -182,8 +181,14 @@ inline LocalDOMWindow* EventTarget::executingWindow()
     return nullptr;
 }
 
-void EventTarget::setDefaultAddEventListenerOptions(AddEventListenerOptions& options)
+void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventType, AddEventListenerOptions& options)
 {
+    if (!isScrollBlockingEvent(eventType)) {
+        if (!options.hasPassive())
+            options.setPassive(false);
+        return;
+    }
+
     if (Settings* settings = windowSettings(executingWindow())) {
         switch (settings->passiveListenerDefault()) {
         case PassiveListenerDefault::False:
@@ -219,7 +224,7 @@ bool EventTarget::addEventListener(const AtomicString& eventType, EventListener*
 {
     AddEventListenerOptions options;
     options.setCapture(useCapture);
-    setDefaultAddEventListenerOptions(options);
+    setDefaultAddEventListenerOptions(eventType, options);
     return addEventListenerInternal(eventType, listener, options);
 }
 
@@ -236,7 +241,7 @@ bool EventTarget::addEventListener(const AtomicString& eventType, EventListener*
 
 bool EventTarget::addEventListener(const AtomicString& eventType, EventListener* listener, AddEventListenerOptions& options)
 {
-    setDefaultAddEventListenerOptions(options);
+    setDefaultAddEventListenerOptions(eventType, options);
     return addEventListenerInternal(eventType, listener, options);
 }
 

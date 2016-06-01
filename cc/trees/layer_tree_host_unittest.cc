@@ -1004,6 +1004,74 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestEffectTreeSync);
 
+class LayerTreeHostTestTransformTreeSync : public LayerTreeHostTest {
+ protected:
+  void SetupTree() override {
+    root_ = Layer::Create();
+    layer_tree_host()->SetRootLayer(root_);
+    LayerTreeHostTest::SetupTree();
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    TransformTree& transform_tree =
+        layer_tree_host()->property_trees()->transform_tree;
+    TransformNode* node = transform_tree.Node(root_->transform_tree_index());
+    gfx::Transform rotate10;
+    rotate10.Rotate(10.f);
+    switch (layer_tree_host()->source_frame_number()) {
+      case 1:
+        node->data.local = rotate10;
+        node->data.is_currently_animating = true;
+        break;
+      case 2:
+        node->data.is_currently_animating = true;
+        break;
+      case 3:
+        node->data.is_currently_animating = false;
+        break;
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
+    TransformTree& transform_tree =
+        impl->sync_tree()->property_trees()->transform_tree;
+    TransformNode* node = transform_tree.Node(
+        impl->sync_tree()->root_layer()->transform_tree_index());
+    gfx::Transform rotate10;
+    rotate10.Rotate(10.f);
+    gfx::Transform rotate20;
+    rotate20.Rotate(20.f);
+    switch (impl->sync_tree()->source_frame_number()) {
+      case 0:
+        impl->sync_tree()->root_layer()->OnTransformAnimated(rotate20);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 1:
+        EXPECT_EQ(node->data.local, rotate20);
+        impl->sync_tree()->root_layer()->OnTransformAnimated(rotate20);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 2:
+        EXPECT_EQ(node->data.local, rotate20);
+        impl->sync_tree()->root_layer()->OnTransformAnimated(rotate20);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 3:
+        EXPECT_EQ(node->data.local, rotate10);
+        EndTest();
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  scoped_refptr<Layer> root_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestTransformTreeSync);
+
 // Verify damage status is updated even when the transform tree doesn't need
 // to be updated at draw time.
 class LayerTreeHostTestTransformTreeDamageIsUpdated : public LayerTreeHostTest {
@@ -2368,7 +2436,7 @@ class LayerTreeHostTestLCDChange : public LayerTreeHostTest {
     PictureLayerImpl* root_layer =
         static_cast<PictureLayerImpl*>(host_impl->active_tree()->root_layer());
     bool can_use_lcd_text =
-        host_impl->active_tree()->root_layer()->can_use_lcd_text();
+        host_impl->active_tree()->root_layer()->CanUseLCDText();
     switch (host_impl->active_tree()->source_frame_number()) {
       case 0:
         // The first draw.
@@ -5277,7 +5345,8 @@ MULTI_THREAD_TEST_F(LayerTreeHostAcceptsDeltasFromImplWithoutRootLayer);
 class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
  protected:
   LayerTreeHostTestCrispUpAfterPinchEnds()
-      : playback_allowed_event_(true, true) {}
+      : playback_allowed_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                                base::WaitableEvent::InitialState::SIGNALED) {}
 
   void SetupTree() override {
     frame_ = 1;
@@ -5579,7 +5648,8 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
     : public LayerTreeHostTest {
  protected:
   LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles()
-      : playback_allowed_event_(true, true) {}
+      : playback_allowed_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                                base::WaitableEvent::InitialState::SIGNALED) {}
 
   void SetupTree() override {
     step_ = 1;

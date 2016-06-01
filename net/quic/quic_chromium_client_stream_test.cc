@@ -94,7 +94,7 @@ class MockQuicClientSessionBase : public QuicClientSessionBase {
   MOCK_METHOD0(IsCryptoHandshakeConfirmed, bool());
   MOCK_METHOD5(WriteHeaders,
                size_t(QuicStreamId id,
-                      const SpdyHeaderBlock& headers,
+                      SpdyHeaderBlock headers,
                       bool fin,
                       SpdyPriority priority,
                       QuicAckListenerInterface* ack_notifier_delegate));
@@ -412,7 +412,7 @@ TEST_P(QuicChromiumClientStreamTest, MarkTrailersConsumedWhenNotifyDelegate) {
   base::RunLoop run_loop3;
   SpdyHeaderBlock actual_trailers;
   EXPECT_CALL(delegate_,
-              OnHeadersAvailable(trailers, uncompressed_trailers.length()))
+              OnHeadersAvailable(_, uncompressed_trailers.length()))
       .WillOnce(testing::DoAll(
           testing::SaveArg<0>(&actual_trailers),
           testing::InvokeWithoutArgs([&run_loop3]() { run_loop3.Quit(); })));

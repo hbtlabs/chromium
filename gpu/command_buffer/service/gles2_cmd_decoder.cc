@@ -652,6 +652,11 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
       const FenceSyncReleaseCallback& callback) override;
   void SetWaitFenceSyncCallback(const WaitFenceSyncCallback& callback) override;
 
+  void SetDescheduleUntilFinishedCallback(
+      const NoParamCallback& callback) override;
+  void SetRescheduleAfterFinishedCallback(
+      const NoParamCallback& callback) override;
+
   void SetIgnoreCachedStateForTest(bool ignore) override;
   void SetForceShaderNameHashingForTest(bool force) override;
   uint32_t GetAndClearBackbufferClearBitsForTest() override;
@@ -970,14 +975,6 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
       GLint y,
       GLsizei width,
       GLsizei height);
-
-  // Wrapper for TexImageIOSurface2DCHROMIUM.
-  void DoTexImageIOSurface2DCHROMIUM(
-      GLenum target,
-      GLsizei width,
-      GLsizei height,
-      GLuint io_surface_id,
-      GLuint plane);
 
   void DoCopyTextureCHROMIUM(GLuint source_id,
                              GLuint dest_id,
@@ -1865,10 +1862,6 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   void MarkContextLost(error::ContextLostReason reason) override;
   bool CheckResetStatus();
 
-#if defined(OS_MACOSX)
-  void ReleaseIOSurfaceForTexture(GLuint texture_id);
-#endif
-
   bool GetCompressedTexSizeInBytes(
       const char* function_name, GLsizei width, GLsizei height, GLsizei depth,
       GLenum format, GLsizei* size_in_bytes);
@@ -1961,6 +1954,9 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   void ProcessPendingReadPixels(bool did_finish);
   void FinishReadPixels(const cmds::ReadPixels& c, GLuint buffer);
+
+  // Checks to see if the inserted fence has completed.
+  void ProcessDescheduleUntilFinished();
 
   void DoBindFragmentInputLocationCHROMIUM(GLuint program_id,
                                            GLint location,
@@ -2101,6 +2097,8 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
 
   FenceSyncReleaseCallback fence_sync_release_callback_;
   WaitFenceSyncCallback wait_fence_sync_callback_;
+  NoParamCallback deschedule_until_finished_callback_;
+  NoParamCallback reschedule_after_finished_callback_;
 
   ShaderCacheCallback shader_cache_callback_;
 
@@ -2168,11 +2166,6 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   // Log extra info.
   bool service_logging_;
 
-#if defined(OS_MACOSX)
-  typedef std::map<GLuint, IOSurfaceRef> TextureToIOSurfaceMap;
-  TextureToIOSurfaceMap texture_to_io_surface_map_;
-#endif
-
   std::unique_ptr<CopyTextureCHROMIUMResourceManager> copy_texture_CHROMIUM_;
   std::unique_ptr<ClearFramebufferResourceManager> clear_framebuffer_blit_;
 
@@ -2195,6 +2188,11 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool gpu_debug_commands_;
 
   std::queue<linked_ptr<FenceCallback> > pending_readpixel_fences_;
+
+  // After this fence is inserted, both the GpuChannelMessageQueue and
+  // CommandExecutor are descheduled. Once the fence has completed, both get
+  // rescheduled.
+  std::unique_ptr<gl::GLFence> deschedule_until_finished_fence_;
 
   // Used to validate multisample renderbuffers if needed
   GLuint validation_texture_;
@@ -3364,6 +3362,8 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
       feature_info_->workarounds().disable_webgl_multisampling_color_mask_usage;
   caps.disable_webgl_rgb_multisampling_usage =
       feature_info_->workarounds().disable_webgl_rgb_multisampling_usage;
+  caps.emulate_rgb_buffer_with_rgba =
+      feature_info_->workarounds().disable_gl_rgb_format;
 
   return caps;
 }
@@ -3753,12 +3753,6 @@ void GLES2DecoderImpl::DeleteTexturesHelper(
               ->UnbindTexture(GL_FRAMEBUFFER, texture_ref);
         }
       }
-#if defined(OS_MACOSX)
-      GLuint service_id = texture->service_id();
-      if (texture->target() == GL_TEXTURE_RECTANGLE_ARB) {
-        ReleaseIOSurfaceForTexture(service_id);
-      }
-#endif
       RemoveTexture(client_ids[ii]);
     }
   }
@@ -4177,6 +4171,16 @@ void GLES2DecoderImpl::SetWaitFenceSyncCallback(
   wait_fence_sync_callback_ = callback;
 }
 
+void GLES2DecoderImpl::SetDescheduleUntilFinishedCallback(
+    const NoParamCallback& callback) {
+  deschedule_until_finished_callback_ = callback;
+}
+
+void GLES2DecoderImpl::SetRescheduleAfterFinishedCallback(
+    const NoParamCallback& callback) {
+  reschedule_after_finished_callback_ = callback;
+}
+
 bool GLES2DecoderImpl::GetServiceTextureId(uint32_t client_texture_id,
                                            uint32_t* service_texture_id) {
   TextureRef* texture_ref = texture_manager()->GetTexture(client_texture_id);
@@ -4364,14 +4368,6 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
     context_->ReleaseCurrent(NULL);
     context_ = NULL;
   }
-
-#if defined(OS_MACOSX)
-  for (TextureToIOSurfaceMap::iterator it = texture_to_io_surface_map_.begin();
-       it != texture_to_io_surface_map_.end(); ++it) {
-    CFRelease(it->second);
-  }
-  texture_to_io_surface_map_.clear();
-#endif
 }
 
 void GLES2DecoderImpl::SetSurface(const scoped_refptr<gl::GLSurface>& surface) {
@@ -7429,7 +7425,7 @@ void GLES2DecoderImpl::DoRenderbufferStorage(
     // we could just mark those framebuffers as not complete.
     framebuffer_manager()->IncFramebufferStateChangeCount();
     renderbuffer_manager()->SetInfo(
-        renderbuffer, 1, internalformat, width, height);
+        renderbuffer, 0, internalformat, width, height);
   }
 }
 
@@ -9270,6 +9266,27 @@ void GLES2DecoderImpl::GetTexParameterImpl(
         return;
       }
       break;
+    // Get the level information from the texture to avoid a Mac driver
+    // bug where they store the levels in int16_t, making values bigger
+    // than 2^15-1 overflow in the negative range.
+    case GL_TEXTURE_BASE_LEVEL:
+      if (workarounds().use_shadowed_tex_level_params) {
+        if (fparams) {
+          fparams[0] = static_cast<GLfloat>(texture->base_level());
+        } else {
+          iparams[0] = texture->base_level();
+        }
+        return;
+      }
+    case GL_TEXTURE_MAX_LEVEL:
+      if (workarounds().use_shadowed_tex_level_params) {
+        if (fparams) {
+          fparams[0] = static_cast<GLfloat>(texture->max_level());
+        } else {
+          iparams[0] = texture->max_level();
+        }
+        return;
+      }
     default:
       break;
   }
@@ -13653,6 +13670,28 @@ bool GLES2DecoderImpl::CheckResetStatus() {
   return false;
 }
 
+error::Error GLES2DecoderImpl::HandleDescheduleUntilFinishedCHROMIUM(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  if (deschedule_until_finished_callback_.is_null() ||
+      reschedule_after_finished_callback_.is_null()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION,
+                       "glDescheduleUntilFinishedCHROMIUM",
+                       "Not fully implemented.");
+    return error::kNoError;
+  }
+
+  deschedule_until_finished_fence_.reset(gl::GLFence::Create());
+  DCHECK(deschedule_until_finished_fence_);
+  if (deschedule_until_finished_fence_->HasCompleted()) {
+    deschedule_until_finished_fence_.reset();
+    return error::kNoError;
+  }
+
+  deschedule_until_finished_callback_.Run();
+  return error::kDeferLaterCommands;
+}
+
 error::Error GLES2DecoderImpl::HandleInsertFenceSyncCHROMIUM(
     uint32_t immediate_data_size,
     const void* cmd_data) {
@@ -13779,14 +13818,27 @@ void GLES2DecoderImpl::ProcessPendingReadPixels(bool did_finish) {
   }
 }
 
+void GLES2DecoderImpl::ProcessDescheduleUntilFinished() {
+  if (!deschedule_until_finished_fence_)
+    return;
+
+  if (!deschedule_until_finished_fence_->HasCompleted())
+    return;
+
+  deschedule_until_finished_fence_.reset();
+  reschedule_after_finished_callback_.Run();
+}
+
 bool GLES2DecoderImpl::HasMoreIdleWork() const {
-  return !pending_readpixel_fences_.empty() ||
+  return deschedule_until_finished_fence_ ||
+         !pending_readpixel_fences_.empty() ||
          gpu_tracer_->HasTracesToProcess();
 }
 
 void GLES2DecoderImpl::PerformIdleWork() {
   gpu_tracer_->ProcessTraces();
   ProcessPendingReadPixels(false);
+  ProcessDescheduleUntilFinished();
 }
 
 error::Error GLES2DecoderImpl::HandleBeginQueryEXT(uint32_t immediate_data_size,
@@ -14059,104 +14111,6 @@ bool GLES2DecoderImpl::DoIsPathCHROMIUM(GLuint client_id) {
 bool GLES2DecoderImpl::DoIsSync(GLuint client_id) {
   GLsync service_sync = 0;
   return group_->GetSyncServiceId(client_id, &service_sync);
-}
-
-#if defined(OS_MACOSX)
-void GLES2DecoderImpl::ReleaseIOSurfaceForTexture(GLuint texture_id) {
-  TextureToIOSurfaceMap::iterator it = texture_to_io_surface_map_.find(
-      texture_id);
-  if (it != texture_to_io_surface_map_.end()) {
-    // Found a previous IOSurface bound to this texture; release it.
-    IOSurfaceRef surface = it->second;
-    CFRelease(surface);
-    texture_to_io_surface_map_.erase(it);
-  }
-}
-#endif
-
-void GLES2DecoderImpl::DoTexImageIOSurface2DCHROMIUM(
-    GLenum target, GLsizei width, GLsizei height,
-    GLuint io_surface_id, GLuint plane) {
-#if defined(OS_MACOSX)
-  if (gl::GetGLImplementation() != gl::kGLImplementationDesktopGL) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION,
-        "glTexImageIOSurface2DCHROMIUM", "only supported on desktop GL.");
-    return;
-  }
-
-  if (target != GL_TEXTURE_RECTANGLE_ARB) {
-    // This might be supported in the future, and if we could require
-    // support for binding an IOSurface to a NPOT TEXTURE_2D texture, we
-    // could delete a lot of code. For now, perform strict validation so we
-    // know what's going on.
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION,
-        "glTexImageIOSurface2DCHROMIUM",
-        "requires TEXTURE_RECTANGLE_ARB target");
-    return;
-  }
-
-  // Default target might be conceptually valid, but disallow it to avoid
-  // accidents.
-  TextureRef* texture_ref =
-      texture_manager()->GetTextureInfoForTargetUnlessDefault(&state_, target);
-  if (!texture_ref) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION,
-        "glTexImageIOSurface2DCHROMIUM", "no rectangle texture bound");
-    return;
-  }
-
-  // Look up the new IOSurface. Note that because of asynchrony
-  // between processes this might fail; during live resizing the
-  // plugin process might allocate and release an IOSurface before
-  // this process gets a chance to look it up. Hold on to any old
-  // IOSurface in this case.
-  IOSurfaceRef surface = IOSurfaceLookup(io_surface_id);
-  if (!surface) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION,
-        "glTexImageIOSurface2DCHROMIUM", "no IOSurface with the given ID");
-    return;
-  }
-
-  // Release any IOSurface previously bound to this texture.
-  ReleaseIOSurfaceForTexture(texture_ref->service_id());
-
-  // Make sure we release the IOSurface even if CGLTexImageIOSurface2D fails.
-  texture_to_io_surface_map_.insert(
-      std::make_pair(texture_ref->service_id(), surface));
-
-  CGLContextObj context =
-      static_cast<CGLContextObj>(context_->GetHandle());
-
-  CGLError err = CGLTexImageIOSurface2D(
-      context,
-      target,
-      GL_RGBA,
-      width,
-      height,
-      GL_BGRA,
-      GL_UNSIGNED_INT_8_8_8_8_REV,
-      surface,
-      plane);
-
-  if (err != kCGLNoError) {
-    LOCAL_SET_GL_ERROR(
-        GL_INVALID_OPERATION,
-        "glTexImageIOSurface2DCHROMIUM", "error in CGLTexImageIOSurface2D");
-    return;
-  }
-
-  texture_manager()->SetLevelInfo(
-      texture_ref, target, 0, GL_RGBA, width, height, 1, 0, GL_BGRA,
-      GL_UNSIGNED_INT_8_8_8_8_REV, gfx::Rect(width, height));
-
-#else
-  LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION,
-             "glTexImageIOSurface2DCHROMIUM", "not supported.");
-#endif
 }
 
 bool GLES2DecoderImpl::ValidateCopyTextureCHROMIUMTextures(
@@ -15555,6 +15509,11 @@ error::Error GLES2DecoderImpl::HandleMapBufferRange(
     return error::kOutOfBounds;
   }
 
+  if (!validators_->buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glMapBufferRange", target, "target");
+    return error::kNoError;
+  }
+
   GLbitfield mask = GL_MAP_INVALIDATE_BUFFER_BIT;
   if ((access & mask) == mask) {
     // TODO(zmo): To be on the safe side, always map
@@ -15598,6 +15557,11 @@ error::Error GLES2DecoderImpl::HandleUnmapBuffer(
   const gles2::cmds::UnmapBuffer& c =
       *static_cast<const gles2::cmds::UnmapBuffer*>(cmd_data);
   GLenum target = static_cast<GLenum>(c.target);
+
+  if (!validators_->buffer_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glMapBufferRange", target, "target");
+    return error::kNoError;
+  }
 
   Buffer* buffer = buffer_manager()->GetBufferInfoForTarget(&state_, target);
   if (!buffer) {

@@ -1321,6 +1321,9 @@ void GL_APIENTRY GLES2GetImageivCHROMIUM(GLuint image_id,
                                          GLint* data) {
   gles2::GetGLContext()->GetImageivCHROMIUM(image_id, param, data);
 }
+void GL_APIENTRY GLES2DescheduleUntilFinishedCHROMIUM() {
+  gles2::GetGLContext()->DescheduleUntilFinishedCHROMIUM();
+}
 void GL_APIENTRY GLES2GetTranslatedShaderSourceANGLE(GLuint shader,
                                                      GLsizei bufsize,
                                                      GLsizei* length,
@@ -1333,14 +1336,6 @@ void GL_APIENTRY GLES2PostSubBufferCHROMIUM(GLint x,
                                             GLint width,
                                             GLint height) {
   gles2::GetGLContext()->PostSubBufferCHROMIUM(x, y, width, height);
-}
-void GL_APIENTRY GLES2TexImageIOSurface2DCHROMIUM(GLenum target,
-                                                  GLsizei width,
-                                                  GLsizei height,
-                                                  GLuint ioSurfaceId,
-                                                  GLuint plane) {
-  gles2::GetGLContext()->TexImageIOSurface2DCHROMIUM(target, width, height,
-                                                     ioSurfaceId, plane);
 }
 void GL_APIENTRY GLES2CopyTextureCHROMIUM(GLenum source_id,
                                           GLenum dest_id,
@@ -2710,6 +2705,11 @@ extern const NameToFunc g_gles2_function_table[] = {
         reinterpret_cast<GLES2FunctionPointer>(glGetImageivCHROMIUM),
     },
     {
+        "glDescheduleUntilFinishedCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glDescheduleUntilFinishedCHROMIUM),
+    },
+    {
         "glGetTranslatedShaderSourceANGLE",
         reinterpret_cast<GLES2FunctionPointer>(
             glGetTranslatedShaderSourceANGLE),
@@ -2717,10 +2717,6 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glPostSubBufferCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glPostSubBufferCHROMIUM),
-    },
-    {
-        "glTexImageIOSurface2DCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glTexImageIOSurface2DCHROMIUM),
     },
     {
         "glCopyTextureCHROMIUM",

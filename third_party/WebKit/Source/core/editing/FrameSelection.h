@@ -104,7 +104,7 @@ public:
 
     void moveTo(const VisiblePosition&, EUserTriggered = NotUserTriggered, CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded);
     void moveTo(const VisiblePosition&, const VisiblePosition&, EUserTriggered = NotUserTriggered);
-    void moveTo(const Position&, TextAffinity, EUserTriggered = NotUserTriggered);
+    void moveTo(const Position&, TextAffinity);
 
     template <typename Strategy>
     const VisibleSelectionTemplate<Strategy>& visibleSelection() const;
@@ -115,7 +115,6 @@ public:
     // TODO(yosin) We should get rid of two parameters version of
     // |setSelection()| to avoid conflict of four parameters version.
     void setSelection(const VisibleSelection& selection, TextGranularity granularity) { setSelection(selection, CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded, granularity); }
-    void setSelection(const VisibleSelectionInFlatTree& selection, TextGranularity granularity) { setSelection(selection, CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded, granularity); }
     // TODO(yosin) We should get rid of |Range| version of |setSelectedRagne()|
     // for Oilpan.
     bool setSelectedRange(Range*, TextAffinity, SelectionDirectionalMode = SelectionDirectionalMode::NonDirectional, SetSelectionOptions = CloseTyping | ClearTypingStyle);
@@ -206,7 +205,6 @@ public:
 #endif
 
     enum EndPointsAdjustmentMode { AdjustEndpointsAtBidiBoundary, DoNotAdjsutEndpoints };
-    void setNonDirectionalSelectionIfNeeded(const VisibleSelection&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
     void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&, TextGranularity, EndPointsAdjustmentMode = DoNotAdjsutEndpoints);
     void setFocusedNodeIfNeeded();
     void notifyLayoutObjectOfSelectionChange(EUserTriggered);
