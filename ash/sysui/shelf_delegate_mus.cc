@@ -21,14 +21,13 @@
 #include "components/mus/public/cpp/window_property.h"
 #include "mojo/common/common_type_converters.h"
 #include "services/shell/public/cpp/connector.h"
-#include "skia/public/type_converters.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/mus/window_manager_connection.h"
 
-using mash::wm::mojom::UserWindowController;
+using ash::mojom::UserWindowController;
 
 namespace ash {
 namespace sysui {
@@ -286,14 +285,13 @@ void ShelfDelegateMus::AddObserver(
 
 void ShelfDelegateMus::SetAlignment(mash::shelf::mojom::Alignment alignment) {
   wm::ShelfAlignment value = static_cast<wm::ShelfAlignment>(alignment);
-  Shell::GetInstance()->SetShelfAlignment(value, Shell::GetPrimaryRootWindow());
+  Shelf::ForPrimaryDisplay()->SetAlignment(value);
 }
 
 void ShelfDelegateMus::SetAutoHideBehavior(
     mash::shelf::mojom::AutoHideBehavior auto_hide) {
   ShelfAutoHideBehavior value = static_cast<ShelfAutoHideBehavior>(auto_hide);
-  Shell::GetInstance()->SetShelfAutoHideBehavior(value,
-                                                 Shell::GetPrimaryRootWindow());
+  Shelf::ForPrimaryDisplay()->SetAutoHideBehavior(value);
 }
 
 void ShelfDelegateMus::PinItem(
@@ -315,7 +313,7 @@ void ShelfDelegateMus::PinItem(
   ShelfItem shelf_item;
   shelf_item.type = TYPE_APP_SHORTCUT;
   shelf_item.status = STATUS_CLOSED;
-  shelf_item.image = GetShelfIconFromBitmap(item->image.To<SkBitmap>());
+  shelf_item.image = GetShelfIconFromBitmap(item->image);
   model_->Add(shelf_item);
 
   std::unique_ptr<ShelfItemDelegateMus> item_delegate(
@@ -342,25 +340,24 @@ void ShelfDelegateMus::UnpinItem(const mojo::String& app_id) {
 }
 
 void ShelfDelegateMus::SetItemImage(const mojo::String& app_id,
-                                    skia::mojom::BitmapPtr image) {
+                                    const SkBitmap& image) {
   if (!app_id_to_shelf_id_.count(app_id.To<std::string>()))
     return;
   ShelfID shelf_id = app_id_to_shelf_id_[app_id.To<std::string>()];
   int index = model_->ItemIndexByID(shelf_id);
   DCHECK_GE(index, 0);
   ShelfItem item = *model_->ItemByID(shelf_id);
-  item.image = GetShelfIconFromBitmap(image.To<SkBitmap>());
+  item.image = GetShelfIconFromBitmap(image);
   model_->Set(index, item);
 }
 
 void ShelfDelegateMus::OnUserWindowObserverAdded(
-    mojo::Array<mash::wm::mojom::UserWindowPtr> user_windows) {
+    mojo::Array<mojom::UserWindowPtr> user_windows) {
   for (size_t i = 0; i < user_windows.size(); ++i)
     OnUserWindowAdded(std::move(user_windows[i]));
 }
 
-void ShelfDelegateMus::OnUserWindowAdded(
-    mash::wm::mojom::UserWindowPtr user_window) {
+void ShelfDelegateMus::OnUserWindowAdded(mojom::UserWindowPtr user_window) {
   DCHECK(!window_id_to_shelf_id_.count(user_window->window_id));
 
   if (user_window->ignored_by_shelf)

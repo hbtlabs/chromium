@@ -43,6 +43,7 @@ void JniClient::ConnectToHost(const std::string& username,
   session_ = new ChromotingJniInstance(
       runtime(), this, username, auth_token, host_jid, host_id, host_pubkey,
       pairing_id, pairing_secret, capabilities, flags);
+  session_->Connect();
 }
 
 void JniClient::DisconnectFromHost() {

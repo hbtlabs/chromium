@@ -20,7 +20,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkXfermode.h"
-#include "ui/gfx/mojo/transform_type_converters.h"
 
 using mus::mojom::Color;
 using mus::mojom::ColorPtr;
@@ -36,9 +35,6 @@ using mus::mojom::Quad;
 using mus::mojom::QuadPtr;
 using mus::mojom::RenderPassQuadState;
 using mus::mojom::RenderPassQuadStatePtr;
-using mus::mojom::ResourceFormat;
-using mus::mojom::ReturnedResource;
-using mus::mojom::ReturnedResourcePtr;
 using mus::mojom::SharedQuadState;
 using mus::mojom::SharedQuadStatePtr;
 using mus::mojom::SolidColorQuadState;
@@ -49,8 +45,6 @@ using mus::mojom::TextureQuadState;
 using mus::mojom::TextureQuadStatePtr;
 using mus::mojom::TileQuadState;
 using mus::mojom::TileQuadStatePtr;
-using mus::mojom::TransferableResource;
-using mus::mojom::TransferableResourcePtr;
 using mus::mojom::YUVColorSpace;
 using mus::mojom::YUVVideoQuadState;
 using mus::mojom::YUVVideoQuadStatePtr;
@@ -217,8 +211,7 @@ TEST(SurfaceLibTest, SharedQuadState) {
 
   SharedQuadStatePtr mus_sqs = SharedQuadState::From(*sqs);
   ASSERT_FALSE(mus_sqs.is_null());
-  EXPECT_TRUE(Transform::From(quad_to_target_transform)
-                  .Equals(mus_sqs->quad_to_target_transform));
+  EXPECT_EQ(quad_to_target_transform, mus_sqs->quad_to_target_transform);
   EXPECT_EQ(quad_layer_bounds, mus_sqs->quad_layer_bounds);
   EXPECT_EQ(visible_quad_layer_rect, mus_sqs->visible_quad_layer_rect);
   EXPECT_EQ(clip_rect, mus_sqs->clip_rect);
@@ -300,8 +293,7 @@ TEST(SurfaceLibTest, RenderPass) {
   EXPECT_EQ(6u, mus_pass->id.index);
   EXPECT_EQ(output_rect, mus_pass->output_rect);
   EXPECT_EQ(damage_rect, mus_pass->damage_rect);
-  EXPECT_TRUE(Transform::From(transform_to_root_target)
-                  .Equals(mus_pass->transform_to_root_target));
+  EXPECT_EQ(transform_to_root_target, mus_pass->transform_to_root_target);
   EXPECT_EQ(has_transparent_background, mus_pass->has_transparent_background);
   ASSERT_EQ(1u, mus_pass->shared_quad_states.size());
   ASSERT_EQ(3u, mus_pass->quads.size());
@@ -367,69 +359,6 @@ TEST(SurfaceLibTest, RenderPass) {
   }
   EXPECT_EQ(y_flipped, round_trip_texture_quad->y_flipped);
   EXPECT_EQ(secure_output_only, round_trip_texture_quad->secure_output_only);
-}
-
-TEST(SurfaceLibTest, TransferableResource) {
-  uint32_t id = 7u;
-  cc::ResourceFormat format = cc::BGRA_8888;
-  uint32_t filter = 123u;
-  gfx::Size size(17, 18);
-  gpu::MailboxHolder mailbox_holder;
-  bool is_software = false;
-  cc::TransferableResource resource;
-  resource.id = id;
-  resource.format = format;
-  resource.filter = filter;
-  resource.size = size;
-  resource.mailbox_holder = mailbox_holder;
-  resource.is_software = is_software;
-
-  TransferableResourcePtr mus_resource = TransferableResource::From(resource);
-  EXPECT_EQ(id, mus_resource->id);
-  EXPECT_EQ(static_cast<ResourceFormat>(format), mus_resource->format);
-  EXPECT_EQ(filter, mus_resource->filter);
-  EXPECT_EQ(size, mus_resource->size);
-  EXPECT_EQ(is_software, mus_resource->is_software);
-
-  cc::TransferableResource round_trip_resource =
-      mus_resource.To<cc::TransferableResource>();
-  EXPECT_EQ(id, round_trip_resource.id);
-  EXPECT_EQ(format, round_trip_resource.format);
-  EXPECT_EQ(filter, round_trip_resource.filter);
-  EXPECT_EQ(size, round_trip_resource.size);
-  EXPECT_EQ(mailbox_holder.mailbox, round_trip_resource.mailbox_holder.mailbox);
-  EXPECT_EQ(mailbox_holder.texture_target,
-            round_trip_resource.mailbox_holder.texture_target);
-  EXPECT_EQ(mailbox_holder.sync_token,
-            round_trip_resource.mailbox_holder.sync_token);
-  EXPECT_EQ(is_software, round_trip_resource.is_software);
-}
-
-TEST(SurfaceLibTest, ReturnedResource) {
-  uint32_t id = 5u;
-  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
-                            gpu::CommandBufferId::FromUnsafeValue(1), 24u);
-  sync_token.SetVerifyFlush();
-  int count = 2;
-  bool lost = false;
-  cc::ReturnedResource resource;
-  resource.id = id;
-  resource.sync_token = sync_token;
-  resource.count = count;
-  resource.lost = lost;
-
-  ReturnedResourcePtr mus_resource = ReturnedResource::From(resource);
-  EXPECT_EQ(id, mus_resource->id);
-  EXPECT_EQ(sync_token, mus_resource->sync_token);
-  EXPECT_EQ(count, mus_resource->count);
-  EXPECT_EQ(lost, mus_resource->lost);
-
-  cc::ReturnedResource round_trip_resource =
-      mus_resource.To<cc::ReturnedResource>();
-  EXPECT_EQ(id, round_trip_resource.id);
-  EXPECT_EQ(sync_token, round_trip_resource.sync_token);
-  EXPECT_EQ(count, round_trip_resource.count);
-  EXPECT_EQ(lost, round_trip_resource.lost);
 }
 
 TEST_F(SurfaceLibQuadTest, DebugBorderQuad) {

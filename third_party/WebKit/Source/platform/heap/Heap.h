@@ -277,11 +277,22 @@ public:
     {
         static_assert(IsGarbageCollectedType<T>::value, "only objects deriving from GarbageCollected can be used.");
         BasePage* page = pageFromObject(objectPointer);
+        // Page has been swept and it is still alive.
         if (page->hasBeenSwept())
             return false;
         ASSERT(page->arena()->getThreadState()->isSweepingInProgress());
 
-        return !ThreadHeap::isHeapObjectAlive(const_cast<T*>(objectPointer));
+        // If marked and alive, the object hasn't yet been swept..and won't
+        // be once its page is processed.
+        if (ThreadHeap::isHeapObjectAlive(const_cast<T*>(objectPointer)))
+            return false;
+
+        if (page->isLargeObjectPage())
+            return true;
+
+        // If the object is unmarked, it may be on the page currently being
+        // lazily swept.
+        return page->arena()->willObjectBeLazilySwept(page, const_cast<T*>(objectPointer));
     }
 
     // Push a trace callback on the marking stack.
@@ -574,18 +585,29 @@ Address ThreadHeap::reallocate(void* previous, size_t size)
     HeapObjectHeader* previousHeader = HeapObjectHeader::fromPayload(previous);
     BasePage* page = pageFromObject(previousHeader);
     ASSERT(page);
-    int arenaIndex = page->arena()->arenaIndex();
-    // Recompute the effective heap index if previous allocation
-    // was on the normal arenas or a large object.
-    if (isNormalArenaIndex(arenaIndex) || arenaIndex == BlinkGC::LargeObjectArenaIndex)
-        arenaIndex = arenaIndexForObjectSize(size);
 
+    // Determine arena index of new allocation.
+    int arenaIndex;
+    if (size >= largeObjectSizeThreshold) {
+        arenaIndex = BlinkGC::LargeObjectArenaIndex;
+    } else {
+        arenaIndex = page->arena()->arenaIndex();
+        if (isNormalArenaIndex(arenaIndex) || arenaIndex == BlinkGC::LargeObjectArenaIndex)
+            arenaIndex = arenaIndexForObjectSize(size);
+    }
+
+    size_t gcInfoIndex = GCInfoTrait<T>::index();
     // TODO(haraken): We don't support reallocate() for finalizable objects.
     ASSERT(!ThreadHeap::gcInfo(previousHeader->gcInfoIndex())->hasFinalizer());
-    ASSERT(previousHeader->gcInfoIndex() == GCInfoTrait<T>::index());
-    const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
+    ASSERT(previousHeader->gcInfoIndex() == gcInfoIndex);
     HeapAllocHooks::freeHookIfEnabled(static_cast<Address>(previous));
-    Address address = ThreadHeap::allocateOnArenaIndex(state, size, arenaIndex, GCInfoTrait<T>::index(), typeName);
+    Address address;
+    if (arenaIndex == BlinkGC::LargeObjectArenaIndex) {
+        address = page->arena()->allocateLargeObject(allocationSizeFromSize(size), gcInfoIndex);
+    } else {
+        const char* typeName = WTF_HEAP_PROFILER_TYPE_NAME(T);
+        address = ThreadHeap::allocateOnArenaIndex(state, size, arenaIndex, gcInfoIndex, typeName);
+    }
     size_t copySize = previousHeader->payloadSize();
     if (copySize > size)
         copySize = size;

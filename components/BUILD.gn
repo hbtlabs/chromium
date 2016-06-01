@@ -284,9 +284,7 @@ test("components_unittests") {
   }
 
   if (toolkit_views) {
-    # TODO bug 522654 Enable this when the undefined symbol is fixed in
-    # web_modal such that this links.
-    #deps += [ "//components/constrained_window:unit_tests" ]
+    deps += [ "//components/constrained_window:unit_tests" ]
   }
 
   if (is_win) {
@@ -385,7 +383,7 @@ if (!is_ios) {
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "password_manager/content/renderer/credential_manager_client_browsertest.cc",
-      "tracing/child_trace_message_filter_browsertest.cc",
+      "tracing/child/child_trace_message_filter_browsertest.cc",
     ]
 
     data = [

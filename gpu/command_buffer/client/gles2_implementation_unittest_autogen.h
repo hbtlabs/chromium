@@ -2690,14 +2690,14 @@ TEST_F(GLES2ImplementationTest, ResizeCHROMIUM) {
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
-TEST_F(GLES2ImplementationTest, TexImageIOSurface2DCHROMIUM) {
+TEST_F(GLES2ImplementationTest, DescheduleUntilFinishedCHROMIUM) {
   struct Cmds {
-    cmds::TexImageIOSurface2DCHROMIUM cmd;
+    cmds::DescheduleUntilFinishedCHROMIUM cmd;
   };
   Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, 2, 3, 4, 5);
+  expected.cmd.Init();
 
-  gl_->TexImageIOSurface2DCHROMIUM(GL_TEXTURE_2D, 2, 3, 4, 5);
+  gl_->DescheduleUntilFinishedCHROMIUM();
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 

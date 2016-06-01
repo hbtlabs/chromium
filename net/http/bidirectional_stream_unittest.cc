@@ -580,7 +580,12 @@ TEST_F(BidirectionalStreamTest, TestNetLogContainEntries) {
   net_log_.GetEntries(&entries);
   size_t index = ExpectLogContainsSomewhere(
       entries, 0, NetLog::TYPE_BIDIRECTIONAL_STREAM_ALIVE, NetLog::PHASE_BEGIN);
-  // Headers received should happen after BIDIRECTIONAL_STREAM_ALIVE.
+  // HTTP_STREAM_REQUEST is nested inside in BIDIRECTIONAL_STREAM_ALIVE.
+  index = ExpectLogContainsSomewhere(
+      entries, index, NetLog::TYPE_HTTP_STREAM_REQUEST, NetLog::PHASE_BEGIN);
+  index = ExpectLogContainsSomewhere(
+      entries, index, NetLog::TYPE_HTTP_STREAM_REQUEST, NetLog::PHASE_END);
+  // Headers received should happen after HTTP_STREAM_REQUEST.
   index = ExpectLogContainsSomewhere(
       entries, index, NetLog::TYPE_BIDIRECTIONAL_STREAM_RECV_HEADERS,
       NetLog::PHASE_NONE);
@@ -919,6 +924,8 @@ TEST_F(BidirectionalStreamTest, TestBuffering) {
   // Deliver last DATA frame and EOF. There will be an additional
   // Delegate::OnReadComplete callback.
   sequenced_data_->Resume();
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(2, delegate->on_data_read_count());
   EXPECT_EQ(kUploadDataSize * 3,
             static_cast<int>(delegate->data_received().size()));
@@ -1000,6 +1007,8 @@ TEST_F(BidirectionalStreamTest, TestBufferingWithTrailers) {
   // called right after OnTrailersReceived. The three DATA frames should be
   // delivered in a single OnReadCompleted callback.
   sequenced_data_->Resume();
+  base::RunLoop().RunUntilIdle();
+
   EXPECT_EQ(1, delegate->on_data_read_count());
   EXPECT_EQ(kUploadDataSize * 3,
             static_cast<int>(delegate->data_received().size()));

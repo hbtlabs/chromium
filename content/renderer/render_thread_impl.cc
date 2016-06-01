@@ -65,6 +65,7 @@
 #include "content/child/runtime_features.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_database_observer_impl.h"
+#include "content/child/websocket_message_filter.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
@@ -90,6 +91,7 @@
 #include "content/renderer/browser_plugin/browser_plugin_manager.h"
 #include "content/renderer/cache_storage/cache_storage_dispatcher.h"
 #include "content/renderer/cache_storage/cache_storage_message_filter.h"
+#include "content/renderer/categorized_worker_pool.h"
 #include "content/renderer/devtools/devtools_agent_filter.h"
 #include "content/renderer/devtools/v8_sampling_profiler.h"
 #include "content/renderer/dom_storage/dom_storage_dispatcher.h"
@@ -113,7 +115,6 @@
 #include "content/renderer/media/video_capture_message_filter.h"
 #include "content/renderer/net_info_helper.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
-#include "content/renderer/raster_worker_pool.h"
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_process_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -581,9 +582,11 @@ RenderThreadImpl::RenderThreadImpl(
     std::unique_ptr<scheduler::RendererScheduler> scheduler,
     scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue)
     : ChildThreadImpl(Options::Builder()
-          .InBrowserProcess(params).UseMojoChannel(true).Build()),
+                          .InBrowserProcess(params)
+                          .UseMojoChannel(true)
+                          .Build()),
       renderer_scheduler_(std::move(scheduler)),
-      raster_worker_pool_(new RasterWorkerPool()) {
+      categorized_worker_pool_(new CategorizedWorkerPool()) {
   Init(resource_task_queue);
 }
 
@@ -595,7 +598,7 @@ RenderThreadImpl::RenderThreadImpl(
     : ChildThreadImpl(Options::Builder().UseMojoChannel(true).Build()),
       renderer_scheduler_(std::move(scheduler)),
       main_message_loop_(std::move(main_message_loop)),
-      raster_worker_pool_(new RasterWorkerPool()) {
+      categorized_worker_pool_(new CategorizedWorkerPool()) {
   scoped_refptr<base::SingleThreadTaskRunner> test_task_counter;
   Init(test_task_counter);
 }
@@ -796,7 +799,7 @@ void RenderThreadImpl::Init(
   // image decode tasks.
   are_image_decode_tasks_enabled_ = true;
 
-  raster_worker_pool_->Start(num_raster_threads);
+  categorized_worker_pool_->Start(num_raster_threads);
 
   // TODO(boliu): In single process, browser main loop should set up the
   // discardable memory manager, and should skip this if kSingleProcess.
@@ -892,7 +895,7 @@ void RenderThreadImpl::Shutdown() {
   RemoveFilter(audio_message_filter_.get());
   audio_message_filter_ = NULL;
 
-  raster_worker_pool_->Shutdown();
+  categorized_worker_pool_->Shutdown();
 
   main_input_callback_.Cancel();
   input_handler_manager_.reset();
@@ -1179,6 +1182,9 @@ void RenderThreadImpl::InitializeWebKit(
   child_resource_message_filter()->SetMainThreadTaskRunner(
       resource_task_queue2);
   resource_dispatcher()->SetMainThreadTaskRunner(resource_task_queue2);
+
+  websocket_message_filter()->SetLoadingTaskRunner(
+      renderer_scheduler_->LoadingTaskRunner());
 
   if (!command_line.HasSwitch(switches::kDisableThreadedCompositing) &&
       !command_line.HasSwitch(switches::kUseRemoteCompositing))
@@ -1612,7 +1618,7 @@ RenderThreadImpl::GetImageSerializationProcessor() {
 }
 
 cc::TaskGraphRunner* RenderThreadImpl::GetTaskGraphRunner() {
-  return raster_worker_pool_->GetTaskGraphRunner();
+  return categorized_worker_pool_->GetTaskGraphRunner();
 }
 
 bool RenderThreadImpl::AreImageDecodeTasksEnabled() {
@@ -1941,7 +1947,7 @@ RenderThreadImpl::GetMediaThreadTaskRunner() {
 }
 
 base::TaskRunner* RenderThreadImpl::GetWorkerTaskRunner() {
-  return raster_worker_pool_.get();
+  return categorized_worker_pool_.get();
 }
 
 scoped_refptr<ContextProviderCommandBuffer>

@@ -4380,25 +4380,25 @@ bool Document::parseQualifiedName(const AtomicString& qualifiedName, AtomicStrin
         return true;
 
     StringBuilder message;
-    message.appendLiteral("The qualified name provided ('");
+    message.append("The qualified name provided ('");
     message.append(qualifiedName);
-    message.appendLiteral("') ");
+    message.append("') ");
 
     if (returnValue.status == QNMultipleColons) {
-        message.appendLiteral("contains multiple colons.");
+        message.append("contains multiple colons.");
     } else if (returnValue.status == QNInvalidStartChar) {
-        message.appendLiteral("contains the invalid name-start character '");
+        message.append("contains the invalid name-start character '");
         message.append(returnValue.character);
-        message.appendLiteral("'.");
+        message.append("'.");
     } else if (returnValue.status == QNInvalidChar) {
-        message.appendLiteral("contains the invalid character '");
+        message.append("contains the invalid character '");
         message.append(returnValue.character);
-        message.appendLiteral("'.");
+        message.append("'.");
     } else if (returnValue.status == QNEmptyPrefix) {
-        message.appendLiteral("has an empty namespace prefix.");
+        message.append("has an empty namespace prefix.");
     } else {
         DCHECK_EQ(returnValue.status, QNEmptyLocalName);
-        message.appendLiteral("has an empty local name.");
+        message.append("has an empty local name.");
     }
 
     if (returnValue.status == QNInvalidStartChar || returnValue.status == QNInvalidChar)
@@ -5225,14 +5225,15 @@ void Document::addConsoleMessage(ConsoleMessage* consoleMessage)
     if (!m_frame)
         return;
 
-    if (!consoleMessage->messageId() && !consoleMessage->relatedMessageId() && consoleMessage->url().isNull() && !consoleMessage->lineNumber()) {
+    if (!consoleMessage->messageId() && !consoleMessage->relatedMessageId() && consoleMessage->location()->isUnknown()) {
+        // TODO(dgozman): capture correct location at call places instead.
         unsigned lineNumber = 0;
         if (!isInDocumentWrite() && scriptableDocumentParser()) {
             ScriptableDocumentParser* parser = scriptableDocumentParser();
             if (parser->isParsingAtLineNumber())
                 lineNumber = parser->lineNumber().oneBasedInt();
         }
-        consoleMessage = ConsoleMessage::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), url().getString(), lineNumber, 0, consoleMessage->stackTrace() ? consoleMessage->stackTrace()->clone() : nullptr, 0, consoleMessage->scriptArguments());
+        consoleMessage = ConsoleMessage::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), SourceLocation::create(url().getString(), lineNumber, 0, nullptr), consoleMessage->scriptArguments());
     }
     m_frame->console().addMessage(consoleMessage);
 }

@@ -483,6 +483,10 @@ interface CSSPageRule : CSSRule
     getter style
     method constructor
     setter selectorText
+interface CSSPerspective : TransformComponent
+    attribute @@toStringTag
+    getter length
+    method constructor
 interface CSSPositionValue : StyleValue
     attribute @@toStringTag
     getter x
@@ -522,12 +526,23 @@ interface CSSRuleList
     method @@iterator
     method constructor
     method item
+interface CSSScale : TransformComponent
+    attribute @@toStringTag
+    getter x
+    getter y
+    getter z
+    method constructor
 interface CSSSimpleLength : CSSLengthValue
     attribute @@toStringTag
     getter type
     getter value
     method constructor
     setter value
+interface CSSSkew : TransformComponent
+    attribute @@toStringTag
+    getter ax
+    getter ay
+    method constructor
 interface CSSStyleDeclaration
     attribute @@toStringTag
     getter cssFloat
@@ -1567,19 +1582,19 @@ interface Event
     getter bubbles
     getter cancelBubble
     getter cancelable
+    getter composed
     getter currentTarget
     getter defaultPrevented
     getter eventPhase
     getter path
     getter relatedTargetScoped
     getter returnValue
-    getter scoped
     getter srcElement
     getter target
     getter timeStamp
     getter type
+    method composedPath
     method constructor
-    method deepPath
     method initEvent
     method preventDefault
     method stopImmediatePropagation
@@ -3444,6 +3459,7 @@ interface InputEvent : UIEvent
     getter inputType
     getter isComposing
     method constructor
+    method getRanges
 interface IntersectionObserver
     attribute @@toStringTag
     getter root
@@ -4307,10 +4323,6 @@ interface Permissions
     method request
     method requestAll
     method revoke
-interface Perspective : TransformComponent
-    attribute @@toStringTag
-    getter length
-    method constructor
 interface PhotoCapabilities
     attribute @@toStringTag
     getter zoom
@@ -5648,12 +5660,6 @@ interface SVGZoomEvent : UIEvent
     getter previousTranslate
     getter zoomRectScreen
     method constructor
-interface Scale : TransformComponent
-    attribute @@toStringTag
-    getter x
-    getter y
-    getter z
-    method constructor
 interface Screen
     attribute @@toStringTag
     getter availHeight
@@ -5725,6 +5731,30 @@ interface Selection
     method setBaseAndExtent
     method setPosition
     method toString
+interface Sensor : EventTarget
+    attribute @@toStringTag
+    getter onchange
+    getter onerror
+    getter onstatechange
+    getter reading
+    getter state
+    method constructor
+    method start
+    method stop
+    setter onchange
+    setter onerror
+    setter onstatechange
+interface SensorErrorEvent : ErrorEvent
+    attribute @@toStringTag
+    method constructor
+interface SensorReading
+    attribute @@toStringTag
+    getter timeStamp
+    method constructor
+interface SensorReadingEvent : Event
+    attribute @@toStringTag
+    getter reading
+    method constructor
 interface ServiceWorker : EventTarget
     attribute @@toStringTag
     getter onerror
@@ -5805,11 +5835,6 @@ interface SiteBoundCredential : Credential
     attribute @@toStringTag
     getter iconURL
     getter name
-    method constructor
-interface Skew : TransformComponent
-    attribute @@toStringTag
-    getter ax
-    getter ay
     method constructor
 interface SourceBuffer : EventTarget
     attribute @@toStringTag

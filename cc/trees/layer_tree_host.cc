@@ -476,7 +476,7 @@ void LayerTreeHost::FinishCommitOnImplThread(LayerTreeHostImpl* host_impl) {
       sync_tree->MoveChangeTrackingToLayers();
   }
   // Setting property trees must happen before pushing the page scale.
-  sync_tree->SetPropertyTrees(property_trees_);
+  sync_tree->SetPropertyTrees(&property_trees_);
 
   sync_tree->PushPageScaleFromMainThread(
       page_scale_factor_, min_page_scale_factor_, max_page_scale_factor_);
@@ -1266,6 +1266,11 @@ void LayerTreeHost::set_surface_id_namespace(uint32_t id_namespace) {
 
 SurfaceSequence LayerTreeHost::CreateSurfaceSequence() {
   return SurfaceSequence(surface_id_namespace_, next_surface_sequence_++);
+}
+
+void LayerTreeHost::SetLayerTreeMutator(
+    std::unique_ptr<LayerTreeMutator> mutator) {
+  proxy_->SetMutator(std::move(mutator));
 }
 
 Layer* LayerTreeHost::LayerById(int id) const {

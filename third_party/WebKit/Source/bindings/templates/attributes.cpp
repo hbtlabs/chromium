@@ -1,4 +1,4 @@
-{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value, check_origin_trial %}
+{% from 'utilities.cpp' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
 
 {##############################################################################}
 {% macro attribute_getter(attribute, world_suffix) %}
@@ -9,9 +9,6 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %})
 {
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
-    {% endif %}
     {% if attribute.is_reflect and not attribute.is_url
           and attribute.idl_type == 'DOMString' and is_node
           and not attribute.is_implemented_in_private_script %}
@@ -28,9 +25,15 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
     {# impl #}
     {% if attribute.is_save_same_object %}
-    v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "sameobject_{{attribute.name}}");
+    {% set same_object_private_symbol = 'SameObject' + interface_name + attribute.name[0]|capitalize + attribute.name[1:] %}
+    // If you see a compile error that
+    //   V8PrivateProperty::get{{same_object_private_symbol}}
+    // is not defined, then you need to register your attribute at
+    // V8_PRIVATE_PROPERTY_FOR_EACH defined in V8PrivateProperty.h as
+    //   X(SameObject, {{interface_name}}{{attribute.name[0]|capitalize}}{{attribute.name[1:]}})
+    auto privateSameObject = V8PrivateProperty::getSameObject{{interface_name}}{{attribute.name[0]|capitalize}}{{attribute.name[1:]}}(info.GetIsolate());
     {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
+        v8::Local<v8::Value> v8Value = privateSameObject.get(info.GetIsolate()->GetCurrentContext(), holder);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
@@ -134,7 +137,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {{attribute.v8_set_return_value}};
     {% endif %}
     {% if attribute.is_save_same_object %}
-    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, info.GetReturnValue().Get());
+    privateSameObject.set(info.GetIsolate()->GetCurrentContext(), holder, info.GetReturnValue().Get());
     {% endif %}
 }
 {% endmacro %}
@@ -189,9 +192,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('AttributeGetter')}});
     {% endif %}
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
-    {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
     ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
     V8PerContextData* contextData = scriptState->perContextData();
@@ -220,9 +220,6 @@ static void {{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Loca
     {% endif %}
     {% if attribute.measure_as %}
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('ConstructorGetter')}});
-    {% endif %}
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute) | indent}}
     {% endif %}
     v8ConstructorAttributeGetter(property, info);
 }
@@ -423,9 +420,6 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeGetter(LocalFrame* 
     if (holder.IsEmpty())
         return false;
 
-    {% if attribute.origin_trial_enabled_function %}
-    {{check_origin_trial(attribute, "scriptState->isolate()") | indent}}
-    {% endif %}
 
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::Local<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{attribute.name}}", holder);

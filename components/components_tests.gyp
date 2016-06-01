@@ -114,7 +114,7 @@
       'certificate_transparency/single_tree_tracker_unittest.cc',
     ],
     'child_trace_message_filter_unittest_sources': [
-      'tracing/child_trace_message_filter_unittest.cc',
+      'tracing/child/child_trace_message_filter_unittest.cc',
     ],
     'client_update_protocol_unittest_sources': [
       'client_update_protocol/ecdsa_unittest.cc',
@@ -168,10 +168,10 @@
       'data_reduction_proxy/core/browser/data_reduction_proxy_settings_unittest.cc',
       'data_reduction_proxy/core/browser/data_reduction_proxy_tamper_detection_unittest.cc',
       'data_reduction_proxy/core/browser/data_usage_store_unittest.cc',
-      'data_reduction_proxy/core/common/data_reduction_proxy_client_config_parser_unittest.cc',
       'data_reduction_proxy/core/common/data_reduction_proxy_event_store_unittest.cc',
       'data_reduction_proxy/core/common/data_reduction_proxy_headers_unittest.cc',
       'data_reduction_proxy/core/common/data_reduction_proxy_params_unittest.cc',
+      'data_reduction_proxy/core/common/data_reduction_proxy_util_unittest.cc',
     ],
     'data_usage_unittest_sources': [
       'data_usage/core/data_use_aggregator_unittest.cc',
@@ -423,6 +423,7 @@
     ],
     'offline_pages_background_unittest_sources': [
       'offline_pages/background/request_coordinator_unittest.cc',
+      'offline_pages/background/request_picker_unittest.cc',
       'offline_pages/background/request_queue_in_memory_store_unittest.cc',
       'offline_pages/background/request_queue_unittest.cc',
       'offline_pages/background/save_page_request_unittest.cc',
@@ -431,7 +432,7 @@
       'offline_pages/archive_manager_unittest.cc',
       'offline_pages/client_policy_controller_unittest.cc',
       'offline_pages/offline_page_metadata_store_impl_unittest.cc',
-      'offline_pages/offline_page_model_unittest.cc',
+      'offline_pages/offline_page_model_impl_unittest.cc',
       'offline_pages/offline_page_storage_manager_unittest.cc',
       'offline_pages/snapshot_controller_unittest.cc',
     ],
@@ -829,9 +830,9 @@
       'syncable_prefs/pref_service_syncable_unittest.cc',
     ],
     'tracing_unittest_sources': [
-      'tracing/graphics_memory_dump_provider_android_unittest.cc',
-      'tracing/process_metrics_memory_dump_provider_unittest.cc',
-      'tracing/trace_config_file_unittest.cc',
+      'tracing/browser/trace_config_file_unittest.cc',
+      'tracing/common/graphics_memory_dump_provider_android_unittest.cc',
+      'tracing/common/process_metrics_memory_dump_provider_unittest.cc',
     ],
     'translate_unittest_sources': [
       'translate/core/browser/mock_translate_driver.cc',
@@ -1535,6 +1536,18 @@
             '../device/media_transfer_protocol/media_transfer_protocol.gyp:device_media_transfer_protocol',
           ],
         }],
+        ['OS=="linux" and chromeos!=1', {
+          'sources': [
+            'os_crypt/os_crypt_linux_unittest.cc',
+            'os_crypt/os_crypt_util_linux_unittest.cc',
+          ],
+          'defines': [
+            'USE_LIBSECRET',
+          ],
+          'include_dirs': [
+            '../third_party/libsecret'
+          ],
+        }],
         ['OS=="linux" and use_udev==0', {
           'dependencies!': [
             'components.gyp:storage_monitor',
@@ -1558,7 +1571,7 @@
             ['OS=="android"', {
               'sources/': [
                 ['exclude', '^policy/core/common/async_policy_provider_unittest\\.cc'],
-                ['exclude', '^tracing/trace_config_file_unittest\\.cc'],
+                ['exclude', '^tracing/browser/trace_config_file_unittest\\.cc'],
               ],
             }],
             ['OS=="android" or OS=="ios"', {
@@ -1849,7 +1862,7 @@
             'dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc',
             'dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc',
             'password_manager/content/renderer/credential_manager_client_browsertest.cc',
-            'tracing/child_trace_message_filter_browsertest.cc',
+            'tracing/child/child_trace_message_filter_browsertest.cc',
           ],
           'conditions': [
             ['OS == "android"', {

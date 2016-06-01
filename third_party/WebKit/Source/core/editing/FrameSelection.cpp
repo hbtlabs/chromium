@@ -175,9 +175,9 @@ void FrameSelection::moveTo(const VisiblePosition &base, const VisiblePosition &
     setSelection(VisibleSelection(base, extent, selectionHasDirection), options);
 }
 
-void FrameSelection::moveTo(const Position &pos, TextAffinity affinity, EUserTriggered userTriggered)
+void FrameSelection::moveTo(const Position &pos, TextAffinity affinity)
 {
-    SetSelectionOptions options = CloseTyping | ClearTypingStyle | userTriggered;
+    SetSelectionOptions options = CloseTyping | ClearTypingStyle;
     setSelection(VisibleSelection(pos, affinity, selection().isDirectional()), options);
 }
 
@@ -262,12 +262,8 @@ void FrameSelection::setNonDirectionalSelectionIfNeededAlgorithm(const VisibleSe
     if (visibleSelection<Strategy>() == newSelection)
         return;
 
-    setSelection(newSelection, granularity);
-}
-
-void FrameSelection::setNonDirectionalSelectionIfNeeded(const VisibleSelection& passedNewSelection, TextGranularity granularity, EndPointsAdjustmentMode endpointsAdjustmentMode)
-{
-    setNonDirectionalSelectionIfNeededAlgorithm<EditingStrategy>(passedNewSelection, granularity, endpointsAdjustmentMode);
+    const SetSelectionOptions options = CloseTyping | ClearTypingStyle;
+    setSelection(newSelection, options, CursorAlignOnScroll::IfNeeded, granularity);
 }
 
 void FrameSelection::setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree& passedNewSelection, TextGranularity granularity, EndPointsAdjustmentMode endpointsAdjustmentMode)
@@ -698,7 +694,7 @@ IntRect FrameSelection::absoluteCaretBounds()
 
 void FrameSelection::invalidateCaretRect()
 {
-    m_frameCaret->invalidateCaretRect(selection());
+    m_frameCaret->invalidateCaretRect();
 }
 
 void FrameSelection::dataWillChange(const CharacterData& node)
@@ -708,7 +704,7 @@ void FrameSelection::dataWillChange(const CharacterData& node)
 
 void FrameSelection::paintCaret(GraphicsContext& context, const LayoutPoint& paintOffset)
 {
-    m_frameCaret->paintCaret(context, paintOffset, selection());
+    m_frameCaret->paintCaret(context, paintOffset);
 }
 
 bool FrameSelection::contains(const LayoutPoint& point)
@@ -798,6 +794,13 @@ void FrameSelection::selectFrameElementInParentIfFullySelected()
         toLocalFrame(parent)->selection().setSelection(newSelection);
 }
 
+// Returns a shadow tree node for legacy shadow trees, a child of the
+// ShadowRoot node for new shadow trees, or 0 for non-shadow trees.
+static Node* nonBoundaryShadowTreeRootNode(const Position& position)
+{
+    return position.anchorNode() && !position.anchorNode()->isShadowRoot() ? position.anchorNode()->nonBoundaryShadowTreeRootNode() : nullptr;
+}
+
 void FrameSelection::selectAll()
 {
     Document* document = m_frame->document();
@@ -814,12 +817,12 @@ void FrameSelection::selectAll()
     Node* selectStartTarget = nullptr;
     if (isContentEditable()) {
         root = highestEditableRoot(selection().start());
-        if (Node* shadowRoot = selection().nonBoundaryShadowTreeRootNode())
+        if (Node* shadowRoot = nonBoundaryShadowTreeRootNode(selection().start()))
             selectStartTarget = shadowRoot->shadowHost();
         else
             selectStartTarget = root;
     } else {
-        root = selection().nonBoundaryShadowTreeRootNode();
+        root = nonBoundaryShadowTreeRootNode(selection().start());
         if (root) {
             selectStartTarget = root->shadowHost();
         } else {

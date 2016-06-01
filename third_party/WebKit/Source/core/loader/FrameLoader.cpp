@@ -1354,6 +1354,7 @@ bool FrameLoader::shouldClose(bool isReload)
         if (i == targetFrames.size())
             shouldClose = true;
     }
+
     return shouldClose;
 }
 
@@ -1371,10 +1372,7 @@ bool FrameLoader::shouldContinueForNavigationPolicy(const ResourceRequest& reque
         Frame* parentFrame = m_frame->tree().parent();
         if (parentFrame) {
             ContentSecurityPolicy* parentPolicy = parentFrame->securityContext()->contentSecurityPolicy();
-            ContentSecurityPolicy::RedirectStatus redirectStatus = request.followedRedirect()
-                ? ContentSecurityPolicy::DidRedirect
-                : ContentSecurityPolicy::DidNotRedirect;
-            if (!parentPolicy->allowChildFrameFromSource(request.url(), redirectStatus)) {
+            if (!parentPolicy->allowChildFrameFromSource(request.url(), request.redirectStatus())) {
                 // Fire a load event, as timing attacks would otherwise reveal that the
                 // frame was blocked. This way, it looks like every other cross-origin
                 // page load.
@@ -1416,8 +1414,6 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
     frameLoadRequest.resourceRequest().setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
     ResourceRequest& request = frameLoadRequest.resourceRequest();
     if (!shouldContinueForNavigationPolicy(request, frameLoadRequest.substituteData(), nullptr, frameLoadRequest.shouldCheckMainWorldContentSecurityPolicy(), navigationType, navigationPolicy, type == FrameLoadTypeReplaceCurrentItem, frameLoadRequest.clientRedirect() == ClientRedirectPolicy::ClientRedirect))
-        return;
-    if (!shouldClose(navigationType == NavigationTypeReload))
         return;
 
     m_frame->document()->cancelParsing();
