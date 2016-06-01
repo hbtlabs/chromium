@@ -65,6 +65,11 @@ class SmoothnessToughFiltersCases(_Smoothness):
   def Name(cls):
     return 'smoothness.tough_filters_cases'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/616520
+    return (cls.IsSvelte(possible_browser) and
+            possible_browser.browser_type == 'reference')
+
 
 class SmoothnessToughPathRenderingCases(_Smoothness):
   """Tests a selection of pages with SVG and 2D Canvas paths.
@@ -233,6 +238,11 @@ class SmoothnessGpuRasterizationFiltersCases(_Smoothness):
   def Name(cls):
     return 'smoothness.gpu_rasterization.tough_filters_cases'
 
+  @classmethod
+  def ShouldDisable(cls, possible_browser):  # http://crbug.com/616540
+    return (cls.IsSvelte(possible_browser) and
+            possible_browser.browser_type == 'reference')
+
 
 @benchmark.Enabled('android')
 class SmoothnessSyncScrollKeyMobileSites(_Smoothness):
@@ -326,17 +336,6 @@ class SmoothnessToughScrollingWhileZoomedInCases(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.tough_scrolling_while_zoomed_in_cases'
-
-
-@benchmark.Enabled('android')
-class SmoothnessPolymer(_Smoothness):
-  """Measures rendering statistics for Polymer cases.
-  """
-  page_set = page_sets.PolymerPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'smoothness.polymer'
 
 
 @benchmark.Enabled('android')
@@ -438,14 +437,6 @@ class SmoothnessPathologicalMobileSites(_Smoothness):
   @classmethod
   def Name(cls):
     return 'smoothness.pathological_mobile_sites'
-
-
-class SmoothnessToughAnimatedImageCases(_Smoothness):
-  page_set = page_sets.ToughAnimatedImageCasesPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'smoothness.tough_animated_image_cases'
 
 
 class SmoothnessToughTextureUploadCases(_Smoothness):

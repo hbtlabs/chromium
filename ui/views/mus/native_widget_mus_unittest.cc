@@ -7,10 +7,10 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/tests/window_tree_client_impl_private.h"
+#include "components/mus/public/cpp/tests/window_tree_client_private.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_connection.h"
+#include "components/mus/public/cpp/window_tree_client.h"
 #include "components/mus/public/interfaces/window_manager.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -154,7 +154,7 @@ class NativeWidgetMusTest : public ViewsTestBase {
     Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
     params.delegate = delegate;
     params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    params.bounds = gfx::Rect(10, 20, 100, 200);
+    params.bounds = initial_bounds();
     widget->Init(params);
     return widget;
   }
@@ -184,6 +184,9 @@ class NativeWidgetMusTest : public ViewsTestBase {
     native_widget->OnWindowInputEvent(native_widget->window(), event,
                                       ack_callback);
   }
+
+ protected:
+  gfx::Rect initial_bounds() { return gfx::Rect(10, 20, 100, 200); }
 
  private:
   int ack_callback_count_ = 0;
@@ -345,7 +348,7 @@ TEST_F(NativeWidgetMusTest, ChildVisibilityDoesntEffectParent) {
 
   // Create a child window, make it visible and parent it to the Widget's
   // window.
-  mus::Window* child_window = window->connection()->NewWindow();
+  mus::Window* child_window = window->window_tree()->NewWindow();
   child_window->SetVisible(true);
   window->AddChild(child_window);
 
@@ -413,7 +416,7 @@ TEST_F(NativeWidgetMusTest, WidgetReceivesEvent) {
   std::unique_ptr<ui::MouseEvent> mouse = CreateMouseEvent();
   NativeWidgetMus* native_widget =
       static_cast<NativeWidgetMus*>(widget->native_widget_private());
-  mus::WindowTreeClientImplPrivate test_api(native_widget->window());
+  mus::WindowTreeClientPrivate test_api(native_widget->window());
   test_api.CallOnWindowInputEvent(native_widget->window(), *mouse);
   EXPECT_EQ(1, handler.num_mouse_events());
 }
@@ -489,6 +492,33 @@ TEST_F(NativeWidgetMusTest, SetAndReleaseCapture) {
   widget->ReleaseCapture();
   EXPECT_FALSE(widget_private->HasCapture());
   EXPECT_FALSE(mus_window->HasCapture());
+}
+
+// Ensure that manually setting NativeWidgetMus's mus::Window bounds also
+// updates its WindowTreeHost bounds.
+TEST_F(NativeWidgetMusTest, SetMusWindowBounds) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  widget->Show();
+  View* content = new View;
+  widget->GetContentsView()->AddChildView(content);
+  NativeWidgetMus* native_widget =
+      static_cast<NativeWidgetMus*>(widget->native_widget_private());
+  mus::Window* mus_window = native_widget->window();
+
+  gfx::Rect start_bounds = initial_bounds();
+  gfx::Rect end_bounds = gfx::Rect(40, 50, 60, 70);
+  EXPECT_NE(start_bounds, end_bounds);
+
+  EXPECT_EQ(start_bounds, mus_window->bounds());
+  EXPECT_EQ(start_bounds, native_widget->window_tree_host()->GetBounds());
+
+  mus_window->SetBounds(end_bounds);
+
+  EXPECT_EQ(end_bounds, mus_window->bounds());
+
+  // Main check for this test: Setting |mus_window| bounds while bypassing
+  // |native_widget| must update window_tree_host bounds.
+  EXPECT_EQ(end_bounds, native_widget->window_tree_host()->GetBounds());
 }
 
 }  // namespace views

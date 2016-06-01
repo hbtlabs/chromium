@@ -469,7 +469,6 @@ if (!is_android) {
 
       deps += [
         "//ash/resources",
-        "//ash/wm/common/resources",
         "//chromeos",
       ]
 
@@ -731,29 +730,6 @@ if (!is_android) {
       "//skia",
     ]
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-  }
-
-  # TODO(GYP_GONE): Delete this after we've converted everything to GN.
-  # The _run targets exist only for compatibility w/ GYP.
-  group("telemetry_perf_unittests_run") {
-    testonly = true
-    deps = [
-      ":telemetry_perf_unittests",
-    ]
-  }
-
-  group("telemetry_perf_unittests") {
-    testonly = true
-    deps = [
-      "//tools/perf:perf",
-    ]
-
-    data = [
-      # For isolate contract.
-      "//testing/scripts/common.py",
-      "//testing/xvfb.py",
-      "//testing/scripts/run_telemetry_as_googletest.py",
-    ]
   }
 
   # TODO(GYP_GONE): Delete this after we've converted everything to GN.
@@ -1114,10 +1090,12 @@ if (!is_android) {
         "//chromeos/ime:gencode",
         "//components/arc:arc_test_support",
         "//components/user_manager:test_support",
-        "//dbus",
-        "//dbus:test_support",
         "//ui/login:resources",
       ]
+
+      if (use_dbus) {
+        deps += [ "//dbus:test_support" ]
+      }
     } else {
       sources -= [
         "../browser/extensions/api/enterprise_device_attributes/enterprise_device_attributes_apitest.cc",
@@ -1622,6 +1600,29 @@ if (!is_android) {
   }
 }
 
+# TODO(GYP_GONE): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("telemetry_perf_unittests_run") {
+  testonly = true
+  deps = [
+    ":telemetry_perf_unittests",
+  ]
+}
+
+group("telemetry_perf_unittests") {
+  testonly = true
+  deps = [
+    "//tools/perf:perf",
+  ]
+
+  data = [
+    # For isolate contract.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_telemetry_as_googletest.py",
+  ]
+}
+
 js2gtest("unit_tests_js") {
   test_type = "unit"
   sources = rebase_path(
@@ -1880,7 +1881,6 @@ test("unit_tests") {
       "//ash:test_support",
       "//ash/resources",
       "//ash/strings",
-      "//ash/wm/common/resources",
     ]
 
     # We eventually want to compile both in Win Aura builds, see
@@ -2046,11 +2046,10 @@ test("unit_tests") {
     deps += [ "//third_party/libsecret" ]
   }
   if (is_linux && use_aura) {
-    deps += [
-      "//dbus",
-      "//dbus:test_support",
-      "//ui/aura:test_support",
-    ]
+    deps += [ "//ui/aura:test_support" ]
+    if (use_dbus) {
+      deps += [ "//dbus:test_support" ]
+    }
   }
   if (is_linux && is_chrome_branded && current_cpu == "x86") {
     ldflags = [ "-Wl,--strip-debug" ]

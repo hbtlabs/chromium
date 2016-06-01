@@ -1468,6 +1468,26 @@ unsigned numEnclosingMailBlockquotes(const Position& p)
     return num;
 }
 
+PositionWithAffinity positionRespectingEditingBoundary(const Position& position, const LayoutPoint& localPoint, Node* targetNode)
+{
+    if (!targetNode->layoutObject())
+        return PositionWithAffinity();
+
+    LayoutPoint selectionEndPoint = localPoint;
+    Element* editableElement = rootEditableElementOf(position);
+
+    if (editableElement && !editableElement->contains(targetNode)) {
+        if (!editableElement->layoutObject())
+            return PositionWithAffinity();
+
+        FloatPoint absolutePoint = targetNode->layoutObject()->localToAbsolute(FloatPoint(selectionEndPoint));
+        selectionEndPoint = roundedLayoutPoint(editableElement->layoutObject()->absoluteToLocal(absolutePoint));
+        targetNode = editableElement;
+    }
+
+    return targetNode->layoutObject()->positionForPoint(selectionEndPoint);
+}
+
 void updatePositionForNodeRemoval(Position& position, Node& node)
 {
     if (position.isNull())
@@ -1742,7 +1762,9 @@ DispatchEventResult dispatchBeforeInputInsertText(EventTarget* target, const Str
         return DispatchEventResult::NotCanceled;
     if (!target)
         return DispatchEventResult::NotCanceled;
-    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(InputEvent::InputType::InsertText, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing);
+    // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+    // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(InputEvent::InputType::InsertText, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing, nullptr);
     return target->dispatchEvent(beforeInputEvent);
 }
 
@@ -1752,17 +1774,19 @@ DispatchEventResult dispatchBeforeInputFromComposition(EventTarget* target, Inpu
         return DispatchEventResult::NotCanceled;
     if (!target)
         return DispatchEventResult::NotCanceled;
-    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, cancelable, InputEvent::EventIsComposing::IsComposing);
+    // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+    // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, cancelable, InputEvent::EventIsComposing::IsComposing, nullptr);
     return target->dispatchEvent(beforeInputEvent);
 }
 
-DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget* target, InputEvent::InputType inputType, const String& data)
+DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget* target, InputEvent::InputType inputType, const String& data, const RangeVector* ranges)
 {
     if (!RuntimeEnabledFeatures::inputEventEnabled())
         return DispatchEventResult::NotCanceled;
     if (!target)
         return DispatchEventResult::NotCanceled;
-    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing);
+    InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing, ranges);
     return target->dispatchEvent(beforeInputEvent);
 }
 

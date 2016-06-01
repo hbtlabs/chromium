@@ -106,7 +106,20 @@ public:
     {
         return reinterpret_cast<Return>(ThreadHeap::allocate<Metadata>(size, IsEagerlyFinalizedType<Metadata>::value));
     }
-    static void free(void* address) { }
+
+#if OS(WIN) && COMPILER(MSVC)
+    // MSVC eagerly instantiates the unused 'operator delete',
+    // provide a version that asserts and fails at run-time if
+    // used.
+    // Elsewhere we expect compilation to fail if 'delete' is
+    // attempted used and instantiated with a HeapAllocator-based
+    // object, as HeapAllocator::free is not provided.
+    static void free(void*)
+    {
+        NOTREACHED();
+    }
+#endif
+
     template<typename T>
     static void* newArray(size_t bytes)
     {
@@ -465,6 +478,103 @@ template <typename T, size_t inlineCapacity> struct VectorTraits<blink::HeapDequ
     static const bool canMoveWithMemcpy = VectorTraits<T>::canMoveWithMemcpy;
 };
 
+template<typename T> struct HashTraits<blink::Member<T>> : SimpleClassHashTraits<blink::Member<T>> {
+    STATIC_ONLY(HashTraits);
+    // FIXME: The distinction between PeekInType and PassInType is there for
+    // the sake of the reference counting handles. When they are gone the two
+    // types can be merged into PassInType.
+    // FIXME: Implement proper const'ness for iterator types. Requires support
+    // in the marking Visitor.
+    using PeekInType = T*;
+    using PassInType = T*;
+    using IteratorGetType = blink::Member<T>*;
+    using IteratorConstGetType = const blink::Member<T>*;
+    using IteratorReferenceType = blink::Member<T>&;
+    using IteratorConstReferenceType = const blink::Member<T>&;
+    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
+    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
+
+    using PeekOutType = T*;
+
+    template<typename U>
+    static void store(const U& value, blink::Member<T>& storage) { storage = value; }
+
+    static PeekOutType peek(const blink::Member<T>& value) { return value; }
+};
+
+template<typename T> struct HashTraits<blink::WeakMember<T>> : SimpleClassHashTraits<blink::WeakMember<T>> {
+    STATIC_ONLY(HashTraits);
+    static const bool needsDestruction = false;
+    // FIXME: The distinction between PeekInType and PassInType is there for
+    // the sake of the reference counting handles. When they are gone the two
+    // types can be merged into PassInType.
+    // FIXME: Implement proper const'ness for iterator types. Requires support
+    // in the marking Visitor.
+    using PeekInType = T*;
+    using PassInType = T*;
+    using IteratorGetType = blink::WeakMember<T>*;
+    using IteratorConstGetType = const blink::WeakMember<T>*;
+    using IteratorReferenceType = blink::WeakMember<T>&;
+    using IteratorConstReferenceType = const blink::WeakMember<T>&;
+    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
+    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
+
+    using PeekOutType = T*;
+
+    template<typename U>
+    static void store(const U& value, blink::WeakMember<T>& storage) { storage = value; }
+
+    static PeekOutType peek(const blink::WeakMember<T>& value) { return value; }
+
+    template<typename VisitorDispatcher>
+    static bool traceInCollection(VisitorDispatcher visitor, blink::WeakMember<T>& weakMember, ShouldWeakPointersBeMarkedStrongly strongify)
+    {
+        if (strongify == WeakPointersActStrong) {
+            visitor->trace(weakMember.get()); // Strongified visit.
+            return false;
+        }
+        return !blink::ThreadHeap::isHeapObjectAlive(weakMember);
+    }
+};
+
+template<typename T> struct HashTraits<blink::UntracedMember<T>> : SimpleClassHashTraits<blink::UntracedMember<T>> {
+    STATIC_ONLY(HashTraits);
+    static const bool needsDestruction = false;
+    // FIXME: The distinction between PeekInType and PassInType is there for
+    // the sake of the reference counting handles. When they are gone the two
+    // types can be merged into PassInType.
+    // FIXME: Implement proper const'ness for iterator types.
+    using PeekInType = T*;
+    using PassInType = T*;
+    using IteratorGetType = blink::UntracedMember<T>*;
+    using IteratorConstGetType = const blink::UntracedMember<T>*;
+    using IteratorReferenceType = blink::UntracedMember<T>&;
+    using IteratorConstReferenceType = const blink::UntracedMember<T>&;
+    static IteratorReferenceType getToReferenceConversion(IteratorGetType x) { return *x; }
+    static IteratorConstReferenceType getToReferenceConstConversion(IteratorConstGetType x) { return *x; }
+    using PeekOutType = T*;
+
+    template<typename U>
+    static void store(const U& value, blink::UntracedMember<T>& storage) { storage = value; }
+
+    static PeekOutType peek(const blink::UntracedMember<T>& value) { return value; }
+};
+
+template<typename T, size_t inlineCapacity>
+struct NeedsTracing<ListHashSetNode<T, blink::HeapListHashSetAllocator<T, inlineCapacity>> *> {
+    STATIC_ONLY(NeedsTracing);
+    static_assert(sizeof(T), "T must be fully defined");
+    // All heap allocated node pointers need visiting to keep the nodes alive,
+    // regardless of whether they contain pointers to other heap allocated
+    // objects.
+    static const bool value = true;
+};
+
+template<typename T, size_t inlineCapacity>
+struct IsGarbageCollectedType<ListHashSetNode<T, blink::HeapListHashSetAllocator<T, inlineCapacity>>> {
+    static const bool value = true;
+};
+
 template<typename T, typename H> struct HandleHashTraits : SimpleClassHashTraits<H> {
     STATIC_ONLY(HandleHashTraits);
     // TODO: The distinction between PeekInType and PassInType is there for
@@ -487,43 +597,6 @@ template<typename T, typename H> struct HandleHashTraits : SimpleClassHashTraits
     static void store(const U& value, H& storage) { storage = value; }
 
     static PeekOutType peek(const H& value) { return value; }
-};
-
-template<typename T> struct HashTraits<blink::Member<T>> : HandleHashTraits<T, blink::Member<T>> { };
-
-template<typename T> struct HashTraits<blink::WeakMember<T>> : HandleHashTraits<T, blink::WeakMember<T>> {
-    STATIC_ONLY(HashTraits);
-    static const bool needsDestruction = false;
-
-    template<typename VisitorDispatcher>
-    static bool traceInCollection(VisitorDispatcher visitor, blink::WeakMember<T>& weakMember, ShouldWeakPointersBeMarkedStrongly strongify)
-    {
-        if (strongify == WeakPointersActStrong) {
-            visitor->trace(weakMember.get()); // Strongified visit.
-            return false;
-        }
-        return !blink::ThreadHeap::isHeapObjectAlive(weakMember);
-    }
-};
-
-template<typename T> struct HashTraits<blink::UntracedMember<T>> : HandleHashTraits<T, blink::UntracedMember<T>> {
-    STATIC_ONLY(HashTraits);
-    static const bool needsDestruction = false;
-};
-
-template<typename T, size_t inlineCapacity>
-struct NeedsTracing<ListHashSetNode<T, blink::HeapListHashSetAllocator<T, inlineCapacity>> *> {
-    STATIC_ONLY(NeedsTracing);
-    static_assert(sizeof(T), "T must be fully defined");
-    // All heap allocated node pointers need visiting to keep the nodes alive,
-    // regardless of whether they contain pointers to other heap allocated
-    // objects.
-    static const bool value = true;
-};
-
-template<typename T, size_t inlineCapacity>
-struct IsGarbageCollectedType<ListHashSetNode<T, blink::HeapListHashSetAllocator<T, inlineCapacity>>> {
-    static const bool value = true;
 };
 
 template<typename T> struct HashTraits<blink::Persistent<T>> : HandleHashTraits<T, blink::Persistent<T>> { };

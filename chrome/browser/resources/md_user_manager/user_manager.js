@@ -6,7 +6,6 @@
 <include src="../../../../ui/login/bubble.js">
 <include src="../../../../ui/login/login_ui_tools.js">
 <include src="../../../../ui/login/display_manager.js">
-<include src="../../../../ui/login/account_picker/user_pod_template.js">
 <include src="../../../../ui/login/account_picker/screen_account_picker.js">
 <include src="../../../../ui/login/account_picker/user_pod_row.js">
 
@@ -66,6 +65,7 @@ cr.define('cr.ui', function() {
 
     signin.ProfileBrowserProxyImpl.getInstance().initializeUserManager(
         window.location.hash);
+    cr.addWebUIListener('show-error-dialog', cr.ui.UserManager.showErrorDialog);
   };
 
   /**
@@ -130,6 +130,14 @@ cr.define('cr.ui', function() {
    */
   UserManager.clearErrors = function() {
     DisplayManager.clearErrors();
+  };
+
+  /**
+   * Shows the error dialog populated with the given message.
+   * @param {string} message Error message to show.
+   */
+  UserManager.showErrorDialog = function(message) {
+    document.querySelector('error-dialog').show(message);
   };
 
   // Export

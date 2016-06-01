@@ -554,7 +554,7 @@ bool Editor::shouldDeleteRange(const EphemeralRange& range) const
     return canDeleteRange(range);
 }
 
-void Editor::notifyComponentsOnChangedSelection(const VisibleSelection& oldSelection)
+void Editor::notifyComponentsOnChangedSelection()
 {
     client().respondToChangedSelection(m_frame, frame().selection().getSelectionType());
     setStartNewKillRingSequence(true);
@@ -641,8 +641,10 @@ void Editor::applyParagraphStyleToSelection(StylePropertySet* style, EditAction 
 
 bool Editor::selectionStartHasStyle(CSSPropertyID propertyID, const String& value) const
 {
-    return EditingStyle::create(propertyID, value)->triStateOfStyle(
-        EditingStyle::styleAtSelectionStart(frame().selection().selection(), propertyID == CSSPropertyBackgroundColor));
+    EditingStyle* styleToCheck = EditingStyle::create(propertyID, value);
+    EditingStyle* styleAtStart = EditingStyle::styleAtSelectionStart(frame().selection().selection(),
+        propertyID == CSSPropertyBackgroundColor, styleToCheck->style());
+    return styleToCheck->triStateOfStyle(styleAtStart);
 }
 
 TriState Editor::selectionHasStyle(CSSPropertyID propertyID, const String& value) const
@@ -1309,7 +1311,7 @@ void Editor::respondToChangedSelection(const VisibleSelection& oldSelection, Fra
 {
     spellChecker().respondToChangedSelection(oldSelection, options);
     frame().inputMethodController().cancelCompositionIfSelectionIsInvalid();
-    notifyComponentsOnChangedSelection(oldSelection);
+    notifyComponentsOnChangedSelection();
 }
 
 SpellChecker& Editor::spellChecker() const

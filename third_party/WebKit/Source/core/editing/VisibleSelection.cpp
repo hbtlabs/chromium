@@ -734,33 +734,6 @@ void VisibleSelectionTemplate<Strategy>::adjustSelectionToAvoidCrossingEditingBo
 }
 
 template <typename Strategy>
-VisiblePositionTemplate<Strategy> VisibleSelectionTemplate<Strategy>::visiblePositionRespectingEditingBoundary(const LayoutPoint& localPoint, Node* targetNode) const
-{
-    return createVisiblePosition(positionRespectingEditingBoundary(localPoint, targetNode));
-}
-
-template <typename Strategy>
-PositionWithAffinityTemplate<Strategy> VisibleSelectionTemplate<Strategy>::positionRespectingEditingBoundary(const LayoutPoint& localPoint, Node* targetNode) const
-{
-    if (!targetNode->layoutObject())
-        return PositionWithAffinityTemplate<Strategy>();
-
-    LayoutPoint selectionEndPoint = localPoint;
-    Element* editableElement = rootEditableElement();
-
-    if (editableElement && !editableElement->contains(targetNode)) {
-        if (!editableElement->layoutObject())
-            return PositionWithAffinityTemplate<Strategy>();
-
-        FloatPoint absolutePoint = targetNode->layoutObject()->localToAbsolute(FloatPoint(selectionEndPoint));
-        selectionEndPoint = roundedLayoutPoint(editableElement->layoutObject()->absoluteToLocal(absolutePoint));
-        targetNode = editableElement;
-    }
-
-    return fromPositionInDOMTree<Strategy>(targetNode->layoutObject()->positionForPoint(selectionEndPoint));
-}
-
-template <typename Strategy>
 bool VisibleSelectionTemplate<Strategy>::isContentEditable() const
 {
     return isEditablePosition(start());
@@ -782,12 +755,6 @@ template <typename Strategy>
 Element* VisibleSelectionTemplate<Strategy>::rootEditableElement() const
 {
     return rootEditableElementOf(start());
-}
-
-template <typename Strategy>
-Node* VisibleSelectionTemplate<Strategy>::nonBoundaryShadowTreeRootNode() const
-{
-    return start().anchorNode() && !start().anchorNode()->isShadowRoot() ? start().anchorNode()->nonBoundaryShadowTreeRootNode() : 0;
 }
 
 VisibleSelectionChangeObserver::VisibleSelectionChangeObserver()
@@ -917,14 +884,14 @@ void VisibleSelectionTemplate<Strategy>::formatForDebugger(char* buffer, unsigne
     String s;
 
     if (isNone()) {
-        result.appendLiteral("<none>");
+        result.append("<none>");
     } else {
         const int FormatBufferSize = 1024;
         char s[FormatBufferSize];
-        result.appendLiteral("from ");
+        result.append("from ");
         start().formatForDebugger(s, FormatBufferSize);
         result.append(s);
-        result.appendLiteral(" to ");
+        result.append(" to ");
         end().formatForDebugger(s, FormatBufferSize);
         result.append(s);
     }

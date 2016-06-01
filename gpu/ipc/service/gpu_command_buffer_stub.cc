@@ -610,6 +610,12 @@ bool GpuCommandBufferStub::Initialize(
       &GpuCommandBufferStub::OnFenceSyncRelease, base::Unretained(this)));
   decoder_->SetWaitFenceSyncCallback(base::Bind(
       &GpuCommandBufferStub::OnWaitFenceSync, base::Unretained(this)));
+  decoder_->SetDescheduleUntilFinishedCallback(
+      base::Bind(&GpuCommandBufferStub::OnDescheduleUntilFinished,
+                 base::Unretained(this)));
+  decoder_->SetRescheduleAfterFinishedCallback(
+      base::Bind(&GpuCommandBufferStub::OnRescheduleAfterFinished,
+                 base::Unretained(this)));
 
   command_buffer_->SetPutOffsetChangeCallback(
       base::Bind(&GpuCommandBufferStub::PutChanged, base::Unretained(this)));
@@ -898,6 +904,21 @@ void GpuCommandBufferStub::OnFenceSyncRelease(uint64_t release) {
   sync_point_client_->ReleaseFenceSync(release);
 }
 
+void GpuCommandBufferStub::OnDescheduleUntilFinished() {
+  DCHECK(executor_->scheduled());
+  DCHECK(executor_->HasMoreIdleWork());
+
+  executor_->SetScheduled(false);
+  channel_->OnStreamRescheduled(stream_id_, false);
+}
+
+void GpuCommandBufferStub::OnRescheduleAfterFinished() {
+  DCHECK(!executor_->scheduled());
+
+  executor_->SetScheduled(true);
+  channel_->OnStreamRescheduled(stream_id_, true);
+}
+
 bool GpuCommandBufferStub::OnWaitFenceSync(
     CommandBufferNamespace namespace_id,
     CommandBufferId command_buffer_id,
@@ -990,8 +1011,10 @@ void GpuCommandBufferStub::OnCreateImage(
 
   image_manager->AddImage(image.get(), id);
   if (image_release_count) {
-    DCHECK_EQ(image_release_count,
-              sync_point_client_->client_state()->fence_sync_release() + 1);
+    DLOG_IF(ERROR,
+            image_release_count !=
+                sync_point_client_->client_state()->fence_sync_release() + 1)
+        << "Client released fences out of order.";
     sync_point_client_->ReleaseFenceSync(image_release_count);
   }
 }

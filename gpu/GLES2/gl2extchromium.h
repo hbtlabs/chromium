@@ -14,19 +14,6 @@
 extern "C" {
 #endif
 
-/* GL_CHROMIUM_iosurface */
-#ifndef GL_CHROMIUM_iosurface
-#define GL_CHROMIUM_iosurface 1
-#ifdef GL_GLEXT_PROTOTYPES
-GL_APICALL void GL_APIENTRY glTexImageIOSurface2DCHROMIUM(
-    GLenum target, GLsizei width, GLsizei height, GLuint ioSurfaceId,
-    GLuint plane);
-#endif
-typedef void (GL_APIENTRYP PFNGLTEXIMAGEIOSURFACE2DCHROMIUMPROC) (
-    GLenum target, GLsizei width, GLsizei height, GLuint ioSurfaceId,
-    GLuint plane);
-#endif  /* GL_CHROMIUM_iosurface */
-
 /* GL_CHROMIUM_texture_mailbox */
 #ifndef GL_CHROMIUM_texture_mailbox
 #define GL_CHROMIUM_texture_mailbox 1
@@ -152,6 +139,15 @@ typedef GLint(GL_APIENTRYP PFNGLGETIMAGEIVCHROMIUMPROC)(
     GLuint image_id,
     GLenum param);
 #endif  /* GL_CHROMIUM_gpu_memory_buffer_image */
+
+/* GL_CHROMIUM_deschedule */
+#ifndef GL_CHROMIUM_deschedule
+#define GL_CHROMIUM_deschedule 1
+#ifdef GL_GLEXT_PROTOTYPES
+GL_APICALL void GL_APIENTRY glDescheduleUntilFinishedCHROMIUM();
+#endif
+typedef void(GL_APIENTRYP PFNGLDESCHEDULEUNTILFINISHEDCHROMIUM)();
+#endif  /* GL_CHROMIUM_deschedule */
 
 /* GL_CHROMIUM_map_sub */
 #ifndef GL_CHROMIUM_map_sub

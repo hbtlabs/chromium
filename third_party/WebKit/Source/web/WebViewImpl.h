@@ -280,7 +280,6 @@ public:
     void setShowScrollBottleneckRects(bool) override;
     void acceptLanguagesChanged() override;
 
-    void willEnterFullScreen(WebRemoteFrame*) override;
     void didUpdateFullScreenSize();
 
     float defaultMinimumPageScaleFactor() const;
@@ -750,6 +749,11 @@ private:
     WebDisplayMode m_displayMode;
 
     FloatSize m_elasticOverscroll;
+
+    // This is owned by the LayerTreeHostImpl, and should only be used on the
+    // compositor thread. The LayerTreeHostImpl is indirectly owned by this
+    // class so this pointer should be valid until this class is destructed.
+    CrossThreadPersistent<CompositorMutatorImpl> m_mutator;
 
     Persistent<EventListener> m_popupMouseWheelEventListener;
 

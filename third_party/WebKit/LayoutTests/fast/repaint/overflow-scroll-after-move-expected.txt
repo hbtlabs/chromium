@@ -11,18 +11,6 @@
           "bounds": [300, 400],
           "shouldFlattenTransform": false,
           "drawsContent": true,
-          "paintInvalidations": [
-            {
-              "object": "LayoutBlockFlow (positioned) DIV id='block'",
-              "rect": [50, 160, 200, 50],
-              "reason": "bounds change"
-            },
-            {
-              "object": "LayoutBlockFlow (positioned) DIV id='block'",
-              "rect": [50, 50, 200, 50],
-              "reason": "bounds change"
-            }
-          ],
           "children": [
             {
               "bounds": [285, 385],

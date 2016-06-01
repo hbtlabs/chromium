@@ -100,7 +100,6 @@ class CC_EXPORT LayerImpl {
   void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
   void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
   bool IsActive() const;
-  bool OpacityCanAnimateOnImplThread() const { return false; }
 
   // Tree structure.
   LayerImpl* parent() { return parent_; }
@@ -147,18 +146,11 @@ class CC_EXPORT LayerImpl {
 
   void UpdatePropertyTreeTransform();
   void UpdatePropertyTreeTransformIsAnimated(bool is_animated);
-  void UpdatePropertyTreeOpacity();
+  void UpdatePropertyTreeOpacity(float opacity);
   void UpdatePropertyTreeScrollOffset();
 
   // For compatibility with Layer.
   bool has_render_surface() const { return !!render_surface(); }
-
-  void PassCopyRequests(
-      std::vector<std::unique_ptr<CopyOutputRequest>>* requests);
-  // Can only be called when the layer has a copy request.
-  void TakeCopyRequestsAndTransformToTarget(
-      std::vector<std::unique_ptr<CopyOutputRequest>>* request);
-  bool HasCopyRequest() const { return !copy_requests_.empty(); }
 
   void SetMaskLayer(std::unique_ptr<LayerImpl> mask_layer);
   LayerImpl* mask_layer() { return mask_layer_; }
@@ -239,8 +231,7 @@ class CC_EXPORT LayerImpl {
   void SetContentsOpaque(bool opaque);
   bool contents_opaque() const { return contents_opaque_; }
 
-  void SetOpacity(float opacity);
-  float opacity() const { return opacity_; }
+  float Opacity() const;
   bool OpacityIsAnimating() const;
   bool HasPotentiallyRunningOpacityAnimation() const;
 
@@ -319,6 +310,8 @@ class CC_EXPORT LayerImpl {
     return performance_properties_;
   }
 
+  bool CanUseLCDText() const;
+
   // Setter for draw_properties_.
   void set_visible_layer_rect(const gfx::Rect& visible_rect) {
     draw_properties_.visible_layer_rect = visible_rect;
@@ -333,7 +326,6 @@ class CC_EXPORT LayerImpl {
   bool screen_space_transform_is_animating() const {
     return draw_properties_.screen_space_transform_is_animating;
   }
-  bool can_use_lcd_text() const { return draw_properties_.can_use_lcd_text; }
   gfx::Rect clip_rect() const { return draw_properties_.clip_rect; }
   gfx::Rect drawable_content_rect() const {
     return draw_properties_.drawable_content_rect;
@@ -431,7 +423,7 @@ class CC_EXPORT LayerImpl {
   void AddDamageRect(const gfx::Rect& damage_rect);
   const gfx::Rect& damage_rect() const { return damage_rect_; }
 
-  virtual base::DictionaryValue* LayerTreeAsJson() const;
+  virtual std::unique_ptr<base::DictionaryValue> LayerTreeAsJson() const;
 
   bool LayerPropertyChanged() const;
 
@@ -600,7 +592,6 @@ class CC_EXPORT LayerImpl {
   SkColor background_color_;
   SkColor safe_opaque_background_color_;
 
-  float opacity_;
   SkXfermode::Mode blend_mode_;
   // draw_blend_mode may be different than blend_mode_,
   // when a RenderSurface re-parents the layer's blend_mode.
@@ -638,8 +629,6 @@ class CC_EXPORT LayerImpl {
   // Denotes an area that is damaged and needs redraw. This is in the layer's
   // space.
   gfx::Rect damage_rect_;
-
-  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests_;
 
   // Group of properties that need to be computed based on the layer tree
   // hierarchy before layers can be drawn.

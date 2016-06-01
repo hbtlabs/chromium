@@ -191,9 +191,10 @@ config("compiler") {
 
     # Stack protection.
     if (is_mac) {
-      cflags += [ "-fstack-protector-all" ]
+      cflags += [ "-fstack-protector-strong" ]
     } else if (is_posix && !is_chromeos && !is_nacl) {
       # TODO(phajdan.jr): Use -fstack-protector-strong when our gcc supports it.
+      # See also https://crbug.com/533294
       cflags += [ "--param=ssp-buffer-size=4" ]
 
       # The x86 toolchain currently has problems with stack-protector.
@@ -346,7 +347,7 @@ config("compiler") {
     # Let clang find the ld.bfd in the NDK.
     _rebased_android_toolchain_root =
         rebase_path(android_toolchain_root, root_build_dir)
-    ldflags += [ "--gcc-toolchain=$rebased_android_toolchain_root" ]
+    ldflags += [ "--gcc-toolchain=$_rebased_android_toolchain_root" ]
   }
 
   if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
@@ -533,6 +534,12 @@ config("compiler_cpu_abi") {
         cflags += [ "-mtune=$arm_tune" ]
       }
     } else if (current_cpu == "mipsel") {
+      if (is_clang) {
+        # Temporarily needed due to unsupported MIPS macro instructions
+        # in inline asm code in third_party projects (libwebp and webrtc).
+        # TODO(lmilko) Enable integrated-as.
+        cflags += [ "-fno-integrated-as" ]
+      }
       if (mips_arch_variant == "r6") {
         if (is_clang) {
           cflags += [
@@ -1092,7 +1099,7 @@ config("rtti") {
 }
 config("no_rtti") {
   # CFI diagnostics and UBsan vptr require RTTI.
-  if (!use_cfi_diag && !is_ubsan_vptr) {
+  if (!use_cfi_diag && !is_ubsan_vptr && !is_ubsan_security) {
     if (is_win) {
       cflags_cc = [ "/GR-" ]
     } else {
@@ -1246,7 +1253,15 @@ if (is_win) {
 config("optimize") {
   if (is_win) {
     if (is_official_build && full_wpo_on_official) {
-      common_optimize_on_cflags += [ "/GL" ]
+      common_optimize_on_cflags += [
+        "/GL",  # Whole program optimization.
+
+        # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+        # Probably anything that this would catch that wouldn't be caught in a
+        # normal build isn't going to actually be a bug, so the incremental
+        # value of C4702 for PGO builds is likely very small.
+        "/wd4702",
+      ]
     }
 
     # Favor size over speed, /O1 must be before the common flags. The GYP

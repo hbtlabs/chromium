@@ -27,12 +27,12 @@
 #include "core/fetch/CachedMetadataHandler.h"
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "platform/Timer.h"
-#include "platform/WebProcessMemoryDump.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/scheduler/CancellableTaskFactory.h"
+#include "platform/web_process_memory_dump.h"
 #include "public/platform/WebDataConsumerHandle.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashCountedSet.h"
@@ -104,6 +104,8 @@ public:
 
     void setLinkPreload(bool isLinkPreload) { m_linkPreload = isLinkPreload; }
     bool isLinkPreload() const { return m_linkPreload; }
+
+    void setPreloadDiscoveryTime(double preloadDiscoveryTime) { m_preloadDiscoveryTime = preloadDiscoveryTime; }
 
     const ResourceError& resourceError() const { return m_error; }
 
@@ -332,6 +334,8 @@ private:
     const size_t m_overheadSize;
 
     unsigned m_preloadCount;
+
+    double m_preloadDiscoveryTime;
 
     String m_cacheIdentifier;
 

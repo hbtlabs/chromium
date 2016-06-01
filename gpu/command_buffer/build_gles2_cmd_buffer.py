@@ -1175,6 +1175,9 @@ _NAMED_TYPE_INFO = {
       'GL_CONSTANT_ALPHA',
       'GL_ONE_MINUS_CONSTANT_ALPHA',
     ],
+    'valid_es3': [
+      'GL_SRC_ALPHA_SATURATE'
+    ]
   },
   'Capability': {
     'type': 'GLenum',
@@ -2678,6 +2681,14 @@ _FUNCTION_INFO = {
     'chromium': True,
     'trace_level': 1,
   },
+  'DescheduleUntilFinishedCHROMIUM': {
+    'type': 'Custom',
+    'decoder_func': 'DoDescheduleUntilFinishedCHROMIUM',
+    'unit_test': False,
+    'extension': "CHROMIUM_deschedule",
+    'chromium': True,
+    'trace_level': 1,
+  },
   'CreateProgram': {
     'type': 'Create',
     'client_test': False,
@@ -4031,13 +4042,6 @@ _FUNCTION_INFO = {
     'cmd_args': 'uint32_t bucket_id',
     'extension': 'CHROMIUM_request_extension',
     'chromium': True,
-  },
-  'TexImageIOSurface2DCHROMIUM': {
-    'decoder_func': 'DoTexImageIOSurface2DCHROMIUM',
-    'unit_test': False,
-    'extension': True,
-    'chromium': True,
-    'trace_level': 1,
   },
   'CopyTextureCHROMIUM': {
     'decoder_func': 'DoCopyTextureCHROMIUM',

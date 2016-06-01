@@ -265,9 +265,9 @@
   OP(GetUniformBlocksCHROMIUM)                             /* 506 */ \
   OP(GetTransformFeedbackVaryingsCHROMIUM)                 /* 507 */ \
   OP(GetUniformsES3CHROMIUM)                               /* 508 */ \
-  OP(GetTranslatedShaderSourceANGLE)                       /* 509 */ \
-  OP(PostSubBufferCHROMIUM)                                /* 510 */ \
-  OP(TexImageIOSurface2DCHROMIUM)                          /* 511 */ \
+  OP(DescheduleUntilFinishedCHROMIUM)                      /* 509 */ \
+  OP(GetTranslatedShaderSourceANGLE)                       /* 510 */ \
+  OP(PostSubBufferCHROMIUM)                                /* 511 */ \
   OP(CopyTextureCHROMIUM)                                  /* 512 */ \
   OP(CopySubTextureCHROMIUM)                               /* 513 */ \
   OP(CompressedCopyTextureCHROMIUM)                        /* 514 */ \

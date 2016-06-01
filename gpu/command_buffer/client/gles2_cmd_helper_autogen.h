@@ -2472,6 +2472,14 @@ void GetUniformsES3CHROMIUM(GLuint program, uint32_t bucket_id) {
   }
 }
 
+void DescheduleUntilFinishedCHROMIUM() {
+  gles2::cmds::DescheduleUntilFinishedCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::DescheduleUntilFinishedCHROMIUM>();
+  if (c) {
+    c->Init();
+  }
+}
+
 void GetTranslatedShaderSourceANGLE(GLuint shader, uint32_t bucket_id) {
   gles2::cmds::GetTranslatedShaderSourceANGLE* c =
       GetCmdSpace<gles2::cmds::GetTranslatedShaderSourceANGLE>();
@@ -2485,18 +2493,6 @@ void PostSubBufferCHROMIUM(GLint x, GLint y, GLint width, GLint height) {
       GetCmdSpace<gles2::cmds::PostSubBufferCHROMIUM>();
   if (c) {
     c->Init(x, y, width, height);
-  }
-}
-
-void TexImageIOSurface2DCHROMIUM(GLenum target,
-                                 GLsizei width,
-                                 GLsizei height,
-                                 GLuint ioSurfaceId,
-                                 GLuint plane) {
-  gles2::cmds::TexImageIOSurface2DCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::TexImageIOSurface2DCHROMIUM>();
-  if (c) {
-    c->Init(target, width, height, ioSurfaceId, plane);
   }
 }
 

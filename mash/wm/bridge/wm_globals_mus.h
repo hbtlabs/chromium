@@ -9,13 +9,13 @@
 
 #include <vector>
 
-#include "ash/wm/common/wm_globals.h"
+#include "ash/common/wm/wm_globals.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "components/mus/public/cpp/window_tree_connection_observer.h"
+#include "components/mus/public/cpp/window_tree_client_observer.h"
 
 namespace mus {
-class WindowTreeConnection;
+class WindowTreeClient;
 }
 
 namespace mash {
@@ -26,9 +26,9 @@ class WmWindowMus;
 
 // WmGlobals implementation for mus.
 class WmGlobalsMus : public ash::wm::WmGlobals,
-                     public mus::WindowTreeConnectionObserver {
+                     public mus::WindowTreeClientObserver {
  public:
-  explicit WmGlobalsMus(mus::WindowTreeConnection* connection);
+  explicit WmGlobalsMus(mus::WindowTreeClient* client);
   ~WmGlobalsMus() override;
 
   static WmGlobalsMus* Get();
@@ -43,6 +43,7 @@ class WmGlobalsMus : public ash::wm::WmGlobals,
   WmRootWindowControllerMus* GetRootWindowControllerWithDisplayId(int64_t id);
 
   // WmGlobals:
+  ash::wm::WmWindow* NewContainerWindow() override;
   ash::wm::WmWindow* GetFocusedWindow() override;
   ash::wm::WmWindow* GetActiveWindow() override;
   ash::wm::WmWindow* GetPrimaryRootWindow() override;
@@ -76,14 +77,14 @@ class WmGlobalsMus : public ash::wm::WmGlobals,
   // Returns true if |window| is a window that can have active children.
   static bool IsActivationParent(mus::Window* window);
 
-  void RemoveConnectionObserver();
+  void RemoveClientObserver();
 
-  // mus::WindowTreeConnectionObserver:
+  // mus::WindowTreeClientObserver:
   void OnWindowTreeFocusChanged(mus::Window* gained_focus,
                                 mus::Window* lost_focus) override;
-  void OnWillDestroyConnection(mus::WindowTreeConnection* connection) override;
+  void OnWillDestroyClient(mus::WindowTreeClient* client) override;
 
-  mus::WindowTreeConnection* connection_;
+  mus::WindowTreeClient* client_;
 
   std::vector<WmRootWindowControllerMus*> root_window_controllers_;
 

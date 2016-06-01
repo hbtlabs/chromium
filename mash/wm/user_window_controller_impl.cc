@@ -4,12 +4,12 @@
 
 #include "mash/wm/user_window_controller_impl.h"
 
+#include "ash/public/interfaces/container.mojom.h"
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_connection.h"
+#include "components/mus/public/cpp/window_tree_client.h"
 #include "mash/wm/property_util.h"
-#include "mash/wm/public/interfaces/container.mojom.h"
 #include "mash/wm/root_window_controller.h"
 #include "mojo/common/common_type_converters.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -32,15 +32,15 @@ mus::Window* GetTopLevelWindow(mus::Window* window, mus::Window* container) {
 }
 
 // Get a UserWindow struct from a mus::Window.
-mojom::UserWindowPtr GetUserWindow(mus::Window* window) {
-  mojom::UserWindowPtr user_window(mojom::UserWindow::New());
+ash::mojom::UserWindowPtr GetUserWindow(mus::Window* window) {
+  ash::mojom::UserWindowPtr user_window(ash::mojom::UserWindow::New());
   DCHECK_NE(0u, window->GetLocalProperty(kUserWindowIdKey));
   user_window->window_id = window->GetLocalProperty(kUserWindowIdKey);
   user_window->window_title = mojo::String::From(GetWindowTitle(window));
   user_window->window_app_icon = GetWindowAppIcon(window);
   user_window->window_app_id = mojo::String::From(GetAppID(window));
   user_window->ignored_by_shelf = GetWindowIgnoredByShelf(window);
-  mus::Window* focused = window->connection()->GetFocusedWindow();
+  mus::Window* focused = window->window_tree()->GetFocusedWindow();
   focused = GetTopLevelWindow(focused, window->parent());
   user_window->window_has_focus = focused == window;
   return user_window;
@@ -102,7 +102,7 @@ void UserWindowControllerImpl::Initialize(
   DCHECK(!root_controller_);
   root_controller_ = root_controller;
   GetUserWindowContainer()->AddObserver(this);
-  GetUserWindowContainer()->connection()->AddObserver(this);
+  GetUserWindowContainer()->window_tree()->AddObserver(this);
   window_property_observer_.reset(new WindowPropertyObserver(this));
   for (mus::Window* window : GetUserWindowContainer()->children()) {
     AssignIdIfNecessary(window);
@@ -117,7 +117,7 @@ void UserWindowControllerImpl::AssignIdIfNecessary(mus::Window* window) {
 
 void UserWindowControllerImpl::RemoveObservers(mus::Window* user_container) {
   user_container->RemoveObserver(this);
-  user_container->connection()->RemoveObserver(this);
+  user_container->window_tree()->RemoveObserver(this);
   for (auto iter : user_container->children())
     iter->RemoveObserver(window_property_observer_.get());
 }
@@ -132,7 +132,7 @@ mus::Window* UserWindowControllerImpl::GetUserWindowById(uint32_t id) {
 
 mus::Window* UserWindowControllerImpl::GetUserWindowContainer() const {
   return root_controller_->GetWindowForContainer(
-      mojom::Container::USER_PRIVATE_WINDOWS);
+      ash::mojom::Container::USER_PRIVATE_WINDOWS);
 }
 
 void UserWindowControllerImpl::OnTreeChanging(const TreeChangeParams& params) {
@@ -178,13 +178,13 @@ void UserWindowControllerImpl::OnWindowTreeFocusChanged(
 }
 
 void UserWindowControllerImpl::AddUserWindowObserver(
-    mojom::UserWindowObserverPtr observer) {
+    ash::mojom::UserWindowObserverPtr observer) {
   // TODO(msw): Support multiple observers.
   user_window_observer_ = std::move(observer);
 
   const mus::Window::Children& windows = GetUserWindowContainer()->children();
-  mojo::Array<mojom::UserWindowPtr> user_windows =
-      mojo::Array<mojom::UserWindowPtr>::New(windows.size());
+  mojo::Array<ash::mojom::UserWindowPtr> user_windows =
+      mojo::Array<ash::mojom::UserWindowPtr>::New(windows.size());
   for (size_t i = 0; i < windows.size(); ++i)
     user_windows[i] = GetUserWindow(windows[i]);
   user_window_observer_->OnUserWindowObserverAdded(std::move(user_windows));

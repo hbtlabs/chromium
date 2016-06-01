@@ -94,7 +94,6 @@
 #include "content/renderer/gpu/gpu_benchmarking_extension.h"
 #include "content/renderer/history_controller.h"
 #include "content/renderer/history_serialization.h"
-#include "content/renderer/http_body_conversions.h"
 #include "content/renderer/image_downloader/image_downloader_impl.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/internal_document_state_data.h"
@@ -540,21 +539,6 @@ WebURLRequest CreateURLRequestForNavigation(
       static_cast<WebURLRequest::InputToLoadPerfMetricReportPolicy>(
           common_params.report_type));
   return request;
-}
-
-// Converts the HTTP body data stored in ResourceRequestBody format to a
-// WebHTTPBody, which is then added to the WebURLRequest.
-// PlzNavigate: used to add the POST data sent by the renderer at commit time
-// to the WebURLRequest used to commit the navigation. This ensures that the
-// POST data will be in the PageState sent to the browser on commit.
-void AddHTTPBodyToRequest(WebURLRequest* request,
-                          const scoped_refptr<ResourceRequestBody>& body) {
-  WebHTTPBody http_body;
-  http_body.initialize();
-  http_body.setIdentifier(body->identifier());
-  for (const ResourceRequestBody::Element& element : *(body->elements()))
-    AppendHttpBodyElement(element, &http_body);
-  request->setHTTPBody(http_body);
 }
 
 // Sanitizes the navigation_start timestamp for browser-initiated navigations,
@@ -1574,7 +1558,7 @@ void RenderFrameImpl::SetPendingNavigationParams(
   pending_navigation_params_ = std::move(navigation_params);
 }
 
-void RenderFrameImpl::OnBeforeUnload() {
+void RenderFrameImpl::OnBeforeUnload(bool is_reload) {
   TRACE_EVENT1("navigation", "RenderFrameImpl::OnBeforeUnload",
                "id", routing_id_);
   // TODO(creis): Right now, this is only called on the main frame.  Make the
@@ -1583,11 +1567,10 @@ void RenderFrameImpl::OnBeforeUnload() {
   CHECK(!frame_->parent());
 
   base::TimeTicks before_unload_start_time = base::TimeTicks::Now();
-  bool proceed = frame_->dispatchBeforeUnloadEvent();
+  bool proceed = frame_->dispatchBeforeUnloadEvent(is_reload);
   base::TimeTicks before_unload_end_time = base::TimeTicks::Now();
-  Send(new FrameHostMsg_BeforeUnload_ACK(routing_id_, proceed,
-                                         before_unload_start_time,
-                                         before_unload_end_time));
+  Send(new FrameHostMsg_BeforeUnload_ACK(
+      routing_id_, proceed, before_unload_start_time, before_unload_end_time));
 }
 
 void RenderFrameImpl::OnSwapOut(
@@ -4911,6 +4894,25 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
     return blink::WebNavigationPolicyIgnore;
   }
 
+  // Execute the BeforeUnload event. If asked not to proceed or the frame is
+  // destroyed, ignore the navigation. There is no need to execute the
+  // BeforeUnload event during a redirect, since it was already executed at the
+  // start of the navigation.
+  // PlzNavigate: this is not executed when commiting the navigation.
+  if (info.defaultPolicy == blink::WebNavigationPolicyCurrentTab &&
+      !is_redirect && (!IsBrowserSideNavigationEnabled() ||
+                       info.urlRequest.checkForBrowserSideNavigation())) {
+    // Keep a WeakPtr to this RenderFrameHost to detect if executing the
+    // BeforeUnload event destriyed this frame.
+    base::WeakPtr<RenderFrameImpl> weak_self = weak_factory_.GetWeakPtr();
+
+    if (!frame_->dispatchBeforeUnloadEvent(info.navigationType ==
+                                           blink::WebNavigationTypeReload) ||
+        !weak_self) {
+      return blink::WebNavigationPolicyIgnore;
+    }
+  }
+
   // PlzNavigate: if the navigation is not synchronous, send it to the browser.
   // This includes navigations with no request being sent to the network stack.
   if (IsBrowserSideNavigationEnabled() &&
@@ -5356,7 +5358,7 @@ void RenderFrameImpl::NavigateInternal(
                                     frame_->isViewSourceModeEnabled());
 
   if (IsBrowserSideNavigationEnabled() && common_params.post_data)
-    AddHTTPBodyToRequest(&request, common_params.post_data);
+    request.setHTTPBody(GetWebHTTPBodyForRequestBody(common_params.post_data));
 
   // Used to determine whether this frame is actually loading a request as part
   // of a history navigation.
@@ -5449,7 +5451,8 @@ void RenderFrameImpl::NavigateInternal(
 
     if (common_params.method == "POST" && !browser_side_navigation &&
         common_params.post_data) {
-      AddHTTPBodyToRequest(&request, common_params.post_data);
+      request.setHTTPBody(
+          GetWebHTTPBodyForRequestBody(common_params.post_data));
     }
 
     // A session history navigation should have been accompanied by state.
@@ -5659,7 +5662,6 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request,
                                       bool is_client_redirect) {
   CHECK(IsBrowserSideNavigationEnabled());
   DCHECK(request);
-  // TODO(clamy): Execute the beforeunload event.
 
   // Note: At this stage, the goal is to apply all the modifications the
   // renderer wants to make to the request, and then send it to the browser, so

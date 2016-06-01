@@ -56,7 +56,8 @@ class AnimatingDesktopController;
 class DesktopBackgroundWidgetController;
 class DockedWindowLayoutManager;
 class PanelLayoutManager;
-class RootWindowLayoutManager;
+class RootWindowControllerCommon;
+class Shelf;
 class ShelfLayoutManager;
 class ShelfWidget;
 class StackingController;
@@ -72,6 +73,10 @@ class WorkspaceController;
 class BootSplashScreen;
 class AshTouchExplorationManager;
 #endif
+
+namespace wm {
+class WmWindow;
+}
 
 // This class maintains the per root window state for ash. This class
 // owns the root window and other dependent objects that should be
@@ -108,8 +113,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   aura::Window* GetRootWindow();
   const aura::Window* GetRootWindow() const;
 
-  RootWindowLayoutManager* root_window_layout() { return root_window_layout_; }
-
   WorkspaceController* workspace_controller() {
     return workspace_controller_.get();
   }
@@ -120,6 +123,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   // Access the shelf widget associated with this root window controller,
   // NULL if no such shelf exists.
+  // DEPRECATED: Prefer GetShelf()->shelf_widget().
   ShelfWidget* shelf_widget() { return shelf_widget_.get(); }
 
   // Get touch HUDs associated with this root window controller.
@@ -178,10 +182,14 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   const aura::Window* GetContainer(int container_id) const;
 
   // Show shelf view if it was created hidden (before session has started).
+  // TODO(jamescook): Eliminate this and handle show via Shelf.
   void ShowShelf();
 
   // Creates the shelf for this root window and notifies observers.
   void CreateShelf();
+
+  // Returns the shelf controller for this root window.
+  Shelf* GetShelf() const;
 
   // Called when the login status changes after login (such as lock/unlock).
   // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
@@ -247,10 +255,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   // |is_first_run_after_boot| determines the background's initial color.
   void CreateSystemBackground(bool is_first_run_after_boot);
 
-  // Creates each of the special window containers that holds windows of various
-  // types in the shell UI.
-  void CreateContainersInRootWindow(aura::Window* root_window);
-
   // Enables projection touch HUD.
   void EnableTouchHudProjection();
 
@@ -265,7 +269,8 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   void OnTouchHudProjectionToggled(bool enabled) override;
 
   std::unique_ptr<AshWindowTreeHost> ash_host_;
-  RootWindowLayoutManager* root_window_layout_;
+
+  std::unique_ptr<RootWindowControllerCommon> root_window_controller_common_;
 
   std::unique_ptr<StackingController> stacking_controller_;
 

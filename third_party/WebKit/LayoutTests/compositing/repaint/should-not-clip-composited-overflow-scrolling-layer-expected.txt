@@ -11,17 +11,6 @@
           "bounds": [500, 500],
           "shouldFlattenTransform": false,
           "drawsContent": true,
-          "paintInvalidations": [
-            {
-              "object": "LayoutBlockFlow DIV id='content'",
-              "rect": [-2000, -2000, 5000, 5000],
-              "reason": "style change"
-            },
-            {
-              "object": "RootInlineBox",
-              "reason": "full"
-            }
-          ],
           "children": [
             {
               "bounds": [485, 485],

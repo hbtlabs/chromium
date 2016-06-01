@@ -82,6 +82,7 @@ class ChromeControllerError(Exception):
   """
   _INTERMITTENT_WHITE_LIST = {websocket.WebSocketTimeoutException,
                               devtools_monitor.DevToolsConnectionTargetCrashed}
+  _PASSTHROUGH_WHITE_LIST = (MemoryError, SyntaxError)
 
   def __init__(self, log):
     """Constructor
@@ -296,7 +297,7 @@ class RemoteChromeController(ChromeControllerBase):
     Caution: The browser state might need to be manually reseted.
 
     Args:
-      device: an android device.
+      device: (device_utils.DeviceUtils) an android device.
     """
     assert device is not None, 'Should you be using LocalController instead?'
     super(RemoteChromeController, self).__init__()
@@ -354,20 +355,25 @@ class RemoteChromeController(ChromeControllerBase):
           raise ChromeControllerInternalError(
               'Failed to connect to Chrome devtools after {} '
               'attempts.'.format(self.DEVTOOLS_CONNECTION_ATTEMPTS))
-      except:
+      except ChromeControllerError._PASSTHROUGH_WHITE_LIST:
+        raise
+      except Exception:
         logcat = ''.join([l + '\n' for l in self._device.adb.Logcat(dump=True)])
         raise ChromeControllerError(log=logcat)
       finally:
         self._device.ForceStop(package_info.package)
 
   def ResetBrowserState(self):
-    """Override for chrome state reseting."""
-    logging.info('Reset chrome\'s profile')
-    package_info = OPTIONS.ChromePackage()
-    # We assume all the browser is in the Default user profile directory.
-    cmd = ['rm', '-rf', '/data/data/{}/app_chrome/Default'.format(
-               package_info.package)]
-    self._device.adb.Shell(subprocess.list2cmdline(cmd))
+    """Override resetting Chrome local state."""
+    logging.info('Resetting Chrome local state')
+    package = OPTIONS.ChromePackage().package
+    # Remove the Chrome Profile and the various disk caches. Other parts
+    # theoretically should not affect loading performance. Also remove the tab
+    # state to prevent it from growing infinitely. [:D]
+    for directory in ['app_chrome/Default', 'cache', 'app_chrome/ShaderCache',
+                      'app_tabs']:
+      cmd = ['rm', '-rf', '/data/data/{}/{}'.format(package, directory)]
+      self._device.adb.Shell(subprocess.list2cmdline(cmd))
 
   def PushBrowserCache(self, cache_path):
     """Override for chrome cache pushing."""
@@ -520,7 +526,9 @@ class LocalChromeController(ChromeControllerBase):
         connection.Close()
         chrome_process.wait()
         chrome_process = None
-    except:
+    except ChromeControllerError._PASSTHROUGH_WHITE_LIST:
+      raise
+    except Exception:
       raise ChromeControllerError(log=open(tmp_log.name).read())
     finally:
       if OPTIONS.local_noisy:
