@@ -24,8 +24,6 @@ class Time;
 
 namespace offline_pages {
 
-static const int64_t kInvalidOfflineId = 0;
-
 struct ClientId;
 struct OfflinePageItem;
 
@@ -46,8 +44,7 @@ struct OfflinePageItem;
 //
 // TODO(fgorski): Things to describe:
 // * how to cancel requests and what to expect
-class OfflinePageModel : public base::SupportsUserData,
-                         public OfflinePageStorageManager::Client {
+class OfflinePageModel : public base::SupportsUserData {
  public:
   // Observer of the OfflinePageModel.
   class Observer {
@@ -78,9 +75,8 @@ class OfflinePageModel : public base::SupportsUserData,
   using DeletePageResult = offline_pages::DeletePageResult;
   using SavePageResult = offline_pages::SavePageResult;
 
-  // Returns true if an offline copy can be saved for the given URL.
-  // TODO(dougarnett): Consider renaming and moving to Utils.
-  static bool CanSavePage(const GURL& url);
+  // Returns true if saving an offline page may be attempted for |url|.
+  static bool CanSaveURL(const GURL& url);
 
   OfflinePageModel();
   ~OfflinePageModel() override;
@@ -100,12 +96,12 @@ class OfflinePageModel : public base::SupportsUserData,
   // will be updated. Requires that the model is loaded.
   virtual void MarkPageAccessed(int64_t offline_id) = 0;
 
-  // TODO(romax): Pull this interface up from OfflinePageStorageManager::Client
-  // void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
-  //                             const DeletePageCallback& callback);
-
   // Wipes out all the data by deleting all saved files and clearing the store.
   virtual void ClearAll(const base::Closure& callback) = 0;
+
+  // Deletes pages based on |ofline_ids|.
+  virtual void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
+                                      const DeletePageCallback& callback) = 0;
 
   // Deletes offline pages matching the URL predicate.
   virtual void DeletePagesByURLPredicate(
@@ -122,6 +118,9 @@ class OfflinePageModel : public base::SupportsUserData,
   virtual void CheckPagesExistOffline(
       const std::set<GURL>& urls,
       const CheckPagesExistOfflineCallback& callback) = 0;
+
+  // Gets all offline pages.
+  virtual void GetAllPages(const MultipleOfflinePageItemCallback& callback) = 0;
 
   // Gets all offline ids where the offline page has the matching client id.
   virtual void GetOfflineIdsForClientId(
@@ -185,6 +184,12 @@ class OfflinePageModel : public base::SupportsUserData,
   // metadata will be removed and |OfflinePageDeleted| will be sent to model
   // observers.
   virtual void CheckForExternalFileDeletion() = 0;
+
+  // Marks pages with |offline_ids| as expired and deletes the associated
+  // archive files.
+  virtual void ExpirePages(const std::vector<int64_t>& offline_ids,
+                           const base::Time& expiration_time,
+                           const base::Callback<void(bool)>& callback) = 0;
 
   // Returns the policy controller.
   virtual ClientPolicyController* GetPolicyController() = 0;

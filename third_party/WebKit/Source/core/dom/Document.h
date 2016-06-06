@@ -122,6 +122,7 @@ class IdleRequestOptions;
 class InputDeviceCapabilities;
 class IntersectionObserverController;
 class LayoutPoint;
+class LayoutView;
 class LayoutViewItem;
 class LiveNodeListBase;
 class LocalDOMWindow;
@@ -141,8 +142,8 @@ class PlatformMouseEvent;
 class ProcessingInstruction;
 class QualifiedName;
 class Range;
-class LayoutView;
 class ResourceFetcher;
+class RootScrollerController;
 class SVGDocumentExtensions;
 class SVGUseElement;
 class ScriptRunner;
@@ -313,7 +314,6 @@ public:
     HeapVector<Member<Element>> elementsFromPoint(int x, int y) const;
     Range* caretRangeFromPoint(int x, int y);
     Element* scrollingElement();
-    VisualViewport* visualViewport();
 
     String readyState() const;
 
@@ -648,7 +648,6 @@ public:
     void attachRange(Range*);
     void detachRange(Range*);
 
-    void updateRangesAfterChildrenChanged(ContainerNode*);
     void updateRangesAfterNodeMovedToAnotherDocument(const Node&);
     // nodeChildrenWillBeRemoved is used when removing all node children at once.
     void nodeChildrenWillBeRemoved(ContainerNode&);
@@ -1069,9 +1068,6 @@ public:
 
     SnapCoordinator* snapCoordinator();
 
-    using WeakDocumentSet = HeapHashSet<WeakMember<Document>>;
-    static WeakDocumentSet& liveDocumentSet();
-
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
 
@@ -1084,8 +1080,9 @@ public:
 
     bool containsV1ShadowTree() const { return m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV1; }
 
+    Element* rootScroller() const;
     void setRootScroller(Element*, ExceptionState&);
-    Element* rootScroller();
+    bool isEffectiveRootScroller(const Element&) const;
 
     bool isInMainFrame() const;
 
@@ -1241,6 +1238,7 @@ private:
     Member<Element> m_activeHoverElement;
     Member<Element> m_documentElement;
     UserActionElementSet m_userActionElements;
+    Member<RootScrollerController> m_rootScrollerController;
 
     uint64_t m_domTreeVersion;
     static uint64_t s_globalTreeVersion;

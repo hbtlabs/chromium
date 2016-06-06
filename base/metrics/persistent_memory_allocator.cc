@@ -7,6 +7,12 @@
 #include <assert.h>
 #include <algorithm>
 
+#if defined(OS_WIN)
+#include "winbase.h"
+#elif defined(OS_POSIX)
+#include <sys/mman.h>
+#endif
+
 #include "base/files/memory_mapped_file.h"
 #include "base/logging.h"
 #include "base/memory/shared_memory.h"
@@ -78,8 +84,8 @@ const uint32_t PersistentMemoryAllocator::kAllocAlignment = 8;
 struct PersistentMemoryAllocator::BlockHeader {
   uint32_t size;       // Number of bytes in this block, including header.
   uint32_t cookie;     // Constant value indicating completed allocation.
-  uint32_t type_id;    // A number provided by caller indicating data type.
-  std::atomic<uint32_t> next;  // Pointer to the next block when iterating.
+  std::atomic<uint32_t> type_id;  // Arbitrary number indicating data type.
+  std::atomic<uint32_t> next;     // Pointer to the next block when iterating.
 };
 
 // The shared metadata exists once at the top of the memory segment to
@@ -188,7 +194,7 @@ PersistentMemoryAllocator::Iterator::GetNext(uint32_t* type_return) {
     // "strong" compare-exchange is used because failing unnecessarily would
     // mean repeating some fairly costly validations above.
     if (last_record_.compare_exchange_strong(last, next)) {
-      *type_return = block->type_id;
+      *type_return = block->type_id.load(std::memory_order_relaxed);
       break;
     }
   }
@@ -295,7 +301,7 @@ PersistentMemoryAllocator::PersistentMemoryAllocator(
         shared_meta()->queue.next.load(std::memory_order_relaxed) != 0 ||
         first_block->size != 0 ||
         first_block->cookie != 0 ||
-        first_block->type_id != 0 ||
+        first_block->type_id.load(std::memory_order_relaxed) != 0 ||
         first_block->next != 0) {
       // ...or something malicious has been playing with the metadata.
       SetCorrupt();
@@ -422,15 +428,20 @@ uint32_t PersistentMemoryAllocator::GetType(Reference ref) const {
   const volatile BlockHeader* const block = GetBlock(ref, 0, 0, false, false);
   if (!block)
     return 0;
-  return block->type_id;
+  return block->type_id.load(std::memory_order_relaxed);
 }
 
-void PersistentMemoryAllocator::SetType(Reference ref, uint32_t type_id) {
+bool PersistentMemoryAllocator::ChangeType(Reference ref,
+                                           uint32_t to_type_id,
+                                           uint32_t from_type_id) {
   DCHECK(!readonly_);
   volatile BlockHeader* const block = GetBlock(ref, 0, 0, false, false);
   if (!block)
-    return;
-  block->type_id = type_id;
+    return false;
+
+  // This is a "strong" exchange because there is no loop that can retry in
+  // the wake of spurious failures possible with "weak" exchanges.
+  return block->type_id.compare_exchange_strong(from_type_id, to_type_id);
 }
 
 PersistentMemoryAllocator::Reference PersistentMemoryAllocator::Allocate(
@@ -544,7 +555,7 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
     // writing beyond the allocated space and into unallocated space.
     if (block->size != 0 ||
         block->cookie != kBlockCookieFree ||
-        block->type_id != 0 ||
+        block->type_id.load(std::memory_order_relaxed) != 0 ||
         block->next.load(std::memory_order_relaxed) != 0) {
       SetCorrupt();
       return kReferenceNull;
@@ -552,7 +563,7 @@ PersistentMemoryAllocator::Reference PersistentMemoryAllocator::AllocateImpl(
 
     block->size = size;
     block->cookie = kBlockCookieAllocated;
-    block->type_id = type_id;
+    block->type_id.store(type_id, std::memory_order_relaxed);
     return freeptr;
   }
 }
@@ -684,8 +695,10 @@ PersistentMemoryAllocator::GetBlock(Reference ref, uint32_t type_id,
       return nullptr;
     if (ref != kReferenceQueue && block->cookie != kBlockCookieAllocated)
       return nullptr;
-    if (type_id != 0 && block->type_id != type_id)
+    if (type_id != 0 &&
+        block->type_id.load(std::memory_order_relaxed) != type_id) {
       return nullptr;
+    }
   }
 
   // Return pointer to block data.
@@ -722,11 +735,44 @@ LocalPersistentMemoryAllocator::LocalPersistentMemoryAllocator(
     size_t size,
     uint64_t id,
     base::StringPiece name)
-    : PersistentMemoryAllocator(memset(new char[size], 0, size),
+    : PersistentMemoryAllocator(AllocateLocalMemory(size),
                                 size, 0, id, name, false) {}
 
 LocalPersistentMemoryAllocator::~LocalPersistentMemoryAllocator() {
-  delete [] mem_base_;
+  DeallocateLocalMemory(const_cast<char*>(mem_base_), mem_size_);
+}
+
+// static
+void* LocalPersistentMemoryAllocator::AllocateLocalMemory(size_t size) {
+#if defined(OS_WIN)
+  void* address =
+      ::VirtualAlloc(nullptr, size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+  DPCHECK(address);
+  return address;
+#elif defined(OS_POSIX)
+  // MAP_ANON is deprecated on Linux but MAP_ANONYMOUS is not universal on Mac.
+  // MAP_SHARED is not available on Linux <2.4 but required on Mac.
+  void* address = ::mmap(nullptr, size, PROT_READ | PROT_WRITE,
+                         MAP_ANON | MAP_SHARED, -1, 0);
+  DPCHECK(MAP_FAILED != address);
+  return address;
+#else
+#error This architecture is not (yet) supported.
+#endif
+}
+
+// static
+void LocalPersistentMemoryAllocator::DeallocateLocalMemory(void* memory,
+                                                           size_t size) {
+#if defined(OS_WIN)
+  BOOL success = ::VirtualFree(memory, 0, MEM_DECOMMIT);
+  DPCHECK(success);
+#elif defined(OS_POSIX)
+  int result = ::munmap(memory, size);
+  DPCHECK(0 == result);
+#else
+#error This architecture is not (yet) supported.
+#endif
 }
 
 

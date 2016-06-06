@@ -463,58 +463,6 @@ void FocusFrame(FrameTreeNode* frame) {
   focus_observer.Wait();
 }
 
-// A WebContentsDelegate that catches messages sent to the console.
-class ConsoleObserverDelegate : public WebContentsDelegate {
- public:
-  ConsoleObserverDelegate(WebContents* web_contents, const std::string& filter)
-      : web_contents_(web_contents),
-        filter_(filter),
-        message_(""),
-        message_loop_runner_(new MessageLoopRunner) {}
-
-  ~ConsoleObserverDelegate() override {}
-
-  bool AddMessageToConsole(WebContents* source,
-                           int32_t level,
-                           const base::string16& message,
-                           int32_t line_no,
-                           const base::string16& source_id) override;
-
-  std::string message() { return message_; }
-
-  void Wait();
-
- private:
-  WebContents* web_contents_;
-  std::string filter_;
-  std::string message_;
-
-  // The MessageLoopRunner used to spin the message loop.
-  scoped_refptr<MessageLoopRunner> message_loop_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(ConsoleObserverDelegate);
-};
-
-void ConsoleObserverDelegate::Wait() {
-  message_loop_runner_->Run();
-}
-
-bool ConsoleObserverDelegate::AddMessageToConsole(
-    WebContents* source,
-    int32_t level,
-    const base::string16& message,
-    int32_t line_no,
-    const base::string16& source_id) {
-  DCHECK(source == web_contents_);
-
-  std::string ascii_message = base::UTF16ToASCII(message);
-  if (base::MatchPattern(ascii_message, filter_)) {
-    message_ = ascii_message;
-    message_loop_runner_->Quit();
-  }
-  return false;
-}
-
 // A BrowserMessageFilter that drops SwapOut ACK messages.
 class SwapoutACKMessageFilter : public BrowserMessageFilter {
  public:
@@ -784,6 +732,44 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, CrossSiteIframe) {
       "Where A = http://a.com/\n"
       "      C = http://bar.com/",
       DepictFrameTree(root));
+}
+
+// Ensure that title updates affect the correct NavigationEntry after a new
+// subframe navigation with an out-of-process iframe.  https://crbug.com/616609.
+IN_PROC_BROWSER_TEST_F(SitePerProcessBrowserTest, TitleAfterCrossSiteIframe) {
+  // Start at an initial page.
+  GURL initial_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), initial_url));
+
+  // Navigate to a same-site page with a same-site iframe.
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(a)"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = web_contents()->GetFrameTree()->root();
+
+  // Make the main frame update its title after the subframe loads.
+  EXPECT_TRUE(ExecuteScript(shell()->web_contents(),
+                            "document.querySelector('iframe').onload = "
+                            "    function() { document.title = 'loaded'; };"));
+  EXPECT_TRUE(
+      ExecuteScript(shell()->web_contents(), "document.title = 'not loaded';"));
+  base::string16 expected_title(base::UTF8ToUTF16("loaded"));
+  TitleWatcher title_watcher(shell()->web_contents(), expected_title);
+
+  // Navigate the iframe cross-site.
+  TestNavigationObserver load_observer(shell()->web_contents());
+  GURL frame_url = embedded_test_server()->GetURL("b.com", "/title2.html");
+  EXPECT_TRUE(
+      ExecuteScript(root->child_at(0)->current_frame_host(),
+                    "window.location.href = '" + frame_url.spec() + "';"));
+  load_observer.Wait();
+
+  // Wait for the title to update and ensure it affects the right NavEntry.
+  EXPECT_EQ(expected_title, title_watcher.WaitAndGetTitle());
+  NavigationEntry* entry =
+      shell()->web_contents()->GetController().GetLastCommittedEntry();
+  EXPECT_EQ(expected_title, entry->GetTitle());
 }
 
 // Class to sniff incoming IPCs for FrameHostMsg_FrameRectChanged messages.

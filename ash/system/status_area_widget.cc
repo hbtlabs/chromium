@@ -4,13 +4,13 @@
 
 #include "ash/system/status_area_widget.h"
 
-#include "ash/common/wm/wm_root_window_controller.h"
-#include "ash/common/wm/wm_window.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_window.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_window_ids.h"
 #include "ash/system/overview/overview_button_tray.h"
 #include "ash/system/status_area_widget_delegate.h"
 #include "ash/system/tray/system_tray.h"
@@ -26,7 +26,7 @@
 
 namespace ash {
 
-StatusAreaWidget::StatusAreaWidget(wm::WmWindow* status_container,
+StatusAreaWidget::StatusAreaWidget(WmWindow* status_container,
                                    ShelfWidget* shelf_widget)
     : status_area_widget_delegate_(new StatusAreaWidgetDelegate),
       overview_button_tray_(NULL),
@@ -174,7 +174,7 @@ void StatusAreaWidget::AddOverviewButtonTray() {
   status_area_widget_delegate_->AddTray(overview_button_tray_);
 }
 
-void StatusAreaWidget::SetShelfAlignment(wm::ShelfAlignment alignment) {
+void StatusAreaWidget::SetShelfAlignment(ShelfAlignment alignment) {
   status_area_widget_delegate_->set_alignment(alignment);
   if (system_tray_)
     system_tray_->SetShelfAlignment(alignment);

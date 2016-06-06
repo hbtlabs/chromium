@@ -526,11 +526,18 @@ bool MultiplexRouter::OnPeerAssociatedEndpointClosed(InterfaceId id) {
     return false;
 
   InterfaceEndpoint* endpoint = FindOrInsertEndpoint(id, nullptr);
-  DCHECK(!endpoint->peer_closed());
 
-  if (endpoint->client())
-    tasks_.push_back(Task::CreateNotifyErrorTask(endpoint));
-  UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
+  // It is possible that this endpoint has been set as peer closed. That is
+  // because when the message pipe is closed, all the endpoints are updated with
+  // PEER_ENDPOINT_CLOSED. We continue to process remaining tasks in the queue,
+  // as long as there are refs keeping the router alive. If there is a
+  // PeerAssociatedEndpointClosedEvent control message in the queue, we will get
+  // here and see that the endpoint has been marked as peer closed.
+  if (!endpoint->peer_closed()) {
+    if (endpoint->client())
+      tasks_.push_back(Task::CreateNotifyErrorTask(endpoint));
+    UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
+  }
 
   // No need to trigger a ProcessTasks() because it is already on the stack.
 
@@ -594,7 +601,7 @@ void MultiplexRouter::ProcessTasks(
     bool sync_message = task->IsMessageTask() && task->message &&
                         task->message->has_flag(kMessageIsSync);
     if (sync_message) {
-      InterfaceId id = task->message->interface_id();
+      id = task->message->interface_id();
       auto& sync_message_queue = sync_message_tasks_[id];
       DCHECK_EQ(task.get(), sync_message_queue.front());
       sync_message_queue.pop_front();
@@ -608,11 +615,11 @@ void MultiplexRouter::ProcessTasks(
                                      current_task_runner);
 
     if (!processed) {
-      tasks_.push_front(std::move(task));
       if (sync_message) {
         auto& sync_message_queue = sync_message_tasks_[id];
         sync_message_queue.push_front(task.get());
       }
+      tasks_.push_front(std::move(task));
       break;
     } else {
       if (sync_message) {
@@ -643,7 +650,15 @@ bool MultiplexRouter::ProcessFirstSyncMessageForEndpoint(InterfaceId id) {
   DCHECK(processed);
 
   iter = sync_message_tasks_.find(id);
-  return iter != sync_message_tasks_.end() && !iter->second.empty();
+  if (iter == sync_message_tasks_.end())
+    return false;
+
+  if (iter->second.empty()) {
+    sync_message_tasks_.erase(iter);
+    return false;
+  }
+
+  return true;
 }
 
 bool MultiplexRouter::ProcessNotifyErrorTask(

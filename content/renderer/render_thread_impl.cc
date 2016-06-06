@@ -164,7 +164,6 @@
 
 #if defined(OS_ANDROID)
 #include <cpu-features.h>
-#include "content/renderer/android/synchronous_compositor_external_begin_frame_source.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/media/android/renderer_demuxer_android.h"
 #include "content/renderer/media/android/stream_texture_factory.h"
@@ -611,7 +610,7 @@ void RenderThreadImpl::Init(
       base::PlatformThread::CurrentId(),
       kTraceEventRendererMainThreadSortIndex);
 
-#if defined(OS_MACOSX) || (defined(OS_ANDROID) && !defined(USE_AURA))
+#if defined(USE_EXTERNAL_POPUP_MENU)
   // On Mac and Android Java UI, the select popups are rendered by the browser.
   blink::WebView::setUseExternalPopupMenus(true);
 #endif
@@ -1104,7 +1103,6 @@ void RenderThreadImpl::InitializeCompositorThread() {
       FROM_HERE,
       base::Bind(base::IgnoreResult(&ThreadRestrictions::SetIOAllowed), false));
 
-  InputHandlerManagerClient* input_handler_manager_client = nullptr;
   SynchronousInputHandlerProxyClient* synchronous_input_handler_proxy_client =
       nullptr;
 #if defined(OS_ANDROID)
@@ -1112,22 +1110,17 @@ void RenderThreadImpl::InitializeCompositorThread() {
     sync_compositor_message_filter_ =
         new SynchronousCompositorFilter(compositor_task_runner_);
     AddFilter(sync_compositor_message_filter_.get());
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kSyncInputForSyncCompositor)) {
-      input_handler_manager_client = sync_compositor_message_filter_.get();
-    }
     synchronous_input_handler_proxy_client =
         sync_compositor_message_filter_.get();
   }
 #endif
-  if (!input_handler_manager_client) {
-    scoped_refptr<InputEventFilter> compositor_input_event_filter(
-        new InputEventFilter(main_input_callback_.callback(),
-                             main_thread_compositor_task_runner_,
-                             compositor_task_runner_));
-    input_handler_manager_client = compositor_input_event_filter.get();
-    input_event_filter_ = compositor_input_event_filter;
-  }
+  scoped_refptr<InputEventFilter> compositor_input_event_filter(
+      new InputEventFilter(main_input_callback_.callback(),
+                           main_thread_compositor_task_runner_,
+                           compositor_task_runner_));
+  InputHandlerManagerClient* input_handler_manager_client =
+      compositor_input_event_filter.get();
+  input_event_filter_ = compositor_input_event_filter;
   input_handler_manager_.reset(new InputHandlerManager(
       compositor_task_runner_, input_handler_manager_client,
       synchronous_input_handler_proxy_client, renderer_scheduler_.get()));
@@ -1268,6 +1261,10 @@ void RenderThreadImpl::RegisterSchemes() {
   // chrome-devtools:
   WebString devtools_scheme(base::ASCIIToUTF16(kChromeDevToolsScheme));
   WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(devtools_scheme);
+
+  // view-source:
+  WebString view_source_scheme(base::ASCIIToUTF16(kViewSourceScheme));
+  WebSecurityPolicy::registerURLSchemeAsDisplayIsolated(view_source_scheme);
 }
 
 void RenderThreadImpl::NotifyTimezoneChange() {
@@ -1602,12 +1599,6 @@ scheduler::RendererScheduler* RenderThreadImpl::GetRendererScheduler() {
 
 std::unique_ptr<cc::BeginFrameSource>
 RenderThreadImpl::CreateExternalBeginFrameSource(int routing_id) {
-#if defined(OS_ANDROID)
-  if (sync_compositor_message_filter_) {
-    return base::WrapUnique(new SynchronousCompositorExternalBeginFrameSource(
-        routing_id, sync_compositor_message_filter_.get()));
-  }
-#endif
   return base::WrapUnique(new CompositorExternalBeginFrameSource(
       compositor_message_filter_.get(), sync_message_filter(), routing_id));
 }

@@ -58,9 +58,9 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icons_public.h"
+#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
-#include "ui/views/animation/ink_drop_delegate.h"
-#include "ui/views/animation/ink_drop_hover.h"
+#include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -160,7 +160,7 @@ DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
       dragging_(false),
       starting_drag_(false),
       model_(download_item),
-      ink_drop_delegate_(this, this),
+      button_ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       save_button_(nullptr),
       discard_button_(nullptr),
       dropdown_button_(new BarControlButton(this)),
@@ -170,6 +170,7 @@ DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
       creation_time_(base::Time::Now()),
       time_download_warning_shown_(base::Time()),
       weak_ptr_factory_(this) {
+  set_ink_drop_delegate(base::WrapUnique(button_ink_drop_delegate_));
   DCHECK(download());
   DCHECK(ui::MaterialDesignController::IsModeMaterial());
   download()->AddObserver(this);
@@ -338,9 +339,9 @@ void DownloadItemViewMd::Layout() {
       child_origin.Offset(button_size.width() + kButtonPadding, 0);
     }
     discard_button_->SetBoundsRect(gfx::Rect(child_origin, button_size));
-    DCHECK_EQ(GetPreferredSize().width(),
-              discard_button_->bounds().right() + kEndPadding);
-  } else {
+  }
+
+  if (mode_ != DANGEROUS_MODE) {
     dropdown_button_->SizeToPreferredSize();
     dropdown_button_->SetPosition(
         gfx::Point(width() - dropdown_button_->width() - kEndPadding,
@@ -368,9 +369,11 @@ gfx::Size DownloadItemViewMd::GetPreferredSize() const {
         std::max({child_height, button_size.height(), kWarningIconSize});
   } else {
     width = kStartPadding + DownloadShelf::kProgressIndicatorSize +
-            kProgressTextPadding + kTextWidth +
-            dropdown_button_->GetPreferredSize().width() + kEndPadding;
+            kProgressTextPadding + kTextWidth + kEndPadding;
   }
+
+  if (mode_ != DANGEROUS_MODE)
+    width += dropdown_button_->GetPreferredSize().width();
 
   return gfx::Size(width, std::max(kDefaultHeight,
                                    2 * kMinimumVerticalPadding + child_height));
@@ -390,7 +393,7 @@ bool DownloadItemViewMd::OnMouseDragged(const ui::MouseEvent& event) {
   if (!starting_drag_) {
     starting_drag_ = true;
     drag_start_point_ = event.location();
-    ink_drop_delegate_.OnAction(views::InkDropState::HIDDEN);
+    button_ink_drop_delegate_->OnAction(views::InkDropState::HIDDEN);
   }
   if (dragging_) {
     if (download()->GetState() == DownloadItem::COMPLETE) {
@@ -430,7 +433,7 @@ bool DownloadItemViewMd::OnKeyPressed(const ui::KeyEvent& event) {
 
   if (event.key_code() == ui::VKEY_SPACE ||
       event.key_code() == ui::VKEY_RETURN) {
-    ink_drop_delegate_.set_last_ink_drop_location(
+    button_ink_drop_delegate_->set_last_ink_drop_location(
         GetLocalBounds().CenterPoint());
     // OpenDownload may delete this, so don't add any code after this line.
     OpenDownload();
@@ -475,17 +478,17 @@ void DownloadItemViewMd::AddInkDropLayer(ui::Layer* ink_drop_layer) {
 std::unique_ptr<views::InkDropRipple> DownloadItemViewMd::CreateInkDropRipple()
     const {
   return base::WrapUnique(new views::FloodFillInkDropRipple(
-      GetLocalBounds(), ink_drop_delegate_.last_ink_drop_location(),
+      GetLocalBounds(), button_ink_drop_delegate_->last_ink_drop_location(),
       color_utils::DeriveDefaultIconColor(GetTextColor())));
 }
 
-std::unique_ptr<views::InkDropHover> DownloadItemViewMd::CreateInkDropHover()
-    const {
+std::unique_ptr<views::InkDropHighlight>
+DownloadItemViewMd::CreateInkDropHighlight() const {
   if (IsShowingWarningDialog())
     return nullptr;
 
   gfx::Size size = GetPreferredSize();
-  return base::WrapUnique(new views::InkDropHover(
+  return base::WrapUnique(new views::InkDropHighlight(
       size, kInkDropSmallCornerRadius, gfx::Rect(size).CenterPoint(),
       color_utils::DeriveDefaultIconColor(GetTextColor())));
 }
@@ -738,7 +741,7 @@ void DownloadItemViewMd::OpenDownload() {
                            base::Time::Now() - creation_time_);
 
   UpdateAccessibleName();
-  ink_drop_delegate_.OnAction(views::InkDropState::ACTION_TRIGGERED);
+  button_ink_drop_delegate_->OnAction(views::InkDropState::ACTION_TRIGGERED);
 
   // Calling download()->OpenDownload may delete this, so this must be
   // the last thing we do.
@@ -838,8 +841,8 @@ void DownloadItemViewMd::HandlePressEvent(const ui::LocatedEvent& event,
   if (!active_event)
     return;
 
-  ink_drop_delegate_.set_last_ink_drop_location(event.location());
-  ink_drop_delegate_.OnAction(views::InkDropState::ACTION_PENDING);
+  button_ink_drop_delegate_->set_last_ink_drop_location(event.location());
+  button_ink_drop_delegate_->OnAction(views::InkDropState::ACTION_PENDING);
 }
 
 void DownloadItemViewMd::HandleClickEvent(const ui::LocatedEvent& event,
@@ -966,7 +969,7 @@ void DownloadItemViewMd::ShowWarningDialog() {
   AddChildView(dangerous_download_label_);
   SizeLabelToMinWidth();
 
-  dropdown_button_->SetVisible(false);
+  dropdown_button_->SetVisible(mode_ == MALICIOUS_MODE);
 }
 
 gfx::ImageSkia DownloadItemViewMd::GetWarningIcon() {

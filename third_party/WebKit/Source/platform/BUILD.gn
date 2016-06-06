@@ -188,33 +188,42 @@ executable("character_data_generator") {
 
 # Inspector protocol
 
-protocol_file = "../devtools/protocol.json"
-
 action("inspector_protocol_sources") {
   script = "inspector_protocol/CodeGenerator.py"
-
+  deps = [
+    ":inspector_protocol_version",
+  ]
   sources = [
     "inspector_protocol/CodeGenerator.py",
+    "inspector_protocol/TypeBuilder_cpp.template",
+    "inspector_protocol/TypeBuilder_h.template",
   ]
   inputs = [
-    protocol_file,
-    "inspector_protocol/TypeBuilder_h.template",
-    "inspector_protocol/TypeBuilder_cpp.template",
+    "v8_inspector/js_protocol.json",
   ]
   outputs = [
-    "$blink_platform_output_dir/inspector_protocol/TypeBuilder.cpp",
-    "$blink_platform_output_dir/inspector_protocol/TypeBuilder.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Debugger.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Debugger.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/HeapProfiler.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/HeapProfiler.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Profiler.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Profiler.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Runtime.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Runtime.h",
   ]
 
   args = [
-    rebase_path(protocol_file, root_build_dir),
+    "--protocol",
+    rebase_path("v8_inspector/js_protocol.json", root_build_dir),
+    "--string_type",
+    "String16",
+    "--export_macro",
+    "PLATFORM_EXPORT",
     "--output_dir",
-    rebase_path(blink_platform_output_dir + "/inspector_protocol/",
+    rebase_path(blink_platform_output_dir + "/v8_inspector/protocol",
                 root_build_dir),
-  ]
-
-  deps = [
-    ":inspector_protocol_version",
+    "--output_package",
+    "platform/v8_inspector/protocol",
   ]
 }
 
@@ -222,18 +231,18 @@ action("inspector_protocol_version") {
   script = "inspector_protocol/generate-inspector-protocol-version"
 
   inputs = [
-    protocol_file,
+    "v8_inspector/js_protocol.json",
   ]
   output_file =
-      "$blink_platform_output_dir/inspector_protocol/InspectorProtocolVersion.h"
+      "$blink_platform_output_dir/v8_inspector/protocol/v8inspector.json"
   outputs = [
     output_file,
   ]
 
   args = [
-    "-o",
+    "--o",
     rebase_path(output_file, root_build_dir),
-    rebase_path(protocol_file, root_build_dir),
+    rebase_path("v8_inspector/js_protocol.json", root_build_dir),
   ]
 }
 

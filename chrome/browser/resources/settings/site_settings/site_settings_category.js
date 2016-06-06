@@ -22,6 +22,14 @@ Polymer({
     },
 
     /**
+     * Preferences state.
+     */
+    prefs: {
+      type: Object,
+      notify: true,
+    },
+
+    /**
      * Represents the state of the main toggle shown for the category. For
      * example, the Location category can be set to Block/Ask so false, in that
      * case, represents Block and true represents Ask.
@@ -56,6 +64,9 @@ Polymer({
 
     this.addWebUIListener('contentSettingCategoryChanged',
         this.defaultValueForCategoryChanged_.bind(this));
+
+    if (this.category == settings.ContentSettingsTypes.COOKIES)
+      this.$.cookieControls.hidden = false;
   },
 
   /**
@@ -74,9 +85,11 @@ Polymer({
    */
   onToggleChange_: function(event) {
     switch (this.category) {
+      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
       case settings.ContentSettingsTypes.COOKIES:
       case settings.ContentSettingsTypes.IMAGES:
       case settings.ContentSettingsTypes.JAVASCRIPT:
+      case settings.ContentSettingsTypes.KEYGEN:
       case settings.ContentSettingsTypes.POPUPS:
         // "Allowed" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
@@ -85,15 +98,25 @@ Polymer({
                 settings.PermissionValues.ALLOW :
                 settings.PermissionValues.BLOCK);
         break;
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
+      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
       case settings.ContentSettingsTypes.GEOLOCATION:
       case settings.ContentSettingsTypes.CAMERA:
       case settings.ContentSettingsTypes.MIC:
+      case settings.ContentSettingsTypes.NOTIFICATIONS:
+      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
         // "Ask" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
             this.category,
             this.categoryEnabled ?
                 settings.PermissionValues.ASK :
+                settings.PermissionValues.BLOCK);
+        break;
+      case settings.ContentSettingsTypes.PLUGINS:
+        // "Detect important" vs "Let me choose".
+        this.browserProxy.setDefaultValueForContentType(
+            this.category,
+            this.categoryEnabled ?
+                settings.PermissionValues.IMPORTANT_CONTENT :
                 settings.PermissionValues.BLOCK);
         break;
       default:

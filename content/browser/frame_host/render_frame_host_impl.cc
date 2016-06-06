@@ -95,8 +95,8 @@
 
 #if defined(ENABLE_WEBVR)
 #include "base/command_line.h"
-#include "content/browser/vr/vr_device_manager.h"
 #include "content/public/common/content_switches.h"
+#include "device/vr/vr_device_manager.h" // nogncheck
 #endif
 
 using base::TimeDelta;
@@ -584,7 +584,7 @@ bool RenderFrameHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnDidChangeLoadProgress)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SerializeAsMHTMLResponse,
                         OnSerializeAsMHTMLResponse)
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
     IPC_MESSAGE_HANDLER(FrameHostMsg_ShowPopup, OnShowPopup)
     IPC_MESSAGE_HANDLER(FrameHostMsg_HidePopup, OnHidePopup)
 #endif
@@ -1928,7 +1928,7 @@ void RenderFrameHostImpl::OnSerializeAsMHTMLResponse(
       this, job_id, success, digests_of_uris_of_serialized_resources);
 }
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
 void RenderFrameHostImpl::OnShowPopup(
     const FrameHostMsg_ShowPopup_Params& params) {
   RenderViewHostDelegateView* view =
@@ -2026,7 +2026,7 @@ void RenderFrameHostImpl::RegisterMojoServices() {
 
   if (browser_command_line.HasSwitch(switches::kEnableWebVR)) {
     GetServiceRegistry()->AddService<blink::mojom::VRService>(
-        base::Bind(&VRDeviceManager::BindRequest));
+        base::Bind(&device::VRDeviceManager::BindRequest));
   }
 #endif
 
@@ -2618,6 +2618,7 @@ int RenderFrameHostImpl::GetProxyCount() {
   return frame_tree_node_->render_manager()->GetProxyCount();
 }
 
+#if defined(USE_EXTERNAL_POPUP_MENU)
 #if defined(OS_MACOSX)
 
 void RenderFrameHostImpl::DidSelectPopupMenuItem(int selected_index) {
@@ -2628,7 +2629,7 @@ void RenderFrameHostImpl::DidCancelPopupMenu() {
   Send(new FrameMsg_SelectPopupMenuItem(routing_id_, -1));
 }
 
-#elif defined(OS_ANDROID)
+#else
 
 void RenderFrameHostImpl::DidSelectPopupMenuItems(
     const std::vector<int>& selected_indices) {
@@ -2640,6 +2641,7 @@ void RenderFrameHostImpl::DidCancelPopupMenu() {
       routing_id_, true, std::vector<int>()));
 }
 
+#endif
 #endif
 
 void RenderFrameHostImpl::SetNavigationsSuspended(

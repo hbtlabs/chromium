@@ -522,10 +522,10 @@ bool LocalFrame::shouldUsePrintingLayout() const
 FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize)
 {
     FloatSize resultSize;
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return FloatSize();
 
-    if (contentLayoutObject()->style()->isHorizontalWritingMode()) {
+    if (contentLayoutItem().style()->isHorizontalWritingMode()) {
         ASSERT(fabs(originalSize.width()) > std::numeric_limits<float>::epsilon());
         float ratio = originalSize.height() / originalSize.width();
         resultSize.setWidth(floorf(expectedSize.width()));
@@ -588,6 +588,7 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
             toLocalFrame(child)->setPageAndTextZoomFactors(m_pageZoomFactor, m_textZoomFactor);
     }
 
+    document->mediaQueryAffectingValueChanged();
     document->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Zoom));
     document->updateStyleAndLayoutIgnorePendingStylesheets();
 }
@@ -682,7 +683,7 @@ Document* LocalFrame::documentAtPoint(const IntPoint& pointInRootFrame)
 
     IntPoint pt = view()->rootFrameToContents(pointInRootFrame);
 
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return nullptr;
     HitTestResult result = eventHandler().hitTestResultAtPoint(pt, HitTestRequest::ReadOnly | HitTestRequest::Active);
     return result.innerNode() ? &result.innerNode()->document() : nullptr;
@@ -752,10 +753,10 @@ void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
 
 String LocalFrame::localLayerTreeAsText(unsigned flags) const
 {
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return String();
 
-    return contentLayoutObject()->compositor()->layerTreeAsText(static_cast<LayerTreeFlags>(flags));
+    return contentLayoutItem().compositor()->layerTreeAsText(static_cast<LayerTreeFlags>(flags));
 }
 
 bool LocalFrame::shouldThrottleRendering() const
@@ -825,6 +826,19 @@ FrameNavigationDisabler::FrameNavigationDisabler(LocalFrame& frame)
 FrameNavigationDisabler::~FrameNavigationDisabler()
 {
     m_frame->enableNavigation();
+}
+
+ScopedFrameBlamer::ScopedFrameBlamer(LocalFrame* frame)
+    : m_frame(frame)
+{
+    if (m_frame && m_frame->client() && m_frame->client()->frameBlameContext())
+        m_frame->client()->frameBlameContext()->Enter();
+}
+
+ScopedFrameBlamer::~ScopedFrameBlamer()
+{
+    if (m_frame && m_frame->client() && m_frame->client()->frameBlameContext())
+        m_frame->client()->frameBlameContext()->Leave();
 }
 
 } // namespace blink

@@ -556,7 +556,6 @@ public:
         V8Animation_Onfinish_AttributeSetter = 701,
         V8Window_WebKitAnimationEvent_ConstructorGetter = 707,
         V8Window_WebKitAnimationEvent_AttributeSetter = 708,
-        ResourceLoadedAfterRedirectWithCSP = 709,
         CryptoGetRandomValues = 710,
         SubtleCryptoEncrypt = 711,
         SubtleCryptoDecrypt = 712,
@@ -1072,9 +1071,7 @@ public:
         DocumentAllLegacyCallIndexedWithNonNumber = 1259,
         DocumentAllLegacyCallTwoArguments = 1260,
         HTMLLabelElementControlForNonFormAssociatedElement = 1263,
-        PatternAttributeUnicodeFlagIsIncompatible = 1264,
         HTMLMediaElementLoadNetworkEmptyNotPaused = 1265,
-        EventRelatedTargetScoped = 1266,
         V8Window_WebkitSpeechGrammar_ConstructorGetter = 1267,
         V8Window_WebkitSpeechGrammarList_ConstructorGetter = 1268,
         V8Window_WebkitSpeechRecognition_ConstructorGetter = 1269,
@@ -1199,6 +1196,7 @@ public:
         RTCIceCandidateDefaultSdpMLineIndex = 1386,
         DocumentCreateEventSensorErrorEvent = 1387,
         DocumentCreateEventSensorReadingEvent = 1388,
+        MediaStreamConstraintsOldAndNew = 1389,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

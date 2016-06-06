@@ -7,9 +7,12 @@
 #include <algorithm>
 #include <cmath>
 
-#include "ash/common/wm/shelf/wm_shelf_util.h"
+#include "ash/aura/wm_shelf_aura.h"
+#include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/focus_cycler.h"
 #include "ash/root_window_controller.h"
+#include "ash/root_window_settings.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_item_delegate.h"
@@ -18,11 +21,8 @@
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_navigator.h"
 #include "ash/shelf/shelf_util.h"
-#include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_window_ids.h"
-#include "ash/wm/aura/wm_shelf_aura.h"
 #include "ash/wm/window_properties.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -53,7 +53,7 @@ Shelf::Shelf(ShelfModel* shelf_model,
   shelf_widget_->GetNativeView()->SetName(kNativeViewName);
   // This has to be done after the ShelfWidget and ShelfLayoutManager have
   // been created.
-  wm_shelf_.reset(new wm::WmShelfAura(this));
+  wm_shelf_.reset(new WmShelfAura(this));
 }
 
 Shelf::~Shelf() {
@@ -72,12 +72,24 @@ Shelf* Shelf::ForWindow(const aura::Window* window) {
   return shelf_widget ? shelf_widget->shelf() : nullptr;
 }
 
-void Shelf::SetAlignment(wm::ShelfAlignment alignment) {
+// static
+Shelf* Shelf::ForDisplayId(int64_t display_id) {
+  for (aura::Window* window : Shell::GetInstance()->GetAllRootWindows()) {
+    RootWindowSettings* settings = GetRootWindowSettings(window);
+    if (settings->display_id == display_id && settings->controller) {
+      ShelfWidget* shelf_widget = settings->controller->shelf_widget();
+      return shelf_widget ? shelf_widget->shelf() : nullptr;
+    }
+  }
+  return nullptr;
+}
+
+void Shelf::SetAlignment(ShelfAlignment alignment) {
   if (alignment_ == alignment)
     return;
 
   if (shelf_locking_manager_.is_locked() &&
-      alignment != wm::SHELF_ALIGNMENT_BOTTOM_LOCKED) {
+      alignment != SHELF_ALIGNMENT_BOTTOM_LOCKED) {
     shelf_locking_manager_.set_stored_alignment(alignment);
     return;
   }
@@ -92,7 +104,7 @@ void Shelf::SetAlignment(wm::ShelfAlignment alignment) {
 }
 
 bool Shelf::IsHorizontalAlignment() const {
-  return wm::IsHorizontalAlignment(alignment_);
+  return ::ash::IsHorizontalAlignment(alignment_);
 }
 
 void Shelf::SetAutoHideBehavior(ShelfAutoHideBehavior auto_hide_behavior) {

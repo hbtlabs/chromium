@@ -20,7 +20,7 @@
 namespace views {
 
 class InkDropRipple;
-class InkDropHover;
+class InkDropHighlight;
 class LabelButtonBorder;
 class Painter;
 
@@ -41,7 +41,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the image shown for the specified button state.
   // GetImage returns the image for STATE_NORMAL if the state's image is empty.
-  virtual const gfx::ImageSkia& GetImage(ButtonState for_state);
+  virtual gfx::ImageSkia GetImage(ButtonState for_state) const;
   void SetImage(ButtonState for_state, const gfx::ImageSkia& image);
 
   // Gets or sets the text shown on the button.
@@ -105,7 +105,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
   gfx::Point GetInkDropCenter() const override;
 
  protected:

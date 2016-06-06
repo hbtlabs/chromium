@@ -1031,6 +1031,18 @@ double LocalDOMWindow::scrollY() const
     return adjustScrollForAbsoluteZoom(viewportY, frame()->pageZoomFactor());
 }
 
+VisualViewport* LocalDOMWindow::visualViewport()
+{
+    if (!frame())
+        return nullptr;
+
+    FrameHost* host = frame()->host();
+    if (!host)
+        return nullptr;
+
+    return &host->visualViewport();
+}
+
 const AtomicString& LocalDOMWindow::name() const
 {
     if (!isCurrentlyDisplayedInFrame())
@@ -1336,8 +1348,8 @@ CustomElementsRegistry* LocalDOMWindow::customElements(ScriptState* scriptState)
 
 CustomElementsRegistry* LocalDOMWindow::customElements() const
 {
-    if (!m_customElements)
-        m_customElements = CustomElementsRegistry::create(document()->registrationContext());
+    if (!m_customElements && m_document)
+        m_customElements = CustomElementsRegistry::create(document());
     return m_customElements;
 }
 

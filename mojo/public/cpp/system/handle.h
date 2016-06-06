@@ -96,6 +96,7 @@ class ScopedHandleBase {
   }
 
   const HandleType& get() const { return handle_; }
+  const HandleType* operator->() const { return &handle_; }
 
   template <typename PassedHandleType>
   static ScopedHandleBase<HandleType> From(
@@ -121,6 +122,10 @@ class ScopedHandleBase {
   }
 
   bool is_valid() const { return handle_.is_valid(); }
+
+  bool operator==(const ScopedHandleBase& other) const {
+    return handle_.value() == other.get().value();
+  }
 
  private:
   void CloseIfNecessary() {

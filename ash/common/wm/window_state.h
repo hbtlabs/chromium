@@ -14,7 +14,6 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/gfx/geometry/insets.h"
 
 namespace aura {
 class Window;
@@ -27,12 +26,12 @@ class Rect;
 namespace ash {
 class LockWindowState;
 class MaximizeModeWindowState;
+class WmWindow;
 
 namespace wm {
 class WindowStateDelegate;
 class WindowStateObserver;
 class WMEvent;
-class WmWindow;
 
 // WindowState manages and defines ash specific window state and
 // behavior. Ash specific per-window state (such as ones that controls
@@ -279,13 +278,6 @@ class ASH_EXPORT WindowState {
     in_immersive_fullscreen_ = enable;
   }
 
-  // Gets/sets the transparent insets of the window for purposes of darkening
-  // the shelf appropriately.
-  gfx::Insets transparent_insets() const { return transparent_insets_; }
-  void set_transparent_insets(const gfx::Insets& insets) {
-    transparent_insets_ = insets;
-  }
-
   // Creates and takes ownership of a pointer to DragDetails when resizing is
   // active. This should be done before a resizer gets created.
   void CreateDragDetails(const gfx::Point& point_in_parent,
@@ -377,10 +369,6 @@ class ASH_EXPORT WindowState {
   // auto window position manager changed the window bounds, so that it can get
   // restored when only this one window gets shown.
   std::unique_ptr<gfx::Rect> pre_auto_manage_window_bounds_;
-
-  // A property that can be set on windows with transparent insets, so that
-  // layout manager related code can handle these windows more appropriately.
-  gfx::Insets transparent_insets_;
 
   base::ObserverList<WindowStateObserver> observer_list_;
 

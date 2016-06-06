@@ -26,34 +26,25 @@
 # (INCLUDING NEGLIGENCE OR/ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Queue
 import json
 import logging
 import optparse
 import re
 import sys
-import threading
 import time
 import traceback
-import urllib
 import urllib2
 
 from webkitpy.common.checkout.baselineoptimizer import BaselineOptimizer
 from webkitpy.common.memoized import memoized
 from webkitpy.common.system.executive import ScriptError
-from webkitpy.layout_tests.controllers.test_result_writer import TestResultWriter
-from webkitpy.layout_tests.models import test_failures
+from webkitpy.layout_tests.controllers.test_result_writer import baseline_name
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, BASELINE_SUFFIX_LIST, SKIP
 from webkitpy.layout_tests.port import factory
 from webkitpy.tool.commands.command import Command
 
 
 _log = logging.getLogger(__name__)
-
-
-# FIXME: Should TestResultWriter know how to compute this string?
-def _baseline_name(fs, test_name, suffix):
-    return fs.splitext(test_name)[0] + TestResultWriter.FILENAME_SUFFIX_EXPECTED + "." + suffix
 
 
 class AbstractRebaseliningCommand(Command):
@@ -189,7 +180,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
     def _results_url(self, builder_name):
         return self._tool.buildbot.builder_with_name(builder_name).latest_layout_test_results_url()
 
-    def _save_baseline(self, data, target_baseline, baseline_directory, test_name, suffix):
+    def _save_baseline(self, data, target_baseline):
         if not data:
             _log.debug("No baseline data to save.")
             return
@@ -208,7 +199,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
 
         _log.debug("Retrieving %s." % source_baseline)
         self._save_baseline(self._tool.web.get_binary(source_baseline, convert_404_to_None=True),
-                            target_baseline, baseline_directory, test_name, suffix)
+                            target_baseline)
 
     def _rebaseline_test_and_update_expectations(self, options):
         self._baseline_suffix_list = options.suffixes.split(',')
@@ -251,10 +242,10 @@ class OptimizeBaselines(AbstractRebaseliningCommand):
         files_to_delete = []
         files_to_add = []
         for suffix in self._baseline_suffix_list:
-            baseline_name = _baseline_name(self._tool.filesystem, test_name, suffix)
-            succeeded, more_files_to_delete, more_files_to_add = optimizer.optimize(baseline_name)
+            name = baseline_name(self._tool.filesystem, test_name, suffix)
+            succeeded, more_files_to_delete, more_files_to_add = optimizer.optimize(name)
             if not succeeded:
-                print "Heuristics failed to optimize %s" % baseline_name
+                _log.error("Heuristics failed to optimize %s", name)
             files_to_delete.extend(more_files_to_delete)
             files_to_add.extend(more_files_to_add)
         return files_to_delete, files_to_add
@@ -263,7 +254,7 @@ class OptimizeBaselines(AbstractRebaseliningCommand):
         self._baseline_suffix_list = options.suffixes.split(',')
         port_names = tool.port_factory.all_port_names(options.platform)
         if not port_names:
-            print "No port names match '%s'" % options.platform
+            _log.error("No port names match '%s'", options.platform)
             return
         port = tool.port_factory.get(port_names[0])
         optimizer = BaselineOptimizer(tool, port, port_names, skip_scm_commands=options.no_modify_scm)
@@ -276,46 +267,6 @@ class OptimizeBaselines(AbstractRebaseliningCommand):
                 self._add_to_scm_later(path)
 
         print json.dumps(self._scm_changes)
-
-
-class AnalyzeBaselines(AbstractRebaseliningCommand):
-    name = "analyze-baselines"
-    help_text = "Analyzes the baselines for the given tests and prints results that are identical."
-    show_in_main_help = True
-    argument_names = "TEST_NAMES"
-
-    def __init__(self):
-        super(AnalyzeBaselines, self).__init__(options=[
-            self.suffixes_option,
-            optparse.make_option('--missing', action='store_true', default=False, help='Show missing baselines as well.'),
-        ] + self.platform_options)
-        self._optimizer_class = BaselineOptimizer  # overridable for testing
-        self._baseline_optimizer = None
-        self._port = None
-
-    def _write(self, msg):
-        print msg
-
-    def _analyze_baseline(self, options, test_name):
-        for suffix in self._baseline_suffix_list:
-            baseline_name = _baseline_name(self._tool.filesystem, test_name, suffix)
-            results_by_directory = self._baseline_optimizer.read_results_by_directory(baseline_name)
-            if results_by_directory:
-                self._write("%s:" % baseline_name)
-                self._baseline_optimizer.write_by_directory(results_by_directory, self._write, "  ")
-            elif options.missing:
-                self._write("%s: (no baselines found)" % baseline_name)
-
-    def execute(self, options, args, tool):
-        self._baseline_suffix_list = options.suffixes.split(',')
-        port_names = tool.port_factory.all_port_names(options.platform)
-        if not port_names:
-            print "No port names match '%s'" % options.platform
-            return
-        self._port = tool.port_factory.get(port_names[0])
-        self._baseline_optimizer = self._optimizer_class(tool, self._port, port_names, skip_scm_commands=False)
-        for test_name in self._port.tests(args):
-            self._analyze_baseline(options, test_name)
 
 
 class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
@@ -835,7 +786,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
         last_output_time = time.time()
 
         # git cl sometimes completely hangs. Bail if we haven't gotten any output to stdout/stderr in a while.
-        while process.poll() == None and time.time() < last_output_time + self.SECONDS_BEFORE_GIVING_UP:
+        while process.poll() is None and time.time() < last_output_time + self.SECONDS_BEFORE_GIVING_UP:
             # FIXME: This doesn't make any sense. readline blocks, so all this code to
             # try and bail is useless. Instead, we should do the readline calls on a
             # subthread. Then the rest of this code would make sense.
@@ -844,7 +795,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 last_output_time = time.time()
                 _log.info(out)
 
-        if process.poll() == None:
+        if process.poll() is None:
             _log.error('Command hung: %s' % subprocess_command)
             return False
         return True
@@ -873,7 +824,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             return
 
         min_revision = int(min([item["revision"] for item in revision_data]))
-        tests, revision, commit, author, bugs, has_any_needs_rebaseline_lines = self.tests_to_rebaseline(
+        tests, revision, commit, author, bugs, _ = self.tests_to_rebaseline(
             tool, min_revision, print_revisions=options.verbose)
 
         if options.verbose:
@@ -891,7 +842,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
 
         _log.info('Rebaselining %s for r%s by %s.' % (list(tests), revision, author))
 
-        test_prefix_list, lines_to_remove = self.get_test_prefix_list(tests)
+        test_prefix_list, _ = self.get_test_prefix_list(tests)
 
         did_switch_branches = False
         did_finish = False

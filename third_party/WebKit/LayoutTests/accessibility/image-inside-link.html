@@ -33,55 +33,30 @@ async_test(function(t)
 <script>
 async_test(function(t)
 {
-    var axImg = accessibilityController.accessibleElementById("img2");
-    axImg.addNotificationListener(function(notification) {
-        if (notification == 'Clicked') {
+    var axEvent = false;
+    var domEvent = false;
+    var clickEventHandler = function(e)
+    {
+        if (e == 'Clicked')
+            axEvent = true;
+
+        // "which" is a known property on MouseEvent objects.
+        if (e.which) {
+            img.title = "clicked";
+            domEvent = true;
+        }
+
+        if (axEvent && domEvent) {
             document.getElementById("wrapper2").style.display = "none";
             t.done();
         }
-    });
+    };
 
+    var axImg = accessibilityController.accessibleElementById("img2");
+    axImg.addNotificationListener(clickEventHandler);
     var img = document.getElementById("img2");
-    img.addEventListener("click", function(e)
-    {
-        img.title = "clicked";
-    });
-    eventSender.mouseMoveTo(axImg.x + 10, axImg.y + 10);
-    eventSender.mouseDown();
-    eventSender.mouseUp();
-}, "clicking an image via mouse events sends an accessible click event");
-</script>
-
-<div id="wrapper4">
-    <a href="#"><img id="img4" alt="Delicious cake" src="resources/cake.png"></a>
-</div>
-
-<script>
-async_test(function(t)
-{
-    var axEvent = false;
-    var domEvent = false;
-    var axImg = accessibilityController.accessibleElementById("img4");
-    axImg.addNotificationListener(function(notification) {
-        if (notification == 'Clicked') {
-            axEvent = true;
-        }
-    });
-
-    var img = document.getElementById("img4");
-    img.addEventListener("click", function(e)
-    {
-        img.title = "clicked";
-        domEvent = true;
-    });
+    img.addEventListener("click", clickEventHandler);
     axImg.press();
-
-    setTimeout(function()
-    {
-        if (axEvent && domEvent) {
-            document.getElementById("wrapper4").style.display = "none";
-            t.done();
-        }
-    });
 }, "clicking an image via accessibility sends both an accessible and a DOM click event");
 </script>
+

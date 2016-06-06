@@ -110,8 +110,8 @@ source_set("test_support") {
     "//components/sync_sessions:test_support",
     "//components/syncable_prefs:test_support",
     "//components/toolbar:test_support",
-    "//components/ui/zoom:test_support",
     "//components/update_client:test_support",
+    "//components/zoom:test_support",
     "//content/public/app:both",
     "//content/test:test_support",
     "//net",
@@ -530,12 +530,10 @@ if (!is_android) {
     }
 
     if (is_mac) {
-      data_deps += [ "//chrome" ]
-
-      # TODO(mark): We really want this for all non-static library targets, but
-      # when we tried to pull it up to the common.gypi level, it broke other
-      # things like the ui and startup tests. *shrug*
-      ldflags += [ "-Wl,-ObjC" ]
+      data_deps += [
+        "//chrome",
+        "//chrome:chrome_framework",
+      ]
 
       # The browser window can be views or Cocoa on Mac. Test accordingly.
       if (mac_views_browser) {
@@ -832,7 +830,10 @@ if (!is_android) {
             ".",
             "//chrome")
 
-    configs += [ "//build/config:precompiled_headers" ]
+    configs += [
+      "//build/config:precompiled_headers",
+      "//third_party/WebKit/public:debug_devtools",
+    ]
 
     data = [
       "data/",
@@ -1020,9 +1021,6 @@ if (!is_android) {
           "//components/nacl/loader:helper_nonsfi",
         ]
       }
-    }
-    if (debug_devtools) {
-      defines += [ "DEBUG_DEVTOOLS=1" ]
     }
     if (use_ash) {
       sources +=
@@ -1479,9 +1477,10 @@ if (!is_android) {
         "../browser/sync/test/integration/two_client_dictionary_sync_test.cc",
       ]
 
-      # The sync_integration_tests do not run on mac without this flag.
-      # Search for comments about "xcode_settings" elsewhere in this file.
-      ldflags = [ "-Wl,-ObjC" ]
+      data_deps += [
+        "//chrome",
+        "//chrome:chrome_framework",
+      ]
     }
     if (is_win) {
       deps += [
@@ -2309,7 +2308,7 @@ if (!is_android) {
   }
 }
 
-if (is_win || (is_linux && !is_chromeos)) {
+if (!is_android && !is_ios && !is_chromecast) {
   test("performance_browser_tests") {
     sources =
         rebase_path(chrome_tests_gypi_values.performance_browser_tests_sources,

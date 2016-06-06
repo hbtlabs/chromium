@@ -67,6 +67,7 @@
         'range/range_unittest.cc',
         'range/range_win_unittest.cc',
         'render_text_unittest.cc',
+        'selection_bound_unittest.cc',
         'sequential_id_generator_unittest.cc',
         'shadow_value_unittest.cc',
         'skbitmap_operations_unittest.cc',
@@ -91,6 +92,10 @@
         ['OS == "ios"', {
           'sources': ['<@(_common_sources)'],
         }, {  # OS != "ios"
+          'dependencies': [
+            '../../mojo/mojo_edk.gyp:mojo_common_test_support',
+            '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
           'sources': ['<@(_all_sources)'],
         }],
         ['OS != "mac" and OS != "ios"', {

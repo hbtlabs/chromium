@@ -5,6 +5,7 @@
 #include "content/public/test/browser_test_utils.h"
 
 #include <stddef.h>
+#include <tuple>
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -522,6 +523,37 @@ void SimulateGestureScrollSequence(WebContents* web_contents,
   widget_host->ForwardGestureEvent(scroll_end);
 }
 
+void SimulateGestureFlingSequence(WebContents* web_contents,
+                                  const gfx::Point& point,
+                                  const gfx::Vector2dF& velocity) {
+  RenderWidgetHostImpl* widget_host = RenderWidgetHostImpl::From(
+      web_contents->GetRenderViewHost()->GetWidget());
+
+  blink::WebGestureEvent scroll_begin;
+  scroll_begin.type = blink::WebGestureEvent::GestureScrollBegin;
+  scroll_begin.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_begin.x = point.x();
+  scroll_begin.y = point.y();
+  widget_host->ForwardGestureEvent(scroll_begin);
+
+  blink::WebGestureEvent scroll_end;
+  scroll_end.type = blink::WebGestureEvent::GestureScrollEnd;
+  scroll_end.sourceDevice = blink::WebGestureDeviceTouchpad;
+  scroll_end.x = point.x();
+  scroll_end.y = point.y();
+  widget_host->ForwardGestureEvent(scroll_end);
+
+  blink::WebGestureEvent fling_start;
+  fling_start.type = blink::WebGestureEvent::GestureFlingStart;
+  fling_start.sourceDevice = blink::WebGestureDeviceTouchpad;
+  fling_start.x = point.x();
+  fling_start.y = point.y();
+  fling_start.data.flingStart.targetViewport = false;
+  fling_start.data.flingStart.velocityX = velocity.x();
+  fling_start.data.flingStart.velocityY = velocity.y();
+  widget_host->ForwardGestureEvent(fling_start);
+}
+
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point) {
   blink::WebGestureEvent tap;
   tap.type = blink::WebGestureEvent::GestureTap;
@@ -792,9 +824,8 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
   for (std::vector<int>::iterator iter = ids.begin();
        iter != ids.end();
        ++iter) {
-    scoped_refptr<base::RefCountedMemory> resource =
-        ResourceBundle::GetSharedInstance().LoadDataResourceBytes(*iter);
-    script.append(resource->front_as<char>(), resource->size());
+    ResourceBundle::GetSharedInstance().GetRawDataResource(*iter)
+        .AppendToString(&script);
     script.append("\n");
   }
   if (!ExecuteScript(web_contents, script))
@@ -815,7 +846,8 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
 
 std::string GetCookies(BrowserContext* browser_context, const GURL& url) {
   std::string cookies;
-  base::WaitableEvent event(true, false);
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   net::URLRequestContextGetter* context_getter =
       BrowserContext::GetDefaultStoragePartition(browser_context)->
           GetURLRequestContext();
@@ -832,7 +864,8 @@ bool SetCookie(BrowserContext* browser_context,
                const GURL& url,
                const std::string& value) {
   bool result = false;
-  base::WaitableEvent event(true, false);
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   net::URLRequestContextGetter* context_getter =
       BrowserContext::GetDefaultStoragePartition(browser_context)->
           GetURLRequestContext();
@@ -1152,7 +1185,7 @@ bool FrameWatcher::OnMessageReceived(const IPC::Message& message) {
     if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
       return false;
     std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
-    base::get<1>(param).AssignTo(frame.get());
+    std::get<1>(param).AssignTo(frame.get());
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
@@ -1243,8 +1276,8 @@ bool InputMsgWatcher::OnMessageReceived(const IPC::Message& message) {
   if (message.type() == InputHostMsg_HandleInputEvent_ACK::ID) {
     InputHostMsg_HandleInputEvent_ACK::Param params;
     InputHostMsg_HandleInputEvent_ACK::Read(&message, &params);
-    blink::WebInputEvent::Type ack_type = base::get<0>(params).type;
-    InputEventAckState ack_state = base::get<0>(params).state;
+    blink::WebInputEvent::Type ack_type = std::get<0>(params).type;
+    InputEventAckState ack_state = std::get<0>(params).state;
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
         base::Bind(&InputMsgWatcher::ReceivedAck, this, ack_type, ack_state));

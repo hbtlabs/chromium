@@ -66,7 +66,6 @@
         '../../skia/skia.gyp:skia',
         '../../third_party/icu/icu.gyp:icui18n',
         '../../third_party/icu/icu.gyp:icuuc',
-        '../../third_party/zlib/zlib.gyp:zlib',
         '../../url/url.gyp:url_lib',
         '../display/display.gyp:display',
         '../events/events.gyp:events',
@@ -211,10 +210,10 @@
         'cursor/image_cursors.h',
         'cursor/ozone/bitmap_cursor_factory_ozone.cc',
         'cursor/ozone/bitmap_cursor_factory_ozone.h',
+        'default_style.h',
         'default_theme_provider.cc',
         'default_theme_provider.h',
         'default_theme_provider_mac.mm',
-        'default_style.h',
         'device_form_factor.h',
         'device_form_factor_android.cc',
         'device_form_factor_android.h',
@@ -223,13 +222,12 @@
         'dragdrop/cocoa_dnd_util.h',
         'dragdrop/cocoa_dnd_util.mm',
         'dragdrop/drag_drop_types.h',
+        'dragdrop/drag_drop_types_mac.mm',
         'dragdrop/drag_drop_types_win.cc',
         'dragdrop/drag_source_win.cc',
         'dragdrop/drag_source_win.h',
         'dragdrop/drag_utils.cc',
         'dragdrop/drag_utils.h',
-        'dragdrop/drag_utils_aura.cc',
-        'dragdrop/drag_utils_mac.mm',
         'dragdrop/drag_utils_win.cc',
         'dragdrop/drop_target_event.cc',
         'dragdrop/drop_target_event.h',
@@ -326,8 +324,6 @@
         'text/bytes_formatting.h',
         'theme_provider.cc',
         'theme_provider.h',
-        'touch/selection_bound.cc',
-        'touch/selection_bound.h',
         'touch/touch_device.cc',
         'touch/touch_device.h',
         'touch/touch_device_android.cc',
@@ -465,11 +461,6 @@
             '../ozone/ozone.gyp:ozone_base',
           ],
         }],
-        ['use_aura==1 and OS=="win"', {
-          'sources/': [
-            ['exclude', 'dragdrop/drag_utils_aura.cc'],
-          ],
-        }],
         ['use_glib == 1', {
           'dependencies': [
             '../../build/linux/system.gyp:fontconfig',
@@ -578,8 +569,6 @@
           'sources!': [
             'cursor/image_cursors.cc',
             'cursor/image_cursors.h',
-            'dragdrop/drag_utils.cc',
-            'dragdrop/drag_utils.h',
           ],
           'link_settings': {
             'libraries': [

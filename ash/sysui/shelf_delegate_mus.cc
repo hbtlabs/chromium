@@ -6,13 +6,13 @@
 
 #include <memory>
 
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_item_delegate.h"
 #include "ash/shelf/shelf_item_delegate_manager.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_menu_model.h"
 #include "ash/shelf/shelf_model.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "base/strings/string_util.h"
@@ -184,8 +184,8 @@ ShelfDelegateMus::ShelfDelegateMus(ShelfModel* model)
     : model_(model), binding_(this) {
   ::shell::Connector* connector =
       views::WindowManagerConnection::Get()->connector();
-  connector->ConnectToInterface("mojo:desktop_wm", &shelf_layout_);
-  connector->ConnectToInterface("mojo:desktop_wm", &user_window_controller_);
+  connector->ConnectToInterface("mojo:ash", &shelf_layout_);
+  connector->ConnectToInterface("mojo:ash", &user_window_controller_);
   user_window_controller_->AddUserWindowObserver(
       binding_.CreateInterfacePtrAndBind());
 }
@@ -284,7 +284,7 @@ void ShelfDelegateMus::AddObserver(
 }
 
 void ShelfDelegateMus::SetAlignment(mash::shelf::mojom::Alignment alignment) {
-  wm::ShelfAlignment value = static_cast<wm::ShelfAlignment>(alignment);
+  ShelfAlignment value = static_cast<ShelfAlignment>(alignment);
   Shelf::ForPrimaryDisplay()->SetAlignment(value);
 }
 
@@ -352,12 +352,13 @@ void ShelfDelegateMus::SetItemImage(const mojo::String& app_id,
 }
 
 void ShelfDelegateMus::OnUserWindowObserverAdded(
-    mojo::Array<mojom::UserWindowPtr> user_windows) {
+    mojo::Array<ash::mojom::UserWindowPtr> user_windows) {
   for (size_t i = 0; i < user_windows.size(); ++i)
     OnUserWindowAdded(std::move(user_windows[i]));
 }
 
-void ShelfDelegateMus::OnUserWindowAdded(mojom::UserWindowPtr user_window) {
+void ShelfDelegateMus::OnUserWindowAdded(
+    ash::mojom::UserWindowPtr user_window) {
   DCHECK(!window_id_to_shelf_id_.count(user_window->window_id));
 
   if (user_window->ignored_by_shelf)

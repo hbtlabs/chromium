@@ -2865,19 +2865,22 @@ class LayerTreeHostImplTestScrollbarOpacity : public LayerTreeHostImplTest {
                                              VERTICAL, 10, 0, false, true);
     scrollbar->test_properties()->opacity = 0.f;
     LayerImpl* scroll = host_impl_->pending_tree()->OuterViewportScrollLayer();
-    LayerImpl* root = host_impl_->pending_tree()->InnerViewportContainerLayer();
+    LayerImpl* container =
+        host_impl_->pending_tree()->InnerViewportContainerLayer();
     scrollbar->SetScrollLayerId(scroll->id());
-    root->AddChild(std::move(scrollbar));
+    container->AddChild(std::move(scrollbar));
     host_impl_->pending_tree()->PushPageScaleFromMainThread(1.f, 1.f, 1.f);
     host_impl_->pending_tree()->BuildPropertyTreesForTesting();
     host_impl_->ActivateSyncTree();
 
-    LayerImpl* scrollbar_layer = host_impl_->active_tree()->LayerById(400);
+    LayerImpl* active_scrollbar_layer =
+        host_impl_->active_tree()->LayerById(400);
 
     EffectNode* active_tree_node =
         host_impl_->active_tree()->property_trees()->effect_tree.Node(
-            scrollbar_layer->effect_tree_index());
-    EXPECT_FLOAT_EQ(scrollbar_layer->Opacity(), active_tree_node->data.opacity);
+            active_scrollbar_layer->effect_tree_index());
+    EXPECT_FLOAT_EQ(active_scrollbar_layer->Opacity(),
+                    active_tree_node->data.opacity);
 
     host_impl_->ScrollbarAnimationControllerForId(scroll->id())
         ->DidMouseMoveNear(0);
@@ -2886,21 +2889,31 @@ class LayerTreeHostImplTestScrollbarOpacity : public LayerTreeHostImplTest {
     host_impl_->ScrollBy(UpdateState(gfx::Point(), gfx::Vector2dF(0, 5)).get());
     host_impl_->ScrollEnd(EndState().get());
     host_impl_->CreatePendingTree();
+    // To test the case where the effect tree index of scrollbar layer changes,
+    // we force the container layer to create a render surface.
+    container = host_impl_->pending_tree()->InnerViewportContainerLayer();
+    container->test_properties()->force_render_surface = true;
+    container->SetBounds(gfx::Size(10, 10));
+    host_impl_->pending_tree()->property_trees()->needs_rebuild = true;
+    host_impl_->pending_tree()->BuildPropertyTreesForTesting();
+
+    LayerImpl* pending_scrollbar_layer =
+        host_impl_->pending_tree()->LayerById(400);
     EffectNode* pending_tree_node =
         host_impl_->pending_tree()->property_trees()->effect_tree.Node(
-            scrollbar_layer->effect_tree_index());
+            pending_scrollbar_layer->effect_tree_index());
     host_impl_->pending_tree()
         ->property_trees()
         ->always_use_active_tree_opacity_effect_ids.push_back(400);
     EXPECT_FLOAT_EQ(1.f, active_tree_node->data.opacity);
-    EXPECT_FLOAT_EQ(1.f, scrollbar_layer->Opacity());
+    EXPECT_FLOAT_EQ(1.f, active_scrollbar_layer->Opacity());
     EXPECT_FLOAT_EQ(0.f, pending_tree_node->data.opacity);
     host_impl_->ActivateSyncTree();
     active_tree_node =
         host_impl_->active_tree()->property_trees()->effect_tree.Node(
-            scrollbar_layer->effect_tree_index());
+            active_scrollbar_layer->effect_tree_index());
     EXPECT_FLOAT_EQ(1.f, active_tree_node->data.opacity);
-    EXPECT_FLOAT_EQ(1.f, scrollbar_layer->Opacity());
+    EXPECT_FLOAT_EQ(1.f, active_scrollbar_layer->Opacity());
   }
 };
 
@@ -8257,16 +8270,16 @@ TEST_F(LayerTreeHostImplTest, SelectionBoundsPassedToCompositorFrameMetadata) {
   // Ensure the default frame selection bounds are empty.
   FakeOutputSurface* fake_output_surface =
       static_cast<FakeOutputSurface*>(host_impl_->output_surface());
-  const ViewportSelection& selection_before =
+  const Selection<gfx::SelectionBound>& selection_before =
       fake_output_surface->last_sent_frame().metadata.selection;
-  EXPECT_EQ(ViewportSelectionBound(), selection_before.start);
-  EXPECT_EQ(ViewportSelectionBound(), selection_before.end);
+  EXPECT_EQ(gfx::SelectionBound(), selection_before.start);
+  EXPECT_EQ(gfx::SelectionBound(), selection_before.end);
 
   // Plumb the layer-local selection bounds.
   gfx::Point selection_top(5, 0);
   gfx::Point selection_bottom(5, 5);
   LayerSelection selection;
-  selection.start.type = SELECTION_BOUND_CENTER;
+  selection.start.type = gfx::SelectionBound::CENTER;
   selection.start.layer_id = root_layer_id;
   selection.start.edge_bottom = selection_bottom;
   selection.start.edge_top = selection_top;
@@ -8284,14 +8297,14 @@ TEST_F(LayerTreeHostImplTest, SelectionBoundsPassedToCompositorFrameMetadata) {
   EXPECT_TRUE(host_impl_->SwapBuffers(frame));
 
   // Ensure the selection bounds have propagated to the frame metadata.
-  const ViewportSelection& selection_after =
+  const Selection<gfx::SelectionBound>& selection_after =
       fake_output_surface->last_sent_frame().metadata.selection;
-  EXPECT_EQ(selection.start.type, selection_after.start.type);
-  EXPECT_EQ(selection.end.type, selection_after.end.type);
-  EXPECT_EQ(gfx::PointF(selection_bottom), selection_after.start.edge_bottom);
-  EXPECT_EQ(gfx::PointF(selection_top), selection_after.start.edge_top);
-  EXPECT_TRUE(selection_after.start.visible);
-  EXPECT_TRUE(selection_after.start.visible);
+  EXPECT_EQ(selection.start.type, selection_after.start.type());
+  EXPECT_EQ(selection.end.type, selection_after.end.type());
+  EXPECT_EQ(gfx::PointF(selection_bottom), selection_after.start.edge_bottom());
+  EXPECT_EQ(gfx::PointF(selection_top), selection_after.start.edge_top());
+  EXPECT_TRUE(selection_after.start.visible());
+  EXPECT_TRUE(selection_after.start.visible());
 }
 
 class SimpleSwapPromiseMonitor : public SwapPromiseMonitor {

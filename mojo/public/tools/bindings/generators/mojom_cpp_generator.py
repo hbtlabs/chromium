@@ -135,9 +135,6 @@ def IsTypemappedKind(kind):
   return hasattr(kind, "name") and \
       GetFullMojomNameForKind(kind) in _current_typemap
 
-def IsCloneableKind(kind):
-  return mojom.IsCloneableKind(kind, IsTypemappedKind)
-
 def IsNativeOnlyKind(kind):
   return mojom.IsStructKind(kind) and kind.native_only
 
@@ -379,21 +376,26 @@ def ShouldInlineStruct(struct):
 def ShouldInlineUnion(union):
   return not any(mojom.IsMoveOnlyKind(field.kind) for field in union.fields)
 
-def GetArrayValidateParamsCtorArgs(kind):
+def GetContainerValidateParamsCtorArgs(kind):
   if mojom.IsStringKind(kind):
     expected_num_elements = 0
     element_is_nullable = False
+    key_validate_params = "nullptr"
     element_validate_params = "nullptr"
     enum_validate_func = "nullptr"
   elif mojom.IsMapKind(kind):
     expected_num_elements = 0
-    element_is_nullable = mojom.IsNullableKind(kind.value_kind)
-    element_validate_params = GetNewArrayValidateParams(kind.value_kind)
+    element_is_nullable = False
+    key_validate_params = GetNewContainerValidateParams(mojom.Array(
+        kind=kind.key_kind))
+    element_validate_params = GetNewContainerValidateParams(mojom.Array(
+        kind=kind.value_kind))
     enum_validate_func = "nullptr"
-  else:
+  else:  # mojom.IsArrayKind(kind)
     expected_num_elements = generator.ExpectedArraySize(kind) or 0
     element_is_nullable = mojom.IsNullableKind(kind.kind)
-    element_validate_params = GetNewArrayValidateParams(kind.kind)
+    key_validate_params = "nullptr"
+    element_validate_params = GetNewContainerValidateParams(kind.kind)
     if mojom.IsEnumKind(kind.kind):
       enum_validate_func = ("%s::Validate" %
                             GetQualifiedNameForKind(kind.kind, internal=True))
@@ -401,26 +403,22 @@ def GetArrayValidateParamsCtorArgs(kind):
       enum_validate_func = "nullptr"
 
   if enum_validate_func == "nullptr":
-    return "%d, %s, %s" % (expected_num_elements,
-                           "true" if element_is_nullable else "false",
-                           element_validate_params)
+    if key_validate_params == "nullptr":
+      return "%d, %s, %s" % (expected_num_elements,
+                             "true" if element_is_nullable else "false",
+                             element_validate_params)
+    else:
+      return "%s, %s" % (key_validate_params, element_validate_params)
   else:
     return "%d, %s" % (expected_num_elements, enum_validate_func)
 
-def GetNewArrayValidateParams(kind):
+def GetNewContainerValidateParams(kind):
   if (not mojom.IsArrayKind(kind) and not mojom.IsMapKind(kind) and
       not mojom.IsStringKind(kind)):
     return "nullptr"
 
-  return "new mojo::internal::ArrayValidateParams(%s)" % (
-      GetArrayValidateParamsCtorArgs(kind))
-
-def GetMapValidateParamsCtorArgs(value_kind):
-  # Unlike GetArrayValidateParams, we are given the wrapped kind, instead of
-  # the raw array kind. So we wrap the return value of GetArrayValidateParams.
-  element_is_nullable = mojom.IsNullableKind(value_kind)
-  return "0, %s, %s" % ("true" if element_is_nullable else "false",
-                        GetNewArrayValidateParams(value_kind))
+  return "new mojo::internal::ContainerValidateParams(%s)" % (
+      GetContainerValidateParamsCtorArgs(kind))
 
 class Generator(generator.Generator):
 
@@ -434,8 +432,8 @@ class Generator(generator.Generator):
     "cpp_wrapper_type": GetCppWrapperType,
     "default_value": DefaultValue,
     "expression_to_text": ExpressionToText,
-    "get_array_validate_params_ctor_args": GetArrayValidateParamsCtorArgs,
-    "get_map_validate_params_ctor_args": GetMapValidateParamsCtorArgs,
+    "get_container_validate_params_ctor_args":
+    GetContainerValidateParamsCtorArgs,
     "get_name_for_kind": GetNameForKind,
     "get_pad": pack.GetPad,
     "get_qualified_name_for_kind": GetQualifiedNameForKind,
@@ -444,7 +442,6 @@ class Generator(generator.Generator):
     "should_inline": ShouldInlineStruct,
     "should_inline_union": ShouldInlineUnion,
     "is_array_kind": mojom.IsArrayKind,
-    "is_cloneable_kind": IsCloneableKind,
     "is_enum_kind": mojom.IsEnumKind,
     "is_integral_kind": mojom.IsIntegralKind,
     "is_move_only_kind": mojom.IsMoveOnlyKind,

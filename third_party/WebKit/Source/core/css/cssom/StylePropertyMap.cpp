@@ -5,6 +5,7 @@
 #include "core/css/cssom/StylePropertyMap.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/css/CSSValueList.h"
 #include "core/css/cssom/CSSSimpleLength.h"
 #include "core/css/cssom/StyleValue.h"
 #include "core/css/cssom/StyleValueFactory.h"
@@ -42,7 +43,7 @@ bool StylePropertyMap::has(const String& propertyName, ExceptionState& exception
 {
     CSSPropertyID propertyID = cssPropertyID(propertyName);
     if (propertyID != CSSPropertyInvalid)
-        return has(propertyID);
+        return !getAll(propertyID).isEmpty();
 
     // TODO(meade): Handle custom properties here.
     exceptionState.throwTypeError("Invalid propertyName: " + propertyName);

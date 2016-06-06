@@ -144,7 +144,9 @@ class ServiceWorkerMetrics {
   static void RecordDeleteAndStartOverResult(DeleteAndStartOverResult result);
 
   // Counts the number of page loads controlled by a Service Worker.
-  static void CountControlledPageLoad(const GURL& url, bool has_fetch_handler);
+  static void CountControlledPageLoad(const GURL& url,
+                                      bool has_fetch_handler,
+                                      bool is_main_frame_load);
 
   // Records the result of trying to start a worker. |is_installed| indicates
   // whether the version has been installed.
@@ -156,7 +158,8 @@ class ServiceWorkerMetrics {
   // indicates whether the version has been installed.
   static void RecordStartWorkerTime(base::TimeDelta time,
                                     bool is_installed,
-                                    StartSituation start_situation);
+                                    StartSituation start_situation,
+                                    EventType purpose);
 
   // Records the result of trying to stop a worker.
   static void RecordWorkerStopped(StopStatus status);
@@ -164,7 +167,8 @@ class ServiceWorkerMetrics {
   // Records the time taken to successfully stop a worker.
   static void RecordStopWorkerTime(base::TimeDelta time);
 
-  static void RecordActivateEventStatus(ServiceWorkerStatusCode status);
+  static void RecordActivateEventStatus(ServiceWorkerStatusCode status,
+                                        bool is_shutdown);
   static void RecordInstallEventStatus(ServiceWorkerStatusCode status);
 
   // Records how much of dispatched events are handled while a Service

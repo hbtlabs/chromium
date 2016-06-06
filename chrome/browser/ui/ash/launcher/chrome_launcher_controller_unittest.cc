@@ -24,10 +24,13 @@
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -371,10 +374,6 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
                                     Extension::NO_FLAGS,
                                     "ffffffffffffffffffffffffffffffff",
                                     &error);
-
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        chromeos::switches::kEnableArc);
-    arc_test_.SetUp(profile());
   }
 
   // Creates a running V2 app (not pinned) of type |app_id|.
@@ -868,7 +867,7 @@ class MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest
 
     // A Task is leaked if we don't destroy everything, then run the message
     // loop.
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
   }
@@ -1433,7 +1432,7 @@ TEST_F(ChromeLauncherControllerTest, CheckRunningAppOrder) {
 }
 
 TEST_F(ChromeLauncherControllerTest, ArcDeferredLaunch) {
-  arc_test_.CreateUserAndLogin();
+  arc_test_.SetUp(profile());
 
   launcher_controller_.reset(
       ChromeLauncherController::CreateInstance(profile(), model_.get()));
@@ -1505,7 +1504,7 @@ TEST_F(ChromeLauncherControllerTest, ArcDeferredLaunch) {
 }
 
 TEST_F(ChromeLauncherControllerTest, ArcRunningApp) {
-  arc_test_.CreateUserAndLogin();
+  arc_test_.SetUp(profile());
   InitLauncherController();
 
   const std::string arc_app_id = ArcAppTest::GetAppId(arc_test_.fake_apps()[0]);
@@ -1533,7 +1532,7 @@ TEST_F(ChromeLauncherControllerTest, ArcRunningApp) {
 // Validate that Arc app is pinned correctly and pin is removed automatically
 // once app is uninstalled.
 TEST_F(ChromeLauncherControllerTest, ArcAppPin) {
-  arc_test_.CreateUserAndLogin();
+  arc_test_.SetUp(profile());
   InitLauncherController();
 
   const std::string arc_app_id = ArcAppTest::GetAppId(arc_test_.fake_apps()[0]);
@@ -3046,7 +3045,7 @@ TEST_F(ChromeLauncherControllerTest, MultipleAppIconLoaders) {
 }
 
 TEST_F(ChromeLauncherControllerTest, ArcAppPinPolicy) {
-  arc_test_.CreateUserAndLogin();
+  arc_test_.SetUp(profile());
   InitLauncherControllerWithBrowser();
 
   arc::mojom::AppInfo appinfo;

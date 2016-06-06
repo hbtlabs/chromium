@@ -131,7 +131,7 @@ v8::Local<v8::Value> nodeV8Value(v8::Local<v8::Context> context, Node* node)
 {
     v8::Isolate* isolate = context->GetIsolate();
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "nodeV8Value", "InjectedScriptHost", context->Global(), isolate);
-    if (!node || !BindingSecurity::shouldAllowAccessTo(isolate, callingDOMWindow(isolate), node, exceptionState))
+    if (!node || !BindingSecurity::shouldAllowAccessTo(isolate, currentDOMWindow(isolate), node, exceptionState))
         return v8::Null(isolate);
     return toV8(node, context->Global(), isolate);
 }
@@ -1179,7 +1179,7 @@ Node* InspectorDOMAgent::nodeForRemoteId(ErrorString* errorString, const String&
     return node;
 }
 
-void InspectorDOMAgent::highlightNode(ErrorString* errorString, std::unique_ptr<protocol::DOM::HighlightConfig> highlightInspectorObject, const Maybe<int>& nodeId, const Maybe<int>& backendNodeId, const Maybe<String16>& objectId)
+void InspectorDOMAgent::highlightNode(ErrorString* errorString, std::unique_ptr<protocol::DOM::HighlightConfig> highlightInspectorObject, const Maybe<int>& nodeId, const Maybe<int>& backendNodeId, const Maybe<String>& objectId)
 {
     Node* node = nullptr;
     if (nodeId.isJust()) {
@@ -1386,7 +1386,7 @@ void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, std:
     *result = buildArrayForElementAttributes(element);
 }
 
-void InspectorDOMAgent::requestNode(ErrorString* errorString, const String16& objectId, int* nodeId)
+void InspectorDOMAgent::requestNode(ErrorString* errorString, const String& objectId, int* nodeId)
 {
     Node* node = nodeForRemoteId(errorString, objectId);
     if (node)
@@ -2041,7 +2041,7 @@ void InspectorDOMAgent::getHighlightObjectForTest(ErrorString* errorString, int 
     *result = highlight.asProtocolValue();
 }
 
-std::unique_ptr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String16& objectGroup)
+std::unique_ptr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String& objectGroup)
 {
     Document* document = node->isDocumentNode() ? &node->document() : node->ownerDocument();
     LocalFrame* frame = document ? document->frame() : nullptr;

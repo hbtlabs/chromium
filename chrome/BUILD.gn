@@ -21,10 +21,12 @@ if (is_android) {
 } else if (is_mac) {
   import("//build/compiled_action.gni")
   import("//build/config/mac/rules.gni")
+  import("//build/config/mac/symbols.gni")
   import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
   import("//build_overrides/v8.gni")
+  import("//media/cdm/ppapi/cdm_paths.gni")
 }
 
 if (is_win) {
@@ -61,6 +63,11 @@ if (!is_android && !is_mac) {
     ]
     if (is_win) {
       public_deps += [ ":reorder_imports" ]
+    }
+    if (use_aura && (is_win || is_linux)) {
+      data_deps = [
+        "//chrome/app:mojo_manifests",
+      ]
     }
   }
 
@@ -419,6 +426,10 @@ if (is_win) {
     deps = [
       ":chrome_app",
     ]
+
+    if (debug_devtools) {
+      deps += [ ":devtools_debug_resources" ]
+    }
   }
 
   tweak_info_plist("chrome_app_plist") {
@@ -455,6 +466,15 @@ if (is_win) {
       ":chrome_versioned_bundle_data",
       "//chrome/common:version_header",
     ]
+
+    # Remove the default strip configuration (which strips all symbols) so that
+    # a saves file can be specified.
+    if (enable_stripping) {
+      remove_configs = [ "//build/config/mac:strip_all" ]
+
+      ldflags =
+          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+    }
   }
 
   compiled_action("chrome_app_strings") {
@@ -597,6 +617,15 @@ if (is_win) {
       "-rpath",
       "@loader_path/../../../../../../..",
     ]
+
+    # Remove the default strip configuration (which strips all symbols) so that
+    # a saves file can be specified.
+    if (enable_stripping) {
+      remove_configs = [ "//build/config/mac:strip_all" ]
+
+      ldflags +=
+          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+    }
   }
 
   bundle_data("chrome_framework_locales") {
@@ -686,6 +715,39 @@ if (is_win) {
     }
   }
 
+  # When debug_devtools is enabled, symlink the inspector resources into the
+  # framework bundle. The resources go into the final output directory for the
+  # framework in the app bundle, rather than the framework bundle in
+  # root_out_dir, since copy_bundle_data copies the contents of the link
+  # rather than the link itself.
+  action("devtools_debug_resources") {
+    _stamp = "$target_out_dir/run_${target_name}.stamp"
+
+    outputs = [
+      _stamp,
+    ]
+
+    script = "//build/symlink.py"
+    args = [
+      "-f",
+      "--touch",
+      rebase_path(_stamp, root_out_dir),
+
+      # Convert the symlink source and destination to an absolute paths, which
+      # makes symlinking easier (now pwd manipulation).
+      rebase_path("$root_out_dir/resources/inspector"),
+      rebase_path(
+          "$root_out_dir/$chrome_product_full_name.app/Contents/Versions/$chrome_version_full/$chrome_framework_name.framework/Resources/inspector"),
+    ]
+
+    deps = [
+      # Depend on :chrome_app to ensure that the bundle is produced before
+      # creating or destroying the symlink.
+      ":chrome_app",
+      "//third_party/WebKit/public:blink_devtools_frontend_resources",
+    ]
+  }
+
   if (enable_nacl) {
     bundle_data("chrome_framework_plugins") {
       sources = []
@@ -709,17 +771,50 @@ if (is_win) {
       sources = [
         "$root_out_dir/PepperFlash/PepperFlashPlayer.plugin",
       ]
-
       outputs = [
         "{{bundle_root_dir}}/Internet Plug-Ins/PepperFlash/{{source_file_part}}",
       ]
-
       public_deps = [
         "//third_party/adobe/flash:flapper_binaries",
       ]
     }
+
+    bundle_data("widevine_cdm_library_binaries") {
+      sources = [
+        "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
+        "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin",
+      ]
+      outputs = [
+        "{{bundle_root_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//third_party/widevine/cdm:widevinecdm",
+        "//third_party/widevine/cdm:widevinecdmadapter",
+      ]
+    }
+
+    bundle_data("widevine_cdm_library_manifest") {
+      sources = [
+        "$root_out_dir/WidevineCdm/manifest.json",
+      ]
+      outputs = [
+        "{{bundle_root_dir}}/Libraries/WidevineCdm/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//third_party/widevine/cdm:widevine_cdm_manifest",
+      ]
+    }
   } else {
     group("flash_player_plugin") {
+    }
+  }
+
+  group("widevine_cdm_library") {
+    if (is_chrome_branded) {
+      deps = [
+        ":widevine_cdm_library_binaries",
+        ":widevine_cdm_library_manifest",
+      ]
     }
   }
 
@@ -843,6 +938,7 @@ if (is_win) {
       ":chrome_framework_plugins",
       ":chrome_framework_resources",
       ":flash_player_plugin",
+      ":widevine_cdm_library",
       "//build/config/sanitizers:deps",
       "//chrome/app/nibs:chrome_xibs",
     ]

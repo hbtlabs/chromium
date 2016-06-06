@@ -101,10 +101,10 @@
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/ui/zoom/zoom_event_manager.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/tracked/tracked_preference_validation_delegate.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/notification_service.h"
@@ -223,7 +223,9 @@ void BlockFileThreadOnDirectoryCreate(base::WaitableEvent* done_creating) {
 void CreateProfileDirectory(base::SequencedTaskRunner* sequenced_task_runner,
                             const base::FilePath& path,
                             bool create_readme) {
-  base::WaitableEvent* done_creating = new base::WaitableEvent(false, false);
+  base::WaitableEvent* done_creating =
+      new base::WaitableEvent(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
   sequenced_task_runner->PostTask(
       FROM_HERE, base::Bind(&CreateDirectoryAndSignal, path, done_creating,
                             create_readme));
@@ -712,7 +714,7 @@ std::unique_ptr<content::ZoomLevelDelegate>
 ProfileImpl::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return base::WrapUnique(new ChromeZoomLevelPrefs(
       GetPrefs(), GetPath(), partition_path,
-      ui_zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
+      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
 }
 
 base::FilePath ProfileImpl::GetPath() const {
