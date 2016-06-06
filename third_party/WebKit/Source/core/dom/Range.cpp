@@ -1337,23 +1337,6 @@ bool areRangesEqual(const Range* a, const Range* b)
     return a->startPosition() == b->startPosition() && a->endPosition() == b->endPosition();
 }
 
-static inline void boundaryNodeChildrenChanged(RangeBoundaryPoint& boundary, ContainerNode* container)
-{
-    if (!boundary.childBefore())
-        return;
-    if (boundary.container() != container)
-        return;
-    boundary.invalidateOffset();
-}
-
-void Range::nodeChildrenChanged(ContainerNode* container)
-{
-    DCHECK(container);
-    DCHECK_EQ(container->document(), m_ownerDocument);
-    boundaryNodeChildrenChanged(m_start, container);
-    boundaryNodeChildrenChanged(m_end, container);
-}
-
 static inline void boundaryNodeChildrenWillBeRemoved(RangeBoundaryPoint& boundary, ContainerNode& container)
 {
     for (Node* nodeToBeRemoved = container.firstChild(); nodeToBeRemoved; nodeToBeRemoved = nodeToBeRemoved->nextSibling()) {
@@ -1408,6 +1391,7 @@ void Range::nodeWillBeRemoved(Node& node)
 
 static inline void boundaryTextInserted(RangeBoundaryPoint& boundary, Node* text, unsigned offset, unsigned length)
 {
+    boundary.markValid();
     if (boundary.container() != text)
         return;
     unsigned boundaryOffset = boundary.offset();
@@ -1426,6 +1410,7 @@ void Range::didInsertText(Node* text, unsigned offset, unsigned length)
 
 static inline void boundaryTextRemoved(RangeBoundaryPoint& boundary, Node* text, unsigned offset, unsigned length)
 {
+    boundary.markValid();
     if (boundary.container() != text)
         return;
     unsigned boundaryOffset = boundary.offset();

@@ -20,8 +20,8 @@ struct Size {
 };
 
 struct SizeF {
-  int32 width;
-  int32 height;
+  float width;
+  float height;
 };
 
 struct Rect {
@@ -50,4 +50,14 @@ struct InsetsF {
   float left;
   float bottom;
   float right;
+};
+
+struct Vector2d {
+  int32 x;
+  int32 y;
+};
+
+struct Vector2dF {
+  float x;
+  float y;
 };

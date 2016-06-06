@@ -7,6 +7,8 @@
 #include <string>
 #include <utility>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
@@ -18,10 +20,8 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
-#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/maximize_mode/workspace_backdrop_delegate.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -827,7 +827,7 @@ namespace {
 
 WorkspaceLayoutManager* GetWorkspaceLayoutManager(aura::Window* container) {
   return static_cast<WorkspaceLayoutManager*>(
-      wm::WmWindowAura::Get(container)->GetLayoutManager());
+      WmWindowAura::Get(container)->GetLayoutManager());
 }
 
 class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {

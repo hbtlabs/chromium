@@ -15,7 +15,7 @@ crbug.com/569901 crbug.com/24182 [ Debug ] jquery/manipulation.html [ Timeout Pa
 # Run these tests with under virtual/scalefactor... only.
 crbug.com/567837 fast/hidpi/static [ Skip ]
 
-# TODO(yosin): We should convert following tests to use asynchronous spell checker.
+# TODO(yosin): We should convert following tests to use asynchronous spell checker.scroll-in
 crbug.com/563265 editing/spelling/context-menu-suggestions.html [ Skip ]
 crbug.com/563265 editing/spelling/spellcheck-editable-on-focus-multiframe.html [ Skip ]
 crbug.com/563265 editing/spelling/spellcheck-editable-on-focus-sync.html [ Skip ]
@@ -46,6 +46,8 @@ crbug.com/502531 fast/borders/border-antialiasing.html [ Failure ]
 
 crbug.com/538697 [ Win7 Debug ] virtual/threaded/printing/webgl-oversized-printing.html [ Crash ]
 crbug.com/538697 [ Win7 Debug ] printing/webgl-oversized-printing.html [ Crash ]
+
+crbug.com/617152 imported/wpt/mediacapture-streams/GUM-impossible-constraint.html [ Skip ]
 
 # Expected to fail until OffscreenCanvas can render on the gpu
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-strokeRect-in-worker.html [ Failure ]
@@ -226,6 +228,8 @@ crbug.com/569139 fast/js/string-replace-2.html [ NeedsManualRebaseline ]
 crbug.com/569139 fast/js/regexp-caching.html [ NeedsManualRebaseline ]
 crbug.com/597221 fast/dom/Window/window-postmessage-clone-deep-array.html [ NeedsManualRebaseline ]
 
+crbug.com/616752 virtual/gpu/fast/canvas/canvas-imageSmoothingEnabled-patterns.html [ NeedsManualRebaseline ]
+
 crbug.com/498539 http/tests/inspector/elements/styles/selector-line.html [ Pass Timeout ]
 crbug.com/498539 http/tests/inspector/network/network-datareceived.html [ Pass Timeout ]
 crbug.com/498539 [ Win ] inspector/tracing/decode-resize.html [ Failure Timeout ]
@@ -308,11 +312,6 @@ crbug.com/410145 [ Win ] fast/table/column-in-inline.html [ Failure ]
 crbug.com/411164 [ Win ] http/tests/security/powerfulFeatureRestrictions/serviceworker-on-insecure-origin.html [ Pass ]
 
 crbug.com/475984 [ Mac Debug ] css2.1/t100801-c544-valgn-03-d-agi.html [ Failure ]
-
-# Rebaseline didn't fix this. It's flaking between two different failures due to rounding error.
-# It consistently fails on debug builds and sometiems on release+asserts builds.
-# But consistently passes on release builds.
-crbug.com/518005 crbug.com/463358 [ Mac ] svg/W3C-SVG-1.1/struct-frag-02-t.svg [ Pass Failure ]
 
 # SPv2 paint properties are still being implemented.
 #
@@ -511,9 +510,9 @@ crbug.com/505364 imported/wpt/shadow-dom/untriaged/styles/test-003.html [ Failur
 crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-002.html [ Failure ]
 crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-003.html [ Failure ]
 crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-004.html [ Failure ]
+crbug.com/505364 imported/wpt/shadow-dom/untriaged/elements-and-dom-objects/extensions-to-event-interface/event-path-001.html [ Failure ]
 crbug.com/505364 imported/wpt/custom-elements/v0/instantiating/extensions-to-document-interface/create-element-interface-type-is-a-type-extension.html [ Failure ]
 crbug.com/505364 imported/csswg-test/css-scoping-1/css-scoping-shadow-slot-display-override.html [ Failure ]
-crbug.com/505364 imported/wpt/shadow-dom/untriaged/elements-and-dom-objects/extensions-to-event-interface/event-path-001.html [ Failure ]
 
 crbug.com/517840 imported/wpt/webrtc/rtcpeerconnection/rtcpeerconnection-idl.html [ Failure Timeout ]
 
@@ -719,11 +718,6 @@ crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/row-progression
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-vrl-006.xht [ Failure ]
 crbug.com/492664 [ Mac ] imported/csswg-test/css-writing-modes-3/text-baseline-vlr-007.xht [ Failure ]
 
-# Auto-rebaseline for r397112 caused the following failure.
-crbug.com/616485 [ Win7 ] virtual/rootlayerscrolls/scrollbars/scrollbars-on-positioned-content.html [ Skip ]
-crbug.com/616485 [ Win7 ] virtual/prefer_compositing_to_lcd_text/scrollbars/scrollbars-on-positioned-content.html [ Skip ]
-crbug.com/616485 [ Win7 ] scrollbars/scrollbars-on-positioned-content.html [ Skip ]
-
 crbug.com/498845 [ Win ] fast/multicol/vertical-rl/float-content-break.html [ Failure ]
 crbug.com/443615 [ Linux Win ] imported/csswg-test/css-shapes-1/shape-outside/supported-shapes/circle/shape-outside-circle-027.html [ Failure ]
 
@@ -910,9 +904,9 @@ crbug.com/459305 [ Mac ] svg/custom/foreign-object-skew.svg [ Failure ]
 
 crbug.com/482229 compositing/layer-creation/fixed-position-under-transform.html [ Failure ]
 
-crbug.com/471824 imported/wpt/pointerevents/ [ Skip ]
-crbug.com/471824 virtual/pointerevent/imported/wpt/pointerevents/pointerevent_touch-action-illegal.html [ Skip ]
-crbug.com/471824 virtual/pointerevent/imported/wpt/pointerevents/pointerevent_touch-action-verification.html [ Skip ]
+crbug.com/612924 imported/wpt/pointerevents/ [ Skip ]
+crbug.com/612924 virtual/pointerevent/imported/wpt/pointerevents/ [ Skip ]
+crbug.com/616459 virtual/pointerevent/imported/wpt/pointerevents/pointerevent_constructor.html [ Failure ]
 
 # These testcases are incorrect, mark them as failing until they're fixed in the testsuite.
 # https://lists.w3.org/Archives/Public/www-style/2016Jan/0275.html
@@ -1088,15 +1082,9 @@ crbug.com/353746 virtual/android/fullscreen/video-specified-size.html [ Failure 
 
 crbug.com/527270 accessibility/name-calc-img.html [ Failure Pass Timeout ]
 
-# This test has different results in Debug and Release.
-crbug.com/529038 [ Debug ] virtual/gpu/fast/canvas/canvas-composite-repaint-by-all-imagesource.html [ Failure ]
-
 crbug.com/532643 [ Mac ] fast/events/hit-test-cache-scrollbar-no-crash.html [ Pass Failure ]
 crbug.com/532643 [ Mac ] virtual/trustedeventsdefaultaction/fast/events/hit-test-cache-scrollbar-no-crash.html [ Pass Failure ]
 crbug.com/532643 [ Mac ] virtual/pointerevent/fast/events/hit-test-cache-scrollbar-no-crash.html [ Pass Failure ]
-
-# The Win10 result for fast/text/emoji-font-fallback-win.html does not match the description
-crbug.com/527044 [ Win10 ] fast/text/emoji-font-fallback-win.html [ Failure ]
 
 # Win7 does not support the needed DirectWrite APIs for font fallback
 crbug.com/459056 [ Win7 ] fast/text/font-fallback-win.html [ Failure ]
@@ -1143,9 +1131,6 @@ crbug.com/575766 http/tests/inspector/resource-tree/resource-tree-frame-add.html
 crbug.com/581468 http/tests/inspector/resource-tree/resource-tree-non-unique-url.html [ Pass Failure ]
 
 crbug.com/571710 http/tests/inspector/search/source-frame-search.html [ Timeout Pass ]
-
-crbug.com/614063 [ Win10 ] svg/custom/shape-rendering.svg [ Failure ]
-crbug.com/614063 [ Win10 ] svg/custom/use-referencing-nonexisting-symbol.svg [ Failure ]
 
 crbug.com/399951 http/tests/mime/javascript-mimetype-usecounters.html [ Pass Failure ]
 
@@ -1327,6 +1312,9 @@ crbug.com/487344 media/video-empty-source.html [ NeedsManualRebaseline ]
 crbug.com/487344 media/video-no-audio.html [ NeedsManualRebaseline ]
 crbug.com/487344 media/video-paint-invalidation.html [ NeedsManualRebaseline ]
 
+# Failed expectation after auto-rebaseline.
+crbug.com/617033 [ Mac10.11 Retina ] tables/mozilla/bugs/bug30692.html [ Failure ]
+
 crbug.com/614197 [ Mac ] http/tests/media/pdf-served-as-pdf.html [ Pass Timeout ]
 
 crbug.com/606302 [ Win7 Debug ] transforms/3d/point-mapping/3d-point-mapping-deep.html [ Failure ]
@@ -1334,6 +1322,9 @@ crbug.com/606302 [ Mac ] transforms/3d/point-mapping/3d-point-mapping-preserve-3
 crbug.com/606302 [ Win ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
 crbug.com/606302 [ Linux Debug ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
 crbug.com/613497 [ Linux Release ] transforms/3d/point-mapping/3d-point-mapping-preserve-3d.html [ Failure ]
+
+# Crashed on Linux ASAN.
+crbug.com/616700 [ Linux ] svg/filters/filtered-animated-image-crash.html [ Crash Failure ]
 
 crbug.com/613659 imported/wpt/quirks-mode/percentage-height-calculation.html [ Failure ]
 crbug.com/613661 imported/wpt/quirks-mode/table-cell-nowrap-minimum-width-calculation.html [ Failure ]

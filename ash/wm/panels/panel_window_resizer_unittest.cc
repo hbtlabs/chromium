@@ -4,22 +4,22 @@
 
 #include "ash/common/wm/panels/panel_window_resizer.h"
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_model.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/i18n/rtl.h"
@@ -67,7 +67,7 @@ class PanelWindowResizerTest : public test::AshTestBase {
   }
 
   void DragStart(aura::Window* window) {
-    resizer_.reset(CreateWindowResizer(wm::WmWindowAura::Get(window),
+    resizer_.reset(CreateWindowResizer(WmWindowAura::Get(window),
                                        window->bounds().origin(), HTCAPTION,
                                        aura::client::WINDOW_MOVE_SOURCE_MOUSE)
                        .release());
@@ -239,7 +239,7 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachLeft) {
  if (!SupportsHostWindowResize())
     return;
 
- Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_LEFT);
+ Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_LEFT);
  std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
  DetachReattachTest(window.get(), 1, 0);
 }
@@ -248,7 +248,7 @@ TEST_F(PanelWindowResizerTest, PanelDetachReattachRight) {
   if (!SupportsHostWindowResize())
     return;
 
-  Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_RIGHT);
+  Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
   std::unique_ptr<aura::Window> window(CreatePanelWindow(gfx::Point(0, 0)));
   DetachReattachTest(window.get(), -1, 0);
 }
@@ -488,7 +488,7 @@ TEST_F(PanelWindowResizerTest, DragReordersPanelsVertical) {
   if (!SupportsHostWindowResize())
     return;
 
-  Shelf::ForPrimaryDisplay()->SetAlignment(wm::SHELF_ALIGNMENT_LEFT);
+  Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_LEFT);
   DragAlongShelfReorder(0, -1);
 }
 

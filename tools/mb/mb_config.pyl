@@ -15,7 +15,7 @@
       'Android': 'android_without_codecs_gn_release_bot_minimal_symbols',
       'Linux x64': 'noswarming_gn_release_bot',
       'Mac': 'noswarming_gyp_release_bot_mac_strip',
-      'Win': 'noswarming_gyp_release_bot_minimal_symbols_x86',
+      'Win': 'noswarming_gn_release_bot_minimal_symbols_x86',
       'Win x64': 'noswarming_gn_release_bot_minimal_symbols_x64',
     },
 
@@ -65,7 +65,7 @@
       'Google Chrome ChromeOS': 'gyp_official_goma_chromeos',
       'Google Chrome Linux x64': 'gn_official_goma',
       'Google Chrome Mac': 'gyp_official_goma',
-      'Google Chrome Win': 'gyp_official_goma_minimal_symbols_x86',
+      'Google Chrome Win': 'gn_official_goma_minimal_symbols_x86',
     },
 
     'chromium.chromiumos': {
@@ -136,12 +136,12 @@
         'swarming_gn_clang_tot_linux_full_symbols_shared_release',
       'ClangToTLinux tester': 'none',
       'ClangToTLinux (dbg)': 'swarming_clang_tot_shared_debug',
-      'ClangToTLinuxASan': 'swarming_gyp_clang_tot_asan_lsan_static_release',
+      'ClangToTLinuxASan': 'swarming_gn_clang_tot_asan_lsan_static_release',
       'ClangToTLinuxASan tester': 'none',
       'ClangToTLinuxLLD': 'swarming_clang_tot_lld_release_shared',
       'ClangToTLinuxLLD tester': 'none',
       'ClangToTLinuxUBSanVptr':
-        'swarming_gyp_clang_tot_edge_ubsan_no_recover_hack_static_release',
+        'swarming_gn_clang_tot_edge_ubsan_no_recover_hack_static_release',
       'ClangToTLinuxUBSanVptr tester': 'none',
       'ClangToTMac': 'swarming_gyp_clang_tot_minimal_symbols_shared_release',
       'ClangToTMac tester': 'none',
@@ -250,6 +250,8 @@
       # These all use the 'trybot' mixins to ensure that dcheck is on.
       'Android Debug (Nexus 5)': 'android_gn_debug_static_trybot',
       'Android Debug (Nexus 5X)': 'android_gn_debug_static_trybot_arm64',
+      'Android Swarmed Debug (Nexus 5X)':
+        'android_gn_debug_static_trybot_arm64',
       'Android Debug (Nexus 6)': 'android_gn_debug_static_trybot',
       'Android Debug (Nexus 9)': 'android_gn_debug_static_trybot_arm64',
       'GPU Linux Builder (dbg)': 'swarming_gpu_fyi_tests_gn_debug_trybot',
@@ -316,33 +318,33 @@
     },
 
     'chromium.lkgr': {
-      'ASAN Debug': 'gyp_asan_lsan_edge_fuzzer_debug_bot',
+      'ASAN Debug': 'gn_asan_lsan_edge_fuzzer_debug_bot',
       'ASAN Release (symbolized)':
-        'gyp_asan_lsan_edge_fuzzer_v8_heap_symbolized_release_bot',
+        'gn_asan_lsan_edge_fuzzer_v8_heap_symbolized_release_bot',
       'ASAN Release Media':
-        'gyp_asan_lsan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot',
-      'ASAN Release': 'gyp_asan_lsan_edge_fuzzer_v8_heap_release_bot',
+        'gn_asan_lsan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot',
+      'ASAN Release': 'gn_asan_lsan_edge_fuzzer_v8_heap_release_bot',
       'ASan Debug (32-bit x86 with V8-ARM)':
-        'gyp_asan_edge_fuzzer_v8_heap_debug_bot_hybrid',
+        'gn_asan_edge_fuzzer_v8_heap_debug_bot_hybrid',
       'ASan Release (32-bit x86 with V8-ARM)':
-        'gyp_asan_edge_fuzzer_v8_heap_release_bot_hybrid',
+        'gn_asan_edge_fuzzer_v8_heap_release_bot_hybrid',
       'ASan Release (32-bit x86 with V8-ARM, symbolized)':
-        'gyp_asan_edge_fuzzer_v8_heap_symbolized_release_bot_hybrid',
+        'gn_asan_edge_fuzzer_v8_heap_symbolized_release_bot_hybrid',
       'ASan Release Media (32-bit x86 with V8-ARM)':
-        'gyp_asan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot_hybrid',
+        'gn_asan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot_hybrid',
       'ChromiumOS ASAN Release':
         'gyp_chromeos_asan_lsan_edge_fuzzer_v8_heap_release_bot',
-      'MSAN Release (chained origins)': 'gyp_msan_edge_release_bot',
-      'MSAN Release (no origins)': 'gyp_msan_no_origins_edge_release_bot',
+      'MSAN Release (chained origins)': 'gn_msan_edge_release_bot',
+      'MSAN Release (no origins)': 'gn_msan_no_origins_edge_release_bot',
       'Mac ASAN Debug': 'gyp_asan_fuzzer_v8_heap_debug_symbols_static_bot',
       'Mac ASAN Release Media':
         'gyp_asan_fuzzer_v8_heap_chrome_with_codecs_release_bot',
       'Mac ASAN Release': 'gyp_asan_fuzzer_v8_heap_release_bot',
-      'TSAN Debug': 'gyp_tsan_disable_nacl_line_tables_debug_bot',
-      'TSAN Release': 'gyp_tsan_disable_nacl_line_tables_release_bot',
+      'TSAN Debug': 'gn_tsan_disable_nacl_line_tables_debug_bot',
+      'TSAN Release': 'gn_tsan_disable_nacl_line_tables_release_bot',
       'Telemetry Harness Upload': 'none',
-      'UBSan Release': 'gyp_ubsan_release_bot',
-      'UBSan vptr Release': 'gyp_ubsan_vptr_edge_release_bot',
+      'UBSan Release': 'gn_ubsan_release_bot',
+      'UBSan vptr Release': 'gn_ubsan_vptr_edge_release_bot',
       'Win ASan Release Coverage':
         'gyp_asan_edge_fuzzer_v8_heap_release_static_x86',
       'Win ASan Release Media':
@@ -366,13 +368,24 @@
       'ios-simulator-gn': 'ios_gn',
     },
 
+    'chromium.memory': {
+      'Linux ASAN LSAN Builder': 'swarming_asan_lsan_gn_release_bot',
+      'Linux ASAN LSAN Tests (1)': 'none',
+      'Linux ASAN LSAN Tests (sandboxed)': 'none',
+      'Mac ASAN 64 Builder': 'swarming_asan_lsan_full_symbols_gyp_release_bot',
+      'Mac ASAN 64 Tests (1)': 'none',
+      'Linux Chromium OS ASAN LSAN Builder':
+        'swarming_asan_lsan_chromeos_gyp_release_bot',
+      'Linux Chromium OS ASAN LSAN Tests (1)': 'none',
+    },
+
     'chromium.memory.fyi': {
       'Chromium Linux ChromeOS MSan Builder':
         'swarming_gyp_chromeos_msan_release_bot',
       'Chromium Linux MSan Builder':
         'swarming_gyp_msan_release_bot',
       'Chromium Linux TSan Builder':
-        'swarming_gyp_tsan_disable_nacl_release_bot',
+        'swarming_tsan_disable_nacl_gn_release_bot',
       'Chromium Windows Builder (DrMemory x64)':
         'gyp_drmemory_shared_release_x64',
       'Chromium Windows Builder (DrMemory)': 'gyp_drmemory_shared_release_x86',
@@ -501,13 +514,13 @@
       'Win 8 Perf (3)': 'none',
       'Win 8 Perf (4)': 'none',
       'Win 8 Perf (5)': 'none',
-      'Win Builder': 'gyp_official_goma_minimal_symbols_x86',
+      'Win Builder': 'gn_official_goma_minimal_symbols_x86',
       'Win Zenbook Perf (1)': 'none',
       'Win Zenbook Perf (2)': 'none',
       'Win Zenbook Perf (3)': 'none',
       'Win Zenbook Perf (4)': 'none',
       'Win Zenbook Perf (5)': 'none',
-      'Win x64 Builder': 'gyp_official_goma_minimal_symbols_x64',
+      'Win x64 Builder': 'gn_official_goma_minimal_symbols_x64',
     },
 
     'client.skia': {
@@ -713,7 +726,7 @@
       'closure_compilation': 'closure_compilation',
       'linux_arm': 'swarming_gn_release_trybot_arm',
       'linux_chromium_archive_rel_ng': 'noswarming_gn_release_bot',
-      'linux_chromium_asan_rel_ng': 'swarming_asan_lsan_gyp_release_trybot',
+      'linux_chromium_asan_rel_ng': 'swarming_asan_lsan_gn_release_trybot',
       'linux_chromium_asan_variable': 'findit',
       'linux_chromium_browser_side_navigation_rel': 'gn_release_trybot',
       'linux_chromium_cast_variable': 'findit',
@@ -746,9 +759,8 @@
       'linux_chromium_gn_upload': 'gn_linux_upload',
       'linux_chromium_msan_rel_ng': 'swarming_msan_gyp_release_trybot',
       'linux_chromium_rel_ng': 'swarming_gpu_tests_gn_release_trybot',
-      'linux_chromium_tsan_rel_ng': 'swarming_tsan_gyp_release_trybot',
       'linux_chromium_tsan_rel_ng':
-        'swarming_gyp_tsan_disable_nacl_release_trybot',
+        'swarming_tsan_disable_nacl_gn_release_trybot',
       'linux_chromium_variable': 'findit',
       'linux_chromium_variable_32': 'findit',
       'linux_chromium_variable_chrome': 'findit',
@@ -846,8 +858,8 @@
       'win8_chromium_gn_dbg': 'swarming_gn_debug_trybot_x86',
       'win8_chromium_gn_upload': 'gn_release_bot_minimal_symbols_x86',
       'win8_chromium_ng': 'gn_release_trybot_x86',
-      'win_x64_archive': 'noswarming_gyp_release_trybot_x64',
-      'win_archive': 'noswarming_gyp_release_trybot_x86',
+      'win_x64_archive': 'noswarming_gn_release_trybot_x64',
+      'win_archive': 'noswarming_gn_release_trybot_x86',
       'win_chromium_compile_dbg_ng': 'swarming_gn_debug_trybot_x86',
       'win_chromium_compile_rel_ng':
         'swarming_gpu_tests_gn_release_trybot_x86',
@@ -874,7 +886,7 @@
         'swarming_gpu_tests_deqp_gles_gyp_release_trybot_x86',
       'win_pgo': 'gyp_official_winpgo',
       'win_upload_clang': 'gn_release_bot',
-      'win_chrome_official': 'gyp_official_goma_minimal_symbols_x86',
+      'win_chrome_official': 'gn_official_goma_minimal_symbols_x86',
     },
 
     'tryserver.v8': {
@@ -1133,6 +1145,14 @@
       'gn', 'official', 'goma', 'minimal_symbols', 'android', 'arm64',
     ],
 
+    'gn_official_goma_minimal_symbols_x64': [
+      'gn', 'official', 'goma', 'minimal_symbols', 'x64',
+    ],
+
+    'gn_official_goma_minimal_symbols_x86': [
+      'gn', 'official', 'goma', 'minimal_symbols', 'x86',
+    ],
+
     'gn_release_bot': [
       'gn', 'release_bot',
     ],
@@ -1196,25 +1216,25 @@
       'gn', 'ubsan_vptr', 'ubsan_no_recover_hack', 'release_bot',
     ],
 
-    'gyp_asan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot_hybrid': [
-      'gyp', 'asan', 'edge', 'fuzzer', 'v8_heap', 'chromeos_codecs',
+    'gn_asan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot_hybrid': [
+      'gn', 'asan', 'edge', 'fuzzer', 'v8_heap', 'chromeos_codecs',
       'release_bot', 'hybrid',
     ],
 
-    'gyp_asan_edge_fuzzer_v8_heap_debug_bot_hybrid': [
-      'gyp', 'asan', 'edge', 'fuzzer', 'v8_heap', 'debug_bot', 'hybrid',
+    'gn_asan_edge_fuzzer_v8_heap_debug_bot_hybrid': [
+      'gn', 'asan', 'edge', 'fuzzer', 'v8_heap', 'debug_bot', 'hybrid',
     ],
 
-    'gyp_asan_edge_fuzzer_v8_heap_release_bot_hybrid': [
-      'gyp', 'asan', 'edge', 'fuzzer', 'v8_heap', 'release_bot', 'hybrid',
+    'gn_asan_edge_fuzzer_v8_heap_release_bot_hybrid': [
+      'gn', 'asan', 'edge', 'fuzzer', 'v8_heap', 'release_bot', 'hybrid',
     ],
 
     'gyp_asan_edge_fuzzer_v8_heap_release_static_x86': [
       'gyp', 'asan', 'edge', 'fuzzer', 'v8_heap', 'release', 'static', 'x86',
     ],
 
-    'gyp_asan_edge_fuzzer_v8_heap_symbolized_release_bot_hybrid': [
-      'gyp', 'asan', 'edge', 'fuzzer', 'v8_heap', 'symbolized',
+    'gn_asan_edge_fuzzer_v8_heap_symbolized_release_bot_hybrid': [
+      'gn', 'asan', 'edge', 'fuzzer', 'v8_heap', 'symbolized',
       'release_bot', 'hybrid',
     ],
 
@@ -1239,21 +1259,21 @@
       'gyp', 'asan', 'fuzzer', 'v8_heap', 'release', 'static', 'x86',
     ],
 
-    'gyp_asan_lsan_edge_fuzzer_debug_bot': [
-      'gyp', 'asan', 'lsan', 'edge', 'fuzzer', 'debug_bot',
+    'gn_asan_lsan_edge_fuzzer_debug_bot': [
+      'gn', 'asan', 'lsan', 'edge', 'fuzzer', 'debug_bot',
     ],
 
-    'gyp_asan_lsan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot': [
-      'gyp', 'asan', 'lsan', 'edge', 'v8_heap', 'chromeos_codecs',
+    'gn_asan_lsan_edge_fuzzer_v8_heap_chromeos_codecs_release_bot': [
+      'gn', 'asan', 'lsan', 'edge', 'v8_heap', 'chromeos_codecs',
       'release_bot',
     ],
 
-    'gyp_asan_lsan_edge_fuzzer_v8_heap_release_bot': [
-      'gyp', 'asan', 'lsan', 'edge', 'fuzzer', 'v8_heap', 'release_bot',
+    'gn_asan_lsan_edge_fuzzer_v8_heap_release_bot': [
+      'gn', 'asan', 'lsan', 'edge', 'fuzzer', 'v8_heap', 'release_bot',
     ],
 
-    'gyp_asan_lsan_edge_fuzzer_v8_heap_symbolized_release_bot': [
-      'gyp', 'asan', 'lsan', 'edge', 'v8_heap', 'symbolized', 'release_bot',
+    'gn_asan_lsan_edge_fuzzer_v8_heap_symbolized_release_bot': [
+      'gn', 'asan', 'lsan', 'edge', 'v8_heap', 'symbolized', 'release_bot',
     ],
 
     'gyp_chromeos_asan_lsan_edge_fuzzer_v8_heap_release_bot': [
@@ -1289,12 +1309,12 @@
       'gyp', 'drmemory', 'shared', 'release', 'x64',
     ],
 
-    'gyp_msan_edge_release_bot': [
-      'gyp', 'msan', 'edge', 'release_bot',
+    'gn_msan_edge_release_bot': [
+      'gn', 'msan', 'edge', 'release_bot',
     ],
 
-    'gyp_msan_no_origins_edge_release_bot': [
-      'gyp', 'msan_no_origins', 'edge', 'release_bot',
+    'gn_msan_no_origins_edge_release_bot': [
+      'gn', 'msan_no_origins', 'edge', 'release_bot',
     ],
 
     'gyp_official': [
@@ -1355,20 +1375,20 @@
       'gyp', 'syzyasan', 'no_pch', 'win_z7', 'x86',
     ],
 
-    'gyp_tsan_disable_nacl_line_tables_debug_bot': [
-      'gyp', 'tsan', 'disable_nacl', 'line_tables', 'debug_bot',
+    'gn_tsan_disable_nacl_line_tables_debug_bot': [
+      'gn', 'tsan', 'disable_nacl', 'line_tables', 'debug_bot',
     ],
 
-    'gyp_tsan_disable_nacl_line_tables_release_bot': [
-      'gyp', 'tsan', 'disable_nacl', 'line_tables', 'release_bot',
+    'gn_tsan_disable_nacl_line_tables_release_bot': [
+      'gn', 'tsan', 'disable_nacl', 'line_tables', 'release_bot',
     ],
 
-    'gyp_ubsan_release_bot': [
-      'gyp', 'ubsan', 'release_bot',
+    'gn_ubsan_release_bot': [
+      'gn', 'ubsan', 'release_bot',
     ],
 
-    'gyp_ubsan_vptr_edge_release_bot': [
-      'gyp', 'ubsan_vptr', 'edge', 'release_bot',
+    'gn_ubsan_vptr_edge_release_bot': [
+      'gn', 'ubsan_vptr', 'edge', 'release_bot',
     ],
 
     # The 'ios' configs are just used for auditing. iOS bots
@@ -1418,20 +1438,16 @@
       'noswarming', 'gyp', 'release_bot', 'mac_strip',
     ],
 
-    'noswarming_gyp_release_bot_minimal_symbols_x86': [
-      'noswarming', 'gyp', 'release_bot', 'minimal_symbols', 'x86',
-    ],
-
     'noswarming_gyp_release_trybot': [
       'noswarming', 'gyp', 'release_trybot',
     ],
 
-    'noswarming_gyp_release_trybot_x64': [
-      'noswarming', 'gyp', 'release_trybot', 'x64',
+    'noswarming_gn_release_trybot_x64': [
+      'noswarming', 'gn', 'release_trybot', 'x64',
     ],
 
-    'noswarming_gyp_release_trybot_x86': [
-      'noswarming', 'gyp', 'release_trybot', 'x86',
+    'noswarming_gn_release_trybot_x86': [
+      'noswarming', 'gn', 'release_trybot', 'x86',
     ],
 
     'swarming_android_gn_debug_static_bot': [
@@ -1470,12 +1486,28 @@
       'swarming', 'asan', 'dcheck_always_on', 'gyp', 'release_bot',
     ],
 
-    'swarming_asan_lsan_chromeos_gyp_release_trybot': [
-      'swarming', 'asan', 'lsan', 'chromeos', 'release_trybot',
+    'swarming_asan_lsan_chromeos_gyp_release_bot': [
+      'swarming', 'asan', 'lsan', 'chromeos', 'gyp', 'release_bot',
     ],
 
-    'swarming_asan_lsan_gyp_release_trybot': [
-      'swarming', 'asan', 'lsan', 'release_trybot',
+    'swarming_asan_lsan_chromeos_gyp_release_trybot': [
+      'swarming', 'asan', 'lsan', 'chromeos', 'gyp', 'release_trybot',
+    ],
+
+    'swarming_asan_lsan_chromeos_gyp_release_trybot': [
+      'swarming', 'asan', 'lsan', 'chromeos', 'gyp', 'release_trybot',
+    ],
+
+    'swarming_asan_lsan_full_symbols_gyp_release_bot': [
+      'swarming', 'asan', 'lsan', 'full_symbols', 'gyp', 'release_bot',
+    ],
+
+    'swarming_asan_lsan_gn_release_bot': [
+      'swarming', 'asan', 'lsan', 'gn', 'release_bot',
+    ],
+
+    'swarming_asan_lsan_gn_release_trybot': [
+      'swarming', 'asan', 'lsan', 'gn', 'release_trybot',
     ],
 
     'swarming_chromeos_gn_release_trybot': [
@@ -1730,12 +1762,12 @@
       'x86',
     ],
 
-    'swarming_gyp_clang_tot_asan_lsan_static_release': [
-      'swarming', 'gyp', 'clang_tot', 'asan', 'lsan', 'static', 'release',
+    'swarming_gn_clang_tot_asan_lsan_static_release': [
+      'swarming', 'gn', 'clang_tot', 'asan', 'lsan', 'static', 'release',
     ],
 
-    'swarming_gyp_clang_tot_edge_ubsan_no_recover_hack_static_release': [
-      'swarming', 'gyp', 'clang_tot', 'edge', 'ubsan_no_recover_hack',
+    'swarming_gn_clang_tot_edge_ubsan_no_recover_hack_static_release': [
+      'swarming', 'gn', 'clang_tot', 'edge', 'ubsan_no_recover_hack',
       'static', 'release',
     ],
 
@@ -1823,12 +1855,12 @@
       'swarming', 'gyp', 'syzyasan', 'release_trybot', 'x86',
     ],
 
-    'swarming_gyp_tsan_disable_nacl_release_bot': [
-      'swarming', 'gyp', 'tsan', 'disable_nacl', 'release_bot',
+    'swarming_tsan_disable_nacl_gn_release_bot': [
+      'swarming', 'tsan', 'disable_nacl', 'gn', 'release_bot',
     ],
 
-    'swarming_gyp_tsan_disable_nacl_release_trybot': [
-      'swarming', 'gyp', 'tsan', 'disable_nacl', 'release_trybot',
+    'swarming_tsan_disable_nacl_gn_release_trybot': [
+      'swarming', 'tsan', 'disable_nacl', 'gn', 'release_trybot',
     ],
 
     'swarming_msan_gyp_release_trybot': [
@@ -2051,7 +2083,7 @@
     },
 
     'fuzzer': {
-      'gn_args': 'error', # TODO(GYP): implement enable_ipc_fuzzer=true
+      'gn_args': 'enable_ipc_fuzzer=true',
       'gyp_defines': 'enable_ipc_fuzzer=1',
     },
 
@@ -2081,7 +2113,7 @@
     'gyp': {'type': 'gyp'},
 
     'hybrid': {
-      'gn_args': 'error', # TODO(GYP): figure out the equivalent for this
+      'gn_args': 'v8_target_cpu="arm" target_cpu="x86"',
       'gyp_defines': 'v8_target_arch=arm target_arch=ia32 host_arch=x86_64',
       'mixins': ['disable_nacl'],
     },
@@ -2098,7 +2130,7 @@
     'libfuzzer': { 'gn_args': 'use_libfuzzer=true' },
 
     'line_tables': {
-      'gn_args': '', # TODO(GYP): check that this is not needed
+      'gn_args': '', # line-tables-only is on when using_sanitizer=true.
       'gyp_defines': 'debug_extra_cflags="-gline-tables-only"',
     },
 
@@ -2220,8 +2252,9 @@
       'gyp_defines': 'test_isolation_mode=prepare',
     },
 
+    # TODO(dpranke): Remove the symbolized config after the bots are  gone.
     'symbolized': {
-      'gn_args': 'error', # TODO(GYP): add an equivalent flag for this
+      'gn_args': 'symbolized=true',
       'gyp_defines':
         'release_extra_cflags="-O1 -fno-inline-functions -fno-inline"',
     },
@@ -2260,7 +2293,7 @@
     },
 
     'v8_heap': {
-      'gn_args': 'error', # TODO(GYP): implement v8_enable_verify_heap=true
+      'gn_args': 'v8_enable_verify_heap=true',
       'gyp_defines': 'v8_enable_verify_heap=1',
     },
 

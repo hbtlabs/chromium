@@ -600,6 +600,9 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget,
         ->GetInputEventRouter()
         ->AddSurfaceIdNamespaceOwner(GetSurfaceIdNamespace(), this);
   }
+
+  if (!render_widget_host_->is_hidden())
+    EnsureBrowserCompositorView();
 }
 
 RenderWidgetHostViewMac::~RenderWidgetHostViewMac() {
@@ -1497,8 +1500,7 @@ void RenderWidgetHostViewMac::OnSwapCompositorFrame(
     gfx::Size dip_size = gfx::ConvertSizeToDIP(scale_factor, pixel_size);
 
     root_layer_->SetBounds(gfx::Rect(dip_size));
-    if (!render_widget_host_->is_hidden()) {
-      EnsureBrowserCompositorView();
+    if (browser_compositor_ && browser_compositor_->compositor()) {
       browser_compositor_->compositor()->SetScaleAndSize(
           scale_factor, pixel_size);
     }
@@ -2744,7 +2746,7 @@ void RenderWidgetHostViewMac::OnDisplayMetricsChanged(
   if (!renderWidgetHostView_->render_widget_host_)
     return NO;
 
-  renderWidgetHostView_->render_widget_host_->Focus();
+  renderWidgetHostView_->render_widget_host_->GotFocus();
   renderWidgetHostView_->SetTextInputActive(true);
 
   // Cancel any onging composition text which was left before we lost focus.

@@ -27,7 +27,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from webkitpy.common.host_mock import MockHost
-from webkitpy.common.net.buildbot_mock import MockBuildBot
 
 # FIXME: Old-style "Ports" need to die and be replaced by modern layout_tests.port which needs to move to common.
 from webkitpy.common.config.ports_mock import MockPort
@@ -50,7 +49,7 @@ class MockOptions(object):
         return self
 
     def ensure_value(self, key, value):
-        if getattr(self, key, None) == None:
+        if getattr(self, key, None) is None:
             self.__dict__[key] = value
         return self.__dict__[key]
 

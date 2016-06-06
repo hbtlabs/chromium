@@ -6,6 +6,8 @@
 
 #include <map>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/workspace/workspace_window_resizer.h"
@@ -14,12 +16,10 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -129,7 +129,7 @@ class WorkspaceControllerTest : public test::AshTestBase {
         test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
     PanelLayoutManager* manager =
-        PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
+        PanelLayoutManager::Get(WmWindowAura::Get(window));
     manager->Relayout();
     return window;
   }
@@ -511,13 +511,12 @@ TEST_F(WorkspaceControllerTest, MinimizeResetsVisibility) {
   w1->Show();
   wm::ActivateWindow(w1.get());
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_EQ(wm::SHELF_BACKGROUND_MAXIMIZED,
-            shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(SHELF_BACKGROUND_MAXIMIZED, shelf_widget()->GetBackgroundType());
 
   w1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MINIMIZED);
   Shelf* shelf = Shelf::ForPrimaryDisplay();
   EXPECT_EQ(SHELF_VISIBLE, shelf->GetVisibilityState());
-  EXPECT_EQ(wm::SHELF_BACKGROUND_DEFAULT, shelf_widget()->GetBackgroundType());
+  EXPECT_EQ(SHELF_BACKGROUND_DEFAULT, shelf_widget()->GetBackgroundType());
 }
 
 // Verifies window visibility during various workspace changes.
@@ -1064,7 +1063,7 @@ TEST_F(WorkspaceControllerTest, TestRestoreToUserModifiedBounds) {
 
   // A user moved the window.
   std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(wm::WmWindowAura::Get(window1.get()), gfx::Point(),
+      CreateWindowResizer(WmWindowAura::Get(window1.get()), gfx::Point(),
                           HTCAPTION, aura::client::WINDOW_MOVE_SOURCE_MOUSE)
           .release());
   gfx::Point location = resizer->GetInitialLocation();

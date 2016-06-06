@@ -28,7 +28,6 @@ class ScriptWrappable;
     V(customElementTagName) \
     V(customElementType) \
     V(customElementsRegistryMap) \
-    V(condition) \
     V(detail) \
     V(document) \
     V(error) \
@@ -39,6 +38,7 @@ class ScriptWrappable;
     V(port1) \
     V(port2) \
     V(readableStreamReaderInResponse) \
+    V(requestInFetchEvent) \
     V(state) \
     V(testInterfaces) \
     V(thenableHiddenPromise) \

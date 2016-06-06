@@ -444,11 +444,11 @@ void LayerTreeImpl::MoveChangeTrackingToLayers() {
   }
 }
 
-LayerListIterator<LayerImpl> LayerTreeImpl::begin() {
+LayerListIterator<LayerImpl> LayerTreeImpl::begin() const {
   return LayerListIterator<LayerImpl>(root_layer_);
 }
 
-LayerListIterator<LayerImpl> LayerTreeImpl::end() {
+LayerListIterator<LayerImpl> LayerTreeImpl::end() const {
   return LayerListIterator<LayerImpl>(nullptr);
 }
 
@@ -839,8 +839,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         "cc", "LayerTreeImpl::UpdateDrawProperties::CalculateDrawProperties",
         "IsActive", IsActiveTree(), "SourceFrameNumber", source_frame_number_);
     bool can_render_to_separate_surface =
-        (layer_tree_host_impl_->GetDrawMode() !=
-         DRAW_MODE_RESOURCELESS_SOFTWARE);
+        (!is_in_resourceless_software_draw_mode());
 
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
         root_layer(), DrawViewportSize(),
@@ -952,7 +951,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
 
   // Resourceless draw do not need tiles and should not affect existing tile
   // priorities.
-  if (layer_tree_host_impl_->GetDrawMode() != DRAW_MODE_RESOURCELESS_SOFTWARE) {
+  if (!is_in_resourceless_software_draw_mode()) {
     TRACE_EVENT_BEGIN2("cc", "LayerTreeImpl::UpdateDrawProperties::UpdateTiles",
                        "IsActive", IsActiveTree(), "SourceFrameNumber",
                        source_frame_number_);
@@ -1292,10 +1291,6 @@ void LayerTreeImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   TracedValue::MakeDictIntoImplicitSnapshot(state, "cc::LayerTreeImpl", this);
   state->SetInteger("source_frame_number", source_frame_number_);
 
-  state->BeginDictionary("root_layer");
-  root_layer_->AsValueInto(state);
-  state->EndDictionary();
-
   state->BeginArray("render_surface_layer_list");
   LayerIterator end = LayerIterator::End(&render_surface_layer_list_);
   for (LayerIterator it = LayerIterator::Begin(&render_surface_layer_list_);
@@ -1314,6 +1309,14 @@ void LayerTreeImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->BeginArray("pinned_swap_promise_trace_ids");
   for (const auto& swap_promise : pinned_swap_promise_list_)
     state->AppendDouble(swap_promise->TraceId());
+  state->EndArray();
+
+  state->BeginArray("layers");
+  for (auto* layer : *this) {
+    state->BeginDictionary();
+    layer->AsValueInto(state);
+    state->EndDictionary();
+  }
   state->EndArray();
 }
 
@@ -1621,9 +1624,12 @@ static bool PointIsClippedByAncestorClipNode(
 
       const LayerImpl* target_layer =
           layer->layer_tree_impl()->LayerById(transform_node->owner_id);
-      DCHECK(transform_node->id == 0 || target_layer->render_surface());
+      DCHECK(transform_node->id == 0 || target_layer->render_surface() ||
+             layer->layer_tree_impl()->is_in_resourceless_software_draw_mode());
       gfx::Transform surface_screen_space_transform =
-          transform_node->id == 0
+          transform_node->id == 0 ||
+                  (layer->layer_tree_impl()
+                       ->is_in_resourceless_software_draw_mode())
               ? gfx::Transform()
               : SurfaceScreenSpaceTransform(target_layer, transform_tree);
       if (!PointHitsRect(screen_space_point, surface_screen_space_transform,
@@ -1828,16 +1834,16 @@ void LayerTreeImpl::RegisterSelection(const LayerSelection& selection) {
   selection_ = selection;
 }
 
-static ViewportSelectionBound ComputeViewportSelectionBound(
+static gfx::SelectionBound ComputeViewportSelectionBound(
     const LayerSelectionBound& layer_bound,
     LayerImpl* layer,
     float device_scale_factor,
     const TransformTree& transform_tree,
     const ClipTree& clip_tree) {
-  ViewportSelectionBound viewport_bound;
-  viewport_bound.type = layer_bound.type;
+  gfx::SelectionBound viewport_bound;
+  viewport_bound.set_type(layer_bound.type);
 
-  if (!layer || layer_bound.type == SELECTION_BOUND_EMPTY)
+  if (!layer || layer_bound.type == gfx::SelectionBound::EMPTY)
     return viewport_bound;
 
   auto layer_top = gfx::PointF(layer_bound.edge_top);
@@ -1851,16 +1857,16 @@ static ViewportSelectionBound ComputeViewportSelectionBound(
       MathUtil::MapPoint(screen_space_transform, layer_bottom, &clipped);
 
   // MapPoint can produce points with NaN components (even when no inputs are
-  // NaN). Since consumers of ViewportSelectionBounds may round |edge_top| or
+  // NaN). Since consumers of gfx::SelectionBounds may round |edge_top| or
   // |edge_bottom| (and since rounding will crash on NaN), we return an empty
   // bound instead.
   if (std::isnan(screen_top.x()) || std::isnan(screen_top.y()) ||
       std::isnan(screen_bottom.x()) || std::isnan(screen_bottom.y()))
-    return ViewportSelectionBound();
+    return gfx::SelectionBound();
 
   const float inv_scale = 1.f / device_scale_factor;
-  viewport_bound.edge_top = gfx::ScalePoint(screen_top, inv_scale);
-  viewport_bound.edge_bottom = gfx::ScalePoint(screen_bottom, inv_scale);
+  viewport_bound.SetEdgeTop(gfx::ScalePoint(screen_top, inv_scale));
+  viewport_bound.SetEdgeBottom(gfx::ScalePoint(screen_bottom, inv_scale));
 
   // The bottom edge point is used for visibility testing as it is the logical
   // focal point for bound selection handles (this may change in the future).
@@ -1876,13 +1882,14 @@ static ViewportSelectionBound ComputeViewportSelectionBound(
       MathUtil::MapPoint(screen_space_transform, visibility_point, &clipped);
 
   float intersect_distance = 0.f;
-  viewport_bound.visible = PointHitsLayer(
-      layer, visibility_point, &intersect_distance, transform_tree, clip_tree);
+  viewport_bound.set_visible(PointHitsLayer(
+      layer, visibility_point, &intersect_distance, transform_tree, clip_tree));
 
   return viewport_bound;
 }
 
-void LayerTreeImpl::GetViewportSelection(ViewportSelection* selection) {
+void LayerTreeImpl::GetViewportSelection(
+    Selection<gfx::SelectionBound>* selection) {
   DCHECK(selection);
 
   selection->start = ComputeViewportSelectionBound(
@@ -1892,8 +1899,8 @@ void LayerTreeImpl::GetViewportSelection(ViewportSelection* selection) {
       property_trees_.clip_tree);
   selection->is_editable = selection_.is_editable;
   selection->is_empty_text_form_control = selection_.is_empty_text_form_control;
-  if (selection->start.type == SELECTION_BOUND_CENTER ||
-      selection->start.type == SELECTION_BOUND_EMPTY) {
+  if (selection->start.type() == gfx::SelectionBound::CENTER ||
+      selection->start.type() == gfx::SelectionBound::EMPTY) {
     selection->end = selection->start;
   } else {
     selection->end = ComputeViewportSelectionBound(

@@ -148,8 +148,8 @@ class CC_EXPORT LayerTreeImpl {
 
   void MoveChangeTrackingToLayers();
 
-  LayerListIterator<LayerImpl> begin();
-  LayerListIterator<LayerImpl> end();
+  LayerListIterator<LayerImpl> begin() const;
+  LayerListIterator<LayerImpl> end() const;
   LayerListReverseIterator<LayerImpl> rbegin();
   LayerListReverseIterator<LayerImpl> rend();
 
@@ -277,6 +277,11 @@ class CC_EXPORT LayerTreeImpl {
     return needs_update_draw_properties_;
   }
 
+  bool is_in_resourceless_software_draw_mode() {
+    return (layer_tree_host_impl_->GetDrawMode() ==
+            DRAW_MODE_RESOURCELESS_SOFTWARE);
+  }
+
   void set_needs_full_tree_sync(bool needs) { needs_full_tree_sync_ = needs; }
   bool needs_full_tree_sync() const { return needs_full_tree_sync_; }
 
@@ -401,7 +406,7 @@ class CC_EXPORT LayerTreeImpl {
 
   // Compute the current selection handle location and visbility with respect to
   // the viewport.
-  void GetViewportSelection(ViewportSelection* selection);
+  void GetViewportSelection(Selection<gfx::SelectionBound>* selection);
 
   void set_top_controls_shrink_blink_size(bool shrink);
   bool top_controls_shrink_blink_size() const {

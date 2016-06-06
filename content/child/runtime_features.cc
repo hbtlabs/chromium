@@ -125,11 +125,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       switches::kEnableGpuMemoryBufferCompositorResources) &&
       !command_line.HasSwitch(switches::kDisableWebGLImageChromium) &&
       !command_line.HasSwitch(switches::kDisableGpu);
-
-  // There are two bugs in WebGL image chromium.
-  // https://bugs.chromium.org/p/chromium/issues/detail?id=581777#c37
-  // TODO(erikchen): When those issues are fixed, reenable this feature.
-  enable_web_gl_image_chromium = false;
 #else
   bool enable_web_gl_image_chromium =
       command_line.HasSwitch(switches::kEnableWebGLImageChromium);
@@ -168,14 +163,17 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableUnsafeES3APIs))
     WebRuntimeFeatures::enableUnsafeES3APIs(true);
 
-  if (command_line.HasSwitch(switches::kEnableWebVR)) {
+  if (command_line.HasSwitch(switches::kEnableWebVR))
     WebRuntimeFeatures::enableWebVR(true);
-    WebRuntimeFeatures::enableFeatureFromString(
-        std::string("GeometryInterfaces"), true);
-  }
 
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::enablePresentationAPI(false);
+
+  if (base::FeatureList::IsEnabled(features::kWeakMemoryCache))
+    WebRuntimeFeatures::enableWeakMemoryCache(true);
+
+  if (base::FeatureList::IsEnabled(features::kDoNotUnlockSharedBuffer))
+    WebRuntimeFeatures::enableDoNotUnlockSharedBuffer(true);
 
   const std::string webfonts_intervention_v2_group_name =
       base::FieldTrialList::FindFullName("WebFontsInterventionV2");

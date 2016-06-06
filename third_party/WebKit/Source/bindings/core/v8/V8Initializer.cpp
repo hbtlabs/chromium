@@ -272,7 +272,7 @@ static void failedAccessCheckCallbackInMainThread(v8::Local<v8::Object> host, v8
 
     // FIXME: We should modify V8 to pass in more contextual information (context, property, and object).
     ExceptionState exceptionState(ExceptionState::UnknownContext, 0, 0, isolate->GetCurrentContext()->Global(), isolate);
-    exceptionState.throwSecurityError(targetWindow->sanitizedCrossDomainAccessErrorMessage(callingDOMWindow(isolate)), targetWindow->crossDomainAccessErrorMessage(callingDOMWindow(isolate)));
+    exceptionState.throwSecurityError(targetWindow->sanitizedCrossDomainAccessErrorMessage(currentDOMWindow(isolate)), targetWindow->crossDomainAccessErrorMessage(currentDOMWindow(isolate)));
     exceptionState.throwIfNeeded();
 }
 
@@ -290,8 +290,9 @@ static void initializeV8Common(v8::Isolate* isolate)
     isolate->AddGCPrologueCallback(V8GCController::gcPrologue);
     isolate->AddGCEpilogueCallback(V8GCController::gcEpilogue);
     if (RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-        ScriptWrappableVisitor* visitor = new ScriptWrappableVisitor(isolate);
-        isolate->SetEmbedderHeapTracer(visitor);
+        std::unique_ptr<ScriptWrappableVisitor> visitor(new ScriptWrappableVisitor(isolate));
+        isolate->SetEmbedderHeapTracer(visitor.get());
+        V8PerIsolateData::from(isolate)->setScriptWrappableVisitor(std::move(visitor));
     }
 
     v8::Debug::SetLiveEditEnabled(isolate, false);

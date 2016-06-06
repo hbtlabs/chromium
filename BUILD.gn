@@ -66,6 +66,12 @@ group("gn_all") {
     ":gn_only",
     ":gn_visibility",
   ]
+
+  if (!is_ios) {
+    deps += [
+      "//v8:gn_all",
+    ]
+  }
 }
 
 # TODO(GYP_GONE): This target exists for compatibility with GYP, specifically
@@ -740,6 +746,7 @@ group("gn_only") {
     deps += [
       "//testing/libfuzzer/fuzzers",
       "//testing/libfuzzer/tests:libfuzzer_tests",
+      "//third_party/icu/fuzzers",
     ]
   }
 

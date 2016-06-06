@@ -4,15 +4,15 @@
 
 #include "ash/system/web_notification/ash_popup_alignment_delegate.h"
 
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/wm_lookup.h"
+#include "ash/common/wm_window.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/screen_util.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "base/i18n/rtl.h"
-#include "ui/aura/window.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
@@ -99,7 +99,7 @@ bool AshPopupAlignmentDelegate::IsTopDown() const {
 }
 
 bool AshPopupAlignmentDelegate::IsFromLeft() const {
-  return GetAlignment() == wm::SHELF_ALIGNMENT_LEFT;
+  return GetAlignment() == SHELF_ALIGNMENT_LEFT;
 }
 
 void AshPopupAlignmentDelegate::RecomputeAlignment(
@@ -107,13 +107,14 @@ void AshPopupAlignmentDelegate::RecomputeAlignment(
   // Nothing needs to be done.
 }
 
-wm::ShelfAlignment AshPopupAlignmentDelegate::GetAlignment() const {
+ShelfAlignment AshPopupAlignmentDelegate::GetAlignment() const {
   return shelf_->GetAlignment();
 }
 
 display::Display AshPopupAlignmentDelegate::GetCurrentDisplay() const {
-  return display::Screen::GetScreen()->GetDisplayNearestWindow(
-      shelf_->shelf_widget()->GetNativeView());
+  return WmLookup::Get()
+      ->GetWindowForWidget(shelf_->shelf_widget())
+      ->GetDisplayNearestWindow();
 }
 
 void AshPopupAlignmentDelegate::UpdateWorkArea() {

@@ -187,7 +187,7 @@ bool MainThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context> c
     ExecutionContext* executionContext = toExecutionContext(target);
     ASSERT(executionContext);
 
-    if (executionContext->isWorkletGlobalScope()) {
+    if (executionContext->isMainThreadWorkletGlobalScope()) {
         MainThreadWorkletGlobalScope* globalScope = toMainThreadWorkletGlobalScope(executionContext);
         return globalScope && BindingSecurity::shouldAllowAccessTo(m_isolate, toLocalDOMWindow(toDOMWindow(calling)), globalScope, DoNotReportSecurityError);
     }
@@ -229,12 +229,12 @@ void MainThreadDebugger::reportMessageToConsole(v8::Local<v8::Context> context, 
     frame->console().addMessage(consoleMessage);
 }
 
-v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(v8::Isolate* isolate, v8::Local<v8::Context> context, v8::Local<v8::Object> creationContext)
+v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(v8::Isolate* isolate, v8::Local<v8::Context> context)
 {
     ExecutionContext* executionContext = toExecutionContext(context);
     ASSERT_UNUSED(executionContext, executionContext);
     ASSERT(executionContext->isDocument());
-    return toV8(MemoryInfo::create(), creationContext, isolate);
+    return toV8(MemoryInfo::create(), context->Global(), isolate);
 }
 
 bool MainThreadDebugger::isCommandLineAPIMethod(const String& name)

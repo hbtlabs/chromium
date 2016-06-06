@@ -1250,8 +1250,6 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_per_connection_packet_writer.cc",
     "tools/quic/quic_per_connection_packet_writer.h",
     "tools/quic/quic_process_packet_interface.h",
-    "tools/quic/quic_server_session_base.cc",
-    "tools/quic/quic_server_session_base.h",
     "tools/quic/quic_simple_client.cc",
     "tools/quic/quic_simple_client.h",
     "tools/quic/quic_simple_per_connection_packet_writer.cc",
@@ -1262,6 +1260,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server_packet_writer.h",
     "tools/quic/quic_simple_server_session.cc",
     "tools/quic/quic_simple_server_session.h",
+    "tools/quic/quic_simple_server_session_helper.cc",
+    "tools/quic/quic_simple_server_session_helper.h",
     "tools/quic/quic_simple_server_stream.cc",
     "tools/quic/quic_simple_server_stream.h",
     "tools/quic/quic_spdy_client_stream.cc",
@@ -1672,9 +1672,7 @@ test("net_unittests") {
   }
 
   if (is_win) {
-    libs = [
-      "iphlpapi.lib",
-    ]
+    libs = [ "iphlpapi.lib" ]
   }
 }
 
@@ -1733,6 +1731,8 @@ source_set("net_fuzzer_test_support") {
     "socket/fuzzed_socket.h",
     "socket/fuzzed_socket_factory.cc",
     "socket/fuzzed_socket_factory.h",
+    "udp/fuzzed_datagram_client_socket.cc",
+    "udp/fuzzed_datagram_client_socket.h",
   ]
   deps = [
     "//base",
@@ -1908,6 +1908,21 @@ fuzzer_test("net_dns_hosts_parse_fuzzer") {
     "//base",
     "//net",
   ]
+}
+
+fuzzer_test("net_host_resolver_impl_fuzzer") {
+  sources = [
+    "dns/fuzzed_host_resolver.cc",
+    "dns/fuzzed_host_resolver.h",
+    "dns/host_resolver_impl_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+  dict = "data/dns/dns.dict"
 }
 
 fuzzer_test("net_http_stream_parser_fuzzer") {

@@ -43,13 +43,13 @@ namespace blink {
 
 class ChromeClient;
 class ConsoleMessageStorage;
+class CustomElementReactionStack;
 class Deprecation;
 class EventHandlerRegistry;
 class OverscrollController;
 class Page;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
-class RootScroller;
 class Settings;
 class TopControls;
 class UseCounter;
@@ -97,9 +97,6 @@ public:
     //    use ChromeClient::screenInfo() instead.
     float deviceScaleFactorDeprecated() const;
 
-    RootScroller* rootScroller();
-    const RootScroller* rootScroller() const;
-
     TopControls& topControls();
     const TopControls& topControls() const;
 
@@ -121,6 +118,9 @@ public:
     ConsoleMessageStorage& consoleMessageStorage();
     const ConsoleMessageStorage& consoleMessageStorage() const;
 
+    CustomElementReactionStack& customElementReactionStack();
+    const CustomElementReactionStack& customElementReactionStack() const;
+
     DECLARE_TRACE();
 
     // Don't allow more than a certain number of frames in a page.
@@ -139,13 +139,13 @@ private:
     explicit FrameHost(Page&);
 
     const Member<Page> m_page;
-    const Member<RootScroller> m_rootScroller;
     const Member<TopControls> m_topControls;
     const OwnPtr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
     const Member<VisualViewport> m_visualViewport;
     const Member<OverscrollController> m_overscrollController;
     const Member<EventHandlerRegistry> m_eventHandlerRegistry;
     const Member<ConsoleMessageStorage> m_consoleMessageStorage;
+    const Member<CustomElementReactionStack> m_customElementReactionStack;
 
     AtomicString m_overrideEncoding;
     int m_subframeCount;

@@ -237,6 +237,7 @@ component("gfx") {
   public_deps = [
     ":memory_buffer_sources",
     ":native_widget_types",
+    ":selection_bound_sources",
     "//base",
     "//skia",
     "//third_party/icu",
@@ -422,6 +423,8 @@ action("aggregate_vector_icons") {
     "vector_icons/browser_tools.icon",
     "vector_icons/business.icon",
     "vector_icons/check_circle.icon",
+    "vector_icons/checkbox_active.icon",
+    "vector_icons/checkbox_normal.icon",
     "vector_icons/chrome_product.icon",
     "vector_icons/code.icon",
     "vector_icons/cookie.icon",
@@ -498,13 +501,17 @@ action("aggregate_vector_icons") {
     "vector_icons/pdf.icon",
     "vector_icons/photo_camera.icon",
     "vector_icons/protocol_handler.icon",
+    "vector_icons/radio_button_active.icon",
+    "vector_icons/radio_button_normal.icon",
     "vector_icons/remove_box.icon",
     "vector_icons/remove_circle.icon",
     "vector_icons/sad_tab.icon",
+    "vector_icons/settings.icon",
     "vector_icons/smartphone.icon",
     "vector_icons/submenu_arrow.1x.icon",
     "vector_icons/submenu_arrow.icon",
     "vector_icons/supervisor_account.icon",
+    "vector_icons/sync_problem.icon",
     "vector_icons/tab.icon",
     "vector_icons/tab_audio.1x.icon",
     "vector_icons/tab_audio.icon",
@@ -573,6 +580,36 @@ source_set("native_widget_types") {
 
   public_deps = [
     "//base",
+  ]
+}
+
+group("selection_bound") {
+  if (is_component_build) {
+    public_deps = [
+      ":gfx",
+    ]
+  } else {
+    public_deps = [
+      ":selection_bound_sources",
+    ]
+  }
+}
+
+# Depend on this to use selection_bound.h without pulling in all of gfx.
+source_set("selection_bound_sources") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "gfx_export.h",
+    "selection_bound.cc",
+    "selection_bound.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
   ]
 }
 
@@ -725,12 +762,14 @@ test("gfx_unittests") {
       "image/image_mac_unittest.mm",
       "image/image_util_unittest.cc",
       "mac/coordinate_conversion_unittest.mm",
+      "mojo/struct_traits_unittest.cc",
       "nine_image_painter_unittest.cc",
       "path_mac_unittest.mm",
       "platform_font_mac_unittest.mm",
       "range/range_mac_unittest.mm",
       "range/range_unittest.cc",
       "range/range_win_unittest.cc",
+      "selection_bound_unittest.cc",
       "sequential_id_generator_unittest.cc",
       "shadow_value_unittest.cc",
       "skbitmap_operations_unittest.cc",
@@ -806,6 +845,15 @@ test("gfx_unittests") {
       "d3d10_1.lib",
       "imm32.lib",
       "oleacc.lib",
+    ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//mojo/edk/system",
+      "//mojo/public/cpp/bindings",
+      "//ui/gfx/geometry/mojo:unit_test",
+      "//ui/gfx/mojo:test_interfaces",
     ]
   }
 }

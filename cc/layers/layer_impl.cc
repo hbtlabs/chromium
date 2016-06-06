@@ -933,11 +933,11 @@ void LayerImpl::SetContentsOpaque(bool opaque) {
 }
 
 float LayerImpl::Opacity() const {
-  if (!layer_tree_impl()->property_trees()->IsInIdToIndexMap(
-          PropertyTrees::TreeType::EFFECT, id()))
+  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
+  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
     return 1.f;
-  EffectNode* node =
-      layer_tree_impl()->property_trees()->effect_tree.Node(effect_tree_index_);
+  EffectNode* node = property_trees->effect_tree.Node(
+      property_trees->effect_id_to_index_map[id()]);
   return node->data.opacity;
 }
 
@@ -1174,13 +1174,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
     non_fast_scrollable_region_.AsValueInto(state);
     state->EndArray();
   }
-  state->BeginArray("children");
-  for (size_t i = 0; i < children_.size(); ++i) {
-    state->BeginDictionary();
-    children_[i]->AsValueInto(state);
-    state->EndDictionary();
-  }
-  state->EndArray();
   if (mask_layer_) {
     state->BeginDictionary("mask_layer");
     mask_layer_->AsValueInto(state);

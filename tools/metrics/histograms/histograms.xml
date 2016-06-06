@@ -3458,7 +3458,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Blink.Binding.InitializeWindowProxy" units="ms">
+<histogram name="Blink.Binding.InitializeWindowProxy" units="microseconds">
   <owner>peria@chromium.org</owner>
   <summary>Time spent initializing WindowProxy during a page loading.</summary>
 </histogram>
@@ -8319,7 +8319,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Recovery.SQLiteIntegrityCookie"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityCookie recovery
     step that runs on recovery startups.  The recovery step attempts to
@@ -8330,7 +8330,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Recovery.SQLiteIntegrityDatabaseTracker"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityDatabaseTracker
     recovery step that runs on recovery startups.  The recovery step attempts to
@@ -8339,9 +8339,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Diagnostics.Recovery.SQLiteIntegrityFavicons"
+    enum="DiagnosticsResult">
+  <owner>shess@chromium.org</owner>
+  <summary>
+    Shows the success and failure rates of the SQLiteIntegrityFavicons recovery
+    step that runs on recovery startups.  The recovery step attempts to
+    guarantee the SQLiteIntegrityFavicons test, which checks the integrity of
+    the Favicons database, would pass on the next startup.
+  </summary>
+</histogram>
+
 <histogram name="Diagnostics.Recovery.SQLiteIntegrityHistory"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityHistory recovery
     step that runs on recovery startups.  The recovery step attempts to
@@ -8374,7 +8385,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Recovery.SQLiteIntegrityThumbnails"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <obsolete>
+    Deprecated 05/2016 in Issue 617226; has not been valid for many years.
+  </obsolete>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityThumbnails
     recovery step that runs on recovery startups.  The recovery step attempts to
@@ -8383,9 +8397,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Diagnostics.Recovery.SQLiteIntegrityTopSites"
+    enum="DiagnosticsResult">
+  <owner>shess@chromium.org</owner>
+  <summary>
+    Shows the success and failure rates of the SQLiteIntegrityTopSites recovery
+    step that runs on recovery startups.  The recovery step attempts to
+    guarantee the SQLiteIntegrityTopSites test, which checks the integrity of
+    the TopSites database, would pass on the next startup.
+  </summary>
+</histogram>
+
 <histogram name="Diagnostics.Recovery.SQLiteIntegrityWebData"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityWebData recovery
     step that runs on recovery startups.  The recovery step attempts to
@@ -8549,7 +8574,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Test.SQLiteIntegrityCookie"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityCookie test that
     runs on recovery startups.  The test checks the integrity of the Cookie
@@ -8559,7 +8584,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Test.SQLiteIntegrityDatabaseTracker"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityDatabaseTracker
     test that runs on recovery startups.  The test checks the integrity of the
@@ -8567,9 +8592,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Diagnostics.Test.SQLiteIntegrityFavicons"
+    enum="DiagnosticsResult">
+  <owner>shess@chromium.org</owner>
+  <summary>
+    Shows the success and failure rates of the SQLiteIntegrityFavicons test that
+    runs on recovery startups.  The test checks the integrity of the Favicons
+    database.
+  </summary>
+</histogram>
+
 <histogram name="Diagnostics.Test.SQLiteIntegrityHistory"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityHistory test that
     runs on recovery startups.  The test checks the integrity of the History
@@ -8599,7 +8634,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Diagnostics.Test.SQLiteIntegrityThumbnails"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <obsolete>
+    Deprecated 05/2016 in Issue 617226; has not been valid for many years.
+  </obsolete>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityThumbnails test
     that runs on recovery startups.  The test checks the integrity of the
@@ -8607,9 +8645,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Diagnostics.Test.SQLiteIntegrityTopSites"
+    enum="DiagnosticsResult">
+  <owner>shess@chromium.org</owner>
+  <summary>
+    Shows the success and failure rates of the SQLiteIntegrityTopSites test that
+    runs on recovery startups.  The test checks the integrity of the TopSites
+    database.
+  </summary>
+</histogram>
+
 <histogram name="Diagnostics.Test.SQLiteIntegrityWebData"
     enum="DiagnosticsResult">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Shows the success and failure rates of the SQLiteIntegrityWebData test that
     runs on recovery startups.  The test checks the integrity of the Web Data
@@ -8627,7 +8675,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Diagnostics.TestFailures" enum="DiagnosticsTestName">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <owner>shess@chromium.org</owner>
   <summary>
     Histogram comparing the various types of diagnostic test failures when
     diagnostic tests are run.  Note that some types of test failures cause the
@@ -12578,6 +12626,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Event.TimestampHasValidTimebase" enum="EventTimestampValidity">
+  <owner>majidvp@chromium.org</owner>
+  <owner>tdresser@chromium.org</owner>
+  <owner>caseq@chromium.org</owner>
+  <summary>
+    Whether the timestapms on input events produced by the windowing system
+    appear to be sharing the same time base as TimeTicks, modulo possible
+    roll-over.
+  </summary>
+</histogram>
+
 <histogram name="Event.Touch.TargetAndDispatchResult"
     enum="TouchTargetAndDispatchResultType">
   <obsolete>
@@ -13835,6 +13894,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     or more reasons (although typically just one), so the sum of these may be
     greater than 'Extensions.Disabled' which is a count of the number of unique
     extensions that are disabled.
+  </summary>
+</histogram>
+
+<histogram name="Extensions.DocsOfflineIconState" enum="ExtensionIconState">
+  <owner>rdevlin.cronin@chromium.org</owner>
+  <summary>
+    The state of the toolbar icon for the docs offline extension (visible in the
+    toolbar, overflowed in the menu, or the extension is disabled). Recorded
+    once per startup per (non-incognito) profile.
   </summary>
 </histogram>
 
@@ -17952,6 +18020,43 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     For each http cache transaction for which a cache entry exists but it cannot
     be used because the entry's age is beyond its freshness: counts how many
     freshness periods have elapsed since the entry was last used (x1000).
+  </summary>
+</histogram>
+
+<histogram name="HttpCache.StaleEntry.Updated.Age" units="seconds">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    For each http cache transaction for which a validation attempt is made due
+    to a stale entry and is updated (e.g., 200), records the age of the entry in
+    seconds.
+  </summary>
+</histogram>
+
+<histogram name="HttpCache.StaleEntry.Updated.AgeInFreshnessPeriods" units="%">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    For each http cache transaction for which a validation attempt is made due
+    to a stale entry and is updated (e.g., 200), records the age of the entry as
+    percentage of freshness period.
+  </summary>
+</histogram>
+
+<histogram name="HttpCache.StaleEntry.Validated.Age" units="seconds">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    For each http cache transaction for which a validation attempt is made due
+    to a stale entry and is validated (304), records the age of the entry in
+    seconds.
+  </summary>
+</histogram>
+
+<histogram name="HttpCache.StaleEntry.Validated.AgeInFreshnessPeriods"
+    units="%">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    For each http cache transaction for which a validation attempt is made due
+    to a stale entry and is validated (304), records the age of the entry as
+    percentage of freshness period.
   </summary>
 </histogram>
 
@@ -30465,6 +30570,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.SSL_KeyExchange.RSA">
+  <obsolete>
+    Removed May 2016.
+  </obsolete>
   <owner>sigbjorn@opera.com</owner>
   <owner>agl@chromium.org</owner>
   <owner>rsleevi@chromium.org</owner>
@@ -33965,13 +34073,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="NewTabPage.Snippets.CardClickedAge" units="min">
+<histogram name="NewTabPage.Snippets.CardClickedAge" units="minutes">
   <owner>jkrcal@chromium.org</owner>
   <summary>
     Android: The age of the snippets card on the NTP, that is clicked through to
     the host website of the content. The age is measured from the moment the
     content has been published. In each &quot;_x_y&quot; suffix of the
-    histogram, only snippets on positions \gt;=x and \lt;=y are tracked.
+    histogram, only snippets on positions \gt;=x and \lt;=y are tracked. We
+    track the position the snippet had in the list when NTP was loaded. This
+    tracked position is thus different from the position observed by the user
+    whenever before scrolling down to the given snippet, the user discards some
+    snippets in the top of the list.
   </summary>
 </histogram>
 
@@ -33981,7 +34093,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Android: The score of the snippets card on the NTP, that is clicked through
     to the host website of the content. The recorded score is from the moment
     the snippet was fetched, it could have changed since. In each &quot;_x&quot;
-    suffix  of the histogram, only snippets on positions \lt;=x are tracked.
+    suffix  of the histogram, only snippets on positions \lt;=x are tracked. We
+    track the position the snippet had in the list when NTP was loaded. This
+    tracked position is thus different from the position observed by the user
+    whenever before scrolling down to the given snippet, the user discards some
+    snippets in the top of the list.
   </summary>
 </histogram>
 
@@ -34011,7 +34127,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>knn@chromium.org</owner>
   <summary>
     Android: The position of the snippets card that is shown on the NTP. Each
-    snippet (its position) is recorded whenever at least 1/3 of it height
+    snippet (its position) is recorded whenever at least 1/3 of its height
     becomes visible by scrolling through the NTP. Each snippet is recorded at
     most once for a given instance of NTP and a given data set of snippets that
     is shown. We track the position the snippet had in the list when NTP was
@@ -34021,6 +34137,39 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     before 2016/05/27), this histogram was recorded each time a snippet became
     visible (e.g. by scrolling up and down) at least by 1px; the first snippet
     was thus recorded even without scrolling down.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardShownAge" units="minutes">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Android: The age of the snippets card that is shown on the NTP. Each snippet
+    (its age) is recorded whenever at least 1/3 of its height becomes visible by
+    scrolling through the NTP. Each snippet is recorded at most once for a given
+    instance of NTP and a given data set of snippets that is shown. The age is
+    measured from the moment the content has been published. In each
+    &quot;_x_y&quot; suffix of the histogram, only snippets on positions \gt;=x
+    and \lt;=y are tracked. By this, we mean the position the snippet had in the
+    list when NTP was loaded. This tracked position is thus different from the
+    position observed by the user whenever before scrolling down to the given
+    snippet, the user discards some snippets in the top of the list.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.Snippets.CardShownScore" units="score">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Android: The score of the snippets card that is shown on the NTP. Each
+    snippet (its score) is recorded whenever at least 1/3 of its height becomes
+    visible by scrolling through the NTP. Each snippet is recorded at most once
+    for a given instance of NTP and a given data set of snippets that is shown.
+    The recorded score is from the moment the snippet was fetched, it could have
+    changed since. In each &quot;_x&quot; suffix  of the histogram, only
+    snippets on positions \lt;=x are tracked. By this, we mean the position the
+    snippet had in the list when NTP was loaded. This tracked position is thus
+    different from the position observed by the user whenever before scrolling
+    down to the given snippet, the user discards some snippets in the top of the
+    list.
   </summary>
 </histogram>
 
@@ -35215,6 +35364,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Whether the device is plugged in when the offline page background load task
     wakes up to check or work.
+  </summary>
+</histogram>
+
+<histogram name="OfflinePages.Wakeup.DelayTime" units="ms">
+  <owner>petewil@chromium.org</owner>
+  <owner>jianli@chromium.org</owner>
+  <summary>
+    Time delay from a dinosaur page to connection being available.
   </summary>
 </histogram>
 
@@ -37291,6 +37448,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="PasswordManager.SignInPromo"
+    enum="PasswordBubbleSignInPromoDismissalReason">
+  <owner>vasilii@chromium.org</owner>
+  <summary>
+    User action on the Chrome Sync promo that appears in the password bubble.
+    The promo offers to sign in to Chrome.
+  </summary>
+</histogram>
+
+<histogram name="PasswordManager.SignInPromoCountTilClick">
+  <owner>vasilii@chromium.org</owner>
+  <summary>
+    The number of times the Sign In promo in the password bubble was shown
+    before user clicked on it.
+  </summary>
+</histogram>
+
 <histogram name="PasswordManager.StorePasswordImportedFromCSVResult"
     enum="BooleanSuccess">
   <owner>xunlu@chromium.org</owner>
@@ -37441,8 +37615,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Pepper.InterfaceUsed" enum="PepperInterface">
-  <owner>mackinlay@google.com</owner>
-  <owner>teravest@chromium.org</owner>
+  <owner>sehr@chromium.org</owner>
+  <owner>bradnelson@chromium.org</owner>
+  <owner>bbudge@chromium.org</owner>
+  <owner>raymes@chromium.org</owner>
   <summary>
     The number of out-of-process plugin processes that have loaded a particular
     PPB interface version.
@@ -41555,6 +41731,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="PreloadScanner.TTFB" units="ms">
+  <owner>csharrison@chromium.org</owner>
+  <summary>
+    The time between preload discovery and when the first bytes of the response
+    data arrive.
+  </summary>
+</histogram>
+
 <histogram name="Prerender.AbandonTimeUntilUsed" units="ms">
   <owner>davidben@chromium.org</owner>
   <owner>pasko@chromium.org</owner>
@@ -44251,6 +44435,43 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     &quot;Finish&quot;==after onload() and all resources are loaded. &quot;First
     paint after load&quot;== time after onload() when first paint operation is
     performed.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageDecodeState" enum="GpuImageDecodeState">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Gpu image decode usage statistics. Images are decoded and locked prior to
+    upload; this indicates how that decode is used during tile management.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageDecodeState.FirstLockWasted"
+    enum="BooleanWasted">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Indication whether the first lock of an image decode was wasted (image was
+    not used). Images are decoded and locked prior to raster; this indicates
+    whether the decode was used or not during the first lock.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageUploadState.FirstRefWasted"
+    enum="BooleanWasted">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Indication whether the first ref of a GPU image upload was wasted (not used
+    in raster). Images are uploaded prior to raster; this indicates whether the
+    upload was used during the first ref.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.GpuImageUploadState.Used" enum="BooleanUsage">
+  <owner>vmpstr@chromium.org</owner>
+  <summary>
+    Indication whether the GPU image upload was used in raster. Images are
+    uploaded prior to raster; this indicates whether the upload was used during
+    raster.
   </summary>
 </histogram>
 
@@ -49339,7 +49560,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="ServiceWorker.ActivateEventStatus"
     enum="ServiceWorkerStatusCode">
   <owner>falken@chromium.org</owner>
-  <summary>The result of dispatching the activate event to the worker.</summary>
+  <summary>
+    The result of dispatching the activate event to the worker. This is recorded
+    to both ServiceWorker.ActivateEventStatus and whichever of
+    ServiceWorker.ActivateEventStatus_InShutdown
+    ServiceWorker.ActivateEventStatus_NotInShutdown is appropriate. (InShutdown
+    means the context was null or ServiceWorkerProcessManger::Shutdown was
+    called.)
+  </summary>
 </histogram>
 
 <histogram name="ServiceWorker.BackgroundSyncEvent.Time" units="ms">
@@ -49570,6 +49798,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     enum="ServiceWorkerStatusCode">
   <owner>falken@chromium.org</owner>
   <summary>The result of dispatching the install event to the worker.</summary>
+</histogram>
+
+<histogram name="ServiceWorker.MainFramePageLoad" enum="ServiceWorkerSite">
+  <owner>horo@chromium.org</owner>
+  <summary>
+    Counts main frame page loads controlled by a service worker.
+  </summary>
 </histogram>
 
 <histogram name="ServiceWorker.MessageEvent.Time" units="ms">
@@ -57693,6 +57928,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Records attempts to create histograms in presistent space and any errors
     encountered when doing so.
+  </summary>
+</histogram>
+
+<histogram name="UMA.Debug.EnableCrashUpload.DeferredStartUpDuration"
+    units="ms">
+  <owner>wnwen@chromium.org</owner>
+  <owner>asvitkine@chromium.org</owner>
+  <summary>
+    Measures how much time it took to complete deferred startup tasks on the UI
+    thread. Only logged on Android.
   </summary>
 </histogram>
 
@@ -68312,8 +68557,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="16" label="SQLite Integrity History Test"/>
   <int value="17" label="SQLite Integrity Nss Cert Test"/>
   <int value="18" label="SQLite Integrity Nss Key Test"/>
-  <int value="19" label="SQLite Integrity Thumbnails Test"/>
+  <int value="19" label="SQLite Integrity Thumbnails Test (obsolete)"/>
   <int value="20" label="SQLite Integrity Web Data Test"/>
+  <int value="21" label="SQLite Integrity Favicons Test"/>
+  <int value="22" label="SQLite Integrity Top Sites Test"/>
 </enum>
 
 <enum name="DifferentPrimaryAccounts" type="int">
@@ -70072,6 +70319,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="329" label="Permit locking the screen"/>
   <int value="330" label="Set certificate availability for ARC-apps"/>
   <int value="331" label="Define domains allowed to access Google Apps"/>
+  <int value="332" label="Enable PAC https:// URL stripping"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -70353,6 +70601,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="3" label="Cancelable and not canceled"/>
   <int value="4" label="Cancelable and canceled"/>
   <int value="5" label="Forced Non-Blocking"/>
+</enum>
+
+<enum name="EventTimestampValidity" type="int">
+  <int value="0" label="Invalid time base"/>
+  <int value="1" label="Valid time base"/>
 </enum>
 
 <enum name="EVWhitelistStatus" type="int">
@@ -72020,6 +72273,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1133" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONADJUST"/>
   <int value="1134" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONRESET"/>
   <int value="1135" label="SYSTEM_DISPLAY_OVERSCANCALIBRATIONCOMPLETE"/>
+</enum>
+
+<enum name="ExtensionIconState" type="int">
+  <int value="0" label="DISABLED"/>
+  <int value="1" label="VISIBLE"/>
+  <int value="2" label="OVERFLOWED"/>
 </enum>
 
 <enum name="ExtensionInstallCause" type="int">
@@ -74039,6 +74298,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1386" label="RTCIceCandidateDefaultSdpMLineIndex"/>
   <int value="1387" label="DocumentCreateEventSensorErrorEvent"/>
   <int value="1388" label="DocumentCreateEventSensorReadingEvent"/>
+  <int value="1389" label="MediaStreamConstraintsOldAndNew"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -75985,6 +76245,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="3" label="UPGRADE_SUCCESSFUL"/>
   <int value="4" label="UPGRADE_ALREADY_UP_TO_DATE"/>
   <int value="5" label="UPGRADE_ERROR"/>
+</enum>
+
+<enum name="GpuImageDecodeState" type="int">
+  <int value="0" label="Wasted, once"/>
+  <int value="1" label="Used, once"/>
+  <int value="2" label="Wasted, relocked"/>
+  <int value="3" label="Used, relocked"/>
 </enum>
 
 <enum name="GPUProcessLaunchCauses" type="int">
@@ -79085,6 +79352,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1515196403" label="fast-user-switching"/>
   <int value="1560188739" label="reader-mode-heuristics"/>
   <int value="1589341623" label="disable-easy-unlock"/>
+  <int value="1612446645" label="enable-weak-memorycache"/>
   <int value="1612974229" label="allow-insecure-localhost"/>
   <int value="1622131033" label="ozone-test-single-overlay-support"/>
   <int value="1636962093" label="disable-material-design-ntp"/>
@@ -80349,6 +80617,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="Stop Local"/>
   <int value="3" label="Close"/>
   <int value="4" label="Status Remote"/>
+  <int value="5" label="Replace Local Route"/>
 </enum>
 
 <enum name="MediaRouteType" type="int">
@@ -82607,6 +82876,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="6" label="Opened automatically / Auto-signin toast"/>
   <int value="7" label="Opened manually / Offering a password to update"/>
   <int value="8" label="Opened automatically / Offering a password to update"/>
+</enum>
+
+<enum name="PasswordBubbleSignInPromoDismissalReason" type="int">
+  <int value="0" label="Dismissed"/>
+  <int value="1" label="Sign in"/>
+  <int value="2" label="No thanks"/>
 </enum>
 
 <enum name="PasswordFormQueryVolume" type="int">
@@ -95658,6 +95933,8 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="5_9" label="Only snippets on position 5-9"/>
   <affected-histogram name="NewTabPage.Snippets.CardClickedAge"/>
   <affected-histogram name="NewTabPage.Snippets.CardClickedScore"/>
+  <affected-histogram name="NewTabPage.Snippets.CardShownAge"/>
+  <affected-histogram name="NewTabPage.Snippets.CardShownScore"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PpapiPluginName">
@@ -96700,6 +96977,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="UNKNOWN" label="UNKNOWN"/>
   <suffix name="FOREIGN_FETCH" label="FOREIGN_FETCH"/>
   <affected-histogram name="ServiceWorker.StartWorker.StatusByPurpose"/>
+  <affected-histogram name="ServiceWorker.StartWorker.Time_DuringStartup"/>
+  <affected-histogram name="ServiceWorker.StartWorker.Time_ExistingProcess"/>
+  <affected-histogram name="ServiceWorker.StartWorker.Time_NewProcess"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ServiceWorker.FailureStreak">
@@ -96707,6 +96987,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="1" label="Failed one time."/>
   <suffix name="2" label="Failed two times."/>
   <suffix name="3" label="Failed three times."/>
+</histogram_suffixes>
+
+<histogram_suffixes name="ServiceWorker.ShutdownStatus">
+  <affected-histogram name="ServiceWorker.ActivateEventStatus"/>
+  <suffix name="InShutdown" label="Browser shutdown started."/>
+  <suffix name="NotInShutdown" label="Browser shutdown has not started."/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ServiceWorker.StartSituation">

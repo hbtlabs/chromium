@@ -6,7 +6,7 @@
 #define ASH_SYSTEM_STATUS_AREA_WIDGET_H_
 
 #include "ash/ash_export.h"
-#include "ash/shelf/shelf_types.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/system/user/login_status.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
@@ -18,17 +18,15 @@ class ShellDelegate;
 class StatusAreaWidgetDelegate;
 class SystemTray;
 class WebNotificationTray;
+class WmWindow;
 #if defined(OS_CHROMEOS)
 class LogoutButtonTray;
 class VirtualKeyboardTray;
 #endif
-namespace wm {
-class WmWindow;
-}
 
 class ASH_EXPORT StatusAreaWidget : public views::Widget {
  public:
-  StatusAreaWidget(wm::WmWindow* status_container, ShelfWidget* shelf_widget);
+  StatusAreaWidget(WmWindow* status_container, ShelfWidget* shelf_widget);
   ~StatusAreaWidget() override;
 
   // Creates the SystemTray, WebNotificationTray and LogoutButtonTray.
@@ -39,7 +37,7 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   void Shutdown();
 
   // Update the alignment of the widget and tray views.
-  void SetShelfAlignment(wm::ShelfAlignment alignment);
+  void SetShelfAlignment(ShelfAlignment alignment);
 
   // Set the visibility of system notifications.
   void SetHideSystemNotifications(bool hide);

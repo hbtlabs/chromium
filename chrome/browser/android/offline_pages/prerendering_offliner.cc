@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "components/offline_pages/background/save_page_request.h"
+#include "components/offline_pages/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
 
 namespace offline_pages {
@@ -101,8 +102,13 @@ bool PrerenderingOffliner::LoadAndSave(const SavePageRequest& request,
     return false;
   }
 
-  if (!CanSavePage(request.url())) {
-    DVLOG(1) << "Not able to save page";
+  if (!GetOrCreateLoader()->CanPrerender()) {
+    DVLOG(1) << "Prerendering not allowed/configured";
+    return false;
+  }
+
+  if (!OfflinePageModel::CanSaveURL(request.url())) {
+    DVLOG(1) << "Not able to save page for requested url: " << request.url();
     return false;
   }
 
@@ -132,15 +138,6 @@ void PrerenderingOffliner::SetLoaderForTesting(
     std::unique_ptr<PrerenderingLoader> loader) {
   DCHECK(!loader_);
   loader_ = std::move(loader);
-}
-
-bool PrerenderingOffliner::CanSavePage(const GURL& url) {
-  if (!offline_page_model_) {
-    // Assume we can save if no OfflinePageModel (for unit tests).
-    // TODO(dougarnett): Make OfflinePageModel::CanSavePage() mockable for test.
-    return true;
-  }
-  return offline_page_model_->CanSavePage(url);
 }
 
 void PrerenderingOffliner::SavePage(

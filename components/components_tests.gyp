@@ -418,6 +418,7 @@
       'network_time/network_time_tracker_unittest.cc',
     ],
     'ntp_snippets_unittest_sources': [
+      'ntp_snippets/ntp_snippets_database_unittest.cc',
       'ntp_snippets/ntp_snippets_fetcher_unittest.cc',
       'ntp_snippets/ntp_snippets_service_unittest.cc',
     ],
@@ -638,6 +639,7 @@
     ],
     'prefs_unittest_sources': [
       'prefs/default_pref_store_unittest.cc',
+      'prefs/in_memory_pref_store_unittest.cc',
       'prefs/json_pref_store_unittest.cc',
       'prefs/overlay_user_pref_store_unittest.cc',
       'prefs/pref_change_registrar_unittest.cc',
@@ -675,6 +677,7 @@
       'safe_browsing_db/prefix_set_unittest.cc',
       'safe_browsing_db/testing_util.h',
       'safe_browsing_db/util_unittest.cc',
+      'safe_browsing_db/v4_database_unittest.cc',
       'safe_browsing_db/v4_get_hash_protocol_manager_unittest.cc',
       'safe_browsing_db/v4_protocol_manager_util_unittest.cc',
       'safe_browsing_db/v4_update_protocol_manager_unittest.cc',
@@ -718,6 +721,7 @@
     ],
     'search_engines_unittest_sources': [
       'search_engines/default_search_manager_unittest.cc',
+      'search_engines/default_search_policy_handler_unittest.cc',
       'search_engines/default_search_pref_migration_unittest.cc',
       'search_engines/keyword_table_unittest.cc',
       'search_engines/search_engine_data_type_controller_unittest.cc',
@@ -850,8 +854,8 @@
       'translate/ios/browser/language_detection_controller_unittest.mm',
       'translate/ios/browser/translate_controller_unittest.mm',
     ],
-    'ui_unittest_sources': [
-      'ui/zoom/page_zoom_unittests.cc',
+    'zoom_unittest_sources': [
+      'zoom/page_zoom_unittests.cc',
     ],
     'update_client_unittest_sources': [
       'update_client/component_patcher_unittest.cc',
@@ -1268,12 +1272,12 @@
             '<@(scheduler_unittest_sources)',
             '<@(storage_monitor_unittest_sources)',
             '<@(tracing_unittest_sources)',
-            '<@(ui_unittest_sources)',
             '<@(visitedlink_unittest_sources)',
             '<@(wallpaper_unittest_sources)',
             '<@(web_cache_unittest_sources)',
             '<@(webcrypto_unittest_sources)',
             '<@(web_modal_unittest_sources)',
+            '<@(zoom_unittest_sources)',
           ],
           'dependencies': [
             '../content/content_shell_and_tests.gyp:test_support_content',
@@ -1313,7 +1317,6 @@
             'components.gyp:storage_monitor',
             'components.gyp:storage_monitor_test_support',
             'components.gyp:test_database_manager',
-            'components.gyp:ui_zoom',
             'components.gyp:url_matcher',
             'components.gyp:visitedlink_browser',
             'components.gyp:visitedlink_renderer',
@@ -1321,6 +1324,7 @@
             'components.gyp:web_cache_browser',
             'components.gyp:web_modal',
             'components.gyp:web_modal_test_support',
+            'components.gyp:zoom',
             'scheduler/scheduler.gyp:scheduler',
             'test_runner/test_runner.gyp:test_runner',
             'tracing.gyp:tracing',

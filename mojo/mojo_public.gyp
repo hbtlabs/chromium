@@ -96,6 +96,7 @@
       'target_name': 'mojo_cpp_system',
       'type': 'static_library',
       'sources': [
+        'public/cpp/system/buffer.cc',
         'public/cpp/system/buffer.h',
         'public/cpp/system/core.h',
         'public/cpp/system/data_pipe.h',
@@ -163,7 +164,6 @@
         'public/cpp/bindings/lib/interface_id.h',
         'public/cpp/bindings/lib/interface_ptr_state.h',
         'public/cpp/bindings/lib/map_data_internal.h',
-        'public/cpp/bindings/lib/map_internal.h',
         'public/cpp/bindings/lib/map_serialization.h',
         'public/cpp/bindings/lib/message.cc',
         'public/cpp/bindings/lib/message_buffer.cc',
@@ -210,7 +210,6 @@
         'public/cpp/bindings/lib/validation_errors.h',
         'public/cpp/bindings/lib/validation_util.cc',
         'public/cpp/bindings/lib/validation_util.h',
-        'public/cpp/bindings/lib/value_traits.h',
         'public/cpp/bindings/map_traits.h',
         'public/cpp/bindings/map_traits_standard.h',
         'public/cpp/bindings/map_traits_stl.h',

@@ -36,6 +36,10 @@ crbug.com/301515 fast/workers/worker-terminate.html [ Leak ]
 crbug.com/410974 virtual/scroll_customization/fast/scroll-behavior/scroll-customization/touch-scroll-customization.html [ Leak ]
 crbug.com/410974 virtual/scroll_customization/fast/scroll-behavior/scroll-customization/scrollstate-distribute-to-scroll-chain-descendant.html [ Leak ]
 
+crbug.com/616775 http/tests/inspector-enabled/dedicated-workers-list.html [ Crash ]
+
+crbug.com/617137 http/tests/notifications/serviceworker-notification-properties.html [ Leak ]
+
 # -----------------------------------------------------------------
 # Untriaged but known real leaks.
 # -----------------------------------------------------------------
@@ -55,9 +59,6 @@ crbug.com/455369 fast/html/marquee-destroyed-without-removed-from-crash.html [ L
 crbug.com/414163 [ Debug ] inspector/sources/debugger/promise-tracker.html [ Crash ]
 
 crbug.com/480769 http/tests/inspector/service-workers/user-agent-override.html [ Crash ]
-
-crbug.com/589802 [ Linux ] http/tests/workers/terminate-during-sync-operation-file.html [ Leak Pass ]
-crbug.com/589802 [ Linux ] http/tests/workers/terminate-during-sync-operation-filesystem.html [ Leak Pass ]
 
 # -----------------------------------------------------------------
 # Untriaged but known leaks of ActiveDOMObject (fast).

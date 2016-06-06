@@ -34,7 +34,6 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_aura.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
-#include "content/browser/renderer_host/input/ui_touch_selection_helper.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
@@ -1067,15 +1066,15 @@ gfx::Size RenderWidgetHostViewAura::GetRequestedRendererSize() const {
 
 void RenderWidgetHostViewAura::SelectionBoundsChanged(
     const ViewHostMsg_SelectionBounds_Params& params) {
-  ui::SelectionBound anchor_bound, focus_bound;
+  gfx::SelectionBound anchor_bound, focus_bound;
   anchor_bound.SetEdge(gfx::PointF(params.anchor_rect.origin()),
                        gfx::PointF(params.anchor_rect.bottom_left()));
   focus_bound.SetEdge(gfx::PointF(params.focus_rect.origin()),
                       gfx::PointF(params.focus_rect.bottom_left()));
 
   if (params.anchor_rect == params.focus_rect) {
-    anchor_bound.set_type(ui::SelectionBound::CENTER);
-    focus_bound.set_type(ui::SelectionBound::CENTER);
+    anchor_bound.set_type(gfx::SelectionBound::CENTER);
+    focus_bound.set_type(gfx::SelectionBound::CENTER);
   } else {
     // Whether text is LTR at the anchor handle.
     bool anchor_LTR = params.anchor_dir == blink::WebTextDirectionLeftToRight;
@@ -1084,15 +1083,15 @@ void RenderWidgetHostViewAura::SelectionBoundsChanged(
 
     if ((params.is_anchor_first && anchor_LTR) ||
         (!params.is_anchor_first && !anchor_LTR)) {
-      anchor_bound.set_type(ui::SelectionBound::LEFT);
+      anchor_bound.set_type(gfx::SelectionBound::LEFT);
     } else {
-      anchor_bound.set_type(ui::SelectionBound::RIGHT);
+      anchor_bound.set_type(gfx::SelectionBound::RIGHT);
     }
     if ((params.is_anchor_first && focus_LTR) ||
         (!params.is_anchor_first && !focus_LTR)) {
-      focus_bound.set_type(ui::SelectionBound::RIGHT);
+      focus_bound.set_type(gfx::SelectionBound::RIGHT);
     } else {
-      focus_bound.set_type(ui::SelectionBound::LEFT);
+      focus_bound.set_type(gfx::SelectionBound::LEFT);
     }
   }
 
@@ -1163,20 +1162,27 @@ void RenderWidgetHostViewAura::OnSwapCompositorFrame(
   if (!frame->delegated_frame_data)
     return;
 
-  cc::ViewportSelection selection = frame->metadata.selection;
+  cc::Selection<gfx::SelectionBound> selection = frame->metadata.selection;
   if (IsUseZoomForDSFEnabled()) {
     float viewportToDIPScale = 1.0f / current_device_scale_factor_;
-    selection.start.edge_top.Scale(viewportToDIPScale);
-    selection.start.edge_bottom.Scale(viewportToDIPScale);
-    selection.end.edge_top.Scale(viewportToDIPScale);
-    selection.end.edge_bottom.Scale(viewportToDIPScale);
+    gfx::PointF start_edge_top = selection.start.edge_top();
+    gfx::PointF start_edge_bottom = selection.start.edge_bottom();
+    gfx::PointF end_edge_top = selection.end.edge_top();
+    gfx::PointF end_edge_bottom = selection.end.edge_bottom();
+
+    start_edge_top.Scale(viewportToDIPScale);
+    start_edge_bottom.Scale(viewportToDIPScale);
+    end_edge_top.Scale(viewportToDIPScale);
+    end_edge_bottom.Scale(viewportToDIPScale);
+
+    selection.start.SetEdge(start_edge_top, start_edge_bottom);
+    selection.end.SetEdge(end_edge_top, end_edge_bottom);
   }
 
   delegated_frame_host_->SwapDelegatedFrame(output_surface_id,
                                             std::move(frame));
   SelectionUpdated(selection.is_editable, selection.is_empty_text_form_control,
-                   ConvertSelectionBound(selection.start),
-                   ConvertSelectionBound(selection.end));
+                   selection.start, selection.end);
 }
 
 void RenderWidgetHostViewAura::ClearCompositorFrame() {
@@ -1576,7 +1582,7 @@ gfx::Rect RenderWidgetHostViewAura::ConvertRectFromScreen(
 
 gfx::Rect RenderWidgetHostViewAura::GetCaretBounds() const {
   return ConvertRectToScreen(
-      ui::RectBetweenSelectionBounds(selection_anchor_, selection_focus_));
+      gfx::RectBetweenSelectionBounds(selection_anchor_, selection_focus_));
 }
 
 bool RenderWidgetHostViewAura::GetCompositionCharacterBounds(
@@ -2707,10 +2713,10 @@ void RenderWidgetHostViewAura::RemovingFromRootWindow() {
   delegated_frame_host_->ResetCompositor();
 
 #if defined(OS_WIN)
-  // Update the legacy window's parent temporarily to the desktop window. It
+  // Update the legacy window's parent temporarily to the hidden window. It
   // will eventually get reparented to the right root.
   if (legacy_render_widget_host_HWND_)
-    legacy_render_widget_host_HWND_->UpdateParent(::GetDesktopWindow());
+    legacy_render_widget_host_HWND_->UpdateParent(ui::GetHiddenWindow());
 #endif
 }
 
@@ -2761,10 +2767,11 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
   target_host->ForwardKeyboardEvent(event);
 }
 
-void RenderWidgetHostViewAura::SelectionUpdated(bool is_editable,
-                                                bool is_empty_text_form_control,
-                                                const ui::SelectionBound& start,
-                                                const ui::SelectionBound& end) {
+void RenderWidgetHostViewAura::SelectionUpdated(
+    bool is_editable,
+    bool is_empty_text_form_control,
+    const gfx::SelectionBound& start,
+    const gfx::SelectionBound& end) {
   selection_controller_->OnSelectionEditable(is_editable);
   selection_controller_->OnSelectionEmpty(is_empty_text_form_control);
   selection_controller_->OnSelectionBoundsChanged(start, end);

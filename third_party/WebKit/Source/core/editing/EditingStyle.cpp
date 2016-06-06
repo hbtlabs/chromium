@@ -30,12 +30,12 @@
 #include "core/HTMLNames.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSValueList.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/FontSize.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
@@ -254,7 +254,7 @@ bool HTMLTextDecorationEquivalent::valueIsPresentInStyle(HTMLElement* element, S
     CSSValue* styleValue = style->getPropertyCSSValue(CSSPropertyWebkitTextDecorationsInEffect);
     if (!styleValue)
         styleValue = style->getPropertyCSSValue(textDecorationPropertyForEditing());
-    return matches(element) && styleValue && styleValue->isValueList() && toCSSValueList(styleValue)->hasValue(m_primitiveValue.get());
+    return matches(element) && styleValue && styleValue->isValueList() && toCSSValueList(styleValue)->hasValue(*m_primitiveValue);
 }
 
 class HTMLAttributeEquivalent : public HTMLElementEquivalent {
@@ -355,38 +355,24 @@ CSSValue* HTMLFontSizeEquivalent::attributeValueAsCSSValue(Element* element) con
 
 float EditingStyle::NoFontDelta = 0.0f;
 
-EditingStyle::EditingStyle()
-    : m_isMonospaceFont(false)
-    , m_fontSizeDelta(NoFontDelta)
-{
-}
-
 EditingStyle::EditingStyle(ContainerNode* node, PropertiesToInclude propertiesToInclude)
-    : m_isMonospaceFont(false)
-    , m_fontSizeDelta(NoFontDelta)
 {
     init(node, propertiesToInclude);
 }
 
 EditingStyle::EditingStyle(const Position& position, PropertiesToInclude propertiesToInclude)
-    : m_isMonospaceFont(false)
-    , m_fontSizeDelta(NoFontDelta)
 {
     init(position.anchorNode(), propertiesToInclude);
 }
 
 EditingStyle::EditingStyle(const StylePropertySet* style)
     : m_mutableStyle(style ? style->mutableCopy() : nullptr)
-    , m_isMonospaceFont(false)
-    , m_fontSizeDelta(NoFontDelta)
 {
     extractFontSizeDelta();
 }
 
 EditingStyle::EditingStyle(CSSPropertyID propertyID, const String& value)
     : m_mutableStyle(nullptr)
-    , m_isMonospaceFont(false)
-    , m_fontSizeDelta(NoFontDelta)
 {
     setProperty(propertyID, value);
     m_isVerticalAlign = propertyID == CSSPropertyVerticalAlign && (value == "sub" || value == "super");
@@ -1159,10 +1145,10 @@ static void mergeTextDecorationValues(CSSValueList* mergedValue, const CSSValueL
 {
     DEFINE_STATIC_LOCAL(CSSPrimitiveValue, underline, (CSSPrimitiveValue::createIdentifier(CSSValueUnderline)));
     DEFINE_STATIC_LOCAL(CSSPrimitiveValue, lineThrough, (CSSPrimitiveValue::createIdentifier(CSSValueLineThrough)));
-    if (valueToMerge->hasValue(&underline) && !mergedValue->hasValue(&underline))
+    if (valueToMerge->hasValue(underline) && !mergedValue->hasValue(underline))
         mergedValue->append(&underline);
 
-    if (valueToMerge->hasValue(&lineThrough) && !mergedValue->hasValue(&lineThrough))
+    if (valueToMerge->hasValue(lineThrough) && !mergedValue->hasValue(lineThrough))
         mergedValue->append(&lineThrough);
 }
 
@@ -1314,10 +1300,10 @@ void EditingStyle::addAbsolutePositioningFromElement(const Element& element)
     }
 
     m_mutableStyle->setProperty(CSSPropertyPosition, CSSValueAbsolute);
-    m_mutableStyle->setProperty(CSSPropertyLeft, cssValuePool().createValue(x, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyTop, cssValuePool().createValue(y, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyWidth, cssValuePool().createValue(width, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyHeight, cssValuePool().createValue(height, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyLeft, CSSPrimitiveValue::create(x, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyTop, CSSPrimitiveValue::create(y, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyWidth, CSSPrimitiveValue::create(width, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyHeight, CSSPrimitiveValue::create(height, CSSPrimitiveValue::UnitType::Pixels));
 }
 
 void EditingStyle::forceInline()
@@ -1568,9 +1554,9 @@ void StyleChange::extractTextStyles(Document* document, MutableStylePropertySet*
         DEFINE_STATIC_LOCAL(CSSPrimitiveValue, underline, (CSSPrimitiveValue::createIdentifier(CSSValueUnderline)));
         DEFINE_STATIC_LOCAL(CSSPrimitiveValue, lineThrough, (CSSPrimitiveValue::createIdentifier(CSSValueLineThrough)));
         CSSValueList* newTextDecoration = toCSSValueList(textDecoration)->copy();
-        if (newTextDecoration->removeAll(&underline))
+        if (newTextDecoration->removeAll(underline))
             m_applyUnderline = true;
-        if (newTextDecoration->removeAll(&lineThrough))
+        if (newTextDecoration->removeAll(lineThrough))
             m_applyLineThrough = true;
 
         // If trimTextDecorations, delete underline and line-through
@@ -1619,7 +1605,7 @@ static void diffTextDecorations(MutableStylePropertySet* style, CSSPropertyID pr
     CSSValueList* valuesInRefTextDecoration = toCSSValueList(refTextDecoration);
 
     for (size_t i = 0; i < valuesInRefTextDecoration->length(); i++)
-        newTextDecoration->removeAll(valuesInRefTextDecoration->item(i));
+        newTextDecoration->removeAll(*valuesInRefTextDecoration->item(i));
 
     setTextDecorationProperty(style, newTextDecoration, propertID);
 }

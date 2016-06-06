@@ -374,7 +374,7 @@ void ExtensionFunctionDispatcher::DispatchOnIOThread(
   if (!extension) {
     // Skip all of the UMA, quota, event page, activity logging stuff if there
     // isn't an extension, e.g. if the function call was from WebUI.
-    function->Run()->Execute();
+    function->RunWithValidation()->Execute();
     return;
   }
 
@@ -393,7 +393,7 @@ void ExtensionFunctionDispatcher::DispatchOnIOThread(
         FROM_HERE_WITH_EXPLICIT_FUNCTION(function->name()),
         tracked_objects::ScopedProfile::ENABLED);
     base::ElapsedTimer timer;
-    function->Run()->Execute();
+    function->RunWithValidation()->Execute();
     // TODO(devlin): Once we have a baseline metric for how long functions take,
     // we can create a handful of buckets and record the function name so that
     // we can find what the fastest/slowest are.
@@ -491,7 +491,11 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
     NOTREACHED();
     return;
   }
-  function_ui->SetRenderFrameHost(render_frame_host);
+  if (params.embedded_worker_id != -1) {
+    function_ui->set_is_from_service_worker(true);
+  } else {
+    function_ui->SetRenderFrameHost(render_frame_host);
+  }
   function_ui->set_dispatcher(AsWeakPtr());
   function_ui->set_browser_context(browser_context_);
   if (extension &&
@@ -506,7 +510,7 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
   if (!extension) {
     // Skip all of the UMA, quota, event page, activity logging stuff if there
     // isn't an extension, e.g. if the function call was from WebUI.
-    function->Run()->Execute();
+    function->RunWithValidation()->Execute();
     return;
   }
 
@@ -533,7 +537,7 @@ void ExtensionFunctionDispatcher::DispatchWithCallbackInternal(
         FROM_HERE_WITH_EXPLICIT_FUNCTION(function->name()),
         tracked_objects::ScopedProfile::ENABLED);
     base::ElapsedTimer timer;
-    function->Run()->Execute();
+    function->RunWithValidation()->Execute();
     // TODO(devlin): Once we have a baseline metric for how long functions take,
     // we can create a handful of buckets and record the function name so that
     // we can find what the fastest/slowest are.

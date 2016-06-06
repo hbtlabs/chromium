@@ -6,11 +6,14 @@
 
 #include <memory>
 #include <set>
+#include <tuple>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "media/base/android/media_codec_util.h"
@@ -202,7 +205,7 @@ bool AndroidVideoEncodeAccelerator::Initialize(
   // Conservative upper bound for output buffer size: decoded size + 2KB.
   const size_t output_buffer_capacity =
       VideoFrame::AllocationSize(format, input_visible_size) + 2048;
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&VideoEncodeAccelerator::Client::RequireBitstreamBuffers,
                  client_ptr_factory_->GetWeakPtr(), frame_input_count,
@@ -247,7 +250,7 @@ void AndroidVideoEncodeAccelerator::Encode(
                     kInvalidArgumentError);
 
   pending_frames_.push(
-      base::MakeTuple(frame, force_keyframe, base::Time::Now()));
+      std::make_tuple(frame, force_keyframe, base::Time::Now()));
   DoIOTask();
 }
 
@@ -310,7 +313,7 @@ void AndroidVideoEncodeAccelerator::QueueInput() {
   }
 
   const PendingFrames::value_type& input = pending_frames_.front();
-  bool is_key_frame = base::get<1>(input);
+  bool is_key_frame = std::get<1>(input);
   if (is_key_frame) {
     // Ideally MediaCodec would honor BUFFER_FLAG_SYNC_FRAME so we could
     // indicate this in the QueueInputBuffer() call below and guarantee _this_
@@ -318,7 +321,7 @@ void AndroidVideoEncodeAccelerator::QueueInput() {
     // Instead, we request a key frame "soon".
     media_codec_->RequestKeyFrameSoon();
   }
-  scoped_refptr<VideoFrame> frame = base::get<0>(input);
+  scoped_refptr<VideoFrame> frame = std::get<0>(input);
 
   uint8_t* buffer = NULL;
   size_t capacity = 0;
@@ -352,7 +355,7 @@ void AndroidVideoEncodeAccelerator::QueueInput() {
   status = media_codec_->QueueInputBuffer(input_buf_index, NULL, queued_size,
                                           fake_input_timestamp_);
   UMA_HISTOGRAM_TIMES("Media.AVDA.InputQueueTime",
-                      base::Time::Now() - base::get<2>(input));
+                      base::Time::Now() - std::get<2>(input));
   RETURN_ON_FAILURE(status == media::MEDIA_CODEC_OK,
                     "Failed to QueueInputBuffer: " << status,
                     kPlatformFailureError);
@@ -416,7 +419,7 @@ void AndroidVideoEncodeAccelerator::DequeueOutput() {
   media_codec_->ReleaseOutputBuffer(buf_index, false);
   --num_buffers_at_codec_;
 
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&VideoEncodeAccelerator::Client::BitstreamBufferReady,
                  client_ptr_factory_->GetWeakPtr(), bitstream_buffer.id(), size,

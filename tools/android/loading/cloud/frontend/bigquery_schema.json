@@ -5,18 +5,6 @@
         "mode": "REQUIRED"
     },
     {
-        "name": "activity_frac",
-        "type": "FLOAT"
-    },
-    {
-        "name": "parsing_frac",
-        "type": "FLOAT"
-    },
-    {
-        "name": "script_frac",
-        "type": "FLOAT"
-    },
-    {
         "name": "ad_or_tracking_initiated_requests",
         "type": "INTEGER"
     },
@@ -73,8 +61,16 @@
         "type": "INTEGER"
     },
     {
+        "name": "contentful_preloaded_requests_cost",
+        "type": "FLOAT"
+    },
+    {
         "name": "contentful_requests",
         "type": "INTEGER"
+    },
+    {
+        "name": "contentful_requests_cost",
+        "type": "FLOAT"
     },
     {
         "name": "contentful_script_frac",
@@ -121,8 +117,16 @@
         "type": "INTEGER"
     },
     {
+        "name": "first_text_preloaded_requests_cost",
+        "type": "FLOAT"
+    },
+    {
         "name": "first_text_requests",
         "type": "INTEGER"
+    },
+    {
+        "name": "first_text_requests_cost",
+        "type": "FLOAT"
     },
     {
         "name": "first_text_script_frac",
@@ -137,16 +141,44 @@
         "type": "INTEGER"
     },
     {
+        "name": "plt_activity_frac",
+        "type": "FLOAT"
+    },
+    {
+        "name": "plt_byte_frac",
+        "type": "FLOAT"
+    },
+    {
+        "name": "plt_inversion",
+        "type": "STRING"
+    },
+    {
         "name": "plt_ms",
         "type": "FLOAT"
     },
     {
-        "name": "preloaded_requests",
+        "name": "plt_parsing_frac",
+        "type": "FLOAT"
+    },
+    {
+        "name": "plt_preloaded_requests",
         "type": "INTEGER"
     },
     {
-        "name": "requests",
+        "name": "plt_preloaded_requests_cost",
+        "type": "FLOAT"
+    },
+    {
+        "name": "plt_requests",
         "type": "INTEGER"
+    },
+    {
+        "name": "plt_requests_cost",
+        "type": "FLOAT"
+    },
+    {
+        "name": "plt_script_frac",
+        "type": "FLOAT"
     },
     {
         "name": "significant_activity_frac",
@@ -173,8 +205,16 @@
         "type": "INTEGER"
     },
     {
+        "name": "significant_preloaded_requests_cost",
+        "type": "FLOAT"
+    },
+    {
         "name": "significant_requests",
         "type": "INTEGER"
+    },
+    {
+        "name": "significant_requests_cost",
+        "type": "FLOAT"
     },
     {
         "name": "significant_script_frac",

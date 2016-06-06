@@ -7,6 +7,7 @@
 [
     RuntimeEnabled=PaymentRequest
 ] dictionary PaymentDetails {
-    sequence<PaymentItem> items;
+    PaymentItem total;
+    sequence<PaymentItem> displayItems;
     sequence<ShippingOption> shippingOptions;
 };

@@ -106,7 +106,7 @@ class MultiCommandTool(object):
         return None
 
     def path(self):
-        raise NotImplementedError, "subclasses must implement"
+        raise NotImplementedError("subclasses must implement")
 
     def command_completed(self):
         pass
@@ -114,7 +114,7 @@ class MultiCommandTool(object):
     def should_show_in_main_help(self, command):
         return command.show_in_main_help
 
-    def should_execute_command(self, command):
+    def should_execute_command(self, command):  # Argument may be used in subclasses - pylint: disable=unused-argument
         return True
 
     def _add_global_options(self, option_parser):
@@ -148,7 +148,7 @@ class MultiCommandTool(object):
             try:
                 result = command.check_arguments_and_execute(options, args, self)
                 break
-            except TryAgain, e:
+            except TryAgain as e:
                 pass
 
         self.command_completed()

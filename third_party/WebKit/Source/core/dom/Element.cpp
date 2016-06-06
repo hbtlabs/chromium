@@ -39,8 +39,8 @@
 #include "core/animation/CustomCompositorAnimations.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSImageValue.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSStyleSheet.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
@@ -73,6 +73,8 @@
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
+#include "core/dom/custom/CustomElement.h"
+#include "core/dom/custom/CustomElementsRegistry.h"
 #include "core/dom/custom/V0CustomElement.h"
 #include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/dom/shadow/InsertionPoint.h"
@@ -1421,8 +1423,14 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
             rareData->intersectionObserverData()->activateValidIntersectionObservers(*this);
     }
 
-    if (isUpgradedV0CustomElement() && inShadowIncludingDocument())
-        V0CustomElement::didAttach(this, document());
+    if (inShadowIncludingDocument()) {
+        if (getCustomElementState() != CustomElementState::Custom && CustomElement::descriptorMayMatch(*this)) {
+            if (CustomElementsRegistry* registry = CustomElement::registry(*this))
+                registry->addCandidate(this);
+        }
+        if (isUpgradedV0CustomElement())
+            V0CustomElement::didAttach(this, document());
+    }
 
     TreeScope& scope = insertionPoint->treeScope();
     if (scope != treeScope())
@@ -2607,7 +2615,7 @@ Node* Element::insertAdjacent(const String& where, Node* newChild, ExceptionStat
 
 NodeIntersectionObserverData* Element::intersectionObserverData() const
 {
-    if (elementRareData())
+    if (hasRareData())
         return elementRareData()->intersectionObserverData();
     return nullptr;
 }
@@ -3510,7 +3518,7 @@ void Element::styleAttributeChanged(const AtomicString& newStyleString, Attribut
 
     if (newStyleString.isNull()) {
         ensureUniqueElementData().m_inlineStyle.clear();
-    } else if (modificationReason == ModifiedByCloning || ContentSecurityPolicy::shouldBypassMainWorld(&document()) || document().contentSecurityPolicy()->allowInlineStyle(document().url(), startLineNumber, newStyleString)) {
+    } else if (modificationReason == ModifiedByCloning || ContentSecurityPolicy::shouldBypassMainWorld(&document()) || document().contentSecurityPolicy()->allowInlineStyle(document().url(), String(), startLineNumber, newStyleString)) {
         setInlineStyleFromString(newStyleString);
     }
 
@@ -3531,12 +3539,12 @@ void Element::inlineStyleChanged()
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValueID identifier, bool important)
 {
-    setInlineStyleProperty(propertyID, cssValuePool().createIdentifierValue(identifier), important);
+    setInlineStyleProperty(propertyID, CSSPrimitiveValue::createIdentifier(identifier), important);
 }
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, double value, CSSPrimitiveValue::UnitType unit, bool important)
 {
-    setInlineStyleProperty(propertyID, cssValuePool().createValue(value, unit), important);
+    setInlineStyleProperty(propertyID, CSSPrimitiveValue::create(value, unit), important);
 }
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValue* value, bool important)
@@ -3587,13 +3595,13 @@ void Element::updatePresentationAttributeStyle()
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, CSSValueID identifier)
 {
     DCHECK(isStyledElement());
-    style->setProperty(propertyID, cssValuePool().createIdentifierValue(identifier));
+    style->setProperty(propertyID, CSSPrimitiveValue::createIdentifier(identifier));
 }
 
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, double value, CSSPrimitiveValue::UnitType unit)
 {
     DCHECK(isStyledElement());
-    style->setProperty(propertyID, cssValuePool().createValue(value, unit));
+    style->setProperty(propertyID, CSSPrimitiveValue::create(value, unit));
 }
 
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, const String& value)
