@@ -288,6 +288,8 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
 
     m_gl->ProduceTextureDirectCHROMIUM(frontColorBufferMailbox->textureInfo.textureId, frontColorBufferMailbox->textureInfo.parameters.target, frontColorBufferMailbox->mailbox.name);
     const GLuint64 fenceSync = m_gl->InsertFenceSyncCHROMIUM();
+    if (RuntimeEnabledFeatures::webGLImageChromiumEnabled())
+        m_gl->DescheduleUntilFinishedCHROMIUM();
     m_gl->Flush();
     m_gl->GenSyncTokenCHROMIUM(fenceSync, frontColorBufferMailbox->mailbox.syncToken);
     frontColorBufferMailbox->mailbox.validSyncToken = true;
@@ -341,8 +343,9 @@ DrawingBuffer::TextureParameters DrawingBuffer::chromiumImageTextureParameters()
         parameters.creationInternalColorFormat = GL_RGB;
         parameters.internalColorFormat = GL_RGBA;
     } else {
-        parameters.creationInternalColorFormat = GL_RGB;
-        parameters.internalColorFormat = GL_RGB;
+        GLenum format = defaultBufferRequiresAlphaChannelToBePreserved() ? GL_RGBA : GL_RGB;
+        parameters.creationInternalColorFormat = format;
+        parameters.internalColorFormat = format;
     }
 
     // Unused when CHROMIUM_image is being used.
@@ -366,9 +369,10 @@ DrawingBuffer::TextureParameters DrawingBuffer::defaultTextureParameters()
         parameters.creationInternalColorFormat = GL_RGBA;
         parameters.colorFormat = GL_RGBA;
     } else {
-        parameters.internalColorFormat = GL_RGB;
-        parameters.creationInternalColorFormat = GL_RGB;
-        parameters.colorFormat = GL_RGB;
+        GLenum format = defaultBufferRequiresAlphaChannelToBePreserved() ? GL_RGBA : GL_RGB;
+        parameters.creationInternalColorFormat = format;
+        parameters.internalColorFormat = format;
+        parameters.colorFormat = format;
     }
     return parameters;
 }
@@ -1066,6 +1070,8 @@ GLenum DrawingBuffer::getMultisampledRenderbufferFormat()
     if (m_wantAlphaChannel)
         return GL_RGBA8_OES;
     if (RuntimeEnabledFeatures::webGLImageChromiumEnabled() && contextProvider()->getCapabilities().chromium_image_rgb_emulation)
+        return GL_RGBA8_OES;
+    if (contextProvider()->getCapabilities().disable_webgl_rgb_multisampling_usage)
         return GL_RGBA8_OES;
     return GL_RGB8_OES;
 }

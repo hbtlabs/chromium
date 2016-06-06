@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/message_loop/message_loop.h"
-#include "base/run_loop.h"
+#include "cc/input/selection.h"
 #include "cc/ipc/traits_test_service.mojom.h"
 #include "cc/quads/render_pass_id.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -40,6 +40,17 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     callback.Run(r);
   }
 
+  void EchoSelection(const Selection<gfx::SelectionBound>& s,
+                     const EchoSelectionCallback& callback) override {
+    callback.Run(s);
+  }
+
+  void EchoSharedQuadState(
+      const SharedQuadState& s,
+      const EchoSharedQuadStateCallback& callback) override {
+    callback.Run(s);
+  }
+
   void EchoSurfaceId(const SurfaceId& s,
                      const EchoSurfaceIdCallback& callback) override {
     callback.Run(s);
@@ -52,6 +63,7 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
   }
 
   mojo::BindingSet<TraitsTestService> traits_test_bindings_;
+  DISALLOW_COPY_AND_ASSIGN(StructTraitsTest);
 };
 
 }  // namespace
@@ -68,34 +80,25 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   input.interval = interval;
   input.type = type;
   input.on_critical_path = on_critical_path;
-  base::RunLoop loop;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoBeginFrameArgs(
-      input, [frame_time, deadline, interval, type, on_critical_path,
-              &loop](const BeginFrameArgs& pass) {
-        EXPECT_EQ(frame_time, pass.frame_time);
-        EXPECT_EQ(deadline, pass.deadline);
-        EXPECT_EQ(interval, pass.interval);
-        EXPECT_EQ(type, pass.type);
-        EXPECT_EQ(on_critical_path, pass.on_critical_path);
-        loop.Quit();
-      });
-  loop.Run();
+  BeginFrameArgs output;
+  proxy->EchoBeginFrameArgs(input, &output);
+  EXPECT_EQ(frame_time, output.frame_time);
+  EXPECT_EQ(deadline, output.deadline);
+  EXPECT_EQ(interval, output.interval);
+  EXPECT_EQ(type, output.type);
+  EXPECT_EQ(on_critical_path, output.on_critical_path);
 }
 
 TEST_F(StructTraitsTest, RenderPassId) {
   const int layer_id = 1337;
   const uint32_t index = 0xdeadbeef;
   RenderPassId input(layer_id, index);
-  base::RunLoop loop;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoRenderPassId(input,
-                          [layer_id, index, &loop](const RenderPassId& pass) {
-                            EXPECT_EQ(layer_id, pass.layer_id);
-                            EXPECT_EQ(index, pass.index);
-                            loop.Quit();
-                          });
-  loop.Run();
+  RenderPassId output;
+  proxy->EchoRenderPassId(input, &output);
+  EXPECT_EQ(layer_id, output.layer_id);
+  EXPECT_EQ(index, output.index);
 }
 
 TEST_F(StructTraitsTest, ReturnedResource) {
@@ -115,17 +118,38 @@ TEST_F(StructTraitsTest, ReturnedResource) {
   input.sync_token = sync_token;
   input.count = count;
   input.lost = lost;
-  base::RunLoop loop;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoReturnedResource(input, [id, sync_token, count, lost,
-                                      &loop](const ReturnedResource& pass) {
-    EXPECT_EQ(id, pass.id);
-    EXPECT_EQ(sync_token, pass.sync_token);
-    EXPECT_EQ(count, pass.count);
-    EXPECT_EQ(lost, pass.lost);
-    loop.Quit();
-  });
-  loop.Run();
+  ReturnedResource output;
+  proxy->EchoReturnedResource(input, &output);
+  EXPECT_EQ(id, output.id);
+  EXPECT_EQ(sync_token, output.sync_token);
+  EXPECT_EQ(count, output.count);
+  EXPECT_EQ(lost, output.lost);
+}
+
+TEST_F(StructTraitsTest, Selection) {
+  gfx::SelectionBound start;
+  start.SetEdge(gfx::PointF(1234.5f, 67891.f), gfx::PointF(5432.1f, 1987.6f));
+  start.set_visible(true);
+  start.set_type(gfx::SelectionBound::CENTER);
+  gfx::SelectionBound end;
+  end.SetEdge(gfx::PointF(1337.5f, 52124.f), gfx::PointF(1234.3f, 8765.6f));
+  end.set_visible(false);
+  end.set_type(gfx::SelectionBound::RIGHT);
+  const bool is_editable = true;
+  const bool is_empty_text_form_control = true;
+  Selection<gfx::SelectionBound> input;
+  input.start = start;
+  input.end = end;
+  input.is_editable = is_editable;
+  input.is_empty_text_form_control = is_empty_text_form_control;
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  Selection<gfx::SelectionBound> output;
+  proxy->EchoSelection(input, &output);
+  EXPECT_EQ(start, output.start);
+  EXPECT_EQ(end, output.end);
+  EXPECT_EQ(is_editable, output.is_editable);
+  EXPECT_EQ(is_empty_text_form_control, output.is_empty_text_form_control);
 }
 
 TEST_F(StructTraitsTest, SurfaceId) {
@@ -133,16 +157,40 @@ TEST_F(StructTraitsTest, SurfaceId) {
   const uint32_t local_id = 0xfbadbeef;
   const uint64_t nonce = 0xdeadbeef;
   SurfaceId input(id_namespace, local_id, nonce);
-  base::RunLoop loop;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoSurfaceId(
-      input, [id_namespace, local_id, nonce, &loop](const SurfaceId& pass) {
-        EXPECT_EQ(id_namespace, pass.id_namespace());
-        EXPECT_EQ(local_id, pass.local_id());
-        EXPECT_EQ(nonce, pass.nonce());
-        loop.Quit();
-      });
-  loop.Run();
+  SurfaceId output;
+  proxy->EchoSurfaceId(input, &output);
+  EXPECT_EQ(id_namespace, output.id_namespace());
+  EXPECT_EQ(local_id, output.local_id());
+  EXPECT_EQ(nonce, output.nonce());
+}
+
+TEST_F(StructTraitsTest, SharedQuadState) {
+  const gfx::Transform quad_to_target_transform(1.f, 2.f, 3.f, 4.f, 5.f, 6.f,
+                                                7.f, 8.f, 9.f, 10.f, 11.f, 12.f,
+                                                13.f, 14.f, 15.f, 16.f);
+  const gfx::Size layer_bounds(1234, 5678);
+  const gfx::Rect visible_layer_rect(12, 34, 56, 78);
+  const gfx::Rect clip_rect(123, 456, 789, 101112);
+  const bool is_clipped = true;
+  const float opacity = 0.9f;
+  const SkXfermode::Mode blend_mode = SkXfermode::kSrcOver_Mode;
+  const int sorting_context_id = 1337;
+  SharedQuadState input_sqs;
+  input_sqs.SetAll(quad_to_target_transform, layer_bounds, visible_layer_rect,
+                   clip_rect, is_clipped, opacity, blend_mode,
+                   sorting_context_id);
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  SharedQuadState output_sqs;
+  proxy->EchoSharedQuadState(input_sqs, &output_sqs);
+  EXPECT_EQ(quad_to_target_transform, output_sqs.quad_to_target_transform);
+  EXPECT_EQ(layer_bounds, output_sqs.quad_layer_bounds);
+  EXPECT_EQ(visible_layer_rect, output_sqs.visible_quad_layer_rect);
+  EXPECT_EQ(clip_rect, output_sqs.clip_rect);
+  EXPECT_EQ(is_clipped, output_sqs.is_clipped);
+  EXPECT_EQ(opacity, output_sqs.opacity);
+  EXPECT_EQ(blend_mode, output_sqs.blend_mode);
+  EXPECT_EQ(sorting_context_id, output_sqs.sorting_context_id);
 }
 
 TEST_F(StructTraitsTest, TransferableResource) {
@@ -181,27 +229,21 @@ TEST_F(StructTraitsTest, TransferableResource) {
   input.is_software = is_software;
   input.gpu_memory_buffer_id.id = gpu_memory_buffer_id;
   input.is_overlay_candidate = is_overlay_candidate;
-  base::RunLoop loop;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoTransferableResource(
-      input, [id, format, filter, size, mailbox_holder,
-              read_lock_fences_enabled, is_software, gpu_memory_buffer_id,
-              is_overlay_candidate, &loop](const TransferableResource& pass) {
-        EXPECT_EQ(id, pass.id);
-        EXPECT_EQ(format, pass.format);
-        EXPECT_EQ(filter, pass.filter);
-        EXPECT_EQ(size, pass.size);
-        EXPECT_EQ(mailbox_holder.mailbox, pass.mailbox_holder.mailbox);
-        EXPECT_EQ(mailbox_holder.sync_token, pass.mailbox_holder.sync_token);
-        EXPECT_EQ(mailbox_holder.texture_target,
-                  pass.mailbox_holder.texture_target);
-        EXPECT_EQ(read_lock_fences_enabled, pass.read_lock_fences_enabled);
-        EXPECT_EQ(is_software, pass.is_software);
-        EXPECT_EQ(gpu_memory_buffer_id, pass.gpu_memory_buffer_id.id);
-        EXPECT_EQ(is_overlay_candidate, pass.is_overlay_candidate);
-        loop.Quit();
-      });
-  loop.Run();
+  TransferableResource output;
+  proxy->EchoTransferableResource(input, &output);
+  EXPECT_EQ(id, output.id);
+  EXPECT_EQ(format, output.format);
+  EXPECT_EQ(filter, output.filter);
+  EXPECT_EQ(size, output.size);
+  EXPECT_EQ(mailbox_holder.mailbox, output.mailbox_holder.mailbox);
+  EXPECT_EQ(mailbox_holder.sync_token, output.mailbox_holder.sync_token);
+  EXPECT_EQ(mailbox_holder.texture_target,
+            output.mailbox_holder.texture_target);
+  EXPECT_EQ(read_lock_fences_enabled, output.read_lock_fences_enabled);
+  EXPECT_EQ(is_software, output.is_software);
+  EXPECT_EQ(gpu_memory_buffer_id, output.gpu_memory_buffer_id.id);
+  EXPECT_EQ(is_overlay_candidate, output.is_overlay_candidate);
 }
 
 }  // namespace cc

@@ -246,7 +246,14 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CallbackAccounting) {
   SimpleTest(GetTestUrl("indexeddb", "callback_accounting.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, GetAllMaxMessageSize) {
+
+// https://crbug.com/616155
+#if defined(ANDROID)
+#define MAYBE_GetAllMaxMessageSize DISABLED_GetAllMaxMessageSize
+#else
+#define MAYBE_GetAllMaxMessageSize GetAllMaxMessageSize
+#endif
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, MAYBE_GetAllMaxMessageSize) {
   SimpleTest(GetTestUrl("indexeddb", "getall_max_message_size.html"));
 }
 
@@ -612,7 +619,9 @@ static std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
 
   if (request_path == "corruptdb" && !request_query.empty()) {
     VLOG(0) << "Requested to corrupt IndexedDB: " << request_query;
-    base::WaitableEvent signal_when_finished(false, false);
+    base::WaitableEvent signal_when_finished(
+        base::WaitableEvent::ResetPolicy::AUTOMATIC,
+        base::WaitableEvent::InitialState::NOT_SIGNALED);
     context->TaskRunner()->PostTask(
         FROM_HERE,
         base::Bind(&CorruptIndexedDBDatabase, base::ConstRef(context), origin,

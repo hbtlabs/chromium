@@ -15,6 +15,7 @@ from oauth2client.client import GoogleCredentials
 
 import common.clovis_paths
 from common.clovis_task import ClovisTask
+import common.google_bigquery_helper
 import common.google_instance_helper
 from common.loading_trace_database import LoadingTraceDatabase
 import email_helper
@@ -22,6 +23,7 @@ from memory_logs import MemoryLogs
 
 
 # Global variables.
+logging.Formatter.converter = time.gmtime
 clovis_logger = logging.getLogger('clovis_frontend')
 clovis_logger.setLevel(logging.DEBUG)
 project_name = app_identity.get_application_id()
@@ -96,6 +98,28 @@ def Finalize(tag, email_address, status, task_url):
       logger=clovis_logger)
   clovis_logger.info('Scheduling instance group destruction for tag: ' + tag)
   deferred.defer(DeleteInstanceGroup, tag)
+
+
+def GetEstimatedTaskDurationInSeconds(task):
+  """Returns an estimation of the time required to run the task.
+
+  Args:
+    task: (ClovisTask) The task.
+
+  Returns:
+    float: Time estimation in seconds, or -1 in case of failure.
+  """
+  action_params = task.ActionParams()
+  if task.Action() == 'trace':
+    estimated_trace_time_s = 40.0
+    return (len(action_params['urls']) * action_params.get('repeat_count', 1) *
+            estimated_trace_time_s)
+  elif task.Action() == 'report':
+    estimated_report_time_s = 20.0
+    return len(action_params['traces']) * estimated_report_time_s
+  else:
+    clovis_logger.error('Unexpected action.')
+    return -1
 
 
 def CreateInstanceTemplate(task, task_dir):
@@ -241,6 +265,49 @@ def GetTracePaths(bucket):
   return traces
 
 
+def GetTaskURL(task, task_dir):
+  """Returns the URL where the task output are generated, or None.
+
+  Args:
+    task: (ClovisTask) The task.
+    task_dir: (str) Working directory for the backend, it is a subdirectory of
+                    the deployment bucket.
+
+  Returns:
+    str: The URL.
+  """
+  clovis_logger.info('Building task result URL.')
+
+  if task.Action() == 'trace':
+    storage_bucket = task.BackendParams().get('storage_bucket')
+    if not storage_bucket:
+      clovis_logger.error('Missing storage_bucket for trace action.')
+      return None
+    return 'https://console.cloud.google.com/storage/%s/%s' % (storage_bucket,
+                                                               task_dir)
+
+  elif task.Action() == 'report':
+    table_id = common.google_bigquery_helper.GetBigQueryTableID(task)
+    task_url = common.google_bigquery_helper.GetBigQueryTableURL(project_name,
+                                                                 table_id)
+    # Abort if the table already exists.
+    bigquery_service = common.google_bigquery_helper.GetBigQueryService(
+        GoogleCredentials.get_application_default())
+    try:
+      table_exists = common.google_bigquery_helper.DoesBigQueryTableExist(
+          bigquery_service, project_name, table_id, clovis_logger)
+    except Exception:
+      return None
+    if table_exists:
+      clovis_logger.error('BigQuery table %s already exists.' % task_url)
+      return None
+    return task_url
+
+  else:
+    clovis_logger.error('Unsupported action: %s.' % task.Action())
+    return None
+
+
 def StartFromJsonString(http_body_str):
   """Main function handling a JSON task posted by the user."""
   # Set up logging.
@@ -259,7 +326,9 @@ def StartFromJsonString(http_body_str):
   # Compute the task directory.
   task_dir_components = []
   user_email = email_helper.GetUserEmail()
-  user_name = user_email[:user_email.find('@')]
+  user_name = None
+  if user_email:
+    user_name = user_email[:user_email.find('@')]
   if user_name:
     task_dir_components.append(user_name)
   task_name = task.BackendParams().get('task_name')
@@ -269,24 +338,52 @@ def StartFromJsonString(http_body_str):
   task_dir = os.path.join(task.Action(), '_'.join(task_dir_components))
 
   # Build the URL where the result will live.
-  task_url = None
-  if task.Action() == 'trace':
-    bucket = task.BackendParams().get('storage_bucket')
-    if bucket:
-      task_url = 'https://console.cloud.google.com/storage/%s/%s' % (bucket,
-                                                                     task_dir)
-  elif task.Action() == 'report':
-    task_url = common.clovis_paths.GetBigQueryTableURL(project_name, task_tag)
+  task_url = GetTaskURL(task, task_dir)
+  if task_url:
+    clovis_logger.info('Task result URL: ' + task_url)
   else:
-    error_string = 'Unsupported action: %s.' % task.Action()
-    clovis_logger.error(error_string)
-    return Render(error_string, memory_logs)
-  clovis_logger.info('Task result URL: ' + task_url)
+    return Render('Could not build the task URL.', memory_logs)
 
   # Split the task in smaller tasks.
   sub_tasks = SplitClovisTask(task)
   if not sub_tasks:
     return Render('Task split failed.', memory_logs)
+
+  # Compute estimates for the work duration, in order to compute the instance
+  # count and the timeout.
+  sequential_duration_s = \
+      GetEstimatedTaskDurationInSeconds(sub_tasks[0]) * len(sub_tasks)
+  if sequential_duration_s <= 0:
+    return Render('Time estimation failed.', memory_logs)
+
+  # Compute the number of required instances if not specified.
+  if not task.BackendParams().get('instance_count'):
+    target_parallel_duration_s = 1800.0 # 30 minutes.
+    task.BackendParams()['instance_count'] = int(
+        sequential_duration_s / target_parallel_duration_s + 0.5)  # Rounded up.
+
+  # Check the instance quotas.
+  clovis_logger.info(
+      'Requesting %i instances.' % task.BackendParams()['instance_count'])
+  max_instances = instance_helper.GetAvailableInstanceCount()
+  if max_instances == -1:
+    return Render('Failed to count the available instances.', memory_logs)
+  elif task.BackendParams()['instance_count'] == 0:
+    return Render('Cannot create instances, quota exceeded.', memory_logs)
+  elif max_instances < task.BackendParams()['instance_count']:
+    clovis_logger.warning(
+        'Instance count limited by quota: %i available / %i requested.' % (
+            max_instances, task.BackendParams()['instance_count']))
+    task.BackendParams()['instance_count'] = max_instances
+
+  # Compute the timeout if there is none specified.
+  expected_duration_h = sequential_duration_s / (
+      task.BackendParams()['instance_count'] * 3600.0)
+  if not task.BackendParams().get('timeout_hours'):
+    # Timeout is at least 1 hour.
+    task.BackendParams()['timeout_hours'] = max(1, 5 * expected_duration_h)
+  clovis_logger.info(
+      'Timeout delay: %i hours. ' % task.BackendParams()['timeout_hours'])
 
   if not EnqueueTasks(sub_tasks, task_tag):
     return Render('Task creation failed.', memory_logs)
@@ -294,8 +391,8 @@ def StartFromJsonString(http_body_str):
   # Start polling the progress.
   clovis_logger.info('Creating worker polling task.')
   first_poll_delay_minutes = 10
-  timeout_hours = task.BackendParams().get('timeout_hours', 5)
-  deferred.defer(PollWorkers, task_tag, time.time(), timeout_hours, user_email,
+  deferred.defer(PollWorkers, task_tag, time.time(),
+                 task.BackendParams()['timeout_hours'], user_email,
                  task_url, _countdown=(60 * first_poll_delay_minutes))
 
   # Start the instances if required.
@@ -306,7 +403,9 @@ def StartFromJsonString(http_body_str):
 
   return Render(flask.Markup(
       'Success!<br>Your task %s has started.<br>'
-      'You will be notified at %s when completed.') % (task_tag, user_email),
+      'Expected duration: %.1f hours.<br>'
+      'You will be notified at %s when completed.') % (
+          task_tag, expected_duration_h, user_email),
       memory_logs)
 
 

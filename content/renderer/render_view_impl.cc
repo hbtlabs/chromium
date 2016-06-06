@@ -50,7 +50,6 @@
 #include "content/common/input/input_event_utils.h"
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
-#include "content/common/pepper_messages.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
@@ -1148,6 +1147,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setUseSolidColorScrollbars(prefs.use_solid_color_scrollbars);
 
   settings->setShowContextMenuOnMouseUp(prefs.context_menu_on_mouse_up);
+  settings->setAlwaysShowContextMenuOnTouch(
+      prefs.always_show_context_menu_on_touch);
 
 #if defined(OS_MACOSX)
   settings->setDoubleTapToZoomEnabled(true);

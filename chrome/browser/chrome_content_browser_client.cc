@@ -1100,16 +1100,6 @@ void ChromeContentBrowserClient::GetAdditionalWebUISchemes(
   additional_schemes->push_back(dom_distiller::kDomDistillerScheme);
 }
 
-void ChromeContentBrowserClient::GetAdditionalWebUIHostsToIgnoreParititionCheck(
-    std::vector<std::string>* hosts) {
-  hosts->push_back(chrome::kChromeUIExtensionIconHost);
-  hosts->push_back(chrome::kChromeUIFaviconHost);
-  hosts->push_back(chrome::kChromeUIThemeHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost2);
-  hosts->push_back(chrome::kChromeUIThumbnailListHost);
-}
-
 bool ChromeContentBrowserClient::LogWebUIUrl(const GURL& web_ui_url) const {
   return webui::LogWebUIUrl(web_ui_url);
 }
@@ -1369,40 +1359,6 @@ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
             "%s=%s", param.first.c_str(), param.second.c_str()));
       }
     }
-  }
-
-  // Flags for the ResourcePriorities field trial. The settings are
-  // encoded in the field trial group name instead of as variations
-  // because the variations code is not accessible from the loader.
-  //
-  // The group name encoding looks like this:
-  //  <descriptiveName>_ABCDE_E2_F_G
-  //    A - fetchDeferLateScripts (1 for true, 0 for false)
-  //    B - fetchIncreaseFontPriority (1 for true, 0 for false)
-  //    C - fetchIncreaseAsyncScriptPriority (1 for true, 0 for false)
-  //    D - fetchIncreasePriorities (1 for true, 0 for false)
-  //    E - fetchEnableLayoutBlockingThreshold (1 for true, 0 for false)
-  //    E2 - fetchLayoutBlockingThreshold (Numeric)
-  //    F - fetchMaxNumDelayableWhileLayoutBlocking (Numeric)
-  //    G - fetchMaxNumDelayableRequests (Numeric)
-  //
-  // Only A-D are relevant to blink and exposed as settings
-  // Any group names (Control, Default, etc) will not match the pattern or
-  // flags and will get the default settings which is the expected behavior.
-  std::string resource_priorities_trial_group =
-      base::FieldTrialList::FindFullName("ResourcePriorities");
-  std::vector<std::string> split_group(
-      base::SplitString(resource_priorities_trial_group, "_",
-                        base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL));
-  if (split_group.size() == 5 && split_group[1].length() == 5) {
-    if (split_group[1].at(0) == '1')
-      blink_settings.push_back("fetchDeferLateScripts=true");
-    if (split_group[1].at(1) == '1')
-      blink_settings.push_back("fetchIncreaseFontPriority=true");
-    if (split_group[1].at(2) == '1')
-      blink_settings.push_back("fetchIncreaseAsyncScriptPriority=true");
-    if (split_group[1].at(3) == '1')
-      blink_settings.push_back("fetchIncreasePriorities=true");
   }
 
   if (blink_settings.empty()) {

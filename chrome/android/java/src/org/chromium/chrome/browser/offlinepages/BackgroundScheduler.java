@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.offlinepages;
 
 import android.content.Context;
 import android.os.Bundle;
-import android.os.SystemClock;
 
 import com.google.android.gms.gcm.GcmNetworkManager;
 import com.google.android.gms.gcm.OneoffTask;
@@ -19,7 +18,7 @@ import org.chromium.chrome.browser.ChromeBackgroundService;
  */
 public class BackgroundScheduler {
     /** Bundle key for the timestamp in milliseconds when the request started. */
-    private static final String DATE_TAG = "Date";
+    public static final String DATE_TAG = "Date";
     private static final long ONE_WEEK_IN_SECONDS = 60 * 60 * 24 * 7;
 
     /**
@@ -35,7 +34,7 @@ public class BackgroundScheduler {
         // Triggering conditions will include network state and charging requirements, maybe
         // also battery percentage.
         Bundle taskExtras = new Bundle();
-        taskExtras.putLong(DATE_TAG, SystemClock.elapsedRealtime());
+        taskExtras.putLong(DATE_TAG, System.currentTimeMillis());
 
         Task task = new OneoffTask.Builder()
                 .setService(ChromeBackgroundService.class)
@@ -45,6 +44,7 @@ public class BackgroundScheduler {
                 .setRequiredNetwork(Task.NETWORK_STATE_CONNECTED)
                 .setRequiresCharging(false)
                 .setExtras(taskExtras)
+                .setPersisted(true)
                 .build();
 
         gcmNetworkManager.schedule(task);

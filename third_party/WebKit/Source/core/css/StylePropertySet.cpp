@@ -24,8 +24,8 @@
 
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyMetadata.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/StylePropertySerializer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
@@ -77,7 +77,7 @@ ImmutableStylePropertySet::ImmutableStylePropertySet(const CSSProperty* properti
     : StylePropertySet(cssParserMode, length)
 {
     StylePropertyMetadata* metadataArray = const_cast<StylePropertyMetadata*>(this->metadataArray());
-    Member<CSSValue>* valueArray = const_cast<Member<CSSValue>*>(this->valueArray());
+    Member<const CSSValue>* valueArray = const_cast<Member<const CSSValue>*>(this->valueArray());
     for (unsigned i = 0; i < m_arraySize; ++i) {
         metadataArray[i] = properties[i].metadata();
         valueArray[i] = properties[i].value();
@@ -132,7 +132,7 @@ template CORE_EXPORT int ImmutableStylePropertySet::findPropertyIndex(AtomicStri
 
 DEFINE_TRACE_AFTER_DISPATCH(ImmutableStylePropertySet)
 {
-    const Member<CSSValue>* values = valueArray();
+    const Member<const CSSValue>* values = valueArray();
     for (unsigned i = 0; i < m_arraySize; i++)
         visitor->trace(values[i]);
     StylePropertySet::traceAfterDispatch(visitor);
@@ -340,7 +340,7 @@ bool MutableStylePropertySet::setProperty(const CSSProperty& property, CSSProper
 
 bool MutableStylePropertySet::setProperty(CSSPropertyID propertyID, CSSValueID identifier, bool important)
 {
-    setProperty(CSSProperty(propertyID, cssValuePool().createIdentifierValue(identifier), important));
+    setProperty(CSSProperty(propertyID, CSSPrimitiveValue::createIdentifier(identifier), important));
     return true;
 }
 

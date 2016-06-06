@@ -103,6 +103,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kWPADQuickCheckEnabled,
     prefs::kQuickCheckEnabled,
     base::Value::TYPE_BOOLEAN },
+  { key::kPacHttpsUrlStrippingEnabled,
+    prefs::kPacHttpsUrlStrippingEnabled,
+    base::Value::TYPE_BOOLEAN },
   { key::kDisableSpdy,
     prefs::kDisableSpdy,
     base::Value::TYPE_BOOLEAN },
@@ -389,9 +392,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kSSLVersionFallbackMin,
     ssl_config::prefs::kSSLVersionFallbackMin,
     base::Value::TYPE_STRING },
-  { key::kRC4Enabled,
-    ssl_config::prefs::kRC4Enabled,
-    base::Value::TYPE_BOOLEAN },
 
 #if !defined(OS_MACOSX)
   { key::kFullscreenAllowed,

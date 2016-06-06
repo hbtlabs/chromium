@@ -52,6 +52,7 @@
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/html/LabelsNodeList.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutFileUploadControl.h"
@@ -1442,13 +1443,6 @@ AXObject* AXLayoutObject::accessibilityHitTest(const IntPoint& point) const
 
     Node* node = hitTestResult.innerNode();
 
-    // MediaDocument has a special shadow root for displaying the save button.
-    bool allowNodeInShadowTree = node->document().isMediaDocument() && RuntimeEnabledFeatures::mediaDocumentDownloadButtonEnabled();
-
-    // Allow the hit test to return media control buttons.
-    if (node->isInShadowTree() && (!isHTMLInputElement(*node) || !node->isMediaControlElement()) && !allowNodeInShadowTree)
-        node = node->shadowHost();
-
     if (isHTMLAreaElement(node))
         return accessibilityImageMapHitTest(toHTMLAreaElement(node), point);
 
@@ -2497,12 +2491,17 @@ LayoutRect AXLayoutObject::computeElementRect() const
     if (isWebArea() && obj->frame()->view())
         result.setSize(LayoutSize(obj->frame()->view()->contentsSize()));
 
-    // Checkboxes and radio buttons include their label as part of their rect.
-    if (isCheckboxOrRadio()) {
-        HTMLLabelElement* label = labelForElement(toElement(m_layoutObject->node()));
-        if (label && label->layoutObject()) {
-            LayoutRect labelRect = axObjectCache().getOrCreate(label)->elementRect();
-            result.unite(labelRect);
+    // Checkboxes and radio buttons include their labels as part of their rect.
+    if (isCheckboxOrRadio() && isLabelableElement(obj->node())) {
+        LabelsNodeList* labels = toLabelableElement(obj->node())->labels();
+        if (labels) {
+            for (unsigned labelIndex = 0; labelIndex < labels->length(); ++labelIndex) {
+                AXObject* labelAXObject = axObjectCache().getOrCreate(labels->item(labelIndex));
+                if (labelAXObject) {
+                    LayoutRect labelRect = labelAXObject->elementRect();
+                    result.unite(labelRect);
+                }
+            }
         }
     }
 

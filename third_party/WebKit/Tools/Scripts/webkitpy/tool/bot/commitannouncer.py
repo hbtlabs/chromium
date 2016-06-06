@@ -88,7 +88,8 @@ class CommitAnnouncer(SingleServerIRCBot):
     def stop(self, message=""):
         self.connection.execute_delayed(0, lambda: self.die(message))
 
-    # IRC event handlers.
+    # IRC event handlers. Methods' arguments are determined by superclass
+    # and some arguments maybe unused - pylint: disable=unused-argument
 
     def on_nicknameinuse(self, connection, event):
         connection.nick('%s_' % connection.get_nickname())
@@ -110,7 +111,7 @@ class CommitAnnouncer(SingleServerIRCBot):
                     return False
             try:
                 self.git.ensure_cleanly_tracking_remote_master()
-            except ScriptError, e:
+            except ScriptError as e:
                 _log.error('Failed to clean repository: %s' % e)
                 return False
 
@@ -130,7 +131,7 @@ class CommitAnnouncer(SingleServerIRCBot):
             try:
                 self.git.pull()
                 return True
-            except ScriptError, e:
+            except ScriptError as e:
                 _log.error('Error pulling from server: %s' % e)
                 _log.error('Output: %s' % e.output)
             attempts += 1

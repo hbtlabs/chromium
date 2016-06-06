@@ -284,7 +284,9 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
       app_sync_ui_state_->AddObserver(this);
   }
 
-  arc_deferred_launcher_.reset(new ArcAppDeferredLauncherController(this));
+  if (arc::ArcAuthService::IsAllowedForProfile(profile_)) {
+    arc_deferred_launcher_.reset(new ArcAppDeferredLauncherController(this));
+  }
 
   // All profile relevant settings get bound to the current profile.
   AttachProfile(profile_);
@@ -837,10 +839,6 @@ void ChromeLauncherController::PersistPinnedState() {
       prefs::kPinnedLauncherApps,
       base::Bind(&ChromeLauncherController::UpdateAppLaunchersFromPref,
                  base::Unretained(this)));
-}
-
-ash::ShelfModel* ChromeLauncherController::model() {
-  return model_;
 }
 
 Profile* ChromeLauncherController::profile() {
@@ -1702,7 +1700,8 @@ ChromeLauncherController::GetBrowserShortcutLauncherItemController() {
     if (item.type == ash::TYPE_BROWSER_SHORTCUT)
       return static_cast<BrowserShortcutLauncherItemController*>(i->second);
   }
-  NOTREACHED() << "There should be always a BrowserLauncherItemController.";
+  NOTREACHED()
+      << "There should be always be a BrowserShortcutLauncherItemController.";
   return nullptr;
 }
 
@@ -1715,7 +1714,7 @@ ash::ShelfID ChromeLauncherController::CreateBrowserShortcutLauncherItem() {
   size_t index = GetChromeIconIndexForCreation();
   model_->AddAt(index, browser_shortcut);
   id_to_item_controller_map_[id] =
-      new BrowserShortcutLauncherItemController(this);
+      new BrowserShortcutLauncherItemController(this, model_);
   id_to_item_controller_map_[id]->set_shelf_id(id);
   // ShelfItemDelegateManager owns BrowserShortcutLauncherItemController.
   SetShelfItemDelegate(id, id_to_item_controller_map_[id]);
@@ -1851,11 +1850,13 @@ void ChromeLauncherController::AttachProfile(Profile* profile) {
           profile_, extension_misc::EXTENSION_ICON_SMALL, this));
   app_icon_loaders_.push_back(std::move(extension_app_icon_loader));
 
-  DCHECK(arc_deferred_launcher());
-  std::unique_ptr<AppIconLoader> arc_app_icon_loader(
-      new ArcAppIconLoader(profile_, extension_misc::EXTENSION_ICON_SMALL,
-                           arc_deferred_launcher(), this));
-  app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
+  if (arc::ArcAuthService::IsAllowedForProfile(profile_)) {
+    DCHECK(arc_deferred_launcher());
+    std::unique_ptr<AppIconLoader> arc_app_icon_loader(
+        new ArcAppIconLoader(profile_, extension_misc::EXTENSION_ICON_SMALL,
+                             arc_deferred_launcher(), this));
+    app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
+  }
 
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
@@ -1888,9 +1889,11 @@ void ChromeLauncherController::AttachProfile(Profile* profile) {
       new LauncherExtensionAppUpdater(this, profile_));
   app_updaters_.push_back(std::move(extension_app_updater));
 
-  std::unique_ptr<LauncherAppUpdater> arc_app_updater(
-      new LauncherArcAppUpdater(this, profile_));
-  app_updaters_.push_back(std::move(arc_app_updater));
+  if (arc::ArcAuthService::IsAllowedForProfile(profile_)) {
+    std::unique_ptr<LauncherAppUpdater> arc_app_updater(
+        new LauncherArcAppUpdater(this, profile_));
+    app_updaters_.push_back(std::move(arc_app_updater));
+  }
 }
 
 void ChromeLauncherController::ReleaseProfile() {

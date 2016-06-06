@@ -52,6 +52,7 @@
 #include "ipc/ipc_switches.h"
 #include "ipc/message_filter.h"
 #include "media/base/media_switches.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/latency_info.h"
 #include "ui/gl/gl_switches.h"
@@ -407,7 +408,8 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       kind_(kind),
       process_launched_(false),
       initialized_(false),
-      uma_memory_stats_received_(false) {
+      uma_memory_stats_received_(false),
+      child_token_(mojo::edk::GenerateRandomToken()) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -431,7 +433,8 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       FROM_HERE,
       base::Bind(base::IgnoreResult(&GpuProcessHostUIShim::Create), host_id));
 
-  process_.reset(new BrowserChildProcessHostImpl(PROCESS_TYPE_GPU, this));
+  process_.reset(new BrowserChildProcessHostImpl(PROCESS_TYPE_GPU, this,
+                                                 child_token_));
 }
 
 GpuProcessHost::~GpuProcessHost() {
@@ -544,7 +547,7 @@ bool GpuProcessHost::Init() {
     return false;
 
   DCHECK(!mojo_application_host_);
-  mojo_application_host_.reset(new MojoApplicationHost);
+  mojo_application_host_.reset(new MojoApplicationHost(child_token_));
 
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
@@ -879,18 +882,24 @@ void GpuProcessHost::OnDidLoseContext(bool offscreen,
     return;
   }
 
-  GpuDataManagerImpl::DomainGuilt guilt;
+  GpuDataManagerImpl::DomainGuilt guilt =
+      GpuDataManagerImpl::DOMAIN_GUILT_UNKNOWN;
   switch (reason) {
     case gpu::error::kGuilty:
       guilt = GpuDataManagerImpl::DOMAIN_GUILT_KNOWN;
       break;
+    // Treat most other error codes as though they had unknown provenance.
+    // In practice this doesn't affect the user experience. A lost context
+    // of either known or unknown guilt still causes user-level 3D APIs
+    // (e.g. WebGL) to be blocked on that domain until the user manually
+    // reenables them.
     case gpu::error::kUnknown:
-      guilt = GpuDataManagerImpl::DOMAIN_GUILT_UNKNOWN;
+    case gpu::error::kOutOfMemory:
+    case gpu::error::kMakeCurrentFailed:
+    case gpu::error::kGpuChannelLost:
+    case gpu::error::kInvalidGpuMessage:
       break;
     case gpu::error::kInnocent:
-      return;
-    default:
-      NOTREACHED();
       return;
   }
 

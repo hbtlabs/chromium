@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include "ash/shell_window_ids.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -152,9 +152,9 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_LOGIN_JS);
   }
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
-  source->OverrideContentSecurityPolicyFrameSrc(
+  source->OverrideContentSecurityPolicyChildSrc(
       base::StringPrintf(
-          "frame-src chrome://terms/ %s/;",
+          "child-src chrome://terms/ %s/;",
           extensions::kGaiaAuthExtensionOrigin));
   source->OverrideContentSecurityPolicyObjectSrc("object-src *;");
   source->AddResourcePath("gaia_auth_host.js",

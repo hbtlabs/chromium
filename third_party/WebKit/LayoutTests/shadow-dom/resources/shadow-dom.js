@@ -67,27 +67,27 @@ function getNodeInComposedTree(path)
 
 function createTestTree(node) {
 
-  let labels = {};
+  let ids = {};
 
   function attachShadowFromTemplate(template) {
     let parent = template.parentNode;
     parent.removeChild(template);
     let shadowRoot = parent.attachShadow({mode: template.getAttribute('data-mode')});
-    let label = template.getAttribute('label');
-    if (label) {
-      shadowRoot.id = label;
-      labels[label] = shadowRoot;
+    let id = template.id;
+    if (id) {
+      shadowRoot.id = id;
+      ids[id] = shadowRoot;
     }
     shadowRoot.appendChild(document.importNode(template.content, true));
     return shadowRoot;
   }
 
   function walk(root) {
-    if (root.getAttribute && root.getAttribute('label')) {
-      labels[root.getAttribute('label')] = root;
+    if (root.id) {
+      ids[root.id] = root;
     }
-    for (let e of Array.from(root.querySelectorAll('[label]'))) {
-      labels[e.getAttribute('label')] = e;
+    for (let e of Array.from(root.querySelectorAll('[id]'))) {
+      ids[e.id] = e;
     }
     for (let e of Array.from(root.querySelectorAll('template'))) {
       walk(attachShadowFromTemplate(e));
@@ -95,15 +95,12 @@ function createTestTree(node) {
   }
 
   walk(node.cloneNode(true));
-  return labels;
+  return ids;
 }
 
 function dispatchEventWithLog(nodes, target, event) {
 
   function labelFor(e) {
-    if (e.getAttribute && e.getAttribute('label')) {
-      return e.getAttribute('label');
-    }
     return e.id || e.tagName;
   }
 
@@ -114,12 +111,12 @@ function dispatchEventWithLog(nodes, target, event) {
     for (let node = startingNode; node; node = node.parentNode) {
       if (attachedNodes.indexOf(node) >= 0)
         continue;
-      let label = labelFor(node);
-      if (!label)
+      let id = node.id;
+      if (!id)
         continue;
       attachedNodes.push(node);
       node.addEventListener(event.type, (e) => {
-        log.push([label,
+        log.push([id,
                   event.relatedTarget ? labelFor(event.relatedTarget) : null,
                   event.composedPath().map((n) => {
                     return labelFor(n);
@@ -129,4 +126,44 @@ function dispatchEventWithLog(nodes, target, event) {
   }
   target.dispatchEvent(event);
   return log;
+}
+
+function dispatchUAEventWithLog(nodes, target, eventType, callback) {
+
+  function labelFor(e) {
+    return e.id || e.tagName;
+  }
+
+  let log = [];
+  let attachedNodes = [];
+  for (let label in nodes) {
+    let startingNode = nodes[label];
+    for (let node = startingNode; node; node = node.parentNode) {
+      if (attachedNodes.indexOf(node) >= 0)
+        continue;
+      let id = node.id;
+      if (!id)
+        continue;
+      attachedNodes.push(node);
+      node.addEventListener(eventType, (e) => {
+        log.push([id,
+                  event.relatedTarget ? labelFor(event.relatedTarget) : null,
+                  event.composedPath().map((n) => {
+                    return labelFor(n);
+                  })]);
+      });
+    }
+  }
+  callback(target);
+  return log;
+}
+
+// This function assumes that testharness.js is available.
+function assert_event_path_equals(actual, expected) {
+  assert_equals(actual.length, expected.length);
+  for (let i = 0; i < actual.length; ++i) {
+    assert_equals(actual[i][0], expected[i][0], 'currentTarget at ' + i + ' should be same');
+    assert_equals(actual[i][1], expected[i][1], 'relatedTarget at ' + i + ' should be same');
+    assert_array_equals(actual[i][2], expected[i][2], 'composedPath at ' + i + ' should be same');
+  }
 }

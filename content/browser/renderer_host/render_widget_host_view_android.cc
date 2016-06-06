@@ -27,7 +27,6 @@
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/output/latency_info_swap_promise.h"
-#include "cc/output/viewport_selection_bound.h"
 #include "cc/resources/single_release_callback.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_factory.h"
@@ -51,7 +50,6 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/frame_metadata_util.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_android.h"
-#include "content/browser/renderer_host/input/ui_touch_selection_helper.h"
 #include "content/browser/renderer_host/input/web_input_event_builders_android.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -870,15 +868,16 @@ void RenderWidgetHostViewAndroid::CopyFromCompositingSurface(
     const ReadbackRequestCallback& callback,
     const SkColorType preferred_color_type) {
   TRACE_EVENT0("cc", "RenderWidgetHostViewAndroid::CopyFromCompositingSurface");
-  if (!host_ || host_->is_hidden()) {
+  if (!host_ || host_->is_hidden() || !IsSurfaceAvailableForCopy()) {
     callback.Run(SkBitmap(), READBACK_SURFACE_UNAVAILABLE);
     return;
   }
+  if (!content_view_core_ || !(content_view_core_->GetWindowAndroid())) {
+    callback.Run(SkBitmap(), READBACK_FAILED);
+    return;
+  }
+
   base::TimeTicks start_time = base::TimeTicks::Now();
-  if (!IsSurfaceAvailableForCopy()) {
-    callback.Run(SkBitmap(), READBACK_SURFACE_UNAVAILABLE);
-    return;
-  }
   const display::Display& display =
       display::Screen::GetScreen()->GetPrimaryDisplay();
   float device_scale_factor = display.device_scale_factor();
@@ -895,20 +894,18 @@ void RenderWidgetHostViewAndroid::CopyFromCompositingSurface(
     return;
   }
 
-  if (!content_view_core_ || !(content_view_core_->GetWindowAndroid())) {
-    callback.Run(SkBitmap(), READBACK_FAILED);
-    return;
-  }
   ui::WindowAndroidCompositor* compositor =
       content_view_core_->GetWindowAndroid()->GetCompositor();
   DCHECK(compositor);
   DCHECK(!surface_id_.is_null());
   std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateRequest(
-          base::Bind(&PrepareTextureCopyOutputResult, dst_size_in_pixel,
-                     preferred_color_type, start_time, callback));
+      cc::CopyOutputRequest::CreateRequest(base::Bind(
+          &PrepareTextureCopyOutputResult, weak_ptr_factory_.GetWeakPtr(),
+          dst_size_in_pixel, preferred_color_type, start_time, callback));
   if (!src_subrect_in_pixel.IsEmpty())
     request->set_area(src_subrect_in_pixel);
+  // Make sure the layer doesn't get deleted until we fulfill the request.
+  LockCompositingSurface();
   layer_->RequestCopyOfOutput(std::move(request));
 }
 
@@ -1287,8 +1284,7 @@ void RenderWidgetHostViewAndroid::OnFrameMetadataUpdated(
     selection_controller_->OnSelectionEmpty(
         frame_metadata.selection.is_empty_text_form_control);
     selection_controller_->OnSelectionBoundsChanged(
-        ConvertSelectionBound(frame_metadata.selection.start),
-        ConvertSelectionBound(frame_metadata.selection.end));
+        frame_metadata.selection.start, frame_metadata.selection.end);
 
     // Set parameters for adaptive handle orientation.
     gfx::SizeF viewport_size(frame_metadata.scrollable_viewport_size);
@@ -1413,11 +1409,6 @@ void RenderWidgetHostViewAndroid::RequestVSyncUpdate(uint32_t requests) {
   bool should_request_vsync = !outstanding_vsync_requests_ && requests;
   outstanding_vsync_requests_ |= requests;
 
-  // If the host has been hidden, defer vsync requests until it is shown
-  // again via |Show()|.
-  if (!host_ || host_->is_hidden())
-    return;
-
   // Note that if we're not currently observing the root window, outstanding
   // vsync requests will be pushed if/when we resume observing in
   // |StartObservingRootWindow()|.
@@ -1435,6 +1426,8 @@ void RenderWidgetHostViewAndroid::StartObservingRootWindow() {
     return;
 
   observing_root_window_ = true;
+  if (host_)
+    host_->Send(new ViewMsg_SetBeginFramePaused(host_->GetRoutingID(), false));
   content_view_core_->GetWindowAndroid()->AddObserver(this);
 
   // Clear existing vsync requests to allow a request to the new window.
@@ -1456,6 +1449,8 @@ void RenderWidgetHostViewAndroid::StopObservingRootWindow() {
   is_window_activity_started_ = true;
   is_window_visible_ = true;
   observing_root_window_ = false;
+  if (host_)
+    host_->Send(new ViewMsg_SetBeginFramePaused(host_->GetRoutingID(), true));
   content_view_core_->GetWindowAndroid()->RemoveObserver(this);
 }
 
@@ -1464,22 +1459,17 @@ void RenderWidgetHostViewAndroid::SendBeginFrame(base::TimeTicks frame_time,
   TRACE_EVENT1("cc", "RenderWidgetHostViewAndroid::SendBeginFrame",
                "frame_time_us", frame_time.ToInternalValue());
 
-  if (using_browser_compositor_) {
-    // TODO(brianderson): Replace this hardcoded deadline after Android
-    // switches to Surfaces and the Browser's commit isn't in the critcal path.
-    base::TimeTicks deadline = frame_time + (vsync_period * 0.6);
-
-    host_->Send(new ViewMsg_BeginFrame(
-        host_->GetRoutingID(),
-        cc::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, frame_time, deadline,
-                                   vsync_period, cc::BeginFrameArgs::NORMAL)));
-  } else if (sync_compositor_) {
-    // The synchronous compositor synchronously does it's work in this call.
-    // It does not use a deadline.
-    sync_compositor_->BeginFrame(cc::BeginFrameArgs::Create(
-        BEGINFRAME_FROM_HERE, frame_time, base::TimeTicks(), vsync_period,
-        cc::BeginFrameArgs::NORMAL));
-  }
+  // Synchronous compositor does not use deadline-based scheduling.
+  // TODO(brianderson): Replace this hardcoded deadline after Android
+  // switches to Surfaces and the Browser's commit isn't in the critcal path.
+  base::TimeTicks deadline =
+      sync_compositor_ ? base::TimeTicks() : frame_time + (vsync_period * 0.6);
+  host_->Send(new ViewMsg_BeginFrame(
+      host_->GetRoutingID(),
+      cc::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, frame_time, deadline,
+                                 vsync_period, cc::BeginFrameArgs::NORMAL)));
+  if (sync_compositor_)
+    sync_compositor_->DidSendBeginFrame();
 }
 
 bool RenderWidgetHostViewAndroid::Animate(base::TimeTicks frame_time) {
@@ -1601,8 +1591,6 @@ InputEventAckState RenderWidgetHostViewAndroid::FilterInputEvent(
       shim->Send(new GpuMsg_WakeUpGpu);
   }
 
-  if (sync_compositor_)
-    return sync_compositor_->HandleInputEvent(input_event);
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
@@ -1700,8 +1688,8 @@ void RenderWidgetHostViewAndroid::OnShowingPastePopup(
   // of the region have been updated, explicitly set the properties now.
   // TODO(jdduke): Remove this workaround when auxiliary paste popup
   // notifications are no longer required, crbug.com/398170.
-  ui::SelectionBound insertion_bound;
-  insertion_bound.set_type(ui::SelectionBound::CENTER);
+  gfx::SelectionBound insertion_bound;
+  insertion_bound.set_type(gfx::SelectionBound::CENTER);
   insertion_bound.set_visible(true);
   insertion_bound.SetEdge(point, point);
   selection_controller_->HideAndDisallowShowingAutomatically();
@@ -1874,7 +1862,7 @@ void RenderWidgetHostViewAndroid::OnDetachCompositor() {
 void RenderWidgetHostViewAndroid::OnVSync(base::TimeTicks frame_time,
                                           base::TimeDelta vsync_period) {
   TRACE_EVENT0("cc,benchmark", "RenderWidgetHostViewAndroid::OnVSync");
-  if (!host_ || host_->is_hidden())
+  if (!host_)
     return;
 
   if (outstanding_vsync_requests_ & FLUSH_INPUT) {
@@ -1928,6 +1916,7 @@ void RenderWidgetHostViewAndroid::OnLostResources() {
 
 // static
 void RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult(
+    base::WeakPtr<RenderWidgetHostViewAndroid> rwhva,
     const gfx::Size& dst_size_in_pixel,
     SkColorType color_type,
     const base::TimeTicks& start_time,
@@ -1937,9 +1926,21 @@ void RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult(
       base::Bind(callback, SkBitmap(), READBACK_FAILED));
   TRACE_EVENT0("cc",
                "RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult");
-
+  if (rwhva)
+    rwhva->UnlockCompositingSurface();
   if (!result->HasTexture() || result->IsEmpty() || result->size().IsEmpty())
     return;
+  cc::TextureMailbox texture_mailbox;
+  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
+  result->TakeTexture(&texture_mailbox, &release_callback);
+  DCHECK(texture_mailbox.IsTexture());
+  if (!texture_mailbox.IsTexture())
+    return;
+  display_compositor::GLHelper* gl_helper = GetPostReadbackGLHelper();
+  if (!gl_helper)
+    return;
+  if (!gl_helper->IsReadbackConfigSupported(color_type))
+    color_type = kRGBA_8888_SkColorType;
 
   gfx::Size output_size_in_pixel;
   if (dst_size_in_pixel.IsEmpty())
@@ -1947,11 +1948,6 @@ void RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult(
   else
     output_size_in_pixel = dst_size_in_pixel;
 
-  display_compositor::GLHelper* gl_helper = GetPostReadbackGLHelper();
-  if (!gl_helper)
-    return;
-  if (!gl_helper->IsReadbackConfigSupported(color_type))
-    color_type = kRGBA_8888_SkColorType;
   std::unique_ptr<SkBitmap> bitmap(new SkBitmap);
   if (!bitmap->tryAllocPixels(SkImageInfo::Make(output_size_in_pixel.width(),
                                                 output_size_in_pixel.height(),
@@ -1965,13 +1961,6 @@ void RenderWidgetHostViewAndroid::PrepareTextureCopyOutputResult(
   std::unique_ptr<SkAutoLockPixels> bitmap_pixels_lock(
       new SkAutoLockPixels(*bitmap));
   uint8_t* pixels = static_cast<uint8_t*>(bitmap->getPixels());
-
-  cc::TextureMailbox texture_mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
-  result->TakeTexture(&texture_mailbox, &release_callback);
-  DCHECK(texture_mailbox.IsTexture());
-  if (!texture_mailbox.IsTexture())
-    return;
 
   ignore_result(scoped_callback_runner.Release());
 

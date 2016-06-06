@@ -2537,6 +2537,10 @@ void FrameView::synchronizedPaint()
         if (!layoutViewItem.isNull())
             layoutViewItem.layer()->clearNeedsRepaintRecursively();
     });
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
 void FrameView::synchronizedPaintRecursively(GraphicsLayer* graphicsLayer)
@@ -2592,6 +2596,9 @@ void FrameView::updateStyleAndLayoutIfNeededRecursiveInternal()
 {
     if (shouldThrottleRendering())
         return;
+
+    ScopedFrameBlamer frameBlamer(m_frame);
+    TRACE_EVENT0("blink", "FrameView::updateStyleAndLayoutIfNeededRecursive");
 
     // We have to crawl our entire subtree looking for any FrameViews that need
     // layout and make sure they are up to date.

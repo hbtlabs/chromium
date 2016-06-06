@@ -28,7 +28,11 @@ enum class FullScreenMode {
   ACTIVE,       // Fullscreen is activated for an app.
   NON_ACTIVE,   // Fullscreen was not activated for an app.
 };
+
+std::string GetShelfAppId(const std::string& app_id) {
+  return app_id == arc::kPlayStoreAppId ? ArcSupportHost::kHostAppId : app_id;
 }
+}  // namespace
 
 class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
  public:
@@ -176,19 +180,26 @@ class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
 ArcAppWindowLauncherController::ArcAppWindowLauncherController(
     ChromeLauncherController* owner)
     : AppWindowLauncherController(owner) {
-  aura::Env* env = aura::Env::GetInstanceDontCreate();
-  if (env)
-    env->AddObserver(this);
-  ArcAppListPrefs::Get(owner->profile())->AddObserver(this);
+  if (arc::ArcAuthService::IsAllowedForProfile(owner->profile())) {
+    observed_profile_ = owner->profile();
+    StartObserving(observed_profile_);
+  }
 }
 
 ArcAppWindowLauncherController::~ArcAppWindowLauncherController() {
-  for (auto window : observed_windows_)
-    window->RemoveObserver(this);
-  ArcAppListPrefs::Get(owner()->profile())->RemoveObserver(this);
-  aura::Env* env = aura::Env::GetInstanceDontCreate();
-  if (env)
-    env->RemoveObserver(this);
+  if (observed_profile_)
+    StopObserving(observed_profile_);
+}
+
+void ArcAppWindowLauncherController::ActiveUserChanged(
+    const std::string& user_email) {
+  // TODO(xdai): Traverse the Arc App list to show / hide the apps one by one
+  // if there are Arc Apps running.
+}
+
+void ArcAppWindowLauncherController::AdditionalUserAddedToSession(
+    Profile* profile) {
+  DCHECK(!arc::ArcAuthService::IsAllowedForProfile(profile));
 }
 
 void ArcAppWindowLauncherController::OnWindowInitialized(aura::Window* window) {
@@ -242,16 +253,7 @@ void ArcAppWindowLauncherController::CheckForAppWindowWidget(
     AppWindow* app_window = GetAppWindowForTask(task_id);
     if (app_window)
       app_window->set_widget(views::Widget::GetWidgetForNativeWindow(window));
-  } else {
-    // task_id=0 is the default window. It will not contain any real
-    // apps so best if it's ignored by the shelf for purposes of darkening
-    // and always on top.
-    ash::wm::GetWindowState(window)->set_ignored_by_shelf(true);
-    window->SetProperty(aura::client::kAlwaysOnTopKey, true);
   }
-
-  // Apps do their own animation and don't want any from the system.
-  window->SetProperty(aura::client::kAnimationsDisabledKey, true);
 }
 
 void ArcAppWindowLauncherController::OnAppReadyChanged(
@@ -289,7 +291,7 @@ void ArcAppWindowLauncherController::OnTaskCreated(
   std::unique_ptr<AppWindow> app_window(new AppWindow(task_id, this));
 
   const std::string app_id =
-      ArcAppListPrefs::GetAppId(package_name, activity_name);
+      GetShelfAppId(ArcAppListPrefs::GetAppId(package_name, activity_name));
 
   ArcAppWindowLauncherItemController* controller;
   AppControllerMap::iterator it = app_controller_map_.find(app_id);
@@ -299,14 +301,11 @@ void ArcAppWindowLauncherController::OnTaskCreated(
     DCHECK_EQ(controller->app_id(), app_id);
     shelf_id = controller->shelf_id();
   } else {
-    const std::string shelf_app_id =
-        app_id == arc::kPlayStoreAppId ? ArcSupportHost::kHostAppId : app_id;
-    controller =
-        new ArcAppWindowLauncherItemController(shelf_app_id, app_id, owner());
-    shelf_id = owner()->GetShelfIDForAppID(shelf_app_id);
+    controller = new ArcAppWindowLauncherItemController(app_id, owner());
+    shelf_id = owner()->GetShelfIDForAppID(app_id);
     if (shelf_id == 0) {
       // Map Play Store shelf icon to Arc Support host, to share one entry.
-      shelf_id = owner()->CreateAppLauncherItem(controller, shelf_app_id,
+      shelf_id = owner()->CreateAppLauncherItem(controller, app_id,
                                                 ash::STATUS_RUNNING);
     } else {
       owner()->SetItemController(shelf_id, controller);
@@ -401,4 +400,23 @@ void ArcAppWindowLauncherController::OnWindowActivated(
     aura::Window* gained_active,
     aura::Window* lost_active) {
   OnTaskSetActive(active_task_id_);
+}
+
+void ArcAppWindowLauncherController::StartObserving(Profile* profile) {
+  aura::Env* env = aura::Env::GetInstanceDontCreate();
+  if (env)
+    env->AddObserver(this);
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
+  DCHECK(prefs);
+  prefs->AddObserver(this);
+}
+
+void ArcAppWindowLauncherController::StopObserving(Profile* profile) {
+  for (auto window : observed_windows_)
+    window->RemoveObserver(this);
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
+  prefs->RemoveObserver(this);
+  aura::Env* env = aura::Env::GetInstanceDontCreate();
+  if (env)
+    env->RemoveObserver(this);
 }

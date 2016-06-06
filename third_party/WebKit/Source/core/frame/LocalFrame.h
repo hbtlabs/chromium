@@ -61,20 +61,20 @@ class InputMethodController;
 class IntPoint;
 class IntSize;
 class InstrumentingAgents;
+class LayoutView;
 class LayoutViewItem;
 class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
 class NodeTraversal;
+template <typename Strategy> class PositionWithAffinityTemplate;
 class PluginData;
 class Range;
-class LayoutView;
 class ScriptController;
 class ServiceRegistry;
 class SpellChecker;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
-template <typename Strategy> class PositionWithAffinityTemplate;
 
 class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
@@ -309,6 +309,30 @@ class FrameNavigationDisabler {
 public:
     explicit FrameNavigationDisabler(LocalFrame&);
     ~FrameNavigationDisabler();
+
+private:
+    Member<LocalFrame> m_frame;
+};
+
+// A helper class for attributing cost inside a scope to a LocalFrame, with
+// output written to the trace log. The class is irrelevant to the core logic
+// of LocalFrame.  Sample usage:
+//
+// void foo(LocalFrame* frame)
+// {
+//     ScopedFrameBlamer frameBlamer(frame);
+//     TRACE_EVENT0("blink", "foo");
+//     // Do some real work...
+// }
+//
+// In Trace Viewer, we can find the cost of slice |foo| attributed to |frame|.
+// Design doc: https://docs.google.com/document/d/15BB-suCb9j-nFt55yCFJBJCGzLg2qUm3WaSOPb8APtI/edit?usp=sharing
+class ScopedFrameBlamer {
+    WTF_MAKE_NONCOPYABLE(ScopedFrameBlamer);
+    STACK_ALLOCATED();
+public:
+    explicit ScopedFrameBlamer(LocalFrame*);
+    ~ScopedFrameBlamer();
 
 private:
     Member<LocalFrame> m_frame;

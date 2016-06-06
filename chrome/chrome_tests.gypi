@@ -988,7 +988,7 @@
       'test/data/webui/async_gen.js',
       'test/data/webui/certificate_viewer_dialog_test.js',
       'test/data/webui/chrome_send_browsertest.js',
-      'test/data/webui/cr_elements_browsertest.js',
+      'test/data/webui/cr_elements/cr_elements_browsertest.js',
       'test/data/webui/extensions/cr_extensions_browsertest.js',
       'test/data/webui/history_browsertest.js',
       'test/data/webui/md_downloads/downloads_browsertest.js',
@@ -2176,7 +2176,7 @@
         '../components/components.gyp:ssl_config',
         '../components/components.gyp:test_database_manager',
         '../components/components.gyp:translate_core_common',
-        '../components/components.gyp:ui_zoom_test_support',
+        '../components/components.gyp:zoom_test_support',
         '../components/components_resources.gyp:components_resources',
         '../components/components_strings.gyp:components_strings',
         '../content/content.gyp:common_features',
@@ -2785,43 +2785,6 @@
       ],
       'sources': [
         '<@(performance_browser_tests_sources)',
-      ],
-      'rules': [
-        {
-          'rule_name': 'js2webui',
-          'extension': 'js',
-          'msvs_external_rule': 1,
-          'variables': {
-            'conditions': [
-              ['v8_use_external_startup_data==1', {
-                'external_v8': 'y',
-              }, {
-                'external_v8': 'n',
-              }],
-            ],
-          },
-          'inputs': [
-            '<(gypv8sh)',
-            '<(PRODUCT_DIR)/v8_shell<(EXECUTABLE_SUFFIX)',
-            '<(mock_js)',
-            '<(test_api_js)',
-            '<(js2gtest)',
-          ],
-          'outputs': [
-            '<(INTERMEDIATE_DIR)/chrome/<(RULE_INPUT_DIRNAME)/<(RULE_INPUT_ROOT)-gen.cc',
-            '<(PRODUCT_DIR)/test_data/chrome/<(RULE_INPUT_DIRNAME)/<(RULE_INPUT_ROOT).js',
-          ],
-          'process_outputs_as_sources': 1,
-          'action': [
-            'python',
-            '<@(_inputs)',
-            'webui',
-            '--external', '<(external_v8)',
-            '<(RULE_INPUT_PATH)',
-            'chrome/<(RULE_INPUT_DIRNAME)/<(RULE_INPUT_ROOT).js',
-            '<@(_outputs)',
-          ],
-        },
       ],
       'conditions': [
         ['OS=="win"', {

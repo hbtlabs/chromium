@@ -74,7 +74,6 @@ console-dir.html:39 Event
     eventPhase: 0
     isTrusted: false
     path: Array[0]
-    relatedTargetScoped: false
     returnValue: true
     srcElement: null
     target: null

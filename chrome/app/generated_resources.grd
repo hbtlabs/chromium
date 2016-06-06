@@ -375,19 +375,6 @@ are declared in build/common.gypi.
       <message name="IDS_WEBSITE_SETTINGS_MIXED_PASSIVE_CONTENT" desc="Text that is displayed in the header of the Website Settings popup if the website uses secure transport but included passive resources (e.g. images) over non-secure transport.">
         Your connection to this site is private, but someone on the network might be able to change the look of the page.
       </message>
-      <if expr="is_android or is_ios">
-        <message name="IDS_WEBSITE_SETTINGS_MALWARE" desc="Text that is displayed in the header of the Website Settings popup if the SafeBrowsing reports that the website is malicious or has been compromised by attackers seeking to install malware.">
-          Attackers may have compromised this site, and might attempt to install dangerous programs on your device that steal or delete your information (examples: photos, passwords, messages, and credit cards).
-        </message>
-      </if>
-      <if expr="not is_android and not is_ios">
-        <message name="IDS_WEBSITE_SETTINGS_MALWARE" desc="Text that is displayed in the header of the Website Settings popup if the SafeBrowsing reports that the website is malicious or has been compromised by attackers seeking to install malware.">
-          Attackers may have compromised this site, and might attempt to install dangerous programs on your computer that steal or delete your information (examples: photos, passwords, messages, and credit cards).
-        </message>
-      </if>
-      <message name="IDS_WEBSITE_SETTINGS_PHISHING" desc="Text that is displayed in the header of the Website Settings popup if the SafeBrowsing reports that the website is being used to conduct phishing attacks.">
-        This site might try to trick you to steal your information (examples: passwords, messages, or credit cards).
-      </message>
       <message name="IDS_WEBSITE_SETTINGS_FIRST_PARTY_SITE_DATA" desc="The label of the counts for allowed and blocked cookies and site data for the top-level origin (i.e. the origin in the Omnibox).">
         {NUM_COOKIES, plural, =1 {1 from this site} other {# from this site}}
       </message>
@@ -6017,12 +6004,27 @@ Keep your key file in a safe place. You will need it to create new versions of y
         <message name="IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN" desc="In Title Case: The title of the Sign in button in the account chooser when there is one account.">
           Sign In
         </message>
+        <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_SIGN_IN" desc="In Title Case: The title of the Sign in button in the bubble promoting Chrome sign-in.">
+          Sign In
+        </message>
+        <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_NO_THANKS" desc="In Title Case: The title of the No Thanks button in the bubble promoting Chrome sign-in.">
+          No Thanks
+        </message>
       </if>
       <if expr="not use_titlecase">
         <message name="IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN" desc="The title of the Sign in button in the account chooser when there is one account.">
           Sign in
         </message>
+        <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_SIGN_IN" desc="The title of the Sign in button in the bubble promoting Chrome sign-in.">
+          Sign in
+        </message>
+        <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_NO_THANKS" desc="The title of the No Thanks button in the bubble promoting Chrome sign-in.">
+          No thanks
+        </message>
       </if>
+      <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_TITLE" desc="Promotion text for Chrome sign-in appearing in the password bubble after a password is saved.">
+        Password saved. To get your passwords on all your devices, sign in to Chrome.
+      </message>
       <message name="IDS_PASSWORD_MANAGER_SAVE_PROMPT_FIRST_RUN_EXPERIENCE" desc="The message which explains to the user what is Smart Lock, when the user sees the branded title of the Save prompt for the first time.">
         Smart Lock helps you quickly sign in to apps and sites using passwords you have saved with Google.
       </message>
@@ -6685,6 +6687,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_ENABLE_APPCONTAINER_DESCRIPTION" desc="Description of the flag to enable AppContainer lockdown experiment.">
           Enables the use of an AppContainer on sandboxed processes to improve security.
+        </message>
+      </if>
+      <if expr="toolkit_views or is_android">
+        <message name="IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_NAME" desc="Name of the flag to enable uploading Autofill credit cards.">
+          Enable offering upload of Autofilled credit cards
+        </message>
+        <message name="IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_DESCRIPTION" desc="Description of the flag to enable uploading Autofill credit cards.">
+          Enables a new option to upload credit cards to Google Payments for sync to all Chrome devices.
         </message>
       </if>
       <message name="IDS_FLAGS_FORCE_UI_DIRECTION_NAME" desc="Name for the flag to force a specific UI direction.">
@@ -7975,8 +7985,8 @@ I don't think this site should be blocked!
         <message name="IDS_POPUPS_BLOCKED_INFOBAR_BUTTON_SHOW" desc="Pop-up Blocking Show Button [CHAR-LIMIT=32]">
           Always show
         </message>
-        <message name="IDS_POPUPS_BLOCKED_INFOBAR_TEXT" desc="Pop-up Blocking Title [CHAR-LIMIT=32]">
-          Pop-ups blocked (<ph name="POP_UP_COUNT">$1<ex>3</ex></ph>)
+        <message name="IDS_POPUPS_BLOCKED_INFOBAR_TEXT" desc="Pop-up Blocking Title [CHAR-LIMIT=32] [ICU Syntax]">
+          {NUM_POPUPS,plural,=1{A pop-up is blocked} other{# pop-ups are blocked}}
         </message>
       </if>
       <message name="IDS_PLUGIN_TAB_LABEL" desc="Label for Plugins tab on Content Settings dialog">
@@ -9285,6 +9295,9 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_ABOUT_PAGE_CHANNEL_DEVELOPMENT" desc="The development option in the channel select.">
           Developer - unstable
+        </message>
+        <message name="IDS_ABOUT_PAGE_CHANNEL_DEVELOPMENT_DISCLAIMER" desc="The disclaimer shown to warn the user when the development channel is used.">
+          This channel is not suitable for use on your primary device and certain features and apps might break.
         </message>
         <message name="IDS_ABOUT_PAGE_CHANNEL_CHANGED" desc="The message to confirm that channel has changed.">
           You have switched to the <ph name="CHANNEL_NAME">$1<ex>Stable</ex></ph> channel.
@@ -11864,9 +11877,6 @@ Some features may be unavailable.  Please check that the profile exists and you 
         <message name="IDS_NOTIFICATION_SETTINGS" desc="Button label to go to the notification settings panel">
           Notification settings
         </message>
-        <message name="IDS_MESSAGE_CENTER_FOOTER_WITH_PRODUCT_TITLE" desc="The label in the footer of the message center tray, with the product title.">
-          <ph name="product_name">$1<ex>Chrome</ex></ph> Notifications
-        </message>
         <message name="IDS_NOTIFIER_WELCOME_BUTTON" desc="Notification body for when a new notifier service is introduced.">
           Turn off these notifications
         </message>
@@ -13307,6 +13317,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_USER_MANAGER_DESCRIPTION" desc="Description for the flag to enable the new material design user manager.">
         When enabled, the Switch person button in the avatar menu launches the new Material Design user manager.
       </message>
+      <message name="IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_NAME" desc="Title for the flag to switch to the material design desktop user menu.">
+        Use material design user menu
+      </message>
+      <message name="IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_DESCRIPTION" desc="Description for the flag to switch to the material design desktop user menu.">
+        When enabled, the desktop user menu will be switched to the material design version with a more intuitive flow.
+      </message>
 
       <message name="IDS_FLAGS_GOOGLE_PROFILE_INFO_NAME" desc="Title for the flag to enable the google profile information">
         Google profile name and icon
@@ -13794,7 +13810,7 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         Entire screen
       </message>
       <message name="IDS_DESKTOP_MEDIA_PICKER_MULTIPLE_SCREEN_NAME" desc="Name for screens in the desktop media picker UI when there are multiple monitors.">
-        Screen <ph name="SCREEN_INDEX">$1<ex>1</ex></ph>
+        {SCREEN_INDEX, plural, one{Screen #} other{Screen #}}
       </message>
       <message name="IDS_DESTOP_MEDIA_PICKER_VIRTUAL_SCREEN_NAME" desc="The name of the virtual display which is shown in the picker">
         Virtual Display
@@ -14882,6 +14898,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
     </message>
     <message name="IDS_FLAGS_ENABLE_BROTLI_DESCRIPTION" desc="Description for the flag to enable Brotli Content-Encoding.">
       Enable Brotli Content-Encoding support.
+    </message>
+    <message name="IDS_FLAGS_ENABLE_WEAK_MEMORYCACHE_NAME" desc="Title for the flag to enable Weak MemoryCache.">
+      Weak MemoryCache.
+    </message>
+    <message name="IDS_FLAGS_ENABLE_WEAK_MEMORYCACHE_DESCRIPTION" desc="Description for the flag to enable Weak MemoryCache.">
+      Enable Weak MemoryCache.
     </message>
     <message name="IDS_FLAGS_ENABLE_WEBFONTS_INTERVENTION_NAME" desc="Title for the flag to enable WebFonts User Agent Intervention.">
       New version of User Agent Intervention for WebFonts loading.

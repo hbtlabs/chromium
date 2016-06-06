@@ -9,17 +9,24 @@
 
 #include "ash/ash_constants.h"
 #include "ash/ash_switches.h"
+#include "ash/aura/aura_layout_manager_adapter.h"
+#include "ash/aura/wm_shelf_aura.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/root_window_controller_common.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/always_on_top_controller.h"
 #include "ash/common/wm/container_finder.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/fullscreen_window_finder.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
+#include "ash/common/wm/root_window_layout_manager.h"
 #include "ash/common/wm/switchable_windows.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/common/wm/wm_globals.h"
-#include "ash/common/wm/wm_window.h"
 #include "ash/common/wm/workspace/workspace_layout_manager.h"
 #include "ash/common/wm/workspace/workspace_layout_manager_delegate.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
@@ -27,29 +34,22 @@
 #include "ash/focus_cycler.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/host/ash_window_tree_host.h"
-#include "ash/root_window_controller_common.h"
 #include "ash/root_window_settings.h"
 #include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/shell_factory.h"
-#include "ash/shell_window_ids.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/touch/touch_hud_projection.h"
 #include "ash/touch/touch_observer_hud.h"
-#include "ash/wm/aura/aura_layout_manager_adapter.h"
-#include "ash/wm/aura/wm_shelf_aura.h"
-#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/lock_layout_manager.h"
 #include "ash/wm/panels/attached_panel_window_targeter.h"
 #include "ash/wm/panels/panel_window_event_handler.h"
-#include "ash/wm/root_window_layout_manager.h"
 #include "ash/wm/stacking_controller.h"
 #include "ash/wm/status_area_layout_manager.h"
 #include "ash/wm/system_background_controller.h"
@@ -129,7 +129,7 @@ void ReparentWindow(aura::Window* window, aura::Window* new_parent) {
                        new_parent->id() != kShellWindowId_DockedContainer;
   gfx::Rect local_bounds;
   if (update_bounds) {
-    local_bounds = wm::WmWindowAura::GetAuraWindow(state->window())->bounds();
+    local_bounds = WmWindowAura::GetAuraWindow(state->window())->bounds();
     MoveOriginRelativeToSize(src_size, dst_size, &local_bounds);
   }
 
@@ -367,8 +367,8 @@ SystemModalContainerLayoutManager*
 RootWindowController::GetSystemModalLayoutManager(aura::Window* window) {
   aura::Window* modal_container = NULL;
   if (window) {
-    aura::Window* window_container = wm::WmWindowAura::GetAuraWindow(
-        wm::GetContainerForWindow(wm::WmWindowAura::Get(window)));
+    aura::Window* window_container = WmWindowAura::GetAuraWindow(
+        wm::GetContainerForWindow(WmWindowAura::Get(window)));
     if (window_container &&
         window_container->id() >= kShellWindowId_LockScreenContainer) {
       modal_container = GetContainer(kShellWindowId_LockSystemModalContainer);
@@ -592,8 +592,8 @@ void RootWindowController::UpdateShelfVisibility() {
 }
 
 aura::Window* RootWindowController::GetWindowForFullscreenMode() {
-  return wm::WmWindowAura::GetAuraWindow(
-      wm::GetWindowForFullscreenMode(wm::WmWindowAura::Get(GetRootWindow())));
+  return WmWindowAura::GetAuraWindow(
+      wm::GetWindowForFullscreenMode(WmWindowAura::Get(GetRootWindow())));
 }
 
 void RootWindowController::ActivateKeyboard(
@@ -650,6 +650,14 @@ bool RootWindowController::IsVirtualKeyboardWindow(aura::Window* window) {
   return parent ? parent->Contains(window) : false;
 }
 
+void RootWindowController::SetTouchAccessibilityAnchorPoint(
+    const gfx::Point& anchor_point) {
+#if defined(OS_CHROMEOS)
+  if (touch_exploration_manager_)
+    touch_exploration_manager_->SetTouchAccessibilityAnchorPoint(anchor_point);
+#endif  // defined(OS_CHROMEOS)
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // RootWindowController, private:
 
@@ -661,7 +669,7 @@ RootWindowController::RootWindowController(AshWindowTreeHost* ash_host)
       touch_hud_projection_(NULL) {
   aura::Window* root_window = GetRootWindow();
   root_window_controller_common_.reset(
-      new RootWindowControllerCommon(wm::WmWindowAura::Get(root_window)));
+      new RootWindowControllerCommon(WmWindowAura::Get(root_window)));
   GetRootWindowSettings(root_window)->controller = this;
 
   stacking_controller_.reset(new StackingController);
@@ -742,16 +750,16 @@ void RootWindowController::InitLayoutManagers() {
   workspace_controller_.reset(new WorkspaceController(
       default_container, base::WrapUnique(workspace_layout_manager_delegate)));
 
-  wm::WmWindow* always_on_top_container =
-      wm::WmWindowAura::Get(GetContainer(kShellWindowId_AlwaysOnTopContainer));
+  WmWindow* always_on_top_container =
+      WmWindowAura::Get(GetContainer(kShellWindowId_AlwaysOnTopContainer));
   always_on_top_controller_.reset(
       new AlwaysOnTopController(always_on_top_container));
 
   DCHECK(!shelf_widget_.get());
-  wm::WmWindow* shelf_container =
-      wm::WmWindowAura::Get(GetContainer(kShellWindowId_ShelfContainer));
-  wm::WmWindow* status_container =
-      wm::WmWindowAura::Get(GetContainer(kShellWindowId_StatusContainer));
+  WmWindow* shelf_container =
+      WmWindowAura::Get(GetContainer(kShellWindowId_ShelfContainer));
+  WmWindow* status_container =
+      WmWindowAura::Get(GetContainer(kShellWindowId_StatusContainer));
   shelf_widget_.reset(new ShelfWidget(shelf_container, status_container,
                                       workspace_controller()));
   workspace_layout_manager_delegate->set_shelf(
@@ -771,8 +779,8 @@ void RootWindowController::InitLayoutManagers() {
   }
 
   // Create Docked windows layout manager
-  wm::WmWindow* docked_container =
-      wm::WmWindowAura::Get(GetContainer(kShellWindowId_DockedContainer));
+  WmWindow* docked_container =
+      WmWindowAura::Get(GetContainer(kShellWindowId_DockedContainer));
   docked_layout_manager_ = new DockedWindowLayoutManager(docked_container);
   docked_container->SetLayoutManager(base::WrapUnique(docked_layout_manager_));
 
@@ -782,7 +790,7 @@ void RootWindowController::InitLayoutManagers() {
 
   // Create Panel layout manager
   aura::Window* panel_container = GetContainer(kShellWindowId_PanelContainer);
-  wm::WmWindow* wm_panel_container = wm::WmWindowAura::Get(panel_container);
+  WmWindow* wm_panel_container = WmWindowAura::Get(panel_container);
   panel_layout_manager_ = new PanelLayoutManager(wm_panel_container);
   wm_panel_container->SetLayoutManager(base::WrapUnique(panel_layout_manager_));
   panel_container_handler_.reset(new PanelWindowEventHandler);

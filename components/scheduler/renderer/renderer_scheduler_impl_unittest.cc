@@ -2165,22 +2165,26 @@ TEST_F(RendererSchedulerImplTest, MultipleSuspendsNeedMultipleResumes) {
               testing::ElementsAre(std::string("T1"), std::string("T2")));
 }
 
-TEST_F(RendererSchedulerImplTest, SuspendRendererWhenBackgrounded) {
+TEST_F(RendererSchedulerImplTest, SuspendRenderer) {
   // Assume that the renderer is backgrounded.
   scheduler_->OnRendererBackgrounded();
 
-  // Tasks don't fire when the renderer is suspended.
+  // Tasks in some queues don't fire when the renderer is suspended.
   std::vector<std::string> run_order;
-  PostTestTasks(&run_order, "T1 T2");
+  PostTestTasks(&run_order, "D1 C1 L1 I1 T1");
   scheduler_->SuspendRenderer();
+  EnableIdleTasks();
   RunUntilIdle();
-  EXPECT_TRUE(run_order.empty());
+  EXPECT_THAT(run_order,
+              testing::ElementsAre(std::string("D1"), std::string("C1"),
+                                   std::string("I1")));
 
-  // The queued tasks fire when the tab goes foregrounded.
+  // The rest queued tasks fire when the tab goes foregrounded.
+  run_order.clear();
   scheduler_->OnRendererForegrounded();
   RunUntilIdle();
   EXPECT_THAT(run_order,
-              testing::ElementsAre(std::string("T1"), std::string("T2")));
+              testing::ElementsAre(std::string("L1"), std::string("T1")));
 }
 
 TEST_F(RendererSchedulerImplTest, UseCaseToString) {
@@ -2985,6 +2989,67 @@ TEST_F(RendererSchedulerImplTest,
 
   // Task is throttled but not completely blocked.
   EXPECT_EQ(12u, count);
+}
+
+TEST_F(RendererSchedulerImplTest,
+       SYNCHRONIZED_GESTURE_TimerTaskThrottling_TimersSuspended) {
+  SimulateCompositorGestureStart(TouchEventPolicy::SEND_TOUCH_START);
+
+  base::TimeTicks first_throttled_run_time =
+      ThrottlingHelper::ThrottledRunTime(clock_->NowTicks());
+
+  size_t count = 0;
+  // With the compositor task taking 10ms, there is not enough time to run this
+  // 7ms timer task in the 16ms frame.
+  scheduler_->TimerTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(SlowCountingTask, &count, clock_.get(), 7,
+                            scheduler_->TimerTaskRunner()));
+
+  bool suspended = false;
+  for (int i = 0; i < 1000; i++) {
+    cc::BeginFrameArgs begin_frame_args = cc::BeginFrameArgs::Create(
+        BEGINFRAME_FROM_HERE, clock_->NowTicks(), base::TimeTicks(),
+        base::TimeDelta::FromMilliseconds(16), cc::BeginFrameArgs::NORMAL);
+    begin_frame_args.on_critical_path = true;
+    scheduler_->WillBeginFrame(begin_frame_args);
+    scheduler_->DidHandleInputEventOnCompositorThread(
+        FakeInputEvent(blink::WebInputEvent::GestureScrollUpdate),
+        RendererScheduler::InputEventState::EVENT_CONSUMED_BY_COMPOSITOR);
+
+    simulate_compositor_task_ran_ = false;
+    compositor_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&RendererSchedulerImplTest::SimulateMainThreadCompositorTask,
+                   base::Unretained(this),
+                   base::TimeDelta::FromMilliseconds(10)));
+
+    mock_task_runner_->RunTasksWhile(
+        base::Bind(&RendererSchedulerImplTest::SimulatedCompositorTaskPending,
+                   base::Unretained(this)));
+    EXPECT_EQ(UseCase::SYNCHRONIZED_GESTURE, CurrentUseCase()) << "i = " << i;
+
+    // Before the policy is updated the queue will be enabled. Subsequently it
+    // will be disabled until the throttled queue is pumped.
+    bool expect_queue_enabled =
+        (i == 0) || (clock_->NowTicks() > first_throttled_run_time);
+    if (suspended)
+      expect_queue_enabled = false;
+    EXPECT_EQ(expect_queue_enabled,
+              scheduler_->TimerTaskRunner()->IsQueueEnabled())
+        << "i = " << i;
+
+    // After we've run any expensive tasks suspend the queue.  The throttling
+    // helper should /not/ re-enable this queue under any circumstances while
+    // timers are suspended.
+    if (count > 0 && !suspended) {
+      EXPECT_EQ(2u, count);
+      scheduler_->SuspendTimerQueue();
+      suspended = true;
+    }
+  }
+
+  // Make sure the timer queue stayed suspended!
+  EXPECT_EQ(2u, count);
 }
 
 TEST_F(RendererSchedulerImplTest,

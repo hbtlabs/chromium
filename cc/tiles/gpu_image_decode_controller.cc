@@ -6,6 +6,7 @@
 
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -136,34 +137,99 @@ class ImageUploadTaskImpl : public TileTask {
 };
 
 GpuImageDecodeController::DecodedImageData::DecodedImageData() = default;
-GpuImageDecodeController::DecodedImageData::~DecodedImageData() = default;
+GpuImageDecodeController::DecodedImageData::~DecodedImageData() {
+  ResetData();
+}
 
 bool GpuImageDecodeController::DecodedImageData::Lock() {
   DCHECK(!is_locked_);
   is_locked_ = data_->Lock();
+  if (is_locked_)
+    ++usage_stats_.lock_count;
   return is_locked_;
 }
 
 void GpuImageDecodeController::DecodedImageData::Unlock() {
   DCHECK(is_locked_);
   data_->Unlock();
+  if (usage_stats_.lock_count == 1)
+    usage_stats_.first_lock_wasted = !usage_stats_.used;
   is_locked_ = false;
 }
 
 void GpuImageDecodeController::DecodedImageData::SetLockedData(
     std::unique_ptr<base::DiscardableMemory> data) {
   DCHECK(!is_locked_);
+  DCHECK(data);
+  DCHECK(!data_);
   data_ = std::move(data);
   is_locked_ = true;
 }
 
 void GpuImageDecodeController::DecodedImageData::ResetData() {
   DCHECK(!is_locked_);
+  if (data_)
+    ReportUsageStats();
   data_ = nullptr;
+  usage_stats_ = UsageStats();
+}
+
+void GpuImageDecodeController::DecodedImageData::ReportUsageStats() const {
+  // lock_count | used  | result state
+  // ===========+=======+==================
+  //  1         | false | WASTED_ONCE
+  //  1         | true  | USED_ONCE
+  //  >1        | false | WASTED_RELOCKED
+  //  >1        | true  | USED_RELOCKED
+  // Note that it's important not to reorder the following enums, since the
+  // numerical values are used in the histogram code.
+  enum State : int {
+    DECODED_IMAGE_STATE_WASTED_ONCE,
+    DECODED_IMAGE_STATE_USED_ONCE,
+    DECODED_IMAGE_STATE_WASTED_RELOCKED,
+    DECODED_IMAGE_STATE_USED_RELOCKED,
+    DECODED_IMAGE_STATE_COUNT
+  } state = DECODED_IMAGE_STATE_WASTED_ONCE;
+
+  if (usage_stats_.lock_count == 1) {
+    if (usage_stats_.used)
+      state = DECODED_IMAGE_STATE_USED_ONCE;
+    else
+      state = DECODED_IMAGE_STATE_WASTED_ONCE;
+  } else {
+    if (usage_stats_.used)
+      state = DECODED_IMAGE_STATE_USED_RELOCKED;
+    else
+      state = DECODED_IMAGE_STATE_WASTED_RELOCKED;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Renderer4.GpuImageDecodeState", state,
+                            DECODED_IMAGE_STATE_COUNT);
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageDecodeState.FirstLockWasted",
+                        usage_stats_.first_lock_wasted);
 }
 
 GpuImageDecodeController::UploadedImageData::UploadedImageData() = default;
-GpuImageDecodeController::UploadedImageData::~UploadedImageData() = default;
+GpuImageDecodeController::UploadedImageData::~UploadedImageData() {
+  SetImage(nullptr);
+}
+
+void GpuImageDecodeController::UploadedImageData::SetImage(
+    sk_sp<SkImage> image) {
+  DCHECK(!image_ || !image);
+  if (image_) {
+    ReportUsageStats();
+    usage_stats_ = UsageStats();
+  }
+  image_ = std::move(image);
+}
+
+void GpuImageDecodeController::UploadedImageData::ReportUsageStats() const {
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageUploadState.Used",
+                        usage_stats_.used);
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.GpuImageUploadState.FirstRefWasted",
+                        usage_stats_.first_ref_wasted);
+}
 
 GpuImageDecodeController::ImageData::ImageData(DecodedDataMode mode,
                                                size_t size)
@@ -235,7 +301,7 @@ bool GpuImageDecodeController::GetTaskForImageAndRef(
       return false;
     }
 
-    if (image_data->upload.image) {
+    if (image_data->upload.image()) {
       // The image is already uploaded, ref and return.
       RefImage(draw_image);
       *task = nullptr;
@@ -336,7 +402,8 @@ DecodedDrawImage GpuImageDecodeController::GetDecodedImageForDraw(
   // in DrawWithImageFinished.
   UnrefImageDecode(draw_image);
 
-  sk_sp<SkImage> image = image_data->upload.image;
+  sk_sp<SkImage> image = image_data->upload.image();
+  image_data->upload.mark_used();
   DCHECK(image || image_data->decode.decode_failure);
 
   DecodedDrawImage decoded_draw_image(std::move(image),
@@ -415,7 +482,8 @@ bool GpuImageDecodeController::OnMemoryDump(
 
     // If we have an uploaded image (that is actually on the GPU, not just a CPU
     // wrapper), upload it here.
-    if (image_data->upload.image && image_data->mode == DecodedDataMode::GPU) {
+    if (image_data->upload.image() &&
+        image_data->mode == DecodedDataMode::GPU) {
       std::string gpu_dump_name = base::StringPrintf(
           "cc/image_memory/controller_%p/gpu/image_%d", this, image_id);
       base::trace_event::MemoryAllocatorDump* dump =
@@ -427,7 +495,7 @@ bool GpuImageDecodeController::OnMemoryDump(
       // Create a global shred GUID to associate this data with its GPU process
       // counterpart.
       GLuint gl_id = skia::GrBackendObjectToGrGLTextureInfo(
-                         image_data->upload.image->getTextureHandle(
+                         image_data->upload.image()->getTextureHandle(
                              false /* flushPendingGrContextIO */))
                          ->fID;
       base::trace_event::MemoryAllocatorDumpGuid guid =
@@ -505,7 +573,7 @@ scoped_refptr<TileTask> GpuImageDecodeController::GetImageDecodeTaskAndRef(
     // We should never be creating a decode task for an at raster image.
     DCHECK(!found->second->is_at_raster);
     // We should never be creating a decode for an already-uploaded image.
-    DCHECK(!found->second->upload.image);
+    DCHECK(!found->second->upload.image());
     return nullptr;
   }
 
@@ -553,6 +621,8 @@ void GpuImageDecodeController::UnrefImageInternal(const DrawImage& draw_image) {
   DCHECK(found != image_data_.end());
   DCHECK_GT(found->second->upload.ref_count, 0u);
   --found->second->upload.ref_count;
+  if (found->second->upload.ref_count == 0)
+    found->second->upload.notify_ref_reached_zero();
   RefCountChanged(found->second.get());
 }
 
@@ -568,22 +638,22 @@ void GpuImageDecodeController::RefCountChanged(ImageData* image_data) {
   // re-locking discardable (rather than requiring a full upload like GPU
   // images).
   if (image_data->mode == DecodedDataMode::CPU && !has_any_refs) {
-    images_pending_deletion_.push_back(std::move(image_data->upload.image));
-    image_data->upload.image = nullptr;
+    images_pending_deletion_.push_back(image_data->upload.image());
+    image_data->upload.SetImage(nullptr);
   }
 
   if (image_data->is_at_raster && !has_any_refs) {
     // We have an at-raster image which has reached zero refs. If it won't fit
     // in our cache, delete the image to allow it to fit.
-    if (image_data->upload.image && !CanFitSize(image_data->size)) {
-      images_pending_deletion_.push_back(std::move(image_data->upload.image));
-      image_data->upload.image = nullptr;
+    if (image_data->upload.image() && !CanFitSize(image_data->size)) {
+      images_pending_deletion_.push_back(image_data->upload.image());
+      image_data->upload.SetImage(nullptr);
     }
 
     // We now have an at-raster image which will fit in our cache. Convert it
     // to not-at-raster.
     image_data->is_at_raster = false;
-    if (image_data->upload.image) {
+    if (image_data->upload.image()) {
       bytes_used_ += image_data->size;
       image_data->upload.budgeted = true;
     }
@@ -604,7 +674,7 @@ void GpuImageDecodeController::RefCountChanged(ImageData* image_data) {
   // an uploaded image. If no image exists (upload was cancelled), we should
   // un-budget the image.
   if (image_data->upload.ref_count == 0 && image_data->upload.budgeted &&
-      !image_data->upload.image) {
+      !image_data->upload.image()) {
     DCHECK_GE(bytes_used_, image_data->size);
     bytes_used_ -= image_data->size;
     image_data->upload.budgeted = false;
@@ -625,7 +695,7 @@ void GpuImageDecodeController::RefCountChanged(ImageData* image_data) {
 
 #if DCHECK_IS_ON()
   // Sanity check the above logic.
-  if (image_data->upload.image) {
+  if (image_data->upload.image()) {
     DCHECK(image_data->is_at_raster || image_data->upload.budgeted);
     if (image_data->mode == DecodedDataMode::CPU)
       DCHECK(image_data->decode.is_locked());
@@ -661,15 +731,15 @@ bool GpuImageDecodeController::EnsureCapacity(size_t required_size) {
 
     // If an image without refs is budgeted, it must have an associated image
     // upload.
-    DCHECK(!it->second->upload.budgeted || it->second->upload.image);
+    DCHECK(!it->second->upload.budgeted || it->second->upload.image());
 
     // Free the uploaded image if possible.
-    if (it->second->upload.image) {
+    if (it->second->upload.image()) {
       DCHECK(it->second->upload.budgeted);
       DCHECK_GE(bytes_used_, it->second->size);
       bytes_used_ -= it->second->size;
-      images_pending_deletion_.push_back(std::move(it->second->upload.image));
-      it->second->upload.image = nullptr;
+      images_pending_deletion_.push_back(it->second->upload.image());
+      it->second->upload.SetImage(nullptr);
       it->second->upload.budgeted = false;
     }
 
@@ -715,7 +785,7 @@ void GpuImageDecodeController::DecodeImageIfNecessary(
     return;
   }
 
-  if (image_data->upload.image) {
+  if (image_data->upload.image()) {
     // We already have an uploaded image, no reason to decode.
     return;
   }
@@ -785,7 +855,7 @@ void GpuImageDecodeController::UploadImageIfNecessary(
     return;
   }
 
-  if (image_data->upload.image) {
+  if (image_data->upload.image()) {
     // Someone has uploaded this image before us (at raster).
     return;
   }
@@ -820,13 +890,13 @@ void GpuImageDecodeController::UploadImageIfNecessary(
       }
     }
   }
+  image_data->decode.mark_used();
   DCHECK(uploaded_image);
 
   // At-raster may have decoded this while we were unlocked. If so, ignore our
   // result.
-  if (!image_data->upload.image) {
-    image_data->upload.image = std::move(uploaded_image);
-  }
+  if (!image_data->upload.image())
+    image_data->upload.SetImage(std::move(uploaded_image));
 }
 
 std::unique_ptr<GpuImageDecodeController::ImageData>

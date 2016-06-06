@@ -83,8 +83,8 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/ui/zoom/page_zoom.h"
 #include "components/user_manager/user_type.h"
+#include "components/zoom/page_zoom.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/navigation_controller.h"
@@ -1099,12 +1099,8 @@ void BrowserOptionsHandler::InitializePage() {
     consumer_management->AddObserver(this);
   }
 
-  if (arc::ArcBridgeService::GetEnabled(
-          base::CommandLine::ForCurrentProcess()) &&
-      !arc::ArcAuthService::IsOptInVerificationDisabled() &&
-      !profile->IsLegacySupervised() && user->HasGaiaAccount() &&
-      !user_manager::UserManager::Get()
-           ->IsCurrentUserCryptohomeDataEphemeral()) {
+  if (arc::ArcAuthService::IsAllowedForProfile(profile) &&
+      !arc::ArcAuthService::IsOptInVerificationDisabled()) {
     web_ui()->CallJavascriptFunction("BrowserOptions.showAndroidAppsSection");
   }
   OnSystemTimezoneAutomaticDetectionPolicyChanged();
@@ -1991,7 +1987,7 @@ void BrowserOptionsHandler::SetupPageZoomSelector() {
   // Generate a vector of zoom factors from an array of known presets along with
   // the default factor added if necessary.
   std::vector<double> zoom_factors =
-      ui_zoom::PageZoom::PresetZoomFactors(default_zoom_factor);
+      zoom::PageZoom::PresetZoomFactors(default_zoom_factor);
 
   // Iterate through the zoom factors and and build the contents of the
   // selector that will be sent to the javascript handler.
@@ -2005,10 +2001,10 @@ void BrowserOptionsHandler::SetupPageZoomSelector() {
     base::ListValue* option = new base::ListValue();
     double factor = *i;
     int percent = static_cast<int>(factor * 100 + 0.5);
-    option->Append(new base::StringValue(base::FormatPercent(percent)));
-    option->Append(new base::FundamentalValue(factor));
+    option->AppendString(base::FormatPercent(percent));
+    option->AppendDouble(factor);
     bool selected = content::ZoomValuesEqual(factor, default_zoom_factor);
-    option->Append(new base::FundamentalValue(selected));
+    option->AppendBoolean(selected);
     zoom_factors_value.Append(option);
   }
 

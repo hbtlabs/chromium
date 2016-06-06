@@ -39,9 +39,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('deqp/functional/gles3/fragmentoutput.html', bug=483282)
     self.Skip('deqp/functional/gles3/framebufferblit.html', bug=483282)
     self.Skip('deqp/functional/gles3/instancedrendering.html', bug=483282)
-    self.Skip('deqp/functional/gles3/lifetime.html', bug=483282)
     self.Skip('deqp/data/gles3/shaders/linkage.html', bug=601821)
-    self.Skip('deqp/functional/gles3/multisample.html', bug=483282)
     self.Skip('deqp/functional/gles3/negativebufferapi.html', bug=483282)
     self.Skip('deqp/functional/gles3/negativetextureapi.html', bug=483282)
     self.Skip('deqp/functional/gles3/negativevertexarrayapi.html', bug=483282)
@@ -68,9 +66,9 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
     self.Fail('conformance2/vertex_arrays/vertex-array-object.html', bug=483282)
 
+    self.Fail('conformance2/rendering/draw-buffers.html', bug=617410)
+
     # All platforms when running ANGLE
-    self.Skip('conformance2/textures/misc/copy-texture-image.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=577144) # crash on debug
     self.Fail('conformance2/textures/misc/tex-unpack-params.html',
         ['d3d9', 'd3d11', 'opengl'], bug=483282)
 
@@ -78,26 +76,48 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/textures/misc/tex-input-validation.html',
         ['d3d9', 'd3d11', 'opengl'], bug=483282)
 
+    # All platforms with AMD GPU.
+    self.Fail('deqp/functional/gles3/multisample.html',
+        ['amd'], bug=617290)
+
     # Failing because the tests are using invalid combinations of source and
     # destination formats, see https://github.com/KhronosGroup/WebGL/issues/1628
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgb565-rgb-unsigned_short_5_6_5.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgba4-rgba-unsigned_byte.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-2d-rgba4-rgba-unsigned_short_4_4_4_4.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgb565-rgb-unsigned_byte.html',
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgb565-rgb-unsigned_short_5_6_5.html',
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html',
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgba4-rgba-unsigned_byte.html',
+        bug=483282)
+    self.Fail('conformance2/textures/canvas/' +
+        'tex-2d-rgba4-rgba-unsigned_short_4_4_4_4.html',
+        bug=483282)
 
     # Windows only.
 
@@ -106,25 +126,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'basic_copyteximage2d.html',
-        ['win'], bug=483282)
-
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win'], bug=483282)
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgb565-rgb-unsigned_short_5_6_5.html',
-        ['win'], bug=483282)
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win'], bug=483282)
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgb5_a1-rgba-unsigned_short_5_5_5_1.html',
-        ['win'], bug=483282)
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgba4-rgba-unsigned_byte.html',
-        ['win'], bug=483282)
-    self.Fail('conformance2/textures/canvas/' +
-        'tex-2d-rgba4-rgba-unsigned_short_4_4_4_4.html',
         ['win'], bug=483282)
 
     self.Flaky('deqp/functional/gles3/buffercopy.html', ['win'], bug=587601)
@@ -150,137 +151,137 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('conformance2/textures/image_data/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_data/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/svg_image/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/svg_image/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/video/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/video/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_data/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_data/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_video/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_video/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_canvas/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_canvas/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_blob/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_blob/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_bitmap/' +
         'tex-2d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_bitmap/' +
         'tex-2d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
 
     self.Fail('conformance2/textures/video/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/video/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_data/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_data/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/svg_image/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/svg_image/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_data/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_data/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_video/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_video/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/canvas/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/canvas/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/webgl_canvas/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=560555)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_canvas/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_canvas/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_blob/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_blob/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_bitmap/' +
         'tex-3d-rgb565-rgb-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
     self.Fail('conformance2/textures/image_bitmap_from_image_bitmap/' +
         'tex-3d-rgb5_a1-rgba-unsigned_byte.html',
-        ['win8'], bug=483282)
+        ['win8'], bug=616176)
 
     # Windows Debug. Causing assertions in the GPU process which raise
     # a dialog box, so have to skip them rather than mark them as
@@ -384,8 +385,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac'], bug=604053)
 
     # Mac Retina NVIDIA
-    self.Fail('conformance2/rendering/draw-buffers.html',
-        ['mac', ('nvidia', 0xfe9)], bug=483282)
     self.Fail('conformance2/textures/misc/tex-input-validation.html',
         ['mac', ('nvidia', 0xfe9), 'no_angle'], bug=483282)
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
@@ -482,8 +481,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux'], bug=483282)
     self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
         ['linux'], bug=483282)
-    self.Fail('conformance2/rendering/draw-buffers.html',
-        ['linux'], bug=483282)
 
     self.Skip('deqp/data/gles3/shaders/qualification_order.html',
         ['linux', 'amd', 'intel'], bug=483282)
@@ -512,6 +509,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance2/reading/read-pixels-pack-parameters.html',
         ['linux', 'nvidia', 'opengl'], bug=483282)
     self.Fail('conformance2/transform_feedback/transform_feedback.html',
+        ['linux', 'nvidia', 'opengl'], bug=483282)
+    self.Fail('deqp/functional/gles3/uniformapi/value_assigned.html',
         ['linux', 'nvidia', 'opengl'], bug=483282)
 
     # Linux Intel with ANGLE only
@@ -543,6 +542,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/texturefiltering/3d*',
         ['linux', 'amd'], bug=606114)
+    self.Fail('deqp/functional/gles3/fbocompleteness.html',
+        ['linux', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/lifetime.html',
+        ['linux', 'amd'], bug=483282)
 
     self.Fail('conformance2/misc/uninitialized-test-2.html',
         ['linux', 'amd'], bug=483282)

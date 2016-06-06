@@ -49,7 +49,6 @@
 #include "components/omnibox/browser/omnibox_switches.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/proximity_auth/switches.h"
-#include "components/quirks/switches.h"
 #include "components/search/search_switches.h"
 #include "components/security_state/switches.h"
 #include "components/signin/core/common/signin_switches.h"
@@ -875,11 +874,6 @@ const FeatureEntry kFeatureEntries[] = {
         SINGLE_DISABLE_VALUE_TYPE(::switches::kDisableDisplayColorCalibration),
     },
     {
-        "disable-quirks-client", IDS_FLAGS_DISABLE_QUIRKS_CLIENT_NAME,
-        IDS_FLAGS_DISABLE_QUIRKS_CLIENT_DESCRIPTION, kOsCrOS,
-        SINGLE_VALUE_TYPE(quirks::switches::kDisableQuirksClient),
-    },
-    {
         "ash-disable-screen-orientation-lock",
         IDS_FLAGS_ASH_SCREEN_ORIENTATION_LOCK_NAME,
         IDS_FLAGS_ASH_SCREEN_ORIENTATION_LOCK_DESCRIPTION, kOsCrOS,
@@ -1186,6 +1180,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_MATERIAL_DESIGN_USER_MANAGER_DESCRIPTION,
      kOsMac | kOsWin | kOsLinux,
      FEATURE_VALUE_TYPE(switches::kMaterialDesignUserManager)},
+    {"show-material-design-user-menu",
+     IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_NAME,
+     IDS_FLAGS_SHOW_MATERIAL_DESIGN_USER_MENU_DESCRIPTION,
+     kOsMac | kOsWin | kOsLinux,
+     FEATURE_VALUE_TYPE(switches::kMaterialDesignUserMenu)},
     {"enable-google-profile-info", IDS_FLAGS_GOOGLE_PROFILE_INFO_NAME,
      IDS_FLAGS_GOOGLE_PROFILE_INFO_DESCRIPTION, kOsMac | kOsWin | kOsLinux,
      SINGLE_VALUE_TYPE(switches::kGoogleProfileInfo)},
@@ -1703,6 +1702,15 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableAppContainer,
                                switches::kDisableAppContainer)},
 #endif  // defined(OS_WIN)
+#if defined(TOOLKIT_VIEWS) || defined(OS_ANDROID)
+    {"enable-autofill-credit-card-upload",
+     IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_NAME,
+     IDS_FLAGS_AUTOFILL_CREDIT_CARD_UPLOAD_DESCRIPTION,
+     kOsAll,
+     ENABLE_DISABLE_VALUE_TYPE(
+         autofill::switches::kEnableOfferUploadCreditCards,
+         autofill::switches::kDisableOfferUploadCreditCards)},
+#endif  // defined(TOOLKIT_VIEWS) || defined(OS_ANDROID)
 #if defined(OS_ANDROID)
     {"tab-management-experiment-type", IDS_FLAGS_HERB_PROTOTYPE_CHOICES_NAME,
      IDS_FLAGS_HERB_PROTOTYPE_CHOICES_DESCRIPTION, kOsAndroid,
@@ -1906,6 +1914,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_FONT_CACHE_SCALING_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(features::kFontCacheScaling)},
 
+    {"enable-weak-memorycache",
+     IDS_FLAGS_ENABLE_WEAK_MEMORYCACHE_NAME,
+     IDS_FLAGS_ENABLE_WEAK_MEMORYCACHE_DESCRIPTION, kOsAll,
+     FEATURE_VALUE_TYPE(features::kWeakMemoryCache)},
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.
