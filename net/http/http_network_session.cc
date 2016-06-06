@@ -132,7 +132,7 @@ HttpNetworkSession::Params::Params()
       quic_disable_bidirectional_streams(false),
       proxy_delegate(NULL),
       enable_token_binding(false) {
-  quic_supported_versions.push_back(QUIC_VERSION_32);
+  quic_supported_versions.push_back(QUIC_VERSION_33);
 }
 
 HttpNetworkSession::Params::Params(const Params& other) = default;
@@ -148,6 +148,7 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
       proxy_service_(params.proxy_service),
       ssl_config_service_(params.ssl_config_service),
       quic_stream_factory_(
+          params.net_log,
           params.host_resolver,
           params.client_socket_factory
               ? params.client_socket_factory

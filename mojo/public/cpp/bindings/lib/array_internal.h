@@ -16,11 +16,11 @@
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/bounds_checker.h"
 #include "mojo/public/cpp/bindings/lib/buffer.h"
-#include "mojo/public/cpp/bindings/lib/map_data_internal.h"
 #include "mojo/public/cpp/bindings/lib/serialization_util.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 #include "mojo/public/cpp/bindings/lib/validate_params.h"
 #include "mojo/public/cpp/bindings/lib/validation_errors.h"
+#include "mojo/public/cpp/bindings/lib/validation_util.h"
 
 namespace mojo {
 namespace internal {
@@ -28,6 +28,9 @@ namespace internal {
 // std::numeric_limits<uint32_t>::max() is not a compile-time constant (until
 // C++11).
 const uint32_t kMaxUint32 = 0xFFFFFFFF;
+
+template <typename K, typename V>
+class Map_Data;
 
 std::string MakeMessageWithArrayIndex(const char* message,
                                       size_t size,
@@ -144,7 +147,7 @@ struct ArraySerializationHelper<T, false> {
   static bool ValidateElements(const ArrayHeader* header,
                                const ElementType* elements,
                                BoundsChecker* bounds_checker,
-                               const ArrayValidateParams* validate_params) {
+                               const ContainerValidateParams* validate_params) {
     DCHECK(!validate_params->element_is_nullable)
         << "Primitive type should be non-nullable";
     DCHECK(!validate_params->element_validate_params)
@@ -175,7 +178,7 @@ struct ArraySerializationHelper<Handle_Data, false> {
   static bool ValidateElements(const ArrayHeader* header,
                                const ElementType* elements,
                                BoundsChecker* bounds_checker,
-                               const ArrayValidateParams* validate_params) {
+                               const ContainerValidateParams* validate_params) {
     DCHECK(!validate_params->element_validate_params)
         << "Handle type should not have array validate params";
 
@@ -215,7 +218,7 @@ struct ArraySerializationHelper<P*, false> {
   static bool ValidateElements(const ArrayHeader* header,
                                const ElementType* elements,
                                BoundsChecker* bounds_checker,
-                               const ArrayValidateParams* validate_params) {
+                               const ContainerValidateParams* validate_params) {
     for (uint32_t i = 0; i < header->num_elements; ++i) {
       if (!validate_params->element_is_nullable && !elements[i].offset) {
         ReportValidationError(
@@ -243,7 +246,7 @@ struct ArraySerializationHelper<P*, false> {
   struct ValidateCaller {
     static bool Run(const void* data,
                     BoundsChecker* bounds_checker,
-                    const ArrayValidateParams* validate_params) {
+                    const ContainerValidateParams* validate_params) {
       DCHECK(!validate_params)
           << "Struct type should not have array validate params";
 
@@ -255,7 +258,7 @@ struct ArraySerializationHelper<P*, false> {
   struct ValidateCaller<Map_Data<Key, Value>> {
     static bool Run(const void* data,
                     BoundsChecker* bounds_checker,
-                    const ArrayValidateParams* validate_params) {
+                    const ContainerValidateParams* validate_params) {
       return Map_Data<Key, Value>::Validate(data, bounds_checker,
                                             validate_params);
     }
@@ -265,7 +268,7 @@ struct ArraySerializationHelper<P*, false> {
   struct ValidateCaller<Array_Data<T>> {
     static bool Run(const void* data,
                     BoundsChecker* bounds_checker,
-                    const ArrayValidateParams* validate_params) {
+                    const ContainerValidateParams* validate_params) {
       return Array_Data<T>::Validate(data, bounds_checker, validate_params);
     }
   };
@@ -288,7 +291,7 @@ struct ArraySerializationHelper<U, true> {
   static bool ValidateElements(const ArrayHeader* header,
                                const ElementType* elements,
                                BoundsChecker* bounds_checker,
-                               const ArrayValidateParams* validate_params) {
+                               const ContainerValidateParams* validate_params) {
     for (uint32_t i = 0; i < header->num_elements; ++i) {
       if (!validate_params->element_is_nullable && elements[i].is_null()) {
         ReportValidationError(
@@ -329,7 +332,7 @@ class Array_Data {
 
   static bool Validate(const void* data,
                        BoundsChecker* bounds_checker,
-                       const ArrayValidateParams* validate_params) {
+                       const ContainerValidateParams* validate_params) {
     if (!data)
       return true;
     if (!IsAligned(data)) {

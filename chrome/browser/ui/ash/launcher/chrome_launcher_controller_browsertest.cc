@@ -7,10 +7,10 @@
 #include <stddef.h>
 
 #include "ash/ash_switches.h"
+#include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
-#include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_view.h"
@@ -198,7 +198,7 @@ class LauncherPlatformAppBrowserTest
 
   ash::ShelfID CreateAppShortcutLauncherItem(const std::string& name) {
     return controller_->CreateAppShortcutLauncherItem(
-        name, controller_->model()->item_count());
+        name, shelf_model()->item_count());
   }
 
   const ash::ShelfItem& GetLastLauncherItem() {

@@ -95,6 +95,9 @@ bool shouldDisallowFetchForMainFrameScript(const ResourceRequest& request, Fetch
     if (defer != FetchRequest::NoDefer)
         return false;
 
+    if (!request.url().protocolIsInHTTPFamily())
+        return false;
+
     // Avoid blocking same origin scripts, as they may be used to render main
     // page content, whereas cross-origin scripts inserted via document.write
     // are likely to be third party content.
@@ -129,7 +132,6 @@ bool shouldDisallowFetchForMainFrameScript(const ResourceRequest& request, Fetch
 FrameFetchContext::FrameFetchContext(DocumentLoader* loader, Document* document)
     : m_document(document)
     , m_documentLoader(loader)
-    , m_imageFetched(false)
 {
     ASSERT(frame());
 }
@@ -276,11 +278,10 @@ WebCachePolicy FrameFetchContext::resourceRequestCachePolicy(const ResourceReque
     return WebCachePolicy::UseProtocolCachePolicy;
 }
 
-// FIXME(http://crbug.com/274173):
-// |loader| can be null if the resource is loaded from imported document.
-// This means inspector, which uses DocumentLoader as an grouping entity,
-// cannot see imported documents.
-inline DocumentLoader* FrameFetchContext::ensureLoaderForNotifications() const
+// The |m_documentLoader| is null in the FrameFetchContext of an imported document.
+// FIXME(http://crbug.com/274173): This means Inspector, which uses DocumentLoader
+// as a grouping entity, cannot see imported documents.
+inline DocumentLoader* FrameFetchContext::masterDocumentLoader() const
 {
     return m_documentLoader ? m_documentLoader.get() : frame()->loader().documentLoader();
 }
@@ -297,7 +298,7 @@ void FrameFetchContext::dispatchWillSendRequest(unsigned long identifier, Resour
     frame()->loader().applyUserAgent(request);
     frame()->loader().client()->dispatchWillSendRequest(m_documentLoader, identifier, request, redirectResponse);
     TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceSendRequest", TRACE_EVENT_SCOPE_THREAD, "data", InspectorSendRequestEvent::data(identifier, frame(), request));
-    InspectorInstrumentation::willSendRequest(frame(), identifier, ensureLoaderForNotifications(), request, redirectResponse, initiatorInfo);
+    InspectorInstrumentation::willSendRequest(frame(), identifier, masterDocumentLoader(), request, redirectResponse, initiatorInfo);
 }
 
 void FrameFetchContext::dispatchDidReceiveResponse(unsigned long identifier, const ResourceResponse& response, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, Resource* resource)
@@ -320,7 +321,7 @@ void FrameFetchContext::dispatchDidReceiveResponse(unsigned long identifier, con
     frame()->loader().progress().incrementProgress(identifier, response);
     frame()->loader().client()->dispatchDidReceiveResponse(m_documentLoader, identifier, response);
     TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceReceiveResponse", TRACE_EVENT_SCOPE_THREAD, "data", InspectorReceiveResponseEvent::data(identifier, frame(), response));
-    DocumentLoader* documentLoader = ensureLoaderForNotifications();
+    DocumentLoader* documentLoader = masterDocumentLoader();
     InspectorInstrumentation::didReceiveResourceResponse(frame(), identifier, documentLoader, response, resource);
     // It is essential that inspector gets resource response BEFORE console.
     frame()->console().reportResourceResponseReceived(documentLoader, identifier, response);
@@ -449,7 +450,7 @@ bool FrameFetchContext::canRequest(Resource::Type type, const ResourceRequest& r
     ResourceRequestBlockedReason reason = canRequestInternal(type, resourceRequest, url, options, forPreload, originRestriction, resourceRequest.redirectStatus());
     if (reason != ResourceRequestBlockedReasonNone) {
         if (!forPreload)
-            InspectorInstrumentation::didBlockRequest(frame(), resourceRequest, ensureLoaderForNotifications(), options.initiatorInfo, reason);
+            InspectorInstrumentation::didBlockRequest(frame(), resourceRequest, masterDocumentLoader(), options.initiatorInfo, reason);
         return false;
     }
     return true;
@@ -459,7 +460,7 @@ bool FrameFetchContext::allowResponse(Resource::Type type, const ResourceRequest
 {
     ResourceRequestBlockedReason reason = canRequestInternal(type, resourceRequest, url, options, false, FetchRequest::UseDefaultOriginRestrictionForType, RedirectStatus::FollowedRedirect);
     if (reason != ResourceRequestBlockedReasonNone) {
-        InspectorInstrumentation::didBlockRequest(frame(), resourceRequest, ensureLoaderForNotifications(), options.initiatorInfo, reason);
+        InspectorInstrumentation::didBlockRequest(frame(), resourceRequest, masterDocumentLoader(), options.initiatorInfo, reason);
         return false;
     }
     return true;
@@ -521,13 +522,9 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
     ContentSecurityPolicy::ReportingStatus cspReporting = forPreload ?
         ContentSecurityPolicy::SuppressReport : ContentSecurityPolicy::SendReport;
 
-    // m_document can be null, but not in any of the cases where csp is actually used below.
-    // ImageResourceTest.MultipartImage crashes w/o the m_document null check.
-    // I believe it's the Resource::Raw case.
-    const ContentSecurityPolicy* csp = m_document ? m_document->contentSecurityPolicy() : nullptr;
-
-    if (csp) {
-        if (!shouldBypassMainWorldCSP && !csp->allowRequest(resourceRequest.requestContext(), url, redirectStatus, cspReporting))
+    if (m_document) {
+        DCHECK(m_document->contentSecurityPolicy());
+        if (!shouldBypassMainWorldCSP && !m_document->contentSecurityPolicy()->allowRequest(resourceRequest.requestContext(), url, options.contentSecurityPolicyNonce, redirectStatus, cspReporting))
             return ResourceRequestBlockedReasonCSP;
     }
 
@@ -560,14 +557,6 @@ ResourceRequestBlockedReason FrameFetchContext::canRequestInternal(Resource::Typ
             UseCounter::count(frame()->document(), UseCounter::LegacyProtocolEmbeddedAsSubresource);
         if (!url.user().isEmpty() || !url.pass().isEmpty())
             UseCounter::count(frame()->document(), UseCounter::RequestedSubresourceWithEmbeddedCredentials);
-    }
-
-    // Measure the number of pages that load resources after a redirect
-    // when a CSP is active, to see if implementing CSP
-    // 'unsafe-redirect' is feasible.
-    if (csp && csp->isActive() && resourceRequest.frameType() != WebURLRequest::FrameTypeTopLevel && resourceRequest.frameType() != WebURLRequest::FrameTypeAuxiliary && redirectStatus == RedirectStatus::FollowedRedirect) {
-        ASSERT(frame()->document());
-        UseCounter::count(frame()->document(), UseCounter::ResourceLoadedAfterRedirectWithCSP);
     }
 
     // Last of all, check for mixed content. We do this last so that when
@@ -749,12 +738,8 @@ void FrameFetchContext::countClientHintsViewportWidth()
     UseCounter::count(frame(), UseCounter::ClientHintsViewportWidth);
 }
 
-ResourceLoadPriority FrameFetchContext::modifyPriorityForExperiments(ResourceLoadPriority priority, Resource::Type type, const FetchRequest& request, ResourcePriority::VisibilityStatus visibility)
+ResourceLoadPriority FrameFetchContext::modifyPriorityForExperiments(ResourceLoadPriority priority)
 {
-    // An image fetch is used to distinguish between "early" and "late" scripts in a document
-    if (type == Resource::Image)
-        m_imageFetched = true;
-
     // If Settings is null, we can't verify any experiments are in force.
     if (!frame()->settings())
         return priority;
@@ -763,48 +748,7 @@ ResourceLoadPriority FrameFetchContext::modifyPriorityForExperiments(ResourceLoa
     if (frame()->settings()->lowPriorityIframes() && !frame()->isMainFrame())
         return ResourceLoadPriorityVeryLow;
 
-    // Async/Defer scripts.
-    if (type == Resource::Script && FetchRequest::LazyLoad == request.defer())
-        return frame()->settings()->fetchIncreaseAsyncScriptPriority() ? ResourceLoadPriorityMedium : ResourceLoadPriorityLow;
-
-    // Runtime experiment that change how we prioritize resources.
-    // The toggles do not depend on each other and can be flipped individually
-    // though the cumulative result will depend on the interaction between them.
-    // Background doc: https://docs.google.com/document/d/1bCDuq9H1ih9iNjgzyAL0gpwNFiEP4TZS-YLRp_RuMlc/edit?usp=sharing
-
-    // Increases the priorities for CSS, Scripts, XHR, Fonts and Images all by one level
-    // and parser-blocking scripts and visible images by 2.
-    // This is used in conjunction with logic on the Chrome side to raise the threshold
-    // of "layout-blocking" resources and provide a boost to resources that are needed
-    // as soon as possible for something currently on the screen.
-    int modifiedPriority = static_cast<int>(priority);
-    if (frame()->settings()->fetchIncreasePriorities()) {
-        if (type == Resource::CSSStyleSheet || type == Resource::Script || type == Resource::Font || type == Resource::Image || type == Resource::Raw)
-            modifiedPriority++;
-    }
-
-    // Always give visible resources a bump, and an additional bump if generally increasing priorities.
-    if (visibility == ResourcePriority::Visible) {
-        modifiedPriority++;
-        if (frame()->settings()->fetchIncreasePriorities())
-            modifiedPriority++;
-    }
-
-    if (frame()->settings()->fetchIncreaseFontPriority() && type == Resource::Font)
-        modifiedPriority++;
-
-    if (type == Resource::Script) {
-        // Reduce the priority of late-body scripts.
-        if (frame()->settings()->fetchDeferLateScripts() && request.forPreload() && m_imageFetched)
-            modifiedPriority--;
-        // Parser-blocking scripts.
-        if (frame()->settings()->fetchIncreasePriorities() && !request.forPreload())
-            modifiedPriority++;
-    }
-
-    // Clamp priority
-    modifiedPriority = std::min(static_cast<int>(ResourceLoadPriorityHighest), std::max(static_cast<int>(ResourceLoadPriorityLowest), modifiedPriority));
-    return static_cast<ResourceLoadPriority>(modifiedPriority);
+    return priority;
 }
 
 WebTaskRunner* FrameFetchContext::loadingTaskRunner() const

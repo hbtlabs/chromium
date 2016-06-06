@@ -832,6 +832,7 @@ interface CustomElementsRegistry
     attribute @@toStringTag
     method constructor
     method define
+    method get
 interface CustomEvent : Event
     attribute @@toStringTag
     getter detail
@@ -1251,7 +1252,6 @@ interface Document : Node
     getter timeline
     getter title
     getter visibilityState
-    getter visualViewport
     getter webkitCurrentFullScreenElement
     getter webkitFullscreenElement
     getter webkitFullscreenEnabled
@@ -1307,7 +1307,6 @@ interface Document : Node
     method querySelector
     method querySelectorAll
     method registerElement
-    method setRootScroller
     method webkitCancelFullScreen
     method webkitExitFullscreen
     method write
@@ -1398,6 +1397,7 @@ interface Document : Node
     setter onwebkitfullscreenchange
     setter onwebkitfullscreenerror
     setter onwheel
+    setter rootScroller
     setter selectedStylesheetSet
     setter title
     setter xmlStandalone
@@ -1587,7 +1587,6 @@ interface Event
     getter defaultPrevented
     getter eventPhase
     getter path
-    getter relatedTargetScoped
     getter returnValue
     getter srcElement
     getter target
@@ -4177,6 +4176,19 @@ interface Path2D
     method moveTo
     method quadraticCurveTo
     method rect
+interface PaymentAddress
+    attribute @@toStringTag
+    getter addressLine
+    getter administrativeArea
+    getter dependentLocality
+    getter languageCode
+    getter locality
+    getter organization
+    getter postalCode
+    getter recipient
+    getter regionCode
+    getter sortingCode
+    method constructor
 interface PaymentRequest : EventTarget
     attribute @@toStringTag
     getter onshippingaddresschange
@@ -5818,19 +5830,6 @@ interface SharedWorker : EventTarget
     getter workerStart
     method constructor
     setter onerror
-interface ShippingAddress
-    attribute @@toStringTag
-    getter addressLine
-    getter administrativeArea
-    getter dependentLocality
-    getter languageCode
-    getter locality
-    getter organization
-    getter postalCode
-    getter recipient
-    getter regionCode
-    getter sortingCode
-    method constructor
 interface SiteBoundCredential : Credential
     attribute @@toStringTag
     getter iconURL
@@ -7651,6 +7650,7 @@ interface webkitURL
     attribute textInputController
     attribute toolbar
     attribute top
+    attribute visualViewport
     attribute webkitIndexedDB
     attribute webkitStorageInfo
     attribute window
@@ -7671,6 +7671,7 @@ interface webkitURL
     method focus
     method gc
     method getComputedStyle
+    method getComputedStyleMap
     method getMatchedCSSRules
     method getSelection
     method matchMedia

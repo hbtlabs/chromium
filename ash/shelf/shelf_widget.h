@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/common/wm/background_animator.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
-#include "ash/shelf/shelf_types.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
@@ -20,17 +20,15 @@ class FocusCycler;
 class Shelf;
 class ShelfLayoutManager;
 class StatusAreaWidget;
-class WorkspaceController;
-namespace wm {
 class WmWindow;
-}
+class WorkspaceController;
 
 class ASH_EXPORT ShelfWidget : public views::Widget,
                                public views::WidgetObserver,
                                public ShelfLayoutManagerObserver {
  public:
-  ShelfWidget(wm::WmWindow* wm_shelf_container,
-              wm::WmWindow* wm_status_container,
+  ShelfWidget(WmWindow* wm_shelf_container,
+              WmWindow* wm_status_container,
               WorkspaceController* workspace_controller);
   ~ShelfWidget() override;
 
@@ -39,12 +37,12 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   static bool ShelfAlignmentAllowed();
 
   void OnShelfAlignmentChanged();
-  wm::ShelfAlignment GetAlignment() const;
+  ShelfAlignment GetAlignment() const;
 
   // Sets the shelf's background type.
-  void SetPaintsBackground(wm::ShelfBackgroundType background_type,
+  void SetPaintsBackground(ShelfBackgroundType background_type,
                            BackgroundAnimatorChangeType change_type);
-  wm::ShelfBackgroundType GetBackgroundType() const;
+  ShelfBackgroundType GetBackgroundType() const;
 
   // Hide the shelf behind a black bar during e.g. a user transition when |hide|
   // is true. The |animation_time_ms| will be used as animation duration.

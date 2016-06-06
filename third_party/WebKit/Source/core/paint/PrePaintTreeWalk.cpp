@@ -7,6 +7,7 @@
 #include "core/dom/DocumentLifecycle.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
 
@@ -20,9 +21,8 @@ void PrePaintTreeWalk::walk(FrameView& rootFrame)
 {
     DCHECK(rootFrame.frame().document()->lifecycle().state() == DocumentLifecycle::InPrePaint);
 
-    PaintPropertyTreeBuilderRootContext treeBuilderRootContext;
-    m_propertyTreeBuilder.buildTreeRootNodes(rootFrame, treeBuilderRootContext);
-    PrePaintTreeWalkContext rootContext = { treeBuilderRootContext };
+    PrePaintTreeWalkContext rootContext;
+    m_propertyTreeBuilder.buildTreeRootNodes(rootFrame, rootContext.treeBuilderContext);
     walk(rootFrame, rootContext);
 }
 
@@ -40,9 +40,16 @@ void PrePaintTreeWalk::walk(const LayoutObject& object, const PrePaintTreeWalkCo
     m_propertyTreeBuilder.buildTreeNodes(object, localContext.treeBuilderContext);
 
     for (const LayoutObject* child = object.slowFirstChild(); child; child = child->nextSibling()) {
-        if (child->isBoxModelObject() || child->isSVG())
-            walk(*child, localContext);
+        if (!child->isBoxModelObject() && !child->isSVG())
+            continue;
+        // Column spanners are walked through their placeholders. See below.
+        if (child->isColumnSpanAll())
+            continue;
+        walk(*child, localContext);
     }
+
+    if (object.isLayoutMultiColumnSpannerPlaceholder())
+        walk(*toLayoutMultiColumnSpannerPlaceholder(object).layoutObjectInFlowThread(), localContext);
 
     if (object.isLayoutPart()) {
         Widget* widget = toLayoutPart(object).widget();

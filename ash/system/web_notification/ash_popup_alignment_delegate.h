@@ -8,17 +8,13 @@
 #include <stdint.h>
 
 #include "ash/ash_export.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/shelf/shelf_layout_manager_observer.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "ui/display/display_observer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/message_center/views/popup_alignment_delegate.h"
-
-namespace aura {
-class Window;
-}
 
 namespace display {
 class Screen;
@@ -64,7 +60,7 @@ class ASH_EXPORT AshPopupAlignmentDelegate
   friend class WebNotificationTrayTest;
 
   // Get the current alignment of the shelf.
-  wm::ShelfAlignment GetAlignment() const;
+  ShelfAlignment GetAlignment() const;
 
   // Utility function to get the display which should be care about.
   display::Display GetCurrentDisplay() const;

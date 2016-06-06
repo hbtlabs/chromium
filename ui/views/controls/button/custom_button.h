@@ -110,7 +110,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   void OnDragDone() override;
   void GetAccessibleState(ui::AXViewState* state) override;
   void VisibilityChanged(View* starting_from, bool is_visible) override;
-  std::unique_ptr<InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
   SkColor GetInkDropBaseColor() const override;
 
   // Overridden from gfx::AnimationDelegate:
@@ -141,8 +141,8 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   // we simply return IsTriggerableEvent(event).
   virtual bool ShouldEnterPushedState(const ui::Event& event);
 
-  // Returns true if hover effect should be visible.
-  virtual bool ShouldShowInkDropHover() const;
+  // Returns true if highlight effect should be visible.
+  virtual bool ShouldShowInkDropHighlight() const;
 
   void set_has_ink_drop_action_on_click(bool has_ink_drop_action_on_click) {
     has_ink_drop_action_on_click_ = has_ink_drop_action_on_click;
@@ -183,7 +183,7 @@ class VIEWS_EXPORT CustomButton : public Button, public gfx::AnimationDelegate {
   NotifyAction notify_action_;
 
   // True when a button click should trigger an animation action on
-  // |ink_drop_delegate_|.
+  // ink_drop_delegate().
   // TODO(bruthig): Use an InkDropAction enum and drop the flag.
   bool has_ink_drop_action_on_click_;
 

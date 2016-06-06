@@ -17,12 +17,14 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
@@ -99,6 +101,9 @@ const int kOfflineTimeoutSec = 5;
 
 // Timeout used to prevent infinite connecting to a flaky network.
 const int kConnectingTimeoutSec = 60;
+
+// Max number of Gaia Reload to Show Proxy Auth Dialog.
+const int kMaxGaiaReloadForProxyAuthDialog = 3;
 
 // Type of the login screen UI that is currently presented to user.
 const char kSourceGaiaSignin[] = "gaia-signin";
@@ -249,6 +254,7 @@ SigninScreenHandler::SigninScreenHandler(
       caps_lock_enabled_(chromeos::input_method::InputMethodManager::Get()
                              ->GetImeKeyboard()
                              ->CapsLockIsEnabled()),
+      proxy_auth_dialog_reload_times_(kMaxGaiaReloadForProxyAuthDialog),
       gaia_screen_handler_(gaia_screen_handler),
       histogram_helper_(new ErrorScreensHistogramHelper("Signin")),
       weak_factory_(this) {
@@ -657,9 +663,8 @@ void SigninScreenHandler::UpdateStateInternal(NetworkError::ErrorReason reason,
                    weak_factory_.GetWeakPtr(),
                    reason,
                    true));
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        update_state_closure_.callback(),
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, update_state_closure_.callback(),
         base::TimeDelta::FromSeconds(
             zero_offline_timeout_for_test_ ? 0 : kOfflineTimeoutSec));
     return;
@@ -674,9 +679,8 @@ void SigninScreenHandler::UpdateStateInternal(NetworkError::ErrorReason reason,
                      weak_factory_.GetWeakPtr(),
                      reason,
                      true));
-      base::MessageLoop::current()->PostDelayedTask(
-          FROM_HERE,
-          connecting_closure_.callback(),
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+          FROM_HERE, connecting_closure_.callback(),
           base::TimeDelta::FromSeconds(kConnectingTimeoutSec));
     }
     return;
@@ -697,6 +701,10 @@ void SigninScreenHandler::UpdateStateInternal(NetworkError::ErrorReason reason,
   const bool from_not_online_to_online_transition =
       is_online && last_network_state_ != NetworkStateInformer::ONLINE;
   last_network_state_ = state;
+  proxy_auth_dialog_need_reload_ =
+      (reason == NetworkError::ERROR_REASON_NETWORK_STATE_CHANGED) &&
+      (state == NetworkStateInformer::PROXY_AUTH_REQUIRED) &&
+      (proxy_auth_dialog_reload_times_ > 0);
 
   CallOnReturn reload_gaia(base::Bind(
       &SigninScreenHandler::ReloadGaia, weak_factory_.GetWeakPtr(), true));
@@ -745,6 +753,12 @@ void SigninScreenHandler::UpdateStateInternal(NetworkError::ErrorReason reason,
   if (is_gaia_loading_timeout) {
     LOG(WARNING) << "Retry frame load due to loading timeout.";
     LOG(ERROR) << "UpdateStateInternal reload 4";
+    reload_gaia.ScheduleCall();
+  }
+
+  if (proxy_auth_dialog_need_reload_) {
+    --proxy_auth_dialog_reload_times_;
+    LOG(WARNING) << "Retry frame load to show proxy auth dialog";
     reload_gaia.ScheduleCall();
   }
 
@@ -1437,7 +1451,7 @@ void SigninScreenHandler::OnCapsLockChanged(bool enabled) {
 void SigninScreenHandler::OnFeedbackFinished() {
   CallJS("login.UnrecoverableCryptohomeErrorScreen.resumeAfterFeedbackUI");
 
-  // Recreate user's cryptohome after the feedkback is attempted.
+  // Recreate user's cryptohome after the feedback is attempted.
   HandleResyncUserData();
 }
 

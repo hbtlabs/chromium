@@ -194,9 +194,10 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
-#include "core/page/scrolling/RootScroller.h"
+#include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/SnapCoordinator.h"
+#include "core/page/scrolling/ViewportScrollCallback.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGScriptElement.h"
 #include "core/svg/SVGTitleElement.h"
@@ -366,9 +367,11 @@ uint64_t Document::s_globalTreeVersion = 0;
 
 static bool s_threadedParsingEnabledForTesting = true;
 
-Document::WeakDocumentSet& Document::liveDocumentSet()
+using WeakDocumentSet = PersistentHeapHashSet<WeakMember<Document>>;
+
+static WeakDocumentSet& liveDocumentSet()
 {
-    DEFINE_STATIC_LOCAL(WeakDocumentSet, set, (new WeakDocumentSet));
+    DEFINE_STATIC_LOCAL(WeakDocumentSet, set, ());
     return set;
 }
 
@@ -476,6 +479,14 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     } else {
         m_fetcher = ResourceFetcher::create(nullptr);
     }
+
+    ViewportScrollCallback* applyScroll = nullptr;
+    if (isInMainFrame()) {
+        applyScroll = RootScrollerController::createViewportApplyScroll(
+            frameHost()->topControls(), frameHost()->overscrollController());
+    }
+    m_rootScrollerController =
+        RootScrollerController::create(*this, applyScroll);
 
     // We depend on the url getting immediately set in subframes, but we
     // also depend on the url NOT getting immediately set in opened windows.
@@ -600,52 +611,17 @@ void Document::childrenChanged(const ChildrenChange& change)
 
 void Document::setRootScroller(Element* newScroller, ExceptionState& exceptionState)
 {
-    DCHECK(newScroller);
-
-    if (!frame() || !frame()->isMainFrame()) {
-        exceptionState.throwDOMException(
-            WrongDocumentError,
-            "Root scroller can only be set on the top window's document.");
-        return;
-    }
-
-    if (newScroller->document() != this) {
-        exceptionState.throwDOMException(
-            WrongDocumentError,
-            "Element isn't in this document.");
-        return;
-    }
-
-    FrameHost* host = frameHost();
-    if (!host)
-        return;
-
-    RootScroller* rootScroller = host->rootScroller();
-    DCHECK(rootScroller);
-
-    if (!rootScroller->set(*newScroller)) {
-        exceptionState.throwDOMException(
-            InvalidStateError,
-            "Element cannot be set as root scroller. Must be block or iframe.");
-    }
+    m_rootScrollerController->set(newScroller);
 }
 
-Element* Document::rootScroller()
+Element* Document::rootScroller() const
 {
-    // TODO(bokan): Should child frames return the documentElement or nullptr?
-    if (!isInMainFrame())
-        return documentElement();
+    return m_rootScrollerController->get();
+}
 
-    FrameHost* host = frameHost();
-    if (!host)
-        return nullptr;
-
-    RootScroller* rootScroller = host->rootScroller();
-    DCHECK(rootScroller);
-
-    updateStyleAndLayoutIgnorePendingStylesheets();
-
-    return rootScroller->get();
+bool Document::isEffectiveRootScroller(const Element& element) const
+{
+    return m_rootScrollerController->effectiveRootScroller() == element;
 }
 
 bool Document::isInMainFrame() const
@@ -1184,13 +1160,6 @@ Element* Document::scrollingElement()
     }
 
     return body();
-}
-
-VisualViewport* Document::visualViewport()
-{
-    if (FrameHost* host = frameHost())
-        return &host->visualViewport();
-    return nullptr;
 }
 
 /*
@@ -1945,11 +1914,7 @@ void Document::layoutUpdated()
             m_documentTiming.markFirstLayout();
     }
 
-    // TODO(bokan): Not sure how rootScroller can be null here if we're in the
-    // main frame. In any case, I'm moving rootScroller to be owned by Document
-    // soon so this will go away: https://codereview.chromium.org/1970763002/
-    if (isInMainFrame() && frameHost() && frameHost()->rootScroller())
-        frameHost()->rootScroller()->didUpdateTopDocumentLayout();
+    m_rootScrollerController->didUpdateLayout();
 }
 
 void Document::setNeedsFocusedElementCheck()
@@ -3803,12 +3768,6 @@ void Document::moveNodeIteratorsToNewDocument(Node& node, Document& newDocument)
             newDocument.attachNodeIterator(ni);
         }
     }
-}
-
-void Document::updateRangesAfterChildrenChanged(ContainerNode* container)
-{
-    for (Range* range : m_ranges)
-        range->nodeChildrenChanged(container);
 }
 
 void Document::updateRangesAfterNodeMovedToAnotherDocument(const Node& node)
@@ -5958,6 +5917,7 @@ DEFINE_TRACE(Document)
     visitor->trace(m_hoverNode);
     visitor->trace(m_activeHoverElement);
     visitor->trace(m_documentElement);
+    visitor->trace(m_rootScrollerController);
     visitor->trace(m_titleElement);
     visitor->trace(m_axObjectCache);
     visitor->trace(m_markers);
@@ -6035,7 +5995,7 @@ template class CORE_TEMPLATE_EXPORT Supplement<Document>;
 using namespace blink;
 void showLiveDocumentInstances()
 {
-    Document::WeakDocumentSet& set = Document::liveDocumentSet();
+    WeakDocumentSet& set = liveDocumentSet();
     fprintf(stderr, "There are %u documents currently alive:\n", set.size());
     for (Document* document : set)
         fprintf(stderr, "- Document %p URL: %s\n", document, document->url().getString().utf8().data());

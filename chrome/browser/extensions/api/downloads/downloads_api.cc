@@ -1193,8 +1193,7 @@ bool DownloadsEraseFunction::RunSync() {
   std::unique_ptr<base::ListValue> json_results(new base::ListValue());
   for (DownloadManager::DownloadVector::const_iterator it = results.begin();
        it != results.end(); ++it) {
-    json_results->Append(
-        new base::FundamentalValue(static_cast<int>((*it)->GetId())));
+    json_results->AppendInteger(static_cast<int>((*it)->GetId()));
     (*it)->Remove();
   }
   SetResult(std::move(json_results));
@@ -1271,7 +1270,7 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
       return;
     }
     error_ = errors::kInvisibleContext;
-    SendResponse(error_.empty());
+    SendResponse(false);
     return;
   }
   RecordApiFunctions(DOWNLOADS_FUNCTION_ACCEPT_DANGER);
@@ -1286,7 +1285,7 @@ void DownloadsAcceptDangerFunction::PromptOrWait(int download_id, int retries) {
   // DownloadDangerPrompt deletes itself
   if (on_prompt_created_ && !on_prompt_created_->is_null())
     on_prompt_created_->Run(prompt);
-  SendResponse(error_.empty());
+  // Function finishes in DangerPromptCallback().
 }
 
 void DownloadsAcceptDangerFunction::DangerPromptCallback(

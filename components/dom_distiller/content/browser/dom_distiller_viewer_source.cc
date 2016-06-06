@@ -280,13 +280,13 @@ void DomDistillerViewerSource::WillServiceRequest(
     std::string* path) const {
 }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyObjectSrc()
+std::string DomDistillerViewerSource::GetContentSecurityPolicyStyleSrc()
     const {
-  return "object-src 'none'; style-src 'self' https://fonts.googleapis.com;";
+  return "style-src 'self' https://fonts.googleapis.com;";
 }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyFrameSrc() const {
-  return "frame-src *;";
+std::string DomDistillerViewerSource::GetContentSecurityPolicyChildSrc() const {
+  return "child-src *;";
 }
 
 }  // namespace dom_distiller

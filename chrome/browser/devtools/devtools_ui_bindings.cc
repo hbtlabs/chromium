@@ -7,6 +7,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/base64.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
@@ -39,7 +40,7 @@
 #include "components/infobars/core/infobar.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/ui/zoom/page_zoom.h"
+#include "components/zoom/page_zoom.h"
 #include "content/public/browser/devtools_external_agent_proxy.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/invalidate_type.h"
@@ -267,17 +268,21 @@ int ResponseWriter::Write(net::IOBuffer* buffer,
                           int num_bytes,
                           const net::CompletionCallback& callback) {
   std::string chunk = std::string(buffer->data(), num_bytes);
-  if (!base::IsStringUTF8(chunk))
-    return num_bytes;
+  bool encoded = false;
+  if (!base::IsStringUTF8(chunk)) {
+    encoded = true;
+    base::Base64Encode(chunk, &chunk);
+  }
 
   base::FundamentalValue* id = new base::FundamentalValue(stream_id_);
   base::StringValue* chunkValue = new base::StringValue(chunk);
+  base::FundamentalValue* encodedValue = new base::FundamentalValue(encoded);
 
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&DevToolsUIBindings::CallClientFunction,
-                 bindings_, "DevToolsAPI.streamWrite",
-                 base::Owned(id), base::Owned(chunkValue), nullptr));
+      base::Bind(&DevToolsUIBindings::CallClientFunction, bindings_,
+                 "DevToolsAPI.streamWrite", base::Owned(id),
+                 base::Owned(chunkValue), base::Owned(encodedValue)));
   return num_bytes;
 }
 
@@ -673,15 +678,15 @@ void DevToolsUIBindings::SetWhitelistedShortcuts(const std::string& message) {
 }
 
 void DevToolsUIBindings::ZoomIn() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_IN);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_IN);
 }
 
 void DevToolsUIBindings::ZoomOut() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_OUT);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_OUT);
 }
 
 void DevToolsUIBindings::ResetZoom() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_RESET);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_RESET);
 }
 
 void DevToolsUIBindings::SetDevicesDiscoveryConfig(

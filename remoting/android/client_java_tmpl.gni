@@ -25,6 +25,7 @@ template("remoting_android_client_java_tmpl") {
       "DummyActivityLifecycleListener.java",
       "DummyClientExtension.java",
       "Event.java",
+      "FeedbackAnimator.java",
       "FlingAnimationJob.java",
       "HostInfo.java",
       "HostListAdapter.java",
@@ -32,6 +33,7 @@ template("remoting_android_client_java_tmpl") {
       "InputStrategyInterface.java",
       "NavigationMenuAdapter.java",
       "OAuthTokenConsumer.java",
+      "PaintEventParameter.java",
       "Preconditions.java",
       "RenderData.java",
       "SessionAuthenticator.java",
@@ -67,6 +69,7 @@ template("remoting_android_client_java_tmpl") {
       "help/HelpSingleton.java",
       "jni/Client.java",
       "jni/ConnectionListener.java",
+      "jni/Display.java",
       "jni/JniInterface.java",
       "jni/TouchEventData.java",
     ]

@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
+#include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
@@ -35,6 +36,7 @@
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/selection_bound.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 
 namespace cc {
@@ -284,6 +286,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Called after async screenshot task completes. Scales and crops the result
   // of the copy.
   static void PrepareTextureCopyOutputResult(
+      base::WeakPtr<RenderWidgetHostViewAndroid> rwhva,
       const gfx::Size& dst_size_in_pixel,
       SkColorType color_type,
       const base::TimeTicks& start_time,
@@ -354,7 +357,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Size current_surface_size_;
   cc::ReturnedResourceArray surface_returned_resources_;
   gfx::Vector2dF location_bar_content_translation_;
-  cc::ViewportSelection current_viewport_selection_;
+  cc::Selection<gfx::SelectionBound> current_viewport_selection_;
 
   // The most recent texture size that was pushed to the texture layer.
   gfx::Size texture_size_in_layer_;

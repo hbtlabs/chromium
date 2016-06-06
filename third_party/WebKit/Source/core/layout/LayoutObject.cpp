@@ -1268,6 +1268,12 @@ void LayoutObject::invalidateDisplayItemClientsWithPaintInvalidationState(const 
     invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
 }
 
+
+bool LayoutObject::compositedScrollsWithRespectTo(const LayoutBoxModelObject& paintInvalidationContainer) const
+{
+    return paintInvalidationContainer.usesCompositedScrolling() && this != &paintInvalidationContainer;
+}
+
 const LayoutBoxModelObject* LayoutObject::invalidatePaintRectangleInternal(const LayoutRect& dirtyRect) const
 {
     RELEASE_ASSERT(isRooted());
@@ -1281,6 +1287,13 @@ const LayoutBoxModelObject* LayoutObject::invalidatePaintRectangleInternal(const
     const LayoutBoxModelObject& paintInvalidationContainer = containerForPaintInvalidation();
     LayoutRect dirtyRectOnBacking = dirtyRect;
     PaintLayer::mapRectToPaintInvalidationBacking(*this, paintInvalidationContainer, dirtyRectOnBacking);
+
+    // Composited scrolling should not be included in the bounds of composited-scrolled items.
+    if (compositedScrollsWithRespectTo(paintInvalidationContainer)) {
+        LayoutSize inverseOffset(toLayoutBox(&paintInvalidationContainer)->scrolledContentOffset());
+        dirtyRectOnBacking.move(inverseOffset);
+    }
+
     invalidatePaintUsingContainer(paintInvalidationContainer, dirtyRectOnBacking, PaintInvalidationRectangle);
     return &paintInvalidationContainer;
 }
@@ -1386,7 +1399,7 @@ inline void LayoutObject::invalidateSelectionIfNeeded(const LayoutBoxModelObject
 
         // Composited scrolling should not be included in the bounds and position tracking, because the graphics layer backing the scroller
         // does not move on scroll.
-        if (paintInvalidationContainer.usesCompositedScrolling() && &paintInvalidationContainer != this) {
+        if (compositedScrollsWithRespectTo(paintInvalidationContainer)) {
             LayoutSize inverseOffset(toLayoutBox(&paintInvalidationContainer)->scrolledContentOffset());
             newSelectionRect.move(inverseOffset);
         }
@@ -1425,7 +1438,7 @@ PaintInvalidationReason LayoutObject::invalidatePaintIfNeeded(const PaintInvalid
 
     // Composited scrolling should not be included in the bounds and position tracking, because the graphics layer backing the scroller
     // does not move on scroll.
-    if (paintInvalidationContainer.usesCompositedScrolling() && &paintInvalidationContainer != this) {
+    if (compositedScrollsWithRespectTo(paintInvalidationContainer)) {
         LayoutSize inverseOffset(toLayoutBox(&paintInvalidationContainer)->scrolledContentOffset());
         newLocation.move(inverseOffset);
         newBounds.move(inverseOffset);
@@ -1528,7 +1541,7 @@ PaintInvalidationReason LayoutObject::getPaintInvalidationReason(const PaintInva
 
 void LayoutObject::adjustInvalidationRectForCompositedScrolling(LayoutRect& rect, const LayoutBoxModelObject& paintInvalidationContainer) const
 {
-    if (paintInvalidationContainer.usesCompositedScrolling() && &paintInvalidationContainer != this) {
+    if (compositedScrollsWithRespectTo(paintInvalidationContainer)) {
         LayoutSize offset(-toLayoutBox(&paintInvalidationContainer)->scrolledContentOffset());
         rect.move(offset);
     }
@@ -3643,11 +3656,12 @@ ObjectPaintProperties* LayoutObject::objectPaintProperties() const
 
 ObjectPaintProperties& LayoutObject::ensureObjectPaintProperties()
 {
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    if (ObjectPaintProperties* properties = objectPaintPropertiesMap().get(this))
-        return *properties;
-    objectPaintPropertiesMap().set(this, ObjectPaintProperties::create());
-    return *objectPaintPropertiesMap().get(this);
+    DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+    auto addResult = objectPaintPropertiesMap().add(this, nullptr);
+    if (addResult.isNewEntry)
+        addResult.storedValue->value = ObjectPaintProperties::create();
+
+    return *addResult.storedValue->value;
 }
 
 void LayoutObject::clearObjectPaintProperties()

@@ -65,7 +65,6 @@ def _rebaseline_test(test_file, baseline_target, baseline_move_to, test_config, 
     filesystem = test_config.filesystem
     scm = test_config.scm
     layout_tests_directory = test_config.layout_tests_directory
-    results_directory = test_config.results_directory
     target_expectations_directory = filesystem.join(
         layout_tests_directory, 'platform', baseline_target, test_directory)
     test_results_directory = test_config.filesystem.join(
@@ -87,7 +86,7 @@ def _rebaseline_test(test_file, baseline_target, baseline_move_to, test_config, 
             actual_result_extensions)
 
         if extensions_to_move.intersection(
-            current_baselines.get(baseline_move_to, {}).keys()):
+                current_baselines.get(baseline_move_to, {}).keys()):
             log('    Already had baselines in %s, could not move existing '
                 '%s ones' % (baseline_move_to, baseline_target))
             return False
@@ -95,12 +94,12 @@ def _rebaseline_test(test_file, baseline_target, baseline_move_to, test_config, 
         # Do the actual move.
         if extensions_to_move:
             if not _move_test_baselines(
-                test_file,
-                list(extensions_to_move),
-                baseline_target,
-                baseline_move_to,
-                test_config,
-                log):
+                    test_file,
+                    list(extensions_to_move),
+                    baseline_target,
+                    baseline_move_to,
+                    test_config,
+                    log):
                 return False
         else:
             log('    No current baselines to move')
@@ -174,9 +173,7 @@ def get_test_baselines(test_file, test_config):
         def platform_from_directory(self, directory):
             return self._platforms_by_directory[directory]
 
-    test_path = test_config.filesystem.join(test_config.layout_tests_directory, test_file)
-    host = test_config.host
-    all_platforms_port = AllPlatformsPort(host)
+    all_platforms_port = AllPlatformsPort(test_config.host)
 
     all_test_baselines = {}
     for baseline_extension in ('.txt', '.checksum', '.png'):

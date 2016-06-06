@@ -1390,7 +1390,7 @@ bool RenderFrameImpl::Send(IPC::Message* message) {
   return RenderThread::Get()->Send(message);
 }
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
 void RenderFrameImpl::DidHideExternalPopupMenu() {
   // We need to clear external_popup_menu_ as soon as ExternalPopupMenu::close
   // is called. Otherwise, createExternalPopupMenu() for new popup will fail.
@@ -1504,9 +1504,17 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(InputMsg_ActivateNearestFindResult,
                         OnActivateNearestFindResult)
     IPC_MESSAGE_HANDLER(FrameMsg_FindMatchRects, OnFindMatchRects)
-    IPC_MESSAGE_HANDLER(FrameMsg_SelectPopupMenuItems, OnSelectPopupMenuItems)
-#elif defined(OS_MACOSX)
+#endif
+
+#if defined(USE_EXTERNAL_POPUP_MENU)
+#if defined(OS_MACOSX)
     IPC_MESSAGE_HANDLER(FrameMsg_SelectPopupMenuItem, OnSelectPopupMenuItem)
+#else
+    IPC_MESSAGE_HANDLER(FrameMsg_SelectPopupMenuItems, OnSelectPopupMenuItems)
+#endif
+#endif
+
+#if defined(OS_MACOSX)
     IPC_MESSAGE_HANDLER(InputMsg_CopyToFindPboard, OnCopyToFindPboard)
 #endif
   IPC_END_MESSAGE_MAP()
@@ -2595,7 +2603,7 @@ RenderFrameImpl::createWorkerContentSettingsClientProxy() {
 WebExternalPopupMenu* RenderFrameImpl::createExternalPopupMenu(
     const WebPopupMenuInfo& popup_menu_info,
     WebExternalPopupMenuClient* popup_menu_client) {
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
   // An IPC message is sent to the browser to build and display the actual
   // popup. The user could have time to click a different select by the time
   // the popup is shown. In that case external_popup_menu_ is non NULL.
@@ -3262,12 +3270,14 @@ void RenderFrameImpl::didCommitProvisionalLoad(
   // before updating the current history item.
   if (SiteIsolationPolicy::UseSubframeNavigationEntries()) {
     SendUpdateState();
-    current_history_item_ = item;
   } else {
     render_view_->SendUpdateState();
     render_view_->history_controller()->UpdateForCommit(
         this, item, commit_type, navigation_state->WasWithinSamePage());
   }
+  // Update the current history item for this frame (both in default Chrome and
+  // subframe FrameNavigationEntry modes).
+  current_history_item_ = item;
 
   InternalDocumentStateData* internal_data =
       InternalDocumentStateData::FromDocumentState(document_state);
@@ -5229,7 +5239,17 @@ void RenderFrameImpl::OnFindMatchRects(int current_version) {
   Send(new FrameHostMsg_FindMatchRects_Reply(routing_id_, rects_version,
                                              match_rects, active_rect));
 }
+#endif
 
+#if defined(USE_EXTERNAL_POPUP_MENU)
+#if defined(OS_MACOSX)
+void RenderFrameImpl::OnSelectPopupMenuItem(int selected_index) {
+  if (external_popup_menu_ == NULL)
+    return;
+  external_popup_menu_->DidSelectItem(selected_index);
+  external_popup_menu_.reset();
+}
+#else
 void RenderFrameImpl::OnSelectPopupMenuItems(
     bool canceled,
     const std::vector<int>& selected_indices) {
@@ -5243,13 +5263,7 @@ void RenderFrameImpl::OnSelectPopupMenuItems(
   external_popup_menu_->DidSelectItems(canceled, selected_indices);
   external_popup_menu_.reset();
 }
-#elif defined(OS_MACOSX)
-void RenderFrameImpl::OnSelectPopupMenuItem(int selected_index) {
-  if (external_popup_menu_ == NULL)
-    return;
-  external_popup_menu_->DidSelectItem(selected_index);
-  external_popup_menu_.reset();
-}
+#endif
 #endif
 
 void RenderFrameImpl::OpenURL(const GURL& url,
@@ -5476,12 +5490,11 @@ void RenderFrameImpl::NavigateInternal(
 
     // Perform a navigation to a data url if needed.
     // Note: the base URL might be invalid, so also check the data URL string.
-    if (!common_params.base_url_for_data_url.is_empty() ||
+    bool should_load_data_url = !common_params.base_url_for_data_url.is_empty();
 #if defined(OS_ANDROID)
-        !request_params.data_url_as_string.empty() ||
+    should_load_data_url |= !request_params.data_url_as_string.empty();
 #endif
-        (browser_side_navigation &&
-         common_params.url.SchemeIs(url::kDataScheme))) {
+    if (should_load_data_url) {
       LoadDataURL(common_params, request_params, frame_, load_type,
                   item_for_history_navigation, history_load_type,
                   is_client_redirect);

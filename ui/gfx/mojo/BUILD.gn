@@ -6,6 +6,21 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 mojom("mojo") {
   sources = [
+    "selection_bound.mojom",
     "transform.mojom",
+  ]
+
+  public_deps = [
+    "//ui/gfx/geometry/mojo",
+  ]
+}
+
+mojom("test_interfaces") {
+  sources = [
+    "traits_test_service.mojom",
+  ]
+
+  public_deps = [
+    ":mojo",
   ]
 }

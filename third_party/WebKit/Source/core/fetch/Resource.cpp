@@ -34,6 +34,7 @@
 #include "core/inspector/InstanceCounters.h"
 #include "platform/Histogram.h"
 #include "platform/Logging.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/TraceEvent.h"
 #include "platform/network/HTTPParsers.h"
@@ -547,12 +548,16 @@ const ResourceRequest& Resource::lastResourceRequest() const
 
 void Resource::setRevalidatingRequest(const ResourceRequest& request)
 {
+    SECURITY_CHECK(m_redirectChain.isEmpty());
     m_revalidatingRequest = request;
     m_status = NotStarted;
 }
 
 void Resource::willFollowRedirect(ResourceRequest& newRequest, const ResourceResponse& redirectResponse)
 {
+    if (!m_revalidatingRequest.isNull())
+        revalidationFailed();
+
     newRequest.setAllowStoredCredentials(m_options.allowCredentials == AllowStoredCredentials);
     m_redirectChain.append(RedirectPair(newRequest, redirectResponse));
 }
@@ -575,6 +580,9 @@ bool Resource::unlock()
     if (!memoryCache()->contains(this) || hasClientsOrObservers() || !m_revalidatingRequest.isNull() || !m_loadFinishTime || !isSafeToUnlock())
         return false;
 
+    if (RuntimeEnabledFeatures::doNotUnlockSharedBufferEnabled())
+        return false;
+
     m_data->unlock();
     return true;
 }
@@ -582,6 +590,11 @@ bool Resource::unlock()
 void Resource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle>)
 {
     m_responseTimestamp = currentTime();
+    if (m_preloadDiscoveryTime) {
+        int timeSinceDiscovery = static_cast<int>(1000 * (monotonicallyIncreasingTime() - m_preloadDiscoveryTime));
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, preloadDiscoveryToFirstByteHistogram, ("PreloadScanner.TTFB", 0, 10000, 50));
+        preloadDiscoveryToFirstByteHistogram.count(timeSinceDiscovery);
+    }
 
     if (!m_revalidatingRequest.isNull()) {
         if (response.httpStatusCode() == 304) {
@@ -904,6 +917,8 @@ String Resource::getMemoryDumpName() const
 
 void Resource::revalidationSucceeded(const ResourceResponse& validatingResponse)
 {
+    SECURITY_CHECK(m_redirectChain.isEmpty());
+    SECURITY_CHECK(validatingResponse.url() == m_response.url());
     m_response.setResourceLoadTiming(validatingResponse.resourceLoadTiming());
 
     // RFC2616 10.3.5
@@ -928,7 +943,7 @@ void Resource::revalidationFailed()
 {
     m_resourceRequest = m_revalidatingRequest;
     m_revalidatingRequest = ResourceRequest();
-    m_redirectChain.clear();
+    SECURITY_CHECK(m_redirectChain.isEmpty());
     m_data.clear();
     m_cacheHandler.clear();
     destroyDecodedDataForFailedRevalidation();

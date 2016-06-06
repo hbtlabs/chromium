@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/shelf/shelf_types.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/shell_observer.h"
 #include "ash/system/user/login_status.h"
 #include "base/macros.h"
@@ -67,16 +67,13 @@ class SystemModalContainerLayoutManager;
 class SystemTray;
 class TouchHudDebug;
 class TouchHudProjection;
+class WmWindow;
 class WorkspaceController;
 
 #if defined(OS_CHROMEOS)
 class BootSplashScreen;
 class AshTouchExplorationManager;
 #endif
-
-namespace wm {
-class WmWindow;
-}
 
 // This class maintains the per root window state for ash. This class
 // owns the root window and other dependent objects that should be
@@ -236,6 +233,10 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   // Tests if a window is associated with the virtual keyboard.
   bool IsVirtualKeyboardWindow(aura::Window* window);
+
+  // If touch exploration is enabled, update the touch exploration
+  // controller so that synthesized touch events are anchored at this point.
+  void SetTouchAccessibilityAnchorPoint(const gfx::Point& anchor_point);
 
  private:
   explicit RootWindowController(AshWindowTreeHost* host);

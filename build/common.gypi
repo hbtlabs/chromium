@@ -70,6 +70,9 @@
           # certificate verification, but this configuration is unsupported.
           'use_openssl_certs%': 0,
 
+          # Whether or not we use external popup menu.
+          'use_external_popup_menu%': 0,
+
           # Disable viewport meta tag by default.
           'enable_viewport%': 0,
 
@@ -140,6 +143,11 @@
               'use_ozone%': 1,
             }],
 
+            # Mac and Android use external popup menu.
+            ['OS=="mac" or OS=="android"', {
+              'use_external_popup_menu%': 1,
+            }],
+
             ['OS=="android"', {
               'target_arch%': 'arm',
             }, {
@@ -160,6 +168,7 @@
         'embedded%': '<(embedded)',
         'use_libpci%': '<(use_libpci)',
         'use_openssl_certs%': '<(use_openssl_certs)',
+        'use_external_popup_menu%': '<(use_external_popup_menu)',
         'enable_viewport%': '<(enable_viewport)',
         'enable_hidpi%': '<(enable_hidpi)',
         'enable_wayland_server%': '<(enable_wayland_server)',
@@ -339,6 +348,7 @@
       'use_clipboard_aurax11%': '<(use_clipboard_aurax11)',
       'embedded%': '<(embedded)',
       'use_openssl_certs%': '<(use_openssl_certs)',
+      'use_external_popup_menu%': '<(use_external_popup_menu)',
       'enable_viewport%': '<(enable_viewport)',
       'enable_hidpi%': '<(enable_hidpi)',
       'enable_wayland_server%': '<(enable_wayland_server)',
@@ -622,8 +632,7 @@
       #                  http://crbug.com/105550
       'use_canvas_skia%': 0,
 
-      # Set to "tsan", "memcheck", or "drmemory" to configure the build to work
-      # with one of those tools.
+      # Set to "drmemory" to configure the build to work with DrMemory.
       'build_for_tool%': '',
 
       'wix_path%': '<(DEPTH)/third_party/wix',
@@ -1134,6 +1143,7 @@
     'use_cras%': '<(use_cras)',
     'use_libpci%': '<(use_libpci)',
     'use_openssl_certs%': '<(use_openssl_certs)',
+    'use_external_popup_menu%': '<(use_external_popup_menu)',
     'use_nss_certs%': '<(use_nss_certs)',
     'use_udev%': '<(use_udev)',
     'os_bsd%': '<(os_bsd)',
@@ -1715,6 +1725,8 @@
             # in the GYP files.
             'android_ndk_absolute_root%': '<!(cd <(DEPTH) && pwd -P)/third_party/android_tools/ndk/',
             'android_host_arch%': '<!(uname -m)',
+            # Version of the NDK. Used to ensure full rebuilds on NDK rolls.
+            'android_ndk_version%': 'r11c',
             # Android API-level of the SDK used for compilation.
             'android_sdk_version%': '23',
             'android_sdk_build_tools_version%': '23.0.1',
@@ -1738,6 +1750,7 @@
           # Copy conditionally-set variables out one scope.
           'android_ndk_root%': '<(android_ndk_root)',
           'android_ndk_absolute_root%': '<(android_ndk_absolute_root)',
+          'android_ndk_version%': '<(android_ndk_version)',
           'android_sdk_root%': '<(android_sdk_root)',
           'android_sdk_version%': '<(android_sdk_version)',
           'android_sdk_build_tools_version%': '<(android_sdk_build_tools_version)',
@@ -1809,6 +1822,7 @@
         'android_gdbserver%': '<(android_gdbserver)',
         'android_ndk_root%': '<(android_ndk_root)',
         'android_ndk_sysroot%': '<(android_ndk_sysroot)',
+        'android_ndk_version%': '<(android_ndk_version)',
         'android_sdk_root%': '<(android_sdk_root)',
         'android_sdk_version%': '<(android_sdk_version)',
         'android_toolchain%': '<(android_toolchain)',
@@ -2017,7 +2031,7 @@
           },{
             'msvs_large_module_debug_link_mode%': '2',  # Yes
           }],
-          ['chrome_pgo_phase!= 0', {
+          ['chrome_pgo_phase!=0 or target_arch=="x64"', {
             'full_wpo_on_official%': 1,
           }],
         ],
@@ -2272,27 +2286,6 @@
         # that allows the tool to see the memory accesses from JITted code.
         # Without this flag, JS code causes false positive reports from MSan.
         'v8_target_arch': 'arm64',
-      }],
-
-      # On valgrind bots, override the optimizer settings so we don't inline too
-      # much and make the stacks harder to figure out.
-      #
-      # TODO(rnk): Kill off variables that no one else uses and just implement
-      # them under a build_for_tool== condition.
-      ['build_for_tool=="memcheck" or build_for_tool=="tsan"', {
-        # gcc flags
-        'mac_debug_optimization': '1',
-        'mac_release_optimization': '1',
-        'release_optimize': '1',
-        'no_gc_sections': 1,
-        'debug_extra_cflags': '-g -fno-inline -fno-omit-frame-pointer '
-                              '-fno-builtin -fno-optimize-sibling-calls',
-        'release_extra_cflags': '-g -fno-inline -fno-omit-frame-pointer '
-                                '-fno-builtin -fno-optimize-sibling-calls',
-
-        'release_valgrind_build': 1,
-        'werror': '',
-        'component': 'static_library',
       }],
 
       # Build tweaks for DrMemory.
@@ -2763,6 +2756,9 @@
       ['use_udev==1', {
         'defines': ['USE_UDEV'],
       }],
+      ['use_external_popup_menu==1', {
+        'defines': ['USE_EXTERNAL_POPUP_MENU'],
+      }],
       ['fastbuild!=0', {
         'xcode_settings': {
           'GCC_GENERATE_DEBUGGING_SYMBOLS': 'NO',
@@ -3045,6 +3041,10 @@
       ['enable_wexit_time_destructors==1 and OS!="win"', {
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
+      }],
+      ['"<!(python <(DEPTH)/tools/clang/scripts/update.py --print-revision)"!="270823-1"', {
+        # TODO(thakis): https://crbug.com/617318
+        'variables': { 'clang_warning_flags': ['-Wno-nonportable-include-path']},
       }],
       ['chromium_code==0', {
         'variables': {
@@ -4119,8 +4119,12 @@
                   ['mips_arch_variant=="r6"', {
                     'conditions': [
                       ['clang==1', {
-                        'cflags': [ '-target mipsel-linux-gnu', '-march=mips32r6', ],
-                        'ldflags': [ '-target mipsel-linux-gnu', ],
+                        'conditions': [
+                          ['OS=="android"', {
+                            'cflags': [ '-target mipsel-linux-android', '-march=mipsel', '-mcpu=mips32r6', ],
+                            'ldflags': [ '-target mipsel-linux-android', ],
+                          }],
+                        ],
                       }, { # clang==0
                         'cflags': ['-mips32r6', '-Wa,-mips32r6', ],
                       }],
@@ -4128,6 +4132,8 @@
                         'ldflags': ['-mips32r6', '-Wl,-melf32ltsmip',],
                       }],
                     ],
+                    'cflags': [ '-mfp64', '-mno-odd-spreg' ],
+                    'ldflags': [ '-mfp64', '-mno-odd-spreg' ],
                   }],
                   ['mips_arch_variant=="r2"', {
                     'conditions': [
@@ -4219,14 +4225,48 @@
               ['_toolset=="target"', {
                 'conditions': [
                   ['mips_arch_variant=="r6"', {
-                    'cflags': ['-mips64r6', '-Wa,-mips64r6'],
-                    'ldflags': ['-mips64r6'],
+                    'conditions': [
+                      ['clang==1', {
+                        'conditions': [
+                          ['OS=="android"', {
+                            'cflags': [ '-target mips64el-linux-android', '-march=mips64el', '-mcpu=mips64r6', ],
+                            'ldflags': [ '-target mips64el-linux-android', ],
+                          }],
+                        ],
+                      }, { # clang==0
+                        'cflags': ['-mips64r6', '-Wa,-mips64r6'],
+                        'ldflags': ['-mips64r6'],
+                      }],
+                    ],
                   }],
                   ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips64r2', '-Wa,-mips64r2'],
                     'ldflags': ['-mips64r2'],
                   }],
+                  ['clang==1', {
+                    'cflags!': [
+                      # Clang does not support the following options.
+                      '-finline-limit=64',
+                    ],
+                    # TODO(gordanac) Enable integrated-as.
+                    'cflags': [ '-fno-integrated-as' ],
+                    'conditions': [
+                      ['OS=="android"', {
+                        'cflags': [
+                          # Else /usr/bin/as gets picked up.
+                          '-B<(android_toolchain)',
+                        ],
+                      }],
+                    ],
+                  }],
+                  ['clang==1 and OS=="android"', {
+                    'ldflags': [
+                      # Let clang find the ld in the NDK.
+                      '--gcc-toolchain=<(android_toolchain)/..',
+                    ],
+                  }],
                 ],
+
                 'cflags_cc': [
                   '-Wno-uninitialized',
                 ],
@@ -4811,6 +4851,7 @@
               # The NDK has these things, but doesn't define the constants
               # to say that it does. Define them here instead.
               'HAVE_SYS_UIO_H',
+              'ANDROID_NDK_VERSION=<(android_ndk_version)',
             ],
             'ldflags!': [
               '-pthread',  # Not supported by Android toolchain.
@@ -5501,7 +5542,8 @@
                     # 2, favorSize - Favor small code (/Os)
                     'FavorSizeOrSpeed': '2',
                     'conditions': [
-                      ['full_wpo_on_official==1', {
+                      # TODO(thakis): Remove clang==0 here, crbug.com/598772
+                      ['full_wpo_on_official==1 and clang==0', {
                         # This implies link time code generation.
                         'WholeProgramOptimization': 'true',
                       }],
@@ -5529,7 +5571,8 @@
                     # 1, favorSpeed - Favor fast code (/Ot)
                     'FavorSizeOrSpeed': '1',
                     'conditions': [
-                      ['full_wpo_on_official==1', {
+                      # TODO(thakis): Remove clang==0 here, crbug.com/598772
+                      ['full_wpo_on_official==1 and clang==0', {
                         # This implies link time code generation.
                         'WholeProgramOptimization': 'true',
                       }],

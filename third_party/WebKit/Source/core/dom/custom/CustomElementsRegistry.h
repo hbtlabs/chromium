@@ -5,9 +5,11 @@
 #ifndef CustomElementsRegistry_h
 #define CustomElementsRegistry_h
 
+#include "base/gtest_prod_util.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
+#include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/AtomicStringHash.h"
@@ -16,6 +18,9 @@ namespace blink {
 
 class CustomElementDefinition;
 class CustomElementDefinitionBuilder;
+class CustomElementDescriptor;
+class Document;
+class Element;
 class ElementRegistrationOptions;
 class ExceptionState;
 class ScriptState;
@@ -28,8 +33,9 @@ class CORE_EXPORT CustomElementsRegistry final
     DEFINE_WRAPPERTYPEINFO();
     WTF_MAKE_NONCOPYABLE(CustomElementsRegistry);
 public:
-    static CustomElementsRegistry* create(
-        V0CustomElementRegistrationContext*);
+    static CustomElementsRegistry* create(Document*);
+
+    virtual ~CustomElementsRegistry() = default;
 
     void define(
         ScriptState*,
@@ -44,24 +50,42 @@ public:
         const ElementRegistrationOptions&,
         ExceptionState&);
 
-    bool nameIsDefined(const AtomicString& name) const
-    {
-        return m_definitions.contains(name);
-    }
-
+    ScriptValue get(const AtomicString& name);
+    bool nameIsDefined(const AtomicString& name) const;
     CustomElementDefinition* definitionForName(const AtomicString& name) const;
+
+    // TODO(dominicc): Consider broadening this API when type extensions are
+    // implemented.
+    void addCandidate(Element*);
 
     DECLARE_TRACE();
 
 private:
-    CustomElementsRegistry(const V0CustomElementRegistrationContext*);
-    bool v0NameIsDefined(const AtomicString&) const;
+    friend class CustomElementsRegistryTestBase;
 
+    CustomElementsRegistry(Document*);
+
+    V0CustomElementRegistrationContext* v0();
+    bool v0NameIsDefined(const AtomicString& name);
+
+    void collectCandidates(
+        const CustomElementDescriptor&,
+        HeapVector<Member<Element>>*);
+
+    class NameIsBeingDefined;
+
+    HashSet<AtomicString> m_namesBeingDefined;
     using DefinitionMap =
         HeapHashMap<AtomicString, Member<CustomElementDefinition>>;
     DefinitionMap m_definitions;
 
-    Member<const V0CustomElementRegistrationContext> m_v0;
+    Member<Document> m_document;
+
+    using UpgradeCandidateSet = HeapHashSet<WeakMember<Element>>;
+    using UpgradeCandidateMap = HeapHashMap<
+        AtomicString,
+        Member<UpgradeCandidateSet>>;
+    Member<UpgradeCandidateMap> m_upgradeCandidates;
 };
 
 } // namespace blink

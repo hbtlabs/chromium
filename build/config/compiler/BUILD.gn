@@ -343,7 +343,8 @@ config("compiler") {
     # Gold is the default linker for the bundled binutils so we explicitly
     # enable the bfd linker when use_gold is not set.
     ldflags += [ "-fuse-ld=bfd" ]
-  } else if (is_android && current_cpu == "mipsel" && is_clang) {
+  } else if (is_android && is_clang &&
+             (current_cpu == "mipsel" || current_cpu == "mips64el")) {
     # Let clang find the ld.bfd in the NDK.
     _rebased_android_toolchain_root =
         rebase_path(android_toolchain_root, root_build_dir)
@@ -619,11 +620,22 @@ config("compiler_cpu_abi") {
       cflags += [ "-m${mips_float_abi}-float" ]
     } else if (current_cpu == "mips64el") {
       if (mips_arch_variant == "r6") {
-        cflags += [
-          "-mips64r6",
-          "-Wa,-mips64r6",
-        ]
-        ldflags += [ "-mips64r6" ]
+        if (is_clang) {
+          if (is_android) {
+            cflags += [
+              "--target=mips64el-linux-android",
+              "-march=mips64el",
+              "-mcpu=mips64r6",
+            ]
+            ldflags += [ "--target=mips64el-linux-android" ]
+          }
+        } else {
+          cflags += [
+            "-mips64r6",
+            "-Wa,-mips64r6",
+          ]
+          ldflags += [ "-mips64r6" ]
+        }
       } else if (mips_arch_variant == "r2") {
         cflags += [
           "-mips64r2",
@@ -993,6 +1005,13 @@ config("default_warnings") {
         # TODO(thakis): https://crbug.com/604888
         "-Wno-undefined-var-template",
       ]
+
+      if (llvm_force_head_revision) {
+        cflags += [
+          # TODO(thakis): https://crbug.com/617318
+          "-Wno-nonportable-include-path",
+        ]
+      }
     }
   }
 }
@@ -1194,6 +1213,9 @@ if (is_win) {
       # This gives a 5-10% link speedup.
       "/cgthreads:8",
     ]
+    if (full_wpo_on_official) {
+      arflags = [ "/LTCG" ]
+    }
   }
 } else {
   common_optimize_on_cflags = [
@@ -1252,7 +1274,8 @@ if (is_win) {
 # Default "optimization on" config.
 config("optimize") {
   if (is_win) {
-    if (is_official_build && full_wpo_on_official) {
+    # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+    if (is_official_build && full_wpo_on_official && !is_clang) {
       common_optimize_on_cflags += [
         "/GL",  # Whole program optimization.
 

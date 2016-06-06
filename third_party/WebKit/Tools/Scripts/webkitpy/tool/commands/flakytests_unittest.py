@@ -4,16 +4,15 @@
 
 import flakytests
 
-from webkitpy.common.checkout.scm.scm_mock import MockSCM
-from webkitpy.layout_tests.layout_package import bot_test_expectations
 from webkitpy.layout_tests.builder_list import BuilderList
+from webkitpy.layout_tests.layout_package import bot_test_expectations
 from webkitpy.tool.commands.commandtest import CommandsTest
 from webkitpy.tool.mocktool import MockTool, MockOptions
 
 
 class FakeBotTestExpectations(object):
 
-    def expectation_lines(self, only_ignore_very_flaky=False):
+    def expectation_lines(self):
         return []
 
 
@@ -31,7 +30,8 @@ class FakeBotTestExpectationsFactory(object):
             builder: test_data,
         }
         results = bot_test_expectations.ResultsJSON(builder, json_dict)
-        return bot_test_expectations.BotTestExpectations(results, self.builders, self.builders._exact_matches[builder]["specifiers"])
+        return bot_test_expectations.BotTestExpectations(
+            results, self.builders, self.builders._exact_matches[builder]["specifiers"])
 
     def expectations_for_builder(self, builder):
         if builder == 'foo-builder':

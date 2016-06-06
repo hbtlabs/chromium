@@ -162,12 +162,13 @@ Background.ISSUE_URL = 'https://code.google.com/p/chromium/issues/entry?' +
  * @const
  */
 Background.GESTURE_CLASSIC_COMMAND_MAP = {
+  'click': 'forceClickOnCurrentItem',
   'swipeUp1': 'backward',
   'swipeDown1': 'forward',
   'swipeLeft1': 'left',
   'swipeRight1': 'right',
   'swipeUp2': 'jumpToTop',
-  'swipeDown2': 'readFromhere',
+  'swipeDown2': 'readFromHere',
 };
 
 /**
@@ -177,6 +178,7 @@ Background.GESTURE_CLASSIC_COMMAND_MAP = {
  * @const
  */
 Background.GESTURE_NEXT_COMMAND_MAP = {
+  'click': 'forceClickOnCurrentItem',
   'swipeUp1': 'previousLine',
   'swipeDown1': 'nextLine',
   'swipeLeft1': 'previousObject',
@@ -767,22 +769,25 @@ Background.prototype = {
     }
 
     if (pred) {
-      var node = AutomationUtil.findNextNode(
-          current.getBound(dir).node, dir, pred, {skipInitialAncestry: true});
+      var bound = current.getBound(dir).node;
+      if (bound) {
+        var node = AutomationUtil.findNextNode(
+            bound, dir, pred, {skipInitialAncestry: true});
 
-      if (node) {
-        node = AutomationUtil.findNodePre(
-            node, dir, AutomationPredicate.element) || node;
-      }
-
-      if (node) {
-        current = cursors.Range.fromNode(node);
-      } else {
-        if (predErrorMsg) {
-          cvox.ChromeVox.tts.speak(Msgs.getMsg(predErrorMsg),
-                                   cvox.QueueMode.FLUSH);
+        if (node) {
+          node = AutomationUtil.findNodePre(
+              node, dir, AutomationPredicate.object) || node;
         }
-        return false;
+
+        if (node) {
+          current = cursors.Range.fromNode(node);
+        } else {
+          if (predErrorMsg) {
+            cvox.ChromeVox.tts.speak(Msgs.getMsg(predErrorMsg),
+                                     cvox.QueueMode.FLUSH);
+          }
+          return false;
+        }
       }
     }
 

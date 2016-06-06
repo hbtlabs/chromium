@@ -275,10 +275,11 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
   test_stream->aligned_in_file_data.resize(test_stream->aligned_buffer_size *
                                            test_stream->num_frames);
 
+  base::File src(src_file, base::File::FLAG_OPEN | base::File::FLAG_READ);
   std::vector<char> src_data(visible_buffer_size);
-  off_t dest_offset = 0;
+  off_t src_offset = 0, dest_offset = 0;
   for (size_t frame = 0; frame < test_stream->num_frames; frame++) {
-    LOG_ASSERT(base::ReadFile(src_file, &src_data[0], visible_buffer_size) ==
+    LOG_ASSERT(src.Read(src_offset, &src_data[0], visible_buffer_size) ==
                static_cast<int>(visible_buffer_size));
     const char* src_ptr = &src_data[0];
     for (size_t i = 0; i < num_planes; i++) {
@@ -293,7 +294,9 @@ static void CreateAlignedInputStreamFile(const gfx::Size& coded_size,
       }
       dest_offset += padding_sizes[i];
     }
+    src_offset += visible_buffer_size;
   }
+  src.Close();
 
   // Assert that memory mapped of file starts at 64 byte boundary. So each
   // plane of frames also start at 64 byte boundary.
@@ -1572,18 +1575,18 @@ void VEAClient::WriteIvfFrameHeader(int frame_index, size_t frame_size) {
 // - If true, verify the output frames of encoder.
 class VideoEncodeAcceleratorTest
     : public ::testing::TestWithParam<
-          base::Tuple<int, bool, int, bool, bool, bool, bool, bool>> {};
+          std::tuple<int, bool, int, bool, bool, bool, bool, bool>> {};
 
 TEST_P(VideoEncodeAcceleratorTest, TestSimpleEncode) {
-  size_t num_concurrent_encoders = base::get<0>(GetParam());
-  const bool save_to_file = base::get<1>(GetParam());
-  const unsigned int keyframe_period = base::get<2>(GetParam());
-  const bool force_bitrate = base::get<3>(GetParam());
-  const bool test_perf = base::get<4>(GetParam());
-  const bool mid_stream_bitrate_switch = base::get<5>(GetParam());
-  const bool mid_stream_framerate_switch = base::get<6>(GetParam());
+  size_t num_concurrent_encoders = std::get<0>(GetParam());
+  const bool save_to_file = std::get<1>(GetParam());
+  const unsigned int keyframe_period = std::get<2>(GetParam());
+  const bool force_bitrate = std::get<3>(GetParam());
+  const bool test_perf = std::get<4>(GetParam());
+  const bool mid_stream_bitrate_switch = std::get<5>(GetParam());
+  const bool mid_stream_framerate_switch = std::get<6>(GetParam());
   const bool verify_output =
-      base::get<7>(GetParam()) || g_env->verify_all_output();
+      std::get<7>(GetParam()) || g_env->verify_all_output();
 
   ScopedVector<ClientStateNotification<ClientState>> notes;
   ScopedVector<VEAClient> clients;
@@ -1644,65 +1647,65 @@ INSTANTIATE_TEST_CASE_P(
     SimpleEncode,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, true, 0, false, false, false, false, false),
-        base::MakeTuple(1, true, 0, false, false, false, false, true)));
+        std::make_tuple(1, true, 0, false, false, false, false, false),
+        std::make_tuple(1, true, 0, false, false, false, false, true)));
 
 INSTANTIATE_TEST_CASE_P(
     EncoderPerf,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 0, false, true, false, false, false)));
+        std::make_tuple(1, false, 0, false, true, false, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     ForceKeyframes,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 10, false, false, false, false, false)));
+        std::make_tuple(1, false, 10, false, false, false, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     ForceBitrate,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 0, true, false, false, false, false)));
+        std::make_tuple(1, false, 0, true, false, false, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     MidStreamParamSwitchBitrate,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 0, true, false, true, false, false)));
+        std::make_tuple(1, false, 0, true, false, true, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     MidStreamParamSwitchFPS,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 0, true, false, false, true, false)));
+        std::make_tuple(1, false, 0, true, false, false, true, false)));
 
 INSTANTIATE_TEST_CASE_P(
     MultipleEncoders,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(3, false, 0, false, false, false, false, false),
-        base::MakeTuple(3, false, 0, true, false, false, true, false),
-        base::MakeTuple(3, false, 0, true, false, true, false, false)));
+        std::make_tuple(3, false, 0, false, false, false, false, false),
+        std::make_tuple(3, false, 0, true, false, false, true, false),
+        std::make_tuple(3, false, 0, true, false, true, false, false)));
 #else
 INSTANTIATE_TEST_CASE_P(
     SimpleEncode,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, true, 0, false, false, false, false, false),
-        base::MakeTuple(1, true, 0, false, false, false, false, true)));
+        std::make_tuple(1, true, 0, false, false, false, false, false),
+        std::make_tuple(1, true, 0, false, false, false, false, true)));
 
 INSTANTIATE_TEST_CASE_P(
     EncoderPerf,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(1, false, 0, false, true, false, false, false)));
+        std::make_tuple(1, false, 0, false, true, false, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     MultipleEncoders,
     VideoEncodeAcceleratorTest,
     ::testing::Values(
-        base::MakeTuple(3, false, 0, false, false, false, false, false)));
+        std::make_tuple(3, false, 0, false, false, false, false, false)));
 #endif
 
 // TODO(posciak): more tests:
