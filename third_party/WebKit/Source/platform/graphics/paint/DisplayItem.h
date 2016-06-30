@@ -11,7 +11,6 @@
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 
 #ifndef NDEBUG
 #include "wtf/text/StringBuilder.h"
@@ -64,6 +63,7 @@ public:
         BoxDecorationBackground,
         Caret,
         ColumnRules,
+        DebugDrawing,
         DebugRedFill,
         DocumentBackground,
         DragImage,

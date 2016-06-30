@@ -10,21 +10,21 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_binding.h"
 #include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/operation.h"
 #include "components/mus/ws/server_window.h"
+#include "components/mus/ws/user_activity_monitor.h"
 #include "components/mus/ws/window_coordinate_conversions.h"
 #include "components/mus/ws/window_manager_access_policy.h"
-#include "components/mus/ws/window_manager_factory_service.h"
+#include "components/mus/ws/window_manager_display_root.h"
 #include "components/mus/ws/window_manager_state.h"
+#include "components/mus/ws/window_manager_window_tree_factory.h"
 #include "components/mus/ws/window_server_delegate.h"
 #include "components/mus/ws/window_tree.h"
 #include "components/mus/ws/window_tree_binding.h"
 #include "services/shell/public/cpp/connection.h"
-#include "ui/events/mojo/input_events_type_converters.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
 namespace mus {
@@ -36,11 +36,14 @@ WindowServer::WindowServer(
     : delegate_(delegate),
       surfaces_state_(surfaces_state),
       next_client_id_(1),
-      display_manager_(new DisplayManager(this)),
+      display_manager_(new DisplayManager(this, &user_id_tracker_)),
       current_operation_(nullptr),
       in_destructor_(false),
       next_wm_change_id_(0),
-      window_manager_factory_registry_(this, &user_id_tracker_) {}
+      window_manager_window_tree_factory_set_(this, &user_id_tracker_) {
+  user_id_tracker_.AddObserver(this);
+  OnUserIdAdded(user_id_tracker_.active_id());
+}
 
 WindowServer::~WindowServer() {
   in_destructor_ = true;
@@ -74,10 +77,13 @@ WindowTree* WindowServer::EmbedAtWindow(
     ServerWindow* root,
     const UserId& user_id,
     mojom::WindowTreeClientPtr client,
+    uint32_t flags,
     std::unique_ptr<AccessPolicy> access_policy) {
   std::unique_ptr<WindowTree> tree_ptr(
       new WindowTree(this, user_id, root, std::move(access_policy)));
   WindowTree* tree = tree_ptr.get();
+  if (flags & mojom::kEmbedFlagEmbedderInterceptsEvents)
+    tree->set_embedder_intercepts_events();
 
   mojom::WindowTreePtr window_tree_ptr;
   mojom::WindowTreeRequest window_tree_request = GetProxy(&window_tree_ptr);
@@ -95,42 +101,34 @@ WindowTree* WindowServer::EmbedAtWindow(
   return tree;
 }
 
-WindowTree* WindowServer::AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
-                                  std::unique_ptr<WindowTreeBinding> binding,
-                                  mojom::WindowTreePtr tree_ptr) {
+void WindowServer::AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
+                           std::unique_ptr<WindowTreeBinding> binding,
+                           mojom::WindowTreePtr tree_ptr) {
   CHECK_EQ(0u, tree_map_.count(tree_impl_ptr->id()));
   WindowTree* tree = tree_impl_ptr.get();
   tree_map_[tree->id()] = std::move(tree_impl_ptr);
   tree->Init(std::move(binding), std::move(tree_ptr));
-  return tree;
 }
 
 WindowTree* WindowServer::CreateTreeForWindowManager(
-    Display* display,
-    mojom::WindowManagerFactory* factory,
-    ServerWindow* root,
-    const UserId& user_id) {
-  mojom::DisplayPtr display_ptr = display->ToMojomDisplay();
-  mojom::WindowTreeClientPtr tree_client;
-  factory->CreateWindowManager(std::move(display_ptr), GetProxy(&tree_client));
-  std::unique_ptr<WindowTree> tree_ptr(new WindowTree(
-      this, user_id, root, base::WrapUnique(new WindowManagerAccessPolicy)));
-  WindowTree* tree = tree_ptr.get();
-  mojom::WindowTreePtr window_tree_ptr;
-  mojom::WindowTreeRequest tree_request;
-  std::unique_ptr<WindowTreeBinding> binding =
+    const UserId& user_id,
+    mojom::WindowTreeRequest window_tree_request,
+    mojom::WindowTreeClientPtr window_tree_client) {
+  std::unique_ptr<WindowTree> window_tree(new WindowTree(
+      this, user_id, nullptr, base::WrapUnique(new WindowManagerAccessPolicy)));
+  std::unique_ptr<WindowTreeBinding> window_tree_binding =
       delegate_->CreateWindowTreeBinding(
-          WindowServerDelegate::BindingType::WINDOW_MANAGER, this, tree,
-          &tree_request, &tree_client);
-  if (!binding) {
-    DefaultWindowTreeBinding* default_binding =
-        new DefaultWindowTreeBinding(tree_ptr.get(), std::move(tree_client));
-    binding.reset(default_binding);
-    window_tree_ptr = default_binding->CreateInterfacePtrAndBind();
+          WindowServerDelegate::BindingType::WINDOW_MANAGER, this,
+          window_tree.get(), &window_tree_request, &window_tree_client);
+  if (!window_tree_binding) {
+    window_tree_binding.reset(new DefaultWindowTreeBinding(
+        window_tree.get(), this, std::move(window_tree_request),
+        std::move(window_tree_client)));
   }
-  AddTree(std::move(tree_ptr), std::move(binding), std::move(window_tree_ptr));
-  tree->ConfigureWindowManager();
-  return tree;
+  WindowTree* window_tree_ptr = window_tree.get();
+  AddTree(std::move(window_tree), std::move(window_tree_binding), nullptr);
+  window_tree_ptr->ConfigureWindowManager();
+  return window_tree_ptr;
 }
 
 void WindowServer::DestroyTree(WindowTree* tree) {
@@ -159,6 +157,8 @@ void WindowServer::DestroyTree(WindowTree* tree) {
       displays_notified.insert(display);
     }
   }
+
+  window_manager_window_tree_factory_set_.DeleteFactoryAssociatedWithTree(tree);
 
   // Remove any requests from the client that resulted in a call to the window
   // manager and we haven't gotten a response back yet.
@@ -225,7 +225,7 @@ const WindowTree* WindowServer::GetTreeWithRoot(
   return nullptr;
 }
 
-void WindowServer::OnFirstWindowManagerFactorySet() {
+void WindowServer::OnFirstWindowManagerWindowTreeFactoryReady() {
   if (display_manager_->has_active_or_pending_displays())
     return;
 
@@ -233,6 +233,12 @@ void WindowServer::OnFirstWindowManagerFactorySet() {
   // created yet. Treat this as a signal to create a Display.
   // TODO(sky): we need a better way to determine this, most likely a switch.
   delegate_->CreateDefaultDisplays();
+}
+
+UserActivityMonitor* WindowServer::GetUserActivityMonitorForUser(
+    const UserId& user_id) {
+  DCHECK_GT(activity_monitor_map_.count(user_id), 0u);
+  return activity_monitor_map_[user_id].get();
 }
 
 bool WindowServer::SetFocusedWindow(ServerWindow* window) {
@@ -339,9 +345,8 @@ void WindowServer::ProcessClientAreaChanged(
 }
 
 void WindowServer::ProcessLostCapture(const ServerWindow* window) {
-  for (auto& pair : tree_map_) {
+  for (auto& pair : tree_map_)
     pair.second->ProcessLostCapture(window, IsOperationSource(pair.first));
-  }
 }
 
 void WindowServer::ProcessWillChangeWindowHierarchy(
@@ -438,28 +443,33 @@ void WindowServer::FinishOperation() {
 }
 
 void WindowServer::UpdateNativeCursorFromMouseLocation(ServerWindow* window) {
-  WindowManagerAndDisplay wm_and_display =
-      display_manager_->GetWindowManagerAndDisplay(window);
-  WindowManagerState* wms = wm_and_display.window_manager_state;
-  if (wms && wm_and_display.display) {
-    wms->event_dispatcher()->UpdateCursorProviderByLastKnownLocation();
+  WindowManagerDisplayRoot* display_root =
+      display_manager_->GetWindowManagerDisplayRoot(window);
+  if (display_root) {
+    EventDispatcher* event_dispatcher =
+        display_root->window_manager_state()->event_dispatcher();
+    event_dispatcher->UpdateCursorProviderByLastKnownLocation();
     int32_t cursor_id = 0;
-    if (wms->event_dispatcher()->GetCurrentMouseCursor(&cursor_id))
-      wm_and_display.display->UpdateNativeCursor(cursor_id);
+    if (event_dispatcher->GetCurrentMouseCursor(&cursor_id))
+      display_root->display()->UpdateNativeCursor(cursor_id);
   }
 }
 
 void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
-  WindowManagerAndDisplay wm_and_display =
-      display_manager_->GetWindowManagerAndDisplay(window);
-  WindowManagerState* wms = wm_and_display.window_manager_state;
-  if (wms && wm_and_display.display &&
-      window == wms->event_dispatcher()->mouse_cursor_source_window()) {
-    wms->event_dispatcher()->UpdateNonClientAreaForCurrentWindow();
-    int32_t cursor_id = 0;
-    if (wms->event_dispatcher()->GetCurrentMouseCursor(&cursor_id))
-      wm_and_display.display->UpdateNativeCursor(cursor_id);
-  }
+  WindowManagerDisplayRoot* display_root =
+      display_manager_->GetWindowManagerDisplayRoot(window);
+  if (!display_root)
+    return;
+
+  EventDispatcher* event_dispatcher =
+      display_root->window_manager_state()->event_dispatcher();
+  if (window != event_dispatcher->mouse_cursor_source_window())
+    return;
+
+  event_dispatcher->UpdateNonClientAreaForCurrentWindow();
+  int32_t cursor_id = 0;
+  if (event_dispatcher->GetCurrentMouseCursor(&cursor_id))
+    display_root->display()->UpdateNativeCursor(cursor_id);
 }
 
 mus::SurfacesState* WindowServer::GetSurfacesState() {
@@ -487,31 +497,6 @@ void WindowServer::ScheduleSurfaceDestruction(ServerWindow* window) {
     display->ScheduleSurfaceDestruction(window);
 }
 
-ServerWindow* WindowServer::FindWindowForSurface(
-    const ServerWindow* ancestor,
-    mojom::SurfaceType surface_type,
-    const ClientWindowId& client_window_id) {
-  WindowTree* window_tree;
-  if (ancestor->id().client_id == kInvalidClientId) {
-    WindowManagerAndDisplay wm_and_display =
-        display_manager_->GetWindowManagerAndDisplay(ancestor);
-    window_tree = wm_and_display.window_manager_state
-                      ? wm_and_display.window_manager_state->tree()
-                      : nullptr;
-  } else {
-    window_tree = GetTreeWithId(ancestor->id().client_id);
-  }
-  if (!window_tree)
-    return nullptr;
-  if (surface_type == mojom::SurfaceType::DEFAULT) {
-    // At embed points the default surface comes from the embedded app.
-    WindowTree* tree_with_root = GetTreeWithRoot(ancestor);
-    if (tree_with_root)
-      window_tree = tree_with_root;
-  }
-  return window_tree->GetWindowByClientId(client_window_id);
-}
-
 void WindowServer::OnWindowDestroyed(ServerWindow* window) {
   ProcessWindowDeleted(window);
 }
@@ -531,10 +516,11 @@ void WindowServer::OnWindowHierarchyChanged(ServerWindow* window,
   if (in_destructor_)
     return;
 
-  WindowManagerState* wms =
-      display_manager_->GetWindowManagerAndDisplay(window).window_manager_state;
-  if (wms)
-    wms->ReleaseCaptureBlockedByAnyModalWindow();
+  WindowManagerDisplayRoot* display_root =
+      display_manager_->GetWindowManagerDisplayRoot(window);
+  if (display_root)
+    display_root->window_manager_state()
+        ->ReleaseCaptureBlockedByAnyModalWindow();
 
   ProcessWindowHierarchyChanged(window, new_parent, old_parent);
 
@@ -618,10 +604,11 @@ void WindowServer::OnWindowVisibilityChanged(ServerWindow* window) {
   if (in_destructor_)
     return;
 
-  WindowManagerState* wms =
-      display_manager_->GetWindowManagerAndDisplay(window).window_manager_state;
-  if (wms)
-    wms->ReleaseCaptureBlockedByModalWindow(window);
+  WindowManagerDisplayRoot* display_root =
+      display_manager_->GetWindowManagerDisplayRoot(window);
+  if (display_root)
+    display_root->window_manager_state()->ReleaseCaptureBlockedByModalWindow(
+        window);
 }
 
 void WindowServer::OnWindowPredefinedCursorChanged(ServerWindow* window,
@@ -684,6 +671,36 @@ void WindowServer::OnFirstDisplayReady() {
 
 void WindowServer::OnNoMoreDisplays() {
   delegate_->OnNoMoreDisplays();
+}
+
+bool WindowServer::GetFrameDecorationsForUser(
+    const UserId& user_id,
+    mojom::FrameDecorationValuesPtr* values) {
+  WindowManagerState* window_manager_state =
+      window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
+          user_id);
+  if (!window_manager_state)
+    return false;
+  if (values && window_manager_state->got_frame_decoration_values())
+    *values = window_manager_state->frame_decoration_values().Clone();
+  return window_manager_state->got_frame_decoration_values();
+}
+
+WindowManagerState* WindowServer::GetWindowManagerStateForUser(
+    const UserId& user_id) {
+  return window_manager_window_tree_factory_set_.GetWindowManagerStateForUser(
+      user_id);
+}
+
+void WindowServer::OnActiveUserIdChanged(const UserId& previously_active_id,
+                                         const UserId& active_id) {}
+
+void WindowServer::OnUserIdAdded(const UserId& id) {
+  activity_monitor_map_[id] = base::MakeUnique<UserActivityMonitor>(nullptr);
+}
+
+void WindowServer::OnUserIdRemoved(const UserId& id) {
+  activity_monitor_map_.erase(id);
 }
 
 }  // namespace ws

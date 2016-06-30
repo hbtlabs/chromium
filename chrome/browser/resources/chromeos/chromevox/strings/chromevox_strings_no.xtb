@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">Det finnes ikke flere listeelementer.</translation>
 <translation id="1157782847298808853">Tastaturhjelp</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, kombinasjonsfelt</translation>
+<translation id="1161762950103988776">Hopp</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, menyelement, med undermeny</translation>
 <translation id="1177863135347784049">Tilpasset</translation>
 <translation id="1188858454923323853">komplementær</translation>
+<translation id="1201402288615127009">Neste</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox – gir Chrome en stemme</translation>
 <translation id="1229276918471378188">Forrige hopp</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">Gruppe</translation>
 <translation id="2582407057977008361">Aside-tag</translation>
-<translation id="2589102159832527089">Denne siden inneholder teksten som automatisk ble hentet ut av PDF-filen &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt;. &lt;a href="<ph name="URL" />"&gt;Klikk her for å se originalen.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">med {COUNT,plural, =1{# element}other{# elementer}}</translation>
 <translation id="2614981083756825552">MathML-utforming</translation>
 <translation id="2626530649491650971">klikkbart</translation>
@@ -245,6 +246,7 @@
         "vi": "Vietnamesisk",
         "zh": "Kinesisk",
         "zh_TW": "Kinesisk (tradisjonell han)"}</translation>
+<translation id="335581015389089642">Tale</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{pluss}other{# plusstegn}}</translation>
 <translation id="338583716107319301">Skillelinje</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">Mellomrom</translation>
 <translation id="6142308968191113180">Overskrift 4</translation>
 <translation id="6169420925157477918">Bilde med lang beskrivelse</translation>
-<translation id="6172087735260766220">Kan ikke åpne tilgjengelig tekst fra kopibeskyttet PDF-fil.</translation>
 <translation id="6186305613600865047">Gå til nederst på siden</translation>
 <translation id="6193330012414963395">AM/PM</translation>
 <translation id="622484624075952240">Ned</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">Tab</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6697092096875747123">Forrige kombinasjonsfelt</translation>
+<translation id="6710213216561001401">Forrige</translation>
 <translation id="6714813999819678458">Forrige overskrift på nivå 2</translation>
 <translation id="6716505898850596801">Modifikatortaster</translation>
 <translation id="671916444866103745">Det finnes ikke flere ARIA-landemerker.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">Tidtaker</translation>
 <translation id="8065607967589909823">Utvalget er</translation>
 <translation id="8066678206530322333">Banner</translation>
+<translation id="8076492880354921740">Faner</translation>
 <translation id="8110647606445335195">Det finnes ingen ARIA-landmerker.</translation>
 <translation id="8153880621934657047">Ikke inne i tabellen.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{understrek}other{# understreker}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">Det finnes ikke flere overskrifter på nivå 3.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">Det finnes ingen tidligere avmerkingsruter.</translation>
+<translation id="8446884382197647889">Les mer</translation>
 <translation id="8455868257606149352">Maksimum <ph name="X" /></translation>
 <translation id="84575901236241018">har tilgangstast, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">vindusoversikt</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">Bruk piltastene for opp og ned for å bla gjennom, eller skriv inn tekst for å søke.</translation>
 <translation id="9192904702577636854">Rulletekst</translation>
 <translation id="9212322457209634662">Det finnes ingen neste del.</translation>
+<translation id="923331726185079994">ChromeVox er oppdatert</translation>
 <translation id="930275611743429116">Start eller avslutt utvalget.</translation>
 <translation id="948171205378458592">Reduser talehastigheten</translation>
 <translation id="962913030769097253">Neste overskrift på nivå 1</translation>
 <translation id="973955474346881951">Slå av eller på trege taster</translation>
+<translation id="976849232629612000">Ingen elementer.</translation>
 </translationbundle>

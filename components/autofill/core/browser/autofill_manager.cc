@@ -58,6 +58,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/rappor/rappor_utils.h"
 #include "google_apis/gaia/identity_provider.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -224,6 +225,12 @@ void AutofillManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kAutofillEnabled,
       true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kAutofillProfileUseDatesFixed, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kAutofillLastVersionDeduped, 0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   // These choices are made on a per-device basis, so they're not syncable.
   registry->RegisterBooleanPref(prefs::kAutofillWalletImportEnabled, true);
@@ -1070,13 +1077,16 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     if (upload_request_.cvc.empty()) {
       AutofillMetrics::LogCardUploadDecisionMetric(
           AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC);
+      CollectRapportSample(submitted_form.source_url(),
+                           "Autofill.CardUploadNotOfferedNoCvc");
       return;
     }
 
     // Upload also requires recently used or modified addresses that meet the
     // client-side validation rules.
     if (!GetProfilesForCreditCardUpload(*imported_credit_card,
-                                        &upload_request_.profiles)) {
+                                        &upload_request_.profiles,
+                                        submitted_form.source_url())) {
       return;
     }
 
@@ -1087,7 +1097,8 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
 
 bool AutofillManager::GetProfilesForCreditCardUpload(
     const CreditCard& card,
-    std::vector<AutofillProfile>* profiles) const {
+    std::vector<AutofillProfile>* profiles,
+    const GURL& source_url) const {
   std::vector<AutofillProfile> candidate_profiles;
   const base::Time now = base::Time::Now();
   const base::TimeDelta fifteen_minutes = base::TimeDelta::FromMinutes(15);
@@ -1102,6 +1113,7 @@ bool AutofillManager::GetProfilesForCreditCardUpload(
   if (candidate_profiles.empty()) {
     AutofillMetrics::LogCardUploadDecisionMetric(
         AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS);
+    CollectRapportSample(source_url, "Autofill.CardUploadNotOfferedNoAddress");
     return false;
   }
 
@@ -1131,6 +1143,8 @@ bool AutofillManager::GetProfilesForCreditCardUpload(
                 verified_name, RemoveMiddleInitial(address_name))) {
           AutofillMetrics::LogCardUploadDecisionMetric(
               AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES);
+          CollectRapportSample(source_url,
+                               "Autofill.CardUploadNotOfferedConflictingNames");
           return false;
         }
       }
@@ -1141,6 +1155,7 @@ bool AutofillManager::GetProfilesForCreditCardUpload(
   if (verified_name.empty()) {
     AutofillMetrics::LogCardUploadDecisionMetric(
         AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME);
+    CollectRapportSample(source_url, "Autofill.CardUploadNotOfferedNoName");
     return false;
   }
 
@@ -1184,6 +1199,14 @@ bool AutofillManager::GetProfilesForCreditCardUpload(
 
   profiles->assign(candidate_profiles.begin(), candidate_profiles.end());
   return true;
+}
+
+void AutofillManager::CollectRapportSample(const GURL& source_url,
+                                           const char* metric_name) const {
+  if (source_url.is_valid() && client_->GetRapporService()) {
+    rappor::SampleDomainAndRegistryFromGURL(client_->GetRapporService(),
+                                            metric_name, source_url);
+  }
 }
 
 // Note that |submitted_form| is passed as a pointer rather than as a reference
@@ -1637,7 +1660,7 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
     const FormStructure& form,
     const FormFieldData& field,
     const AutofillField& autofill_field) const {
-  address_form_event_logger_->OnDidPollSuggestions();
+  address_form_event_logger_->OnDidPollSuggestions(field);
 
   std::vector<ServerFieldType> field_types(form.field_count());
   for (size_t i = 0; i < form.field_count(); ++i) {
@@ -1665,7 +1688,7 @@ std::vector<Suggestion> AutofillManager::GetProfileSuggestions(
 std::vector<Suggestion> AutofillManager::GetCreditCardSuggestions(
     const FormFieldData& field,
     const AutofillType& type) const {
-  credit_card_form_event_logger_->OnDidPollSuggestions();
+  credit_card_form_event_logger_->OnDidPollSuggestions(field);
 
   // The field value is sanitized before attempting to match it to the user's
   // data.

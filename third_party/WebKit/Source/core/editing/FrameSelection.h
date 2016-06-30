@@ -39,6 +39,7 @@
 #include "platform/geometry/LayoutRect.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
+#include <memory>
 
 namespace blink {
 
@@ -93,6 +94,10 @@ public:
         return static_cast<EUserTriggered>(options & UserTriggered);
     }
 
+    bool isAvailable() const { return m_document; }
+    // You should not call |document()| when |!isAvailable()|.
+    const Document& document() const;
+    Document& document();
     LocalFrame* frame() const { return m_frame; }
     Element* rootEditableElement() const { return selection().rootEditableElement(); }
     Element* rootEditableElementOrDocumentElement() const;
@@ -121,7 +126,6 @@ public:
     bool setSelectedRange(const EphemeralRange&, TextAffinity, SelectionDirectionalMode = SelectionDirectionalMode::NonDirectional, FrameSelection::SetSelectionOptions = CloseTyping | ClearTypingStyle);
     void selectAll();
     void clear();
-    void prepareForDestruction();
 
     // Call this after doing user-triggered selections to make it easy to delete the frame you entirely selected.
     void selectFrameElementInParentIfFullySelected();
@@ -168,6 +172,8 @@ public:
     // the return value from underlying VisibleSelection's firstRange() is returned.
     Range* firstRange() const;
 
+    void documentAttached(Document*);
+    void documentDetached(const Document&);
     void nodeWillBeRemoved(Node&);
     void dataWillChange(const CharacterData& node);
     void didUpdateCharacterData(CharacterData*, unsigned offset, unsigned oldLength, unsigned newLength);
@@ -280,6 +286,7 @@ private:
     bool shouldPaintCaretForTesting() const;
     bool isPreviousCaretDirtyForTesting() const;
 
+    Member<Document> m_document;
     Member<LocalFrame> m_frame;
     const Member<PendingSelection> m_pendingSelection;
     const Member<SelectionEditor> m_selectionEditor;
@@ -295,7 +302,7 @@ private:
     bool m_focused : 1;
 
     // Controls text granularity used to adjust the selection's extent in moveRangeSelectionExtent.
-    OwnPtr<GranularityStrategy> m_granularityStrategy;
+    std::unique_ptr<GranularityStrategy> m_granularityStrategy;
 
     const Member<FrameCaret> m_frameCaret;
 };

@@ -33,7 +33,9 @@ import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.widget.TextViewWithClickableSpans;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -85,29 +87,29 @@ public class ItemChooserDialog {
      */
     public static class ItemChooserLabels {
         // The title at the top of the dialog.
-        public final CharSequence mTitle;
+        public final CharSequence title;
         // The message to show while there are no results.
-        public final CharSequence mSearching;
+        public final CharSequence searching;
         // The message to show when no results were produced.
-        public final CharSequence mNoneFound;
+        public final CharSequence noneFound;
         // A status message to show above the button row after discovery has
         // stopped and no devices have been found.
-        public final CharSequence mStatusIdleNoneFound;
+        public final CharSequence statusIdleNoneFound;
         // A status message to show above the button row after an item has
         // been added and discovery has stopped.
-        public final CharSequence mStatusIdleSomeFound;
+        public final CharSequence statusIdleSomeFound;
         // The label for the positive button (e.g. Select/Pair).
-        public final CharSequence mPositiveButton;
+        public final CharSequence positiveButton;
 
         public ItemChooserLabels(CharSequence title, CharSequence searching, CharSequence noneFound,
                 CharSequence statusIdleNoneFound, CharSequence statusIdleSomeFound,
                 CharSequence positiveButton) {
-            mTitle = title;
-            mSearching = searching;
-            mNoneFound = noneFound;
-            mStatusIdleNoneFound = statusIdleNoneFound;
-            mStatusIdleSomeFound = statusIdleSomeFound;
-            mPositiveButton = positiveButton;
+            this.title = title;
+            this.searching = searching;
+            this.noneFound = noneFound;
+            this.statusIdleNoneFound = statusIdleNoneFound;
+            this.statusIdleSomeFound = statusIdleSomeFound;
+            this.positiveButton = positiveButton;
         }
     }
 
@@ -119,7 +121,7 @@ public class ItemChooserDialog {
     /**
      * An adapter for keeping track of which items to show in the dialog.
      */
-    private class ItemAdapter extends ArrayAdapter<ItemChooserRow>
+    public class ItemAdapter extends ArrayAdapter<ItemChooserRow>
             implements AdapterView.OnItemClickListener {
         private final LayoutInflater mInflater;
 
@@ -136,6 +138,9 @@ public class ItemChooserDialog {
         // A set of keys that are marked as disabled in the dialog.
         private Set<String> mDisabledEntries = new HashSet<String>();
 
+        // Item descriptions are counted in a map.
+        private Map<String, Integer> mItemDescriptionMap = new HashMap<>();
+
         public ItemAdapter(Context context, int resource) {
             super(context, resource);
 
@@ -145,6 +150,29 @@ public class ItemChooserDialog {
                     R.color.light_active_color);
             mDefaultTextColor = ApiCompatibilityUtils.getColor(getContext().getResources(),
                     R.color.default_text_color);
+        }
+
+        @Override
+        public void add(ItemChooserRow item) {
+            String description = item.mDescription;
+            int count = mItemDescriptionMap.containsKey(description)
+                    ? mItemDescriptionMap.get(description) : 0;
+            mItemDescriptionMap.put(description, count + 1);
+            super.add(item);
+        }
+
+        @Override
+        public void remove(ItemChooserRow item) {
+            String description = item.mDescription;
+            if (mItemDescriptionMap.containsKey(description)) {
+                int count = mItemDescriptionMap.get(description);
+                if (count == 1) {
+                    mItemDescriptionMap.remove(description);
+                } else {
+                    mItemDescriptionMap.put(description, count - 1);
+                }
+            }
+            super.remove(item);
         }
 
         @Override
@@ -162,6 +190,20 @@ public class ItemChooserDialog {
             ItemChooserRow row = getItem(mSelectedItem);
             if (row == null) return "";
             return row.mKey;
+        }
+
+        /**
+         * Returns the text to be displayed on the chooser for an item. For items with the same
+         * description, their unique keys are appended to distinguish them.
+         * @param position The index of the item.
+         */
+        public String getDisplayText(int position) {
+            ItemChooserRow item = getItem(position);
+            String description = item.mDescription;
+            int counter = mItemDescriptionMap.get(description);
+            return counter == 1 ? description
+                    : mActivity.getString(R.string.item_chooser_item_name_with_id, description,
+                            item.mKey);
         }
 
         /**
@@ -218,8 +260,7 @@ public class ItemChooserDialog {
                 }
             }
 
-            ItemChooserRow item = getItem(position);
-            view.setText(item.mDescription);
+            view.setText(getDisplayText(position));
             return view;
         }
 
@@ -286,14 +327,14 @@ public class ItemChooserDialog {
         mEmptyMessage =
                 (TextViewWithClickableSpans) dialogContainer.findViewById(R.id.not_found_message);
 
-        mTitle.setText(labels.mTitle);
+        mTitle.setText(labels.title);
         mTitle.setMovementMethod(LinkMovementMethod.getInstance());
 
         mEmptyMessage.setMovementMethod(LinkMovementMethod.getInstance());
         mStatus.setMovementMethod(LinkMovementMethod.getInstance());
 
         mConfirmButton = (Button) dialogContainer.findViewById(R.id.positive);
-        mConfirmButton.setText(labels.mPositiveButton);
+        mConfirmButton.setText(labels.positiveButton);
         mConfirmButton.setEnabled(false);
         mConfirmButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -423,7 +464,7 @@ public class ItemChooserDialog {
     private void setState(State state) {
         switch (state) {
             case STARTING:
-                mStatus.setText(mLabels.mSearching);
+                mStatus.setText(mLabels.searching);
                 mListView.setVisibility(View.GONE);
                 mProgressBar.setVisibility(View.VISIBLE);
                 mEmptyMessage.setVisibility(View.GONE);
@@ -431,8 +472,8 @@ public class ItemChooserDialog {
             case DISCOVERY_IDLE:
                 boolean showEmptyMessage = mItemAdapter.isEmpty();
                 mStatus.setText(showEmptyMessage
-                        ? mLabels.mStatusIdleNoneFound : mLabels.mStatusIdleSomeFound);
-                mEmptyMessage.setText(mLabels.mNoneFound);
+                        ? mLabels.statusIdleNoneFound : mLabels.statusIdleSomeFound);
+                mEmptyMessage.setText(mLabels.noneFound);
                 mEmptyMessage.setVisibility(showEmptyMessage ? View.VISIBLE : View.GONE);
                 break;
         }

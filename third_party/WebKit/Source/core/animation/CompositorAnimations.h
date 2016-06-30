@@ -37,6 +37,7 @@
 #include "platform/animation/TimingFunction.h"
 #include "wtf/Allocator.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -59,8 +60,7 @@ public:
     static void cancelAnimationOnCompositor(const Element&, const Animation&, int id);
     static void pauseAnimationForTestingOnCompositor(const Element&, const Animation&, int id, double pauseTime);
 
-    static bool canAttachCompositedLayers(const Element&, const Animation&);
-    static void attachCompositedLayers(const Element&, const Animation&);
+    static void attachCompositedLayers(Element&, const Animation&);
 
     static bool getAnimatedBoundingBox(FloatBox&, const EffectModel&, double minValue, double maxValue);
 
@@ -76,7 +76,7 @@ public:
 
     static bool convertTimingForCompositor(const Timing&, double timeOffset, CompositorTiming& out, double animationPlaybackRate);
 
-    static void getAnimationOnCompositor(const Timing&, int group, double startTime, double timeOffset, const KeyframeEffectModelBase&, Vector<OwnPtr<CompositorAnimation>>& animations, double animationPlaybackRate);
+    static void getAnimationOnCompositor(const Timing&, int group, double startTime, double timeOffset, const KeyframeEffectModelBase&, Vector<std::unique_ptr<CompositorAnimation>>& animations, double animationPlaybackRate);
 };
 
 } // namespace blink

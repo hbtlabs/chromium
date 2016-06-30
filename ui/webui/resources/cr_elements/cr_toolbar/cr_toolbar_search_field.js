@@ -19,10 +19,21 @@ Polymer({
 
     // Tooltip to display on the clear search button.
     clearLabel: String,
+
+    // When true, show a loading spinner to indicate that the backend is
+    // processing the search. Will only show if the search field is open.
+    spinnerActive: {
+      type: Boolean,
+      reflectToAttribute: true
+    },
+
+    /** @private */
+    hasSearchText_: Boolean,
   },
 
   listeners: {
     'tap': 'showSearch_',
+    'searchInput.bind-value-changed': 'onBindValueChanged_',
   },
 
   /**
@@ -34,20 +45,33 @@ Polymer({
     return narrow ? 0 : -1;
   },
 
+  /**
+   * @param {boolean} spinnerActive
+   * @param {boolean} showingSearch
+   * @return {boolean}
+   * @private
+   */
+  isSpinnerShown_: function(spinnerActive, showingSearch) {
+    return spinnerActive && showingSearch;
+  },
+
   /** @private */
   onInputBlur_: function() {
-    if (!this.hasSearchText)
+    if (!this.hasSearchText_)
       this.showingSearch = false;
   },
 
   /**
-   * Expand the search field when a key is pressed with it focused. This ensures
-   * it can be used correctly by tab-focusing. 'keypress' is used instead of
-   * 'keydown' to avoid expanding on non-text keys (shift, escape, etc).
+   * Update the state of the search field whenever the underlying input value
+   * changes. Unlike onsearch or onkeypress, this is reliably called immediately
+   * after any change, whether the result of user input or JS modification.
    * @private
    */
-  onSearchTermKeypress_: function() {
-    this.showingSearch = true;
+  onBindValueChanged_: function() {
+    var newValue = this.$.searchInput.bindValue;
+    this.hasSearchText_ = newValue != '';
+    if (newValue != '')
+      this.showingSearch = true;
   },
 
   /**

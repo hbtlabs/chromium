@@ -13,10 +13,11 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "headless/public/headless_browser_context.h"
 #include "headless/public/headless_export.h"
+#include "headless/public/headless_web_contents.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
-#include "net/url_request/url_request_job_factory.h"
 
 namespace base {
 class MessagePump;
@@ -28,7 +29,6 @@ class Size;
 }
 
 namespace headless {
-class HeadlessWebContents;
 
 // This class represents the global headless browser instance. To get a pointer
 // to one, call |HeadlessBrowserMain| to initiate the browser main loop. An
@@ -38,11 +38,11 @@ class HEADLESS_EXPORT HeadlessBrowser {
  public:
   struct Options;
 
-  // Create a new browser tab which navigates to |initial_url|. |size| is in
-  // physical pixels.
-  // We require the user to pass an initial URL to ensure that the renderer
-  // gets initialized and eventually becomes ready to be inspected. See
-  // HeadlessWebContents::Observer::DevToolsTargetReady.
+  // Open a new tab. Returns a builder object which can be used to set
+  // properties for the new tab.
+  virtual HeadlessWebContents::Builder CreateWebContentsBuilder() = 0;
+
+  // Deprecated. Use CreateWebContentsBuilder() instead.
   virtual HeadlessWebContents* CreateWebContents(const GURL& initial_url,
                                                  const gfx::Size& size) = 0;
 
@@ -60,6 +60,10 @@ class HEADLESS_EXPORT HeadlessBrowser {
   // browser stops.
   virtual void Shutdown() = 0;
 
+  // Create a new browser context, which can be used to isolate
+  // HeadlessWebContents from one another.
+  virtual HeadlessBrowserContext::Builder CreateBrowserContextBuilder() = 0;
+
  protected:
   HeadlessBrowser() {}
   virtual ~HeadlessBrowser() {}
@@ -67,10 +71,6 @@ class HEADLESS_EXPORT HeadlessBrowser {
  private:
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowser);
 };
-
-using ProtocolHandlerMap = std::unordered_map<
-    std::string,
-    std::unique_ptr<net::URLRequestJobFactory::ProtocolHandler>>;
 
 // Embedding API overrides for the headless browser.
 struct HeadlessBrowser::Options {
@@ -140,11 +140,33 @@ class HeadlessBrowser::Options::Builder {
   DISALLOW_COPY_AND_ASSIGN(Builder);
 };
 
+// The headless browser may need to create child processes (e.g., a renderer
+// which runs web content). This is done by re-executing the parent process as
+// a zygote[1] and forking each child process from that zygote.
+//
+// For this to work, the embedder should call RunChildProcess as soon as
+// possible (i.e., before creating any threads) to pass control to the headless
+// library. In a browser process this function will return immediately, but in a
+// child process it will never return. For example:
+//
+// int main(int argc, const char** argv) {
+//   headless::RunChildProcessIfNeeded(argc, argv);
+//   headless::HeadlessBrowser::Options::Builder builder(argc, argv);
+//   return headless::HeadlessBrowserMain(
+//       builder.Build(),
+//       base::Callback<void(headless::HeadlessBrowser*)>());
+// }
+//
+// [1]
+// https://chromium.googlesource.com/chromium/src/+/master/docs/linux_zygote.md
+void RunChildProcessIfNeeded(int argc, const char** argv);
+
 // Main entry point for running the headless browser. This function constructs
 // the headless browser instance, passing it to the given
 // |on_browser_start_callback| callback. Note that since this function executes
 // the main loop, it will only return after HeadlessBrowser::Shutdown() is
-// called, returning the exit code for the process.
+// called, returning the exit code for the process. It is not possible to
+// initialize the browser again after it has been torn down.
 int HeadlessBrowserMain(
     HeadlessBrowser::Options options,
     const base::Callback<void(HeadlessBrowser*)>& on_browser_start_callback);

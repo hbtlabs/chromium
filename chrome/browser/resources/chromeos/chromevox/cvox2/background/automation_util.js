@@ -34,7 +34,7 @@ AutomationUtil.findNodePre = function(cur, dir, pred) {
   if (!cur)
     return null;
 
-  if (pred(cur))
+  if (pred(cur) && !AutomationPredicate.shouldIgnoreNode(cur))
     return cur;
 
   var child = dir == Dir.BACKWARD ? cur.lastChild : cur.firstChild;
@@ -69,7 +69,7 @@ AutomationUtil.findNodePost = function(cur, dir, pred) {
         child.previousSibling : child.nextSibling;
   }
 
-  if (pred(cur))
+  if (pred(cur) && !AutomationPredicate.shouldIgnoreNode(cur))
     return cur;
 
   return null;
@@ -289,6 +289,25 @@ AutomationUtil.hitTest = function(node, point) {
       point.y <= (loc.top + loc.height) && point.y >= loc.top)
     return node;
   return null;
+};
+
+/**
+ * Gets a top level root.
+ * @param {!AutomationNode} node
+ * @return {AutomationNode}
+ */
+AutomationUtil.getTopLevelRoot = function(node) {
+  var root = node.root;
+  if (!root || root.role == RoleType.desktop)
+    return null;
+
+  while (root &&
+      root.parent &&
+      root.parent.root &&
+      root.parent.root.role != RoleType.desktop) {
+    root = root.parent.root;
+  }
+  return root;
 };
 
 });  // goog.scope

@@ -37,8 +37,8 @@
 #include "components/test_runner/web_test_interfaces.h"
 #include "components/test_runner/web_test_proxy.h"
 #include "components/test_runner/web_test_runner.h"
+#include "content/common/content_switches_internal.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/media_stream_utils.h"
@@ -58,6 +58,7 @@
 #include "media/base/video_capturer_source.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/Platform.h"
@@ -233,27 +234,12 @@ WebURL RewriteAbsolutePathInWPT(const std::string& utf8_url) {
 #else
   std::string path = utf8_url.substr(kFileSchemeLen);
 #endif
-  // LayoutTests use file: URLs in various ways.
-  //  - The magic URL prefix "file:///tmp/LayoutTests/" to access file:
-  //    resources from http resources.
-  //  - $TMP to download a blob URL
-  //  - out/$CONFIG/gen/ and third_party/WebKit/Source/devtools to load
-  //    DevTools code.
-  // We rewite only a few patterns used in web-platform-tests to avoid to
-  // rewrite non-WPT URLs. We can remove this hack if we run all WPT tests
-  // with wptserve.
-  if (base::StartsWith(path, "common/", base::CompareCase::SENSITIVE) ||
-      base::StartsWith(path, "images/", base::CompareCase::SENSITIVE) ||
-      base::StartsWith(path, "media/", base::CompareCase::SENSITIVE) ||
-      base::StartsWith(path, "resources/", base::CompareCase::SENSITIVE)) {
-    base::FilePath new_path =
-        LayoutTestRenderThreadObserver::GetInstance()
-            ->webkit_source_dir()
-            .Append(FILE_PATH_LITERAL("LayoutTests/imported/wpt/"))
-            .AppendASCII(path);
-    return WebURL(net::FilePathToFileURL(new_path));
-  }
-  return WebURL();
+  base::FilePath new_path =
+      LayoutTestRenderThreadObserver::GetInstance()
+          ->webkit_source_dir()
+          .Append(FILE_PATH_LITERAL("LayoutTests/imported/wpt/"))
+          .AppendASCII(path);
+  return WebURL(net::FilePathToFileURL(new_path));
 }
 
 }  // namespace
@@ -505,9 +491,17 @@ void BlinkTestRunner::SetDeviceScaleFactor(float factor) {
   content::SetDeviceScaleFactor(render_view(), factor);
 }
 
+float BlinkTestRunner::GetWindowToViewportScale() {
+  return content::GetWindowToViewportScale(render_view());
+}
+
 void BlinkTestRunner::EnableUseZoomForDSF() {
   base::CommandLine::ForCurrentProcess()->
       AppendSwitch(switches::kEnableUseZoomForDSF);
+}
+
+bool BlinkTestRunner::IsUseZoomForDSFEnabled() {
+  return content::IsUseZoomForDSFEnabled();
 }
 
 void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
@@ -843,7 +837,7 @@ void BlinkTestRunner::CaptureDump() {
   if (!interfaces->TestRunner()->IsRecursiveLayoutDumpRequested()) {
     std::string layout_dump = interfaces->TestRunner()->DumpLayout(
         render_view()->GetMainRenderFrame()->GetWebFrame());
-    OnLayoutDumpCompleted(layout_dump);
+    OnLayoutDumpCompleted(std::move(layout_dump));
     return;
   }
 
@@ -859,7 +853,8 @@ void BlinkTestRunner::OnLayoutDumpCompleted(std::string completed_layout_dump) {
       completed_layout_dump.append(DumpHistoryForWindow(web_view));
   }
 
-  Send(new ShellViewHostMsg_TextDump(routing_id(), completed_layout_dump));
+  Send(new ShellViewHostMsg_TextDump(routing_id(),
+                                     std::move(completed_layout_dump)));
 
   CaptureDumpContinued();
 }
@@ -928,7 +923,7 @@ void BlinkTestRunner::CaptureDumpComplete() {
 mojom::LayoutTestBluetoothFakeAdapterSetter&
 BlinkTestRunner::GetBluetoothFakeAdapterSetter() {
   if (!bluetooth_fake_adapter_setter_) {
-    RenderThread::Get()->GetServiceRegistry()->ConnectToRemoteService(
+    RenderThread::Get()->GetRemoteInterfaces()->GetInterface(
         mojo::GetProxy(&bluetooth_fake_adapter_setter_));
   }
   return *bluetooth_fake_adapter_setter_;
@@ -1018,6 +1013,10 @@ void BlinkTestRunner::OnReplyBluetoothManualChooserEvents(
 void BlinkTestRunner::ReportLeakDetectionResult(
     const LeakDetectionResult& report) {
   Send(new ShellViewHostMsg_LeakDetectionDone(routing_id(), report));
+}
+
+void BlinkTestRunner::OnDestruct() {
+  delete this;
 }
 
 }  // namespace content

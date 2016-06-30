@@ -4,13 +4,12 @@
 
 #include "ash/sysui/shell_delegate_mus.h"
 
-#include "ash/default_accessibility_delegate.h"
+#include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/media_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/system/tray/default_system_tray_delegate.h"
 #include "ash/gpu_support_stub.h"
-#include "ash/media_delegate.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/system/tray/default_system_tray_delegate.h"
 #include "ash/sysui/app_list_presenter_mus.h"
-#include "ash/sysui/container_delegate_mus.h"
 #include "ash/sysui/context_menu_mus.h"
 #include "ash/sysui/pointer_watcher_delegate_mus.h"
 #include "ash/sysui/shelf_delegate_mus.h"
@@ -56,10 +55,12 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   const user_manager::UserInfo* GetUserInfo(UserIndex index) const override {
     return user_info_.get();
   }
-  bool ShouldShowAvatar(aura::Window* window) const override {
+  bool ShouldShowAvatar(WmWindow* window) const override {
+    NOTIMPLEMENTED();
     return !user_info_->GetImage().isNull();
   }
-  gfx::ImageSkia GetAvatarImageForWindow(aura::Window* window) const override {
+  gfx::ImageSkia GetAvatarImageForWindow(WmWindow* window) const override {
+    NOTIMPLEMENTED();
     return gfx::ImageSkia();
   }
   void SwitchActiveUser(const AccountId& account_id) override {}
@@ -126,7 +127,7 @@ bool ShellDelegateMus::IsRunningInForcedAppMode() const {
   return false;
 }
 
-bool ShellDelegateMus::CanShowWindowForUser(aura::Window* window) const {
+bool ShellDelegateMus::CanShowWindowForUser(WmWindow* window) const {
   NOTIMPLEMENTED();
   return true;
 }
@@ -208,18 +209,14 @@ MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {
   return new MediaDelegateStub;
 }
 
-std::unique_ptr<ContainerDelegate> ShellDelegateMus::CreateContainerDelegate() {
-  return base::WrapUnique(new ContainerDelegateMus);
-}
-
 std::unique_ptr<PointerWatcherDelegate>
 ShellDelegateMus::CreatePointerWatcherDelegate() {
   return base::WrapUnique(new PointerWatcherDelegateMus);
 }
 
-ui::MenuModel* ShellDelegateMus::CreateContextMenu(ash::Shelf* shelf,
+ui::MenuModel* ShellDelegateMus::CreateContextMenu(WmShelf* wm_shelf,
                                                    const ShelfItem* item) {
-  return new ContextMenuMus(shelf);
+  return new ContextMenuMus(wm_shelf);
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {

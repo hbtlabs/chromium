@@ -23,7 +23,7 @@ GpuSurfacelessBrowserCompositorOutputSurface::
         scoped_refptr<ContextProviderCommandBuffer> context,
         gpu::SurfaceHandle surface_handle,
         scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-        base::SingleThreadTaskRunner* task_runner,
+        cc::SyntheticBeginFrameSource* begin_frame_source,
         std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
             overlay_candidate_validator,
         unsigned int target,
@@ -31,7 +31,7 @@ GpuSurfacelessBrowserCompositorOutputSurface::
         gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
     : GpuBrowserCompositorOutputSurface(std::move(context),
                                         std::move(vsync_manager),
-                                        task_runner,
+                                        begin_frame_source,
                                         std::move(overlay_candidate_validator)),
       internalformat_(internalformat),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager) {
@@ -69,10 +69,10 @@ unsigned GpuSurfacelessBrowserCompositorOutputSurface::GetOverlayTextureId()
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
-    cc::CompositorFrame* frame) {
+    cc::CompositorFrame frame) {
   DCHECK(buffer_queue_);
-  buffer_queue_->SwapBuffers(frame->gl_frame_data->sub_buffer_rect);
-  GpuBrowserCompositorOutputSurface::SwapBuffers(frame);
+  buffer_queue_->SwapBuffers(frame.gl_frame_data->sub_buffer_rect);
+  GpuBrowserCompositorOutputSurface::SwapBuffers(std::move(frame));
 }
 
 void GpuSurfacelessBrowserCompositorOutputSurface::OnSwapBuffersComplete() {
@@ -86,12 +86,21 @@ void GpuSurfacelessBrowserCompositorOutputSurface::BindFramebuffer() {
   buffer_queue_->BindFramebuffer();
 }
 
+GLenum GpuSurfacelessBrowserCompositorOutputSurface::
+    GetFramebufferCopyTextureFormat() {
+  return buffer_queue_->internal_format();
+}
+
 void GpuSurfacelessBrowserCompositorOutputSurface::Reshape(
     const gfx::Size& size,
     float scale_factor,
+    const gfx::ColorSpace& color_space,
     bool alpha) {
-  GpuBrowserCompositorOutputSurface::Reshape(size, scale_factor, alpha);
+  GpuBrowserCompositorOutputSurface::Reshape(size, scale_factor, color_space,
+                                             alpha);
   DCHECK(buffer_queue_);
+  // TODO(ccameron): Plumb the color profile to the output GpuMemoryBuffer.
+  // https://crbug.com/622133
   buffer_queue_->Reshape(SurfaceSize(), scale_factor);
 }
 

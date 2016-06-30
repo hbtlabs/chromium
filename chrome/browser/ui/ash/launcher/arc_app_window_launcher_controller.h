@@ -16,6 +16,10 @@
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window_observer.h"
 
+namespace ash {
+class ShelfDelegate;
+}
+
 namespace aura {
 class Window;
 }
@@ -34,8 +38,15 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
                                        public aura::WindowObserver,
                                        public ArcAppListPrefs::Observer {
  public:
-  explicit ArcAppWindowLauncherController(ChromeLauncherController* owner);
+  ArcAppWindowLauncherController(ChromeLauncherController* owner,
+                                 ash::ShelfDelegate* shelf_delegate);
   ~ArcAppWindowLauncherController() override;
+
+  // Returns shelf app id. Play Store app is mapped to Arc platform host app.
+  static std::string GetShelfAppIdFromArcAppId(const std::string& arc_app_id);
+
+  // Returns Arc app id. Arc platform host app is mapped to Play Store app.
+  static std::string GetArcAppIdFromShelfAppId(const std::string& shelf_app_id);
 
   // AppWindowLauncherControllre:
   void ActiveUserChanged(const std::string& user_email) override;
@@ -63,16 +74,18 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
   void OnTaskDestroyed(int task_id) override;
   void OnTaskSetActive(int32_t task_id) override;
 
- protected:
-  void StartObserving(Profile* profile);
-  void StopObserving(Profile* profile);
-
  private:
   class AppWindow;
 
   using TaskIdToAppWindow = std::map<int, std::unique_ptr<AppWindow>>;
   using AppControllerMap =
       std::map<std::string, ArcAppWindowLauncherItemController*>;
+
+  void StartObserving(Profile* profile);
+  void StopObserving(Profile* profile);
+
+  void RegisterApp(AppWindow* app_window);
+  void UnregisterApp(AppWindow* app_window);
 
   AppWindow* GetAppWindowForTask(int task_id);
 
@@ -82,6 +95,8 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
   AppWindowLauncherItemController* ControllerForWindow(
       aura::Window* window) override;
 
+  // Not owned
+  ash::ShelfDelegate* shelf_delegate_;
   int active_task_id_ = -1;
   TaskIdToAppWindow task_id_to_app_window_;
   AppControllerMap app_controller_map_;

@@ -31,6 +31,8 @@ class Painter;
 // tab-to-search UI, and content settings.
 class IconLabelBubbleView : public views::InkDropHostView {
  public:
+  static constexpr int kTrailingPaddingPreMd = 2;
+
   IconLabelBubbleView(int contained_image,
                       const gfx::FontList& font_list,
                       SkColor parent_background_color,
@@ -76,7 +78,7 @@ class IconLabelBubbleView : public views::InkDropHostView {
 
   // The view has been activated by a user gesture such as spacebar. Returns
   // true if some handling was performed.
-  virtual bool OnActivate();
+  virtual bool OnActivate(const ui::Event& event);
 
   // views::View:
   gfx::Size GetPreferredSize() const override;
@@ -110,8 +112,14 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // (or image, if the label is invisible) to the trailing edge of the view.
   int GetOuterPadding(bool leading) const;
 
+  // Horizontal position of the image trailing edge (i.e. just after the image).
+  int GetImageTrailingEdge() const;
+
   // Spacing between the image and the label.
   int GetInternalSpacing() const;
+
+  // Padding after the separator.
+  int GetPostSeparatorPadding() const;
 
   // views::View:
   const char* GetClassName() const override;

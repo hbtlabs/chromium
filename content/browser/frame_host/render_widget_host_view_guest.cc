@@ -175,6 +175,34 @@ void RenderWidgetHostViewGuest::ProcessTouchEvent(
         guest_->GetOwnerRenderWidgetHostView()->GetRenderWidgetHost());
     if (!embedder->GetView()->HasFocus())
       embedder->GetView()->Focus();
+
+    // Since we now route GestureEvents directly to the guest renderer, we need
+    // a way to make sure that the BrowserPlugin in the embedder gets focused so
+    // that keyboard input (which still travels via BrowserPlugin) is routed to
+    // the plugin and thus onwards to the guest.
+    // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
+    // http://crbug.com/533069
+    if (!HasFocus()) {
+      // We need to a account for the position of the guest view within the
+      // embedder, as well as the fact that the embedder's host will add its
+      // offset in screen coordinates before sending the event (with the latter
+      // component just serving to confuse the renderer, hence why it should be
+      // removed).
+      gfx::Vector2d offset = GetViewBounds().origin() -
+          GetOwnerRenderWidgetHostView()->GetBoundsInRootWindow().origin();
+      blink::WebGestureEvent gesture_tap_event;
+      gesture_tap_event.sourceDevice = blink::WebGestureDeviceTouchscreen;
+      gesture_tap_event.type = blink::WebGestureEvent::GestureTapDown;
+      gesture_tap_event.x = event.touches[0].position.x + offset.x();
+      gesture_tap_event.y = event.touches[0].position.y + offset.y();
+      gesture_tap_event.globalX = event.touches[0].screenPosition.x;
+      gesture_tap_event.globalY = event.touches[0].screenPosition.y;
+      GetOwnerRenderWidgetHostView()->ProcessGestureEvent(gesture_tap_event,
+                                                          ui::LatencyInfo());
+      gesture_tap_event.type = blink::WebGestureEvent::GestureTapCancel;
+      GetOwnerRenderWidgetHostView()->ProcessGestureEvent(gesture_tap_event,
+                                                          ui::LatencyInfo());
+    }
   }
 
   host_->ForwardTouchEventWithLatencyInfo(event, latency);
@@ -230,16 +258,16 @@ void RenderWidgetHostViewGuest::SetTooltipText(
 
 void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
 
   cc::RenderPass* root_pass =
-      frame->delegated_frame_data->render_pass_list.back().get();
+      frame.delegated_frame_data->render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
-  float scale_factor = frame->metadata.device_scale_factor;
+  float scale_factor = frame.metadata.device_scale_factor;
 
   // Check whether we need to recreate the cc::Surface, which means the child
   // frame renderer has changed its output surface, or size, or scale factor.
@@ -442,17 +470,6 @@ void RenderWidgetHostViewGuest::GetScreenInfo(blink::WebScreenInfo* results) {
   RenderWidgetHostViewBase* embedder_view = GetOwnerRenderWidgetHostView();
   if (embedder_view)
     embedder_view->GetScreenInfo(results);
-}
-
-bool RenderWidgetHostViewGuest::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  if (!guest_)
-    return false;
-  DCHECK(color_profile->empty());
-  RenderWidgetHostViewBase* embedder_view = GetOwnerRenderWidgetHostView();
-  if (embedder_view)
-    return embedder_view->GetScreenColorProfile(color_profile);
-  return false;
 }
 
 #if defined(OS_MACOSX)

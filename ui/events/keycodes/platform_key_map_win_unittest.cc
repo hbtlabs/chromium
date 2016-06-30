@@ -17,12 +17,39 @@ namespace ui {
 
 namespace {
 
-const wchar_t* LAYOUT_US = L"00000409";
-const wchar_t* LAYOUT_FR = L"0000040c";
+enum Layout {
+  LAYOUT_US,
+  LAYOUT_FR,
+  LAYOUT_KR,
+};
+
+// |LoadKeyboardLayout()| ensures the locale to be loaded into the system
+// (Similar to temporarily adding a locale in Control Panel), otherwise
+// |ToUnicodeEx()| will fall-back to the default locale.
+// See MSDN LoadKeyboardLayout():
+// https://msdn.microsoft.com/en-us/library/windows/desktop/ms646305(v=vs.85).aspx
+// And language constants and strings:
+// https://msdn.microsoft.com/en-us/library/windows/desktop/dd318693(v=vs.85).aspx
+HKL GetInputLocale(Layout layout) {
+  switch (layout) {
+    case LAYOUT_US:
+      return ::LoadKeyboardLayout(L"00000409", KLF_ACTIVATE);
+    case LAYOUT_FR:
+      return ::LoadKeyboardLayout(L"0000040c", KLF_ACTIVATE);
+    case LAYOUT_KR:
+      // |LoadKeyboardLayout(L"00000412", KLF_ACTIVATE)| returns the correct
+      // Korean locale, but it will fail on DrMemory tests.
+      // See https://crbug.com/612736#c6
+      // However we could bypass it since we are only testing non-printable keys
+      // on Korean locale.
+      // (This issue only happens on Korean and Japanese).
+      return reinterpret_cast<HKL>(0x04120412);
+    default:
+      return 0;
+  }
+}
 
 struct TestKey {
-  // Have to use KeyboardCode instead of DomCode because we don't know the
-  // physical keyboard layout for try bots.
   KeyboardCode key_code;
   const char* normal;
   const char* shift;
@@ -40,59 +67,55 @@ class PlatformKeyMapTest : public testing::Test {
   PlatformKeyMapTest() {}
   ~PlatformKeyMapTest() override {}
 
-  void CheckDomCodeToKeyString(const char* label,
-                               const PlatformKeyMap& keymap,
-                               const TestKey& test_case,
-                               HKL layout) {
+  void CheckKeyboardCodeToKeyString(const char* label,
+                                    const PlatformKeyMap& keymap,
+                                    const TestKey& test_case,
+                                    HKL layout) {
     KeyboardCode key_code = test_case.key_code;
-    int scan_code = ::MapVirtualKeyEx(key_code, MAPVK_VK_TO_VSC, layout);
-    DomCode dom_code = KeycodeConverter::NativeKeycodeToDomCode(scan_code);
     EXPECT_STREQ(test_case.normal,
                  KeycodeConverter::DomKeyToKeyString(
-                     keymap.DomKeyFromNativeImpl(dom_code, key_code, EF_NONE))
+                     keymap.DomKeyFromKeyboardCodeImpl(key_code, EF_NONE))
                      .c_str())
         << label;
-    EXPECT_STREQ(test_case.shift, KeycodeConverter::DomKeyToKeyString(
-                                      keymap.DomKeyFromNativeImpl(
-                                          dom_code, key_code, EF_SHIFT_DOWN))
-                                      .c_str())
+    EXPECT_STREQ(test_case.shift,
+                 KeycodeConverter::DomKeyToKeyString(
+                     keymap.DomKeyFromKeyboardCodeImpl(key_code, EF_SHIFT_DOWN))
+                     .c_str())
         << label;
-    EXPECT_STREQ(
-        test_case.capslock,
-        KeycodeConverter::DomKeyToKeyString(
-            keymap.DomKeyFromNativeImpl(dom_code, key_code, EF_CAPS_LOCK_ON))
-            .c_str())
+    EXPECT_STREQ(test_case.capslock, KeycodeConverter::DomKeyToKeyString(
+                                         keymap.DomKeyFromKeyboardCodeImpl(
+                                             key_code, EF_CAPS_LOCK_ON))
+                                         .c_str())
         << label;
-    EXPECT_STREQ(test_case.altgr, KeycodeConverter::DomKeyToKeyString(
-                                      keymap.DomKeyFromNativeImpl(
-                                          dom_code, key_code, EF_ALTGR_DOWN))
-                                      .c_str())
+    EXPECT_STREQ(test_case.altgr,
+                 KeycodeConverter::DomKeyToKeyString(
+                     keymap.DomKeyFromKeyboardCodeImpl(key_code, EF_ALTGR_DOWN))
+                     .c_str())
         << label;
     EXPECT_STREQ(test_case.shift_capslock,
                  KeycodeConverter::DomKeyToKeyString(
-                     keymap.DomKeyFromNativeImpl(
-                         dom_code, key_code, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON))
+                     keymap.DomKeyFromKeyboardCodeImpl(
+                         key_code, EF_SHIFT_DOWN | EF_CAPS_LOCK_ON))
                      .c_str())
         << label;
     EXPECT_STREQ(test_case.shift_altgr,
                  KeycodeConverter::DomKeyToKeyString(
-                     keymap.DomKeyFromNativeImpl(dom_code, key_code,
-                                                 EF_SHIFT_DOWN | EF_ALTGR_DOWN))
+                     keymap.DomKeyFromKeyboardCodeImpl(
+                         key_code, EF_SHIFT_DOWN | EF_ALTGR_DOWN))
                      .c_str())
         << label;
     EXPECT_STREQ(test_case.altgr_capslock,
                  KeycodeConverter::DomKeyToKeyString(
-                     keymap.DomKeyFromNativeImpl(
-                         dom_code, key_code, EF_ALTGR_DOWN | EF_CAPS_LOCK_ON))
+                     keymap.DomKeyFromKeyboardCodeImpl(
+                         key_code, EF_ALTGR_DOWN | EF_CAPS_LOCK_ON))
                      .c_str())
         << label;
   }
 
-  DomKey DomKeyFromNativeImpl(const PlatformKeyMap& keymap,
-                              DomCode dom_code,
-                              KeyboardCode key_code,
-                              int flags) {
-    return keymap.DomKeyFromNativeImpl(dom_code, key_code, flags);
+  DomKey DomKeyFromKeyboardCodeImpl(const PlatformKeyMap& keymap,
+                                    KeyboardCode key_code,
+                                    int flags) {
+    return keymap.DomKeyFromKeyboardCodeImpl(key_code, flags);
   }
 
  private:
@@ -100,7 +123,7 @@ class PlatformKeyMapTest : public testing::Test {
 };
 
 TEST_F(PlatformKeyMapTest, USLayout) {
-  HKL layout = ::LoadKeyboardLayout(LAYOUT_US, 0);
+  HKL layout = GetInputLocale(LAYOUT_US);
   PlatformKeyMap keymap(layout);
 
   const TestKey kUSLayoutTestCases[] = {
@@ -144,12 +167,12 @@ TEST_F(PlatformKeyMapTest, USLayout) {
   };
 
   for (const auto& test_case : kUSLayoutTestCases) {
-    CheckDomCodeToKeyString("USLayout", keymap, test_case, layout);
+    CheckKeyboardCodeToKeyString("USLayout", keymap, test_case, layout);
   }
 }
 
 TEST_F(PlatformKeyMapTest, FRLayout) {
-  HKL layout = ::LoadKeyboardLayout(LAYOUT_FR, 0);
+  HKL layout = GetInputLocale(LAYOUT_FR);
   PlatformKeyMap keymap(layout);
 
   const TestKey kFRLayoutTestCases[] = {
@@ -193,12 +216,12 @@ TEST_F(PlatformKeyMapTest, FRLayout) {
   };
 
   for (const auto& test_case : kFRLayoutTestCases) {
-    CheckDomCodeToKeyString("FRLayout", keymap, test_case, layout);
+    CheckKeyboardCodeToKeyString("FRLayout", keymap, test_case, layout);
   }
 }
 
 TEST_F(PlatformKeyMapTest, NumPad) {
-  HKL layout = ::LoadKeyboardLayout(LAYOUT_US, 0);
+  HKL layout = GetInputLocale(LAYOUT_US);
   PlatformKeyMap keymap(layout);
 
   const struct TestCase {
@@ -230,27 +253,25 @@ TEST_F(PlatformKeyMapTest, NumPad) {
 
   for (const auto& test_case : kNumPadTestCases) {
     KeyboardCode key_code = test_case.key_code;
-    int scan_code = ::MapVirtualKeyEx(key_code, MAPVK_VK_TO_VSC, layout);
-    DomCode dom_code = KeycodeConverter::NativeKeycodeToDomCode(scan_code);
 
     EXPECT_EQ(test_case.key,
-              DomKeyFromNativeImpl(keymap, dom_code, key_code, EF_NONE))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_NONE))
         << key_code;
     EXPECT_EQ(test_case.key,
-              DomKeyFromNativeImpl(keymap, dom_code, key_code, EF_ALTGR_DOWN))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_ALTGR_DOWN))
         << key_code;
     EXPECT_EQ(test_case.key,
-              DomKeyFromNativeImpl(keymap, dom_code, key_code, EF_CONTROL_DOWN))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_CONTROL_DOWN))
         << key_code;
     EXPECT_EQ(test_case.key,
-              DomKeyFromNativeImpl(keymap, dom_code, key_code,
-                                   EF_ALTGR_DOWN | EF_CONTROL_DOWN))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code,
+                                         EF_ALTGR_DOWN | EF_CONTROL_DOWN))
         << key_code;
   }
 }
 
 TEST_F(PlatformKeyMapTest, NonPrintableKey) {
-  HKL layout = ::LoadKeyboardLayout(LAYOUT_US, 0);
+  HKL layout = GetInputLocale(LAYOUT_US);
   PlatformKeyMap keymap(layout);
 
   for (const auto& test_case : kNonPrintableCodeMap) {
@@ -271,19 +292,45 @@ TEST_F(PlatformKeyMapTest, NonPrintableKey) {
       continue;
 
     EXPECT_EQ(test_case.dom_key,
-              DomKeyFromNativeImpl(keymap, DomCode::NONE, key_code, EF_NONE))
-        << key_code << ", " << scan_code;
-    EXPECT_EQ(test_case.dom_key, DomKeyFromNativeImpl(keymap, DomCode::NONE,
-                                                      key_code, EF_ALTGR_DOWN))
-        << key_code << ", " << scan_code;
-    EXPECT_EQ(
-        test_case.dom_key,
-        DomKeyFromNativeImpl(keymap, DomCode::NONE, key_code, EF_CONTROL_DOWN))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_NONE))
         << key_code << ", " << scan_code;
     EXPECT_EQ(test_case.dom_key,
-              DomKeyFromNativeImpl(keymap, DomCode::NONE, key_code,
-                                   EF_ALTGR_DOWN | EF_CONTROL_DOWN))
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_ALTGR_DOWN))
         << key_code << ", " << scan_code;
+    EXPECT_EQ(test_case.dom_key,
+              DomKeyFromKeyboardCodeImpl(keymap, key_code, EF_CONTROL_DOWN))
+        << key_code << ", " << scan_code;
+    EXPECT_EQ(test_case.dom_key,
+              DomKeyFromKeyboardCodeImpl(keymap, key_code,
+                                         EF_ALTGR_DOWN | EF_CONTROL_DOWN))
+        << key_code << ", " << scan_code;
+  }
+}
+
+TEST_F(PlatformKeyMapTest, KoreanSpecificKeys) {
+  const struct TestCase {
+    KeyboardCode key_code;
+    DomKey key;
+  } kKoreanTestCases[] = {
+      {VKEY_HANGUL, DomKey::HANGUL_MODE}, {VKEY_HANJA, DomKey::HANJA_MODE},
+  };
+
+  // US English should not return values for these keys.
+  HKL us_layout = GetInputLocale(LAYOUT_US);
+  PlatformKeyMap us_keymap(us_layout);
+  for (const auto& test_case : kKoreanTestCases) {
+    EXPECT_EQ(DomKey::NONE, DomKeyFromKeyboardCodeImpl(
+                                us_keymap, test_case.key_code, EF_NONE))
+        << test_case.key_code;
+  }
+
+  // Korean layout should return specific DomKey.
+  HKL ko_layout = GetInputLocale(LAYOUT_KR);
+  PlatformKeyMap ko_keymap(ko_layout);
+  for (const auto& test_case : kKoreanTestCases) {
+    EXPECT_EQ(test_case.key, DomKeyFromKeyboardCodeImpl(
+                                 ko_keymap, test_case.key_code, EF_NONE))
+        << test_case.key_code;
   }
 }
 

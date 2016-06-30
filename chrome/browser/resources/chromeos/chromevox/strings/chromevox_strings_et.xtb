@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">Järgmist loendiüksust ei ole.</translation>
 <translation id="1157782847298808853">Klaviatuuri abi</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, liitboks</translation>
+<translation id="1161762950103988776">Hüpe</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, menüü-üksus, alammenüüga</translation>
 <translation id="1177863135347784049">Kohandatud</translation>
 <translation id="1188858454923323853">täiendav</translation>
+<translation id="1201402288615127009">Edasi</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox – annab Chrome'ile hääle</translation>
 <translation id="1229276918471378188">Eelmine hüpe</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">Rühm</translation>
 <translation id="2582407057977008361">Kõrvale</translation>
-<translation id="2589102159832527089">Leht sisaldab automaatselt PDF-failist &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; ekstraktitud teksti. &lt;a href="<ph name="URL" />"&gt;Originaali jaoks klõpsake siin.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">koos {COUNT,plural, =1{# üksusega}other{# üksusega}}</translation>
 <translation id="2614981083756825552">Math ML-i paigutus</translation>
 <translation id="2626530649491650971">klõpsatav</translation>
@@ -245,6 +246,7 @@
         "vi": "vietnami",
         "zh": "hiina",
         "zh_TW": "hiina (traditsiooniline han)"}</translation>
+<translation id="335581015389089642">Kõne</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{pluss}other{# plussmärki}}</translation>
 <translation id="338583716107319301">Eraldaja</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">Tühik</translation>
 <translation id="6142308968191113180">4. pealkiri</translation>
 <translation id="6169420925157477918">Pika kirjeldusega kujutis</translation>
-<translation id="6172087735260766220">Kopeerimiskaitsega PDF-is ei pääse juurdepääsetavale tekstile juurde.</translation>
 <translation id="6186305613600865047">Saate liikuda lehe lõppu</translation>
 <translation id="6193330012414963395">AM/PM</translation>
 <translation id="622484624075952240">Alla</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">Vaheleht</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6697092096875747123">Eelmine liitboks</translation>
+<translation id="6710213216561001401">Eelmine</translation>
 <translation id="6714813999819678458">Eelmine 2. taseme pealkiri</translation>
 <translation id="6716505898850596801">Muuteklahvid</translation>
 <translation id="671916444866103745">Järgmist ARIA maamärki ei ole.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">Taimer</translation>
 <translation id="8065607967589909823">Valik on</translation>
 <translation id="8066678206530322333">Bänner</translation>
+<translation id="8076492880354921740">Vahelehed</translation>
 <translation id="8110647606445335195">ARIA maamärke ei ole.</translation>
 <translation id="8153880621934657047">Ei ole tabelis.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{alljoon}other{# alljoont}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">Järgmist 3. taseme pealkirja ei ole.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">Eelmist märkeruutu ei ole.</translation>
+<translation id="8446884382197647889">Lisateave</translation>
 <translation id="8455868257606149352">Max <ph name="X" /></translation>
 <translation id="84575901236241018">on pääsuklahv, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">akna ülevaade</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">Kasutage sirvimiseks üles ja alla nooleklahve või sisestage otsimiseks.</translation>
 <translation id="9192904702577636854">Marquee</translation>
 <translation id="9212322457209634662">Järgmist jaotist ei ole.</translation>
+<translation id="923331726185079994">ChromeVox on värskendatud</translation>
 <translation id="930275611743429116">Valimise alustamine või lõpetamine.</translation>
 <translation id="948171205378458592">Vähenda kõne kiirust</translation>
 <translation id="962913030769097253">Järgmine 1. taseme pealkiri</translation>
 <translation id="973955474346881951">Luba/keela püsiv režiim</translation>
+<translation id="976849232629612000">Üksusi ei ole.</translation>
 </translationbundle>

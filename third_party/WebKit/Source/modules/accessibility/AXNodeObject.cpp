@@ -1878,7 +1878,7 @@ void AXNodeObject::addChildren()
 
     for (Node& child : NodeTraversal::childrenOf(*m_node)) {
         AXObject* childObj = axObjectCache().getOrCreate(&child);
-        if (!axObjectCache().isAriaOwned(childObj))
+        if (childObj && !axObjectCache().isAriaOwned(childObj))
             addChild(childObj);
     }
 
@@ -2188,7 +2188,8 @@ void AXNodeObject::computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedCh
         return;
 
     Vector<String> idVector;
-    tokenVectorFromAttribute(idVector, aria_ownsAttr);
+    if (canHaveChildren())
+        tokenVectorFromAttribute(idVector, aria_ownsAttr);
 
     axObjectCache().updateAriaOwns(this, idVector, ownedChildren);
 }

@@ -10,6 +10,7 @@
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringConcatenate.h"
 #include "wtf/text/StringHash.h"
+#include "wtf/text/StringToNumber.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -81,6 +82,7 @@ public:
     void append(const UChar* c, size_t size) { m_impl.append(c, size); };
     void append(const char* characters, unsigned length) { m_impl.append(characters, length); }
     void appendNumber(int number) { m_impl.appendNumber(number); }
+    void appendNumber(double number) { m_impl.appendNumber(number); }
     String16 toString() { return m_impl.toString(); }
     void reserveCapacity(unsigned newCapacity) { m_impl.reserveCapacity(newCapacity); }
 
@@ -136,5 +138,15 @@ struct HashTraits<String16> : SimpleClassHashTraits<String16> {
 };
 
 } // namespace WTF
+
+namespace std {
+template<> struct hash<String16> {
+    std::size_t operator()(const String16& string) const
+    {
+        return StringHash::hash(string.impl());
+    }
+};
+
+} // namespace std
 
 #endif // !defined(String16WTF_h)

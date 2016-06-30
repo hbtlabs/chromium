@@ -22,21 +22,12 @@ CrSettingsBrowserTest.prototype = {
   __proto__: PolymerTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://md-settings/prefs/prefs.html',
+  get browsePreload() {
+    throw 'this is abstract and should be overriden by subclasses';
+  },
 
-  /**
-   * TODO(dbeam): these should not be required monolithically.
-   * @override
-   */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
-    '../fake_chrome_event.js',
-    'fake_settings_private.js',
-    'checkbox_tests.js',
-    'dropdown_menu_tests.js',
-    'pref_util_tests.js',
-    'prefs_test_cases.js',
-    'prefs_tests.js',
-  ]),
+  /** @override */
+  extraLibraries: PolymerTest.getLibraries(ROOT_PATH),
 
   /** @override */
   setUp: function() {
@@ -54,21 +45,82 @@ CrSettingsBrowserTest.prototype = {
 // Have to include command_line.h manually due to GEN calls below.
 GEN('#include "base/command_line.h"');
 
-// Times out on memory bots. http://crbug.com/534718
-GEN('#if defined(MEMORY_SANITIZER)');
-GEN('#define MAYBE_CrSettingsTest DISABLED_CrSettingsTest');
-GEN('#else');
-GEN('#define MAYBE_CrSettingsTest CrSettingsTest');
-GEN('#endif');
+function CrSettingsCheckboxTest() {}
 
-// TODO(dbeam): these should be split into multiple TEST_F()s.
-TEST_F('CrSettingsBrowserTest', 'MAYBE_CrSettingsTest', function() {
+CrSettingsCheckboxTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/controls/settings_checkbox.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'checkbox_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsCheckboxTest', 'All', function() {
   settings_checkbox.registerTests();
-  settings_dropdown_menu.registerTests();
-  settings_prefUtil.registerTests();
-  settings_prefs.registerTests();
+  mocha.run();
+});
 
-  // Run all registered tests.
+function CrSettingsDropdownMenuTest() {}
+
+CrSettingsDropdownMenuTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/controls/settings_dropdown_menu.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'dropdown_menu_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsDropdownMenuTest', 'All', function() {
+  settings_dropdown_menu.registerTests();
+  mocha.run();
+});
+
+function CrSettingsPrefUtilTest() {}
+
+CrSettingsPrefUtilTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/prefs/pref_util.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'pref_util_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsPrefUtilTest', 'All', function() {
+  settings_prefUtil.registerTests();
+  mocha.run();
+});
+
+function CrSettingsPrefsTest() {}
+
+CrSettingsPrefsTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/prefs/prefs.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    '../fake_chrome_event.js',
+    'fake_settings_private.js',
+    'prefs_test_cases.js',
+    'prefs_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsPrefsTest', 'All', function() {
+  settings_prefs.registerTests();
   mocha.run();
 });
 
@@ -87,6 +139,7 @@ CrSettingsAboutPageTest.prototype = {
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
+    'test_lifetime_browser_proxy.js',
     'about_page_tests.js',
   ]),
 };
@@ -120,7 +173,7 @@ CrSettingsPeoplePageChangePictureTest.prototype = {
   browsePreload: 'chrome://md-settings/people_page/change_picture.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'people_page_change_picture_test.js',
   ]),
@@ -147,7 +200,7 @@ CrSettingsPeoplePageManageProfileTest.prototype = {
   browsePreload: 'chrome://md-settings/people_page/manage_profile.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'people_page_manage_profile_test.js',
   ]),
@@ -174,7 +227,7 @@ CrSettingsPeoplePageTest.prototype = {
   browsePreload: 'chrome://md-settings/people_page/people_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'people_page_test.js',
   ]),
@@ -200,7 +253,7 @@ CrSettingsPeoplePageSyncPageTest.prototype = {
   browsePreload: 'chrome://md-settings/people_page/sync_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'people_page_sync_page_test.js',
   ]),
@@ -249,8 +302,9 @@ CrSettingsResetPageTest.prototype = {
   browsePreload: 'chrome://md-settings/reset_page/reset_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
+    'test_lifetime_browser_proxy.js',
     'reset_page_test.js',
   ]),
 };
@@ -274,7 +328,7 @@ CrSettingsAppearancePageTest.prototype = {
   browsePreload: 'chrome://md-settings/appearance_page/appearance_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
     'test_browser_proxy.js',
     'appearance_page_test.js',
@@ -300,7 +354,7 @@ CrSettingsSearchPageTest.prototype = {
   browsePreload: 'chrome://md-settings/search_page/search_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'test_search_engines_browser_proxy.js',
     'search_page_test.js',
@@ -327,7 +381,7 @@ CrSettingsSearchEnginesTest.prototype = {
       'chrome://md-settings/search_engines_page/search_engines_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'test_search_engines_browser_proxy.js',
     'search_engines_page_test.js',
@@ -355,7 +409,7 @@ CrSettingsCertificateManagerTest.prototype = {
       'certificate_manager_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
     'certificate_manager_page_test.js',
   ]),
@@ -381,7 +435,7 @@ CrSettingsPrivacyPageTest.prototype = {
   browsePreload: 'chrome://md-settings/privacy_page/privacy_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     ROOT_PATH + 'ui/webui/resources/js/promise_resolver.js',
     'test_browser_proxy.js',
     'privacy_page_test.js',
@@ -407,7 +461,7 @@ CrSettingsSiteSettingsTest.prototype = {
   browsePreload: 'chrome://md-settings/prefs/prefs.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'site_details_tests.js',
     'site_details_permission_tests.js',
     'site_list_tests.js',
@@ -441,7 +495,7 @@ CrSettingsDevicePageTest.prototype = {
   browsePreload: 'chrome://md-settings/device_page/device_page.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     ROOT_PATH + 'ui/webui/resources/js/assert.js',
     '../fake_chrome_event.js',
     'fake_settings_private.js',
@@ -477,7 +531,7 @@ CrSettingsMenuTest.prototype = {
   browsePreload: 'chrome://md-settings/settings_menu/settings_menu.html',
 
   /** @override */
-  extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'settings_menu_test.js',
   ]),
 };
@@ -503,6 +557,7 @@ CrSettingsSystemPageTest.prototype = {
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
     'test_browser_proxy.js',
+    'test_lifetime_browser_proxy.js',
     'system_page_tests.js',
   ]),
 };
@@ -547,6 +602,7 @@ CrSettingsLanguagesPageTest.prototype = {
 
   /** @override */
   extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    '../fake_chrome_event.js',
     'fake_language_settings_private.js',
     'fake_settings_private.js',
     'languages_page_tests.js',
@@ -554,5 +610,23 @@ CrSettingsLanguagesPageTest.prototype = {
 };
 
 TEST_F('CrSettingsLanguagesPageTest', 'LanguagesPage', function() {
+  mocha.run();
+});
+
+function CrSettingsRadioGroupTest() {}
+
+CrSettingsRadioGroupTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/controls/settings_radio_group.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'radio_group_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsRadioGroupTest', 'All', function() {
   mocha.run();
 });

@@ -114,12 +114,13 @@ void DrmThread::CreateBufferFromFds(const gfx::Size& size,
                                     gfx::BufferFormat format,
                                     std::vector<base::ScopedFD>&& fds,
                                     std::vector<int> strides,
+                                    std::vector<int> offsets,
                                     scoped_refptr<GbmBuffer>* buffer) {
   scoped_refptr<GbmDevice> gbm =
       static_cast<GbmDevice*>(device_manager_->GetPrimaryDrmDevice().get());
   DCHECK(gbm);
   *buffer = GbmBuffer::CreateBufferFromFds(gbm, format, size, std::move(fds),
-                                           strides);
+                                           strides, offsets);
 }
 
 void DrmThread::GetScanoutFormats(
@@ -174,7 +175,7 @@ void DrmThread::SetCursor(gfx::AcceleratedWidget widget,
       ->SetCursor(bitmaps, location, frame_delay_ms);
 }
 
-void DrmThread::MoveCursor(gfx::AcceleratedWidget widget,
+void DrmThread::MoveCursor(const gfx::AcceleratedWidget& widget,
                            const gfx::Point& location) {
   screen_manager_->GetWindow(widget)->MoveCursor(location);
 }

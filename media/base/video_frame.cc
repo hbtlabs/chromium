@@ -188,27 +188,6 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
 }
 
 // static
-scoped_refptr<VideoFrame> VideoFrame::WrapGpuMemoryBufferBackedNativeTextures(
-    VideoPixelFormat format,
-    const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
-    const gfx::GpuMemoryBufferId (&gpu_memory_buffer_ids)[kMaxPlanes],
-    const ReleaseMailboxCB& mailbox_holder_release_cb,
-    const gfx::Size& coded_size,
-    const gfx::Rect& visible_rect,
-    const gfx::Size& natural_size,
-    base::TimeDelta timestamp) {
-  scoped_refptr<VideoFrame> frame =
-      WrapNativeTextures(format, mailbox_holders, mailbox_holder_release_cb,
-                         coded_size, visible_rect, natural_size, timestamp);
-  if (frame) {
-    frame->storage_type_ = STORAGE_GPU_MEMORY_BUFFERS;
-    for (size_t i = 0; i < kMaxPlanes; ++i)
-      frame->texture_gpu_memory_buffer_ids_[i] = gpu_memory_buffer_ids[i];
-  }
-  return frame;
-}
-
-// static
 scoped_refptr<VideoFrame> VideoFrame::WrapExternalData(
     VideoPixelFormat format,
     const gfx::Size& coded_size,
@@ -305,6 +284,48 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvGpuMemoryBuffers(
   frame->gpu_memory_buffer_handles_.push_back(y_handle);
   frame->gpu_memory_buffer_handles_.push_back(u_handle);
   frame->gpu_memory_buffer_handles_.push_back(v_handle);
+  return frame;
+}
+
+// static
+scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
+    VideoPixelFormat format,
+    const gfx::Size& coded_size,
+    const gfx::Rect& visible_rect,
+    const gfx::Size& natural_size,
+    int32_t y_stride,
+    int32_t u_stride,
+    int32_t v_stride,
+    int32_t a_stride,
+    uint8_t* y_data,
+    uint8_t* u_data,
+    uint8_t* v_data,
+    uint8_t* a_data,
+    base::TimeDelta timestamp) {
+  const StorageType storage = STORAGE_UNOWNED_MEMORY;
+  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
+    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+                << ConfigToString(format, storage, coded_size, visible_rect,
+                                  natural_size);
+    return nullptr;
+  }
+
+  if (NumPlanes(format) != 4) {
+    LOG(DFATAL) << "Expecting Y, U, V and A planes to be present for the video"
+                << " format.";
+    return nullptr;
+  }
+
+  scoped_refptr<VideoFrame> frame(new VideoFrame(
+      format, storage, coded_size, visible_rect, natural_size, timestamp));
+  frame->strides_[kYPlane] = y_stride;
+  frame->strides_[kUPlane] = u_stride;
+  frame->strides_[kVPlane] = v_stride;
+  frame->strides_[kAPlane] = a_stride;
+  frame->data_[kYPlane] = y_data;
+  frame->data_[kUPlane] = u_data;
+  frame->data_[kVPlane] = v_data;
+  frame->data_[kAPlane] = a_data;
   return frame;
 }
 
@@ -684,13 +705,6 @@ VideoFrame::mailbox_holder(size_t texture_index) const {
   DCHECK(HasTextures());
   DCHECK(IsValidPlane(texture_index, format_));
   return mailbox_holders_[texture_index];
-}
-
-const gfx::GpuMemoryBufferId& VideoFrame::texture_gpu_memory_buffer_id(
-    size_t texture_index) const {
-  DCHECK(HasTextures());
-  DCHECK(IsValidPlane(texture_index, format_));
-  return texture_gpu_memory_buffer_ids_[texture_index];
 }
 
 base::SharedMemoryHandle VideoFrame::shared_memory_handle() const {

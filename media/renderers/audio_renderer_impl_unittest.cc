@@ -12,6 +12,7 @@
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/audio_buffer_converter.h"
@@ -273,13 +274,13 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                                  DecoderBuffer::CreateEOSBuffer()));
 
     // Satify pending |decode_cb_| to trigger a new DemuxerStream::Read().
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
     WaitForPendingRead();
 
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
@@ -376,9 +377,9 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                      const AudioDecoder::DecodeCB& decode_cb) {
     // TODO(scherkus): Make this a DCHECK after threading semantics are fixed.
     if (base::MessageLoop::current() != &message_loop_) {
-      message_loop_.PostTask(FROM_HERE, base::Bind(
-          &AudioRendererImplTest::DecodeDecoder,
-          base::Unretained(this), buffer, decode_cb));
+      message_loop_.task_runner()->PostTask(
+          FROM_HERE, base::Bind(&AudioRendererImplTest::DecodeDecoder,
+                                base::Unretained(this), buffer, decode_cb));
       return;
     }
 
@@ -398,7 +399,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
       return;
     }
 
-    message_loop_.PostTask(FROM_HERE, reset_cb);
+    message_loop_.task_runner()->PostTask(FROM_HERE, reset_cb);
   }
 
   void DeliverBuffer(DecodeStatus status,
@@ -748,6 +749,33 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForEarlyStartTime) {
     ASSERT_NE(0.0f, bus->channel(0)[i]);
 }
 
+TEST_F(AudioRendererImplTest, RenderingDelayedForSuspend) {
+  Initialize();
+  Preroll(base::TimeDelta(), base::TimeDelta(), PIPELINE_OK);
+  StartTicking();
+
+  // Verify the first buffer is real data.
+  int frames_read = 0;
+  std::unique_ptr<AudioBus> bus = AudioBus::Create(hardware_params_);
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_NE(0, frames_read);
+  for (int i = 0; i < bus->frames(); ++i)
+    ASSERT_NE(0.0f, bus->channel(0)[i]);
+
+  // Verify after suspend we get silence.
+  renderer_->OnSuspend();
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_EQ(0, frames_read);
+
+  // Verify after resume we get audio.
+  bus->Zero();
+  renderer_->OnResume();
+  EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
+  EXPECT_NE(0, frames_read);
+  for (int i = 0; i < bus->frames(); ++i)
+    ASSERT_NE(0.0f, bus->channel(0)[i]);
+}
+
 TEST_F(AudioRendererImplTest, RenderingDelayDoesNotOverflow) {
   Initialize();
 
@@ -855,6 +883,16 @@ TEST_F(AudioRendererImplTest, TimeSourceBehavior) {
 
   // Time shouldn't change just yet because we've only sent the initial audio
   // data to the hardware.
+  EXPECT_EQ(tick_clock_->NowTicks(),
+            ConvertMediaTime(base::TimeDelta(), &is_time_moving));
+  EXPECT_TRUE(is_time_moving);
+
+  // A system suspend should freeze the time state and resume restart it.
+  renderer_->OnSuspend();
+  EXPECT_EQ(tick_clock_->NowTicks(),
+            ConvertMediaTime(base::TimeDelta(), &is_time_moving));
+  EXPECT_FALSE(is_time_moving);
+  renderer_->OnResume();
   EXPECT_EQ(tick_clock_->NowTicks(),
             ConvertMediaTime(base::TimeDelta(), &is_time_moving));
   EXPECT_TRUE(is_time_moving);

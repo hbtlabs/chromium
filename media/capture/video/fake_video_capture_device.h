@@ -22,7 +22,7 @@
 
 namespace media {
 
-class MEDIA_EXPORT FakeVideoCaptureDevice : public VideoCaptureDevice {
+class CAPTURE_EXPORT FakeVideoCaptureDevice : public VideoCaptureDevice {
  public:
   enum class BufferOwnership {
     OWN_BUFFERS,
@@ -37,6 +37,8 @@ class MEDIA_EXPORT FakeVideoCaptureDevice : public VideoCaptureDevice {
   void AllocateAndStart(const VideoCaptureParams& params,
                         std::unique_ptr<Client> client) override;
   void StopAndDeAllocate() override;
+  void GetPhotoCapabilities(
+      ScopedResultCallback<GetPhotoCapabilitiesCallback> callback) override;
   void TakePhoto(ScopedResultCallback<TakePhotoCallback> callback) override;
 
  private:

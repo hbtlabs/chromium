@@ -203,6 +203,16 @@ TEST(WeakPtrFactoryTest, Comparison) {
   EXPECT_EQ(ptr.get(), ptr2.get());
 }
 
+TEST(WeakPtrFactoryTest, Move) {
+  int data;
+  WeakPtrFactory<int> factory(&data);
+  WeakPtr<int> ptr = factory.GetWeakPtr();
+  WeakPtr<int> ptr2 = factory.GetWeakPtr();
+  WeakPtr<int> ptr3 = std::move(ptr2);
+  EXPECT_NE(ptr.get(), ptr2.get());
+  EXPECT_EQ(ptr.get(), ptr3.get());
+}
+
 TEST(WeakPtrFactoryTest, OutOfScope) {
   WeakPtr<int> ptr;
   EXPECT_EQ(nullptr, ptr.get());
@@ -306,6 +316,19 @@ TEST(WeakPtrFactoryTest, BooleanTesting) {
   } else {
     ADD_FAILURE() << "Null pointer should result in !x being true.";
   }
+}
+
+TEST(WeakPtrFactoryTest, ComparisonToNull) {
+  int data;
+  WeakPtrFactory<int> factory(&data);
+
+  WeakPtr<int> ptr_to_an_instance = factory.GetWeakPtr();
+  EXPECT_NE(nullptr, ptr_to_an_instance);
+  EXPECT_NE(ptr_to_an_instance, nullptr);
+
+  WeakPtr<int> null_ptr;
+  EXPECT_EQ(null_ptr, nullptr);
+  EXPECT_EQ(nullptr, null_ptr);
 }
 
 TEST(WeakPtrTest, InvalidateWeakPtrs) {

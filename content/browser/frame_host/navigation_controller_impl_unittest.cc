@@ -42,6 +42,7 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_type.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_notification_tracker.h"
@@ -667,7 +668,8 @@ void CheckNavigationEntryMatchLoadParams(
   EXPECT_EQ(load_params.url, entry->GetURL());
   EXPECT_EQ(load_params.referrer.url, entry->GetReferrer().url);
   EXPECT_EQ(load_params.referrer.policy, entry->GetReferrer().policy);
-  EXPECT_EQ(load_params.transition_type, entry->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      entry->GetTransitionType(), load_params.transition_type));
   EXPECT_EQ(load_params.extra_headers, entry->extra_headers());
 
   EXPECT_EQ(load_params.is_renderer_initiated, entry->is_renderer_initiated());
@@ -684,8 +686,7 @@ void CheckNavigationEntryMatchLoadParams(
         load_params.override_user_agent);
     EXPECT_EQ(should_override, entry->GetIsOverridingUserAgent());
   }
-  EXPECT_EQ(load_params.browser_initiated_post_data.get(),
-            entry->GetBrowserInitiatedPostData());
+  EXPECT_EQ(load_params.post_data, entry->GetPostData());
   EXPECT_EQ(load_params.transferred_global_request_id,
       entry->transferred_global_request_id());
 }
@@ -757,18 +758,13 @@ TEST_F(NavigationControllerTest, LoadURLWithExtraParams_HttpPost) {
 
   NavigationController::LoadURLParams load_params(GURL("https://posturl"));
   load_params.transition_type = ui::PAGE_TRANSITION_TYPED;
-  load_params.load_type =
-      NavigationController::LOAD_TYPE_BROWSER_INITIATED_HTTP_POST;
+  load_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
   load_params.override_user_agent = NavigationController::UA_OVERRIDE_TRUE;
 
-
-  const unsigned char* raw_data =
-      reinterpret_cast<const unsigned char*>("d\n\0a2");
+  const char* raw_data = "d\n\0a2";
   const int length = 5;
-  std::vector<unsigned char> post_data_vector(raw_data, raw_data+length);
-  scoped_refptr<base::RefCountedBytes> data =
-      base::RefCountedBytes::TakeVector(&post_data_vector);
-  load_params.browser_initiated_post_data = data.get();
+  load_params.post_data =
+      ResourceRequestBody::CreateFromBytes(raw_data, length);
 
   controller.LoadURLWithParams(load_params);
   NavigationEntryImpl* entry = controller.GetPendingEntry();
@@ -1578,22 +1574,19 @@ TEST_F(NavigationControllerTest, ResetEntryValuesAfterCommit) {
   entry_id = controller.GetPendingEntry()->GetUniqueID();
 
   // Set up some sample values.
-  const unsigned char* raw_data =
-      reinterpret_cast<const unsigned char*>("post\n\n\0data");
+  const char* raw_data = "post\n\n\0data";
   const int length = 11;
-  std::vector<unsigned char> post_data_vector(raw_data, raw_data+length);
-  scoped_refptr<base::RefCountedBytes> post_data =
-      base::RefCountedBytes::TakeVector(&post_data_vector);
   GlobalRequestID transfer_id(3, 4);
 
   // Set non-persisted values on the pending entry.
   NavigationEntryImpl* pending_entry = controller.GetPendingEntry();
-  pending_entry->SetBrowserInitiatedPostData(post_data.get());
+  pending_entry->SetPostData(
+      ResourceRequestBody::CreateFromBytes(raw_data, length));
   pending_entry->set_is_renderer_initiated(true);
   pending_entry->set_transferred_global_request_id(transfer_id);
   pending_entry->set_should_replace_entry(true);
   pending_entry->set_should_clear_history_list(true);
-  EXPECT_EQ(post_data.get(), pending_entry->GetBrowserInitiatedPostData());
+  EXPECT_TRUE(pending_entry->GetPostData());
   EXPECT_TRUE(pending_entry->is_renderer_initiated());
   EXPECT_EQ(transfer_id, pending_entry->transferred_global_request_id());
   EXPECT_TRUE(pending_entry->should_replace_entry());
@@ -1606,7 +1599,7 @@ TEST_F(NavigationControllerTest, ResetEntryValuesAfterCommit) {
   // Certain values that are only used for pending entries get reset after
   // commit.
   NavigationEntryImpl* committed_entry = controller.GetLastCommittedEntry();
-  EXPECT_FALSE(committed_entry->GetBrowserInitiatedPostData());
+  EXPECT_FALSE(committed_entry->GetPostData());
   EXPECT_FALSE(committed_entry->is_renderer_initiated());
   EXPECT_EQ(GlobalRequestID(-1, -1),
             committed_entry->transferred_global_request_id());
@@ -3771,59 +3764,65 @@ TEST_F(NavigationControllerTest, IsInPageNavigation) {
   // TODO(japhet): We should only trust the renderer if the about:blank
   // was the first document in the given frame, but we don't have enough
   // information to identify that case currently.
+  // TODO(creis): Update this to verify that the origin of the about:blank page
+  // matches if the URL doesn't look same-origin.
   const GURL blank_url(url::kAboutBlankURL);
+  const url::Origin blank_origin;
   main_test_rfh()->NavigateAndCommitRendererInitiated(0, true, blank_url);
-  EXPECT_TRUE(controller.IsURLInPageNavigation(url, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(url, url::Origin(url), true,
+                                               main_test_rfh()));
 
   // Navigate to URL with no refs.
   main_test_rfh()->NavigateAndCommitRendererInitiated(0, false, url);
 
   // Reloading the page is not an in-page navigation.
-  EXPECT_FALSE(controller.IsURLInPageNavigation(url, false, main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(url, url::Origin(url), false,
+                                                main_test_rfh()));
   const GURL other_url("http://www.google.com/add.html");
-  EXPECT_FALSE(controller.IsURLInPageNavigation(other_url, false,
-      main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(
+      other_url, url::Origin(other_url), false, main_test_rfh()));
   const GURL url_with_ref("http://www.google.com/home.html#my_ref");
-  EXPECT_TRUE(controller.IsURLInPageNavigation(url_with_ref, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(
+      url_with_ref, url::Origin(url_with_ref), true, main_test_rfh()));
 
   // Navigate to URL with refs.
   main_test_rfh()->NavigateAndCommitRendererInitiated(1, true, url_with_ref);
 
   // Reloading the page is not an in-page navigation.
-  EXPECT_FALSE(controller.IsURLInPageNavigation(url_with_ref, false,
-      main_test_rfh()));
-  EXPECT_FALSE(controller.IsURLInPageNavigation(url, false,
-      main_test_rfh()));
-  EXPECT_FALSE(controller.IsURLInPageNavigation(other_url, false,
-      main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(
+      url_with_ref, url::Origin(url_with_ref), false, main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(url, url::Origin(url), false,
+                                                main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(
+      other_url, url::Origin(other_url), false, main_test_rfh()));
   const GURL other_url_with_ref("http://www.google.com/home.html#my_other_ref");
-  EXPECT_TRUE(controller.IsURLInPageNavigation(other_url_with_ref, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(other_url_with_ref,
+                                               url::Origin(other_url_with_ref),
+                                               true, main_test_rfh()));
 
   // Going to the same url again will be considered in-page
   // if the renderer says it is even if the navigation type isn't IN_PAGE.
-  EXPECT_TRUE(controller.IsURLInPageNavigation(url_with_ref, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(
+      url_with_ref, url::Origin(url_with_ref), true, main_test_rfh()));
 
   // Going back to the non ref url will be considered in-page if the navigation
   // type is IN_PAGE.
-  EXPECT_TRUE(controller.IsURLInPageNavigation(url, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(url, url::Origin(url), true,
+                                               main_test_rfh()));
 
   // If the renderer says this is a same-origin in-page navigation, believe it.
   // This is the pushState/replaceState case.
-  EXPECT_TRUE(controller.IsURLInPageNavigation(other_url, true,
-      main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(
+      other_url, url::Origin(other_url), true, main_test_rfh()));
 
   // Don't believe the renderer if it claims a cross-origin navigation is
   // in-page.
   const GURL different_origin_url("http://www.example.com");
   MockRenderProcessHost* rph = main_test_rfh()->GetProcess();
   EXPECT_EQ(0, rph->bad_msg_count());
-  EXPECT_FALSE(controller.IsURLInPageNavigation(different_origin_url, true,
-                                                main_test_rfh()));
+  EXPECT_FALSE(controller.IsURLInPageNavigation(
+      different_origin_url, url::Origin(different_origin_url), true,
+      main_test_rfh()));
   EXPECT_EQ(1, rph->bad_msg_count());
 }
 
@@ -3848,7 +3847,8 @@ TEST_F(NavigationControllerTest, IsInPageNavigationWithUniversalFileAccess) {
   EXPECT_TRUE(file_origin.IsSameOriginWith(
       main_test_rfh()->frame_tree_node()->current_origin()));
   EXPECT_EQ(0, rph->bad_msg_count());
-  EXPECT_TRUE(controller.IsURLInPageNavigation(different_origin_url, true,
+  EXPECT_TRUE(controller.IsURLInPageNavigation(
+      different_origin_url, url::Origin(different_origin_url), true,
       main_test_rfh()));
   EXPECT_EQ(0, rph->bad_msg_count());
 
@@ -3874,15 +3874,16 @@ TEST_F(NavigationControllerTest, IsInPageNavigationWithUniversalFileAccess) {
   // so that a file URL would still be in-page.  See https://crbug.com/553418.
   EXPECT_TRUE(file_origin.IsSameOriginWith(
       main_test_rfh()->frame_tree_node()->current_origin()));
-  EXPECT_TRUE(
-      controller.IsURLInPageNavigation(file_url, true, main_test_rfh()));
+  EXPECT_TRUE(controller.IsURLInPageNavigation(file_url, url::Origin(file_url),
+                                               true, main_test_rfh()));
   EXPECT_EQ(0, rph->bad_msg_count());
 
   // Don't honor allow_universal_access_from_file_urls if actual URL is
   // not file scheme.
   const GURL url("http://www.google.com/home.html");
   main_test_rfh()->NavigateAndCommitRendererInitiated(2, true, url);
-  EXPECT_FALSE(controller.IsURLInPageNavigation(different_origin_url, true,
+  EXPECT_FALSE(controller.IsURLInPageNavigation(
+      different_origin_url, url::Origin(different_origin_url), true,
       main_test_rfh()));
   EXPECT_EQ(1, rph->bad_msg_count());
 }
@@ -4002,21 +4003,24 @@ TEST_F(NavigationControllerTest, LazyReload) {
   const GURL url("http://foo");
   NavigateAndCommit(url);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_NE(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetLastCommittedEntry()->GetTransitionType());
+  EXPECT_FALSE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetLastCommittedEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 
   // Request a reload to happen when the controller becomes active (e.g. after
   // the renderer gets killed in background on Android).
   controller.SetNeedsReload();
   ASSERT_TRUE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetLastCommittedEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetLastCommittedEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 
   // Set the controller as active, triggering the requested reload.
   controller.SetActive(true);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 }
 
 // Test requesting and triggering a lazy reload without any committed entry nor
@@ -4040,21 +4044,24 @@ TEST_F(NavigationControllerTest, LazyReloadWithOnlyPendingEntry) {
   const GURL url("http://foo");
   controller.LoadURL(url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 
   // Request a reload to happen when the controller becomes active (e.g. after
   // the renderer gets killed in background on Android).
   controller.SetNeedsReload();
   ASSERT_TRUE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 
   // Set the controller as active, triggering the requested reload.
   controller.SetActive(true);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 }
 
 // Tests a subframe navigation while a toplevel navigation is pending.

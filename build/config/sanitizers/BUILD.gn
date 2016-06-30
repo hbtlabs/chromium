@@ -4,6 +4,7 @@
 
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
 
@@ -27,6 +28,9 @@ group("deps") {
       ":options_sources",
     ]
   }
+  if (use_afl) {
+    deps += [ "//third_party/afl" ]
+  }
 }
 
 group("deps_no_options") {
@@ -47,10 +51,10 @@ group("deps_no_options") {
     } else {
       exe = ""
     }
-    data += [ "//third_party//llvm-build/Release+Asserts/bin/llvm-symbolizer${exe}" ]
+    data += [ "$clang_base_path/bin/llvm-symbolizer${exe}" ]
     if (is_linux) {
       # llvm-symbolizer needs this.
-      data += [ "//third_party/llvm-build/Release+Asserts/lib/libstdc++.so.6" ]
+      data += [ "$clang_base_path/lib/libstdc++.so.6" ]
     }
 
     if (use_prebuilt_instrumented_libraries) {
@@ -70,10 +74,10 @@ group("deps_no_options") {
   }
 }
 
-if (is_mac) {
+if (is_mac && using_sanitizer) {
   copy("copy_asan_runtime") {
     sources = [
-      "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/darwin/libclang_rt.asan_osx_dynamic.dylib",
+      "$clang_base_path/lib/clang/$clang_version/lib/darwin/libclang_rt.asan_osx_dynamic.dylib",
     ]
     outputs = [
       "$root_out_dir/{{source_file_part}}",
@@ -229,7 +233,7 @@ config("asan_flags") {
       ]
       # TODO(GYP): deal with mac_bundles.
     } else if (is_win) {
-      assert(target_cpu == "x86", "WinASan is 32-bit only currently")
+      assert(current_cpu == "x86", "WinASan is 32-bit only currently")
       if (is_component_build) {
         libs = [
           "clang_rt.asan_dynamic-i386.lib",
@@ -280,7 +284,7 @@ config("coverage_flags") {
       "-mllvm",
       "-sanitizer-coverage-prune-blocks=1",
     ]
-    if (target_cpu == "arm") {
+    if (current_cpu == "arm") {
       # http://crbug.com/517105
       cflags += [
         "-mllvm",

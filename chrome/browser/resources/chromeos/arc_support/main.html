@@ -13,14 +13,14 @@
       width: 360px;
     }
     paper-progress.red {
-      --paper-progress-active-color: #ff374f;
-      --paper-progress-secondary-color: #ff374f;
-      --paper-progress-container-color: #c8bdd4;
+      --paper-progress-active-color: rgb(255, 55, 79);
+      --paper-progress-container-color: rgb(200, 189, 212);
+      --paper-progress-secondary-color: rgb(255, 55, 79);
     }
     paper-progress.blue {
-      --paper-progress-active-color: #4285f4;
-      --paper-progress-secondary-color: #4285f4;
+      --paper-progress-active-color: rgb(66, 133, 244);
       --paper-progress-container-color: #e6e6e6;
+      --paper-progress-secondary-color: rgb(66, 133, 244);
     }
     paper-button {
       font-size: 13px;
@@ -50,10 +50,14 @@
     <div class="section-terms" id ="terms-container">
       <webview id="terms" partition="persist:arc_support"></webview>
     </div>
-    <div class="layout horizontal section-metrics">
-      <input type="checkbox" class="checkbox-metrics" id="enable-metrics"
-        hidden>
-      <p class="text-metrics" id="text-metrics"></p>
+    <div class="layout horizontal section-checkbox-container">
+      <input type="checkbox" class="checkbox-option" id="enable-metrics" hidden>
+      <p class="checkbox-text" id="text-metrics"></p>
+    </div>
+    <div id="section-backup-restore" class="layout horizontal
+        section-checkbox-container">
+      <input type="checkbox" class="checkbox-option" id="enable-backup-restore">
+      <p class="checkbox-text" id="text-backup-restore"></p>
     </div>
     <div class="layout horizontal end-justified section-buttons">
       <paper-button class="white" id="button-cancel"
@@ -71,6 +75,7 @@
     <p class="text-status" i18n-content=progressLsoLoading></p>
   </div>
   <div id="lso" class="section" hidden>
+    <img class="image-header" src="images/header.png">
     <webview id="arc-support" partition="persist:arc_support"></webview>
   </div>
   <div id="arc-loading" class="section" hidden>
@@ -82,6 +87,9 @@
     <img class="image-header" src="images/header.png">
     <paper-progress class="red" value="100" max="100" ></paper-progress>
     <p class="text-status" id="error-message"></p>
+    <paper-button class="blue" id="button-send-feedback"
+        i18n-content="buttonSendFeedback">
+    </paper-button>
     <paper-button class="blue" id="button-retry" i18n-content="buttonRetry">
     </paper-button>
   </div>

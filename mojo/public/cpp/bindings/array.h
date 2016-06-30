@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/move.h"
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
@@ -25,15 +25,11 @@ namespace mojo {
 // meaning that no value has been assigned to it. Null is distinct from empty.
 template <typename T>
 class Array {
-  MOVE_ONLY_TYPE_FOR_CPP_03(Array);
-
  public:
   using ConstRefType = typename std::vector<T>::const_reference;
   using RefType = typename std::vector<T>::reference;
 
   using Element = T;
-  using Data_ = internal::Array_Data<
-      typename internal::GetDataTypeAsArrayElement<T>::Data>;
 
   using iterator = typename std::vector<T>::iterator;
   using const_iterator = typename std::vector<T>::const_iterator;
@@ -215,6 +211,8 @@ class Array {
 
   std::vector<T> vec_;
   bool is_null_;
+
+  DISALLOW_COPY_AND_ASSIGN(Array);
 };
 
 // A |TypeConverter| that will create an |Array<T>| containing a copy of the

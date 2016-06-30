@@ -3,29 +3,30 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "cc/output/compositor_frame.h"
+#include "cc/output/delegated_frame_data.h"
+#include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_manager.h"
 #include "components/exo/buffer.h"
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/env.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/gpu_memory_buffer.h"
+#include "ui/wm/core/window_util.h"
 
 namespace exo {
 namespace {
 
-class SurfaceTest : public test::ExoTestBase,
-                    public ::testing::WithParamInterface<bool> {
-  void SetUp() override {
-    Surface::SetUseSurfaceLayer(GetParam());
-    test::ExoTestBase::SetUp();
-  }
-};
+using SurfaceTest = test::ExoTestBase;
 
 void ReleaseBuffer(int* release_buffer_call_count) {
   (*release_buffer_call_count)++;
 }
 
-TEST_P(SurfaceTest, Attach) {
+TEST_F(SurfaceTest, Attach) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -52,7 +53,7 @@ TEST_P(SurfaceTest, Attach) {
   ASSERT_EQ(1, release_buffer_call_count);
 }
 
-TEST_P(SurfaceTest, Damage) {
+TEST_F(SurfaceTest, Damage) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -75,7 +76,7 @@ void SetFrameTime(base::TimeTicks* result, base::TimeTicks frame_time) {
   *result = frame_time;
 }
 
-TEST_P(SurfaceTest, RequestFrameCallback) {
+TEST_F(SurfaceTest, RequestFrameCallback) {
   std::unique_ptr<Surface> surface(new Surface);
 
   base::TimeTicks frame_time;
@@ -87,7 +88,7 @@ TEST_P(SurfaceTest, RequestFrameCallback) {
   EXPECT_TRUE(frame_time.is_null());
 }
 
-TEST_P(SurfaceTest, SetOpaqueRegion) {
+TEST_F(SurfaceTest, SetOpaqueRegion) {
   std::unique_ptr<Surface> surface(new Surface);
 
   // Setting a non-empty opaque region should succeed.
@@ -97,7 +98,7 @@ TEST_P(SurfaceTest, SetOpaqueRegion) {
   surface->SetOpaqueRegion(SkRegion(SkIRect::MakeEmpty()));
 }
 
-TEST_P(SurfaceTest, SetInputRegion) {
+TEST_F(SurfaceTest, SetInputRegion) {
   std::unique_ptr<Surface> surface(new Surface);
 
   // Setting a non-empty input region should succeed.
@@ -107,7 +108,7 @@ TEST_P(SurfaceTest, SetInputRegion) {
   surface->SetInputRegion(SkRegion(SkIRect::MakeEmpty()));
 }
 
-TEST_P(SurfaceTest, SetBufferScale) {
+TEST_F(SurfaceTest, SetBufferScale) {
   gfx::Size buffer_size(512, 512);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -121,10 +122,33 @@ TEST_P(SurfaceTest, SetBufferScale) {
   surface->Commit();
   EXPECT_EQ(
       gfx::ScaleToFlooredSize(buffer_size, 1.0f / kBufferScale).ToString(),
-      surface->bounds().size().ToString());
+      surface->window()->bounds().size().ToString());
+  EXPECT_EQ(
+      gfx::ScaleToFlooredSize(buffer_size, 1.0f / kBufferScale).ToString(),
+      surface->content_size().ToString());
 }
 
-TEST_P(SurfaceTest, SetViewport) {
+TEST_F(SurfaceTest, RecreateLayer) {
+  gfx::Size buffer_size(512, 512);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  EXPECT_EQ(buffer_size, surface->window()->bounds().size());
+  EXPECT_EQ(buffer_size, surface->window()->layer()->bounds().size());
+  std::unique_ptr<ui::LayerTreeOwner> old_layer_owner =
+      ::wm::RecreateLayers(surface->window(), nullptr);
+  EXPECT_EQ(buffer_size, surface->window()->bounds().size());
+  EXPECT_EQ(buffer_size, surface->window()->layer()->bounds().size());
+  EXPECT_EQ(buffer_size, old_layer_owner->root()->bounds().size());
+  EXPECT_TRUE(surface->window()->layer()->has_external_content());
+  EXPECT_TRUE(old_layer_owner->root()->has_external_content());
+}
+
+TEST_F(SurfaceTest, SetViewport) {
   gfx::Size buffer_size(1, 1);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -136,17 +160,19 @@ TEST_P(SurfaceTest, SetViewport) {
   gfx::Size viewport(256, 256);
   surface->SetViewport(viewport);
   surface->Commit();
-  EXPECT_EQ(viewport.ToString(), surface->bounds().size().ToString());
+  EXPECT_EQ(viewport.ToString(), surface->content_size().ToString());
 
   // This will update the bounds of the surface and take the viewport2 into
   // account.
   gfx::Size viewport2(512, 512);
   surface->SetViewport(viewport2);
   surface->Commit();
-  EXPECT_EQ(viewport2.ToString(), surface->bounds().size().ToString());
+  EXPECT_EQ(viewport2.ToString(),
+            surface->window()->bounds().size().ToString());
+  EXPECT_EQ(viewport2.ToString(), surface->content_size().ToString());
 }
 
-TEST_P(SurfaceTest, SetCrop) {
+TEST_F(SurfaceTest, SetCrop) {
   gfx::Size buffer_size(16, 16);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -156,34 +182,21 @@ TEST_P(SurfaceTest, SetCrop) {
   gfx::Size crop_size(12, 12);
   surface->SetCrop(gfx::RectF(gfx::PointF(2.0, 2.0), gfx::SizeF(crop_size)));
   surface->Commit();
-  EXPECT_EQ(crop_size.ToString(), surface->bounds().size().ToString());
+  EXPECT_EQ(crop_size.ToString(),
+            surface->window()->bounds().size().ToString());
+  EXPECT_EQ(crop_size.ToString(), surface->content_size().ToString());
 }
 
-TEST_P(SurfaceTest, SetOnlyVisibleOnSecureOutput) {
-  // SurfaceLayer doesn't have texture mailbox, so it can't be tested this
-  // way.
-  if (GetParam())
-    return;
-  gfx::Size buffer_size(1, 1);
-  std::unique_ptr<Buffer> buffer(
-      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
-  std::unique_ptr<Surface> surface(new Surface);
-
-  surface->Attach(buffer.get());
-  surface->SetOnlyVisibleOnSecureOutput(true);
-  surface->Commit();
-
-  cc::TextureMailbox mailbox;
-  std::unique_ptr<cc::SingleReleaseCallback> release_callback;
-  bool rv = surface->layer()->PrepareTextureMailbox(&mailbox, &release_callback,
-                                                    false);
-  ASSERT_TRUE(rv);
-
-  EXPECT_TRUE(mailbox.secure_output_only());
-  release_callback->Run(gpu::SyncToken(), false);
+const cc::DelegatedFrameData* GetFrameFromSurface(Surface* surface) {
+  cc::SurfaceId surface_id = surface->surface_id();
+  cc::SurfaceManager* surface_manager =
+      aura::Env::GetInstance()->context_factory()->GetSurfaceManager();
+  const cc::CompositorFrame& frame =
+      surface_manager->GetSurfaceForId(surface_id)->GetEligibleFrame();
+  return frame.delegated_frame_data.get();
 }
 
-TEST_P(SurfaceTest, SetBlendMode) {
+TEST_F(SurfaceTest, SetBlendMode) {
   gfx::Size buffer_size(1, 1);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -193,10 +206,15 @@ TEST_P(SurfaceTest, SetBlendMode) {
   surface->SetBlendMode(SkXfermode::kSrc_Mode);
   surface->Commit();
 
-  EXPECT_TRUE(surface->layer()->fills_bounds_opaquely());
+  const cc::DelegatedFrameData* frame_data = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame_data->render_pass_list.size());
+  ASSERT_EQ(1u, frame_data->render_pass_list.back()->quad_list.size());
+  EXPECT_FALSE(frame_data->render_pass_list.back()
+                   ->quad_list.back()
+                   ->ShouldDrawWithBlending());
 }
 
-TEST_P(SurfaceTest, SetAlpha) {
+TEST_F(SurfaceTest, SetAlpha) {
   gfx::Size buffer_size(1, 1);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -207,14 +225,12 @@ TEST_P(SurfaceTest, SetAlpha) {
   surface->Commit();
 }
 
-TEST_P(SurfaceTest, Commit) {
+TEST_F(SurfaceTest, Commit) {
   std::unique_ptr<Surface> surface(new Surface);
 
   // Calling commit without a buffer should succeed.
   surface->Commit();
 }
-
-INSTANTIATE_TEST_CASE_P(, SurfaceTest, ::testing::Bool());
 
 }  // namespace
 }  // namespace exo

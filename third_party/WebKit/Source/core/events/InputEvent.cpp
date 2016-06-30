@@ -16,13 +16,13 @@ const struct {
     InputEvent::InputType inputType;
     const char* stringName;
 } kInputTypeStringNameMap[] = {
-    {InputEvent::InputType::None, ""},
-    {InputEvent::InputType::InsertText, "insertText"},
-    {InputEvent::InputType::ReplaceContent, "replaceContent"},
-    {InputEvent::InputType::DeleteContent, "deleteContent"},
-    {InputEvent::InputType::DeleteComposedCharacter, "deleteComposedCharacter"},
-    {InputEvent::InputType::Undo, "undo"},
-    {InputEvent::InputType::Redo, "redo"},
+    { InputEvent::InputType::None, "" },
+    { InputEvent::InputType::InsertText, "insertText" },
+    { InputEvent::InputType::ReplaceContent, "replaceContent" },
+    { InputEvent::InputType::DeleteContent, "deleteContent" },
+    { InputEvent::InputType::DeleteComposedCharacter, "deleteComposedCharacter" },
+    { InputEvent::InputType::Undo, "undo" },
+    { InputEvent::InputType::Redo, "redo" },
 };
 
 static_assert(arraysize(kInputTypeStringNameMap) == static_cast<size_t>(InputEvent::InputType::NumberOfInputTypes),
@@ -85,9 +85,35 @@ InputEvent* InputEvent::createBeforeInput(InputType inputType, const String& dat
     return InputEvent::create(EventTypeNames::beforeinput, inputEventInit);
 }
 
+/* static */
+InputEvent* InputEvent::createInput(InputType inputType, const String& data, EventIsComposing isComposing, const RangeVector* ranges)
+{
+    InputEventInit inputEventInit;
+
+    inputEventInit.setBubbles(true);
+    inputEventInit.setCancelable(false);
+    // TODO(ojan): We should find a way to prevent conversion like String->enum->String just in order to use initializer.
+    // See InputEvent::InputEvent() for the second conversion.
+    inputEventInit.setInputType(convertInputTypeToString(inputType));
+    inputEventInit.setData(data);
+    inputEventInit.setIsComposing(isComposing == IsComposing);
+    if (ranges)
+        inputEventInit.setRanges(*ranges);
+
+    return InputEvent::create(EventTypeNames::input, inputEventInit);
+}
+
 String InputEvent::inputType() const
 {
     return convertInputTypeToString(m_inputType);
+}
+
+StaticRangeVector InputEvent::getRanges() const
+{
+    StaticRangeVector staticRanges;
+    for (const auto& range : m_ranges)
+        staticRanges.append(StaticRange::create(range->ownerDocument(), range->startContainer(), range->startOffset(), range->endContainer(), range->endOffset()));
+    return staticRanges;
 }
 
 bool InputEvent::isInputEvent() const

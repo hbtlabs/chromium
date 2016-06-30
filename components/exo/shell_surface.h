@@ -15,6 +15,7 @@
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/hit_test.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -108,8 +109,14 @@ class ShellSurface : public SurfaceDelegate,
   // Set fullscreen state for shell surface.
   void SetFullscreen(bool fullscreen);
 
+  // Pins the shell surface.
+  void SetPinned(bool pinned);
+
   // Set title for surface.
   void SetTitle(const base::string16& title);
+
+  // Sets the system modality.
+  void SetSystemModal(bool system_modal);
 
   // Sets the application ID for the window. The application ID identifies the
   // general class of applications to which the window belongs.
@@ -136,12 +143,22 @@ class ShellSurface : public SurfaceDelegate,
   // for the surface from the user's perspective.
   void SetGeometry(const gfx::Rect& geometry);
 
+  // Set the content bounds for the shadow. Empty bounds will delete
+  // the shadow.
+  void SetRectangularShadow(const gfx::Rect& content_bounds);
+
   // Set scale factor for surface. The scale factor will be applied to surface
   // and all descendants.
   void SetScale(double scale);
 
+  // Set top inset for surface.
+  void SetTopInset(int height);
+
   // Sets the main surface for the window.
   static void SetMainSurface(aura::Window* window, Surface* surface);
+
+  // Returns the main Surface instance or nullptr if it is not set.
+  // |window| must not be nullptr.
   static Surface* GetMainSurface(const aura::Window* window);
 
   // Returns a trace value representing the state of the surface.
@@ -172,6 +189,8 @@ class ShellSurface : public SurfaceDelegate,
   gfx::Size GetPreferredSize() const override;
 
   // Overridden from ash::wm::WindowStateObserver:
+  void OnPreWindowStateTypeChange(ash::wm::WindowState* window_state,
+                                  ash::wm::WindowStateType old_type) override;
   void OnPostWindowStateTypeChange(ash::wm::WindowState* window_state,
                                    ash::wm::WindowStateType old_type) override;
 
@@ -191,8 +210,12 @@ class ShellSurface : public SurfaceDelegate,
   void OnKeyEvent(ui::KeyEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
 
+  // Overridden from ui::AcceleratorTarget:
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+
  private:
   class ScopedConfigure;
+  class ScopedAnimationsDisabled;
 
   // Surface state associated with each configure request.
   struct Config {
@@ -228,33 +251,43 @@ class ShellSurface : public SurfaceDelegate,
   // Updates the bounds of widget to match the current surface bounds.
   void UpdateWidgetBounds();
 
-  views::Widget* widget_;
+  // Creates, deletes and update the shadow bounds based on
+  // |pending_shadow_content_bounds_|.
+  void UpdateShadow();
+
+  views::Widget* widget_ = nullptr;
   Surface* surface_;
   aura::Window* parent_;
   const gfx::Rect initial_bounds_;
   const bool activatable_;
   // Container Window Id (see ash/common/shell_window_ids.h)
   const int container_;
-  bool pending_show_widget_;
+  bool pending_show_widget_ = false;
   base::string16 title_;
   std::string application_id_;
   gfx::Rect geometry_;
   gfx::Rect pending_geometry_;
-  double scale_;
-  double pending_scale_;
+  double scale_ = 1.0;
+  double pending_scale_ = 1.0;
   base::Closure close_callback_;
   base::Closure surface_destroyed_callback_;
   StateChangedCallback state_changed_callback_;
   ConfigureCallback configure_callback_;
-  ScopedConfigure* scoped_configure_;
-  bool ignore_window_bounds_changes_;
+  ScopedConfigure* scoped_configure_ = nullptr;
+  bool ignore_window_bounds_changes_ = false;
   gfx::Point origin_;
   gfx::Vector2d pending_origin_offset_;
   gfx::Vector2d pending_origin_config_offset_;
-  int resize_component_;  // HT constant (see ui/base/hit_test.h)
-  int pending_resize_component_;
+  int resize_component_ = HTCAPTION;  // HT constant (see ui/base/hit_test.h)
+  int pending_resize_component_ = HTCAPTION;
+  aura::Window* shadow_overlay_ = nullptr;
+  aura::Window* shadow_underlay_ = nullptr;
+  gfx::Rect shadow_content_bounds_;
   std::deque<Config> pending_configs_;
   std::unique_ptr<ash::WindowResizer> resizer_;
+  std::unique_ptr<ScopedAnimationsDisabled> scoped_animations_disabled_;
+  int top_inset_height_ = 0;
+  int pending_top_inset_height_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ShellSurface);
 };

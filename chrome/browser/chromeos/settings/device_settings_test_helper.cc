@@ -183,13 +183,17 @@ void DeviceSettingsTestHelper::GetServerBackedStateKeys(
 void DeviceSettingsTestHelper::CheckArcAvailability(
     const ArcCallback& callback) {}
 
-void DeviceSettingsTestHelper::StartArcInstance(const std::string& socket_path,
-                                                const ArcCallback& callback) {}
+void DeviceSettingsTestHelper::StartArcInstance(
+    const cryptohome::Identification& cryptohome_id,
+    const ArcCallback& callback) {}
 
 void DeviceSettingsTestHelper::StopArcInstance(const ArcCallback& callback) {}
 
 void DeviceSettingsTestHelper::GetArcStartTime(
     const GetArcStartTimeCallback& callback) {}
+
+void DeviceSettingsTestHelper::RemoveArcData(
+    const cryptohome::Identification& cryptohome_id) {}
 
 DeviceSettingsTestHelper::PolicyState::PolicyState()
     : store_result_(true) {}

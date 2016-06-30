@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/test/base/chrome_render_view_test.h"
@@ -133,7 +134,7 @@ TEST_F(AutofillRendererTest, SendForms) {
       "newForm.appendChild(newLastname);"
       "newForm.appendChild(newEmail);"
       "document.body.appendChild(newForm);");
-  msg_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   message = render_thread_->sink().GetFirstMessageMatching(
       AutofillHostMsg_FormsSeen::ID);
@@ -211,7 +212,7 @@ TEST_F(AutofillRendererTest, DynamicallyAddedUnownedFormElements) {
   render_thread_->sink().ClearMessages();
 
   ExecuteJavaScriptForTests("AddFields()");
-  msg_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   message = render_thread_->sink().GetFirstMessageMatching(
       AutofillHostMsg_FormsSeen::ID);
@@ -251,7 +252,7 @@ TEST_F(AutofillRendererTest, IgnoreNonUserGestureTextFieldChanges) {
   DisableUserGestureSimulationForAutofill();
   full_name.setValue("Alice", true);
   GetMainFrame()->autofillClient()->textFieldDidChange(full_name);
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   ASSERT_EQ(nullptr, render_thread_->sink().GetFirstMessageMatching(
                          AutofillHostMsg_TextFieldDidChange::ID));
 

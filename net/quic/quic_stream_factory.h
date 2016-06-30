@@ -150,8 +150,9 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   QuicStreamFactory(
       NetLog* net_log,
       HostResolver* host_resolver,
+      SSLConfigService* ssl_config_service,
       ClientSocketFactory* client_socket_factory,
-      base::WeakPtr<HttpServerProperties> http_server_properties,
+      HttpServerProperties* http_server_properties,
       CertVerifier* cert_verifier,
       CTPolicyEnforcer* ct_policy_enforcer,
       ChannelIDService* channel_id_service,
@@ -379,7 +380,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // disk cache. This job is started via a PostTask.
   void CreateAuxilaryJob(const QuicSessionKey& key,
                          int cert_verify_flags,
-                         bool is_post,
                          const BoundNetLog& net_log);
 
   // Returns a newly created QuicHttpStream owned by the caller.
@@ -438,7 +438,7 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   NetLog* net_log_;
   HostResolver* host_resolver_;
   ClientSocketFactory* client_socket_factory_;
-  base::WeakPtr<HttpServerProperties> http_server_properties_;
+  HttpServerProperties* http_server_properties_;
   TransportSecurityState* transport_security_state_;
   CTVerifier* cert_transparency_verifier_;
   std::unique_ptr<QuicServerInfoFactory> quic_server_info_factory_;
@@ -584,6 +584,8 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   FactoryStatus status_;
 
   base::TaskRunner* task_runner_;
+
+  const scoped_refptr<SSLConfigService> ssl_config_service_;
 
   base::WeakPtrFactory<QuicStreamFactory> weak_factory_;
 

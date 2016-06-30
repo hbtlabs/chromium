@@ -1,17 +1,17 @@
 function removeWhiteSpaceOnlyTextNodes(node)
 {
-    for (var i = 0; i < node.childNodes.length; i++) {
-        var child = node.childNodes[i];
-        if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim().length == 0) {
-            node.removeChild(child);
-            i--;
-        } else if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-            removeWhiteSpaceOnlyTextNodes(child);
-        }
+  for (var i = 0; i < node.childNodes.length; i++) {
+    var child = node.childNodes[i];
+    if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim().length == 0) {
+      node.removeChild(child);
+      i--;
+    } else if (child.nodeType === Node.ELEMENT_NODE || child.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
+      removeWhiteSpaceOnlyTextNodes(child);
     }
-    if (node.shadowRoot) {
-        removeWhiteSpaceOnlyTextNodes(node.shadowRoot);
-    }
+  }
+  if (node.shadowRoot) {
+    removeWhiteSpaceOnlyTextNodes(node.shadowRoot);
+  }
 }
 
 function convertTemplatesToShadowRootsWithin(node) {
@@ -72,7 +72,13 @@ function createTestTree(node) {
   function attachShadowFromTemplate(template) {
     let parent = template.parentNode;
     parent.removeChild(template);
-    let shadowRoot = parent.attachShadow({mode: template.getAttribute('data-mode')});
+    let shadowRoot;
+    if (template.getAttribute('data-mode') === 'v0') {
+      // For legacy Shadow DOM
+      shadowRoot = parent.createShadowRoot();
+    } else {
+      shadowRoot = parent.attachShadow({mode: template.getAttribute('data-mode')});
+    }
     let id = template.id;
     if (id) {
       shadowRoot.id = id;
@@ -116,9 +122,11 @@ function dispatchEventWithLog(nodes, target, event) {
         continue;
       attachedNodes.push(node);
       node.addEventListener(event.type, (e) => {
+        // Record [currentTarget, target, relatedTarget, composedPath()]
         log.push([id,
-                  event.relatedTarget ? labelFor(event.relatedTarget) : null,
-                  event.composedPath().map((n) => {
+                  labelFor(e.target),
+                  e.relatedTarget ? labelFor(e.relatedTarget) : null,
+                  e.composedPath().map((n) => {
                     return labelFor(n);
                   })]);
       });
@@ -128,6 +136,7 @@ function dispatchEventWithLog(nodes, target, event) {
   return log;
 }
 
+// TODO(hayato): Merge this into dispatchEventWithLog
 function dispatchUAEventWithLog(nodes, target, eventType, callback) {
 
   function labelFor(e) {
@@ -146,9 +155,11 @@ function dispatchUAEventWithLog(nodes, target, eventType, callback) {
         continue;
       attachedNodes.push(node);
       node.addEventListener(eventType, (e) => {
+        // Record [currentTarget, target, relatedTarget, composedPath()]
         log.push([id,
-                  event.relatedTarget ? labelFor(event.relatedTarget) : null,
-                  event.composedPath().map((n) => {
+                  labelFor(e.target),
+                  e.relatedTarget ? labelFor(e.relatedTarget) : null,
+                  e.composedPath().map((n) => {
                     return labelFor(n);
                   })]);
       });
@@ -158,12 +169,25 @@ function dispatchUAEventWithLog(nodes, target, eventType, callback) {
   return log;
 }
 
+function debugEventLog(log) {
+  for (let i = 0; i < log.length; i++) {
+    console.log('[' + i + '] currentTarget: ' + log[i][0] + ' target: ' + log[i][1] + ' relatedTarget: ' + log[i][2] + ' composedPath(): ' + log[i][3]);
+  }
+}
+
+function debugCreateTestTree(nodes) {
+  for (let k in nodes) {
+    console.log(k + ' -> ' + nodes[k]);
+  }
+}
+
 // This function assumes that testharness.js is available.
 function assert_event_path_equals(actual, expected) {
   assert_equals(actual.length, expected.length);
   for (let i = 0; i < actual.length; ++i) {
     assert_equals(actual[i][0], expected[i][0], 'currentTarget at ' + i + ' should be same');
-    assert_equals(actual[i][1], expected[i][1], 'relatedTarget at ' + i + ' should be same');
-    assert_array_equals(actual[i][2], expected[i][2], 'composedPath at ' + i + ' should be same');
+    assert_equals(actual[i][1], expected[i][1], 'target at ' + i + ' should be same');
+    assert_equals(actual[i][2], expected[i][2], 'relatedTarget at ' + i + ' should be same');
+    assert_array_equals(actual[i][3], expected[i][3], 'composedPath at ' + i + ' should be same');
   }
 }

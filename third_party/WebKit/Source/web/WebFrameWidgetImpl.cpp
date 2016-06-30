@@ -47,6 +47,7 @@
 #include "core/page/ContextMenuController.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
+#include "core/page/PointerLockController.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/graphics/CompositorMutatorClient.h"
 #include "public/platform/WebFrameScheduler.h"
@@ -60,6 +61,8 @@
 #include "web/WebPluginContainerImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "web/WebViewFrameWidget.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -120,6 +123,7 @@ DEFINE_TRACE(WebFrameWidgetImpl)
 {
     visitor->trace(m_localRoot);
     visitor->trace(m_mouseCaptureNode);
+    visitor->trace(m_mutator);
 }
 
 // WebWidget ------------------------------------------------------------------
@@ -342,7 +346,7 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& in
         if (inputEvent.type == WebInputEvent::MouseUp)
             mouseCaptureLost();
 
-        OwnPtr<UserGestureIndicator> gestureIndicator;
+        std::unique_ptr<UserGestureIndicator> gestureIndicator;
 
         AtomicString eventType;
         switch (inputEvent.type) {
@@ -354,12 +358,12 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& in
             break;
         case WebInputEvent::MouseDown:
             eventType = EventTypeNames::mousedown;
-            gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
             m_mouseCaptureGestureToken = gestureIndicator->currentToken();
             break;
         case WebInputEvent::MouseUp:
             eventType = EventTypeNames::mouseup;
-            gestureIndicator = adoptPtr(new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
             break;
         default:
             NOTREACHED();
@@ -643,6 +647,21 @@ void WebFrameWidgetImpl::didChangeWindowResizerRect()
 {
     if (m_localRoot->frameView())
         m_localRoot->frameView()->windowResizerRectChanged();
+}
+
+void WebFrameWidgetImpl::didAcquirePointerLock()
+{
+    page()->pointerLockController().didAcquirePointerLock();
+}
+
+void WebFrameWidgetImpl::didNotAcquirePointerLock()
+{
+    page()->pointerLockController().didNotAcquirePointerLock();
+}
+
+void WebFrameWidgetImpl::didLosePointerLock()
+{
+    page()->pointerLockController().didLosePointerLock();
 }
 
 void WebFrameWidgetImpl::handleMouseLeave(LocalFrame& mainFrame, const WebMouseEvent& event)
@@ -1091,21 +1110,10 @@ void WebFrameWidgetImpl::detachCompositorAnimationTimeline(CompositorAnimationTi
         m_layerTreeView->detachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
 }
 
-void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilityState, bool isInitialState)
+void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilityState)
 {
-    if (!page())
-        return;
-
-    // FIXME: This is not correct, since Show and Hide messages for a frame's Widget do not necessarily
-    // correspond to Page visibility, but is necessary until we properly sort out OOPIF visibility.
-    page()->setVisibilityState(static_cast<PageVisibilityState>(visibilityState), isInitialState);
-
-    m_localRoot->frame()->frameScheduler()->setPageVisible(visibilityState == WebPageVisibilityStateVisible);
-
-    if (m_layerTreeView) {
-        bool visible = visibilityState == WebPageVisibilityStateVisible;
-        m_layerTreeView->setVisible(visible);
-    }
+    if (m_layerTreeView)
+        m_layerTreeView->setVisible(visibilityState == WebPageVisibilityStateVisible);
 }
 
 HitTestResult WebFrameWidgetImpl::hitTestResultForRootFramePos(const IntPoint& posInRootFrame)

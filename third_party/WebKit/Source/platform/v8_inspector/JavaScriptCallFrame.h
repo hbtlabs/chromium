@@ -32,9 +32,11 @@
 #define JavaScriptCallFrame_h
 
 #include "platform/inspector_protocol/Collections.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/inspector_protocol/String16.h"
-#include "wtf/PtrUtil.h"
 #include <v8.h>
+
+#include <vector>
 
 namespace blink {
 
@@ -67,7 +69,7 @@ private:
     v8::Global<v8::Object> m_callFrame;
 };
 
-using JavaScriptCallFrames = protocol::Vector<std::unique_ptr<JavaScriptCallFrame>>;
+using JavaScriptCallFrames = std::vector<std::unique_ptr<JavaScriptCallFrame>>;
 
 } // namespace blink
 

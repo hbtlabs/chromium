@@ -7,9 +7,10 @@ cr.define('cr_toolbar_search_field', function() {
   function registerTests() {
     suite('cr-toolbar-search-field', function() {
       /** @type {?CrToolbarSearchFieldElement} */
-      var field;
-      /** @type {?MockSearchFieldDelegate} */
-      var delegate;
+      var field = null;
+
+      /** @type {?Array<string>} */
+      var searches = null;
 
       /** @param {string} term */
       function simulateSearch(term) {
@@ -17,41 +18,20 @@ cr.define('cr_toolbar_search_field', function() {
         field.onSearchTermSearch();
       }
 
-      /**
-       * @constructor
-       * @implements {SearchFieldDelegate}
-       */
-      function MockSearchFieldDelegate() {
-        /** @type {!Array<string>} */
-        this.searches = [];
-      }
-
-      MockSearchFieldDelegate.prototype = {
-        /** @override */
-        onSearchTermSearch: function(term) {
-          this.searches.push(term);
-        }
-      };
-
-      suiteSetup(function() {
-        return PolymerTest.importHtml(
-            'chrome://resources/cr_elements/cr_toolbar/' +
-            'cr_toolbar_search_field.html');
-      });
-
       setup(function() {
         PolymerTest.clearBody();
-        // Constructing a new delegate resets the list of searches.
-        delegate = new MockSearchFieldDelegate();
         field = document.createElement('cr-toolbar-search-field');
-        field.setDelegate(delegate);
+        searches = [];
+        field.addEventListener('search-changed', function(event) {
+          searches.push(event.detail);
+        });
         document.body.appendChild(field);
       });
 
       teardown(function() {
         field.remove();
         field = null;
-        delegate = null;
+        searches = null;
       });
 
       test('opens and closes correctly', function() {
@@ -72,16 +52,31 @@ cr.define('cr_toolbar_search_field', function() {
         assertNotEquals(field.$.searchInput, field.root.activeElement);
       });
 
-      test('passes searches correctly', function() {
+      test('notifies on new searches', function() {
         MockInteractions.tap(field);
-        simulateSearch('test');
-        assertEquals('test', field.getValue());
+        simulateSearch('query1');
+        assertEquals('query1', field.getValue());
 
         MockInteractions.tap(field.$.clearSearch);
         assertFalse(field.showingSearch);
         assertEquals('', field.getValue());
 
-        assertEquals(['test', ''].join(), delegate.searches.join());
+        simulateSearch('query2');
+        // Expecting identical query to be ignored.
+        simulateSearch('query2');
+
+        assertEquals(['query1', '', 'query2'].join(), searches.join());
+      });
+
+      test('notifies on setValue', function() {
+        MockInteractions.tap(field);
+        field.setValue('foo');
+        field.setValue('');
+        field.setValue('bar');
+        // Expecting identical query to be ignored.
+        field.setValue('bar');
+        field.setValue('baz');
+        assertEquals(['foo', '', 'bar', 'baz'].join(), searches.join());
       });
 
       test('blur does not close field when a search is active', function() {
@@ -90,6 +85,19 @@ cr.define('cr_toolbar_search_field', function() {
         MockInteractions.blur(field.$.searchInput);
 
         assertTrue(field.showingSearch);
+      });
+
+      test('opens when value is changed', function() {
+        // Change search value without explicity opening the field first.
+        // Similar to what happens when pasting or dragging into the input
+        // field.
+        simulateSearch('test');
+
+        assertFalse(field.$.clearSearch.hidden);
+        assertTrue(field.showingSearch);
+
+        MockInteractions.tap(field.$.clearSearch);
+        assertFalse(field.showingSearch);
       });
     });
   }

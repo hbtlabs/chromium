@@ -37,7 +37,7 @@ class GpuBrowserCompositorOutputSurface
   GpuBrowserCompositorOutputSurface(
       scoped_refptr<ContextProviderCommandBuffer> context,
       scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      base::SingleThreadTaskRunner* task_runner,
+      cc::SyntheticBeginFrameSource* begin_frame_source,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
@@ -55,8 +55,10 @@ class GpuBrowserCompositorOutputSurface
 #endif
 
   // cc::OutputSurface implementation.
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  void SwapBuffers(cc::CompositorFrame frame) override;
   bool BindToClient(cc::OutputSurfaceClient* client) override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
+
   gpu::CommandBufferProxyImpl* GetCommandBufferProxy();
 
   base::CancelableCallback<void(

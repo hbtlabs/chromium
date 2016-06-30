@@ -13,7 +13,7 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
-#include "media/base/media_export.h"
+#include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_device.h"
 
 namespace tracked_objects {
@@ -26,7 +26,7 @@ namespace media {
 // by VideoCaptureManager on its own thread, while OnFrameAvailable is called
 // on JAVA thread (i.e., UI thread). Both will access |state_| and |client_|,
 // but only VideoCaptureManager would change their value.
-class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
+class CAPTURE_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
  public:
   // Automatically generated enum to interface with Java world.
   //
@@ -56,6 +56,8 @@ class MEDIA_EXPORT VideoCaptureDeviceAndroid : public VideoCaptureDevice {
   void AllocateAndStart(const VideoCaptureParams& params,
                         std::unique_ptr<Client> client) override;
   void StopAndDeAllocate() override;
+  void GetPhotoCapabilities(
+      ScopedResultCallback<GetPhotoCapabilitiesCallback> callback) override;
   void TakePhoto(ScopedResultCallback<TakePhotoCallback> callback) override;
 
   // Implement org.chromium.media.VideoCapture.nativeOnFrameAvailable.

@@ -32,6 +32,7 @@
 
 #include "base/sys_info.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
@@ -48,7 +49,9 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/DataLog.h"
 #include "wtf/LeakAnnotations.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/allocator/Partitions.h"
+#include <memory>
 
 namespace blink {
 
@@ -217,15 +220,15 @@ void ThreadHeapStats::decreaseAllocatedSpace(size_t delta)
 }
 
 ThreadHeap::ThreadHeap()
-    : m_regionTree(adoptPtr(new RegionTree()))
-    , m_heapDoesNotContainCache(adoptPtr(new HeapDoesNotContainCache))
-    , m_safePointBarrier(adoptPtr(new SafePointBarrier()))
-    , m_freePagePool(adoptPtr(new FreePagePool))
-    , m_orphanedPagePool(adoptPtr(new OrphanedPagePool))
-    , m_markingStack(adoptPtr(new CallbackStack()))
-    , m_postMarkingCallbackStack(adoptPtr(new CallbackStack()))
-    , m_globalWeakCallbackStack(adoptPtr(new CallbackStack()))
-    , m_ephemeronStack(adoptPtr(new CallbackStack(CallbackStack::kMinimalBlockSize)))
+    : m_regionTree(wrapUnique(new RegionTree()))
+    , m_heapDoesNotContainCache(wrapUnique(new HeapDoesNotContainCache))
+    , m_safePointBarrier(wrapUnique(new SafePointBarrier()))
+    , m_freePagePool(wrapUnique(new FreePagePool))
+    , m_orphanedPagePool(wrapUnique(new OrphanedPagePool))
+    , m_markingStack(wrapUnique(new CallbackStack()))
+    , m_postMarkingCallbackStack(wrapUnique(new CallbackStack()))
+    , m_globalWeakCallbackStack(wrapUnique(new CallbackStack()))
+    , m_ephemeronStack(wrapUnique(new CallbackStack(CallbackStack::kMinimalBlockSize)))
 {
     if (ThreadState::current()->isMainThread())
         s_mainThreadHeap = this;
@@ -261,6 +264,7 @@ void ThreadHeap::attach(ThreadState* thread)
 void ThreadHeap::detach(ThreadState* thread)
 {
     ASSERT(ThreadState::current() == thread);
+    bool isLastThread = false;
     {
         // Grab the threadAttachMutex to ensure only one thread can shutdown at
         // a time and that no other thread can do a global GC. It also allows
@@ -272,13 +276,17 @@ void ThreadHeap::detach(ThreadState* thread)
         thread->runTerminationGC();
         ASSERT(m_threads.contains(thread));
         m_threads.remove(thread);
+        isLastThread = m_threads.isEmpty();
     }
-    // The main thread must be the last thread that gets detached.
-    ASSERT(!thread->isMainThread() || m_threads.isEmpty());
-    if (thread->isMainThread()) {
-        ASSERT(heapStats().allocatedSpace() == 0);
+    // The last thread begin detached should be the owning thread, which would
+    // be the main thread for the mainThreadHeap and a per thread heap enabled
+    // thread otherwise.
+    if (isLastThread)
+        DCHECK(thread->perThreadHeapEnabled() || thread->isMainThread());
+    if (thread->isMainThread())
+        DCHECK_EQ(heapStats().allocatedSpace(), 0u);
+    if (isLastThread)
         delete this;
-    }
 }
 
 bool ThreadHeap::park()
@@ -440,17 +448,15 @@ void ThreadHeap::decommitCallbackStacks()
 void ThreadHeap::preGC()
 {
     ASSERT(!ThreadState::current()->isInGC());
-    for (ThreadState* state : m_threads) {
+    for (ThreadState* state : m_threads)
         state->preGC();
-    }
 }
 
 void ThreadHeap::postGC(BlinkGC::GCType gcType)
 {
     ASSERT(ThreadState::current()->isInGC());
-    for (ThreadState* state : m_threads) {
+    for (ThreadState* state : m_threads)
         state->postGC(gcType);
-    }
 }
 
 const char* ThreadHeap::gcReasonString(BlinkGC::GCReason reason)
@@ -483,7 +489,7 @@ void ThreadHeap::collectGarbage(BlinkGC::StackState stackState, BlinkGC::GCType 
     RELEASE_ASSERT(!state->isGCForbidden());
     state->completeSweep();
 
-    OwnPtr<Visitor> visitor = Visitor::create(state, gcType);
+    std::unique_ptr<Visitor> visitor = Visitor::create(state, gcType);
 
     SafePointScope safePointScope(stackState, state);
 
@@ -576,7 +582,7 @@ void ThreadHeap::collectGarbageForTerminatingThread(ThreadState* state)
         // ahead while it is running, hence the termination GC does not enter a
         // safepoint. VisitorScope will not enter also a safepoint scope for
         // ThreadTerminationGC.
-        OwnPtr<Visitor> visitor = Visitor::create(state, BlinkGC::ThreadTerminationGC);
+        std::unique_ptr<Visitor> visitor = Visitor::create(state, BlinkGC::ThreadTerminationGC);
 
         ThreadState::NoAllocationScope noAllocationScope(state);
 
@@ -744,18 +750,16 @@ void ThreadHeap::visitPersistentRoots(Visitor* visitor)
     TRACE_EVENT0("blink_gc", "ThreadHeap::visitPersistentRoots");
     ProcessHeap::crossThreadPersistentRegion().tracePersistentNodes(visitor);
 
-    for (ThreadState* state : m_threads) {
+    for (ThreadState* state : m_threads)
         state->visitPersistents(visitor);
-    }
 }
 
 void ThreadHeap::visitStackRoots(Visitor* visitor)
 {
     ASSERT(ThreadState::current()->isInGC());
     TRACE_EVENT0("blink_gc", "ThreadHeap::visitStackRoots");
-    for (ThreadState* state : m_threads) {
+    for (ThreadState* state : m_threads)
         state->visitStack(visitor);
-    }
 }
 
 void ThreadHeap::checkAndPark(ThreadState* threadState, SafePointAwareMutexLocker* locker)

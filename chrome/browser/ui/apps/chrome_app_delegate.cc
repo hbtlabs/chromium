@@ -80,7 +80,7 @@ content::WebContents* OpenURLFromTabInternal(
 }
 
 void OnCheckIsDefaultBrowserFinished(
-    content::WebContents* source,
+    std::unique_ptr<content::WebContents> source,
     const content::OpenURLParams& params,
     shell_integration::DefaultWebClientState state) {
   // Open a URL based on if this browser instance is the default system browser.
@@ -136,13 +136,21 @@ ChromeAppDelegate::NewWindowContentsDelegate::OpenURLFromTab(
     content::WebContents* source,
     const content::OpenURLParams& params) {
   if (source) {
+    // This NewWindowContentsDelegate was given ownership of the incoming
+    // WebContents by being assigned as its delegate within
+    // ChromeAppDelegate::AddNewContents(), but this is the first time
+    // NewWindowContentsDelegate actually sees the WebContents. Here ownership
+    // is captured and passed to OnCheckIsDefaultBrowserFinished(), which
+    // destroys it after the default browser worker completes.
+    std::unique_ptr<content::WebContents> source_ptr(source);
     // Object lifetime notes: StartCheckIsDefault() takes lifetime ownership of
     // check_if_default_browser_worker and will clean up after the asynchronous
     // tasks.
     scoped_refptr<shell_integration::DefaultBrowserWorker>
         check_if_default_browser_worker =
-            new shell_integration::DefaultBrowserWorker(base::Bind(
-                &OnCheckIsDefaultBrowserFinished, base::Owned(source), params));
+            new shell_integration::DefaultBrowserWorker(
+                base::Bind(&OnCheckIsDefaultBrowserFinished,
+                           base::Passed(&source_ptr), params));
     check_if_default_browser_worker->StartCheckIsDefault();
   }
   return NULL;
@@ -256,9 +264,9 @@ content::ColorChooser* ChromeAppDelegate::ShowColorChooser(
 }
 
 void ChromeAppDelegate::RunFileChooser(
-    content::WebContents* tab,
+    content::RenderFrameHost* render_frame_host,
     const content::FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(tab, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 void ChromeAppDelegate::RequestMediaAccessPermission(
@@ -282,7 +290,7 @@ bool ChromeAppDelegate::CheckMediaAccessPermission(
 
 int ChromeAppDelegate::PreferredIconSize() {
 #if defined(USE_ASH)
-  return ash::kShelfSize;
+  return ash::GetShelfConstant(ash::SHELF_SIZE);
 #else
   return extension_misc::EXTENSION_ICON_SMALL;
 #endif
@@ -336,12 +344,7 @@ void ChromeAppDelegate::OnShow() {
 void ChromeAppDelegate::Observe(int type,
                                 const content::NotificationSource& source,
                                 const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_APP_TERMINATING:
-      if (!terminating_callback_.is_null())
-        terminating_callback_.Run();
-      break;
-    default:
-      NOTREACHED() << "Received unexpected notification";
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
+  if (!terminating_callback_.is_null())
+    terminating_callback_.Run();
 }

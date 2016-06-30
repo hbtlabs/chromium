@@ -22,20 +22,6 @@ group("blink") {
     ":blink_minimal",
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/web",
-
-    # public/platform/Platform.h in ':blink_headers' depends on Mojo APIs, and
-    # the dependent of this target needs to link Mojo.
-    "//mojo/public/c/system:for_component",
-  ]
-}
-
-group("blink_for_unittests") {
-  public_deps = [
-    ":blink",
-
-    # Since public/platform/Platform.h depends on Mojo APIs, unittests depending
-    # on :blink needs to link mojo/edk/system.
-    "//mojo/edk/system",
   ]
 }
 
@@ -176,18 +162,19 @@ mojom("mojo_bindings") {
     "platform/modules/background_sync/background_sync.mojom",
     "platform/modules/bluetooth/web_bluetooth.mojom",
     "platform/modules/geolocation/geolocation.mojom",
-    "platform/modules/imagecapture/image_capture.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/notifications/notification_service.mojom",
+    "platform/modules/offscreencanvas/offscreen_canvas_surface.mojom",
     "platform/modules/permissions/permission.mojom",
     "platform/modules/permissions/permission_status.mojom",
     "platform/modules/presentation/presentation.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
-    "platform/modules/vr/vr_service.mojom",
     "platform/modules/wake_lock/wake_lock_service.mojom",
   ]
   public_deps = [
     ":android_mojo_bindings",
+    "//cc/ipc:interfaces_surfaceid_only",
+    "//device/bluetooth/public/interfaces:bluetooth_mojom_bluetooth_uuid",
   ]
 }
 

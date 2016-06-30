@@ -31,8 +31,6 @@
 #include "core/css/parser/CSSParserMode.h"
 #include "wtf/BitVector.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 #include <v8.h>
 
@@ -800,7 +798,6 @@ public:
         ExternalAddSearchProvider = 981,
         ExternalIsSearchProviderInstalled = 982,
         V8Permissions_RequestAll_Method = 983,
-        BluetoothDeviceInstanceId = 984,
         DeviceOrientationAbsoluteInsecureOrigin = 987,
         DeviceOrientationAbsoluteSecureOrigin = 988,
         FontFaceConstructor = 989,
@@ -964,8 +961,6 @@ public:
         MediaStreamConstraintsFromDictionary = 1151,
         MediaStreamConstraintsConformant = 1152,
         CSSSelectorIndirectAdjacent = 1153,
-        NodeRootNode = 1154,
-        BluetoothDeviceConnectGATT = 1155,
         CreateImageBitmap = 1156,
         PresentationConnectionConnectEventListener = 1157,
         PresentationConnectionCloseEventListener = 1158,
@@ -1082,7 +1077,7 @@ public:
         ImageDocument = 1274,
         ScriptPassesCSPDynamic = 1275,
         ScriptPassesCSPNonce = 1276,
-        CSPWithUnsafeDynamic = 1277,
+        CSPWithStrictDynamic = 1277,
         ScrollAnchored = 1278,
         AddEventListenerFourArguments = 1279,
         RemoveEventListenerFourArguments = 1280,
@@ -1178,6 +1173,7 @@ public:
         DurableStoragePersisted = 1370,
         DurableStorageEstimate = 1371,
         UntrustedEventDefaultHandled = 1372,
+        // The following two items (FixedRasterScale*) are unused.
         FixedRasterScaleBlurryContent = 1373,
         FixedRasterScalePotentialPerformanceRegression = 1374,
         CSSDeepCombinatorAndShadow = 1375,
@@ -1197,6 +1193,44 @@ public:
         DocumentCreateEventSensorErrorEvent = 1387,
         DocumentCreateEventSensorReadingEvent = 1388,
         MediaStreamConstraintsOldAndNew = 1389,
+        V8ArrayProtectorDirtied = 1390,
+        V8ArraySpeciesModified = 1391,
+        V8ArrayPrototypeConstructorModified = 1392,
+        V8ArrayInstanceProtoModified = 1393,
+        V8ArrayInstanceConstructorModified = 1394,
+        V8LegacyFunctionDeclaration = 1395,
+        V8RegExpPrototypeSourceGetter = 1396,
+        V8RegExpPrototypeOldFlagGetter = 1397,
+        V8DecimalWithLeadingZeroInStrictMode = 1398,
+        FormSubmissionNotInDocumentTree = 1399,
+        GetUserMediaPrefixed = 1400,
+        GetUserMediaLegacy = 1401,
+        GetUserMediaPromise = 1402,
+        CSSFilterFunctionNoArguments = 1403,
+        V8LegacyDateParser = 1404,
+        OpenSearchInsecureOriginInsecureTarget = 1405,
+        OpenSearchInsecureOriginSecureTarget = 1406,
+        OpenSearchSecureOriginInsecureTarget = 1407,
+        OpenSearchSecureOriginSecureTarget = 1408,
+        RegisterProtocolHandlerSecureOrigin = 1409,
+        RegisterProtocolHandlerInsecureOrigin = 1410,
+        CrossOriginWindowAlert = 1411,
+        CrossOriginWindowConfirm = 1412,
+        CrossOriginWindowPrompt = 1413,
+        CrossOriginWindowPrint = 1414,
+        MediaStreamOnActive = 1415,
+        MediaStreamOnInactive = 1416,
+        AddEventListenerPassiveTrue = 1417,
+        AddEventListenerPassiveFalse = 1418,
+        CSPReferrerDirective = 1419,
+        DocumentOpen = 1420,
+        ElementRequestPointerLockInShadow = 1421,
+        ShadowRootPointerLockElement = 1422,
+        DocumentPointerLockElementInV0Shadow = 1423,
+        TextAreaMaxLength = 1424,
+        TextAreaMinLength = 1425,
+        TopNavigationFromSubFrame = 1426,
+        PrefixedElementRequestFullscreenInShadow = 1427,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

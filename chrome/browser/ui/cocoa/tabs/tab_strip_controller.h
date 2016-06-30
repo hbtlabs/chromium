@@ -49,6 +49,10 @@ class WebContents;
 // Stripped down version of TabStripModelObserverBridge:tabDetachedWithContents.
 - (void)onTabDetachedWithContents:(content::WebContents*)contents;
 
+// Stripped down version of
+// TabStripModelObserverBridge:onTabInsertedInForeground.
+- (void)onTabInsertedInForeground:(BOOL)inForeground;
+
 @end
 
 // A class that handles managing the tab strip in a browser window. It uses
@@ -290,6 +294,9 @@ class WebContents;
 // Returns the alert state associated with the contents.
 - (TabAlertState)alertStateForContents:(content::WebContents*)contents;
 
+// Leaving visual effects enabled when fullscreen results in higher power
+// consumption. This is used to disable effects when fullscreen.
+- (void)setVisualEffectsDisabledForFullscreen:(BOOL)disabled;
 @end
 
 @interface TabStripController(TestingAPI)

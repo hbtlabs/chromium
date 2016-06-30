@@ -9,7 +9,7 @@
 #include "cc/animation/animation_timeline.h"
 #include "platform/PlatformExport.h"
 #include "wtf/Noncopyable.h"
-
+#include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace blink {
@@ -21,8 +21,12 @@ class CompositorAnimationPlayerClient;
 class PLATFORM_EXPORT CompositorAnimationTimeline {
     WTF_MAKE_NONCOPYABLE(CompositorAnimationTimeline);
 public:
-    CompositorAnimationTimeline();
-    virtual ~CompositorAnimationTimeline();
+    static std::unique_ptr<CompositorAnimationTimeline> create()
+    {
+        return wrapUnique(new CompositorAnimationTimeline());
+    }
+
+    ~CompositorAnimationTimeline();
 
     cc::AnimationTimeline* animationTimeline() const;
     // TODO(ymalik): Currently we just wrap cc::AnimationHost in
@@ -30,10 +34,12 @@ public:
     // to blink. See crbug.com/610763.
     CompositorAnimationHost compositorAnimationHost();
 
-    virtual void playerAttached(const CompositorAnimationPlayerClient&);
-    virtual void playerDestroyed(const CompositorAnimationPlayerClient&);
+    void playerAttached(const CompositorAnimationPlayerClient&);
+    void playerDestroyed(const CompositorAnimationPlayerClient&);
 
 private:
+    CompositorAnimationTimeline();
+
     scoped_refptr<cc::AnimationTimeline> m_animationTimeline;
 };
 

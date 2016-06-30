@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -92,15 +93,9 @@ void PrintJob::Observe(int type,
                        const content::NotificationSource& source,
                        const content::NotificationDetails& details) {
   DCHECK(RunsTasksOnCurrentThread());
-  switch (type) {
-    case chrome::NOTIFICATION_PRINT_JOB_EVENT: {
-      OnNotifyPrintJobEvent(*content::Details<JobEventDetails>(details).ptr());
-      break;
-    }
-    default: {
-      break;
-    }
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_PRINT_JOB_EVENT, type);
+
+  OnNotifyPrintJobEvent(*content::Details<JobEventDetails>(details).ptr());
 }
 
 void PrintJob::GetSettingsDone(const PrintSettings& new_settings,
@@ -206,7 +201,7 @@ bool PrintJob::FlushJob(base::TimeDelta timeout) {
 
   base::MessageLoop::ScopedNestableTaskAllower allow(
       base::MessageLoop::current());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   return true;
 }

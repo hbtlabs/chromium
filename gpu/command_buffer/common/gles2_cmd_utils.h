@@ -18,6 +18,8 @@
 #include "base/macros.h"
 #include "base/numerics/safe_math.h"
 #include "gpu/command_buffer/common/gles2_utils_export.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gl/gpu_preference.h"
 
 namespace gpu {
 namespace gles2 {
@@ -238,6 +240,7 @@ class GLES2_UTILS_EXPORT GLES2Util {
   static bool IsSignedIntegerFormat(uint32_t internal_format);
   static bool IsIntegerFormat(uint32_t internal_format);
   static bool IsFloatFormat(uint32_t internal_format);
+  static uint32_t ConvertToSizedFormat(uint32_t format, uint32_t type);
 
   static bool IsSizedColorFormat(uint32_t internal_format);
   static void GetColorFormatComponentSizes(
@@ -306,6 +309,8 @@ struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
 
   bool Parse(const std::vector<int32_t>& attribs);
 
+  gfx::Size offscreen_framebuffer_size;
+  gl::GpuPreference gpu_preference;
   // -1 if invalid or unspecified.
   int32_t alpha_size;
   int32_t blue_size;
@@ -319,6 +324,8 @@ struct GLES2_UTILS_EXPORT ContextCreationAttribHelper {
   bool bind_generates_resource;
   bool fail_if_major_perf_caveat;
   bool lose_context_when_out_of_memory;
+  bool should_use_native_gmb_for_backbuffer;
+
   ContextType context_type;
 };
 

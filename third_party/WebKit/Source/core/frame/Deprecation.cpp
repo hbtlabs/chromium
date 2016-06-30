@@ -330,12 +330,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::PrefixedPerformanceResourceTimingBufferFull:
         return replacedBy("'Performance.onwebkitresourcetimingbufferfull'", "'Performance.onresourcetimingbufferfull'");
 
-    case UseCounter::BluetoothDeviceInstanceId:
-        return replacedBy("'BluetoothDevice.instanceID'", "'BluetoothDevice.id'");
-
-    case UseCounter::BluetoothDeviceConnectGATT:
-        return replacedWillBeRemoved("'BluetoothDevice.connectGATT'", "'BluetoothDevice.gatt.connect'", 52, "5264933985976320");
-
     case UseCounter::MediaStreamTrackGetSources:
         return "MediaStreamTrack.getSources is deprecated. See https://www.chromestatus.com/feature/4765305641369600 for more details.";
 
@@ -366,23 +360,11 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::V8KeyboardEvent_KeyIdentifier_AttributeGetter:
         return willBeRemoved("'KeyboardEvent.keyIdentifier'", 53, "5316065118650368");
 
-    case UseCounter::During_Microtask_Alert:
-        return willBeRemoved("Invoking 'alert()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Confirm:
-        return willBeRemoved("Invoking 'confirm()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Print:
-        return willBeRemoved("Invoking 'print()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Prompt:
-        return willBeRemoved("Invoking 'prompt()' during microtask execution", 53, "5647113010544640");
-
     case UseCounter::During_Microtask_SyncXHR:
-        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 53, "5647113010544640");
+        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 54, "5647113010544640");
 
     case UseCounter::MediaStreamOnEnded:
-        return replacedWillBeRemoved("The MediaStream 'ended' event", "the MediaStream 'inactive' event", 53, "5730404371791872");
+        return willBeRemoved("The MediaStream 'ended' event", 54, "5730404371791872");
 
     case UseCounter::UntrustedEventDefaultHandled:
         return String::format("A DOM event generated from JavaScript has triggered a default action inside the browser. This behavior is non-standard and will be removed in %s. See https://www.chromestatus.com/features/5718803933560832 for more details.", milestoneString(53));

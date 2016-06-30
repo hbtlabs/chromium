@@ -32,6 +32,14 @@ extern const char kBackgroundHistogramDomContentLoaded[];
 extern const char kBackgroundHistogramLoad[];
 extern const char kBackgroundHistogramFirstPaint[];
 
+extern const char kHistogramLoadTypeFirstContentfulPaintReload[];
+extern const char kHistogramLoadTypeFirstContentfulPaintForwardBack[];
+extern const char kHistogramLoadTypeFirstContentfulPaintNewNavigation[];
+
+extern const char kHistogramLoadTypeParseStartReload[];
+extern const char kHistogramLoadTypeParseStartForwardBack[];
+extern const char kHistogramLoadTypeParseStartNewNavigation[];
+
 extern const char kHistogramBackgroundBeforePaint[];
 extern const char kHistogramFailedProvisionalLoad[];
 
@@ -49,6 +57,7 @@ class CorePageLoadMetricsObserver
   ~CorePageLoadMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
+  void OnCommit(content::NavigationHandle* navigation_handle) override;
   void OnDomContentLoadedEventStart(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
@@ -85,10 +94,11 @@ class CorePageLoadMetricsObserver
   // Information related to failed provisional loads.
   // Populated in OnFailedProvisionalLoad and accessed in OnComplete.
   struct FailedProvisionalLoadInfo {
-    base::TimeDelta interval;
+    base::Optional<base::TimeDelta> interval;
     net::Error error;
 
-    FailedProvisionalLoadInfo() : error(net::OK) {}
+    FailedProvisionalLoadInfo();
+    ~FailedProvisionalLoadInfo();
   };
 
   void RecordTimingHistograms(const page_load_metrics::PageLoadTiming& timing,
@@ -97,6 +107,8 @@ class CorePageLoadMetricsObserver
                     const page_load_metrics::PageLoadExtraInfo& info);
 
   FailedProvisionalLoadInfo failed_provisional_load_info_;
+  ui::PageTransition transition_;
+  bool initiated_by_user_gesture_;
 
   DISALLOW_COPY_AND_ASSIGN(CorePageLoadMetricsObserver);
 };

@@ -1862,12 +1862,27 @@
   },
 
   "SSLVersionFallbackMin": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "SSLVersionFallbackMin": "tls1.2" },
-    "pref_mappings": []
+  },
+
+  "CertificateTransparencyEnforcementDisabledForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForUrls": ["example.com"] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_hosts" }
+    ]
   },
 
   "RC4Enabled": {
+  },
+
+  "DHEEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "DHEEnabled": true },
+    "pref_mappings": [
+      { "pref": "ssl.dhe_enabled",
+        "local_state": true
+      }
+    ]
   },
 
   "WelcomePageOnOSUpgradeEnabled": {
@@ -1917,6 +1932,14 @@
     "pref_mappings": [
       { "pref": "settings.allowed_domains_for_apps"
       }
+    ]
+  },
+
+  "EnableMediaRouter": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "EnableMediaRouter": true },
+    "pref_mappings": [
+      { "pref": "media_router.enable_media_router" }
     ]
   },
 

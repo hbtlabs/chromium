@@ -6,14 +6,18 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/location.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
+#import "base/mac/scoped_nsautorelease_pool.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #import "testing/gtest_mac.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -55,8 +59,10 @@
 @interface NativeWidgetMacTestWindow : NativeWidgetMacNSWindow {
  @private
   int invalidateShadowCount_;
+  bool* deallocFlag_;
 }
 @property(readonly, nonatomic) int invalidateShadowCount;
+@property(assign, nonatomic) bool* deallocFlag;
 @end
 
 // Used to mock BridgedContentView so that calls to drawRect: can be
@@ -75,6 +81,10 @@
 @end
 
 @interface FocusableTestNSView : NSView
+@end
+
+@interface TestNativeParentWindow : NSWindow
+@property(assign, nonatomic) bool* deallocFlag;
 @end
 
 namespace views {
@@ -138,8 +148,8 @@ class NativeWidgetMacTest : public WidgetTest {
   NSRect ParentRect() const { return NSMakeRect(100, 100, 300, 200); }
 
   // Make a native NSWindow with the given |style_mask| to use as a parent.
-  NSWindow* MakeNativeParentWithStyle(int style_mask) {
-    native_parent_.reset([[NSWindow alloc]
+  TestNativeParentWindow* MakeNativeParentWithStyle(int style_mask) {
+    native_parent_.reset([[TestNativeParentWindow alloc]
         initWithContentRect:ParentRect()
                   styleMask:style_mask
                     backing:NSBackingStoreBuffered
@@ -150,7 +160,7 @@ class NativeWidgetMacTest : public WidgetTest {
   }
 
   // Make a borderless, native NSWindow to use as a parent.
-  NSWindow* MakeNativeParent() {
+  TestNativeParentWindow* MakeNativeParent() {
     return MakeNativeParentWithStyle(NSBorderlessWindowMask);
   }
 
@@ -167,9 +177,10 @@ class NativeWidgetMacTest : public WidgetTest {
     return widget;
   }
 
- private:
-  base::scoped_nsobject<NSWindow> native_parent_;
+ protected:
+  base::scoped_nsobject<TestNativeParentWindow> native_parent_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMacTest);
 };
 
@@ -186,7 +197,7 @@ class WidgetChangeObserver : public TestWidgetObserver {
 
     base::RunLoop run_loop;
     run_loop_ = &run_loop;
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_timeout());
     run_loop.Run();
     run_loop_ = nullptr;
@@ -372,6 +383,55 @@ class PaintCountView : public View {
 
   DISALLOW_COPY_AND_ASSIGN(PaintCountView);
 };
+
+// Test for correct child window restore when parent window is minimized
+// and restored using -makeKeyAndOrderFront:.
+// Parent-child window relationships in AppKit are not supported when window
+// visibility changes.
+// Disabled because it relies on cocoa occlusion APIs
+// and state changes that are unavoidably flaky.
+TEST_F(NativeWidgetMacTest, DISABLED_OrderFrontAfterMiniaturize) {
+  Widget* widget = CreateTopLevelPlatformWidget();
+  NSWindow* ns_window = widget->GetNativeWindow();
+
+  Widget* child_widget = CreateChildPlatformWidget(widget->GetNativeView());
+  NSWindow* child_ns_window = child_widget->GetNativeWindow();
+
+  // Set parent bounds that overlap child.
+  widget->SetBounds(gfx::Rect(100, 100, 300, 300));
+  child_widget->SetBounds(gfx::Rect(110, 110, 100, 100));
+
+  widget->Show();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(widget->IsMinimized());
+
+  // Minimize parent.
+  [ns_window performMiniaturize:nil];
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(widget->IsMinimized());
+  EXPECT_FALSE(widget->IsVisible());
+  EXPECT_FALSE(child_widget->IsVisible());
+
+  // Restore parent window as AppController does.
+  [ns_window makeKeyAndOrderFront:nil];
+
+  // Wait and check that child is really visible.
+  // TODO(kirr): remove the fixed delay.
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      base::TimeDelta::FromSeconds(2));
+  base::MessageLoop::current()->Run();
+
+  EXPECT_FALSE(widget->IsMinimized());
+  EXPECT_TRUE(widget->IsVisible());
+  EXPECT_TRUE(child_widget->IsVisible());
+  // Check that child window is visible.
+  EXPECT_TRUE([child_ns_window occlusionState] & NSWindowOcclusionStateVisible);
+  EXPECT_TRUE(IsWindowStackedAbove(child_widget, widget));
+  widget->Close();
+}
 
 // Test minimized states triggered externally, implied visibility and restored
 // bounds whilst minimized.
@@ -646,6 +706,37 @@ TEST_F(NativeWidgetMacTest, NonWidgetParent) {
   EXPECT_EQ(0u, [[native_parent childWindows] count]);
 }
 
+// Tests closing the last remaining NSWindow reference via -windowWillClose:.
+// This is a regression test for http://crbug.com/616701.
+TEST_F(NativeWidgetMacTest, NonWidgetParentLastReference) {
+  bool child_dealloced = false;
+  bool native_parent_dealloced = false;
+  {
+    base::mac::ScopedNSAutoreleasePool pool;
+    TestNativeParentWindow* native_parent = MakeNativeParent();
+    [native_parent setDeallocFlag:&native_parent_dealloced];
+
+    NativeWidgetMacTestWindow* window;
+    Widget::InitParams init_params =
+        CreateParams(Widget::InitParams::TYPE_POPUP);
+    init_params.parent = [native_parent_ contentView];
+    init_params.bounds = gfx::Rect(0, 0, 100, 200);
+    CreateWidgetWithTestWindow(init_params, &window);
+    [window setDeallocFlag:&child_dealloced];
+  }
+  {
+    // On 10.11, closing a weak reference on the parent window works, but older
+    // versions of AppKit get upset if things are released inside -[NSWindow
+    // close]. This test tries to establish a situation where the last reference
+    // to the child window is released inside WidgetOwnerNSWindowAdapter::
+    // OnWindowWillClose().
+    base::mac::ScopedNSAutoreleasePool pool;
+    [native_parent_.autorelease() close];
+    EXPECT_TRUE(child_dealloced);
+  }
+  EXPECT_TRUE(native_parent_dealloced);
+}
+
 // Use Native APIs to query the tooltip text that would be shown once the
 // tooltip delay had elapsed.
 base::string16 TooltipTextForWidget(Widget* widget) {
@@ -758,7 +849,7 @@ class ScopedSwizzleWaiter {
       return;
 
     base::RunLoop run_loop;
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_timeout());
     run_loop_ = &run_loop;
     run_loop.Run();
@@ -930,8 +1021,6 @@ TEST_F(NativeWidgetMacTest, WindowModalSheet) {
                    queue:nil
               usingBlock:^(NSNotification* note) {
                 EXPECT_TRUE([sheet_window delegate]);
-                EXPECT_FALSE(sheet_widget->IsVisible());
-                EXPECT_FALSE(sheet_widget->GetLayer()->IsDrawn());
                 *did_observe_ptr = true;
               }];
 
@@ -1567,6 +1656,15 @@ TEST_F(NativeWidgetMacViewsOrderTest, UnassociatedViewsIsAbove) {
 @implementation NativeWidgetMacTestWindow
 
 @synthesize invalidateShadowCount = invalidateShadowCount_;
+@synthesize deallocFlag = deallocFlag_;
+
+- (void)dealloc {
+  if (deallocFlag_) {
+    DCHECK(!*deallocFlag_);
+    *deallocFlag_ = true;
+  }
+  [super dealloc];
+}
 
 - (void)invalidateShadow {
   ++invalidateShadowCount_;
@@ -1591,4 +1689,20 @@ TEST_F(NativeWidgetMacViewsOrderTest, UnassociatedViewsIsAbove) {
 - (BOOL)acceptsFirstResponder {
   return YES;
 }
+@end
+
+@implementation TestNativeParentWindow {
+  bool* deallocFlag_;
+}
+
+@synthesize deallocFlag = deallocFlag_;
+
+- (void)dealloc {
+  if (deallocFlag_) {
+    DCHECK(!*deallocFlag_);
+    *deallocFlag_ = true;
+  }
+  [super dealloc];
+}
+
 @end

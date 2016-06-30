@@ -5,11 +5,13 @@
 #include "ui/display/win/screen_win.h"
 
 #include <windows.h>
+#include <shellscalingapi.h>
 
 #include <algorithm>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/win/win_util.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
 #include "ui/display/manager/display_layout_builder.h"
@@ -29,6 +31,31 @@ namespace {
 // TODO(robliao): http://crbug.com/615514 Remove when ScreenWin usage is
 // resolved with Desktop Aura and WindowTreeHost.
 ScreenWin* g_screen_win_instance = nullptr;
+
+float GetMonitorScaleFactor(HMONITOR monitor) {
+  DCHECK(monitor);
+  if (base::win::IsProcessPerMonitorDpiAware()) {
+    static auto get_dpi_for_monitor_func = [](){
+      using GetDpiForMonitorPtr = decltype(::GetDpiForMonitor)*;
+      HMODULE shcore_dll = ::LoadLibrary(L"shcore.dll");
+      if (shcore_dll) {
+        return reinterpret_cast<GetDpiForMonitorPtr>(
+                   ::GetProcAddress(shcore_dll, "GetDpiForMonitor"));
+      }
+      return static_cast<GetDpiForMonitorPtr>(nullptr);
+    }();
+
+    UINT dpi_x;
+    UINT dpi_y;
+    if (get_dpi_for_monitor_func &&
+        SUCCEEDED(get_dpi_for_monitor_func(monitor, MDT_EFFECTIVE_DPI,
+                                           &dpi_x, &dpi_y))) {
+      DCHECK_EQ(dpi_x, dpi_y);
+      return GetScalingFactorFromDPI(dpi_x);
+    }
+  }
+  return GetDPIScale();
+}
 
 std::vector<DisplayInfo> FindAndRemoveTouchingDisplayInfos(
     const DisplayInfo& ref_display_info,
@@ -144,10 +171,8 @@ BOOL CALLBACK EnumMonitorCallback(HMONITOR monitor,
   std::vector<DisplayInfo>* display_infos =
       reinterpret_cast<std::vector<DisplayInfo>*>(data);
   DCHECK(display_infos);
-  // TODO(robliao): When ready, replace the GetDPIScale with GetDpiForMonitor
-  // to get the actual DPI for the HMONITOR.
   display_infos->push_back(DisplayInfo(MonitorInfoFromHMONITOR(monitor),
-                                       GetDPIScale()));
+                                       GetMonitorScaleFactor(monitor)));
   return TRUE;
 }
 
@@ -268,6 +293,23 @@ gfx::Size ScreenWin::DIPToScreenSize(HWND hwnd, const gfx::Size& dip_size) {
   float scale_factor = GetScaleFactorForHWND(hwnd);
   // Always ceil sizes. Otherwise we may be leaving off part of the bounds.
   return ScaleToCeiledSize(dip_size, scale_factor);
+}
+
+// static
+int ScreenWin::GetSystemMetricsForHwnd(HWND hwnd, int metric) {
+  // GetSystemMetrics returns screen values based off of the primary monitor's
+  // DPI. This will further scale based off of the DPI for |hwnd|.
+  if (!g_screen_win_instance)
+    return ::GetSystemMetrics(metric);
+
+  Display primary_display(g_screen_win_instance->GetPrimaryDisplay());
+  int system_metrics_result = g_screen_win_instance->GetSystemMetrics(metric);
+
+  float metrics_relative_scale_factor = hwnd
+      ? GetScaleFactorForHWND(hwnd) / primary_display.device_scale_factor()
+      : 1.0f;
+  return static_cast<int>(std::round(
+      system_metrics_result * metrics_relative_scale_factor));
 }
 
 HWND ScreenWin::GetHWNDFromNativeView(gfx::NativeView window) const {
@@ -392,6 +434,10 @@ MONITORINFOEX ScreenWin::MonitorInfoFromWindow(HWND hwnd,
 
 HWND ScreenWin::GetRootWindow(HWND hwnd) const {
   return ::GetAncestor(hwnd, GA_ROOT);
+}
+
+int ScreenWin::GetSystemMetrics(int metric) const {
+  return ::GetSystemMetrics(metric);
 }
 
 void ScreenWin::OnWndProc(HWND hwnd,

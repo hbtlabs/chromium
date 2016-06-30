@@ -27,6 +27,8 @@
 #include "content/renderer/input/render_widget_input_handler.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/message_delivery_policy.h"
+#include "content/renderer/mouse_lock_dispatcher.h"
+#include "content/renderer/render_widget_mouse_lock_dispatcher.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
@@ -201,16 +203,10 @@ class CONTENT_EXPORT RenderWidget
   void RequestScheduleAnimation() override;
   void UpdateVisualState() override;
   void WillBeginCompositorFrame() override;
-  void ReportFixedRasterScaleUseCounters(
-      bool has_blurry_content,
-      bool has_potential_performance_regression) override;
 
   // RenderWidgetInputHandlerDelegate
   void FocusChangeComplete() override;
   bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
-  void ObserveWheelEventAndResult(const blink::WebMouseWheelEvent& wheel_event,
-                                  const gfx::Vector2dF& wheel_unused_delta,
-                                  bool event_processed) override;
   void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
                                     const gfx::Vector2dF& unused_delta,
                                     bool event_processed) override;
@@ -218,8 +214,8 @@ class CONTENT_EXPORT RenderWidget
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const DidOverscrollParams& params) override;
   void OnInputEventAck(std::unique_ptr<InputEventAck> input_event_ack) override;
-  void NotifyInputEventHandled(
-      blink::WebInputEvent::Type handled_type) override;
+  void NotifyInputEventHandled(blink::WebInputEvent::Type handled_type,
+                               InputEventAckState ack_result) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void UpdateTextInputState(ShowIme show_ime,
                             ChangeSource change_source) override;
@@ -261,6 +257,9 @@ class CONTENT_EXPORT RenderWidget
   void showImeIfNeeded() override;
   void convertViewportToWindow(blink::WebRect* rect) override;
   void convertWindowToViewport(blink::WebFloatRect* rect) override;
+  bool requestPointerLock() override;
+  void requestPointerUnlock() override;
+  bool isPointerLocked() override;
 
   // Override point to obtain that the current input method state and caret
   // position.
@@ -345,9 +344,6 @@ class CONTENT_EXPORT RenderWidget
   // the new value will be sent to the browser process.
   void UpdateSelectionBounds();
 
-  // Called by the compositor to forward a proto that represents serialized
-  // compositor state.
-
   virtual void GetSelectionBounds(gfx::Rect* start, gfx::Rect* end);
 
   void OnShowHostContextMenu(ContextMenuParams* params);
@@ -364,6 +360,10 @@ class CONTENT_EXPORT RenderWidget
 
   // Indicates whether this widget has focus.
   bool has_focus() const { return has_focus_; }
+
+  MouseLockDispatcher* mouse_lock_dispatcher() {
+    return mouse_lock_dispatcher_.get();
+  }
 
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
@@ -441,7 +441,6 @@ class CONTENT_EXPORT RenderWidget
   virtual void OnResize(const ResizeParams& params);
   void OnEnableDeviceEmulation(const blink::WebDeviceEmulationParams& params);
   void OnDisableDeviceEmulation();
-  void OnColorProfile(const std::vector<char>& color_profile);
   void OnChangeResizeRect(const gfx::Rect& resizer_rect);
   virtual void OnWasHidden();
   virtual void OnWasShown(bool needs_repainting,
@@ -716,8 +715,6 @@ class CONTENT_EXPORT RenderWidget
   std::queue<SyntheticGestureCompletionCallback>
       pending_synthetic_gesture_callbacks_;
 
-  uint32_t next_output_surface_id_;
-
 #if defined(OS_ANDROID)
   // Indicates value in the focused text field is in dirty state, i.e. modified
   // by script etc., not by user input.
@@ -758,6 +755,12 @@ class CONTENT_EXPORT RenderWidget
 
   std::unique_ptr<scheduler::RenderWidgetSchedulingState>
       render_widget_scheduling_state_;
+
+  // Mouse Lock dispatcher attached to this view.
+  std::unique_ptr<RenderWidgetMouseLockDispatcher> mouse_lock_dispatcher_;
+
+  // Wraps the |webwidget_| as a MouseLockDispatcher::LockTarget interface.
+  std::unique_ptr<MouseLockDispatcher::LockTarget> webwidget_mouse_lock_target_;
 
  private:
   // When emulated, this returns original device scale factor.

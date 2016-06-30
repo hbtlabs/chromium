@@ -53,14 +53,17 @@ gfx::Rect RenderWidgetHostDelegate::GetRootWindowResizerRect(
   return gfx::Rect();
 };
 
-bool RenderWidgetHostDelegate::IsFullscreenForCurrentTab(
-    RenderWidgetHostImpl* render_widget_host) const {
+bool RenderWidgetHostDelegate::IsFullscreenForCurrentTab() const {
   return false;
 }
 
 blink::WebDisplayMode RenderWidgetHostDelegate::GetDisplayMode(
     RenderWidgetHostImpl* render_widget_host) const {
   return blink::WebDisplayModeBrowser;
+}
+
+TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
+  return nullptr;
 }
 
 }  // namespace content

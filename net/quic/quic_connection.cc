@@ -293,14 +293,13 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
       time_of_last_sent_new_packet_(clock_->ApproximateNow()),
       last_send_for_timeout_(clock_->ApproximateNow()),
       packet_number_of_last_sent_packet_(0),
-      sent_packet_manager_(new QuicSentPacketManager(
-          perspective,
-          kDefaultPathId,
-          clock_,
-          &stats_,
-          FLAGS_quic_use_bbr_congestion_control ? kBBR : kCubic,
-          FLAGS_quic_use_time_loss_detection ? kTime : kNack,
-          /*delegate=*/nullptr)),
+      sent_packet_manager_(new QuicSentPacketManager(perspective,
+                                                     kDefaultPathId,
+                                                     clock_,
+                                                     &stats_,
+                                                     kCubic,
+                                                     kNack,
+                                                     /*delegate=*/nullptr)),
       version_negotiation_state_(START_NEGOTIATION),
       perspective_(perspective),
       connected_(true),
@@ -319,6 +318,8 @@ QuicConnection::QuicConnection(QuicConnectionId connection_id,
   framer_.set_received_entropy_calculator(&received_packet_manager_);
   last_stop_waiting_frame_.least_unacked = 0;
   stats_.connection_creation_time = clock_->ApproximateNow();
+  // TODO(ianswett): Supply the NetworkChangeVisitor as a constructor argument
+  // and make it required non-null, because it's always used.
   sent_packet_manager_->SetNetworkChangeVisitor(this);
   // Allow the packet writer to potentially reduce the packet size to a value
   // even smaller than kDefaultMaxPacketSize.
@@ -655,6 +656,13 @@ void QuicConnection::OnDecryptedPacket(EncryptionLevel level) {
       has_forward_secure_encrypter_ && level == ENCRYPTION_FORWARD_SECURE) {
     SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
   }
+
+  // Once the server receives a forward secure packet, the handshake is
+  // confirmed.
+  if (FLAGS_quic_no_shlo_listener && level == ENCRYPTION_FORWARD_SECURE &&
+      perspective_ == Perspective::IS_SERVER) {
+    sent_packet_manager_->SetHandshakeConfirmed();
+  }
 }
 
 bool QuicConnection::OnPacketHeader(const QuicPacketHeader& header) {
@@ -692,8 +700,7 @@ bool QuicConnection::OnStreamFrame(const QuicStreamFrame& frame) {
   }
   if (frame.stream_id != kCryptoStreamId &&
       last_decrypted_packet_level_ == ENCRYPTION_NONE) {
-    if (FLAGS_quic_detect_memory_corrpution &&
-        MaybeConsiderAsMemoryCorruption(frame)) {
+    if (MaybeConsiderAsMemoryCorruption(frame)) {
       CloseConnection(QUIC_MAYBE_CORRUPTED_MEMORY,
                       "Received crypto frame on non crypto stream.",
                       ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
@@ -1380,11 +1387,7 @@ void QuicConnection::OnCanWrite() {
     // We're not write blocked, but some stream didn't write out all of its
     // bytes. Register for 'immediate' resumption so we'll keep writing after
     // other connections and events have had a chance to use the thread.
-    if (FLAGS_quic_only_one_sending_alarm) {
-      send_alarm_->Update(clock_->ApproximateNow(), QuicTime::Delta::Zero());
-    } else {
-      resume_writes_alarm_->Set(clock_->ApproximateNow());
-    }
+    resume_writes_alarm_->Set(clock_->ApproximateNow());
   }
 }
 
@@ -1678,12 +1681,14 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
   DVLOG(1) << ENDPOINT << "time we began writing last sent packet: "
            << packet_send_time.ToDebuggingValue();
 
-  // TODO(ianswett): Change the packet number length and other packet creator
-  // options by a more explicit API than setting a struct value directly,
-  // perhaps via the NetworkChangeVisitor.
-  packet_generator_.UpdateSequenceNumberLength(
-      sent_packet_manager_->GetLeastPacketAwaitedByPeer(packet->path_id),
-      sent_packet_manager_->EstimateMaxPacketsInFlight(max_packet_length()));
+  if (!FLAGS_quic_simple_packet_number_length) {
+    // TODO(ianswett): Change the packet number length and other packet creator
+    // options by a more explicit API than setting a struct value directly,
+    // perhaps via the NetworkChangeVisitor.
+    packet_generator_.UpdateSequenceNumberLength(
+        sent_packet_manager_->GetLeastPacketAwaitedByPeer(packet->path_id),
+        sent_packet_manager_->EstimateMaxPacketsInFlight(max_packet_length()));
+  }
 
   bool reset_retransmission_alarm = sent_packet_manager_->OnPacketSent(
       packet, packet->original_path_id, packet->original_packet_number,
@@ -1691,6 +1696,14 @@ bool QuicConnection::WritePacket(SerializedPacket* packet) {
 
   if (reset_retransmission_alarm || !retransmission_alarm_->IsSet()) {
     SetRetransmissionAlarm();
+  }
+
+  if (FLAGS_quic_simple_packet_number_length) {
+    // The packet number length must be updated after OnPacketSent, because it
+    // may change the packet number length in packet.
+    packet_generator_.UpdateSequenceNumberLength(
+        sent_packet_manager_->GetLeastPacketAwaitedByPeer(packet->path_id),
+        sent_packet_manager_->EstimateMaxPacketsInFlight(max_packet_length()));
   }
 
   stats_.bytes_sent += result.bytes_written;
@@ -1728,6 +1741,13 @@ bool QuicConnection::ShouldDiscardPacket(const SerializedPacket& packet) {
     DVLOG(1) << ENDPOINT << "Dropping NULL encrypted packet: " << packet_number
              << " since the connection is forward secure.";
     return true;
+  }
+
+  // TODO(fayang): Remove IsUnacked and HasRetransmittableFrames from
+  // QuicSentPacketManagerInterface when deprecating
+  // gfe2_reloadable_flag_quic_always_write_queued_retransmissions.
+  if (FLAGS_quic_always_write_queued_retransmissions) {
+    return false;
   }
 
   // If a retransmission has been acked before sending, don't send it.
@@ -1796,6 +1816,13 @@ void QuicConnection::OnCongestionChange() {
 
 void QuicConnection::OnPathDegrading() {
   visitor_->OnPathDegrading();
+}
+
+void QuicConnection::OnPathMtuIncreased(QuicPacketLength packet_size) {
+  DCHECK(FLAGS_quic_no_mtu_discovery_ack_listener);
+  if (packet_size > max_packet_length()) {
+    SetMaxPacketLength(packet_size);
+  }
 }
 
 void QuicConnection::OnHandshakeComplete() {
@@ -1874,10 +1901,6 @@ void QuicConnection::OnRetransmissionTimeout() {
     return;
   }
 
-  // Cancel the send alarm to ensure TimeUntilSend is re-evaluated.
-  if (FLAGS_quic_only_one_sending_alarm) {
-    send_alarm_->Cancel();
-  }
   sent_packet_manager_->OnRetransmissionTimeout();
   WriteIfNotBlocked();
 
@@ -2203,19 +2226,6 @@ void QuicConnection::SetRetransmissionAlarm() {
     pending_retransmission_alarm_ = true;
     return;
   }
-  // Once the handshake has been confirmed, the retransmission alarm should
-  // never fire before the send alarm.
-  if (FLAGS_quic_only_one_sending_alarm &&
-      sent_packet_manager_->IsHandshakeConfirmed() && send_alarm_->IsSet()) {
-    DCHECK(!sent_packet_manager_->GetRetransmissionTime().IsInitialized() ||
-           sent_packet_manager_->GetRetransmissionTime() >=
-               send_alarm_->deadline())
-        << " retransmission_time:"
-        << sent_packet_manager_->GetRetransmissionTime().ToDebuggingValue()
-        << " send_alarm:" << send_alarm_->deadline().ToDebuggingValue();
-    retransmission_alarm_->Cancel();
-    return;
-  }
   QuicTime retransmission_time = sent_packet_manager_->GetRetransmissionTime();
   retransmission_alarm_->Update(retransmission_time,
                                 QuicTime::Delta::FromMilliseconds(1));
@@ -2380,19 +2390,21 @@ void QuicConnection::SendMtuDiscoveryPacket(QuicByteCount target_mtu) {
 
   // Send the probe.
   packet_generator_.GenerateMtuDiscoveryPacket(
-      target_mtu, last_mtu_discovery_ack_listener.get());
+      target_mtu, FLAGS_quic_no_mtu_discovery_ack_listener
+                      ? nullptr
+                      : last_mtu_discovery_ack_listener.get());
 }
 
 void QuicConnection::DiscoverMtu() {
   DCHECK(!mtu_discovery_alarm_->IsSet());
 
-  // Chcek if the MTU has been already increased.
+  // Check if the MTU has been already increased.
   if (mtu_discovery_target_ <= max_packet_length()) {
     return;
   }
 
-  // Schedule the next probe *before* sending the current one.  This is
-  // important, otherwise, when SendMtuDiscoveryPacket() is called,
+  // Calculate the packet number of the next probe *before* sending the current
+  // one.  Otherwise, when SendMtuDiscoveryPacket() is called,
   // MaybeSetMtuAlarm() will not realize that the probe has been just sent, and
   // will reschedule this probe again.
   packets_between_mtu_probes_ *= 2;

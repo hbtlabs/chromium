@@ -312,6 +312,9 @@
               ['target_arch=="arm"', {
                 'sysroot%': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_wheezy_arm-sysroot',
               }],
+              ['target_arch=="arm64"', {
+                'sysroot%': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_jessie_arm64-sysroot',
+              }],
               ['target_arch=="x64"', {
                 'sysroot%': '<!(cd <(DEPTH) && pwd -P)/build/linux/debian_wheezy_amd64-sysroot',
               }],
@@ -890,7 +893,7 @@
         ['OS=="android" or OS=="ios" or (embedded==1 and chromecast==0)', {
           'pdf_enable_xfa%': 0,
         }, {
-          'pdf_enable_xfa%': 1,
+          'pdf_enable_xfa%': 0,
         }],
 
         ['chromeos==1 or OS=="android" or OS=="ios" or desktop_linux==1', {
@@ -911,7 +914,7 @@
         # are using a custom toolchain and need to control -B in ldflags.
         # Do not use 32-bit gold on 32-bit hosts as it runs out address space
         # for component=static_library builds.
-        ['(OS=="linux" or OS=="android") and (target_arch=="x64" or target_arch=="arm" or target_arch=="mipsel" or (target_arch=="ia32" and host_arch=="x64"))', {
+        ['((OS=="linux" or OS=="android") and (target_arch=="x64" or target_arch=="arm" or (target_arch=="ia32" and host_arch=="x64"))) or (OS=="linux" and target_arch=="mipsel")', {
           'linux_use_bundled_gold%': 1,
         }, {
           'linux_use_bundled_gold%': 0,
@@ -1008,14 +1011,6 @@
           'enable_print_preview%': 0,
         }],
 
-        # Path to sas.dll, which provides the SendSAS function.
-        # http://msdn.microsoft.com/en-us/library/windows/desktop/dd979761(v=vs.85).aspx
-        ['target_arch=="x64"', {
-          'sas_dll_path%': '<(DEPTH)/third_party/platformsdk_win7/files/redist/amd64',
-        }, {
-          'sas_dll_path%': '<(DEPTH)/third_party/platformsdk_win7/files/redist/x86',
-        }],
-
         ['sysroot!=""', {
           'pkg-config': '<(chroot_cmd) <(DEPTH)/build/linux/pkg-config-wrapper "<(sysroot)" "<(target_arch)" "<(system_libdir)"',
         }, {
@@ -1040,19 +1035,6 @@
           # which causes the linker to produce an invalid ELF.
           # http://crbug.com/574476
           'fastbuild%': 2,
-        }],
-        # Enable hang report capture. Capture can only be enabled for 32bit
-        # Windows.
-        ['OS=="win" and target_arch=="ia32" and branding=="Chrome"', {
-          # Enable hang reports from the watcher process.
-          'kasko_hang_reports%': 0,
-          # Enable failed rendez-vous reports.
-          'kasko_failed_rdv_reports%': 0,
-        }, {
-          # Enable hang reports from the watcher process.
-          'kasko_hang_reports%': 0,
-          # Enable failed rendez-vous reports.
-          'kasko_failed_rdv_reports%': 0,
         }],
       ],
 
@@ -1208,8 +1190,6 @@
     'use_sanitizer_options%': '<(use_sanitizer_options)',
     'syzyasan%': '<(syzyasan)',
     'kasko%': '<(kasko)',
-    'kasko_hang_reports%': '<(kasko_hang_reports)',
-    'kasko_failed_rdv_reports%': '<(kasko_failed_rdv_reports)',
     'syzygy_optimize%': '<(syzygy_optimize)',
     'lsan%': '<(lsan)',
     'msan%': '<(msan)',
@@ -1253,7 +1233,6 @@
     'use_platform_icu_alternatives%': '<(use_platform_icu_alternatives)',
     'disable_brotli_filter%': '<(disable_brotli_filter)',
     'enable_task_manager%': '<(enable_task_manager)',
-    'sas_dll_path%': '<(sas_dll_path)',
     'wix_path%': '<(wix_path)',
     'use_libjpeg_turbo%': '<(use_libjpeg_turbo)',
     'use_system_libjpeg%': '<(use_system_libjpeg)',
@@ -1531,7 +1510,6 @@
     # Contains data about the attached devices for gyp_managed_install.
     'build_device_config_path': '<(PRODUCT_DIR)/build_devices.cfg',
 
-    'sas_dll_exists': '<!pymod_do_main(dir_exists "<(sas_dll_path)")',
     'wix_exists': '<!pymod_do_main(dir_exists "<(wix_path)")',
 
     'windows_sdk_path%': 'C:/Program Files (x86)/Windows Kits/10',
@@ -1641,6 +1619,13 @@
       }],
       ['OS=="win"', {
         'windows_driver_kit_path%': '$(WDK_DIR)',
+        'conditions': [
+          ['component!="shared_library"', {
+            'single_module_mode_handle_verifier%': 0,
+          }, {
+            'single_module_mode_handle_verifier%': 1,
+          }],
+        ],
       }],
       ['os_posix==1 and OS!="mac" and OS!="ios"', {
         'conditions': [
@@ -1726,7 +1711,7 @@
             'android_ndk_absolute_root%': '<!(cd <(DEPTH) && pwd -P)/third_party/android_tools/ndk/',
             'android_host_arch%': '<!(uname -m)',
             # Version of the NDK. Used to ensure full rebuilds on NDK rolls.
-            'android_ndk_version%': 'r11c',
+            'android_ndk_version%': 'r10e',
             # Android API-level of the SDK used for compilation.
             'android_sdk_version%': '23',
             'android_sdk_build_tools_version%': '23.0.1',
@@ -1899,6 +1884,14 @@
       }],
       ['OS=="linux"', {
         'clang%': 1,
+        'conditions': [
+          ['target_arch=="arm64"', {
+            # Temporarily disable nacl and tcmalloc on arm64 linux to get
+            # rid of compilation errors.
+            'disable_nacl%': 1,
+            'use_allocator%': 'none',
+          }],
+        ],
       }],  # OS=="mac"
       ['OS=="mac"', {
         'conditions': [
@@ -2006,18 +1999,11 @@
           }, {
             'win_console_app%': 0,
           }],
-          # Disable hang reporting for syzyasan builds.
+          # Enable the Kasko reporter for syzyasan builds.
           ['syzyasan==1', {
-            # Note: override.
-            'kasko_hang_reports': 0,
-            'kasko_failed_rdv_reports': 0,
-          }],
-          # Enable the Kasko reporter for syzyasan builds and hang reporting.
-          ['syzyasan==1 or kasko_hang_reports==1 or kasko_failed_rdv_reports==1', {
             'kasko': 1,
           }],
-          ['component=="shared_library" and "<(GENERATOR)"=="ninja"', {
-            # Only enabled by default for ninja because it's buggy in VS.
+          ['component=="shared_library"', {
             # Not enabled for component=static_library because some targets
             # are too large and the toolchain fails due to the size of the
             # .obj files.
@@ -2143,12 +2129,11 @@
           '-t', 'ios',
           '--no-output-all-resource-defines',
         ],
-        # Enable host builds when generating with ninja-ios.
-        'conditions': [
-          ['"<(GENERATOR)"=="ninja"', {
-            'host_os%': "mac",
-          }],
 
+        # Enable host builds.
+        'host_os%': "mac",
+
+        'conditions': [
           # Use the version of clang shipped with Xcode when building official
           # version of Chrome for iOS.
           #
@@ -2634,6 +2619,9 @@
 
         # TODO(thakis): https://crbug.com/604888
         '-Wno-undefined-var-template',
+
+        # TODO(thakis): https://crbug.com/617318
+        '-Wno-nonportable-include-path',
       ],
     },
     'includes': [ 'set_clang_warning_flags.gypi', ],
@@ -3042,10 +3030,6 @@
         # TODO: Enable on Windows too, http://crbug.com/404525
         'variables': { 'clang_warning_flags': ['-Wexit-time-destructors']},
       }],
-      ['"<!(python <(DEPTH)/tools/clang/scripts/update.py --print-revision)"!="270823-1"', {
-        # TODO(thakis): https://crbug.com/617318
-        'variables': { 'clang_warning_flags': ['-Wno-nonportable-include-path']},
-      }],
       ['chromium_code==0', {
         'variables': {
           'clang_warning_flags': [
@@ -3199,7 +3183,6 @@
               'odbccp32.lib',
               'delayimp.lib',
               'credui.lib',
-              'netapi32.lib',
             ],
             'AdditionalOptions': [
               # Suggested by Microsoft Devrel to avoid
@@ -3771,6 +3754,14 @@
                 'variables': {
                   'release_optimize%': 's',
                 },
+              }, {
+                'ldflags': [
+                  # TODO(pcc): Fix linker bug which requires us to link pthread
+                  # unconditionally here (crbug.com/623236).
+                  '-Wl,--no-as-needed',
+                  '-lpthread',
+                  '-Wl,--as-needed',
+                ],
               }],
               ['profiling==1', {
                 'cflags': [
@@ -4108,6 +4099,14 @@
                        '-fstack-protector',  # stack protector is always enabled on arm64.
                     ],
                   }],
+                  ['clang==1 and arm_arch!="" and OS!="android"', {
+                    'cflags': [
+                      '-target aarch64-linux-gnu',
+                     ],
+                     'ldflags': [
+                       '-target aarch64-linux-gnu',
+                     ],
+                 }],
                 ],
               }],
             ],
@@ -4294,6 +4293,10 @@
               }]]
           }],
           ['clang==1', {
+            'cflags': [
+              # See http://crbug.com/110262
+              '-fcolor-diagnostics',
+            ],
             'cflags_cc': [
               # gnu++11 instead of c++11 is needed because some code uses
               # typeof() (a GNU extension).
@@ -4338,12 +4341,6 @@
               # Align the stack on 16-byte boundaries, http://crbug.com/418554.
               '-mstack-alignment=16',
               '-mstackrealign',
-            ],
-          }],
-          ['clang==1 and "<(GENERATOR)"=="ninja"', {
-            'cflags': [
-              # See http://crbug.com/110262
-              '-fcolor-diagnostics',
             ],
           }],
           # Common options for AddressSanitizer, LeakSanitizer,
@@ -5086,6 +5083,12 @@
             ['chromium_mac_pch', {'GCC_PRECOMPILE_PREFIX_HEADER': 'YES'},
                                  {'GCC_PRECOMPILE_PREFIX_HEADER': 'NO'}
             ],
+            ['clang==1', {
+              'OTHER_CFLAGS': [
+                # See http://crbug.com/110262
+                '-fcolor-diagnostics',
+              ],
+            }],
             # Note that the prebuilt Clang binaries should not be used for iOS
             # development except for ASan builds.
             ['clang_xcode==0', {
@@ -5105,22 +5108,6 @@
             ['clang==1 and clang_xcode==0 and clang_add_plugin!=""', {
               'OTHER_CFLAGS': [
                 '-Xclang', '-add-plugin', '-Xclang', '<(clang_add_plugin)',
-              ],
-            }],
-            ['clang==1 and "<(GENERATOR)"=="ninja"', {
-              'OTHER_CFLAGS': [
-                # See http://crbug.com/110262
-                '-fcolor-diagnostics',
-              ],
-            }],
-            ['OS=="ios" and target_subarch!="arm32" and \
-              "<(GENERATOR)"=="xcode"', {
-              'OTHER_CFLAGS': [
-                # TODO(ios): when building Chrome for iOS on 64-bit platform
-                # with Xcode, the -Wshorted-64-to-32 warning is automatically
-                # enabled. This cause failures when compiling protobuf code,
-                # so disable the warning. http://crbug.com/359107
-                '-Wno-shorten-64-to-32',
               ],
             }],
           ],
@@ -5428,17 +5415,6 @@
               ],
               'ARCHS': [
                 'x86_64',
-              ],
-              'WARNING_CFLAGS': [
-                # TODO(thakis): Remove this once the deployment target on OS X
-                # is 10.7 too, http://crbug.com/547071
-                # In general, it is NOT OK to add -Wno-deprecated-declarations
-                # anywhere, you should instead fix your code instead.  But host
-                # compiles on iOS are really mac compiles, so this will be fixed
-                # when the mac deployment target is increased.  (Some of the
-                # fixes depend on OS X 10.7 so they can't be done before mac
-                # upgrades).
-                '-Wno-deprecated-declarations',
               ],
             },
           }],
@@ -5819,10 +5795,6 @@
                   # pattern.
                   '-Wno-missing-field-initializers',
 
-                  # Many files use intrinsics without including this header.
-                  # TODO(hans): Fix those files, or move this to sub-GYPs.
-                  '/FIIntrin.h',
-
                   # TODO(hans): Make this list shorter eventually, http://crbug.com/504657
                   '-Wno-microsoft-enum-value',  # http://crbug.com/505296
                   '-Wno-unknown-pragmas',  # http://crbug.com/505314
@@ -6065,10 +6037,7 @@
         ['CXX.host', '<(host_cxx)'],
       ],
     }],
-    # TODO(yyanagisawa): supports GENERATOR==make
-    #  make generator doesn't support CC_wrapper without CC
-    #  in make_global_settings yet.
-    ['use_goma==1 and ("<(GENERATOR)"=="ninja" or clang==1)', {
+    ['use_goma==1', {
       'make_global_settings': [
        ['CC_wrapper', '<(gomadir)/gomacc'],
        ['CXX_wrapper', '<(gomadir)/gomacc'],
@@ -6347,14 +6316,7 @@
         'TARGETED_DEVICE_FAMILY': '1,2',
         'conditions': [
           ['ios_sdk_path==""', {
-            'conditions': [
-              # TODO(justincohen): Ninja only supports simulator for now.
-              ['"<(GENERATOR)"=="xcode"', {
-                'SDKROOT': 'iphoneos<(ios_sdk)',  # -isysroot
-              }, {
-                'SDKROOT': 'iphonesimulator<(ios_sdk)',  # -isysroot
-              }],
-            ],
+            'SDKROOT': 'iphoneos<(ios_sdk)',  # -isysroot
           }, {
             'SDKROOT': '<(ios_sdk_path)',  # -isysroot
           }],

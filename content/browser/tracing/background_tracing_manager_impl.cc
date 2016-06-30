@@ -8,9 +8,12 @@
 
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/tracing/background_tracing_rule.h"
 #include "content/public/browser/browser_thread.h"
@@ -47,10 +50,9 @@ void RecordBackgroundTracingMetric(BackgroundTracingMetrics metric) {
 }
 
 // Tracing enabled callback for BENCHMARK_MEMORY_LIGHT category preset.
-// TODO(ssid): Remove this when background tracing supports trace config strings
-// and memory-infra supports peak detection crbug.com/609935.
 void BenchmarkMemoryLight_TracingEnabledCallback() {
-  base::trace_event::MemoryDumpManager::GetInstance()->RequestGlobalDump(
+  auto dump_manager = base::trace_event::MemoryDumpManager::GetInstance();
+  dump_manager->RequestGlobalDump(
       base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND);
 }
@@ -139,7 +141,7 @@ bool BackgroundTracingManagerImpl::SetActiveScenario(
       return false;
     }
   } else {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&BackgroundTracingManagerImpl::ValidateStartupScenario,
                    base::Unretained(this)));
@@ -312,6 +314,8 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
     return;
   }
 
+  last_triggered_rule_.reset(new base::DictionaryValue);
+  triggered_rule->IntoDict(last_triggered_rule_.get());
   int trace_delay = triggered_rule->GetTraceDelay();
 
   if (config_->tracing_mode() == BackgroundTracingConfigImpl::REACTIVE) {
@@ -409,8 +413,13 @@ void BackgroundTracingManagerImpl::StartTracing(
                            BENCHMARK_MEMORY_LIGHT) {
     // On memory light mode, the periodic memory dumps are disabled and a single
     // memory dump is requested after tracing is enabled in all the processes.
-    trace_config.ResetMemoryDumpConfig(
-        base::trace_event::TraceConfig::MemoryDumpConfig());
+    // TODO(ssid): Remove this when background tracing supports trace config
+    // strings and memory-infra supports peak detection crbug.com/609935.
+    base::trace_event::TraceConfig::MemoryDumpConfig memory_config;
+    memory_config.allowed_dump_modes =
+        std::set<base::trace_event::MemoryDumpLevelOfDetail>(
+            {base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND});
+    trace_config.ResetMemoryDumpConfig(memory_config);
     tracing_enabled_callback =
         base::Bind(&BenchmarkMemoryLight_TracingEnabledCallback);
   }
@@ -470,13 +479,15 @@ void BackgroundTracingManagerImpl::OnFinalizeComplete() {
 }
 
 void BackgroundTracingManagerImpl::AddCustomMetadata(
-    TracingControllerImpl::TraceDataSink* trace_data_sink) const {
+    TracingControllerImpl::TraceDataSink* trace_data_sink) {
   base::DictionaryValue metadata_dict;
 
   std::unique_ptr<base::DictionaryValue> config_dict(
       new base::DictionaryValue());
   config_->IntoDict(config_dict.get());
   metadata_dict.Set("config", std::move(config_dict));
+  if (last_triggered_rule_)
+    metadata_dict.Set("last_triggered_rule", std::move(last_triggered_rule_));
 
   trace_data_sink->AddMetadata(metadata_dict);
 }

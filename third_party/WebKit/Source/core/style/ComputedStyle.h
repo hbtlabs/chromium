@@ -28,9 +28,9 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/style/BorderValue.h"
+#include "core/style/ComputedStyleConstants.h"
 #include "core/style/CounterDirectives.h"
 #include "core/style/DataRef.h"
-#include "core/style/ComputedStyleConstants.h"
 #include "core/style/LineClampValue.h"
 #include "core/style/NinePieceImage.h"
 #include "core/style/SVGComputedStyle.h"
@@ -71,9 +71,9 @@
 #include "platform/transforms/TransformOperations.h"
 #include "wtf/Forward.h"
 #include "wtf/LeakAnnotations.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 template<typename T, typename U> inline bool compareEqual(const T& t, const U& u) { return t == static_cast<T>(u); }
 
@@ -153,7 +153,7 @@ protected:
     DataRef<StyleInheritedData> inherited;
 
     // list of associated pseudo styles
-    OwnPtr<PseudoStyleCache> m_cachedPseudoStyles;
+    std::unique_ptr<PseudoStyleCache> m_cachedPseudoStyles;
 
     DataRef<SVGComputedStyle> m_svgStyle;
 
@@ -457,6 +457,17 @@ public:
     // used (including, but not limited to, 'filter').
     bool hasFilterInducingProperty() const { return hasFilter() || (RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && hasBoxReflect()); }
 
+    // Returns |true| if opacity should be considered to have non-initial value for the purpose
+    // of creating stacking contexts.
+    bool hasNonInitialOpacity() const { return hasOpacity() || hasWillChangeOpacityHint() || hasCurrentOpacityAnimation(); }
+
+    // Returns whether this style contains any grouping property as defined by [css-transforms].
+    // The main purpose of this is to adjust the used value of transform-style property.
+    // Note: We currently don't include every grouping property on the spec to maintain
+    //       backward compatibility.
+    // [css-transforms] https://drafts.csswg.org/css-transforms/#grouping-property-values
+    bool hasGroupingProperty() const { return !isOverflowVisible() || hasFilterInducingProperty() || hasNonInitialOpacity(); }
+
     Order rtlOrdering() const { return static_cast<Order>(inherited_flags.m_rtlOrdering); }
     void setRTLOrdering(Order o) { inherited_flags.m_rtlOrdering = o; }
 
@@ -467,6 +478,9 @@ public:
     void setHasPseudoStyle(PseudoId);
     bool hasUniquePseudoStyle() const;
     bool hasPseudoElementStyle() const;
+
+    bool canContainAbsolutePositionObjects() const { return position() != StaticPosition; }
+    bool canContainFixedPositionObjects() const { return hasTransformRelatedProperty() || containsPaint();}
 
     // attribute getter methods
 
@@ -749,6 +763,8 @@ public:
     EBreak breakBefore() const { return static_cast<EBreak>(noninherited_flags.breakBefore); }
     EBreak breakInside() const { return static_cast<EBreak>(noninherited_flags.breakInside); }
 
+    TextSizeAdjust getTextSizeAdjust() const { return rareInheritedData->m_textSizeAdjust; }
+
     // CSS3 Getter Methods
 
     int outlineOffset() const
@@ -908,7 +924,7 @@ public:
     bool transformDataEquivalent(const ComputedStyle& otherStyle) const { return rareNonInheritedData->m_transform == otherStyle.rareNonInheritedData->m_transform; }
 
     StylePath* motionPath() const { return rareNonInheritedData->m_transform->m_motion.m_path.get(); }
-    bool hasMotionPath() const { return rareNonInheritedData->m_transform->m_motion.m_path; }
+    bool hasMotionPath() const { return motionPath(); }
     const Length& motionOffset() const { return rareNonInheritedData->m_transform->m_motion.m_offset; }
     const StyleMotionRotation& motionRotation() const { return rareNonInheritedData->m_transform->m_motion.m_rotation; }
 
@@ -959,7 +975,8 @@ public:
     CSSTransitionData& accessTransitions();
 
     ETransformStyle3D transformStyle3D() const { return static_cast<ETransformStyle3D>(rareNonInheritedData->m_transformStyle3D); }
-    bool preserves3D() const { return rareNonInheritedData->m_transformStyle3D == TransformStyle3DPreserve3D; }
+    ETransformStyle3D usedTransformStyle3D() const { return hasGroupingProperty() ? TransformStyle3DFlat : transformStyle3D(); }
+    bool preserves3D() const { return usedTransformStyle3D() != TransformStyle3DFlat; }
 
     EBackfaceVisibility backfaceVisibility() const { return static_cast<EBackfaceVisibility>(rareNonInheritedData->m_backfaceVisibility); }
     float perspective() const { return rareNonInheritedData->m_perspective; }
@@ -1027,6 +1044,7 @@ public:
     bool willChangeContents() const { return rareNonInheritedData->m_willChange->m_contents; }
     bool willChangeScrollPosition() const { return rareNonInheritedData->m_willChange->m_scrollPosition; }
     bool hasWillChangeCompositingHint() const;
+    bool hasWillChangeOpacityHint() const { return willChangeProperties().contains(CSSPropertyOpacity); }
     bool hasWillChangeTransformHint() const;
     bool subtreeWillChangeContents() const { return rareInheritedData->m_subtreeWillChangeContents; }
 
@@ -1301,6 +1319,8 @@ public:
     void setBreakAfter(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakAfter = b; }
     void setBreakBefore(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakAfterAndBefore); noninherited_flags.breakBefore = b;  }
     void setBreakInside(EBreak b) { ASSERT(b <= BreakValueLastAllowedForBreakInside); noninherited_flags.breakInside = b;  }
+
+    void setTextSizeAdjust(TextSizeAdjust sizeAdjust) { SET_VAR(rareInheritedData, m_textSizeAdjust, sizeAdjust); }
 
     // CSS3 Setters
     void setOutlineOffset(int v) { SET_VAR(m_background, m_outline.m_offset, v); }
@@ -1831,6 +1851,8 @@ public:
     static GridPosition initialGridRowEnd() { return GridPosition(); }
 
     static TabSize initialTabSize() { return TabSize(8); }
+
+    static TextSizeAdjust initialTextSizeAdjust() { return TextSizeAdjust::adjustAuto(); }
 
     static WrapFlow initialWrapFlow() { return WrapFlowAuto; }
     static WrapThrough initialWrapThrough() { return WrapThroughWrap; }

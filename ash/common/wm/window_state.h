@@ -95,8 +95,12 @@ class ASH_EXPORT WindowState {
   bool IsMinimized() const;
   bool IsMaximized() const;
   bool IsFullscreen() const;
-  bool IsMaximizedOrFullscreen() const;
   bool IsSnapped() const;
+  bool IsPinned() const;
+
+  // True if the window's state type is WINDOW_STATE_TYPE_MAXIMIZED,
+  // WINDOW_STATE_TYPE_FULLSCREEN or WINDOW_STATE_TYPE_PINNED.
+  bool IsMaximizedOrFullscreenOrPinned() const;
 
   // True if the window's state type is WINDOW_STATE_TYPE_NORMAL or
   // WINDOW_STATE_TYPE_DEFAULT.
@@ -109,6 +113,10 @@ class ASH_EXPORT WindowState {
 
   // Returns true if the window's location can be controlled by the user.
   bool IsUserPositionable() const;
+
+  // Returns true is the window should be excluded from the most recently used
+  // windows list.
+  bool ShouldBeExcludedFromMru() const;
 
   // Checks if the window can change its state accordingly.
   bool CanMaximize() const;
@@ -126,6 +134,7 @@ class ASH_EXPORT WindowState {
   void Maximize();
   void Minimize();
   void Unminimize();
+  void SetExcludedFromMru(bool excluded_from_mru);
 
   void Activate();
   void Deactivate();
@@ -278,6 +287,17 @@ class ASH_EXPORT WindowState {
     in_immersive_fullscreen_ = enable;
   }
 
+  // True if the window should not adjust the window's bounds when
+  // virtual keyboard bounds changes.
+  // TODO(oshima): This is hack. Replace this with proper
+  // implementation based on EnsureCaretInRect.
+  bool ignore_keyboard_bounds_change() const {
+    return ignore_keyboard_bounds_change_;
+  }
+  void set_ignore_keyboard_bounds_change(bool ignore_keyboard_bounds_change) {
+    ignore_keyboard_bounds_change_ = ignore_keyboard_bounds_change;
+  }
+
   // Creates and takes ownership of a pointer to DragDetails when resizing is
   // active. This should be done before a resizer gets created.
   void CreateDragDetails(const gfx::Point& point_in_parent,
@@ -360,6 +380,7 @@ class ASH_EXPORT WindowState {
 
   bool unminimize_to_restore_bounds_;
   bool in_immersive_fullscreen_;
+  bool ignore_keyboard_bounds_change_ = false;
   bool hide_shelf_when_fullscreen_;
   bool minimum_visibility_;
   bool can_be_dragged_;

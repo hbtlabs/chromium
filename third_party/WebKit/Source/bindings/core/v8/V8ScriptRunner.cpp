@@ -270,7 +270,7 @@ typedef Function<v8::MaybeLocal<v8::Script>(v8::Isolate*, v8::Local<v8::String>,
 template<typename... A>
 std::unique_ptr<CompileFn> bind(const A&... args)
 {
-    return WTF::bind<v8::Isolate*, v8::Local<v8::String>, v8::ScriptOrigin>(args...);
+    return WTF::bind(args...);
 }
 
 // Select a compile function from any of the above, mainly depending on
@@ -296,7 +296,7 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Ca
     switch (cacheOptions) {
     case V8CacheOptionsParse:
         // Use parser-cache; in-memory only.
-        return bind(compileAndConsumeOrProduce, cacheHandler, cacheTag(CacheTagParser, cacheHandler), v8::ScriptCompiler::kConsumeParserCache, v8::ScriptCompiler::kProduceParserCache, CachedMetadataHandler::CacheLocally);
+        return bind(compileAndConsumeOrProduce, wrapPersistent(cacheHandler), cacheTag(CacheTagParser, cacheHandler), v8::ScriptCompiler::kConsumeParserCache, v8::ScriptCompiler::kProduceParserCache, CachedMetadataHandler::CacheLocally);
         break;
 
     case V8CacheOptionsDefault:
@@ -307,12 +307,12 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Ca
         unsigned codeCacheTag = cacheTag(CacheTagCode, cacheHandler);
         CachedMetadata* codeCache = cacheHandler->cachedMetadata(codeCacheTag);
         if (codeCache)
-            return bind(compileAndConsumeCache, cacheHandler, codeCacheTag, v8::ScriptCompiler::kConsumeCodeCache);
+            return bind(compileAndConsumeCache, wrapPersistent(cacheHandler), codeCacheTag, v8::ScriptCompiler::kConsumeCodeCache);
         if (cacheOptions != V8CacheOptionsAlways && !isResourceHotForCaching(cacheHandler, hotHours)) {
             V8ScriptRunner::setCacheTimeStamp(cacheHandler);
             return bind(compileWithoutOptions, V8CompileHistogram::Cacheable);
         }
-        return bind(compileAndProduceCache, cacheHandler, codeCacheTag, v8::ScriptCompiler::kProduceCodeCache, CachedMetadataHandler::SendToPlatform);
+        return bind(compileAndProduceCache, wrapPersistent(cacheHandler), codeCacheTag, v8::ScriptCompiler::kProduceCodeCache, CachedMetadataHandler::SendToPlatform);
         break;
     }
 
@@ -338,7 +338,7 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Sc
     ASSERT(!resource->errorOccurred());
     ASSERT(streamer->isFinished());
     ASSERT(!streamer->streamingSuppressed());
-    return WTF::bind<v8::Isolate*, v8::Local<v8::String>, v8::ScriptOrigin>(postStreamCompile, cacheOptions, resource->cacheHandler(), streamer);
+    return WTF::bind(postStreamCompile, cacheOptions, wrapPersistent(resource->cacheHandler()), wrapPersistent(streamer));
 }
 } // namespace
 
@@ -466,15 +466,19 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::callAsConstructor(v8::Isolate* isolate
     CHECK(constructor->IsFunction());
     v8::Local<v8::Function> function = constructor.As<v8::Function>();
 
-    bool shouldTraceFunctionCall = !depth;
-    if (shouldTraceFunctionCall)
+    if (!depth)
         TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data", InspectorFunctionCallEvent::data(context, function));
-    v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kRunMicrotasks);
-    ThreadDebugger::willExecuteScript(isolate, function->ScriptId());
-    v8::MaybeLocal<v8::Value> result = constructor->CallAsConstructor(isolate->GetCurrentContext(), argc, argv);
-    crashIfIsolateIsDead(isolate);
-    ThreadDebugger::didExecuteScript(isolate);
-    if (shouldTraceFunctionCall)
+    v8::MaybeLocal<v8::Value> result;
+    {
+        // Create an extra block so FunctionCall trace event end phase is recorded after
+        // v8::MicrotasksScope destructor, as the latter is running microtasks.
+        v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kRunMicrotasks);
+        ThreadDebugger::willExecuteScript(isolate, function->ScriptId());
+        result = constructor->CallAsConstructor(isolate->GetCurrentContext(), argc, argv);
+        crashIfIsolateIsDead(isolate);
+        ThreadDebugger::didExecuteScript(isolate);
+    }
+    if (!depth)
         TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
     return result;
 }

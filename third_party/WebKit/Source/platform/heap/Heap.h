@@ -42,6 +42,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/Atomics.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -205,7 +206,8 @@ public:
         // TODO(keishi): some tests create CrossThreadPersistent on non attached threads.
         if (!ThreadState::current())
             return true;
-        DCHECK(&ThreadState::current()->heap() == &pageFromObject(object)->arena()->getThreadState()->heap());
+        if (&ThreadState::current()->heap() != &pageFromObject(object)->arena()->getThreadState()->heap())
+            return true;
         return ObjectAliveTrait<T>::isHeapObjectAlive(object);
     }
     template<typename T>
@@ -334,13 +336,10 @@ public:
 
     static inline size_t allocationSizeFromSize(size_t size)
     {
-        // Check the size before computing the actual allocation size.  The
-        // allocation size calculation can overflow for large sizes and the check
-        // therefore has to happen before any calculation on the size.
-        RELEASE_ASSERT(size < maxHeapObjectSize);
-
         // Add space for header.
         size_t allocationSize = size + sizeof(HeapObjectHeader);
+        // The allocation size calculation can overflow for large sizes.
+        RELEASE_ASSERT(allocationSize > size);
         // Align size with allocation granularity.
         allocationSize = (allocationSize + allocationMask) & ~allocationMask;
         return allocationSize;
@@ -402,15 +401,15 @@ private:
     RecursiveMutex m_threadAttachMutex;
     ThreadStateSet m_threads;
     ThreadHeapStats m_stats;
-    OwnPtr<RegionTree> m_regionTree;
-    OwnPtr<HeapDoesNotContainCache> m_heapDoesNotContainCache;
-    OwnPtr<SafePointBarrier> m_safePointBarrier;
-    OwnPtr<FreePagePool> m_freePagePool;
-    OwnPtr<OrphanedPagePool> m_orphanedPagePool;
-    OwnPtr<CallbackStack> m_markingStack;
-    OwnPtr<CallbackStack> m_postMarkingCallbackStack;
-    OwnPtr<CallbackStack> m_globalWeakCallbackStack;
-    OwnPtr<CallbackStack> m_ephemeronStack;
+    std::unique_ptr<RegionTree> m_regionTree;
+    std::unique_ptr<HeapDoesNotContainCache> m_heapDoesNotContainCache;
+    std::unique_ptr<SafePointBarrier> m_safePointBarrier;
+    std::unique_ptr<FreePagePool> m_freePagePool;
+    std::unique_ptr<OrphanedPagePool> m_orphanedPagePool;
+    std::unique_ptr<CallbackStack> m_markingStack;
+    std::unique_ptr<CallbackStack> m_postMarkingCallbackStack;
+    std::unique_ptr<CallbackStack> m_globalWeakCallbackStack;
+    std::unique_ptr<CallbackStack> m_ephemeronStack;
     BlinkGC::GCReason m_lastGCReason;
 
     static ThreadHeap* s_mainThreadHeap;

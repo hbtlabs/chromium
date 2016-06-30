@@ -14,6 +14,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -40,24 +41,47 @@ protected:
     Persistent<Document> document;
 };
 
-TEST_F(ContentSecurityPolicyTest, ParseUpgradeInsecureRequestsEnabled)
+TEST_F(ContentSecurityPolicyTest, ParseInsecureRequestPolicy)
 {
-    csp->didReceiveHeader("upgrade-insecure-requests", ContentSecurityPolicyHeaderTypeEnforce, ContentSecurityPolicyHeaderSourceHTTP);
-    EXPECT_EQ(SecurityContext::InsecureRequestsUpgrade, csp->getInsecureRequestsPolicy());
+    struct TestCase {
+        const char* header;
+        WebInsecureRequestPolicy expectedPolicy;
+    } cases[] = {
+        { "default-src 'none'", kLeaveInsecureRequestsAlone },
+        { "upgrade-insecure-requests", kUpgradeInsecureRequests },
+        { "block-all-mixed-content", kBlockAllMixedContent },
+        { "upgrade-insecure-requests; block-all-mixed-content", kUpgradeInsecureRequests | kBlockAllMixedContent },
+        { "upgrade-insecure-requests, block-all-mixed-content", kUpgradeInsecureRequests | kBlockAllMixedContent }
+    };
 
-    csp->bindToExecutionContext(document.get());
-    EXPECT_EQ(SecurityContext::InsecureRequestsUpgrade, document->getInsecureRequestsPolicy());
-    EXPECT_TRUE(document->insecureNavigationsToUpgrade()->contains(secureOrigin->host().impl()->hash()));
-}
+    // Enforced
+    for (const auto& test : cases) {
+        SCOPED_TRACE(testing::Message() << "[Enforce] Header: `" << test.header << "`");
+        csp = ContentSecurityPolicy::create();
+        csp->didReceiveHeader(test.header, ContentSecurityPolicyHeaderTypeEnforce, ContentSecurityPolicyHeaderSourceHTTP);
+        EXPECT_EQ(test.expectedPolicy, csp->getInsecureRequestPolicy());
 
-TEST_F(ContentSecurityPolicyTest, ParseMonitorInsecureRequestsEnabled)
-{
-    csp->didReceiveHeader("upgrade-insecure-requests", ContentSecurityPolicyHeaderTypeReport, ContentSecurityPolicyHeaderSourceHTTP);
-    EXPECT_EQ(SecurityContext::InsecureRequestsDoNotUpgrade, csp->getInsecureRequestsPolicy());
+        document = Document::create();
+        document->setSecurityOrigin(secureOrigin);
+        csp->bindToExecutionContext(document.get());
+        EXPECT_EQ(test.expectedPolicy, document->getInsecureRequestPolicy());
+        bool expectUpgrade = test.expectedPolicy & kUpgradeInsecureRequests;
+        EXPECT_EQ(expectUpgrade, document->insecureNavigationsToUpgrade()->contains(secureOrigin->host().impl()->hash()));
+    }
 
-    csp->bindToExecutionContext(document.get());
-    EXPECT_EQ(SecurityContext::InsecureRequestsDoNotUpgrade, document->getInsecureRequestsPolicy());
-    EXPECT_FALSE(document->insecureNavigationsToUpgrade()->contains(secureOrigin->host().impl()->hash()));
+    // Report-Only
+    for (const auto& test : cases) {
+        SCOPED_TRACE(testing::Message() << "[Report-Only] Header: `" << test.header << "`");
+        csp = ContentSecurityPolicy::create();
+        csp->didReceiveHeader(test.header, ContentSecurityPolicyHeaderTypeReport, ContentSecurityPolicyHeaderSourceHTTP);
+        EXPECT_EQ(kLeaveInsecureRequestsAlone, csp->getInsecureRequestPolicy());
+
+        document = Document::create();
+        document->setSecurityOrigin(secureOrigin);
+        csp->bindToExecutionContext(document.get());
+        EXPECT_EQ(kLeaveInsecureRequestsAlone, document->getInsecureRequestPolicy());
+        EXPECT_FALSE(document->insecureNavigationsToUpgrade()->contains(secureOrigin->host().impl()->hash()));
+    }
 }
 
 TEST_F(ContentSecurityPolicyTest, ParseEnforceTreatAsPublicAddressDisabled)
@@ -140,7 +164,7 @@ TEST_F(ContentSecurityPolicyTest, MultipleReferrerPolicies)
     csp->didReceiveHeader("referrer unsafe-url;", ContentSecurityPolicyHeaderTypeEnforce, ContentSecurityPolicyHeaderSourceHTTP);
     csp->bindToExecutionContext(document.get());
     EXPECT_EQ(ReferrerPolicyAlways, document->getReferrerPolicy());
-    document->processReferrerPolicy("origin");
+    document->parseAndSetReferrerPolicy("origin");
     EXPECT_EQ(ReferrerPolicyOrigin, document->getReferrerPolicy());
 }
 
@@ -149,8 +173,8 @@ TEST_F(ContentSecurityPolicyTest, UnknownReferrerDirective)
     csp->didReceiveHeader("referrer unsafe-url; referrer blahblahblah", ContentSecurityPolicyHeaderTypeEnforce, ContentSecurityPolicyHeaderSourceHTTP);
     csp->bindToExecutionContext(document.get());
     EXPECT_EQ(ReferrerPolicyAlways, document->getReferrerPolicy());
-    document->processReferrerPolicy("origin");
-    document->processReferrerPolicy("blahblahblah");
+    document->parseAndSetReferrerPolicy("origin");
+    document->parseAndSetReferrerPolicy("blahblahblah");
     EXPECT_EQ(ReferrerPolicyOrigin, document->getReferrerPolicy());
 }
 

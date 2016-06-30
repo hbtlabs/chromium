@@ -127,6 +127,7 @@
         '../../google_apis/google_apis.gyp:google_apis',
         '../../net/net.gyp:net',
         '../../net/net.gyp:net_extras',
+        '../../services/shell/shell_public.gyp:shell_public',
         '../../skia/skia.gyp:skia',
         '../../sync/sync.gyp:sync',
         '../../third_party/brotli/brotli.gyp:brotli',
@@ -420,6 +421,8 @@
         'browser/passwords/ios_chrome_password_manager_client.mm',
         'browser/passwords/ios_chrome_password_manager_driver.h',
         'browser/passwords/ios_chrome_password_manager_driver.mm',
+        'browser/passwords/ios_chrome_password_manager_infobar_delegate.h',
+        'browser/passwords/ios_chrome_password_manager_infobar_delegate.mm',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.cc',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.h',
         'browser/passwords/ios_chrome_password_store_factory.cc',
@@ -540,8 +543,12 @@
         'browser/ssl/ios_chrome_security_state_model_client.mm',
         'browser/ssl/ios_ssl_blocking_page.h',
         'browser/ssl/ios_ssl_blocking_page.mm',
+        'browser/ssl/ios_ssl_error_handler.h',
+        'browser/ssl/ios_ssl_error_handler.mm',
         'browser/suggestions/image_fetcher_impl.h',
         'browser/suggestions/image_fetcher_impl.mm',
+        'browser/suggestions/ios_image_decoder_impl.h',
+        'browser/suggestions/ios_image_decoder_impl.mm',
         'browser/suggestions/suggestions_service_factory.h',
         'browser/suggestions/suggestions_service_factory.mm',
         'browser/sync/glue/sync_start_util.cc',
@@ -655,6 +662,7 @@
         'browser/ui/webui/history/history_ui.mm',
         'browser/ui/webui/history/metrics_handler.cc',
         'browser/ui/webui/history/metrics_handler.h',
+        'browser/ui/webui/mojo_web_ui_ios_controller.h',
         'browser/ui/webui/net_export/net_export_ui.cc',
         'browser/ui/webui/net_export/net_export_ui.h',
         'browser/ui/webui/sync_internals/sync_internals_message_handler.cc',
@@ -696,14 +704,6 @@
           ],
         }],
       ],
-      # TODO(crbug.com/569158): Suppresses warnings that are treated as errors
-      # when minimum iOS version support is increased to iOS 9 and up.
-      # This should be removed once all deprecation violations have been fixed.
-      'xcode_settings': {
-        'WARNING_CFLAGS': [
-          '-Wno-deprecated-declarations',
-        ],
-      },
     },
     {
       # GN version: //ios/chrome/browser:about_flags
@@ -750,6 +750,23 @@
         'google_test_oauth_url%': '',
         'google_test_sync_url%': '',
       },
+    },
+    {
+      # GN version: //ios/chrome/browser:chrome_coordinators
+      'target_name': 'ios_chrome_browser_chrome_coordinators',
+      'type': 'static_library',
+      'include_dirs': [
+        '../..',
+      ],
+      'dependencies': [
+        '../../base/base.gyp:base',
+      ],
+      'sources': [
+        'browser/chrome_coordinator.h',
+        'browser/chrome_coordinator.mm',
+        'browser/root_coordinator.h',
+        'browser/root_coordinator.mm',
+       ]
     },
     {
       # GN version: //ios/chrome/common

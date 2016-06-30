@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <utility>
 
-#include "base/move.h"
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
 #include "mojo/public/cpp/bindings/lib/bindings_internal.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
@@ -25,13 +25,7 @@ namespace mojo {
 //   - method PassStorage() passes the underlying WTF::Vector.
 template <typename T>
 class WTFArray {
-  MOVE_ONLY_TYPE_FOR_CPP_03(WTFArray);
-
  public:
-  using Data_ = internal::Array_Data<
-      typename internal::GetDataTypeAsArrayElement<T>::Data>;
-  using Element = T;
-
   // Constructs an empty array.
   WTFArray() : is_null_(false) {}
   // Constructs a null array.
@@ -175,6 +169,7 @@ class WTFArray {
   }
 
  private:
+  // TODO(dcheng): Use an explicit conversion operator.
   typedef WTF::Vector<T> WTFArray::*Testable;
 
  public:
@@ -200,6 +195,8 @@ class WTFArray {
 
   WTF::Vector<T> vec_;
   bool is_null_;
+
+  DISALLOW_COPY_AND_ASSIGN(WTFArray);
 };
 
 }  // namespace mojo

@@ -50,6 +50,8 @@
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
 #include "chrome/browser/background/background_mode_manager.h"
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
 #endif
 
 namespace {
@@ -195,6 +197,14 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
                                          const gcm::IncomingMessage& message) {
   in_flight_message_deliveries_.insert(app_id);
 
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  if (!in_flight_keep_alive_) {
+    in_flight_keep_alive_.reset(
+        new ScopedKeepAlive(KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
+                            KeepAliveRestartOption::DISABLED));
+  }
+#endif
+
   base::Closure message_handled_closure =
       message_callback_for_testing_.is_null() ? base::Bind(&base::DoNothing)
                                               : message_callback_for_testing_;
@@ -311,6 +321,11 @@ void PushMessagingServiceImpl::DidHandleMessage(
 
   if (push_messaging_service_observer_)
     push_messaging_service_observer_->OnMessageHandled();
+
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  if (in_flight_message_deliveries_.empty())
+    in_flight_keep_alive_.reset();
+#endif
 }
 
 void PushMessagingServiceImpl::SetMessageCallbackForTesting(
@@ -503,7 +518,7 @@ void PushMessagingServiceImpl::DidSubscribeWithEncryptionInfo(
     const std::string& subscription_id,
     const std::string& p256dh,
     const std::string& auth_secret) {
-  if (!p256dh.size()) {
+  if (p256dh.empty()) {
     SubscribeEndWithError(
         callback, content::PUSH_REGISTRATION_STATUS_PUBLIC_KEY_UNAVAILABLE);
     return;
@@ -563,7 +578,7 @@ void PushMessagingServiceImpl::DidGetEncryptionInfo(
     const std::string& p256dh,
     const std::string& auth_secret) const {
   // I/O errors might prevent the GCM Driver from retrieving a key-pair.
-  const bool success = !!p256dh.size();
+  const bool success = !p256dh.empty();
 
   callback.Run(success, std::vector<uint8_t>(p256dh.begin(), p256dh.end()),
                std::vector<uint8_t>(auth_secret.begin(), auth_secret.end()));

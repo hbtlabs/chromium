@@ -25,8 +25,6 @@
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/chrome_pages.h"
-#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
@@ -61,6 +59,11 @@
 #include "extensions/common/permissions/permissions_data.h"
 #endif
 
+#if BUILDFLAG(ENABLE_BACKGROUND)
+#include "chrome/browser/lifetime/keep_alive_types.h"
+#include "chrome/browser/lifetime/scoped_keep_alive.h"
+#endif
+
 using content::BrowserContext;
 using content::BrowserThread;
 using content::PlatformNotificationContext;
@@ -74,24 +77,6 @@ namespace {
 // permission without having an associated renderer process yet.
 const int kInvalidRenderProcessId = -1;
 
-// Persistent notifications fired through the delegate do not care about the
-// lifetime of the Service Worker responsible for executing the event.
-void OnClickEventDispatchComplete(
-    content::PersistentNotificationStatus status) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Notifications.PersistentWebNotificationClickResult", status,
-      content::PersistentNotificationStatus::
-          PERSISTENT_NOTIFICATION_STATUS_MAX);
-}
-
-void OnCloseEventDispatchComplete(
-    content::PersistentNotificationStatus status) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Notifications.PersistentWebNotificationCloseResult", status,
-      content::PersistentNotificationStatus::
-          PERSISTENT_NOTIFICATION_STATUS_MAX);
-}
-
 void OnCloseNonPersistentNotificationProfileLoaded(
     const std::string& notification_id,
     Profile* profile) {
@@ -101,12 +86,11 @@ void OnCloseNonPersistentNotificationProfileLoaded(
 
 // Callback to run once the profile has been loaded in order to perform a
 // given |operation| in a notification.
-void ProfileLoadedCallback(
-    PlatformNotificationServiceImpl::NotificationOperation operation,
-    const GURL& origin,
-    int64_t persistent_notification_id,
-    int action_index,
-    Profile* profile) {
+void ProfileLoadedCallback(NotificationCommon::Operation operation,
+                           const GURL& origin,
+                           int64_t persistent_notification_id,
+                           int action_index,
+                           Profile* profile) {
   if (!profile) {
     // TODO(miguelg): Add UMA for this condition.
     // Perhaps propagate this through PersistentNotificationStatus.
@@ -115,19 +99,18 @@ void ProfileLoadedCallback(
   }
 
   switch (operation) {
-    case PlatformNotificationServiceImpl::NOTIFICATION_CLICK:
+    case NotificationCommon::CLICK:
       PlatformNotificationServiceImpl::GetInstance()
           ->OnPersistentNotificationClick(profile, persistent_notification_id,
                                           origin, action_index);
       break;
-    case PlatformNotificationServiceImpl::NOTIFICATION_CLOSE:
+    case NotificationCommon::CLOSE:
       PlatformNotificationServiceImpl::GetInstance()
           ->OnPersistentNotificationClose(profile, persistent_notification_id,
                                           origin, true);
       break;
-    case PlatformNotificationServiceImpl::NOTIFICATION_SETTINGS:
-      PlatformNotificationServiceImpl::GetInstance()->OpenNotificationSettings(
-          profile);
+    case NotificationCommon::SETTINGS:
+      NotificationCommon::OpenNotificationSettings(profile);
       break;
   }
 }
@@ -153,12 +136,16 @@ PlatformNotificationServiceImpl::GetInstance() {
 }
 
 PlatformNotificationServiceImpl::PlatformNotificationServiceImpl()
-    : test_display_service_(nullptr) {}
+    : test_display_service_(nullptr) {
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  pending_click_dispatch_events_ = 0;
+#endif
+}
 
 PlatformNotificationServiceImpl::~PlatformNotificationServiceImpl() {}
 
 void PlatformNotificationServiceImpl::ProcessPersistentNotificationOperation(
-    NotificationOperation operation,
+    NotificationCommon::Operation operation,
     const std::string& profile_id,
     bool incognito,
     const GURL& origin,
@@ -199,10 +186,21 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
         "Notifications.Persistent.ClickedActionButton"));
   }
 
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  // Ensure the browser stays alive while the event is processed.
+  if (pending_click_dispatch_events_++ == 0) {
+    click_dispatch_keep_alive_.reset(
+        new ScopedKeepAlive(KeepAliveOrigin::PENDING_NOTIFICATION_CLICK_EVENT,
+                            KeepAliveRestartOption::DISABLED));
+  }
+#endif
+
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationClickEvent(
           browser_context, persistent_notification_id, origin, action_index,
-          base::Bind(&OnClickEventDispatchComplete));
+          base::Bind(
+              &PlatformNotificationServiceImpl::OnClickEventDispatchComplete,
+              base::Unretained(this)));
 }
 
 void PlatformNotificationServiceImpl::OnPersistentNotificationClose(
@@ -226,7 +224,9 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClose(
   content::NotificationEventDispatcher::GetInstance()
       ->DispatchNotificationCloseEvent(
           browser_context, persistent_notification_id, origin, by_user,
-          base::Bind(&OnCloseEventDispatchComplete));
+          base::Bind(
+              &PlatformNotificationServiceImpl::OnCloseEventDispatchComplete,
+              base::Unretained(this)));
 }
 
 blink::mojom::PermissionStatus
@@ -412,15 +412,14 @@ void PlatformNotificationServiceImpl::ClosePersistentNotification(
     // generated by the caller of this method.
     GetNotificationDisplayService(profile)->Close(
         base::Int64ToString(persistent_notification_id));
+  } else {
+    auto iter = persistent_notifications_.find(persistent_notification_id);
+    if (iter == persistent_notifications_.end())
+      return;
+    GetNotificationDisplayService(profile)->Close(iter->second);
   }
 
-  auto iter = persistent_notifications_.find(persistent_notification_id);
-  if (iter == persistent_notifications_.end())
-    return;
-
-  GetNotificationDisplayService(profile)->Close(iter->second);
-
-  persistent_notifications_.erase(iter);
+  persistent_notifications_.erase(persistent_notification_id);
 }
 
 bool PlatformNotificationServiceImpl::GetDisplayedPersistentNotifications(
@@ -435,6 +434,28 @@ bool PlatformNotificationServiceImpl::GetDisplayedPersistentNotifications(
   // TODO(peter): Filter for persistent notifications only.
   return GetNotificationDisplayService(profile)->GetDisplayed(
       displayed_notifications);
+}
+
+void PlatformNotificationServiceImpl::OnClickEventDispatchComplete(
+    content::PersistentNotificationStatus status) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Notifications.PersistentWebNotificationClickResult", status,
+      content::PersistentNotificationStatus::
+          PERSISTENT_NOTIFICATION_STATUS_MAX);
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  DCHECK_GT(pending_click_dispatch_events_, 0);
+  if (--pending_click_dispatch_events_ == 0) {
+    click_dispatch_keep_alive_.reset();
+  }
+#endif
+}
+
+void PlatformNotificationServiceImpl::OnCloseEventDispatchComplete(
+    content::PersistentNotificationStatus status) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "Notifications.PersistentWebNotificationCloseResult", status,
+      content::PersistentNotificationStatus::
+          PERSISTENT_NOTIFICATION_STATUS_MAX);
 }
 
 Notification PlatformNotificationServiceImpl::CreateNotificationFromData(
@@ -500,27 +521,6 @@ PlatformNotificationServiceImpl::GetNotificationDisplayService(
   if (test_display_service_ != nullptr)
     return test_display_service_;
   return NotificationDisplayServiceFactory::GetForProfile(profile);
-}
-
-void PlatformNotificationServiceImpl::OpenNotificationSettings(
-    BrowserContext* browser_context) {
-#if defined(OS_ANDROID)
-  NOTIMPLEMENTED();
-#else
-
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  DCHECK(profile);
-
-  if (switches::SettingsWindowEnabled()) {
-    chrome::ShowContentSettingsExceptionsInWindow(
-        profile, CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
-  } else {
-    chrome::ScopedTabbedBrowserDisplayer browser_displayer(profile);
-    chrome::ShowContentSettingsExceptions(browser_displayer.browser(),
-                                          CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
-  }
-
-#endif  // defined(OS_ANDROID)
 }
 
 base::string16 PlatformNotificationServiceImpl::DisplayNameForContextMessage(

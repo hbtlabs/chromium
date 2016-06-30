@@ -29,7 +29,7 @@ struct StructTraits<cc::mojom::TransferableResource, cc::TransferableResource> {
     return resource.size;
   }
 
-  static gpu::MailboxHolder mailbox_holder(
+  static const gpu::MailboxHolder& mailbox_holder(
       const cc::TransferableResource& resource) {
     return resource.mailbox_holder;
   }
@@ -43,32 +43,12 @@ struct StructTraits<cc::mojom::TransferableResource, cc::TransferableResource> {
     return resource.is_software;
   }
 
-  static int32_t gpu_memory_buffer_id(
-      const cc::TransferableResource& resource) {
-    return resource.gpu_memory_buffer_id.id;
-  }
-
   static bool is_overlay_candidate(const cc::TransferableResource& resource) {
     return resource.is_overlay_candidate;
   }
 
   static bool Read(cc::mojom::TransferableResourceDataView data,
-                   cc::TransferableResource* out) {
-    gfx::Size size;
-    gpu::MailboxHolder holder;
-    if (!data.ReadSize(&size) || !data.ReadMailboxHolder(&holder))
-      return false;
-    out->id = data.id();
-    out->format = static_cast<cc::ResourceFormat>(data.format());
-    out->filter = data.filter();
-    out->size = size;
-    out->mailbox_holder = holder;
-    out->read_lock_fences_enabled = data.read_lock_fences_enabled();
-    out->is_software = data.is_software();
-    out->gpu_memory_buffer_id.id = data.gpu_memory_buffer_id();
-    out->is_overlay_candidate = data.is_overlay_candidate();
-    return true;
-  }
+                   cc::TransferableResource* out);
 };
 
 }  // namespace mojo

@@ -2041,7 +2041,7 @@ _NAMED_TYPE_INFO = {
       'GL_RGBA4',
       'GL_RGB10_A2',
       'GL_RGBA16F',
-      'GL_RGB_YUV_420_CHROMIUM',
+      'GL_RGB_YCRCB_420_CHROMIUM',
       'GL_RGB_YCBCR_422_CHROMIUM',
       'GL_RGB_YCBCR_420V_CHROMIUM',
     ],
@@ -2137,7 +2137,7 @@ _NAMED_TYPE_INFO = {
     'type': 'GLenum',
     'valid': [
       'GL_RGB',
-      'GL_RGB_YUV_420_CHROMIUM',
+      'GL_RGB_YCRCB_420_CHROMIUM',
       'GL_RGB_YCBCR_422_CHROMIUM',
       'GL_RGB_YCBCR_420V_CHROMIUM',
       'GL_RGBA',
@@ -2599,8 +2599,9 @@ _FUNCTION_INFO = {
   },
   'CompileShader': {'decoder_func': 'DoCompileShader', 'unit_test': False},
   'CompressedTexImage2D': {
-    'type': 'Manual',
+    'type': 'Data',
     'data_transfer_methods': ['bucket', 'shm'],
+    'decoder_func': 'DoCompressedTexImage2D',
     'trace_level': 1,
   },
   'CompressedTexSubImage2D': {
@@ -2621,8 +2622,9 @@ _FUNCTION_INFO = {
     'trace_level': 1,
   },
   'CompressedTexImage3D': {
-    'type': 'Manual',
+    'type': 'Data',
     'data_transfer_methods': ['bucket', 'shm'],
+    'decoder_func': 'DoCompressedTexImage3D',
     'unsafe': True,
     'trace_level': 1,
   },
@@ -2868,6 +2870,7 @@ _FUNCTION_INFO = {
   'FenceSync': {
     'type': 'Create',
     'client_test': False,
+    'decoder_func': 'DoFenceSync',
     'unsafe': True,
     'trace_level': 1,
   },
@@ -4423,6 +4426,15 @@ _FUNCTION_INFO = {
     'extension': 'CHROMIUM_schedule_ca_layer',
     'chromium': True,
   },
+  'ScheduleCALayerInUseQueryCHROMIUM': {
+    'type': 'PUTn',
+    'count': 1,
+    'decoder_func': 'DoScheduleCALayerInUseQueryCHROMIUM',
+    'cmd_args': 'GLsizei count, const GLuint* textures',
+    'extension': 'CHROMIUM_schedule_ca_layer',
+    'chromium': True,
+    'unit_test': False,
+  },
   'CommitOverlayPlanesCHROMIUM': {
     'impl_func': False,
     'decoder_func': 'DoCommitOverlayPlanes',
@@ -4843,7 +4855,7 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     if func.IsUnsafe() and func.GetInfo('id_mapping'):
       code_no_gen = """  if (!group_->Get%(type)sServiceId(
         %(var)s, &%(service_var)s)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "%(func)s", "invalid %(var)s id");
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "%(func)s", "invalid %(var)s id");
     return error::kNoError;
   }
 """
@@ -4988,6 +5000,10 @@ static_assert(offsetof(%(cmd_name)s::Result, %(field_name)s) == %(offset)d,
     """Writes the argument unpack code for bucket service handlers."""
     for arg in func.GetCmdArgs():
       arg.WriteGetCode(f)
+    for arg in func.GetOriginalArgs():
+      if arg.IsConstant():
+        arg.WriteGetCode(f)
+    self.WriteGetDataSizeCode(func, f)
 
   def WriteServiceImplementation(self, func, f):
     """Writes the service implementation for a command."""
@@ -5822,15 +5838,6 @@ class HandWrittenHandler(CustomHandler):
 class ManualHandler(CustomHandler):
   """Handler for commands who's handlers must be written by hand."""
 
-  def InitFunction(self, func):
-    """Overrriden from TypeHandler."""
-    if (func.name == 'CompressedTexImage2DBucket' or
-        func.name == 'CompressedTexImage3DBucket'):
-      func.cmd_args = func.cmd_args[:-1]
-      func.AddCmdArg(Argument('bucket_id', 'GLuint'))
-    else:
-      CustomHandler.InitFunction(self, func)
-
   def WriteServiceImplementation(self, func, f):
     """Overrriden from TypeHandler."""
     pass
@@ -5879,10 +5886,12 @@ class DataHandler(TypeHandler):
 
   def InitFunction(self, func):
     """Overrriden from TypeHandler."""
-    if (func.name == 'CompressedTexSubImage2DBucket' or
-        func.name == 'CompressedTexSubImage3DBucket'):
-      func.cmd_args = func.cmd_args[:-1]
+    if (func.name.startswith('CompressedTex') and func.name.endswith('Bucket')):
+      # Remove imageSize argument, take the size from the bucket instead.
+      func.cmd_args = [arg for arg in func.cmd_args if arg.name != 'imageSize']
       func.AddCmdArg(Argument('bucket_id', 'GLuint'))
+    else:
+      TypeHandler.InitFunction(self, func)
 
   def WriteGetDataSizeCode(self, func, f):
     """Overrriden from TypeHandler."""
@@ -5892,16 +5901,18 @@ class DataHandler(TypeHandler):
       name = name[0:-9]
     if name == 'BufferData' or name == 'BufferSubData':
       f.write("  uint32_t data_size = size;\n")
-    elif (name == 'CompressedTexImage2D' or
-          name == 'CompressedTexSubImage2D' or
-          name == 'CompressedTexImage3D' or
-          name == 'CompressedTexSubImage3D'):
-      f.write("  uint32_t data_size = imageSize;\n")
-    elif (name == 'CompressedTexSubImage2DBucket' or
-          name == 'CompressedTexSubImage3DBucket'):
-      f.write("  Bucket* bucket = GetBucket(c.bucket_id);\n")
-      f.write("  uint32_t data_size = bucket->size();\n")
-      f.write("  GLsizei imageSize = data_size;\n")
+    elif (name.startswith('CompressedTex')):
+      if name.endswith('Bucket'):
+        f.write("""  Bucket* bucket = GetBucket(bucket_id);
+  if (!bucket)
+    return error::kInvalidArguments;
+  uint32_t data_size = bucket->size();
+  GLsizei imageSize = data_size;
+  const void* data = bucket->GetData(0, data_size);
+  DCHECK(data || !imageSize);
+""")
+      else:
+        f.write("  uint32_t data_size = imageSize;\n")
     elif name == 'TexImage2D' or name == 'TexSubImage2D':
       code = """  uint32_t data_size;
   if (!GLES2Util::ComputeImageDataSize(
@@ -5953,18 +5964,6 @@ class DataHandler(TypeHandler):
   def WriteImmediateServiceUnitTest(self, func, f, *extras):
     """Overrriden from TypeHandler."""
     pass
-
-  def WriteBucketServiceImplementation(self, func, f):
-    """Overrriden from TypeHandler."""
-    if ((not func.name == 'CompressedTexSubImage2DBucket') and
-        (not func.name == 'CompressedTexSubImage3DBucket')):
-      TypeHandler.WriteBucketServiceImplemenation(self, func, f)
-
-  def WritePassthroughBucketServiceImplementation(self, func, f):
-    """Overrriden from TypeHandler."""
-    if ((not func.name == 'CompressedTexSubImage2DBucket') and
-        (not func.name == 'CompressedTexSubImage3DBucket')):
-      TypeHandler.WritePassthroughBucketServiceImplementation(self, func, f)
 
 class BindHandler(TypeHandler):
   """Handler for glBind___ type functions."""
@@ -6186,7 +6185,7 @@ class GENnHandler(TypeHandler):
   def WriteImmediateHandlerImplementation(self, func, f):
     """Overrriden from TypeHandler."""
     param_name = func.GetLastOriginalArg().name
-    f.write("  if (!CheckUniqueIds(n, %s) || !%sHelper(n, %s)) {\n"
+    f.write("  if (!CheckUniqueAndNonNullIds(n, %s) || !%sHelper(n, %s)) {\n"
             "    return error::kInvalidArguments;\n"
             "  }\n" %
             (param_name, func.original_name, param_name))
@@ -6292,7 +6291,7 @@ TEST_P(%(test_name)s, %(name)sValidArgs) {
         'resource_name': func.GetInfo('resource_type'),
       }, *extras)
     duplicate_id_test = """
-TEST_P(%(test_name)s, %(name)sDuplicateIds) {
+TEST_P(%(test_name)s, %(name)sDuplicateOrNullIds) {
   EXPECT_CALL(*gl_, %(gl_func_name)s(_, _)).Times(0);
   cmds::%(name)s* cmd = GetImmediateAs<cmds::%(name)s>();
   GLuint temp[3] = {kNewClientId, kNewClientId + 1, kNewClientId};
@@ -6306,6 +6305,11 @@ TEST_P(%(test_name)s, %(name)sDuplicateIds) {
             ExecuteImmediateCmd(*cmd, sizeof(temp)));
   EXPECT_TRUE(Get%(resource_name)s(kNewClientId) == NULL);
   EXPECT_TRUE(Get%(resource_name)s(kNewClientId + 1) == NULL);
+  GLuint null_id[2] = {kNewClientId, 0};
+  cmd->Init(2, null_id);
+  EXPECT_EQ(error::kInvalidArguments,
+            ExecuteImmediateCmd(*cmd, sizeof(temp)));
+  EXPECT_TRUE(Get%(resource_name)s(kNewClientId) == NULL);
 }
     """
     self.WriteValidUnitTest(func, f, duplicate_id_test, {

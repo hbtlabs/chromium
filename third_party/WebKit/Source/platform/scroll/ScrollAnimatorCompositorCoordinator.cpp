@@ -6,26 +6,29 @@
 
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/animation/CompositorAnimation.h"
 #include "platform/animation/CompositorAnimationHost.h"
 #include "platform/animation/CompositorAnimationPlayer.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
-#include "platform/graphics/CompositorFactory.h"
+#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 ScrollAnimatorCompositorCoordinator::ScrollAnimatorCompositorCoordinator()
-    : m_compositorAnimationAttachedToLayerId(0)
+    : m_compositorAnimationAttachedToElementId()
     , m_runState(RunState::Idle)
     , m_compositorAnimationId(0)
     , m_compositorAnimationGroupId(0)
     , m_implOnlyAnimationTakeover(false)
 {
     ThreadState::current()->registerPreFinalizer(this);
-    m_compositorPlayer = adoptPtr(CompositorFactory::current().createAnimationPlayer());
+    m_compositorPlayer = CompositorAnimationPlayer::create();
     ASSERT(m_compositorPlayer);
     m_compositorPlayer->setAnimationDelegate(this);
 }
@@ -76,10 +79,10 @@ bool ScrollAnimatorCompositorCoordinator::hasAnimationThatRequiresService() cons
 }
 
 bool ScrollAnimatorCompositorCoordinator::addAnimation(
-    PassOwnPtr<CompositorAnimation> animation)
+    std::unique_ptr<CompositorAnimation> animation)
 {
-    if (m_compositorPlayer->isLayerAttached()) {
-        m_compositorPlayer->addAnimation(animation.leakPtr());
+    if (m_compositorPlayer->isElementAttached()) {
+        m_compositorPlayer->addAnimation(animation.release());
         return true;
     }
     return false;
@@ -87,13 +90,13 @@ bool ScrollAnimatorCompositorCoordinator::addAnimation(
 
 void ScrollAnimatorCompositorCoordinator::removeAnimation()
 {
-    if (m_compositorPlayer->isLayerAttached())
+    if (m_compositorPlayer->isElementAttached())
         m_compositorPlayer->removeAnimation(m_compositorAnimationId);
 }
 
 void ScrollAnimatorCompositorCoordinator::abortAnimation()
 {
-    if (m_compositorPlayer->isLayerAttached())
+    if (m_compositorPlayer->isElementAttached())
         m_compositorPlayer->abortAnimation(m_compositorAnimationId);
 }
 
@@ -191,27 +194,28 @@ bool ScrollAnimatorCompositorCoordinator::reattachCompositorPlayerIfNeeded(
     CompositorAnimationTimeline* timeline)
 {
     bool reattached = false;
-    int compositorAnimationAttachedToLayerId = 0;
-    if (getScrollableArea()->layerForScrolling())
-        compositorAnimationAttachedToLayerId = getScrollableArea()->layerForScrolling()->platformLayer()->id();
+    CompositorElementId compositorAnimationAttachedToElementId;
+    if (getScrollableArea()->layerForScrolling()) {
+        compositorAnimationAttachedToElementId = getScrollableArea()->layerForScrolling()->platformLayer()->elementId();
+        DCHECK(compositorAnimationAttachedToElementId);
+    }
 
-    if (compositorAnimationAttachedToLayerId != m_compositorAnimationAttachedToLayerId) {
+    if (compositorAnimationAttachedToElementId != m_compositorAnimationAttachedToElementId) {
         if (m_compositorPlayer && timeline) {
             // Detach from old layer (if any).
-            if (m_compositorAnimationAttachedToLayerId) {
-                if (m_compositorPlayer->isLayerAttached())
-                    m_compositorPlayer->detachLayer();
+            if (m_compositorAnimationAttachedToElementId) {
+                if (m_compositorPlayer->isElementAttached())
+                    m_compositorPlayer->detachElement();
                 timeline->playerDestroyed(*this);
             }
             // Attach to new layer (if any).
-            if (compositorAnimationAttachedToLayerId) {
-                ASSERT(!m_compositorPlayer->isLayerAttached());
+            if (compositorAnimationAttachedToElementId) {
+                DCHECK(!m_compositorPlayer->isElementAttached());
                 timeline->playerAttached(*this);
-                m_compositorPlayer->attachLayer(
-                    getScrollableArea()->layerForScrolling()->platformLayer());
+                m_compositorPlayer->attachElement(compositorAnimationAttachedToElementId);
                 reattached = true;
             }
-            m_compositorAnimationAttachedToLayerId = compositorAnimationAttachedToLayerId;
+            m_compositorAnimationAttachedToElementId = compositorAnimationAttachedToElementId;
         }
     }
 
@@ -259,16 +263,16 @@ bool ScrollAnimatorCompositorCoordinator::hasImplOnlyAnimationUpdate() const
     return !m_implOnlyAnimationAdjustment.isZero() || m_implOnlyAnimationTakeover;
 }
 
-void ScrollAnimatorCompositorCoordinator::updateCompositorAnimations()
+void ScrollAnimatorCompositorCoordinator::updateImplOnlyCompositorAnimations()
 {
-    if (!getScrollableArea()->scrollAnimatorEnabled() || !hasImplOnlyAnimationUpdate())
+    if (!hasImplOnlyAnimationUpdate())
         return;
 
     GraphicsLayer* layer = getScrollableArea()->layerForScrolling();
     CompositorAnimationTimeline* timeline = getScrollableArea()->compositorAnimationTimeline();
     if (layer && timeline && !timeline->compositorAnimationHost().isNull()) {
         CompositorAnimationHost host = timeline->compositorAnimationHost();
-        int elementId = layer->platformLayer()->id();
+        cc::ElementId elementId =layer->platformLayer()->elementId();
         if (!m_implOnlyAnimationAdjustment.isZero()) {
             host.adjustImplOnlyScrollOffsetAnimation(
                 elementId,
@@ -279,6 +283,14 @@ void ScrollAnimatorCompositorCoordinator::updateCompositorAnimations()
     }
     m_implOnlyAnimationAdjustment = IntSize();
     m_implOnlyAnimationTakeover = false;
+}
+
+void ScrollAnimatorCompositorCoordinator::updateCompositorAnimations()
+{
+    if (!getScrollableArea()->scrollAnimatorEnabled())
+        return;
+
+    updateImplOnlyCompositorAnimations();
 }
 
 void ScrollAnimatorCompositorCoordinator::adjustAnimationAndSetScrollPosition(
@@ -305,6 +317,11 @@ void ScrollAnimatorCompositorCoordinator::takeOverImplOnlyScrollOffsetAnimation(
         return;
 
     m_implOnlyAnimationTakeover = true;
+
+    // Update compositor animations right away to avoid skipping a frame.
+    // This imposes the constraint that this function should only be called
+    // from or after DocumentLifecycle::LifecycleState::CompositingClean state.
+    updateImplOnlyCompositorAnimations();
 
     getScrollableArea()->registerForAnimation();
 }

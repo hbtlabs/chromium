@@ -43,7 +43,6 @@
 #include "web/WebViewImpl.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
 
 namespace blink {
 class Frame;
@@ -114,9 +113,12 @@ public:
     bool isAcceleratedCompositingActive() const override;
     void willCloseLayerTreeView() override;
     void didChangeWindowResizerRect() override;
+    void didAcquirePointerLock() override;
+    void didNotAcquirePointerLock() override;
+    void didLosePointerLock() override;
 
     // WebFrameWidget implementation.
-    void setVisibilityState(WebPageVisibilityState, bool) override;
+    void setVisibilityState(WebPageVisibilityState) override;
     bool isTransparent() const override;
     void setIsTransparent(bool) override;
     void setBaseBackgroundColor(WebColor) override;
@@ -208,7 +210,7 @@ private:
     // This is owned by the LayerTreeHostImpl, and should only be used on the
     // compositor thread. The LayerTreeHostImpl is indirectly owned by this
     // class so this pointer should be valid until this class is destructed.
-    CrossThreadPersistent<CompositorMutatorImpl> m_mutator;
+    Member<CompositorMutatorImpl> m_mutator;
 
     WebLayerTreeView* m_layerTreeView;
     WebLayer* m_rootLayer;

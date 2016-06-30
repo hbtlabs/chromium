@@ -11,12 +11,14 @@
 #include <string>
 #include <vector>
 
+#include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "media/base/media_tracks.h"
 #include "media/base/pipeline_impl.h"
@@ -259,6 +261,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Called when the data source is downloading or paused.
   void NotifyDownloading(bool is_downloading);
 
+  // Called by SurfaceManager when a surface is created.
+  void OnSurfaceCreated(int surface_id);
+
+  // Called by GpuVideoDecoder on Android to request a surface to render to (if
+  // necessary).
   void OnSurfaceRequested(const SurfaceCreatedCB& surface_created_cb);
 
   // Creates a Renderer via the |renderer_factory_|.
@@ -317,6 +324,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   // Methods internal to UpdatePlayState().
   PlayState UpdatePlayState_ComputePlayState(bool is_remote,
+                                             bool is_suspended,
                                              bool is_backgrounded);
   void SetDelegateState(DelegateState new_state);
   void SetMemoryReportingState(bool is_memory_reporting_enabled);
@@ -328,6 +336,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // accessed on the media thread.
   void ReportMemoryUsage();
   void FinishMemoryUsageReport(int64_t demuxer_memory_usage);
+
+  // Called during OnHidden() when we want a suspended player to enter the
+  // paused state after some idle timeout.
+  void ScheduleIdlePauseTimer();
 
   blink::WebLocalFrame* frame_;
 
@@ -417,11 +429,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Whether the current decoder requires a restart on fullscreen transitions.
   bool decoder_requires_restart_for_fullscreen_;
 
-  // What to return from supportsOverlayFullscreenVideo(). This is usually
-  // equal to |decoder_requires_restart_for_fullscreen_| except that it doesn't
-  // change while we're in fullscreen. See supportsOverlayFullscreenVideo().
-  bool supports_overlay_fullscreen_video_;
-
   blink::WebMediaPlayerClient* client_;
   blink::WebMediaPlayerEncryptedMediaClient* encrypted_client_;
 
@@ -490,6 +497,17 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // This will be null everywhere but Android.
   SurfaceManager* surface_manager_;
 
+  // For canceling ongoing surface creation requests when exiting fullscreen.
+  base::CancelableCallback<void(int)> surface_created_cb_;
+
+  // The current fullscreen surface id. Populated while in fullscreen once the
+  // surface is created.
+  int fullscreen_surface_id_;
+
+  // If a surface is requested before it's finished being created, the request
+  // is saved and satisfied once the surface is available.
+  SurfaceCreatedCB pending_surface_request_cb_;
+
   // Suppresses calls to OnPipelineError() after destruction / shutdown has been
   // started; prevents us from spuriously logging errors that are transient or
   // unimportant.
@@ -501,6 +519,10 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // state will be set to YES or NO respectively if a frame is available.
   enum class CanSuspendState { UNKNOWN, YES, NO };
   CanSuspendState can_suspend_state_;
+
+  // Called some-time after OnHidden() if the media was suspended in a playing
+  // state as part of the call to OnHidden().
+  base::OneShotTimer background_pause_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

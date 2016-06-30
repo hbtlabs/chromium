@@ -807,6 +807,7 @@ WebInspector.ElementsTreeElement.prototype = {
             this._childrenListNode.style.display = "none";
         // Append editor.
         this.listItemElement.appendChild(this._htmlEditElement);
+        this.listItemElement.classList.add("editing-as-html");
         this.treeOutline.element.addEventListener("mousedown", consume, false);
 
         this.updateSelection();
@@ -831,6 +832,7 @@ WebInspector.ElementsTreeElement.prototype = {
             delete this._editing;
             this.treeOutline.setMultilineEditing(null);
 
+            this.listItemElement.classList.remove("editing-as-html");
             // Remove editor.
             this.listItemElement.removeChild(this._htmlEditElement);
             delete this._htmlEditElement;
@@ -1285,17 +1287,26 @@ WebInspector.ElementsTreeElement.prototype = {
 
         if (node && (name === "src" || name === "href")) {
             attrValueElement.appendChild(linkifyValue.call(this, value));
-        } else if (node && node.nodeName().toLowerCase() === "img" && name === "srcset") {
+        } else if (node && (node.nodeName().toLowerCase() === "img" || node.nodeName().toLowerCase() === "source") && name === "srcset") {
             var sources = value.split(",");
             for (var i = 0; i < sources.length; ++i) {
                 if (i > 0)
                     attrValueElement.createTextChild(", ");
                 var source = sources[i].trim();
                 var indexOfSpace = source.indexOf(" ");
-                var url = source.substring(0, indexOfSpace);
-                var tail = source.substring(indexOfSpace);
+                var url, tail;
+
+                if (indexOfSpace === -1) {
+                    url = source;
+                } else {
+                    url = source.substring(0, indexOfSpace);
+                    tail = source.substring(indexOfSpace);
+                }
+
                 attrValueElement.appendChild(linkifyValue.call(this, url));
-                attrValueElement.createTextChild(tail);
+
+                if (tail)
+                    attrValueElement.createTextChild(tail);
             }
         } else {
             setValueWithEntities.call(this, attrValueElement, value);

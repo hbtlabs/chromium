@@ -40,6 +40,7 @@ class MemoryDumpSessionState;
 class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
  public:
   static const char* const kTraceCategory;
+  static const char* const kLogPrefix;
 
   // This value is returned as the tracing id of the child processes by
   // GetTracingProcessId() when tracing is not enabled.
@@ -115,10 +116,14 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   void OnTraceLogEnabled() override;
   void OnTraceLogDisabled() override;
 
+  // Returns true if the dump mode is allowed for current tracing session.
+  bool IsDumpModeAllowed(MemoryDumpLevelOfDetail dump_mode);
+
   // Returns the MemoryDumpSessionState object, which is shared by all the
   // ProcessMemoryDump and MemoryAllocatorDump instances through all the tracing
   // session lifetime.
-  const scoped_refptr<MemoryDumpSessionState>& session_state() const {
+  const scoped_refptr<MemoryDumpSessionState>& session_state_for_testing()
+      const {
     return session_state_;
   }
 

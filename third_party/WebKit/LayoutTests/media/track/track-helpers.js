@@ -39,3 +39,35 @@ function check_cues_from_track(src, func) {
         });
     }, "Check cues from " + src);
 }
+
+function assert_cue_fragment(cue, children) {
+    var fragment = createFragment(children);
+    assert_true(fragment.isEqualNode(cue.getCueAsHTML()));
+}
+
+function assert_cue_fragment_as_textcontent(cue, children) {
+    var fragment = createFragment(children);
+    assert_equals(cue.getCueAsHTML().textContent, fragment.textContent);
+}
+
+function createFragment(children) {
+    var fragment = document.createDocumentFragment();
+    cloneChildrenToFragment(fragment, children);
+    return fragment;
+}
+
+function cloneChildrenToFragment(root, children) {
+    for (var child of children) {
+        var childElement;
+        if (child.type == "text") {
+            childElement = document.createTextNode(child.value);
+        } else {
+            childElement = document.createElement(child.type);
+            var styles = child.style || {};
+            for (var attr of Object.getOwnPropertyNames(styles))
+                childElement[attr] = styles[attr];
+            cloneChildrenToFragment(childElement, child.value);
+        }
+        root.appendChild(childElement);
+    }
+}

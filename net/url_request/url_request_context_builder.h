@@ -51,6 +51,7 @@ class HostMappingRules;
 class HttpAuthHandlerFactory;
 class HttpServerProperties;
 class ProxyConfigService;
+class SocketPerformanceWatcherFactory;
 class URLRequestContext;
 class URLRequestInterceptor;
 
@@ -91,7 +92,6 @@ class NET_EXPORT URLRequestContextBuilder {
     uint16_t testing_fixed_https_port;
     bool enable_spdy31;
     bool enable_http2;
-    bool enable_alternative_service_with_different_host;
     bool enable_quic;
     std::string quic_user_agent_id;
     int quic_max_server_configs_stored_in_properties;
@@ -292,6 +292,11 @@ class NET_EXPORT URLRequestContextBuilder {
     backoff_enabled_ = backoff_enabled;
   }
 
+  void set_socket_performance_watcher_factory(
+      SocketPerformanceWatcherFactory* socket_performance_watcher_factory) {
+    socket_performance_watcher_factory_ = socket_performance_watcher_factory;
+  }
+
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
 
   void SetInterceptors(std::vector<std::unique_ptr<URLRequestInterceptor>>
@@ -369,6 +374,10 @@ class NET_EXPORT URLRequestContextBuilder {
   std::unique_ptr<HttpServerProperties> http_server_properties_;
   std::map<std::string, std::unique_ptr<URLRequestJobFactory::ProtocolHandler>>
       protocol_handlers_;
+  // SocketPerformanceWatcherFactory to be used by this context builder.
+  // Not owned by the context builder. Once it is set to a non-null value, it
+  // is guaranteed to be non-null during the lifetime of |this|.
+  SocketPerformanceWatcherFactory* socket_performance_watcher_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextBuilder);
 };

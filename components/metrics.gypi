@@ -60,6 +60,8 @@
         'metrics/metrics_pref_names.h',
         'metrics/metrics_provider.cc',
         'metrics/metrics_provider.h',
+        'metrics/metrics_reporting_default_state.cc',
+        'metrics/metrics_reporting_default_state.h',
         'metrics/metrics_reporting_scheduler.cc',
         'metrics/metrics_reporting_scheduler.h',
         'metrics/metrics_service.cc',
@@ -278,16 +280,6 @@
             'metrics/leak_detector/leak_detector_value_type.h',
             'metrics/leak_detector/ranked_set.cc',
             'metrics/leak_detector/ranked_set.h',
-          ],
-        },
-        {
-          'target_name': 'metrics_mojo_bindings',
-          'type': 'static_library',
-          'includes': [
-            '../mojo/mojom_bindings_generator.gypi',
-          ],
-          'sources': [
-            'metrics/leak_detector/leak_detector_remote.mojom',
           ],
         },
       ],

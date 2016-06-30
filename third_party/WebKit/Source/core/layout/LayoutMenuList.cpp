@@ -39,9 +39,9 @@ LayoutMenuList::LayoutMenuList(Element* element)
     : LayoutFlexibleBox(element)
     , m_buttonText(nullptr)
     , m_innerBlock(nullptr)
-    , m_optionsChanged(true)
     , m_isEmpty(false)
     , m_hasUpdatedActiveOption(false)
+    , m_innerBlockHeight(LayoutUnit())
     , m_optionsWidth(0)
     , m_lastActiveIndex(-1)
 {
@@ -145,63 +145,38 @@ void LayoutMenuList::styleDidChange(StyleDifference diff, const ComputedStyle* o
 
     m_buttonText->setStyle(mutableStyle());
     adjustInnerStyle();
-
-    bool fontChanged = !oldStyle || oldStyle->font() != style()->font();
-    if (fontChanged)
-        updateOptionsWidth();
+    updateInnerBlockHeight();
 }
 
-void LayoutMenuList::updateOptionsWidth()
+void LayoutMenuList::updateInnerBlockHeight()
+{
+    m_innerBlockHeight = style()->getFontMetrics().height() + m_innerBlock->borderAndPaddingHeight();
+}
+
+void LayoutMenuList::updateOptionsWidth() const
 {
     float maxOptionWidth = 0;
-    const HeapVector<Member<HTMLElement>>& listItems = selectElement()->listItems();
-    int size = listItems.size();
 
-    for (int i = 0; i < size; ++i) {
-        HTMLElement* element = listItems[i];
-        if (!isHTMLOptionElement(*element))
+    for (const auto& element : selectElement()->listItems()) {
+        if (!isHTMLOptionElement(element))
             continue;
 
         String text = toHTMLOptionElement(element)->textIndentedToRespectGroupLabel();
-        applyTextTransform(style(), text, ' ');
-        if (LayoutTheme::theme().popupOptionSupportsTextIndent()) {
-            // Add in the option's text indent.  We can't calculate percentage values for now.
-            float optionWidth = 0;
-            if (const ComputedStyle* optionStyle = element->computedStyle())
-                optionWidth += minimumValueForLength(optionStyle->textIndent(), LayoutUnit());
-            if (!text.isEmpty())
-                optionWidth += computeTextWidth(text);
-            maxOptionWidth = std::max(maxOptionWidth, optionWidth);
-        } else if (!text.isEmpty()) {
-            maxOptionWidth = std::max(maxOptionWidth, computeTextWidth(text));
-        }
+        const ComputedStyle* itemStyle = element->computedStyle() ? element->computedStyle() : style();
+        applyTextTransform(itemStyle, text, ' ');
+        TextRun textRun = constructTextRun(itemStyle->font(), text, *itemStyle);
+
+        maxOptionWidth = std::max(maxOptionWidth, computeTextWidth(textRun, *itemStyle));
     }
-
-    int width = static_cast<int>(ceilf(maxOptionWidth));
-    if (m_optionsWidth == width)
-        return;
-
-    m_optionsWidth = width;
-    if (parent())
-        setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::MenuWidthChanged);
+    m_optionsWidth = static_cast<int>(ceilf(maxOptionWidth));
 }
 
-float LayoutMenuList::computeTextWidth(const String& text) const
+float LayoutMenuList::computeTextWidth(const TextRun& textRun, const ComputedStyle& computedStyle) const
 {
-    return style()->font().width(constructTextRun(style()->font(), text, styleRef()));
+    return computedStyle.font().width(textRun);
 }
 
 void LayoutMenuList::updateFromElement()
-{
-    if (m_optionsChanged) {
-        updateOptionsWidth();
-        m_optionsChanged = false;
-    }
-
-    updateText();
-}
-
-void LayoutMenuList::updateText()
 {
     setTextFromOption(selectElement()->optionIndexToBeShown());
 }
@@ -297,9 +272,21 @@ LayoutRect LayoutMenuList::controlClipRect(const LayoutPoint& additionalOffset) 
 
 void LayoutMenuList::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
-    maxLogicalWidth = std::max(m_optionsWidth, LayoutTheme::theme().minimumMenuListSize(styleRef())) + m_innerBlock->paddingLeft() + m_innerBlock->paddingRight();
+    updateOptionsWidth();
+
+    maxLogicalWidth = std::max(m_optionsWidth, LayoutTheme::theme().minimumMenuListSize(styleRef()))
+        + m_innerBlock->paddingLeft() + m_innerBlock->paddingRight();
     if (!style()->width().hasPercent())
         minLogicalWidth = maxLogicalWidth;
+    else
+        minLogicalWidth = LayoutUnit();
+}
+
+void LayoutMenuList::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop,
+    LogicalExtentComputedValues& computedValues) const
+{
+    logicalHeight = m_innerBlockHeight + borderAndPaddingHeight();
+    LayoutBox::computeLogicalHeight(logicalHeight, logicalTop, computedValues);
 }
 
 void LayoutMenuList::didSetSelectedIndex(int optionIndex)

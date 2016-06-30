@@ -8,6 +8,7 @@
       "blink_heap_unittests",
       "blink_platform_unittests",
       "cacheinvalidation_unittests",
+      "capture_unittests",
       "cast_unittests",
       "cc_unittests",
       "chrome_app_unittests",
@@ -57,6 +58,7 @@
       "base_unittests",
       "blink_heap_unittests",
       "blink_platform_unittests",
+      "capture_unittests",
       "url_unittests",
       "printing_unittests",
       "media_unittests",
@@ -133,6 +135,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -245,12 +253,6 @@
           "shards": 2
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
@@ -429,6 +431,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -541,12 +549,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
@@ -730,6 +732,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -818,12 +826,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "gpu_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
@@ -1600,6 +1602,9 @@
         "test": "base_unittests"
       },
       {
+        "test": "capture_unittests"
+      },
+      {
         "test": "media_unittests"
       },
       {
@@ -1781,6 +1786,9 @@
         "test": "cacheinvalidation_unittests"
       },
       {
+        "test": "capture_unittests"
+      },
+      {
         "test": "cast_unittests"
       },
       {
@@ -1921,6 +1929,9 @@
       },
       {
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "test": "capture_unittests"
       },
       {
         "test": "cast_unittests"

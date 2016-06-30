@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -93,6 +94,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/accessibility_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
 #endif
@@ -1539,7 +1541,16 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardown) {
 
 // This test makes sure the browser process does not crash if browser is shut
 // down while an interstitial page is being shown in guest.
-IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardownOnBrowserShutdown) {
+// Flaky on Windows. http://crbug.com/619508.
+#if defined(OS_WIN)
+#define MAYBE_InterstitialTeardownOnBrowserShutdown \
+    DISABLED_InterstitialTeardownOnBrowserShutdown
+#else
+#define MAYBE_InterstitialTeardownOnBrowserShutdown \
+    InterstitialTeardownOnBrowserShutdown
+#endif
+IN_PROC_BROWSER_TEST_P(WebViewTest,
+                       MAYBE_InterstitialTeardownOnBrowserShutdown) {
   InterstitialTeardownTestHelper();
 
   // Now close the app while interstitial page being shown in guest.
@@ -1723,13 +1734,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, IndexedDBIsolation) {
 // This test ensures that closing app window on 'loadcommit' does not crash.
 // The test launches an app with guest and closes the window on loadcommit. It
 // then launches the app window again. The process is repeated 3 times.
-// http://crbug.com/291278
-#if defined(OS_WIN) || defined(MAC_OS_X_VERSION_10_9)
-#define MAYBE_CloseOnLoadcommit DISABLED_CloseOnLoadcommit
-#else
-#define MAYBE_CloseOnLoadcommit CloseOnLoadcommit
-#endif
-IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_CloseOnLoadcommit) {
+IN_PROC_BROWSER_TEST_P(WebViewTest, CloseOnLoadcommit) {
   LoadAndLaunchPlatformApp("web_view/close_on_loadcommit",
                            "done-close-on-loadcommit");
 }
@@ -2058,7 +2063,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DISABLED_ChromeVoxInjection) {
 
   chromeos::SpeechMonitor monitor;
   chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(monitor.SkipChromeVoxEnabledMessage());
 
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -3109,8 +3114,9 @@ IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
   // Now keep pressing the Tab key until focus lands on a button.
   while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
              ui::AX_ROLE_BUTTON) {
-    content::SimulateKeyPress(
-        web_contents, ui::VKEY_TAB, false, false, false, false);
+    content::SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('\t'),
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
     content::WaitForAccessibilityFocusChange();
   }
 
@@ -3234,7 +3240,7 @@ class ScrollWaiter {
 
   void WaitForScrollChange(gfx::Vector2dF target_offset) {
     while (target_offset != host_view_->GetLastScrollOffset())
-      base::MessageLoop::current()->RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
   }
 
  private:
@@ -3399,16 +3405,13 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
   // Perform a scroll gesture of the same magnitude, but in the opposite
   // direction and centered over the GuestView this time.
   guest_rect = guest_contents->GetContainerBounds();
-  embedder_rect = embedder_contents->GetContainerBounds();
-  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
-  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
   {
-    gfx::Point guest_scroll_location(guest_rect.x() + guest_rect.width() / 2,
-                                     guest_rect.y());
+    gfx::Point guest_scroll_location(guest_rect.width() / 2,
+                                     guest_rect.height() / 2);
 
     ScrollWaiter waiter(embedder_host_view);
 
-    content::SimulateGestureScrollSequence(embedder_contents,
+    content::SimulateGestureScrollSequence(guest_contents,
                                            guest_scroll_location,
                                            gfx::Vector2dF(0, gesture_distance));
 
@@ -3456,8 +3459,7 @@ IN_PROC_BROWSER_TEST_P(WebViewScrollGuestContentTest, ScrollGuestContent) {
   EXPECT_EQ(gfx::Vector2dF(), guest_host_view->GetLastScrollOffset());
   EXPECT_EQ(gfx::Vector2dF(), embedder_host_view->GetLastScrollOffset());
 
-  gfx::Point guest_scroll_location(guest_rect.x() + guest_rect.width() / 2,
-                                   guest_rect.y());
+  gfx::Point guest_scroll_location(guest_rect.width() / 2, 0);
 
   float gesture_distance = 15.f;
   {
@@ -3466,7 +3468,7 @@ IN_PROC_BROWSER_TEST_P(WebViewScrollGuestContentTest, ScrollGuestContent) {
     ScrollWaiter waiter(guest_host_view);
 
     content::SimulateGestureScrollSequence(
-        embedder_contents, guest_scroll_location,
+        guest_contents, guest_scroll_location,
         gfx::Vector2dF(0, -gesture_distance));
 
     waiter.WaitForScrollChange(expected_offset);
@@ -3480,7 +3482,7 @@ IN_PROC_BROWSER_TEST_P(WebViewScrollGuestContentTest, ScrollGuestContent) {
     ScrollWaiter waiter(guest_host_view);
 
     content::SimulateGestureFlingSequence(
-        embedder_contents, guest_scroll_location,
+        guest_contents, guest_scroll_location,
         gfx::Vector2dF(0, fling_velocity));
 
     waiter.WaitForScrollChange(gfx::Vector2dF());

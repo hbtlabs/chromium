@@ -41,7 +41,6 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   bool Initialize(const scoped_refptr<gl::GLSurface>& surface,
                   const scoped_refptr<gl::GLContext>& context,
                   bool offscreen,
-                  const gfx::Size& offscreen_size,
                   const DisallowedFeatures& disallowed_features,
                   const ContextCreationAttribHelper& attrib_helper) override;
 
@@ -134,6 +133,9 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Perform any idle work that needs to be made.
   void PerformIdleWork() override;
+
+  bool HasPollingWork() const override;
+  void PerformPollingWork() override;
 
   bool GetServiceTextureId(uint32_t client_texture_id,
                            uint32_t* service_texture_id) override;

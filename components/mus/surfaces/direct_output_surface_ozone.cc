@@ -7,11 +7,15 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "components/display_compositor/buffer_queue.h"
-#include "components/mus/gles2/mojo_gpu_memory_buffer_manager.h"
+#include "components/mus/common/gpu_service.h"
+#include "components/mus/common/mojo_gpu_memory_buffer_manager.h"
+#include "components/mus/gpu/mus_gpu_memory_buffer_manager.h"
 #include "components/mus/surfaces/surfaces_context_provider.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -23,22 +27,25 @@ namespace mus {
 DirectOutputSurfaceOzone::DirectOutputSurfaceOzone(
     scoped_refptr<SurfacesContextProvider> context_provider,
     gfx::AcceleratedWidget widget,
-    base::SingleThreadTaskRunner* task_runner,
+    cc::SyntheticBeginFrameSource* synthetic_begin_frame_source,
     uint32_t target,
     uint32_t internalformat)
     : cc::OutputSurface(context_provider, nullptr, nullptr),
       gl_helper_(context_provider->ContextGL(),
                  context_provider->ContextSupport()),
-      buffer_queue_(new BufferQueue(context_provider->ContextGL(),
-                                    target,
-                                    internalformat,
-                                    &gl_helper_,
-                                    &gpu_memory_buffer_manager_,
-                                    widget)),
-      synthetic_begin_frame_source_(new cc::SyntheticBeginFrameSource(
-          task_runner,
-          cc::BeginFrameArgs::DefaultInterval())),
+      synthetic_begin_frame_source_(synthetic_begin_frame_source),
       weak_ptr_factory_(this) {
+  if (!GpuService::UseChromeGpuCommandBuffer()) {
+    ozone_gpu_memory_buffer_manager_.reset(new OzoneGpuMemoryBufferManager());
+    buffer_queue_.reset(new BufferQueue(
+        context_provider->ContextGL(), target, internalformat, &gl_helper_,
+        ozone_gpu_memory_buffer_manager_.get(), widget));
+  } else {
+    buffer_queue_.reset(new BufferQueue(
+        context_provider->ContextGL(), target, internalformat, &gl_helper_,
+        MusGpuMemoryBufferManager::current(), widget));
+  }
+
   capabilities_.uses_default_gl_framebuffer = false;
   capabilities_.flipped_output_surface = true;
   // Set |max_frames_pending| to 2 for surfaceless, which aligns scheduling
@@ -71,19 +78,19 @@ unsigned DirectOutputSurfaceOzone::GetOverlayTextureId() const {
   return buffer_queue_->current_texture_id();
 }
 
-void DirectOutputSurfaceOzone::SwapBuffers(cc::CompositorFrame* frame) {
+void DirectOutputSurfaceOzone::SwapBuffers(cc::CompositorFrame frame) {
   DCHECK(buffer_queue_);
-  DCHECK(frame->gl_frame_data);
+  DCHECK(frame.gl_frame_data);
 
-  buffer_queue_->SwapBuffers(frame->gl_frame_data->sub_buffer_rect);
+  buffer_queue_->SwapBuffers(frame.gl_frame_data->sub_buffer_rect);
 
   // Code combining GpuBrowserCompositorOutputSurface + DirectOutputSurface
-  if (frame->gl_frame_data->sub_buffer_rect ==
-      gfx::Rect(frame->gl_frame_data->size)) {
+  if (frame.gl_frame_data->sub_buffer_rect ==
+      gfx::Rect(frame.gl_frame_data->size)) {
     context_provider_->ContextSupport()->Swap();
   } else {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame->gl_frame_data->sub_buffer_rect);
+        frame.gl_frame_data->sub_buffer_rect);
   }
 
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
@@ -99,8 +106,6 @@ void DirectOutputSurfaceOzone::SwapBuffers(cc::CompositorFrame* frame) {
 bool DirectOutputSurfaceOzone::BindToClient(cc::OutputSurfaceClient* client) {
   if (!cc::OutputSurface::BindToClient(client))
     return false;
-
-  client->SetBeginFrameSource(synthetic_begin_frame_source_.get());
 
   if (capabilities_.uses_default_gl_framebuffer) {
     capabilities_.flipped_output_surface =
@@ -140,6 +145,10 @@ void DirectOutputSurfaceOzone::BindFramebuffer() {
   buffer_queue_->BindFramebuffer();
 }
 
+uint32_t DirectOutputSurfaceOzone::GetFramebufferCopyTextureFormat() {
+  return buffer_queue_->internal_format();
+}
+
 // We call this on every frame but changing the size once we've allocated
 // backing NativePixmapOzone instances will cause a DCHECK because
 // Chrome never Reshape(s) after the first one from (0,0). NB: this implies
@@ -147,8 +156,9 @@ void DirectOutputSurfaceOzone::BindFramebuffer() {
 // must create the native window in the size that the hardware reports.
 void DirectOutputSurfaceOzone::Reshape(const gfx::Size& size,
                                        float scale_factor,
+                                       const gfx::ColorSpace& color_space,
                                        bool alpha) {
-  OutputSurface::Reshape(size, scale_factor, alpha);
+  OutputSurface::Reshape(size, scale_factor, color_space, alpha);
   DCHECK(buffer_queue_);
   buffer_queue_->Reshape(SurfaceSize(), scale_factor);
 }

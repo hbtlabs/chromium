@@ -20,6 +20,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_database_task_manager.h"
@@ -115,8 +116,8 @@ class ClearAllServiceWorkersHelper
         context->GetLiveVersions();
     for (const auto& version_itr : live_versions_copy) {
       ServiceWorkerVersion* version(version_itr.second);
-      if (version->running_status() == ServiceWorkerVersion::STARTING ||
-          version->running_status() == ServiceWorkerVersion::RUNNING) {
+      if (version->running_status() == EmbeddedWorkerStatus::STARTING ||
+          version->running_status() == EmbeddedWorkerStatus::RUNNING) {
         version->StopWorker(
             base::Bind(&ClearAllServiceWorkersHelper::OnResult, this));
       }
@@ -631,13 +632,13 @@ ServiceWorkerContextCore::TransferProviderHostOut(int process_id,
                                                   int provider_id) {
   ProviderMap* map = GetProviderMapForProcess(process_id);
   ServiceWorkerProviderHost* transferee = map->Lookup(provider_id);
-  ServiceWorkerProviderHost* replacement =
-      new ServiceWorkerProviderHost(process_id,
-                                    transferee->frame_id(),
-                                    provider_id,
-                                    transferee->provider_type(),
-                                    AsWeakPtr(),
-                                    transferee->dispatcher_host());
+  ServiceWorkerProviderHost* replacement = new ServiceWorkerProviderHost(
+      process_id, transferee->frame_id(), provider_id,
+      transferee->provider_type(),
+      transferee->is_parent_frame_secure()
+          ? ServiceWorkerProviderHost::FrameSecurityLevel::SECURE
+          : ServiceWorkerProviderHost::FrameSecurityLevel::INSECURE,
+      AsWeakPtr(), transferee->dispatcher_host());
   map->Replace(provider_id, replacement);
   transferee->PrepareForCrossSiteTransfer();
   return base::WrapUnique(transferee);

@@ -44,7 +44,6 @@
 #include "ios/web/public/web_thread.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert/cert_verify_proc.h"
 #include "net/cert/ct_known_logs.h"
 #include "net/cert/ct_log_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
@@ -348,8 +347,7 @@ void IOSChromeIOThread::Init() {
   globals_->network_quality_estimator.reset(new net::NetworkQualityEstimator(
       std::move(external_estimate_provider), network_quality_estimator_params));
 
-  globals_->cert_verifier.reset(
-      new net::MultiThreadedCertVerifier(net::CertVerifyProc::CreateDefault()));
+  globals_->cert_verifier = net::CertVerifier::CreateDefault();
 
   globals_->transport_security_state.reset(new net::TransportSecurityState());
 
@@ -361,7 +359,7 @@ void IOSChromeIOThread::Init() {
   // Add built-in logs
   ct_verifier->AddLogs(ct_logs);
 
-  params_.ct_policy_enforcer = new net::CTPolicyEnforcer;
+  globals_->ct_policy_enforcer.reset(new net::CTPolicyEnforcer());
 
   globals_->ssl_config_service = GetSSLConfigService();
 
@@ -532,6 +530,7 @@ net::URLRequestContext* IOSChromeIOThread::ConstructSystemRequestContext(
   context->set_http_auth_handler_factory(
       globals->http_auth_handler_factory.get());
   context->set_proxy_service(globals->system_proxy_service.get());
+  context->set_ct_policy_enforcer(globals->ct_policy_enforcer.get());
 
   net::URLRequestJobFactoryImpl* system_job_factory =
       new net::URLRequestJobFactoryImpl();
@@ -552,8 +551,7 @@ net::URLRequestContext* IOSChromeIOThread::ConstructSystemRequestContext(
       globals->network_quality_estimator.get());
   context->set_backoff_manager(globals->url_request_backoff_manager.get());
 
-  context->set_http_server_properties(
-      globals->http_server_properties->GetWeakPtr());
+  context->set_http_server_properties(globals->http_server_properties.get());
 
   net::HttpNetworkSession::Params system_params(params);
   net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(

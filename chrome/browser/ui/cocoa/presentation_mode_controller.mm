@@ -9,7 +9,6 @@
 #include "base/command_line.h"
 #import "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
-#include "chrome/browser/fullscreen.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #include "chrome/common/chrome_switches.h"
 #import "third_party/google_toolbox_for_mac/src/AppKit/GTMNSAnimation+Duration.h"
@@ -30,6 +29,9 @@ const NSTimeInterval kMouseExitCheckDelay = 0.1;
 // This show delay attempts to match the delay for the main menu.
 const NSTimeInterval kDropdownShowDelay = 0.3;
 const NSTimeInterval kDropdownHideDelay = 0.2;
+
+// The duration the toolbar is revealed for tab strip changes.
+const NSTimeInterval kDropdownForTabStripChangesDuration = 0.75;
 
 // The event kind value for a undocumented menubar show/hide Carbon event.
 const CGFloat kMenuBarRevealEventKind = 2004;
@@ -52,7 +54,7 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   // As such, we should ignore the kMenuBarRevealEventKind event if it gives
   // us a fraction of 0.0 or 1.0, and rely on kEventMenuBarShown and
   // kEventMenuBarHidden to set these values.
-  if ([self isMainWindow]) {
+  if ([self isMainWindow] && ![self isFullscreenTransitionInProgress]) {
     if (GetEventKind(event) == kMenuBarRevealEventKind) {
       CGFloat revealFraction = 0;
       GetEventParameter(event, FOUR_CHAR_CODE('rvlf'), typeCGFloat, NULL,
@@ -384,6 +386,16 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   currentAnimation_.reset();
 }
 
+- (void)revealToolbarForTabStripChanges {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableFullscreenToolbarReveal)) {
+    return;
+  }
+
+  revealToolbarForTabStripChanges_ = YES;
+  [self ensureOverlayShownWithAnimation:YES delay:NO];
+}
+
 - (void)setSystemFullscreenModeTo:(base::mac::FullScreenMode)mode {
   if (mode == systemFullscreenMode_)
     return;
@@ -424,6 +436,10 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   return [self shouldShowMenubarInImmersiveFullscreen]
              ? -[self floatingBarVerticalOffset]
              : 0;
+}
+
+- (BOOL)isFullscreenTransitionInProgress {
+  return [browserController_ isFullscreenTransitionInProgress];
 }
 
 - (BOOL)isMainWindow {
@@ -482,6 +498,20 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   // Don't automatically set up a new tracking area. When explicitly stopped,
   // either another animation is going to start immediately or the state will be
   // changed immediately.
+  if (revealToolbarForTabStripChanges_) {
+    if (toolbarFraction_ > 0.0) {
+      // Set the timer to hide the toolbar.
+      [hideTimer_ invalidate];
+      hideTimer_.reset([[NSTimer
+          scheduledTimerWithTimeInterval:kDropdownForTabStripChangesDuration
+                                  target:self
+                                selector:@selector(hideTimerFire:)
+                                userInfo:nil
+                                 repeats:NO] retain]);
+    } else {
+      revealToolbarForTabStripChanges_ = NO;
+    }
+  }
 }
 
 - (void)animationDidEnd:(NSAnimation*)animation {

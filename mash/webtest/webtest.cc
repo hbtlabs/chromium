@@ -99,6 +99,7 @@ class UI : public views::WidgetDelegateView,
   }
 
   // navigation::mojom::ViewClient:
+  void OpenURL(navigation::mojom::OpenURLParamsPtr params) override {}
   void LoadingStateChanged(bool is_loading) override {}
   void NavigationStateChanged(const GURL& url,
                               const mojo::String& title,
@@ -108,6 +109,7 @@ class UI : public views::WidgetDelegateView,
     GetWidget()->UpdateWindowTitle();
   }
   void LoadProgressChanged(double progress) override {}
+  void UpdateHoverURL(const GURL& url) override {}
   void ViewCreated(navigation::mojom::ViewPtr view,
                    navigation::mojom::ViewClientRequest request,
                    bool is_popup,
@@ -122,6 +124,14 @@ class UI : public views::WidgetDelegateView,
   void Close() override {
     GetWidget()->Close();
   }
+  void NavigationPending(navigation::mojom::NavigationEntryPtr entry) override {
+  }
+  void NavigationCommitted(
+      navigation::mojom::NavigationCommittedDetailsPtr details,
+      int current_index) override {}
+  void NavigationEntryChanged(navigation::mojom::NavigationEntryPtr entry,
+                              int entry_index) override {}
+  void NavigationListPruned(bool from_front, int count) override {}
 
   Webtest* webtest_;
   mus::Window* content_area_ = nullptr;
@@ -154,7 +164,8 @@ void Webtest::Initialize(shell::Connector* connector,
   tracing_.Initialize(connector, identity.name());
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-  views::WindowManagerConnection::Create(connector, identity);
+  window_manager_connection_ =
+      views::WindowManagerConnection::Create(connector, identity);
 }
 
 bool Webtest::AcceptConnection(shell::Connection* connection) {

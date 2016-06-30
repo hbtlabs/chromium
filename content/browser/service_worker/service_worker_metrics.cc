@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_util.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -66,9 +67,40 @@ std::string EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_UNKNOWN";
     case ServiceWorkerMetrics::EventType::FOREIGN_FETCH:
       return "_FOREIGN_FETCH";
+    case ServiceWorkerMetrics::EventType::FETCH_WAITUNTIL:
+      return "_FETCH_WAITUNTIL";
+    case ServiceWorkerMetrics::EventType::FOREIGN_FETCH_WAITUNTIL:
+      return "_FOREIGN_FETCH_WAITUNTIL";
     case ServiceWorkerMetrics::EventType::NUM_TYPES:
       NOTREACHED() << static_cast<int>(event_type);
   }
+  return "_UNKNOWN";
+}
+
+std::string GetWorkerPreparationSuffix(
+    EmbeddedWorkerStatus initial_worker_status,
+    ServiceWorkerMetrics::StartSituation start_situation) {
+  switch (initial_worker_status) {
+    case EmbeddedWorkerStatus::STOPPED: {
+      switch (start_situation) {
+        case ServiceWorkerMetrics::StartSituation::DURING_STARTUP:
+          return "_StartWorkerDuringStartup";
+        case ServiceWorkerMetrics::StartSituation::NEW_PROCESS:
+          return "_StartWorkerNewProcess";
+        case ServiceWorkerMetrics::StartSituation::EXISTING_PROCESS:
+          return "_StartWorkerExistingProcess";
+        default:
+          NOTREACHED() << static_cast<int>(start_situation);
+      }
+    }
+    case EmbeddedWorkerStatus::STARTING:
+      return "_StartingWorker";
+    case EmbeddedWorkerStatus::RUNNING:
+      return "_RunningWorker";
+    case EmbeddedWorkerStatus::STOPPING:
+      return "_StoppingWorker";
+  }
+  NOTREACHED();
   return "_UNKNOWN";
 }
 
@@ -158,6 +190,10 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Unknown";
     case EventType::FOREIGN_FETCH:
       return "Foreign Fetch";
+    case EventType::FETCH_WAITUNTIL:
+      return "Fetch WaitUntil";
+    case EventType::FOREIGN_FETCH_WAITUNTIL:
+      return "Foreign Fetch WaitUntil";
     case EventType::NUM_TYPES:
       break;
   }
@@ -288,6 +324,18 @@ void ServiceWorkerMetrics::RecordStartWorkerTime(base::TimeDelta time,
   }
 }
 
+void ServiceWorkerMetrics::RecordActivatedWorkerPreparationTimeForMainFrame(
+    base::TimeDelta time,
+    EmbeddedWorkerStatus initial_worker_status,
+    StartSituation start_situation) {
+  std::string name =
+      "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time";
+  UMA_HISTOGRAM_MEDIUM_TIMES(name, time);
+  RecordSuffixedTimeHistogram(
+      name, GetWorkerPreparationSuffix(initial_worker_status, start_situation),
+      time);
+}
+
 void ServiceWorkerMetrics::RecordWorkerStopped(StopStatus status) {
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.WorkerStopped",
                             static_cast<int>(status),
@@ -377,6 +425,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
                                    time);
       }
       break;
+    case EventType::FETCH_WAITUNTIL:
+      UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.FetchEvent.WaitUntil.Time",
+                                 time);
+      break;
     case EventType::FOREIGN_FETCH:
       if (was_handled) {
         UMA_HISTOGRAM_MEDIUM_TIMES(
@@ -385,6 +437,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
         UMA_HISTOGRAM_MEDIUM_TIMES(
             "ServiceWorker.ForeignFetchEvent.Fallback.Time", time);
       }
+      break;
+    case EventType::FOREIGN_FETCH_WAITUNTIL:
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "ServiceWorker.ForeignFetchEvent.WaitUntil.Time", time);
       break;
     case EventType::SYNC:
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.BackgroundSyncEvent.Time",

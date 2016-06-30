@@ -7,95 +7,22 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/test/browser_test.h"
-#include "headless/public/domains/types.h"
+#include "headless/public/domains/page.h"
 #include "headless/public/headless_browser.h"
+#include "headless/public/headless_devtools_client.h"
+#include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
 #include "headless/test/headless_browser_test.h"
-#include "net/base/io_buffer.h"
-#include "net/http/http_response_headers.h"
+#include "headless/test/test_protocol_handler.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
-#include "net/url_request/url_request_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace headless {
-namespace {
-
-class TestURLRequestJob : public net::URLRequestJob {
- public:
-  TestURLRequestJob(net::URLRequest* request,
-                    net::NetworkDelegate* network_delegate,
-                    const std::string& body);
-  ~TestURLRequestJob() override {}
-
-  // net::URLRequestJob implementation:
-  void Start() override;
-  void GetResponseInfo(net::HttpResponseInfo* info) override;
-  int ReadRawData(net::IOBuffer* buf, int buf_size) override;
-
- private:
-  scoped_refptr<net::StringIOBuffer> body_;
-  scoped_refptr<net::DrainableIOBuffer> src_buf_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestURLRequestJob);
-};
-
-TestURLRequestJob::TestURLRequestJob(net::URLRequest* request,
-                                     net::NetworkDelegate* network_delegate,
-                                     const std::string& body)
-    : net::URLRequestJob(request, network_delegate),
-      body_(new net::StringIOBuffer(body)),
-      src_buf_(new net::DrainableIOBuffer(body_.get(), body_->size())) {}
-
-void TestURLRequestJob::Start() {
-  NotifyHeadersComplete();
-}
-
-void TestURLRequestJob::GetResponseInfo(net::HttpResponseInfo* info) {
-  info->headers =
-      new net::HttpResponseHeaders("Content-Type: text/html\r\n\r\n");
-}
-
-int TestURLRequestJob::ReadRawData(net::IOBuffer* buf, int buf_size) {
-  scoped_refptr<net::DrainableIOBuffer> dest_buf(
-      new net::DrainableIOBuffer(buf, buf_size));
-  while (src_buf_->BytesRemaining() > 0 && dest_buf->BytesRemaining() > 0) {
-    *dest_buf->data() = *src_buf_->data();
-    src_buf_->DidConsume(1);
-    dest_buf->DidConsume(1);
-  }
-  return dest_buf->BytesConsumed();
-}
-
-class TestProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
- public:
-  TestProtocolHandler(const std::string& body);
-  ~TestProtocolHandler() override {}
-
-  net::URLRequestJob* MaybeCreateJob(
-      net::URLRequest* request,
-      net::NetworkDelegate* network_delegate) const override;
-
- private:
-  std::string body_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestProtocolHandler);
-};
-
-TestProtocolHandler::TestProtocolHandler(const std::string& body)
-    : body_(body) {}
-
-net::URLRequestJob* TestProtocolHandler::MaybeCreateJob(
-    net::URLRequest* request,
-    net::NetworkDelegate* network_delegate) const {
-  return new TestURLRequestJob(request, network_delegate, body_);
-}
-
-}  // namespace
 
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateAndDestroyWebContents) {
   HeadlessWebContents* web_contents =
-      browser()->CreateWebContents(GURL("about:blank"), gfx::Size(800, 600));
+      browser()->CreateWebContentsBuilder().Build();
   EXPECT_TRUE(web_contents);
 
   EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
@@ -109,7 +36,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateAndDestroyWebContents) {
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateWithBadURL) {
   GURL bad_url("not_valid");
   HeadlessWebContents* web_contents =
-      browser()->CreateWebContents(bad_url, gfx::Size(800, 600));
+      browser()->CreateWebContentsBuilder().SetInitialURL(bad_url).Build();
   EXPECT_FALSE(web_contents);
   EXPECT_TRUE(browser()->GetAllWebContents().empty());
 }
@@ -148,8 +75,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestWithProxy, SetProxyServer) {
   //
   // TODO(altimin): Currently this construction does not serve hello.html
   // from headless/test/data as expected. We should fix this.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
   EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
   EXPECT_EQ(web_contents, browser()->GetAllWebContents()[0]);
@@ -167,8 +97,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetHostResolverRules) {
 
   // Load a page which doesn't actually exist, but which is turned into a valid
   // address by our host resolver rules.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
 }
 
@@ -184,8 +117,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpProtocolHandler) {
 
   // Load a page which doesn't actually exist, but which is fetched by our
   // custom protocol handler.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
 
   std::string inner_html;
@@ -208,8 +144,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpsProtocolHandler) {
 
   // Load a page which doesn't actually exist, but which is fetched by our
   // custom protocol handler.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("https://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("https://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
 
   std::string inner_html;

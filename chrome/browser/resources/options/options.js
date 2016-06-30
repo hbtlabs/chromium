@@ -203,6 +203,8 @@ function load() {
     PageManager.registerOverlay(ChangePictureOptions.getInstance(),
                                 BrowserOptions.getInstance(),
                                 [$('account-picture')]);
+    PageManager.registerOverlay(StorageClearDriveCacheOverlay.getInstance(),
+                                StorageManager.getInstance());
     PageManager.registerOverlay(ConsumerManagementOverlay.getInstance(),
                                 BrowserOptions.getInstance());
     PageManager.registerOverlay(DetailsInternetPage.getInstance(),
@@ -228,6 +230,18 @@ function load() {
                                 [$('storage-manager-button')]);
     PageManager.registerOverlay(ThirdPartyImeConfirmOverlay.getInstance(),
                                 LanguageOptions.getInstance());
+    PageManager.registerOverlay(
+        new ConfirmDialog(
+            'arcOptOutConfirm',
+            loadTimeData.getString('arcOptOutConfirmOverlayTabTitle'),
+            'arc-opt-out-confirm-overlay',
+            /** @type {HTMLButtonElement} */($('arc-opt-out-confirm-ok')),
+            /** @type {HTMLButtonElement} */($('arc-opt-out-confirm-cancel')),
+            $('android-apps-enabled')['pref'],
+            $('android-apps-enabled')['metric'],
+            undefined,
+            false),
+        BrowserOptions.getInstance());
   }
 
   if (!cr.isWindows && !cr.isMac) {

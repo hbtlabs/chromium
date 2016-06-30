@@ -123,7 +123,8 @@ class MediaRouterUI::UIIssuesObserver : public IssuesObserver {
 };
 
 MediaRouterUI::UIMediaRoutesObserver::UIMediaRoutesObserver(
-    MediaRouter* router, const MediaSource::Id& source_id,
+    MediaRouter* router,
+    const MediaSource::Id& source_id,
     const RoutesUpdatedCallback& callback)
     : MediaRoutesObserver(router, source_id), callback_(callback) {
   DCHECK(!callback_.is_null());
@@ -224,8 +225,9 @@ void MediaRouterUI::InitWithDefaultMediaSource(
         presentation_service_delegate_->GetDefaultPresentationRequest());
   } else {
     // Register for MediaRoute updates without a media source.
-    routes_observer_.reset(new UIMediaRoutesObserver(router_, MediaSource::Id(),
-          base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
+    routes_observer_.reset(new UIMediaRoutesObserver(
+        router_, MediaSource::Id(),
+        base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
   }
 }
 
@@ -312,8 +314,8 @@ void MediaRouterUI::OnDefaultPresentationRemoved() {
   query_result_manager_->StopSinksQuery(MediaCastMode::DEFAULT);
   // Register for MediaRoute updates without a media source.
   routes_observer_.reset(new UIMediaRoutesObserver(
-        router_, MediaSource::Id(),
-        base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
+      router_, MediaSource::Id(),
+      base::Bind(&MediaRouterUI::OnRoutesUpdated, base::Unretained(this))));
   UpdateCastModes();
 }
 
@@ -400,21 +402,23 @@ bool MediaRouterUI::SetRouteParameters(
 
   DVLOG(1) << "DoCreateRoute: origin: " << *origin;
 
-  // There are 3 cases. In all cases the MediaRouterUI will need to be notified.
+  // There are 3 cases. In cases (1) and (3) the MediaRouterUI will need to be
+  // notified. In case (2) the dialog will be closed.
   // (1) Non-presentation route request (e.g., mirroring). No additional
   // notification necessary.
   // (2) Presentation route request for a Presentation API startSession call.
   // The startSession (CreatePresentationConnectionRequest) will need to be
-  // answered with the
-  // route response.
+  // answered with the route response.
   // (3) Browser-initiated presentation route request. If successful,
   // PresentationServiceDelegateImpl will have to be notified. Note that we
   // treat subsequent route requests from a Presentation API-initiated dialogs
   // as browser-initiated.
-  route_response_callbacks->push_back(base::Bind(
-      &MediaRouterUI::OnRouteResponseReceived, weak_factory_.GetWeakPtr(),
-      current_route_request_id_, sink_id, cast_mode,
-      base::UTF8ToUTF16(GetTruncatedPresentationRequestSourceName())));
+  if (!for_default_source || !create_session_request_) {
+    route_response_callbacks->push_back(base::Bind(
+        &MediaRouterUI::OnRouteResponseReceived, weak_factory_.GetWeakPtr(),
+        current_route_request_id_, sink_id, cast_mode,
+        base::UTF8ToUTF16(GetTruncatedPresentationRequestSourceName())));
+  }
   if (for_default_source) {
     if (create_session_request_) {
       // |create_session_request_| will be nullptr after this call, as the
@@ -422,6 +426,9 @@ bool MediaRouterUI::SetRouteParameters(
       route_response_callbacks->push_back(
           base::Bind(&CreatePresentationConnectionRequest::HandleRouteResponse,
                      base::Passed(&create_session_request_)));
+      route_response_callbacks->push_back(
+          base::Bind(&MediaRouterUI::HandleCreateSessionRequestRouteResponse,
+                     weak_factory_.GetWeakPtr()));
     } else if (presentation_service_delegate_) {
       route_response_callbacks->push_back(
           base::Bind(&PresentationServiceDelegateImpl::OnRouteResponse,
@@ -517,7 +524,25 @@ void MediaRouterUI::OnRoutesUpdated(
     const std::vector<MediaRoute::Id>& joinable_route_ids) {
   routes_ = routes;
   joinable_route_ids_ = joinable_route_ids;
-  if (ui_initialized_) handler_->UpdateRoutes(routes_, joinable_route_ids_);
+
+  std::unordered_map<MediaSource::Id, MediaCastMode> available_source_map;
+  for (const auto& cast_mode : cast_modes_) {
+    available_source_map.insert(std::make_pair(
+        query_result_manager_->GetSourceForCastMode(cast_mode).id(),
+        cast_mode));
+  }
+
+  current_cast_modes_.clear();
+  for (const auto& route : routes) {
+    auto source_entry = available_source_map.find(route.media_source().id());
+    if (source_entry != available_source_map.end()) {
+      current_cast_modes_.insert(
+          std::make_pair(route.media_route_id(), source_entry->second));
+    }
+  }
+
+  if (ui_initialized_)
+    handler_->UpdateRoutes(routes_, joinable_route_ids_, current_cast_modes_);
 }
 
 void MediaRouterUI::OnRouteResponseReceived(
@@ -541,6 +566,11 @@ void MediaRouterUI::OnRouteResponseReceived(
 
   if (result.result_code() == RouteRequestResult::TIMED_OUT)
     SendIssueForRouteTimeout(cast_mode, presentation_request_source_name);
+}
+
+void MediaRouterUI::HandleCreateSessionRequestRouteResponse(
+    const RouteRequestResult&) {
+  Close();
 }
 
 void MediaRouterUI::OnSearchSinkResponseReceived(

@@ -9,8 +9,8 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_constants.h"
-#include "ash/ash_switches.h"
+#include "ash/common/ash_constants.h"
+#include "ash/common/ash_switches.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -206,7 +206,7 @@ void SetWallpaper(const gfx::ImageSkia& image,
 #if defined(MOJO_SHELL_CLIENT)
   if (chrome::IsRunningInMash()) {
     shell::Connector* connector =
-        content::MojoShellConnection::Get()->GetConnector();
+        content::MojoShellConnection::GetForProcess()->GetConnector();
     ash::sysui::mojom::WallpaperControllerPtr wallpaper_controller;
     connector->ConnectToInterface("mojo:ash_sysui", &wallpaper_controller);
     wallpaper_controller->SetWallpaper(*image.bitmap(),

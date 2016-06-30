@@ -40,8 +40,8 @@
 #include "public/web/WebDevToolsAgent.h"
 #include "web/InspectorEmulationAgent.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -125,6 +125,7 @@ private:
     void resumeStartup() override;
     void profilingStarted() override;
     void profilingStopped() override;
+    void consoleCleared() override;
 
     // WebThread::TaskObserver implementation.
     void willProcessTask() override;
@@ -135,7 +136,7 @@ private:
     void dispatchMessageFromFrontend(int sessionId, const String& method, const String& message);
 
     friend class WebDevToolsAgent;
-    static void runDebuggerTask(int sessionId, PassOwnPtr<WebDevToolsAgent::MessageDescriptor>);
+    static void runDebuggerTask(int sessionId, std::unique_ptr<WebDevToolsAgent::MessageDescriptor>);
 
     bool attached() const { return m_session.get(); }
 
@@ -150,7 +151,7 @@ private:
 
     Member<InspectorDOMAgent> m_domAgent;
     Member<InspectorPageAgent> m_pageAgent;
-    Member<InspectorResourceAgent> m_resourceAgent;
+    Member<InspectorNetworkAgent> m_networkAgent;
     Member<InspectorLayerTreeAgent> m_layerTreeAgent;
     Member<InspectorTracingAgent> m_tracingAgent;
 

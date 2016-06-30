@@ -66,8 +66,26 @@ void PaintController::processNewItem(DisplayItem& displayItem)
     DCHECK(!skippingCache() || !displayItem.isCached());
 
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-    if (!skippingCache() && (displayItem.isCacheable() || displayItem.isCached()))
-        displayItem.client().beginShouldKeepAlive(this);
+    if (!skippingCache()) {
+        if (displayItem.isCacheable() || displayItem.isCached()) {
+            // Mark the client shouldKeepAlive under this PaintController.
+            // The status will end after the new display items are committed.
+            displayItem.client().beginShouldKeepAlive(this);
+
+            if (!m_currentSubsequenceClients.isEmpty()) {
+                // Mark the client shouldKeepAlive under the current subsequence.
+                // The status will end when the subsequence owner is invalidated or deleted.
+                displayItem.client().beginShouldKeepAlive(m_currentSubsequenceClients.last());
+            }
+        }
+
+        if (displayItem.getType() == DisplayItem::Subsequence) {
+            m_currentSubsequenceClients.append(&displayItem.client());
+        } else if (displayItem.getType() == DisplayItem::EndSubsequence) {
+            CHECK(m_currentSubsequenceClients.last() == &displayItem.client());
+            m_currentSubsequenceClients.removeLast();
+        }
+    }
 #endif
 
     if (displayItem.isCached())
@@ -112,18 +130,6 @@ const PaintChunkProperties& PaintController::currentPaintChunkProperties() const
     return m_newPaintChunks.currentPaintChunkProperties();
 }
 
-void PaintController::displayItemClientWasInvalidated(const DisplayItemClient& client)
-{
-#if DCHECK_IS_ON()
-    // Slimming paint v1 CompositedLayerMapping may invalidate client on extra layers.
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() || clientCacheIsValid(client))
-        m_invalidations.append(client.debugName());
-
-    // Should not invalidate already painted clients.
-    DCHECK(!m_newDisplayItemIndicesByClient.contains(&client));
-#endif
-}
-
 void PaintController::invalidateAll()
 {
     // Can only be called during layout/paintInvalidation, not during painting.
@@ -141,26 +147,6 @@ bool PaintController::clientCacheIsValid(const DisplayItemClient& client) const
         return false;
     return client.displayItemsAreCached(m_currentCacheGeneration);
 }
-
-void PaintController::invalidatePaintOffset(const DisplayItemClient& client)
-{
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-    displayItemClientWasInvalidated(client);
-    client.setDisplayItemsUncached();
-
-#if DCHECK_IS_ON()
-    DCHECK(!paintOffsetWasInvalidated(client));
-    m_clientsWithPaintOffsetInvalidations.add(&client);
-#endif
-}
-
-#if DCHECK_IS_ON()
-bool PaintController::paintOffsetWasInvalidated(const DisplayItemClient& client) const
-{
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-    return m_clientsWithPaintOffsetInvalidations.contains(&client);
-}
-#endif
 
 size_t PaintController::findMatchingItemFromIndex(const DisplayItem::Id& id, const DisplayItemIndicesByClientMap& displayItemIndicesByClient, const DisplayItemList& list)
 {
@@ -232,6 +218,9 @@ void PaintController::copyCachedSubsequence(const DisplayItemList& currentList, 
         // We should always find the EndSubsequence display item.
         DCHECK(currentIt != m_currentPaintArtifact.getDisplayItemList().end());
         DCHECK(currentIt->hasValidClient());
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+        CHECK(currentIt->client().isAlive());
+#endif
         updatedList.appendByMoving(*currentIt, currentList.visualRect(currentIt - m_currentPaintArtifact.getDisplayItemList().begin()), gpuAnalyzer);
         ++currentIt;
     } while (!endSubsequenceId.matches(updatedList.last()));
@@ -266,8 +255,6 @@ void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutOb
     DCHECK(!skippingCache());
 #if DCHECK_IS_ON()
     m_newDisplayItemIndicesByClient.clear();
-    m_clientsWithPaintOffsetInvalidations.clear();
-    m_invalidations.clear();
 #endif
 
     SkPictureGpuAnalyzer gpuAnalyzer;
@@ -310,9 +297,9 @@ void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutOb
         bool isSynchronized = currentIt != currentEnd && newDisplayItemId.matches(*currentIt);
 
         if (newDisplayItemHasCachedType) {
-#if DCHECK_IS_ON()
             DCHECK(newDisplayItem.isCached());
-            DCHECK(clientCacheIsValid(newDisplayItem.client()) || (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() && !paintOffsetWasInvalidated(newDisplayItem.client())));
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+            CHECK(clientCacheIsValid(newDisplayItem.client()));
 #endif
             if (!isSynchronized) {
                 currentIt = findOutOfOrderCachedItem(newDisplayItemId, outOfOrderIndexContext);
@@ -345,12 +332,9 @@ void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutOb
                 DCHECK(updatedList.last().getType() == DisplayItem::EndSubsequence);
             }
         } else {
-#if DCHECK_IS_ON()
             DCHECK(!newDisplayItem.isDrawing()
                 || newDisplayItem.skippedCache()
-                || !clientCacheIsValid(newDisplayItem.client())
-                || (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() && paintOffsetWasInvalidated(newDisplayItem.client())));
-#endif
+                || !clientCacheIsValid(newDisplayItem.client()));
 
             updatedList.appendByMoving(*newIt, visualRectForDisplayItem(*newIt, offsetFromLayoutObject), gpuAnalyzer);
 
@@ -361,11 +345,6 @@ void PaintController::commitNewDisplayItems(const LayoutSize& offsetFromLayoutOb
         if (currentIt - outOfOrderIndexContext.nextItemToIndex > 0)
             outOfOrderIndexContext.nextItemToIndex = currentIt;
     }
-
-#if DCHECK_IS_ON()
-    if (RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled())
-        checkNoRemainingCachedDisplayItems();
-#endif
 
     // TODO(jbroman): When subsequence caching applies to SPv2, we'll need to
     // merge the paint chunks as well.
@@ -402,15 +381,24 @@ size_t PaintController::approximateUnsharedMemoryUsage() const
 
 void PaintController::updateCacheGeneration()
 {
-    m_currentCacheGeneration = DisplayItemCacheGeneration::next();
+    m_currentCacheGeneration = DisplayItemClient::CacheGenerationOrInvalidationReason::next();
     for (const DisplayItem& displayItem : m_currentPaintArtifact.getDisplayItemList()) {
         if (!displayItem.isCacheable())
             continue;
         displayItem.client().setDisplayItemsCached(m_currentCacheGeneration);
     }
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    CHECK(m_currentSubsequenceClients.isEmpty());
     DisplayItemClient::endShouldKeepAliveAllClients(this);
 #endif
+}
+
+void PaintController::appendDebugDrawingAfterCommit(const DisplayItemClient& displayItemClient, PassRefPtr<SkPicture> picture, const LayoutSize& offsetFromLayoutObject)
+{
+    DCHECK(m_newDisplayItemList.isEmpty());
+    DrawingDisplayItem& displayItem = m_currentPaintArtifact.getDisplayItemList().allocateAndConstruct<DrawingDisplayItem>(displayItemClient, DisplayItem::DebugDrawing, picture);
+    displayItem.setSkippedCache();
+    m_currentPaintArtifact.getDisplayItemList().appendVisualRect(visualRectForDisplayItem(displayItem, offsetFromLayoutObject));
 }
 
 #if DCHECK_IS_ON()
@@ -498,17 +486,6 @@ void PaintController::checkCachedDisplayItemIsUnchanged(const char* messagePrefi
 #endif // NDEBUG
 
     NOTREACHED();
-}
-
-void PaintController::checkNoRemainingCachedDisplayItems()
-{
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled());
-
-    for (const auto& displayItem : m_currentPaintArtifact.getDisplayItemList()) {
-        if (!displayItem.hasValidClient() || !displayItem.isCacheable() || !clientCacheIsValid(displayItem.client()))
-            continue;
-        showUnderInvalidationError("", "May be under-invalidation: no new display item", nullptr, &displayItem);
-    }
 }
 
 #endif // DCHECK_IS_ON()

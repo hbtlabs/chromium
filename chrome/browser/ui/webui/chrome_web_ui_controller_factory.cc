@@ -103,6 +103,7 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/ui/webui/net_export_ui.h"
+#include "chrome/browser/ui/webui/offline_internals_ui.h"
 #include "chrome/browser/ui/webui/popular_sites_internals_ui.h"
 #include "chrome/browser/ui/webui/snippets_internals_ui.h"
 #else
@@ -253,6 +254,14 @@ WebUIController* NewWebUI<dom_distiller::DomDistillerUi>(WebUI* web_ui,
   return new dom_distiller::DomDistillerUi(
       web_ui, service, dom_distiller::kDomDistillerScheme);
 }
+
+#if !defined(OS_ANDROID)
+template<>
+WebUIController* NewWebUI<settings::MdSettingsUI>(WebUI* web_ui,
+                                                  const GURL& url) {
+  return new settings::MdSettingsUI(web_ui, url);
+}
+#endif
 
 #if defined(ENABLE_EXTENSIONS)
 // Only create ExtensionWebUI for URLs that are allowed extension bindings,
@@ -413,9 +422,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<extensions::ExtensionsUI>;
   }
   // Material Design history is on its own host, rather than on an Uber page.
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignHistoryFeature) &&
+  if (MdHistoryUI::IsEnabled(profile) &&
       url.host() == chrome::kChromeUIHistoryHost) {
     return &NewWebUI<MdHistoryUI>;
+  }
+  // Material Design Settings gets its own host, if enabled.
+  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettingsFeature) &&
+      url.host() == chrome::kChromeUISettingsHost) {
+    return &NewWebUI<settings::MdSettingsUI>;
   }
   if (url.host() == chrome::kChromeUIQuotaInternalsHost)
     return &NewWebUI<QuotaInternalsUI>;
@@ -493,9 +507,12 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
 #if defined(OS_ANDROID)
   if (url.host() == chrome::kChromeUINetExportHost)
     return &NewWebUI<NetExportUI>;
+  if (url.host() == chrome::kChromeUIOfflineInternalsHost)
+    return &NewWebUI<OfflineInternalsUI>;
   if (url.host() == chrome::kChromeUIPopularSitesInternalsHost)
     return &NewWebUI<PopularSitesInternalsUI>;
-  if (url.host() == chrome::kChromeUISnippetsInternalsHost)
+  if (url.host() == chrome::kChromeUISnippetsInternalsHost &&
+      !profile->IsOffTheRecord())
     return &NewWebUI<SnippetsInternalsUI>;
 #else
   if (url.host() == chrome::kChromeUICopresenceHost)

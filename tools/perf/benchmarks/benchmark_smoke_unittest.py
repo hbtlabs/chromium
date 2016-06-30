@@ -23,16 +23,13 @@ from telemetry.testing import progress_reporter
 from benchmarks import image_decoding
 from benchmarks import indexeddb_perf
 from benchmarks import jetstream
-from benchmarks import kraken
 from benchmarks import memory
 from benchmarks import octane
 from benchmarks import rasterize_and_record_micro
 from benchmarks import repaint
 from benchmarks import spaceport
 from benchmarks import speedometer
-from benchmarks import sunspider
 from benchmarks import text_selection
-from benchmarks import tracing
 
 
 def SmokeTestGenerator(benchmark):
@@ -54,7 +51,6 @@ def SmokeTestGenerator(benchmark):
         # pylint: disable=super-on-old-class
         story_set = super(SinglePageBenchmark, self).CreateStorySet(options)
         for story in story_set.stories:
-          story.skip_waits = True
           story_set.stories = [story]
           break
         return story_set
@@ -95,14 +91,6 @@ _BLACK_LIST_TEST_MODULES = {
     jetstream,  # Take 206 seconds.
     text_selection,  # Always fails on cq bot.
     memory  # Flaky on bots, crbug.com/513767.
-}
-
-# Some smoke benchmark tests that run quickly on desktop platform can be very
-# slow on Android. So we create a separate set of black list only for Android.
-_ANDROID_BLACK_LIST_MODULES = {
-    kraken,  # Takes 275 seconds on Android.
-    sunspider,  # Takes 163 seconds on Android.
-    tracing,  # Failed on Android bot, crbug.com/600989.
 }
 
 
@@ -149,14 +137,6 @@ def load_tests(loader, standard_tests, pattern):
           getattr(benchmark, attribute, set()))
       if merged_attributes:
         setattr(method, attribute, merged_attributes)
-
-    # Disable some tests on android platform only.
-    if sys.modules[benchmark.__module__] in _ANDROID_BLACK_LIST_MODULES:
-      method._disabled_strings.add('android')
-
-    # TODO(bashi): Remove once crrev.com/1266833004 is landed.
-    if benchmark.Name() == 'memory.blink_memory_mobile':
-      method._disabled_strings.add('android')
 
     setattr(BenchmarkSmokeTest, benchmark.Name(), method)
 

@@ -9,12 +9,13 @@
 #include <vector>
 
 #include "base/memory/ptr_util.h"
+#include "base/optional.h"
 #include "content/child/mojo/type_converters.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/public/common/service_registry.h"
 #include "content/renderer/bluetooth/bluetooth_type_converters.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/array.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothDevice.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothDeviceInit.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/WebBluetoothRemoteGATTCharacteristic.h"
@@ -24,8 +25,8 @@
 
 namespace content {
 
-WebBluetoothImpl::WebBluetoothImpl(ServiceRegistry* service_registry)
-    : service_registry_(service_registry), binding_(this) {}
+WebBluetoothImpl::WebBluetoothImpl(shell::InterfaceProvider* remote_interfaces)
+    : remote_interfaces_(remote_interfaces), binding_(this) {}
 
 WebBluetoothImpl::~WebBluetoothImpl() {
 }
@@ -61,13 +62,18 @@ void WebBluetoothImpl::disconnect(const blink::WebString& device_id) {
       mojo::String::From(device_id));
 }
 
-void WebBluetoothImpl::getPrimaryService(
+void WebBluetoothImpl::getPrimaryServices(
     const blink::WebString& device_id,
-    const blink::WebString& service_uuid,
-    blink::WebBluetoothGetPrimaryServiceCallbacks* callbacks) {
-  GetWebBluetoothService().RemoteServerGetPrimaryService(
-      mojo::String::From(device_id), mojo::String::From(service_uuid),
-      base::Bind(&WebBluetoothImpl::OnGetPrimaryServiceComplete,
+
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    const blink::WebString& services_uuid,
+    blink::WebBluetoothGetPrimaryServicesCallbacks* callbacks) {
+  GetWebBluetoothService().RemoteServerGetPrimaryServices(
+      mojo::String::From(device_id), quantity,
+      services_uuid.isEmpty()
+          ? base::nullopt
+          : base::make_optional(device::BluetoothUUID(services_uuid.utf8())),
+      base::Bind(&WebBluetoothImpl::OnGetPrimaryServicesComplete,
                  base::Unretained(this), device_id,
                  base::Passed(base::WrapUnique(callbacks))));
 }
@@ -79,8 +85,10 @@ void WebBluetoothImpl::getCharacteristics(
     blink::WebBluetoothGetCharacteristicsCallbacks* callbacks) {
   GetWebBluetoothService().RemoteServiceGetCharacteristics(
       mojo::String::From(service_instance_id), quantity,
-      characteristics_uuid.isEmpty() ? nullptr
-                                     : mojo::String::From(characteristics_uuid),
+      characteristics_uuid.isEmpty()
+          ? base::nullopt
+          : base::make_optional(
+                device::BluetoothUUID(characteristics_uuid.utf8())),
       base::Bind(&WebBluetoothImpl::OnGetCharacteristicsComplete,
                  base::Unretained(this), service_instance_id,
                  base::Passed(base::WrapUnique(callbacks))));
@@ -175,8 +183,12 @@ void WebBluetoothImpl::OnRequestDeviceComplete(
 void WebBluetoothImpl::GattServerDisconnected(const mojo::String& device_id) {
   auto device_iter = connected_devices_.find(device_id);
   if (device_iter != connected_devices_.end()) {
-    device_iter->second->dispatchGattServerDisconnected();
+    // Remove device from the map before calling dispatchGattServerDisconnected
+    // to avoid removing a device the gattserverdisconnected event handler might
+    // have re-connected.
+    blink::WebBluetoothDevice* device = device_iter->second;
     connected_devices_.erase(device_iter);
+    device->dispatchGattServerDisconnected();
   }
 }
 
@@ -191,17 +203,23 @@ void WebBluetoothImpl::OnConnectComplete(
   }
 }
 
-void WebBluetoothImpl::OnGetPrimaryServiceComplete(
+void WebBluetoothImpl::OnGetPrimaryServicesComplete(
     const blink::WebString& device_id,
-    std::unique_ptr<blink::WebBluetoothGetPrimaryServiceCallbacks> callbacks,
+    std::unique_ptr<blink::WebBluetoothGetPrimaryServicesCallbacks> callbacks,
     blink::mojom::WebBluetoothError error,
-    blink::mojom::WebBluetoothRemoteGATTServicePtr service) {
+    mojo::Array<blink::mojom::WebBluetoothRemoteGATTServicePtr> services) {
   if (error == blink::mojom::WebBluetoothError::SUCCESS) {
-    callbacks->onSuccess(
-        base::WrapUnique(new blink::WebBluetoothRemoteGATTService(
-            blink::WebString::fromUTF8(service->instance_id),
-            blink::WebString::fromUTF8(service->uuid), true /* isPrimary */,
-            device_id)));
+    // TODO(dcheng): This WebVector should use smart pointers.
+    blink::WebVector<blink::WebBluetoothRemoteGATTService*> promise_services(
+        services.size());
+
+    for (size_t i = 0; i < services.size(); i++) {
+      promise_services[i] = new blink::WebBluetoothRemoteGATTService(
+          blink::WebString::fromUTF8(services[i]->instance_id),
+          blink::WebString::fromUTF8(services[i]->uuid), true /* isPrimary */,
+          device_id);
+    }
+    callbacks->onSuccess(promise_services);
   } else {
     callbacks->onError(error);
   }
@@ -280,8 +298,7 @@ void WebBluetoothImpl::DispatchCharacteristicValueChanged(
 
 blink::mojom::WebBluetoothService& WebBluetoothImpl::GetWebBluetoothService() {
   if (!web_bluetooth_service_) {
-    service_registry_->ConnectToRemoteService(
-        mojo::GetProxy(&web_bluetooth_service_));
+    remote_interfaces_->GetInterface(mojo::GetProxy(&web_bluetooth_service_));
     // Create an associated interface ptr and pass it to the WebBluetoothService
     // so that it can send us events without us prompting.
     blink::mojom::WebBluetoothServiceClientAssociatedPtrInfo ptr_info;

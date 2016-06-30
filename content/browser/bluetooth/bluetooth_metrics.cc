@@ -8,6 +8,8 @@
 
 #include <map>
 #include <set>
+#include <unordered_set>
+
 #include "base/hash.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -21,11 +23,14 @@ namespace {
 // UMA_HISTOGRAM_SPARSE_SLOWLY (positive int).
 //
 // Hash values can be produced manually using tool: bluetooth_metrics_hash.
-int HashUUID(const std::string& canonical_uuid) {
-  DCHECK(canonical_uuid == BluetoothUUID(canonical_uuid).canonical_value());
+int HashUUID(const base::Optional<BluetoothUUID>& uuid) {
+  if (!uuid) {
+    return 0;
+  }
 
-  // TODO(520284): Other than verifying that uuid is canonical, this logic
+  // TODO(520284): Other than verifying that |uuid| contains a value, this logic
   // should be migrated to a dedicated histogram macro for hashed strings.
+  const std::string& canonical_uuid = uuid->canonical_value();
   uint32_t data =
       base::SuperFastHash(canonical_uuid.data(), canonical_uuid.size());
 
@@ -60,7 +65,7 @@ static void RecordRequestDeviceFilters(
   for (const auto& filter : filters) {
     UMA_HISTOGRAM_COUNTS_100("Bluetooth.Web.RequestDevice.FilterSize",
                              filter->services.size());
-    for (const std::string& service : filter->services) {
+    for (const base::Optional<BluetoothUUID>& service : filter->services) {
       // TODO(ortuno): Use a macro to histogram strings.
       // http://crbug.com/520284
       UMA_HISTOGRAM_SPARSE_SLOWLY(
@@ -70,10 +75,10 @@ static void RecordRequestDeviceFilters(
 }
 
 static void RecordRequestDeviceOptionalServices(
-    const mojo::Array<mojo::String>& optional_services) {
+    const mojo::Array<base::Optional<BluetoothUUID>>& optional_services) {
   UMA_HISTOGRAM_COUNTS_100("Bluetooth.Web.RequestDevice.OptionalServices.Count",
                            optional_services.size());
-  for (const std::string& service : optional_services) {
+  for (const base::Optional<BluetoothUUID>& service : optional_services) {
     // TODO(ortuno): Use a macro to histogram strings.
     // http://crbug.com/520284
     UMA_HISTOGRAM_SPARSE_SLOWLY(
@@ -84,11 +89,17 @@ static void RecordRequestDeviceOptionalServices(
 
 static void RecordUnionOfServices(
     const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options) {
-  std::set<mojo::String> union_of_services(options->optional_services.begin(),
-                                           options->optional_services.end());
+  std::unordered_set<std::string> union_of_services;
+  for (const base::Optional<BluetoothUUID>& service :
+       options->optional_services) {
+    union_of_services.insert(service->canonical_value());
+  }
 
-  for (const auto& filter : options->filters)
-    union_of_services.insert(filter->services.begin(), filter->services.end());
+  for (const auto& filter : options->filters) {
+    for (const base::Optional<BluetoothUUID>& service : filter->services) {
+      union_of_services.insert(service->canonical_value());
+    }
+  }
 
   UMA_HISTOGRAM_COUNTS_100("Bluetooth.Web.RequestDevice.UnionOfServices.Count",
                            union_of_services.size());
@@ -122,24 +133,48 @@ void RecordConnectGATTTimeFailed(const base::TimeDelta& duration) {
   UMA_HISTOGRAM_MEDIUM_TIMES("Bluetooth.Web.ConnectGATT.TimeFailed", duration);
 }
 
-// getPrimaryService
+// getPrimaryService & getPrimaryServices
 
-void RecordGetPrimaryServiceService(const BluetoothUUID& service) {
+void RecordGetPrimaryServicesOutcome(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    UMAGetPrimaryServiceOutcome outcome) {
+  switch (quantity) {
+    case blink::mojom::WebBluetoothGATTQueryQuantity::SINGLE:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Bluetooth.Web.GetPrimaryService.Outcome", static_cast<int>(outcome),
+          static_cast<int>(UMAGetPrimaryServiceOutcome::COUNT));
+      return;
+    case blink::mojom::WebBluetoothGATTQueryQuantity::MULTIPLE:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Bluetooth.Web.GetPrimaryServices.Outcome", static_cast<int>(outcome),
+          static_cast<int>(UMAGetPrimaryServiceOutcome::COUNT));
+      return;
+  }
+}
+
+void RecordGetPrimaryServicesOutcome(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    CacheQueryOutcome outcome) {
+  DCHECK(outcome == CacheQueryOutcome::NO_DEVICE);
+  RecordGetPrimaryServicesOutcome(quantity,
+                                  UMAGetPrimaryServiceOutcome::NO_DEVICE);
+}
+
+void RecordGetPrimaryServicesServices(
+    blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+    const base::Optional<BluetoothUUID>& service) {
   // TODO(ortuno): Use a macro to histogram strings.
   // http://crbug.com/520284
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Bluetooth.Web.GetPrimaryService.Services",
-                              HashUUID(service.canonical_value()));
-}
-
-void RecordGetPrimaryServiceOutcome(UMAGetPrimaryServiceOutcome outcome) {
-  UMA_HISTOGRAM_ENUMERATION(
-      "Bluetooth.Web.GetPrimaryService.Outcome", static_cast<int>(outcome),
-      static_cast<int>(UMAGetPrimaryServiceOutcome::COUNT));
-}
-
-void RecordGetPrimaryServiceOutcome(CacheQueryOutcome outcome) {
-  DCHECK(outcome == CacheQueryOutcome::NO_DEVICE);
-  RecordGetPrimaryServiceOutcome(UMAGetPrimaryServiceOutcome::NO_DEVICE);
+  switch (quantity) {
+    case blink::mojom::WebBluetoothGATTQueryQuantity::SINGLE:
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Bluetooth.Web.GetPrimaryService.Services",
+                                  HashUUID(service));
+      return;
+    case blink::mojom::WebBluetoothGATTQueryQuantity::MULTIPLE:
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Bluetooth.Web.GetPrimaryServices.Services",
+                                  HashUUID(service));
+      return;
+  }
 }
 
 // getCharacteristic & getCharacteristics
@@ -186,7 +221,7 @@ void RecordGetCharacteristicsOutcome(
 
 void RecordGetCharacteristicsCharacteristic(
     blink::mojom::WebBluetoothGATTQueryQuantity quantity,
-    const std::string& characteristic) {
+    const base::Optional<BluetoothUUID>& characteristic) {
   switch (quantity) {
     case blink::mojom::WebBluetoothGATTQueryQuantity::SINGLE:
       UMA_HISTOGRAM_SPARSE_SLOWLY(

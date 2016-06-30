@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/options/options_ui.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -414,11 +415,11 @@ void OptionsUI::ProcessAutocompleteSuggestions(
         type != AutocompleteMatchType::NAVSUGGEST_PERSONALIZED) {
       continue;
     }
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
     entry->SetString("title", match.description);
     entry->SetString("displayURL", match.contents);
     entry->SetString("url", match.destination_url.spec());
-    suggestions->Append(entry);
+    suggestions->Append(std::move(entry));
   }
 }
 
@@ -472,7 +473,7 @@ void OptionsUI::InitializeHandlers() {
   for (size_t i = 0; i < handlers_.size(); ++i)
     handlers_[i]->InitializePage();
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.notifyInitializationComplete");
 }
 

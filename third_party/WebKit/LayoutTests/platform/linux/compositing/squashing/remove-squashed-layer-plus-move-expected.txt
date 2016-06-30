@@ -1,15 +1,17 @@
 {
+  "name": "Content Root Layer",
   "bounds": [1418, 1008],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [1418, 1008],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow DIV id='container'",
-          "rect": [8, 8, 769, 109],
-          "reason": "invalidate paint rectangle"
+          "rect": [8, 8, 769, 110],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutBlockFlow (anonymous)",
@@ -20,46 +22,20 @@
           "object": "LayoutBlockFlow (anonymous)",
           "rect": [8, 63, 769, 55],
           "reason": "bounds change"
-        },
-        {
-          "object": "LayoutBlockFlow DIV id='container'",
-          "rect": [8, 63, 769, 55],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutText #text",
-          "reason": "bounds change"
-        },
-        {
-          "object": "LayoutText #text",
-          "reason": "bounds change"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ],
       "children": [
         {
+          "name": "Squashing Containment Layer",
           "shouldFlattenTransform": false,
           "children": [
             {
+              "name": "LayoutBlockFlow (positioned) DIV",
               "position": [8, 8],
               "bounds": [1000, 1000]
             },
             {
+              "name": "Squashing Layer (first squashed layer: LayoutBlockFlow (relative positioned) DIV class='mv-tile')",
               "position": [8, 8],
               "bounds": [1000, 105],
               "drawsContent": true,
@@ -82,26 +58,64 @@
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
                   "rect": [0, 0, 100, 50],
-                  "reason": "compositing update"
+                  "reason": "forced by layout"
                 },
                 {
                   "object": "LayoutBlockFlow (relative positioned) DIV id='foo' class='mv-tile'",
                   "rect": [0, 0, 100, 50],
                   "reason": "layoutObject removal"
-                },
-                {
-                  "object": "InlineBox",
-                  "reason": "full"
-                },
-                {
-                  "object": "InlineBox",
-                  "reason": "full"
                 }
               ]
             }
           ]
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow (relative positioned) DIV id='foo' class='mv-tile'",
+      "reason": "layoutObject removal"
+    },
+    {
+      "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
+      "reason": "subtree"
+    },
+    {
+      "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
+      "reason": "subtree"
+    },
+    {
+      "object": "LayoutBlockFlow DIV id='container'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutBlockFlow (anonymous)",
+      "reason": "bounds change"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutBlockFlow (relative positioned) DIV class='mv-tile'",
+      "reason": "compositing update"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "bounds change"
     }
   ]
 }

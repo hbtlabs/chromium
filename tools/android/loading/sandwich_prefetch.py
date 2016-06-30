@@ -34,54 +34,59 @@ import task_manager
 import wpr_backend
 
 
-# Do not prefetch anything.
-EMPTY_CACHE_DISCOVERER = 'empty-cache'
+class Discoverer(object):
+  # Do not prefetch anything.
+  EmptyCache = 'empty-cache'
 
-# Prefetches everything to load fully from cache (impossible in practice).
-FULL_CACHE_DISCOVERER = 'full-cache'
+  # Prefetches everything to load fully from cache (impossible in practice).
+  FullCache = 'full-cache'
 
-# Prefetches the first resource following the redirection chain.
-REDIRECTED_MAIN_DISCOVERER = 'redirected-main'
+  # Prefetches the first resource following the redirection chain.
+  MainDocument = 'main-document'
 
-# All resources which are fetched from the main document and their redirections.
-PARSER_DISCOVERER = 'parser'
+  # All resources which are fetched from the main document and their
+  # redirections.
+  Parser = 'parser'
 
-# Simulation of HTMLPreloadScanner on the main document and their redirections.
-HTML_PRELOAD_SCANNER_DISCOVERER = 'html-scanner'
+  # Simulation of HTMLPreloadScanner on the main document and their
+  # redirections and subsets:
+  #   Store: only resources that don't have Cache-Control: No-Store.
+  HTMLPreloadScanner = 'html-scanner'
+  HTMLPreloadScannerStore = 'html-scanner-store'
 
+
+# List of all available sub-resource discoverers.
 SUBRESOURCE_DISCOVERERS = set([
-  EMPTY_CACHE_DISCOVERER,
-  FULL_CACHE_DISCOVERER,
-  REDIRECTED_MAIN_DISCOVERER,
-  PARSER_DISCOVERER,
-  HTML_PRELOAD_SCANNER_DISCOVERER
+  Discoverer.EmptyCache,
+  Discoverer.FullCache,
+  Discoverer.MainDocument,
+  Discoverer.Parser,
+  Discoverer.HTMLPreloadScanner,
+  Discoverer.HTMLPreloadScannerStore,
 ])
+
 
 _UPLOAD_DATA_STREAM_REQUESTS_REGEX = re.compile(r'^\d+/(?P<url>.*)$')
 
 
-def _PatchWpr(wpr_archive_path):
+def _PatchWpr(wpr_archive):
   """Patches a WPR archive to get all resources into the HTTP cache and avoid
   invalidation and revalidations.
 
   Args:
-    wpr_archive_path: Path of the WPR archive to patch.
+    wpr_archive: wpr_backend.WprArchiveBackend WPR archive to patch.
   """
   # Sets the resources cache max-age to 10 years.
   MAX_AGE = 10 * 365 * 24 * 60 * 60
   CACHE_CONTROL = 'public, max-age={}'.format(MAX_AGE)
 
-  wpr_archive = wpr_backend.WprArchiveBackend(wpr_archive_path)
+  logging.info('number of entries: %d', len(wpr_archive.ListUrlEntries()))
+  patched_entry_count = 0
   for url_entry in wpr_archive.ListUrlEntries():
     response_headers = url_entry.GetResponseHeadersDict()
     if 'cache-control' in response_headers and \
         response_headers['cache-control'] == CACHE_CONTROL:
       continue
-    logging.info('patching %s' % url_entry.url)
-    # TODO(gabadie): may need to patch Last-Modified and If-Modified-Since.
-    # TODO(gabadie): may need to delete ETag.
-    # TODO(gabadie): may need to take care of x-cache.
-    #
     # Override the cache-control header to set the resources max age to MAX_AGE.
     #
     # Important note: Some resources holding sensitive information might have
@@ -97,14 +102,10 @@ def _PatchWpr(wpr_archive_path):
     # All of these Vary and Pragma possibilities need to be removed from
     # response headers in order for Chrome to store a resource in HTTP cache and
     # not to invalidate it.
-    #
-    # Note: HttpVaryData::Init() in Chrome adds an implicit 'Vary: cookie'
-    # header to any redirect.
-    # TODO(gabadie): Find a way to work around this issue.
     url_entry.RemoveResponseHeaderDirectives('vary', {'*', 'cookie'})
     url_entry.RemoveResponseHeaderDirectives('pragma', {'no-cache'})
-
-  wpr_archive.Persist()
+    patched_entry_count += 1
+  logging.info('number of entries patched: %d', patched_entry_count)
 
 
 def _FilterOutDataAndIncompleteRequests(requests):
@@ -114,7 +115,8 @@ def _FilterOutDataAndIncompleteRequests(requests):
     # originated requests that have not received any responses yet.
     if request.protocol is None:
       assert not request.HasReceivedResponse()
-      assert request.initiator['type'] == 'script'
+      continue
+    if request.protocol == 'about':
       continue
     if request.protocol not in {'http/0.9', 'http/1.0', 'http/1.1'}:
       raise RuntimeError('Unknown request protocol {}'.format(request.protocol))
@@ -171,12 +173,50 @@ def _PatchCacheArchive(cache_archive_path, loading_trace_path,
     logging.info('Patched cache size: %d bytes' % cache_backend.GetSize())
 
 
-def _ExtractDiscoverableUrls(loading_trace_path, subresource_discoverer):
+def _DiscoverRequests(dependencies_lens, subresource_discoverer):
+  trace = dependencies_lens.loading_trace
+  first_resource_request = trace.request_track.GetFirstResourceRequest()
+
+  if subresource_discoverer == Discoverer.EmptyCache:
+    requests = []
+  elif subresource_discoverer == Discoverer.FullCache:
+    requests = dependencies_lens.loading_trace.request_track.GetEvents()
+  elif subresource_discoverer == Discoverer.MainDocument:
+    requests = [dependencies_lens.GetRedirectChain(first_resource_request)[-1]]
+  elif subresource_discoverer == Discoverer.Parser:
+    requests = PrefetchSimulationView.ParserDiscoverableRequests(
+        first_resource_request, dependencies_lens)
+  elif subresource_discoverer == Discoverer.HTMLPreloadScanner:
+    requests = PrefetchSimulationView.PreloadedRequests(
+        first_resource_request, dependencies_lens, trace)
+  else:
+    assert False
+  logging.info('number of requests discovered by %s: %d',
+      subresource_discoverer, len(requests))
+  return requests
+
+
+def _PruneOutOriginalNoStoreRequests(original_headers_path, requests):
+  with open(original_headers_path) as file_input:
+    original_headers = json.load(file_input)
+  pruned_requests = set()
+  for request in requests:
+    request_original_headers = original_headers[request.url]
+    if ('cache-control' in request_original_headers and
+        'no-store' in request_original_headers['cache-control'].lower()):
+      pruned_requests.add(request)
+  return [r for r in requests if r not in pruned_requests]
+
+
+def _ExtractDiscoverableUrls(
+    original_headers_path, loading_trace_path, subresource_discoverer):
   """Extracts discoverable resource urls from a loading trace according to a
   sub-resource discoverer.
 
   Args:
-    loading_trace_path: The loading trace's path.
+    original_headers_path: Path of JSON containing the original headers.
+    loading_trace_path: Path of the loading trace recorded at original cache
+      creation.
     subresource_discoverer: The sub-resources discoverer that should white-list
       the resources to keep in cache for the NoState-Prefetch benchmarks.
 
@@ -185,30 +225,20 @@ def _ExtractDiscoverableUrls(loading_trace_path, subresource_discoverer):
   """
   assert subresource_discoverer in SUBRESOURCE_DISCOVERERS, \
       'unknown prefetch simulation {}'.format(subresource_discoverer)
-
-  # Load trace and related infos.
-  logging.info('loading %s' % loading_trace_path)
+  logging.info('loading %s', loading_trace_path)
   trace = loading_trace.LoadingTrace.FromJsonFile(loading_trace_path)
   dependencies_lens = RequestDependencyLens(trace)
-  first_resource_request = trace.request_track.GetFirstResourceRequest()
 
   # Build the list of discovered requests according to the desired simulation.
   discovered_requests = []
-  if subresource_discoverer == EMPTY_CACHE_DISCOVERER:
-    pass
-  elif subresource_discoverer == FULL_CACHE_DISCOVERER:
-    discovered_requests = trace.request_track.GetEvents()
-  elif subresource_discoverer == REDIRECTED_MAIN_DISCOVERER:
-    discovered_requests = \
-        [dependencies_lens.GetRedirectChain(first_resource_request)[-1]]
-  elif subresource_discoverer == PARSER_DISCOVERER:
-    discovered_requests = PrefetchSimulationView.ParserDiscoverableRequests(
-        first_resource_request, dependencies_lens)
-  elif subresource_discoverer == HTML_PRELOAD_SCANNER_DISCOVERER:
-    discovered_requests = PrefetchSimulationView.PreloadedRequests(
-        first_resource_request, dependencies_lens, trace)
+  if subresource_discoverer == Discoverer.HTMLPreloadScannerStore:
+    requests = _DiscoverRequests(
+        dependencies_lens, Discoverer.HTMLPreloadScanner)
+    discovered_requests = _PruneOutOriginalNoStoreRequests(
+        original_headers_path, requests)
   else:
-    assert False
+    discovered_requests = _DiscoverRequests(
+        dependencies_lens, subresource_discoverer)
 
   whitelisted_urls = set()
   for request in _FilterOutDataAndIncompleteRequests(discovered_requests):
@@ -287,7 +317,8 @@ class _RunOutputVerifier(object):
       benchmark_setup: JSON of the benchmark setup.
     """
     self._cache_whitelist = set(benchmark_setup['cache_whitelist'])
-    self._original_requests = set(cache_validation_result['effective_requests'])
+    self._original_requests = set(
+        cache_validation_result['effective_encoded_data_lengths'].keys())
     self._original_post_requests = set(
         cache_validation_result['effective_post_requests'])
     self._original_cached_requests = self._original_requests.intersection(
@@ -361,7 +392,8 @@ def _ValidateCacheArchiveContent(cache_build_trace_path, cache_archive_path):
 
   Returns:
     {
-      'effective_requests': [URLs of all requests],
+      'effective_encoded_data_lengths':
+        {URL of all requests: encoded_data_length},
       'effective_post_requests': [URLs of POST requests],
       'expected_cached_resources': [URLs of resources expected to be cached],
       'successfully_cached': [URLs of cached sub-resources]
@@ -376,6 +408,20 @@ def _ValidateCacheArchiveContent(cache_build_trace_path, cache_archive_path):
   trace = loading_trace.LoadingTrace.FromJsonFile(cache_build_trace_path)
   effective_requests = _ListUrlRequests(trace, _RequestOutcome.All)
   effective_post_requests = _ListUrlRequests(trace, _RequestOutcome.Post)
+  effective_encoded_data_lengths = {}
+  for request in _FilterOutDataAndIncompleteRequests(
+      trace.request_track.GetEvents()):
+    if request.from_disk_cache or request.served_from_cache:
+      # At cache archive creation time, a request might be loaded several times,
+      # but avoid the request.encoded_data_length == 0 if loaded from cache.
+      continue
+    if request.url in effective_encoded_data_lengths:
+      effective_encoded_data_lengths[request.url] = max(
+          effective_encoded_data_lengths[request.url],
+          request.GetEncodedDataLength())
+    else:
+      effective_encoded_data_lengths[request.url] = (
+          request.GetEncodedDataLength())
 
   upload_data_stream_cache_entry_keys = set()
   upload_data_stream_requests = set()
@@ -397,7 +443,7 @@ def _ValidateCacheArchiveContent(cache_build_trace_path, cache_archive_path):
                          'Cached resources')
 
   return {
-      'effective_requests': [url for url in effective_requests],
+      'effective_encoded_data_lengths': effective_encoded_data_lengths,
       'effective_post_requests': [url for url in effective_post_requests],
       'expected_cached_resources': [url for url in expected_cached_requests],
       'successfully_cached_resources': [url for url in effective_cache_keys]
@@ -419,6 +465,8 @@ def _ProcessRunOutputDir(
   run_metrics_list = []
   run_output_verifier = _RunOutputVerifier(
       cache_validation_result, benchmark_setup)
+  cached_encoded_data_lengths = (
+      cache_validation_result['effective_encoded_data_lengths'])
   for repeat_id, repeat_dir in sandwich_runner.WalkRepeatedRuns(
       runner_output_dir):
     trace_path = os.path.join(repeat_dir, sandwich_runner.TRACE_FILENAME)
@@ -430,12 +478,33 @@ def _ProcessRunOutputDir(
     run_output_verifier.VerifyTrace(trace)
 
     logging.info('extracting metrics from trace: %s', trace_path)
+    served_from_network_bytes = 0
+    served_from_cache_bytes = 0
+    urls_hitting_network = set()
+    for request in _FilterOutDataAndIncompleteRequests(
+        trace.request_track.GetEvents()):
+      # Ignore requests served from the blink's cache.
+      if request.served_from_cache:
+        continue
+      urls_hitting_network.add(request.url)
+      if request.from_disk_cache:
+        served_from_cache_bytes += cached_encoded_data_lengths[request.url]
+      else:
+        served_from_network_bytes += request.GetEncodedDataLength()
+
+    # Make sure the served from blink's cache requests have at least one
+    # corresponding request that was not served from the blink's cache.
+    for request in _FilterOutDataAndIncompleteRequests(
+        trace.request_track.GetEvents()):
+      assert (request.url in urls_hitting_network or
+              not request.served_from_cache)
+
     run_metrics = {
         'url': trace.url,
         'repeat_id': repeat_id,
         'subresource_discoverer': benchmark_setup['subresource_discoverer'],
         'cache_recording.subresource_count':
-            len(cache_validation_result['effective_requests']),
+            len(cache_validation_result['effective_encoded_data_lengths']),
         'cache_recording.cached_subresource_count_theoretic':
             len(cache_validation_result['successfully_cached_resources']),
         'cache_recording.cached_subresource_count':
@@ -446,6 +515,8 @@ def _ProcessRunOutputDir(
             len(benchmark_setup['cache_whitelist']),
         'benchmark.served_from_cache_count': len(_ListUrlRequests(
             trace, _RequestOutcome.ServedFromCache)),
+        'benchmark.served_from_network_bytes': served_from_network_bytes,
+        'benchmark.served_from_cache_bytes': served_from_cache_bytes
     }
     run_metrics.update(
         sandwich_metrics.ExtractCommonMetricsFromRepeatDirectory(
@@ -469,6 +540,7 @@ class PrefetchBenchmarkBuilder(task_manager.Builder):
                                   common_builder.output_subdirectory)
     self._common_builder = common_builder
 
+    self._original_headers_path = None
     self._wpr_archive_path = None
     self._cache_path = None
     self._trace_from_grabbing_reference_cache = None
@@ -488,13 +560,26 @@ class PrefetchBenchmarkBuilder(task_manager.Builder):
           depends on: common/webpages-patched.wpr
             depends on: common/webpages.wpr
     """
+    self._original_headers_path = self.RebaseOutputPath(
+        'common/response-headers.json')
+
     @self.RegisterTask('common/webpages-patched.wpr',
                        dependencies=[self._common_builder.original_wpr_task])
     def BuildPatchedWpr():
       common_util.EnsureParentDirectoryExists(BuildPatchedWpr.path)
       shutil.copyfile(
           self._common_builder.original_wpr_task.path, BuildPatchedWpr.path)
-      _PatchWpr(BuildPatchedWpr.path)
+      wpr_archive = wpr_backend.WprArchiveBackend(BuildPatchedWpr.path)
+
+      # Save up original response headers.
+      original_response_headers = {e.url: e.GetResponseHeadersDict() \
+          for e in wpr_archive.ListUrlEntries()}
+      with open(self._original_headers_path, 'w') as file_output:
+        json.dump(original_response_headers, file_output)
+
+      # Patch WPR.
+      _PatchWpr(wpr_archive)
+      wpr_archive.Persist()
 
     @self.RegisterTask('common/original-cache.zip', [BuildPatchedWpr])
     def BuildOriginalCache():
@@ -556,7 +641,9 @@ class PrefetchBenchmarkBuilder(task_manager.Builder):
         'cache_recording.cached_subresource_count',
         'benchmark.subresource_count',
         'benchmark.served_from_cache_count_theoretic',
-        'benchmark.served_from_cache_count']
+        'benchmark.served_from_cache_count',
+        'benchmark.served_from_network_bytes',
+        'benchmark.served_from_cache_bytes']
 
     assert subresource_discoverer in SUBRESOURCE_DISCOVERERS
     assert 'common' not in SUBRESOURCE_DISCOVERERS
@@ -567,7 +654,9 @@ class PrefetchBenchmarkBuilder(task_manager.Builder):
                        dependencies=[self._cache_validation_task])
     def SetupBenchmark():
       whitelisted_urls = _ExtractDiscoverableUrls(
-          self._trace_from_grabbing_reference_cache, subresource_discoverer)
+          original_headers_path=self._original_headers_path,
+          loading_trace_path=self._trace_from_grabbing_reference_cache,
+          subresource_discoverer=subresource_discoverer)
 
       common_util.EnsureParentDirectoryExists(SetupBenchmark.path)
       with open(SetupBenchmark.path, 'w') as output:

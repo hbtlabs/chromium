@@ -686,22 +686,22 @@ void LayoutInline::absoluteQuads(Vector<FloatQuad>& quads) const
         continuation->absoluteQuads(quads);
 }
 
-LayoutUnit LayoutInline::offsetLeft() const
+LayoutUnit LayoutInline::offsetLeft(const Element* parent) const
 {
     LayoutPoint topLeft;
     if (InlineBox* firstBox = firstLineBoxIncludingCulling()) {
         topLeft = firstBox->topLeft();
     }
-    return adjustedPositionRelativeToOffsetParent(topLeft).x();
+    return adjustedPositionRelativeTo(topLeft, parent).x();
 }
 
-LayoutUnit LayoutInline::offsetTop() const
+LayoutUnit LayoutInline::offsetTop(const Element* parent) const
 {
     LayoutPoint topLeft;
     if (InlineBox* firstBox = firstLineBoxIncludingCulling()) {
         topLeft = firstBox->topLeft();
     }
-    return adjustedPositionRelativeToOffsetParent(topLeft).y();
+    return adjustedPositionRelativeTo(topLeft, parent).y();
 }
 
 static LayoutUnit computeMargin(const LayoutInline* layoutObject, const Length& margin)
@@ -1353,12 +1353,12 @@ void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
     regions.append(region);
 }
 
-void LayoutInline::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason) const
+void LayoutInline::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    LayoutBoxModelObject::invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
+    LayoutBoxModelObject::invalidateDisplayItemClients(invalidationReason);
 
     for (InlineFlowBox* box = firstLineBox(); box; box = box->nextLineBox())
-        paintInvalidationContainer.invalidateDisplayItemClientOnBacking(*box, invalidationReason);
+        invalidateDisplayItemClient(*box, invalidationReason);
 }
 
 } // namespace blink

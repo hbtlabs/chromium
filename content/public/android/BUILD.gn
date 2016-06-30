@@ -35,6 +35,7 @@ android_library("content_java") {
     "//device/battery:mojo_bindings_java",
     "//device/battery/android:battery_monitor_android",
     "//device/bluetooth:java",
+    "//device/power_save_blocker:java",
     "//device/usb:java",
     "//device/vibration:mojo_bindings_java",
     "//device/vibration/android:vibration_manager_android",
@@ -65,6 +66,7 @@ android_library("content_java") {
 
   java_files = [
     "java/src/org/chromium/content/app/ChildProcessService.java",
+    "java/src/org/chromium/content/app/ChildProcessServiceImpl.java",
     "java/src/org/chromium/content/app/ChromiumLinkerParams.java",
     "java/src/org/chromium/content/app/ContentApplication.java",
     "java/src/org/chromium/content/app/ContentMain.java",
@@ -110,14 +112,11 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/ContentView.java",
     "java/src/org/chromium/content/browser/ContentViewClient.java",
     "java/src/org/chromium/content/browser/ContentViewCore.java",
-    "java/src/org/chromium/content/browser/ContentViewDownloadDelegate.java",
     "java/src/org/chromium/content/browser/ContentViewRenderView.java",
     "java/src/org/chromium/content/browser/ContentViewStatics.java",
     "java/src/org/chromium/content/browser/ContextualSearchClient.java",
     "java/src/org/chromium/content/browser/DeviceSensors.java",
     "java/src/org/chromium/content/browser/DeviceUtils.java",
-    "java/src/org/chromium/content/browser/DownloadController.java",
-    "java/src/org/chromium/content/browser/DownloadInfo.java",
     "java/src/org/chromium/content/browser/FileDescriptorInfo.java",
     "java/src/org/chromium/content/browser/FloatingWebActionModeCallback.java",
     "java/src/org/chromium/content/browser/InterstitialPageDelegateAndroid.java",
@@ -132,7 +131,6 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/PepperPluginManager.java",
     "java/src/org/chromium/content/browser/PopupZoomer.java",
     "java/src/org/chromium/content/browser/PositionObserver.java",
-    "java/src/org/chromium/content/browser/PowerSaveBlocker.java",
     "java/src/org/chromium/content/browser/RenderCoordinates.java",
     "java/src/org/chromium/content/browser/SPenSupport.java",
     "java/src/org/chromium/content/browser/ScreenOrientationListener.java",
@@ -207,6 +205,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/common/MediaMetadata.java",
     "java/src/org/chromium/content_public/common/Referrer.java",
+    "java/src/org/chromium/content_public/common/ResourceRequestBody.java",
     "java/src/org/chromium/content_public/common/ScreenOrientationConstants.java",
   ]
 }
@@ -308,7 +307,6 @@ android_library("content_javatests") {
     "//content/public/test/android:content_java_test_support",
     "//content/shell/android:content_shell_apk_java",
     "//content/shell/android:content_shell_java",
-    "//content/shell/android:content_shell_java_resources",
     "//content/shell/android:content_shell_test_java",
     "//device/vibration:mojo_bindings_java",
     "//device/vibration/android:vibration_manager_android",
@@ -341,7 +339,6 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/ContentViewScrollingTest.java",
     "javatests/src/org/chromium/content/browser/ContentViewZoomingTest.java",
     "javatests/src/org/chromium/content/browser/DeviceSensorsTest.java",
-    "javatests/src/org/chromium/content/browser/DownloadInfoTest.java",
     "javatests/src/org/chromium/content/browser/EmailAddressDetectionTest.java",
     "javatests/src/org/chromium/content/browser/EncodeHtmlDataUriTest.java",
     "javatests/src/org/chromium/content/browser/GestureDetectorResetTest.java",
@@ -391,6 +388,9 @@ android_library("content_javatests") {
 junit_binary("content_junit_tests") {
   java_files = [
     "junit/src/org/chromium/content/browser/input/GamepadMappingsTest.java",
+    "junit/src/org/chromium/content/browser/input/RangeTest.java",
+    "junit/src/org/chromium/content/browser/input/TextInputStateTest.java",
+    "junit/src/org/chromium/content/browser/input/ThreadedInputConnectionTest.java",
     "junit/src/org/chromium/content/browser/BindingManagerImplTest.java",
   ]
   deps = [

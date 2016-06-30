@@ -26,7 +26,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-from webkitpy.common.config.builders import WEBKIT_BUILDERS
+from webkitpy.common.config.builders import BUILDERS
 from webkitpy.common.checkout.scm.scm_mock import MockSCM
 from webkitpy.common.net.buildbot_mock import MockBuildBot
 from webkitpy.common.net.web_mock import MockWeb
@@ -57,7 +57,7 @@ class MockHost(MockSystemHost):
         # on the list of known ports should override this with a MockPortFactory.
         self.port_factory = PortFactory(self)
 
-        self.builders = BuilderList(WEBKIT_BUILDERS)
+        self.builders = BuilderList(BUILDERS)
 
     def initialize_scm(self, patch_directories=None):
         if not self._scm:
@@ -73,6 +73,3 @@ class MockHost(MockSystemHost):
         # FIXME: consider supporting more than one SCM so that we can do more comprehensive testing.
         self.initialize_scm()
         return self._scm
-
-    def checkout(self):
-        return self._checkout

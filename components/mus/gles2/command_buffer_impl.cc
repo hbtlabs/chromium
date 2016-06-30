@@ -48,8 +48,9 @@ void CommandBufferImpl::DidLoseContext(uint32_t reason) {
   client_->Destroyed(reason, gpu::error::kLostContext);
 }
 
-void CommandBufferImpl::UpdateVSyncParameters(int64_t timebase,
-                                              int64_t interval) {}
+void CommandBufferImpl::UpdateVSyncParameters(const base::TimeTicks& timebase,
+                                              const base::TimeDelta& interval) {
+}
 
 void CommandBufferImpl::OnGpuCompletedSwapBuffers(gfx::SwapResult result) {}
 
@@ -171,7 +172,9 @@ void CommandBufferImpl::BindToRequest(
     mojo::InterfaceRequest<mus::mojom::CommandBuffer> request) {
   binding_.reset(
       new mojo::Binding<mus::mojom::CommandBuffer>(this, std::move(request)));
-  binding_->set_connection_error_handler([this]() { OnConnectionError(); });
+  binding_->set_connection_error_handler(
+      base::Bind(&CommandBufferImpl::OnConnectionError,
+                 base::Unretained(this)));
 }
 
 void CommandBufferImpl::InitializeOnGpuThread(

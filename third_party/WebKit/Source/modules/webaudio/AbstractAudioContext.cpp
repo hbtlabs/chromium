@@ -23,6 +23,7 @@
  */
 
 #include "modules/webaudio/AbstractAudioContext.h"
+
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
@@ -32,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContextTask.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/mediastream/MediaStream.h"
 #include "modules/webaudio/AnalyserNode.h"
@@ -64,12 +66,26 @@
 #include "modules/webaudio/ScriptProcessorNode.h"
 #include "modules/webaudio/StereoPannerNode.h"
 #include "modules/webaudio/WaveShaperNode.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
+#include "platform/Histogram.h"
+#include "platform/UserGestureIndicator.h"
 #include "platform/audio/IIRFilter.h"
 #include "public/platform/Platform.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
+
+namespace {
+
+enum UserGestureRecord {
+    UserGestureRequiredAndAvailable = 0,
+    UserGestureRequiredAndNotAvailable,
+    UserGestureNotRequiredAndAvailable,
+    UserGestureNotRequiredAndNotAvailable,
+    UserGestureRecordMax
+};
+
+} // anonymous namespace
 
 AbstractAudioContext* AbstractAudioContext::create(Document& document, ExceptionState& exceptionState)
 {
@@ -86,6 +102,7 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
+    , m_userGestureRequired(false)
     , m_connectionCount(0)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
@@ -95,6 +112,12 @@ AbstractAudioContext::AbstractAudioContext(Document* document)
     , m_periodicWaveSawtooth(nullptr)
     , m_periodicWaveTriangle(nullptr)
 {
+    // TODO(mlamouri): we might want to use other ways of checking for this but
+    // in order to record metrics, re-using the HTMLMediaElement setting is
+    // probably the simplest solution.
+    if (document->settings() && document->settings()->mediaPlaybackRequiresUserGesture())
+        m_userGestureRequired = true;
+
     m_destinationNode = DefaultAudioDestinationNode::create(this);
 
     initialize();
@@ -107,6 +130,7 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_destinationNode(nullptr)
     , m_isCleared(false)
     , m_isResolvingResumePromises(false)
+    , m_userGestureRequired(false)
     , m_connectionCount(0)
     , m_deferredTaskHandler(DeferredTaskHandler::create())
     , m_contextState(Suspended)
@@ -116,6 +140,11 @@ AbstractAudioContext::AbstractAudioContext(Document* document, unsigned numberOf
     , m_periodicWaveSawtooth(nullptr)
     , m_periodicWaveTriangle(nullptr)
 {
+    // TODO(mlamouri): we might want to use other ways of checking for this but
+    // in order to record metrics, re-using the HTMLMediaElement setting is
+    // probably the simplest solution.
+    if (document->settings() && document->settings()->mediaPlaybackRequiresUserGesture())
+        m_userGestureRequired = true;
 }
 
 AbstractAudioContext::~AbstractAudioContext()
@@ -206,7 +235,47 @@ AudioBuffer* AbstractAudioContext::createBuffer(unsigned numberOfChannels, size_
     // It's ok to call createBuffer, even if the context is closed because the AudioBuffer doesn't
     // really "belong" to any particular context.
 
-    return AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate, exceptionState);
+    AudioBuffer* buffer = AudioBuffer::create(numberOfChannels, numberOfFrames, sampleRate, exceptionState);
+
+    if (buffer) {
+        // Only record the data if the creation succeeded.
+        DEFINE_STATIC_LOCAL(SparseHistogram, audioBufferChannelsHistogram,
+            ("WebAudio.AudioBuffer.NumberOfChannels"));
+
+        // Arbitrarly limit the maximum length to 1 million frames (about 20 sec
+        // at 48kHz).  The number of buckets is fairly arbitrary.
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, audioBufferLengthHistogram,
+            ("WebAudio.AudioBuffer.Length", 1, 1000000, 50));
+        // The limits are the min and max AudioBuffer sample rates currently
+        // supported.  We use explicit values here instead of
+        // AudioUtilities::minAudioBufferSampleRate() and
+        // AudioUtilities::maxAudioBufferSampleRate().  The number of buckets is
+        // fairly arbitrary.
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, audioBufferSampleRateHistogram,
+            ("WebAudio.AudioBuffer.SampleRate", 3000, 192000, 60));
+
+        audioBufferChannelsHistogram.sample(numberOfChannels);
+        audioBufferLengthHistogram.count(numberOfFrames);
+        audioBufferSampleRateHistogram.count(sampleRate);
+
+        // Compute the ratio of the buffer rate and the context rate so we know
+        // how often the buffer needs to be resampled to match the context.  For
+        // the histogram, we multiply the ratio by 100 and round to the nearest
+        // integer.  If the context is closed, don't record this because we
+        // don't have a sample rate for closed context.
+        if (!isContextClosed()) {
+            // The limits are choosen from 100*(3000/192000) = 1.5625 and
+            // 100*(192000/3000) = 6400, where 3000 and 192000 are the current
+            // min and max sample rates possible for an AudioBuffer.  The number
+            // of buckets is fairly arbitrary.
+            DEFINE_STATIC_LOCAL(CustomCountHistogram, audioBufferSampleRateRatioHistogram,
+                ("WebAudio.AudioBuffer.SampleRateRatio", 1, 6400, 50));
+            float ratio = 100 * sampleRate / this->sampleRate();
+            audioBufferSampleRateRatioHistogram.count(static_cast<int>(0.5 + ratio));
+        }
+    }
+
+    return buffer;
 }
 
 ScriptPromise AbstractAudioContext::decodeAudioData(ScriptState* scriptState, DOMArrayBuffer* audioData, AudioBufferCallback* successCallback, AudioBufferCallback* errorCallback, ExceptionState& exceptionState)
@@ -473,6 +542,25 @@ PeriodicWave* AbstractAudioContext::periodicWave(int type)
     }
 }
 
+void AbstractAudioContext::recordUserGestureState()
+{
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, userGestureHistogram, ("WebAudio.UserGesture", UserGestureRecordMax));
+
+    if (!m_userGestureRequired) {
+        if (UserGestureIndicator::processingUserGesture())
+            userGestureHistogram.count(UserGestureNotRequiredAndAvailable);
+        else
+            userGestureHistogram.count(UserGestureNotRequiredAndNotAvailable);
+        return;
+    }
+    if (!UserGestureIndicator::processingUserGesture()) {
+        userGestureHistogram.count(UserGestureRequiredAndNotAvailable);
+        return;
+    }
+    userGestureHistogram.count(UserGestureRequiredAndAvailable);
+    m_userGestureRequired = false;
+}
+
 String AbstractAudioContext::state() const
 {
     // These strings had better match the strings for AudioContextState in AudioContext.idl.
@@ -515,7 +603,7 @@ void AbstractAudioContext::setContextState(AudioContextState newState)
 
     // Notify context that state changed
     if (getExecutionContext())
-        getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&AbstractAudioContext::notifyStateChange, this));
+        getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&AbstractAudioContext::notifyStateChange, wrapPersistent(this)));
 }
 
 void AbstractAudioContext::notifyStateChange()
@@ -561,7 +649,7 @@ void AbstractAudioContext::releaseFinishedSourceNodes()
         }
     }
     if (didRemove)
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::removeFinishedSourceNodes, wrapCrossThreadPersistent(this)));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&AbstractAudioContext::removeFinishedSourceNodes, wrapCrossThreadPersistent(this)));
 
     m_finishedSourceHandlers.clear();
 }
@@ -674,7 +762,7 @@ void AbstractAudioContext::resolvePromisesForResume()
     // promises in the main thread.
     if (!m_isResolvingResumePromises && m_resumeResolvers.size() > 0) {
         m_isResolvingResumePromises = true;
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, wrapCrossThreadPersistent(this)));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&AbstractAudioContext::resolvePromisesForResumeOnMainThread, wrapCrossThreadPersistent(this)));
     }
 }
 
@@ -716,6 +804,8 @@ void AbstractAudioContext::startRendering()
     // This is called for both online and offline contexts.
     ASSERT(isMainThread());
     ASSERT(m_destinationNode);
+
+    recordUserGestureState();
 
     if (m_contextState == Suspended) {
         destination()->audioDestinationHandler().startRendering();

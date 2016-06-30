@@ -14,8 +14,11 @@
 namespace blink {
 
 class Document;
+class Element;
 class HTMLElement;
 class QualifiedName;
+class CustomElementDefinition;
+class CustomElementReaction;
 class CustomElementRegistry;
 
 class CORE_EXPORT CustomElement {
@@ -25,34 +28,30 @@ public:
     // may be a different object for a given element over its lifetime
     // as it moves between documents.
     static CustomElementsRegistry* registry(const Element&);
+    static CustomElementsRegistry* registry(const Document&);
 
-    // Returns true if element could possibly match a custom element
-    // descriptor *now*. See CustomElementDescriptor::matches for the
-    // meaning of "match". Custom element processing which depends on
-    // matching a descriptor, such as upgrade, can be skipped for
-    // elements that fail this test.
-    //
-    // Although this result is currently constant for a given element,
-    // when customized built-in elements are implemented the result
-    // will depend on the value of the 'is' attribute. In addition,
-    // these elements may stop matching descriptors after being
-    // upgraded, so use Node::getCustomElementState to detect
-    // customized elements.
-    static bool descriptorMayMatch(const Element& element)
-    {
-        // TODO(dominicc): Broaden this check when customized built-in
-        // elements are implemented.
-        return isValidName(element.localName())
-            && element.namespaceURI() == HTMLNames::xhtmlNamespaceURI;
-    }
+    static CustomElementDefinition* definitionForElement(const Element&);
 
     static bool isValidName(const AtomicString& name);
 
     static bool shouldCreateCustomElement(Document&, const AtomicString& localName);
     static bool shouldCreateCustomElement(Document&, const QualifiedName&);
 
-    static HTMLElement* createCustomElement(Document&, const AtomicString& localName, CreateElementFlags);
-    static HTMLElement* createCustomElement(Document&, const QualifiedName&, CreateElementFlags);
+    static HTMLElement* createCustomElementSync(Document&, const AtomicString& localName, ExceptionState&);
+    static HTMLElement* createCustomElementSync(Document&, const QualifiedName&, ExceptionState&);
+    static HTMLElement* createCustomElementSync(Document&, const QualifiedName&);
+    static HTMLElement* createCustomElementAsync(Document&, const QualifiedName&);
+
+    static void enqueue(Element*, CustomElementReaction*);
+    static void enqueueConnectedCallback(Element*);
+    static void enqueueDisconnectedCallback(Element*);
+    static void enqueueAttributeChangedCallback(Element*, const QualifiedName&,
+        const AtomicString& oldValue, const AtomicString& newValue);
+
+    static void tryToUpgrade(Element*);
+
+private:
+    static HTMLElement* createUndefinedElement(Document&, const QualifiedName&);
 };
 
 } // namespace blink

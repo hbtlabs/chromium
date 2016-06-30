@@ -29,11 +29,11 @@ async_test(function(t) {
       return capturer.takePhoto();
     })
     .then(blob => {
-        assert_true(blob.size > 0);
-        t.done();
+      assert_true(blob.size > 0);
+      t.done();
     })
     .catch(error => {
-        assert_unreached("Error during takePhoto(): " + error);
+      assert_unreached("Error during takePhoto(): " + error);
     });
 }, 'exercises the ImageCapture API takePhoto()');
 

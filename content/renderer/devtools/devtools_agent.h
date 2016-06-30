@@ -45,6 +45,8 @@ class CONTENT_EXPORT DevToolsAgent
                                          int call_id,
                                          const std::string& message,
                                          const std::string& post_state);
+  static blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
+      createMessageLoopWrapper();
 
   blink::WebDevToolsAgent* GetWebAgent();
 
@@ -56,6 +58,7 @@ class CONTENT_EXPORT DevToolsAgent
   // RenderFrameObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
   void WidgetWillClose() override;
+  void OnDestruct() override;
 
   // WebDevToolsAgentClient implementation.
   void sendProtocolMessage(int session_id,

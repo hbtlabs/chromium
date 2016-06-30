@@ -20,9 +20,12 @@
 #include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
+#include <memory>
 #include <utility>
+
+class SkPicture;
 
 namespace blink {
 
@@ -37,25 +40,21 @@ class PLATFORM_EXPORT PaintController {
     WTF_MAKE_NONCOPYABLE(PaintController);
     USING_FAST_MALLOC(PaintController);
 public:
-    static PassOwnPtr<PaintController> create()
+    static std::unique_ptr<PaintController> create()
     {
-        return adoptPtr(new PaintController());
+        return wrapUnique(new PaintController());
     }
 
     ~PaintController()
     {
+        // New display items should be committed before PaintController is destructed.
+        DCHECK(m_newDisplayItemList.isEmpty());
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
         DisplayItemClient::endShouldKeepAliveAllClients(this);
 #endif
     }
 
     void invalidateAll();
-
-    // Record when paint offsets change during paint.
-    void invalidatePaintOffset(const DisplayItemClient&);
-#if DCHECK_IS_ON()
-    bool paintOffsetWasInvalidated(const DisplayItemClient&) const;
-#endif
 
     // These methods are called during painting.
 
@@ -137,16 +136,10 @@ public:
     // the last commitNewDisplayItems(). Use with care.
     DisplayItemList& newDisplayItemList() { return m_newDisplayItemList; }
 
+    void appendDebugDrawingAfterCommit(const DisplayItemClient&, PassRefPtr<SkPicture>, const LayoutSize& offsetFromLayoutObject);
+
 #ifndef NDEBUG
     void showDebugData() const;
-#endif
-
-    // This is called only if we are tracking paint invalidation for testing, or DCHECK_IS_ON()
-    // for error checking and debugging.
-    void displayItemClientWasInvalidated(const DisplayItemClient&);
-
-#if DCHECK_IS_ON()
-    bool hasInvalidations() { return !m_invalidations.isEmpty(); }
 #endif
 
 #if DCHECK_IS_ON()
@@ -189,7 +182,6 @@ private:
     // (when RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled).
     void checkUnderInvalidation(DisplayItemList::iterator& newIt, DisplayItemList::iterator& currentIt);
     void checkCachedDisplayItemIsUnchanged(const char* messagePrefix, const DisplayItem& newItem, const DisplayItem& oldItem);
-    void checkNoRemainingCachedDisplayItems();
 #endif
 
     void updateCacheGeneration();
@@ -201,12 +193,6 @@ private:
     // Data being used to build the next paint artifact.
     DisplayItemList m_newDisplayItemList;
     PaintChunker m_newPaintChunks;
-
-#if DCHECK_IS_ON()
-    // Set of clients which had paint offset changes since the last commit. This is used for
-    // ensuring paint offsets are only updated once and are the same in all phases.
-    HashSet<const DisplayItemClient*> m_clientsWithPaintOffsetInvalidations;
-#endif
 
     // Allow display item construction to be disabled to isolate the costs of construction
     // in performance metrics.
@@ -224,16 +210,18 @@ private:
     int m_numCachedNewItems;
 
 #if DCHECK_IS_ON()
-    // Record the debug names of invalidated clients for assertion and debugging.
-    Vector<String> m_invalidations;
-
     // This is used to check duplicated ids during add(). We could also check
     // during commitNewDisplayItems(), but checking during add() helps developer
     // easily find where the duplicated ids are from.
     DisplayItemIndicesByClientMap m_newDisplayItemIndicesByClient;
 #endif
 
-    DisplayItemCacheGeneration m_currentCacheGeneration;
+    DisplayItemClient::CacheGenerationOrInvalidationReason m_currentCacheGeneration;
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    // A stack recording subsequence clients that are currently painting.
+    Vector<const DisplayItemClient*> m_currentSubsequenceClients;
+#endif
 };
 
 } // namespace blink

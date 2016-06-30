@@ -4,6 +4,8 @@
 
 module blink.mojom;
 
+import "device/bluetooth/public/interfaces/bluetooth_uuid.mojom";
+
 // Errors that can occur during Web Bluetooth execution, which are transformed
 // to a DOMException in Source/modules/bluetooth/BluetoothError.cpp.
 //
@@ -46,6 +48,7 @@ enum WebBluetoothError {
   CHOOSER_NOT_SHOWN_API_LOCALLY_DISABLED,
   CHOOSER_NOT_SHOWN_USER_DENIED_PERMISSION_TO_SCAN,
   SERVICE_NOT_FOUND,
+  NO_SERVICES_FOUND,
   CHARACTERISTIC_NOT_FOUND,
   NO_CHARACTERISTICS_FOUND,
   // NotSupportedError:
@@ -69,14 +72,14 @@ enum WebBluetoothError {
 };
 
 struct WebBluetoothScanFilter {
-  array<string>? services;
+  array<device.mojom.BluetoothUUID>? services;
   string? name;
   string? name_prefix;
 };
 
 struct WebBluetoothRequestDeviceOptions {
   array<WebBluetoothScanFilter> filters;
-  array<string> optional_services;
+  array<device.mojom.BluetoothUUID> optional_services;
 };
 
 // Indicates if the function will return a single or multiple
@@ -103,9 +106,6 @@ struct WebBluetoothRemoteGATTCharacteristic {
   uint32 properties;
 };
 
-// TODO(ortuno): Define Bluetooth Service.
-// https://crbug.com/508771
-
 // Web Bluetooth Interface that Blink can use to perform
 // Bluetooth GATT Operations on Bluetooth Devices.
 interface WebBluetoothService {
@@ -127,13 +127,16 @@ interface WebBluetoothService {
   // the ref count for that connection.
   RemoteServerDisconnect(string device_id);
 
-  // Returns the first GATT Service with |service_uuid| of a Bluetooth Device
-  // with |device_id|.
-  RemoteServerGetPrimaryService(
+  // If |services_uuid| is present, returns services with |services_uuid|.
+  // Otherwise returns all non-blacklisted services.
+  // If |quantity| == WebBluetoothGATTQueryQuantity::SINGLE, only one
+  // service will be returned.
+  RemoteServerGetPrimaryServices(
     string device_id,
-    string service_uuid) => (
+    WebBluetoothGATTQueryQuantity quantity,
+    device.mojom.BluetoothUUID? services_uuid) => (
       WebBluetoothError error,
-      WebBluetoothRemoteGATTService? service);
+      array<WebBluetoothRemoteGATTService>? services);
 
   // Returns the Characteristics of a GATT Service with |service_instance_id|.
   // If |quantity| == WebBluetoothGATTQueryQuantity::SINGLE, only one
@@ -141,7 +144,7 @@ interface WebBluetoothService {
   RemoteServiceGetCharacteristics(
     string service_instance_id,
     WebBluetoothGATTQueryQuantity quantity,
-    string? characteristics_uuid) => (
+    device.mojom.BluetoothUUID? characteristics_uuid) => (
       WebBluetoothError error,
       array<WebBluetoothRemoteGATTCharacteristic>? characteristics);
 

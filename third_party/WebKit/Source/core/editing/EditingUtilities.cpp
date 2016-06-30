@@ -29,6 +29,7 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
@@ -44,6 +45,7 @@
 #include "core/editing/state_machines/BackspaceStateMachine.h"
 #include "core/editing/state_machines/BackwardGraphemeBoundaryStateMachine.h"
 #include "core/editing/state_machines/ForwardGraphemeBoundaryStateMachine.h"
+#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
@@ -65,6 +67,7 @@ namespace blink {
 using namespace HTMLNames;
 
 namespace {
+
 std::ostream& operator<<(std::ostream& os, PositionMoveType type)
 {
     static const char* const texts[] = {
@@ -75,7 +78,26 @@ std::ostream& operator<<(std::ostream& os, PositionMoveType type)
     DCHECK_LT(it, std::end(texts)) << "Unknown PositionMoveType value";
     return os << *it;
 }
+
 } // namespace
+
+bool needsLayoutTreeUpdate(const Node& node)
+{
+    const Document& document = node.document();
+    if (document.needsLayoutTreeUpdate())
+        return true;
+    // TODO(yosin): We should make |document::needsLayoutTreeUpdate()| to
+    // check |LayoutView::needsLayout()|.
+    return document.view() && document.view()->needsLayout();
+}
+
+bool needsLayoutTreeUpdate(const Position& position)
+{
+    const Node* node = position.anchorNode();
+    if (!node)
+        return false;
+    return needsLayoutTreeUpdate(*node);
+}
 
 // Atomic means that the node has no children, or has children which are ignored for the
 // purposes of editing.
@@ -175,7 +197,7 @@ static int comparePositions(Node* containerA, int offsetA, Node* containerB, int
     }
 
     // Should never reach this point.
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
 }
 
@@ -262,15 +284,19 @@ ContainerNode* highestEditableRoot(const PositionInFlatTree& position, EditableT
     return highestEditableRoot(toPositionInDOMTree(position), editableType);
 }
 
-bool isEditablePosition(const Position& p, EditableType editableType, EUpdateStyle updateStyle)
+bool isEditablePosition(const Position& position, EditableType editableType)
 {
-    Node* node = p.parentAnchoredEquivalent().anchorNode();
+    Node* node = position.parentAnchoredEquivalent().anchorNode();
     if (!node)
         return false;
-    if (updateStyle == UpdateStyle)
-        node->document().updateStyleAndLayoutIgnorePendingStylesheets();
-    else
-        DCHECK_EQ(updateStyle, DoNotUpdateStyle);
+    DCHECK(node->document().isActive());
+    if (node->document().lifecycle().state() >= DocumentLifecycle::InStyleRecalc) {
+        // TODO(yosin): Once we change |LayoutObject::adjustStyleDifference()|
+        // not to call |FrameSelection::hasCaret()|, we should not assume
+        // calling |isEditablePosition()| in |InStyleRecalc| is safe.
+    } else {
+        DCHECK(!needsLayoutTreeUpdate(position)) << position;
+    }
 
     if (isDisplayInsideTable(node))
         node = node->parentNode();
@@ -280,9 +306,9 @@ bool isEditablePosition(const Position& p, EditableType editableType, EUpdateSty
     return node->hasEditableStyle(editableType);
 }
 
-bool isEditablePosition(const PositionInFlatTree& p, EditableType editableType, EUpdateStyle updateStyle)
+bool isEditablePosition(const PositionInFlatTree& p, EditableType editableType)
 {
-    return isEditablePosition(toPositionInDOMTree(p), editableType, updateStyle);
+    return isEditablePosition(toPositionInDOMTree(p), editableType);
 }
 
 bool isAtUnsplittableElement(const Position& pos)
@@ -329,7 +355,7 @@ Element* rootEditableElementOf(const VisiblePosition& visiblePosition)
 }
 
 // Finds the enclosing element until which the tree can be split.
-// When a user hits ENTER, he/she won't expect this element to be split into two.
+// When a user hits ENTER, they won't expect this element to be split into two.
 // You may pass it as the second argument of splitTreeToNode.
 Element* unsplittableElementForPosition(const Position& p)
 {
@@ -481,6 +507,7 @@ VisiblePositionInFlatTree firstEditableVisiblePositionAfterPositionInRoot(const 
 template <typename Strategy>
 PositionTemplate<Strategy> firstEditablePositionAfterPositionInRootAlgorithm(const PositionTemplate<Strategy>& position, Node& highestRoot)
 {
+    DCHECK(!needsLayoutTreeUpdate(highestRoot)) << position << ' ' << highestRoot;
     // position falls before highestRoot.
     if (position.compareTo(PositionTemplate<Strategy>::firstPositionInNode(&highestRoot)) == -1 && highestRoot.hasEditableStyle())
         return PositionTemplate<Strategy>::firstPositionInNode(&highestRoot);
@@ -527,6 +554,7 @@ VisiblePositionInFlatTree lastEditableVisiblePositionBeforePositionInRoot(const 
 template <typename Strategy>
 PositionTemplate<Strategy> lastEditablePositionBeforePositionInRootAlgorithm(const PositionTemplate<Strategy>& position, Node& highestRoot)
 {
+    DCHECK(!needsLayoutTreeUpdate(highestRoot)) << position << ' ' << highestRoot;
     // When position falls after highestRoot, the result is easy to compute.
     if (position.compareTo(PositionTemplate<Strategy>::lastPositionInNode(&highestRoot)) == 1)
         return PositionTemplate<Strategy>::lastPositionInNode(&highestRoot);
@@ -737,7 +765,7 @@ bool isEnclosingBlock(const Node* node)
 
 bool isInline(const Node* node)
 {
-    return node && node->layoutObject() && node->layoutObject()->isInline();
+    return node && node->computedStyle()->display() == INLINE;
 }
 
 // TODO(yosin) Deploy this in all of the places where |enclosingBlockFlow()| and
@@ -1320,7 +1348,7 @@ HTMLElement* createDefaultParagraphElement(Document& document)
         return HTMLParagraphElement::create(document);
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 
@@ -1417,7 +1445,7 @@ static Position previousCharacterPosition(const Position& position, TextAffinity
 // This assumes that it starts in editable content.
 Position leadingWhitespacePosition(const Position& position, TextAffinity affinity, WhitespacePositionOption option)
 {
-    DCHECK(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle)) << position;
+    DCHECK(isEditablePosition(position, ContentIsEditable)) << position;
     if (position.isNull())
         return Position();
 
@@ -1445,7 +1473,7 @@ Position leadingWhitespacePosition(const Position& position, TextAffinity affini
 // This assumes that it starts in editable content.
 Position trailingWhitespacePosition(const Position& position, TextAffinity, WhitespacePositionOption option)
 {
-    DCHECK(isEditablePosition(position, ContentIsEditable, DoNotUpdateStyle)) << position;
+    DCHECK(isEditablePosition(position, ContentIsEditable)) << position;
     if (position.isNull())
         return Position();
 

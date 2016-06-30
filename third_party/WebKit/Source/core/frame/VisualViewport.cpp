@@ -30,6 +30,7 @@
 
 #include "core/frame/VisualViewport.h"
 
+#include "core/dom/DOMNodeIds.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -47,6 +48,7 @@
 #include "platform/TraceEvent.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/FloatSize.h"
+#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeOverlay.h"
@@ -55,6 +57,7 @@
 #include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/platform/WebScrollbarLayer.h"
+#include <memory>
 
 using blink::WebLayer;
 using blink::WebLayerTreeView;
@@ -95,13 +98,22 @@ void VisualViewport::updateStyleAndLayoutIgnorePendingStylesheets()
         document->updateStyleAndLayoutIgnorePendingStylesheets();
 }
 
-void VisualViewport::enqueueChangedEvent()
+void VisualViewport::enqueueScrollEvent()
 {
     if (!RuntimeEnabledFeatures::visualViewportAPIEnabled())
         return;
 
     if (Document* document = mainFrame()->document())
-        document->enqueueVisualViewportChangedEvent();
+        document->enqueueVisualViewportScrollEvent();
+}
+
+void VisualViewport::enqueueResizeEvent()
+{
+    if (!RuntimeEnabledFeatures::visualViewportAPIEnabled())
+        return;
+
+    if (Document* document = mainFrame()->document())
+        document->enqueueVisualViewportResizeEvent();
 }
 
 void VisualViewport::setSize(const IntSize& size)
@@ -123,7 +135,7 @@ void VisualViewport::setSize(const IntSize& size)
     if (!mainFrame())
         return;
 
-    enqueueChangedEvent();
+    enqueueResizeEvent();
 
     bool autosizerNeedsUpdating = widthDidChange
         && mainFrame()->settings()
@@ -230,26 +242,6 @@ double VisualViewport::scrollTop()
     return adjustScrollForAbsoluteZoom(visibleRect().y(), mainFrame()->pageZoomFactor());
 }
 
-void VisualViewport::setScrollLeft(double x)
-{
-    if (!mainFrame())
-        return;
-
-    updateStyleAndLayoutIgnorePendingStylesheets();
-
-    setLocation(FloatPoint(x * mainFrame()->pageZoomFactor(), location().y()));
-}
-
-void VisualViewport::setScrollTop(double y)
-{
-    if (!mainFrame())
-        return;
-
-    updateStyleAndLayoutIgnorePendingStylesheets();
-
-    setLocation(FloatPoint(location().x(), y * mainFrame()->pageZoomFactor()));
-}
-
 double VisualViewport::clientWidth()
 {
     if (!mainFrame())
@@ -290,6 +282,7 @@ void VisualViewport::setScaleAndLocation(float scale, const FloatPoint& location
         m_scale = scale;
         valuesChanged = true;
         frameHost().chromeClient().pageScaleFactorChanged();
+        enqueueResizeEvent();
     }
 
     FloatPoint clampedOffset(clampOffsetToBoundaries(location));
@@ -307,14 +300,14 @@ void VisualViewport::setScaleAndLocation(float scale, const FloatPoint& location
                 document->enqueueScrollEventForNode(document);
         }
 
+        enqueueScrollEvent();
+
         mainFrame()->loader().client()->didChangeScrollOffset();
         valuesChanged = true;
     }
 
     if (!valuesChanged)
         return;
-
-    enqueueChangedEvent();
 
     InspectorInstrumentation::didUpdateLayout(mainFrame());
     mainFrame()->loader().saveScrollState();
@@ -375,7 +368,7 @@ void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot)
         return;
     }
 
-    if (currentLayerTreeRoot->parent() && currentLayerTreeRoot->parent() == m_innerViewportScrollLayer)
+    if (currentLayerTreeRoot->parent() && currentLayerTreeRoot->parent() == m_innerViewportScrollLayer.get())
         return;
 
     if (!m_innerViewportScrollLayer) {
@@ -406,6 +399,10 @@ void VisualViewport::attachToLayerTree(GraphicsLayer* currentLayerTreeRoot)
         m_innerViewportScrollLayer->platformLayer()->setScrollClipLayer(
             m_innerViewportContainerLayer->platformLayer());
         m_innerViewportScrollLayer->platformLayer()->setUserScrollable(true, true);
+        if (mainFrame()) {
+            if (Document* document = mainFrame()->document())
+                m_innerViewportScrollLayer->setElementId(createCompositorElementId(DOMNodeIds::idForNode(document), CompositorSubElementId::Scroll));
+        }
 
         m_rootTransformLayer->addChild(m_innerViewportContainerLayer.get());
         m_innerViewportContainerLayer->addChild(m_overscrollElasticityLayer.get());
@@ -447,7 +444,7 @@ void VisualViewport::setupScrollbar(WebScrollbar::Orientation orientation)
     bool isHorizontal = orientation == WebScrollbar::Horizontal;
     GraphicsLayer* scrollbarGraphicsLayer = isHorizontal ?
         m_overlayScrollbarHorizontal.get() : m_overlayScrollbarVertical.get();
-    OwnPtr<WebScrollbarLayer>& webScrollbarLayer = isHorizontal ?
+    std::unique_ptr<WebScrollbarLayer>& webScrollbarLayer = isHorizontal ?
         m_webOverlayScrollbarHorizontal : m_webOverlayScrollbarVertical;
 
     ScrollbarThemeOverlay& theme = ScrollbarThemeOverlay::mobileTheme();
@@ -832,7 +829,7 @@ String VisualViewport::debugName(const GraphicsLayer* graphicsLayer) const
         name =  "Overlay Scrollbar Horizontal Layer";
     } else if (graphicsLayer == m_overlayScrollbarVertical.get()) {
         name =  "Overlay Scrollbar Vertical Layer";
-    } else if (graphicsLayer == m_rootTransformLayer) {
+    } else if (graphicsLayer == m_rootTransformLayer.get()) {
         name =  "Root Transform Layer";
     } else {
         ASSERT_NOT_REACHED();

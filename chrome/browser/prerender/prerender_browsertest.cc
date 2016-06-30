@@ -94,6 +94,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/ppapi_test_utils.h"
@@ -110,8 +111,10 @@
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_server_config.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -1134,7 +1137,8 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
     prerender_manager->mutable_config().rate_limit_enabled = false;
     ASSERT_TRUE(prerender_contents_factory_ == NULL);
     prerender_contents_factory_ = new TestPrerenderContentsFactory;
-    prerender_manager->SetPrerenderContentsFactory(prerender_contents_factory_);
+    prerender_manager->SetPrerenderContentsFactoryForTest(
+        prerender_contents_factory_);
     ASSERT_TRUE(safe_browsing_factory_->test_safe_browsing_service());
   }
 
@@ -2839,22 +2843,26 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderTargetHasPopup) {
 
 class TestClientCertStore : public net::ClientCertStore {
  public:
-  TestClientCertStore() {}
+  explicit TestClientCertStore(const net::CertificateList& certs)
+      : certs_(certs) {}
   ~TestClientCertStore() override {}
 
   // net::ClientCertStore:
   void GetClientCerts(const net::SSLCertRequestInfo& cert_request_info,
                       net::CertificateList* selected_certs,
                       const base::Closure& callback) override {
-    *selected_certs = net::CertificateList(
-        1, scoped_refptr<net::X509Certificate>(
-        new net::X509Certificate("test", "test", base::Time(), base::Time())));
+    *selected_certs = certs_;
     callback.Run();
   }
+
+ private:
+  net::CertificateList certs_;
 };
 
-std::unique_ptr<net::ClientCertStore> CreateCertStore() {
-  return std::unique_ptr<net::ClientCertStore>(new TestClientCertStore);
+std::unique_ptr<net::ClientCertStore> CreateCertStore(
+    scoped_refptr<net::X509Certificate> available_cert) {
+  return std::unique_ptr<net::ClientCertStore>(
+      new TestClientCertStore(net::CertificateList(1, available_cert)));
 }
 
 // Checks that a top-level page which would normally request an SSL client
@@ -2862,9 +2870,10 @@ std::unique_ptr<net::ClientCertStore> CreateCertStore() {
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                        PrerenderSSLClientCertTopLevel) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -2881,9 +2890,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                        PrerenderSSLClientCertSubresource) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -2908,9 +2918,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
 // iframe will cancel the prerendered page.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLClientCertIframe) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -3226,7 +3237,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   const char* url = "/prerender/prerender_page.html";
   PrerenderTestURL(url, FINAL_STATUS_DEVTOOLS_ATTACHED, 1);
   NavigateToURLWithDisposition(url, CURRENT_TAB, false);
-  agent->DetachClient();
+  agent->DetachClient(&client);
 }
 
 // Validate that the sessionStorage namespace remains the same when swapping
@@ -3697,8 +3708,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   content::OpenURLParams params(dest_url(), Referrer(), CURRENT_TAB,
                                 ui::PAGE_TRANSITION_TYPED, false);
   params.uses_post = true;
-  params.browser_initiated_post_data =
-      base::RefCountedString::TakeString(&post_data);
+  params.post_data = content::ResourceRequestBody::CreateFromBytes(
+      post_data.data(), post_data.size());
   NavigateToURLWithParams(params, false);
 }
 

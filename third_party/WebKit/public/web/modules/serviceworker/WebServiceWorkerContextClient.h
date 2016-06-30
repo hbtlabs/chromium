@@ -37,6 +37,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerEventResult.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
+#include "public/web/WebDevToolsAgentClient.h"
 #include <v8.h>
 
 namespace blink {
@@ -107,6 +108,9 @@ public:
     // Inspector related messages.
     virtual void sendDevToolsMessage(int sessionId, int callId, const WebString& message, const WebString& state) { }
 
+    // Message loop for debugging.
+    virtual WebDevToolsAgentClient::WebKitClientMessageLoop* createDevToolsMessageLoop() { return nullptr; }
+
     // ServiceWorker specific method.
     virtual void didHandleActivateEvent(int eventID, WebServiceWorkerEventResult result) { }
 
@@ -114,11 +118,15 @@ public:
     // script context.
     virtual void didHandleExtendableMessageEvent(int eventID, WebServiceWorkerEventResult result) { }
 
-    // ServiceWorker specific methods. Called after FetchEvent is handled by the
-    // ServiceWorker's script context. When no response is provided, the browser
-    // should fallback to native fetch.
-    virtual void didHandleFetchEvent(int fetchEventID) { }
-    virtual void didHandleFetchEvent(int fetchEventID, const WebServiceWorkerResponse& response) { }
+    // ServiceWorker specific methods. respondFetchEvent will be called after
+    // FetchEvent returns a response by the ServiceWorker's script context, and
+    // didHandleFetchEvent will be called after the end of FetchEvent's
+    // lifecycle. When no response is provided, the browser should fallback to
+    // native fetch. EventIDs are the same with the ids passed from
+    // dispatchFetchEvent respectively.
+    virtual void respondToFetchEvent(int responseID) { };
+    virtual void respondToFetchEvent(int responseID, const WebServiceWorkerResponse& response) { };
+    virtual void didHandleFetchEvent(int eventFinishID, WebServiceWorkerEventResult result) { };
 
     // ServiceWorker specific method. Called after InstallEvent (dispatched
     // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's

@@ -11,35 +11,72 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/common/media_delegate.h"
+#include "ash/common/metrics/user_metrics_action.h"
 
 namespace gfx {
 class Rect;
 }
 
+namespace views {
+class PointerWatcher;
+}
+
 namespace ash {
 
+class AccessibilityDelegate;
+class DisplayInfo;
+class FocusCycler;
+class KeyboardUI;
+class MruWindowTracker;
+class SessionStateDelegate;
+class ShellObserver;
+class SystemTrayDelegate;
+class SystemTrayNotifier;
 class WindowResizer;
+class WindowSelectorController;
 class WmActivationObserver;
 class WmDisplayObserver;
-class WmOverviewModeObserver;
+class WmRootWindowController;
 class WmWindow;
 
 namespace wm {
-
+class MaximizeModeEventHandler;
 class WindowState;
-
-enum class WmUserMetricsAction;
 }
+
+#if defined(OS_CHROMEOS)
+class LogoutConfirmationController;
+#endif
 
 // Similar to ash::Shell. Eventually the two will be merged.
 class ASH_EXPORT WmShell {
  public:
-  virtual ~WmShell() {}
-
   // This is necessary for a handful of places that is difficult to plumb
   // through context.
   static void Set(WmShell* instance);
   static WmShell* Get();
+  static bool HasInstance() { return instance_ != nullptr; }
+
+  FocusCycler* focus_cycler() { return focus_cycler_.get(); }
+
+  KeyboardUI* keyboard_ui() { return keyboard_ui_.get(); }
+
+  MediaDelegate* media_delegate() { return media_delegate_.get(); }
+
+  SystemTrayNotifier* system_tray_notifier() {
+    return system_tray_notifier_.get();
+  }
+
+  SystemTrayDelegate* system_tray_delegate() {
+    return system_tray_delegate_.get();
+  }
+
+  WindowSelectorController* window_selector_controller() {
+    return window_selector_controller_.get();
+  }
+
+  virtual MruWindowTracker* GetMruWindowTracker() = 0;
 
   // Creates a new window used as a container of other windows. No painting is
   // done to the created window.
@@ -58,19 +95,40 @@ class ASH_EXPORT WmShell {
   // appropriate container in the returned window.
   virtual WmWindow* GetRootWindowForNewWindows() = 0;
 
-  // Returns the list of most recently used windows.
-  virtual std::vector<WmWindow*> GetMruWindowList() = 0;
-
-  // Returns the list of most recently used windows excluding modals.
-  virtual std::vector<WmWindow*> GetMruWindowListIgnoreModals() = 0;
+  // Retuns the display info associated with |display_id|.
+  // TODO(msw): Remove this when DisplayManager has been moved. crbug.com/622480
+  virtual const DisplayInfo& GetDisplayInfo(int64_t display_id) const = 0;
 
   // Returns true if the first window shown on first run should be
   // unconditionally maximized, overriding the heuristic that normally chooses
   // the window size.
   virtual bool IsForceMaximizeOnFirstRun() = 0;
 
-  virtual bool IsUserSessionBlocked() = 0;
-  virtual bool IsScreenLocked() = 0;
+  // Returns true if a system-modal dialog window is currently open.
+  bool IsSystemModalWindowOpen();
+
+  // For testing only: set simulation that a modal window is open
+  void SimulateModalWindowOpenForTesting(bool modal_window_open) {
+    simulate_modal_window_open_for_testing_ = modal_window_open;
+  }
+
+  // Returns true if a window is currently pinned.
+  virtual bool IsPinned() = 0;
+
+  // Sets/Unsets the |window| to as a pinned window. If this is called with a
+  // window with WINDOW_STATE_TYPE_PINNED state, then this sets the |window|
+  // as a pinned window. Otherwise, this unsets it.
+  // For setting, a caller needs to guarantee that no windows are set
+  // as pinned window. For unsetting, a caller needs to guarantee that the
+  // |window| is the one which is currently set as a pinned window via previous
+  // this function invocation.
+  virtual void SetPinnedWindow(WmWindow* window) = 0;
+
+  // Returns true if |window| can be shown for the current user. This is
+  // intended to check if the current user matches the user associated with
+  // |window|.
+  // TODO(jamescook): Remove this when ShellDelegate has been moved.
+  virtual bool CanShowWindowForUser(WmWindow* window) = 0;
 
   // See aura::client::CursorClient for details on these.
   virtual void LockCursor() = 0;
@@ -78,7 +136,7 @@ class ASH_EXPORT WmShell {
 
   virtual std::vector<WmWindow*> GetAllRootWindows() = 0;
 
-  virtual void RecordUserMetricsAction(wm::WmUserMetricsAction action) = 0;
+  virtual void RecordUserMetricsAction(UserMetricsAction action) = 0;
 
   // Returns a WindowResizer to handle dragging. |next_window_resizer| is
   // the next WindowResizer in the WindowResizer chain. This may return
@@ -87,10 +145,19 @@ class ASH_EXPORT WmShell {
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) = 0;
 
-  // TODO(sky): if WindowSelectorController can't be moved over, move these
-  // onto their own local class.
-  virtual bool IsOverviewModeSelecting() = 0;
-  virtual bool IsOverviewModeRestoringMinimizedWindows() = 0;
+  virtual std::unique_ptr<wm::MaximizeModeEventHandler>
+  CreateMaximizeModeEventHandler() = 0;
+
+  // Called when the overview mode is about to be started (before the windows
+  // get re-arranged).
+  virtual void OnOverviewModeStarting() = 0;
+
+  // Called after overview mode has ended.
+  virtual void OnOverviewModeEnded() = 0;
+
+  virtual AccessibilityDelegate* GetAccessibilityDelegate() = 0;
+
+  virtual SessionStateDelegate* GetSessionStateDelegate() = 0;
 
   virtual void AddActivationObserver(WmActivationObserver* observer) = 0;
   virtual void RemoveActivationObserver(WmActivationObserver* observer) = 0;
@@ -98,11 +165,52 @@ class ASH_EXPORT WmShell {
   virtual void AddDisplayObserver(WmDisplayObserver* observer) = 0;
   virtual void RemoveDisplayObserver(WmDisplayObserver* observer) = 0;
 
-  virtual void AddOverviewModeObserver(WmOverviewModeObserver* observer) = 0;
-  virtual void RemoveOverviewModeObserver(WmOverviewModeObserver* observer) = 0;
+  virtual void AddShellObserver(ShellObserver* observer) = 0;
+  virtual void RemoveShellObserver(ShellObserver* observer) = 0;
+
+  virtual void AddPointerWatcher(views::PointerWatcher* watcher) = 0;
+  virtual void RemovePointerWatcher(views::PointerWatcher* watcher) = 0;
+
+#if defined(OS_CHROMEOS)
+  LogoutConfirmationController* logout_confirmation_controller() {
+    return logout_confirmation_controller_.get();
+  }
+
+  // TODO(jamescook): Remove this when VirtualKeyboardController has been moved.
+  virtual void ToggleIgnoreExternalKeyboard() = 0;
+#endif
+
+ protected:
+  WmShell();
+  virtual ~WmShell();
+
+  void SetKeyboardUI(std::unique_ptr<KeyboardUI> keyboard_ui);
+
+  // Helpers to set (and initialize) or destroy various delegates.
+  // TODO(msw|jamescook): Remove these once ShellDelegate, etc. are ported.
+  void SetMediaDelegate(std::unique_ptr<MediaDelegate> delegate);
+  void SetSystemTrayDelegate(std::unique_ptr<SystemTrayDelegate> delegate);
+  void DeleteSystemTrayDelegate();
+
+  void DeleteWindowSelectorController();
 
  private:
+  friend class Shell;
+
   static WmShell* instance_;
+
+  std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<KeyboardUI> keyboard_ui_;
+  std::unique_ptr<MediaDelegate> media_delegate_;
+  std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
+  std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;
+  std::unique_ptr<WindowSelectorController> window_selector_controller_;
+
+  bool simulate_modal_window_open_for_testing_ = false;
+
+#if defined(OS_CHROMEOS)
+  std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
+#endif
 };
 
 }  // namespace ash

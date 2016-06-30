@@ -13,6 +13,7 @@
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm/wm_screen_util.h"
 #include "ash/common/wm_window.h"
+#include "ash/common/wm_window_property.h"
 #include "base/auto_reset.h"
 
 namespace ash {
@@ -72,14 +73,19 @@ bool WindowState::IsFullscreen() const {
   return GetStateType() == WINDOW_STATE_TYPE_FULLSCREEN;
 }
 
-bool WindowState::IsMaximizedOrFullscreen() const {
-  return GetStateType() == WINDOW_STATE_TYPE_FULLSCREEN ||
-         GetStateType() == WINDOW_STATE_TYPE_MAXIMIZED;
+bool WindowState::IsMaximizedOrFullscreenOrPinned() const {
+  return GetStateType() == WINDOW_STATE_TYPE_MAXIMIZED ||
+         GetStateType() == WINDOW_STATE_TYPE_FULLSCREEN ||
+         GetStateType() == WINDOW_STATE_TYPE_PINNED;
 }
 
 bool WindowState::IsSnapped() const {
   return GetStateType() == WINDOW_STATE_TYPE_LEFT_SNAPPED ||
          GetStateType() == WINDOW_STATE_TYPE_RIGHT_SNAPPED;
+}
+
+bool WindowState::IsPinned() const {
+  return GetStateType() == WINDOW_STATE_TYPE_PINNED;
 }
 
 bool WindowState::IsNormalStateType() const {
@@ -103,6 +109,10 @@ bool WindowState::IsDocked() const {
 bool WindowState::IsUserPositionable() const {
   return (window_->GetType() == ui::wm::WINDOW_TYPE_NORMAL ||
           window_->GetType() == ui::wm::WINDOW_TYPE_PANEL);
+}
+
+bool WindowState::ShouldBeExcludedFromMru() const {
+  return (window_->GetBoolProperty(ash::WmWindowProperty::EXCLUDE_FROM_MRU));
 }
 
 bool WindowState::CanMaximize() const {
@@ -156,6 +166,10 @@ void WindowState::Unminimize() {
   window_->Unminimize();
 }
 
+void WindowState::SetExcludedFromMru(bool excluded_from_mru) {
+  window_->SetExcludedFromMru(excluded_from_mru);
+}
+
 void WindowState::Activate() {
   window_->Activate();
 }
@@ -172,7 +186,6 @@ void WindowState::Restore() {
 }
 
 void WindowState::DisableAlwaysOnTop(WmWindow* window_on_top) {
-  DCHECK(window_on_top);
   if (GetAlwaysOnTop()) {
     // |window_| is hidden first to avoid canceling fullscreen mode when it is
     // no longer always on top and gets added to default container. This avoids
@@ -186,7 +199,7 @@ void WindowState::DisableAlwaysOnTop(WmWindow* window_on_top) {
     // Technically it is possible that a |window_| could make itself
     // always_on_top really quickly. This is probably not a realistic case but
     // check if the two windows are in the same container just in case.
-    if (window_on_top->GetParent() == window_->GetParent())
+    if (window_on_top && window_on_top->GetParent() == window_->GetParent())
       window_->GetParent()->StackChildAbove(window_on_top, window_);
     if (visible)
       window_->Show();

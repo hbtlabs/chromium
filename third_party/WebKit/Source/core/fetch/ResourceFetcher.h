@@ -42,6 +42,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -80,6 +81,9 @@ public:
     using DocumentResourceMap = HeapHashMap<String, WeakMember<Resource>>;
     const DocumentResourceMap& allResources() const { return m_documentResources; }
 
+    // Actually starts loading a Resource if it wasn't started during requestResource().
+    bool startLoad(Resource*);
+
     void setAutoLoadImages(bool);
     void setImagesEnabled(bool);
 
@@ -113,7 +117,6 @@ public:
     void didReceiveResponse(Resource*, const ResourceResponse&);
     void didReceiveData(const Resource*, const char* data, int dataLength, int encodedDataLength);
     void didDownloadData(const Resource*, int dataLength, int encodedDataLength);
-    void willStartLoadingResource(Resource*, ResourceLoader*, ResourceRequest&);
     bool defersLoading() const;
 
     enum AccessControlLoggingDecision {
@@ -131,15 +134,13 @@ public:
         ResourceLoadingFromNetwork,
         ResourceLoadingFromCache
     };
-    void requestLoadStarted(Resource*, const FetchRequest&, ResourceLoadStartType, bool isStaticData = false);
+    void requestLoadStarted(unsigned long identifier, Resource*, const FetchRequest&, ResourceLoadStartType, bool isStaticData = false);
     static const ResourceLoaderOptions& defaultResourceOptions();
 
     String getCacheIdentifier() const;
 
     static void determineRequestContext(ResourceRequest&, Resource::Type, bool isMainFrame);
     void determineRequestContext(ResourceRequest&, Resource::Type);
-
-    WebTaskRunner* loadingTaskRunner();
 
     void updateAllImageResourcePriorities();
 
@@ -153,7 +154,7 @@ private:
 
     explicit ResourceFetcher(FetchContext*);
 
-    void initializeRevalidation(const FetchRequest&, Resource*);
+    void initializeRevalidation(ResourceRequest&, Resource*);
     Resource* createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
     void storeResourceTimingInitiatorInformation(Resource*);
 
@@ -168,6 +169,7 @@ private:
     void removeResourceLoader(ResourceLoader*);
 
     void initializeResourceRequest(ResourceRequest&, Resource::Type, FetchRequest::DeferOption);
+    void willSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse&, const ResourceLoaderOptions&);
 
     bool resourceNeedsLoad(Resource*, const FetchRequest&, RevalidationPolicy);
     bool shouldDeferImageLoad(const KURL&) const;
@@ -188,10 +190,10 @@ private:
 
     Timer<ResourceFetcher> m_resourceTimingReportTimer;
 
-    using ResourceTimingInfoMap = HeapHashMap<Member<Resource>, OwnPtr<ResourceTimingInfo>>;
+    using ResourceTimingInfoMap = HeapHashMap<Member<Resource>, std::unique_ptr<ResourceTimingInfo>>;
     ResourceTimingInfoMap m_resourceTimingInfoMap;
 
-    Vector<OwnPtr<ResourceTimingInfo>> m_scheduledResourceTimingReports;
+    Vector<std::unique_ptr<ResourceTimingInfo>> m_scheduledResourceTimingReports;
 
     ResourceLoaderSet m_loaders;
     ResourceLoaderSet m_nonBlockingLoaders;

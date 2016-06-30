@@ -41,7 +41,6 @@
 #include "content/child/fileapi/file_system_dispatcher.h"
 #include "content/child/fileapi/webfilesystem_impl.h"
 #include "content/child/memory/child_memory_message_filter.h"
-#include "content/child/mojo/mojo_application.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/power_monitor_broadcast_source.h"
 #include "content/child/push_messaging/push_dispatcher.h"
@@ -54,21 +53,22 @@
 #include "content/child/websocket_message_filter.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/mojo/mojo_shell_connection_impl.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
+#include "content/public/common/mojo_shell_connection.h"
 #include "ipc/attachment_broker.h"
 #include "ipc/attachment_broker_unprivileged.h"
+#include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_platform_file.h"
 #include "ipc/ipc_switches.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
-#include "ipc/mojo/ipc_channel_mojo.h"
-#include "ipc/mojo/scoped_ipc_support.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/named_platform_channel_pair.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
+#include "services/shell/runner/common/client_util.h"
 
 #if defined(OS_POSIX)
 #include "base/posix/global_descriptors.h"
@@ -262,7 +262,8 @@ ChildThread* ChildThread::Get() {
 ChildThreadImpl::Options::Options()
     : channel_name(base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kProcessChannelID)),
-      use_mojo_channel(false) {
+      use_mojo_channel(base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kMojoChannelToken)) {
 }
 
 ChildThreadImpl::Options::Options(const Options& other) = default;
@@ -396,27 +397,25 @@ void ChildThreadImpl::Init(const Options& options) {
 
   if (!IsInBrowserProcess()) {
     // Don't double-initialize IPC support in single-process mode.
-    mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(GetIOTaskRunner()));
+    mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(GetIOTaskRunner()));
     InitializeMojoIPCChannel();
   }
-
-  if (MojoShellConnectionImpl::Get()) {
-    base::ElapsedTimer timer;
-    MojoShellConnectionImpl::Get()->BindToRequestFromCommandLine();
-    UMA_HISTOGRAM_TIMES("Mojo.Shell.ChildConnectionTime", timer.Elapsed());
-  }
-
-  mojo_application_.reset(new MojoApplication());
   std::string mojo_application_token;
   if (!IsInBrowserProcess()) {
     mojo_application_token =
-        base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-            switches::kMojoApplicationChannelToken);
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+        switches::kMojoApplicationChannelToken);
   } else {
     mojo_application_token = options.in_process_application_token;
   }
-  if (!mojo_application_token.empty())
-    mojo_application_->InitWithToken(mojo_application_token);
+  if (!mojo_application_token.empty()) {
+    mojo::ScopedMessagePipeHandle handle =
+        mojo::edk::CreateChildMessagePipe(mojo_application_token);
+    DCHECK(handle.is_valid());
+    mojo_shell_connection_ = MojoShellConnection::Create(
+        mojo::MakeRequest<shell::mojom::ShellClient>(std::move(handle)));
+    mojo_shell_connection_->AddEmbeddedShellClient(this);
+  }
 
   sync_message_filter_ = channel_->CreateSyncMessageFilter();
   thread_safe_sender_ = new ThreadSafeSender(
@@ -518,6 +517,9 @@ void ChildThreadImpl::Init(const Options& options) {
 }
 
 ChildThreadImpl::~ChildThreadImpl() {
+  if (MojoShellConnection::GetForProcess())
+    MojoShellConnection::DestroyForProcess();
+
 #ifdef IPC_MESSAGE_LOG_ENABLED
   IPC::Logging::GetInstance()->SetIPCSender(NULL);
 #endif
@@ -588,6 +590,30 @@ void ChildThreadImpl::RecordAction(const base::UserMetricsAction& action) {
 
 void ChildThreadImpl::RecordComputedAction(const std::string& action) {
     NOTREACHED();
+}
+
+MojoShellConnection* ChildThreadImpl::GetMojoShellConnection() {
+  return mojo_shell_connection_.get();
+}
+
+shell::InterfaceRegistry* ChildThreadImpl::GetInterfaceRegistry() {
+  if (!interface_registry_.get())
+    interface_registry_.reset(new shell::InterfaceRegistry(nullptr));
+  return interface_registry_.get();
+}
+
+shell::InterfaceProvider* ChildThreadImpl::GetRemoteInterfaces() {
+  if (!remote_interfaces_.get())
+    remote_interfaces_.reset(new shell::InterfaceProvider);
+  return remote_interfaces_.get();
+}
+
+shell::InterfaceRegistry* ChildThreadImpl::GetInterfaceRegistryForConnection() {
+  return GetInterfaceRegistry();
+}
+
+shell::InterfaceProvider* ChildThreadImpl::GetInterfaceProviderForConnection() {
+  return GetRemoteInterfaces();
 }
 
 IPC::MessageRouter* ChildThreadImpl::GetRouter() {

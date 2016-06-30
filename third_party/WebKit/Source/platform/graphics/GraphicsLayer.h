@@ -34,6 +34,7 @@
 #include "platform/geometry/FloatSize.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/Color.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/ContentLayerDelegate.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayerClient.h"
@@ -50,9 +51,8 @@
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerScrollClient.h"
 #include "third_party/skia/include/core/SkFilterQuality.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -72,7 +72,7 @@ typedef Vector<GraphicsLayer*, 64> GraphicsLayerVector;
 class PLATFORM_EXPORT GraphicsLayer : public WebLayerScrollClient, public cc::LayerClient, public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(GraphicsLayer); USING_FAST_MALLOC(GraphicsLayer);
 public:
-    static PassOwnPtr<GraphicsLayer> create(GraphicsLayerClient*);
+    static std::unique_ptr<GraphicsLayer> create(GraphicsLayerClient*);
 
     ~GraphicsLayer() override;
 
@@ -186,10 +186,6 @@ public:
 
     void setContentsNeedsDisplay();
 
-    // This is called only if we are tracking paint invalidation for testing, or ENABLE(ASSERT)
-    // for error checking and debugging.
-    void displayItemClientWasInvalidated(const DisplayItemClient&, PaintInvalidationReason);
-
     // Set that the position/size of the contents (image or video).
     void setContentsRect(const IntRect&);
 
@@ -201,19 +197,27 @@ public:
     // For hosting this GraphicsLayer in a native layer hierarchy.
     WebLayer* platformLayer() const;
 
-    typedef HashMap<int, int> RenderingContextMap;
-    PassRefPtr<JSONObject> layerTreeAsJSON(LayerTreeFlags, RenderingContextMap&) const;
-
     int paintCount() const { return m_paintCount; }
 
     // Return a string with a human readable form of the layer tree, If debug is true
     // pointers for the layers and timing data will be included in the returned string.
     String layerTreeAsText(LayerTreeFlags = LayerTreeNormal) const;
 
-    bool isTrackingPaintInvalidations() const { return m_client->isTrackingPaintInvalidations(); }
+    PassRefPtr<JSONObject> layerTreeAsJSON(LayerTreeFlags) const;
+
+    void setTracksPaintInvalidations(bool);
+    bool isTrackingOrCheckingPaintInvalidations() const
+    {
+#if DCHECK_IS_ON()
+        if (RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled())
+            return true;
+#endif
+        return m_isTrackingPaintInvalidations;
+    }
+
     void resetTrackedPaintInvalidations();
     bool hasTrackedPaintInvalidations() const;
-    void trackPaintInvalidation(const DisplayItemClient&, const FloatRect&, PaintInvalidationReason);
+    void trackPaintInvalidation(const DisplayItemClient&, const IntRect&, PaintInvalidationReason);
 
     void addLinkHighlight(LinkHighlight*);
     void removeLinkHighlight(LinkHighlight*);
@@ -243,7 +247,7 @@ public:
     // Exposed for tests.
     WebLayer* contentsLayer() const { return m_contentsLayer; }
 
-    void setElementId(uint64_t);
+    void setElementId(const CompositorElementId&);
     void setCompositorMutableProperties(uint32_t);
 
     static void setDrawDebugRedFillForTesting(bool);
@@ -292,6 +296,14 @@ private:
     void clearContentsLayerIfUnregistered();
     WebLayer* contentsLayerIfRegistered();
 
+    typedef HashMap<int, int> RenderingContextMap;
+    PassRefPtr<JSONObject> layerTreeAsJSONInternal(LayerTreeFlags, RenderingContextMap&) const;
+
+#if DCHECK_IS_ON()
+    PassRefPtr<SkPicture> capturePicture();
+    void checkPaintUnderInvalidations(const SkPicture&);
+#endif
+
     GraphicsLayerClient* m_client;
 
     // Offset from the owning layoutObject
@@ -325,6 +337,8 @@ private:
     bool m_textPainted : 1;
     bool m_imagePainted : 1;
 
+    bool m_isTrackingPaintInvalidations : 1;
+
     GraphicsLayerPaintingPhase m_paintingPhase;
 
     Vector<GraphicsLayer*> m_children;
@@ -343,8 +357,8 @@ private:
 
     int m_paintCount;
 
-    OwnPtr<WebContentLayer> m_layer;
-    OwnPtr<WebImageLayer> m_imageLayer;
+    std::unique_ptr<WebContentLayer> m_layer;
+    std::unique_ptr<WebImageLayer> m_imageLayer;
     WebLayer* m_contentsLayer;
     // We don't have ownership of m_contentsLayer, but we do want to know if a given layer is the
     // same as our current layer in setContentsTo(). Since m_contentsLayer may be deleted at this point,
@@ -354,17 +368,15 @@ private:
 
     Vector<LinkHighlight*> m_linkHighlights;
 
-    OwnPtr<ContentLayerDelegate> m_contentLayerDelegate;
+    std::unique_ptr<ContentLayerDelegate> m_contentLayerDelegate;
 
     WeakPersistent<ScrollableArea> m_scrollableArea;
     GraphicsLayerDebugInfo m_debugInfo;
     int m_3dRenderingContext;
 
-    OwnPtr<PaintController> m_paintController;
+    std::unique_ptr<PaintController> m_paintController;
 
     IntRect m_previousInterestRect;
-
-    DISPLAY_ITEM_CACHE_STATUS_IMPLEMENTATION
 };
 
 } // namespace blink

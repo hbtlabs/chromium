@@ -5,7 +5,7 @@
 #include "core/css/parser/CSSParserToken.h"
 
 #include "core/css/CSSMarkup.h"
-#include "core/css/CSSPrimitiveValueUnitTrie.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/parser/CSSPropertyParser.h"
 #include "wtf/HashMap.h"
 #include "wtf/text/StringBuilder.h"
@@ -69,11 +69,7 @@ void CSSParserToken::convertToDimensionWithUnit(StringView unit)
     ASSERT(m_type == NumberToken);
     m_type = DimensionToken;
     initValueFromStringView(unit);
-
-    if (unit.is8Bit())
-        m_unit = static_cast<unsigned>(lookupCSSPrimitiveValueUnit(unit.characters8(), unit.length()));
-    else
-        m_unit = static_cast<unsigned>(lookupCSSPrimitiveValueUnit(unit.characters16(), unit.length()));
+    m_unit = static_cast<unsigned>(CSSPrimitiveValue::stringToUnitType(unit));
 }
 
 void CSSParserToken::convertToPercentage()
@@ -217,10 +213,8 @@ void CSSParserToken::serialize(StringBuilder& builder) const
         serializeIdentifier(value().toString(), builder);
         break;
     case HashToken:
-        // This will always serialize as a hash-token with 'id' type instead of
-        // preserving the type of the input.
         builder.append('#');
-        serializeIdentifier(value().toString(), builder);
+        serializeIdentifier(value().toString(), builder, (getHashTokenType() == HashTokenUnrestricted));
         break;
     case UrlToken:
         builder.append("url(");
@@ -292,6 +286,17 @@ void CSSParserToken::serialize(StringBuilder& builder) const
         ASSERT_NOT_REACHED();
         return;
     }
+}
+
+bool CSSParserToken::isValidNumericValue(double value)
+{
+    return value >= -std::numeric_limits<float>::max()
+        && value <= std::numeric_limits<float>::max();
+}
+
+bool CSSParserToken::isValidNumericValue() const
+{
+    return isValidNumericValue(numericValue());
 }
 
 } // namespace blink

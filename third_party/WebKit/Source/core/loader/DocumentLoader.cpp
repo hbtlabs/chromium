@@ -70,10 +70,12 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebMimeRegistry.h"
 #include "wtf/Assertions.h"
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -162,6 +164,11 @@ const ResourceRequest& DocumentLoader::request() const
 const KURL& DocumentLoader::url() const
 {
     return m_request.url();
+}
+
+void DocumentLoader::setSubresourceFilter(std::unique_ptr<WebDocumentSubresourceFilter> subresourceFilter)
+{
+    m_subresourceFilter = std::move(subresourceFilter);
 }
 
 Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
@@ -356,15 +363,24 @@ void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceRespo
 
     setWasBlockedAfterXFrameOptionsOrCSP();
 
-    // Pretend that this was an empty HTTP 200 response.
+    // Pretend that this was an empty HTTP 200 response.  Don't reuse the
+    // original URL for the empty page (https://crbug.com/622385).
+    //
+    // TODO(mkwst):  Remove this once XFO moves to the browser.
+    // https://crbug.com/555418.
     clearMainResourceHandle();
-    m_response = ResourceResponse(blankURL(), "text/html", 0, nullAtom, String());
+    KURL blockedURL = SecurityOrigin::urlWithUniqueSecurityOrigin();
+    m_originalRequest.setURL(blockedURL);
+    m_request.setURL(blockedURL);
+    m_redirectChain.removeLast();
+    appendRedirect(blockedURL);
+    m_response = ResourceResponse(blockedURL, "text/html", 0, nullAtom, String());
     finishedLoading(monotonicallyIncreasingTime());
 
     return;
 }
 
-void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(resource, m_mainResource == resource);
     ASSERT_UNUSED(handle, !handle);

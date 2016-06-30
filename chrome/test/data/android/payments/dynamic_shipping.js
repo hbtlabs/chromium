@@ -19,8 +19,8 @@ function buy() {  // eslint-disable-line no-unused-vars
           [{label: 'Subtotal', amount: {currency: 'USD', value: '5.00'}}]
     };
 
-    var request =
-        new PaymentRequest(['visa'], details, {requestShipping: true});
+    var request = new PaymentRequest(
+        [{supportedMethods: ['visa']}], details, {requestShipping: true});
 
     request.addEventListener('shippingaddresschange', function(evt) {
       evt.updateWith(new Promise(function(resolve) {
@@ -30,11 +30,12 @@ function buy() {  // eslint-disable-line no-unused-vars
 
     request.show()
         .then(function(resp) {
-          resp.complete(true)
+          resp.complete('success')
               .then(function() {
-                print(request.shippingOption + '<br>' +
+                print(
+                    resp.shippingOption + '<br>' +
                     JSON.stringify(
-                        toDictionary(request.shippingAddress), undefined, 2) +
+                        toDictionary(resp.shippingAddress), undefined, 2) +
                     '<br>' + resp.methodName + '<br>' +
                     JSON.stringify(resp.details, undefined, 2));
               })
@@ -58,18 +59,19 @@ function buy() {  // eslint-disable-line no-unused-vars
  * @return {object} The updated shopping cart.
  */
 function updateDetails(details, addr) {
-  if (addr.regionCode === 'US') {
+  if (addr.country === 'US') {
     var shippingOption = {
       id: '',
       label: '',
-      amount: {currency: 'USD', value: '0.00'}
+      amount: {currency: 'USD', value: '0.00'},
+      selected: true
     };
-    if (addr.administrativeArea === 'CA') {
-      shippingOption.id = 'ca';
+    if (addr.region === 'CA') {
+      shippingOption.id = 'californiaShippingOption';
       shippingOption.label = 'Free shipping in California';
       details.total.amount.value = '5.00';
     } else {
-      shippingOption.id = 'us';
+      shippingOption.id = 'usShippingOption';
       shippingOption.label = 'Standard shipping in US';
       shippingOption.amount.value = '5.00';
       details.total.amount.value = '10.00';

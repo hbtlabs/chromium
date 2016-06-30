@@ -36,6 +36,8 @@ class PpapiPluginProcessHost : public BrowserChildProcessHostDelegate,
   class Client {
    public:
     // Gets the information about the renderer that's requesting the channel.
+    // If |renderer_handle| is base::kNullProcessHandle, this channel is used by
+    // the browser itself.
     virtual void GetPpapiChannelInfo(base::ProcessHandle* renderer_handle,
                                      int* renderer_id) = 0;
 
@@ -174,6 +176,9 @@ class PpapiPluginProcessHost : public BrowserChildProcessHostDelegate,
   base::FilePath profile_data_directory_;
 
   const bool is_broker_;
+
+  // A random token used to identify the child process to Mojo.
+  const std::string mojo_child_token_;
 
   std::unique_ptr<BrowserChildProcessHostImpl> process_;
 

@@ -7,10 +7,12 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/values.h"
 #include "content/public/browser/resource_request_info.h"
 #include "extensions/browser/api/declarative_webrequest/webrequest_condition.h"
@@ -150,7 +152,7 @@ TEST(WebRequestConditionAttributeTest, ContentType) {
   std::unique_ptr<net::URLRequest> url_request(context.CreateRequest(
       test_server.GetURL("/headers.html"), net::DEFAULT_PRIORITY, &delegate));
   url_request->Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   base::ListValue content_types;
   content_types.AppendString("text/plain");
@@ -388,7 +390,7 @@ std::unique_ptr<base::DictionaryValue> GetDictionaryFromArray(
           list = new base::ListValue;
           // Ignoring return value, we already verified the entry is there.
           dictionary->RemoveWithoutPathExpansion(*name, &entry_owned);
-          list->Append(entry_owned.release());
+          list->Append(std::move(entry_owned));
           list->AppendString(*value);
           dictionary->SetWithoutPathExpansion(*name, list);
           break;
@@ -422,7 +424,7 @@ void MatchAndCheck(const std::vector< std::vector<const std::string*> >& tests,
     std::unique_ptr<base::DictionaryValue> temp(
         GetDictionaryFromArray(tests[i]));
     ASSERT_TRUE(temp.get());
-    contains_headers.Append(temp.release());
+    contains_headers.Append(std::move(temp));
   }
 
   std::string error;
@@ -454,7 +456,7 @@ TEST(WebRequestConditionAttributeTest, RequestHeaders) {
   url_request->SetExtraRequestHeaderByName(
       "Custom-header", "custom/value", true /* overwrite */);
   url_request->Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   std::vector<std::vector<const std::string*> > tests;
   bool result = false;
@@ -539,7 +541,7 @@ TEST(WebRequestConditionAttributeTest, ResponseHeaders) {
   std::unique_ptr<net::URLRequest> url_request(context.CreateRequest(
       test_server.GetURL("/headers.html"), net::DEFAULT_PRIORITY, &delegate));
   url_request->Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // In all the tests below we assume that the server includes the headers
   // Custom-Header: custom/value

@@ -54,7 +54,9 @@
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -103,7 +105,7 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
 void LayoutBlock::removeFromGlobalMaps()
 {
     if (hasPositionedObjects()) {
-        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPositionedDescendantsMap->take(this);
+        std::unique_ptr<TrackedLayoutBoxListHashSet> descendants = gPositionedDescendantsMap->take(this);
         ASSERT(!descendants->isEmpty());
         for (LayoutBox* descendant : *descendants) {
             ASSERT(gPositionedContainerMap->get(descendant) == this);
@@ -111,7 +113,7 @@ void LayoutBlock::removeFromGlobalMaps()
         }
     }
     if (hasPercentHeightDescendants()) {
-        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPercentHeightDescendantsMap->take(this);
+        std::unique_ptr<TrackedLayoutBoxListHashSet> descendants = gPercentHeightDescendantsMap->take(this);
         ASSERT(!descendants->isEmpty());
         for (LayoutBox* descendant : *descendants) {
             ASSERT(descendant->percentHeightContainer() == this);
@@ -143,21 +145,24 @@ void LayoutBlock::styleWillChange(StyleDifference diff, const ComputedStyle& new
     setIsAtomicInlineLevel(newStyle.isDisplayInlineType());
 
     if (oldStyle && parent()) {
-        bool oldHasTransformRelatedProperty = oldStyle->hasTransformRelatedProperty();
-        bool newHasTransformRelatedProperty = newStyle.hasTransformRelatedProperty();
-        bool oldStyleIsContainer = oldStyle->position() != StaticPosition || oldHasTransformRelatedProperty;
+        bool oldStyleContainsFixedPosition = oldStyle->canContainFixedPositionObjects();
+        bool oldStyleContainsAbsolutePosition = oldStyleContainsFixedPosition || oldStyle->canContainAbsolutePositionObjects();
+        bool newStyleContainsFixedPosition = newStyle.canContainFixedPositionObjects();
+        bool newStyleContainsAbsolutePosition = newStyleContainsFixedPosition || newStyle.canContainAbsolutePositionObjects();
 
-        if (oldStyleIsContainer && (newStyle.position() == StaticPosition || (oldHasTransformRelatedProperty && !newHasTransformRelatedProperty))) {
+        if ((oldStyleContainsFixedPosition && !newStyleContainsFixedPosition)
+            || (oldStyleContainsAbsolutePosition && !newStyleContainsAbsolutePosition)) {
             // Clear our positioned objects list. Our absolute and fixed positioned descendants will be
             // inserted into our containing block's positioned objects list during layout.
             removePositionedObjects(nullptr, NewContainingBlock);
-        } else if (!oldStyleIsContainer && (newStyle.position() != StaticPosition || newHasTransformRelatedProperty)) {
+        }
+        if (!oldStyleContainsAbsolutePosition && newStyleContainsAbsolutePosition) {
             // Remove our absolutely positioned descendants from their current containing block.
             // They will be inserted into our positioned objects list during layout.
             if (LayoutBlock* cb = containingBlockForAbsolutePosition())
                 cb->removePositionedObjects(this, NewContainingBlock);
         }
-        if (!oldHasTransformRelatedProperty && newHasTransformRelatedProperty) {
+        if (!oldStyleContainsFixedPosition && newStyleContainsFixedPosition) {
             // Remove our fixed positioned descendants from their current containing block.
             // They will be inserted into our positioned objects list during layout.
             if (LayoutBlock* cb = containerForFixedPosition())
@@ -192,11 +197,20 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
 
     if (oldStyle && parent()) {
         if (oldStyle->position() != newStyle.position() && newStyle.position() != StaticPosition) {
-            // Remove our absolute and fixed positioned descendants from their new containing block,
-            // in case containingBlock() changes by the change to the position property.
-            // See styleWillChange() for other cases.
-            if (LayoutBlock* cb = containingBlock())
+            // In LayoutObject::styleWillChange() we already removed ourself from our old containing
+            // block's positioned descendant list, and we will be inserted to the new containing
+            // block's list during layout. However the positioned descendant layout logic assumes
+            // layout objects to obey parent-child order in the list. Remove our descendants here
+            // so they will be re-inserted after us.
+            if (LayoutBlock* cb = containingBlock()) {
                 cb->removePositionedObjects(this, NewContainingBlock);
+                if (isOutOfFlowPositioned()) {
+                    // Insert this object into containing block's positioned descendants list
+                    // in case the parent won't layout. This is needed especially there are
+                    // descendants scheduled for overflow recalc.
+                    cb->insertPositionedObject(this);
+                }
+            }
         }
     }
 
@@ -431,8 +445,12 @@ void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
     }
 
     addVisualEffectOverflow();
-
     addVisualOverflowFromTheme();
+
+    // An enclosing composited layer will need to update its bounds if we now overflow it.
+    PaintLayer* layer = enclosingLayer();
+    if (!needsLayout() && layer->hasCompositedLayerMapping() && !layer->visualRect().contains(visualOverflowRect()))
+        layer->setNeedsCompositingInputsUpdate();
 }
 
 void LayoutBlock::addOverflowFromBlockChildren()
@@ -612,7 +630,7 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(LayoutObject* child, 
     }
 }
 
-LayoutUnit LayoutBlock::marginIntrinsicLogicalWidthForChild(LayoutBox& child) const
+LayoutUnit LayoutBlock::marginIntrinsicLogicalWidthForChild(const LayoutBox& child) const
 {
     // A margin has three types: fixed, percentage, and auto (variable).
     // Auto and percentage margins become 0 when computing min/max width.
@@ -874,7 +892,7 @@ void LayoutBlock::insertPositionedObject(LayoutBox* o)
     TrackedLayoutBoxListHashSet* descendantSet = gPositionedDescendantsMap->get(this);
     if (!descendantSet) {
         descendantSet = new TrackedLayoutBoxListHashSet;
-        gPositionedDescendantsMap->set(this, adoptPtr(descendantSet));
+        gPositionedDescendantsMap->set(this, wrapUnique(descendantSet));
     }
     descendantSet->add(o);
 
@@ -962,7 +980,7 @@ void LayoutBlock::addPercentHeightDescendant(LayoutBox* descendant)
     TrackedLayoutBoxListHashSet* descendantSet = gPercentHeightDescendantsMap->get(this);
     if (!descendantSet) {
         descendantSet = new TrackedLayoutBoxListHashSet;
-        gPercentHeightDescendantsMap->set(this, adoptPtr(descendantSet));
+        gPercentHeightDescendantsMap->set(this, wrapUnique(descendantSet));
     }
     descendantSet->add(descendant);
 
@@ -1754,6 +1772,13 @@ bool LayoutBlock::recalcChildOverflowAfterStyleChange()
         }
     }
 
+    return recalcPositionedDescendantsOverflowAfterStyleChange() || childrenOverflowChanged;
+}
+
+bool LayoutBlock::recalcPositionedDescendantsOverflowAfterStyleChange()
+{
+    bool childrenOverflowChanged = false;
+
     TrackedLayoutBoxListHashSet* positionedDescendants = positionedObjects();
     if (!positionedDescendants)
         return childrenOverflowChanged;
@@ -1817,7 +1842,7 @@ bool LayoutBlock::tryLayoutDoingPositionedMovementOnly()
     setIntrinsicContentLogicalHeight(contentLogicalHeight());
     computeLogicalHeight(oldHeight, logicalTop(), computedValues);
 
-    if (hasPercentHeightDescendants() && oldHeight != computedValues.m_extent) {
+    if (oldHeight != computedValues.m_extent && (hasPercentHeightDescendants() || isFlexibleBox())) {
         setIntrinsicContentLogicalHeight(oldIntrinsicContentLogicalHeight);
         return false;
     }

@@ -60,6 +60,7 @@ namespace mojo {
 namespace common {
 class MessagePumpMojo;
 }
+class SyncCallRestrictions;
 }
 namespace mus {
 class CommandBufferClientImpl;
@@ -210,6 +211,7 @@ class BASE_EXPORT ThreadRestrictions {
   friend class PlatformThread;
   friend class android::JavaHandlerThread;
   friend class mojo::common::MessagePumpMojo;
+  friend class mojo::SyncCallRestrictions;
   friend class mus::CommandBufferClientImpl;
   friend class mus::CommandBufferLocal;
   friend class mus::GpuState;

@@ -45,9 +45,9 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/LinkLoader.h"
 #include "core/loader/NavigationScheduler.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/TraceEvent.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/Platform.h"
@@ -55,7 +55,9 @@
 #include "public/platform/WebLoadingBehaviorFlag.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/TemporaryChange.h"
+#include <memory>
 
 namespace blink {
 
@@ -89,11 +91,11 @@ static HTMLTokenizer::State tokenizerStateForContextElement(Element* contextElem
 HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document, ParserSynchronizationPolicy syncPolicy)
     : ScriptableDocumentParser(document)
     , m_options(&document)
-    , m_token(syncPolicy == ForceSynchronousParsing ? adoptPtr(new HTMLToken) : nullptr)
+    , m_token(syncPolicy == ForceSynchronousParsing ? wrapUnique(new HTMLToken) : nullptr)
     , m_tokenizer(syncPolicy == ForceSynchronousParsing ? HTMLTokenizer::create(m_options) : nullptr)
     , m_scriptRunner(HTMLScriptRunner::create(&document, this))
     , m_treeBuilder(HTMLTreeBuilder::create(this, &document, getParserContentPolicy(), m_options))
-    , m_loadingTaskRunner(adoptPtr(document.loadingTaskRunner()->clone()))
+    , m_loadingTaskRunner(wrapUnique(document.loadingTaskRunner()->clone()))
     , m_parserScheduler(HTMLParserScheduler::create(this, m_loadingTaskRunner.get()))
     , m_xssAuditorDelegate(&document)
     , m_weakFactory(this)
@@ -117,10 +119,10 @@ HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document, ParserSynchroniza
 HTMLDocumentParser::HTMLDocumentParser(DocumentFragment* fragment, Element* contextElement, ParserContentPolicy parserContentPolicy)
     : ScriptableDocumentParser(fragment->document(), parserContentPolicy)
     , m_options(&fragment->document())
-    , m_token(adoptPtr(new HTMLToken))
+    , m_token(wrapUnique(new HTMLToken))
     , m_tokenizer(HTMLTokenizer::create(m_options))
     , m_treeBuilder(HTMLTreeBuilder::create(this, fragment, contextElement, this->getParserContentPolicy(), m_options))
-    , m_loadingTaskRunner(adoptPtr(fragment->document().loadingTaskRunner()->clone()))
+    , m_loadingTaskRunner(wrapUnique(fragment->document().loadingTaskRunner()->clone()))
     , m_xssAuditorDelegate(&fragment->document())
     , m_weakFactory(this)
     , m_shouldUseThreading(false)
@@ -156,6 +158,13 @@ DEFINE_TRACE(HTMLDocumentParser)
 
 void HTMLDocumentParser::detach()
 {
+    if (!isParsingFragment() && m_parsedChunkQueue.get() && m_parsedChunkQueue->peakPendingChunkCount()) {
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, peakPendingChunkHistogram, ("Parser.PeakPendingChunkCount", 1, 1000, 50));
+        peakPendingChunkHistogram.count(m_parsedChunkQueue->peakPendingChunkCount());
+        DEFINE_STATIC_LOCAL(CustomCountHistogram, peakPendingTokenHistogram, ("Parser.PeakPendingTokenCount", 1, 100000, 50));
+        peakPendingTokenHistogram.count(m_parsedChunkQueue->peakPendingTokenCount());
+    }
+
     if (m_haveBackgroundParser)
         stopBackgroundParser();
     DocumentParser::detach();
@@ -263,14 +272,11 @@ bool HTMLDocumentParser::canTakeNextToken()
     if (isStopped())
         return false;
 
-    if (isWaitingForScripts()) {
-        // If we're paused waiting for a script, we try to execute scripts before continuing.
+    // If we're paused waiting for a script, we try to execute scripts before continuing.
+    if (m_treeBuilder->hasParserBlockingScript())
         runScriptsForPausedTreeBuilder();
-        if (isStopped())
-            return false;
-        if (isWaitingForScripts())
-            return false;
-    }
+    if (isStopped() || isWaitingForScripts())
+        return false;
 
     // FIXME: It's wrong for the HTMLDocumentParser to reach back to the
     //        LocalFrame, but this approach is how the old parser handled
@@ -290,7 +296,7 @@ void HTMLDocumentParser::notifyPendingParsedChunks()
     TRACE_EVENT0("blink", "HTMLDocumentParser::notifyPendingParsedChunks");
     ASSERT(m_parsedChunkQueue);
 
-    Vector<OwnPtr<ParsedChunk>> pendingChunks;
+    Vector<std::unique_ptr<ParsedChunk>> pendingChunks;
     m_parsedChunkQueue->takeAll(pendingChunks);
 
     if (!isParsing())
@@ -312,7 +318,7 @@ void HTMLDocumentParser::notifyPendingParsedChunks()
     } else {
         // We can safely assume that there are no queued preloads request after
         // the document element is available, as we empty the queue immediately
-        // after the document element is created in pumpPendingSpeculations().
+        // after the document element is created in documentElementAvailable().
         ASSERT(m_queuedPreloads.isEmpty());
         ASSERT(m_queuedDocumentWriteScripts.isEmpty());
         for (auto& chunk : pendingChunks) {
@@ -341,7 +347,7 @@ void HTMLDocumentParser::didReceiveEncodingDataFromBackgroundParser(const Docume
     document()->setEncodingData(data);
 }
 
-void HTMLDocumentParser::validateSpeculations(PassOwnPtr<ParsedChunk> chunk)
+void HTMLDocumentParser::validateSpeculations(std::unique_ptr<ParsedChunk> chunk)
 {
     ASSERT(chunk);
     if (isWaitingForScripts()) {
@@ -355,8 +361,8 @@ void HTMLDocumentParser::validateSpeculations(PassOwnPtr<ParsedChunk> chunk)
     }
 
     ASSERT(!m_lastChunkBeforeScript);
-    OwnPtr<HTMLTokenizer> tokenizer = std::move(m_tokenizer);
-    OwnPtr<HTMLToken> token = std::move(m_token);
+    std::unique_ptr<HTMLTokenizer> tokenizer = std::move(m_tokenizer);
+    std::unique_ptr<HTMLToken> token = std::move(m_token);
 
     if (!tokenizer) {
         // There must not have been any changes to the HTMLTokenizer state on
@@ -380,12 +386,20 @@ void HTMLDocumentParser::validateSpeculations(PassOwnPtr<ParsedChunk> chunk)
     discardSpeculationsAndResumeFrom(std::move(chunk), std::move(token), std::move(tokenizer));
 }
 
-void HTMLDocumentParser::discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk> lastChunkBeforeScript, PassOwnPtr<HTMLToken> token, PassOwnPtr<HTMLTokenizer> tokenizer)
+void HTMLDocumentParser::discardSpeculationsAndResumeFrom(std::unique_ptr<ParsedChunk> lastChunkBeforeScript, std::unique_ptr<HTMLToken> token, std::unique_ptr<HTMLTokenizer> tokenizer)
 {
     m_weakFactory.revokeAll();
+
+    size_t discardedTokenCount = 0;
+    for (const auto& speculation : m_speculations) {
+        discardedTokenCount += speculation->tokens->size();
+    }
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, discardedTokenCountHistogram, ("Parser.DiscardedTokenCount", 1, 100000, 50));
+    discardedTokenCountHistogram.count(discardedTokenCount);
+
     m_speculations.clear();
 
-    OwnPtr<BackgroundHTMLParser::Checkpoint> checkpoint = adoptPtr(new BackgroundHTMLParser::Checkpoint);
+    std::unique_ptr<BackgroundHTMLParser::Checkpoint> checkpoint = wrapUnique(new BackgroundHTMLParser::Checkpoint);
     checkpoint->parser = m_weakFactory.createWeakPtr();
     checkpoint->token = std::move(token);
     checkpoint->tokenizer = std::move(tokenizer);
@@ -396,10 +410,10 @@ void HTMLDocumentParser::discardSpeculationsAndResumeFrom(PassOwnPtr<ParsedChunk
     m_input.current().clear(); // FIXME: This should be passed in instead of cleared.
 
     ASSERT(checkpoint->unparsedInput.isSafeToSendToAnotherThread());
-    HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::resumeFrom, m_backgroundParser, passed(std::move(checkpoint))));
+    postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::resumeFrom, m_backgroundParser, passed(std::move(checkpoint))));
 }
 
-size_t HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<ParsedChunk> popChunk)
+size_t HTMLDocumentParser::processParsedChunkFromBackgroundParser(std::unique_ptr<ParsedChunk> popChunk)
 {
     TRACE_EVENT_WITH_FLOW0("blink,loading", "HTMLDocumentParser::processParsedChunkFromBackgroundParser", popChunk.get(), TRACE_EVENT_FLAG_FLOW_IN);
     TemporaryChange<bool> hasLineNumber(m_isParsingAtLineNumber, true);
@@ -414,11 +428,11 @@ size_t HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Par
     ASSERT(!m_token);
     ASSERT(!m_lastChunkBeforeScript);
 
-    OwnPtr<ParsedChunk> chunk(std::move(popChunk));
-    OwnPtr<CompactHTMLTokenStream> tokens = std::move(chunk->tokens);
+    std::unique_ptr<ParsedChunk> chunk(std::move(popChunk));
+    std::unique_ptr<CompactHTMLTokenStream> tokens = std::move(chunk->tokens);
     size_t elementTokenCount = 0;
 
-    HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::startedChunkWithCheckpoint, m_backgroundParser, chunk->inputCheckpoint));
+    postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::startedChunkWithCheckpoint, m_backgroundParser, chunk->inputCheckpoint));
 
     for (const auto& xssInfo : chunk->xssInfos) {
         m_textPosition = xssInfo->m_textPosition;
@@ -453,8 +467,6 @@ size_t HTMLDocumentParser::processParsedChunkFromBackgroundParser(PassOwnPtr<Par
 
         if (isStopped())
             break;
-
-        pumpPreloadQueue();
 
         if (!m_triedLoadingLinkHeaders && document()->loader()) {
             String linkHeader = document()->loader()->response().httpHeaderField(HTTPNames::Link);
@@ -551,7 +563,7 @@ void HTMLDocumentParser::forcePlaintextForTextDocument()
         if (!m_haveBackgroundParser)
             startBackgroundParser();
 
-        HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::forcePlaintextForTextDocument, m_backgroundParser));
+        postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::forcePlaintextForTextDocument, m_backgroundParser));
     } else
         m_tokenizer->setState(HTMLTokenizer::PLAINTEXTState);
 }
@@ -586,7 +598,7 @@ void HTMLDocumentParser::pumpTokenizer()
 
             // We do not XSS filter innerHTML, which means we (intentionally) fail
             // http/tests/security/xssAuditor/dom-write-innerHTML.html
-            if (OwnPtr<XSSInfo> xssInfo = m_xssAuditor.filterToken(FilterTokenRequest(token(), m_sourceTracker, m_tokenizer->shouldAllowCDATA())))
+            if (std::unique_ptr<XSSInfo> xssInfo = m_xssAuditor.filterToken(FilterTokenRequest(token(), m_sourceTracker, m_tokenizer->shouldAllowCDATA())))
                 m_xssAuditorDelegate.didBlockScript(*xssInfo);
         }
 
@@ -675,7 +687,7 @@ void HTMLDocumentParser::insert(const SegmentedString& source)
     if (!m_tokenizer) {
         ASSERT(!inPumpSession());
         ASSERT(m_haveBackgroundParser || wasCreatedByScript());
-        m_token = adoptPtr(new HTMLToken);
+        m_token = wrapUnique(new HTMLToken);
         m_tokenizer = HTMLTokenizer::create(m_options);
     }
 
@@ -711,10 +723,10 @@ void HTMLDocumentParser::startBackgroundParser()
     RefPtr<WeakReference<BackgroundHTMLParser>> reference = WeakReference<BackgroundHTMLParser>::createUnbound();
     m_backgroundParser = WeakPtr<BackgroundHTMLParser>(reference);
 
-    OwnPtr<BackgroundHTMLParser::Configuration> config = adoptPtr(new BackgroundHTMLParser::Configuration);
+    std::unique_ptr<BackgroundHTMLParser::Configuration> config = wrapUnique(new BackgroundHTMLParser::Configuration);
     config->options = m_options;
     config->parser = m_weakFactory.createWeakPtr();
-    config->xssAuditor = adoptPtr(new XSSAuditor);
+    config->xssAuditor = wrapUnique(new XSSAuditor);
     config->xssAuditor->init(document(), &m_xssAuditorDelegate);
 
     config->decoder = takeDecoder();
@@ -727,14 +739,14 @@ void HTMLDocumentParser::startBackgroundParser()
     }
 
     ASSERT(config->xssAuditor->isSafeToSendToAnotherThread());
-    HTMLParserThread::shared()->postTask(threadSafeBind(
+    postTaskToLookaheadParser(crossThreadBind(
         &BackgroundHTMLParser::start,
         reference.release(),
         passed(std::move(config)),
         document()->url(),
         passed(CachedDocumentParameters::create(document())),
         MediaValuesCached::MediaValuesCachedData(*document()),
-        passed(adoptPtr(m_loadingTaskRunner->clone()))));
+        passed(wrapUnique(m_loadingTaskRunner->clone()))), Synchronous);
 }
 
 void HTMLDocumentParser::stopBackgroundParser()
@@ -743,7 +755,10 @@ void HTMLDocumentParser::stopBackgroundParser()
     ASSERT(m_haveBackgroundParser);
     m_haveBackgroundParser = false;
 
-    HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::stop, m_backgroundParser));
+    // Make this sync, as lsan triggers on some unittests if the task runner is
+    // used. Note that these lifetimes will be much more concrete if
+    // ParseHTMLOnMainThread lands (the lookahead parser will be a member).
+    postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::stop, m_backgroundParser), Synchronous);
     m_weakFactory.revokeAll();
 }
 
@@ -851,7 +866,7 @@ void HTMLDocumentParser::finish()
     if (m_haveBackgroundParser) {
         if (!m_input.haveSeenEndOfFile())
             m_input.closeWithoutMarkingEndOfFile();
-        HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::finish, m_backgroundParser));
+        postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::finish, m_backgroundParser));
         return;
     }
 
@@ -860,7 +875,7 @@ void HTMLDocumentParser::finish()
         // We're finishing before receiving any data. Rather than booting up
         // the background parser just to spin it down, we finish parsing
         // synchronously.
-        m_token = adoptPtr(new HTMLToken);
+        m_token = wrapUnique(new HTMLToken);
         m_tokenizer = HTMLTokenizer::create(m_options);
     }
 
@@ -1009,14 +1024,15 @@ void HTMLDocumentParser::appendBytes(const char* data, size_t length)
         return;
 
     if (shouldUseThreading()) {
+        double bytesReceivedTime = monotonicallyIncreasingTimeMS();
         if (!m_haveBackgroundParser)
             startBackgroundParser();
 
-        OwnPtr<Vector<char>> buffer = adoptPtr(new Vector<char>(length));
+        std::unique_ptr<Vector<char>> buffer = wrapUnique(new Vector<char>(length));
         memcpy(buffer->data(), data, length);
         TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "HTMLDocumentParser::appendBytes", "size", (unsigned)length);
 
-        HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::appendRawBytesFromMainThread, m_backgroundParser, passed(std::move(buffer))));
+        postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::appendRawBytesFromMainThread, m_backgroundParser, passed(std::move(buffer)), bytesReceivedTime));
         return;
     }
 
@@ -1034,32 +1050,31 @@ void HTMLDocumentParser::flush()
         // appendBytes. Fallback to synchronous parsing in that case.
         if (!m_haveBackgroundParser) {
             m_shouldUseThreading = false;
-            m_token = adoptPtr(new HTMLToken);
+            m_token = wrapUnique(new HTMLToken);
             m_tokenizer = HTMLTokenizer::create(m_options);
             DecodedDataDocumentParser::flush();
             return;
         }
 
-        HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::flush, m_backgroundParser));
+        postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::flush, m_backgroundParser));
     } else {
         DecodedDataDocumentParser::flush();
     }
 }
 
-void HTMLDocumentParser::setDecoder(PassOwnPtr<TextResourceDecoder> decoder)
+void HTMLDocumentParser::setDecoder(std::unique_ptr<TextResourceDecoder> decoder)
 {
     ASSERT(decoder);
     DecodedDataDocumentParser::setDecoder(std::move(decoder));
 
     if (m_haveBackgroundParser)
-        HTMLParserThread::shared()->postTask(threadSafeBind(&BackgroundHTMLParser::setDecoder, m_backgroundParser, passed(takeDecoder())));
+        postTaskToLookaheadParser(crossThreadBind(&BackgroundHTMLParser::setDecoder, m_backgroundParser, passed(takeDecoder())));
 }
 
-void HTMLDocumentParser::pumpPreloadQueue()
+void HTMLDocumentParser::documentElementAvailable()
 {
-    if (!document()->documentElement())
-        return;
-
+    TRACE_EVENT0("blink,loader", "HTMLDocumentParser::documentElementAvailable");
+    DCHECK(document()->documentElement());
     for (const String& scriptSource : m_queuedDocumentWriteScripts) {
         evaluateAndPreloadScriptForDocumentWrite(scriptSource);
     }
@@ -1069,7 +1084,7 @@ void HTMLDocumentParser::pumpPreloadQueue()
         m_preloader->takeAndPreload(m_queuedPreloads);
 }
 
-PassOwnPtr<HTMLPreloadScanner> HTMLDocumentParser::createPreloadScanner()
+std::unique_ptr<HTMLPreloadScanner> HTMLDocumentParser::createPreloadScanner()
 {
     return HTMLPreloadScanner::create(
         m_options,
@@ -1096,7 +1111,7 @@ void HTMLDocumentParser::evaluateAndPreloadScriptForDocumentWrite(const String& 
     double duration = monotonicallyIncreasingTimeMS() - startTime;
 
     int currentPreloadCount = document()->loader()->fetcher()->countPreloads();
-    OwnPtr<HTMLPreloadScanner> scanner = createPreloadScanner();
+    std::unique_ptr<HTMLPreloadScanner> scanner = createPreloadScanner();
     scanner->appendToEnd(SegmentedString(writtenSource));
     scanner->scanAndPreload(m_preloader.get(), document()->baseElementURL(), nullptr);
     int numPreloads = document()->loader()->fetcher()->countPreloads() - currentPreloadCount;
@@ -1115,7 +1130,26 @@ void HTMLDocumentParser::evaluateAndPreloadScriptForDocumentWrite(const String& 
         DEFINE_STATIC_LOCAL(CustomCountHistogram, failureHistogram, ("PreloadScanner.DocumentWrite.ExecutionTime.Failure", 1, 10000, 50));
         failureHistogram.count(duration);
     }
+}
 
+void HTMLDocumentParser::postTaskToLookaheadParser(std::unique_ptr<CrossThreadClosure> closure, LookaheadParserTaskSynchrony synchronyPolicy)
+{
+    if (!RuntimeEnabledFeatures::parseHTMLOnMainThreadEnabled()) {
+        HTMLParserThread::shared()->postTask(std::move(closure));
+        return;
+    }
+
+    // Some messages to the lookahead parser should be synchronous. Otherwise,
+    // just post to the loading task runner.
+    switch (synchronyPolicy) {
+    case Synchronous:
+        (*closure)();
+        return;
+    case Asynchronous:
+        m_loadingTaskRunner->postTask(BLINK_FROM_HERE, std::move(closure));
+        return;
+    }
+    NOTREACHED();
 }
 
 } // namespace blink

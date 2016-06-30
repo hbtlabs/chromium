@@ -43,6 +43,7 @@
 #include "components/metrics/file_metrics_provider.h"
 #include "components/metrics/gpu/gpu_metrics_provider.h"
 #include "components/metrics/metrics_pref_names.h"
+#include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/metrics_service_client.h"
 #include "components/metrics/metrics_state_manager.h"
@@ -87,6 +88,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
+#include "chrome/browser/metrics/antivirus_metrics_provider_win.h"
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
 #include "chrome/common/metrics_constants_util_win.h"
 #include "chrome/installer/util/browser_distribution.h"
@@ -233,7 +235,7 @@ void ChromeMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
 
   RegisterInstallerFileMetricsPreferences(registry);
 
-  RegisterMetricsReportingStatePrefs(registry);
+  metrics::RegisterMetricsReportingStatePrefs(registry);
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   AndroidMetricsProvider::RegisterPrefs(registry);
@@ -357,9 +359,10 @@ bool ChromeMetricsServiceClient::IsReportingPolicyManaged() {
   return IsMetricsReportingPolicyManaged();
 }
 
-metrics::MetricsServiceClient::EnableMetricsDefault
-ChromeMetricsServiceClient::GetDefaultOptIn() {
-  return GetMetricsReportingDefaultOptIn(g_browser_process->local_state());
+metrics::EnableMetricsDefault
+ChromeMetricsServiceClient::GetMetricsReportingDefaultState() {
+  return metrics::GetMetricsReportingDefaultState(
+      g_browser_process->local_state());
 }
 
 void ChromeMetricsServiceClient::Initialize() {
@@ -445,6 +448,14 @@ void ChromeMetricsServiceClient::Initialize() {
           new browser_watcher::WatcherMetricsProviderWin(
               chrome::GetBrowserExitCodesRegistryPath(),
               content::BrowserThread::GetBlockingPool())));
+
+  antivirus_metrics_provider_ = new AntiVirusMetricsProvider(
+      content::BrowserThread::GetBlockingPool()
+          ->GetTaskRunnerWithShutdownBehavior(
+              base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(antivirus_metrics_provider_));
 #endif  // defined(OS_WIN)
 
 #if defined(ENABLE_PLUGINS)
@@ -465,6 +476,15 @@ void ChromeMetricsServiceClient::Initialize() {
       new SigninStatusMetricsProviderChromeOS;
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(signin_metrics_provider_cros));
+
+  // Record default UMA state as opt-out for all Chrome OS users, if not
+  // recorded yet.
+  PrefService* local_state = g_browser_process->local_state();
+  if (metrics::GetMetricsReportingDefaultState(local_state) ==
+      metrics::EnableMetricsDefault::DEFAULT_UNKNOWN) {
+    metrics::RecordMetricsReportingDefaultState(
+        local_state, metrics::EnableMetricsDefault::OPT_OUT);
+  }
 #endif  // defined(OS_CHROMEOS)
 
 #if !defined(OS_CHROMEOS)
@@ -523,6 +543,18 @@ void ChromeMetricsServiceClient::OnInitTaskGotPluginInfo() {
 }
 
 void ChromeMetricsServiceClient::OnInitTaskGotGoogleUpdateData() {
+  const base::Closure got_metrics_callback =
+      base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotAntiVirusData,
+                 weak_ptr_factory_.GetWeakPtr());
+
+#if defined(OS_WIN)
+  antivirus_metrics_provider_->GetAntiVirusMetrics(got_metrics_callback);
+#else
+  got_metrics_callback.Run();
+#endif  // defined(OS_WIN)
+}
+
+void ChromeMetricsServiceClient::OnInitTaskGotAntiVirusData() {
   drive_metrics_provider_->GetDriveMetrics(
       base::Bind(&ChromeMetricsServiceClient::OnInitTaskGotDriveMetrics,
                  weak_ptr_factory_.GetWeakPtr()));

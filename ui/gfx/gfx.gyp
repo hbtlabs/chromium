@@ -3,10 +3,7 @@
 # found in the LICENSE file.
 
 {
-  'includes': [
-    '../../mojo/mojo_variables.gypi',
-  ],
-  'variables': {
+ 'variables': {
     'chromium_code': 1,
   },
   'targets': [
@@ -199,10 +196,10 @@
         'color_analysis.cc',
         'color_analysis.h',
         'color_palette.h',
-        'color_profile.cc',
-        'color_profile.h',
-        'color_profile_mac.mm',
-        'color_profile_win.cc',
+        'color_space.cc',
+        'color_space.h',
+        'color_space_mac.mm',
+        'color_space_win.cc',
         'color_utils.cc',
         'color_utils.h',
         'favicon_size.cc',
@@ -359,6 +356,8 @@
         'win/singleton_hwnd.h',
         'win/singleton_hwnd_observer.cc',
         'win/singleton_hwnd_observer.h',
+        'win/text_analysis_source.cc',
+        'win/text_analysis_source.h',
         'win/window_impl.cc',
         'win/window_impl.h',
       ],

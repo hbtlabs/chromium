@@ -10,11 +10,14 @@
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "modules/compositorworker/CompositorWorkerGlobalScope.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/TraceEvent.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "public/platform/Platform.h"
+#include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -39,20 +42,10 @@ public:
             s_instance = new BackingThreadHolder;
     }
 
-    static void terminateExecution()
-    {
-        MutexLocker locker(holderInstanceMutex());
-        if (s_instance && s_instance->m_initialized) {
-            s_instance->thread()->isolate()->TerminateExecution();
-            s_instance->m_terminatingExecution = true;
-        }
-    }
-
     static void clear()
     {
         MutexLocker locker(holderInstanceMutex());
         if (s_instance) {
-            DCHECK(!s_instance->m_initialized || s_instance->m_terminatingExecution);
             s_instance->shutdownAndWait();
             delete s_instance;
             s_instance = nullptr;
@@ -69,11 +62,11 @@ public:
     WorkerBackingThread* thread() { return m_thread.get(); }
 
 private:
-    BackingThreadHolder(PassOwnPtr<WorkerBackingThread> useBackingThread = nullptr)
+    BackingThreadHolder(std::unique_ptr<WorkerBackingThread> useBackingThread = nullptr)
         : m_thread(useBackingThread ? std::move(useBackingThread) : WorkerBackingThread::create(Platform::current()->compositorThread()))
     {
         DCHECK(isMainThread());
-        m_thread->backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&BackingThreadHolder::initializeOnThread, AllowCrossThreadAccess(this)));
+        m_thread->backingThread().postTask(BLINK_FROM_HERE, crossThreadBind(&BackingThreadHolder::initializeOnThread, crossThreadUnretained(this)));
     }
 
     static Mutex& holderInstanceMutex()
@@ -85,8 +78,8 @@ private:
     void initializeOnThread()
     {
         MutexLocker locker(holderInstanceMutex());
-        DCHECK_EQ(0u, m_thread->workerScriptCount()) << "BackingThreadHolder should be the first to attach to WorkerBackingThread";
-        m_thread->attach();
+        DCHECK(!m_initialized);
+        m_thread->initialize();
         m_initialized = true;
     }
 
@@ -94,19 +87,17 @@ private:
     {
         DCHECK(isMainThread());
         WaitableEvent doneEvent;
-        m_thread->backingThread().postTask(BLINK_FROM_HERE, threadSafeBind(&BackingThreadHolder::shutdownOnThread, AllowCrossThreadAccess(this), AllowCrossThreadAccess(&doneEvent)));
+        m_thread->backingThread().postTask(BLINK_FROM_HERE, crossThreadBind(&BackingThreadHolder::shutdownOnThread, crossThreadUnretained(this), crossThreadUnretained(&doneEvent)));
         doneEvent.wait();
     }
 
     void shutdownOnThread(WaitableEvent* doneEvent)
     {
-        DCHECK_EQ(1u, m_thread->workerScriptCount()) << "BackingThreadHolder should be the last to detach from WorkerBackingThread";
-        m_thread->detach();
+        m_thread->shutdown();
         doneEvent->signal();
     }
 
-    OwnPtr<WorkerBackingThread> m_thread;
-    bool m_terminatingExecution = false;
+    std::unique_ptr<WorkerBackingThread> m_thread;
     bool m_initialized = false;
 
     static BackingThreadHolder* s_instance;
@@ -116,11 +107,11 @@ BackingThreadHolder* BackingThreadHolder::s_instance = nullptr;
 
 } // namespace
 
-PassOwnPtr<CompositorWorkerThread> CompositorWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, InProcessWorkerObjectProxy& workerObjectProxy, double timeOrigin)
+std::unique_ptr<CompositorWorkerThread> CompositorWorkerThread::create(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, InProcessWorkerObjectProxy& workerObjectProxy, double timeOrigin)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"), "CompositorWorkerThread::create");
     ASSERT(isMainThread());
-    return adoptPtr(new CompositorWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
+    return wrapUnique(new CompositorWorkerThread(workerLoaderProxy, workerObjectProxy, timeOrigin));
 }
 
 CompositorWorkerThread::CompositorWorkerThread(PassRefPtr<WorkerLoaderProxy> workerLoaderProxy, InProcessWorkerObjectProxy& workerObjectProxy, double timeOrigin)
@@ -139,7 +130,7 @@ WorkerBackingThread& CompositorWorkerThread::workerBackingThread()
     return *BackingThreadHolder::instance().thread();
 }
 
-WorkerGlobalScope*CompositorWorkerThread::createWorkerGlobalScope(PassOwnPtr<WorkerThreadStartupData> startupData)
+WorkerGlobalScope*CompositorWorkerThread::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"), "CompositorWorkerThread::createWorkerGlobalScope");
     return CompositorWorkerGlobalScope::create(this, std::move(startupData), m_timeOrigin);
@@ -149,12 +140,6 @@ void CompositorWorkerThread::ensureSharedBackingThread()
 {
     DCHECK(isMainThread());
     BackingThreadHolder::ensureInstance();
-}
-
-void CompositorWorkerThread::terminateExecution()
-{
-    DCHECK(isMainThread());
-    BackingThreadHolder::terminateExecution();
 }
 
 void CompositorWorkerThread::clearSharedBackingThread()

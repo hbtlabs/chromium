@@ -152,10 +152,6 @@ NSFont* SmallFont() {
   return OmniboxViewMac::GetSmallFont();
 }
 
-CGFloat GetContentAreaWidth(NSRect cellFrame) {
-  return NSWidth(cellFrame) - TextStartOffset();
-}
-
 NSAttributedString* CreateAnswerStringHelper(const base::string16& text,
                                              NSInteger style_type,
                                              bool is_bold,
@@ -299,7 +295,6 @@ NSAttributedString* CreateAnswerLine(const SuggestionAnswer::ImageLine& line,
   }
   base::scoped_nsobject<NSMutableParagraphStyle> style(
       [[NSMutableParagraphStyle alloc] init]);
-  [style setLineBreakMode:NSLineBreakByTruncatingTail];
   [style setTighteningFactorForTruncation:0.0];
   [answer_string addAttribute:NSParagraphStyleAttributeName
                             value:style
@@ -323,7 +318,6 @@ NSMutableAttributedString* CreateAttributedString(
 
   NSMutableParagraphStyle* style =
       [[[NSMutableParagraphStyle alloc] init] autorelease];
-  [style setLineBreakMode:NSLineBreakByTruncatingTail];
   [style setTighteningFactorForTruncation:0.0];
   [style setAlignment:textAlignment];
   [attributedString addAttribute:NSParagraphStyleAttributeName
@@ -409,6 +403,7 @@ NSAttributedString* CreateClassifiedAttributedString(
 @synthesize isContentsRTL = isContentsRTL_;
 @synthesize isAnswer = isAnswer_;
 @synthesize matchType = matchType_;
+@synthesize max_lines = max_lines_;
 
 - (instancetype)initWithMatch:(const AutocompleteMatch&)match
                contentsOffset:(CGFloat)contentsOffset
@@ -441,6 +436,7 @@ NSAttributedString* CreateClassifiedAttributedString(
           [CreateAnswerLine(match.answer->first_line(), isDarkTheme) retain];
       description_ =
           [CreateAnswerLine(match.answer->second_line(), isDarkTheme) retain];
+      max_lines_ = match.answer->second_line().num_text_lines();
     } else {
       contents_ = [CreateClassifiedAttributedString(
           match.contents, ContentTextColor(isDarkTheme), match.contents_class,
@@ -450,6 +446,7 @@ NSAttributedString* CreateClassifiedAttributedString(
             match.description, DimTextColor(isDarkTheme),
             match.description_class, isDarkTheme) retain];
       }
+      max_lines_ = 1;
     }
   }
   return self;
@@ -502,8 +499,8 @@ NSAttributedString* CreateClassifiedAttributedString(
       base::mac::ObjCCastStrict<OmniboxPopupCellData>([self objectValue]);
   OmniboxPopupMatrix* tableView =
       base::mac::ObjCCastStrict<OmniboxPopupMatrix>(controlView);
-  CGFloat remainingWidth =
-      GetContentAreaWidth(cellFrame) - [tableView contentLeftPadding];
+  CGFloat remainingWidth = [OmniboxPopupCell getContentAreaWidth:cellFrame] -
+                           [tableView contentLeftPadding];
   CGFloat contentsWidth = [cellData getMatchContentsWidth];
   CGFloat separatorWidth = [[tableView separator] size].width;
   CGFloat descriptionWidth =
@@ -593,8 +590,8 @@ NSAttributedString* CreateClassifiedAttributedString(
   OmniboxPopupCellData* cellData =
       base::mac::ObjCCastStrict<OmniboxPopupCellData>([self objectValue]);
   CGFloat offset = 0.0f;
-  CGFloat remainingWidth =
-      GetContentAreaWidth(cellFrame) - [tableView contentLeftPadding];
+  CGFloat remainingWidth = [OmniboxPopupCell getContentAreaWidth:cellFrame] -
+                           [tableView contentLeftPadding];
   CGFloat prefixWidth = [[cellData prefix] size].width;
 
   CGFloat prefixOffset = 0.0f;
@@ -642,8 +639,11 @@ NSAttributedString* CreateClassifiedAttributedString(
       cellFrame, NSOffsetRect(cellFrame, origin.x, origin.y));
   renderRect.size.width =
       std::min(NSWidth(renderRect), static_cast<CGFloat>(maxWidth));
-  if (!NSIsEmptyRect(renderRect))
-    [attributedString drawInRect:FlipIfRTL(renderRect, cellFrame)];
+  if (!NSIsEmptyRect(renderRect)) {
+    [attributedString drawWithRect:FlipIfRTL(renderRect, cellFrame)
+                           options:NSStringDrawingUsesLineFragmentOrigin |
+                                   NSStringDrawingTruncatesLastVisibleLine];
+  }
   return NSWidth(renderRect);
 }
 
@@ -719,6 +719,10 @@ NSAttributedString* CreateClassifiedAttributedString(
   base::string16 raw_separator =
       l10n_util::GetStringUTF16(IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR);
   return CreateAttributedString(raw_separator, DimTextColor(isDarkTheme));
+}
+
++ (CGFloat)getContentAreaWidth:(NSRect)cellFrame {
+  return NSWidth(cellFrame) - TextStartOffset();
 }
 
 @end

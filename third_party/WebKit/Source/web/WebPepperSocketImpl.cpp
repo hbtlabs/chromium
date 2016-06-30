@@ -32,9 +32,9 @@
 
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "modules/websockets/DocumentWebSocketChannel.h"
 #include "modules/websockets/WebSocketChannel.h"
-#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/web/WebArrayBuffer.h"
@@ -42,6 +42,7 @@
 #include "web/WebPepperSocketChannelClientProxy.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -164,7 +165,7 @@ void WebPepperSocketImpl::didReceiveTextMessage(const String& payload)
     m_client->didReceiveMessage(WebString(payload));
 }
 
-void WebPepperSocketImpl::didReceiveBinaryMessage(PassOwnPtr<Vector<char>> payload)
+void WebPepperSocketImpl::didReceiveBinaryMessage(std::unique_ptr<Vector<char>> payload)
 {
     switch (m_binaryType) {
     case BinaryTypeBlob:

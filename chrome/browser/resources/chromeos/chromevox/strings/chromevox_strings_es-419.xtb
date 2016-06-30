@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">No hay ningún elemento de la lista posterior.</translation>
 <translation id="1157782847298808853">Ayuda del teclado</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, cuadro combinado</translation>
+<translation id="1161762950103988776">Salta</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, elemento del menú, con submenú</translation>
 <translation id="1177863135347784049">Personalizado</translation>
 <translation id="1188858454923323853">complementario</translation>
+<translation id="1201402288615127009">Siguiente</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox, la voz de Chrome</translation>
 <translation id="1229276918471378188">Salto anterior</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">Grupo</translation>
 <translation id="2582407057977008361">Lateral</translation>
-<translation id="2589102159832527089">Esta página incluye el texto que se extrajo automáticamente del archivo PDF &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt;. &lt;a href="<ph name="URL" />"&gt;Haz clic aquí para acceder al original&lt;/a&gt;.</translation>
 <translation id="2606210917827248971">con {COUNT,plural, =1{# elemento}other{# elementos}}</translation>
 <translation id="2614981083756825552">Diseño de MathML</translation>
 <translation id="2626530649491650971">elemento en el que se puede hacer clic</translation>
@@ -245,6 +246,7 @@
         "vi": "vietnamita",
         "zh": "chino",
         "zh_TW": "chino (tradicional)"}</translation>
+<translation id="335581015389089642">Voz</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{más}other{# signos más}}</translation>
 <translation id="338583716107319301">Separador</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">Google Space</translation>
 <translation id="6142308968191113180">Encabezado 4</translation>
 <translation id="6169420925157477918">Imagen con descripción larga</translation>
-<translation id="6172087735260766220">No se puede acceder al texto del PDF protegido contra copia.</translation>
 <translation id="6186305613600865047">Ir al final de la página</translation>
 <translation id="6193330012414963395">a. m./p. m.</translation>
 <translation id="622484624075952240">Abajo</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">Pestaña</translation>
 <translation id="667999046851023355">Documento</translation>
 <translation id="6697092096875747123">Cuadro combinado anterior</translation>
+<translation id="6710213216561001401">Anterior</translation>
 <translation id="6714813999819678458">Encabezado anterior de nivel 2</translation>
 <translation id="6716505898850596801">Teclas modificadoras</translation>
 <translation id="671916444866103745">No hay ningún punto de referencia de ARIA posterior.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">Temporizador</translation>
 <translation id="8065607967589909823">La selección es</translation>
 <translation id="8066678206530322333">Banner</translation>
+<translation id="8076492880354921740">Pestañas</translation>
 <translation id="8110647606445335195">No hay puntos de referencia de ARIA.</translation>
 <translation id="8153880621934657047">No está dentro de la tabla.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{guion bajo}other{# guiones bajos}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">No hay ningún encabezado de nivel 3 posterior.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">No hay ninguna casilla de verificación anterior.</translation>
+<translation id="8446884382197647889">Más información</translation>
 <translation id="8455868257606149352">Máximo <ph name="X" /></translation>
 <translation id="84575901236241018">tiene tecla de acceso, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">vista general de ventana</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">Usa las teclas de flecha hacia arriba y hacia abajo para navegar o escribe un término para realizar una búsqueda.</translation>
 <translation id="9192904702577636854">Recuadro</translation>
 <translation id="9212322457209634662">No hay ninguna sección posterior.</translation>
+<translation id="923331726185079994">Actualización de ChromeVox</translation>
 <translation id="930275611743429116">Iniciar o finalizar selección</translation>
 <translation id="948171205378458592">Hablar más lento</translation>
 <translation id="962913030769097253">Encabezado siguiente de nivel 1</translation>
 <translation id="973955474346881951">Habilitar/inhabilitar modo permanente</translation>
+<translation id="976849232629612000">Sin elementos</translation>
 </translationbundle>

@@ -21,7 +21,10 @@ config("utility_ldflags") {
 static_library("utility") {
   sources = rebase_path(gypi_values.chrome_utility_sources, ".", "..")
   defines = []
-  configs += [ "//build/config:precompiled_headers" ]
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
   all_dependent_configs = [ ":utility_ldflags" ]
 
   public_deps = []
@@ -41,6 +44,7 @@ static_library("utility") {
     "//courgette:courgette_lib",
     "//media",
     "//net:net_with_v8",
+    "//services/shell/public/cpp",
     "//skia",
     "//sql",
     "//third_party/libxml",
@@ -119,6 +123,7 @@ if (is_mac) {
   import("//testing/libfuzzer/fuzzer_test.gni")
   fuzzer_test("safe_browsing_dmg_fuzzer") {
     sources = [
+      "safe_browsing/mac/convert_big_endian.h",
       "safe_browsing/mac/fuzzer.cc",
       "safe_browsing/mac/hfs.cc",
       "safe_browsing/mac/hfs.h",

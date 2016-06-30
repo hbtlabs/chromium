@@ -16,7 +16,7 @@
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/views/mus/clipboard_mus.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/mus/screen_mus.h"
 #include "ui/views/pointer_watcher.h"
@@ -35,10 +35,14 @@ base::LazyInstance<WindowManagerConnectionPtr>::Leaky lazy_tls_ptr =
 }  // namespace
 
 // static
-void WindowManagerConnection::Create(shell::Connector* connector,
-                                     const shell::Identity& identity) {
+std::unique_ptr<WindowManagerConnection> WindowManagerConnection::Create(
+    shell::Connector* connector,
+    const shell::Identity& identity) {
   DCHECK(!lazy_tls_ptr.Pointer()->Get());
-  lazy_tls_ptr.Pointer()->Set(new WindowManagerConnection(connector, identity));
+  WindowManagerConnection* connection =
+      new WindowManagerConnection(connector, identity);
+  DCHECK(lazy_tls_ptr.Pointer()->Get());
+  return base::WrapUnique(connection);
 }
 
 // static
@@ -51,12 +55,6 @@ WindowManagerConnection* WindowManagerConnection::Get() {
 // static
 bool WindowManagerConnection::Exists() {
   return !!lazy_tls_ptr.Pointer()->Get();
-}
-
-// static
-void WindowManagerConnection::Reset() {
-  delete Get();
-  lazy_tls_ptr.Pointer()->Set(nullptr);
 }
 
 mus::Window* WindowManagerConnection::NewWindow(
@@ -89,7 +87,7 @@ void WindowManagerConnection::AddPointerWatcher(PointerWatcher* watcher) {
     // TODO(jamescook): Extend event observers to handle multiple event types.
     mus::mojom::EventMatcherPtr matcher = mus::mojom::EventMatcher::New();
     matcher->type_matcher = mus::mojom::EventTypeMatcher::New();
-    matcher->type_matcher->type = mus::mojom::EventType::POINTER_DOWN;
+    matcher->type_matcher->type = ui::mojom::EventType::POINTER_DOWN;
     client_->SetEventObserver(std::move(matcher));
   }
 }
@@ -105,22 +103,17 @@ void WindowManagerConnection::RemovePointerWatcher(PointerWatcher* watcher) {
 WindowManagerConnection::WindowManagerConnection(
     shell::Connector* connector,
     const shell::Identity& identity)
-    : connector_(connector),
-      identity_(identity),
-      created_device_data_manager_(false) {
+    : connector_(connector), identity_(identity) {
+  lazy_tls_ptr.Pointer()->Set(this);
   client_.reset(new mus::WindowTreeClient(this, nullptr, nullptr));
   client_->ConnectViaWindowTreeFactory(connector_);
 
   screen_.reset(new ScreenMus(this));
   screen_->Init(connector);
 
-  if (!ui::DeviceDataManager::HasInstance()) {
-    // TODO(sad): We should have a DeviceDataManager implementation that talks
-    // to a mojo service to learn about the input-devices on the system.
-    // http://crbug.com/601981
-    ui::DeviceDataManager::CreateInstance();
-    created_device_data_manager_ = true;
-  }
+  std::unique_ptr<ClipboardMus> clipboard(new ClipboardMus);
+  clipboard->Init(connector);
+  ui::Clipboard::SetClipboardForCurrentThread(std::move(clipboard));
 
   ViewsDelegate::GetInstance()->set_native_widget_factory(base::Bind(
       &WindowManagerConnection::CreateNativeWidgetMus,
@@ -132,8 +125,8 @@ WindowManagerConnection::~WindowManagerConnection() {
   // ~WindowTreeClient calls back to us (we're its delegate), destroy it while
   // we are still valid.
   client_.reset();
-  if (created_device_data_manager_)
-    ui::DeviceDataManager::DeleteInstance();
+  ui::Clipboard::DestroyClipboardForCurrentThread();
+  lazy_tls_ptr.Pointer()->Set(nullptr);
 
   if (ViewsDelegate::GetInstance()) {
     ViewsDelegate::GetInstance()->set_native_widget_factory(
@@ -152,7 +145,13 @@ bool WindowManagerConnection::HasPointerWatcher() {
 void WindowManagerConnection::OnEmbed(mus::Window* root) {}
 
 void WindowManagerConnection::OnWindowTreeClientDestroyed(
-    mus::WindowTreeClient* client) {}
+    mus::WindowTreeClient* client) {
+  if (client_.get() == client) {
+    client_.release();
+  } else {
+    DCHECK(!client_);
+  }
+}
 
 void WindowManagerConnection::OnEventObserved(const ui::Event& event,
                                               mus::Window* target) {

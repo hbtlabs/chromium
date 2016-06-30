@@ -94,6 +94,7 @@ Polymer({
       this.resultLoadingDisabled_ = false;
       if (this.historyData_)
         this.splice('historyData_', 0, this.historyData_.length);
+      this.fire('unselect-all');
       this.lastSearchedTerm_ = this.searchedTerm;
     }
 
@@ -243,4 +244,13 @@ Polymer({
         this.historyData_[i].dateRelativeDay !=
         this.historyData_[i + 1].dateRelativeDay;
   },
+
+  /**
+   * @param {number} index
+   * @return {boolean}
+   * @private
+   */
+  isFirstItem_: function(index) {
+    return index == 0;
+  }
 });

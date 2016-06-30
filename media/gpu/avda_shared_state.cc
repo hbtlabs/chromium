@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "media/gpu/avda_codec_image.h"
+#include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/scoped_make_current.h"
 
@@ -14,10 +15,19 @@ namespace media {
 
 AVDASharedState::AVDASharedState()
     : surface_texture_service_id_(0),
-      frame_available_event_(false, false),
-      surface_texture_is_attached_(false) {}
+      frame_available_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
-AVDASharedState::~AVDASharedState() {}
+AVDASharedState::~AVDASharedState() {
+  if (!surface_texture_service_id_)
+    return;
+
+  ui::ScopedMakeCurrent scoped_make_current(context_.get(), surface_.get());
+  if (scoped_make_current.Succeeded()) {
+    glDeleteTextures(1, &surface_texture_service_id_);
+    DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
+  }
+}
 
 void AVDASharedState::SignalFrameAvailable() {
   frame_available_event_.Signal();
@@ -53,16 +63,18 @@ void AVDASharedState::WaitForFrameAvailable() {
   }
 }
 
-void AVDASharedState::DidAttachSurfaceTexture() {
+void AVDASharedState::SetSurfaceTexture(
+    scoped_refptr<gl::SurfaceTexture> surface_texture,
+    GLuint attached_service_id) {
+  surface_texture_ = surface_texture;
+  surface_texture_service_id_ = attached_service_id;
   context_ = gl::GLContext::GetCurrent();
   surface_ = gl::GLSurface::GetCurrent();
   DCHECK(context_);
   DCHECK(surface_);
-
-  surface_texture_is_attached_ = true;
 }
 
-void AVDASharedState::CodecChanged(media::MediaCodecBridge* codec) {
+void AVDASharedState::CodecChanged(MediaCodecBridge* codec) {
   for (auto& image_kv : codec_images_)
     image_kv.second->CodecChanged(codec);
   release_time_ = base::TimeTicks();
@@ -87,7 +99,7 @@ AVDACodecImage* AVDASharedState::GetImageForPicture(
 }
 
 void AVDASharedState::RenderCodecBufferToSurfaceTexture(
-    media::MediaCodecBridge* codec,
+    MediaCodecBridge* codec,
     int codec_buffer_index) {
   if (!release_time_.is_null())
     WaitForFrameAvailable();

@@ -264,7 +264,8 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
   scoped_refptr<gpu::gles2::ContextGroup> group(new gpu::gles2::ContextGroup(
       gpu_preferences_, nullptr, nullptr,
       new gpu::gles2::ShaderTranslatorCache(gpu_preferences_),
-      new gpu::gles2::FramebufferCompletenessCache, feature_info, true));
+      new gpu::gles2::FramebufferCompletenessCache, feature_info, true,
+      nullptr));
 
   std::unique_ptr<gpu::gles2::GLES2Decoder> decoder(
       gpu::gles2::GLES2Decoder::Create(group.get()));
@@ -294,9 +295,10 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
   helper.fail_if_major_perf_caveat = false;
   helper.lose_context_when_out_of_memory = kLoseContextWhenOutOfMemory;
   helper.context_type = gpu::gles2::CONTEXT_TYPE_OPENGLES2;
+  helper.offscreen_framebuffer_size = gl_surface->GetSize();
 
   if (!decoder->Initialize(gl_surface, gl_context.get(),
-                           gl_surface->IsOffscreen(), gl_surface->GetSize(),
+                           gl_surface->IsOffscreen(),
                            gpu::gles2::DisallowedFeatures(), helper)) {
     return false;
   }

@@ -26,6 +26,7 @@
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/drag_drop_client_mac.h"
 #import "ui/views/cocoa/cocoa_mouse_capture.h"
+#import "ui/views/cocoa/cocoa_window_move_loop.h"
 #include "ui/views/cocoa/tooltip_manager_mac.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 #import "ui/views/cocoa/widget_owner_nswindow_adapter.h"
@@ -619,6 +620,39 @@ bool BridgedNativeWidget::HasCapture() {
   return mouse_capture_ && mouse_capture_->IsActive();
 }
 
+Widget::MoveLoopResult BridgedNativeWidget::RunMoveLoop(
+      const gfx::Vector2d& drag_offset) {
+  DCHECK(!HasCapture());
+  DCHECK(!window_move_loop_);
+
+  // RunMoveLoop caller is responsible for updating the window to be under the
+  // mouse, but it does this using possibly outdated coordinate from the mouse
+  // event, and mouse is very likely moved beyound that point.
+
+  // Compensate for mouse drift by shifting the initial mouse position we pass
+  // to CocoaWindowMoveLoop, so as it handles incoming move events the window's
+  // top left corner will be |drag_offset| from the current mouse position.
+
+  const gfx::Rect frame = gfx::ScreenRectFromNSRect([window_ frame]);
+  const gfx::Point mouse_in_screen(frame.x() + drag_offset.x(),
+                                   frame.y() + drag_offset.y());
+  window_move_loop_.reset(new CocoaWindowMoveLoop(
+      this, gfx::ScreenPointToNSPoint(mouse_in_screen)));
+
+  return window_move_loop_->Run();
+
+  // |this| may be destroyed during the RunLoop, causing it to exit early.
+  // Even if that doesn't happen, CocoaWindowMoveLoop will clean itself up by
+  // calling EndMoveLoop(). So window_move_loop_ will always be null before the
+  // function returns. But don't DCHECK since |this| might not be valid.
+}
+
+void BridgedNativeWidget::EndMoveLoop() {
+  DCHECK(window_move_loop_);
+  window_move_loop_->End();
+  window_move_loop_.reset();
+}
+
 void BridgedNativeWidget::SetNativeWindowProperty(const char* name,
                                                   void* value) {
   NSString* key = [NSString stringWithUTF8String:name];
@@ -640,6 +674,14 @@ void BridgedNativeWidget::SetCursor(NSCursor* cursor) {
 }
 
 void BridgedNativeWidget::OnWindowWillClose() {
+  // Ensure BridgedNativeWidget does not have capture, otherwise
+  // OnMouseCaptureLost() may reference a deleted |native_widget_mac_| when
+  // called via ~CocoaMouseCapture() upon the destruction of |mouse_capture_|.
+  // See crbug.com/622201. Also we do this before setting the delegate to nil,
+  // because this may lead to callbacks to bridge which rely on a valid
+  // delegate.
+  ReleaseCapture();
+
   if (parent_) {
     parent_->RemoveChildWindow(this);
     parent_ = nullptr;
@@ -737,15 +779,16 @@ void BridgedNativeWidget::OnSizeChanged() {
     [bridged_view_ updateWindowMask];
 }
 
-void BridgedNativeWidget::OnVisibilityChanged() {
-  OnVisibilityChangedTo([window_ isVisible]);
+void BridgedNativeWidget::OnPositionChanged() {
+  native_widget_mac_->GetWidget()->OnNativeWidgetMove();
 }
 
-void BridgedNativeWidget::OnVisibilityChangedTo(bool new_visibility) {
-  if (window_visible_ == new_visibility)
+void BridgedNativeWidget::OnVisibilityChanged() {
+  const bool window_visible = [window_ isVisible];
+  if (window_visible_ == window_visible)
     return;
 
-  window_visible_ = new_visibility;
+  window_visible_ = window_visible;
 
   // If arriving via SetVisible(), |wants_to_be_visible_| should already be set.
   // If made visible externally (e.g. Cmd+H), just roll with it. Don't try (yet)
@@ -757,7 +800,7 @@ void BridgedNativeWidget::OnVisibilityChangedTo(bool new_visibility) {
     if (parent_)
       [parent_->GetNSWindow() addChildWindow:window_ ordered:NSWindowAbove];
   } else {
-    mouse_capture_.reset();  // Capture on hidden windows is not permitted.
+    ReleaseCapture();  // Capture on hidden windows is not permitted.
 
     // When becoming invisible, remove the entry in any parent's childWindow
     // list. Cocoa's childWindow management breaks down when child windows are
@@ -980,6 +1023,10 @@ void BridgedNativeWidget::PostCapturedEvent(NSEvent* event) {
 
 void BridgedNativeWidget::OnMouseCaptureLost() {
   native_widget_mac_->GetWidget()->OnMouseCaptureLost();
+}
+
+NSWindow* BridgedNativeWidget::GetWindow() const {
+  return window_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -4,6 +4,9 @@
 
 #include "content/browser/gpu/gpu_data_manager_impl_private.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -49,7 +52,7 @@
 #include "ui/gfx/android/device_display_info.h"
 #endif  // OS_ANDROID
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "content/common/mojo/mojo_shell_connection_impl.h"
+#include "services/shell/runner/common/client_util.h"
 #endif
 
 namespace content {
@@ -267,7 +270,7 @@ enum BlockStatusHistogram {
 bool ShouldDisableHardwareAcceleration() {
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
   // TODO(rjkroege): Remove this when https://crbug.com/602519 is fixed.
-  if (IsRunningInMojoShell())
+  if (shell::ShellIsRemote())
     return true;
 #endif
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -524,8 +527,11 @@ void GpuDataManagerImplPrivate::Initialize() {
   }
 
   gpu::GPUInfo gpu_info;
-  if (command_line->GetSwitchValueASCII(switches::kUseGL) ==
-      gl::kGLImplementationOSMesaName) {
+  const bool force_osmesa =
+      (command_line->GetSwitchValueASCII(switches::kUseGL) ==
+       gl::kGLImplementationOSMesaName) ||
+      command_line->HasSwitch(switches::kOverrideUseGLWithOSMesaForTests);
+  if (force_osmesa) {
     // If using the OSMesa GL implementation, use fake vendor and device ids to
     // make sure it never gets blacklisted. This is better than simply
     // cancelling GPUInfo gathering as it allows us to proceed with loading the
@@ -537,6 +543,10 @@ void GpuDataManagerImplPrivate::Initialize() {
     // Also declare the driver_vendor to be osmesa to be able to specify
     // exceptions based on driver_vendor==osmesa for some blacklist rules.
     gpu_info.driver_vendor = gl::kGLImplementationOSMesaName;
+
+    // We are not going to call CollectBasicGraphicsInfo.
+    // So mark it as collected.
+    gpu_info.basic_info_state = gpu::kCollectInfoSuccess;
   } else {
     TRACE_EVENT0("startup",
       "GpuDataManagerImpl::Initialize:CollectBasicGraphicsInfo");
@@ -911,11 +921,11 @@ void GpuDataManagerImplPrivate::ProcessCrashed(
 base::ListValue* GpuDataManagerImplPrivate::GetLogMessages() const {
   base::ListValue* value = new base::ListValue;
   for (size_t ii = 0; ii < log_messages_.size(); ++ii) {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger("level", log_messages_[ii].level);
     dict->SetString("header", log_messages_[ii].header);
     dict->SetString("message", log_messages_[ii].message);
-    value->Append(dict);
+    value->Append(std::move(dict));
   }
   return value;
 }

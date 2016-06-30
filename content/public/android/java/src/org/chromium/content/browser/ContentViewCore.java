@@ -406,11 +406,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         boolean super_onKeyUp(int keyCode, KeyEvent event);
 
         /**
-         * @see View#dispatchKeyEventPreIme(KeyEvent)
-         */
-        boolean super_dispatchKeyEventPreIme(KeyEvent event);
-
-        /**
          * @see View#dispatchKeyEvent(KeyEvent)
          */
         boolean super_dispatchKeyEvent(KeyEvent event);
@@ -533,9 +528,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     private boolean mPreserveSelectionOnNextLossOfFocus;
     private WebActionModeCallback.ActionHandler mActionHandler;
     private final Rect mSelectionRect = new Rect();
-
-    // Delegate that will handle GET downloads, and be notified of completion of POST downloads.
-    private ContentViewDownloadDelegate mDownloadDelegate;
 
     // Whether native accessibility, i.e. without any script injection, is allowed.
     private boolean mNativeAccessibilityAllowed;
@@ -1540,6 +1532,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     @SuppressWarnings("javadoc")
     @SuppressLint("MissingSuperCall")
     public void onDetachedFromWindow() {
+        mImeAdapter.onViewDetachedFromWindow();
         mZoomControlsDelegate.dismissZoomPicker();
 
         ScreenOrientationListener.getInstance().removeObserver(this);
@@ -1655,6 +1648,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
      * @see View#onWindowFocusChanged(boolean)
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
+        mImeAdapter.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) resetGestureDetection();
         if (mActionMode != null) mActionMode.onWindowFocusChanged(hasWindowFocus);
         for (mGestureStateListenersIterator.rewind(); mGestureStateListenersIterator.hasNext();) {
@@ -1693,18 +1687,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
             return true;
         }
         return mContainerViewInternals.super_onKeyUp(keyCode, event);
-    }
-
-    /**
-     * @see View#dispatchKeyEventPreIme(KeyEvent)
-     */
-    public boolean dispatchKeyEventPreIme(KeyEvent event) {
-        try {
-            TraceEvent.begin("ContentViewCore.dispatchKeyEventPreIme");
-            return mContainerViewInternals.super_dispatchKeyEventPreIme(event);
-        } finally {
-            TraceEvent.end("ContentViewCore.dispatchKeyEventPreIme");
-        }
     }
 
     /**
@@ -1990,21 +1972,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         if (mNativeContentViewCore == 0) return;
 
         nativeSendOrientationChangeEvent(mNativeContentViewCore, orientation);
-    }
-
-    /**
-     * Register the delegate to be used when content can not be handled by
-     * the rendering engine, and should be downloaded instead. This will replace
-     * the current delegate, if any.
-     * @param delegate An implementation of ContentViewDownloadDelegate.
-     */
-    public void setDownloadDelegate(ContentViewDownloadDelegate delegate) {
-        mDownloadDelegate = delegate;
-    }
-
-    // Called by DownloadController.
-    ContentViewDownloadDelegate getDownloadDelegate() {
-        return mDownloadDelegate;
     }
 
     @VisibleForTesting

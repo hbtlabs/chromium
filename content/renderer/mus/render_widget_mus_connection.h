@@ -43,17 +43,14 @@ class CONTENT_EXPORT RenderWidgetMusConnection
   // RenderWidgetInputHandlerDelegate implementation:
   void FocusChangeComplete() override;
   bool HasTouchEventHandlersAt(const gfx::Point& point) const override;
-  void ObserveWheelEventAndResult(const blink::WebMouseWheelEvent& wheel_event,
-                                  const gfx::Vector2dF& wheel_unused_delta,
-                                  bool event_processed) override;
   void ObserveGestureEventAndResult(const blink::WebGestureEvent& gesture_event,
                                     const gfx::Vector2dF& gesture_unused_delta,
                                     bool event_processed) override;
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const DidOverscrollParams& params) override;
   void OnInputEventAck(std::unique_ptr<InputEventAck> input_event_ack) override;
-  void NotifyInputEventHandled(
-      blink::WebInputEvent::Type handled_type) override;
+  void NotifyInputEventHandled(blink::WebInputEvent::Type handled_type,
+                               InputEventAckState ack_result) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void UpdateTextInputState(ShowIme show_ime,
                             ChangeSource change_source) override;

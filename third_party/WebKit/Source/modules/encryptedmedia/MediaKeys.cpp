@@ -38,6 +38,7 @@
 #include "platform/Timer.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 #define MEDIA_KEYS_LOG_LEVEL 3
 
@@ -80,14 +81,50 @@ private:
     const Member<DOMArrayBuffer> m_data;
 };
 
-MediaKeys* MediaKeys::create(ExecutionContext* context, const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes, PassOwnPtr<WebContentDecryptionModule> cdm)
+// This class wraps the promise resolver used when setting the certificate
+// and is passed to Chromium to fullfill the promise. This implementation of
+// complete() will resolve the promise with true, while completeWithError()
+// will reject the promise with an exception. completeWithSession()
+// is not expected to be called, and will reject the promise.
+class SetCertificateResultPromise : public ContentDecryptionModuleResultPromise {
+public:
+    SetCertificateResultPromise(ScriptState* scriptState)
+        : ContentDecryptionModuleResultPromise(scriptState)
+    {
+    }
+
+    ~SetCertificateResultPromise() override
+    {
+    }
+
+    // ContentDecryptionModuleResult implementation.
+    void complete() override
+    {
+        resolve(true);
+    }
+
+    void completeWithError(WebContentDecryptionModuleException exceptionCode, unsigned long systemCode, const WebString& errorMessage) override
+    {
+        // The EME spec specifies that "If the Key System implementation does
+        // not support server certificates, return a promise resolved with
+        // false." So convert any NOTSUPPORTEDERROR into resolving with false.
+        if (exceptionCode == WebContentDecryptionModuleExceptionNotSupportedError) {
+            resolve(false);
+            return;
+        }
+
+        ContentDecryptionModuleResultPromise::completeWithError(exceptionCode, systemCode, errorMessage);
+    }
+};
+
+MediaKeys* MediaKeys::create(ExecutionContext* context, const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes, std::unique_ptr<WebContentDecryptionModule> cdm)
 {
     MediaKeys* mediaKeys = new MediaKeys(context, supportedSessionTypes, std::move(cdm));
     mediaKeys->suspendIfNeeded();
     return mediaKeys;
 }
 
-MediaKeys::MediaKeys(ExecutionContext* context, const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes, PassOwnPtr<WebContentDecryptionModule> cdm)
+MediaKeys::MediaKeys(ExecutionContext* context, const WebVector<WebEncryptedMediaSessionType>& supportedSessionTypes, std::unique_ptr<WebContentDecryptionModule> cdm)
     : ActiveScriptWrappable(this)
     , ActiveDOMObject(context)
     , m_supportedSessionTypes(supportedSessionTypes)
@@ -155,7 +192,7 @@ ScriptPromise MediaKeys::setServerCertificate(ScriptState* scriptState, const DO
     DOMArrayBuffer* serverCertificateBuffer = DOMArrayBuffer::create(serverCertificate.data(), serverCertificate.byteLength());
 
     // 4. Let promise be a new promise.
-    SimpleContentDecryptionModuleResultPromise* result = new SimpleContentDecryptionModuleResultPromise(scriptState);
+    SetCertificateResultPromise* result = new SetCertificateResultPromise(scriptState);
     ScriptPromise promise = result->promise();
 
     // 5. Run the following steps asynchronously (documented in timerFired()).

@@ -6,6 +6,7 @@
 
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
+#include "cc/ipc/quads.mojom.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/delegated_frame_data.h"
@@ -13,10 +14,7 @@
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
 #include "components/mus/gles2/gpu_state.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
-#include "components/mus/public/cpp/surfaces/surfaces_utils.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
-#include "components/mus/public/interfaces/quads.mojom.h"
 #include "components/mus/surfaces/display_compositor.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/platform_display_factory.h"
@@ -31,8 +29,6 @@
 #include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
-#include "ui/events/mojo/input_events_type_converters.h"
-#include "ui/events/mojo/mojo_extended_key_event_data.h"
 #include "ui/platform_window/platform_ime_controller.h"
 #include "ui/platform_window/platform_window.h"
 
@@ -52,29 +48,17 @@ namespace ws {
 namespace {
 
 // DrawWindowTree recursively visits ServerWindows, creating a SurfaceDrawQuad
-// for each that lacks one. A ServerWindow may hold a CompositorFrame that
-// references other ServerWindows in SurfaceDrawQuads. We should not create new
-// SurfaceDrawQuads for these |referenced_window_ids|. Instead,
-// cc::SurfaceAggregator will do the heavy lifting here by expanding those
-// references to generate one top-level display CompositorFrame.
+// for each that lacks one.
 void DrawWindowTree(cc::RenderPass* pass,
                     ServerWindow* window,
                     const gfx::Vector2d& parent_to_root_origin_offset,
-                    float opacity,
-                    std::set<WindowId>* referenced_window_ids) {
+                    float opacity) {
   if (!window->visible())
     return;
 
   ServerWindowSurface* default_surface =
       window->surface_manager() ? window->surface_manager()->GetDefaultSurface()
                                 : nullptr;
-
-  if (default_surface) {
-    // Accumulate referenced windows in each ServerWindow's CompositorFrame.
-    referenced_window_ids->insert(
-        default_surface->referenced_window_ids().begin(),
-        default_surface->referenced_window_ids().end());
-  }
 
   const gfx::Rect absolute_bounds =
       window->bounds() + parent_to_root_origin_offset;
@@ -83,23 +67,18 @@ void DrawWindowTree(cc::RenderPass* pass,
   const float combined_opacity = opacity * window->opacity();
   for (auto it = children.rbegin(); it != children.rend(); ++it) {
     DrawWindowTree(pass, *it, absolute_bounds.OffsetFromOrigin(),
-                   combined_opacity, referenced_window_ids);
+                   combined_opacity);
   }
 
   if (!window->surface_manager() || !window->surface_manager()->ShouldDraw())
     return;
 
-  // If an ancestor has already referenced this window, then we do not need
-  // to create a SurfaceDrawQuad for it.
-  const bool draw_default_surface =
-      default_surface && (referenced_window_ids->count(window->id()) == 0);
-
   ServerWindowSurface* underlay_surface =
       window->surface_manager()->GetUnderlaySurface();
-  if (!draw_default_surface && !underlay_surface)
+  if (!default_surface && !underlay_surface)
     return;
 
-  if (draw_default_surface) {
+  if (default_surface) {
     gfx::Transform quad_to_target_transform;
     quad_to_target_transform.Translate(absolute_bounds.x(),
                                        absolute_bounds.y());
@@ -161,7 +140,8 @@ PlatformDisplay* PlatformDisplay::Create(
 
 DefaultPlatformDisplay::DefaultPlatformDisplay(
     const PlatformDisplayInitParams& init_params)
-    : gpu_state_(init_params.gpu_state),
+    : display_id_(init_params.display_id),
+      gpu_state_(init_params.gpu_state),
       surfaces_state_(init_params.surfaces_state),
       delegate_(nullptr),
       draw_timer_(false, false),
@@ -277,7 +257,7 @@ void DefaultPlatformDisplay::Draw() {
     return;
 
   // TODO(fsamuel): We should add a trace for generating a top level frame.
-  std::unique_ptr<cc::CompositorFrame> frame(GenerateCompositorFrame());
+  cc::CompositorFrame frame(GenerateCompositorFrame());
   frame_pending_ = true;
   if (display_compositor_) {
     display_compositor_->SubmitCompositorFrame(
@@ -296,6 +276,10 @@ void DefaultPlatformDisplay::DidDraw(cc::SurfaceDrawStatus status) {
 
 bool DefaultPlatformDisplay::IsFramePending() const {
   return frame_pending_;
+}
+
+int64_t DefaultPlatformDisplay::GetDisplayId() const {
+  return display_id_;
 }
 
 void DefaultPlatformDisplay::WantToDraw() {
@@ -322,23 +306,20 @@ void DefaultPlatformDisplay::UpdateMetrics(const gfx::Size& size,
   delegate_->OnViewportMetricsChanged(old_metrics, metrics_);
 }
 
-std::unique_ptr<cc::CompositorFrame>
-DefaultPlatformDisplay::GenerateCompositorFrame() {
+cc::CompositorFrame DefaultPlatformDisplay::GenerateCompositorFrame() {
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->damage_rect = dirty_rect_;
   render_pass->output_rect = gfx::Rect(metrics_.size_in_pixels);
 
-  std::set<WindowId> referenced_window_ids;
   DrawWindowTree(render_pass.get(), delegate_->GetRootWindow(), gfx::Vector2d(),
-                 1.0f, &referenced_window_ids);
+                 1.0f);
 
   std::unique_ptr<cc::DelegatedFrameData> frame_data(
       new cc::DelegatedFrameData);
-  frame_data->device_scale_factor = metrics_.device_scale_factor;
   frame_data->render_pass_list.push_back(std::move(render_pass));
 
-  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
-  frame->delegated_frame_data = std::move(frame_data);
+  cc::CompositorFrame frame;
+  frame.delegated_frame_data = std::move(frame_data);
   return frame;
 }
 

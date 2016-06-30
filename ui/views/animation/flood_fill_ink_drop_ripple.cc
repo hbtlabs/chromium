@@ -108,8 +108,10 @@ namespace views {
 
 FloodFillInkDropRipple::FloodFillInkDropRipple(const gfx::Rect& clip_bounds,
                                                const gfx::Point& center_point,
-                                               SkColor color)
+                                               SkColor color,
+                                               float visible_opacity)
     : center_point_(center_point),
+      visible_opacity_(visible_opacity),
       root_layer_(ui::LAYER_NOT_DRAWN),
       circle_layer_delegate_(
           color,
@@ -143,7 +145,7 @@ FloodFillInkDropRipple::~FloodFillInkDropRipple() {
 
 void FloodFillInkDropRipple::SnapToActivated() {
   InkDropRipple::SnapToActivated();
-  SetOpacity(kVisibleOpacity);
+  SetOpacity(visible_opacity_);
   painted_layer_.SetTransform(GetMaxSizeTargetTransform());
 }
 
@@ -176,11 +178,11 @@ void FloodFillInkDropRipple::AnimateStateChange(
     case InkDropState::ACTION_PENDING: {
       DCHECK(old_ink_drop_state == InkDropState::HIDDEN);
 
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ACTION_PENDING_FADE_IN),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ACTION_PENDING_TRANSFORM) -
                            GetAnimationDuration(ACTION_PENDING_FADE_IN),
                        ui::LayerAnimator::ENQUEUE_NEW_ANIMATION,
@@ -207,7 +209,7 @@ void FloodFillInkDropRipple::AnimateStateChange(
     }
     case InkDropState::ALTERNATE_ACTION_PENDING: {
       DCHECK(old_ink_drop_state == InkDropState::ACTION_PENDING);
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ALTERNATE_ACTION_PENDING),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
@@ -225,7 +227,8 @@ void FloodFillInkDropRipple::AnimateStateChange(
                        gfx::Tween::EASE_IN_OUT, animation_observer);
       break;
     case InkDropState::ACTIVATED: {
-      AnimateToOpacity(kVisibleOpacity, GetAnimationDuration(ACTIVATED_FADE_IN),
+      AnimateToOpacity(visible_opacity_,
+                       GetAnimationDuration(ACTIVATED_FADE_IN),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
       AnimateToTransform(GetMaxSizeTargetTransform(),
@@ -303,25 +306,37 @@ void FloodFillInkDropRipple::AnimateToOpacity(
 gfx::Transform FloodFillInkDropRipple::CalculateTransform(
     float target_radius) const {
   const float target_scale = target_radius / circle_layer_delegate_.radius();
-  const gfx::Point drawn_center_point =
-      ToRoundedPoint(circle_layer_delegate_.GetCenterPoint());
 
   gfx::Transform transform = gfx::Transform();
   transform.Translate(center_point_.x() - root_layer_.bounds().x(),
                       center_point_.y() - root_layer_.bounds().y());
   transform.Scale(target_scale, target_scale);
-  transform.Translate(-drawn_center_point.x(), -drawn_center_point.y());
+
+  const gfx::Vector2dF drawn_center_offset =
+      circle_layer_delegate_.GetCenteringOffset();
+  transform.Translate(-drawn_center_offset.x(), -drawn_center_offset.y());
 
   return transform;
 }
 
 gfx::Transform FloodFillInkDropRipple::GetMaxSizeTargetTransform() const {
-  // TODO(estade): get rid of this 2, but make the fade out start before the
-  // active/action transform is done.
-  return CalculateTransform(gfx::Vector2dF(root_layer_.bounds().width(),
-                                           root_layer_.bounds().height())
-                                .Length() /
-                            2);
+  return CalculateTransform(MaxDistanceToCorners(center_point_));
+}
+
+float FloodFillInkDropRipple::MaxDistanceToCorners(
+    const gfx::Point& point) const {
+  const gfx::Rect bounds = root_layer_.bounds();
+  const float distance_to_top_left = (bounds.origin() - point).Length();
+  const float distance_to_top_right = (bounds.top_right() - point).Length();
+  const float distance_to_bottom_left = (bounds.bottom_left() - point).Length();
+  const float distance_to_bottom_right =
+      (bounds.bottom_right() - point).Length();
+
+  float largest_distance =
+      std::max(distance_to_top_left, distance_to_top_right);
+  largest_distance = std::max(largest_distance, distance_to_bottom_left);
+  largest_distance = std::max(largest_distance, distance_to_bottom_right);
+  return largest_distance;
 }
 
 }  // namespace views

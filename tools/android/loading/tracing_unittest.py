@@ -42,7 +42,7 @@ class TracingTrackTestCase(unittest.TestCase):
   def setUp(self):
     self.tree_threshold = _IntervalTree._TRESHOLD
     _IntervalTree._TRESHOLD = 2  # Expose more edge cases in the tree.
-    self.track = TracingTrack(None, additional_categories=('A', 'B', 'C', 'D'))
+    self.track = TracingTrack(None, ['A', 'B', 'C', 'D'])
 
   def tearDown(self):
     _IntervalTree._TRESHOLD = self.tree_threshold
@@ -360,25 +360,50 @@ class TracingTrackTestCase(unittest.TestCase):
     self.assertSetEqual(
         set('A'), self.track.Filter(categories=set('A')).Categories())
 
-  def testAdditionalCategories(self):
-    track = TracingTrack(None, additional_categories=('best-category-ever',))
-    self.assertIn('best-category-ever', track.Categories())
-    # Cannot re-enable a category.
-    with self.assertRaises(AssertionError):
-      TracingTrack(None, additional_categories=('cc',))
-    # Cannot disable categories via |additional_categories|.
-    with self.assertRaises(AssertionError):
-      TracingTrack(None, additional_categories=('-best-category-ever',))
+  def testHasLoadingSucceeded(self):
+    cat = 'navigation'
+    on_navigate = 'RenderFrameImpl::OnNavigate'
+    fail_provisional = 'RenderFrameImpl::didFailProvisionalLoad'
+    fail_load = 'RenderFrameImpl::didFailLoad'
 
-  def testDisabledCategories(self):
-    track = TracingTrack(None, disabled_categories=('toplevel',))
-    self.assertNotIn('toplevel', track.Categories())
-    self.assertIn('-toplevel', track.Categories())
-    # Can only disable categories that are enabled by default.
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': []})
     with self.assertRaises(AssertionError):
-      TracingTrack(None, disabled_categories=('best-category-ever',))
-    with self.assertRaises(AssertionError):
-      TracingTrack(None, disabled_categories=('cc',))
+      track.HasLoadingSucceeded()
+
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': [
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1}]})
+    self.assertTrue(track.HasLoadingSucceeded())
+
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': [
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1},
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 2},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1},
+        {'cat': cat, 'name': fail_provisional, 'args': {'id': 2},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1}]})
+    self.assertTrue(track.HasLoadingSucceeded())
+
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': [
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1},
+        {'cat': cat, 'name': fail_provisional, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1}]})
+    self.assertFalse(track.HasLoadingSucceeded())
+
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': [
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1},
+        {'cat': cat, 'name': fail_load, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1}]})
+    self.assertFalse(track.HasLoadingSucceeded())
+
+    track = TracingTrack.FromJsonDict({'categories': [cat], 'events': [
+        {'cat': cat, 'name': on_navigate, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1},
+        {'cat': cat, 'name': fail_load, 'args': {'id': 1},
+            'ts': 5, 'ph': 'X', 'dur': 10, 'pid': 1, 'tid': 1}]})
+    self.assertFalse(track.HasLoadingSucceeded())
 
   def _HandleEvents(self, events):
     self.track.Handle('Tracing.dataCollected', {'params': {'value': [

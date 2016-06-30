@@ -31,7 +31,6 @@
 #ifndef ScriptWrappable_h
 #define ScriptWrappable_h
 
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -150,7 +149,7 @@ public:
      *  wrapper in the main world. To mark wrappers in all worlds call
      *  ScriptWrappableVisitor::markWrapper(ScriptWrappable*, v8::Isolate*)
      */
-    void markWrapper(v8::Isolate*) const;
+    void markWrapper(const WrapperVisitor*) const;
 
     DECLARE_VIRTUAL_TRACE_WRAPPERS() {};
 

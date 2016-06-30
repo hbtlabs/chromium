@@ -219,7 +219,6 @@ TEST_P(FeatureInfoTest, Basic) {
   GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
 #undef GPU_OP
   EXPECT_EQ(0, info_->workarounds().max_texture_size);
-  EXPECT_EQ(0, info_->workarounds().max_cube_map_texture_size);
   EXPECT_FALSE(info_->workarounds().gl_clear_broken);
 }
 
@@ -232,6 +231,47 @@ TEST_P(FeatureInfoTest, InitializeNoExtensions) {
               HasSubstr("GL_ANGLE_translated_shader_source"));
   EXPECT_THAT(info_->extensions(), HasSubstr("GL_CHROMIUM_trace_marker"));
   EXPECT_THAT(info_->extensions(), HasSubstr("GL_EXT_unpack_subimage"));
+
+  bool expect_ext_srgb = false;
+  switch (GetParam()) {
+    case ES2_on_Version3_0:
+    case ES3_on_Version3_0:
+    case ES3_on_Version3_2Compatibility:
+      break;
+    case ES2_on_Version3_2Compatibility:
+      // sRGB features are available as core GL 3.2.
+      expect_ext_srgb = true;
+      break;
+    default:
+      NOTREACHED();
+      break;
+  }
+  if (expect_ext_srgb) {
+    EXPECT_THAT(info_->extensions(), HasSubstr("GL_EXT_sRGB"));
+    EXPECT_TRUE(info_->validators()->texture_format.IsValid(GL_SRGB_EXT));
+    EXPECT_TRUE(info_->validators()->texture_format.IsValid(GL_SRGB_ALPHA_EXT));
+    EXPECT_TRUE(info_->validators()->texture_internal_format.IsValid(
+        GL_SRGB_EXT));
+    EXPECT_TRUE(info_->validators()->texture_internal_format.IsValid(
+        GL_SRGB_ALPHA_EXT));
+    EXPECT_TRUE(info_->validators()->render_buffer_format.IsValid(
+        GL_SRGB8_ALPHA8_EXT));
+    EXPECT_TRUE(info_->validators()->frame_buffer_parameter.IsValid(
+        GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT));
+  } else {
+    EXPECT_THAT(info_->extensions(), Not(HasSubstr("GL_EXT_sRGB")));
+    EXPECT_FALSE(info_->validators()->texture_format.IsValid(GL_SRGB_EXT));
+    EXPECT_FALSE(info_->validators()->texture_format.IsValid(
+        GL_SRGB_ALPHA_EXT));
+    EXPECT_FALSE(info_->validators()->texture_internal_format.IsValid(
+        GL_SRGB_EXT));
+    EXPECT_FALSE(info_->validators()->texture_internal_format.IsValid(
+        GL_SRGB_ALPHA_EXT));
+    EXPECT_FALSE(info_->validators()->render_buffer_format.IsValid(
+        GL_SRGB8_ALPHA8_EXT));
+    EXPECT_FALSE(info_->validators()->frame_buffer_parameter.IsValid(
+        GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT));
+  }
 
   // Check a couple of random extensions that should not be there.
   EXPECT_THAT(info_->extensions(), Not(HasSubstr("GL_OES_texture_npot")));
@@ -251,8 +291,6 @@ TEST_P(FeatureInfoTest, InitializeNoExtensions) {
               Not(HasSubstr("GL_AMD_compressed_ATC_texture")));
   EXPECT_THAT(info_->extensions(),
               Not(HasSubstr("GL_IMG_texture_compression_pvrtc")));
-  EXPECT_THAT(info_->extensions(),
-              Not(HasSubstr("GL_EXT_sRGB")));
   EXPECT_FALSE(info_->feature_flags().npot_ok);
   EXPECT_FALSE(info_->validators()->compressed_texture_format.IsValid(
       GL_COMPRESSED_RGB_S3TC_DXT1_EXT));
@@ -320,18 +358,6 @@ TEST_P(FeatureInfoTest, InitializeNoExtensions) {
   EXPECT_FALSE(info_->validators()->equation.IsValid(GL_MIN_EXT));
   EXPECT_FALSE(info_->validators()->equation.IsValid(GL_MAX_EXT));
   EXPECT_FALSE(info_->feature_flags().chromium_sync_query);
-  EXPECT_FALSE(info_->validators()->texture_format.IsValid(
-      GL_SRGB_EXT));
-  EXPECT_FALSE(info_->validators()->texture_format.IsValid(
-      GL_SRGB_ALPHA_EXT));
-  EXPECT_FALSE(info_->validators()->texture_internal_format.IsValid(
-      GL_SRGB_EXT));
-  EXPECT_FALSE(info_->validators()->texture_internal_format.IsValid(
-      GL_SRGB_ALPHA_EXT));
-  EXPECT_FALSE(info_->validators()->render_buffer_format.IsValid(
-      GL_SRGB8_ALPHA8_EXT));
-  EXPECT_FALSE(info_->validators()->frame_buffer_parameter.IsValid(
-      GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT));
   EXPECT_FALSE(info_->feature_flags().chromium_image_ycbcr_422);
 }
 
@@ -1335,12 +1361,10 @@ TEST_P(FeatureInfoTest, ParseDriverBugWorkaroundsMultiple) {
   command_line.AppendSwitchASCII(
       switches::kGpuDriverBugWorkarounds,
       base::IntToString(gpu::EXIT_ON_CONTEXT_LOST) + "," +
-      base::IntToString(gpu::MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024) + "," +
       base::IntToString(gpu::MAX_TEXTURE_SIZE_LIMIT_4096));
   // Workarounds should get parsed without the need for a context.
   SetupWithCommandLine(command_line);
   EXPECT_TRUE(info_->workarounds().exit_on_context_lost);
-  EXPECT_EQ(1024, info_->workarounds().max_cube_map_texture_size);
   EXPECT_EQ(4096, info_->workarounds().max_texture_size);
 }
 

@@ -12,6 +12,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_stream_factory.h"
 #include "net/log/net_log.h"
@@ -198,9 +199,7 @@ class NET_EXPORT BidirectionalStream
       const SSLConfig& used_ssl_config,
       const ProxyInfo& used_proxy_info,
       WebSocketHandshakeStreamBase* stream) override;
-  void OnStreamFailed(int status,
-                      const SSLConfig& used_ssl_config,
-                      SSLFailureState ssl_failure_state) override;
+  void OnStreamFailed(int status, const SSLConfig& used_ssl_config) override;
   void OnCertificateError(int status,
                           const SSLConfig& used_ssl_config,
                           const SSLInfo& ssl_info) override;
@@ -215,6 +214,9 @@ class NET_EXPORT BidirectionalStream
                                   const ProxyInfo& used_proxy_info,
                                   HttpStream* stream) override;
   void OnQuicBroken() override;
+
+  // Helper method to notify delegate if there is an error.
+  void NotifyFailed(int error);
 
   // BidirectionalStreamRequestInfo used when requesting the stream.
   std::unique_ptr<BidirectionalStreamRequestInfo> request_info_;
@@ -245,6 +247,8 @@ class NET_EXPORT BidirectionalStream
   std::vector<scoped_refptr<IOBuffer>> write_buffer_list_;
   // List of buffer length.
   std::vector<int> write_buffer_len_list_;
+
+  base::WeakPtrFactory<BidirectionalStream> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BidirectionalStream);
 };

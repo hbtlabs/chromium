@@ -185,7 +185,10 @@ GLManager::Options::Options()
       context_lost_allowed(false),
       context_type(gles2::CONTEXT_TYPE_OPENGLES2),
       force_shader_name_hashing(false),
-      multisampled(false) {}
+      multisampled(false),
+      backbuffer_alpha(true),
+      image_factory(nullptr),
+      enable_arb_texture_rectangle(false) {}
 
 GLManager::GLManager()
     : sync_point_manager_(nullptr),
@@ -276,7 +279,6 @@ void GLManager::InitializeWithCommandLine(
       mailbox_manager ? mailbox_manager : new gles2::MailboxManagerImpl;
   share_group_ = share_group ? share_group : new gl::GLShareGroup;
 
-  gl::GpuPreference gpu_preference(gl::PreferDiscreteGpu);
   gles2::ContextCreationAttribHelper attribs;
   attribs.red_size = 8;
   attribs.green_size = 8;
@@ -287,16 +289,26 @@ void GLManager::InitializeWithCommandLine(
   attribs.context_type = options.context_type;
   attribs.samples = options.multisampled ? 4 : 0;
   attribs.sample_buffers = options.multisampled ? 1 : 0;
+  attribs.alpha_size = options.backbuffer_alpha ? 8 : 0;
+  attribs.should_use_native_gmb_for_backbuffer =
+      options.image_factory != nullptr;
+  attribs.offscreen_framebuffer_size = options.size;
 
   if (!context_group) {
     GpuDriverBugWorkarounds gpu_driver_bug_workaround(&command_line);
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo(command_line, gpu_driver_bug_workaround);
+    if (options.enable_arb_texture_rectangle) {
+      gles2::FeatureInfo::FeatureFlags& flags =
+          const_cast<gles2::FeatureInfo::FeatureFlags&>(
+              feature_info->feature_flags());
+      flags.arb_texture_rectangle = true;
+    }
     context_group = new gles2::ContextGroup(
         gpu_preferences_, mailbox_manager_.get(), NULL,
         new gpu::gles2::ShaderTranslatorCache(gpu_preferences_),
         new gpu::gles2::FramebufferCompletenessCache, feature_info,
-        options.bind_generates_resource);
+        options.bind_generates_resource, options.image_factory);
   }
 
   decoder_.reset(::gpu::gles2::GLES2Decoder::Create(context_group));
@@ -317,23 +329,23 @@ void GLManager::InitializeWithCommandLine(
   if (base_context_) {
     context_ = scoped_refptr<gl::GLContext>(new gpu::GLContextVirtual(
         share_group_.get(), base_context_->get(), decoder_->AsWeakPtr()));
-    ASSERT_TRUE(context_->Initialize(surface_.get(), gl::PreferIntegratedGpu));
+    ASSERT_TRUE(context_->Initialize(surface_.get(), attribs.gpu_preference));
   } else {
     if (real_gl_context) {
       context_ = scoped_refptr<gl::GLContext>(new gpu::GLContextVirtual(
           share_group_.get(), real_gl_context, decoder_->AsWeakPtr()));
       ASSERT_TRUE(
-          context_->Initialize(surface_.get(), gl::PreferIntegratedGpu));
+          context_->Initialize(surface_.get(), attribs.gpu_preference));
     } else {
       context_ = gl::init::CreateGLContext(share_group_.get(), surface_.get(),
-                                           gpu_preference);
+                                           attribs.gpu_preference);
     }
   }
   ASSERT_TRUE(context_.get() != NULL) << "could not create GL context";
 
   ASSERT_TRUE(context_->MakeCurrent(surface_.get()));
 
-  if (!decoder_->Initialize(surface_.get(), context_.get(), true, options.size,
+  if (!decoder_->Initialize(surface_.get(), context_.get(), true,
                             ::gpu::gles2::DisallowedFeatures(), attribs)) {
     return;
   }

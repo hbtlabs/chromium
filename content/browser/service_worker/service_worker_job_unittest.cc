@@ -12,6 +12,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -185,11 +186,12 @@ ServiceWorkerJobTest::FindRegistrationForPattern(
 std::unique_ptr<ServiceWorkerProviderHost>
 ServiceWorkerJobTest::CreateControllee() {
   return std::unique_ptr<ServiceWorkerProviderHost>(
-      new ServiceWorkerProviderHost(33 /* dummy render_process id */,
-                                    MSG_ROUTING_NONE /* render_frame_id */,
-                                    1 /* dummy provider_id */,
-                                    SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-                                    helper_->context()->AsWeakPtr(), NULL));
+      new ServiceWorkerProviderHost(
+          33 /* dummy render_process id */,
+          MSG_ROUTING_NONE /* render_frame_id */, 1 /* dummy provider_id */,
+          SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+          ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+          helper_->context()->AsWeakPtr(), NULL));
 }
 
 TEST_F(ServiceWorkerJobTest, SameDocumentSameRegistration) {
@@ -657,15 +659,14 @@ TEST_F(ServiceWorkerJobTest, UnregisterWaitingSetsRedundant) {
 
   version->SetStatus(ServiceWorkerVersion::INSTALLED);
   registration->SetWaitingVersion(version);
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING,
-            version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be stopped since there is no controllee after
   // unregistration.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -678,14 +679,14 @@ TEST_F(ServiceWorkerJobTest, UnregisterActiveSetsRedundant) {
   ASSERT_TRUE(registration.get());
 
   scoped_refptr<ServiceWorkerVersion> version = registration->active_version();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be stopped since there is no controllee after
   // unregistration.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -702,20 +703,20 @@ TEST_F(ServiceWorkerJobTest,
   registration->active_version()->AddControllee(host.get());
 
   scoped_refptr<ServiceWorkerVersion> version = registration->active_version();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be running since there is still a controllee.
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   registration->active_version()->RemoveControllee(host.get());
   base::RunLoop().RunUntilIdle();
 
   // The version should be stopped since there is no controllee.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -729,7 +730,7 @@ const std::string kScript("script.js");
 void RunNestedUntilIdle() {
   base::MessageLoop::ScopedNestableTaskAllower allow(
       base::MessageLoop::current());
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 void OnIOComplete(int* rv_out, int rv) {
@@ -1252,7 +1253,7 @@ TEST_F(ServiceWorkerJobTest, RegisterWhileUninstalling) {
   // Verify the new version is installed but not activated yet.
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_TRUE(new_version);
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, new_version->status());
 
   old_version->RemoveControllee(host.get());
@@ -1269,7 +1270,7 @@ TEST_F(ServiceWorkerJobTest, RegisterWhileUninstalling) {
 
   runner->RunUntilIdle();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 }
 
@@ -1304,9 +1305,9 @@ TEST_F(ServiceWorkerJobTest, RegisterAndUnregisterWhileUninstalling) {
   EXPECT_TRUE(registration->is_uninstalling());
   EXPECT_EQ(old_version, registration->active_version());
 
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, old_version->status());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, new_version->status());
 
   old_version->RemoveControllee(host.get());
@@ -1315,9 +1316,9 @@ TEST_F(ServiceWorkerJobTest, RegisterAndUnregisterWhileUninstalling) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_TRUE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, new_version->status());
 }
 
@@ -1368,7 +1369,7 @@ TEST_F(ServiceWorkerJobTest, RegisterSameScriptMultipleTimesWhileUninstalling) {
 
   runner->RunUntilIdle();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 }
 
@@ -1424,7 +1425,7 @@ TEST_F(ServiceWorkerJobTest, RegisterMultipleTimesWhileUninstalling) {
 
   runner->RunUntilIdle();
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, third_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, third_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, third_version->status());
 }
 
@@ -1503,7 +1504,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall) {
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_EQ(NULL, registration->waiting_version());
   EXPECT_EQ(new_version, registration->active_version());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 
   EXPECT_EQ(registration, FindRegistrationForPattern(pattern));
@@ -1539,7 +1540,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringRejectedInstall) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_TRUE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
   FindRegistrationForPattern(pattern, SERVICE_WORKER_ERROR_NOT_FOUND);
@@ -1575,7 +1576,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall_RejectActivate) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_FALSE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
   FindRegistrationForPattern(pattern, SERVICE_WORKER_OK);

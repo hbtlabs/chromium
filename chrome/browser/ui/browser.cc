@@ -229,7 +229,7 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/shell.h"
 #endif
 
@@ -585,7 +585,8 @@ gfx::Image Browser::GetCurrentPageIcon() const {
   return favicon_driver ? favicon_driver->GetFavicon() : gfx::Image();
 }
 
-base::string16 Browser::GetWindowTitleForCurrentTab() const {
+base::string16 Browser::GetWindowTitleForCurrentTab(
+    bool include_app_name) const {
   WebContents* contents = tab_strip_model_->GetActiveWebContents();
   base::string16 title;
 
@@ -602,15 +603,15 @@ base::string16 Browser::GetWindowTitleForCurrentTab() const {
   if (title.empty())
     title = CoreTabHelper::GetDefaultTitle();
 
-#if defined(OS_MACOSX) || defined(USE_ASH)
-  // On Mac and Ash, we don't want to suffix the page title with the application
-  // name.
+#if defined(OS_MACOSX)
+  // On Mac, we don't want to suffix the page title with the application name.
   return title;
 #endif
-  // Don't append the app name to window titles on app frames and app popups
-  return is_app() ?
-      title :
-      l10n_util::GetStringFUTF16(IDS_BROWSER_WINDOW_TITLE_FORMAT, title);
+  // Include the app name in window titles for tabbed browser windows when
+  // requested with |include_app_name|.
+  return (!is_app() && include_app_name) ?
+      l10n_util::GetStringFUTF16(IDS_BROWSER_WINDOW_TITLE_FORMAT, title):
+      title;
 }
 
 // static
@@ -1260,6 +1261,10 @@ void Browser::ShowValidationMessage(content::WebContents* web_contents,
                                     const gfx::Rect& anchor_in_root_view,
                                     const base::string16& main_text,
                                     const base::string16& sub_text) {
+  // If the web contents is unparented (e.g. in a blocked popup) it does not
+  // make sense to show a validation message. See http://crbug.com/616990
+  if (!web_contents->GetTopLevelNativeWindow())
+    return;
   validation_message_bubble_ =
       TabDialogs::FromWebContents(web_contents)
           ->ShowValidationMessage(anchor_in_root_view, main_text, sub_text);
@@ -1347,8 +1352,7 @@ void Browser::RequestAppBannerFromDevTools(content::WebContents* web_contents) {
   banners::AppBannerManagerEmulation::CreateForWebContents(web_contents);
   banners::AppBannerManagerEmulation* manager =
       banners::AppBannerManagerEmulation::FromWebContents(web_contents);
-  manager->RequestAppBanner(web_contents->GetMainFrame(),
-                            web_contents->GetLastCommittedURL(), true);
+  manager->RequestAppBanner(web_contents->GetLastCommittedURL(), true);
 }
 
 bool Browser::IsMouseLocked() const {
@@ -1362,8 +1366,8 @@ void Browser::OnWindowDidShow() {
 
   startup_metric_utils::RecordBrowserWindowDisplay(base::TimeTicks::Now());
 
-  // Nothing to do for non-tabbed windows.
-  if (!is_type_tabbed())
+  // Nothing to do for non-tabbed and minimized windows.
+  if (!is_type_tabbed() || window_->IsMinimized())
     return;
 
   // Show any pending global error bubble.
@@ -1683,9 +1687,9 @@ content::ColorChooser* Browser::OpenColorChooser(
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
-void Browser::RunFileChooser(WebContents* web_contents,
+void Browser::RunFileChooser(content::RenderFrameHost* render_frame_host,
                              const content::FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(web_contents, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 void Browser::EnumerateDirectory(WebContents* web_contents,

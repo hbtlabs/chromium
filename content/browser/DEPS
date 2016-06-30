@@ -1,10 +1,11 @@
 include_rules = [
-  # Allow inclusion of specific components that we depend on. We may only
-  # depend on components which we share with the mojo html_viewer.
+  # Allow inclusion of specific components that we depend on.
+  # See comment in content/DEPS for which components are allowed.
   "+components/filesystem",
   "+components/leveldb",
   "+components/link_header_util",
   "+components/mime_util",
+  "+components/mus/common",
   "+components/mus/public/interfaces",
   "+components/mus/public",
   "+components/network_session_configurator/switches.h",
@@ -16,6 +17,7 @@ include_rules = [
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
   "+device/battery",  # For battery status service.
+  "+device/power_save_blocker",
   "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
   "+gin/v8_initializer.h",
@@ -23,7 +25,6 @@ include_rules = [
   "+services",
   "+sql",
   "+ui/aura_extra",
-  "+ui/views/mus",  # http://crbug.com/555767
   "+ui/webui",
   "+win8/util",
 
@@ -55,6 +56,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebFocusType.h",
   "+third_party/WebKit/public/platform/WebGamepad.h",
   "+third_party/WebKit/public/platform/WebGamepads.h",
+  "+third_party/WebKit/public/platform/WebInsecureRequestPolicy.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebString.h",
@@ -66,6 +68,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification.mojom.h",
+  "+third_party/WebKit/public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h",
@@ -108,35 +111,8 @@ include_rules = [
   # one separately.
   "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h",
-  "+third_party/WebKit/public/platform/modules/vr/vr_service.mojom.h"
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module
   # for more information.
 ]
-
-specific_include_rules = {
-  # See https://crbug.com/612337.
-  "(power_save_blocker_android\.cc"
-  "|power_save_blocker_android\.h"
-  "|power_save_blocker_chromeos\.cc"
-  "|power_save_blocker_impl\.cc"
-  "|power_save_blocker_impl\.h"
-  "|power_save_blocker_mac\.cc"
-  "|power_save_blocker_ozone\.cc"
-  "|power_save_blocker_win\.cc"
-  "|power_save_blocker_x11\.cc"
-  ")": [
-    "-content",
-
-    # These will move to //device/power_save_blocker.
-    "+content/browser/power_save_blocker_impl.h",
-    "+content/public/browser/power_save_blocker.h",
-
-    # These dependencies need to be removed.
-    "!content/browser/android/content_view_core_impl.h",
-    "!content/browser/web_contents/web_contents_impl.h",
-    "!content/public/browser/android/content_view_core.h",
-    "!content/public/browser/web_contents_observer.h",
-  ]
-}

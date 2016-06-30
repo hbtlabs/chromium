@@ -6,7 +6,7 @@
 
 #include "core/animation/CustomCompositorAnimationManager.h"
 #include "core/dom/CompositorProxy.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/TraceEvent.h"
 #include "platform/WaitableEvent.h"
 #include "platform/graphics/CompositorMutationsTarget.h"
@@ -14,6 +14,7 @@
 #include "platform/heap/Handle.h"
 #include "public/platform/Platform.h"
 #include "web/CompositorProxyClientImpl.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -30,7 +31,7 @@ void createCompositorMutatorClient(std::unique_ptr<CompositorMutatorClient>* ptr
 } // namespace
 
 CompositorMutatorImpl::CompositorMutatorImpl()
-    : m_animationManager(adoptPtr(new CustomCompositorAnimationManager))
+    : m_animationManager(wrapUnique(new CustomCompositorAnimationManager))
     , m_client(nullptr)
 {
 }
@@ -40,7 +41,7 @@ std::unique_ptr<CompositorMutatorClient> CompositorMutatorImpl::createClient()
     std::unique_ptr<CompositorMutatorClient> mutatorClient;
     WaitableEvent doneEvent;
     if (WebThread* compositorThread = Platform::current()->compositorThread()) {
-        compositorThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&createCompositorMutatorClient, AllowCrossThreadAccess(&mutatorClient), AllowCrossThreadAccess(&doneEvent)));
+        compositorThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&createCompositorMutatorClient, crossThreadUnretained(&mutatorClient), crossThreadUnretained(&doneEvent)));
     } else {
         createCompositorMutatorClient(&mutatorClient, &doneEvent);
     }
@@ -56,7 +57,7 @@ CompositorMutatorImpl* CompositorMutatorImpl::create()
     return new CompositorMutatorImpl();
 }
 
-bool CompositorMutatorImpl::mutate(double monotonicTimeNow)
+bool CompositorMutatorImpl::mutate(double monotonicTimeNow, CompositorMutableStateProvider* stateProvider)
 {
     TRACE_EVENT0("compositor-worker", "CompositorMutatorImpl::mutate");
     bool needToReinvoke = false;
@@ -64,7 +65,7 @@ bool CompositorMutatorImpl::mutate(double monotonicTimeNow)
     // callbacks if none of the proxies in the global scope are affected by
     // m_mutations.
     for (CompositorProxyClientImpl* client : m_proxyClients) {
-        if (client->mutate(monotonicTimeNow))
+        if (client->mutate(monotonicTimeNow, stateProvider))
             needToReinvoke = true;
     }
 

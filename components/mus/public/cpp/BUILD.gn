@@ -11,10 +11,6 @@ source_set("cpp") {
     "lib/command_buffer_client_impl.h",
     "lib/context_provider.cc",
     "lib/gles2_context.cc",
-    "lib/gpu_memory_buffer_manager_mus.cc",
-    "lib/gpu_memory_buffer_manager_mus.h",
-    "lib/gpu_service.cc",
-    "lib/gpu_service.h",
     "lib/in_flight_change.cc",
     "lib/in_flight_change.h",
     "lib/output_surface.cc",
@@ -45,34 +41,31 @@ source_set("cpp") {
   ]
 
   public_deps = [
-    "../interfaces",
-  ]
-
-  deps = [
     "//base",
     "//cc",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//components/mus/common:mus_common",
-    "//components/mus/gles2:lib",
-    "//components/mus/public/cpp/surfaces",
     "//components/mus/public/interfaces",
     "//gpu/command_buffer/client",
-    "//gpu/command_buffer/client:gles2_cmd_helper",
     "//gpu/command_buffer/client:gles2_implementation",
-    "//gpu/command_buffer/client:gles2_interface",
     "//gpu/command_buffer/common",
-    "//gpu/ipc/client",
-    "//mojo/public/c/system:for_component",
-    "//mojo/public/cpp/bindings:bindings",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-    "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
+  ]
+
+  deps = [
+    "//components/mus/gles2:lib",
+    "//components/mus/public/interfaces",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc/client",
+    "//services/shell/public/cpp",
     "//ui/display",
+    "//ui/display/mojo",
     "//ui/events",
-    "//ui/events/mojo",
     "//ui/gfx/geometry",
-    "//ui/gfx/geometry/mojo",
   ]
 
   data_deps = [

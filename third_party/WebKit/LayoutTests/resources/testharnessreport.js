@@ -66,10 +66,24 @@
         return !!document.querySelector('script[src*="/resources/testharness"]');
     }
 
+    function injectSyntheticInput() {
+        var path = window.location.pathname;
+        if (path.match(/imported\/wpt\/.*\.html$/)) {
+            path = path.replace(/imported\/wpt\/(.*)\.html$/, "imported/wpt_automation/$1-input.js");
+            var input_script = document.createElement('script');
+            input_script.setAttribute('src', path);
+            document.head.appendChild(input_script);
+        }
+    }
+
     var didDispatchLoadEvent = false;
     var handleLoad = function() {
         didDispatchLoadEvent = true;
         window.removeEventListener('load', handleLoad);
+        // Add synthetic input to pointer event manual tests
+        if(window.location.pathname.includes('imported/wpt/pointerevents/')) {
+            setTimeout(injectSyntheticInput, 0);
+        }
     };
     window.addEventListener('load', handleLoad, false);
 
@@ -91,15 +105,15 @@
                 " , harness_status.message = " +
                 harness_status.message +
                 "\n";
-        } else {
-            // Iterate through tests array and build string that contains
-            // results for all tests.
-            for (var i = 0; i < tests.length; ++i) {
-                resultStr += convertResult(tests[i].status) + " " +
-                    sanitize(tests[i].name) + " " +
-                    sanitize(tests[i].message) + "\n";
-            }
         }
+        // Iterate through tests array and build string that contains
+        // results for all tests.
+        for (var i = 0; i < tests.length; ++i) {
+            resultStr += convertResult(tests[i].status) + " " +
+                sanitize(tests[i].name) + " " +
+                sanitize(tests[i].message) + "\n";
+        }
+
         resultStr += "Harness: the test ran to completion.\n";
 
         // Set results element's textContent to the results string.

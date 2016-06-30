@@ -146,9 +146,13 @@ class BrowserWindow : public ui::BaseWindow {
   // Returns true if the fullscreen bubble is visible.
   virtual bool IsFullscreenBubbleVisible() const = 0;
 
-  // Shows a notice teaching the user the new shortcut for going Back or
-  // Forward.
-  virtual void ShowNewBackShortcutBubble(bool forward) = 0;
+  // Shows a notice teaching the user the new shortcut for going back or forward
+  // if the user has pressed the old shortcut more than once in three seconds
+  // and the bubble has been shown less than five times.
+  virtual void MaybeShowNewBackShortcutBubble(bool forward) = 0;
+
+  // Hides the new back shortcut bubble, if showing, by fading it out.
+  virtual void HideNewBackShortcutBubble() = 0;
 
   // Returns the size of WebContents in the browser. This may be called before
   // the TabStripModel has an active tab.
@@ -279,8 +283,8 @@ class BrowserWindow : public ui::BaseWindow {
       bool app_modal,
       const base::Callback<void(bool)>& callback) = 0;
 
-  // ThemeService calls this when a user has changed his or her theme,
-  // indicating that it's time to redraw everything.
+  // ThemeService calls this when a user has changed their theme, indicating
+  // that it's time to redraw everything.
   virtual void UserChangedTheme() = 0;
 
   // Shows the website settings using the specified information. |virtual_url|

@@ -396,7 +396,10 @@ void FakeBluetoothDeviceClient::Connect(const dbus::ObjectPath& object_path,
 
   // Expose GATT services if connected to LE device.
   if (object_path == dbus::ObjectPath(kLowEnergyPath)) {
-    properties->services_resolved.ReplaceValue(true);
+    FakeBluetoothGattServiceClient* gatt_service_client =
+        static_cast<FakeBluetoothGattServiceClient*>(
+            bluez::BluezDBusManager::Get()->GetBluetoothGattServiceClient());
+    gatt_service_client->ExposeHeartRateService(object_path);
   }
 
   AddInputDeviceIfNeeded(object_path, properties);
@@ -1705,7 +1708,8 @@ void FakeBluetoothDeviceClient::CreateTestDevice(
     const std::string name,
     const std::string alias,
     const std::string device_address,
-    const std::vector<std::string>& service_uuids) {
+    const std::vector<std::string>& service_uuids,
+    device::BluetoothTransport type) {
   // Create a random device path.
   dbus::ObjectPath device_path;
   do {
@@ -1724,6 +1728,21 @@ void FakeBluetoothDeviceClient::CreateTestDevice(
   properties->alias.ReplaceValue(alias);
 
   properties->uuids.ReplaceValue(service_uuids);
+
+  switch (type) {
+    case device::BLUETOOTH_TRANSPORT_CLASSIC:
+      properties->type.ReplaceValue(BluetoothDeviceClient::kTypeBredr);
+      break;
+    case device::BLUETOOTH_TRANSPORT_LE:
+      properties->type.ReplaceValue(BluetoothDeviceClient::kTypeLe);
+      break;
+    case device::BLUETOOTH_TRANSPORT_DUAL:
+      properties->type.ReplaceValue(BluetoothDeviceClient::kTypeDual);
+      break;
+    default:
+      NOTREACHED();
+  }
+  properties->type.set_valid(true);
 
   properties_map_.insert(std::make_pair(device_path, std::move(properties)));
   device_list_.push_back(device_path);

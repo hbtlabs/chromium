@@ -231,7 +231,6 @@ PlatformWheelEventBuilder::PlatformWheelEventBuilder(Widget* widget, const WebMo
     m_dispatchType = toPlatformDispatchType(e.dispatchType);
 
     m_hasPreciseScrollingDeltas = e.hasPreciseScrollingDeltas;
-    m_canScroll = e.canScroll;
     m_resendingPluginId = e.resendingPluginId;
     m_railsMode = static_cast<PlatformEvent::RailsMode>(e.railsMode);
 #if OS(MACOSX)
@@ -345,6 +344,8 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
     case WebGestureDeviceUninitialized:
         NOTREACHED();
     }
+
+    m_uniqueTouchEventId = e.uniqueTouchEventId;
 }
 
 // MakePlatformKeyboardEvent --------------------------------------------------
@@ -492,6 +493,7 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(Widget* widget, const WebTo
         m_touchPoints.append(PlatformTouchPointBuilder(widget, event.touches[i]));
 
     m_dispatchType = toPlatformDispatchType(event.dispatchType);
+    m_uniqueTouchEventId = event.uniqueTouchEventId;
 }
 
 static FloatPoint convertAbsoluteLocationForLayoutObjectFloat(const LayoutPoint& location, const LayoutItem layoutItem)
@@ -637,7 +639,6 @@ WebMouseWheelEventBuilder::WebMouseWheelEventBuilder(const Widget* widget, const
     wheelTicksX = event.ticksX();
     wheelTicksY = event.ticksY();
     scrollByPage = event.deltaMode() == WheelEvent::DOM_DELTA_PAGE;
-    canScroll = event.canScroll();
     resendingPluginId = event.resendingPluginId();
     railsMode = static_cast<RailsMode>(event.getRailsMode());
     hasPreciseScrollingDeltas = event.hasPreciseScrollingDeltas();

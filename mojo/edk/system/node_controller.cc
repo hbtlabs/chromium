@@ -73,6 +73,27 @@ void RecordPendingChildCount(size_t count) {
                               50 /* bucket count */);
 }
 
+bool ParsePortsMessage(Channel::Message* message,
+                       void** data,
+                       size_t* num_data_bytes,
+                       size_t* num_header_bytes,
+                       size_t* num_payload_bytes,
+                       size_t* num_ports_bytes) {
+  DCHECK(data && num_data_bytes && num_header_bytes && num_payload_bytes &&
+         num_ports_bytes);
+
+  NodeChannel::GetPortsMessageData(message, data, num_data_bytes);
+  if (!*num_data_bytes)
+    return false;
+
+  if (!ports::Message::Parse(*data, *num_data_bytes, num_header_bytes,
+                             num_payload_bytes, num_ports_bytes)) {
+    return false;
+  }
+
+  return true;
+}
+
 // Used by NodeController to watch for shutdown. Since no IO can happen once
 // the IO thread is killed, the NodeController can cleanly drop all its peers
 // at that time.
@@ -139,9 +160,11 @@ void NodeController::SetIOTaskRunner(
       base::Bind(&NodeController::DropAllPeers, base::Unretained(this)));
 }
 
-void NodeController::ConnectToChild(base::ProcessHandle process_handle,
-                                    ScopedPlatformHandle platform_handle,
-                                    const std::string& child_token) {
+void NodeController::ConnectToChild(
+    base::ProcessHandle process_handle,
+    ScopedPlatformHandle platform_handle,
+    const std::string& child_token,
+    const ProcessErrorCallback& process_error_callback) {
   // Generate the temporary remote node name here so that it can be associated
   // with the embedder's child_token. If an error occurs in the child process
   // after it is launched, but before any reserved ports are connected, this can
@@ -156,13 +179,27 @@ void NodeController::ConnectToChild(base::ProcessHandle process_handle,
     DCHECK(inserted);
   }
 
+#if defined(OS_WIN)
+  // On Windows, we need to duplicate the process handle because we have no
+  // control over its lifetime and it may become invalid by the time the posted
+  // task runs.
+  HANDLE dup_handle = INVALID_HANDLE_VALUE;
+  BOOL ok = ::DuplicateHandle(
+      base::GetCurrentProcessHandle(), process_handle,
+      base::GetCurrentProcessHandle(), &dup_handle,
+      0, FALSE, DUPLICATE_SAME_ACCESS);
+  DPCHECK(ok);
+  process_handle = dup_handle;
+#endif
+
   io_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&NodeController::ConnectToChildOnIOThread,
                  base::Unretained(this),
                  process_handle,
                  base::Passed(&platform_handle),
-                 node_name));
+                 node_name,
+                 process_error_callback));
 }
 
 void NodeController::CloseChildPorts(const std::string& child_token) {
@@ -191,7 +228,7 @@ void NodeController::CloseChildPorts(const std::string& child_token) {
 
 void NodeController::ConnectToParent(ScopedPlatformHandle platform_handle) {
 // TODO(amistry): Consider the need for a broker on Windows.
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
   // On posix, use the bootstrap channel for the broker and receive the node's
   // channel synchronously as the first message from the broker.
   base::ElapsedTimer timer;
@@ -199,6 +236,14 @@ void NodeController::ConnectToParent(ScopedPlatformHandle platform_handle) {
   platform_handle = broker_->GetParentPlatformHandle();
   UMA_HISTOGRAM_TIMES("Mojo.System.GetParentPlatformHandleSyncTime",
                       timer.Elapsed());
+
+  if (!platform_handle.is_valid()) {
+    // Most likely the browser side of the channel has already been closed and
+    // the broker was unable to negotiate a NodeChannel pipe. In this case we
+    // can cancel parent connection.
+    DVLOG(1) << "Cannot connect to invalid parent channel.";
+    return;
+  }
 #endif
 
   io_task_runner_->PostTask(
@@ -288,7 +333,7 @@ int NodeController::MergeLocalPorts(const ports::PortRef& port0,
 
 scoped_refptr<PlatformSharedBuffer> NodeController::CreateSharedBuffer(
     size_t num_bytes) {
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
   // Shared buffer creation failure is fatal, so always use the broker when we
   // have one. This does mean that a non-root process that has children will use
   // the broker for shared buffer creation even though that process is
@@ -310,10 +355,18 @@ void NodeController::RequestShutdown(const base::Closure& callback) {
   AttemptShutdownIfRequested();
 }
 
+void NodeController::NotifyBadMessageFrom(const ports::NodeName& source_node,
+                                          const std::string& error) {
+  scoped_refptr<NodeChannel> peer = GetPeerChannel(source_node);
+  if (peer)
+    peer->NotifyBadMessage(error);
+}
+
 void NodeController::ConnectToChildOnIOThread(
     base::ProcessHandle process_handle,
     ScopedPlatformHandle platform_handle,
-    ports::NodeName token) {
+    ports::NodeName token,
+    const ProcessErrorCallback& process_error_callback) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL)
@@ -322,10 +375,12 @@ void NodeController::ConnectToChildOnIOThread(
   BrokerHost* broker_host = new BrokerHost(std::move(platform_handle));
   broker_host->SendChannel(node_channel.PassClientHandle());
   scoped_refptr<NodeChannel> channel = NodeChannel::Create(
-      this, node_channel.PassServerHandle(), io_task_runner_);
+      this, node_channel.PassServerHandle(), io_task_runner_,
+      process_error_callback);
 #else
   scoped_refptr<NodeChannel> channel =
-      NodeChannel::Create(this, std::move(platform_handle), io_task_runner_);
+      NodeChannel::Create(this, std::move(platform_handle), io_task_runner_,
+                          process_error_callback);
 #endif
 
   // We set up the child channel with a temporary name so it can be identified
@@ -355,7 +410,14 @@ void NodeController::ConnectToParentOnIOThread(
     // into our |peers_| map. That will happen as soon as we receive an
     // AcceptChild message from them.
     bootstrap_parent_channel_ =
-        NodeChannel::Create(this, std::move(platform_handle), io_task_runner_);
+        NodeChannel::Create(this, std::move(platform_handle), io_task_runner_,
+                            ProcessErrorCallback());
+    // Prevent the parent pipe handle from being closed on shutdown. Pipe
+    // closure is used by the parent to detect the child process has exited.
+    // Relying on message pipes to be closed is not enough because the parent
+    // may see the message pipe closure before the child is dead, causing the
+    // child process to be unexpectedly SIGKILL'd.
+    bootstrap_parent_channel_->LeakHandleOnShutdown();
   }
   bootstrap_parent_channel_->Start();
 }
@@ -630,6 +692,7 @@ void NodeController::AllocMessage(size_t num_header_bytes,
 
 void NodeController::ForwardMessage(const ports::NodeName& node,
                                     ports::ScopedMessage message) {
+  DCHECK(message);
   if (node == name_) {
     // NOTE: We need to avoid re-entering the Node instance within
     // ForwardMessage. Because ForwardMessage is only ever called
@@ -641,6 +704,19 @@ void NodeController::ForwardMessage(const ports::NodeName& node,
   } else {
     SendPeerMessage(node, std::move(message));
   }
+}
+
+void NodeController::BroadcastMessage(ports::ScopedMessage message) {
+  CHECK_EQ(message->num_ports(), 0u);
+  Channel::MessagePtr channel_message =
+      static_cast<PortsMessage*>(message.get())->TakeChannelMessage();
+  CHECK(!channel_message->has_handles());
+
+  scoped_refptr<NodeChannel> broker = GetBrokerChannel();
+  if (broker)
+    broker->Broadcast(std::move(channel_message));
+  else
+    OnBroadcast(name_, std::move(channel_message));
 }
 
 void NodeController::PortStatusChanged(const ports::PortRef& port) {
@@ -756,7 +832,8 @@ void NodeController::OnAddBrokerClient(const ports::NodeName& from_node,
 
   PlatformChannelPair broker_channel;
   scoped_refptr<NodeChannel> client = NodeChannel::Create(
-      this, broker_channel.PassServerHandle(), io_task_runner_);
+      this, broker_channel.PassServerHandle(), io_task_runner_,
+      ProcessErrorCallback());
 
 #if defined(OS_WIN)
   // The broker must have a working handle to the client process in order to
@@ -833,7 +910,7 @@ void NodeController::OnAcceptBrokerClient(const ports::NodeName& from_node,
   } else {
     DCHECK(broker_channel.is_valid());
     broker = NodeChannel::Create(this, std::move(broker_channel),
-                                 io_task_runner_);
+                                 io_task_runner_, ProcessErrorCallback());
     AddPeer(broker_name, broker, true /* start_channel */);
   }
 
@@ -876,32 +953,22 @@ void NodeController::OnPortsMessage(const ports::NodeName& from_node,
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
   void* data;
-  size_t num_data_bytes;
-  NodeChannel::GetPortsMessageData(
-      channel_message.get(), &data, &num_data_bytes);
-  if (!num_data_bytes) {
-    DropPeer(from_node);
-    return;
-  }
-
-  size_t num_header_bytes, num_payload_bytes, num_ports_bytes;
-  if (!ports::Message::Parse(data,
-                             num_data_bytes,
-                             &num_header_bytes,
-                             &num_payload_bytes,
-                             &num_ports_bytes)) {
+  size_t num_data_bytes, num_header_bytes, num_payload_bytes, num_ports_bytes;
+  if (!ParsePortsMessage(channel_message.get(), &data, &num_data_bytes,
+                         &num_header_bytes, &num_payload_bytes,
+                         &num_ports_bytes)) {
     DropPeer(from_node);
     return;
   }
 
   CHECK(channel_message);
-  ports::ScopedMessage message(
+  std::unique_ptr<PortsMessage> ports_message(
       new PortsMessage(num_header_bytes,
                        num_payload_bytes,
                        num_ports_bytes,
                        std::move(channel_message)));
-
-  node_->AcceptMessage(std::move(message));
+  ports_message->set_source_node(from_node);
+  node_->AcceptMessage(ports::ScopedMessage(ports_message.release()));
   AcceptIncomingMessages();
 }
 
@@ -969,10 +1036,41 @@ void NodeController::OnIntroduce(const ports::NodeName& from_node,
   }
 
   scoped_refptr<NodeChannel> channel =
-      NodeChannel::Create(this, std::move(channel_handle), io_task_runner_);
+      NodeChannel::Create(this, std::move(channel_handle), io_task_runner_,
+                          ProcessErrorCallback());
 
   DVLOG(1) << "Adding new peer " << name << " via parent introduction.";
   AddPeer(name, channel, true /* start_channel */);
+}
+
+void NodeController::OnBroadcast(const ports::NodeName& from_node,
+                                 Channel::MessagePtr message) {
+  DCHECK(!message->has_handles());
+
+  void* data;
+  size_t num_data_bytes, num_header_bytes, num_payload_bytes, num_ports_bytes;
+  if (!ParsePortsMessage(message.get(), &data, &num_data_bytes,
+                         &num_header_bytes, &num_payload_bytes,
+                         &num_ports_bytes)) {
+    DropPeer(from_node);
+    return;
+  }
+
+  // Broadcast messages must not contain ports.
+  if (num_ports_bytes > 0) {
+    DropPeer(from_node);
+    return;
+  }
+
+  base::AutoLock lock(peers_lock_);
+  for (auto& iter : peers_) {
+    // Copy and send the message to each known peer.
+    Channel::MessagePtr peer_message(
+        new Channel::Message(message->payload_size(), 0));
+    memcpy(peer_message->mutable_payload(), message->payload(),
+           message->payload_size());
+    iter.second->PortsMessage(std::move(peer_message));
+  }
 }
 
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
@@ -1036,9 +1134,21 @@ void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
 
   scoped_refptr<NodeChannel> peer = GetPeerChannel(destination);
   if (peer)
-    peer->PortsMessage(std::move(message));
+    peer->PortsMessageFromRelay(from_node, std::move(message));
   else
     DLOG(ERROR) << "Dropping relay message for unknown node " << destination;
+}
+
+void NodeController::OnPortsMessageFromRelay(const ports::NodeName& from_node,
+                                             const ports::NodeName& source_node,
+                                             Channel::MessagePtr message) {
+  if (GetPeerChannel(from_node) != GetBrokerChannel()) {
+    LOG(ERROR) << "Refusing relayed message from non-broker node.";
+    DropPeer(from_node);
+    return;
+  }
+
+  OnPortsMessage(source_node, std::move(message));
 }
 #endif
 

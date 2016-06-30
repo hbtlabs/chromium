@@ -1326,7 +1326,7 @@ VisiblePosition previousLinePosition(const VisiblePosition& visiblePosition, Lay
     if (root) {
         // FIXME: Can be wrong for multi-column layout and with transforms.
         LayoutPoint pointInLine = absoluteLineDirectionPointToLocalPointInBlock(root, lineDirectionPoint);
-        LineLayoutItem lineLayoutItem = root->closestLeafChildForPoint(pointInLine, isEditablePosition(p))->getLineLayoutItem();
+        LineLayoutItem lineLayoutItem = root->closestLeafChildForPoint(pointInLine, isEditablePosition(p, ContentIsEditable))->getLineLayoutItem();
         Node* node = lineLayoutItem.node();
         if (node && editingIgnoresContent(node))
             return VisiblePosition::inParentBeforeNode(*node);
@@ -3180,7 +3180,7 @@ static VisiblePositionTemplate<Strategy> nextPositionOfAlgorithm(const VisiblePo
     case CanSkipOverEditingBoundary:
         return skipToEndOfEditingBoundary(next, visiblePosition.deepEquivalent());
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return honorEditingBoundaryAtOrAfter(next, visiblePosition.deepEquivalent());
 }
 
@@ -3243,7 +3243,7 @@ static VisiblePositionTemplate<Strategy> previousPositionOfAlgorithm(const Visib
         return skipToStartOfEditingBoundary(prev, visiblePosition.deepEquivalent());
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return honorEditingBoundaryAtOrBefore(prev, visiblePosition.deepEquivalent());
 }
 

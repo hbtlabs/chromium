@@ -15,11 +15,15 @@ webview,
   width: 100%;
 }
 
+#arc-support {
+  padding: 0;
+}
+
 .button-separator {
   width: 1px;
 }
 
-.checkbox-metrics {
+.checkbox-option {
   height: 16px;
   margin: 0;
   padding: 0 8px 0 0;
@@ -49,7 +53,7 @@ webview,
   height: 688px;
 }
 
-.section-metrics {
+.section-checkbox-container {
   margin: auto;
   padding: 16px 0 0 0;
   text-align: left;
@@ -76,7 +80,7 @@ webview,
   width: 600px;
 }
 
-.text-metrics {
+.checkbox-text {
   color: rgba(0, 0, 0, 0.54);
   font-size: 10px;
   font-weight: 400;

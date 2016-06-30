@@ -8,7 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -230,10 +233,6 @@ void RenderWidgetHostViewChildFrame::InitAsFullscreen(
   NOTREACHED();
 }
 
-void RenderWidgetHostViewChildFrame::ImeCancelComposition() {
-  // TODO(kenrb): Fix OOPIF Ime.
-}
-
 void RenderWidgetHostViewChildFrame::ImeCompositionRangeChanged(
     const gfx::Range& range,
     const std::vector<gfx::Rect>& character_bounds) {
@@ -260,11 +259,6 @@ void RenderWidgetHostViewChildFrame::SetIsLoading(bool is_loading) {
   NOTREACHED();
 }
 
-void RenderWidgetHostViewChildFrame::TextInputStateChanged(
-    const TextInputState& params) {
-  // TODO(kenrb): Implement.
-}
-
 void RenderWidgetHostViewChildFrame::RenderProcessGone(
     base::TerminationStatus status,
     int error_code) {
@@ -289,7 +283,7 @@ void RenderWidgetHostViewChildFrame::Destroy() {
 
   host_->SetView(nullptr);
   host_ = nullptr;
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 void RenderWidgetHostViewChildFrame::SetTooltipText(
@@ -369,20 +363,20 @@ void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
 
 void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
 
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
 
   if (!frame_connector_)
     return;
 
   cc::RenderPass* root_pass =
-      frame->delegated_frame_data->render_pass_list.back().get();
+      frame.delegated_frame_data->render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
-  float scale_factor = frame->metadata.device_scale_factor;
+  float scale_factor = frame.metadata.device_scale_factor;
 
   // Check whether we need to recreate the cc::Surface, which means the child
   // frame renderer has changed its output surface, or size, or scale factor.
@@ -446,15 +440,6 @@ void RenderWidgetHostViewChildFrame::GetScreenInfo(
   frame_connector_->GetScreenInfo(results);
 }
 
-bool RenderWidgetHostViewChildFrame::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  if (!frame_connector_)
-    return false;
-  DCHECK(color_profile->empty());
-  NOTIMPLEMENTED();
-  return false;
-}
-
 gfx::Rect RenderWidgetHostViewChildFrame::GetBoundsInRootWindow() {
   gfx::Rect rect;
   if (frame_connector_) {
@@ -478,10 +463,25 @@ void RenderWidgetHostViewChildFrame::ProcessAckedTouchEvent(
 }
 
 bool RenderWidgetHostViewChildFrame::LockMouse() {
+  if (frame_connector_)
+    return frame_connector_->LockMouse();
   return false;
 }
 
 void RenderWidgetHostViewChildFrame::UnlockMouse() {
+}
+
+bool RenderWidgetHostViewChildFrame::IsMouseLocked() {
+  if (!frame_connector_)
+    return false;
+
+  RenderWidgetHostViewBase* root_view =
+      frame_connector_->GetRootRenderWidgetHostView();
+
+  if (root_view)
+    return root_view->IsMouseLocked();
+
+  return false;
 }
 
 uint32_t RenderWidgetHostViewChildFrame::GetSurfaceIdNamespace() {
@@ -494,14 +494,16 @@ void RenderWidgetHostViewChildFrame::ProcessKeyboardEvent(
 }
 
 void RenderWidgetHostViewChildFrame::ProcessMouseEvent(
-    const blink::WebMouseEvent& event) {
-  host_->ForwardMouseEvent(event);
+    const blink::WebMouseEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardMouseEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessMouseWheelEvent(
-    const blink::WebMouseWheelEvent& event) {
+    const blink::WebMouseWheelEvent& event,
+    const ui::LatencyInfo& latency) {
   if (event.deltaX != 0 || event.deltaY != 0)
-    host_->ForwardWheelEvent(event);
+    host_->ForwardWheelEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewChildFrame::ProcessTouchEvent(

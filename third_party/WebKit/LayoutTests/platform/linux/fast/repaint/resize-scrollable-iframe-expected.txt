@@ -1,30 +1,22 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow (anonymous)",
-          "rect": [8, 108, 784, 304],
-          "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "LayoutBlockFlow (anonymous)",
-          "rect": [8, 213, 784, 200],
-          "reason": "incremental"
+          "rect": [8, 108, 784, 305],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutIFrame IFRAME id='iframe'",
-          "rect": [8, 208, 300, 200],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutView #document",
-          "rect": [8, 108, 285, 285],
-          "reason": "full"
+          "rect": [8, 108, 300, 300],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutView #document",
@@ -35,11 +27,6 @@
           "object": "LayoutView #document",
           "rect": [8, 393, 285, 15],
           "reason": "scroll"
-        },
-        {
-          "object": "LayoutIFrame IFRAME id='iframe'",
-          "rect": [108, 108, 200, 300],
-          "reason": "incremental"
         },
         {
           "object": "LayoutView #document",
@@ -70,32 +57,22 @@
           "object": "LayoutView #document",
           "rect": [93, 193, 15, 15],
           "reason": "scroll"
-        },
-        {
-          "object": "HorizontalScrollbar",
-          "reason": "scroll"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "LayoutView #document",
-          "reason": "scroll"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "VerticalScrollbar",
-          "reason": "scroll"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow (anonymous)",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutIFrame IFRAME id='iframe'",
+      "reason": "forced by layout"
     }
   ]
 }

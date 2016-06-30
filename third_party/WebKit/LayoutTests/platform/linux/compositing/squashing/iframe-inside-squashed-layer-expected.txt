@@ -1,15 +1,19 @@
 {
+  "name": "Content Root Layer",
   "bounds": [785, 1016],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [785, 1016],
       "contentsOpaque": true,
       "drawsContent": true,
       "children": [
         {
+          "name": "Squashing Containment Layer",
           "shouldFlattenTransform": false,
           "children": [
             {
+              "name": "LayoutBlockFlow DIV id='foo'",
               "position": [8, 8],
               "bounds": [200, 1000],
               "contentsOpaque": true,
@@ -17,6 +21,7 @@
               "backgroundColor": "#D3D3D3"
             },
             {
+              "name": "Squashing Layer (first squashed layer: LayoutBlockFlow (positioned) DIV)",
               "position": [8, 0],
               "bounds": [300, 654],
               "drawsContent": true,
@@ -37,11 +42,6 @@
                   "reason": "forced by layout"
                 },
                 {
-                  "object": "LayoutView #document",
-                  "rect": [0, 500, 285, 150],
-                  "reason": "full"
-                },
-                {
                   "object": "LayoutBlockFlow BODY",
                   "rect": [8, 508, 284, 20],
                   "reason": "forced by layout"
@@ -52,36 +52,13 @@
                   "reason": "forced by layout"
                 },
                 {
+                  "object": "LayoutText #text",
+                  "rect": [8, 508, 29, 19],
+                  "reason": "forced by layout"
+                },
+                {
                   "object": "LayoutView #document",
                   "rect": [285, 500, 15, 150],
-                  "reason": "scroll"
-                },
-                {
-                  "object": "InlineTextBox 'test1'",
-                  "reason": "full"
-                },
-                {
-                  "object": "InlineTextBox 'test1'",
-                  "reason": "full"
-                },
-                {
-                  "object": "LayoutView #document",
-                  "reason": "scroll"
-                },
-                {
-                  "object": "RootInlineBox",
-                  "reason": "full"
-                },
-                {
-                  "object": "RootInlineBox",
-                  "reason": "full"
-                },
-                {
-                  "object": "RootInlineBox",
-                  "reason": "full"
-                },
-                {
-                  "object": "VerticalScrollbar",
                   "reason": "scroll"
                 }
               ]

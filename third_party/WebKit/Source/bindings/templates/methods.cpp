@@ -512,6 +512,9 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
         contextData->activityLogger()->logMethod("{{interface_name}}.{{method.name}}", info.Length(), loggerArgs.data());
     }
     {% endif %}
+    {% if method.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if method.is_custom %}
     {{v8_class}}::{{method.name}}MethodCustom(info);
     {% elif method.is_post_message %}
@@ -542,7 +545,7 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "{{method.name}}"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), v8AtomicString(info.GetIsolate(), "{{method.name}}"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
     }
@@ -668,12 +671,12 @@ V8DOMConfiguration::installMethod(isolate, world, {{instance_template}}, {{proto
 
 {######################################}
 {% macro install_conditionally_enabled_methods() %}
-{% if conditionally_enabled_methods %}
+{% if methods | conditionally_exposed(is_partial) %}
 {# Define operations with limited exposure #}
 v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
 ExecutionContext* executionContext = toExecutionContext(prototypeObject->CreationContext());
 ASSERT(executionContext);
-{% for method in conditionally_enabled_methods %}
+{% for method in methods | conditionally_exposed(is_partial) %}
 {% filter exposed(method.overloads.exposed_test_all
                   if method.overloads else
                   method.exposed_test) %}

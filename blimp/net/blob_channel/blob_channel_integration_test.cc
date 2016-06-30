@@ -4,14 +4,18 @@
 
 #include <memory>
 
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "blimp/common/blob_cache/id_util.h"
 #include "blimp/common/blob_cache/in_memory_blob_cache.h"
 #include "blimp/common/blob_cache/test_util.h"
 #include "blimp/net/blob_channel/blob_channel_receiver.h"
 #include "blimp/net/blob_channel/blob_channel_sender.h"
+#include "blimp/net/blob_channel/blob_channel_sender_impl.h"
 #include "blimp/net/blob_channel/mock_blob_channel_receiver.h"
 #include "blimp/net/test_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,7 +32,7 @@ const char kBlobPayload[] = "bar1";
 // Routes sender delegate calls to a receiver delegate object.
 // The caller is responsible for ensuring that the receiver delegate is deleted
 // after |this| is deleted.
-class SenderDelegateProxy : public BlobChannelSender::Delegate {
+class SenderDelegateProxy : public BlobChannelSenderImpl::Delegate {
  public:
   explicit SenderDelegateProxy(BlobChannelReceiver* receiver)
       : receiver_(receiver) {}
@@ -37,7 +41,7 @@ class SenderDelegateProxy : public BlobChannelSender::Delegate {
  private:
   // BlobChannelSender implementation.
   void DeliverBlob(const BlobId& id, BlobDataPtr data) override {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&BlobChannelReceiver::OnBlobReceived,
                               base::Unretained(receiver_), id, data));
   }
@@ -65,7 +69,7 @@ class BlobChannelIntegrationTest : public testing::Test {
 
     EXPECT_EQ(receiver_.get(), stored_receiver);
 
-    sender_.reset(new BlobChannelSender(
+    sender_.reset(new BlobChannelSenderImpl(
         base::WrapUnique(new InMemoryBlobCache),
         base::WrapUnique(new SenderDelegateProxy(receiver_.get()))));
   }

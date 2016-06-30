@@ -156,10 +156,6 @@ void VersionUpdaterCros::CheckForUpdate(const StatusCallback& callback,
   }
 }
 
-void VersionUpdaterCros::RelaunchBrowser() const {
-  DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
-}
-
 void VersionUpdaterCros::SetChannel(const std::string& channel,
                                     bool is_powerwash_allowed) {
   OwnerSettingsServiceChromeOS* service =
@@ -183,6 +179,14 @@ void VersionUpdaterCros::GetChannel(bool get_current_channel,
   update_engine_client->GetChannel(get_current_channel, cb);
 }
 
+void VersionUpdaterCros::GetEolStatus(const EolStatusCallback& cb) {
+  UpdateEngineClient* update_engine_client =
+      DBusThreadManager::Get()->GetUpdateEngineClient();
+
+  // Request the Eol Status.
+  update_engine_client->GetEolStatus(cb);
+}
+
 VersionUpdaterCros::VersionUpdaterCros(content::WebContents* web_contents)
     : context_(web_contents ? web_contents->GetBrowserContext() : nullptr),
       last_operation_(UpdateEngineClient::UPDATE_STATUS_IDLE),
@@ -204,7 +208,7 @@ void VersionUpdaterCros::UpdateStatusChanged(
 
   // If the updater is currently idle, just show the last operation (unless it
   // was previously checking for an update -- in that case, the system is
-  // up-to-date now).  See http://crbug.com/120063 for details.
+  // up to date now).  See http://crbug.com/120063 for details.
   UpdateEngineClient::UpdateStatusOperation operation_to_show = status.status;
   if (status.status == UpdateEngineClient::UPDATE_STATUS_IDLE &&
       last_operation_ !=

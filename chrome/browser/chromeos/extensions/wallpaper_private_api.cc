@@ -11,10 +11,11 @@
 #include <utility>
 #include <vector>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
-#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -215,8 +216,10 @@ void WindowStateManager::BuildWindowListAndMinimizeInactiveForUser(
   std::set<aura::Window*>* results =
       &user_id_hash_window_list_map_[user_id_hash];
 
-  std::vector<aura::Window*> windows = ash::Shell::GetInstance()->
-      mru_window_tracker()->BuildWindowListIgnoreModal();
+  std::vector<aura::Window*> windows =
+      ash::WmWindowAura::ToAuraWindows(ash::Shell::GetInstance()
+                                           ->mru_window_tracker()
+                                           ->BuildWindowListIgnoreModal());
 
   for (std::vector<aura::Window*>::iterator iter = windows.begin();
        iter != windows.end(); ++iter) {
@@ -713,9 +716,8 @@ void WallpaperPrivateSetCustomWallpaperFunction::GenerateThumbnail(
 
 void WallpaperPrivateSetCustomWallpaperFunction::ThumbnailGenerated(
     base::RefCountedBytes* data) {
-  BinaryValue* result = BinaryValue::CreateWithCopiedBuffer(
-      reinterpret_cast<const char*>(data->front()), data->size());
-  SetResult(base::WrapUnique(result));
+  SetResult(BinaryValue::CreateWithCopiedBuffer(
+      reinterpret_cast<const char*>(data->front()), data->size()));
   SendResponse(true);
 }
 
@@ -839,9 +841,7 @@ void WallpaperPrivateGetThumbnailFunction::FileNotLoaded() {
 
 void WallpaperPrivateGetThumbnailFunction::FileLoaded(
     const std::string& data) {
-  BinaryValue* thumbnail = BinaryValue::CreateWithCopiedBuffer(data.c_str(),
-                                                               data.size());
-  SetResult(base::WrapUnique(thumbnail));
+  SetResult(BinaryValue::CreateWithCopiedBuffer(data.c_str(), data.size()));
   SendResponse(true);
 }
 

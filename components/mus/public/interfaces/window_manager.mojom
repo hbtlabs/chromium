@@ -6,8 +6,9 @@ module mus.mojom;
 
 import "components/mus/public/interfaces/cursor.mojom";
 import "components/mus/public/interfaces/event_matcher.mojom";
-import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
+import "components/mus/public/interfaces/window_tree_constants.mojom";
+import "ui/events/mojo/event.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // WindowManager is used when a WindowTreeClient attempts to modify
@@ -50,6 +51,16 @@ interface WindowManager {
   const string kWindowIgnoredByShelf_Property = "prop:window-ignored-by-shelf";
   // The application ID (eg. 'mojo:foo'). Type: mojom::String
   const string kAppID_Property = "prop:app-id";
+  // Specifies that the system default caption and icon should not be rendered,
+  // and the client area should be equivalent to the window area. Type: bool
+  const string kRemoveStandardFrame_Property = "prop:remove-standard-frame";
+
+  // Called immediately when the WindowManager is obtained.
+  OnConnect(uint16 client_id);
+
+  // Called when a new display is added. |root| gives the root window specific
+  // to this WindowManager for |display|.
+  WmNewDisplayAdded(Display display, WindowData root, bool parent_drawn);
 
   // When the WindowManager completes a request it must call back to
   // WindowManagerClient::WmResponse().
@@ -73,7 +84,7 @@ interface WindowManager {
   WmClientJankinessChanged(uint16 client_id, bool janky);
 
   // An accelerator registered via AddAccelerator() has been triggered.
-  OnAccelerator(uint32 id, Event event);
+  OnAccelerator(uint32 id, ui.mojom.Event event);
 };
 
 // This interface is only used as an associated interface and is associated

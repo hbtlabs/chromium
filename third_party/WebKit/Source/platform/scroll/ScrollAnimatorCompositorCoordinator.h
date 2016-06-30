@@ -12,11 +12,12 @@
 #include "platform/animation/CompositorAnimationDelegate.h"
 #include "platform/animation/CompositorAnimationPlayerClient.h"
 #include "platform/geometry/FloatPoint.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -63,7 +64,7 @@ protected:
     IntSize implOnlyAnimationAdjustmentForTesting() { return m_implOnlyAnimationAdjustment; }
 
     void resetAnimationIds();
-    bool addAnimation(PassOwnPtr<CompositorAnimation>);
+    bool addAnimation(std::unique_ptr<CompositorAnimation>);
     void removeAnimation();
     virtual void abortAnimation();
 
@@ -139,8 +140,8 @@ protected:
         RunningOnCompositorButNeedsAdjustment,
     };
 
-    OwnPtr<CompositorAnimationPlayer> m_compositorPlayer;
-    int m_compositorAnimationAttachedToLayerId;
+    std::unique_ptr<CompositorAnimationPlayer> m_compositorPlayer;
+    CompositorElementId m_compositorAnimationAttachedToElementId;
     RunState m_runState;
     int m_compositorAnimationId;
     int m_compositorAnimationGroupId;
@@ -156,6 +157,9 @@ protected:
 
 private:
     bool hasImplOnlyAnimationUpdate() const;
+    void updateImplOnlyCompositorAnimations();
+    // Accesses compositing state and should only be called when in or after
+    // DocumentLifecycle::LifecycleState::CompositingClean.
     void takeOverImplOnlyScrollOffsetAnimation();
 };
 

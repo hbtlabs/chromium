@@ -60,6 +60,12 @@ void LayoutTestRuntimeFlags::Reset() {
 
   set_have_top_loading_frame(false);
 
+  set_can_open_windows(false);
+
+  set_dump_create_view(false);
+  set_dump_window_status_changes(false);
+  set_dump_spell_check_callbacks(false);
+
   // No need to report the initial state - only the future delta is important.
   tracked_dictionary().ResetChangeTracking();
 }

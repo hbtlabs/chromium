@@ -21,7 +21,6 @@ source_set("mus") {
     "//base",
     "//cc",
     "//components/mus/public/cpp",
-    "//components/mus/public/cpp/surfaces",
     "//components/mus/public/interfaces",
     "//content/common",
     "//content/public/common:common_sources",
@@ -31,7 +30,6 @@ source_set("mus") {
     "//third_party/WebKit/public:blink",
     "//ui/events:events",
     "//ui/events:events_base",
-    "//ui/events/mojo",
     "//ui/gfx/geometry/mojo",
   ]
 }

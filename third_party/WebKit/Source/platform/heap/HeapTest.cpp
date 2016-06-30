@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/HeapLinkedStack.h"
@@ -44,6 +44,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/HashTraits.h"
 #include "wtf/LinkedHashSet.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -84,7 +86,7 @@ private:
     IntWrapper();
     int m_x;
 };
-static_assert(WTF::NeedsTracing<IntWrapper>::value, "NeedsTracing macro failed to recognize trace method.");
+static_assert(WTF::IsTraceable<IntWrapper>::value, "IsTraceable<> template failed to recognize trace method.");
 
 struct SameSizeAsPersistent {
     void* m_pointer[4];
@@ -178,7 +180,7 @@ template<typename T> struct WeakHandlingHashTraits : WTF::SimpleClassHashTraits<
     // can perhaps only be allocated inside collections, never as independent
     // objects.  Explicitly mark this as needing tracing and it will be traced
     // in collections using the traceInCollection method, which it must have.
-    template<typename U = void> struct NeedsTracingLazily {
+    template<typename U = void> struct IsTraceableInCollection {
         static const bool value = true;
     };
     // The traceInCollection method traces differently depending on whether we
@@ -234,8 +236,8 @@ template<> struct HashTraits<blink::PairWithWeakHandling> : blink::WeakHandlingH
 };
 
 template<>
-struct NeedsTracing<blink::PairWithWeakHandling> {
-    static const bool value = NeedsTracing<blink::StrongWeakPair>::value;
+struct IsTraceable<blink::PairWithWeakHandling> {
+    static const bool value = IsTraceable<blink::StrongWeakPair>::value;
 };
 
 } // namespace WTF
@@ -465,10 +467,10 @@ class ThreadedTesterBase {
 protected:
     static void test(ThreadedTesterBase* tester)
     {
-        Vector<OwnPtr<WebThread>, numberOfThreads> m_threads;
+        Vector<std::unique_ptr<WebThread>, numberOfThreads> m_threads;
         for (int i = 0; i < numberOfThreads; i++) {
-            m_threads.append(adoptPtr(Platform::current()->createThread("blink gc testing thread")));
-            m_threads.last()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(threadFunc, AllowCrossThreadAccess(tester)));
+            m_threads.append(wrapUnique(Platform::current()->createThread("blink gc testing thread")));
+            m_threads.last()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(threadFunc, crossThreadUnretained(tester)));
         }
         while (tester->m_threadsToFinish) {
             SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
@@ -529,11 +531,11 @@ protected:
     using GlobalIntWrapperPersistent = CrossThreadPersistent<IntWrapper>;
 
     Mutex m_mutex;
-    Vector<OwnPtr<GlobalIntWrapperPersistent>> m_crossPersistents;
+    Vector<std::unique_ptr<GlobalIntWrapperPersistent>> m_crossPersistents;
 
-    PassOwnPtr<GlobalIntWrapperPersistent> createGlobalPersistent(int value)
+    std::unique_ptr<GlobalIntWrapperPersistent> createGlobalPersistent(int value)
     {
-        return adoptPtr(new GlobalIntWrapperPersistent(IntWrapper::create(value)));
+        return wrapUnique(new GlobalIntWrapperPersistent(IntWrapper::create(value)));
     }
 
     void addGlobalPersistent()
@@ -557,7 +559,7 @@ protected:
             {
                 Persistent<IntWrapper> wrapper;
 
-                OwnPtr<GlobalIntWrapperPersistent> globalPersistent = createGlobalPersistent(0x0ed0cabb);
+                std::unique_ptr<GlobalIntWrapperPersistent> globalPersistent = createGlobalPersistent(0x0ed0cabb);
 
                 for (int i = 0; i < numberOfAllocations; i++) {
                     wrapper = IntWrapper::create(0x0bbac0de);
@@ -1388,7 +1390,7 @@ private:
 
 class FinalizationObserverWithHashMap {
 public:
-    typedef HeapHashMap<WeakMember<Observable>, OwnPtr<FinalizationObserverWithHashMap>> ObserverMap;
+    typedef HeapHashMap<WeakMember<Observable>, std::unique_ptr<FinalizationObserverWithHashMap>> ObserverMap;
 
     explicit FinalizationObserverWithHashMap(Observable& target) : m_target(target) { }
     ~FinalizationObserverWithHashMap()
@@ -1402,7 +1404,7 @@ public:
         ObserverMap& map = observers();
         ObserverMap::AddResult result = map.add(&target, nullptr);
         if (result.isNewEntry)
-            result.storedValue->value = adoptPtr(new FinalizationObserverWithHashMap(target));
+            result.storedValue->value = wrapUnique(new FinalizationObserverWithHashMap(target));
         else
             ASSERT(result.storedValue->value);
         return map;
@@ -2421,6 +2423,25 @@ TEST(HeapTest, LargeHeapObjects)
     EXPECT_EQ(11, IntWrapper::s_destructorCalls);
     EXPECT_EQ(11, LargeHeapObject::s_destructorCalls);
     preciselyCollectGarbage();
+}
+
+TEST(HeapTest, LargeHashMap)
+{
+    clearOutOldGarbage();
+
+    size_t size = (1 << 27) / sizeof(int);
+    Persistent<HeapHashMap<int, Member<IntWrapper>>> map = new HeapHashMap<int, Member<IntWrapper>>();
+    map->reserveCapacityForSize(size);
+    EXPECT_LE(size, map->capacity());
+}
+
+TEST(HeapTest, LargeVector)
+{
+    clearOutOldGarbage();
+
+    size_t size = (1 << 27) / sizeof(int);
+    Persistent<HeapVector<int>> vector = new HeapVector<int>(size);
+    EXPECT_LE(size, vector->capacity());
 }
 
 typedef std::pair<Member<IntWrapper>, int> PairWrappedUnwrapped;
@@ -4216,8 +4237,8 @@ TEST(HeapTest, CollectionNesting)
     typedef HeapDeque<Member<IntWrapper>> IntDeque;
     HeapHashMap<void*, IntVector>* map = new HeapHashMap<void*, IntVector>();
     HeapHashMap<void*, IntDeque>* map2 = new HeapHashMap<void*, IntDeque>();
-    static_assert(WTF::NeedsTracing<IntVector>::value, "Failed to recognize HeapVector as NeedsTracing");
-    static_assert(WTF::NeedsTracing<IntDeque>::value, "Failed to recognize HeapDeque as NeedsTracing");
+    static_assert(WTF::IsTraceable<IntVector>::value, "Failed to recognize HeapVector as traceable");
+    static_assert(WTF::IsTraceable<IntDeque>::value, "Failed to recognize HeapDeque as traceable");
 
     map->add(key, IntVector());
     map2->add(key, IntDeque());
@@ -4794,9 +4815,9 @@ void destructorsCalledOnClear(bool addLots)
 
 TEST(HeapTest, DestructorsCalled)
 {
-    HeapHashMap<Member<IntWrapper>, OwnPtr<SimpleClassWithDestructor>> map;
+    HeapHashMap<Member<IntWrapper>, std::unique_ptr<SimpleClassWithDestructor>> map;
     SimpleClassWithDestructor* hasDestructor = new SimpleClassWithDestructor();
-    map.add(IntWrapper::create(1), adoptPtr(hasDestructor));
+    map.add(IntWrapper::create(1), wrapUnique(hasDestructor));
     SimpleClassWithDestructor::s_wasDestructed = false;
     map.clear();
     EXPECT_TRUE(SimpleClassWithDestructor::s_wasDestructed);
@@ -4941,8 +4962,8 @@ class GCParkingThreadTester {
 public:
     static void test()
     {
-        OwnPtr<WebThread> sleepingThread = adoptPtr(Platform::current()->createThread("SleepingThread"));
-        sleepingThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(sleeperMainFunc));
+        std::unique_ptr<WebThread> sleepingThread = wrapUnique(Platform::current()->createThread("SleepingThread"));
+        sleepingThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(sleeperMainFunc));
 
         // Wait for the sleeper to run.
         while (!s_sleeperRunning) {
@@ -5230,16 +5251,16 @@ TEST(HeapTest, RegressNullIsStrongified)
 
 TEST(HeapTest, Bind)
 {
-    std::unique_ptr<SameThreadClosure> closure = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), Bar::create(), static_cast<Visitor*>(0));
+    std::unique_ptr<WTF::Closure> closure = WTF::bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), wrapPersistent(Bar::create()), nullptr);
     // OffHeapInt* should not make Persistent.
-    std::unique_ptr<SameThreadClosure> closure2 = bind(&OffHeapInt::voidFunction, OffHeapInt::create(1));
+    std::unique_ptr<WTF::Closure> closure2 = WTF::bind(&OffHeapInt::voidFunction, OffHeapInt::create(1));
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(1u, Bar::s_live);
 
     UseMixin::s_traceCount = 0;
     Mixin* mixin = UseMixin::create();
-    std::unique_ptr<SameThreadClosure> mixinClosure = bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), mixin, static_cast<Visitor*>(0));
+    std::unique_ptr<WTF::Closure> mixinClosure = WTF::bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), wrapPersistent(mixin), nullptr);
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the mixin.
     EXPECT_EQ(1, UseMixin::s_traceCount);
@@ -5606,8 +5627,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Wait for the worker thread to have done its initialization,
         // IE. the worker allocates an object and then throw aways any
@@ -5709,8 +5730,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Wait for the worker thread initialization. The worker
         // allocates a weak collection where both collection and
@@ -5912,8 +5933,8 @@ public:
         DestructorLockingObject::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Park the main thread until the worker thread has initialized.
         parkMainThread();
@@ -6265,7 +6286,10 @@ int DeepEagerly::sTraceLazy = 0;
 
 TEST(HeapTest, TraceDeepEagerly)
 {
-#if !ENABLE(ASSERT)
+    // The allocation & GC overhead is considerable for this test,
+    // straining debug builds and lower-end targets too much to be
+    // worth running.
+#if !ENABLE(ASSERT) && !OS(ANDROID)
     DeepEagerly* obj = nullptr;
     for (int i = 0; i < 10000000; i++)
         obj = new DeepEagerly(obj);
@@ -6617,7 +6641,7 @@ private:
 TEST(HeapTest, WeakPersistent)
 {
     Persistent<IntWrapper> object = new IntWrapper(20);
-    OwnPtr<WeakPersistentHolder> holder = adoptPtr(new WeakPersistentHolder(object));
+    std::unique_ptr<WeakPersistentHolder> holder = wrapUnique(new WeakPersistentHolder(object));
     preciselyCollectGarbage();
     EXPECT_TRUE(holder->object());
     object = nullptr;
@@ -6658,9 +6682,9 @@ TEST(HeapTest, CrossThreadWeakPersistent)
 
     // Step 1: Initiate a worker thread, and wait for |object| to get allocated on the worker thread.
     MutexLocker mainThreadMutexLocker(mainThreadMutex());
-    OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+    std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
     DestructorLockingObject* object = nullptr;
-    workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMainForCrossThreadWeakPersistentTest, AllowCrossThreadAccess(&object)));
+    workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMainForCrossThreadWeakPersistentTest, crossThreadUnretained(&object)));
     parkMainThread();
 
     // Step 3: Set up a CrossThreadWeakPersistent.

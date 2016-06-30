@@ -5,6 +5,7 @@
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
@@ -19,7 +20,17 @@ config("ui_warnings") {
   }
 }
 
-source_set("ui") {
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+split_static_library("ui") {
+  # Split into multiple static libraries on Windows official builds, where we
+  # run into a 2GB max size limit.
+  if (is_win && is_official_build) {
+    split_count = 5
+  } else {
+    split_count = 1
+  }
+
   sources = []
   defines = []
   libs = []
@@ -112,6 +123,7 @@ source_set("ui") {
     "//content/public/common",
     "//crypto",
     "//device/core",
+    "//services/shell/runner/common",
     "//skia",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
@@ -162,7 +174,6 @@ source_set("ui") {
       "//components/url_formatter",
       "//device/nfc",
       "//media",
-      "//mojo/edk/system",
       "//net:net_with_v8",
       "//net:stale_while_revalidate_experiment_domains",
       "//storage/browser",
@@ -261,6 +272,8 @@ source_set("ui") {
       "ash/chrome_wallpaper_manager.h",
       "ash/keyboard_ui_service.cc",
       "ash/keyboard_ui_service.h",
+      "ash/launcher/chrome_launcher_controller_mus.cc",
+      "ash/launcher/chrome_launcher_controller_mus.h",
       "ash/launcher/chrome_mash_shelf_controller.cc",
       "ash/launcher/chrome_mash_shelf_controller.h",
     ]
@@ -275,11 +288,6 @@ source_set("ui") {
       "//ui/app_list/presenter:mojom",
       "//ui/keyboard:mojom",
     ]
-    if (!is_chromeos) {
-      sources += rebase_path(gypi_values.chrome_browser_ui_ash_non_chromeos,
-                             ".",
-                             "//chrome")
-    }
   } else {  # Not ash.
     sources += rebase_path(gypi_values.chrome_browser_ui_non_ash_sources,
                            ".",
@@ -295,7 +303,12 @@ source_set("ui") {
       deps += [ "//extensions/components/native_app_window" ]
     }
 
-    if (!is_chromeos && (!is_mac || mac_views_browser)) {
+    if (is_chromeos) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_ui_views_chromeos_sources,
+                      ".",
+                      "//chrome")
+    } else if (!is_mac || mac_views_browser) {
       sources +=
           rebase_path(gypi_values.chrome_browser_ui_views_non_chromeos_sources,
                       ".",
@@ -452,8 +465,6 @@ source_set("ui") {
       "Carbon.framework",
       "Quartz.framework",
     ]
-    configs +=
-        [ "//third_party/google_toolbox_for_mac:google_toolbox_for_mac_config" ]
   } else {  # non-Mac.
     sources += rebase_path(gypi_values.chrome_browser_ui_non_mac_sources,
                            ".",
@@ -630,7 +641,7 @@ if (is_mac) {
 }
 
 # In GYP this is part of test_support_common.
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [

@@ -31,12 +31,12 @@ class FakeSerialGetDevicesFunction : public AsyncExtensionFunction {
  public:
   bool RunAsync() override {
     std::unique_ptr<base::ListValue> devices(new base::ListValue());
-    base::DictionaryValue* device0 = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> device0(new base::DictionaryValue());
     device0->SetString("path", "/dev/fakeserial");
-    base::DictionaryValue* device1 = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> device1(new base::DictionaryValue());
     device1->SetString("path", "\\\\COM800\\");
-    devices->Append(device0);
-    devices->Append(device1);
+    devices->Append(std::move(device0));
+    devices->Append(std::move(device1));
     SetResult(std::move(devices));
     SendResponse(true);
     return true;
@@ -135,10 +135,9 @@ ExtensionFunction* FakeSerialConnectFunctionFactory() {
 void CreateTestSerialServiceOnFileThread(
     mojo::InterfaceRequest<device::serial::SerialService> request) {
   auto io_handler_factory = base::Bind(&FakeEchoSerialIoHandler::Create);
-  auto connection_factory = new device::SerialConnectionFactory(
-      io_handler_factory,
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::IO));
+  auto* connection_factory = new device::SerialConnectionFactory(
+      io_handler_factory, content::BrowserThread::GetMessageLoopProxyForThread(
+                              content::BrowserThread::IO));
   std::unique_ptr<device::SerialDeviceEnumerator> device_enumerator(
       new FakeSerialDeviceEnumerator);
   new device::SerialServiceImpl(

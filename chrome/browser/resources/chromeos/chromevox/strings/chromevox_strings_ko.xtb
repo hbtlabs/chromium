@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">다음 목록 항목이 없습니다.</translation>
 <translation id="1157782847298808853">키보드 도움말</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, 콤보 상자</translation>
+<translation id="1161762950103988776">점프</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, 메뉴 항목, 하위 메뉴 포함</translation>
 <translation id="1177863135347784049">맞춤</translation>
 <translation id="1188858454923323853">상호 보완</translation>
+<translation id="1201402288615127009">다음</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - Chrome이 말을 합니다.</translation>
 <translation id="1229276918471378188">이전 점프</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">그룹</translation>
 <translation id="2582407057977008361">사이드 바</translation>
-<translation id="2589102159832527089">이 페이지에는 PDF 파일인 &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt;에서 자동으로 추출된 텍스트가 포함되어 있습니다. &lt;a href="<ph name="URL" />"&gt;원본을 보려면 여기를 클릭하세요.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">에{COUNT,plural, =1{항목 #개 포함}other{항목 #개 포함}}</translation>
 <translation id="2614981083756825552">Math ML 레이아웃</translation>
 <translation id="2626530649491650971">clickable</translation>
@@ -245,6 +246,7 @@
         "vi": "베트남어",
         "zh": "중국어",
         "zh_TW": "중국어(번체)"}</translation>
+<translation id="335581015389089642">음성</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{더하기 기호}other{더하기 기호 #개}}</translation>
 <translation id="338583716107319301">구분자</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">공백</translation>
 <translation id="6142308968191113180">제목 4</translation>
 <translation id="6169420925157477918">자세한 설명이 있는 이미지</translation>
-<translation id="6172087735260766220">복제 방지된 PDF에서 액세스 가능한 텍스트에 액세스할 수 없습니다.</translation>
 <translation id="6186305613600865047">페이지 끝으로 이동</translation>
 <translation id="6193330012414963395">오전/오후</translation>
 <translation id="622484624075952240">아래</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">탭</translation>
 <translation id="667999046851023355">문서</translation>
 <translation id="6697092096875747123">이전 콤보 상자</translation>
+<translation id="6710213216561001401">이전</translation>
 <translation id="6714813999819678458">이전 수준 2 제목</translation>
 <translation id="6716505898850596801">특수키</translation>
 <translation id="671916444866103745">다음 ARIA 랜드마크가 없습니다.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">타이머</translation>
 <translation id="8065607967589909823">현재 선택</translation>
 <translation id="8066678206530322333">배너</translation>
+<translation id="8076492880354921740">탭</translation>
 <translation id="8110647606445335195">ARIA 랜드마크가 없습니다.</translation>
 <translation id="8153880621934657047">표 내부가 아닙니다.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{밑줄}other{밑줄 기호 #개}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">다음 수준 3 제목이 없습니다.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">이전 체크박스가 없습니다.</translation>
+<translation id="8446884382197647889">자세히 알아보기</translation>
 <translation id="8455868257606149352">최대 <ph name="X" /></translation>
 <translation id="84575901236241018">액세스 키(<ph name="KEY" />) 있음</translation>
 <translation id="8476508772960940536">창 전체보기</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">위쪽 또는 아래쪽 화살표 키를 사용하여 탐색하거나 검색어를 입력하세요.</translation>
 <translation id="9192904702577636854">마키</translation>
 <translation id="9212322457209634662">다음 섹션이 없습니다.</translation>
+<translation id="923331726185079994">ChromeVox 업데이트됨</translation>
 <translation id="930275611743429116">선택을 시작 또는 종료합니다.</translation>
 <translation id="948171205378458592">말하기 속도 줄이기</translation>
 <translation id="962913030769097253">다음 수준 1 제목</translation>
 <translation id="973955474346881951">고정 모드 사용/사용 중지</translation>
+<translation id="976849232629612000">항목 없음</translation>
 </translationbundle>

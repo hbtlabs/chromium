@@ -139,6 +139,7 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/TextPosition.h"
+#include <memory>
 
 namespace blink {
 
@@ -524,7 +525,15 @@ void Element::nativeDistributeScroll(ScrollState& scrollState)
 void Element::callDistributeScroll(ScrollState& scrollState)
 {
     ScrollStateCallback* callback = scrollCustomizationCallbacks().getDistributeScroll(this);
-    if (!callback) {
+
+    // TODO(bokan): Need to add tests before we allow calling custom callbacks
+    // for non-touch modalities. For now, just call into the native callback but
+    // allow the viewport scroll callback so we don't disable overscroll.
+    // crbug.com/623079.
+    bool disableCustomCallbacks = !scrollState.isDirectManipulation()
+        && !document().isViewportScrollCallback(callback);
+
+    if (!callback || disableCustomCallbacks) {
         nativeDistributeScroll(scrollState);
         return;
     }
@@ -538,8 +547,6 @@ void Element::callDistributeScroll(ScrollState& scrollState)
 
 void Element::nativeApplyScroll(ScrollState& scrollState)
 {
-    DCHECK(RuntimeEnabledFeatures::scrollCustomizationEnabled());
-
     // All elements in the scroll chain should be boxes.
     DCHECK(!layoutObject() || layoutObject()->isBox());
 
@@ -556,8 +563,9 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
     LayoutBox* boxToScroll = nullptr;
 
-    // Handle the scrollingElement separately, as it should scroll the viewport.
-    if (this == document().scrollingElement())
+    // We should only ever scroll the effective root scroller this way when the
+    // page removes the default applyScroll (ViewportScrollCallback).
+    if (document().effectiveRootScroller() == this)
         boxToScroll = document().layoutView();
     else if (layoutObject())
         boxToScroll = toLayoutBox(layoutObject());
@@ -567,7 +575,7 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
     ScrollResult result =
         LayoutBoxItem(boxToScroll).enclosingBox().scroll(
-            ScrollByPrecisePixel,
+            ScrollGranularity(static_cast<int>(scrollState.deltaGranularity())),
             delta);
 
     if (!result.didScroll())
@@ -591,7 +599,15 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 void Element::callApplyScroll(ScrollState& scrollState)
 {
     ScrollStateCallback* callback = scrollCustomizationCallbacks().getApplyScroll(this);
-    if (!callback) {
+
+    // TODO(bokan): Need to add tests before we allow calling custom callbacks
+    // for non-touch modalities. For now, just call into the native callback but
+    // allow the viewport scroll callback so we don't disable overscroll.
+    // crbug.com/623079.
+    bool disableCustomCallbacks = !scrollState.isDirectManipulation()
+        && !document().isViewportScrollCallback(callback);
+
+    if (!callback || disableCustomCallbacks) {
         nativeApplyScroll(scrollState);
         return;
     }
@@ -601,13 +617,13 @@ void Element::callApplyScroll(ScrollState& scrollState)
         nativeApplyScroll(scrollState);
     if (callback->nativeScrollBehavior() == WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
-};
+}
 
 int Element::offsetLeft()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetLeft()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetLeft(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -615,7 +631,7 @@ int Element::offsetTop()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetTop()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetTop(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -623,7 +639,7 @@ int Element::offsetWidth()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetWidth()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetWidth(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -631,7 +647,7 @@ int Element::offsetHeight()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetHeight()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetHeight(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -640,17 +656,7 @@ Element* Element::offsetParent()
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
     LayoutObject* layoutObject = this->layoutObject();
-    if (!layoutObject)
-        return nullptr;
-
-    Element* element = layoutObject->offsetParent();
-    if (!element)
-        return nullptr;
-
-    if (element->isInShadowTree() && !element->containingShadowRoot()->isOpenOrV0())
-        return nullptr;
-
-    return element;
+    return layoutObject ? layoutObject->offsetParent() : nullptr;
 }
 
 int Element::clientLeft()
@@ -1050,14 +1056,14 @@ ClientRect* Element::getBoundingClientRect()
 const AtomicString& Element::computedRole()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-    OwnPtr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
+    std::unique_ptr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
     return cache->get()->computedRoleForNode(this);
 }
 
 String Element::computedName()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-    OwnPtr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
+    std::unique_ptr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
     return cache->get()->computedNameForNode(this);
 }
 
@@ -1424,12 +1430,12 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
     }
 
     if (inShadowIncludingDocument()) {
-        if (getCustomElementState() != CustomElementState::Custom && CustomElement::descriptorMayMatch(*this)) {
-            if (CustomElementsRegistry* registry = CustomElement::registry(*this))
-                registry->addCandidate(this);
-        }
-        if (isUpgradedV0CustomElement())
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueConnectedCallback(this);
+        else if (isUpgradedV0CustomElement())
             V0CustomElement::didAttach(this, document());
+        else if (getCustomElementState() == CustomElementState::Undefined)
+            CustomElement::tryToUpgrade(this);
     }
 
     TreeScope& scope = insertionPoint->treeScope();
@@ -1490,7 +1496,9 @@ void Element::removedFrom(ContainerNode* insertionPoint)
         if (hasPendingResources())
             document().accessSVGExtensions().removeElementFromPendingResources(this);
 
-        if (isUpgradedV0CustomElement())
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueDisconnectedCallback(this);
+        else if (isUpgradedV0CustomElement())
             V0CustomElement::didDetach(this, insertionPoint->document());
 
         if (needsStyleInvalidation())
@@ -1934,6 +1942,7 @@ ShadowRoot* Element::attachShadow(const ScriptState* scriptState, const ShadowRo
 
     const AtomicString& tagName = localName();
     bool tagNameIsSupported = isV0CustomElement()
+        || isCustomElement()
         || tagName == HTMLNames::articleTag
         || tagName == HTMLNames::asideTag
         || tagName == HTMLNames::blockquoteTag
@@ -2088,7 +2097,7 @@ void Element::childrenChanged(const ChildrenChange& change)
 
     checkForEmptyStyleChange();
     if (!change.byParser && change.isChildElementChange())
-        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingBeforeChange, change.siblingAfterChange);
+        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingChanged, change.siblingBeforeChange, change.siblingAfterChange);
 
     // TODO(hayato): Confirm that we can skip this if a shadow tree is v1.
     if (ElementShadow* shadow = this->shadow())
@@ -2099,7 +2108,7 @@ void Element::finishParsingChildren()
 {
     setIsFinishedParsingChildren(true);
     checkForEmptyStyleChange();
-    checkForSiblingStyleChanges(FinishedParsingChildren, lastChild(), nullptr);
+    checkForSiblingStyleChanges(FinishedParsingChildren, nullptr, lastChild(), nullptr);
 }
 
 #ifndef NDEBUG
@@ -3189,7 +3198,9 @@ void Element::willModifyAttribute(const QualifiedName& name, const AtomicString&
 
     if (oldValue != newValue) {
         document().styleEngine().attributeChangedForElement(name, *this);
-        if (isUpgradedV0CustomElement())
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueAttributeChangedCallback(this, name, oldValue, newValue);
+        else if (isUpgradedV0CustomElement())
             V0CustomElement::attributeDidChange(this, name.localName(), oldValue, newValue);
     }
 

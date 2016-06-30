@@ -21,6 +21,8 @@ class SimpleIntegrationUnittest(gpu_integration_test.GpuIntegrationTest):
   # Must be class-scoped since instances aren't reused across runs.
   _num_flaky_runs_to_fail = 2
 
+  _num_browser_starts = 0
+
   @classmethod
   def Name(cls):
     return 'simple_integration_unittest'
@@ -55,6 +57,11 @@ class SimpleIntegrationUnittest(gpu_integration_test.GpuIntegrationTest):
     expectations.Skip('expected_skip')
     return expectations
 
+  @classmethod
+  def StartBrowser(cls, options):
+    super(SimpleIntegrationUnittest, cls).StartBrowser(options)
+    cls._num_browser_starts += 1
+
   def RunActualGpuTest(self, file_path, *args):
     if file_path == 'failure.html':
       self.fail('Expected failure')
@@ -83,14 +90,15 @@ class GpuIntegrationTestUnittest(unittest.TestCase):
            '--write-abbreviated-json-results-to=%s' % temp_file_name])
       with open(temp_file_name) as f:
         test_result = json.load(f)
-      prefix = 'gpu_tests.gpu_integration_test_unittest.' + \
-               'SimpleIntegrationUnittest.'
       self.assertEquals(test_result['failures'], [
-          prefix + 'unexpected_error',
-          prefix + 'unexpected_failure'])
+          'unexpected_error',
+          'unexpected_failure'])
       self.assertEquals(test_result['successes'], [
-          prefix + 'expected_failure',
-          prefix + 'expected_flaky'])
+          'expected_failure',
+          'expected_flaky'])
       self.assertEquals(test_result['valid'], True)
+      # It might be nice to be more precise about the order of operations
+      # with these browser restarts, but this is at least a start.
+      self.assertEquals(SimpleIntegrationUnittest._num_browser_starts, 5)
     finally:
       os.remove(temp_file_name)

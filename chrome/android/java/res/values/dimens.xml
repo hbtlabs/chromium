@@ -115,6 +115,7 @@
     <!-- Preferences dimensions -->
     <dimen name="pref_autofill_field_horizontal_padding">3dp</dimen>
     <dimen name="pref_autofill_field_top_padding">10dp</dimen>
+    <dimen name="pref_autofill_touch_target_padding">15dp</dimen>
 
     <!-- Site Settings dimensions -->
     <dimen name="site_setttings_icon_padding">4.6dp</dimen>
@@ -137,7 +138,7 @@
     <dimen name="compositor_tab_title_bar_shadow_x_offset_incognito">-0.6667dp</dimen> <!-- -1px hdpi -->
     <dimen name="compositor_tab_title_bar_shadow_y_offset_incognito">-0.6667dp</dimen> <!-- -1px hdpi -->
     <!-- The size of the text for tab titles. -->
-    <dimen name="compositor_tab_title_text_size">13dp</dimen>
+    <dimen name="compositor_tab_title_text_size">13sp</dimen>
     <!-- The size of the bounding box for favicons. -->
     <dimen name="compositor_tab_title_favicon_size">16dp</dimen>
     <!-- Slop value for allowing slight misses on the compositor button. -->
@@ -257,6 +258,8 @@
     <dimen name="omnibox_suggestion_phone_url_bar_left_offset">10dp</dimen>
     <dimen name="omnibox_suggestion_phone_url_bar_left_offset_rtl">46dp</dimen>
     <dimen name="omnibox_suggestion_refine_width">48dp</dimen>
+    <dimen name="omnibox_suggestion_text_vertical_padding">5dp</dimen>
+    <dimen name="omnibox_suggestion_multiline_text_vertical_padding">10dp</dimen>
 
     <!-- NTP dimensions -->
     <dimen name="most_visited_bg_corner_radius">2dp</dimen>
@@ -281,13 +284,14 @@
     <dimen name="ntp_search_box_material_padding_bottom">3dp</dimen>
     <dimen name="ntp_search_box_material_padding_left">2dp</dimen>
     <dimen name="ntp_search_box_material_padding_right">2dp</dimen>
+    <dimen name="ntp_search_box_transition_length">16dp</dimen>
     <dimen name="ntp_list_item_padding">16dp</dimen>
     <dimen name="ntp_list_item_min_height">48dp</dimen>
     <dimen name="ntp_list_item_text_size">16sp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
     <dimen name="snippets_thumbnail_size">72dp</dimen>
     <dimen name="snippets_padding_and_peeking_card_height">16dp</dimen>
-    <dimen name="snippets_vertical_spacing">1dp</dimen>
+    <dimen name="snippets_card_9_patch_adjustment">2dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
     <dimen name="snippets_card_elevation">2dp</dimen>
 
@@ -305,11 +309,11 @@
     <dimen name="snackbar_width_tablet">450dp</dimen>
     <dimen name="snackbar_margin_tablet">24dp</dimen>
 
+    <!-- Drawers -->
+    <dimen name="drawer_width">240dp</dimen>
+    <dimen name="drawer_margin_large">16dp</dimen>
+
     <!-- Bookmarks dimensions -->
-    <dimen name="bookmark_item_corner_radius">3dp</dimen>
-    <dimen name="bookmark_item_icon_text_size">10dp</dimen>
-    <dimen name="bookmark_item_icon_size">16dp</dimen>
-    <dimen name="bookmark_item_min_icon_size">16px</dimen>
     <dimen name="bookmark_item_popup_width">140dp</dimen>
     <dimen name="bookmark_folder_item_left">16dp</dimen>
     <dimen name="bookmark_minimum_dialog_size_tablet">500dp</dimen>
@@ -330,6 +334,9 @@
 
     <!-- Favicon dimensions -->
     <dimen name="default_favicon_size">16dp</dimen>
+    <dimen name="default_favicon_corner_radius">3dp</dimen>
+    <dimen name="default_favicon_icon_text_size">10dp</dimen>
+    <dimen name="default_favicon_min_size">16px</dimen>
 
     <!-- Account chooser dialog dimensions -->
     <dimen name="account_chooser_dialog_margin">24dp</dimen>
@@ -340,11 +347,17 @@
     <!-- Clear browsing data preferences dimensions -->
     <dimen name="clear_browsing_data_checkbox_height">56dp</dimen>
 
-    <!-- Payments UI -->
+    <!-- Payments UI
+         * payments_section_checking_spacing:
+           The spec says that the "Checking" text should be 32dp above the bottom of its section.
+           We improvise by using 6dp because sections also have a 10dp padding, so we end up with
+           a 16dp bottom margin on the "Checking" text + 10dp section padding + 6dp leftover.
+    -->
     <dimen name="payments_section_vertical_spacing">10dp</dimen>
     <dimen name="payments_section_small_spacing">8dp</dimen>
     <dimen name="payments_section_large_spacing">16dp</dimen>
     <dimen name="payments_section_largest_spacing">32dp</dimen>
+    <dimen name="payments_section_checking_spacing">6dp</dimen>
     <dimen name="payments_section_descriptive_item_spacing">40dp</dimen>
     <dimen name="payments_section_separator_height">1dp</dimen>
     <dimen name="payments_section_logo_height">36dp</dimen>

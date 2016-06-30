@@ -4,10 +4,12 @@
 
 #include "platform/v8_inspector/V8Console.h"
 
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/inspector_protocol/String16.h"
 #include "platform/v8_inspector/InjectedScript.h"
 #include "platform/v8_inspector/InspectedContext.h"
 #include "platform/v8_inspector/V8Compat.h"
+#include "platform/v8_inspector/V8ConsoleMessage.h"
 #include "platform/v8_inspector/V8DebuggerAgentImpl.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
@@ -15,8 +17,6 @@
 #include "platform/v8_inspector/V8RuntimeAgentImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
-#include "platform/v8_inspector/public/ConsoleAPITypes.h"
-#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
 
 namespace blink {
@@ -76,26 +76,42 @@ public:
         return m_debuggerClient;
     }
 
+    void reportMessageToConsole(v8::Local<v8::Context> context, MessageType type, MessageLevel level, const String16& message, const v8::FunctionCallbackInfo<v8::Value>* arguments, unsigned skipArgumentCount)
+    {
+        InspectedContext* inspectedContext = ensureInspectedContext();
+        if (!inspectedContext)
+            return;
+        V8DebuggerImpl* debugger = inspectedContext->debugger();
+
+        std::unique_ptr<V8ConsoleMessage> consoleMessage = nullptr;
+        if (arguments) {
+            std::vector<v8::Local<v8::Value>> messageArguments;
+            for (int i = skipArgumentCount; i < arguments->Length(); ++i)
+                messageArguments.push_back((*arguments)[i]);
+            consoleMessage = V8ConsoleMessage::createForConsoleAPI(debugger->client()->currentTimeMS(), type, level, message, &messageArguments, debugger->captureStackTrace(false), inspectedContext);
+        } else {
+            consoleMessage = V8ConsoleMessage::createForConsoleAPI(debugger->client()->currentTimeMS(), type, level, message, nullptr, debugger->captureStackTrace(false), inspectedContext);
+        }
+        debugger->ensureConsoleMessageStorage(inspectedContext->contextGroupId())->addMessage(std::move(consoleMessage));
+    }
+
     void addMessage(MessageType type, MessageLevel level, String16 emptyText, int skipArgumentCount)
     {
         if (emptyText.isEmpty() && !m_info.Length())
             return;
-        if (V8DebuggerClient* debuggerClient = ensureDebuggerClient())
-            debuggerClient->reportMessageToConsole(m_context, type, level, m_info.Length() <= skipArgumentCount ? emptyText : String16(), &m_info, skipArgumentCount);
+        reportMessageToConsole(m_context, type, level, m_info.Length() <= skipArgumentCount ? emptyText : String16(), &m_info, skipArgumentCount);
     }
 
     void addMessage(MessageType type, MessageLevel level, const String16& message)
     {
-        if (V8DebuggerClient* debuggerClient = ensureDebuggerClient())
-            debuggerClient->reportMessageToConsole(m_context, type, level, message, nullptr, 0 /* skipArgumentsCount */);
+        reportMessageToConsole(m_context, type, level, message, nullptr, 0 /* skipArgumentsCount */);
     }
 
     void addDeprecationMessage(const char* id, const String16& message)
     {
         if (checkAndSetPrivateFlagOnConsole(id, false))
             return;
-        if (V8DebuggerClient* debuggerClient = ensureDebuggerClient())
-            debuggerClient->reportMessageToConsole(m_context, LogMessageType, WarningMessageLevel, message, nullptr, 0 /* skipArgumentsCount */);
+        reportMessageToConsole(m_context, LogMessageType, WarningMessageLevel, message, nullptr, 0 /* skipArgumentsCount */);
     }
 
     bool firstArgToBoolean(bool defaultValue)
@@ -336,7 +352,7 @@ void V8Console::countCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
     String16 title = helper.firstArgToString(String16());
     String16 identifier;
     if (title.isEmpty()) {
-        std::unique_ptr<V8StackTraceImpl> stackTrace = V8StackTraceImpl::capture(nullptr, 1);
+        std::unique_ptr<V8StackTraceImpl> stackTrace = V8StackTraceImpl::capture(nullptr, 0, 1);
         if (stackTrace)
             identifier = stackTrace->topSourceURL() + ":" + String16::number(stackTrace->topLineNumber());
     } else {
@@ -666,6 +682,12 @@ v8::Local<v8::Object> V8Console::createConsole(InspectedContext* inspectedContex
     return console;
 }
 
+void V8Console::clearInspectedContextIfNeeded(v8::Local<v8::Context> context, v8::Local<v8::Object> console)
+{
+    v8::Isolate* isolate = context->GetIsolate();
+    console->SetPrivate(context, inspectedContextPrivateKey(isolate), v8::External::New(isolate, nullptr));
+}
+
 v8::Local<v8::Object> V8Console::createCommandLineAPI(InspectedContext* inspectedContext)
 {
     v8::Local<v8::Context> context = inspectedContext->context();
@@ -702,33 +724,95 @@ v8::Local<v8::Object> V8Console::createCommandLineAPI(InspectedContext* inspecte
     return commandLineAPI;
 }
 
-void V8Console::clearInspectedContextIfNeeded(v8::Local<v8::Context> context, v8::Local<v8::Object> console)
+static bool isCommandLineAPIGetter(const String16& name)
 {
-    v8::Isolate* isolate = context->GetIsolate();
-    console->SetPrivate(context, inspectedContextPrivateKey(isolate), v8::External::New(isolate, nullptr));
+    if (name.length() != 2)
+        return false;
+    // $0 ... $4, $_
+    return name[0] == '$' && ((name[1] >= '0' && name[1] <= '4') || name[1] == '_');
 }
 
-bool V8Debugger::isCommandLineAPIMethod(const String16& name)
+void V8Console::CommandLineAPIScope::accessorGetterCallback(v8::Local<v8::Name> name, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-    DEFINE_STATIC_LOCAL(protocol::HashSet<String16>, methods, ());
-    if (methods.size() == 0) {
-        const char* members[] = { "dir", "dirxml", "keys", "values", "profile", "profileEnd", "inspect",
-            "copy", "clear", "debug", "undebug", "monitor", "unmonitor", "table" };
-        for (size_t i = 0; i < WTF_ARRAY_LENGTH(members); ++i)
-            methods.add(members[i]);
+    CommandLineAPIScope* scope = static_cast<CommandLineAPIScope*>(info.Data().As<v8::External>()->Value());
+    DCHECK(scope);
+
+    v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
+    if (scope->m_cleanup) {
+        bool removed = info.Holder()->Delete(context, name).FromMaybe(false);
+        DCHECK(removed);
+        return;
     }
-    return methods.find(name) != methods.end();
+    v8::Local<v8::Object> commandLineAPI = scope->m_commandLineAPI;
+
+    v8::Local<v8::Value> value;
+    if (!commandLineAPI->Get(context, name).ToLocal(&value))
+        return;
+    if (isCommandLineAPIGetter(toProtocolStringWithTypeCheck(name))) {
+        DCHECK(value->IsFunction());
+        v8::MicrotasksScope microtasks(info.GetIsolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
+        if (value.As<v8::Function>()->Call(context, commandLineAPI, 0, nullptr).ToLocal(&value))
+            info.GetReturnValue().Set(value);
+    } else {
+        info.GetReturnValue().Set(value);
+    }
 }
 
-bool V8Debugger::isCommandLineAPIGetter(const String16& name)
+void V8Console::CommandLineAPIScope::accessorSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
-    DEFINE_STATIC_LOCAL(protocol::HashSet<String16>, getters, ());
-    if (getters.size() == 0) {
-        const char* members[] = { "$0", "$1", "$2", "$3", "$4", "$_" };
-        for (size_t i = 0; i < WTF_ARRAY_LENGTH(members); ++i)
-            getters.add(members[i]);
+    CommandLineAPIScope* scope = static_cast<CommandLineAPIScope*>(info.Data().As<v8::External>()->Value());
+    v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
+    if (!info.Holder()->Delete(context, name).FromMaybe(false))
+        return;
+    if (!info.Holder()->CreateDataProperty(context, name, value).FromMaybe(false))
+        return;
+    bool removed = scope->m_installedMethods->Delete(context, name).FromMaybe(false);
+    DCHECK(removed);
+}
+
+V8Console::CommandLineAPIScope::CommandLineAPIScope(v8::Local<v8::Context> context, v8::Local<v8::Object> commandLineAPI, v8::Local<v8::Object> global)
+    : m_context(context)
+    , m_commandLineAPI(commandLineAPI)
+    , m_global(global)
+    , m_installedMethods(v8::Set::New(context->GetIsolate()))
+    , m_cleanup(false)
+{
+    v8::Local<v8::Array> names;
+    if (!m_commandLineAPI->GetOwnPropertyNames(context).ToLocal(&names))
+        return;
+    v8::Local<v8::External> externalThis = v8::External::New(context->GetIsolate(), this);
+    for (size_t i = 0; i < names->Length(); ++i) {
+        v8::Local<v8::Value> name;
+        if (!names->Get(context, i).ToLocal(&name) || !name->IsName())
+            continue;
+        if (m_global->Has(context, name).FromMaybe(true))
+            continue;
+        if (!m_installedMethods->Add(context, name).ToLocal(&m_installedMethods))
+            continue;
+        if (!m_global->SetAccessor(context, v8::Local<v8::Name>::Cast(name), CommandLineAPIScope::accessorGetterCallback,
+            CommandLineAPIScope::accessorSetterCallback, externalThis,
+            v8::DEFAULT, v8::DontEnum).FromMaybe(false)) {
+            bool removed = m_installedMethods->Delete(context, name).FromMaybe(false);
+            DCHECK(removed);
+            continue;
+        }
     }
-    return getters.find(name) != getters.end();
+}
+
+V8Console::CommandLineAPIScope::~CommandLineAPIScope()
+{
+    m_cleanup = true;
+    v8::Local<v8::Array> names = m_installedMethods->AsArray();
+    for (size_t i = 0; i < names->Length(); ++i) {
+        v8::Local<v8::Value> name;
+        if (!names->Get(m_context, i).ToLocal(&name) || !name->IsName())
+            continue;
+        if (name->IsString()) {
+            v8::Local<v8::Value> descriptor;
+            bool success = m_global->GetOwnPropertyDescriptor(m_context, v8::Local<v8::String>::Cast(name)).ToLocal(&descriptor);
+            DCHECK(success);
+        }
+    }
 }
 
 } // namespace blink

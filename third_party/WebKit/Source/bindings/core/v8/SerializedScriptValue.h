@@ -36,13 +36,9 @@
 #include "core/CoreExport.h"
 #include "wtf/HashMap.h"
 #include "wtf/ThreadSafeRefCounted.h"
+#include "wtf/typed_arrays/ArrayBufferContents.h"
+#include <memory>
 #include <v8.h>
-
-namespace WTF {
-
-class ArrayBufferContents;
-
-}
 
 namespace blink {
 
@@ -57,6 +53,9 @@ typedef Vector<WebBlobInfo> WebBlobInfoArray;
 
 class CORE_EXPORT SerializedScriptValue : public ThreadSafeRefCounted<SerializedScriptValue> {
 public:
+    using ArrayBufferContentsArray = Vector<WTF::ArrayBufferContents, 1>;
+    using ImageBitmapContentsArray = Vector<RefPtr<StaticBitmapImage>, 1>;
+
     // Increment this for each incompatible change to the wire format.
     // Version 2: Added StringUCharTag for UChar v8 strings.
     // Version 3: Switched to using uuids as blob data identifiers.
@@ -76,7 +75,6 @@ public:
     static PassRefPtr<SerializedScriptValue> serialize(const String&);
     static PassRefPtr<SerializedScriptValue> serializeAndSwallowExceptions(v8::Isolate*, v8::Local<v8::Value>);
 
-    // TODO(peria): Make these create()s private.
     static PassRefPtr<SerializedScriptValue> create();
     static PassRefPtr<SerializedScriptValue> create(const String&);
     static PassRefPtr<SerializedScriptValue> create(const char* data, size_t length);
@@ -108,35 +106,32 @@ public:
     // Returns true if the value contains a transferable ArrayBuffer.
     bool containsTransferableArrayBuffer() const;
 
-private:
-    // The followings are private, but used by SerializedScriptValueFactory.
-    enum StringDataMode {
-        StringValue,
-        WireData
-    };
-    typedef Vector<WTF::ArrayBufferContents, 1> ArrayBufferContentsArray;
-    typedef Vector<RefPtr<StaticBitmapImage>, 1> ImageBitmapContentsArray;
-
-    SerializedScriptValue();
-    explicit SerializedScriptValue(const String& wireData);
-
-    BlobDataHandleMap& blobDataHandles() { return m_blobDataHandles; }
     String& data() { return m_data; }
-    void setData(const String& data) { m_data = data; }
-    void transferArrayBuffers(v8::Isolate*, const ArrayBufferArray&, ExceptionState&);
-    void transferImageBitmaps(v8::Isolate*, const ImageBitmapArray&, ExceptionState&);
-    void transferOffscreenCanvas(v8::Isolate*, const OffscreenCanvasArray&, ExceptionState&);
+    BlobDataHandleMap& blobDataHandles() { return m_blobDataHandles; }
     ArrayBufferContentsArray* getArrayBufferContentsArray() { return m_arrayBufferContentsArray.get(); }
     ImageBitmapContentsArray* getImageBitmapContentsArray() { return m_imageBitmapContentsArray.get(); }
 
 private:
+    friend class ScriptValueSerializer;
+
+    enum StringDataMode {
+        StringValue,
+        WireData
+    };
+
+    SerializedScriptValue();
+    explicit SerializedScriptValue(const String& wireData);
+
+    void setData(const String& data) { m_data = data; }
+    void transferArrayBuffers(v8::Isolate*, const ArrayBufferArray&, ExceptionState&);
+    void transferImageBitmaps(v8::Isolate*, const ImageBitmapArray&, ExceptionState&);
+    void transferOffscreenCanvas(v8::Isolate*, const OffscreenCanvasArray&, ExceptionState&);
+
     String m_data;
-    OwnPtr<ArrayBufferContentsArray> m_arrayBufferContentsArray;
-    OwnPtr<ImageBitmapContentsArray> m_imageBitmapContentsArray;
+    std::unique_ptr<ArrayBufferContentsArray> m_arrayBufferContentsArray;
+    std::unique_ptr<ImageBitmapContentsArray> m_imageBitmapContentsArray;
     BlobDataHandleMap m_blobDataHandles;
     intptr_t m_externallyAllocatedMemory;
-
-    friend class SerializedScriptValueFactory;
 };
 
 } // namespace blink

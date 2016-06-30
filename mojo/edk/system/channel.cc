@@ -29,7 +29,7 @@ namespace {
 static_assert(sizeof(Channel::Message::Header) % kChannelMessageAlignment == 0,
     "Invalid Header size.");
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
 static_assert(sizeof(Channel::Message::Header) == 8,
               "Header must be 8 bytes on ChromeOS and Android");
 #endif
@@ -67,7 +67,7 @@ Channel::Message::Message(size_t payload_size,
                          (extra_header_size % kChannelMessageAlignment);
   }
   DCHECK_EQ(0u, extra_header_size % kChannelMessageAlignment);
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
   DCHECK_EQ(0u, extra_header_size);
 #endif
 
@@ -88,7 +88,7 @@ Channel::Message::Message(size_t payload_size,
   DCHECK_LE(sizeof(Header) + extra_header_size,
             std::numeric_limits<uint16_t>::max());
   header_->message_type = message_type;
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
   header_->num_handles = static_cast<uint16_t>(max_handles);
 #else
   header_->num_header_bytes =
@@ -121,12 +121,6 @@ Channel::Message::~Message() {
 // static
 Channel::MessagePtr Channel::Message::Deserialize(const void* data,
                                                   size_t data_num_bytes) {
-#if !defined(OS_WIN) && !(defined(OS_MACOSX) && !defined(OS_IOS))
-  // We only serialize messages into other messages when performing message
-  // relay on Windows and OSX.
-  NOTREACHED();
-  return nullptr;
-#else
   if (data_num_bytes < sizeof(Header))
     return nullptr;
 
@@ -137,37 +131,53 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
     return nullptr;
   }
 
-  if (header->num_bytes < header->num_header_bytes) {
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
+  size_t payload_size = data_num_bytes - sizeof(Header);
+  const char* payload = static_cast<const char*>(data) + sizeof(Header);
+#else
+  if (header->num_bytes < header->num_header_bytes ||
+      header->num_header_bytes < sizeof(Header)) {
     DLOG(ERROR) << "Decoding invalid message: " << header->num_bytes << " < "
                 << header->num_header_bytes;
     return nullptr;
   }
 
   uint32_t extra_header_size = header->num_header_bytes - sizeof(Header);
+  size_t payload_size = data_num_bytes - header->num_header_bytes;
+  const char* payload =
+      static_cast<const char*>(data) + header->num_header_bytes;
+#endif  // defined(MOJO_EDK_LEGACY_PROTOCOL)
+
 #if defined(OS_WIN)
   uint32_t max_handles = extra_header_size / sizeof(HandleEntry);
 #elif defined(OS_MACOSX) && !defined(OS_IOS)
+  if (extra_header_size < sizeof(MachPortsExtraHeader)) {
+    DLOG(ERROR) << "Decoding invalid message: " << extra_header_size << " < "
+                << sizeof(MachPortsExtraHeader);
+    return nullptr;
+  }
   uint32_t max_handles = (extra_header_size - sizeof(MachPortsExtraHeader)) /
       sizeof(MachPortsEntry);
-#endif
-  if (header->num_handles > max_handles) {
+#else
+  const uint32_t max_handles = 0;
+#endif  // defined(OS_WIN)
+
+  if (header->num_handles > max_handles || max_handles > kMaxAttachedHandles) {
     DLOG(ERROR) << "Decoding invalid message:" << header->num_handles
                 << " > " << max_handles;
     return nullptr;
   }
 
-  MessagePtr message(new Message(data_num_bytes - header->num_header_bytes,
-                                 max_handles));
+  MessagePtr message(new Message(payload_size, max_handles));
   DCHECK_EQ(message->data_num_bytes(), data_num_bytes);
+
+  // Copy all payload bytes.
+  if (payload_size)
+    memcpy(message->mutable_payload(), payload, payload_size);
+
+#if !defined(MOJO_EDK_LEGACY_PROTOCOL)
   DCHECK_EQ(message->extra_header_size(), extra_header_size);
   DCHECK_EQ(message->header_->num_header_bytes, header->num_header_bytes);
-
-  if (data_num_bytes > header->num_header_bytes) {
-    // Copy all payload bytes.
-    memcpy(message->mutable_payload(),
-           static_cast<const char*>(data) + header->num_header_bytes,
-           data_num_bytes - header->num_header_bytes);
-  }
 
   if (message->extra_header_size()) {
     // Copy extra header bytes.
@@ -175,6 +185,7 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
            static_cast<const char*>(data) + sizeof(Header),
            message->extra_header_size());
   }
+#endif
 
   message->header_->num_handles = header->num_handles;
 #if defined(OS_WIN)
@@ -188,11 +199,10 @@ Channel::MessagePtr Channel::Message::Deserialize(const void* data,
 #endif
 
   return message;
-#endif
 }
 
 size_t Channel::Message::payload_size() const {
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
   return header_->num_bytes - sizeof(Header);
 #else
   return size_ - header_->num_header_bytes;
@@ -215,7 +225,7 @@ bool Channel::Message::has_mach_ports() const {
 #endif
 
 void Channel::Message::SetHandles(ScopedPlatformHandleVectorPtr new_handles) {
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
   // Old semantics for ChromeOS and Android
   if (header_->num_handles == 0) {
     CHECK(!new_handles || new_handles->size() == 0);
@@ -238,7 +248,7 @@ void Channel::Message::SetHandles(ScopedPlatformHandleVectorPtr new_handles) {
   for (size_t i = 0; i < handle_vector_->size(); i++)
     handles_[i].handle = base::win::HandleToUint32((*handle_vector_)[i].handle);
 #endif  // defined(OS_WIN)
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(MOJO_EDK_LEGACY_PROTOCOL)
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   size_t mach_port_index = 0;
@@ -506,7 +516,7 @@ bool Channel::OnReadComplete(size_t bytes_read, size_t *next_read_size_hint) {
       return true;
     }
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
     size_t extra_header_size = 0;
     const void* extra_header = nullptr;
     size_t payload_size = header->num_bytes - sizeof(Message::Header);
@@ -527,7 +537,7 @@ bool Channel::OnReadComplete(size_t bytes_read, size_t *next_read_size_hint) {
                            const_cast<char*>(read_buffer_->occupied_bytes()) +
                            header->num_header_bytes)
                      : nullptr;
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(MOJO_EDK_LEGACY_PROTOCOL)
 
     ScopedPlatformHandleVectorPtr handles;
     if (header->num_handles > 0) {

@@ -30,15 +30,17 @@ class ArcStorageManager : public ArcService,
   // ArcBridgeService::Observer
   void OnStorageManagerInstanceReady() override;
 
-  // Gets detailed information of private volume of ARC.
-  // Returns false when an instance of ARC-side isn't ready yet.
-  using GetPrivateVolumesCallback = base::Callback<
-      void(mojo::Array<mojom::ArcVolumeInfoPtr>)>;
-  bool GetPrivateVolumes(const GetPrivateVolumesCallback& callback);
-
   // Opens detailed preference screen of private volume on ARC.
   // Returns false when an instance of ARC-side isn't ready yet.
   bool OpenPrivateVolumeSettings();
+
+  // Gets storage usage of all application's APK, data, and cache size.
+  using GetApplicationsSizeCallback = base::Callback<
+      void(bool succeeded, arc::mojom::ApplicationsSizePtr)>;
+  bool GetApplicationsSize(const GetApplicationsSizeCallback& callback);
+
+  // Deletes all applications' cache files.
+  bool DeleteApplicationsCache(const base::Callback<void()>& callback);
 
  private:
   mojom::StorageManagerInstance* GetStorageManagerInstance();

@@ -11,10 +11,10 @@
 #include "base/memory/shared_memory.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/mus/common/mojo_buffer_backing.h"
 #include "components/mus/gles2/gl_surface_adapter.h"
 #include "components/mus/gles2/gpu_memory_tracker.h"
 #include "components/mus/gles2/gpu_state.h"
-#include "components/mus/gles2/mojo_buffer_backing.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/command_executor.h"
@@ -83,6 +83,7 @@ bool CommandBufferDriver::Initialize(
   gpu::gles2::ContextCreationAttribHelper attrib_helper;
   if (!attrib_helper.Parse(attribs.storage()))
     return false;
+  // TODO(piman): attribs can't currently represent gpu_preference.
 
   const bool offscreen = widget_ == gfx::kNullAcceleratedWidget;
   if (offscreen) {
@@ -116,9 +117,9 @@ bool CommandBufferDriver::Initialize(
   if (!surface_.get())
     return false;
 
-  // TODO(piman): virtual contexts, gpu preference.
-  context_ = gl::init::CreateGLContext(gpu_state_->share_group(),
-                                       surface_.get(), gl::PreferIntegratedGpu);
+  // TODO(piman): virtual contexts.
+  context_ = gl::init::CreateGLContext(
+      gpu_state_->share_group(), surface_.get(), attrib_helper.gpu_preference);
   if (!context_.get())
     return false;
 
@@ -130,13 +131,15 @@ bool CommandBufferDriver::Initialize(
   const bool bind_generates_resource = attrib_helper.bind_generates_resource;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info =
       new gpu::gles2::FeatureInfo(gpu_state_->gpu_driver_bug_workarounds());
+  // TODO(erikchen): The ContextGroup needs a reference to the
+  // GpuMemoryBufferManager.
   scoped_refptr<gpu::gles2::ContextGroup> context_group =
       new gpu::gles2::ContextGroup(
           gpu_state_->gpu_preferences(), gpu_state_->mailbox_manager(),
           new GpuMemoryTracker,
           new gpu::gles2::ShaderTranslatorCache(gpu_state_->gpu_preferences()),
           new gpu::gles2::FramebufferCompletenessCache, feature_info,
-          bind_generates_resource);
+          bind_generates_resource, nullptr);
 
   command_buffer_.reset(
       new gpu::CommandBufferService(context_group->transfer_buffer_manager()));
@@ -159,8 +162,8 @@ bool CommandBufferDriver::Initialize(
 
   gpu::gles2::DisallowedFeatures disallowed_features;
 
-  if (!decoder_->Initialize(surface_, context_, offscreen, gfx::Size(1, 1),
-                            disallowed_features, attrib_helper))
+  if (!decoder_->Initialize(surface_, context_, offscreen, disallowed_features,
+                            attrib_helper))
     return false;
 
   command_buffer_->SetPutOffsetChangeCallback(base::Bind(
@@ -483,10 +486,8 @@ void CommandBufferDriver::OnUpdateVSyncParameters(
     const base::TimeTicks timebase,
     const base::TimeDelta interval) {
   DCHECK(CalledOnValidThread());
-  if (client_) {
-    client_->UpdateVSyncParameters(timebase.ToInternalValue(),
-                                   interval.ToInternalValue());
-  }
+  if (client_)
+    client_->UpdateVSyncParameters(timebase, interval);
 }
 
 void CommandBufferDriver::OnFenceSyncRelease(uint64_t release) {

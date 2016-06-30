@@ -114,12 +114,13 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/SubstituteData.h"
-#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLFormElement.h"
@@ -136,7 +137,6 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutViewItem.h"
-#include "core/style/StyleInheritedData.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
@@ -149,6 +149,7 @@
 #include "core/page/PrintContext.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/TransformRecorder.h"
+#include "core/style/StyleInheritedData.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "modules/app_banner/AppBannerController.h"
@@ -235,7 +236,9 @@
 #include "web/WebViewImpl.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/HashMap.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
+#include <memory>
 
 namespace blink {
 
@@ -496,9 +499,9 @@ static WebDataSource* DataSourceForDocLoader(DocumentLoader* loader)
 
 class WebSuspendableTaskWrapper: public SuspendableTask {
 public:
-    static PassOwnPtr<WebSuspendableTaskWrapper> create(PassOwnPtr<WebSuspendableTask> task)
+    static std::unique_ptr<WebSuspendableTaskWrapper> create(std::unique_ptr<WebSuspendableTask> task)
     {
-        return adoptPtr(new WebSuspendableTaskWrapper(std::move(task)));
+        return wrapUnique(new WebSuspendableTaskWrapper(std::move(task)));
     }
 
     void run() override
@@ -512,12 +515,12 @@ public:
     }
 
 private:
-    explicit WebSuspendableTaskWrapper(PassOwnPtr<WebSuspendableTask> task)
+    explicit WebSuspendableTaskWrapper(std::unique_ptr<WebSuspendableTask> task)
         : m_task(std::move(task))
     {
     }
 
-    OwnPtr<WebSuspendableTask> m_task;
+    std::unique_ptr<WebSuspendableTask> m_task;
 };
 
 // WebFrame -------------------------------------------------------------------
@@ -620,6 +623,14 @@ ScrollableArea* WebLocalFrameImpl::layoutViewportScrollableArea() const
     if (FrameView* view = frameView())
         return view->layoutViewportScrollableArea();
     return nullptr;
+}
+
+bool WebLocalFrameImpl::isFocused() const
+{
+    if (!viewImpl() || !viewImpl()->page())
+        return false;
+
+    return this == WebFrame::fromFrame(viewImpl()->page()->focusController().focusedFrame());
 }
 
 WebSize WebLocalFrameImpl::scrollOffset() const
@@ -1462,8 +1473,13 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
     provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
     provideNavigatorContentUtilsTo(*m_frame, NavigatorContentUtilsClientImpl::create(this));
 
-    if (RuntimeEnabledFeatures::webBluetoothEnabled())
+    bool enableWebBluetooth = RuntimeEnabledFeatures::webBluetoothEnabled();
+#if OS(CHROMEOS) || OS(ANDROID) || OS(MACOSX)
+    enableWebBluetooth = true;
+#endif
+    if (enableWebBluetooth)
         BluetoothSupplement::provideTo(*m_frame, m_client ? m_client->bluetooth() : nullptr);
+
     if (RuntimeEnabledFeatures::screenOrientationEnabled())
         ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
     if (RuntimeEnabledFeatures::presentationEnabled())
@@ -1500,7 +1516,7 @@ LocalFrame* WebLocalFrameImpl::createChildFrame(const FrameLoadRequest& request,
     WebTreeScopeType scope = frame()->document() == ownerElement->treeScope()
         ? WebTreeScopeType::Document
         : WebTreeScopeType::Shadow;
-    WebFrameOwnerProperties ownerProperties(ownerElement->scrollingMode(), ownerElement->marginWidth(), ownerElement->marginHeight(), ownerElement->allowFullscreen());
+    WebFrameOwnerProperties ownerProperties(ownerElement->scrollingMode(), ownerElement->marginWidth(), ownerElement->marginHeight(), ownerElement->allowFullscreen(), ownerElement->delegatedPermissions());
     // FIXME: Using subResourceAttributeName as fallback is not a perfect
     // solution. subResourceAttributeName returns just one attribute name. The
     // element might not have the attribute, and there might be other attributes
@@ -1542,11 +1558,8 @@ LocalFrame* WebLocalFrameImpl::createChildFrame(const FrameLoadRequest& request,
 
 void WebLocalFrameImpl::didChangeContentsSize(const IntSize& size)
 {
-    // This is only possible on the main frame.
-    if (m_textFinder && m_textFinder->totalMatchCount() > 0) {
-        DCHECK(!parent());
+    if (m_textFinder && m_textFinder->totalMatchCount() > 0)
         m_textFinder->increaseMarkerVersion();
-    }
 }
 
 void WebLocalFrameImpl::createFrameView()
@@ -1614,12 +1627,7 @@ WebDataSourceImpl* WebLocalFrameImpl::provisionalDataSourceImpl() const
 
 void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
 {
-    WebLocalFrameImpl* mainFrameImpl = viewImpl()->mainFrameImpl();
-
-    // Main frame should already have a textFinder at this point of time.
-    DCHECK(mainFrameImpl->textFinder());
-
-    if (this != mainFrameImpl->textFinder()->activeMatchFrame())
+    if (!m_textFinder || !m_textFinder->activeMatchFrame())
         return;
 
     if (Range* activeMatch = m_textFinder->activeMatch()) {
@@ -1758,6 +1766,15 @@ void WebLocalFrameImpl::loadJavaScriptURL(const KURL& url)
         frame()->loader().replaceDocumentWhileExecutingJavaScriptURL(scriptResult, ownerDocument);
 }
 
+HitTestResult WebLocalFrameImpl::hitTestResultForVisualViewportPos(const IntPoint& posInViewport)
+{
+    IntPoint rootFramePoint(frame()->host()->visualViewport().viewportToRootFrame(posInViewport));
+    IntPoint docPoint(frame()->view()->rootFrameToContents(rootFramePoint));
+    HitTestResult result = frame()->eventHandler().hitTestResultAtPoint(docPoint, HitTestRequest::ReadOnly | HitTestRequest::Active);
+    result.setToShadowHostIfInUserAgentShadowRoot();
+    return result;
+}
+
 static void ensureFrameLoaderHasCommitted(FrameLoader& frameLoader)
 {
     // Internally, Blink uses CommittedMultipleRealLoads to track whether the
@@ -1795,7 +1812,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::localRoot()
     // when the WebLocalFrame exists but the core LocalFrame does not.
     // TODO(alexmos, dcheng): Clean this up to only calculate this in one place.
     WebLocalFrameImpl* localRoot = this;
-    while (!localRoot->frameWidget())
+    while (localRoot->parent() && localRoot->parent()->isWebLocalFrame())
         localRoot = toWebLocalFrameImpl(localRoot->parent());
     return localRoot;
 }
@@ -1947,7 +1964,7 @@ void WebLocalFrameImpl::requestRunTask(WebSuspendableTask* task) const
 {
     DCHECK(frame());
     DCHECK(frame()->document());
-    frame()->document()->postSuspendableTask(WebSuspendableTaskWrapper::create(adoptPtr(task)));
+    frame()->document()->postSuspendableTask(WebSuspendableTaskWrapper::create(wrapUnique(task)));
 }
 
 void WebLocalFrameImpl::didCallAddSearchProvider()
@@ -1962,15 +1979,33 @@ void WebLocalFrameImpl::didCallIsSearchProviderInstalled()
 
 bool WebLocalFrameImpl::find(int identifier, const WebString& searchText, const WebFindOptions& options, bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow)
 {
-    return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, selectionRect, activeNow);
+    // Search for an active match only if this frame is focused or if this is a
+    // find next request.
+    if (isFocused() || options.findNext)
+        return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, selectionRect, activeNow);
+
+    return false;
 }
 
-void WebLocalFrameImpl::stopFinding(bool clearSelection)
+void WebLocalFrameImpl::stopFinding(StopFindAction action)
 {
+    bool clearSelection = action == StopFindActionClearSelection;
+    if (clearSelection)
+        executeCommand(WebString::fromUTF8("Unselect"));
+
     if (m_textFinder) {
         if (!clearSelection)
             setFindEndstateFocusAndSelection();
         m_textFinder->stopFindingAndClearSelection();
+    }
+
+    if (action == StopFindActionActivateSelection && isFocused()) {
+        WebDocument doc = document();
+        if (!doc.isNull()) {
+            WebElement element = doc.focusedElement();
+            if (!element.isNull())
+                element.simulateClick();
+        }
     }
 }
 
@@ -1987,8 +2022,6 @@ void WebLocalFrameImpl::cancelPendingScopingEffort()
 
 void WebLocalFrameImpl::increaseMatchCount(int count, int identifier)
 {
-    // This function should only be called on the mainframe.
-    DCHECK(!parent());
     ensureTextFinder().increaseMatchCount(identifier, count);
 }
 
@@ -2005,8 +2038,6 @@ void WebLocalFrameImpl::dispatchMessageEventWithOriginCheck(const WebSecurityOri
 
 int WebLocalFrameImpl::findMatchMarkersVersion() const
 {
-    DCHECK(!parent());
-
     if (m_textFinder)
         return m_textFinder->findMatchMarkersVersion();
     return 0;
@@ -2014,14 +2045,18 @@ int WebLocalFrameImpl::findMatchMarkersVersion() const
 
 int WebLocalFrameImpl::selectNearestFindMatch(const WebFloatPoint& point, WebRect* selectionRect)
 {
-    DCHECK(!parent());
     return ensureTextFinder().selectNearestFindMatch(point, selectionRect);
+}
+
+float WebLocalFrameImpl::distanceToNearestFindMatch(const WebFloatPoint& point)
+{
+    float nearestDistance;
+    ensureTextFinder().nearestFindMatch(point, &nearestDistance);
+    return nearestDistance;
 }
 
 WebFloatRect WebLocalFrameImpl::activeFindMatchRect()
 {
-    DCHECK(!parent());
-
     if (m_textFinder)
         return m_textFinder->activeFindMatchRect();
     return WebFloatRect();
@@ -2029,7 +2064,6 @@ WebFloatRect WebLocalFrameImpl::activeFindMatchRect()
 
 void WebLocalFrameImpl::findMatchRects(WebVector<WebFloatRect>& outputRects)
 {
-    DCHECK(!parent());
     ensureTextFinder().findMatchRects(outputRects);
 }
 
@@ -2086,6 +2120,36 @@ WebFrameWidget* WebLocalFrameImpl::frameWidget() const
     return m_frameWidget;
 }
 
+void WebLocalFrameImpl::copyImageAt(const WebPoint& posInViewport)
+{
+    HitTestResult result = hitTestResultForVisualViewportPos(posInViewport);
+    if (!isHTMLCanvasElement(result.innerNodeOrImageMapImage()) && result.absoluteImageURL().isEmpty()) {
+        // There isn't actually an image at these coordinates.  Might be because
+        // the window scrolled while the context menu was open or because the page
+        // changed itself between when we thought there was an image here and when
+        // we actually tried to retreive the image.
+        //
+        // FIXME: implement a cache of the most recent HitTestResult to avoid having
+        //        to do two hit tests.
+        return;
+    }
+
+    frame()->editor().copyImage(result);
+}
+
+void WebLocalFrameImpl::saveImageAt(const WebPoint& posInViewport)
+{
+    Node* node = hitTestResultForVisualViewportPos(posInViewport).innerNodeOrImageMapImage();
+    if (!node || !(isHTMLCanvasElement(*node) || isHTMLImageElement(*node)))
+        return;
+
+    String url = toElement(*node).imageSourceURL();
+    if (!KURL(KURL(), url).protocolIsData())
+        return;
+
+    m_client->saveImageFromDataURL(url);
+}
+
 WebSandboxFlags WebLocalFrameImpl::effectiveSandboxFlags() const
 {
     if (!frame())
@@ -2096,6 +2160,11 @@ WebSandboxFlags WebLocalFrameImpl::effectiveSandboxFlags() const
 void WebLocalFrameImpl::forceSandboxFlags(WebSandboxFlags flags)
 {
     frame()->loader().forceSandboxFlags(static_cast<SandboxFlags>(flags));
+}
+
+void WebLocalFrameImpl::clearActiveFindMatch()
+{
+    ensureTextFinder().clearActiveFindMatch();
 }
 
 } // namespace blink

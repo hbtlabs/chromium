@@ -889,7 +889,7 @@ void FillFormField(const FormFieldData& data,
 
   WebInputElement* input_element = toWebInputElement(field);
   if (IsCheckableElement(input_element)) {
-    input_element->setChecked(data.is_checked, true);
+    input_element->setChecked(IsChecked(data.check_status), true);
   } else {
     base::string16 value = data.value;
     if (IsTextInput(input_element) || IsMonthInput(input_element)) {
@@ -1366,6 +1366,7 @@ void WebFormControlElementToFormField(const WebFormControlElement& element,
   CR_DEFINE_STATIC_LOCAL(WebString, kAutocomplete, ("autocomplete"));
   CR_DEFINE_STATIC_LOCAL(WebString, kRole, ("role"));
   CR_DEFINE_STATIC_LOCAL(WebString, kPlaceholder, ("placeholder"));
+  CR_DEFINE_STATIC_LOCAL(WebString, kClass, ("class"));
 
   // The label is not officially part of a WebFormControlElement; however, the
   // labels for all form control elements are scraped from the DOM and set in
@@ -1384,6 +1385,8 @@ void WebFormControlElementToFormField(const WebFormControlElement& element,
     field->role = FormFieldData::ROLE_ATTRIBUTE_PRESENTATION;
 
   field->placeholder = element.getAttribute(kPlaceholder);
+  if (element.hasAttribute(kClass))
+    field->css_classes = element.getAttribute(kClass);
 
   if (!IsAutofillableElement(element))
     return;
@@ -1404,8 +1407,8 @@ void WebFormControlElementToFormField(const WebFormControlElement& element,
     if (IsTextInput(input_element))
       field->max_length = input_element->maxLength();
 
-    field->is_checkable = IsCheckableElement(input_element);
-    field->is_checked = input_element->isChecked();
+    SetCheckStatus(field, IsCheckableElement(input_element),
+                   input_element->isChecked());
   } else if (IsTextAreaElement(element)) {
     // Nothing more to do in this case.
   } else if (extract_mask & EXTRACT_OPTIONS) {

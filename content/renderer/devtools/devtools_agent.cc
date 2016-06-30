@@ -107,6 +107,10 @@ void DevToolsAgent::WidgetWillClose() {
   ContinueProgram();
 }
 
+void DevToolsAgent::OnDestruct() {
+  delete this;
+}
+
 void DevToolsAgent::sendProtocolMessage(int session_id,
                                         int call_id,
                                         const blink::WebString& message,
@@ -120,9 +124,15 @@ void DevToolsAgent::sendProtocolMessage(int session_id,
                              message.utf8(), state_cookie.utf8());
 }
 
+// static
 blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
-    DevToolsAgent::createClientMessageLoop() {
+DevToolsAgent::createMessageLoopWrapper() {
   return new WebKitClientMessageLoopImpl();
+}
+
+blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
+DevToolsAgent::createClientMessageLoop() {
+  return createMessageLoopWrapper();
 }
 
 void DevToolsAgent::willEnterDebugLoop() {

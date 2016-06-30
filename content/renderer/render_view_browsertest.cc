@@ -46,7 +46,7 @@
 #include "content/public/test/frame_load_waiter.h"
 #include "content/public/test/render_view_test.h"
 #include "content/public/test/test_utils.h"
-#include "content/renderer/accessibility/renderer_accessibility.h"
+#include "content/renderer/accessibility/render_accessibility_impl.h"
 #include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_controller.h"
@@ -74,6 +74,7 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPerformance.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
+#include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
@@ -383,6 +384,7 @@ class DevToolsAgentTest : public RenderViewImplTest {
  public:
   void Attach() {
     notifications_ = std::vector<std::string>();
+    expecting_pause_ = false;
     std::string host_id = "host_id";
     agent()->OnAttach(host_id, 17);
     agent()->send_protocol_message_callback_for_test_ = base::Bind(
@@ -410,15 +412,29 @@ class DevToolsAgentTest : public RenderViewImplTest {
 
   void OnDevToolsMessage(
       int, int, const std::string& message, const std::string&) {
-    last_received_message_ = message;
-    std::unique_ptr<base::DictionaryValue> root(
-        static_cast<base::DictionaryValue*>(
-            base::JSONReader::Read(message).release()));
+    last_message_ = base::WrapUnique(static_cast<base::DictionaryValue*>(
+        base::JSONReader::Read(message).release()));
     int id;
-    if (!root->GetInteger("id", &id)) {
+    if (!last_message_->GetInteger("id", &id)) {
       std::string notification;
-      EXPECT_TRUE(root->GetString("method", &notification));
+      EXPECT_TRUE(last_message_->GetString("method", &notification));
       notifications_.push_back(notification);
+
+      if (notification == "Debugger.paused" && expecting_pause_) {
+        base::ListValue* call_frames;
+        EXPECT_TRUE(last_message_->GetList("params.callFrames", &call_frames));
+        if (call_frames) {
+          EXPECT_EQ(call_frames_count_,
+                    static_cast<int>(call_frames->GetSize()));
+        }
+        expecting_pause_ = false;
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE,
+            base::Bind(&DevToolsAgentTest::DispatchDevToolsMessage,
+                       base::Unretained(this),
+                       "Debugger.resume",
+                       "{\"id\":100,\"method\":\"Debugger.resume\"}"));
+      }
     }
   }
 
@@ -431,7 +447,14 @@ class DevToolsAgentTest : public RenderViewImplTest {
     return result;
   }
 
-  std::string LastReceivedMessage() const { return last_received_message_; }
+  base::DictionaryValue* LastReceivedMessage() {
+    return last_message_.get();
+  }
+
+  void ExpectPauseAndResume(int call_frames_count) {
+    expecting_pause_ = true;
+    call_frames_count_ = call_frames_count;
+  }
 
  private:
   DevToolsAgent* agent() {
@@ -439,7 +462,9 @@ class DevToolsAgentTest : public RenderViewImplTest {
   }
 
   std::vector<std::string> notifications_;
-  std::string last_received_message_;
+  std::unique_ptr<base::DictionaryValue> last_message_;
+  int call_frames_count_;
+  bool expecting_pause_;
 };
 
 class RenderViewImplBlinkSettingsTest : public RenderViewImplTest {
@@ -522,54 +547,6 @@ TEST_F(RenderViewImplTest, RenderFrameClearedAfterClose) {
   new_view->Release();
 }
 
-TEST_F(RenderViewImplTest, SaveImageFromDataURL) {
-  const IPC::Message* msg1 = render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_SaveImageFromDataURL::ID);
-  EXPECT_FALSE(msg1);
-  render_thread_->sink().ClearMessages();
-
-  const std::string image_data_url =
-      "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
-
-  view()->saveImageFromDataURL(WebString::fromUTF8(image_data_url));
-  ProcessPendingMessages();
-  const IPC::Message* msg2 = render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_SaveImageFromDataURL::ID);
-  EXPECT_TRUE(msg2);
-
-  ViewHostMsg_SaveImageFromDataURL::Param param1;
-  ViewHostMsg_SaveImageFromDataURL::Read(msg2, &param1);
-  EXPECT_EQ(std::get<2>(param1).length(), image_data_url.length());
-  EXPECT_EQ(std::get<2>(param1), image_data_url);
-
-  ProcessPendingMessages();
-  render_thread_->sink().ClearMessages();
-
-  const std::string large_data_url(1024 * 1024 * 20 - 1, 'd');
-
-  view()->saveImageFromDataURL(WebString::fromUTF8(large_data_url));
-  ProcessPendingMessages();
-  const IPC::Message* msg3 = render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_SaveImageFromDataURL::ID);
-  EXPECT_TRUE(msg3);
-
-  ViewHostMsg_SaveImageFromDataURL::Param param2;
-  ViewHostMsg_SaveImageFromDataURL::Read(msg3, &param2);
-  EXPECT_EQ(std::get<2>(param2).length(), large_data_url.length());
-  EXPECT_EQ(std::get<2>(param2), large_data_url);
-
-  ProcessPendingMessages();
-  render_thread_->sink().ClearMessages();
-
-  const std::string exceeded_data_url(1024 * 1024 * 20 + 1, 'd');
-
-  view()->saveImageFromDataURL(WebString::fromUTF8(exceeded_data_url));
-  ProcessPendingMessages();
-  const IPC::Message* msg4 = render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_SaveImageFromDataURL::ID);
-  EXPECT_FALSE(msg4);
-}
-
 // Test that we get form state change notifications when input fields change.
 TEST_F(RenderViewImplTest, OnNavStateChanged) {
   view()->set_send_content_state_immediately(true);
@@ -611,7 +588,7 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   // Set up post data.
   const char raw_data[] = "post \0\ndata";
   const size_t length = arraysize(raw_data);
-  scoped_refptr<ResourceRequestBody> post_data(new ResourceRequestBody);
+  scoped_refptr<ResourceRequestBodyImpl> post_data(new ResourceRequestBodyImpl);
   post_data->AppendBytes(raw_data, length);
   common_params.post_data = post_data;
 
@@ -2047,19 +2024,19 @@ TEST_F(RenderViewImplTest, ServiceWorkerNetworkProviderSetup) {
 
 TEST_F(RenderViewImplTest, OnSetAccessibilityMode) {
   ASSERT_EQ(AccessibilityModeOff, frame()->accessibility_mode());
-  ASSERT_EQ((RendererAccessibility*) NULL, frame()->renderer_accessibility());
+  ASSERT_FALSE(frame()->render_accessibility());
 
   frame()->SetAccessibilityMode(AccessibilityModeTreeOnly);
   ASSERT_EQ(AccessibilityModeTreeOnly, frame()->accessibility_mode());
-  ASSERT_NE((RendererAccessibility*) NULL, frame()->renderer_accessibility());
+  ASSERT_TRUE(frame()->render_accessibility());
 
   frame()->SetAccessibilityMode(AccessibilityModeOff);
   ASSERT_EQ(AccessibilityModeOff, frame()->accessibility_mode());
-  ASSERT_EQ((RendererAccessibility*) NULL, frame()->renderer_accessibility());
+  ASSERT_FALSE(frame()->render_accessibility());
 
   frame()->SetAccessibilityMode(AccessibilityModeComplete);
   ASSERT_EQ(AccessibilityModeComplete, frame()->accessibility_mode());
-  ASSERT_NE((RendererAccessibility*) NULL, frame()->renderer_accessibility());
+  ASSERT_TRUE(frame()->render_accessibility());
 }
 
 // Sanity check for the Navigation Timing API |navigationStart| override. We
@@ -2485,9 +2462,7 @@ TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
                           "}"
                           "}");
 
-  std::unique_ptr<base::DictionaryValue> root(
-      static_cast<base::DictionaryValue*>(
-          base::JSONReader::Read(LastReceivedMessage()).release()));
+  base::DictionaryValue* root = LastReceivedMessage();
   const base::Value* object_id;
   ASSERT_TRUE(root->Get("result.result.objectId", &object_id));
   std::string object_id_str;
@@ -2506,6 +2481,25 @@ TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
                               "}"
                               "}");
   EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+}
+
+TEST_F(DevToolsAgentTest, CallFramesInIsolatedWorld) {
+  LoadHTML("<body>page</body>");
+  blink::WebScriptSource source1(
+      WebString::fromUTF8("function func1() { debugger; }"));
+  frame()->GetWebFrame()->executeScriptInIsolatedWorld(17, &source1, 1, 1);
+
+  Attach();
+  DispatchDevToolsMessage("Debugger.enable",
+                          "{\"id\":1,\"method\":\"Debugger.enable\"}");
+
+  ExpectPauseAndResume(3);
+  blink::WebScriptSource source2(
+      WebString::fromUTF8("function func2() { func1(); }; func2();"));
+  frame()->GetWebFrame()->executeScriptInIsolatedWorld(17, &source2, 1, 1);
+
+  EXPECT_FALSE(IsPaused());
+  Detach();
 }
 
 }  // namespace content

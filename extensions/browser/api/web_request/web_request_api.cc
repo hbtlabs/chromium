@@ -37,6 +37,7 @@
 #include "extensions/browser/api/web_request/web_request_event_details.h"
 #include "extensions/browser/api/web_request/web_request_event_router_delegate.h"
 #include "extensions/browser/api/web_request/web_request_time_tracker.h"
+#include "extensions/browser/api_activity_monitor.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -131,7 +132,7 @@ bool IsWebRequestEvent(const std::string& event_name) {
     web_request_event_name.replace(
         0, strlen(webview::kWebViewEventPrefix), kWebRequestEventPrefix);
   }
-  const auto web_request_events_end =
+  auto* const* web_request_events_end =
       kWebRequestEvents + arraysize(kWebRequestEvents);
   return std::find(kWebRequestEvents, web_request_events_end,
                    web_request_event_name) != web_request_events_end;
@@ -575,10 +576,9 @@ ExtensionWebRequestEventRouter* ExtensionWebRequestEventRouter::GetInstance() {
 }
 
 ExtensionWebRequestEventRouter::ExtensionWebRequestEventRouter()
-    : request_time_tracker_(new ExtensionWebRequestTimeTracker) {
-  web_request_event_router_delegate_.reset(
-      ExtensionsAPIClient::Get()->CreateWebRequestEventRouterDelegate());
-}
+    : request_time_tracker_(new ExtensionWebRequestTimeTracker),
+      web_request_event_router_delegate_(
+          ExtensionsAPIClient::Get()->CreateWebRequestEventRouterDelegate()) {}
 
 ExtensionWebRequestEventRouter::~ExtensionWebRequestEventRouter() {
 }
@@ -1371,7 +1371,8 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
               crosses_incognito,
               WebRequestPermissions::REQUIRE_HOST_PERMISSION);
       if (access != PermissionsData::ACCESS_ALLOWED) {
-        if (access == PermissionsData::ACCESS_WITHHELD) {
+        if (access == PermissionsData::ACCESS_WITHHELD &&
+            web_request_event_router_delegate_) {
           web_request_event_router_delegate_->NotifyWebRequestWithheld(
               render_process_id, render_frame_id, listener.extension_id);
         }
@@ -1544,7 +1545,7 @@ base::ListValue* SummarizeCookieModifications(
                            *mod.modification->name);
       }
     }
-    cookie_modifications->Append(summary.release());
+    cookie_modifications->Append(std::move(summary));
   }
   return cookie_modifications.release();
 }
@@ -1603,34 +1604,6 @@ std::unique_ptr<base::DictionaryValue> SummarizeResponseDelta(
 
 }  // namespace
 
-void ExtensionWebRequestEventRouter::LogExtensionActivity(
-    void* browser_context_id,
-    bool is_incognito,
-    const std::string& extension_id,
-    const GURL& url,
-    const std::string& api_call,
-    std::unique_ptr<base::DictionaryValue> details) {
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&ExtensionWebRequestEventRouter::LogExtensionActivity,
-                    base::Unretained(this),
-                    browser_context_id,
-                    is_incognito,
-                    extension_id,
-                    url,
-                    api_call,
-                    base::Passed(&details)));
-  } else {
-    if (web_request_event_router_delegate_) {
-      web_request_event_router_delegate_->LogExtensionActivity(
-          reinterpret_cast<content::BrowserContext*>(browser_context_id),
-          is_incognito, extension_id, url, api_call, std::move(details));
-    }
-  }
-}
-
 void ExtensionWebRequestEventRouter::DecrementBlockCount(
     void* browser_context,
     const std::string& extension_id,
@@ -1653,12 +1626,10 @@ void ExtensionWebRequestEventRouter::DecrementBlockCount(
     helpers::EventResponseDelta* delta =
         CalculateDelta(&blocked_request, response);
 
-    LogExtensionActivity(browser_context,
-                         blocked_request.is_incognito,
-                         extension_id,
-                         blocked_request.request->url(),
-                         event_name,
-                         SummarizeResponseDelta(event_name, *delta));
+    activity_monitor::OnWebRequestApiUsed(
+        static_cast<content::BrowserContext*>(browser_context), extension_id,
+        blocked_request.request->url(), blocked_request.is_incognito,
+        event_name, SummarizeResponseDelta(event_name, *delta));
 
     blocked_request.response_deltas.push_back(
         linked_ptr<helpers::EventResponseDelta>(delta));
@@ -1835,7 +1806,7 @@ bool ExtensionWebRequestEventRouter::ProcessDeclarativeRules(
                               : RulesRegistryService::kDefaultRulesRegistryID;
 
   RulesRegistryKey rules_key(browser_context, rules_registry_id);
-  // If this check fails, check that the active stages are up-to-date in
+  // If this check fails, check that the active stages are up to date in
   // extensions/browser/api/declarative_webrequest/request_stage.h .
   DCHECK(request_stage & kActiveStages);
 

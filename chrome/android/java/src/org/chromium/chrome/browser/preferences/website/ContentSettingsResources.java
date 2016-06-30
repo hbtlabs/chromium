@@ -8,7 +8,6 @@ import android.annotation.SuppressLint;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ContentSettingsType;
 
 import java.util.HashMap;
@@ -103,18 +102,12 @@ public class ContentSettingsResources {
                     new ResourceItem(R.drawable.permission_cookie, R.string.cookies_title,
                                  R.string.cookies_title, ContentSetting.ALLOW, ContentSetting.BLOCK,
                                  R.string.website_settings_category_cookie_allowed, 0));
-            // In simplified fullscreen mode, the "on" case should be described as "Always allowed",
-            // rather than just "Allowed". (It is disabled; this further clarifies that it is
-            // deliberately disabled.)
-            int fullscreenEnabledSummary =
-                    ChromeFeatureList.isEnabled("ViewsSimplifiedFullscreenUI")
-                    ? R.string.website_settings_category_always_allowed : 0;
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_FULLSCREEN,
                     new ResourceItem(R.drawable.permission_fullscreen,
                                  R.string.website_settings_fullscreen,
                                  R.string.fullscreen_permission_title, ContentSetting.ALLOW,
-                                 ContentSetting.ASK, fullscreenEnabledSummary,
-                                 R.string.website_settings_category_fullscreen_ask));
+                                 ContentSetting.ASK,
+                                 R.string.website_settings_category_always_allowed, 0));
             localMap.put(ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION,
                     new ResourceItem(R.drawable.permission_location,
                                  R.string.website_settings_device_location,
@@ -285,5 +278,13 @@ public class ContentSettingsResources {
      */
     public static int getCookieAllowedExceptThirdPartySummary() {
         return R.string.website_settings_category_allowed_except_third_party;
+    }
+
+    /**
+     * Returns the summary for Autoplay content settings when it is disabled because of Data Saver
+     * being enabled.
+     */
+    public static int getAutoplayDisabledByDataSaverSummary() {
+        return R.string.website_settings_category_autoplay_disabled_data_saver;
     }
 }

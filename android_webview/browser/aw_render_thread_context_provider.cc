@@ -62,8 +62,7 @@ AwRenderThreadContextProvider::AwRenderThreadContextProvider(
 
   context_.reset(gpu::GLInProcessContext::Create(
       service, surface, surface->IsOffscreen(), gfx::kNullAcceleratedWidget,
-      surface->GetSize(), nullptr /* share_context */, attributes,
-      gl::PreferDiscreteGpu, limits, nullptr, nullptr));
+      nullptr /* share_context */, attributes, limits, nullptr, nullptr));
 
   context_->GetImplementation()->SetLostContextCallback(base::Bind(
       &AwRenderThreadContextProvider::OnLostContext, base::Unretained(this)));
@@ -73,6 +72,11 @@ AwRenderThreadContextProvider::~AwRenderThreadContextProvider() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   if (gr_context_)
     gr_context_->releaseResourcesAndAbandonContext();
+}
+
+uint32_t AwRenderThreadContextProvider::GetCopyTextureInternalFormat() {
+  // The attributes used in the constructor included an alpha channel.
+  return GL_RGBA;
 }
 
 bool AwRenderThreadContextProvider::BindToCurrentThread() {

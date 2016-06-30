@@ -38,7 +38,6 @@
 #include "chrome/renderer/content_settings_observer.h"
 #include "chrome/renderer/security_filter_peer.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/render_view_visitor.h"
@@ -46,6 +45,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/web/WebCache.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
@@ -165,13 +165,12 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
   void SendResults() {
     if (!callback_.is_null())
       callback_.Run(std::move(usage_data_));
-    callback_.reset();
+    callback_.Reset();
     weak_factory_.InvalidateWeakPtrs();
     workers_to_go_ = 0;
   }
 
-  void GetUsageData(const mojo::Callback<void(mojom::ResourceUsageDataPtr)>&
-                        callback) override {
+  void GetUsageData(const GetUsageDataCallback& callback) override {
     DCHECK(callback_.is_null());
     weak_factory_.InvalidateWeakPtrs();
     usage_data_ = mojom::ResourceUsageData::New();
@@ -215,7 +214,7 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
   }
 
   mojom::ResourceUsageDataPtr usage_data_;
-  mojo::Callback<void(mojom::ResourceUsageDataPtr)> callback_;
+  GetUsageDataCallback callback_;
   int workers_to_go_;
   mojo::StrongBinding<mojom::ResourceUsageReporter> binding_;
   base::WeakPtr<ChromeRenderThreadObserver> observer_;
@@ -236,7 +235,7 @@ void CreateResourceUsageReporter(
 bool ChromeRenderThreadObserver::is_incognito_process_ = false;
 
 ChromeRenderThreadObserver::ChromeRenderThreadObserver()
-    : field_trial_syncer_(content::RenderThread::Get()), weak_factory_(this) {
+    : field_trial_syncer_(this), weak_factory_(this) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
@@ -244,7 +243,7 @@ ChromeRenderThreadObserver::ChromeRenderThreadObserver()
   resource_delegate_.reset(new RendererResourceDelegate());
   thread->SetResourceDispatcherDelegate(resource_delegate_.get());
 
-  thread->GetServiceRegistry()->AddService(
+  thread->GetInterfaceRegistry()->AddInterface(
       base::Bind(CreateResourceUsageReporter, weak_factory_.GetWeakPtr()));
 
   // Configure modules that need access to resources.
@@ -282,6 +281,13 @@ bool ChromeRenderThreadObserver::OnControlMessageReceived(
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+}
+
+void ChromeRenderThreadObserver::OnFieldTrialGroupFinalized(
+    const std::string& trial_name,
+    const std::string& group_name) {
+  content::RenderThread::Get()->Send(
+      new ChromeViewHostMsg_FieldTrialActivated(trial_name));
 }
 
 void ChromeRenderThreadObserver::OnSetIsIncognitoProcess(

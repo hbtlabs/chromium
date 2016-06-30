@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <utility>
 
+#include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -328,13 +328,12 @@ void DriveWebContentsManager::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  if (type == chrome::NOTIFICATION_BACKGROUND_CONTENTS_OPENED) {
-    const std::string app_id = base::UTF16ToUTF8(
-        content::Details<BackgroundContentsOpenedDetails>(details)
-            ->application_id);
-    if (app_id == app_id_)
-      OnOfflineInit(true, DriveFirstRunController::OUTCOME_OFFLINE_ENABLED);
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_BACKGROUND_CONTENTS_OPENED, type);
+  const std::string app_id = base::UTF16ToUTF8(
+      content::Details<BackgroundContentsOpenedDetails>(details)
+          ->application_id);
+  if (app_id == app_id_)
+    OnOfflineInit(true, DriveFirstRunController::OUTCOME_OFFLINE_ENABLED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

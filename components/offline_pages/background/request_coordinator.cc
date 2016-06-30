@@ -7,21 +7,33 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "components/offline_pages/background/offliner_factory.h"
 #include "components/offline_pages/background/offliner_policy.h"
 #include "components/offline_pages/background/request_picker.h"
 #include "components/offline_pages/background/save_page_request.h"
-#include "components/offline_pages/background/scheduler.h"
 #include "components/offline_pages/offline_page_item.h"
 
 namespace offline_pages {
+
+namespace {
+// TODO(dougarnett/petewil): Move to Policy object. Also consider lower minimum
+// battery percentage once there is some processing time limits in place.
+const Scheduler::TriggerConditions kUserRequestTriggerConditions(
+    false /* require_power_connected */,
+    50 /* minimum_battery_percentage */,
+    false /* require_unmetered_network */);
+}  // namespace
 
 RequestCoordinator::RequestCoordinator(std::unique_ptr<OfflinerPolicy> policy,
                                        std::unique_ptr<OfflinerFactory> factory,
                                        std::unique_ptr<RequestQueue> queue,
                                        std::unique_ptr<Scheduler> scheduler)
-    : policy_(std::move(policy)),
+    : is_busy_(false),
+      is_canceled_(false),
+      offliner_(nullptr),
+      policy_(std::move(policy)),
       factory_(std::move(factory)),
       queue_(std::move(queue)),
       scheduler_(std::move(scheduler)),
@@ -49,11 +61,6 @@ bool RequestCoordinator::SavePageLater(
   queue_->AddRequest(request,
                      base::Bind(&RequestCoordinator::AddRequestResultCallback,
                                 weak_ptr_factory_.GetWeakPtr()));
-  // TODO(petewil): Do I need to persist the request in case the add fails?
-
-  // TODO(petewil): Make a new chromium command line switch to send the request
-  // immediately for testing.  It should call SendRequestToOffliner()
-
   return true;
 }
 
@@ -62,26 +69,38 @@ void RequestCoordinator::AddRequestResultCallback(
     const SavePageRequest& request) {
 
   // Inform the scheduler that we have an outstanding task.
-  // TODO(petewil): Define proper TriggerConditions and set them.
-  Scheduler::TriggerCondition conditions;
-  scheduler_->Schedule(conditions);
+  // TODO(petewil): Determine trigger conditions from policy.
+  scheduler_->Schedule(GetTriggerConditionsForUserRequest());
 }
 
-void RequestCoordinator::RequestPicked(const SavePageRequest& request) {
-  // Send the request on to the offliner.
-  SendRequestToOffliner(request);
+// Called in response to updating a request in the request queue.
+void RequestCoordinator::UpdateRequestCallback(
+    RequestQueue::UpdateRequestResult result) {}
+
+void RequestCoordinator::StopProcessing() {
+  is_canceled_ = true;
+  if (offliner_ && is_busy_)
+    offliner_->Cancel();
 }
 
-void RequestCoordinator::RequestQueueEmpty() {
-  // TODO(petewil): return to the BackgroundScheduler by calling
-  // ProcessingDoneCallback
-}
-
+// Returns true if the caller should expect a callback, false otherwise. For
+// instance, this would return false if a request is already in progress.
 bool RequestCoordinator::StartProcessing(
-    const ProcessingDoneCallback& callback) {
+    const DeviceConditions& device_conditions,
+    const base::Callback<void(bool)>& callback) {
+  if (is_busy_) return false;
+
+  is_canceled_ = false;
+  scheduler_callback_ = callback;
   // TODO(petewil): Check existing conditions (should be passed down from
   // BackgroundTask)
 
+  TryNextRequest();
+
+  return true;
+}
+
+void RequestCoordinator::TryNextRequest() {
   // Choose a request to process that meets the available conditions.
   // This is an async call, and returns right away.
   picker_->ChooseNextRequest(
@@ -89,38 +108,79 @@ bool RequestCoordinator::StartProcessing(
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&RequestCoordinator::RequestQueueEmpty,
                  weak_ptr_factory_.GetWeakPtr()));
-  return false;
 }
 
-void RequestCoordinator::StopProcessing() {
+// Called by the request picker when a request has been picked.
+void RequestCoordinator::RequestPicked(const SavePageRequest& request) {
+  // Send the request on to the offliner.
+  SendRequestToOffliner(request);
+}
+
+void RequestCoordinator::RequestQueueEmpty() {
+  // Clear the outstanding "safety" task in the scheduler.
+  scheduler_->Unschedule();
+  // Return control to the scheduler when there is no more to do.
+  scheduler_callback_.Run(true);
 }
 
 void RequestCoordinator::SendRequestToOffliner(const SavePageRequest& request) {
-  // TODO(petewil): When we have multiple offliners, we need to pick one.
-  Offliner* offliner = factory_->GetOffliner(policy_.get());
-  if (!offliner) {
+  // Check that offlining didn't get cancelled while performing some async
+  // steps.
+  if (is_canceled_)
+    return;
+
+  GetOffliner();
+  if (!offliner_) {
     DVLOG(0) << "Unable to create Offliner. "
              << "Cannot background offline page.";
     return;
   }
 
+  DCHECK(!is_busy_);
+  is_busy_ = true;
+
   // Start the load and save process in the offliner (Async).
-  offliner->LoadAndSave(request,
-                        base::Bind(&RequestCoordinator::OfflinerDoneCallback,
-                                   weak_ptr_factory_.GetWeakPtr()));
+  offliner_->LoadAndSave(request,
+                         base::Bind(&RequestCoordinator::OfflinerDoneCallback,
+                                    weak_ptr_factory_.GetWeakPtr()));
 }
 
 void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
                                               Offliner::RequestStatus status) {
   DVLOG(2) << "offliner finished, saved: "
-           << (status == Offliner::RequestStatus::SAVED) << ", "
-           << __FUNCTION__;
+           << (status == Offliner::RequestStatus::SAVED) << ", status: "
+           << (int) status << ", " << __FUNCTION__;
+  event_logger_.RecordSavePageRequestUpdated(
+      request.client_id().name_space,
+      "Saved",
+      request.request_id());
   last_offlining_status_ = status;
 
-  // TODO(petewil): Check time budget.  Start a request if we have time, return
-  // to the scheduler if we are out of time.
+  is_busy_ = false;
 
-  // TODO(petewil): If the request succeeded, remove it from the Queue.
+  // If the request succeeded, remove it from the Queue and maybe schedule
+  // another one.
+  if (status == Offliner::RequestStatus::SAVED) {
+    queue_->RemoveRequest(request.request_id(),
+                          base::Bind(&RequestCoordinator::UpdateRequestCallback,
+                                     weak_ptr_factory_.GetWeakPtr()));
+
+    // TODO(petewil): Check time budget. Return to the scheduler if we are out.
+
+    // Start another request if we have time.
+    TryNextRequest();
+  }
+}
+
+const Scheduler::TriggerConditions&
+RequestCoordinator::GetTriggerConditionsForUserRequest() {
+  return kUserRequestTriggerConditions;
+}
+
+void RequestCoordinator::GetOffliner() {
+  if (!offliner_) {
+    offliner_ = factory_->GetOffliner(policy_.get());
+  }
 }
 
 }  // namespace offline_pages

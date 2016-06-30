@@ -75,6 +75,10 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
       // indicates that the client supports it as well.  Refer to
       // NotifyInitializationComplete for more details.
       SUPPORTS_DEFERRED_INITIALIZATION = 1 << 2,
+
+      // If set, video frames will have COPY_REQUIRED flag which will cause
+      // an extra texture copy during composition.
+      REQUIRES_TEXTURE_COPY = 1 << 3,
     };
 
     SupportedProfiles supported_profiles;
@@ -115,11 +119,14 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
       IMPORT,
     };
 
-    Config() = default;
+    Config();
+    Config(const Config& config);
 
     // Intentional converting constructor.
     // TODO(watk): Make this explicit.
     Config(VideoCodecProfile profile);
+
+    ~Config();
 
     std::string AsHumanReadableString() const;
 
@@ -145,6 +152,10 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     gfx::Size initial_expected_coded_size = gfx::Size(320, 240);
 
     OutputMode output_mode = OutputMode::ALLOCATE;
+
+    // The list of picture buffer formats that the client knows how to use. An
+    // empty list means any format is supported.
+    std::vector<VideoPixelFormat> supported_output_formats;
   };
 
   // Interface for collaborating with picture interface to provide memory for
@@ -167,7 +178,11 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     // Callback to tell client how many and what size of buffers to provide.
     // Note that the actual count provided through AssignPictureBuffers() can be
     // larger than the value requested.
+    // |format| indicates what format the decoded frames will be produced in
+    // by the VDA, or PIXEL_FORMAT_UNKNOWN if the underlying platform handles
+    // this transparently.
     virtual void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
+                                       VideoPixelFormat format,
                                        uint32_t textures_per_buffer,
                                        const gfx::Size& dimensions,
                                        uint32_t texture_target) = 0;
@@ -314,10 +329,6 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   // Windows creates a BGRA texture.
   // TODO(dshwang): after moving to D3D11, remove this. crbug.com/438691
   virtual GLenum GetSurfaceInternalFormat() const;
-
-  // In IMPORT OutputMode, if supported by the VDA, return the format that it
-  // requires for imported picture buffers.
-  virtual VideoPixelFormat GetOutputFormat() const;
 
  protected:
   // Do not delete directly; use Destroy() or own it with a scoped_ptr, which

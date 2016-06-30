@@ -5,9 +5,11 @@
 #include "components/mus/public/cpp/tests/window_server_test_base.h"
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_client.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
@@ -42,7 +44,7 @@ bool WindowServerTestBase::DoRunLoopWithTimeout() {
 
   bool timeout = false;
   base::RunLoop run_loop;
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&TimeoutRunLoop, run_loop.QuitClosure(), &timeout),
       TestTimeouts::action_timeout());
 
@@ -122,6 +124,12 @@ void WindowServerTestBase::OnWmClientJankinessChanged(
     bool janky) {
   if (window_manager_delegate_)
     window_manager_delegate_->OnWmClientJankinessChanged(client_windows, janky);
+}
+
+void WindowServerTestBase::OnWmNewDisplay(Window* window,
+                                          const display::Display& display) {
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnWmNewDisplay(window, display);
 }
 
 void WindowServerTestBase::OnAccelerator(uint32_t id, const ui::Event& event) {

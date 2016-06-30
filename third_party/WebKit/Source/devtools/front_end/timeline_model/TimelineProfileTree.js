@@ -218,10 +218,12 @@ WebInspector.TimelineProfileTree.eventStackFrame = function(event)
 
 /**
  * @constructor
+ * @param {function(!WebInspector.TracingModel.Event):string} titleMapper
  * @param {function(!WebInspector.TracingModel.Event):string} categoryMapper
  */
-WebInspector.TimelineAggregator = function(categoryMapper)
+WebInspector.TimelineAggregator = function(titleMapper, categoryMapper)
 {
+    this._titleMapper = titleMapper;
     this._categoryMapper = categoryMapper;
     /** @type {!Map<string, !WebInspector.TimelineProfileTree.Node>} */
     this._groupNodes = new Map();
@@ -232,6 +234,7 @@ WebInspector.TimelineAggregator = function(categoryMapper)
  */
 WebInspector.TimelineAggregator.GroupBy = {
     None: "None",
+    EventName: "EventName",
     Category: "Category",
     Domain: "Domain",
     Subdomain: "Subdomain",
@@ -336,6 +339,7 @@ WebInspector.TimelineAggregator.prototype = {
 
         switch (groupBy) {
         case WebInspector.TimelineAggregator.GroupBy.None: return null;
+        case WebInspector.TimelineAggregator.GroupBy.EventName: return node => node.event ? this._titleMapper(node.event) : "";
         case WebInspector.TimelineAggregator.GroupBy.Category: return node => node.event ? this._categoryMapper(node.event) : "";
         case WebInspector.TimelineAggregator.GroupBy.Subdomain: return groupByDomain.bind(null, false);
         case WebInspector.TimelineAggregator.GroupBy.Domain: return groupByDomain.bind(null, true);

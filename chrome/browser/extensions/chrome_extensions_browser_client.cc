@@ -201,12 +201,12 @@ bool ChromeExtensionsBrowserClient::DidVersionUpdate(
     content::BrowserContext* context) {
   Profile* profile = static_cast<Profile*>(context);
 
-  // Unit tests may not provide prefs; assume everything is up-to-date.
+  // Unit tests may not provide prefs; assume everything is up to date.
   ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile);
   if (!extension_prefs)
     return false;
 
-  // If we're inside a browser test, then assume prefs are all up-to-date.
+  // If we're inside a browser test, then assume prefs are all up to date.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
     return false;
 
@@ -246,12 +246,6 @@ bool ChromeExtensionsBrowserClient::IsLoggedInAsPublicAccount() {
 #else
   return false;
 #endif
-}
-
-ApiActivityMonitor* ChromeExtensionsBrowserClient::GetApiActivityMonitor(
-    content::BrowserContext* context) {
-  // The ActivityLog monitors and records function calls and events.
-  return ActivityLog::GetInstance(context);
 }
 
 ExtensionSystemProvider*
@@ -415,6 +409,12 @@ ChromeExtensionsBrowserClient::CreateBluetoothChooser(
     const content::BluetoothChooser::EventHandler& event_handler) {
   return base::WrapUnique(
       new ChromeExtensionBluetoothChooser(frame, event_handler));
+}
+
+bool ChromeExtensionsBrowserClient::IsActivityLoggingEnabled(
+    content::BrowserContext* context) {
+  ActivityLog* activity_log = ActivityLog::GetInstance(context);
+  return activity_log && activity_log->is_active();
 }
 
 }  // namespace extensions

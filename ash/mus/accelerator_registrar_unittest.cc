@@ -56,7 +56,7 @@ class TestAcceleratorHandler : public AcceleratorHandler {
   }
 
   // AcceleratorHandler:
-  void OnAccelerator(uint32_t id, ::mus::mojom::EventPtr event) override {}
+  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override {}
 
   std::set<uint32_t> installed_accelerators_;
   std::unique_ptr<base::RunLoop> run_loop_;
@@ -86,13 +86,13 @@ TEST_F(AcceleratorRegistrarTest, AcceleratorRegistrarBasic) {
   ConnectToRegistrar(&registrar_first);
   TestAcceleratorHandler handler_first(std::move(registrar_first));
   EXPECT_TRUE(handler_first.AttemptToInstallAccelerator(
-      1, ::mus::CreateKeyMatcher(::mus::mojom::KeyboardCode::T,
-                                 ::mus::mojom::kEventFlagShiftDown)));
+      1, ::mus::CreateKeyMatcher(ui::mojom::KeyboardCode::T,
+                                 ui::mojom::kEventFlagShiftDown)));
   // Attempting to add an accelerator with the same accelerator id from the same
   // registrar should fail.
   EXPECT_FALSE(handler_first.AttemptToInstallAccelerator(
-      1, ::mus::CreateKeyMatcher(::mus::mojom::KeyboardCode::N,
-                                 ::mus::mojom::kEventFlagShiftDown)));
+      1, ::mus::CreateKeyMatcher(ui::mojom::KeyboardCode::N,
+                                 ui::mojom::kEventFlagShiftDown)));
 
   // Attempting to add an accelerator with the same id from a different
   // registrar should be OK.
@@ -100,16 +100,16 @@ TEST_F(AcceleratorRegistrarTest, AcceleratorRegistrarBasic) {
   ConnectToRegistrar(&registrar_second);
   TestAcceleratorHandler handler_second(std::move(registrar_second));
   EXPECT_TRUE(handler_second.AttemptToInstallAccelerator(
-      1, ::mus::CreateKeyMatcher(::mus::mojom::KeyboardCode::N,
-                                 ::mus::mojom::kEventFlagShiftDown)));
+      1, ::mus::CreateKeyMatcher(ui::mojom::KeyboardCode::N,
+                                 ui::mojom::kEventFlagShiftDown)));
 
   // But attempting to add an accelerator with the same matcher should fail.
   EXPECT_FALSE(handler_first.AttemptToInstallAccelerator(
-      3, ::mus::CreateKeyMatcher(::mus::mojom::KeyboardCode::N,
-                                 ::mus::mojom::kEventFlagShiftDown)));
+      3, ::mus::CreateKeyMatcher(ui::mojom::KeyboardCode::N,
+                                 ui::mojom::kEventFlagShiftDown)));
   EXPECT_FALSE(handler_second.AttemptToInstallAccelerator(
-      3, ::mus::CreateKeyMatcher(::mus::mojom::KeyboardCode::N,
-                                 ::mus::mojom::kEventFlagShiftDown)));
+      3, ::mus::CreateKeyMatcher(ui::mojom::KeyboardCode::N,
+                                 ui::mojom::kEventFlagShiftDown)));
 }
 
 }  // namespace mus

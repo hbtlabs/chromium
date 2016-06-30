@@ -46,13 +46,13 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the text shown on the button.
   const base::string16& GetText() const;
-  virtual void SetText(const base::string16& text);
+  void SetText(const base::string16& text);
 
   // Sets the text color shown for the specified button |for_state| to |color|.
   void SetTextColor(ButtonState for_state, SkColor color);
 
   // Sets the text colors shown for the non-disabled states to |color|.
-  void SetEnabledTextColors(SkColor color);
+  virtual void SetEnabledTextColors(SkColor color);
 
   // Sets drop shadows underneath the text.
   void SetTextShadows(const gfx::ShadowValues& shadows);
@@ -106,7 +106,6 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
-  gfx::Point GetInkDropCenter() const override;
 
  protected:
   ImageView* image() const { return image_; }

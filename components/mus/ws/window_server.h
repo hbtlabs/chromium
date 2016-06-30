@@ -13,8 +13,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "components/mus/public/cpp/surfaces/custom_surface_converter.h"
-#include "components/mus/public/interfaces/window_manager_factory.mojom.h"
+#include "components/mus/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/surfaces/surfaces_state.h"
@@ -25,7 +24,8 @@
 #include "components/mus/ws/server_window_delegate.h"
 #include "components/mus/ws/server_window_observer.h"
 #include "components/mus/ws/user_id_tracker.h"
-#include "components/mus/ws/window_manager_factory_registry.h"
+#include "components/mus/ws/user_id_tracker_observer.h"
+#include "components/mus/ws/window_manager_window_tree_factory_set.h"
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -35,6 +35,7 @@ namespace ws {
 class AccessPolicy;
 class DisplayManager;
 class ServerWindow;
+class UserActivityMonitor;
 class WindowManagerState;
 class WindowServerDelegate;
 class WindowTree;
@@ -44,7 +45,8 @@ class WindowTreeBinding;
 // WindowTrees) as well as providing the root of the hierarchy.
 class WindowServer : public ServerWindowDelegate,
                      public ServerWindowObserver,
-                     public DisplayManagerDelegate {
+                     public DisplayManagerDelegate,
+                     public UserIdTrackerObserver {
  public:
   WindowServer(WindowServerDelegate* delegate,
                const scoped_refptr<mus::SurfacesState>& surfaces_state);
@@ -74,17 +76,18 @@ class WindowServer : public ServerWindowDelegate,
   WindowTree* EmbedAtWindow(ServerWindow* root,
                             const UserId& user_id,
                             mojom::WindowTreeClientPtr client,
+                            uint32_t flags,
                             std::unique_ptr<AccessPolicy> access_policy);
 
   // Adds |tree_impl_ptr| to the set of known trees. Use DestroyTree() to
   // destroy the tree.
-  WindowTree* AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
-                      std::unique_ptr<WindowTreeBinding> binding,
-                      mojom::WindowTreePtr tree_ptr);
-  WindowTree* CreateTreeForWindowManager(Display* display,
-                                         mojom::WindowManagerFactory* factory,
-                                         ServerWindow* root,
-                                         const UserId& user_id);
+  void AddTree(std::unique_ptr<WindowTree> tree_impl_ptr,
+               std::unique_ptr<WindowTreeBinding> binding,
+               mojom::WindowTreePtr tree_ptr);
+  WindowTree* CreateTreeForWindowManager(
+      const UserId& user_id,
+      mojom::WindowTreeRequest window_tree_request,
+      mojom::WindowTreeClientPtr window_tree_client);
   // Invoked when a WindowTree's connection encounters an error.
   void DestroyTree(WindowTree* tree);
 
@@ -126,10 +129,12 @@ class WindowServer : public ServerWindowDelegate,
   }
   const WindowTree* GetTreeWithRoot(const ServerWindow* window) const;
 
-  void OnFirstWindowManagerFactorySet();
+  void OnFirstWindowManagerWindowTreeFactoryReady();
 
-  WindowManagerFactoryRegistry* window_manager_factory_registry() {
-    return &window_manager_factory_registry_;
+  UserActivityMonitor* GetUserActivityMonitorForUser(const UserId& user_id);
+
+  WindowManagerWindowTreeFactorySet* window_manager_window_tree_factory_set() {
+    return &window_manager_window_tree_factory_set_;
   }
 
   // Sets focus to |window|. Returns true if |window| already has focus, or
@@ -196,6 +201,8 @@ class WindowServer : public ServerWindowDelegate,
 
   using WindowTreeMap =
       std::map<ClientSpecificId, std::unique_ptr<WindowTree>>;
+  using UserActivityMonitorMap =
+      std::map<UserId, std::unique_ptr<UserActivityMonitor>>;
 
   struct InFlightWindowManagerChange {
     // Identifies the client that initiated the change.
@@ -238,10 +245,6 @@ class WindowServer : public ServerWindowDelegate,
   void OnScheduleWindowPaint(ServerWindow* window) override;
   const ServerWindow* GetRootWindow(const ServerWindow* window) const override;
   void ScheduleSurfaceDestruction(ServerWindow* window) override;
-  ServerWindow* FindWindowForSurface(
-      const ServerWindow* ancestor,
-      mojom::SurfaceType surface_type,
-      const ClientWindowId& client_window_id) override;
 
   // Overridden from ServerWindowObserver:
   void OnWindowDestroyed(ServerWindow* window) override;
@@ -284,6 +287,17 @@ class WindowServer : public ServerWindowDelegate,
   // DisplayManagerDelegate:
   void OnFirstDisplayReady() override;
   void OnNoMoreDisplays() override;
+  bool GetFrameDecorationsForUser(
+      const UserId& user_id,
+      mojom::FrameDecorationValuesPtr* values) override;
+  WindowManagerState* GetWindowManagerStateForUser(
+      const UserId& user_id) override;
+
+  // UserIdTrackerObserver:
+  void OnActiveUserIdChanged(const UserId& previously_active_id,
+                             const UserId& active_id) override;
+  void OnUserIdAdded(const UserId& id) override;
+  void OnUserIdRemoved(const UserId& id) override;
 
   UserIdTracker user_id_tracker_;
 
@@ -315,7 +329,9 @@ class WindowServer : public ServerWindowDelegate,
 
   base::Callback<void(ServerWindow*)> window_paint_callback_;
 
-  WindowManagerFactoryRegistry window_manager_factory_registry_;
+  UserActivityMonitorMap activity_monitor_map_;
+
+  WindowManagerWindowTreeFactorySet window_manager_window_tree_factory_set_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServer);
 };

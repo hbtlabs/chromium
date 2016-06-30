@@ -6,10 +6,14 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "platform/TraceEvent.h"
+#include "base/trace_event/trace_event.h"
+#include "cc/trees/layer_tree_impl.h"
+#include "platform/graphics/CompositorMutableStateProvider.h"
 #include "platform/graphics/CompositorMutation.h"
 #include "platform/graphics/CompositorMutationsTarget.h"
 #include "platform/graphics/CompositorMutator.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -28,13 +32,15 @@ CompositorMutatorClient::~CompositorMutatorClient()
 }
 
 bool CompositorMutatorClient::Mutate(
-    base::TimeTicks monotonicTime)
+    base::TimeTicks monotonicTime,
+    cc::LayerTreeImpl* treeImpl)
 {
     TRACE_EVENT0("compositor-worker", "CompositorMutatorClient::Mutate");
     double monotonicTimeNow = (monotonicTime - base::TimeTicks()).InSecondsF();
     if (!m_mutations)
-        m_mutations = adoptPtr(new CompositorMutations);
-    bool shouldReinvoke = m_mutator->mutate(monotonicTimeNow);
+        m_mutations = wrapUnique(new CompositorMutations);
+    CompositorMutableStateProvider compositorState(treeImpl, m_mutations.get());
+    bool shouldReinvoke = m_mutator->mutate(monotonicTimeNow, &compositorState);
     return shouldReinvoke;
 }
 
@@ -53,7 +59,7 @@ base::Closure CompositorMutatorClient::TakeMutations()
 
     return base::Bind(&CompositorMutationsTarget::applyMutations,
         base::Unretained(m_mutationsTarget),
-        base::Owned(m_mutations.leakPtr()));
+        base::Owned(m_mutations.release()));
 }
 
 void CompositorMutatorClient::setNeedsMutate()
@@ -62,7 +68,7 @@ void CompositorMutatorClient::setNeedsMutate()
     m_client->SetNeedsMutate();
 }
 
-void CompositorMutatorClient::setMutationsForTesting(PassOwnPtr<CompositorMutations> mutations)
+void CompositorMutatorClient::setMutationsForTesting(std::unique_ptr<CompositorMutations> mutations)
 {
     m_mutations = std::move(mutations);
 }

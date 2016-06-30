@@ -14,7 +14,7 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/request_context_type.h"
@@ -39,7 +39,7 @@ enum LoFiState {
 // Helper function to determine if the navigation to |url| should make a request
 // to the network stack. A request should not be sent for data URLs, JavaScript
 // URLs or about:blank. In these cases, no request needs to be sent.
-bool ShouldMakeNetworkRequestForURL(const GURL& url);
+bool CONTENT_EXPORT ShouldMakeNetworkRequestForURL(const GURL& url);
 
 // The following structures hold parameters used during a navigation. In
 // particular they are used by FrameMsg_Navigate, FrameMsg_CommitNavigation and
@@ -50,20 +50,21 @@ bool ShouldMakeNetworkRequestForURL(const GURL& url);
 // Used by all navigation IPCs.
 struct CONTENT_EXPORT CommonNavigationParams {
   CommonNavigationParams();
-  CommonNavigationParams(const GURL& url,
-                         const Referrer& referrer,
-                         ui::PageTransition transition,
-                         FrameMsg_Navigate_Type::Value navigation_type,
-                         bool allow_download,
-                         bool should_replace_current_entry,
-                         base::TimeTicks ui_timestamp,
-                         FrameMsg_UILoadMetricsReportType::Value report_type,
-                         const GURL& base_url_for_data_url,
-                         const GURL& history_url_for_data_url,
-                         LoFiState lofi_state,
-                         const base::TimeTicks& navigation_start,
-                         std::string method,
-                         const scoped_refptr<ResourceRequestBody>& post_data);
+  CommonNavigationParams(
+      const GURL& url,
+      const Referrer& referrer,
+      ui::PageTransition transition,
+      FrameMsg_Navigate_Type::Value navigation_type,
+      bool allow_download,
+      bool should_replace_current_entry,
+      base::TimeTicks ui_timestamp,
+      FrameMsg_UILoadMetricsReportType::Value report_type,
+      const GURL& base_url_for_data_url,
+      const GURL& history_url_for_data_url,
+      LoFiState lofi_state,
+      const base::TimeTicks& navigation_start,
+      std::string method,
+      const scoped_refptr<ResourceRequestBodyImpl>& post_data);
   CommonNavigationParams(const CommonNavigationParams& other);
   ~CommonNavigationParams();
 
@@ -123,7 +124,7 @@ struct CONTENT_EXPORT CommonNavigationParams {
   std::string method;
 
   // Body of HTTP POST request.
-  scoped_refptr<ResourceRequestBody> post_data;
+  scoped_refptr<ResourceRequestBodyImpl> post_data;
 };
 
 // Provided by the renderer ----------------------------------------------------
@@ -296,13 +297,6 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // PlzNavigate
   // Whether a ServiceWorkerProviderHost should be created for the window.
   bool should_create_service_worker;
-
-  // PlzNavigate
-  // The ServiceWorkerProviderHost ID used for navigations, if it was already
-  // created by the browser. Set to kInvalidServiceWorkerProviderId otherwise.
-  // This parameter is not used in the current navigation architecture, where
-  // it will always be equal to kInvalidServiceWorkerProviderId.
-  int service_worker_provider_id;
 
 #if defined(OS_ANDROID)
   // The real content of the data: URL. Only used in Android WebView for
