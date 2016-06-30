@@ -44,16 +44,50 @@ int32_t StructTraits<test::NestedStructWithTraits,
 // static
 bool StructTraits<test::NestedStructWithTraits,
                   test::NestedStructWithTraitsImpl>::
-    Read(test::NestedStructWithTraitsDataView data,
+    Read(test::NestedStructWithTraits::DataView data,
          test::NestedStructWithTraitsImpl* output) {
   output->value = data.value();
   return true;
 }
 
+test::EnumWithTraits
+EnumTraits<test::EnumWithTraits, test::EnumWithTraitsImpl>::ToMojom(
+    test::EnumWithTraitsImpl input) {
+  switch (input) {
+    case test::EnumWithTraitsImpl::CUSTOM_VALUE_0:
+      return test::EnumWithTraits::VALUE_0;
+    case test::EnumWithTraitsImpl::CUSTOM_VALUE_1:
+      return test::EnumWithTraits::VALUE_1;
+  };
+
+  NOTREACHED();
+  return test::EnumWithTraits::VALUE_0;
+}
+
+bool EnumTraits<test::EnumWithTraits, test::EnumWithTraitsImpl>::FromMojom(
+    test::EnumWithTraits input,
+    test::EnumWithTraitsImpl* output) {
+  switch (input) {
+    case test::EnumWithTraits::VALUE_0:
+      *output = test::EnumWithTraitsImpl::CUSTOM_VALUE_0;
+      return true;
+    case test::EnumWithTraits::VALUE_1:
+      *output = test::EnumWithTraitsImpl::CUSTOM_VALUE_1;
+      return true;
+  };
+
+  return false;
+}
+
 // static
 bool StructTraits<test::StructWithTraits, test::StructWithTraitsImpl>::Read(
-    test::StructWithTraitsDataView data,
+    test::StructWithTraits::DataView data,
     test::StructWithTraitsImpl* out) {
+  test::EnumWithTraitsImpl f_enum;
+  if (!data.ReadFEnum(&f_enum))
+    return false;
+  out->set_enum(f_enum);
+
   out->set_bool(data.f_bool());
   out->set_uint32(data.f_uint32());
   out->set_uint64(data.f_uint64());
@@ -84,7 +118,7 @@ bool StructTraits<test::StructWithTraits, test::StructWithTraitsImpl>::Read(
 // static
 bool StructTraits<test::PassByValueStructWithTraits,
                   test::PassByValueStructWithTraitsImpl>::
-    Read(test::PassByValueStructWithTraitsDataView data,
+    Read(test::PassByValueStructWithTraits::DataView data,
          test::PassByValueStructWithTraitsImpl* out) {
   out->get_mutable_handle() = data.TakeFHandle();
   return true;

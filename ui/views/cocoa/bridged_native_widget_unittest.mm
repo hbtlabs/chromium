@@ -112,7 +112,8 @@ NSArray* const kDeleteActions = @[
   @"deleteToBeginningOfParagraph:", @"deleteToEndOfParagraph:"
 ];
 
-NSArray* const kMiscActions = @[ @"insertText:", @"cancelOperation:" ];
+NSArray* const kMiscActions =
+    @[ @"insertText:", @"cancelOperation:", @"transpose:" ];
 
 // Empty range shortcut for readibility.
 NSRange EmptyRange() {
@@ -361,8 +362,10 @@ void BridgedNativeWidgetTest::InstallTextField(
 
   [ns_view_ setTextInputClient:textfield];
 
-  // Initialize the dummy text view.
-  dummy_text_view_.reset([[NSTextView alloc] initWithFrame:NSZeroRect]);
+  // Initialize the dummy text view. Initializing this with NSZeroRect causes
+  // weird NSTextView behavior on OSX 10.9.
+  dummy_text_view_.reset(
+      [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)]);
   [dummy_text_view_ setString:SysUTF16ToNSString(text)];
 }
 
@@ -1029,6 +1032,11 @@ TEST_F(BridgedNativeWidgetTest, NilTextInputClient) {
 
   for (NSString* selector in selectors)
     [ns_view_ doCommandBySelector:NSSelectorFromString(selector)];
+}
+
+// Test transpose command against expectations set by |dummy_text_view_|.
+TEST_F(BridgedNativeWidgetTest, TextInput_Transpose) {
+  TestEditingCommands(@[ @"transpose:" ]);
 }
 
 // Test firstRectForCharacterRange:actualRange for cases where query range is

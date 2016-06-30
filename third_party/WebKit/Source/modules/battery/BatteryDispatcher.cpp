@@ -8,7 +8,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/ServiceRegistry.h"
 #include "wtf/Assertions.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -25,7 +24,7 @@ BatteryDispatcher::BatteryDispatcher()
 
 void BatteryDispatcher::queryNextStatus()
 {
-    m_monitor->QueryNextStatus(createBaseCallback(bind<device::blink::BatteryStatusPtr>(&BatteryDispatcher::onDidChange, this)));
+    m_monitor->QueryNextStatus(createBaseCallback(WTF::bind(&BatteryDispatcher::onDidChange, wrapPersistent(this))));
 }
 
 void BatteryDispatcher::onDidChange(device::blink::BatteryStatusPtr batteryStatus)

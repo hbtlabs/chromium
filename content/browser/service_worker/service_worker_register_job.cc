@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
@@ -423,16 +424,18 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
 void ServiceWorkerRegisterJob::DispatchInstallEvent() {
   DCHECK_EQ(ServiceWorkerVersion::INSTALLING, new_version()->status())
       << new_version()->status();
-  DCHECK_EQ(ServiceWorkerVersion::RUNNING, new_version()->running_status())
+  DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, new_version()->running_status())
       << "Worker stopped too soon after it was started.";
   int request_id = new_version()->StartRequest(
       ServiceWorkerMetrics::EventType::INSTALL,
       base::Bind(&ServiceWorkerRegisterJob::OnInstallFailed,
                  weak_factory_.GetWeakPtr()));
-  new_version()->DispatchEvent<ServiceWorkerHostMsg_InstallEventFinished>(
-      request_id, ServiceWorkerMsg_InstallEvent(request_id),
-      base::Bind(&ServiceWorkerRegisterJob::OnInstallFinished,
-                 weak_factory_.GetWeakPtr()));
+  new_version()
+      ->RegisterRequestCallback<ServiceWorkerHostMsg_InstallEventFinished>(
+          request_id, base::Bind(&ServiceWorkerRegisterJob::OnInstallFinished,
+                                 weak_factory_.GetWeakPtr()));
+  new_version()->DispatchEvent({request_id},
+                               ServiceWorkerMsg_InstallEvent(request_id));
 }
 
 void ServiceWorkerRegisterJob::OnInstallFinished(
@@ -491,8 +494,13 @@ void ServiceWorkerRegisterJob::OnStoreRegistrationComplete(
 
   // "9. If registration.waitingWorker is not null, then:..."
   if (registration()->waiting_version()) {
-    // "1. Run the [[UpdateState]] algorithm passing registration.waitingWorker
-    // and "redundant" as the arguments."
+    // 1. Set redundantWorker to registration’s waiting worker.
+    // 2. Terminate redundantWorker.
+    registration()->waiting_version()->StopWorker(
+        base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+    // TODO(falken): Move this further down. The spec says to set status to
+    // 'redundant' after promoting the new version to .waiting attribute and
+    // 'installed' status.
     registration()->waiting_version()->SetStatus(
         ServiceWorkerVersion::REDUNDANT);
   }

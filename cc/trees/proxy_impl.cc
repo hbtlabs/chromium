@@ -19,6 +19,7 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
 #include "cc/scheduler/compositor_timing_history.h"
+#include "cc/scheduler/delay_based_time_source.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/task_runner_provider.h"
@@ -85,14 +86,15 @@ ProxyImpl::ProxyImpl(
   BeginFrameSource* frame_source = external_begin_frame_source_.get();
   if (!scheduler_settings.throttle_frame_production) {
     // Unthrottled source takes precedence over external sources.
-    unthrottled_begin_frame_source_.reset(new BackToBackBeginFrameSource(
-        task_runner_provider_->ImplThreadTaskRunner()));
+    unthrottled_begin_frame_source_.reset(
+        new BackToBackBeginFrameSource(base::MakeUnique<DelayBasedTimeSource>(
+            task_runner_provider_->ImplThreadTaskRunner())));
     frame_source = unthrottled_begin_frame_source_.get();
   }
   if (!frame_source) {
-    synthetic_begin_frame_source_.reset(new SyntheticBeginFrameSource(
-        task_runner_provider_->ImplThreadTaskRunner(),
-        BeginFrameArgs::DefaultInterval()));
+    synthetic_begin_frame_source_.reset(
+        new DelayBasedBeginFrameSource(base::MakeUnique<DelayBasedTimeSource>(
+            task_runner_provider_->ImplThreadTaskRunner())));
     frame_source = synthetic_begin_frame_source_.get();
   }
   scheduler_ =
@@ -112,6 +114,10 @@ ProxyImpl::~ProxyImpl() {
   TRACE_EVENT0("cc", "ProxyImpl::~ProxyImpl");
   DCHECK(IsImplThread());
   DCHECK(IsMainThreadBlocked());
+
+  // Take away the OutputSurface before destroying things so it doesn't try
+  // to call into its client mid-shutdown.
+  layer_tree_host_impl_->ReleaseOutputSurface();
 
   scheduler_ = nullptr;
   external_begin_frame_source_ = nullptr;
@@ -305,14 +311,8 @@ void ProxyImpl::DidLoseOutputSurfaceOnImplThread() {
 void ProxyImpl::CommitVSyncParameters(base::TimeTicks timebase,
                                       base::TimeDelta interval) {
   DCHECK(IsImplThread());
-  if (!synthetic_begin_frame_source_)
-    return;
-
-  if (interval.is_zero()) {
-    // TODO(brianderson): We should not be receiving 0 intervals.
-    interval = BeginFrameArgs::DefaultInterval();
-  }
-  synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
+  if (synthetic_begin_frame_source_)
+    synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase, interval);
 }
 
 void ProxyImpl::SetBeginFrameSource(BeginFrameSource* source) {
@@ -519,12 +519,6 @@ void ProxyImpl::ScheduledActionSendBeginMainFrame(const BeginFrameArgs& args) {
       layer_tree_host_impl_->memory_allocation_limit_bytes();
   begin_main_frame_state->evicted_ui_resources =
       layer_tree_host_impl_->EvictedUIResourcesExist();
-  begin_main_frame_state->has_fixed_raster_scale_blurry_content =
-      layer_tree_host_impl_->has_fixed_raster_scale_blurry_content();
-  begin_main_frame_state
-      ->has_fixed_raster_scale_potential_performance_regression =
-      layer_tree_host_impl_
-          ->HasFixedRasterScalePotentialPerformanceRegression();
   channel_impl_->BeginMainFrame(std::move(begin_main_frame_state));
   devtools_instrumentation::DidRequestMainThreadFrame(layer_tree_host_id_);
 }

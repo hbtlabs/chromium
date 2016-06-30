@@ -40,6 +40,7 @@
 #include "public/platform/WebAudioSourceProviderClient.h"
 #include "public/platform/WebMediaPlayerClient.h"
 #include "public/platform/WebMimeRegistry.h"
+#include <memory>
 
 namespace blink {
 
@@ -47,6 +48,7 @@ class AudioSourceProviderClient;
 class AudioTrackList;
 class ContentType;
 class CueTimeline;
+class ElementVisibilityObserver;
 class EnumerationHistogram;
 class Event;
 class ExceptionState;
@@ -296,6 +298,13 @@ protected:
     void recordAutoplayMetric(AutoplayMetrics);
 
 private:
+    // These values are used for histograms. Do not reorder.
+    enum AutoplayUnmuteActionStatus {
+        AutoplayUnmuteActionFailure = 0,
+        AutoplayUnmuteActionSuccess = 1,
+        AutoplayUnmuteActionMax
+    };
+
     void resetMediaPlayerAndMediaSource();
 
     bool alwaysCreateUserAgentShadowRoot() const final { return true; }
@@ -347,6 +356,7 @@ private:
     void connectedToRemoteDevice() final;
     void disconnectedFromRemoteDevice() final;
     void cancelledRemotePlaybackRequest() final;
+    void requestReload(const WebURL&) final;
 
     void loadTimerFired(Timer<HTMLMediaElement>*);
     void progressEventTimerFired(Timer<HTMLMediaElement>*);
@@ -367,8 +377,8 @@ private:
     void invokeResourceSelectionAlgorithm();
     void loadInternal();
     void selectMediaResource();
-    void loadResource(const WebMediaPlayerSource&, ContentType&);
-    void startPlayerLoad();
+    void loadResource(const WebMediaPlayerSource&, const ContentType&);
+    void startPlayerLoad(const KURL& playerProvidedUrl = KURL());
     void setPlayerPreload();
     WebMediaPlayer::LoadType loadType() const;
     void scheduleNextSourceChild();
@@ -468,6 +478,10 @@ private:
     // gesture is currently being processed.
     bool isGestureNeededForPlayback() const;
 
+    // Return true if and only if the settings allow autoplay of media on this
+    // frame.
+    bool isAutoplayAllowedPerSettings() const;
+
     void setNetworkState(NetworkState);
 
     void audioTracksTimerFired(Timer<HTMLMediaElement>*);
@@ -478,14 +492,17 @@ private:
     void scheduleResolvePlayPromises();
     void scheduleRejectPlayPromises(ExceptionCode);
     void scheduleNotifyPlaying();
-
-    void resolvePlayPromises();
-    // TODO(mlamouri): this is used for cancellable tasks because we can't pass
-    // parameters.
-    void rejectPlayPromises();
+    void resolveScheduledPlayPromises();
+    void rejectScheduledPlayPromises();
     void rejectPlayPromises(ExceptionCode, const String&);
+    void rejectPlayPromisesInternal(ExceptionCode, const String&);
 
     EnumerationHistogram& showControlsHistogram() const;
+
+    void recordAutoplaySourceMetric(int source);
+    void recordAutoplayUnmuteStatus(AutoplayUnmuteActionStatus);
+
+    void onVisibilityChangedForAutoplay(bool isVisible);
 
     UnthrottledTimer<HTMLMediaElement> m_loadTimer;
     UnthrottledTimer<HTMLMediaElement> m_progressEventTimer;
@@ -543,7 +560,7 @@ private:
     DeferredLoadState m_deferredLoadState;
     Timer<HTMLMediaElement> m_deferredLoadTimer;
 
-    OwnPtr<WebMediaPlayer> m_webMediaPlayer;
+    std::unique_ptr<WebMediaPlayer> m_webMediaPlayer;
     WebLayer* m_webLayer;
 
     DisplayMode m_displayMode;
@@ -591,9 +608,11 @@ private:
 
     Member<CueTimeline> m_cueTimeline;
 
-    HeapVector<Member<ScriptPromiseResolver>> m_playResolvers;
-    OwnPtr<CancellableTaskFactory> m_playPromiseResolveTask;
-    OwnPtr<CancellableTaskFactory> m_playPromiseRejectTask;
+    HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolvers;
+    std::unique_ptr<CancellableTaskFactory> m_playPromiseResolveTask;
+    std::unique_ptr<CancellableTaskFactory> m_playPromiseRejectTask;
+    HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolveList;
+    HeapVector<Member<ScriptPromiseResolver>> m_playPromiseRejectList;
     ExceptionCode m_playPromiseErrorCode;
 
     // This is a weak reference, since m_audioSourceNode holds a reference to us.
@@ -661,6 +680,9 @@ private:
     Member<AutoplayExperimentHelper> m_autoplayHelper;
 
     WebRemotePlaybackClient* m_remotePlaybackClient;
+
+    // class AutoplayVisibilityObserver;
+    Member<ElementVisibilityObserver> m_autoplayVisibilityObserver;
 
     static URLRegistry* s_mediaStreamRegistry;
 };

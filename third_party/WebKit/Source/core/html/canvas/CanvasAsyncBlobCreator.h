@@ -7,9 +7,9 @@
 #include "core/fileapi/BlobCallback.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/heap/Handle.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -42,6 +42,7 @@ public:
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         visitor->trace(m_data);
+        visitor->trace(m_callback);
     }
 
 protected:
@@ -51,7 +52,7 @@ protected:
     virtual void scheduleInitiateJpegEncoding(const double&);
     virtual void idleEncodeRowsPng(double deadlineSeconds);
     virtual void idleEncodeRowsJpeg(double deadlineSeconds);
-    virtual void postDelayedTaskToMainThread(const WebTraceLocation&, std::unique_ptr<SameThreadClosure>, double delayMs);
+    virtual void postDelayedTaskToMainThread(const WebTraceLocation&, std::unique_ptr<WTF::Closure>, double delayMs);
     virtual void signalAlternativeCodePathFinishedForTesting() { }
     virtual void createBlobAndInvokeCallback();
     virtual void createNullAndInvokeCallback();
@@ -63,16 +64,18 @@ protected:
 private:
     friend class CanvasAsyncBlobCreatorTest;
 
-    OwnPtr<PNGImageEncoderState> m_pngEncoderState;
-    OwnPtr<JPEGImageEncoderState> m_jpegEncoderState;
+    void dispose();
+
+    std::unique_ptr<PNGImageEncoderState> m_pngEncoderState;
+    std::unique_ptr<JPEGImageEncoderState> m_jpegEncoderState;
     Member<DOMUint8ClampedArray> m_data;
-    OwnPtr<Vector<unsigned char>> m_encodedImage;
+    std::unique_ptr<Vector<unsigned char>> m_encodedImage;
     int m_numRowsCompleted;
 
     const IntSize m_size;
     size_t m_pixelRowStride;
     const MimeType m_mimeType;
-    CrossThreadPersistent<BlobCallback> m_callback;
+    Member<BlobCallback> m_callback;
 
     // PNG
     bool initializePngStruct();

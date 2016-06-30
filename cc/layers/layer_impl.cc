@@ -44,12 +44,7 @@
 
 namespace cc {
 LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
-    : parent_(nullptr),
-      mask_layer_id_(-1),
-      mask_layer_(nullptr),
-      replica_layer_id_(-1),
-      replica_layer_(nullptr),
-      layer_id_(id),
+    : layer_id_(id),
       layer_tree_impl_(tree_impl),
       test_properties_(nullptr),
       scroll_clip_layer_id_(Layer::INVALID_ID),
@@ -66,7 +61,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       should_check_backface_visibility_(false),
       draws_content_(false),
       is_drawn_render_surface_layer_list_member_(false),
-      is_affected_by_page_scale_(true),
       was_ever_ready_since_last_transform_animation_(true),
       background_color_(0),
       safe_opaque_background_color_(0),
@@ -78,11 +72,11 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       scroll_tree_index_(-1),
       sorting_context_id_(0),
       current_draw_mode_(DRAW_MODE_NONE),
-      element_id_(0),
       mutable_properties_(MutableProperty::kNone),
       debug_info_(nullptr),
       scrolls_drawn_descendant_(false),
-      has_will_change_transform_hint_(false) {
+      has_will_change_transform_hint_(false),
+      needs_push_properties_(false) {
   DCHECK_GT(layer_id_, 0);
 
   DCHECK(layer_tree_impl_);
@@ -103,52 +97,10 @@ LayerImpl::~LayerImpl() {
 
   TRACE_EVENT_OBJECT_DELETED_WITH_ID(
       TRACE_DISABLED_BY_DEFAULT("cc.debug"), "cc::LayerImpl", this);
-
-  if (mask_layer_)
-    layer_tree_impl_->RemoveLayer(mask_layer_id_);
-  if (replica_layer_)
-    layer_tree_impl_->RemoveLayer(replica_layer_id_);
-  ClearChildList();
-}
-
-void LayerImpl::AddChild(std::unique_ptr<LayerImpl> child) {
-  child->SetParent(this);
-  DCHECK_EQ(layer_tree_impl(), child->layer_tree_impl());
-  children_.push_back(child.get());
-  layer_tree_impl_->AddLayer(std::move(child));
-}
-
-std::unique_ptr<LayerImpl> LayerImpl::RemoveChildForTesting(LayerImpl* child) {
-  auto it = std::find(children_.begin(), children_.end(), child);
-  if (it != children_.end())
-    children_.erase(it);
-  layer_tree_impl()->property_trees()->RemoveIdFromIdToIndexMaps(child->id());
-  return layer_tree_impl_->RemoveLayer(child->id());
-}
-
-void LayerImpl::SetParent(LayerImpl* parent) {
-  parent_ = parent;
-}
-
-void LayerImpl::ClearChildList() {
-  if (children_.empty())
-    return;
-  for (auto* child : children_)
-    layer_tree_impl_->RemoveLayer(child->id());
-  children_.clear();
-}
-
-void LayerImpl::ClearLinksToOtherLayers() {
-  children_.clear();
-  mask_layer_ = nullptr;
-  replica_layer_ = nullptr;
 }
 
 void LayerImpl::SetHasWillChangeTransformHint(bool has_will_change) {
-  if (has_will_change_transform_hint_ == has_will_change)
-    return;
   has_will_change_transform_hint_ = has_will_change;
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::SetDebugInfo(
@@ -186,22 +138,18 @@ void LayerImpl::ApplyScroll(ScrollState* scroll_state) {
 
 void LayerImpl::SetTransformTreeIndex(int index) {
   transform_tree_index_ = index;
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::SetClipTreeIndex(int index) {
   clip_tree_index_ = index;
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::SetEffectTreeIndex(int index) {
   effect_tree_index_ = index;
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::SetScrollTreeIndex(int index) {
   scroll_tree_index_ = index;
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::ClearRenderSurfaceLayerList() {
@@ -362,49 +310,52 @@ std::unique_ptr<LayerImpl> LayerImpl::CreateLayerImpl(
 }
 
 void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
-  layer->SetBackgroundColor(background_color_);
-  layer->SetSafeOpaqueBackgroundColor(safe_opaque_background_color_);
-  layer->SetBounds(bounds_);
-  layer->SetDrawsContent(DrawsContent());
+  DCHECK(layer->IsActive());
+
+  layer->offset_to_transform_parent_ = offset_to_transform_parent_;
+  layer->main_thread_scrolling_reasons_ = main_thread_scrolling_reasons_;
+  layer->user_scrollable_horizontal_ = user_scrollable_horizontal_;
+  layer->user_scrollable_vertical_ = user_scrollable_vertical_;
+  layer->should_flatten_transform_from_property_tree_ =
+      should_flatten_transform_from_property_tree_;
+  layer->masks_to_bounds_ = masks_to_bounds_;
+  layer->contents_opaque_ = contents_opaque_;
+  layer->use_parent_backface_visibility_ = use_parent_backface_visibility_;
+  layer->use_local_transform_for_backface_visibility_ =
+      use_local_transform_for_backface_visibility_;
+  layer->should_check_backface_visibility_ = should_check_backface_visibility_;
+  layer->draws_content_ = draws_content_;
+  layer->non_fast_scrollable_region_ = non_fast_scrollable_region_;
+  layer->touch_event_handler_region_ = touch_event_handler_region_;
+  layer->background_color_ = background_color_;
+  layer->safe_opaque_background_color_ = safe_opaque_background_color_;
+  layer->blend_mode_ = blend_mode_;
+  layer->draw_blend_mode_ = draw_blend_mode_;
+  layer->position_ = position_;
+  layer->transform_ = transform_;
+  layer->transform_tree_index_ = transform_tree_index_;
+  layer->effect_tree_index_ = effect_tree_index_;
+  layer->clip_tree_index_ = clip_tree_index_;
+  layer->scroll_tree_index_ = scroll_tree_index_;
+  layer->filters_ = filters_;
+  layer->sorting_context_id_ = sorting_context_id_;
+  layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
+
+  if (layer_property_changed_) {
+    layer->layer_tree_impl()->set_needs_update_draw_properties();
+    layer->layer_property_changed_ = true;
+  }
+
   // If whether layer has render surface changes, we need to update draw
   // properties.
   // TODO(weiliangc): Should be safely removed after impl side is able to
   // update render surfaces without rebuilding property trees.
   if (layer->has_render_surface() != has_render_surface())
     layer->layer_tree_impl()->set_needs_update_draw_properties();
-  layer->SetFilters(filters());
-  layer->SetBackgroundFilters(background_filters());
-  layer->SetMasksToBounds(masks_to_bounds_);
-  layer->set_main_thread_scrolling_reasons(main_thread_scrolling_reasons_);
-  layer->SetNonFastScrollableRegion(non_fast_scrollable_region_);
-  layer->SetTouchEventHandlerRegion(touch_event_handler_region_);
-  layer->SetContentsOpaque(contents_opaque_);
-  layer->SetBlendMode(blend_mode_);
-  layer->SetPosition(position_);
-  layer->set_should_flatten_transform_from_property_tree(
-      should_flatten_transform_from_property_tree_);
-  layer->set_draw_blend_mode(draw_blend_mode_);
-  layer->SetUseParentBackfaceVisibility(use_parent_backface_visibility_);
-  layer->SetUseLocalTransformForBackfaceVisibility(
-      use_local_transform_for_backface_visibility_);
-  layer->SetShouldCheckBackfaceVisibility(should_check_backface_visibility_);
-  layer->SetTransform(transform_);
-  if (layer_property_changed_)
-    layer->NoteLayerPropertyChanged();
-
+  layer->SetBounds(bounds_);
   layer->SetScrollClipLayer(scroll_clip_layer_id_);
   layer->SetElementId(element_id_);
   layer->SetMutableProperties(mutable_properties_);
-  layer->set_user_scrollable_horizontal(user_scrollable_horizontal_);
-  layer->set_user_scrollable_vertical(user_scrollable_vertical_);
-
-  layer->Set3dSortingContextId(sorting_context_id_);
-
-  layer->SetTransformTreeIndex(transform_tree_index_);
-  layer->SetClipTreeIndex(clip_tree_index_);
-  layer->SetEffectTreeIndex(effect_tree_index_);
-  layer->SetScrollTreeIndex(scroll_tree_index_);
-  layer->set_offset_to_transform_parent(offset_to_transform_parent_);
 
   // If the main thread commits multiple times before the impl thread actually
   // draws, then damage tracking will become incorrect if we simply clobber the
@@ -416,10 +367,9 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   if (owned_debug_info_)
     layer->SetDebugInfo(std::move(owned_debug_info_));
 
-  layer->SetHasWillChangeTransformHint(has_will_change_transform_hint());
-
   // Reset any state that should be cleared for the next update.
   layer_property_changed_ = false;
+  needs_push_properties_ = false;
   update_rect_ = gfx::Rect();
   layer_tree_impl()->RemoveLayerShouldPushProperties(this);
 }
@@ -440,7 +390,7 @@ gfx::Vector2dF LayerImpl::FixedContainerSizeDelta() const {
   return scroll_clip_layer->bounds_delta();
 }
 
-std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() const {
+std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
   result->SetInteger("LayerId", id());
   result->SetString("LayerType", LayerTypeAsString());
@@ -477,8 +427,8 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() const {
   }
 
   list = new base::ListValue;
-  for (size_t i = 0; i < children_.size(); ++i)
-    list->Append(children_[i]->LayerTreeAsJson());
+  for (size_t i = 0; i < test_properties()->children.size(); ++i)
+    list->Append(test_properties()->children[i]->LayerTreeAsJson());
   result->Set("Children", list);
 
   return result;
@@ -527,20 +477,13 @@ const char* LayerImpl::LayerTypeAsString() const {
 
 void LayerImpl::ResetChangeTracking() {
   layer_property_changed_ = false;
+  needs_push_properties_ = false;
 
   update_rect_.SetRect(0, 0, 0, 0);
   damage_rect_.SetRect(0, 0, 0, 0);
 
   if (render_surface_)
     render_surface_->ResetPropertyChangedFlag();
-
-  if (mask_layer_)
-    mask_layer_->ResetChangeTracking();
-
-  if (replica_layer_) {
-    // This also resets the replica mask, if it exists.
-    replica_layer_->ResetChangeTracking();
-  }
 }
 
 int LayerImpl::num_copy_requests_in_target_subtree() {
@@ -801,62 +744,6 @@ void LayerImpl::SetBoundsDelta(const gfx::Vector2dF& bounds_delta) {
   }
 }
 
-void LayerImpl::SetMaskLayer(std::unique_ptr<LayerImpl> mask_layer) {
-  int new_layer_id = mask_layer ? mask_layer->id() : -1;
-
-  if (mask_layer) {
-    DCHECK_EQ(layer_tree_impl(), mask_layer->layer_tree_impl());
-    DCHECK_NE(new_layer_id, mask_layer_id_);
-  } else if (new_layer_id == mask_layer_id_) {
-    return;
-  }
-
-  if (mask_layer_)
-    layer_tree_impl_->RemoveLayer(mask_layer_->id());
-  mask_layer_ = mask_layer.get();
-  if (mask_layer_)
-    layer_tree_impl_->AddLayer(std::move(mask_layer));
-
-  mask_layer_id_ = new_layer_id;
-}
-
-std::unique_ptr<LayerImpl> LayerImpl::TakeMaskLayer() {
-  mask_layer_id_ = -1;
-  std::unique_ptr<LayerImpl> ret;
-  if (mask_layer_)
-    ret = layer_tree_impl_->RemoveLayer(mask_layer_->id());
-  mask_layer_ = nullptr;
-  return ret;
-}
-
-void LayerImpl::SetReplicaLayer(std::unique_ptr<LayerImpl> replica_layer) {
-  int new_layer_id = replica_layer ? replica_layer->id() : -1;
-
-  if (replica_layer) {
-    DCHECK_EQ(layer_tree_impl(), replica_layer->layer_tree_impl());
-    DCHECK_NE(new_layer_id, replica_layer_id_);
-  } else if (new_layer_id == replica_layer_id_) {
-    return;
-  }
-
-  if (replica_layer_)
-    layer_tree_impl_->RemoveLayer(replica_layer_->id());
-  replica_layer_ = replica_layer.get();
-  if (replica_layer_)
-    layer_tree_impl_->AddLayer(std::move(replica_layer));
-
-  replica_layer_id_ = new_layer_id;
-}
-
-std::unique_ptr<LayerImpl> LayerImpl::TakeReplicaLayer() {
-  replica_layer_id_ = -1;
-  std::unique_ptr<LayerImpl> ret;
-  if (replica_layer_)
-    ret = layer_tree_impl_->RemoveLayer(replica_layer_->id());
-  replica_layer_ = nullptr;
-  return ret;
-}
-
 ScrollbarLayerImplBase* LayerImpl::ToScrollbarLayer() {
   return nullptr;
 }
@@ -878,11 +765,7 @@ void LayerImpl::SetBackgroundColor(SkColor background_color) {
 }
 
 void LayerImpl::SetSafeOpaqueBackgroundColor(SkColor background_color) {
-  if (background_color == safe_opaque_background_color_)
-    return;
-
   safe_opaque_background_color_ = background_color;
-  SetNeedsPushProperties();
 }
 
 SkColor LayerImpl::SafeOpaqueBackgroundColor() const {
@@ -895,9 +778,6 @@ SkColor LayerImpl::SafeOpaqueBackgroundColor() const {
 }
 
 void LayerImpl::SetFilters(const FilterOperations& filters) {
-  if (filters_ == filters)
-    return;
-
   filters_ = filters;
 }
 
@@ -909,26 +789,11 @@ bool LayerImpl::HasPotentiallyRunningFilterAnimation() const {
   return layer_tree_impl_->HasPotentiallyRunningFilterAnimation(this);
 }
 
-void LayerImpl::SetBackgroundFilters(
-    const FilterOperations& filters) {
-  if (background_filters_ == filters)
-    return;
-
-  background_filters_ = filters;
-  NoteLayerPropertyChanged();
-}
-
 void LayerImpl::SetMasksToBounds(bool masks_to_bounds) {
-  if (masks_to_bounds_ == masks_to_bounds)
-    return;
-
   masks_to_bounds_ = masks_to_bounds;
 }
 
 void LayerImpl::SetContentsOpaque(bool opaque) {
-  if (contents_opaque_ == opaque)
-    return;
-
   contents_opaque_ = opaque;
 }
 
@@ -949,16 +814,18 @@ bool LayerImpl::HasPotentiallyRunningOpacityAnimation() const {
   return layer_tree_impl_->HasPotentiallyRunningOpacityAnimation(this);
 }
 
-void LayerImpl::SetElementId(uint64_t element_id) {
+void LayerImpl::SetElementId(ElementId element_id) {
   if (element_id == element_id_)
     return;
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerImpl::SetElementId", "id", element_id);
+               "LayerImpl::SetElementId", "element",
+               element_id.AsValue().release());
 
   layer_tree_impl_->RemoveFromElementMap(this);
   element_id_ = element_id;
   layer_tree_impl_->AddToElementMap(this);
+
   SetNeedsPushProperties();
 }
 
@@ -972,33 +839,21 @@ void LayerImpl::SetMutableProperties(uint32_t properties) {
   mutable_properties_ = properties;
   // If this layer is already in the element map, update its properties.
   layer_tree_impl_->AddToElementMap(this);
-  SetNeedsPushProperties();
 }
 
 void LayerImpl::SetBlendMode(SkXfermode::Mode blend_mode) {
-  if (blend_mode_ == blend_mode)
-    return;
-
   blend_mode_ = blend_mode;
 }
 
 void LayerImpl::SetPosition(const gfx::PointF& position) {
-  if (position_ == position)
-    return;
-
   position_ = position;
 }
 
 void LayerImpl::Set3dSortingContextId(int id) {
-  if (id == sorting_context_id_)
-    return;
   sorting_context_id_ = id;
 }
 
 void LayerImpl::SetTransform(const gfx::Transform& transform) {
-  if (transform_ == transform)
-    return;
-
   transform_ = transform;
 }
 
@@ -1123,8 +978,10 @@ gfx::Vector2dF LayerImpl::ClampScrollToMaxScrollOffset() {
 }
 
 void LayerImpl::SetNeedsPushProperties() {
-  if (layer_tree_impl_)
+  if (layer_tree_impl_ && !needs_push_properties_) {
+    needs_push_properties_ = true;
     layer_tree_impl()->AddLayerShouldPushProperties(this);
+  }
 }
 
 void LayerImpl::GetAllPrioritizedTilesForTracing(
@@ -1149,10 +1006,11 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
   state->SetInteger("gpu_memory_usage",
                     base::saturated_cast<int>(GPUMemoryUsageInBytes()));
 
-  if (mutable_properties_ != MutableProperty::kNone) {
-    state->SetInteger("element_id", base::saturated_cast<int>(element_id_));
+  if (element_id_)
+    element_id_.AddToTracedValue(state);
+
+  if (mutable_properties_ != MutableProperty::kNone)
     state->SetInteger("mutable_properties", mutable_properties_);
-  }
 
   MathUtil::AddToTracedValue("scroll_offset", CurrentScrollOffset(), state);
 
@@ -1173,16 +1031,6 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
     state->BeginArray("non_fast_scrollable_region");
     non_fast_scrollable_region_.AsValueInto(state);
     state->EndArray();
-  }
-  if (mask_layer_) {
-    state->BeginDictionary("mask_layer");
-    mask_layer_->AsValueInto(state);
-    state->EndDictionary();
-  }
-  if (replica_layer_) {
-    state->BeginDictionary("replica_layer");
-    replica_layer_->AsValueInto(state);
-    state->EndDictionary();
   }
 
   state->SetBoolean("can_use_lcd_text", CanUseLCDText());
@@ -1339,9 +1187,7 @@ bool LayerImpl::InsideReplica() const {
   EffectNode* node = effect_tree.Node(effect_tree_index_);
 
   while (node->id > 0) {
-    LayerImpl* target_layer = layer_tree_impl()->LayerById(node->owner_id);
-    DCHECK(target_layer);
-    if (target_layer->has_replica())
+    if (node->data.replica_layer_id != -1)
       return true;
     node = effect_tree.Node(node->data.target_id);
   }

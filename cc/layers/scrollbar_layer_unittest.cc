@@ -7,6 +7,7 @@
 #include <unordered_map>
 
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
 #include "cc/input/scrollbar_animation_controller.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/painted_scrollbar_layer.h"
@@ -109,6 +110,8 @@ class ScrollbarLayerTest : public testing::Test {
     params.client = &fake_client_;
     params.settings = &layer_tree_settings_;
     params.task_graph_runner = &task_graph_runner_;
+    params.animation_host =
+        AnimationHost::CreateForTesting(ThreadInstance::MAIN);
 
     layer_tree_host_.reset(
         new FakeResourceTrackingLayerTreeHost(&fake_client_, &params));
@@ -142,6 +145,7 @@ class ScrollbarLayerTest : public testing::Test {
     layer_tree_root->InsertChild(child2, reverse_order ? 0 : 1);
     scrollbar_layer_id_ = reverse_order ? child1->id() : child2->id();
     host->SetRootLayer(layer_tree_root);
+    host->BuildPropertyTreesForTesting();
     return host->CommitAndCreateLayerImplTree();
   }
 
@@ -162,7 +166,6 @@ TEST_F(ScrollbarLayerTest, ShouldScrollNonOverlayOnMainThread) {
       static_cast<PaintedScrollbarLayerImpl*>(
           layer_impl_tree_root->layer_tree_impl()->LayerById(
               scrollbar_layer_id_));
-  layer_impl_tree_root->layer_tree_impl()->BuildPropertyTreesForTesting();
   ScrollTree& scroll_tree =
       layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
   ScrollNode* scroll_node =
@@ -184,7 +187,6 @@ TEST_F(ScrollbarLayerTest, ShouldScrollNonOverlayOnMainThread) {
       layer_tree_host_.get(), std::move(scrollbar), false, false, 0, 0);
   scrollbar_layer_impl = static_cast<PaintedScrollbarLayerImpl*>(
       layer_impl_tree_root->layer_tree_impl()->LayerById(scrollbar_layer_id_));
-  layer_impl_tree_root->layer_tree_impl()->BuildPropertyTreesForTesting();
   scroll_tree =
       layer_impl_tree_root->layer_tree_impl()->property_trees()->scroll_tree;
   scroll_node = scroll_tree.Node(scrollbar_layer_impl->scroll_tree_index());
@@ -524,6 +526,18 @@ TEST_F(ScrollbarLayerTest, ScrollbarLayerOpacity) {
   // Choose layer bounds to give max_scroll_offset = (8, 8).
   layer_tree_root->SetBounds(gfx::Size(2, 2));
   scroll_layer->SetBounds(gfx::Size(10, 10));
+
+  // Building property trees twice shouldn't change the size of
+  // PropertyTrees::always_use_active_tree_opacity_effect_ids.
+  layer_tree_host_->BuildPropertyTreesForTesting();
+  EXPECT_EQ(layer_tree_host_->property_trees()
+                ->always_use_active_tree_opacity_effect_ids.size(),
+            1u);
+  layer_tree_host_->property_trees()->needs_rebuild = true;
+  layer_tree_host_->BuildPropertyTreesForTesting();
+  EXPECT_EQ(layer_tree_host_->property_trees()
+                ->always_use_active_tree_opacity_effect_ids.size(),
+            1u);
 
   // A solid color scrollbar layer's opacity is initialized to 0 on main thread
   layer_tree_host_->UpdateLayers();

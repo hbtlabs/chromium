@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
@@ -41,9 +43,6 @@ namespace error_page {
 
 namespace {
 
-// Some error pages have no details or summary.
-const unsigned int kEmptyMessageResourceID = 0;
-
 static const char kRedirectLoopLearnMoreUrl[] =
     "https://support.google.com/chrome?p=rl_error";
 static const char kWeakDHKeyLearnMoreUrl[] =
@@ -77,11 +76,9 @@ struct LocalizedErrorMap {
   int error_code;
   unsigned int title_resource_id;
   unsigned int heading_resource_id;
-  // Detailed summary used when the error is in the main frame.
+  // Detailed summary used when the error is in the main frame and shown on
+  // mouse over when the error is in a frame.
   unsigned int summary_resource_id;
-  // Short one sentence description shown on mouse over when the error is in
-  // a frame.
-  unsigned int details_resource_id;
   int suggestions;  // Bitmap of SUGGEST_* values.
   int buttons; // Which buttons if any to show.
 };
@@ -91,7 +88,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_TIMED_OUT,
-   IDS_ERRORPAGES_DETAILS_TIMED_OUT,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG |
        SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -100,7 +96,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_TIMED_OUT,
-   IDS_ERRORPAGES_DETAILS_TIMED_OUT,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG |
        SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -109,7 +104,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG |
        SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -118,7 +112,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_RESET,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_RESET,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG |
        SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -127,7 +120,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_REFUSED,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_REFUSED,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG,
    SHOW_BUTTON_RELOAD,
   },
@@ -135,7 +127,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_FAILED,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_FAILED,
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
   },
@@ -143,7 +134,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NAME_NOT_RESOLVED,
-   IDS_ERRORPAGES_DETAILS_NAME_NOT_RESOLVED,
    SUGGEST_CHECK_CONNECTION | SUGGEST_DNS_CONFIG | SUGGEST_FIREWALL_CONFIG |
        SUGGEST_PROXY_CONFIG | SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -152,7 +142,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_ICANN_NAME_COLLISION,
-   IDS_ERRORPAGES_DETAILS_ICANN_NAME_COLLISION,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -160,7 +149,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_ADDRESS_UNREACHABLE,
-   IDS_ERRORPAGES_DETAILS_ADDRESS_UNREACHABLE,
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
   },
@@ -168,7 +156,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NETWORK_ACCESS_DENIED,
    IDS_ERRORPAGES_SUMMARY_NETWORK_ACCESS_DENIED,
-   IDS_ERRORPAGES_DETAILS_NETWORK_ACCESS_DENIED,
    SUGGEST_CHECK_CONNECTION | SUGGEST_FIREWALL_CONFIG |
        SUGGEST_ANTIVIRUS_CONFIG | SUGGEST_DIAGNOSE_TOOL,
    SHOW_NO_BUTTONS,
@@ -177,15 +164,13 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_PROXY_CONNECTION_FAILED,
-   IDS_ERRORPAGES_DETAILS_PROXY_CONNECTION_FAILED,
    SUGGEST_PROXY_CONFIG | SUGGEST_CONTACT_ADMINISTRATOR | SUGGEST_DIAGNOSE_TOOL,
    SHOW_NO_BUTTONS,
   },
   {net::ERR_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
-   kEmptyMessageResourceID,
-   IDS_ERRORPAGES_DETAILS_INTERNET_DISCONNECTED,
+   IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    SUGGEST_OFFLINE_CHECKS | SUGGEST_DIAGNOSE_TOOL,
    SHOW_NO_BUTTONS,
   },
@@ -193,7 +178,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_FILE_NOT_FOUND,
    IDS_ERRORPAGES_SUMMARY_FILE_NOT_FOUND,
-   IDS_ERRORPAGES_DETAILS_FILE_NOT_FOUND,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -201,7 +185,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_CACHE_READ_FAILURE,
    IDS_ERRORPAGES_SUMMARY_CACHE_READ_FAILURE,
-   IDS_ERRORPAGES_DETAILS_CACHE_READ_FAILURE,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -209,7 +192,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_CACHE_READ_FAILURE,
    IDS_ERRORPAGES_SUMMARY_CACHE_READ_FAILURE,
-   IDS_ERRORPAGES_DETAILS_CACHE_READ_FAILURE,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -217,7 +199,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_CONNECTION_INTERRUPTED,
    IDS_ERRORPAGES_SUMMARY_NETWORK_IO_SUSPENDED,
-   IDS_ERRORPAGES_DETAILS_NETWORK_IO_SUSPENDED,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -225,7 +206,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_TOO_MANY_REDIRECTS,
-   IDS_ERRORPAGES_DETAILS_TOO_MANY_REDIRECTS,
    SUGGEST_LEARNMORE,
    SHOW_BUTTON_RELOAD,
   },
@@ -233,7 +213,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_EMPTY_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_EMPTY_RESPONSE,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -241,7 +220,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_CONTENT_LENGTH,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -249,7 +227,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_CONTENT_DISPOSITION,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -257,7 +234,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_RESPONSE_HEADERS_MULTIPLE_LOCATION,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -265,7 +241,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -273,7 +248,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_CONNECTION_CLOSED,
-   IDS_ERRORPAGES_DETAILS_CONNECTION_CLOSED,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -281,7 +255,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
   },
@@ -289,7 +262,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_BAD_SSL_CLIENT_AUTH_CERT,
-   IDS_ERRORPAGES_DETAILS_BAD_SSL_CLIENT_AUTH_CERT,
    SUGGEST_CONTACT_ADMINISTRATOR,
    SHOW_NO_BUTTONS,
   },
@@ -297,7 +269,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
-   IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_LEARNMORE,
    SHOW_NO_BUTTONS,
   },
@@ -305,7 +276,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_CERT_ERROR_SUMMARY_PINNING_FAILURE_DETAILS,
-   IDS_CERT_ERROR_SUMMARY_PINNING_FAILURE_DESCRIPTION,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -313,7 +283,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_ACCESS_DENIED,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
-   IDS_ERRORPAGES_DETAILS_TEMPORARILY_THROTTLED,
    SUGGEST_DISABLE_EXTENSION,
    SHOW_NO_BUTTONS,
   },
@@ -321,7 +290,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_BLOCKED,
    IDS_ERRORPAGES_HEADING_BLOCKED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_EXTENSION,
-   IDS_ERRORPAGES_DETAILS_BLOCKED_BY_EXTENSION,
    SUGGEST_DISABLE_EXTENSION,
    SHOW_BUTTON_RELOAD,
   },
@@ -329,7 +297,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_CONNECTION_INTERRUPTED,
    IDS_ERRORPAGES_SUMMARY_NETWORK_CHANGED,
-   IDS_ERRORPAGES_DETAILS_NETWORK_CHANGED,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -337,7 +304,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_BLOCKED,
    IDS_ERRORPAGES_HEADING_BLOCKED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_BY_ADMINISTRATOR,
-   IDS_ERRORPAGES_DETAILS_BLOCKED_BY_ADMINISTRATOR,
    SUGGEST_CONTACT_ADMINISTRATOR,
    SHOW_NO_BUTTONS,
   },
@@ -345,7 +311,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_BLOCKED,
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    IDS_ERRORPAGES_SUMMARY_BLOCKED_ENROLLMENT_CHECK_PENDING,
-   IDS_ERRORPAGES_DETAILS_BLOCKED_ENROLLMENT_CHECK_PENDING,
    SUGGEST_COMPLETE_SETUP,
    SHOW_NO_BUTTONS,
   },
@@ -353,7 +318,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_INVALID_RESPONSE,
-   IDS_ERRORPAGES_DETAILS_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -361,7 +325,13 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_VERSION_OR_CIPHER_MISMATCH,
-   IDS_ERRORPAGES_DETAILS_SSL_VERSION_OR_CIPHER_MISMATCH,
+   SUGGEST_UNSUPPORTED_CIPHER,
+   SHOW_NO_BUTTONS,
+  },
+  {net::ERR_SSL_OBSOLETE_CIPHER,
+   IDS_ERRORPAGES_TITLE_LOAD_FAILED,
+   IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
+   IDS_ERRORPAGES_SUMMARY_SSL_VERSION_OR_CIPHER_MISMATCH,
    SUGGEST_UNSUPPORTED_CIPHER,
    SHOW_NO_BUTTONS,
   },
@@ -369,7 +339,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_ACCESS_DENIED,
    IDS_ERRORPAGES_HEADING_ACCESS_DENIED,
    IDS_ERRORPAGES_SUMMARY_TEMPORARY_BACKOFF,
-   IDS_ERRORPAGES_DETAILS_TEMPORARY_BACKOFF,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -377,7 +346,6 @@ const LocalizedErrorMap net_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_INSECURE_CONNECTION,
    IDS_ERRORPAGES_SUMMARY_SSL_SECURITY_ERROR,
-   IDS_ERRORPAGES_DETAILS_SSL_PROTOCOL_ERROR,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -391,7 +359,6 @@ const LocalizedErrorMap repost_error = {
   IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
   IDS_HTTP_POST_WARNING_TITLE,
   IDS_ERRORPAGES_HTTP_POST_WARNING,
-  IDS_ERRORPAGES_DETAILS_CACHE_READ_FAILURE,
   SUGGEST_REPOST_RELOAD,
   SHOW_NO_BUTTONS,
 };
@@ -401,7 +368,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_ACCESS_DENIED,
    IDS_ERRORPAGES_HEADING_ACCESS_DENIED,
    IDS_ERRORPAGES_SUMMARY_FORBIDDEN,
-   IDS_ERRORPAGES_DETAILS_FORBIDDEN,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -409,7 +375,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_FOUND,
    IDS_ERRORPAGES_HEADING_NOT_FOUND,
    IDS_ERRORPAGES_SUMMARY_GONE,
-   IDS_ERRORPAGES_DETAILS_GONE,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -418,7 +383,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
-   IDS_ERRORPAGES_DETAILS_INTERNAL_SERVER_ERROR,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -426,7 +390,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
-   IDS_ERRORPAGES_DETAILS_NOT_IMPLEMENTED,
    SUGGEST_NONE,
    SHOW_NO_BUTTONS,
   },
@@ -434,7 +397,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
-   IDS_ERRORPAGES_DETAILS_BAD_GATEWAY,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -442,7 +404,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_WEBSITE_CANNOT_HANDLE_REQUEST,
-   IDS_ERRORPAGES_DETAILS_SERVICE_UNAVAILABLE,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -450,7 +411,6 @@ const LocalizedErrorMap http_error_options[] = {
    IDS_ERRORPAGES_TITLE_LOAD_FAILED,
    IDS_ERRORPAGES_HEADING_PAGE_NOT_WORKING,
    IDS_ERRORPAGES_SUMMARY_GATEWAY_TIMEOUT,
-   IDS_ERRORPAGES_DETAILS_GATEWAY_TIMEOUT,
    SUGGEST_NONE,
    SHOW_BUTTON_RELOAD,
   },
@@ -461,7 +421,6 @@ const LocalizedErrorMap dns_probe_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_DNS_PROBE_RUNNING,
-   IDS_ERRORPAGES_DETAILS_DNS_PROBE_RUNNING,
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
   },
@@ -473,7 +432,6 @@ const LocalizedErrorMap dns_probe_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_DNS_PROBE_RUNNING,
-   IDS_ERRORPAGES_DETAILS_DNS_PROBE_RUNNING,
    // Include SUGGEST_RELOAD so the More button doesn't jump when we update.
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -485,8 +443,7 @@ const LocalizedErrorMap dns_probe_error_options[] = {
   {error_page::DNS_PROBE_FINISHED_NO_INTERNET,
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
-   kEmptyMessageResourceID,
-   IDS_ERRORPAGES_DETAILS_INTERNET_DISCONNECTED,
+   IDS_ERRORPAGES_HEADING_INTERNET_DISCONNECTED,
    SUGGEST_OFFLINE_CHECKS | SUGGEST_DIAGNOSE_TOOL,
    SHOW_NO_BUTTONS,
   },
@@ -494,7 +451,6 @@ const LocalizedErrorMap dns_probe_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NAME_NOT_RESOLVED,
-   IDS_ERRORPAGES_DETAILS_NAME_NOT_RESOLVED,
    SUGGEST_DNS_CONFIG | SUGGEST_FIREWALL_CONFIG | SUGGEST_PROXY_CONFIG |
        SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
@@ -503,7 +459,6 @@ const LocalizedErrorMap dns_probe_error_options[] = {
    IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
    IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
    IDS_ERRORPAGES_SUMMARY_NAME_NOT_RESOLVED,
-   IDS_ERRORPAGES_DETAILS_NAME_NOT_RESOLVED,
    SUGGEST_DIAGNOSE_TOOL,
    SHOW_BUTTON_RELOAD,
   },
@@ -648,11 +603,12 @@ void AddLinkedSuggestionToList(const int error_code,
   repl.SetQueryStr(query);
   GURL learn_more_url_with_locale = learn_more_url.ReplaceComponents(repl);
 
-  base::DictionaryValue* suggestion_list_item = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> suggestion_list_item(
+      new base::DictionaryValue);
   suggestion_list_item->SetString("summary", suggestion_string);
   suggestion_list_item->SetString("learnMoreUrl",
       learn_more_url_with_locale.spec());
-  suggestions_summary_list->Append(suggestion_list_item);
+  suggestions_summary_list->Append(std::move(suggestion_list_item));
 }
 
 // Check if a suggestion is in the bitmap of suggestions.
@@ -927,7 +883,6 @@ void LocalizedError::GetStrings(
     IDS_ERRORPAGES_TITLE_NOT_AVAILABLE,
     IDS_ERRORPAGES_HEADING_NOT_AVAILABLE,
     IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE,
-    kEmptyMessageResourceID,
     SUGGEST_NONE,
     SHOW_NO_BUTTONS,
   };
@@ -947,7 +902,6 @@ void LocalizedError::GetStrings(
     options.title_resource_id = IDS_ERRORPAGES_TITLE_ACCESS_DENIED;
     options.heading_resource_id = IDS_ERRORPAGES_HEADING_FILE_ACCESS_DENIED;
     options.summary_resource_id = IDS_ERRORPAGES_SUMMARY_FILE_ACCESS_DENIED;
-    options.details_resource_id = IDS_ERRORPAGES_DETAILS_FILE_ACCESS_DENIED;
     options.suggestions = SUGGEST_NONE;
     options.buttons = SHOW_BUTTON_RELOAD;
   }
@@ -975,10 +929,7 @@ void LocalizedError::GetStrings(
 
   // Set summary message under the heading.
   summary->SetString(
-      "msg",
-      options.summary_resource_id != kEmptyMessageResourceID
-          ? l10n_util::GetStringUTF16(options.summary_resource_id)
-          : base::string16());
+      "msg", l10n_util::GetStringUTF16(options.summary_resource_id));
 
   // Add a DNS definition string.
   summary->SetString("dnsDefinition",
@@ -1003,12 +954,6 @@ void LocalizedError::GetStrings(
       "hideDetails", l10n_util::GetStringUTF16(
           IDS_ERRORPAGE_NET_BUTTON_HIDE_DETAILS));
   error_strings->Set("summary", summary);
-
-  error_strings->SetString(
-      "errorDetails",
-      options.details_resource_id != kEmptyMessageResourceID
-          ? l10n_util::GetStringUTF16(options.details_resource_id)
-          : base::string16());
 
   base::string16 error_string;
   if (error_domain == net::kErrorDomain) {
@@ -1047,7 +992,8 @@ void LocalizedError::GetStrings(
   error_strings->Set("suggestionsSummaryList", suggestions_summary_list);
 
   if (params->search_url.is_valid()) {
-    base::DictionaryValue* search_suggestion = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> search_suggestion(
+        new base::DictionaryValue);
     search_suggestion->SetString("summary",l10n_util::GetStringUTF16(
         IDS_ERRORPAGES_SUGGESTION_GOOGLE_SEARCH_SUMMARY));
     search_suggestion->SetString("searchUrl", params->search_url.spec() +
@@ -1055,7 +1001,7 @@ void LocalizedError::GetStrings(
     search_suggestion->SetString("searchTerms", params->search_terms);
     search_suggestion->SetInteger("trackingId",
                                   params->search_tracking_id);
-    suggestions_summary_list->Append(search_suggestion);
+    suggestions_summary_list->Append(std::move(search_suggestion));
   }
 
   // Add the reload suggestion, if needed for pages that didn't come
@@ -1119,9 +1065,9 @@ base::string16 LocalizedError::GetErrorDetails(const std::string& error_domain,
   const LocalizedErrorMap* error_map =
       LookupErrorMap(error_domain, error_code, is_post);
   if (error_map)
-    return l10n_util::GetStringUTF16(error_map->details_resource_id);
+    return l10n_util::GetStringUTF16(error_map->summary_resource_id);
   else
-    return l10n_util::GetStringUTF16(IDS_ERRORPAGES_DETAILS_UNKNOWN);
+    return l10n_util::GetStringUTF16(IDS_ERRORPAGES_SUMMARY_NOT_AVAILABLE);
 }
 
 bool LocalizedError::HasStrings(const std::string& error_domain,

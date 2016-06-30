@@ -69,7 +69,7 @@ ChromotingJniRuntime* ChromotingJniRuntime::GetInstance() {
 
 ChromotingJniRuntime::ChromotingJniRuntime() {
   // Grab or create the threads.
-  // TODO(nicholss) We could runtime this as a constructor argument when jni
+  // TODO(nicholss): We could runtime this as a constructor argument when jni
   // runtime is not no longer a singleton.
 
   if (!base::MessageLoop::current()) {
@@ -94,7 +94,9 @@ ChromotingJniRuntime::~ChromotingJniRuntime() {
   // The singleton should only ever be destroyed on the main thread.
   DCHECK(ui_task_runner()->BelongsToCurrentThread());
 
-  base::WaitableEvent done_event(false, false);
+  base::WaitableEvent done_event(
+      base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   network_task_runner()->PostTask(
       FROM_HERE, base::Bind(&ChromotingJniRuntime::DetachFromVmAndSignal,
                             base::Unretained(this), &done_event));

@@ -14,6 +14,9 @@ source_set("exo") {
     "keyboard.cc",
     "keyboard.h",
     "keyboard_delegate.h",
+    "notification_surface.cc",
+    "notification_surface.h",
+    "notification_surface_manager.h",
     "pointer.cc",
     "pointer.h",
     "pointer_delegate.h",
@@ -27,6 +30,7 @@ source_set("exo") {
     "surface.h",
     "surface_delegate.h",
     "surface_observer.h",
+    "surface_property.h",
     "touch.cc",
     "touch.h",
     "touch_delegate.h",
@@ -94,6 +98,7 @@ source_set("unit_tests") {
     "//ash",
     "//base",
     "//cc",
+    "//cc/surfaces:surfaces",
     "//components/user_manager",
     "//gpu/command_buffer/client:gles2_interface",
     "//skia",
@@ -118,12 +123,24 @@ test("exo_unittests") {
   sources = [
     "test/run_all_unittests.cc",
   ]
+
   deps = [
     ":unit_tests",
     "//ash:test_support",
     "//base",
     "//base/test:test_support",
   ]
+
+  data_deps = [
+    "//ash/resources:ash_test_resources_100_percent",
+    "//ash/resources:ash_test_resources_200_percent",
+    "//ash/strings:ash_test_strings",
+  ]
+
+  if (use_x11) {
+    deps += [ "//tools/xdisplaycheck" ]
+  }
+
   if (is_linux) {
     deps += [ "//components/exo/wayland:unit_tests" ]
   }

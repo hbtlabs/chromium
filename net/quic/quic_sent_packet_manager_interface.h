@@ -54,6 +54,9 @@ class NET_EXPORT_PRIVATE QuicSentPacketManagerInterface {
     // TODO(jri): With multipath, this method should probably have a path_id
     // parameter, and should maybe result in the path being marked as inactive.
     virtual void OnPathDegrading() = 0;
+
+    // Called when the Path MTU may have increased.
+    virtual void OnPathMtuIncreased(QuicPacketLength packet_size) = 0;
   };
 
   virtual ~QuicSentPacketManagerInterface() {}
@@ -71,6 +74,8 @@ class NET_EXPORT_PRIVATE QuicSentPacketManagerInterface {
   // Sets max pacing rate of the default path.
   virtual void SetMaxPacingRate(QuicBandwidth max_pacing_rate) = 0;
 
+  // Indicates the handshake has completed, so no handshake packets need to be
+  // retransmitted.
   virtual void SetHandshakeConfirmed() = 0;
 
   virtual void OnIncomingAck(const QuicAckFrame& ack_frame,

@@ -28,6 +28,7 @@
 
 """Wrapper object for the file system / source tree."""
 
+import stat
 import codecs
 import errno
 import exceptions
@@ -274,3 +275,6 @@ class FileSystem(object):
     def splitext(self, path):
         """Return (dirname + os.sep + basename, '.' + ext)"""
         return os.path.splitext(path)
+
+    def make_executable(self, file_path):
+        os.chmod(file_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)

@@ -12,6 +12,7 @@
 #include "base/android/jni_string.h"
 #include "base/strings/string_number_conversions.h"
 #include "jni/VideoCapture_jni.h"
+#include "media/capture/video/android/photo_capabilities.h"
 #include "media/capture/video/android/video_capture_device_factory_android.h"
 #include "mojo/public/cpp/bindings/string.h"
 
@@ -157,6 +158,24 @@ void VideoCaptureDeviceAndroid::TakePhoto(
     base::AutoLock lock(photo_callbacks_lock_);
     photo_callbacks_.push_back(std::move(heap_callback));
   }
+}
+
+void VideoCaptureDeviceAndroid::GetPhotoCapabilities(
+    ScopedResultCallback<GetPhotoCapabilitiesCallback> callback) {
+  JNIEnv* env = AttachCurrentThread();
+
+  PhotoCapabilities caps(
+      Java_VideoCapture_getPhotoCapabilities(env, j_capture_.obj()));
+
+  // TODO(mcasas): Manual member copying sucks, consider adding typemapping from
+  // PhotoCapabilities to mojom::PhotoCapabilitiesPtr, https://crbug.com/622002.
+  mojom::PhotoCapabilitiesPtr photo_capabilities =
+      mojom::PhotoCapabilities::New();
+  photo_capabilities->zoom = mojom::Range::New();
+  photo_capabilities->zoom->current = caps.getCurrentZoom();
+  photo_capabilities->zoom->max = caps.getMaxZoom();
+  photo_capabilities->zoom->min = caps.getMinZoom();
+  callback.Run(std::move(photo_capabilities));
 }
 
 void VideoCaptureDeviceAndroid::OnFrameAvailable(

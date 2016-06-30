@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
@@ -63,22 +64,19 @@ OpenedFileMap::mapped_type& GetOpenedFile(const char* file) {
   return opened_files[file];
 }
 
+const char kNativesFileName[] = "natives_blob.bin";
+
 #if defined(OS_ANDROID)
-const char kNativesFileName64[] = "natives_blob_64.bin";
 const char kSnapshotFileName64[] = "snapshot_blob_64.bin";
-const char kNativesFileName32[] = "natives_blob_32.bin";
 const char kSnapshotFileName32[] = "snapshot_blob_32.bin";
 
 #if defined(__LP64__)
-#define kNativesFileName kNativesFileName64
 #define kSnapshotFileName kSnapshotFileName64
 #else
-#define kNativesFileName kNativesFileName32
 #define kSnapshotFileName kSnapshotFileName32
 #endif
 
 #else  // defined(OS_ANDROID)
-const char kNativesFileName[] = "natives_blob.bin";
 const char kSnapshotFileName[] = "snapshot_blob.bin";
 #endif  // defined(OS_ANDROID)
 
@@ -388,17 +386,6 @@ base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
 
 #if defined(OS_ANDROID)
 // static
-base::PlatformFile V8Initializer::GetOpenNativesFileForChildProcesses(
-    base::MemoryMappedFile::Region* region_out,
-    bool abi_32_bit) {
-  const char* natives_file =
-      abi_32_bit ? kNativesFileName32 : kNativesFileName64;
-  const OpenedFileMap::mapped_type& opened = OpenFileIfNecessary(natives_file);
-  *region_out = opened.second;
-  return opened.first;
-}
-
-// static
 base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
     base::MemoryMappedFile::Region* region_out,
     bool abi_32_bit) {
@@ -410,9 +397,9 @@ base::PlatformFile V8Initializer::GetOpenSnapshotFileForChildProcesses(
 }
 
 // static
-base::FilePath V8Initializer::GetNativesFilePath(bool abi_32_bit) {
+base::FilePath V8Initializer::GetNativesFilePath() {
   base::FilePath path;
-  GetV8FilePath(abi_32_bit ? kNativesFileName32 : kNativesFileName64, &path);
+  GetV8FilePath(kNativesFileName, &path);
   return path;
 }
 
@@ -443,7 +430,9 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
     v8::V8::SetFlagsFromString(flag, sizeof(flag) - 1);
   }
 
+  const char* ignition_enabled_crash_key = "N";
   if (ShouldUseIgnition()) {
+    ignition_enabled_crash_key = "Y";
     std::string flag("--ignition");
     v8::V8::SetFlagsFromString(flag.c_str(), static_cast<int>(flag.size()));
 
@@ -459,6 +448,9 @@ void V8Initializer::Initialize(IsolateHolder::ScriptMode mode,
           lazy_flag.c_str(), static_cast<int>(lazy_flag.size()));
     }
   }
+  static const char kIgnitionEnabledKey[] = "v8-ignition";
+  base::debug::SetCrashKeyValue(kIgnitionEnabledKey,
+                                ignition_enabled_crash_key);
 
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)

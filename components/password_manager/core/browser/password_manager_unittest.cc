@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -124,6 +125,18 @@ ACTION_P(SaveToScopedPtr, scoped) { scoped->reset(arg0); }
 class PasswordManagerTest : public testing::Test {
  protected:
   void SetUp() override {
+    // TODO(jww): The following FeatureList clear can be removed once
+    // https://crbug.com/620435 is resolved. This cleanup is needed because on
+    // some platforms (e.g. iOS), the base::FeatureList is not reset betwen
+    // test runs, so if these unit tests are run right after some other unit
+    // tests that turn on a feature, that might affect these tests. In
+    // particular, the earlier fill-on-account-select unit tests turned on
+    // their respective Feature and that was incorrectly left on for these
+    // tests.
+    base::FeatureList::ClearInstanceForTesting();
+    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    base::FeatureList::SetInstance(std::move(feature_list));
+
     store_ = new testing::StrictMock<MockPasswordStore>;
     EXPECT_CALL(*store_, ReportMetrics(_, _)).Times(AnyNumber());
     CHECK(store_->Init(syncer::SyncableService::StartSyncFlare()));
@@ -160,6 +173,13 @@ class PasswordManagerTest : public testing::Test {
     form.password_value = ASCIIToUTF16("password");
     form.submit_element = ASCIIToUTF16("signIn");
     form.signon_realm = "http://www.google.com";
+    return form;
+  }
+
+  PasswordForm MakeSimpleGAIAForm() {
+    PasswordForm form = MakeSimpleForm();
+    form.origin = GURL("https://accounts.google.com");
+    form.signon_realm = form.origin.spec();
     return form;
   }
 
@@ -565,7 +585,7 @@ TEST_F(PasswordManagerTest, PasswordFormReappearance) {
 TEST_F(PasswordManagerTest, SyncCredentialsNotSaved) {
   // Simulate loading a simple form with no existing stored password.
   std::vector<PasswordForm> observed;
-  PasswordForm form(MakeSimpleForm());
+  PasswordForm form(MakeSimpleGAIAForm());
   observed.push_back(form);
   EXPECT_CALL(*store_, GetLogins(_, _))
       .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
@@ -591,7 +611,7 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotSaved) {
 // When there is a sync password saved, and the user successfully uses the
 // stored version of it, PasswordManager should not drop that password.
 TEST_F(PasswordManagerTest, SyncCredentialsNotDroppedIfUpToDate) {
-  PasswordForm form(MakeSimpleForm());
+  PasswordForm form(MakeSimpleGAIAForm());
   EXPECT_CALL(*store_, GetLogins(_, _))
       .WillRepeatedly(WithArg<1>(InvokeConsumer(form)));
 
@@ -621,7 +641,7 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotDroppedIfUpToDate) {
 // updated version of it, the obsolete one should be dropped, to avoid filling
 // it later.
 TEST_F(PasswordManagerTest, SyncCredentialsDroppedWhenObsolete) {
-  PasswordForm form(MakeSimpleForm());
+  PasswordForm form(MakeSimpleGAIAForm());
   form.password_value = ASCIIToUTF16("old pa55word");
   // Pretend that the password store contains "old pa55word" stored for |form|.
   EXPECT_CALL(*store_, GetLogins(_, _))

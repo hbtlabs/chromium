@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">తదుపరి జాబితా అంశం లేదు.</translation>
 <translation id="1157782847298808853">కీబోర్డ్ సహాయం</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, కాంబో పెట్టె</translation>
+<translation id="1161762950103988776">దాటివేయి</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, మెను అంశం, ఉపమెనుని కలిగి ఉంది</translation>
 <translation id="1177863135347784049">అనుకూలీకరించిన</translation>
 <translation id="1188858454923323853">బహుమానపూర్వకం</translation>
+<translation id="1201402288615127009">తదుపరి</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - Chromeకు వాయిస్‌ను ఇస్తోంది</translation>
 <translation id="1229276918471378188">మునుపటి జంప్</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">సమూహం</translation>
 <translation id="2582407057977008361">ప్రక్కన</translation>
-<translation id="2589102159832527089">ఈ పేజీ PDF ఫైల్ &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; నుండి స్వయంచాలకంగా సంగ్రహించిన వచనాన్ని కలిగి ఉంది. &lt;a href="<ph name="URL" />"&gt;అసలైనదాని కోసం ఇక్కడ క్లిక్ చేయండి.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">{COUNT,plural, =1{# అంశంతో}other{# అంశాలతో}}</translation>
 <translation id="2614981083756825552">గణిత ML లేఅవుట్</translation>
 <translation id="2626530649491650971">క్లిక్ చేయదగినది</translation>
@@ -245,6 +246,7 @@
         "vi": "వియత్నామీస్",
         "zh": "చైనీస్",
         "zh_TW": "చైనీస్ (సాంప్రదాయక హాన్)"}</translation>
+<translation id="335581015389089642">ప్రసంగం</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{కూడిక గుర్తు}other{# కూడిక గుర్తులు}}</translation>
 <translation id="338583716107319301">విభాగిని</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">ఖాళీ</translation>
 <translation id="6142308968191113180">శీర్షిక 4</translation>
 <translation id="6169420925157477918">పెద్ద వివరణ గల చిత్రం</translation>
-<translation id="6172087735260766220">కాపీ-రక్షిత PDF నుండి ప్రాప్యత చేయదగిన వచనాన్ని ప్రాప్యత చేయడం సాధ్యపడలేదు.</translation>
 <translation id="6186305613600865047">పేజీ దిగువకు వెళ్లండి</translation>
 <translation id="6193330012414963395">AM PM</translation>
 <translation id="622484624075952240">Down</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">టాబ్</translation>
 <translation id="667999046851023355">పత్రం</translation>
 <translation id="6697092096875747123">మునుపటి కాంబో పెట్టె</translation>
+<translation id="6710213216561001401">మునుపటి</translation>
 <translation id="6714813999819678458">మునుపటి స్థాయి 2 శీర్షిక</translation>
 <translation id="6716505898850596801">మాడిఫైయర్ కీలు</translation>
 <translation id="671916444866103745">తదుపరి ARIA మైలురాయి లేదు.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">టైమర్</translation>
 <translation id="8065607967589909823">ఎంచుకున్నది</translation>
 <translation id="8066678206530322333">బ్యానర్</translation>
+<translation id="8076492880354921740">ట్యాబ్‌లు</translation>
 <translation id="8110647606445335195">ARIA మైలురాళ్లు లేవు.</translation>
 <translation id="8153880621934657047">లోపల పట్టిక కాదు.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{అండర్‌స్కోర్ గుర్తు}other{# అండర్‌స్కోర్ గుర్తులు}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">తదుపరి స్థాయి 3 శీర్షిక లేదు.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">మునుపటి తనిఖీపెట్టె లేదు.</translation>
+<translation id="8446884382197647889">మరింత తెలుసుకోండి</translation>
 <translation id="8455868257606149352">గరిష్టం <ph name="X" /></translation>
 <translation id="84575901236241018">ప్రాప్యత కీ కలిగి ఉంది, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">విండో స్థూలదృష్టి</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">బ్రౌజ్ చేయడానికి పైకి మరియు క్రిందికి బాణం కీలను ఉపయోగించండి లేదా శోధించడానికి టైప్ చేయండి.</translation>
 <translation id="9192904702577636854">మార్కీ</translation>
 <translation id="9212322457209634662">తదుపరి విభాగం లేదు.</translation>
+<translation id="923331726185079994">ChromeVox నవీకరించబడింది</translation>
 <translation id="930275611743429116">ఎంపికను ప్రారంభించండి లేదా ముగించండి.</translation>
 <translation id="948171205378458592">ప్రసంగ రేటుని తగ్గించండి</translation>
 <translation id="962913030769097253">తదుపరి స్థాయి 1 శీర్షిక</translation>
 <translation id="973955474346881951">స్టిక్కీ మోడ్‌ను ప్రారంభించండి/ఆపివేయండి</translation>
+<translation id="976849232629612000">అంశాలు లేవు.</translation>
 </translationbundle>

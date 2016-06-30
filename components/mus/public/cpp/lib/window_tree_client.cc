@@ -21,13 +21,16 @@
 #include "components/mus/public/cpp/window_tracker.h"
 #include "components/mus/public/cpp/window_tree_client_delegate.h"
 #include "components/mus/public/cpp/window_tree_client_observer.h"
+#include "components/mus/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/shell/public/cpp/connector.h"
+#include "ui/display/mojo/display_type_converters.h"
 #include "ui/events/event.h"
-#include "ui/events/mojo/input_events_type_converters.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace mus {
+
+void DeleteWindowTreeClient(WindowTreeClient* client) { delete client; }
 
 Id MakeTransportId(ClientSpecificId client_id, ClientSpecificId local_id) {
   return (client_id << 16) | local_id;
@@ -95,9 +98,8 @@ WindowTreeClient::WindowTreeClient(
       focused_window_(nullptr),
       binding_(this),
       tree_(nullptr),
-      delete_on_no_roots_(true),
+      delete_on_no_roots_(!window_manager_delegate),
       in_destructor_(false),
-      cursor_location_memory_(nullptr),
       weak_factory_(this) {
   // Allow for a null request in tests.
   if (request.is_pending())
@@ -144,13 +146,21 @@ void WindowTreeClient::ConnectViaWindowTreeFactory(
 
   mojom::WindowTreeFactoryPtr factory;
   connector->ConnectToInterface("mojo:mus", &factory);
-  factory->CreateWindowTree(GetProxy(&tree_ptr_),
+  mojom::WindowTreePtr window_tree;
+  factory->CreateWindowTree(GetProxy(&window_tree),
                             binding_.CreateInterfacePtrAndBind());
-  tree_ = tree_ptr_.get();
+  SetWindowTree(std::move(window_tree));
+}
 
-  tree_ptr_->GetCursorLocationMemory(
-      base::Bind(&WindowTreeClient::OnReceivedCursorLocationMemory,
-                 weak_factory_.GetWeakPtr()));
+void WindowTreeClient::ConnectAsWindowManager(shell::Connector* connector) {
+  DCHECK(window_manager_delegate_);
+
+  mojom::WindowManagerWindowTreeFactoryPtr factory;
+  connector->ConnectToInterface("mojo:mus", &factory);
+  mojom::WindowTreePtr window_tree;
+  factory->CreateWindowTree(GetProxy(&window_tree),
+                            binding_.CreateInterfacePtrAndBind());
+  SetWindowTree(std::move(window_tree));
 }
 
 void WindowTreeClient::WaitForEmbed() {
@@ -344,12 +354,12 @@ void WindowTreeClient::SetImeVisibility(Id window_id,
   tree_->SetImeVisibility(window_id, visible, std::move(state));
 }
 
-void WindowTreeClient::Embed(
-    Id window_id,
-    mojom::WindowTreeClientPtr client,
-    const mojom::WindowTree::EmbedCallback& callback) {
+void WindowTreeClient::Embed(Id window_id,
+                             mojom::WindowTreeClientPtr client,
+                             uint32_t flags,
+                             const mojom::WindowTree::EmbedCallback& callback) {
   DCHECK(tree_);
-  tree_->Embed(window_id, std::move(client), callback);
+  tree_->Embed(window_id, std::move(client), flags, callback);
 }
 
 void WindowTreeClient::RequestClose(Window* window) {
@@ -502,6 +512,27 @@ Window* WindowTreeClient::NewWindowImpl(
   return window;
 }
 
+void WindowTreeClient::SetWindowTree(mojom::WindowTreePtr window_tree_ptr) {
+  tree_ptr_ = std::move(window_tree_ptr);
+  tree_ = tree_ptr_.get();
+
+  tree_ptr_->GetCursorLocationMemory(
+      base::Bind(&WindowTreeClient::OnReceivedCursorLocationMemory,
+                 weak_factory_.GetWeakPtr()));
+
+  tree_ptr_.set_connection_error_handler(base::Bind(
+      &WindowTreeClient::OnConnectionLost, weak_factory_.GetWeakPtr()));
+
+  if (window_manager_delegate_) {
+    tree_ptr_->GetWindowManagerClient(GetProxy(&window_manager_internal_client_,
+                                               tree_ptr_.associated_group()));
+  }
+}
+
+void WindowTreeClient::OnConnectionLost() {
+  delete this;
+}
+
 void WindowTreeClient::OnEmbedImpl(mojom::WindowTree* window_tree,
                                        ClientSpecificId client_id,
                                        mojom::WindowDataPtr root_data,
@@ -530,19 +561,23 @@ void WindowTreeClient::OnEmbedImpl(mojom::WindowTree* window_tree,
   }
 }
 
+void WindowTreeClient::WmNewDisplayAddedImpl(const display::Display& display,
+                                             mojom::WindowDataPtr root_data,
+                                             bool parent_drawn) {
+  DCHECK(window_manager_delegate_);
+
+  Window* root = AddWindowToClient(this, nullptr, root_data);
+  WindowPrivate(root).LocalSetDisplay(display.id());
+  WindowPrivate(root).LocalSetParentDrawn(parent_drawn);
+  roots_.insert(root);
+
+  window_manager_delegate_->OnWmNewDisplay(root, display);
+}
+
 void WindowTreeClient::OnReceivedCursorLocationMemory(
     mojo::ScopedSharedBufferHandle handle) {
-  cursor_location_handle_ = std::move(handle);
-  MojoResult result = mojo::MapBuffer(
-      cursor_location_handle_.get(), 0,
-      sizeof(base::subtle::Atomic32),
-      reinterpret_cast<void**>(&cursor_location_memory_),
-      MOJO_MAP_BUFFER_FLAG_NONE);
-  if (result != MOJO_RESULT_OK) {
-    NOTREACHED();
-    return;
-  }
-  DCHECK(cursor_location_memory_);
+  cursor_location_mapping_ = handle->Map(sizeof(base::subtle::Atomic32));
+  DCHECK(cursor_location_mapping_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -569,11 +604,11 @@ void WindowTreeClient::ClearFocus() {
 
 gfx::Point WindowTreeClient::GetCursorScreenPoint() {
   // We raced initialization. Return (0, 0).
-  if (!cursor_location_memory_)
+  if (!cursor_location_memory())
     return gfx::Point();
 
   base::subtle::Atomic32 location =
-      base::subtle::NoBarrier_Load(cursor_location_memory_);
+      base::subtle::NoBarrier_Load(cursor_location_memory());
   return gfx::Point(static_cast<int16_t>(location >> 16),
                     static_cast<int16_t>(location & 0xFFFF));
 }
@@ -604,6 +639,28 @@ Window* WindowTreeClient::NewTopLevelWindow(
   return window;
 }
 
+#if !defined(NDEBUG)
+std::string WindowTreeClient::GetDebugWindowHierarchy() const {
+  std::string result;
+  for (Window* root : roots_)
+    BuildDebugInfo(std::string(), root, &result);
+  return result;
+}
+
+void WindowTreeClient::BuildDebugInfo(const std::string& depth,
+                                      Window* window,
+                                      std::string* result) const {
+  std::string name = window->GetName();
+  *result += base::StringPrintf(
+      "%sid=%d visible=%s bounds=%d,%d %dx%d %s\n", depth.c_str(),
+      window->server_id(), window->visible() ? "true" : "false",
+      window->bounds().x(), window->bounds().y(), window->bounds().width(),
+      window->bounds().height(), !name.empty() ? name.c_str() : "(no name)");
+  for (Window* child : window->children())
+    BuildDebugInfo(depth + "  ", child, result);
+}
+#endif  // !defined(NDEBUG)
+
 ////////////////////////////////////////////////////////////////////////////////
 // WindowTreeClient, WindowTreeClient implementation:
 
@@ -623,7 +680,8 @@ void WindowTreeClient::OnEmbed(ClientSpecificId client_id,
                                    bool drawn) {
   DCHECK(!tree_ptr_);
   tree_ptr_ = std::move(tree);
-  tree_ptr_.set_connection_error_handler([this]() { delete this; });
+  tree_ptr_.set_connection_error_handler(
+      base::Bind(&DeleteWindowTreeClient, this));
 
   if (window_manager_delegate_) {
     tree_ptr_->GetWindowManagerClient(GetProxy(&window_manager_internal_client_,
@@ -874,17 +932,17 @@ void WindowTreeClient::OnWindowSharedPropertyChanged(
 }
 
 void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
-                                              Id window_id,
-                                              mojom::EventPtr event,
-                                              uint32_t event_observer_id) {
-  std::unique_ptr<ui::Event> ui_event = event.To<std::unique_ptr<ui::Event>>();
+                                          Id window_id,
+                                          std::unique_ptr<ui::Event> event,
+                                          uint32_t event_observer_id) {
+  DCHECK(event);
   Window* window = GetWindowByServerId(window_id);  // May be null.
 
   // Non-zero event_observer_id means it matched an event observer on the
   // server.
   if (event_observer_id != 0 && has_event_observer_ &&
       event_observer_id == event_observer_id_)
-    delegate_->OnEventObserved(*ui_event, window);
+    delegate_->OnEventObserved(*event.get(), window);
 
   if (!window || !window->input_event_handler_) {
     tree_->OnWindowInputEventAck(event_id, mojom::EventResult::UNHANDLED);
@@ -895,8 +953,19 @@ void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
       new base::Callback<void(mojom::EventResult)>(
           base::Bind(&mojom::WindowTree::OnWindowInputEventAck,
                      base::Unretained(tree_), event_id)));
-  window->input_event_handler_->OnWindowInputEvent(
-      window, *event.To<std::unique_ptr<ui::Event>>().get(), &ack_callback);
+
+  // TODO(moshayedi): crbug.com/617222. No need to convert to ui::MouseEvent or
+  // ui::TouchEvent once we have proper support for pointer events.
+  if (event->IsMousePointerEvent()) {
+    window->input_event_handler_->OnWindowInputEvent(
+        window, ui::MouseEvent(*event->AsPointerEvent()), &ack_callback);
+  } else if (event->IsTouchPointerEvent()) {
+    window->input_event_handler_->OnWindowInputEvent(
+        window, ui::TouchEvent(*event->AsPointerEvent()), &ack_callback);
+  } else {
+    window->input_event_handler_->OnWindowInputEvent(window, *event.get(),
+                                                     &ack_callback);
+  }
 
   // The handler did not take ownership of the callback, so we send the ack,
   // marking the event as not consumed.
@@ -904,13 +973,11 @@ void WindowTreeClient::OnWindowInputEvent(uint32_t event_id,
     ack_callback->Run(mojom::EventResult::UNHANDLED);
 }
 
-void WindowTreeClient::OnEventObserved(mojom::EventPtr event,
-                                           uint32_t event_observer_id) {
-  if (has_event_observer_ && event_observer_id == event_observer_id_) {
-    std::unique_ptr<ui::Event> ui_event =
-        event.To<std::unique_ptr<ui::Event>>();
-    delegate_->OnEventObserved(*ui_event, nullptr /* target */);
-  }
+void WindowTreeClient::OnEventObserved(std::unique_ptr<ui::Event> event,
+                                       uint32_t event_observer_id) {
+  DCHECK(event);
+  if (has_event_observer_ && event_observer_id == event_observer_id_)
+    delegate_->OnEventObserved(*event.get(), nullptr /* target */);
 }
 
 void WindowTreeClient::OnWindowFocused(Id focused_window_id) {
@@ -968,6 +1035,17 @@ void WindowTreeClient::RequestClose(uint32_t window_id) {
 
   FOR_EACH_OBSERVER(WindowObserver, *WindowPrivate(window).observers(),
                     OnRequestClose(window));
+}
+
+void WindowTreeClient::OnConnect(ClientSpecificId client_id) {
+  client_id_ = client_id;
+}
+
+void WindowTreeClient::WmNewDisplayAdded(mojom::DisplayPtr display,
+                                         mojom::WindowDataPtr root_data,
+                                         bool parent_drawn) {
+  WmNewDisplayAddedImpl(display.To<display::Display>(), std::move(root_data),
+                        parent_drawn);
 }
 
 void WindowTreeClient::WmSetBounds(uint32_t change_id,
@@ -1039,9 +1117,10 @@ void WindowTreeClient::WmClientJankinessChanged(ClientSpecificId client_id,
   }
 }
 
-void WindowTreeClient::OnAccelerator(uint32_t id, mojom::EventPtr event) {
-  window_manager_delegate_->OnAccelerator(
-      id, *event.To<std::unique_ptr<ui::Event>>().get());
+void WindowTreeClient::OnAccelerator(uint32_t id,
+                                     std::unique_ptr<ui::Event> event) {
+  DCHECK(event);
+  window_manager_delegate_->OnAccelerator(id, *event.get());
 }
 
 void WindowTreeClient::SetFrameDecorationValues(

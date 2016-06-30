@@ -14,12 +14,10 @@
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/engine/feature/engine_render_widget_feature.h"
 #include "blimp/engine/feature/engine_settings_feature.h"
-#include "blimp/engine/session/page_load_tracker.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/connection_error_observer.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/web_contents_delegate.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "net/base/completion_callback.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/gfx/geometry/size.h"
@@ -56,6 +54,9 @@ namespace blimp {
 class BlimpConnection;
 class BlimpMessage;
 class BlimpMessageThreadPipe;
+class BlobCache;
+class BlobChannelSender;
+class HeliumBlobSenderDelegate;
 class ThreadPipeManager;
 class SettingsManager;
 
@@ -67,14 +68,13 @@ class BlimpFocusClient;
 class BlimpScreen;
 class BlimpWindowTreeHost;
 class EngineNetworkComponents;
+class Tab;
 
 class BlimpEngineSession
     : public BlimpMessageProcessor,
       public content::WebContentsDelegate,
-      public content::WebContentsObserver,
       public ui::InputMethodObserver,
-      public EngineRenderWidgetFeature::RenderWidgetMessageDelegate,
-      public PageLoadTrackerClient {
+      public EngineRenderWidgetFeature::RenderWidgetMessageDelegate {
  public:
   using GetPortCallback = base::Callback<void(uint16_t)>;
 
@@ -91,6 +91,10 @@ class BlimpEngineSession
 
   BlimpBrowserContext* browser_context() { return browser_context_.get(); }
 
+  BlobChannelSender* blob_channel_sender() {
+    return blob_channel_sender_.get();
+  }
+
   // Gets Engine's listening port. Invokes callback with the allocated port.
   void GetEnginePortForTesting(const GetPortCallback& callback);
 
@@ -105,19 +109,16 @@ class BlimpEngineSession
   void RegisterFeatures();
 
   // TabControlMessage handler methods.
-  // Creates a new WebContents, which will be indexed by |target_tab_id|.
-  // Returns true if a new WebContents is created, false otherwise.
-  bool CreateWebContents(const int target_tab_id);
+  // Creates a new tab, which will be indexed by |target_tab_id|.
+  // Returns true if a new tab is created, false otherwise.
+  bool CreateTab(const int target_tab_id);
 
-  void CloseWebContents(const int target_tab_id);
+  // Closes an existing tab, indexed by |target_tab_id|.
+  void CloseTab(const int target_tab_id);
+
+  // Resizes screen to |size| in pixels, and updates its device pixel ratio to
+  // |device_pixel_ratio|.
   void HandleResize(float device_pixel_ratio, const gfx::Size& size);
-
-  // NavigationMessage handler methods.
-  // Navigates the target tab to the |url|.
-  void LoadUrl(const int target_tab_id, const GURL& url);
-  void GoBack(const int target_tab_id);
-  void GoForward(const int target_tab_id);
-  void Reload(const int target_tab_id);
 
   // RenderWidgetMessage handler methods.
   // RenderWidgetMessageDelegate implementation.
@@ -158,17 +159,9 @@ class BlimpEngineSession
   void OnInputMethodDestroyed(const ui::InputMethod* input_method) override;
   void OnShowImeIfNeeded() override;
 
-  // content::WebContentsObserver implementation.
-  void RenderViewCreated(content::RenderViewHost* render_view_host) override;
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
-  void RenderViewDeleted(content::RenderViewHost* render_view_host) override;
-
-  // PageLoadTrackerClient implementation.
-  void SendPageLoadStatusUpdate(PageLoadStatus load_status) override;
-
-  // Sets up and owns |new_contents|.
-  void PlatformSetContents(std::unique_ptr<content::WebContents> new_contents);
+  // Sets up |new_contents| to be associated with the root window.
+  void PlatformSetContents(std::unique_ptr<content::WebContents> new_contents,
+                           const int target_tab_id);
 
   // Presents the client's single screen.
   // Screen should be deleted after browser context (crbug.com/613372).
@@ -194,13 +187,6 @@ class BlimpEngineSession
   // Used to attach null-parented windows (e.g. popups) to the root window.
   std::unique_ptr<aura::client::WindowTreeClient> window_tree_client_;
 
-  // Only one web_contents is supported for blimp 0.5
-  std::unique_ptr<content::WebContents> web_contents_;
-
-  // Tracks the page load status for a tab. Each PageLoadTracker is tied to a
-  // WebContents.
-  std::unique_ptr<PageLoadTracker> page_load_tracker_;
-
   // Manages all global settings for the engine session.
   SettingsManager* settings_manager_;
 
@@ -210,6 +196,13 @@ class BlimpEngineSession
   // Handles all incoming and outgoing messages related to RenderWidget,
   // including INPUT, COMPOSITOR and RENDER_WIDGET messages.
   EngineRenderWidgetFeature render_widget_feature_;
+
+  // Sends outgoing blob data as BlimpMessages.
+  HeliumBlobSenderDelegate* blob_delegate_;
+
+  // Receives image data from the renderer and sends it to the client via
+  // |blob_delegate_|.
+  std::unique_ptr<BlobChannelSender> blob_channel_sender_;
 
   // Container for connection manager, authentication handler, and
   // browser connection handler. The components run on the I/O thread, and
@@ -221,6 +214,9 @@ class BlimpEngineSession
   // Used to send TAB_CONTROL or NAVIGATION messages to client.
   std::unique_ptr<BlimpMessageProcessor> tab_control_message_sender_;
   std::unique_ptr<BlimpMessageProcessor> navigation_message_sender_;
+
+  // TODO(haibinlu): Support more than one tab (crbug/547231)
+  std::unique_ptr<Tab> tab_;
 
   DISALLOW_COPY_AND_ASSIGN(BlimpEngineSession);
 };

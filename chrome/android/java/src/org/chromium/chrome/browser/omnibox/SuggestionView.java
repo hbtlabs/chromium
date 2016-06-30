@@ -80,6 +80,7 @@ class SuggestionView extends ViewGroup {
 
     private final int mSuggestionHeight;
     private final int mSuggestionAnswerHeight;
+    private int mNumAnswerLines = 1;
 
     private OmniboxResultItem mSuggestionItem;
     private OmniboxSuggestion mSuggestion;
@@ -211,7 +212,14 @@ class SuggestionView extends ViewGroup {
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = mSuggestionHeight;
-        if (!TextUtils.isEmpty(mSuggestion.getAnswerContents())) {
+        boolean refineVisible = mRefineView.getVisibility() == VISIBLE;
+        int refineWidth = refineVisible ? mRefineWidth : 0;
+        if (mNumAnswerLines > 1) {
+            mContentsView.measure(
+                    MeasureSpec.makeMeasureSpec(width - refineWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(mSuggestionAnswerHeight * 2, MeasureSpec.AT_MOST));
+            height = mContentsView.getMeasuredHeight();
+        } else if (!TextUtils.isEmpty(mSuggestion.getAnswerContents())) {
             height = mSuggestionAnswerHeight;
         }
         setMeasuredDimension(width, height);
@@ -220,11 +228,11 @@ class SuggestionView extends ViewGroup {
         // after setting the height.
         if (width == 0) return;
 
-        boolean refineVisible = mRefineView.getVisibility() == VISIBLE;
-        int refineWidth = refineVisible ? mRefineWidth : 0;
-        mContentsView.measure(
-                MeasureSpec.makeMeasureSpec(width - refineWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        if (mNumAnswerLines == 1) {
+            mContentsView.measure(
+                    MeasureSpec.makeMeasureSpec(width - refineWidth, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        }
         mContentsView.getLayoutParams().width = mContentsView.getMeasuredWidth();
         mContentsView.getLayoutParams().height = mContentsView.getMeasuredHeight();
 
@@ -296,6 +304,10 @@ class SuggestionView extends ViewGroup {
             mContentsView.mTextLine2.setVisibility(VISIBLE);
             setRefinable(true);
             return;
+        } else {
+            mNumAnswerLines = 1;
+            mContentsView.mTextLine2.setEllipsize(null);
+            mContentsView.mTextLine2.setSingleLine();
         }
 
         boolean sameAsTyped =
@@ -332,9 +344,7 @@ class SuggestionView extends ViewGroup {
             setSuggestedQuery(suggestionItem, false, false, false);
             if ((suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_ENTITY)
                     || (suggestionType == OmniboxSuggestionType.SEARCH_SUGGEST_PROFILE)) {
-                showDescriptionLine(
-                        SpannableString.valueOf(mSuggestion.getDescription()),
-                        getStandardFontColor());
+                showDescriptionLine(SpannableString.valueOf(mSuggestion.getDescription()), false);
             } else {
                 mContentsView.mTextLine2.setVisibility(INVISIBLE);
             }
@@ -398,7 +408,7 @@ class SuggestionView extends ViewGroup {
         Spannable str = SpannableString.valueOf(suggestion.getDisplayText());
         boolean hasMatch = applyHighlightToMatchRegions(
                 str, suggestion.getDisplayTextClassifications());
-        showDescriptionLine(str, URL_COLOR);
+        showDescriptionLine(str, true);
         return hasMatch;
     }
 
@@ -432,13 +442,23 @@ class SuggestionView extends ViewGroup {
      * Sets a description line for the omnibox suggestion.
      *
      * @param str The description text.
+     * @param isUrl Whether this text is a URL (as opposed to a normal string).
      */
-    private void showDescriptionLine(Spannable str, int textColor) {
-        if (mContentsView.mTextLine2.getVisibility() != VISIBLE) {
-            mContentsView.mTextLine2.setVisibility(VISIBLE);
+    private void showDescriptionLine(Spannable str, boolean isUrl) {
+        TextView textLine = mContentsView.mTextLine2;
+        if (textLine.getVisibility() != VISIBLE) {
+            textLine.setVisibility(VISIBLE);
         }
-        mContentsView.mTextLine2.setTextColor(textColor);
-        mContentsView.mTextLine2.setText(str, BufferType.SPANNABLE);
+        textLine.setText(str, BufferType.SPANNABLE);
+
+        // Force left-to-right rendering for URLs. See UrlBar constructor for details.
+        if (isUrl) {
+            textLine.setTextColor(URL_COLOR);
+            ApiCompatibilityUtils.setTextDirection(textLine, TEXT_DIRECTION_LTR);
+        } else {
+            textLine.setTextColor(getStandardFontColor());
+            ApiCompatibilityUtils.setTextDirection(textLine, TEXT_DIRECTION_INHERIT);
+        }
     }
 
     /**
@@ -510,6 +530,15 @@ class SuggestionView extends ViewGroup {
         mContentsView.mTextLine1.setText(str, BufferType.SPANNABLE);
     }
 
+    static int parseNumAnswerLines(List<SuggestionAnswer.TextField> textFields) {
+        for (int i = 0; i < textFields.size(); i++) {
+            if (textFields.get(i).hasNumLines()) {
+                return Math.min(3, textFields.get(i).getNumLines());
+            }
+        }
+        return -1;
+    }
+
     /**
      * Sets both lines of the Omnibox suggestion based on an Answers in Suggest result.
      *
@@ -522,13 +551,23 @@ class SuggestionView extends ViewGroup {
         mContentsView.mTextLine1.setTextSize(AnswerTextBuilder.getMaxTextHeightSp(firstLine));
         Spannable firstLineText = AnswerTextBuilder.buildSpannable(
                 firstLine, mContentsView.mTextLine1.getPaint().getFontMetrics(), density);
-        mContentsView.mTextLine1.setText(firstLineText, BufferType.SPANNABLE);
+        mContentsView.mTextLine1.setText(firstLineText);
 
         SuggestionAnswer.ImageLine secondLine = answer.getSecondLine();
         mContentsView.mTextLine2.setTextSize(AnswerTextBuilder.getMaxTextHeightSp(secondLine));
         Spannable secondLineText = AnswerTextBuilder.buildSpannable(
                 secondLine, mContentsView.mTextLine2.getPaint().getFontMetrics(), density);
-        mContentsView.mTextLine2.setText(secondLineText, BufferType.SPANNABLE);
+        mContentsView.mTextLine2.setText(secondLineText);
+        mNumAnswerLines = parseNumAnswerLines(secondLine.getTextFields());
+        if (mNumAnswerLines == -1) mNumAnswerLines = 1;
+        if (mNumAnswerLines == 1) {
+            mContentsView.mTextLine2.setEllipsize(null);
+            mContentsView.mTextLine2.setSingleLine();
+        } else {
+            mContentsView.mTextLine2.setSingleLine(false);
+            mContentsView.mTextLine2.setEllipsize(TextUtils.TruncateAt.END);
+            mContentsView.mTextLine2.setMaxLines(mNumAnswerLines);
+        }
 
         if (secondLine.hasImage()) {
             mContentsView.mAnswerImage.setVisibility(VISIBLE);
@@ -724,9 +763,7 @@ class SuggestionView extends ViewGroup {
             if (line1Height + line2Height > height) {
                 // The text lines total height is larger than this view, snap them to the top and
                 // bottom of the view.
-                if (child == mTextLine1) {
-                    verticalOffset = 0;
-                } else {
+                if (child != mTextLine1) {
                     verticalOffset = height - line2Height;
                 }
             } else {
@@ -753,6 +790,10 @@ class SuggestionView extends ViewGroup {
                 if (child == mAnswerImage) {
                     verticalOffset += getResources().getDimensionPixelOffset(
                             R.dimen.omnibox_suggestion_answer_line2_vertical_spacing);
+                }
+
+                if (child != mTextLine1 && verticalOffset + line2Height > height) {
+                    verticalOffset = height - line2Height;
                 }
             }
 
@@ -868,8 +909,6 @@ class SuggestionView extends ViewGroup {
 
         @Override
         protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-
             int width = MeasureSpec.getSize(widthMeasureSpec);
             int height = MeasureSpec.getSize(heightMeasureSpec);
 
@@ -885,6 +924,22 @@ class SuggestionView extends ViewGroup {
                 mTextLine2.measure(
                         MeasureSpec.makeMeasureSpec(widthMeasureSpec, MeasureSpec.AT_MOST),
                         MeasureSpec.makeMeasureSpec(mSuggestionHeight, MeasureSpec.AT_MOST));
+            }
+            if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.AT_MOST) {
+                int desiredHeight = mTextLine1.getMeasuredHeight() + mTextLine2.getMeasuredHeight();
+                int additionalPadding = (int) getResources().getDimension(
+                        R.dimen.omnibox_suggestion_text_vertical_padding);
+                if (mSuggestion.hasAnswer()) {
+                    additionalPadding += (int) getResources().getDimension(
+                            R.dimen.omnibox_suggestion_multiline_text_vertical_padding);
+                }
+                desiredHeight += additionalPadding;
+                desiredHeight = Math.min(MeasureSpec.getSize(heightMeasureSpec), desiredHeight);
+                super.onMeasure(widthMeasureSpec,
+                        MeasureSpec.makeMeasureSpec(desiredHeight, MeasureSpec.EXACTLY));
+            } else {
+                assert MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY;
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
             }
         }
 
@@ -913,7 +968,7 @@ class SuggestionView extends ViewGroup {
         protected int[] onCreateDrawableState(int extraSpace) {
             // When creating the drawable states, treat selected as focused to get the proper
             // highlight when in non-touch mode (i.e. physical keyboard).  This is because only
-            // a single view in a window can have focus, and the these will only appear if
+            // a single view in a window can have focus, and these will only appear if
             // the omnibox has focus, so we trick the drawable state into believing it has it.
             mForceIsFocused = isSelected() && !isInTouchMode();
             int[] drawableState = super.onCreateDrawableState(extraSpace);

@@ -6,21 +6,21 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <set>
 #include <sstream>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/mru_cache.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
-#include "base/strings/string_split.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
@@ -57,32 +57,18 @@ using content::BrowserThread;
 
 namespace chrome_browser_net {
 
-namespace {
-const base::Feature kUsePredictorDNSQueue{"UsePredictorDNSQueue",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-}
-
 // static
 const int Predictor::kPredictorReferrerVersion = 2;
 const double Predictor::kPreconnectWorthyExpectedValue = 0.8;
 const double Predictor::kDNSPreresolutionWorthyExpectedValue = 0.1;
 const double Predictor::kDiscardableExpectedValue = 0.05;
-// The goal is of trimming is to to reduce the importance (number of expected
-// subresources needed) by a factor of 2 after about 24 hours of uptime. We will
-// trim roughly once-an-hour of uptime.  The ratio to use in each trim operation
-// is then the 24th root of 0.5.  If a user only surfs for 4 hours a day, then
-// after about 6 days they will have halved all their estimates of subresource
-// connections.  Once this falls below kDiscardableExpectedValue the referrer
-// will be discarded.
-// TODO(jar): Measure size of referrer lists in the field.  Consider an adaptive
-// system that uses a higher trim ratio when the list is large.
-// static
-const double Predictor::kReferrerTrimRatio = 0.97153;
-const int64_t Predictor::kDurationBetweenTrimmingsHours = 1;
-const int64_t Predictor::kDurationBetweenTrimmingIncrementsSeconds = 15;
-const size_t Predictor::kUrlsTrimmedPerIncrement = 5u;
 const size_t Predictor::kMaxSpeculativeParallelResolves = 3;
 const int Predictor::kMaxUnusedSocketLifetimeSecondsWithoutAGet = 10;
+
+// TODO(csharrison): Tune this by observing UMA. We can probably get a lot
+// lower.
+const int Predictor::kMaxReferrers = 1000;
+
 // To control our congestion avoidance system, which discards a queue when
 // resolutions are "taking too long," we need an expected resolution time.
 // Common average is in the range of 300-500ms.
@@ -120,8 +106,7 @@ Predictor::Predictor(bool preconnect_enabled, bool predictor_enabled)
       proxy_service_(nullptr),
       preconnect_enabled_(preconnect_enabled),
       consecutive_omnibox_preconnect_count_(0),
-      next_trim_time_(base::TimeTicks::Now() +
-                      TimeDelta::FromHours(kDurationBetweenTrimmingsHours)),
+      referrers_(kMaxReferrers),
       observer_(nullptr),
       timed_cache_(new TimedCache(base::TimeDelta::FromSeconds(
           kMaxUnusedSocketLifetimeSecondsWithoutAGet))) {
@@ -162,25 +147,15 @@ void Predictor::InitNetworkPredictor(PrefService* user_prefs,
   // Gather the list of hostnames to prefetch on startup.
   std::vector<GURL> urls = GetPredictedUrlListAtStartup(user_prefs);
 
-  base::ListValue* referral_list =
-      static_cast<base::ListValue*>(user_prefs->GetList(
-          prefs::kDnsPrefetchingHostReferralList)->DeepCopy());
-
-  // Now that we have the statistics in memory, wipe them from the Preferences
-  // file. They will be serialized back on a clean shutdown. This way we only
-  // have to worry about clearing our in-memory state when Clearing Browsing
-  // Data.
-  user_prefs->ClearPref(prefs::kDnsPrefetchingStartupList);
-  user_prefs->ClearPref(prefs::kDnsPrefetchingHostReferralList);
+  std::unique_ptr<base::ListValue> referral_list = base::WrapUnique(
+      user_prefs->GetList(prefs::kDnsPrefetchingHostReferralList)->DeepCopy());
 
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
-      base::Bind(
-          &Predictor::FinalizeInitializationOnIOThread,
-          base::Unretained(this),
-          urls, referral_list,
-          io_thread, profile_io_data));
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&Predictor::FinalizeInitializationOnIOThread,
+                 base::Unretained(this), urls,
+                 base::Passed(std::move(referral_list)), io_thread,
+                 profile_io_data));
 }
 
 void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
@@ -331,6 +306,20 @@ std::vector<GURL> Predictor::GetPredictedUrlListAtStartup(
   return urls;
 }
 
+void Predictor::DiscardAllResultsAndClearPrefsOnUIThread() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&Predictor::DiscardAllResults, weak_factory_->GetWeakPtr()));
+  ClearPrefsOnUIThread();
+}
+
+void Predictor::ClearPrefsOnUIThread() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  user_prefs_->ClearPref(prefs::kDnsPrefetchingStartupList);
+  user_prefs_->ClearPref(prefs::kDnsPrefetchingHostReferralList);
+}
+
 void Predictor::set_max_queueing_delay(int max_queueing_delay_ms) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   g_max_queueing_delay_ms = max_queueing_delay_ms;
@@ -362,8 +351,7 @@ void Predictor::Shutdown() {
 void Predictor::DiscardAllResults() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Delete anything listed so far in this session that shows in about:dns.
-  referrers_.clear();
-
+  referrers_.Clear();
 
   // Try to delete anything in our work queue.
   while (!work_queue_.IsEmpty()) {
@@ -388,8 +376,7 @@ void Predictor::DiscardAllResults() {
       assignees[url] = *info;
     }
   }
-  DCHECK(!base::FeatureList::IsEnabled(kUsePredictorDNSQueue) ||
-         assignees.size() <= max_concurrent_dns_lookups_);
+  DCHECK_LE(assignees.size(), max_concurrent_dns_lookups_);
   results_.clear();
   // Put back in the names being worked on.
   for (Results::iterator it = assignees.begin(); assignees.end() != it; ++it) {
@@ -434,9 +421,15 @@ void Predictor::LearnFromNavigation(const GURL& referring_url,
 
   if (observer_)
     observer_->OnLearnFromNavigation(referring_url_with_hsts, target_url);
-  referrers_[referring_url_with_hsts].SuggestHost(target_url);
-  // Possibly do some referrer trimming.
-  TrimReferrers();
+  // Peek here, as Get() occurs on the actual navigation. Note, Put is used here
+  // due to the fact that on a new navigation, it is unclear whether the URL
+  // will be a referrer to any subresource. That could result in bloating the
+  // database with empty entries.
+  Referrers::iterator it = referrers_.Peek(referring_url_with_hsts);
+  if (it == referrers_.end())
+    it = referrers_.Put(referring_url_with_hsts, Referrer());
+
+  it->second.SuggestHost(target_url);
 }
 
 //-----------------------------------------------------------------------------
@@ -459,44 +452,12 @@ void Predictor::PredictorGetHtmlInfo(Predictor* predictor,
   output->append("</body></html>");
 }
 
-// Provide sort order so all .com's are together, etc.
-struct RightToLeftStringSorter {
-  bool operator()(const GURL& left, const GURL& right) const {
-    return ReverseComponents(left) < ReverseComponents(right);
-  }
-
- private:
-  // Transforms something like "http://www.google.com/xyz" to
-  // "http://com.google.www/xyz".
-  static std::string ReverseComponents(const GURL& url) {
-    // Reverse the components in the hostname.
-    std::vector<std::string> parts = base::SplitString(
-        url.host(), ".", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-    std::reverse(parts.begin(), parts.end());
-    std::string reversed_host = base::JoinString(parts, ".");
-
-    // Return the new URL.
-    GURL::Replacements url_components;
-    url_components.SetHostStr(reversed_host);
-    return url.ReplaceComponents(url_components).spec();
-  }
-};
-
 void Predictor::GetHtmlReferrerLists(std::string* output) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (referrers_.empty())
     return;
 
   // TODO(jar): Remove any plausible JavaScript from names before displaying.
-
-  typedef std::set<GURL, struct RightToLeftStringSorter>
-      SortedNames;
-  SortedNames sorted_names;
-
-  for (Referrers::iterator it = referrers_.begin();
-       referrers_.end() != it; ++it)
-    sorted_names.insert(it->first);
-
   output->append("<br><table border>");
   output->append(
       "<tr><th>Host for Page</th>"
@@ -507,20 +468,19 @@ void Predictor::GetHtmlReferrerLists(std::string* output) {
       "<th>Expected<br>Connects</th>"
       "<th>Subresource Spec</th></tr>");
 
-  for (SortedNames::iterator it = sorted_names.begin();
-       sorted_names.end() != it; ++it) {
-    Referrer* referrer = &(referrers_[*it]);
+  for (Referrers::iterator it = referrers_.begin(); referrers_.end() != it;
+       ++it) {
+    const Referrer& referrer = it->second;
     bool first_set_of_futures = true;
-    for (Referrer::iterator future_url = referrer->begin();
-         future_url != referrer->end(); ++future_url) {
+    for (Referrer::const_iterator future_url = referrer.begin();
+         future_url != referrer.end(); ++future_url) {
       output->append("<tr align=right>");
       if (first_set_of_futures) {
-        base::StringAppendF(output,
-                            "<td rowspan=%d>%s</td><td rowspan=%d>%d</td>",
-                            static_cast<int>(referrer->size()),
-                            it->spec().c_str(),
-                            static_cast<int>(referrer->size()),
-                            static_cast<int>(referrer->use_count()));
+        base::StringAppendF(
+            output, "<td rowspan=%d>%s</td><td rowspan=%d>%d</td>",
+            static_cast<int>(referrer.size()), it->first.spec().c_str(),
+            static_cast<int>(referrer.size()),
+            static_cast<int>(referrer.use_count()));
       }
       first_set_of_futures = false;
       base::StringAppendF(output,
@@ -546,16 +506,8 @@ void Predictor::GetHtmlInfo(std::string* output) {
   UrlInfo::UrlInfoTable name_not_found;
   UrlInfo::UrlInfoTable name_preresolved;
 
-  // Get copies of all useful data.
-  typedef std::map<GURL, UrlInfo, RightToLeftStringSorter> SortedUrlInfo;
-  SortedUrlInfo snapshot;
   // UrlInfo supports value semantics, so we can do a shallow copy.
-  for (Results::iterator it(results_.begin()); it != results_.end(); it++)
-    snapshot[it->first] = it->second;
-
-  // Partition the UrlInfo's into categories.
-  for (SortedUrlInfo::iterator it(snapshot.begin());
-       it != snapshot.end(); it++) {
+  for (Results::iterator it(results_.begin()); it != results_.end(); it++) {
     if (it->second.was_nonexistent()) {
       name_not_found.push_back(it->second);
       continue;
@@ -577,29 +529,23 @@ void Predictor::GetHtmlInfo(std::string* output) {
       "Preresolving DNS records revealed non-existence for ", brief, output);
 }
 
-void Predictor::TrimReferrersNow() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  // Just finish up work if an incremental trim is in progress.
-  if (urls_being_trimmed_.empty())
-    LoadUrlsForTrimming();
-  IncrementalTrimReferrers(true);  // Do everything now.
-}
-
+// Iterating through a MRUCache goes through most recent first. Iterate
+// backwards here so that adding items in order "Just Works" when deserializing.
 void Predictor::SerializeReferrers(base::ListValue* referral_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   referral_list->Clear();
   referral_list->AppendInteger(kPredictorReferrerVersion);
-  for (Referrers::const_iterator it = referrers_.begin();
-       it != referrers_.end(); ++it) {
+  for (Referrers::const_reverse_iterator it = referrers_.rbegin();
+       it != referrers_.rend(); ++it) {
     // Serialize the list of subresource names.
     base::Value* subresource_list(it->second.Serialize());
 
     // Create a list for each referer.
-    base::ListValue* motivator(new base::ListValue);
+    std::unique_ptr<base::ListValue> motivator(new base::ListValue);
     motivator->AppendString(it->first.spec());
     motivator->Append(subresource_list);
 
-    referral_list->Append(motivator);
+    referral_list->Append(std::move(motivator));
   }
 }
 
@@ -627,15 +573,10 @@ void Predictor::DeserializeReferrers(const base::ListValue& referral_list) {
         return;
       }
 
-      referrers_[GURL(motivating_url_spec)].Deserialize(*subresource_list);
+      referrers_.Put(GURL(motivating_url_spec), Referrer())
+          ->second.Deserialize(*subresource_list);
     }
   }
-}
-
-void Predictor::DeserializeReferrersThenDelete(
-    base::ListValue* referral_list) {
-  DeserializeReferrers(*referral_list);
-  delete referral_list;
 }
 
 void Predictor::DiscardInitialNavigationHistory() {
@@ -646,7 +587,7 @@ void Predictor::DiscardInitialNavigationHistory() {
 
 void Predictor::FinalizeInitializationOnIOThread(
     const std::vector<GURL>& startup_urls,
-    base::ListValue* referral_list,
+    std::unique_ptr<base::ListValue> referral_list,
     IOThread* io_thread,
     ProfileIOData* profile_io_data) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -670,7 +611,9 @@ void Predictor::FinalizeInitializationOnIOThread(
   // Prefetch these hostnames on startup.
   DnsPrefetchMotivatedList(startup_urls, UrlInfo::STARTUP_LIST_MOTIVATED);
 
-  DeserializeReferrersThenDelete(referral_list);
+  DeserializeReferrers(*referral_list);
+
+  LogStartupMetrics();
 }
 
 //-----------------------------------------------------------------------------
@@ -731,7 +674,7 @@ void Predictor::DnsPrefetchMotivatedList(
 // Functions to handle saving of hostnames from one session to the next, to
 // expedite startup times.
 
-static void SaveDnsPrefetchStateForNextStartupAndTrimOnIOThread(
+static void SaveDnsPrefetchStateForNextStartupOnIOThread(
     base::ListValue* startup_list,
     base::ListValue* referral_list,
     base::WaitableEvent* completion,
@@ -742,11 +685,11 @@ static void SaveDnsPrefetchStateForNextStartupAndTrimOnIOThread(
     completion->Signal();
     return;
   }
-  predictor->SaveDnsPrefetchStateForNextStartupAndTrim(
-      startup_list, referral_list, completion);
+  predictor->SaveDnsPrefetchStateForNextStartup(startup_list, referral_list,
+                                                completion);
 }
 
-void Predictor::SaveStateForNextStartupAndTrim() {
+void Predictor::SaveStateForNextStartup() {
   if (!predictor_enabled_)
     return;
   if (!CanPreresolveAndPreconnect())
@@ -761,21 +704,15 @@ void Predictor::SaveStateForNextStartupAndTrim() {
   ListPrefUpdate update_referral_list(user_prefs_,
                                       prefs::kDnsPrefetchingHostReferralList);
   if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    SaveDnsPrefetchStateForNextStartupAndTrimOnIOThread(
-        update_startup_list.Get(),
-        update_referral_list.Get(),
-        &completion,
-        this);
+    SaveDnsPrefetchStateForNextStartupOnIOThread(update_startup_list.Get(),
+                                                 update_referral_list.Get(),
+                                                 &completion, this);
   } else {
     bool posted = BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(
-            &SaveDnsPrefetchStateForNextStartupAndTrimOnIOThread,
-            update_startup_list.Get(),
-            update_referral_list.Get(),
-            &completion,
-            this));
+        BrowserThread::IO, FROM_HERE,
+        base::Bind(&SaveDnsPrefetchStateForNextStartupOnIOThread,
+                   update_startup_list.Get(), update_referral_list.Get(),
+                   &completion, this));
 
     // TODO(jar): Synchronous waiting for the IO thread is a potential source
     // to deadlocks and should be investigated. See http://crbug.com/78451.
@@ -788,7 +725,7 @@ void Predictor::SaveStateForNextStartupAndTrim() {
   }
 }
 
-void Predictor::SaveDnsPrefetchStateForNextStartupAndTrim(
+void Predictor::SaveDnsPrefetchStateForNextStartup(
     base::ListValue* startup_list,
     base::ListValue* referral_list,
     base::WaitableEvent* completion) {
@@ -796,11 +733,6 @@ void Predictor::SaveDnsPrefetchStateForNextStartupAndTrim(
   if (initial_observer_.get())
     initial_observer_->GetInitialDnsResolutionList(startup_list);
 
-  // Do at least one trim at shutdown, in case the user wasn't running long
-  // enough to do any regular trimming of referrers.
-  // TODO(lizeb): Should trimming really be done at each shutdown? This could be
-  // a frequent occurrence on Android.
-  TrimReferrersNow();
   SerializeReferrers(referral_list);
 
   completion->Signal();
@@ -931,7 +863,9 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
 
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_EQ(url.GetWithEmptyPath(), url);
-  Referrers::iterator it = referrers_.find(url);
+  // Peek here, and Get after logging the index into the MRU.
+  // TODO(csharrison): Remove this logic when the MRU size is tuned.
+  Referrers::iterator it = referrers_.Peek(url);
   if (referrers_.end() == it) {
     // Only when we don't know anything about this url, make 2 connections
     // available.  We could do this completely via learning (by prepopulating
@@ -946,13 +880,17 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
     }
     return;
   }
-
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Net.Predictor.MRUIndex",
+                              std::distance(referrers_.begin(), it), 1, 1000,
+                              50);
+  it = referrers_.Get(url);
   Referrer* referrer = &(it->second);
+
   referrer->IncrementUseCount();
   const UrlInfo::ResolutionMotivation motivation =
       UrlInfo::LEARNED_REFERAL_MOTIVATED;
-  for (Referrer::iterator future_url = referrer->begin();
-       future_url != referrer->end(); ++future_url) {
+  for (std::map<GURL, ReferrerValue>::iterator future_url = referrer->begin();
+       future_url != referrer->end();) {
     SubresourceValue evalution(TOO_NEW);
     double connection_expectation = future_url->second.subresource_use_rate();
     UMA_HISTOGRAM_CUSTOM_COUNTS("Net.PreconnectSubresourceExpectation",
@@ -977,9 +915,20 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
       if (queued_info)
         queued_info->SetReferringHostname(url);
     }
+    // Remove future urls that are below the discardable threshold here. This is
+    // the only place where the future urls of a referrer are iterated through,
+    // so it is the most logical place for trimming.
+    if (connection_expectation < kDiscardableExpectedValue) {
+      future_url = referrer->erase(future_url);
+    } else {
+      ++future_url;
+    }
     UMA_HISTOGRAM_ENUMERATION("Net.PreconnectSubresourceEval", evalution,
                               SUBRESOURCE_VALUE_MAX);
   }
+  // If the Referrer has no URLs associated with it, remove it from the map.
+  if (referrer->empty())
+    referrers_.Erase(it);
 }
 
 void Predictor::OnLookupFinished(const GURL& url, int result) {
@@ -1052,7 +1001,6 @@ UrlInfo* Predictor::AppendToResolutionQueue(
 
 bool Predictor::CongestionControlPerformed(UrlInfo* info) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DCHECK(base::FeatureList::IsEnabled(kUsePredictorDNSQueue));
   // Note: queue_duration is ONLY valid after we go to assigned state.
   if (info->queue_duration() < max_dns_queue_delay_)
     return false;
@@ -1072,18 +1020,14 @@ bool Predictor::CongestionControlPerformed(UrlInfo* info) {
 void Predictor::StartSomeQueuedResolutions() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // If the queue is disabled, just make requests for all entries.
-  bool enable_queue = base::FeatureList::IsEnabled(kUsePredictorDNSQueue);
-  while (
-      !work_queue_.IsEmpty() &&
-      (!enable_queue || num_pending_lookups_ < max_concurrent_dns_lookups_)) {
+  while (!work_queue_.IsEmpty() &&
+         num_pending_lookups_ < max_concurrent_dns_lookups_) {
     const GURL url(work_queue_.Pop());
     UrlInfo* info = &results_[url];
     DCHECK(info->HasUrl(url));
     info->SetAssignedState();
 
-    // Only perform congestion control if the queue is enabled.
-    if (enable_queue && CongestionControlPerformed(info)) {
+    if (CongestionControlPerformed(info)) {
       DCHECK(work_queue_.IsEmpty());
       return;
     }
@@ -1106,55 +1050,6 @@ void Predictor::StartSomeQueuedResolutions() {
   }
 }
 
-void Predictor::TrimReferrers() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!urls_being_trimmed_.empty())
-    return;   // There is incremental trimming in progress already.
-
-  // Check to see if it is time to trim yet.
-  base::TimeTicks now = base::TimeTicks::Now();
-  if (now < next_trim_time_)
-    return;
-  next_trim_time_ = now + TimeDelta::FromHours(kDurationBetweenTrimmingsHours);
-
-  LoadUrlsForTrimming();
-  PostIncrementalTrimTask();
-}
-
-void Predictor::LoadUrlsForTrimming() {
-  DCHECK(urls_being_trimmed_.empty());
-  for (Referrers::const_iterator it = referrers_.begin();
-       it != referrers_.end(); ++it)
-    urls_being_trimmed_.push_back(it->first);
-  UMA_HISTOGRAM_COUNTS("Net.PredictionTrimSize", urls_being_trimmed_.size());
-}
-
-void Predictor::PostIncrementalTrimTask() {
-  if (urls_being_trimmed_.empty())
-    return;
-  const TimeDelta kDurationBetweenTrimmingIncrements =
-      TimeDelta::FromSeconds(kDurationBetweenTrimmingIncrementsSeconds);
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&Predictor::IncrementalTrimReferrers,
-                            weak_factory_->GetWeakPtr(), false),
-      kDurationBetweenTrimmingIncrements);
-}
-
-void Predictor::IncrementalTrimReferrers(bool trim_all_now) {
-  size_t trim_count = urls_being_trimmed_.size();
-  if (!trim_all_now)
-    trim_count = std::min(trim_count, kUrlsTrimmedPerIncrement);
-  while (trim_count-- != 0) {
-    Referrers::iterator it = referrers_.find(urls_being_trimmed_.back());
-    urls_being_trimmed_.pop_back();
-    if (it == referrers_.end())
-      continue;  // Defensive code: It got trimmed away already.
-    if (!it->second.Trim(kReferrerTrimRatio, kDiscardableExpectedValue))
-      referrers_.erase(it);
-  }
-  PostIncrementalTrimTask();
-}
-
 GURL Predictor::GetHSTSRedirectOnIOThread(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -1170,6 +1065,21 @@ GURL Predictor::GetHSTSRedirectOnIOThread(const GURL& url) {
   replacements.SetScheme(kNewScheme, url::Component(0, strlen(kNewScheme)));
   return url.ReplaceComponents(replacements);
 }
+
+void Predictor::LogStartupMetrics() {
+  size_t total_bytes = 0;
+  for (const auto& referrer : referrers_) {
+    total_bytes += referrer.first.spec().size();
+    total_bytes += sizeof(Referrer);
+    for (const auto& subresource : referrer.second) {
+      total_bytes += subresource.first.spec().size();
+      total_bytes += sizeof(ReferrerValue);
+    }
+  }
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Net.Predictor.Startup.DBSize", total_bytes, 1,
+                              10 * 1000 * 1000, 50);
+}
+
 
 // ---------------------- End IO methods. -------------------------------------
 

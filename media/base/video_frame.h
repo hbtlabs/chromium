@@ -136,19 +136,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::Size& natural_size,
       base::TimeDelta timestamp);
 
-  // Wraps a set of GpuMemoryBuffer-backed native textures with a VideoFrame.
-  // |mailbox_holders_release_cb| will be called with a sync token as the
-  // argument when the VideoFrame is to be destroyed.
-  static scoped_refptr<VideoFrame> WrapGpuMemoryBufferBackedNativeTextures(
-      VideoPixelFormat format,
-      const gpu::MailboxHolder (&mailbox_holder)[kMaxPlanes],
-      const gfx::GpuMemoryBufferId (&gpu_memory_buffer_ids)[kMaxPlanes],
-      const ReleaseMailboxCB& mailbox_holders_release_cb,
-      const gfx::Size& coded_size,
-      const gfx::Rect& visible_rect,
-      const gfx::Size& natural_size,
-      base::TimeDelta timestamp);
-
   // Wraps packed image data residing in a memory buffer with a VideoFrame.
   // The image data resides in |data| and is assumed to be packed tightly in a
   // buffer of logical dimensions |coded_size| with the appropriate bit depth
@@ -205,6 +192,23 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
       const gfx::GpuMemoryBufferHandle& y_handle,
       const gfx::GpuMemoryBufferHandle& u_handle,
       const gfx::GpuMemoryBufferHandle& v_handle,
+      base::TimeDelta timestamp);
+
+  // Wraps external YUVA data of the given parameters with a VideoFrame.
+  // The returned VideoFrame does not own the data passed in.
+  static scoped_refptr<VideoFrame> WrapExternalYuvaData(
+      VideoPixelFormat format,
+      const gfx::Size& coded_size,
+      const gfx::Rect& visible_rect,
+      const gfx::Size& natural_size,
+      int32_t y_stride,
+      int32_t u_stride,
+      int32_t v_stride,
+      int32_t a_stride,
+      uint8_t* y_data,
+      uint8_t* u_data,
+      uint8_t* v_data,
+      uint8_t* a_data,
       base::TimeDelta timestamp);
 
 #if defined(OS_LINUX)
@@ -351,11 +355,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Only valid to call if this is a NATIVE_TEXTURE frame. Before using the
   // mailbox, the caller must wait for the included sync point.
   const gpu::MailboxHolder& mailbox_holder(size_t texture_index) const;
-
-  // Returns the GpuMemoryBufferId for the GpuMemoryBuffer that backs a
-  // a given texture.
-  const gfx::GpuMemoryBufferId& texture_gpu_memory_buffer_id(
-      size_t texture_index) const;
 
   // Returns the shared-memory handle, if present
   base::SharedMemoryHandle shared_memory_handle() const;
@@ -544,7 +543,6 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // Native texture mailboxes, if this is a IsTexture() frame.
   gpu::MailboxHolder mailbox_holders_[kMaxPlanes];
   ReleaseMailboxCB mailbox_holders_release_cb_;
-  gfx::GpuMemoryBufferId texture_gpu_memory_buffer_ids_[kMaxPlanes];
 
   // Shared memory handle and associated offset inside it, if this frame is
   // a STORAGE_SHMEM one.

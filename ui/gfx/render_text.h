@@ -21,6 +21,7 @@
 #include "base/strings/string16.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPaint.h"
+#include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/break_list.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/font_render_params.h"
@@ -59,7 +60,7 @@ class GFX_EXPORT SkiaTextRenderer {
   void SetDrawLooper(sk_sp<SkDrawLooper> draw_looper);
   void SetFontRenderParams(const FontRenderParams& params,
                            bool subpixel_rendering_suppressed);
-  void SetTypeface(SkTypeface* typeface);
+  void SetTypeface(sk_sp<SkTypeface> typeface);
   void SetTextSize(SkScalar size);
   void SetForegroundColor(SkColor foreground);
   void SetShader(sk_sp<SkShader> shader);
@@ -237,9 +238,6 @@ class GFX_EXPORT RenderText {
 
   bool cursor_visible() const { return cursor_visible_; }
   void set_cursor_visible(bool visible) { cursor_visible_ = visible; }
-
-  bool insert_mode() const { return insert_mode_; }
-  void ToggleInsertMode();
 
   SkColor cursor_color() const { return cursor_color_; }
   void set_cursor_color(SkColor color) { cursor_color_ = color; }
@@ -498,7 +496,7 @@ class GFX_EXPORT RenderText {
   RenderText();
 
   // NOTE: The value of these accessors may be stale. Please make sure
-  // that these fields are up-to-date before accessing them.
+  // that these fields are up to date before accessing them.
   const base::string16& layout_text() const { return layout_text_; }
   const base::string16& display_text() const { return display_text_; }
   bool text_elided() const { return text_elided_; }
@@ -737,9 +735,8 @@ class GFX_EXPORT RenderText {
   // for the cursor when positioning text.
   bool cursor_enabled_;
 
-  // The cursor visibility and insert mode.
+  // The cursor visibility.
   bool cursor_visible_;
-  bool insert_mode_;
 
   // The color used for the cursor.
   SkColor cursor_color_;

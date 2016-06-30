@@ -46,8 +46,8 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorLayerTreeAgent.h"
 #include "core/inspector/InspectorMemoryAgent.h"
+#include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
-#include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/inspector/InspectorTaskRunner.h"
@@ -55,7 +55,6 @@
 #include "core/inspector/InspectorWorkerAgent.h"
 #include "core/inspector/LayoutEditor.h"
 #include "core/inspector/MainThreadDebugger.h"
-#include "core/inspector/PageConsoleAgent.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
@@ -65,8 +64,8 @@
 #include "modules/indexeddb/InspectorIndexedDBAgent.h"
 #include "modules/storage/InspectorDOMStorageAgent.h"
 #include "modules/webdatabase/InspectorDatabaseAgent.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/TraceEvent.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
@@ -90,7 +89,9 @@
 #include "web/WebViewImpl.h"
 #include "wtf/MathExtras.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -116,7 +117,7 @@ public:
     {
         if (s_instance)
             return;
-        OwnPtr<ClientMessageLoopAdapter> instance = adoptPtr(new ClientMessageLoopAdapter(adoptPtr(client->createClientMessageLoop())));
+        std::unique_ptr<ClientMessageLoopAdapter> instance = wrapUnique(new ClientMessageLoopAdapter(wrapUnique(client->createClientMessageLoop())));
         s_instance = instance.get();
         MainThreadDebugger::instance()->setClientMessageLoop(std::move(instance));
     }
@@ -152,10 +153,13 @@ public:
     }
 
 private:
-    ClientMessageLoopAdapter(PassOwnPtr<WebDevToolsAgentClient::WebKitClientMessageLoop> messageLoop)
+    ClientMessageLoopAdapter(std::unique_ptr<WebDevToolsAgentClient::WebKitClientMessageLoop> messageLoop)
         : m_runningForDebugBreak(false)
         , m_runningForCreateWindow(false)
-        , m_messageLoop(std::move(messageLoop)) { }
+        , m_messageLoop(std::move(messageLoop))
+    {
+        DCHECK(m_messageLoop.get());
+    }
 
     void run(LocalFrame* frame) override
     {
@@ -264,7 +268,7 @@ private:
 
     bool m_runningForDebugBreak;
     bool m_runningForCreateWindow;
-    OwnPtr<WebDevToolsAgentClient::WebKitClientMessageLoop> m_messageLoop;
+    std::unique_ptr<WebDevToolsAgentClient::WebKitClientMessageLoop> m_messageLoop;
     typedef HashSet<WebViewImpl*> FrozenViewsSet;
     FrozenViewsSet m_frozenViews;
     WebFrameWidgetsSet m_frozenWidgets;
@@ -303,7 +307,7 @@ WebDevToolsAgentImpl::WebDevToolsAgentImpl(
     , m_resourceContainer(new InspectorResourceContainer(m_inspectedFrames))
     , m_domAgent(nullptr)
     , m_pageAgent(nullptr)
-    , m_resourceAgent(nullptr)
+    , m_networkAgent(nullptr)
     , m_layerTreeAgent(nullptr)
     , m_tracingAgent(nullptr)
     , m_includeViewAgents(includeViewAgents)
@@ -340,7 +344,7 @@ DEFINE_TRACE(WebDevToolsAgentImpl)
     visitor->trace(m_resourceContainer);
     visitor->trace(m_domAgent);
     visitor->trace(m_pageAgent);
-    visitor->trace(m_resourceAgent);
+    visitor->trace(m_networkAgent);
     visitor->trace(m_layerTreeAgent);
     visitor->trace(m_tracingAgent);
     visitor->trace(m_session);
@@ -372,11 +376,11 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
     m_layerTreeAgent = layerTreeAgent;
     m_session->append(layerTreeAgent);
 
-    InspectorResourceAgent* resourceAgent = InspectorResourceAgent::create(m_inspectedFrames.get());
-    m_resourceAgent = resourceAgent;
-    m_session->append(resourceAgent);
+    InspectorNetworkAgent* networkAgent = InspectorNetworkAgent::create(m_inspectedFrames.get());
+    m_networkAgent = networkAgent;
+    m_session->append(networkAgent);
 
-    InspectorCSSAgent* cssAgent = InspectorCSSAgent::create(m_domAgent, m_inspectedFrames.get(), m_resourceAgent, m_resourceContentLoader.get(), m_resourceContainer.get());
+    InspectorCSSAgent* cssAgent = InspectorCSSAgent::create(m_domAgent, m_inspectedFrames.get(), m_networkAgent, m_resourceContentLoader.get(), m_resourceContainer.get());
     m_session->append(cssAgent);
 
     m_session->append(new InspectorAnimationAgent(m_inspectedFrames.get(), m_domAgent, cssAgent, m_session->v8Session()));
@@ -386,8 +390,6 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
     m_session->append(InspectorApplicationCacheAgent::create(m_inspectedFrames.get()));
 
     m_session->append(InspectorIndexedDBAgent::create(m_inspectedFrames.get()));
-
-    m_session->append(new PageConsoleAgent(m_session->v8Session(), m_domAgent, m_inspectedFrames.get()));
 
     InspectorWorkerAgent* workerAgent = new InspectorWorkerAgent(m_inspectedFrames.get());
     m_session->append(workerAgent);
@@ -405,7 +407,7 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
     m_session->append(pageAgent);
 
     m_tracingAgent->setLayerTreeId(m_layerTreeId);
-    m_resourceAgent->setHostId(hostId);
+    m_networkAgent->setHostId(hostId);
 
     if (m_includeViewAgents) {
         // TODO(dgozman): we should actually pass the view instead of frame, but during
@@ -435,7 +437,7 @@ void WebDevToolsAgentImpl::destroySession()
 
     m_tracingAgent.clear();
     m_layerTreeAgent.clear();
-    m_resourceAgent.clear();
+    m_networkAgent.clear();
     m_pageAgent.clear();
     m_domAgent.clear();
 
@@ -594,6 +596,12 @@ void WebDevToolsAgentImpl::profilingStopped()
         m_overlay->resume();
 }
 
+void WebDevToolsAgentImpl::consoleCleared()
+{
+    if (m_domAgent)
+        m_domAgent->releaseDanglingNodes();
+}
+
 void WebDevToolsAgentImpl::pageLayoutInvalidated(bool resized)
 {
     if (m_overlay)
@@ -643,7 +651,7 @@ void WebDevToolsAgentImpl::didProcessTask()
     flushProtocolNotifications();
 }
 
-void WebDevToolsAgentImpl::runDebuggerTask(int sessionId, PassOwnPtr<WebDevToolsAgent::MessageDescriptor> descriptor)
+void WebDevToolsAgentImpl::runDebuggerTask(int sessionId, std::unique_ptr<WebDevToolsAgent::MessageDescriptor> descriptor)
 {
     WebDevToolsAgent* webagent = descriptor->agent();
     if (!webagent)
@@ -656,8 +664,8 @@ void WebDevToolsAgentImpl::runDebuggerTask(int sessionId, PassOwnPtr<WebDevTools
 
 void WebDevToolsAgent::interruptAndDispatch(int sessionId, MessageDescriptor* rawDescriptor)
 {
-    // rawDescriptor can't be a PassOwnPtr because interruptAndDispatch is a WebKit API function.
-    MainThreadDebugger::interruptMainThreadAndRun(threadSafeBind(WebDevToolsAgentImpl::runDebuggerTask, sessionId, passed(adoptPtr(rawDescriptor))));
+    // rawDescriptor can't be a std::unique_ptr because interruptAndDispatch is a WebKit API function.
+    MainThreadDebugger::interruptMainThreadAndRun(crossThreadBind(WebDevToolsAgentImpl::runDebuggerTask, sessionId, passed(wrapUnique(rawDescriptor))));
 }
 
 bool WebDevToolsAgent::shouldInterruptForMethod(const WebString& method)

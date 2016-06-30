@@ -26,6 +26,8 @@
 # (INCLUDING NEGLIGENCE OR/ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+from __future__ import print_function
 import json
 import logging
 import optparse
@@ -67,11 +69,21 @@ class AbstractRebaseliningCommand(Command):
         self._baseline_suffix_list = BASELINE_SUFFIX_LIST
         self._scm_changes = {'add': [], 'delete': [], 'remove-lines': []}
 
+    def _results_url(self, builder_name, master_name, build_number=None):
+        builder = self._tool.buildbot.builder_with_name(builder_name, master_name)
+        if build_number:
+            build = builder.build(build_number)
+            return build.results_url()
+        return builder.latest_layout_test_results_url()
+
     def _add_to_scm_later(self, path):
         self._scm_changes['add'].append(path)
 
     def _delete_from_scm_later(self, path):
         self._scm_changes['delete'].append(path)
+
+    def _print_scm_changes(self):
+        print(json.dumps(self._scm_changes))
 
 
 class BaseInternalRebaselineCommand(AbstractRebaseliningCommand):
@@ -84,6 +96,10 @@ class BaseInternalRebaselineCommand(AbstractRebaseliningCommand):
             self.suffixes_option,
             optparse.make_option("--builder", help="Builder to pull new baselines from."),
             optparse.make_option("--test", help="Test to rebaseline."),
+            optparse.make_option("--build-number", default=None, type="int",
+                                 help="Optional build number; if not given, the latest build is used."),
+            optparse.make_option("--master-name", default='chromium.webkit', type="str",
+                                 help="Optional master name; if not given, a default master will be used."),
         ])
 
     def _baseline_directory(self, builder_name):
@@ -170,15 +186,12 @@ class CopyExistingBaselinesInternal(BaseInternalRebaselineCommand):
     def execute(self, options, args, tool):
         for suffix in options.suffixes.split(','):
             self._copy_existing_baseline(options.builder, options.test, suffix)
-        print json.dumps(self._scm_changes)
+        self._print_scm_changes()
 
 
 class RebaselineTest(BaseInternalRebaselineCommand):
     name = "rebaseline-test-internal"
     help_text = "Rebaseline a single test from a buildbot. Only intended for use by other webkit-patch commands."
-
-    def _results_url(self, builder_name):
-        return self._tool.buildbot.builder_with_name(builder_name).latest_layout_test_results_url()
 
     def _save_baseline(self, data, target_baseline):
         if not data:
@@ -197,7 +210,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
         source_baseline = "%s/%s" % (results_url, self._file_name_for_actual_result(test_name, suffix))
         target_baseline = self._tool.filesystem.join(baseline_directory, self._file_name_for_expected_result(test_name, suffix))
 
-        _log.debug("Retrieving %s." % source_baseline)
+        _log.debug("Retrieving source %s for target %s." % (source_baseline, target_baseline))
         self._save_baseline(self._tool.web.get_binary(source_baseline, convert_404_to_None=True),
                             target_baseline)
 
@@ -214,7 +227,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
         if options.results_directory:
             results_url = 'file://' + options.results_directory
         else:
-            results_url = self._results_url(options.builder)
+            results_url = self._results_url(options.builder, options.master_name, build_number=options.build_number)
 
         for suffix in self._baseline_suffix_list:
             self._rebaseline_test(options.builder, options.test, suffix, results_url)
@@ -222,7 +235,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
 
     def execute(self, options, args, tool):
         self._rebaseline_test_and_update_expectations(options)
-        print json.dumps(self._scm_changes)
+        self._print_scm_changes()
 
 
 class OptimizeBaselines(AbstractRebaseliningCommand):
@@ -265,8 +278,7 @@ class OptimizeBaselines(AbstractRebaseliningCommand):
                 self._delete_from_scm_later(path)
             for path in files_to_add:
                 self._add_to_scm_later(path)
-
-        print json.dumps(self._scm_changes)
+        self._print_scm_changes()
 
 
 class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
@@ -291,7 +303,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
     # The release builders cycle much faster than the debug ones and cover all the platforms.
     def _release_builders(self):
         release_builders = []
-        for builder_name in self._tool.builders.all_builder_names():
+        for builder_name in self._tool.builders.all_continuous_builder_names():
             if 'ASAN' in builder_name:
                 continue
             port = self._tool.port_factory.get_from_builder_name(builder_name)
@@ -472,7 +484,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         log_output = '\n'.join(result[2] for result in command_results).replace('\n\n', '\n')
         for line in log_output.split('\n'):
             if line:
-                print >> sys.stderr, line  # FIXME: Figure out how to log properly.
+                _log.error(line)
 
         files_to_add, files_to_delete, lines_to_remove = self._serial_commands(command_results)
         if files_to_delete:
@@ -511,10 +523,10 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
     def _suffixes_for_actual_failures(self, test, builder_name, existing_suffixes):
         if builder_name not in self.builder_data():
             return set()
-        actual_results = self.builder_data()[builder_name].actual_results(test)
-        if not actual_results:
+        test_result = self.builder_data()[builder_name].result_for_test(test)
+        if not test_result:
             return set()
-        return set(existing_suffixes) & TestExpectations.suffixes_for_actual_expectations_string(actual_results)
+        return set(existing_suffixes) & TestExpectations.suffixes_for_test_result(test_result)
 
 
 class RebaselineJson(AbstractParallelRebaselineCommand):
@@ -667,7 +679,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 [^[]*$      # Prevents matching previous [ for version specifiers instead of expectation specifiers
             """, re.VERBOSE)
 
-    def bot_revision_data(self):
+    def bot_revision_data(self, scm):
         revisions = []
         for result in self.builder_data().values():
             if result.run_was_interrupted():
@@ -675,7 +687,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 return []
             revisions.append({
                 "builder": result.builder_name(),
-                "revision": result.chromium_revision(),
+                "revision": result.chromium_revision(scm),
             })
         return revisions
 
@@ -729,7 +741,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 commit = commit_hash
                 author = parsed_line.group(2)
 
-            bugs.update(re.findall("crbug\.com\/(\d+)", line))
+            bugs.update(re.findall(r"crbug\.com\/(\d+)", line))
             tests.add(test)
 
             if len(tests) >= self.MAX_LINES_TO_REBASELINE:
@@ -819,7 +831,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
             _log.error("Cannot proceed with working directory changes. Clean working directory first.")
             return
 
-        revision_data = self.bot_revision_data()
+        revision_data = self.bot_revision_data(tool.scm())
         if not revision_data:
             return
 
@@ -880,7 +892,7 @@ class AutoRebaseline(AbstractParallelRebaselineCommand):
                 tool.executive.run_command(['git', 'pull'])
 
                 self._run_git_cl_command(options, ['land', '-f', '-v'])
-        except:
+        except Exception:
             traceback.print_exc(file=sys.stderr)
         finally:
             if did_switch_branches:

@@ -5,8 +5,10 @@
 #ifndef Persistent_h
 #define Persistent_h
 
+#include "platform/heap/Heap.h"
 #include "platform/heap/Member.h"
 #include "platform/heap/PersistentNode.h"
+#include "platform/heap/Visitor.h"
 #include "wtf/Allocator.h"
 #include "wtf/Atomics.h"
 
@@ -91,18 +93,6 @@ public:
 
     bool isHashTableDeletedValue() const { return m_raw == reinterpret_cast<T*>(-1); }
 
-    template<typename VisitorDispatcher>
-    void trace(VisitorDispatcher visitor)
-    {
-        static_assert(sizeof(T), "T must be fully defined");
-        static_assert(IsGarbageCollectedType<T>::value, "T needs to be a garbage collected object");
-        if (weaknessConfiguration == WeakPersistentConfiguration) {
-            visitor->registerWeakCell(&m_raw);
-        } else {
-            visitor->mark(m_raw);
-        }
-    }
-
     T* release()
     {
         T* result = m_raw;
@@ -169,6 +159,7 @@ public:
     }
 
 protected:
+    NO_SANITIZE_ADDRESS
     T* atomicGet() { return reinterpret_cast<T*>(acquireLoad(reinterpret_cast<void* volatile*>(&m_raw))); }
 
 private:
@@ -188,6 +179,21 @@ private:
         uninitialize();
     }
 
+    template<typename VisitorDispatcher>
+    void tracePersistent(VisitorDispatcher visitor)
+    {
+        static_assert(sizeof(T), "T must be fully defined");
+        static_assert(IsGarbageCollectedType<T>::value, "T needs to be a garbage collected object");
+        if (weaknessConfiguration == WeakPersistentConfiguration) {
+            if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration)
+                visitor->registerWeakCellWithCallback(reinterpret_cast<void**>(this), handleWeakPersistent);
+            else
+                visitor->registerWeakMembers(this, m_raw, handleWeakPersistent);
+        } else {
+            visitor->mark(m_raw);
+        }
+    }
+
     NO_LAZY_SWEEP_SANITIZE_ADDRESS
     void initialize()
     {
@@ -195,7 +201,7 @@ private:
         if (!m_raw || isHashTableDeletedValue())
             return;
 
-        TraceCallback traceCallback = TraceMethodDelegate<PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>, &PersistentBase<T, weaknessConfiguration, crossThreadnessConfiguration>::trace>::trampoline;
+        TraceCallback traceCallback = TraceMethodDelegate<PersistentBase, &PersistentBase::tracePersistent>::trampoline;
         if (crossThreadnessConfiguration == CrossThreadPersistentConfiguration) {
             ProcessHeap::crossThreadPersistentRegion().allocatePersistentNode(m_persistentNode, this, traceCallback);
             return;
@@ -242,6 +248,15 @@ private:
         // header->checkHeader().
         ThreadHeap::isHeapObjectAlive(m_raw);
 #endif
+    }
+
+    static void handleWeakPersistent(Visitor* self, void* persistentPointer)
+    {
+        using Base = PersistentBase<typename std::remove_const<T>::type, weaknessConfiguration, crossThreadnessConfiguration>;
+        Base* persistent = reinterpret_cast<Base*>(persistentPointer);
+        T* object = persistent->get();
+        if (object && !ObjectAliveTrait<T>::isHeapObjectAlive(object))
+            persistent->clear();
     }
 
     // m_raw is accessed most, so put it at the first field.
@@ -497,13 +512,6 @@ public:
         uninitialize();
     }
 
-    template<typename VisitorDispatcher>
-    void trace(VisitorDispatcher visitor)
-    {
-        static_assert(sizeof(Collection), "Collection must be fully defined");
-        visitor->trace(*static_cast<Collection*>(this));
-    }
-
     // See PersistentBase::registerAsStaticReference() comment.
     PersistentHeapCollectionBase* registerAsStaticReference()
     {
@@ -516,6 +524,13 @@ public:
     }
 
 private:
+
+    template<typename VisitorDispatcher>
+    void tracePersistent(VisitorDispatcher visitor)
+    {
+        static_assert(sizeof(Collection), "Collection must be fully defined");
+        visitor->trace(*static_cast<Collection*>(this));
+    }
 
     // Used when the registered PersistentNode of this object is
     // released during ThreadState shutdown, clearing the association.
@@ -532,7 +547,7 @@ private:
         // FIXME: Derive affinity based on the collection.
         ThreadState* state = ThreadState::current();
         ASSERT(state->checkThread());
-        m_persistentNode = state->getPersistentRegion()->allocatePersistentNode(this, TraceMethodDelegate<PersistentHeapCollectionBase<Collection>, &PersistentHeapCollectionBase<Collection>::trace>::trampoline);
+        m_persistentNode = state->getPersistentRegion()->allocatePersistentNode(this, TraceMethodDelegate<PersistentHeapCollectionBase<Collection>, &PersistentHeapCollectionBase<Collection>::tracePersistent>::trampoline);
 #if ENABLE(ASSERT)
         m_state = state;
 #endif
@@ -639,32 +654,6 @@ public:
     }
 };
 
-// Only a very reduced form of weak heap object references can currently be held
-// by WTF::Closure<>s. i.e., bound as a 'this' pointer only.
-//
-// TODO(sof): once wtf/Functional.h is able to work over platform/heap/ types
-// (like CrossThreadWeakPersistent<>), drop the restriction on weak persistent
-// use by function closures (and rename this ad-hoc type.)
-template<typename T>
-class WeakPersistentThisPointer {
-    STACK_ALLOCATED();
-public:
-    explicit WeakPersistentThisPointer(T* value) : m_value(value) { }
-    WeakPersistent<T> value() const { return m_value; }
-private:
-    WeakPersistent<T> m_value;
-};
-
-template<typename T>
-class CrossThreadWeakPersistentThisPointer {
-    STACK_ALLOCATED();
-public:
-    explicit CrossThreadWeakPersistentThisPointer(T* value) : m_value(value) { }
-    CrossThreadWeakPersistent<T> value() const { return m_value; }
-private:
-    CrossThreadWeakPersistent<T> m_value;
-};
-
 template <typename T>
 Persistent<T> wrapPersistent(T* value)
 {
@@ -672,9 +661,21 @@ Persistent<T> wrapPersistent(T* value)
 }
 
 template <typename T>
+WeakPersistent<T> wrapWeakPersistent(T* value)
+{
+    return WeakPersistent<T>(value);
+}
+
+template <typename T>
 CrossThreadPersistent<T> wrapCrossThreadPersistent(T* value)
 {
     return CrossThreadPersistent<T>(value);
+}
+
+template <typename T>
+CrossThreadWeakPersistent<T> wrapCrossThreadWeakPersistent(T* value)
+{
+    return CrossThreadWeakPersistent<T>(value);
 }
 
 // Comparison operators between (Weak)Members, Persistents, and UntracedMembers.
@@ -693,59 +694,39 @@ template<typename T, typename U> inline bool operator!=(const Persistent<T>& a, 
 namespace WTF {
 
 template <typename T>
-struct PersistentHash : MemberHash<T> {
-    STATIC_ONLY(PersistentHash);
-};
-
-template <typename T>
-struct CrossThreadPersistentHash : MemberHash<T> {
-    STATIC_ONLY(CrossThreadPersistentHash);
-};
-
-template <typename T>
 struct DefaultHash<blink::Persistent<T>> {
     STATIC_ONLY(DefaultHash);
-    using Hash = PersistentHash<T>;
+    using Hash = MemberHash<T>;
+};
+
+template <typename T>
+struct DefaultHash<blink::WeakPersistent<T>> {
+    STATIC_ONLY(DefaultHash);
+    using Hash = MemberHash<T>;
 };
 
 template <typename T>
 struct DefaultHash<blink::CrossThreadPersistent<T>> {
     STATIC_ONLY(DefaultHash);
-    using Hash = CrossThreadPersistentHash<T>;
+    using Hash = MemberHash<T>;
 };
 
-template<typename T>
-struct ParamStorageTraits<blink::WeakPersistentThisPointer<T>> {
-    STATIC_ONLY(ParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
-    using StorageType = blink::WeakPersistent<T>;
-
-    static StorageType wrap(const blink::WeakPersistentThisPointer<T>& value) { return value.value(); }
-
-    // WTF::FunctionWrapper<> handles WeakPtr<>, so recast this weak persistent
-    // into it.
-    //
-    // TODO(sof): remove this hack once wtf/Functional.h can also work with a type like
-    // WeakPersistent<>.
-    static WeakPtr<T> unwrap(const StorageType& value) { return WeakPtr<T>(WeakReference<T>::create(value.get())); }
-};
-
-template<typename T>
-struct ParamStorageTraits<blink::CrossThreadWeakPersistentThisPointer<T>> {
-    STATIC_ONLY(ParamStorageTraits);
-    static_assert(sizeof(T), "T must be fully defined");
-    using StorageType = blink::CrossThreadWeakPersistent<T>;
-
-    static StorageType wrap(const blink::CrossThreadWeakPersistentThisPointer<T>& value) { return value.value(); }
-
-    // WTF::FunctionWrapper<> handles WeakPtr<>, so recast this weak persistent
-    // into it.
-    //
-    // TODO(sof): remove this hack once wtf/Functional.h can also work with a type like
-    // CrossThreadWeakPersistent<>.
-    static WeakPtr<T> unwrap(const StorageType& value) { return WeakPtr<T>(WeakReference<T>::create(value.get())); }
+template <typename T>
+struct DefaultHash<blink::CrossThreadWeakPersistent<T>> {
+    STATIC_ONLY(DefaultHash);
+    using Hash = MemberHash<T>;
 };
 
 } // namespace WTF
+
+namespace base {
+
+template <typename T>
+struct IsWeakReceiver<blink::WeakPersistent<T>> : std::true_type {};
+
+template <typename T>
+struct IsWeakReceiver<blink::CrossThreadWeakPersistent<T>> : std::true_type {};
+
+}
 
 #endif // Persistent_h

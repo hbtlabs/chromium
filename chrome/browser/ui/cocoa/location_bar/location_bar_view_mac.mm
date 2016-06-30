@@ -89,7 +89,7 @@ const int kDefaultIconSize = 16;
 
 // Color of the vector graphic icons when the location bar is dark.
 // SkColorSetARGB(0xCC, 0xFF, 0xFF 0xFF);
-const SkColor kMaterialDarkVectorIconColor = 0xCCFFFFFF;
+const SkColor kMaterialDarkVectorIconColor = SK_ColorWHITE;
 
 }  // namespace
 
@@ -174,13 +174,25 @@ const SkColor kMaterialDarkVectorIconColor = 0xCCFFFFFF;
 }
 
 + (void)drawLocationBarIconHTTPForScale:(int)scaleFactor {
-  NSBezierPath* circlePath =
-      [NSBezierPath bezierPathWithOvalInRect:NSMakeRect(2, 2, 12, 12)];
-  [circlePath setLineWidth:1.5];
-  [circlePath stroke];
+  if (scaleFactor > 1) {
+    NSRect ovalRect = NSMakeRect(2.25, 1.75, 12, 12);
+    NSBezierPath* circlePath =
+        [NSBezierPath bezierPathWithOvalInRect:ovalRect];
+    [circlePath setLineWidth:1.5];
+    [circlePath stroke];
 
-  NSRectFill(NSMakeRect(7, 4, 2, 5));
-  NSRectFill(NSMakeRect(7, 10, 2, 2));
+    NSRectFill(NSMakeRect(7.5, 4.5, 1.5, 4));
+    NSRectFill(NSMakeRect(7.5, 9.5, 1.5, 1.5));
+  } else {
+    NSRect ovalRect = NSMakeRect(2, 2, 12, 12);
+    NSBezierPath* circlePath =
+        [NSBezierPath bezierPathWithOvalInRect:ovalRect];
+    [circlePath setLineWidth:1.5];
+    [circlePath stroke];
+
+    NSRectFill(NSMakeRect(7, 4, 2, 5));
+    NSRectFill(NSMakeRect(7, 10, 2, 2));
+  }
 }
 
 + (void)drawLocationBarIconHTTPSInvalidForScale:(int)scaleFactor {
@@ -223,10 +235,17 @@ const SkColor kMaterialDarkVectorIconColor = 0xCCFFFFFF;
 }
 
 + (void)drawLocationBarIconHTTPSValidForScale:(int)scaleFactor {
+  NSAffineTransform* transform = [NSAffineTransform transform];
+  // Adjust down 1px in Retina, so that the lock sits on the text baseline.
+  if (scaleFactor > 1) {
+    [transform translateXBy:0 yBy:-0.5];
+  }
+
   NSBezierPath* rectPath =
       [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(4, 3, 8, 7)
                                       xRadius:1
                                       yRadius:1];
+  [rectPath transformUsingAffineTransform:transform];
   [rectPath fill];
 
   NSBezierPath* curvePath = [NSBezierPath bezierPath];
@@ -240,6 +259,7 @@ const SkColor kMaterialDarkVectorIconColor = 0xCCFFFFFF;
             controlPoint2:NSMakePoint(10.5, 13)];
   [curvePath lineToPoint:NSMakePoint(10.5, 9.75)];
   [curvePath setLineWidth:1.25];
+  [curvePath transformUsingAffineTransform:transform];
   [curvePath stroke];
 }
 
@@ -335,7 +355,7 @@ void LocationBarViewMac::FocusLocation(bool select_all) {
 }
 
 void LocationBarViewMac::FocusSearch() {
-  omnibox_view_->SetForcedQuery();
+  omnibox_view_->EnterKeywordModeForDefaultSearchProvider();
 }
 
 void LocationBarViewMac::UpdateContentSettingsIcons() {
@@ -554,6 +574,9 @@ NSPoint LocationBarViewMac::GetPageInfoBubblePoint() const {
 void LocationBarViewMac::OnDecorationsChanged() {
   // TODO(shess): The field-editor frame and cursor rects should not
   // change, here.
+  std::vector<LocationBarDecoration*> decorations = GetDecorations();
+  for (const auto& decoration : decorations)
+    UpdateAccessibilityViewPosition(decoration);
   [field_ updateMouseTracking];
   [field_ resetFieldEditorFrameIfNeeded];
   [field_ setNeedsDisplay:YES];
@@ -722,27 +745,26 @@ void LocationBarViewMac::UpdateLocationIcon() {
   gfx::VectorIconId vector_icon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
   if (ShouldShowEVBubble()) {
     vector_icon_id = gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID;
-    vector_icon_color = in_dark_mode
-                            ? LocationBarDecoration::kMaterialDarkModeTextColor
-                            : gfx::kGoogleGreen700;
+    vector_icon_color = gfx::kGoogleGreen700;
   } else {
     vector_icon_id = omnibox_view_->GetVectorIcon();
-    if (in_dark_mode) {
-      vector_icon_color = SK_ColorWHITE;
+    security_state::SecurityStateModel::SecurityLevel security_level =
+        GetToolbarModel()->GetSecurityLevel(false);
+    if (security_level == security_state::SecurityStateModel::NONE) {
+      vector_icon_color = gfx::kChromeIconGrey;
     } else {
-      security_state::SecurityStateModel::SecurityLevel security_level =
-          GetToolbarModel()->GetSecurityLevel(false);
-      if (security_level == security_state::SecurityStateModel::NONE) {
-        vector_icon_color = OmniboxViewMac::BaseTextColorSkia(in_dark_mode);
-      } else {
-        NSColor* sRGBColor =
-            OmniboxViewMac::GetSecureTextColor(security_level, in_dark_mode);
-        NSColor* deviceColor =
-            [sRGBColor colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
-        vector_icon_color = skia::NSDeviceColorToSkColor(deviceColor);
-      }
+      NSColor* sRGBColor =
+          OmniboxViewMac::GetSecureTextColor(security_level, in_dark_mode);
+      NSColor* deviceColor =
+          [sRGBColor colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
+      vector_icon_color = skia::NSDeviceColorToSkColor(deviceColor);
     }
   }
+
+  // If the theme is dark, then the color should always be
+  // kMaterialDarkVectorIconColor.
+  if (in_dark_mode)
+    vector_icon_color = kMaterialDarkVectorIconColor;
 
   DCHECK(vector_icon_id != gfx::VectorIconId::VECTOR_ICON_NONE);
   NSImage* image =
@@ -972,7 +994,40 @@ bool LocationBarViewMac::UpdateZoomDecoration(bool default_zoom_changed) {
       IsLocationBarDark());
 }
 
+void LocationBarViewMac::UpdateAccessibilityViewPosition(
+    LocationBarDecoration* decoration) {
+  if (!decoration->IsVisible())
+    return;
+  NSRect r =
+      [[field_ cell] frameForDecoration:decoration inFrame:[field_ frame]];
+  [decoration->GetAccessibilityView() setFrame:r];
+  [decoration->GetAccessibilityView() setNeedsDisplayInRect:r];
+}
+
+std::vector<LocationBarDecoration*> LocationBarViewMac::GetDecorations() {
+  std::vector<LocationBarDecoration*> decorations;
+  // TODO(ellyjones): content setting decorations aren't included right now, nor
+  // are page actions and the keyword hint.
+  decorations.push_back(location_icon_decoration_.get());
+  decorations.push_back(selected_keyword_decoration_.get());
+  decorations.push_back(ev_bubble_decoration_.get());
+  decorations.push_back(save_credit_card_decoration_.get());
+  decorations.push_back(star_decoration_.get());
+  decorations.push_back(translate_decoration_.get());
+  decorations.push_back(zoom_decoration_.get());
+  decorations.push_back(manage_passwords_decoration_.get());
+  return decorations;
+}
+
 void LocationBarViewMac::OnDefaultZoomLevelChanged() {
   if (UpdateZoomDecoration(/*default_zoom_changed=*/true))
     OnDecorationsChanged();
+}
+
+std::vector<NSView*> LocationBarViewMac::GetDecorationAccessibilityViews() {
+  std::vector<LocationBarDecoration*> decorations = GetDecorations();
+  std::vector<NSView*> views;
+  for (const auto& decoration : decorations)
+    views.push_back(decoration->GetAccessibilityView());
+  return views;
 }

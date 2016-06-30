@@ -118,6 +118,7 @@ size_t RegisterChromeCrashKeys() {
 #endif
 
     // content/:
+    { "bad_message_reason", kSmallSize },
     { "discardable-memory-allocated", kSmallSize },
     { "discardable-memory-free", kSmallSize },
     { kFontKeyName, kSmallSize},
@@ -156,6 +157,9 @@ size_t RegisterChromeCrashKeys() {
 #endif
     { kZeroEncodeDetails, kSmallSize },
 
+    // gin/:
+    { "v8-ignition", kSmallSize },
+
     // Temporary for http://crbug.com/575245.
     { "swapout_frame_id", kSmallSize },
     { "swapout_proxy_id", kSmallSize },
@@ -189,6 +193,12 @@ size_t RegisterChromeCrashKeys() {
 
     // Temporary for https://crbug.com/612711.
     { "aci_wrong_sp_extension_id", kSmallSize },
+
+    // Temporary for http://crbug.com/621730
+    { "postmessage_src_origin", kMediumSize },
+    { "postmessage_dst_origin", kMediumSize },
+    { "postmessage_dst_url", kLargeSize },
+    { "postmessage_script_info", kLargeSize },
 
     // Temporary for https://crbug.com/616149.
     { "existing_extension_pref_value_type", crash_keys::kSmallSize },

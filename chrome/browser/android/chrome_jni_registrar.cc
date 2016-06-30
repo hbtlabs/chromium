@@ -40,6 +40,7 @@
 #include "chrome/browser/android/document/document_web_contents_delegate.h"
 #include "chrome/browser/android/dom_distiller/distiller_ui_handle_android.h"
 #include "chrome/browser/android/download/chrome_download_delegate.h"
+#include "chrome/browser/android/download/download_controller.h"
 #include "chrome/browser/android/download/download_manager_service.h"
 #include "chrome/browser/android/favicon_helper.h"
 #include "chrome/browser/android/feature_utilities.h"
@@ -47,7 +48,6 @@
 #include "chrome/browser/android/feedback/screenshot_task.h"
 #include "chrome/browser/android/find_in_page/find_in_page_bridge.h"
 #include "chrome/browser/android/foreign_session_helper.h"
-#include "chrome/browser/android/fullscreen/fullscreen_infobar_delegate.h"
 #include "chrome/browser/android/history_report/history_report_jni_bridge.h"
 #include "chrome/browser/android/intent_helper.h"
 #include "chrome/browser/android/java_exception_reporter.h"
@@ -108,6 +108,7 @@
 #include "chrome/browser/media/android/remote/remote_media_player_bridge.h"
 #include "chrome/browser/media/android/router/media_router_android.h"
 #include "chrome/browser/media/android/router/media_router_dialog_controller_android.h"
+#include "chrome/browser/net/spdyproxy/data_reduction_promo_infobar_delegate_android.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_settings_android.h"
 #include "chrome/browser/notifications/notification_platform_bridge_android.h"
 #include "chrome/browser/password_manager/account_chooser_dialog_android.h"
@@ -260,6 +261,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"CookiesFetcher", RegisterCookiesFetcher},
     {"Credential", RegisterCredential},
     {"CreditCardScanner", autofill::CreditCardScannerViewAndroid::Register},
+    {"DataReductionPromoInfoBarDelegate",
+     DataReductionPromoInfoBarDelegateAndroid::Register},
     {"DataReductionProxySettings", DataReductionProxySettingsAndroid::Register},
     {"DataUseTabUIManager", RegisterDataUseTabUIManager},
     {"DevToolsServer", RegisterDevToolsServer},
@@ -267,6 +270,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"DomDistillerServiceFactory",
      dom_distiller::android::DomDistillerServiceFactoryAndroid::Register},
     {"DomDistillerTabUtils", RegisterDomDistillerTabUtils},
+    {"DownloadController", DownloadController::RegisterDownloadController},
     {"DownloadManagerService",
      DownloadManagerService::RegisterDownloadManagerService},
     {"DownloadOverwriteInfoBarDelegate",
@@ -282,8 +286,6 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"FontSizePrefsAndroid", FontSizePrefsAndroid::Register},
     {"ForeignSessionHelper",
      ForeignSessionHelper::RegisterForeignSessionHelper},
-    {"FullscreenInfoBarDelegate",
-     FullscreenInfoBarDelegate::RegisterFullscreenInfoBarDelegate},
     {"GeneratedPasswordSavedInfoBarDelegate",
      RegisterGeneratedPasswordSavedInfoBarDelegate},
     {"GroupedPermissionInfoBar", GroupedPermissionInfoBar::Register},

@@ -13,7 +13,8 @@ from loading_graph_view import LoadingGraphView
 import loading_trace
 import metrics
 from network_activity_lens import NetworkActivityLens
-import prefetch_view
+from prefetch_view import PrefetchSimulationView
+from queuing_lens import QueuingLens
 import request_dependencies_lens
 from user_satisfied_lens import (
     FirstTextPaintLens, FirstContentfulPaintLens, FirstSignificantPaintLens,
@@ -42,7 +43,14 @@ class PerUserLensReport(object):
   """Generates a variety of metrics relative to a passed in user lens."""
 
   def __init__(self, trace, user_lens, activity_lens, network_lens,
-               navigation_start_msec, preloaded_requests):
+               navigation_start_msec):
+    requests = trace.request_track.GetEvents()
+    dependencies_lens = request_dependencies_lens.RequestDependencyLens(
+        trace)
+    prefetch_view = PrefetchSimulationView(trace, dependencies_lens, user_lens)
+    preloaded_requests = prefetch_view.PreloadedRequests(
+        requests[0], dependencies_lens, trace)
+
     self._navigation_start_msec = navigation_start_msec
 
     self._satisfied_msec = user_lens.SatisfiedMs()
@@ -59,6 +67,8 @@ class PerUserLensReport(object):
     self._cpu_busyness = _ComputeCpuBusyness(activity_lens,
                                              navigation_start_msec,
                                              self._satisfied_msec)
+    prefetch_view.UpdateNodeCosts(lambda n: 0 if n.preloaded else n.cost)
+    self._no_state_prefetch_ms = prefetch_view.Cost()
 
   def GenerateReport(self):
     report = {}
@@ -72,9 +82,10 @@ class PerUserLensReport(object):
                                      self._requests, 0)
     report['preloaded_requests_cost'] = reduce(lambda x,y: x + y.Cost(),
                                         self._preloaded_requests, 0)
+    report['predicted_no_state_prefetch_ms'] = self._no_state_prefetch_ms
 
     # Take the first (earliest) inversion.
-    report['inversion'] = self._inversions[0].url if self._inversions else None
+    report['inversion'] = self._inversions[0].url if self._inversions else ''
 
     report.update(self._cpu_busyness)
     return report
@@ -104,12 +115,6 @@ class LoadingReport(object):
     self._navigation_start_msec = min(
         e.start_msec for e in navigation_start_events)
 
-    dependencies_lens = request_dependencies_lens.RequestDependencyLens(
-        self.trace)
-    requests = self.trace.request_track.GetEvents()
-    preloaded_requests = \
-       prefetch_view.PrefetchSimulationView.PreloadedRequests(
-           requests[0], dependencies_lens, self.trace)
     self._dns_requests, self._dns_cost_msec = metrics.DnsRequestsAndCost(trace)
     self._connection_stats = metrics.ConnectionMetrics(trace)
 
@@ -125,10 +130,10 @@ class LoadingReport(object):
                            ['contentful', first_contentful_paint_lens],
                            ['significant', first_significant_paint_lens]]:
       self._user_lens_reports[key] = PerUserLensReport(self.trace,
-          user_lens, activity, network_lens, self._navigation_start_msec,
-          preloaded_requests)
+          user_lens, activity, network_lens, self._navigation_start_msec)
 
     self._transfer_size = metrics.TotalTransferSize(trace)[1]
+    self._request_count = len(trace.request_track.GetEvents())
 
     content_lens = ContentClassificationLens(
         trace, ad_rules or [], tracking_rules or [])
@@ -138,8 +143,11 @@ class LoadingReport(object):
         trace, content_lens, has_ad_rules, has_tracking_rules)
     self._ads_cost = self._AdsAndTrackingCpuCost(
         self._navigation_start_msec,
-        self._user_lens_reports['plt'].GenerateReport()['ms'], content_lens,
-        activity, has_tracking_rules or has_ad_rules)
+        (self._navigation_start_msec
+         + self._user_lens_reports['plt'].GenerateReport()['ms']),
+        content_lens, activity, has_tracking_rules or has_ad_rules)
+
+    self._queue_stats = self._ComputeQueueStats(QueuingLens(trace))
 
   def GenerateReport(self):
     """Returns a report as a dict."""
@@ -150,7 +158,8 @@ class LoadingReport(object):
         'url': self.trace.url,
         'transfer_size': self._transfer_size,
         'dns_requests': self._dns_requests,
-        'dns_cost_ms': self._dns_cost_msec}
+        'dns_cost_ms': self._dns_cost_msec,
+        'total_requests': self._request_count}
 
     for user_lens_type, user_lens_report in self._user_lens_reports.iteritems():
       for key, value in user_lens_report.GenerateReport().iteritems():
@@ -159,6 +168,7 @@ class LoadingReport(object):
     report.update(self._ad_report)
     report.update(self._ads_cost)
     report.update(self._connection_stats)
+    report.update(self._queue_stats)
     return report
 
   @classmethod
@@ -194,6 +204,41 @@ class LoadingReport(object):
     result['ad_or_tracking_initiated_transfer_size'] = metrics.TransferSize(
         ad_tracking_requests)[1]
     return result
+
+  @classmethod
+  def _ComputeQueueStats(cls, queue_lens):
+    queuing_info = queue_lens.GenerateRequestQueuing()
+    total_blocked_msec = 0
+    total_loading_msec = 0
+    num_blocking_requests = []
+    for queue_info in queuing_info.itervalues():
+      try:
+        total_blocked_msec += max(0, queue_info.ready_msec -
+                                  queue_info.start_msec)
+        total_loading_msec += max(0, queue_info.end_msec -
+                                  queue_info.start_msec)
+      except TypeError:
+        pass  # Invalid queue info timings.
+      num_blocking_requests.append(len(queue_info.blocking))
+    if num_blocking_requests:
+      num_blocking_requests.sort()
+      avg_blocking = (float(sum(num_blocking_requests)) /
+                      len(num_blocking_requests))
+      mid = len(num_blocking_requests) / 2
+      if len(num_blocking_requests) & 1:
+        median_blocking = num_blocking_requests[mid]
+      else:
+        median_blocking = (num_blocking_requests[mid-1] +
+                           num_blocking_requests[mid]) / 2
+    else:
+      avg_blocking = 0
+      median_blocking = 0
+    return {
+        'total_queuing_blocked_msec': int(total_blocked_msec),
+        'total_queuing_load_msec': int(total_loading_msec),
+        'average_blocking_request_count': avg_blocking,
+        'median_blocking_request_count': median_blocking,
+    }
 
   @classmethod
   def _AdsAndTrackingCpuCost(

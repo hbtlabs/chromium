@@ -38,7 +38,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
-// This needs to be here because Document.h also depends on it.
+// This needs to be here because Element.cpp also depends on it.
 #define DUMP_NODE_STATISTICS 0
 
 namespace blink {
@@ -203,6 +203,7 @@ public:
     Node* lastChild() const;
     Node& treeRoot() const;
     Node& shadowIncludingRoot() const;
+    bool isUnclosedNodeOf(const Node&) const;
 
     void prepend(const HeapVector<NodeOrString>&, ExceptionState&);
     void append(const HeapVector<NodeOrString>&, ExceptionState&);
@@ -228,7 +229,7 @@ public:
     void normalize();
 
     bool isEqualNode(Node*) const;
-    bool isSameNode(Node* other) const { return this == other; }
+    bool isSameNode(const Node* other) const { return this == other; }
     bool isDefaultNamespace(const AtomicString& namespaceURI) const;
     const AtomicString& lookupPrefix(const AtomicString& namespaceURI) const;
     const AtomicString& lookupNamespaceURI(const String& prefix) const;

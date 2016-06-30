@@ -27,7 +27,8 @@ ParsedCertificate::~ParsedCertificate() {}
 scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
     const uint8_t* data,
     size_t length,
-    DataSource source) {
+    DataSource source,
+    const ParseCertificateOptions& options) {
   scoped_refptr<ParsedCertificate> result(new ParsedCertificate);
 
   switch (source) {
@@ -47,8 +48,10 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
     return nullptr;
   }
 
-  if (!ParseTbsCertificate(result->tbs_certificate_tlv_, &result->tbs_))
+  if (!ParseTbsCertificate(result->tbs_certificate_tlv_, options,
+                           &result->tbs_)) {
     return nullptr;
+  }
 
   // Attempt to parse the signature algorithm contained in the Certificate.
   // Do not give up on failure here, since SignatureAlgorithm::CreateFromDer
@@ -126,6 +129,17 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
         return nullptr;
     }
 
+    // Authority information access.
+    if (ConsumeExtension(AuthorityInfoAccessOid(),
+                         &result->unparsed_extensions_,
+                         &result->authority_info_access_extension_)) {
+      result->has_authority_info_access_ = true;
+      if (!ParseAuthorityInfoAccess(
+              result->authority_info_access_extension_.value,
+              &result->ca_issuers_uris_, &result->ocsp_uris_))
+        return nullptr;
+    }
+
     // NOTE: if additional extensions are consumed here, the verification code
     // must be updated to process those extensions, since the
     // VerifyNoUnconsumedCriticalExtensions uses the unparsed_extensions_
@@ -136,19 +150,21 @@ scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateData(
 }
 
 scoped_refptr<ParsedCertificate> ParsedCertificate::CreateFromCertificateCopy(
-    const base::StringPiece& data) {
+    const base::StringPiece& data,
+    const ParseCertificateOptions& options) {
   return ParsedCertificate::CreateFromCertificateData(
       reinterpret_cast<const uint8_t*>(data.data()), data.size(),
-      DataSource::INTERNAL_COPY);
+      DataSource::INTERNAL_COPY, options);
 }
 
 bool ParsedCertificate::CreateAndAddToVector(
     const uint8_t* data,
     size_t length,
     DataSource source,
+    const ParseCertificateOptions& options,
     std::vector<scoped_refptr<ParsedCertificate>>* chain) {
   scoped_refptr<ParsedCertificate> cert(
-      CreateFromCertificateData(data, length, source));
+      CreateFromCertificateData(data, length, source, options));
   if (!cert)
     return false;
   chain->push_back(std::move(cert));

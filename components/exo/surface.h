@@ -15,12 +15,12 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "cc/resources/transferable_resource.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_observer.h"
-#include "ui/compositor/compositor_observer.h"
+#include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_owner_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -46,6 +46,13 @@ class SurfaceDelegate;
 class SurfaceObserver;
 class Surface;
 
+template <typename T>
+struct SurfaceProperty;
+
+namespace subtle {
+class PropertyHelper;
+}
+
 // The pointer class is currently the only cursor provider class but this can
 // change in the future when better hardware cursor support is added.
 using CursorProvider = Pointer;
@@ -61,12 +68,14 @@ class SurfaceFactoryOwner : public base::RefCounted<SurfaceFactoryOwner>,
 
   // Overridden from cc::SurfaceFactoryClient:
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface(cc::SurfaceId id, const gfx::Rect& damage_rect) override;
+  void WillDrawSurface(const cc::SurfaceId& id,
+                       const gfx::Rect& damage_rect) override;
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 
  private:
   friend class base::RefCounted<SurfaceFactoryOwner>;
   friend class Surface;
+
   ~SurfaceFactoryOwner() override;
 
   std::map<int,
@@ -75,24 +84,25 @@ class SurfaceFactoryOwner : public base::RefCounted<SurfaceFactoryOwner>,
       release_callbacks_;
   std::unique_ptr<cc::SurfaceIdAllocator> id_allocator_;
   std::unique_ptr<cc::SurfaceFactory> surface_factory_;
-  Surface* surface_;
+  Surface* surface_ = nullptr;
 };
 
 // This class represents a rectangular area that is displayed on the screen.
 // It has a location, size and pixel contents.
-class Surface : public aura::Window,
-                public aura::WindowObserver,
-                public ui::LayerOwnerDelegate,
-                public ui::CompositorObserver {
+class Surface : public ui::LayerOwnerDelegate,
+                public ui::ContextFactoryObserver {
  public:
+  using PropertyDeallocator = void (*)(int64_t value);
+
   Surface();
   ~Surface() override;
 
   // Type-checking downcast routine.
   static Surface* AsSurface(const aura::Window* window);
 
-  // Sets whether to put the contents in a SurfaceLayer or a TextureLayer.
-  static void SetUseSurfaceLayer(bool use_surface_layer);
+  aura::Window* window() { return window_.get(); }
+
+  cc::SurfaceId surface_id() const { return surface_id_; }
 
   // Set a buffer as the content of this surface. A buffer can only be attached
   // to one surface at a time.
@@ -199,55 +209,128 @@ class Surface : public aura::Window,
     return pending_damage_.contains(gfx::RectToSkIRect(damage));
   }
 
-  // Overridden from aura::WindowObserver:
-  void OnWindowAddedToRootWindow(aura::Window* window) override;
-  void OnWindowRemovingFromRootWindow(aura::Window* window,
-                                      aura::Window* new_root) override;
-
   // Overridden from ui::LayerOwnerDelegate:
   void OnLayerRecreated(ui::Layer* old_layer, ui::Layer* new_layer) override;
 
-  // Overridden from ui::CompositorObserver:
-  void OnCompositingDidCommit(ui::Compositor* compositor) override;
-  void OnCompositingStarted(ui::Compositor* compositor,
-                            base::TimeTicks start_time) override;
-  void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingAborted(ui::Compositor* compositor) override;
-  void OnCompositingLockStateChanged(ui::Compositor* compositor) override {}
-  void OnCompositingShuttingDown(ui::Compositor* compositor) override;
+  // Overridden from ui::ContextFactoryObserver.
+  void OnLostResources() override;
 
   void WillDraw(cc::SurfaceId surface_id);
 
+  // Check whether this Surface and its children need to create new cc::Surface
+  // IDs for their contents next time they get new buffer contents.
+  void CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces();
+
+  gfx::Size content_size() const { return content_size_; }
+
+  // Sets the |value| of the given surface |property|. Setting to the default
+  // value (e.g., NULL) removes the property. The caller is responsible for the
+  // lifetime of any object set as a property on the Surface.
+  template <typename T>
+  void SetProperty(const SurfaceProperty<T>* property, T value);
+
+  // Returns the value of the given surface |property|.  Returns the
+  // property-specific default value if the property was not previously set.
+  template <typename T>
+  T GetProperty(const SurfaceProperty<T>* property) const;
+
+  // Sets the |property| to its default value. Useful for avoiding a cast when
+  // setting to NULL.
+  template <typename T>
+  void ClearProperty(const SurfaceProperty<T>* property);
+
  private:
+  struct State {
+    State();
+    ~State();
+
+    bool operator==(const State& other);
+    bool operator!=(const State& other) { return !(*this == other); }
+
+    SkRegion opaque_region;
+    SkRegion input_region;
+    float buffer_scale = 1.0f;
+    gfx::Size viewport;
+    gfx::RectF crop;
+    bool only_visible_on_secure_output = false;
+    SkXfermode::Mode blend_mode = SkXfermode::kSrcOver_Mode;
+    float alpha = 1.0f;
+  };
+  class BufferAttachment {
+   public:
+    BufferAttachment();
+    ~BufferAttachment();
+
+    BufferAttachment& operator=(BufferAttachment&& buffer);
+
+    base::WeakPtr<Buffer>& buffer();
+    const base::WeakPtr<Buffer>& buffer() const;
+    void Reset(base::WeakPtr<Buffer> buffer);
+
+   private:
+    base::WeakPtr<Buffer> buffer_;
+
+    DISALLOW_COPY_AND_ASSIGN(BufferAttachment);
+  };
+
+  friend class subtle::PropertyHelper;
+
   bool needs_commit_surface_hierarchy() const {
     return needs_commit_surface_hierarchy_;
   }
 
-  // Commit the current attached buffer to a TextureLayer.
-  void CommitTextureContents();
+  // Returns true if this surface or any child surface needs a commit and has
+  // has_pending_layer_changes_ true.
+  bool HasLayerHierarchyChanged() const;
 
-  // Commit the current attached buffer to a SurfaceLayer.
-  void CommitSurfaceContents();
-
-  // Set TextureLayer contents to the current buffer.
-  void SetTextureLayerContents(ui::Layer* layer);
+  // Sets that all children must create new cc::SurfaceIds for their contents.
+  void SetSurfaceHierarchyNeedsCommitToNewSurfaces();
 
   // Set SurfaceLayer contents to the current buffer.
   void SetSurfaceLayerContents(ui::Layer* layer);
 
-  // This returns true when the surface has some contents assigned to it.
-  bool has_contents() const { return !!current_buffer_; }
+  // Updates current_resource_ with a new resource id corresponding to the
+  // contents of the attached buffer (or id 0, if no buffer is attached).
+  // UpdateSurface must be called afterwards to ensure the release callback
+  // will be called.
+  void UpdateResource(bool client_usage);
 
-  // This is true if the buffer contents should be put in a SurfaceLayer
-  // rather than a TextureLayer.
-  static bool use_surface_layer_;
+  // Updates the current Surface with a new frame referring to the resource in
+  // current_resource_.
+  void UpdateSurface(bool full_damage);
+
+  int64_t SetPropertyInternal(const void* key,
+                              const char* name,
+                              PropertyDeallocator deallocator,
+                              int64_t value,
+                              int64_t default_value);
+  int64_t GetPropertyInternal(const void* key, int64_t default_value) const;
+
+  // This returns true when the surface has some contents assigned to it.
+  bool has_contents() const { return !!current_buffer_.buffer(); }
+
+  // This window has the layer which contains the Surface contents.
+  std::unique_ptr<aura::Window> window_;
+
+  // This is true if it's possible that the layer properties (size, opacity,
+  // etc.) may have been modified since the last commit. Attaching a new
+  // buffer with the same size as the old shouldn't set this to true.
+  bool has_pending_layer_changes_ = true;
+
+  // This is true if the next commit to this surface should put its contents
+  // into a new cc::SurfaceId. This allows for synchronization between Surface
+  // and layer changes.
+  bool needs_commit_to_new_surface_ = true;
+
+  // This is the size of the last committed contents.
+  gfx::Size content_size_;
 
   // This is true when Attach() has been called and new contents should take
   // effect next time Commit() is called.
-  bool has_pending_contents_;
+  bool has_pending_contents_ = false;
 
   // The buffer that will become the content of surface when Commit() is called.
-  base::WeakPtr<Buffer> pending_buffer_;
+  BufferAttachment pending_buffer_;
 
   cc::SurfaceManager* surface_manager_;
 
@@ -257,7 +340,7 @@ class Surface : public aura::Window,
   cc::SurfaceId surface_id_;
 
   // The next resource id the buffer will be attached to.
-  int next_resource_id_ = 0;
+  int next_resource_id_ = 1;
 
   // The damage region to schedule paint for when Commit() is called.
   SkRegion pending_damage_;
@@ -272,14 +355,11 @@ class Surface : public aura::Window,
   std::list<FrameCallback> frame_callbacks_;
   std::list<FrameCallback> active_frame_callbacks_;
 
-  // The opaque region to take effect when Commit() is called.
-  SkRegion pending_opaque_region_;
+  // This is the state that has yet to be committed.
+  State pending_state_;
 
-  // The input region to take effect when Commit() is called.
-  SkRegion pending_input_region_;
-
-  // The buffer scaling factor to take effect when Commit() is called.
-  float pending_buffer_scale_;
+  // This is the state that has been committed.
+  State state_;
 
   // The stack of sub-surfaces to take effect when Commit() is called.
   // Bottom-most sub-surface at the front of the list and top-most sub-surface
@@ -288,61 +368,35 @@ class Surface : public aura::Window,
   using SubSurfaceEntryList = std::list<SubSurfaceEntry>;
   SubSurfaceEntryList pending_sub_surfaces_;
 
-  // The viewport to take effect when Commit() is called.
-  gfx::Size pending_viewport_;
-
-  // The crop rectangle to take effect when Commit() is called.
-  gfx::RectF pending_crop_;
-
-  // The active crop rectangle.
-  gfx::RectF crop_;
-
-  // The secure output visibility state to take effect when Commit() is called.
-  bool pending_only_visible_on_secure_output_;
-
-  // The active secure output visibility state.
-  bool only_visible_on_secure_output_;
-
-  // The blend mode state to take effect when Commit() is called.
-  SkXfermode::Mode pending_blend_mode_;
-
-  // The alpha state to take effect when Commit() is called.
-  float pending_alpha_;
-
-  // The active alpha state.
-  float alpha_;
-
   // The buffer that is currently set as content of surface.
-  base::WeakPtr<Buffer> current_buffer_;
+  BufferAttachment current_buffer_;
 
-  // The active input region used for hit testing.
-  SkRegion input_region_;
+  // The last resource that was sent to a surface.
+  cc::TransferableResource current_resource_;
 
   // This is true if a call to Commit() as been made but
   // CommitSurfaceHierarchy() has not yet been called.
-  bool needs_commit_surface_hierarchy_;
+  bool needs_commit_surface_hierarchy_ = false;
 
   // This is set when the compositing starts and passed to active frame
   // callbacks when compositing successfully ends.
   base::TimeTicks last_compositing_start_time_;
 
-  // This is true when the contents of the surface should be updated next time
-  // the compositor successfully ends compositing.
-  bool update_contents_after_successful_compositing_;
-
-  // The compsitor being observer or null if not observing a compositor.
-  ui::Compositor* compositor_;
-
   // Cursor providers. Surface does not own the cursor providers.
   std::set<CursorProvider*> cursor_providers_;
-
-  // Texture size.
-  gfx::Size texture_size_in_dip_;
 
   // This can be set to have some functions delegated. E.g. ShellSurface class
   // can set this to handle Commit() and apply any double buffered state it
   // maintains.
-  SurfaceDelegate* delegate_;
+  SurfaceDelegate* delegate_ = nullptr;
+
+  struct Value {
+    const char* name;
+    int64_t value;
+    PropertyDeallocator deallocator;
+  };
+
+  std::map<const void*, Value> prop_map_;
 
   // Surface observer list. Surface does not own the observers.
   base::ObserverList<SurfaceObserver, true> observers_;

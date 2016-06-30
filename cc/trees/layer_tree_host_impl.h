@@ -158,6 +158,7 @@ class CC_EXPORT LayerTreeHostImpl
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
+      std::unique_ptr<AnimationHost> animation_host,
       int id);
   ~LayerTreeHostImpl() override;
 
@@ -247,16 +248,16 @@ class CC_EXPORT LayerTreeHostImpl
   void DidAnimateScrollOffset();
   void SetViewportDamage(const gfx::Rect& damage_rect);
 
-  void SetTreeLayerFilterMutated(int layer_id,
+  void SetTreeLayerFilterMutated(ElementId element_id,
                                  LayerTreeImpl* tree,
                                  const FilterOperations& filters);
-  void SetTreeLayerOpacityMutated(int layer_id,
+  void SetTreeLayerOpacityMutated(ElementId element_id,
                                   LayerTreeImpl* tree,
                                   float opacity);
-  void SetTreeLayerTransformMutated(int layer_id,
+  void SetTreeLayerTransformMutated(ElementId element_id,
                                     LayerTreeImpl* tree,
                                     const gfx::Transform& transform);
-  void SetTreeLayerScrollOffsetMutated(int layer_id,
+  void SetTreeLayerScrollOffsetMutated(ElementId element_id,
                                        LayerTreeImpl* tree,
                                        const gfx::ScrollOffset& scroll_offset);
   bool AnimationsPreserveAxisAlignment(const LayerImpl* layer) const;
@@ -368,6 +369,8 @@ class CC_EXPORT LayerTreeHostImpl
   void DidLoseOutputSurface() override;
   void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
+  void DidReceiveTextureInUseResponses(
+      const gpu::TextureInUseResponses& responses) override;
   void ReclaimResources(const CompositorFrameAck* ack) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
@@ -444,7 +447,6 @@ class CC_EXPORT LayerTreeHostImpl
   virtual void ActivateSyncTree();
 
   // Shortcuts to layers on the active tree.
-  LayerImpl* RootLayer() const;
   LayerImpl* InnerViewportScrollLayer() const;
   LayerImpl* OuterViewportScrollLayer() const;
   LayerImpl* CurrentlyScrollingLayer() const;
@@ -618,16 +620,6 @@ class CC_EXPORT LayerTreeHostImpl
   void SetLayerTreeMutator(std::unique_ptr<LayerTreeMutator> mutator);
   LayerTreeMutator* mutator() { return mutator_.get(); }
 
-  void set_fixed_raster_scale_has_blurry_content() {
-    has_fixed_raster_scale_blurry_content_ = true;
-  }
-  bool has_fixed_raster_scale_blurry_content() const {
-    return has_fixed_raster_scale_blurry_content_;
-  }
-
-  bool HasFixedRasterScalePotentialPerformanceRegression() const;
-  void SetFixedRasterScaleAttemptedToChangeScale();
-
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
@@ -637,6 +629,7 @@ class CC_EXPORT LayerTreeHostImpl
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
+      std::unique_ptr<AnimationHost> animation_host,
       int id);
 
   // Virtual for testing.
@@ -655,9 +648,6 @@ class CC_EXPORT LayerTreeHostImpl
   BeginFrameTracker current_begin_frame_tracker_;
 
  private:
-  enum { kFixedRasterScaleAttemptedScaleChangeThreshold = 5 };
-  enum { kFixedRasterScaleAttemptedScaleChangeHistoryCount = 10 };
-
   gfx::Vector2dF ScrollNodeWithViewportSpaceDelta(
       ScrollNode* scroll_node,
       const gfx::PointF& viewport_point,
@@ -694,7 +684,6 @@ class CC_EXPORT LayerTreeHostImpl
   bool AnimateTopControls(base::TimeTicks monotonic_time);
 
   void TrackDamageForAllSurfaces(
-      LayerImpl* root_draw_layer,
       const LayerImplList& render_surface_layer_list);
 
   void UpdateTileManagerMemoryPolicy(const ManagedMemoryPolicy& policy);
@@ -749,6 +738,7 @@ class CC_EXPORT LayerTreeHostImpl
   bool use_msaa_;
   GpuRasterizationStatus gpu_rasterization_status_;
   bool tree_resources_for_gpu_rasterization_dirty_;
+  std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   std::unique_ptr<TileTaskManager> tile_task_manager_;
   std::unique_ptr<ResourcePool> resource_pool_;
   std::unique_ptr<Renderer> renderer_;
@@ -859,9 +849,6 @@ class CC_EXPORT LayerTreeHostImpl
 
   std::unique_ptr<LayerTreeMutator> mutator_;
 
-  bool has_fixed_raster_scale_blurry_content_;
-  std::bitset<kFixedRasterScaleAttemptedScaleChangeHistoryCount>
-      fixed_raster_scale_attempted_scale_change_history_;
   std::unique_ptr<PendingTreeDurationHistogramTimer>
       pending_tree_duration_timer_;
 

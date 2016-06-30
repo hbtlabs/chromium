@@ -204,6 +204,19 @@ void DefaultState::OnWMEvent(WindowState* window_state, const WMEvent* event) {
     case WM_EVENT_SHOW_INACTIVE:
       next_state_type = WINDOW_STATE_TYPE_INACTIVE;
       break;
+    case WM_EVENT_PIN:
+      // If there already is a pinned window, it is not allowed to set it
+      // to this window.
+      // TODO(hidehiko): If a system modal window is openening, the pinning
+      // probably should fail.
+      if (WmShell::Get()->IsPinned()) {
+        LOG(ERROR) << "An PIN event is triggered, while another window is "
+                   << "already in pinned mode.";
+        next_state_type = current_state_type;
+      } else {
+        next_state_type = WINDOW_STATE_TYPE_PINNED;
+      }
+      break;
     case WM_EVENT_TOGGLE_MAXIMIZE_CAPTION:
     case WM_EVENT_TOGGLE_MAXIMIZE:
     case WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE:
@@ -368,6 +381,7 @@ bool DefaultState::ProcessCompoundEvents(WindowState* window_state,
     case WM_EVENT_MAXIMIZE:
     case WM_EVENT_MINIMIZE:
     case WM_EVENT_FULLSCREEN:
+    case WM_EVENT_PIN:
     case WM_EVENT_SNAP_LEFT:
     case WM_EVENT_SNAP_RIGHT:
     case WM_EVENT_SET_BOUNDS:
@@ -478,6 +492,7 @@ bool DefaultState::ProcessWorkspaceEvents(WindowState* window_state,
     case WM_EVENT_MAXIMIZE:
     case WM_EVENT_MINIMIZE:
     case WM_EVENT_FULLSCREEN:
+    case WM_EVENT_PIN:
     case WM_EVENT_SNAP_LEFT:
     case WM_EVENT_SNAP_RIGHT:
     case WM_EVENT_SET_BOUNDS:
@@ -555,7 +570,7 @@ void DefaultState::EnterToNextState(WindowState* window_state,
       window_state->SaveCurrentBoundsForRestore();
     }
 
-    if (window_state->IsMaximizedOrFullscreen())
+    if (window_state->IsMaximizedOrFullscreenOrPinned())
       MoveToDisplayForRestore(window_state);
 
     UpdateBoundsFromState(window_state, previous_state_type);
@@ -568,6 +583,11 @@ void DefaultState::EnterToNextState(WindowState* window_state,
       window_state->ClearRestoreBounds();
   }
   window_state->NotifyPostStateTypeChange(previous_state_type);
+
+  if (next_state_type == WINDOW_STATE_TYPE_PINNED ||
+      previous_state_type == WINDOW_STATE_TYPE_PINNED) {
+    WmShell::Get()->SetPinnedWindow(window_state->window());
+  }
 }
 
 void DefaultState::ReenterToCurrentState(
@@ -575,13 +595,16 @@ void DefaultState::ReenterToCurrentState(
     WindowState::State* state_in_previous_mode) {
   WindowStateType previous_state_type = state_in_previous_mode->GetType();
 
-  // A state change should not move a window into or out of full screen since
-  // full screen is a "special mode" the user wanted to be in and should be
-  // respected as such.
-  if (previous_state_type == wm::WINDOW_STATE_TYPE_FULLSCREEN)
-    state_type_ = wm::WINDOW_STATE_TYPE_FULLSCREEN;
-  else if (state_type_ == wm::WINDOW_STATE_TYPE_FULLSCREEN)
+  // A state change should not move a window into or out of full screen or
+  // pinned since these are "special mode" the user wanted to be in and
+  // should be respected as such.
+  if (previous_state_type == wm::WINDOW_STATE_TYPE_FULLSCREEN ||
+      previous_state_type == wm::WINDOW_STATE_TYPE_PINNED) {
     state_type_ = previous_state_type;
+  } else if (state_type_ == wm::WINDOW_STATE_TYPE_FULLSCREEN ||
+             state_type_ == wm::WINDOW_STATE_TYPE_PINNED) {
+    state_type_ = previous_state_type;
+  }
 
   window_state->UpdateWindowShowStateFromStateType();
   window_state->NotifyPreStateTypeChange(previous_state_type);
@@ -658,6 +681,7 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
       break;
 
     case WINDOW_STATE_TYPE_FULLSCREEN:
+    case WINDOW_STATE_TYPE_PINNED:
       bounds_in_parent = GetDisplayBoundsInParent(window);
       break;
 
@@ -672,10 +696,11 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
 
   if (!window_state->IsMinimized()) {
     if (IsMinimizedWindowState(previous_state_type) ||
-        window_state->IsFullscreen()) {
+        window_state->IsFullscreen() || window_state->IsPinned()) {
       window_state->SetBoundsDirect(bounds_in_parent);
     } else if (window_state->IsMaximized() ||
-               IsMaximizedOrFullscreenWindowStateType(previous_state_type)) {
+               IsMaximizedOrFullscreenOrPinnedWindowStateType(
+                   previous_state_type)) {
       window_state->SetBoundsDirectCrossFade(bounds_in_parent);
     } else if (window_state->is_dragged()) {
       // SetBoundsDirectAnimated does not work when the window gets reparented.
@@ -704,7 +729,7 @@ void DefaultState::UpdateBoundsFromState(WindowState* window_state,
     // sure it's visible.
     window->Show();
     if (IsMinimizedWindowState(previous_state_type) &&
-        !window_state->IsMaximizedOrFullscreen()) {
+        !window_state->IsMaximizedOrFullscreenOrPinned()) {
       window_state->set_unminimize_to_restore_bounds(false);
     }
   }

@@ -13,7 +13,6 @@
 #include "components/arc/arc_bridge_service_impl.h"
 #include "components/arc/test/fake_arc_bridge_bootstrap.h"
 #include "components/arc/test/fake_arc_bridge_instance.h"
-#include "ipc/mojo/scoped_ipc_support.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -122,7 +121,7 @@ TEST_F(ArcBridgeTest, ShutdownMidStartup) {
   ASSERT_EQ(ArcBridgeService::State::STOPPED, state());
 }
 
-// If the channel is disconnected, it should be re-established.
+// If the instance is stopped, it should be re-started.
 TEST_F(ArcBridgeTest, Restart) {
   ASSERT_FALSE(ready());
   ASSERT_EQ(0, instance_->init_calls());
@@ -136,6 +135,7 @@ TEST_F(ArcBridgeTest, Restart) {
   // Simulate a connection loss.
   service_->DisableReconnectDelayForTesting();
   service_->OnChannelClosed();
+  instance_->SimulateCrash();
   instance_->WaitForInitCall();
   ASSERT_EQ(ArcBridgeService::State::READY, state());
   ASSERT_EQ(2, instance_->init_calls());

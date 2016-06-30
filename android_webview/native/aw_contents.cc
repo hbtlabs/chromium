@@ -56,7 +56,6 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/android/synchronous_compositor.h"
@@ -94,7 +93,6 @@ using base::android::ConvertUTF8ToJavaString;
 using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
-using data_reduction_proxy::DataReductionProxySettings;
 using navigation_interception::InterceptNavigationDelegate;
 using content::BrowserThread;
 using content::ContentViewCore;
@@ -172,7 +170,8 @@ AwBrowserPermissionRequestDelegate* AwBrowserPermissionRequestDelegate::FromID(
 }
 
 AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
-    : functor_(nullptr),
+    : content::WebContentsObserver(web_contents.get()),
+      functor_(nullptr),
       browser_view_renderer_(
           this,
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)),
@@ -184,6 +183,15 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
   web_contents_->SetUserData(android_webview::kAwContentsUserDataKey,
                              new AwContentsUserData(this));
   browser_view_renderer_.RegisterWithWebContents(web_contents_.get());
+
+  CompositorID compositor_id;
+  if (web_contents_->GetRenderProcessHost() &&
+      web_contents_->GetRenderViewHost()) {
+    compositor_id.process_id = web_contents_->GetRenderProcessHost()->GetID();
+    compositor_id.routing_id = web_contents_->GetRoutingID();
+  }
+
+  browser_view_renderer_.SetActiveCompositorID(compositor_id);
   render_view_host_ext_.reset(
       new AwRenderViewHostExt(this, web_contents_.get()));
 
@@ -1286,6 +1294,20 @@ void AwContents::ResumeLoadingCreatedPopupWebContents(
 void SetShouldDownloadFavicons(JNIEnv* env,
                                const JavaParamRef<jclass>& jclazz) {
   g_should_download_favicons = true;
+}
+
+void AwContents::RenderViewHostChanged(content::RenderViewHost* old_host,
+                                       content::RenderViewHost* new_host) {
+  DCHECK(new_host);
+
+  int process_id = new_host->GetProcess()->GetID();
+  int routing_id = new_host->GetRoutingID();
+  // At this point, the current RVH may or may not contain a compositor. So
+  // compositor_ may be nullptr, in which case
+  // BrowserViewRenderer::DidInitializeCompositor() callback is time when the
+  // new compositor is constructed.
+  browser_view_renderer_.SetActiveCompositorID(
+      CompositorID(process_id, routing_id));
 }
 
 }  // namespace android_webview

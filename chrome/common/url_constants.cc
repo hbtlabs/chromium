@@ -271,6 +271,7 @@ const char kChromeUISandboxHost[] = "sandbox";
 
 #if defined(OS_ANDROID)
 const char kChromeUIContextualSearchPromoHost[] = "contextual-search-promo";
+const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUIPhysicalWebHost[] = "physical-web";
 const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
@@ -663,6 +664,7 @@ const char* const kChromeHostURLs[] = {
 #endif
 #if defined(OS_ANDROID)
   kChromeUINetExportHost,
+  kChromeUIOfflineInternalsHost,
   kChromeUIPopularSitesInternalsHost,
   kChromeUISnippetsInternalsHost,
 #else  // non-mobile
@@ -779,5 +781,9 @@ const char kChooserBluetoothOverviewURL[] =
 
 const char kChooserUsbOverviewURL[] =
     "https://support.google.com/chrome?p=webusb";
+
+#if defined(OS_CHROMEOS)
+const char kEolNotificationURL[] = "https://www.google.com/chromebook/older/";
+#endif
 
 }  // namespace chrome

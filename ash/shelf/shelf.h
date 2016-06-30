@@ -13,7 +13,6 @@
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_types.h"
 #include "ash/shelf/shelf_locking_manager.h"
-#include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_widget.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/size.h"
@@ -40,7 +39,8 @@ class FocusCycler;
 class ShelfDelegate;
 class ShelfIconObserver;
 class ShelfModel;
-class WmShelfAura;
+class ShelfView;
+class WmShelf;
 
 namespace test {
 class ShelfTestAPI;
@@ -52,7 +52,10 @@ class ASH_EXPORT Shelf {
  public:
   static const char kNativeViewName[];
 
-  Shelf(ShelfModel* model, ShelfDelegate* delegate, ShelfWidget* widget);
+  Shelf(ShelfModel* model,
+        ShelfDelegate* delegate,
+        WmShelf* wm_shelf,
+        ShelfWidget* widget);
   virtual ~Shelf();
 
   // Return the shelf for the primary display. NULL if no user is logged in yet.
@@ -64,10 +67,6 @@ class ASH_EXPORT Shelf {
   // on primary display if the shelf per display feature is disabled. NULL if no
   // user is logged in yet.
   static Shelf* ForWindow(const aura::Window* window);
-
-  // Returns the shelf for the display with |display_id| or null if that display
-  // does not exist or does not have a shelf.
-  static Shelf* ForDisplayId(int64_t display_id);
 
   void SetAlignment(ShelfAlignment alignment);
   ShelfAlignment alignment() const { return alignment_; }
@@ -141,8 +140,6 @@ class ASH_EXPORT Shelf {
 
   ShelfWidget* shelf_widget() { return shelf_widget_; }
 
-  ShelfModel* shelf_model() { return shelf_view_->model(); }
-
   // TODO(msw): ShelfLayoutManager should not be accessed externally.
   ShelfLayoutManager* shelf_layout_manager() {
     return shelf_widget_->shelf_layout_manager();
@@ -155,13 +152,12 @@ class ASH_EXPORT Shelf {
   // Returns ApplicationDragAndDropHost for this shelf.
   app_list::ApplicationDragAndDropHost* GetDragAndDropHostForAppList();
 
-  WmShelfAura* wm_shelf() { return wm_shelf_.get(); }
-
  private:
   friend class test::ShelfTestAPI;
 
-  std::unique_ptr<WmShelfAura> wm_shelf_;
   ShelfDelegate* delegate_;
+  // The shelf controller. Owned by the root window controller.
+  WmShelf* wm_shelf_;
   ShelfWidget* shelf_widget_;
   ShelfView* shelf_view_;
   ShelfLockingManager shelf_locking_manager_;

@@ -29,24 +29,21 @@
 namespace ash {
 
 LockWindowState::LockWindowState(aura::Window* window)
-    : current_state_type_(wm::GetWindowState(window)->GetStateType()) {
-}
+    : current_state_type_(wm::GetWindowState(window)->GetStateType()) {}
 
-LockWindowState::~LockWindowState() {
-}
+LockWindowState::~LockWindowState() {}
 
 void LockWindowState::OnWMEvent(wm::WindowState* window_state,
                                 const wm::WMEvent* event) {
-  aura::Window* window =
-      ash::WmWindowAura::GetAuraWindow(window_state->window());
-  gfx::Rect bounds = window->bounds();
-
   switch (event->type()) {
     case wm::WM_EVENT_TOGGLE_FULLSCREEN:
       ToggleFullScreen(window_state, window_state->delegate());
       break;
     case wm::WM_EVENT_FULLSCREEN:
       UpdateWindow(window_state, wm::WINDOW_STATE_TYPE_FULLSCREEN);
+      break;
+    case wm::WM_EVENT_PIN:
+      NOTREACHED();
       break;
     case wm::WM_EVENT_TOGGLE_MAXIMIZE_CAPTION:
     case wm::WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE:
@@ -106,13 +103,11 @@ void LockWindowState::AttachState(wm::WindowState* window_state,
   if (current_state_type_ != wm::WINDOW_STATE_TYPE_MAXIMIZED &&
       current_state_type_ != wm::WINDOW_STATE_TYPE_MINIMIZED &&
       current_state_type_ != wm::WINDOW_STATE_TYPE_FULLSCREEN) {
-    UpdateWindow(window_state,
-                 GetMaximizedOrCenteredWindowType(window_state));
+    UpdateWindow(window_state, GetMaximizedOrCenteredWindowType(window_state));
   }
 }
 
-void LockWindowState::DetachState(wm::WindowState* window_state) {
-}
+void LockWindowState::DetachState(wm::WindowState* window_state) {}
 
 // static
 wm::WindowState* LockWindowState::SetLockWindowState(aura::Window* window) {
@@ -128,7 +123,7 @@ void LockWindowState::UpdateWindow(wm::WindowState* window_state,
   DCHECK(target_state == wm::WINDOW_STATE_TYPE_MINIMIZED ||
          target_state == wm::WINDOW_STATE_TYPE_MAXIMIZED ||
          (target_state == wm::WINDOW_STATE_TYPE_NORMAL &&
-              !window_state->CanMaximize()) ||
+          !window_state->CanMaximize()) ||
          target_state == wm::WINDOW_STATE_TYPE_FULLSCREEN);
 
   if (target_state == wm::WINDOW_STATE_TYPE_MINIMIZED) {
@@ -167,9 +162,9 @@ void LockWindowState::UpdateWindow(wm::WindowState* window_state,
 }
 
 wm::WindowStateType LockWindowState::GetMaximizedOrCenteredWindowType(
-      wm::WindowState* window_state) {
-  return window_state->CanMaximize() ? wm::WINDOW_STATE_TYPE_MAXIMIZED :
-                                       wm::WINDOW_STATE_TYPE_NORMAL;
+    wm::WindowState* window_state) {
+  return window_state->CanMaximize() ? wm::WINDOW_STATE_TYPE_MAXIMIZED
+                                     : wm::WINDOW_STATE_TYPE_NORMAL;
 }
 
 gfx::Rect GetBoundsForLockWindow(aura::Window* window) {
@@ -191,8 +186,7 @@ void LockWindowState::UpdateBounds(wm::WindowState* window_state) {
       keyboard::KeyboardController::GetInstance();
   gfx::Rect keyboard_bounds;
 
-  if (keyboard_controller &&
-      !keyboard::IsKeyboardOverscrollEnabled() &&
+  if (keyboard_controller && !keyboard::IsKeyboardOverscrollEnabled() &&
       keyboard_controller->keyboard_visible()) {
     keyboard_bounds = keyboard_controller->current_keyboard_bounds();
   }

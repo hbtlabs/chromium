@@ -5,6 +5,7 @@
 #include "tools/json_schema_compiler/test/additional_properties.h"
 
 #include <memory>
+#include <utility>
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -43,7 +44,7 @@ TEST(JsonSchemaCompilerAdditionalPropertiesTest,
   param_object_value->SetString("str", "a");
   param_object_value->SetInteger("num", 1);
   std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-  params_value->Append(param_object_value->DeepCopy());
+  params_value->Append(param_object_value->CreateDeepCopy());
   std::unique_ptr<AdditionalProperties::Params> params(
       AdditionalProperties::Params::Create(*params_value));
   EXPECT_TRUE(params.get());
@@ -59,10 +60,10 @@ TEST(JsonSchemaCompilerAdditionalPropertiesTest,
 
   base::ListValue expected;
   {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger("integer", 5);
     dict->SetString("key", "value");
-    expected.Append(dict);
+    expected.Append(std::move(dict));
   }
 
   EXPECT_TRUE(base::Value::Equals(

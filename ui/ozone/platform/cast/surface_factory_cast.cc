@@ -254,8 +254,10 @@ scoped_refptr<NativePixmap> SurfaceFactoryCast::CreateNativePixmap(
       return nullptr;
     }
     bool AreDmaBufFdsValid() const override { return false; }
+    size_t GetDmaBufFdCount() const override { return 0; }
     int GetDmaBufFd(size_t plane) const override { return -1; }
     int GetDmaBufPitch(size_t plane) const override { return 0; }
+    int GetDmaBufOffset(size_t plane) const override { return 0; }
     gfx::BufferFormat GetBufferFormat() const override {
       return gfx::BufferFormat::BGRA_8888;
     }

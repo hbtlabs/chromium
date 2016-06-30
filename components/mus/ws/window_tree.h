@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "cc/ipc/surface_id.mojom.h"
@@ -42,6 +43,7 @@ class Display;
 class EventMatcher;
 class ServerWindow;
 class TargetedEvent;
+class WindowManagerDisplayRoot;
 class WindowManagerState;
 class WindowServer;
 class WindowTreeTest;
@@ -72,11 +74,15 @@ class WindowTree : public mojom::WindowTree,
   void Init(std::unique_ptr<WindowTreeBinding> binding,
             mojom::WindowTreePtr tree);
 
-  // Called if this WindowTree hosts the WindowManager. This happens if
-  // this WindowTree serves as the root of a WindowTreeHost.
+  // Called if this WindowTree hosts a WindowManager.
   void ConfigureWindowManager();
 
   ClientSpecificId id() const { return id_; }
+
+  void set_embedder_intercepts_events() { embedder_intercepts_events_ = true; }
+  bool embedder_intercepts_events() const {
+    return embedder_intercepts_events_;
+  }
 
   const UserId& user_id() const { return user_id_; }
 
@@ -122,12 +128,26 @@ class WindowTree : public mojom::WindowTree,
         const_cast<const WindowTree*>(this)->GetDisplay(window));
   }
 
-  const WindowManagerState* GetWindowManagerState(
+  const WindowManagerDisplayRoot* GetWindowManagerDisplayRoot(
       const ServerWindow* window) const;
-  WindowManagerState* GetWindowManagerState(const ServerWindow* window) {
-    return const_cast<WindowManagerState*>(
-        const_cast<const WindowTree*>(this)->GetWindowManagerState(window));
+  WindowManagerDisplayRoot* GetWindowManagerDisplayRoot(
+      const ServerWindow* window) {
+    return const_cast<WindowManagerDisplayRoot*>(
+        const_cast<const WindowTree*>(this)->GetWindowManagerDisplayRoot(
+            window));
   }
+  WindowManagerState* window_manager_state() {
+    return window_manager_state_.get();
+  }
+
+  DisplayManager* display_manager();
+  const DisplayManager* display_manager() const;
+
+  WindowServer* window_server() { return window_server_; }
+  const WindowServer* window_server() const { return window_server_; }
+
+  // Adds a new root to this tree. This is only valid for window managers.
+  void AddRootForWindowManager(const ServerWindow* root);
 
   // Invoked when a tree is about to be destroyed.
   void OnWindowDestroyingTreeImpl(WindowTree* tree);
@@ -148,7 +168,8 @@ class WindowTree : public mojom::WindowTree,
   bool SetWindowOpacity(const ClientWindowId& window_id, float opacity);
   bool SetFocus(const ClientWindowId& window_id);
   bool Embed(const ClientWindowId& window_id,
-             mojom::WindowTreeClientPtr client);
+             mojom::WindowTreeClientPtr client,
+             uint32_t flags);
   void DispatchInputEvent(ServerWindow* target, const ui::Event& event);
 
   bool IsWaitingForNewTopLevelWindow(uint32_t wm_change_id);
@@ -241,13 +262,6 @@ class WindowTree : public mojom::WindowTree,
     // Another client is being embedded in the window.
     EMBED,
   };
-
-  DisplayManager* display_manager();
-  const DisplayManager* display_manager() const;
-
-  // Used when this tree is the window manager.
-  Display* GetDisplayForWindowManager();
-  WindowManagerState* GetWindowManagerStateForWindowManager();
 
   bool ShouldRouteToWindowManager(const ServerWindow* window) const;
 
@@ -342,7 +356,7 @@ class WindowTree : public mojom::WindowTree,
                      mojom::OrderDirection direction) override;
   void GetWindowTree(
       Id window_id,
-      const mojo::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
+      const base::Callback<void(mojo::Array<mojom::WindowDataPtr>)>& callback)
       override;
   void SetCapture(uint32_t change_id, Id window_id) override;
   void ReleaseCapture(uint32_t change_id, Id window_id) override;
@@ -367,6 +381,7 @@ class WindowTree : public mojom::WindowTree,
                      mojom::SurfaceClientPtr client) override;
   void Embed(Id transport_window_id,
              mojom::WindowTreeClientPtr client,
+             uint32_t flags,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t change_id, Id transport_window_id) override;
   void SetCanFocus(Id transport_window_id, bool can_focus) override;
@@ -467,9 +482,11 @@ class WindowTree : public mojom::WindowTree,
   std::unique_ptr<mojo::AssociatedBinding<mojom::WindowManagerClient>>
       window_manager_internal_client_binding_;
   mojom::WindowManager* window_manager_internal_;
+  std::unique_ptr<WindowManagerState> window_manager_state_;
 
   std::unique_ptr<WaitingForTopLevelWindowInfo>
       waiting_for_top_level_window_info_;
+  bool embedder_intercepts_events_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WindowTree);
 };

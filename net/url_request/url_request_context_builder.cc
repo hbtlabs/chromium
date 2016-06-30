@@ -21,6 +21,8 @@
 #include "net/base/network_delegate_impl.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -69,14 +71,14 @@ class BasicNetworkDelegate : public NetworkDelegateImpl {
     return OK;
   }
 
-  int OnBeforeSendHeaders(URLRequest* request,
-                          const CompletionCallback& callback,
-                          HttpRequestHeaders* headers) override {
+  int OnBeforeStartTransaction(URLRequest* request,
+                               const CompletionCallback& callback,
+                               HttpRequestHeaders* headers) override {
     return OK;
   }
 
-  void OnSendHeaders(URLRequest* request,
-                     const HttpRequestHeaders& headers) override {}
+  void OnStartTransaction(URLRequest* request,
+                          const HttpRequestHeaders& headers) override {}
 
   int OnHeadersReceived(
       URLRequest* request,
@@ -182,7 +184,6 @@ URLRequestContextBuilder::HttpNetworkSessionParams::HttpNetworkSessionParams()
       testing_fixed_https_port(0),
       enable_spdy31(false),
       enable_http2(true),
-      enable_alternative_service_with_different_host(true),
       enable_quic(false),
       quic_max_server_configs_stored_in_properties(0),
       quic_delay_tcp_race(true),
@@ -211,7 +212,8 @@ URLRequestContextBuilder::URLRequestContextBuilder()
       backoff_enabled_(false),
       sdch_enabled_(false),
       cookie_store_set_by_client_(false),
-      net_log_(nullptr) {
+      net_log_(nullptr),
+      socket_performance_watcher_factory_(nullptr) {
 }
 
 URLRequestContextBuilder::~URLRequestContextBuilder() {}
@@ -223,6 +225,7 @@ void URLRequestContextBuilder::SetHttpNetworkSessionComponents(
   params->cert_verifier = context->cert_verifier();
   params->transport_security_state = context->transport_security_state();
   params->cert_transparency_verifier = context->cert_transparency_verifier();
+  params->ct_policy_enforcer = context->ct_policy_enforcer();
   params->proxy_service = context->proxy_service();
   params->ssl_config_service = context->ssl_config_service();
   params->http_auth_handler_factory = context->http_auth_handler_factory();
@@ -386,6 +389,10 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
     storage->set_cert_verifier(CertVerifier::CreateDefault());
   }
 
+  storage->set_cert_transparency_verifier(
+      base::MakeUnique<MultiLogCTVerifier>());
+  storage->set_ct_policy_enforcer(base::MakeUnique<CTPolicyEnforcer>());
+
   if (throttling_enabled_) {
     storage->set_throttler_manager(
         base::WrapUnique(new URLRequestThrottlerManager()));
@@ -411,9 +418,6 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_.enable_spdy31;
   network_session_params.enable_http2 =
       http_network_session_params_.enable_http2;
-  network_session_params.enable_alternative_service_with_different_host =
-      http_network_session_params_
-          .enable_alternative_service_with_different_host;
   network_session_params.enable_quic = http_network_session_params_.enable_quic;
   network_session_params.quic_max_server_configs_stored_in_properties =
       http_network_session_params_.quic_max_server_configs_stored_in_properties;
@@ -444,6 +448,10 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
   if (proxy_delegate_) {
     network_session_params.proxy_delegate = proxy_delegate_.get();
     storage->set_proxy_delegate(std::move(proxy_delegate_));
+  }
+  if (socket_performance_watcher_factory_) {
+    network_session_params.socket_performance_watcher_factory =
+        socket_performance_watcher_factory_;
   }
 
   storage->set_http_network_session(

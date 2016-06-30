@@ -4,10 +4,11 @@
 
 #include "ash/aura/wm_window_aura.h"
 
-#include "ash/ash_constants.h"
 #include "ash/aura/aura_layout_manager_adapter.h"
 #include "ash/aura/wm_root_window_controller_aura.h"
 #include "ash/aura/wm_shell_aura.h"
+#include "ash/common/ash_constants.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_layout_manager.h"
 #include "ash/common/wm_window_observer.h"
@@ -43,6 +44,9 @@ DECLARE_WINDOW_PROPERTY_TYPE(ash::WmWindowAura*);
 namespace ash {
 
 DEFINE_OWNED_WINDOW_PROPERTY_KEY(ash::WmWindowAura, kWmWindowKey, nullptr);
+
+static_assert(aura::Window::kInitialId == kShellWindowId_Invalid,
+              "ids must match");
 
 namespace {
 
@@ -82,6 +86,10 @@ WmWindowAura::WmWindowAura(aura::Window* window)
   window_->SetProperty(kWmWindowKey, this);
 }
 
+WmWindowAura::~WmWindowAura() {
+  window_->RemoveObserver(this);
+}
+
 // static
 const WmWindow* WmWindowAura::Get(const aura::Window* window) {
   if (!window)
@@ -101,6 +109,15 @@ std::vector<WmWindow*> WmWindowAura::FromAuraWindows(
   std::vector<WmWindow*> result(aura_windows.size());
   for (size_t i = 0; i < aura_windows.size(); ++i)
     result[i] = Get(aura_windows[i]);
+  return result;
+}
+
+// static
+std::vector<aura::Window*> WmWindowAura::ToAuraWindows(
+    const std::vector<WmWindow*>& windows) {
+  std::vector<aura::Window*> result(windows.size());
+  for (size_t i = 0; i < windows.size(); ++i)
+    result[i] = WmWindowAura::GetAuraWindow(windows[i]);
   return result;
 }
 
@@ -233,6 +250,9 @@ bool WmWindowAura::GetBoolProperty(WmWindowProperty key) {
 
     case WmWindowProperty::ALWAYS_ON_TOP:
       return window_->GetProperty(aura::client::kAlwaysOnTopKey);
+
+    case WmWindowProperty::EXCLUDE_FROM_MRU:
+      return window_->GetProperty(aura::client::kExcludeFromMruKey);
 
     default:
       NOTREACHED();
@@ -411,7 +431,8 @@ void WmWindowAura::SetRestoreBoundsInScreen(const gfx::Rect& bounds) {
 }
 
 gfx::Rect WmWindowAura::GetRestoreBoundsInScreen() const {
-  return *window_->GetProperty(aura::client::kRestoreBoundsKey);
+  gfx::Rect* bounds = window_->GetProperty(aura::client::kRestoreBoundsKey);
+  return bounds ? *bounds : gfx::Rect();
 }
 
 bool WmWindowAura::Contains(const WmWindow* other) const {
@@ -431,6 +452,19 @@ ui::WindowShowState WmWindowAura::GetShowState() const {
 
 void WmWindowAura::SetRestoreShowState(ui::WindowShowState show_state) {
   window_->SetProperty(aura::client::kRestoreShowStateKey, show_state);
+}
+
+void WmWindowAura::SetRestoreOverrides(
+    const gfx::Rect& bounds_override,
+    ui::WindowShowState window_state_override) {
+  if (bounds_override.IsEmpty()) {
+    window_->ClearProperty(kRestoreShowStateOverrideKey);
+    window_->ClearProperty(kRestoreBoundsOverrideKey);
+    return;
+  }
+  window_->SetProperty(kRestoreShowStateOverrideKey, window_state_override);
+  window_->SetProperty(kRestoreBoundsOverrideKey,
+                       new gfx::Rect(bounds_override));
 }
 
 void WmWindowAura::SetLockedToRoot(bool value) {
@@ -501,9 +535,13 @@ void WmWindowAura::Show() {
   window_->Show();
 }
 
+views::Widget* WmWindowAura::GetInternalWidget() {
+  return views::Widget::GetWidgetForNativeView(window_);
+}
+
 void WmWindowAura::CloseWidget() {
-  DCHECK(views::Widget::GetWidgetForNativeView(window_));
-  views::Widget::GetWidgetForNativeView(window_)->Close();
+  DCHECK(GetInternalWidget());
+  GetInternalWidget()->Close();
 }
 
 bool WmWindowAura::IsFocused() const {
@@ -540,6 +578,10 @@ void WmWindowAura::Unminimize() {
       aura::client::kShowStateKey,
       window_->GetProperty(aura::client::kRestoreShowStateKey));
   window_->ClearProperty(aura::client::kRestoreShowStateKey);
+}
+
+void WmWindowAura::SetExcludedFromMru(bool excluded_from_mru) {
+  window_->SetProperty(aura::client::kExcludeFromMruKey, excluded_from_mru);
 }
 
 std::vector<WmWindow*> WmWindowAura::GetChildren() {
@@ -601,8 +643,18 @@ void WmWindowAura::RemoveObserver(WmWindowObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-WmWindowAura::~WmWindowAura() {
-  window_->RemoveObserver(this);
+bool WmWindowAura::HasObserver(const WmWindowObserver* observer) const {
+  return observers_.HasObserver(observer);
+}
+
+void WmWindowAura::OnWindowHierarchyChanging(
+    const HierarchyChangeParams& params) {
+  WmWindowObserver::TreeChangeParams wm_params;
+  wm_params.target = Get(params.target);
+  wm_params.new_parent = Get(params.new_parent);
+  wm_params.old_parent = Get(params.old_parent);
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                    OnWindowTreeChanging(this, wm_params));
 }
 
 void WmWindowAura::OnWindowHierarchyChanged(
@@ -636,6 +688,8 @@ void WmWindowAura::OnWindowPropertyChanged(aura::Window* window,
     wm_property = WmWindowProperty::SHELF_ID;
   } else if (key == aura::client::kTopViewInset) {
     wm_property = WmWindowProperty::TOP_VIEW_INSET;
+  } else if (key == aura::client::kExcludeFromMruKey) {
+    wm_property = WmWindowProperty::EXCLUDE_FROM_MRU;
   } else {
     return;
   }
@@ -652,6 +706,10 @@ void WmWindowAura::OnWindowBoundsChanged(aura::Window* window,
 
 void WmWindowAura::OnWindowDestroying(aura::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroying(this));
+}
+
+void WmWindowAura::OnWindowDestroyed(aura::Window* window) {
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroyed(this));
 }
 
 void WmWindowAura::OnWindowVisibilityChanging(aura::Window* window,

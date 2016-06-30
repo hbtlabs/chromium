@@ -9,9 +9,12 @@
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutPart.h"
+#include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/transforms/TransformationMatrix.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -64,17 +67,14 @@ void PaintPropertyTreeBuilder::buildTreeNodes(FrameView& frameView, PaintPropert
 
 void PaintPropertyTreeBuilder::updatePaintOffsetTranslation(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
 {
-    bool shouldCreatePaintOffsetTranslationNode = false;
-    if (object.isSVGRoot()) {
-        // SVG doesn't use paint offset internally so emit a paint offset at the html->svg boundary.
-        shouldCreatePaintOffsetTranslationNode = true;
-    } else if (object.isBoxModelObject()) {
+    if (object.isBoxModelObject()) {
         // TODO(trchen): Eliminate PaintLayer dependency.
         PaintLayer* layer = toLayoutBoxModelObject(object).layer();
-        shouldCreatePaintOffsetTranslationNode = layer && layer->paintsWithTransform(GlobalPaintNormalPhase);
+        if (!layer || !layer->paintsWithTransform(GlobalPaintNormalPhase))
+            return;
     }
 
-    if (context.paintOffset == LayoutPoint() || !shouldCreatePaintOffsetTranslationNode)
+    if (context.paintOffset == LayoutPoint())
         return;
 
     RefPtr<TransformPaintPropertyNode> paintOffsetTranslation = TransformPaintPropertyNode::create(
@@ -97,6 +97,27 @@ static FloatPoint3D transformOrigin(const LayoutBox& box)
 
 void PaintPropertyTreeBuilder::updateTransform(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
 {
+    if (object.isSVG() && !object.isSVGRoot()) {
+        // SVG does not use paint offset internally and the root should have already accounted for
+        // any paint offset in the root's svgLocalToBorderBox transform.
+        DCHECK(context.paintOffset == LayoutPoint());
+
+        // FIXME(pdr): Check for the presence of a transform instead of the value. Checking for an
+        // identity matrix will cause the property tree structure to change during animations if
+        // the animation passes through the identity matrix.
+        // FIXME(pdr): Refactor this so all non-root SVG objects use the same transform function.
+        const AffineTransform& transform = object.isSVGForeignObject() ? object.localSVGTransform() : object.localToSVGParentTransform();
+        if (transform.isIdentity())
+            return;
+
+        // The origin is included in the local transform, so use an empty origin.
+        RefPtr<TransformPaintPropertyNode> svgTransform = TransformPaintPropertyNode::create(
+            transform, FloatPoint3D(0, 0, 0), context.currentTransform);
+        context.currentTransform = svgTransform.get();
+        object.getMutableForPainting().ensureObjectPaintProperties().setTransform(svgTransform.release());
+        return;
+    }
+
     const ComputedStyle& style = object.styleRef();
     if (!object.isBox() || !style.hasTransform())
         return;
@@ -146,8 +167,8 @@ void PaintPropertyTreeBuilder::updateLocalBorderBoxContext(const LayoutObject& o
     if (!object.hasLayer())
         return;
 
-    OwnPtr<ObjectPaintProperties::LocalBorderBoxProperties> borderBoxContext =
-        adoptPtr(new ObjectPaintProperties::LocalBorderBoxProperties);
+    std::unique_ptr<ObjectPaintProperties::LocalBorderBoxProperties> borderBoxContext =
+        wrapUnique(new ObjectPaintProperties::LocalBorderBoxProperties);
     borderBoxContext->paintOffset = context.paintOffset;
     borderBoxContext->transform = context.currentTransform;
     borderBoxContext->clip = context.currentClip;
@@ -232,20 +253,21 @@ void PaintPropertyTreeBuilder::updatePerspective(const LayoutObject& object, Pai
     object.getMutableForPainting().ensureObjectPaintProperties().setPerspective(perspective.release());
 }
 
-void PaintPropertyTreeBuilder::updateSvgLocalTransform(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
+void PaintPropertyTreeBuilder::updateSvgLocalToBorderBoxTransform(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
 {
-    if (!object.isSVG())
+    if (!object.isSVGRoot())
         return;
 
-    const AffineTransform& transform = object.localToSVGParentTransform();
+    AffineTransform transform = AffineTransform::translation(context.paintOffset.x().toFloat(), context.paintOffset.y().toFloat());
+    transform *= toLayoutSVGRoot(object).localToBorderBoxTransform();
     if (transform.isIdentity())
         return;
 
-    // The origin is included in the local transform, so use an empty origin.
-    RefPtr<TransformPaintPropertyNode> svgLocalTransform = TransformPaintPropertyNode::create(
+    RefPtr<TransformPaintPropertyNode> svgLocalToBorderBoxTransform = TransformPaintPropertyNode::create(
         transform, FloatPoint3D(0, 0, 0), context.currentTransform);
-    context.currentTransform = svgLocalTransform.get();
-    object.getMutableForPainting().ensureObjectPaintProperties().setSvgLocalTransform(svgLocalTransform.release());
+    context.currentTransform = svgLocalToBorderBoxTransform.get();
+    context.paintOffset = LayoutPoint();
+    object.getMutableForPainting().ensureObjectPaintProperties().setSvgLocalToBorderBoxTransform(svgLocalToBorderBoxTransform.release());
 }
 
 void PaintPropertyTreeBuilder::updateScrollTranslation(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
@@ -344,21 +366,27 @@ static void deriveBorderBoxFromContainerContext(const LayoutObject& object, Pain
     default:
         ASSERT_NOT_REACHED();
     }
-    if (boxModelObject.isBox()) {
-        context.paintOffset += toLayoutBox(boxModelObject).locationOffset();
+    if (boxModelObject.isBox() && (!boxModelObject.isSVG() || boxModelObject.isSVGRoot())) {
+        // TODO(pdr): Several calls in this function walk back up the tree to calculate containers
+        // (e.g., topLeftLocation, offsetForInFlowPosition*). The containing block and other
+        // containers can be stored on PaintPropertyTreeBuilderContext instead of recomputing them.
+        context.paintOffset.moveBy(toLayoutBox(boxModelObject).topLeftLocation());
         // This is a weird quirk that table cells paint as children of table rows,
         // but their location have the row's location baked-in.
         // Similar adjustment is done in LayoutTableCell::offsetFromContainer().
         if (boxModelObject.isTableCell()) {
             LayoutObject* parentRow = boxModelObject.parent();
             ASSERT(parentRow && parentRow->isTableRow());
-            context.paintOffset -= toLayoutBox(parentRow)->locationOffset();
+            context.paintOffset.moveBy(-toLayoutBox(parentRow)->topLeftLocation());
         }
     }
 }
 
 void PaintPropertyTreeBuilder::buildTreeNodes(const LayoutObject& object, PaintPropertyTreeBuilderContext& context)
 {
+    if (!object.isBoxModelObject() && !object.isSVG())
+        return;
+
     object.getMutableForPainting().clearObjectPaintProperties();
 
     deriveBorderBoxFromContainerContext(object, context);
@@ -373,7 +401,7 @@ void PaintPropertyTreeBuilder::buildTreeNodes(const LayoutObject& object, PaintP
     // TODO(trchen): Insert flattening transform here, as specified by
     // http://www.w3.org/TR/css3-transforms/#transform-style-property
     updatePerspective(object, context);
-    updateSvgLocalTransform(object, context);
+    updateSvgLocalToBorderBoxTransform(object, context);
     updateScrollTranslation(object, context);
     updateOutOfFlowContext(object, context);
 }

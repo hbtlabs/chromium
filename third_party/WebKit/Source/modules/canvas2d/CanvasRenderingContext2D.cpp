@@ -62,7 +62,6 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
 #include "wtf/MathExtras.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
 
@@ -141,9 +140,7 @@ void CanvasRenderingContext2D::unwindStateStack()
     }
 }
 
-CanvasRenderingContext2D::~CanvasRenderingContext2D()
-{
-}
+CanvasRenderingContext2D::~CanvasRenderingContext2D() { }
 
 void CanvasRenderingContext2D::dispose()
 {
@@ -186,7 +183,7 @@ void CanvasRenderingContext2D::loseContext(LostContextMode lostMode)
     if (m_contextLostMode != NotLostContext)
         return;
     m_contextLostMode = lostMode;
-    if (m_contextLostMode == SyntheticLostContext) {
+    if (m_contextLostMode == SyntheticLostContext && canvas()) {
         canvas()->discardImageBuffer();
     }
     m_dispatchContextLostEventTimer.startOneShot(0, BLINK_FROM_HERE);
@@ -221,7 +218,7 @@ DEFINE_TRACE(CanvasRenderingContext2D)
 
 void CanvasRenderingContext2D::dispatchContextLostEvent(Timer<CanvasRenderingContext2D>*)
 {
-    if (contextLostRestoredEventsEnabled()) {
+    if (canvas() && contextLostRestoredEventsEnabled()) {
         Event* event = Event::createCancelable(EventTypeNames::contextlost);
         canvas()->dispatchEvent(event);
         if (event->defaultPrevented()) {
@@ -245,7 +242,7 @@ void CanvasRenderingContext2D::tryRestoreContextEvent(Timer<CanvasRenderingConte
         return;
     }
 
-    ASSERT(m_contextLostMode == RealLostContext);
+    DCHECK(m_contextLostMode == RealLostContext);
     if (canvas()->hasImageBuffer() && canvas()->buffer()->restoreSurface()) {
         m_tryRestoreContextEventTimer.stop();
         dispatchContextRestoredEvent(nullptr);
@@ -512,13 +509,23 @@ void CanvasRenderingContext2D::schedulePruneLocalFontCacheIfNeeded()
 
 void CanvasRenderingContext2D::didProcessTask()
 {
+    Platform::current()->currentThread()->removeTaskObserver(this);
+
+    // This should be the only place where canvas() needs to be checked for nullness
+    // because the circular refence with HTMLCanvasElement mean the canvas and the
+    // context keep each other alive as long as the pair is referenced the task
+    // observer is the only persisten refernce to this object that is not traced,
+    // so didProcessTask() may be call at a time when the canvas has been garbage
+    // collected but not the context.
+    if (!canvas())
+        return;
+
     // The rendering surface needs to be prepared now because it will be too late
     // to create a layer once we are in the paint invalidation phase.
     canvas()->prepareSurfaceForPaintingIfNeeded();
 
     pruneLocalFontCache(canvas()->document().canvasFontCache()->maxFonts());
     m_pruneLocalFontCacheScheduled = false;
-    Platform::current()->currentThread()->removeTaskObserver(this);
 }
 
 void CanvasRenderingContext2D::pruneLocalFontCache(size_t targetSize)
@@ -687,21 +694,25 @@ void CanvasRenderingContext2D::setDirection(const String& directionString)
 
 void CanvasRenderingContext2D::fillText(const String& text, double x, double y)
 {
+    trackDrawCall(FillText);
     drawTextInternal(text, x, y, CanvasRenderingContext2DState::FillPaintType);
 }
 
 void CanvasRenderingContext2D::fillText(const String& text, double x, double y, double maxWidth)
 {
+    trackDrawCall(FillText);
     drawTextInternal(text, x, y, CanvasRenderingContext2DState::FillPaintType, &maxWidth);
 }
 
 void CanvasRenderingContext2D::strokeText(const String& text, double x, double y)
 {
+    trackDrawCall(StrokeText);
     drawTextInternal(text, x, y, CanvasRenderingContext2DState::StrokePaintType);
 }
 
 void CanvasRenderingContext2D::strokeText(const String& text, double x, double y, double maxWidth)
 {
+    trackDrawCall(StrokeText);
     drawTextInternal(text, x, y, CanvasRenderingContext2DState::StrokePaintType, &maxWidth);
 }
 
@@ -944,6 +955,7 @@ bool CanvasRenderingContext2D::focusRingCallIsValid(const Path& path, Element* e
 
 void CanvasRenderingContext2D::drawFocusRing(const Path& path)
 {
+    m_usageCounters.numDrawFocusCalls++;
     if (!drawingCanvas())
         return;
 

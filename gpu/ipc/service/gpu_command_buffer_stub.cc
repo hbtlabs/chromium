@@ -33,6 +33,7 @@
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
+#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "gpu/ipc/service/gpu_memory_tracking.h"
 #include "gpu/ipc/service/gpu_watchdog.h"
@@ -323,6 +324,7 @@ void GpuCommandBufferStub::PerformWork() {
     }
 
     executor_->ProcessPendingQueries();
+    executor_->PerformPollingWork();
   }
 
   ScheduleDelayedWork(
@@ -340,7 +342,8 @@ bool GpuCommandBufferStub::HasUnprocessedCommands() {
 
 void GpuCommandBufferStub::ScheduleDelayedWork(base::TimeDelta delay) {
   bool has_more_work = executor_.get() && (executor_->HasPendingQueries() ||
-                                           executor_->HasMoreIdleWork());
+                                           executor_->HasMoreIdleWork() ||
+                                           executor_->HasPollingWork());
   if (!has_more_work) {
     last_idle_time_ = base::TimeTicks();
     return;
@@ -457,20 +460,23 @@ bool GpuCommandBufferStub::Initialize(
   } else {
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo(manager->gpu_driver_bug_workarounds());
+    gpu::GpuMemoryBufferFactory* gmb_factory =
+        channel_->gpu_channel_manager()->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
         manager->gpu_preferences(), channel_->mailbox_manager(),
         new GpuCommandBufferMemoryTracker(channel_,
                                           command_buffer_id_.GetUnsafeValue()),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
-        init_params.attribs.bind_generates_resource);
+        init_params.attribs.bind_generates_resource,
+        gmb_factory ? gmb_factory->AsImageFactory() : nullptr);
   }
 
 #if defined(OS_MACOSX)
   // Virtualize PreferIntegratedGpu contexts by default on OS X to prevent
   // performance regressions when enabling FCM.
   // http://crbug.com/180463
-  if (init_params.gpu_preference == gl::PreferIntegratedGpu)
+  if (init_params.attribs.gpu_preference == gl::PreferIntegratedGpu)
     use_virtualized_gl_context_ = true;
 #endif
 
@@ -483,26 +489,22 @@ bool GpuCommandBufferStub::Initialize(
 
   gl::GLSurface::Format surface_format = gl::GLSurface::SURFACE_DEFAULT;
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
+  gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
+  if (!default_surface) {
+    DLOG(ERROR) << "Failed to create default offscreen surface.";
+    return false;
+  }
 #if defined(OS_ANDROID)
   if (init_params.attribs.red_size <= 5 &&
       init_params.attribs.green_size <= 6 &&
       init_params.attribs.blue_size <= 5 &&
       init_params.attribs.alpha_size == 0)
     surface_format = gl::GLSurface::SURFACE_RGB565;
-  gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
   // We can only use virtualized contexts for onscreen command buffers if their
   // config is compatible with the offscreen ones - otherwise MakeCurrent fails.
   if (surface_format != default_surface->GetFormat() && !offscreen)
     use_virtualized_gl_context_ = false;
 #endif
-
-  gfx::Size initial_size = init_params.size;
-  if (offscreen && initial_size.IsEmpty()) {
-    // If we're an offscreen surface with zero width and/or height, set to a
-    // non-zero size so that we have a complete framebuffer for operations like
-    // glClear.
-    initial_size = gfx::Size(1, 1);
-  }
 
   command_buffer_.reset(new CommandBufferService(
       context_group_->transfer_buffer_manager()));
@@ -519,8 +521,7 @@ bool GpuCommandBufferStub::Initialize(
   decoder_->set_engine(executor_.get());
 
   if (offscreen) {
-    surface_ = manager->GetDefaultOffscreenSurface();
-    DCHECK(surface_);
+    surface_ = default_surface;
   } else {
     surface_ = ImageTransportSurface::CreateNativeSurface(
         manager, this, surface_handle_, surface_format);
@@ -536,10 +537,8 @@ bool GpuCommandBufferStub::Initialize(
   if (use_virtualized_gl_context_ && gl_share_group) {
     context = gl_share_group->GetSharedContext();
     if (!context.get()) {
-      context = gl::init::CreateGLContext(
-          gl_share_group,
-          manager->GetDefaultOffscreenSurface(),
-          init_params.gpu_preference);
+      context = gl::init::CreateGLContext(gl_share_group, default_surface,
+                                          init_params.attribs.gpu_preference);
       if (!context.get()) {
         DLOG(ERROR) << "Failed to create shared context for virtualization.";
         return false;
@@ -556,7 +555,8 @@ bool GpuCommandBufferStub::Initialize(
            gl::GetGLImplementation() == gl::kGLImplementationMockGL);
     context = new GLContextVirtual(
         gl_share_group, context.get(), decoder_->AsWeakPtr());
-    if (!context->Initialize(surface_.get(), init_params.gpu_preference)) {
+    if (!context->Initialize(surface_.get(),
+                             init_params.attribs.gpu_preference)) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
       context = NULL;
@@ -566,7 +566,7 @@ bool GpuCommandBufferStub::Initialize(
   }
   if (!context.get()) {
     context = gl::init::CreateGLContext(gl_share_group, surface_.get(),
-                                        init_params.gpu_preference);
+                                        init_params.attribs.gpu_preference);
   }
   if (!context.get()) {
     DLOG(ERROR) << "Failed to create context.";
@@ -589,7 +589,7 @@ bool GpuCommandBufferStub::Initialize(
   }
 
   // Initialize the decoder with either the view or pbuffer GLContext.
-  if (!decoder_->Initialize(surface_, context, offscreen, initial_size,
+  if (!decoder_->Initialize(surface_, context, offscreen,
                             gpu::gles2::DisallowedFeatures(),
                             init_params.attribs)) {
     DLOG(ERROR) << "Failed to initialize decoder.";
@@ -906,7 +906,7 @@ void GpuCommandBufferStub::OnFenceSyncRelease(uint64_t release) {
 
 void GpuCommandBufferStub::OnDescheduleUntilFinished() {
   DCHECK(executor_->scheduled());
-  DCHECK(executor_->HasMoreIdleWork());
+  DCHECK(executor_->HasPollingWork());
 
   executor_->SetScheduled(false);
   channel_->OnStreamRescheduled(stream_id_, false);

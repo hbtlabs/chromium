@@ -5,6 +5,7 @@
 #include "content/browser/service_worker/service_worker_controllee_request_handler.h"
 
 #include <memory>
+#include <set>
 #include <string>
 
 #include "base/trace_event/trace_event.h"
@@ -14,7 +15,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
@@ -26,23 +27,6 @@
 
 namespace content {
 
-namespace {
-
-bool MaybeForwardToServiceWorker(ServiceWorkerURLRequestJob* job,
-                                 const ServiceWorkerVersion* version) {
-  DCHECK(job);
-  DCHECK(version);
-  if (version->has_fetch_handler()) {
-    job->ForwardToServiceWorker();
-    return true;
-  }
-
-  job->FallbackToNetwork();
-  return false;
-}
-
-}  // namespace
-
 ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     base::WeakPtr<ServiceWorkerContextCore> context,
     base::WeakPtr<ServiceWorkerProviderHost> provider_host,
@@ -53,7 +37,7 @@ ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body)
+    scoped_refptr<ResourceRequestBodyImpl> body)
     : ServiceWorkerRequestHandler(context,
                                   provider_host,
                                   blob_storage_context,
@@ -213,6 +197,17 @@ ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
     return;
   }
 
+  if (!provider_host_->IsContextSecureForServiceWorker()) {
+    // TODO(falken): Figure out a way to surface in the page's DevTools
+    // console that the service worker was blocked for security.
+    job_->FallbackToNetwork();
+    TRACE_EVENT_ASYNC_END1(
+        "ServiceWorker",
+        "ServiceWorkerControlleeRequestHandler::PrepareForMainResource",
+        job_.get(), "Info", "Insecure context");
+    return;
+  }
+
   if (need_to_update) {
     force_update_started_ = true;
     context_->UpdateServiceWorker(
@@ -271,15 +266,11 @@ ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
   ServiceWorkerMetrics::CountControlledPageLoad(
       stripped_url_, active_version->has_fetch_handler(), is_main_frame_load_);
 
-  bool is_forwarded =
-      MaybeForwardToServiceWorker(job_.get(), active_version.get());
-
+  job_->ForwardToServiceWorker();
   TRACE_EVENT_ASYNC_END2(
       "ServiceWorker",
       "ServiceWorkerControlleeRequestHandler::PrepareForMainResource",
-      job_.get(), "Status", status, "Info",
-      (is_forwarded) ? "Forwarded to the ServiceWorker"
-                     : "Skipped the ServiceWorker which has no fetch handler");
+      job_.get(), "Status", status, "Info", "Forwarded to the ServiceWorker");
 }
 
 void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
@@ -303,8 +294,7 @@ void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
 
   provider_host_->AssociateRegistration(registration,
                                         false /* notify_controllerchange */);
-
-  MaybeForwardToServiceWorker(job_.get(), version);
+  job_->ForwardToServiceWorker();
 }
 
 void ServiceWorkerControlleeRequestHandler::DidUpdateRegistration(
@@ -374,7 +364,7 @@ void ServiceWorkerControlleeRequestHandler::PrepareForSubResource() {
   DCHECK(job_.get());
   DCHECK(context_);
   DCHECK(provider_host_->active_version());
-  MaybeForwardToServiceWorker(job_.get(), provider_host_->active_version());
+  job_->ForwardToServiceWorker();
 }
 
 void ServiceWorkerControlleeRequestHandler::OnPrepareToRestart() {

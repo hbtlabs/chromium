@@ -54,7 +54,8 @@ DOMException* BluetoothError::take(ScriptPromiseResolver*, const WebBluetoothErr
         MAP_ERROR(CHOOSER_NOT_SHOWN_API_GLOBALLY_DISABLED, NotFoundError, "Web Bluetooth API globally disabled.");
         MAP_ERROR(CHOOSER_NOT_SHOWN_API_LOCALLY_DISABLED, NotFoundError, "User or their enterprise policy has disabled Web Bluetooth.");
         MAP_ERROR(CHOOSER_NOT_SHOWN_USER_DENIED_PERMISSION_TO_SCAN, NotFoundError, "User denied the browser permission to scan for Bluetooth devices.");
-        MAP_ERROR(SERVICE_NOT_FOUND, NotFoundError, "Service not found in device.");
+        MAP_ERROR(SERVICE_NOT_FOUND, NotFoundError, "No Services with specified UUID found in Device.");
+        MAP_ERROR(NO_SERVICES_FOUND, NotFoundError, "No Services found in device.");
         MAP_ERROR(CHARACTERISTIC_NOT_FOUND, NotFoundError, "No Characteristics with specified UUID found in Service.");
         MAP_ERROR(NO_CHARACTERISTICS_FOUND, NotFoundError, "No Characteristics found in service.");
 
@@ -70,7 +71,7 @@ DOMException* BluetoothError::take(ScriptPromiseResolver*, const WebBluetoothErr
         MAP_ERROR(BLACKLISTED_CHARACTERISTIC_UUID, SecurityError, "getCharacteristic(s) called with blacklisted UUID. https://goo.gl/4NeimX");
         MAP_ERROR(BLACKLISTED_READ, SecurityError, "readValue() called on blacklisted object marked exclude-reads. https://goo.gl/4NeimX");
         MAP_ERROR(BLACKLISTED_WRITE, SecurityError, "writeValue() called on blacklisted object marked exclude-writes. https://goo.gl/4NeimX");
-        MAP_ERROR(NOT_ALLOWED_TO_ACCESS_SERVICE, SecurityError, "Origin is not allowed to access the service. Remember to add the service to a filter or to optionalServices in requestDevice().");
+        MAP_ERROR(NOT_ALLOWED_TO_ACCESS_SERVICE, SecurityError, "Origin is not allowed to access the service. Tip: Add the service UUID to 'optionalServices' in requestDevice() options. https://goo.gl/HxfxSQ");
         MAP_ERROR(REQUEST_DEVICE_WITH_BLACKLISTED_UUID, SecurityError, "requestDevice() called with a filter containing a blacklisted UUID. https://goo.gl/4NeimX");
         MAP_ERROR(REQUEST_DEVICE_FROM_CROSS_ORIGIN_IFRAME, SecurityError, "requestDevice() called from cross-origin iframe.");
         MAP_ERROR(REQUEST_DEVICE_WITHOUT_FRAME, SecurityError, "No window to show the requestDevice() dialog.");

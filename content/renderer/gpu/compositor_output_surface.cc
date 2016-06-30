@@ -103,7 +103,7 @@ void CompositorOutputSurface::DetachFromClient() {
   cc::OutputSurface::DetachFromClient();
 }
 
-void CompositorOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
+void CompositorOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   {
     std::unique_ptr<FrameSwapMessageQueue::SendMessageScope>
         send_message_scope =
@@ -114,11 +114,22 @@ void CompositorOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
     FrameSwapMessageQueue::TransferMessages(&messages,
                                             &messages_to_deliver_with_frame);
     Send(new ViewHostMsg_SwapCompositorFrame(routing_id_, output_surface_id_,
-                                             *frame,
+                                             frame,
                                              messages_to_deliver_with_frame));
     // ~send_message_scope.
   }
   client_->DidSwapBuffers();
+}
+
+void CompositorOutputSurface::BindFramebuffer() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+}
+
+uint32_t CompositorOutputSurface::GetFramebufferCopyTextureFormat() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+  return 0;
 }
 
 void CompositorOutputSurface::OnMessageReceived(const IPC::Message& message) {

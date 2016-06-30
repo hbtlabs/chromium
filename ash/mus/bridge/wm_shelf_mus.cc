@@ -37,9 +37,41 @@ ShelfAlignment WmShelfMus::GetAlignment() const {
   return SHELF_ALIGNMENT_BOTTOM;
 }
 
+void WmShelfMus::SetAlignment(ShelfAlignment alignment) {
+  NOTIMPLEMENTED();
+}
+
+ShelfAutoHideBehavior WmShelfMus::GetAutoHideBehavior() const {
+  NOTIMPLEMENTED();
+  return SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
+}
+
+void WmShelfMus::SetAutoHideBehavior(ShelfAutoHideBehavior behavior) {
+  NOTIMPLEMENTED();
+}
+
+ShelfAutoHideState WmShelfMus::GetAutoHideState() const {
+  NOTIMPLEMENTED();
+  return SHELF_AUTO_HIDE_HIDDEN;
+}
+
+void WmShelfMus::UpdateAutoHideState() {
+  NOTIMPLEMENTED();
+}
+
 ShelfBackgroundType WmShelfMus::GetBackgroundType() const {
   NOTIMPLEMENTED();
   return SHELF_BACKGROUND_DEFAULT;
+}
+
+bool WmShelfMus::IsDimmed() const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+bool WmShelfMus::IsVisible() const {
+  NOTIMPLEMENTED();
+  return true;
 }
 
 void WmShelfMus::UpdateVisibilityState() {
@@ -51,13 +83,37 @@ ShelfVisibilityState WmShelfMus::GetVisibilityState() const {
   return shelf_layout_manager_->GetShelfWindow() ? SHELF_VISIBLE : SHELF_HIDDEN;
 }
 
+gfx::Rect WmShelfMus::GetUserWorkAreaBounds() const {
+  NOTIMPLEMENTED();
+  return gfx::Rect();
+}
+
 void WmShelfMus::UpdateIconPositionForWindow(WmWindow* window) {
   NOTIMPLEMENTED();
+}
+
+gfx::Rect WmShelfMus::GetIdealBounds() {
+  NOTIMPLEMENTED();
+  return gfx::Rect();
 }
 
 gfx::Rect WmShelfMus::GetScreenBoundsOfItemIconForWindow(WmWindow* window) {
   NOTIMPLEMENTED();
   return gfx::Rect();
+}
+
+bool WmShelfMus::ProcessGestureEvent(const ui::GestureEvent& event,
+                                     WmWindow* target_window) {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+void WmShelfMus::UpdateAutoHideForMouseEvent(ui::MouseEvent* event) {
+  NOTIMPLEMENTED();
+}
+
+void WmShelfMus::UpdateAutoHideForGestureEvent(ui::GestureEvent* event) {
+  NOTIMPLEMENTED();
 }
 
 void WmShelfMus::AddObserver(WmShelfObserver* observer) {
@@ -66,6 +122,10 @@ void WmShelfMus::AddObserver(WmShelfObserver* observer) {
 
 void WmShelfMus::RemoveObserver(WmShelfObserver* observer) {
   observers_.RemoveObserver(observer);
+}
+
+void WmShelfMus::SetKeyboardBoundsForTesting(const gfx::Rect& bounds) {
+  NOTIMPLEMENTED();
 }
 
 }  // namespace mus

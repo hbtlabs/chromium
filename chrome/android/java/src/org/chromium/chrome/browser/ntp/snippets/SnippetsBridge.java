@@ -28,8 +28,8 @@ public class SnippetsBridge {
     public interface SnippetsObserver {
         void onSnippetsReceived(List<SnippetArticle> snippets);
 
-        /** Called when the service has been disabled. */
-        void onSnippetsDisabled();
+        /** Called when the service is about to change its state. */
+        void onDisabledReasonChanged(int disabledReason);
     }
 
     /**
@@ -109,12 +109,16 @@ public class SnippetsBridge {
         nativeSetObserver(mNativeSnippetsBridge, observer == null ? null : this);
     }
 
+    public int getDisabledReason() {
+        assert mNativeSnippetsBridge != 0;
+        return nativeGetDisabledReason(mNativeSnippetsBridge);
+    }
+
     @CalledByNative
     private void onSnippetsAvailable(String[] ids, String[] titles, String[] urls, String[] ampUrls,
             String[] thumbnailUrls, String[] previewText, long[] timestamps, String[] publishers,
             float[] scores) {
-        // Don't notify observer if we've already been destroyed.
-        if (mNativeSnippetsBridge == 0) return;
+        assert mNativeSnippetsBridge != 0;
         assert mObserver != null;
 
         List<SnippetArticle> newSnippets = new ArrayList<>(ids.length);
@@ -127,8 +131,8 @@ public class SnippetsBridge {
     }
 
     @CalledByNative
-    private void onSnippetsDisabled() {
-        if (mObserver != null) mObserver.onSnippetsDisabled();
+    private void onDisabledReasonChanged(int disabledReason) {
+        if (mObserver != null) mObserver.onDisabledReasonChanged(disabledReason);
     }
 
     private native long nativeInit(Profile profile);
@@ -141,4 +145,5 @@ public class SnippetsBridge {
             Callback<Boolean> callback, String url);
     private native void nativeFetchImage(
             long nativeNTPSnippetsBridge, String snippetId, Callback<Bitmap> callback);
+    private native int nativeGetDisabledReason(long nativeNTPSnippetsBridge);
 }

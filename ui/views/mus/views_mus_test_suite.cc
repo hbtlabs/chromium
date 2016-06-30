@@ -12,6 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
+#include "components/mus/common/gpu_service.h"
 #include "components/mus/common/switches.h"
 #include "services/shell/background/background_shell.h"
 #include "services/shell/public/cpp/connector.h"
@@ -44,13 +45,18 @@ class PlatformTestHelperMus : public PlatformTestHelper {
  public:
   PlatformTestHelperMus(shell::Connector* connector,
                         const shell::Identity& identity) {
+    mus::GpuService::Initialize(connector);
     // It is necessary to recreate the WindowManagerConnection for each test,
     // since a new MessageLoop is created for each test.
-    WindowManagerConnection::Create(connector, identity);
+    connection_ = WindowManagerConnection::Create(connector, identity);
   }
-  ~PlatformTestHelperMus() override { WindowManagerConnection::Reset(); }
+  ~PlatformTestHelperMus() override {
+    mus::GpuService::Terminate();
+  }
 
  private:
+  std::unique_ptr<WindowManagerConnection> connection_;
+
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelperMus);
 };
 
@@ -85,8 +91,6 @@ class ShellConnection {
   }
 
   ~ShellConnection() {
-    if (views::WindowManagerConnection::Exists())
-      views::WindowManagerConnection::Reset();
     base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                              base::WaitableEvent::InitialState::NOT_SIGNALED);
     thread_.task_runner()->PostTask(
@@ -98,7 +102,8 @@ class ShellConnection {
  private:
   shell::Connector* GetConnector() {
     shell_connector_.reset();
-    base::WaitableEvent wait(false, false);
+    base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     thread_.task_runner()->PostTask(FROM_HERE,
                                     base::Bind(&ShellConnection::CloneConnector,
                                                base::Unretained(this), &wait));

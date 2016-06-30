@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
+#include "chrome/browser/ui/user_manager.h"
 #include "chrome/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -36,7 +37,6 @@ Browser* GetDesktopBrowser(content::WebUI* web_ui) {
       web_ui->GetWebContents());
   if (!browser)
     browser = chrome::FindLastActiveWithProfile(Profile::FromWebUI(web_ui));
-  DCHECK(browser);
   return browser;
 }
 
@@ -169,6 +169,10 @@ void InlineLoginHandler::RecordSigninUserActionForAccessPoint(
       content::RecordAction(
           base::UserMetricsAction("Signin_Signin_FromUnknownAccessPoint"));
       break;
+    case signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE:
+      content::RecordAction(
+          base::UserMetricsAction("Signin_Signin_FromPasswordBubble"));
+      break;
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED();
       break;
@@ -231,7 +235,8 @@ void InlineLoginHandler::ContinueHandleInitializeMessage() {
 
   SetExtraInitParams(params);
 
-  web_ui()->CallJavascriptFunction("inline.login.loadAuthExtension", params);
+  web_ui()->CallJavascriptFunctionUnsafe("inline.login.loadAuthExtension",
+                                         params);
 }
 
 void InlineLoginHandler::HandleCompleteLoginMessage(
@@ -269,7 +274,7 @@ void InlineLoginHandler::HandleSwitchToFullTabMessage(
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   chrome::Navigate(&params);
 
-  web_ui()->CallJavascriptFunction("inline.login.closeDialog");
+  web_ui()->CallJavascriptFunctionUnsafe("inline.login.closeDialog");
 }
 
 void InlineLoginHandler::HandleNavigationButtonClicked(
@@ -282,7 +287,10 @@ void InlineLoginHandler::HandleNavigationButtonClicked(
 
 void InlineLoginHandler::HandleDialogClose(const base::ListValue* args) {
   Browser* browser = GetDesktopBrowser(web_ui());
-  DCHECK(browser);
+  // If the dialog was opened in the User Manager browser will be null here.
+  if (browser)
+    browser->CloseModalSigninWindow();
 
-  browser->CloseModalSigninWindow();
+  // Does nothing if user manager is not showing.
+  UserManager::HideReauthDialog();
 }

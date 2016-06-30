@@ -13,7 +13,6 @@
 #include <X11/Xutil.h>
 #include <cmath>
 
-#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -21,6 +20,7 @@
 #include "build/build_config.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/devices/x11/touch_factory_x11.h"
@@ -307,27 +307,16 @@ bool GetGestureTimes(const XEvent& xev, double* start_time, double* end_time) {
   return true;
 }
 
-namespace {
 int64_t g_last_seen_timestamp_ms = 0;
 int64_t g_rollover_ms = 0;
-bool g_bogus_x11_timestamps = false;
-base::LazyInstance<std::unique_ptr<base::TickClock>>::Leaky g_tick_clock =
-    LAZY_INSTANCE_INITIALIZER;
-
-}  // namespace
 
 // Takes Xlib Time and returns a time delta that is immune to timer rollover.
 // This function is not thread safe as we do not use a lock.
-base::TimeDelta TimeDeltaFromXEventTime(Time timestamp) {
+base::TimeTicks TimeTicksFromXEventTime(Time timestamp) {
   int64_t timestamp64 = timestamp;
 
   if (!timestamp)
-    return base::TimeDelta();
-
-  if (g_bogus_x11_timestamps) {
-    return base::TimeDelta::FromInternalValue(
-        base::TimeTicks::Now().ToInternalValue());
-  }
+    return ui::EventTimeForNow();
 
   // If this is the first event that we get, assume the time stamp roll-over
   // might have happened before the process was started.
@@ -340,32 +329,18 @@ base::TimeDelta TimeDeltaFromXEventTime(Time timestamp) {
 
   g_last_seen_timestamp_ms = timestamp64;
   if (!had_recent_rollover)
-    return base::TimeDelta::FromMilliseconds(g_rollover_ms + timestamp);
+    return base::TimeTicks() +
+        base::TimeDelta::FromMilliseconds(g_rollover_ms + timestamp);
 
   DCHECK(timestamp64 <= UINT32_MAX)
       << "X11 Time does not roll over 32 bit, the below logic is likely wrong";
 
-  base::TimeTicks now_ticks = g_tick_clock.Get() != nullptr
-                                  ? g_tick_clock.Get()->NowTicks()
-                                  : base::TimeTicks::Now();
+  base::TimeTicks now_ticks = ui::EventTimeForNow();
   int64_t now_ms = (now_ticks - base::TimeTicks()).InMilliseconds();
 
   g_rollover_ms = now_ms & ~static_cast<int64_t>(UINT32_MAX);
   uint32_t delta = static_cast<uint32_t>(now_ms - timestamp);
-  if (!g_tick_clock.Get()) {
-    if (delta > 60 * 1000) {
-      // x11 timestamps don't seem to be using the same time base as TimeTicks,
-      // so ignore them altogether and always use current time instead.
-      delta = 0;
-      g_bogus_x11_timestamps = true;
-      LOG(WARNING)
-          << "Unexpected x11 timestamps, will use browser time instead.";
-    }
-    UMA_HISTOGRAM_BOOLEAN("Event.TimestampHasValidTimebase",
-                          !g_bogus_x11_timestamps);
-  }
-
-  return base::TimeDelta::FromMilliseconds(now_ms - delta);
+  return base::TimeTicks() + base::TimeDelta::FromMilliseconds(now_ms - delta);
 }
 
 }  // namespace
@@ -541,41 +516,41 @@ int EventFlagsFromXEvent(const XEvent& xev) {
   return 0;
 }
 
-base::TimeDelta EventTimeFromXEvent(const XEvent& xev) {
+base::TimeTicks EventTimeFromXEvent(const XEvent& xev) {
   switch (xev.type) {
     case KeyPress:
     case KeyRelease:
-      return TimeDeltaFromXEventTime(xev.xkey.time);
+      return TimeTicksFromXEventTime(xev.xkey.time);
     case ButtonPress:
     case ButtonRelease:
-      return TimeDeltaFromXEventTime(xev.xbutton.time);
+      return TimeTicksFromXEventTime(xev.xbutton.time);
       break;
     case MotionNotify:
-      return TimeDeltaFromXEventTime(xev.xmotion.time);
+      return TimeTicksFromXEventTime(xev.xmotion.time);
       break;
     case EnterNotify:
     case LeaveNotify:
-      return TimeDeltaFromXEventTime(xev.xcrossing.time);
+      return TimeTicksFromXEventTime(xev.xcrossing.time);
       break;
     case GenericEvent: {
       double start, end;
       double touch_timestamp;
       if (GetGestureTimes(xev, &start, &end)) {
         // If the driver supports gesture times, use them.
-        return base::TimeDelta::FromMicroseconds(end * 1000000);
+        return ui::EventTimeStampFromSeconds(end);
       } else if (DeviceDataManagerX11::GetInstance()->GetEventData(
                      xev, DeviceDataManagerX11::DT_TOUCH_RAW_TIMESTAMP,
                      &touch_timestamp)) {
-        return base::TimeDelta::FromMicroseconds(touch_timestamp * 1000000);
+        return ui::EventTimeStampFromSeconds(touch_timestamp);
       } else {
         XIDeviceEvent* xide = static_cast<XIDeviceEvent*>(xev.xcookie.data);
-        return TimeDeltaFromXEventTime(xide->time);
+        return TimeTicksFromXEventTime(xide->time);
       }
       break;
     }
   }
   NOTREACHED();
-  return base::TimeDelta();
+  return base::TimeTicks();
 }
 
 gfx::Point EventLocationFromXEvent(const XEvent& xev) {
@@ -829,8 +804,7 @@ void ResetTimestampRolloverCountersForTesting(
     std::unique_ptr<base::TickClock> tick_clock) {
   g_last_seen_timestamp_ms = 0;
   g_rollover_ms = 0;
-  g_bogus_x11_timestamps = false;
-  g_tick_clock.Get() = std::move(tick_clock);
+  SetEventTickClockForTesting(std::move(tick_clock));
 }
 
 }  // namespace ui

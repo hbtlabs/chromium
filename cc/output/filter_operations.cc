@@ -21,10 +21,18 @@ FilterOperations::FilterOperations() {}
 FilterOperations::FilterOperations(const FilterOperations& other)
     : operations_(other.operations_) {}
 
+FilterOperations::FilterOperations(std::vector<FilterOperation>&& operations)
+    : operations_(std::move(operations)) {}
+
 FilterOperations::~FilterOperations() {}
 
 FilterOperations& FilterOperations::operator=(const FilterOperations& other) {
   operations_ = other.operations_;
+  return *this;
+}
+
+FilterOperations& FilterOperations::operator=(FilterOperations&& other) {
+  operations_ = std::move(other.operations_);
   return *this;
 }
 
@@ -62,6 +70,16 @@ gfx::Rect FilterOperations::MapRect(const gfx::Rect& rect,
     return op.MapRect(rect, matrix);
   };
   return std::accumulate(operations_.begin(), operations_.end(), rect,
+                         accumulate_rect);
+}
+
+gfx::Rect FilterOperations::MapRectReverse(const gfx::Rect& rect,
+                                           const SkMatrix& matrix) const {
+  auto accumulate_rect = [&matrix](const gfx::Rect& rect,
+                                   const FilterOperation& op) {
+    return op.MapRectReverse(rect, matrix);
+  };
+  return std::accumulate(operations_.rbegin(), operations_.rend(), rect,
                          accumulate_rect);
 }
 

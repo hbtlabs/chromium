@@ -53,13 +53,13 @@
 #include "platform/TraceEvent.h"
 #include "public/platform/WebSourceBuffer.h"
 #include "wtf/MathExtras.h"
-
 #include <limits>
+#include <memory>
 #include <sstream>
 
 using blink::WebSourceBuffer;
 
-#define SOURCE_BUFFER_LOG_LEVEL 3
+#define SBLOG DVLOG(3)
 
 namespace blink {
 
@@ -96,14 +96,14 @@ WTF::String webTimeRangesToString(const WebTimeRanges& ranges)
 
 } // namespace
 
-SourceBuffer* SourceBuffer::create(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
+SourceBuffer* SourceBuffer::create(std::unique_ptr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
 {
     SourceBuffer* sourceBuffer = new SourceBuffer(std::move(webSourceBuffer), source, asyncEventQueue);
     sourceBuffer->suspendIfNeeded();
     return sourceBuffer;
 }
 
-SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
+SourceBuffer::SourceBuffer(std::unique_ptr<WebSourceBuffer> webSourceBuffer, MediaSource* source, GenericEventQueue* asyncEventQueue)
     : ActiveScriptWrappable(this)
     , ActiveDOMObject(source->getExecutionContext())
     , m_webSourceBuffer(std::move(webSourceBuffer))
@@ -125,7 +125,7 @@ SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSou
     , m_streamMaxSize(0)
     , m_appendStreamAsyncPartRunner(AsyncMethodRunner<SourceBuffer>::create(this, &SourceBuffer::appendStreamAsyncPart))
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
 
     DCHECK(m_webSourceBuffer);
     DCHECK(m_source);
@@ -138,7 +138,7 @@ SourceBuffer::SourceBuffer(PassOwnPtr<WebSourceBuffer> webSourceBuffer, MediaSou
 
 SourceBuffer::~SourceBuffer()
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
 }
 
 void SourceBuffer::dispose()
@@ -162,7 +162,7 @@ const AtomicString& SourceBuffer::sequenceKeyword()
 
 void SourceBuffer::setMode(const AtomicString& newMode, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") newMode=" << newMode;
+    SBLOG << __FUNCTION__ << " this=" << this << " newMode=" << newMode;
     // Section 3.1 On setting mode attribute steps.
     // 1. Let new mode equal the new value being assigned to this attribute.
     // 2. If this object has been removed from the sourceBuffers attribute of the parent media source, then throw
@@ -211,7 +211,7 @@ double SourceBuffer::timestampOffset() const
 
 void SourceBuffer::setTimestampOffset(double offset, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") offset=" << offset;
+    SBLOG << __FUNCTION__ << " this=" << this << " offset=" << offset;
     // Section 3.1 timestampOffset attribute setter steps.
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-SourceBuffer-timestampOffset
     // 1. Let new timestamp offset equal the new value being assigned to this attribute.
@@ -256,7 +256,7 @@ double SourceBuffer::appendWindowStart() const
 
 void SourceBuffer::setAppendWindowStart(double start, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") start=" << start;
+    SBLOG << __FUNCTION__ << " this=" << this << " start=" << start;
     // Section 3.1 appendWindowStart attribute setter steps.
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-SourceBuffer-appendWindowStart
     // 1. If this object has been removed from the sourceBuffers attribute of the parent media source then throw an
@@ -285,7 +285,7 @@ double SourceBuffer::appendWindowEnd() const
 
 void SourceBuffer::setAppendWindowEnd(double end, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") end=" << end;
+    SBLOG << __FUNCTION__ << " this=" << this << " end=" << end;
     // Section 3.1 appendWindowEnd attribute setter steps.
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-SourceBuffer-appendWindowEnd
     // 1. If this object has been removed from the sourceBuffers attribute of the parent media source then throw an
@@ -314,7 +314,7 @@ void SourceBuffer::setAppendWindowEnd(double end, ExceptionState& exceptionState
 
 void SourceBuffer::appendBuffer(DOMArrayBuffer* data, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") size=" << data->byteLength();
+    SBLOG << __FUNCTION__ << " this=" << this << " size=" << data->byteLength();
     // Section 3.2 appendBuffer()
     // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendBuffer-void-ArrayBufferView-data
     appendBufferInternal(static_cast<const unsigned char*>(data->data()), data->byteLength(), exceptionState);
@@ -322,7 +322,7 @@ void SourceBuffer::appendBuffer(DOMArrayBuffer* data, ExceptionState& exceptionS
 
 void SourceBuffer::appendBuffer(DOMArrayBufferView* data, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") size=" << data->byteLength();
+    SBLOG << __FUNCTION__ << " this=" << this << " size=" << data->byteLength();
     // Section 3.2 appendBuffer()
     // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-appendBuffer-void-ArrayBufferView-data
     appendBufferInternal(static_cast<const unsigned char*>(data->baseAddress()), data->byteLength(), exceptionState);
@@ -336,7 +336,7 @@ void SourceBuffer::appendStream(Stream* stream, ExceptionState& exceptionState)
 
 void SourceBuffer::appendStream(Stream* stream, unsigned long long maxSize, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") maxSize=" << maxSize;
+    SBLOG << __FUNCTION__ << " this=" << this << " maxSize=" << maxSize;
     m_streamMaxSizeValid = maxSize > 0;
     if (m_streamMaxSizeValid)
         m_streamMaxSize = maxSize;
@@ -345,7 +345,7 @@ void SourceBuffer::appendStream(Stream* stream, unsigned long long maxSize, Exce
 
 void SourceBuffer::abort(ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
     // Section 3.2 abort() method steps.
     // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-SourceBuffer-abort-void
     // 1. If this object has been removed from the sourceBuffers attribute of the parent media source
@@ -376,7 +376,7 @@ void SourceBuffer::abort(ExceptionState& exceptionState)
 
 void SourceBuffer::remove(double start, double end, ExceptionState& exceptionState)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") start=" << start << " end=" << end;
+    SBLOG << __FUNCTION__ << " this=" << this << " start=" << start << " end=" << end;
 
     // Section 3.2 remove() method steps.
     // 1. If duration equals NaN, then throw an InvalidAccessError exception and abort these steps.
@@ -483,7 +483,7 @@ void SourceBuffer::removedFromMediaSource()
     if (isRemoved())
         return;
 
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
     abortIfUpdating();
 
     if (RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
@@ -523,10 +523,10 @@ void SourceBuffer::removeMediaTracks()
             removedEnabledAudioTrack = true;
         // 4.3.3 Remove the AudioTrack object from the HTMLMediaElement audioTracks list.
         // 4.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement audioTracks list.
-        mediaElement->audioTracks().remove(audioTrack->trackId());
+        mediaElement->audioTracks().remove(audioTrack->id());
         // 4.3.5 Remove the AudioTrack object from the SourceBuffer audioTracks list.
         // 4.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the SourceBuffer audioTracks list.
-        audioTracks().remove(audioTrack->trackId());
+        audioTracks().remove(audioTrack->id());
     }
     // 4.4 If the removed enabled audio track flag equals true, then queue a task to fire a simple event named change at the HTMLMediaElement audioTracks list.
     if (removedEnabledAudioTrack) {
@@ -550,10 +550,10 @@ void SourceBuffer::removeMediaTracks()
             removedSelectedVideoTrack = true;
         // 6.3.3 Remove the VideoTrack object from the HTMLMediaElement videoTracks list.
         // 6.3.4 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the HTMLMediaElement videoTracks list.
-        mediaElement->videoTracks().remove(videoTrack->trackId());
+        mediaElement->videoTracks().remove(videoTrack->id());
         // 6.3.5 Remove the VideoTrack object from the SourceBuffer videoTracks list.
         // 6.3.6 Queue a task to fire a trusted event named removetrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the SourceBuffer videoTracks list.
-        videoTracks().remove(videoTrack->trackId());
+        videoTracks().remove(videoTrack->id());
     }
     // 6.4 If the removed selected video track flag equals true, then queue a task to fire a simple event named change at the HTMLMediaElement videoTracks list.
     if (removedSelectedVideoTrack) {
@@ -577,76 +577,244 @@ T* findExistingTrackById(const TrackListBase<T>& trackList, const String& id)
     return trackList.getTrackById(id);
 }
 
-WebVector<WebMediaPlayer::TrackId> SourceBuffer::initializationSegmentReceived(const WebVector<MediaTrackInfo>& newTracks)
+const TrackDefault* SourceBuffer::getTrackDefault(const AtomicString& trackType, const AtomicString& byteStreamTrackID) const
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") tracks=" << newTracks.size();
+    // This is a helper for implementation of default track label and default track language algorithms.
+    // defaultTrackLabel spec: https://w3c.github.io/media-source/#sourcebuffer-default-track-label
+    // defaultTrackLanguage spec: https://w3c.github.io/media-source/#sourcebuffer-default-track-language
+
+    // 1. If trackDefaults contains a TrackDefault object with a type attribute equal to type and a byteStreamTrackID attribute equal to byteStreamTrackID,
+    // then return the value of the label/language attribute on this matching object and abort these steps.
+    // 2. If trackDefaults contains a TrackDefault object with a type attribute equal to type and a byteStreamTrackID attribute equal to an empty string,
+    // then return the value of the label/language attribute on this matching object and abort these steps.
+    // 3. Return an empty string to the caller
+    const TrackDefault* trackDefaultWithEmptyBytestreamId = nullptr;
+    for (unsigned i = 0; i < m_trackDefaults->length(); ++i) {
+        const TrackDefault* trackDefault = m_trackDefaults->item(i);
+        if (trackDefault->type() != trackType)
+            continue;
+        if (trackDefault->byteStreamTrackID() == byteStreamTrackID)
+            return trackDefault;
+        if (!trackDefaultWithEmptyBytestreamId && trackDefault->byteStreamTrackID() == "")
+            trackDefaultWithEmptyBytestreamId = trackDefault;
+    }
+    return trackDefaultWithEmptyBytestreamId;
+}
+
+AtomicString SourceBuffer::defaultTrackLabel(const AtomicString& trackType, const AtomicString& byteStreamTrackID) const
+{
+    // Spec: https://w3c.github.io/media-source/#sourcebuffer-default-track-label
+    const TrackDefault* trackDefault = getTrackDefault(trackType, byteStreamTrackID);
+    return trackDefault ? AtomicString(trackDefault->label()) : "";
+}
+
+AtomicString SourceBuffer::defaultTrackLanguage(const AtomicString& trackType, const AtomicString& byteStreamTrackID) const
+{
+    // Spec: https://w3c.github.io/media-source/#sourcebuffer-default-track-language
+    const TrackDefault* trackDefault = getTrackDefault(trackType, byteStreamTrackID);
+    return trackDefault ? AtomicString(trackDefault->language()) : "";
+}
+
+bool SourceBuffer::initializationSegmentReceived(const WebVector<MediaTrackInfo>& newTracks)
+{
+    SBLOG << __FUNCTION__ << " this=" << this << " tracks=" << newTracks.size();
     DCHECK(m_source);
     DCHECK(m_source->mediaElement());
     DCHECK(m_updating);
 
-    // TODO(servolk): Implement proper 'initialization segment received' algorithm according to MSE spec:
-    // https://w3c.github.io/media-source/#sourcebuffer-init-segment-received
-    WebVector<WebMediaPlayer::TrackId> result(newTracks.size());
-    unsigned resultIdx = 0;
-    for (const auto& trackInfo : newTracks) {
-        if (!RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
-            static WebMediaPlayer::TrackId nextTrackId = 0;
-            result[resultIdx++] = ++nextTrackId;
-            continue;
+    if (!RuntimeEnabledFeatures::audioVideoTracksEnabled()) {
+        if (!m_firstInitializationSegmentReceived) {
+            m_source->setSourceBufferActive(this);
+            m_firstInitializationSegmentReceived = true;
         }
+        return true;
+    }
 
-        const TrackBase* trackBase = nullptr;
+    // Implementation of Initialization Segment Received, see
+    // https://w3c.github.io/media-source/#sourcebuffer-init-segment-received
+
+    // Sort newTracks into audio and video tracks to facilitate implementation
+    // of subsequent steps of this algorithm.
+    Vector<MediaTrackInfo> newAudioTracks;
+    Vector<MediaTrackInfo> newVideoTracks;
+    for (const MediaTrackInfo& trackInfo : newTracks) {
+        const TrackBase* track = nullptr;
         if (trackInfo.trackType == WebMediaPlayer::AudioTrack) {
-            AudioTrack* audioTrack = nullptr;
-            if (!m_firstInitializationSegmentReceived) {
-                audioTrack = AudioTrack::create(trackInfo.byteStreamTrackId, trackInfo.kind, trackInfo.label, trackInfo.language, false);
-                SourceBufferTrackBaseSupplement::setSourceBuffer(*audioTrack, this);
-                audioTracks().add(audioTrack);
-                m_source->mediaElement()->audioTracks().add(audioTrack);
-            } else {
-                audioTrack = findExistingTrackById(audioTracks(), trackInfo.byteStreamTrackId);
-                DCHECK(audioTrack);
-            }
-            trackBase = audioTrack;
-            result[resultIdx++] = audioTrack->trackId();
+            newAudioTracks.append(trackInfo);
+            if (m_firstInitializationSegmentReceived)
+                track = findExistingTrackById(audioTracks(), trackInfo.id);
         } else if (trackInfo.trackType == WebMediaPlayer::VideoTrack) {
-            VideoTrack* videoTrack = nullptr;
-            if (!m_firstInitializationSegmentReceived) {
-                videoTrack = VideoTrack::create(trackInfo.byteStreamTrackId, trackInfo.kind, trackInfo.label, trackInfo.language, false);
-                SourceBufferTrackBaseSupplement::setSourceBuffer(*videoTrack, this);
-                videoTracks().add(videoTrack);
-                m_source->mediaElement()->videoTracks().add(videoTrack);
-            } else {
-                videoTrack = findExistingTrackById(videoTracks(), trackInfo.byteStreamTrackId);
-                DCHECK(videoTrack);
-            }
-            trackBase = videoTrack;
-            result[resultIdx++] = videoTrack->trackId();
+            newVideoTracks.append(trackInfo);
+            if (m_firstInitializationSegmentReceived)
+                track = findExistingTrackById(videoTracks(), trackInfo.id);
         } else {
+            SBLOG << __FUNCTION__ << " this=" << this << " failed: unsupported track type " << trackInfo.trackType;
+            // TODO(servolk): Add handling of text tracks.
             NOTREACHED();
         }
-        (void)trackBase;
+        if (m_firstInitializationSegmentReceived && !track) {
+            SBLOG << __FUNCTION__ << " this=" << this << " failed: tracks mismatch the first init segment.";
+            return false;
+        }
 #if !LOG_DISABLED
-        const char* logActionStr = m_firstInitializationSegmentReceived ? "using existing" : "added";
         const char* logTrackTypeStr = (trackInfo.trackType == WebMediaPlayer::AudioTrack) ? "audio" : "video";
-        DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") " << logActionStr << " "
-            << logTrackTypeStr << " Track " << trackBase << "trackId=" << trackBase->trackId() << " id="
-            << trackBase->id() << " label=" << trackBase->label() << " lang=" << trackBase->language();
+        SBLOG << __FUNCTION__ << " this=" << this << " : " << logTrackTypeStr << " track "
+            << " id=" << String(trackInfo.id) << " byteStreamTrackID=" << String(trackInfo.byteStreamTrackID)
+            << " kind=" << String(trackInfo.kind) << " label=" << String(trackInfo.label) << " language=" << String(trackInfo.language);
 #endif
     }
 
-    if (!m_firstInitializationSegmentReceived) {
-        // 5. If active track flag equals true, then run the following steps:
-        // 5.1. Add this SourceBuffer to activeSourceBuffers.
-        // 5.2. Queue a task to fire a simple event named addsourcebuffer at
-        // activesourcebuffers.
-        m_source->setSourceBufferActive(this);
+    // 1. Update the duration attribute if it currently equals NaN:
+    // TODO(servolk): Pass also stream duration into initSegmentReceived.
 
-        // 6. Set first initialization segment received flag to true.
+    // 2. If the initialization segment has no audio, video, or text tracks, then run the append error algorithm with the decode error parameter set to true and abort these steps.
+    if (newTracks.size() == 0) {
+        SBLOG << __FUNCTION__ << " this=" << this << " failed: no tracks found in the init segment.";
+        // The append error algorithm will be called at the top level after we return false here to indicate failure.
+        return false;
+    }
+
+    // 3. If the first initialization segment received flag is true, then run the following steps:
+    if (m_firstInitializationSegmentReceived) {
+        // 3.1 Verify the following properties. If any of the checks fail then run the append error algorithm with the decode error parameter set to true and abort these steps.
+        bool tracksMatchFirstInitSegment = true;
+        // - The number of audio, video, and text tracks match what was in the first initialization segment.
+        if (newAudioTracks.size() != audioTracks().length() || newVideoTracks.size() != videoTracks().length()) {
+            tracksMatchFirstInitSegment = false;
+        }
+        // - The codecs for each track, match what was specified in the first initialization segment.
+        // This is currently done in MediaSourceState::OnNewConfigs.
+        // - If more than one track for a single type are present (ie 2 audio tracks), then the Track IDs match the ones in the first initialization segment.
+        if (tracksMatchFirstInitSegment && newAudioTracks.size() > 1) {
+            for (size_t i = 0; i < newAudioTracks.size(); ++i) {
+                const String& newTrackId = newVideoTracks[i].id;
+                if (newTrackId != String(audioTracks().anonymousIndexedGetter(i)->id())) {
+                    tracksMatchFirstInitSegment = false;
+                    break;
+                }
+            }
+        }
+
+        if (tracksMatchFirstInitSegment && newVideoTracks.size() > 1) {
+            for (size_t i = 0; i < newVideoTracks.size(); ++i) {
+                const String& newTrackId = newVideoTracks[i].id;
+                if (newTrackId != String(videoTracks().anonymousIndexedGetter(i)->id())) {
+                    tracksMatchFirstInitSegment = false;
+                    break;
+                }
+            }
+        }
+
+        if (!tracksMatchFirstInitSegment) {
+            SBLOG << __FUNCTION__ << " this=" << this << " failed: tracks mismatch the first init segment.";
+            // The append error algorithm will be called at the top level after we return false here to indicate failure.
+            return false;
+        }
+
+        // 3.2 Add the appropriate track descriptions from this initialization segment to each of the track buffers.
+        // This is done in Chromium code in stream parsers and demuxer implementations.
+
+        // 3.3 Set the need random access point flag on all track buffers to true.
+        // This is done in Chromium code, see MediaSourceState::OnNewConfigs.
+    }
+
+    // 4. Let active track flag equal false.
+    m_activeTrack = false;
+
+    // 5. If the first initialization segment received flag is false, then run the following steps:
+    if (!m_firstInitializationSegmentReceived) {
+        // 5.1 If the initialization segment contains tracks with codecs the user agent does not support, then run the append error algorithm with the decode error parameter set to true and abort these steps.
+        // This is done in Chromium code, see MediaSourceState::OnNewConfigs.
+
+        // 5.2 For each audio track in the initialization segment, run following steps:
+        for (const MediaTrackInfo& trackInfo : newAudioTracks) {
+            // 5.2.1 Let audio byte stream track ID be the Track ID for the current track being processed.
+            const auto& byteStreamTrackID = trackInfo.byteStreamTrackID;
+            // 5.2.2 Let audio language be a BCP 47 language tag for the language specified in the initialization segment for this track or an empty string if no language info is present.
+            WebString language = trackInfo.language;
+            // 5.2.3 If audio language equals an empty string or the 'und' BCP 47 value, then run the default track language algorithm with byteStreamTrackID set to
+            // audio byte stream track ID and type set to "audio" and assign the value returned by the algorithm to audio language.
+            if (language.isEmpty() || language == "und")
+                language = defaultTrackLanguage(TrackDefault::audioKeyword(), byteStreamTrackID);
+            // 5.2.4 Let audio label be a label specified in the initialization segment for this track or an empty string if no label info is present.
+            WebString label = trackInfo.label;
+            // 5.3.5 If audio label equals an empty string, then run the default track label algorithm with byteStreamTrackID set to audio byte stream track ID and
+            // type set to "audio" and assign the value returned by the algorithm to audio label.
+            if (label.isEmpty())
+                label = defaultTrackLabel(TrackDefault::audioKeyword(), byteStreamTrackID);
+            // 5.2.6 Let audio kinds be an array of kind strings specified in the initialization segment for this track or an empty array if no kind information is provided.
+            const auto& kind = trackInfo.kind;
+            // 5.2.7 TODO(servolk): Implement track kind processing.
+            // 5.2.8.2 Let new audio track be a new AudioTrack object.
+            AudioTrack* audioTrack = AudioTrack::create(byteStreamTrackID, kind, label, language, false);
+            SourceBufferTrackBaseSupplement::setSourceBuffer(*audioTrack, this);
+            // 5.2.8.7 If audioTracks.length equals 0, then run the following steps:
+            if (audioTracks().length() == 0) {
+                // 5.2.8.7.1 Set the enabled property on new audio track to true.
+                audioTrack->setEnabled(true);
+                // 5.2.8.7.2 Set active track flag to true.
+                m_activeTrack = true;
+            }
+            // 5.2.8.8 Add new audio track to the audioTracks attribute on this SourceBuffer object.
+            // 5.2.8.9 Queue a task to fire a trusted event named addtrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the AudioTrackList object referenced by the audioTracks attribute on this SourceBuffer object.
+            audioTracks().add(audioTrack);
+            // 5.2.8.10 Add new audio track to the audioTracks attribute on the HTMLMediaElement.
+            // 5.2.8.11 Queue a task to fire a trusted event named addtrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the AudioTrackList object referenced by the audioTracks attribute on the HTMLMediaElement.
+            m_source->mediaElement()->audioTracks().add(audioTrack);
+        }
+
+        // 5.3. For each video track in the initialization segment, run following steps:
+        for (const MediaTrackInfo& trackInfo : newVideoTracks) {
+            // 5.3.1 Let video byte stream track ID be the Track ID for the current track being processed.
+            const auto& byteStreamTrackID = trackInfo.byteStreamTrackID;
+            // 5.3.2 Let video language be a BCP 47 language tag for the language specified in the initialization segment for this track or an empty string if no language info is present.
+            WebString language = trackInfo.language;
+            // 5.3.3 If video language equals an empty string or the 'und' BCP 47 value, then run the default track language algorithm with byteStreamTrackID set to
+            // video byte stream track ID and type set to "video" and assign the value returned by the algorithm to video language.
+            if (language.isEmpty() || language == "und")
+                language = defaultTrackLanguage(TrackDefault::videoKeyword(), byteStreamTrackID);
+            // 5.3.4 Let video label be a label specified in the initialization segment for this track or an empty string if no label info is present.
+            WebString label = trackInfo.label;
+            // 5.3.5 If video label equals an empty string, then run the default track label algorithm with byteStreamTrackID set to video byte stream track ID and
+            // type set to "video" and assign the value returned by the algorithm to video label.
+            if (label.isEmpty())
+                label = defaultTrackLabel(TrackDefault::videoKeyword(), byteStreamTrackID);
+            // 5.3.6 Let video kinds be an array of kind strings specified in the initialization segment for this track or an empty array if no kind information is provided.
+            const auto& kind = trackInfo.kind;
+            // 5.3.7 TODO(servolk): Implement track kind processing.
+            // 5.3.8.2 Let new video track be a new VideoTrack object.
+            VideoTrack* videoTrack = VideoTrack::create(byteStreamTrackID, kind, label, language, false);
+            SourceBufferTrackBaseSupplement::setSourceBuffer(*videoTrack, this);
+            // 5.3.8.7 If videoTracks.length equals 0, then run the following steps:
+            if (videoTracks().length() == 0) {
+                // 5.3.8.7.1 Set the selected property on new audio track to true.
+                videoTrack->setSelected(true);
+                // 5.3.8.7.2 Set active track flag to true.
+                m_activeTrack = true;
+            }
+            // 5.3.8.8 Add new video track to the videoTracks attribute on this SourceBuffer object.
+            // 5.3.8.9 Queue a task to fire a trusted event named addtrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the VideoTrackList object referenced by the videoTracks attribute on this SourceBuffer object.
+            videoTracks().add(videoTrack);
+            // 5.3.8.10 Add new video track to the videoTracks attribute on the HTMLMediaElement.
+            // 5.3.8.11 Queue a task to fire a trusted event named addtrack, that does not bubble and is not cancelable, and that uses the TrackEvent interface, at the VideoTrackList object referenced by the videoTracks attribute on the HTMLMediaElement.
+            m_source->mediaElement()->videoTracks().add(videoTrack);
+        }
+
+        // 5.4 TODO(servolk): Add text track processing here.
+
+        // 5.5 If active track flag equals true, then run the following steps:
+        // activesourcebuffers.
+        if (m_activeTrack) {
+            // 5.5.1 Add this SourceBuffer to activeSourceBuffers.
+            // 5.5.2 Queue a task to fire a simple event named addsourcebuffer at activeSourceBuffers
+            m_source->setSourceBufferActive(this);
+        }
+
+        // 5.6. Set first initialization segment received flag to true.
         m_firstInitializationSegmentReceived = true;
     }
 
-    return result;
+    return true;
 }
 
 bool SourceBuffer::hasPendingActivity() const
@@ -729,7 +897,7 @@ bool SourceBuffer::prepareAppend(size_t newDataSize, ExceptionState& exceptionSt
     // 5. Run the coded frame eviction algorithm.
     if (!evictCodedFrames(newDataSize)) {
         // 6. If the buffer full flag equals true, then throw a QUOTA_EXCEEDED_ERR exception and abort these steps.
-        DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") -> throw QuotaExceededError";
+        SBLOG << __FUNCTION__ << " this=" << this << " -> throw QuotaExceededError";
         MediaSource::logAndThrowDOMException(exceptionState, QuotaExceededError, "The SourceBuffer is full, and cannot free space to append additional buffers.");
         TRACE_EVENT_ASYNC_END0("media", "SourceBuffer::prepareAppend", this);
         return false;
@@ -745,8 +913,10 @@ bool SourceBuffer::evictCodedFrames(size_t newDataSize)
     DCHECK(m_source->mediaElement());
     double currentTime = m_source->mediaElement()->currentTime();
     bool result = m_webSourceBuffer->evictCodedFrames(currentTime, newDataSize);
-    DVLOG_IF(SOURCE_BUFFER_LOG_LEVEL, !result) << __FUNCTION__ << "(" << this << ") failed. newDataSize=" << newDataSize
-        << " currentTime=" << currentTime << " buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
+    if (!result) {
+        SBLOG << __FUNCTION__ << " this=" << this << " failed. newDataSize=" << newDataSize
+            << " currentTime=" << currentTime << " buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
+    }
     return result;
 }
 
@@ -812,28 +982,35 @@ void SourceBuffer::appendBufferAsyncPart()
     if (appendSize)
         appendData = m_pendingAppendData.data() + m_pendingAppendDataOffset;
 
-    m_webSourceBuffer->append(appendData, appendSize, &m_timestampOffset);
+    bool appendSuccess = m_webSourceBuffer->append(appendData, appendSize, &m_timestampOffset);
 
-    m_pendingAppendDataOffset += appendSize;
+    if (!appendSuccess) {
+        m_pendingAppendData.clear();
+        m_pendingAppendDataOffset = 0;
+        appendError(DecodeError);
+    } else {
+        m_pendingAppendDataOffset += appendSize;
 
-    if (m_pendingAppendDataOffset < m_pendingAppendData.size()) {
-        m_appendBufferAsyncPartRunner->runAsync();
-        TRACE_EVENT_ASYNC_STEP_INTO0("media", "SourceBuffer::appendBuffer", this, "nextPieceDelay");
-        return;
+        if (m_pendingAppendDataOffset < m_pendingAppendData.size()) {
+            m_appendBufferAsyncPartRunner->runAsync();
+            TRACE_EVENT_ASYNC_STEP_INTO0("media", "SourceBuffer::appendBuffer", this, "nextPieceDelay");
+            return;
+        }
+
+        // 3. Set the updating attribute to false.
+        m_updating = false;
+        m_pendingAppendData.clear();
+        m_pendingAppendDataOffset = 0;
+
+        // 4. Queue a task to fire a simple event named update at this SourceBuffer object.
+        scheduleEvent(EventTypeNames::update);
+
+        // 5. Queue a task to fire a simple event named updateend at this SourceBuffer object.
+        scheduleEvent(EventTypeNames::updateend);
     }
 
-    // 3. Set the updating attribute to false.
-    m_updating = false;
-    m_pendingAppendData.clear();
-    m_pendingAppendDataOffset = 0;
-
-    // 4. Queue a task to fire a simple event named update at this SourceBuffer object.
-    scheduleEvent(EventTypeNames::update);
-
-    // 5. Queue a task to fire a simple event named updateend at this SourceBuffer object.
-    scheduleEvent(EventTypeNames::updateend);
     TRACE_EVENT_ASYNC_END0("media", "SourceBuffer::appendBuffer", this);
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") ended. buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
+    SBLOG << __FUNCTION__ << " done. this=" << this << " buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
 }
 
 void SourceBuffer::removeAsyncPart()
@@ -906,7 +1083,7 @@ void SourceBuffer::appendStreamAsyncPart()
     // 1. If maxSize is set, then let bytesLeft equal maxSize.
     // 2. Loop Top: If maxSize is set and bytesLeft equals 0, then jump to the loop done step below.
     if (m_streamMaxSizeValid && !m_streamMaxSize) {
-        appendStreamDone(true);
+        appendStreamDone(NoError);
         return;
     }
 
@@ -915,7 +1092,7 @@ void SourceBuffer::appendStreamAsyncPart()
     m_loader->start(getExecutionContext(), *m_stream, m_streamMaxSizeValid ? m_streamMaxSize : 0);
 }
 
-void SourceBuffer::appendStreamDone(bool success)
+void SourceBuffer::appendStreamDone(AppendStreamDoneAction action)
 {
     DCHECK(m_updating);
     DCHECK(m_loader);
@@ -923,8 +1100,14 @@ void SourceBuffer::appendStreamDone(bool success)
 
     clearAppendStreamState();
 
-    if (!success) {
-        appendError(false);
+    if (action != NoError) {
+        if (action == RunAppendErrorWithNoDecodeError) {
+            appendError(NoDecodeError);
+        } else {
+            DCHECK_EQ(action, RunAppendErrorWithDecodeError);
+            appendError(DecodeError);
+        }
+
         TRACE_EVENT_ASYNC_END0("media", "SourceBuffer::appendStream", this);
         return;
     }
@@ -941,7 +1124,7 @@ void SourceBuffer::appendStreamDone(bool success)
     // 14. Queue a task to fire a simple event named updateend at this SourceBuffer object.
     scheduleEvent(EventTypeNames::updateend);
     TRACE_EVENT_ASYNC_END0("media", "SourceBuffer::appendStream", this);
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") ended. buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
+    SBLOG << __FUNCTION__ << " ended. this=" << this << " buffered=" << webTimeRangesToString(m_webSourceBuffer->buffered());
 }
 
 void SourceBuffer::clearAppendStreamState()
@@ -952,9 +1135,9 @@ void SourceBuffer::clearAppendStreamState()
     m_stream = nullptr;
 }
 
-void SourceBuffer::appendError(bool decodeError)
+void SourceBuffer::appendError(AppendError err)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") decodeError=" << decodeError;
+    SBLOG << __FUNCTION__ << " this=" << this << " AppendError=" << err;
     // Section 3.5.3 Append Error Algorithm
     // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#sourcebuffer-append-error
 
@@ -972,18 +1155,22 @@ void SourceBuffer::appendError(bool decodeError)
 
     // 5. If decode error is true, then run the end of stream algorithm with the
     // error parameter set to "decode".
-    if (decodeError)
+    if (err == DecodeError) {
         m_source->endOfStream("decode", ASSERT_NO_EXCEPTION);
+    } else {
+        DCHECK_EQ(err, NoDecodeError);
+        // Nothing else to do in this case.
+    }
 }
 
 void SourceBuffer::didStartLoading()
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
 }
 
 void SourceBuffer::didReceiveDataForClient(const char* data, unsigned dataLength)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") dataLength=" << dataLength;
+    SBLOG << __FUNCTION__ << " this=" << this << " dataLength=" << dataLength;
     DCHECK(m_updating);
     DCHECK(m_loader);
 
@@ -993,28 +1180,30 @@ void SourceBuffer::didReceiveDataForClient(const char* data, unsigned dataLength
     // 10. Run the coded frame eviction algorithm.
     if (!evictCodedFrames(dataLength)) {
         // 11. (in appendStreamDone) If the buffer full flag equals true, then run the append error algorithm with the decode error parameter set to false and abort this algorithm.
-        appendStreamDone(false);
+        appendStreamDone(RunAppendErrorWithNoDecodeError);
         return;
     }
 
-    m_webSourceBuffer->append(reinterpret_cast<const unsigned char*>(data), dataLength, &m_timestampOffset);
+    if (!m_webSourceBuffer->append(reinterpret_cast<const unsigned char*>(data), dataLength, &m_timestampOffset))
+        appendStreamDone(RunAppendErrorWithDecodeError);
 }
 
 void SourceBuffer::didFinishLoading()
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    SBLOG << __FUNCTION__ << " this=" << this;
     DCHECK(m_loader);
-    appendStreamDone(true);
+    appendStreamDone(NoError);
 }
 
 void SourceBuffer::didFail(FileError::ErrorCode errorCode)
 {
-    DVLOG(SOURCE_BUFFER_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") errorCode=" << errorCode;
+    SBLOG << __FUNCTION__ << " this=" << this << " errorCode=" << errorCode;
     // m_loader might be already released, in case appendStream has failed due
-    // to evictCodedFrames failing in didReceiveDataForClient. In that case
-    // appendStreamDone will be invoked from there, no need to repeat it here.
+    // to evictCodedFrames or WebSourceBuffer append failing in
+    // didReceiveDataForClient. In that case appendStreamDone will be invoked
+    // from there, no need to repeat it here.
     if (m_loader)
-        appendStreamDone(false);
+        appendStreamDone(RunAppendErrorWithNoDecodeError);
 }
 
 DEFINE_TRACE(SourceBuffer)

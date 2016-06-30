@@ -15,6 +15,7 @@ namespace blink {
 class FrameView;
 class LayoutAPIShim;
 class Node;
+class ObjectPaintProperties;
 
 class LayoutItem {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -162,6 +163,11 @@ public:
         return m_layoutObject->document();
     }
 
+    LayoutItem nextInPreOrder() const
+    {
+        return LayoutItem(m_layoutObject->nextInPreOrder());
+    }
+
     void updateStyleAndLayout()
     {
         return m_layoutObject->document().updateStyleAndLayout();
@@ -170,6 +176,11 @@ public:
     const ComputedStyle& styleRef() const
     {
         return m_layoutObject->styleRef();
+    }
+
+    ComputedStyle& mutableStyleRef() const
+    {
+        return m_layoutObject->mutableStyleRef();
     }
 
     LayoutSize offsetFromContainer(const LayoutItem& item) const
@@ -222,6 +233,11 @@ public:
         return m_layoutObject->absoluteToLocal(point, mode);
     }
 
+    void setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReasonForTracing reason, MarkingBehavior behavior = MarkContainerChain, SubtreeLayoutScope* scope = nullptr)
+    {
+        m_layoutObject->setNeedsLayoutAndFullPaintInvalidation(reason, behavior, scope);
+    }
+
     void setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReasonForTracing reason)
     {
         m_layoutObject->setNeedsLayoutAndPrefWidthsRecalc(reason);
@@ -250,6 +266,11 @@ public:
     Color resolveColor(int colorProperty) const
     {
         return m_layoutObject->resolveColor(colorProperty);
+    }
+
+    ObjectPaintProperties* objectPaintProperties() const
+    {
+        return m_layoutObject->objectPaintProperties();
     }
 
 protected:

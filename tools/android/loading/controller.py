@@ -38,6 +38,7 @@ _SRC_DIR = os.path.abspath(os.path.join(
 _CATAPULT_DIR = os.path.join(_SRC_DIR, 'third_party', 'catapult')
 
 sys.path.append(os.path.join(_CATAPULT_DIR, 'devil'))
+from devil.android import device_errors
 from devil.android.sdk import intent
 
 sys.path.append(
@@ -71,6 +72,21 @@ class ChromeControllerMetadataGatherer(object):
 
 class ChromeControllerInternalError(Exception):
   pass
+
+
+def _AllocateTcpListeningPort():
+  """Allocates a TCP listening port.
+
+  Note: The use of this function is inherently OS level racy because the
+    port returned by this function might be re-used by another running process.
+  """
+  temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  try:
+    temp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    temp_socket.bind(('', 0))
+    return temp_socket.getsockname()[1]
+  finally:
+    temp_socket.close()
 
 
 class ChromeControllerError(Exception):
@@ -306,11 +322,11 @@ class RemoteChromeController(ChromeControllerBase):
     assert device is not None, 'Should you be using LocalController instead?'
     super(RemoteChromeController, self).__init__()
     self._device = device
-    self._device.EnableRoot()
     self._metadata['platform'] = {
         'os': 'A-' + device.build_id,
         'product_model': device.product_model
     }
+    self._InitDevice()
 
   def GetDevice(self):
     """Overridden android device."""
@@ -339,23 +355,41 @@ class RemoteChromeController(ChromeControllerBase):
       try:
         for attempt_id in xrange(self.DEVTOOLS_CONNECTION_ATTEMPTS):
           logging.info('Devtools connection attempt %d' % attempt_id)
-          with device_setup.ForwardPort(
-              self._device, 'tcp:%d' % OPTIONS.devtools_port,
-              'localabstract:chrome_devtools_remote'):
-            try:
-              connection = devtools_monitor.DevToolsConnection(
-                  OPTIONS.devtools_hostname, OPTIONS.devtools_port)
-              self._StartConnection(connection)
-            except socket.error as e:
-              if e.errno != errno.ECONNRESET:
-                raise
-              time.sleep(self.DEVTOOLS_CONNECTION_ATTEMPT_INTERVAL_SECONDS)
-              continue
-            yield connection
-            if self._slow_death:
-              self._device.adb.Shell('am start com.google.android.launcher')
-              time.sleep(self.TIME_TO_IDLE_SECONDS)
-            break
+          # Adb forwarding does not provide a way to print the port number if
+          # it is allocated atomically by the OS by passing port=0, but we need
+          # dynamically allocated listening port here to handle parallel run on
+          # different devices.
+          host_side_port = _AllocateTcpListeningPort()
+          logging.info('Allocated host sided listening port for devtools '
+              'connection: %d', host_side_port)
+          try:
+            with device_setup.ForwardPort(
+                self._device, 'tcp:%d' % host_side_port,
+                'localabstract:chrome_devtools_remote'):
+              try:
+                connection = devtools_monitor.DevToolsConnection(
+                    OPTIONS.devtools_hostname, host_side_port)
+                self._StartConnection(connection)
+              except socket.error as e:
+                if e.errno != errno.ECONNRESET:
+                  raise
+                time.sleep(self.DEVTOOLS_CONNECTION_ATTEMPT_INTERVAL_SECONDS)
+                continue
+              yield connection
+              if self._slow_death:
+                self._device.adb.Shell('am start com.google.android.launcher')
+                time.sleep(self.TIME_TO_IDLE_SECONDS)
+              break
+          except device_errors.AdbCommandFailedError as error:
+            _KNOWN_ADB_FORWARDER_FAILURES = [
+              'cannot bind to socket: Address already in use',
+              'cannot rebind existing socket: Resource temporarily unavailable']
+            for message in _KNOWN_ADB_FORWARDER_FAILURES:
+              if message in error.message:
+                break
+            else:
+              raise
+            continue
         else:
           raise ChromeControllerInternalError(
               'Failed to connect to Chrome devtools after {} '
@@ -380,6 +414,13 @@ class RemoteChromeController(ChromeControllerBase):
                       'app_tabs']:
       cmd = ['rm', '-rf', '/data/data/{}/{}'.format(package, directory)]
       self._device.adb.Shell(subprocess.list2cmdline(cmd))
+
+  def RebootDevice(self):
+    """Reboot the remote device."""
+    assert self._wpr_attributes is None, 'WPR should be closed before rebooting'
+    logging.warning('Rebooting the device')
+    device_setup.Reboot(self._device)
+    self._InitDevice()
 
   def PushBrowserCache(self, cache_path):
     """Override for chrome cache pushing."""
@@ -412,6 +453,9 @@ class RemoteChromeController(ChromeControllerBase):
     for _ in xrange(10):
       if not self._device.DismissCrashDialogIfNeeded():
         break
+
+  def _InitDevice(self):
+    self._device.EnableRoot()
 
 
 class LocalChromeController(ChromeControllerBase):

@@ -104,12 +104,16 @@ class CommandBufferLocal : public gpu::CommandBuffer,
  private:
   // CommandBufferDriver::Client implementation. All called on GPU thread.
   void DidLoseContext(uint32_t reason) override;
-  void UpdateVSyncParameters(int64_t timebase, int64_t interval) override;
+  void UpdateVSyncParameters(const base::TimeTicks& timebase,
+                             const base::TimeDelta& interval) override;
   void OnGpuCompletedSwapBuffers(gfx::SwapResult result) override;
 
   ~CommandBufferLocal() override;
 
-  gpu::CommandBufferSharedState* shared_state() const { return shared_state_; }
+  gpu::CommandBufferSharedState* shared_state() const {
+    return reinterpret_cast<gpu::CommandBufferSharedState*>(
+        shared_state_.get());
+  }
   void TryUpdateState();
   void MakeProgressAndUpdateState();
 
@@ -142,7 +146,8 @@ class CommandBufferLocal : public gpu::CommandBuffer,
 
   // Helper functions are called in the client thread.
   void DidLoseContextOnClientThread(uint32_t reason);
-  void UpdateVSyncParametersOnClientThread(int64_t timebase, int64_t interval);
+  void UpdateVSyncParametersOnClientThread(const base::TimeTicks& timebase,
+                                           const base::TimeDelta& interval);
   void OnGpuCompletedSwapBuffersOnClientThread(gfx::SwapResult result);
 
   gfx::AcceleratedWidget widget_;
@@ -154,8 +159,7 @@ class CommandBufferLocal : public gpu::CommandBuffer,
   // Members accessed on the client thread:
   gpu::GpuControlClient* gpu_control_client_;
   gpu::CommandBuffer::State last_state_;
-  mojo::ScopedSharedBufferHandle shared_state_handle_;
-  gpu::CommandBufferSharedState* shared_state_;
+  mojo::ScopedSharedBufferMapping shared_state_;
   int32_t last_put_offset_;
   gpu::Capabilities capabilities_;
   int32_t next_transfer_buffer_id_;

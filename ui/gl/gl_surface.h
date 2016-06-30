@@ -18,6 +18,7 @@
 #include "ui/gfx/overlay_transform.h"
 #include "ui/gfx/swap_result.h"
 #include "ui/gl/gl_export.h"
+#include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 
 namespace gfx {
@@ -28,7 +29,6 @@ class VSyncProvider;
 namespace gl {
 
 class GLContext;
-class GLImage;
 
 // Encapsulates a surface that can be rendered to with GL, hiding platform
 // specific management.
@@ -184,6 +184,15 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
                                const gfx::Transform& transform,
                                int sorting_content_id,
                                unsigned filter);
+  struct GL_EXPORT CALayerInUseQuery {
+    CALayerInUseQuery();
+    explicit CALayerInUseQuery(const CALayerInUseQuery&);
+    ~CALayerInUseQuery();
+    unsigned texture = 0;
+    scoped_refptr<GLImage> image;
+  };
+  virtual void ScheduleCALayerInUseQuery(
+      std::vector<CALayerInUseQuery> queries);
 
   virtual bool IsSurfaceless() const;
 
@@ -192,28 +201,6 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
   // Returns true if SwapBuffers or PostSubBuffers causes a flip, such that
   // the next buffer may be 2 frames old.
   virtual bool BuffersFlipped() const;
-
-  // Create a GL surface that renders directly to a view.
-  // DEPRECATED(kylechar): Use gl::init::CreateViewGLSurface from gl_factory.h.
-  static scoped_refptr<GLSurface> CreateViewGLSurface(
-      gfx::AcceleratedWidget window);
-
-#if defined(USE_OZONE)
-  // Create a GL surface that renders directly into a window with surfaceless
-  // semantics - there is no default framebuffer and the primary surface must
-  // be presented as an overlay. If surfaceless mode is not supported or
-  // enabled it will return a null pointer.
-  // DEPRECATED(kylechar): Use gl::init::CreateSurfacelessViewGLSurface from
-  // gl_factory.h.
-  static scoped_refptr<GLSurface> CreateSurfacelessViewGLSurface(
-      gfx::AcceleratedWidget window);
-#endif  // defined(USE_OZONE)
-
-  // Create a GL surface used for offscreen rendering.
-  // DEPRECATED(kylechar): Use gl::init::CreateOffscreenGLSurface from
-  // gl_factory.h.
-  static scoped_refptr<GLSurface> CreateOffscreenGLSurface(
-      const gfx::Size& size);
 
   static GLSurface* GetCurrent();
 
@@ -292,6 +279,12 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
 
   DISALLOW_COPY_AND_ASSIGN(GLSurfaceAdapter);
 };
+
+// Wraps GLSurface in scoped_refptr and tries to initializes it. Returns a
+// scoped_refptr containing the initialized GLSurface or nullptr if
+// initialization fails.
+GL_EXPORT scoped_refptr<GLSurface> InitializeGLSurface(
+    scoped_refptr<GLSurface> surface);
 
 }  // namespace gl
 

@@ -4,9 +4,8 @@
 
 #include "ash/system/chromeos/audio/tray_audio_chromeos.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/shell.h"
-#include "ash/system/audio/volume_view.h"
+#include "ash/common/system/audio/volume_view.h"
+#include "ash/common/wm_shell.h"
 #include "ash/system/chromeos/audio/audio_detailed_view.h"
 #include "ash/system/chromeos/audio/tray_audio_delegate_chromeos.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -38,13 +37,13 @@ void TrayAudioChromeOs::Update() {
     audio_detail_view_->Update();
 }
 
-views::View* TrayAudioChromeOs::CreateDetailedView(user::LoginStatus status) {
+views::View* TrayAudioChromeOs::CreateDetailedView(LoginStatus status) {
   if (pop_up_volume_view_) {
     volume_view_ = new tray::VolumeView(this, audio_delegate_.get(), false);
     return volume_view_;
   } else {
-    Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-        ash::UMA_STATUS_AREA_DETAILED_AUDIO_VIEW);
+    WmShell::Get()->RecordUserMetricsAction(
+        UMA_STATUS_AREA_DETAILED_AUDIO_VIEW);
     audio_detail_view_ = new tray::AudioDetailedView(this);
     return audio_detail_view_;
   }

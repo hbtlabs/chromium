@@ -34,8 +34,10 @@ class ArcAppContextMenu : public app_list::AppContextMenu {
  private:
   void IsAppOpen();
   void UninstallPackage();
+  void ShowPackageInfo();
 
   bool CanBeUninstalled() const;
+  bool IsShortcut() const;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAppContextMenu);
 };

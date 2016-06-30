@@ -1,5 +1,13 @@
 <!DOCTYPE html><html dir="$i18n{textdirection}" lang="$i18n{language}"><head><!--
 @license
+Copyright (c) 2014 The Polymer Project Authors. All rights reserved.
+This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
+The complete set of authors may be found at http://polymer.github.io/AUTHORS.txt
+The complete set of contributors may be found at http://polymer.github.io/CONTRIBUTORS.txt
+Code distributed by Google as part of the polymer project is also
+subject to an additional IP rights grant found at http://polymer.github.io/PATENTS.txt
+--><!--
+@license
 Copyright (c) 2016 The Polymer Project Authors. All rights reserved.
 This code may only be used under the BSD style license found at http://polymer.github.io/LICENSE.txt
 The complete set of authors may be found at http://polymer.github.io/AUTHORS.txt
@@ -51,6 +59,24 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 </head>
 <body><div hidden="" by-vulcanize=""><script src="chrome://resources/js/load_time_data.js"></script>
 <script src="chrome://downloads/strings.js"></script>
+<style>
+/* Copyright 2016 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+:root {
+  /* This is a custom, Chrome-specific color that does not have a --paper or
+   * --google equivalent. */
+  --md-background-color: rgb(241, 241, 241);
+  /* This is --google-blue-700, rewritten as a native custom property for speed.
+   */
+  --md-toolbar-color: rgb(51, 103, 214);
+}
+
+</style>
+
+
+
 <dom-module id="iron-list" assetpath="chrome://resources/polymer/v1_0/iron-list/">
   <template>
     <style>
@@ -444,8 +470,6 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
   }
 
 </style>
-
-
 <dom-module id="iron-icon" assetpath="chrome://resources/polymer/v1_0/iron-icon/">
 
   <style>
@@ -469,8 +493,6 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 
   </dom-module>
 <dom-module id="paper-ripple" assetpath="chrome://resources/polymer/v1_0/paper-ripple/">
-
-  
 
   <template>
     <style>
@@ -633,8 +655,6 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
     </style>
   </template>
 </dom-module>
-
-
 <dom-module id="paper-material" assetpath="chrome://resources/polymer/v1_0/paper-material/">
   <template>
     <style include="paper-material-shared-styles"></style>
@@ -720,7 +740,10 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
 
         position: relative;
         cursor: pointer;
+
+        /* NOTE: Both values are needed, since some phones require the value to be `transparent`. */
         -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+        -webkit-tap-highlight-color: transparent;
       }
 
       :host([disabled]) {
@@ -1058,8 +1081,6 @@ subject to an additional IP rights grant found at http://polymer.github.io/PATEN
   }
 
 </style>
-
-
 <dom-module id="paper-progress" assetpath="chrome://resources/polymer/v1_0/paper-progress/">
   <template>
     <style>
@@ -1510,7 +1531,7 @@ paper-button {
           <span id="tag">[[computeTag_(data.state, data.last_reason_text, data.file_externally_removed)]]</span>
         </div>
 
-        <a id="url" target="_blank" href="[[data.url]]">[[data.url]]</a>
+        <a id="url" target="_blank">[[data.url]]</a>
 
         <div id="description">[[computeDescription_(data.state, data.danger_type, data.file_name, data.progress_status_text)]]</div>
 
@@ -1575,6 +1596,8 @@ paper-button {
   </dom-module>
 
 
+
+
 <style is="custom-style">
 
   :root {
@@ -1630,36 +1653,6 @@ paper-button {
     --default-primary-color: var(--primary-color);
 
   }
-
-</style>
-<style>
-/* Copyright 2015 The Chromium Authors. All rights reserved.
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file. */
-
-@font-face {
-  font-family: 'Roboto';
-  font-style: normal;
-  font-weight: 400;
-  src: local('Roboto'), local('Roboto-Regular'),
-      url("chrome://resources/roboto/roboto-regular.woff2") format('woff2');
-}
-
-@font-face {
-  font-family: 'Roboto';
-  font-style: normal;
-  font-weight: 500;
-  src: local('Roboto Medium'), local('Roboto-Medium'),
-      url("chrome://resources/roboto/roboto-medium.woff2") format('woff2');
-}
-
-@font-face {
-  font-family: 'Roboto';
-  font-style: normal;
-  font-weight: 700;
-  src: local('Roboto Bold'), local('Roboto-Bold'),
-      url("chrome://resources/roboto/roboto-bold.woff2") format('woff2');
-}
 
 </style>
 <style is="custom-style">
@@ -1818,10 +1811,40 @@ paper-button {
   }
 
 </style>
+<style>
+/* Copyright 2015 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Roboto'), local('Roboto-Regular'),
+      url("chrome://resources/roboto/roboto-regular.woff2") format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 500;
+  src: local('Roboto Medium'), local('Roboto-Medium'),
+      url("chrome://resources/roboto/roboto-medium.woff2") format('woff2');
+}
+
+@font-face {
+  font-family: 'Roboto';
+  font-style: normal;
+  font-weight: 700;
+  src: local('Roboto Bold'), local('Roboto-Bold'),
+      url("chrome://resources/roboto/roboto-bold.woff2") format('woff2');
+}
+
+</style>
 <dom-module id="paper-item-shared-styles" assetpath="chrome://resources/polymer/v1_0/paper-item/">
   <template>
     <style>
-      :host, .paper-item {
+      :host(paper-item), :host(paper-icon-item), .paper-item {
         display: block;
         position: relative;
         min-height: var(--paper-item-min-height, 48px);
@@ -1837,30 +1860,30 @@ paper-button {
         text-align: left;
       }
 
-      :host([hidden]), .paper-item[hidden] {
+      :host(paper-item[hidden]), :host(paper-icon-item[hidden]), .paper-item[hidden] {
         display: none !important;
       }
 
-      :host(.iron-selected), .paper-item.iron-selected {
+      :host(paper-item.iron-selected), :host(paper-icon-item.iron-selected), .paper-item.iron-selected {
         font-weight: var(--paper-item-selected-weight, bold);
 
         @apply(--paper-item-selected);
       }
 
-      :host([disabled]), .paper-item[disabled] {
+      :host(paper-item[disabled]), :host(paper-icon-item[disabled]), .paper-item[disabled] {
         color: var(--paper-item-disabled-color, --disabled-text-color);
 
         @apply(--paper-item-disabled);
       }
 
-      :host(:focus), .paper-item:focus {
+      :host(paper-item:focus), :host(paper-icon-item:focus), .paper-item:focus {
         position: relative;
         outline: 0;
 
         @apply(--paper-item-focused);
       }
 
-      :host(:focus):before, .paper-item:focus:before {
+      :host(paper-item:focus):before, :host(paper-icon-item:focus):before, .paper-item:focus:before {
         @apply(--layout-fit);
 
         background: currentColor;
@@ -1873,8 +1896,6 @@ paper-button {
     </style>
   </template>
 </dom-module>
-
-
 <dom-module id="paper-item" assetpath="chrome://resources/polymer/v1_0/paper-item/">
   <template>
     <style include="paper-item-shared-styles"></style>
@@ -1929,8 +1950,6 @@ paper-button {
     </style>
   </template>
 </dom-module>
-
-
 <dom-module id="paper-menu" assetpath="chrome://resources/polymer/v1_0/paper-menu/">
   <template>
     <style include="paper-menu-shared-styles"></style>
@@ -1954,36 +1973,34 @@ paper-button {
   </dom-module>
 <dom-module id="iron-overlay-backdrop" assetpath="chrome://resources/polymer/v1_0/iron-overlay-behavior/">
 
-  <style>
-    :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: var(--iron-overlay-backdrop-background-color, #000);
-      opacity: 0;
-      transition: opacity 0.2s;
-      pointer-events: none;
-      @apply(--iron-overlay-backdrop);
-    }
-
-    :host(.opened) {
-      opacity: var(--iron-overlay-backdrop-opacity, 0.6);
-      pointer-events: auto;
-      @apply(--iron-overlay-backdrop-opened);
-    }
-  </style>
-
   <template>
+    <style>
+      :host {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: var(--iron-overlay-backdrop-background-color, #000);
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+        @apply(--iron-overlay-backdrop);
+      }
+
+      :host(.opened) {
+        opacity: var(--iron-overlay-backdrop-opacity, 0.6);
+        pointer-events: auto;
+        @apply(--iron-overlay-backdrop-opened);
+      }
+    </style>
+
     <content></content>
   </template>
 
 </dom-module>
 
 <script src="chrome://resources/polymer/v1_0/web-animations-js/web-animations-next-lite.min.js"></script>
-
-
 <dom-module id="iron-dropdown" assetpath="chrome://resources/polymer/v1_0/iron-dropdown/">
   <style>
     :host {
@@ -2055,7 +2072,7 @@ paper-button {
       <content select=".dropdown-trigger"></content>
     </div>
 
-    <iron-dropdown id="dropdown" opened="{{opened}}" horizontal-align="[[horizontalAlign]]" vertical-align="[[verticalAlign]]" horizontal-offset="[[horizontalOffset]]" vertical-offset="[[verticalOffset]]" open-animation-config="[[openAnimationConfig]]" close-animation-config="[[closeAnimationConfig]]" no-animations="[[noAnimations]]" focus-target="[[_dropdownContent]]" on-iron-overlay-canceled="__onIronOverlayCanceled">
+    <iron-dropdown id="dropdown" opened="{{opened}}" horizontal-align="[[horizontalAlign]]" vertical-align="[[verticalAlign]]" horizontal-offset="[[horizontalOffset]]" vertical-offset="[[verticalOffset]]" open-animation-config="[[openAnimationConfig]]" close-animation-config="[[closeAnimationConfig]]" no-animations="[[noAnimations]]" focus-target="[[_dropdownContent]]" restore-focus-on-close="" on-iron-overlay-canceled="__onIronOverlayCanceled">
       <div class="dropdown-content">
         <content id="content" select=".dropdown-content"></content>
       </div>
@@ -2071,7 +2088,6 @@ paper-button {
         position: relative;
         padding: 8px;
         outline: none;
-        -webkit-tap-highlight-color: rgba(0,0,0,0);
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
@@ -2082,6 +2098,10 @@ paper-button {
 
         width: 40px;
         height: 40px;
+
+        /* NOTE: Both values are needed, since some phones require the value to be `transparent`. */
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+        -webkit-tap-highlight-color: transparent;
 
         /* Because of polymer/2558, this style has lower specificity than * */
         box-sizing: border-box !important;
@@ -2183,6 +2203,10 @@ paper-button {
         opacity: 0.33;
 
         @apply(--paper-input-container-disabled);
+      }
+
+      :host([hidden]) {
+        display: none !important;
       }
 
       .floated-label-placeholder {
@@ -2374,7 +2398,7 @@ paper-button {
     </style>
 
     <template is="dom-if" if="[[!noLabelFloat]]">
-      <div class="floated-label-placeholder">&nbsp;</div>
+      <div class="floated-label-placeholder" aria-hidden="true">&nbsp;</div>
     </template>
 
     <div class$="[[_computeInputContentClass(noLabelFloat,alwaysFloatLabel,focused,invalid,_inputHasContent)]]">
@@ -2478,7 +2502,7 @@ paper-icon-button {
 
 </style>
     <paper-icon-button icon="cr:search" id="searchButton" disabled$="[[showingSearch]]" title="[[label]]" on-click="toggleShowingSearch_"></paper-icon-button>
-    <paper-input-container id="searchTerm" on-search="onSearchTermSearch_" on-keydown="onSearchTermKeydown_" hidden$="[[!showingSearch]]" no-label-float="">
+    <paper-input-container id="searchTerm" on-search="onSearchTermSearch" on-keydown="onSearchTermKeydown" hidden$="[[!showingSearch]]" no-label-float="">
       <input is="iron-input" id="searchInput" type="search" placeholder="[[label]]" incremental="">
       <paper-icon-button icon="cr:cancel" id="clearSearch" on-click="toggleShowingSearch_" title="[[clearLabel]]" hidden$="[[!showingSearch]]"></paper-icon-button>
     </paper-input-container>
@@ -2629,7 +2653,7 @@ paper-button {
       </paper-button>
     </div>
     <div id="search">
-      <cr-search-field id="search-input" label="$i18n{search}" clear-label="$i18n{clearSearch}"></cr-search-field>
+      <cr-search-field id="search-input" label="$i18n{search}" clear-label="$i18n{clearSearch}" on-search-changed="onSearchChanged_"></cr-search-field>
       <paper-menu-button id="more" horizontal-align="[[overflowAlign_]]">
         <paper-icon-button icon="cr:more-vert" title="$i18n{moreActions}" class="dropdown-trigger"></paper-icon-button>
         <paper-menu class="dropdown-content">
@@ -2646,22 +2670,6 @@ paper-button {
   
   
   </dom-module>
-<style>
-/* Copyright 2016 The Chromium Authors. All rights reserved.
- * Use of this source code is governed by a BSD-style license that can be
- * found in the LICENSE file. */
-
-:root {
-  /* This is a custom, Chrome-specific color that does not have a --paper or
-   * --google equivalent. */
-  --md-background-color: rgb(241, 241, 241);
-  /* This is --google-blue-700, rewritten as a native custom property for speed.
-   */
-  --md-toolbar-color: rgb(51, 103, 214);
-}
-
-</style>
-
 <dom-module id="downloads-manager" assetpath="chrome://downloads/">
   <template><style>
 /* Copyright 2015 The Chromium Authors. All rights reserved.

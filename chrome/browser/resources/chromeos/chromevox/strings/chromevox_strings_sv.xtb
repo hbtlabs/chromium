@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">Det finns inga fler poster i listan.</translation>
 <translation id="1157782847298808853">Tangentbordshjälp</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, kombinationsruta</translation>
+<translation id="1161762950103988776">Hoppa</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, menyalternativ, med undermeny</translation>
 <translation id="1177863135347784049">Anpassad</translation>
 <translation id="1188858454923323853">kompletterande</translation>
+<translation id="1201402288615127009">Nästa</translation>
 <translation id="1206619573307042055">markör</translation>
 <translation id="1213216066620407844">ChromeVox – ger röst åt Chrome</translation>
 <translation id="1229276918471378188">Föregående hopp</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">grammatiskt fel</translation>
 <translation id="257674075312929031">Grupp</translation>
 <translation id="2582407057977008361">Sidopanel</translation>
-<translation id="2589102159832527089">Den här sidan innehåller text som extraherats automatiskt från PDF-filen &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt;. &lt;a href="<ph name="URL" />"&gt;Klicka här om du vill öppna originalet.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">med {COUNT,plural, =1{# objekt}other{# objekt}}</translation>
 <translation id="2614981083756825552">Math ML-layout</translation>
 <translation id="2626530649491650971">klickbart</translation>
@@ -245,6 +246,7 @@
         "vi": "vietnamesiska",
         "zh": "kinesiska",
         "zh_TW": "kinesiska (traditionell)"}</translation>
+<translation id="335581015389089642">Tal</translation>
 <translation id="3359142382821736686">avgränsare</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{plustecken}other{# plustecken}}</translation>
 <translation id="338583716107319301">Avgränsare</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">Blanksteg</translation>
 <translation id="6142308968191113180">Rubrik 4</translation>
 <translation id="6169420925157477918">Bild med lång beskrivning</translation>
-<translation id="6172087735260766220">Texten i en kopieringsskyddad PDF-fil är inte åtkomlig med tillgänglighetsfunktionen.</translation>
 <translation id="6186305613600865047">Till slutet av sidan</translation>
 <translation id="6193330012414963395">FM/EM</translation>
 <translation id="622484624075952240">Ner</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">Flik</translation>
 <translation id="667999046851023355">Dokument</translation>
 <translation id="6697092096875747123">Föregående kombinationsruta</translation>
+<translation id="6710213216561001401">Föregående</translation>
 <translation id="6714813999819678458">Föregående rubrik på nivå 2</translation>
 <translation id="6716505898850596801">Specialtangenter</translation>
 <translation id="671916444866103745">Det finns inga fler ARIA-landmärken.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">Timer</translation>
 <translation id="8065607967589909823">Du har markerat</translation>
 <translation id="8066678206530322333">Banner</translation>
+<translation id="8076492880354921740">Flikar</translation>
 <translation id="8110647606445335195">Det finns inga ARIA-landmärken.</translation>
 <translation id="8153880621934657047">Inte i tabellen.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{understreck}other{# understreck}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">Det finns inga fler rubriker på nivå 3.</translation>
 <translation id="8430049249787218991">menyfält</translation>
 <translation id="844681116543532394">Det finns ingen föregående kryssruta.</translation>
+<translation id="8446884382197647889">Läs mer</translation>
 <translation id="8455868257606149352">Högst <ph name="X" /></translation>
 <translation id="84575901236241018">har snabbtangenten <ph name="KEY" /></translation>
 <translation id="8476508772960940536">fönsteröversikt</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">Bläddra med hjälp av tangenterna uppåtpil och nedåtpil eller skriv vad du vill söka efter.</translation>
 <translation id="9192904702577636854">Markör</translation>
 <translation id="9212322457209634662">Det finns inga fler avsnitt.</translation>
+<translation id="923331726185079994">ChromeVox har uppdaterats</translation>
 <translation id="930275611743429116">Börja eller sluta markera.</translation>
 <translation id="948171205378458592">Sänk talhastigheten</translation>
 <translation id="962913030769097253">Nästa rubrik på nivå 1</translation>
 <translation id="973955474346881951">Aktivera/inaktivera låsta knappar</translation>
+<translation id="976849232629612000">Det finns inga objekt.</translation>
 </translationbundle>

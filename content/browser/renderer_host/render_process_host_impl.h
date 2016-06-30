@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
 #include "content/browser/bluetooth/bluetooth_adapter_factory_wrapper.h"
@@ -24,11 +25,11 @@
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/common/content_export.h"
-#include "content/common/mojo/service_registry_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_platform_file.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "services/shell/public/interfaces/shell_client.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
 
@@ -52,7 +53,6 @@ class BrowserCdmManager;
 class BrowserDemuxerAndroid;
 class InProcessChildThreadParams;
 class MessagePortMessageFilter;
-class MojoApplicationHost;
 class MojoChildConnection;
 class NotificationMessageFilter;
 #if defined(ENABLE_WEBRTC)
@@ -135,8 +135,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void SetSuddenTerminationAllowed(bool enabled) override;
   bool SuddenTerminationAllowed() const override;
   IPC::ChannelProxy* GetChannel() override;
-  IPC::Sender* GetImmediateSender() override;
-  IPC::Sender* GetIOThreadSender() override;
   void AddFilter(BrowserMessageFilter* filter) override;
   bool FastShutdownForPageCount(size_t count) override;
   bool FastShutdownStarted() const override;
@@ -157,7 +155,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
   void NotifyTimezoneChange(const std::string& timezone) override;
-  ServiceRegistry* GetServiceRegistry() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
   shell::Connection* GetChildConnection() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
@@ -293,10 +292,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   int32_t pending_views_;
 
  private:
-  class SafeSenderProxy;
-
   friend class ChildProcessLauncherBrowserTest_ChildSpawnFail_Test;
-  friend class SafeSenderProxy;
   friend class VisitRelayingRenderProcessHost;
 
   std::unique_ptr<IPC::ChannelProxy> CreateChannelProxy(
@@ -305,11 +301,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Creates and adds the IO thread message filters.
   void CreateMessageFilters();
 
-  // Shared implementation for IPC::Senders exposed by this RPH.
-  bool SendImpl(std::unique_ptr<IPC::Message> message, bool send_now);
-
-  // Registers Mojo services to be exposed to the renderer.
-  void RegisterMojoServices();
+  // Registers Mojo interfaces to be exposed to the renderer.
+  void RegisterMojoInterfaces();
 
   void CreateStoragePartitionService(
       mojo::InterfaceRequest<mojom::StoragePartitionService> request);
@@ -370,14 +363,15 @@ class CONTENT_EXPORT RenderProcessHostImpl
   base::FilePath GetEventLogFilePathWithExtensions(const base::FilePath& file);
 #endif
 
-  // IPC::Senders which live as long as this RPH and provide safe, opaque
-  // access to ChannelProxy SendNow() and SendOnIOThread() respectively.
-  const std::unique_ptr<SafeSenderProxy> immediate_sender_;
-  const std::unique_ptr<SafeSenderProxy> io_thread_sender_;
+  static void OnMojoError(
+      base::WeakPtr<RenderProcessHostImpl> process,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const std::string& error);
 
   std::string child_token_;
+
   std::unique_ptr<MojoChildConnection> mojo_child_connection_;
-  std::unique_ptr<MojoApplicationHost> mojo_application_host_;
+  shell::mojom::ShellClientPtr test_shell_client_;
 
   // The registered IPC listener objects. When this list is empty, we should
   // delete ourselves.
@@ -421,7 +415,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // instead of in the channel so that we ensure they're sent after init related
   // messages that are sent once the process handle is available.  This is
   // because the queued messages may have dependencies on the init messages.
-  std::queue<std::unique_ptr<IPC::Message>> queued_messages_;
+  std::queue<IPC::Message*> queued_messages_;
 
   // The globally-unique identifier for this RPH.
   const int id_;

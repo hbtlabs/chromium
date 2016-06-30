@@ -80,7 +80,6 @@
 #include "core/page/FocusController.h"
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
-#include "core/page/SpatialNavigation.h"
 #include "core/page/TouchAdjustment.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/paint/PaintLayer.h"
@@ -101,32 +100,14 @@
 #include "platform/scroll/Scrollbar.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/TemporaryChange.h"
+#include <memory>
 
 namespace blink {
 
 namespace {
-
-// Convert |event->deltaMode()| to scroll granularity and output as |granularity|.
-bool wheelGranularityToScrollGranularity(const WheelEvent* event, ScrollGranularity* granularity)
-{
-    DCHECK(granularity);
-    switch (event->deltaMode()) {
-    case WheelEvent::DOM_DELTA_PAGE:
-        *granularity = ScrollByPage;
-        return true;
-    case WheelEvent::DOM_DELTA_LINE:
-        *granularity = ScrollByLine;
-        return true;
-    case WheelEvent::DOM_DELTA_PIXEL:
-        *granularity = event->hasPreciseScrollingDeltas() ? ScrollByPrecisePixel : ScrollByPixel;
-        return true;
-    default:
-        // Could be other values since the event might come from JavaScript.
-        return false;
-    }
-}
 
 // Refetch the event target node if it is removed or currently is the shadow node inside an <input> element.
 // If a mouse event handler changes the input element type to one that has a widget associated,
@@ -212,9 +193,11 @@ EventHandler::EventHandler(LocalFrame* frame)
     , m_mouseDownTimestamp(0)
     , m_pointerEventManager(frame)
     , m_scrollManager(frame)
+    , m_keyboardEventManager(frame, &m_scrollManager)
     , m_longTapShouldInvokeContextMenu(false)
     , m_activeIntervalTimer(this, &EventHandler::activeIntervalTimerFired)
     , m_lastShowPressTimestamp(0)
+    , m_suppressMouseEventsFromGestures(false)
 {
 }
 
@@ -238,6 +221,7 @@ DEFINE_TRACE(EventHandler)
     visitor->trace(m_selectionController);
     visitor->trace(m_pointerEventManager);
     visitor->trace(m_scrollManager);
+    visitor->trace(m_keyboardEventManager);
 }
 
 DragState& EventHandler::dragState()
@@ -281,6 +265,7 @@ void EventHandler::clear()
     m_longTapShouldInvokeContextMenu = false;
     m_dragStartPos = LayoutPoint();
     m_mouseDown = PlatformMouseEvent();
+    m_suppressMouseEventsFromGestures = false;
 }
 
 WebInputEventResult EventHandler::mergeEventResult(
@@ -344,7 +329,7 @@ WebInputEventResult EventHandler::handleMousePressEvent(const MouseEventWithHitT
 
     bool singleClick = event.event().clickCount() <= 1;
 
-    m_mouseDownMayStartDrag = singleClick && !isLinkSelection(event);
+    m_mouseDownMayStartDrag = singleClick && !isLinkSelection(event) && !isExtendingSelection(event);
 
     selectionController().handleMousePressEvent(event);
 
@@ -872,7 +857,8 @@ WebInputEventResult EventHandler::handleMousePressEvent(const PlatformMouseEvent
     m_clickCount = mouseEvent.clickCount();
     m_clickNode = mev.innerNode()->isTextNode() ?  FlatTreeTraversal::parent(*mev.innerNode()) : mev.innerNode();
 
-    m_frame->selection().setCaretBlinkingSuspended(true);
+    if (!mouseEvent.fromTouch())
+        m_frame->selection().setCaretBlinkingSuspended(true);
 
     WebInputEventResult eventResult = updatePointerTargetAndDispatchEvents(EventTypeNames::mousedown, mev.innerNode(), m_clickCount, mev.event());
 
@@ -1127,14 +1113,15 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const PlatformMouseEve
     if (mouseEvent.button() == NoButton)
         return WebInputEventResult::HandledSuppressed;
 
-    m_frame->selection().setCaretBlinkingSuspended(false);
+    if (!mouseEvent.fromTouch())
+        m_frame->selection().setCaretBlinkingSuspended(false);
 
-    OwnPtr<UserGestureIndicator> gestureIndicator;
+    std::unique_ptr<UserGestureIndicator> gestureIndicator;
 
     if (m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken)
-        gestureIndicator = adoptPtr(new UserGestureIndicator(m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken.release()));
+        gestureIndicator = wrapUnique(new UserGestureIndicator(m_frame->localFrameRoot()->eventHandler().m_lastMouseDownUserGestureToken.release()));
     else
-        gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingUserGesture));
+        gestureIndicator = wrapUnique(new UserGestureIndicator(DefinitelyProcessingUserGesture));
 
 #if OS(WIN)
     if (Page* page = m_frame->page())
@@ -1641,90 +1628,22 @@ WebInputEventResult EventHandler::handleWheelEvent(const PlatformWheelEvent& eve
     if (!node && result.scrollbar())
         node = doc->documentElement();
 
-    bool sendDOMEvent = true;
     LocalFrame* subframe = subframeForTargetNode(node);
     if (subframe) {
         WebInputEventResult result = subframe->eventHandler().handleWheelEvent(event);
-        if (result != WebInputEventResult::NotHandled) {
+        if (result != WebInputEventResult::NotHandled)
             m_scrollManager.setFrameWasScrolledByUser();
-            return result;
-        }
-        // TODO(dtapuska): Remove this once wheel gesture scroll has
-        // been enabled everywhere; as we can just return early.
-        // http://crbug.com/568183
-        // Don't propagate the DOM event into the parent iframe
-        // but do dispatch the scroll event.
-        sendDOMEvent = false;
+        return result;
     }
 
     if (node) {
         WheelEvent* domEvent = WheelEvent::create(event, node->document().domWindow());
-        if (sendDOMEvent) {
-            DispatchEventResult domEventResult = node->dispatchEvent(domEvent);
-            if (domEventResult != DispatchEventResult::NotCanceled)
-                return toWebInputEventResult(domEventResult);
-        } else {
-            defaultWheelEventHandler(node, domEvent);
-            if (domEvent->defaultHandled())
-                return WebInputEventResult::HandledSystem;
-        }
+        DispatchEventResult domEventResult = node->dispatchEvent(domEvent);
+        if (domEventResult != DispatchEventResult::NotCanceled)
+            return toWebInputEventResult(domEventResult);
     }
 
     return WebInputEventResult::NotHandled;
-}
-
-void EventHandler::defaultWheelEventHandler(Node* startNode, WheelEvent* wheelEvent)
-{
-    if (!startNode || !wheelEvent)
-        return;
-
-    Settings* settings = m_frame->settings();
-    if (settings && settings->wheelGesturesEnabled())
-        return;
-
-    // When the wheelEvent do not scroll, we trigger zoom in/out instead.
-    if (!wheelEvent->canScroll())
-        return;
-
-    ScrollGranularity granularity;
-    if (!wheelGranularityToScrollGranularity(wheelEvent, &granularity))
-        return;
-    Node* node = nullptr;
-
-    // Diagonal movement on a MacBook pro is an example of a 2-dimensional
-    // mouse wheel event (where both deltaX and deltaY can be set).
-    FloatSize delta;
-
-    if (wheelEvent->getRailsMode() != Event::RailsModeVertical)
-        delta.setWidth(wheelEvent->deltaX());
-
-    if (wheelEvent->getRailsMode() != Event::RailsModeHorizontal)
-        delta.setHeight(wheelEvent->deltaY());
-
-    // We can get page wheel events with non-[0|1] deltas in the case where the
-    // events are coalesced but we still want to scroll by just one page length.
-    // TODO(bokan): This seems like it belongs in the coalescing logic.
-    if (granularity == ScrollByPage) {
-        if (delta.width())
-            delta.setWidth(delta.width() > 0 ? 1 : -1);
-        if (delta.height())
-            delta.setHeight(delta.height() > 0 ? 1 : -1);
-    }
-
-    // FIXME: enable scroll customization in this case. See crbug.com/410974.
-    bool consumed = false;
-
-    m_scrollManager.physicalScroll(
-        granularity,
-        delta,
-        FloatPoint(),
-        FloatSize(),
-        startNode,
-        &node,
-        &consumed);
-
-    if (consumed)
-        wheelEvent->setDefaultHandled();
 }
 
 WebInputEventResult EventHandler::handleGestureShowPress()
@@ -1809,6 +1728,8 @@ WebInputEventResult EventHandler::handleGestureEventInFrame(const GestureEventWi
     }
 
     switch (gestureEvent.type()) {
+    case PlatformEvent::GestureTapDown:
+        return handleGestureTapDown(targetedEvent);
     case PlatformEvent::GestureTap:
         return handleGestureTap(targetedEvent);
     case PlatformEvent::GestureShowPress:
@@ -1819,7 +1740,6 @@ WebInputEventResult EventHandler::handleGestureEventInFrame(const GestureEventWi
         return handleGestureLongTap(targetedEvent);
     case PlatformEvent::GestureTwoFingerTap:
         return sendContextMenuEventForGesture(targetedEvent);
-    case PlatformEvent::GestureTapDown:
     case PlatformEvent::GesturePinchBegin:
     case PlatformEvent::GesturePinchEnd:
     case PlatformEvent::GesturePinchUpdate:
@@ -1840,6 +1760,13 @@ WebInputEventResult EventHandler::handleGestureScrollEvent(const PlatformGesture
     return m_scrollManager.handleGestureScrollEvent(gestureEvent);
 }
 
+WebInputEventResult EventHandler::handleGestureTapDown(const GestureEventWithHitTestResults& targetedEvent)
+{
+    m_suppressMouseEventsFromGestures =
+        m_pointerEventManager.primaryPointerdownCanceled(targetedEvent.event().uniqueTouchEventId());
+    return WebInputEventResult::NotHandled;
+}
+
 WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTestResults& targetedEvent)
 {
     FrameView* frameView(m_frame->view());
@@ -1856,12 +1783,15 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     // co-ordinates outside the target's bounds.
     IntPoint adjustedPoint = frameView->rootFrameToContents(gestureEvent.position());
 
-    unsigned modifiers = gestureEvent.getModifiers();
-    PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(),
-        NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
-        static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
-    dispatchMouseEvent(EventTypeNames::mousemove, currentHitTest.innerNode(), 0, fakeMouseMove);
+    const unsigned modifiers = gestureEvent.getModifiers();
+
+    if (!m_suppressMouseEventsFromGestures) {
+        PlatformMouseEvent fakeMouseMove(gestureEvent.position(), gestureEvent.globalPosition(),
+            NoButton, PlatformEvent::MouseMoved, /* clickCount */ 0,
+            static_cast<PlatformEvent::Modifiers>(modifiers),
+            PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
+        dispatchMouseEvent(EventTypeNames::mousemove, currentHitTest.innerNode(), 0, fakeMouseMove);
+    }
 
     // Do a new hit-test in case the mousemove event changed the DOM.
     // Note that if the original hit test wasn't over an element (eg. was over a scrollbar) we
@@ -1889,13 +1819,19 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
     PlatformMouseEvent fakeMouseDown(gestureEvent.position(), gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MousePressed, gestureEvent.tapCount(),
         static_cast<PlatformEvent::Modifiers>(modifiers | PlatformEvent::LeftButtonDown),
-        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
-    WebInputEventResult mouseDownEventResult = dispatchMouseEvent(EventTypeNames::mousedown, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseDown);
-    selectionController().initializeSelectionState();
-    if (mouseDownEventResult == WebInputEventResult::NotHandled)
-        mouseDownEventResult = handleMouseFocus(MouseEventWithHitTestResults(fakeMouseDown, currentHitTest), InputDeviceCapabilities::firesTouchEventsSourceCapabilities());
-    if (mouseDownEventResult == WebInputEventResult::NotHandled)
-        mouseDownEventResult = handleMousePressEvent(MouseEventWithHitTestResults(fakeMouseDown, currentHitTest));
+        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
+
+    // TODO(mustaq): We suppress MEs plus all it's side effects. What would that
+    // mean for for TEs?  What's the right balance here? crbug.com/617255
+    WebInputEventResult mouseDownEventResult = WebInputEventResult::HandledSuppressed;
+    if (!m_suppressMouseEventsFromGestures) {
+        mouseDownEventResult = dispatchMouseEvent(EventTypeNames::mousedown, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseDown);
+        selectionController().initializeSelectionState();
+        if (mouseDownEventResult == WebInputEventResult::NotHandled)
+            mouseDownEventResult = handleMouseFocus(MouseEventWithHitTestResults(fakeMouseDown, currentHitTest), InputDeviceCapabilities::firesTouchEventsSourceCapabilities());
+        if (mouseDownEventResult == WebInputEventResult::NotHandled)
+            mouseDownEventResult = handleMousePressEvent(MouseEventWithHitTestResults(fakeMouseDown, currentHitTest));
+    }
 
     if (currentHitTest.innerNode()) {
         ASSERT(gestureEvent.type() == PlatformEvent::GestureTap);
@@ -1912,11 +1848,14 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
         adjustedPoint = frameView->rootFrameToContents(gestureEvent.position());
         currentHitTest = hitTestResultInFrame(m_frame, adjustedPoint, hitType);
     }
+
     PlatformMouseEvent fakeMouseUp(gestureEvent.position(), gestureEvent.globalPosition(),
         LeftButton, PlatformEvent::MouseReleased, gestureEvent.tapCount(),
         static_cast<PlatformEvent::Modifiers>(modifiers),
-        PlatformMouseEvent::FromTouch,  gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
-    WebInputEventResult mouseUpEventResult = dispatchMouseEvent(EventTypeNames::mouseup, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseUp);
+        PlatformMouseEvent::FromTouch, gestureEvent.timestamp(), WebPointerProperties::PointerType::Mouse);
+    WebInputEventResult mouseUpEventResult = m_suppressMouseEventsFromGestures
+        ? WebInputEventResult::HandledSuppressed
+        : dispatchMouseEvent(EventTypeNames::mouseup, currentHitTest.innerNode(), gestureEvent.tapCount(), fakeMouseUp);
 
     WebInputEventResult clickEventResult = WebInputEventResult::NotHandled;
     if (m_clickNode) {
@@ -1960,6 +1899,8 @@ WebInputEventResult EventHandler::handleGestureLongPress(const GestureEventWithH
 
     m_longTapShouldInvokeContextMenu = false;
     if (m_frame->settings() && m_frame->settings()->touchDragDropEnabled() && m_frame->view()) {
+        // TODO(mustaq): Suppressing long-tap MouseEvents could break
+        // drag-drop. Will do separately because of the risk. crbug.com/606938.
         PlatformMouseEvent mouseDownEvent(adjustedPoint, gestureEvent.globalPosition(), LeftButton, PlatformEvent::MousePressed, 1,
             static_cast<PlatformEvent::Modifiers>(modifiers | PlatformEvent::LeftButtonDown),
             PlatformMouseEvent::FromTouch, WTF::monotonicallyIncreasingTime(), WebPointerProperties::PointerType::Mouse);
@@ -2593,148 +2534,17 @@ void EventHandler::notifyElementActivated()
 
 bool EventHandler::handleAccessKey(const PlatformKeyboardEvent& evt)
 {
-    // FIXME: Ignoring the state of Shift key is what neither IE nor Firefox do.
-    // IE matches lower and upper case access keys regardless of Shift key state - but if both upper and
-    // lower case variants are present in a document, the correct element is matched based on Shift key state.
-    // Firefox only matches an access key if Shift is not pressed, and does that case-insensitively.
-    ASSERT(!(accessKeyModifiers() & PlatformEvent::ShiftKey));
-    if ((evt.getModifiers() & (PlatformEvent::KeyModifiers & ~PlatformEvent::ShiftKey)) != accessKeyModifiers())
-        return false;
-    String key = evt.unmodifiedText();
-    Element* elem = m_frame->document()->getElementByAccessKey(key.lower());
-    if (!elem)
-        return false;
-    elem->accessKeyAction(false);
-    return true;
+    return m_keyboardEventManager.handleAccessKey(evt);
 }
 
 WebInputEventResult EventHandler::keyEvent(const PlatformKeyboardEvent& initialKeyEvent)
 {
-    m_frame->chromeClient().clearToolTip();
-
-    if (initialKeyEvent.windowsVirtualKeyCode() == VK_CAPITAL)
-        capsLockStateMayHaveChanged();
-
-#if OS(WIN)
-    if (m_scrollManager.panScrollInProgress()) {
-        // If a key is pressed while the panScroll is in progress then we want to stop
-        if (initialKeyEvent.type() == PlatformEvent::KeyDown || initialKeyEvent.type() == PlatformEvent::RawKeyDown)
-            m_scrollManager.stopAutoscroll();
-
-        // If we were in panscroll mode, we swallow the key event
-        return WebInputEventResult::HandledSuppressed;
-    }
-#endif
-
-    // Check for cases where we are too early for events -- possible unmatched key up
-    // from pressing return in the location bar.
-    Node* node = eventTargetNodeForDocument(m_frame->document());
-    if (!node)
-        return WebInputEventResult::NotHandled;
-
-    UserGestureIndicator gestureIndicator(DefinitelyProcessingUserGesture);
-
-    // In IE, access keys are special, they are handled after default keydown processing, but cannot be canceled - this is hard to match.
-    // On Mac OS X, we process them before dispatching keydown, as the default keydown handler implements Emacs key bindings, which may conflict
-    // with access keys. Then we dispatch keydown, but suppress its default handling.
-    // On Windows, WebKit explicitly calls handleAccessKey() instead of dispatching a keypress event for WM_SYSCHAR messages.
-    // Other platforms currently match either Mac or Windows behavior, depending on whether they send combined KeyDown events.
-    bool matchedAnAccessKey = false;
-    if (initialKeyEvent.type() == PlatformEvent::KeyDown)
-        matchedAnAccessKey = handleAccessKey(initialKeyEvent);
-
-    // FIXME: it would be fair to let an input method handle KeyUp events before DOM dispatch.
-    if (initialKeyEvent.type() == PlatformEvent::KeyUp || initialKeyEvent.type() == PlatformEvent::Char) {
-        KeyboardEvent* domEvent = KeyboardEvent::create(initialKeyEvent, m_frame->document()->domWindow());
-
-        return toWebInputEventResult(node->dispatchEvent(domEvent));
-    }
-
-    PlatformKeyboardEvent keyDownEvent = initialKeyEvent;
-    if (keyDownEvent.type() != PlatformEvent::RawKeyDown)
-        keyDownEvent.disambiguateKeyDownEvent(PlatformEvent::RawKeyDown);
-    KeyboardEvent* keydown = KeyboardEvent::create(keyDownEvent, m_frame->document()->domWindow());
-    if (matchedAnAccessKey)
-        keydown->setDefaultPrevented(true);
-    keydown->setTarget(node);
-
-    DispatchEventResult dispatchResult = node->dispatchEvent(keydown);
-    if (dispatchResult != DispatchEventResult::NotCanceled)
-        return toWebInputEventResult(dispatchResult);
-    // If frame changed as a result of keydown dispatch, then return early to avoid sending a subsequent keypress message to the new frame.
-    bool changedFocusedFrame = m_frame->page() && m_frame != m_frame->page()->focusController().focusedOrMainFrame();
-    if (changedFocusedFrame)
-        return WebInputEventResult::HandledSystem;
-
-    if (initialKeyEvent.type() == PlatformEvent::RawKeyDown)
-        return WebInputEventResult::NotHandled;
-
-    // Focus may have changed during keydown handling, so refetch node.
-    // But if we are dispatching a fake backward compatibility keypress, then we pretend that the keypress happened on the original node.
-    node = eventTargetNodeForDocument(m_frame->document());
-    if (!node)
-        return WebInputEventResult::NotHandled;
-
-    PlatformKeyboardEvent keyPressEvent = initialKeyEvent;
-    keyPressEvent.disambiguateKeyDownEvent(PlatformEvent::Char);
-    if (keyPressEvent.text().isEmpty())
-        return WebInputEventResult::NotHandled;
-    KeyboardEvent* keypress = KeyboardEvent::create(keyPressEvent, m_frame->document()->domWindow());
-    keypress->setTarget(node);
-    return toWebInputEventResult(node->dispatchEvent(keypress));
-}
-
-static WebFocusType focusDirectionForKey(const AtomicString& keyIdentifier)
-{
-    DEFINE_STATIC_LOCAL(AtomicString, Down, ("Down"));
-    DEFINE_STATIC_LOCAL(AtomicString, Up, ("Up"));
-    DEFINE_STATIC_LOCAL(AtomicString, Left, ("Left"));
-    DEFINE_STATIC_LOCAL(AtomicString, Right, ("Right"));
-
-    WebFocusType retVal = WebFocusTypeNone;
-
-    if (keyIdentifier == Down)
-        retVal = WebFocusTypeDown;
-    else if (keyIdentifier == Up)
-        retVal = WebFocusTypeUp;
-    else if (keyIdentifier == Left)
-        retVal = WebFocusTypeLeft;
-    else if (keyIdentifier == Right)
-        retVal = WebFocusTypeRight;
-
-    return retVal;
+    return m_keyboardEventManager.keyEvent(initialKeyEvent);
 }
 
 void EventHandler::defaultKeyboardEventHandler(KeyboardEvent* event)
 {
-    if (event->type() == EventTypeNames::keydown) {
-        // Clear caret blinking suspended state to make sure that caret blinks
-        // when we type again after long pressing on an empty input field.
-        if (m_frame && m_frame->selection().isCaretBlinkingSuspended())
-            m_frame->selection().setCaretBlinkingSuspended(false);
-
-        m_frame->editor().handleKeyboardEvent(event);
-        if (event->defaultHandled())
-            return;
-        if (event->keyIdentifier() == "U+0009") {
-            defaultTabEventHandler(event);
-        } else if (event->keyIdentifier() == "U+0008") {
-            defaultBackspaceEventHandler(event);
-        } else if (event->keyIdentifier() == "U+001B") {
-            defaultEscapeEventHandler(event);
-        } else {
-            WebFocusType type = focusDirectionForKey(AtomicString(event->keyIdentifier()));
-            if (type != WebFocusTypeNone)
-                defaultArrowEventHandler(type, event);
-        }
-    }
-    if (event->type() == EventTypeNames::keypress) {
-        m_frame->editor().handleKeyboardEvent(event);
-        if (event->defaultHandled())
-            return;
-        if (event->charCode() == ' ')
-            defaultSpaceEventHandler(event);
-    }
+    m_keyboardEventManager.defaultKeyboardEventHandler(event, m_mousePressNode);
 }
 
 bool EventHandler::dragHysteresisExceeded(const IntPoint& dragLocationInRootFrame) const
@@ -2936,110 +2746,9 @@ void EventHandler::defaultTextInputEventHandler(TextEvent* event)
         event->setDefaultHandled();
 }
 
-void EventHandler::defaultSpaceEventHandler(KeyboardEvent* event)
-{
-    ASSERT(event->type() == EventTypeNames::keypress);
-
-    if (event->ctrlKey() || event->metaKey() || event->altKey())
-        return;
-
-    ScrollDirection direction = event->shiftKey() ? ScrollBlockDirectionBackward : ScrollBlockDirectionForward;
-
-    // FIXME: enable scroll customization in this case. See crbug.com/410974.
-    if (m_scrollManager.logicalScroll(direction, ScrollByPage, nullptr, m_mousePressNode)) {
-        event->setDefaultHandled();
-        return;
-    }
-}
-
-void EventHandler::defaultBackspaceEventHandler(KeyboardEvent* event)
-{
-    ASSERT(event->type() == EventTypeNames::keydown);
-
-    if (!RuntimeEnabledFeatures::backspaceDefaultHandlerEnabled())
-        return;
-
-    if (event->ctrlKey() || event->metaKey() || event->altKey())
-        return;
-
-    if (!m_frame->editor().behavior().shouldNavigateBackOnBackspace())
-        return;
-    UseCounter::count(m_frame->document(), UseCounter::BackspaceNavigatedBack);
-    if (m_frame->page()->chromeClient().hadFormInteraction())
-        UseCounter::count(m_frame->document(), UseCounter::BackspaceNavigatedBackAfterFormInteraction);
-    bool handledEvent = m_frame->loader().client()->navigateBackForward(event->shiftKey() ? 1 : -1);
-    if (handledEvent)
-        event->setDefaultHandled();
-}
-
-void EventHandler::defaultArrowEventHandler(WebFocusType focusType, KeyboardEvent* event)
-{
-    ASSERT(event->type() == EventTypeNames::keydown);
-
-    if (event->ctrlKey() || event->metaKey() || event->shiftKey())
-        return;
-
-    Page* page = m_frame->page();
-    if (!page)
-        return;
-
-    if (!isSpatialNavigationEnabled(m_frame))
-        return;
-
-    // Arrows and other possible directional navigation keys can be used in design
-    // mode editing.
-    if (m_frame->document()->inDesignMode())
-        return;
-
-    if (page->focusController().advanceFocus(focusType))
-        event->setDefaultHandled();
-}
-
-void EventHandler::defaultTabEventHandler(KeyboardEvent* event)
-{
-    ASSERT(event->type() == EventTypeNames::keydown);
-
-    // We should only advance focus on tabs if no special modifier keys are held down.
-    if (event->ctrlKey() || event->metaKey())
-        return;
-
-#if !OS(MACOSX)
-    // Option-Tab is a shortcut based on a system-wide preference on Mac but
-    // should be ignored on all other platforms.
-    if (event->altKey())
-        return;
-#endif
-
-    Page* page = m_frame->page();
-    if (!page)
-        return;
-    if (!page->tabKeyCyclesThroughElements())
-        return;
-
-    WebFocusType focusType = event->shiftKey() ? WebFocusTypeBackward : WebFocusTypeForward;
-
-    // Tabs can be used in design mode editing.
-    if (m_frame->document()->inDesignMode())
-        return;
-
-    if (page->focusController().advanceFocus(focusType, InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities()))
-        event->setDefaultHandled();
-}
-
-void EventHandler::defaultEscapeEventHandler(KeyboardEvent* event)
-{
-    if (HTMLDialogElement* dialog = m_frame->document()->activeModalDialog())
-        dialog->dispatchEvent(Event::createCancelable(EventTypeNames::cancel));
-}
-
 void EventHandler::capsLockStateMayHaveChanged()
 {
-    if (Element* element = m_frame->document()->focusedElement()) {
-        if (LayoutObject* r = element->layoutObject()) {
-            if (r->isTextField())
-                toLayoutTextControlSingleLine(r)->capsLockStateMayHaveChanged();
-        }
-    }
+    m_keyboardEventManager.capsLockStateMayHaveChanged();
 }
 
 bool EventHandler::passMousePressEventToScrollbar(MouseEventWithHitTestResults& mev)
@@ -3089,7 +2798,6 @@ HitTestResult EventHandler::hitTestResultInFrame(LocalFrame* frame, const Layout
 WebInputEventResult EventHandler::handleTouchEvent(const PlatformTouchEvent& event)
 {
     TRACE_EVENT0("blink", "EventHandler::handleTouchEvent");
-
     return m_pointerEventManager.handleTouchEvents(event);
 }
 
@@ -3138,15 +2846,6 @@ void EventHandler::focusDocumentView()
     if (!page)
         return;
     page->focusController().focusDocumentView(m_frame);
-}
-
-PlatformEvent::Modifiers EventHandler::accessKeyModifiers()
-{
-#if OS(MACOSX)
-    return static_cast<PlatformEvent::Modifiers>(PlatformEvent::CtrlKey | PlatformEvent::AltKey);
-#else
-    return PlatformEvent::AltKey;
-#endif
 }
 
 FrameHost* EventHandler::frameHost() const

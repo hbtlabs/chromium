@@ -28,6 +28,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/pattern.h"
@@ -1429,12 +1430,14 @@ TEST_F(ExtensionServiceTest, GrantedPermissionsOnUpdate) {
   const base::FilePath path2 = base_path.AppendASCII("update_2");
   const base::FilePath path3 = base_path.AppendASCII("update_3");
   const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
 
   ASSERT_TRUE(base::PathExists(pem_path));
   ASSERT_TRUE(base::PathExists(path1));
   ASSERT_TRUE(base::PathExists(path2));
   ASSERT_TRUE(base::PathExists(path3));
   ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
 
   ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
 
@@ -1503,6 +1506,169 @@ TEST_F(ExtensionServiceTest, GrantedPermissionsOnUpdate) {
     ASSERT_TRUE(known_perms.get());
     EXPECT_EQ(expected_api_perms, known_perms->apis());
   }
+}
+
+TEST_F(ExtensionServiceTest, ReenableWithAllPermissionsGranted) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+  const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+  ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Install version 1, which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // Update to version 4 that adds the kNotifications permission, which has a
+  // message and hence is considered a permission increase. The extension
+  // should get disabled due to a permissions increase.
+  PackCRXAndUpdateExtension(id, path4, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Update to version 5 that removes the kNotifications permission again.
+  // The extension should get re-enabled.
+  PackCRXAndUpdateExtension(id, path5, pem_path, ENABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+}
+
+TEST_F(ExtensionServiceTest, ReenableWithAllPermissionsGrantedOnStartup) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+
+  // Install an extension which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Disable the extension due to a supposed permission increase, but retain its
+  // granted permissions.
+  service()->DisableExtension(id, Extension::DISABLE_PERMISSIONS_INCREASE);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Simulate a Chrome restart. Since the extension has all required
+  // permissions, it should get re-enabled.
+  service()->ReloadExtensionsForTest();
+  EXPECT_TRUE(registry()->enabled_extensions().Contains(id));
+  EXPECT_FALSE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+}
+
+TEST_F(ExtensionServiceTest,
+       DontReenableWithAllPermissionsGrantedButOtherReason) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+  const base::FilePath path4 = base_path.AppendASCII("update_4");
+  const base::FilePath path5 = base_path.AppendASCII("update_5");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+  ASSERT_TRUE(base::PathExists(path4));
+  ASSERT_TRUE(base::PathExists(path5));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Install version 1, which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  // Disable the extension.
+  service()->DisableExtension(id, Extension::DISABLE_USER_ACTION);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(prefs->HasDisableReason(id, Extension::DISABLE_USER_ACTION));
+
+  // Update to version 4 that adds the kNotifications permission, which has a
+  // message and hence is considered a permission increase. The extension
+  // should get disabled due to a permissions increase.
+  PackCRXAndUpdateExtension(id, path4, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+  // The USER_ACTION reason should also still be there.
+  EXPECT_TRUE(prefs->HasDisableReason(id, Extension::DISABLE_USER_ACTION));
+
+  // Update to version 5 that removes the kNotifications permission again.
+  // The PERMISSIONS_INCREASE should be removed, but the extension should stay
+  // disabled since USER_ACTION is still there.
+  PackCRXAndUpdateExtension(id, path5, pem_path, DISABLED);
+  extension = service()->GetInstalledExtension(id);
+  ASSERT_TRUE(extension);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_EQ(Extension::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
+}
+
+TEST_F(ExtensionServiceTest,
+       DontReenableWithAllPermissionsGrantedOnStartupButOtherReason) {
+  InitializeEmptyExtensionService();
+  const base::FilePath base_path = data_dir().AppendASCII("permissions");
+
+  const base::FilePath pem_path = base_path.AppendASCII("update.pem");
+  const base::FilePath path1 = base_path.AppendASCII("update_1");
+
+  ASSERT_TRUE(base::PathExists(pem_path));
+  ASSERT_TRUE(base::PathExists(path1));
+
+  // Install an extension which has the kHistory permission.
+  const Extension* extension = PackAndInstallCRX(path1, pem_path, INSTALL_NEW);
+  const std::string id = extension->id();
+
+  EXPECT_EQ(0u, GetErrors().size());
+  ASSERT_TRUE(registry()->enabled_extensions().Contains(id));
+
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(profile());
+
+  // Disable the extension due to a supposed permission increase, but retain its
+  // granted permissions.
+  service()->DisableExtension(
+      id,
+      Extension::DISABLE_PERMISSIONS_INCREASE | Extension::DISABLE_USER_ACTION);
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_TRUE(
+      prefs->HasDisableReason(id, Extension::DISABLE_PERMISSIONS_INCREASE));
+
+  // Simulate a Chrome restart. Since the extension has all required
+  // permissions, the DISABLE_PERMISSIONS_INCREASE should get removed, but it
+  // should stay disabled due to the remaining DISABLE_USER_ACTION reason.
+  service()->ReloadExtensionsForTest();
+  EXPECT_TRUE(registry()->disabled_extensions().Contains(id));
+  EXPECT_EQ(Extension::DISABLE_USER_ACTION, prefs->GetDisableReasons(id));
 }
 
 #if !defined(OS_CHROMEOS)
@@ -1805,7 +1971,7 @@ TEST_F(ExtensionServiceTest, PackPunctuatedExtension) {
     // block and catch the notification; otherwise, the process would exit.
     // This call to |Run()| is matched by a call to |Quit()| in the
     // |PackExtensionTestClient|'s notification handling code.
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
     if (HasFatalFailure())
       return;
@@ -2571,7 +2737,6 @@ TEST_F(ExtensionServiceTest, AddPendingExtensionFromSync) {
   const std::string kFakeId(all_zero);
   const GURL kFakeUpdateURL("http:://fake.update/url");
   const bool kFakeRemoteInstall(false);
-  const bool kFakeInstalledByCustodian(false);
 
   EXPECT_TRUE(
       service()->pending_extension_manager()->AddFromSync(
@@ -2579,8 +2744,7 @@ TEST_F(ExtensionServiceTest, AddPendingExtensionFromSync) {
           kFakeUpdateURL,
           base::Version(),
           &IsExtension,
-          kFakeRemoteInstall,
-          kFakeInstalledByCustodian));
+          kFakeRemoteInstall));
 
   const extensions::PendingExtensionInfo* pending_extension_info;
   ASSERT_TRUE((pending_extension_info =
@@ -2605,7 +2769,6 @@ const char kGoodUpdateURL[] = "http://good.update/url";
 const char kGoodVersion[] = "1";
 const bool kGoodIsFromSync = true;
 const bool kGoodRemoteInstall = false;
-const bool kGoodInstalledByCustodian = false;
 }  // namespace
 
 // Test installing a pending extension (this goes through
@@ -2618,8 +2781,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExtension) {
           GURL(kGoodUpdateURL),
           base::Version(kGoodVersion),
           &IsExtension,
-          kGoodRemoteInstall,
-          kGoodInstalledByCustodian));
+          kGoodRemoteInstall));
   EXPECT_TRUE(service()->pending_extension_manager()->IsIdPending(kGoodId));
 
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2642,8 +2804,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExtensionWrongVersion) {
           GURL(kGoodUpdateURL),
           other_version,
           &IsExtension,
-          kGoodRemoteInstall,
-          kGoodInstalledByCustodian));
+          kGoodRemoteInstall));
   EXPECT_TRUE(service()->pending_extension_manager()->IsIdPending(kGoodId));
 
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2674,7 +2835,7 @@ bool IsTheme(const Extension* extension) {
 TEST_F(ExtensionServiceTest, DISABLED_UpdatePendingTheme) {
   InitializeEmptyExtensionService();
   EXPECT_TRUE(service()->pending_extension_manager()->AddFromSync(
-      theme_crx, GURL(), base::Version(), &IsTheme, false, false));
+      theme_crx, GURL(), base::Version(), &IsTheme, false));
   EXPECT_TRUE(service()->pending_extension_manager()->IsIdPending(theme_crx));
 
   base::FilePath path = data_dir().AppendASCII("theme.crx");
@@ -2739,8 +2900,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExternalCrxWinsOverSync) {
           GURL(kGoodUpdateURL),
           base::Version(),
           &IsExtension,
-          kGoodRemoteInstall,
-          kGoodInstalledByCustodian));
+          kGoodRemoteInstall));
 
   // Check that there is a pending crx, with is_from_sync set to true.
   const extensions::PendingExtensionInfo* pending_extension_info;
@@ -2771,8 +2931,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExternalCrxWinsOverSync) {
           GURL(kGoodUpdateURL),
           base::Version(),
           &IsExtension,
-          kGoodRemoteInstall,
-          kGoodInstalledByCustodian));
+          kGoodRemoteInstall));
 
   // Check that the external, non-sync update was not overridden.
   ASSERT_TRUE((pending_extension_info =
@@ -2787,7 +2946,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExternalCrxWinsOverSync) {
 TEST_F(ExtensionServiceTest, UpdatePendingCrxThemeMismatch) {
   InitializeEmptyExtensionService();
   EXPECT_TRUE(service()->pending_extension_manager()->AddFromSync(
-      theme_crx, GURL(), base::Version(), &IsExtension, false, false));
+      theme_crx, GURL(), base::Version(), &IsExtension, false));
 
   EXPECT_TRUE(service()->pending_extension_manager()->IsIdPending(theme_crx));
 
@@ -2814,8 +2973,7 @@ TEST_F(ExtensionServiceTest, UpdatePendingExtensionFailedShouldInstallTest) {
           GURL(kGoodUpdateURL),
           base::Version(),
           &IsTheme,
-          kGoodRemoteInstall,
-          kGoodInstalledByCustodian));
+          kGoodRemoteInstall));
   EXPECT_TRUE(service()->pending_extension_manager()->IsIdPending(kGoodId));
 
   base::FilePath path = data_dir().AppendASCII("good.crx");
@@ -2860,7 +3018,6 @@ TEST_F(ExtensionServiceTest, UpdatePendingExtensionAlreadyInstalled) {
       &IsExtension,
       kGoodIsFromSync,
       Manifest::INTERNAL,
-      Extension::NO_FLAGS,
       false,
       kGoodRemoteInstall);
   UpdateExtension(good->id(), path, ENABLED);
@@ -4425,7 +4582,7 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
   IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
                                       profile())->GetIndexedDBContext();
   idb_context->SetTaskRunnerForTesting(
-      base::MessageLoop::current()->task_runner().get());
+      base::ThreadTaskRunnerHandle::Get().get());
   base::FilePath idb_path = idb_context->GetFilePathForTesting(ext_url);
   EXPECT_TRUE(base::CreateDirectory(idb_path));
   EXPECT_TRUE(base::DirectoryExists(idb_path));
@@ -4546,7 +4703,7 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
   IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
                                       profile())->GetIndexedDBContext();
   idb_context->SetTaskRunnerForTesting(
-      base::MessageLoop::current()->task_runner().get());
+      base::ThreadTaskRunnerHandle::Get().get());
   base::FilePath idb_path = idb_context->GetFilePathForTesting(origin1);
   EXPECT_TRUE(base::CreateDirectory(idb_path));
   EXPECT_TRUE(base::DirectoryExists(idb_path));
@@ -5855,8 +6012,7 @@ class ExtensionSourcePriorityTest : public ExtensionServiceTest {
         GURL(kGoodUpdateURL),
         base::Version(),
         &IsExtension,
-        kGoodRemoteInstall,
-        kGoodInstalledByCustodian);
+        kGoodRemoteInstall);
   }
 
   // Fake a policy install.

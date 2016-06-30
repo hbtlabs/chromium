@@ -164,6 +164,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AboutFlags_enable-experimental-web-platform-features">
+  <owner>rbyers@chromium.org</owner>
+  <description>
+    User flag to enable web APIs marked as status=experimental
+    RuntimeEnabledFeatures.
+  </description>
+</action>
+
 <action name="AboutFlags_enable-nacl">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -287,6 +295,14 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_nacl-gdb-script">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="AboutFlags_new-audio-rendering-mixing-strategy">
+  <owner>grunell@chromium.org</owner>
+  <owner>olka@chromium.org</owner>
+  <description>
+    User enabled flag to control new audio rendering mixing strategy.
+  </description>
 </action>
 
 <action name="AboutFlags_page-prerender">
@@ -997,6 +1013,51 @@ should be able to be added at any place in this file.
   <owner>sebsg@chromium.org</owner>
   <description>
     This user action is logged when Autofill detects a form submission.
+  </description>
+  <obsolete>
+    Deprecated 6/2016. Replaced by the versions with a suffix, which are more
+    descriptive.
+  </obsolete>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledAll">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where all the fields were autofilled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledNone_SuggestionsNotShown">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where Autofill suggestions were not shown.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledNone_SuggestionsShown">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where an Autofill suggestion was shown but no fields were filled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledSome">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where some field were filled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_NonFillable">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form that is not Autofillable or for a form that was filled with new
+    information that Autofill could not predict.
   </description>
 </action>
 
@@ -2317,7 +2378,11 @@ should be able to be added at any place in this file.
 
 <action name="ClearBrowsingData_ContentLicenses">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <description>
+    Content licenses for Flash were deauthorized as the user selected
+    &quot;Media Licenses&quot; when clearing browsing data and Flash was
+    enabled.
+  </description>
 </action>
 
 <action name="ClearBrowsingData_Cookies">
@@ -2870,6 +2935,20 @@ should be able to be added at any place in this file.
   <description>Close button of the CustomTabActivity was clicked.</description>
 </action>
 
+<action name="CustomTabs.StartedInitially">
+  <owner>tedchoc@chromium.org</owner>
+  <description>A CustomTabActivity was stared for the first time.</description>
+</action>
+
+<action name="CustomTabs.StartedReopened">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A CustomTabActivity was started by reopening a previously created instance.
+    This can happen if you send a CCT to the background via the home button and
+    reselect it from Android Overview.
+  </description>
+</action>
+
 <action name="CustomTabs.SystemBack">
   <owner>dfalcantara@chromium.org</owner>
   <description>
@@ -2893,8 +2972,13 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="CustomTabsMenuOpenInChrome">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of the metric.</description>
+  <owner>yusufo@chromium.org</owner>
+  <description>User hit &quot;open in browser&quot; menu item.</description>
+</action>
+
+<action name="CustomTabsMenuReadItLater">
+  <owner>ianwen@chromium.org</owner>
+  <description>User hit &quot;read it later&quot; menu item.</description>
 </action>
 
 <action name="CustomTabsRemoteViewsShown">
@@ -8710,6 +8794,24 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 8/2015</obsolete>
 </action>
 
+<action name="MobileExternalNavigationDispatched">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    Records when the system started a VIEW intent on a navigation click. This
+    happens when there is another application in the system that's not a browser
+    and that can handle this URL (e.g. Maps app for  http://maps.google.com/
+    url).
+  </description>
+</action>
+
+<action name="MobileExternalNavigationReceived">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    Records when a user was given a choice between using Chrome and an installed
+    app and chose Chrome.
+  </description>
+</action>
+
 <action name="MobileFirstEditInOmnibox">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8952,6 +9054,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User scrolled above the fold (not reading snippets cards).
   </description>
+  <obsolete>Deprecated as of 5/2016</obsolete>
 </action>
 
 <action name="MobileNTP.Snippets.ScrolledBelowTheFold">
@@ -8959,6 +9062,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User scrolled to the snippet cards below the fold.
   </description>
+  <obsolete>Deprecated as of 5/2016</obsolete>
 </action>
 
 <action name="MobileNTP.Snippets.ShowLess">
@@ -9281,6 +9385,18 @@ should be able to be added at any place in this file.
   <owner>kkimlabs@chromium.org</owner>
   <description>
     Only for Android. Menu is shown by tapping software menu button.
+  </description>
+</action>
+
+<action name="MobileWebsiteSettingsOpenedFromMenu">
+  <owner>tedchoc@chromium.org</owner>
+  <description>Website Settings opened via the menu.</description>
+</action>
+
+<action name="MobileWebsiteSettingsOpenedFromToolbar">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    Website Settings opened via the toolbar page info (i.e. https lock) icon.
   </description>
 </action>
 
@@ -13348,6 +13464,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Signin_FromPasswordBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE.
+  </description>
+</action>
+
 <action name="Signin_Signin_FromRecentTabs">
   <owner>gogerald@chromium.org</owner>
   <description>
@@ -14044,6 +14168,7 @@ should be able to be added at any place in this file.
   <description>
     User hit the &quot;Open in Chrome&quot; action button.
   </description>
+  <obsolete>The button option was removed and code deleted.</obsolete>
 </action>
 
 <action name="TaskManagement.ReturnButtonClicked">

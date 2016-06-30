@@ -44,6 +44,7 @@
 #include "platform/geometry/TransformState.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "public/platform/Platform.h"
+#include "wtf/PtrUtil.h"
 #include <inttypes.h>
 
 namespace blink {
@@ -195,44 +196,18 @@ void LayoutView::checkLayoutState()
 }
 #endif
 
-bool LayoutView::shouldDoFullPaintInvalidationForNextLayout() const
+void LayoutView::setShouldDoFullPaintInvalidationOnResizeIfNeeded()
 {
-    // It's hard to predict here which of full paint invalidation or per-descendant paint invalidation costs less.
-    // For vertical writing mode or width change it's more likely that per-descendant paint invalidation
-    // eventually turns out to be full paint invalidation but with the cost to handle more layout states
-    // and discrete paint invalidation rects, so marking full paint invalidation here is more likely to cost less.
-    // Otherwise, per-descendant paint invalidation is more likely to avoid unnecessary full paint invalidation.
-
-    if (shouldUsePrintingLayout())
-        return true;
-
-    if (!style()->isHorizontalWritingMode())
-        return true;
-
-    // The width/height checks below assume horizontal writing mode.
-    ASSERT(style()->isHorizontalWritingMode());
-
-    if (size().width() != viewLogicalWidthForBoxSizing())
-        return true;
-
-    if (size().height() != viewLogicalHeightForBoxSizing()) {
-        // When background-attachment is 'fixed', we treat the viewport (instead of the 'root'
-        // i.e. html or body) as the background positioning area, and we should full paint invalidation
-        // viewport resize if the background image is not composited and needs full paint invalidation on
-        // background positioning area resize.
-        if (!m_compositor || !m_compositor->needsFixedRootBackgroundLayer(layer())) {
-            if (style()->hasFixedBackgroundImage()
-                && mustInvalidateFillLayersPaintOnHeightChange(style()->backgroundLayers()))
-                return true;
-        }
+    // When background-attachment is 'fixed', we treat the viewport (instead of the 'root'
+    // i.e. html or body) as the background positioning area, and we should fully invalidate
+    // on viewport resize if the background image is not composited and needs full paint
+    // invalidation on background positioning area resize.
+    if (style()->hasFixedBackgroundImage() && (!m_compositor || !m_compositor->needsFixedRootBackgroundLayer(layer()))) {
+        IncludeScrollbarsInRect includeScrollbars = document().settings() && document().settings()->rootLayerScrolls() ? IncludeScrollbars : ExcludeScrollbars;
+        if ((offsetWidth() != viewWidth(includeScrollbars) && mustInvalidateFillLayersPaintOnWidthChange(style()->backgroundLayers()))
+            || (offsetHeight() != viewHeight(includeScrollbars) && mustInvalidateFillLayersPaintOnHeightChange(style()->backgroundLayers())))
+            setShouldDoFullPaintInvalidation(PaintInvalidationBoundsChange);
     }
-
-    return false;
-}
-
-bool LayoutView::doingFullPaintInvalidation() const
-{
-    return m_frameView->needsFullPaintInvalidation();
 }
 
 void LayoutView::layout()
@@ -240,10 +215,12 @@ void LayoutView::layout()
     if (!document().paginated())
         setPageLogicalHeight(LayoutUnit());
 
+    setShouldDoFullPaintInvalidationOnResizeIfNeeded();
+
     if (pageLogicalHeight() && shouldUsePrintingLayout()) {
         m_minPreferredLogicalWidth = m_maxPreferredLogicalWidth = logicalWidth();
         if (!m_fragmentationContext)
-            m_fragmentationContext = adoptPtr(new ViewFragmentationContext(*this));
+            m_fragmentationContext = wrapUnique(new ViewFragmentationContext(*this));
     } else if (m_fragmentationContext) {
         m_fragmentationContext.reset();
     }
@@ -438,22 +415,6 @@ void LayoutView::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOffse
 void LayoutView::paintBoxDecorationBackground(const PaintInfo& paintInfo, const LayoutPoint&) const
 {
     ViewPainter(*this).paintBoxDecorationBackground(paintInfo);
-}
-
-void LayoutView::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
-{
-    ASSERT(!needsLayout());
-
-    // We specifically need to issue paint invalidations for the viewRect since other layoutObjects
-    // short-circuit on full-paint invalidation.
-    LayoutRect dirtyRect = viewRect();
-    if (doingFullPaintInvalidation() && !dirtyRect.isEmpty()) {
-        const LayoutBoxModelObject& paintInvalidationContainer = paintInvalidationState.paintInvalidationContainer();
-        paintInvalidationState.mapLocalRectToPaintInvalidationBacking(dirtyRect);
-        invalidatePaintUsingContainer(paintInvalidationContainer, dirtyRect, PaintInvalidationFull);
-        invalidateDisplayItemClientsWithPaintInvalidationState(paintInvalidationContainer, paintInvalidationState, PaintInvalidationFull);
-    }
-    LayoutBlock::invalidateTreeIfNeeded(paintInvalidationState);
 }
 
 static void setShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(LayoutObject* object)
@@ -952,7 +913,7 @@ bool LayoutView::usesCompositing() const
 PaintLayerCompositor* LayoutView::compositor()
 {
     if (!m_compositor)
-        m_compositor = adoptPtr(new PaintLayerCompositor(*this));
+        m_compositor = wrapUnique(new PaintLayerCompositor(*this));
 
     return m_compositor.get();
 }
@@ -961,6 +922,12 @@ void LayoutView::setIsInWindow(bool isInWindow)
 {
     if (m_compositor)
         m_compositor->setIsInWindow(isInWindow);
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    // We don't invalidate layers during document detach(), so must clear the should-keep-alive
+    // DisplayItemClients which may be deleted before the layers being subsequence owners.
+    if (!isInWindow && layer())
+        layer()->endShouldKeepAliveAllClientsRecursive();
+#endif
 }
 
 IntervalArena* LayoutView::intervalArena()
@@ -1030,11 +997,11 @@ bool LayoutView::allowsOverflowClip() const
 
 ScrollResult LayoutView::scroll(ScrollGranularity granularity, const FloatSize& delta)
 {
-    // TODO(bokan): This should never get called on the main frame but it
-    // currently does via the Windows pan scrolling path. That should go through
-    // a more normalized EventHandler-like scrolling path and we should
-    // ASSERT(!frame()->isMainFrame()) here. All main frame scrolling should
-    // be handled by the ViewportScrollCallback.
+    // TODO(bokan): We shouldn't need this specialization but we currently do
+    // because of the Windows pan scrolling path. That should go through a more
+    // normalized ScrollManager-like scrolling path and we should get rid of
+    // of this override. All frame scrolling should be handled by
+    // ViewportScrollCallback.
 
     if (!frameView())
         return ScrollResult(false, false, delta.width(), delta.height());

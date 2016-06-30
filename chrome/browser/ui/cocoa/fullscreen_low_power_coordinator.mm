@@ -4,8 +4,13 @@
 
 #include "chrome/browser/ui/cocoa/fullscreen_low_power_coordinator.h"
 
-#include "base/command_line.h"
-#include "chrome/common/chrome_switches.h"
+namespace {
+
+// The minimum number of frames with valid low power contents that we need to
+// receive in a row before showing the low power window.
+const uint64_t kMinValidFrames = 15;
+
+}  // namespace
 
 @interface FullscreenLowPowerWindow : NSWindow {
   base::scoped_nsobject<NSWindow> eventTargetWindow_;
@@ -24,6 +29,8 @@
                       backing:NSBackingStoreBuffered
                         defer:NO]) {
     eventTargetWindow_.reset(eventTargetWindow, base::scoped_policy::RETAIN);
+    [self setCollectionBehavior:NSWindowCollectionBehaviorIgnoresCycle];
+    [self setExcludedFromWindowsMenu:YES];
     [self setReleasedWhenClosed:NO];
     [self setIgnoresMouseEvents:YES];
 
@@ -58,6 +65,9 @@ FullscreenLowPowerCoordinatorCocoa::FullscreenLowPowerCoordinatorCocoa(
                           withLayer:fullscreen_low_power_layer]);
     }
   }
+
+  SetHasActiveSheet([content_window_ attachedSheet]);
+  ChildWindowsChanged();
 }
 
 FullscreenLowPowerCoordinatorCocoa::~FullscreenLowPowerCoordinatorCocoa() {
@@ -69,6 +79,12 @@ FullscreenLowPowerCoordinatorCocoa::~FullscreenLowPowerCoordinatorCocoa() {
 
 NSWindow* FullscreenLowPowerCoordinatorCocoa::GetFullscreenLowPowerWindow() {
   return low_power_window_.get();
+}
+
+void FullscreenLowPowerCoordinatorCocoa::SetInFullscreenTransition(
+    bool in_fullscreen_transition) {
+  allowed_by_fullscreen_transition_ = !in_fullscreen_transition;
+  EnterOrExitLowPowerModeIfNeeded();
 }
 
 void FullscreenLowPowerCoordinatorCocoa::SetLayoutParameters(
@@ -95,8 +111,38 @@ void FullscreenLowPowerCoordinatorCocoa::SetLayoutParameters(
   EnterOrExitLowPowerModeIfNeeded();
 }
 
+void FullscreenLowPowerCoordinatorCocoa::SetHasActiveSheet(bool has_sheet) {
+  allowed_by_active_sheet_ = !has_sheet;
+  EnterOrExitLowPowerModeIfNeeded();
+}
+
+void FullscreenLowPowerCoordinatorCocoa::ChildWindowsChanged() {
+  allowed_by_child_windows_ = true;
+  for (NSWindow* child_window in [content_window_ childWindows]) {
+    // The toolbar correctly appears on top of the fullscreen low power window.
+    if ([child_window
+            isKindOfClass:NSClassFromString(@"NSToolbarFullScreenWindow")]) {
+      continue;
+    }
+    // There is a persistent 1x1 StatusBubbleWindow child window at 0,0.
+    if ([child_window isKindOfClass:NSClassFromString(@"StatusBubbleWindow")] &&
+        NSEqualRects([child_window frame], NSMakeRect(0, 0, 1, 1))) {
+      continue;
+    }
+
+    // Don't make any assumptions about other child windows.
+    allowed_by_child_windows_ = false;
+    break;
+  }
+
+  EnterOrExitLowPowerModeIfNeeded();
+}
+
 void FullscreenLowPowerCoordinatorCocoa::SetLowPowerLayerValid(bool valid) {
-  low_power_layer_valid_ = valid;
+  if (valid)
+    low_power_layer_valid_frame_count_ += 1;
+  else
+    low_power_layer_valid_frame_count_ = 0;
   EnterOrExitLowPowerModeIfNeeded();
 }
 
@@ -108,15 +154,19 @@ void FullscreenLowPowerCoordinatorCocoa::WillLoseAcceleratedWidget() {
 }
 
 void FullscreenLowPowerCoordinatorCocoa::EnterOrExitLowPowerModeIfNeeded() {
-  static bool enabled_at_command_line =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableFullscreenLowPowerMode);
-
   bool new_in_low_power_mode =
-      widget_ && low_power_window_ && allowed_by_nsview_layout_ &&
-      low_power_layer_valid_ && enabled_at_command_line;
+      widget_ && low_power_window_ &&
+      low_power_layer_valid_frame_count_ > kMinValidFrames &&
+      allowed_by_fullscreen_transition_ && allowed_by_nsview_layout_ &&
+      allowed_by_child_windows_ && allowed_by_active_sheet_;
 
   if (new_in_low_power_mode) {
+    // Update whether or not we are in low power mode based on whether or not
+    // the low power window is in front (we do not get notifications of window
+    // order change).
+    in_low_power_mode_ &=
+        [[NSApp orderedWindows] firstObject] == low_power_window_.get();
+
     if (!in_low_power_mode_) {
       [low_power_window_ setFrame:[content_window_ frame] display:YES];
       [low_power_window_

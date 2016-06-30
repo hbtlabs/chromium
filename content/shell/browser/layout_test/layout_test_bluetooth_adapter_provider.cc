@@ -162,6 +162,8 @@ LayoutTestBluetoothAdapterProvider::GetBluetoothAdapter(
     return GetHeartRateAdapter();
   if (fake_adapter_name == "UnnamedHeartRateAdapter")
     return GetUnnamedHeartRateAdapter();
+  if (fake_adapter_name == "TwoHeartRateServicesAdapter")
+    return GetTwoHeartRateServicesAdapter();
   if (fake_adapter_name == "DisconnectingHeartRateAdapter")
     return GetDisconnectingHeartRateAdapter();
   if (fake_adapter_name == "BlacklistTestAdapter")
@@ -363,9 +365,10 @@ LayoutTestBluetoothAdapterProvider::GetMissingCharacteristicHeartRateAdapter() {
       GetHeartRateDevice(adapter.get()));
 
   std::unique_ptr<NiceMockBluetoothGattService> generic_access(
-      GetBaseGATTService(device.get(), kGenericAccessServiceUUID));
+      GetBaseGATTService("Generic Access", device.get(),
+                         kGenericAccessServiceUUID));
   std::unique_ptr<NiceMockBluetoothGattService> heart_rate(
-      GetBaseGATTService(device.get(), kHeartRateServiceUUID));
+      GetBaseGATTService("Heart Rate", device.get(), kHeartRateServiceUUID));
 
   // Intentionally NOT adding a characteristic to heart_rate service.
 
@@ -398,7 +401,8 @@ LayoutTestBluetoothAdapterProvider::GetDelayedServicesDiscoveryAdapter() {
 
         if (services.size() == 0) {
           std::unique_ptr<NiceMockBluetoothGattService> heart_rate(
-              GetBaseGATTService(device_ptr, kHeartRateServiceUUID));
+              GetBaseGATTService("Heart Rate", device_ptr,
+                                 kHeartRateServiceUUID));
 
           device_ptr->AddMockService(std::move(heart_rate));
           base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -456,6 +460,60 @@ LayoutTestBluetoothAdapterProvider::GetUnnamedHeartRateAdapter() {
 
 // static
 scoped_refptr<NiceMockBluetoothAdapter>
+LayoutTestBluetoothAdapterProvider::GetTwoHeartRateServicesAdapter() {
+  scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
+  std::unique_ptr<NiceMockBluetoothDevice> device(
+      GetHeartRateDevice(adapter.get()));
+
+  device->AddMockService(GetGenericAccessService(device.get()));
+
+  // First Heart Rate Service has one Heart Rate Measurement characteristic
+  // and one Body Sensor Location characteristic.
+  std::unique_ptr<NiceMockBluetoothGattService> first_heart_rate(
+      GetBaseGATTService("First Heart Rate", device.get(),
+                         kHeartRateServiceUUID));
+
+  // Heart Rate Measurement
+  std::unique_ptr<NiceMockBluetoothGattCharacteristic> heart_rate_measurement(
+      GetBaseGATTCharacteristic(
+          "Heart Rate Measurement", first_heart_rate.get(),
+          kHeartRateMeasurementUUID,
+          BluetoothRemoteGattCharacteristic::PROPERTY_NOTIFY));
+
+  // Body Sensor Location Characteristic
+  std::unique_ptr<NiceMockBluetoothGattCharacteristic>
+      body_sensor_location_chest(GetBaseGATTCharacteristic(
+          "Body Sensor Location Chest", first_heart_rate.get(),
+          kBodySensorLocation,
+          BluetoothRemoteGattCharacteristic::PROPERTY_READ));
+
+  first_heart_rate->AddMockCharacteristic(std::move(heart_rate_measurement));
+  first_heart_rate->AddMockCharacteristic(
+      std::move(body_sensor_location_chest));
+  device->AddMockService(std::move(first_heart_rate));
+
+  // Second Heart Rate Service has only one Body Sensor Location
+  // characteristic.
+  std::unique_ptr<NiceMockBluetoothGattService> second_heart_rate(
+      GetBaseGATTService("Second Heart Rate", device.get(),
+                         kHeartRateServiceUUID));
+  std::unique_ptr<NiceMockBluetoothGattCharacteristic>
+      body_sensor_location_wrist(GetBaseGATTCharacteristic(
+          "Body Sensor Location Wrist", second_heart_rate.get(),
+          kBodySensorLocation,
+          BluetoothRemoteGattCharacteristic::PROPERTY_READ));
+
+  second_heart_rate->AddMockCharacteristic(
+      std::move(body_sensor_location_wrist));
+  device->AddMockService(std::move(second_heart_rate));
+
+  adapter->AddMockDevice(std::move(device));
+
+  return adapter;
+}
+
+// static
+scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetDisconnectingHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   NiceMockBluetoothAdapter* adapter_ptr = adapter.get();
@@ -472,7 +530,8 @@ LayoutTestBluetoothAdapterProvider::GetDisconnectingHeartRateAdapter() {
   // Set up a service and a characteristic to disconnect the device when it's
   // written to.
   std::unique_ptr<NiceMockBluetoothGattService> disconnection_service =
-      GetBaseGATTService(device_ptr, kRequestDisconnectionServiceUUID);
+      GetBaseGATTService("Disconnection", device_ptr,
+                         kRequestDisconnectionServiceUUID);
   std::unique_ptr<NiceMockBluetoothGattCharacteristic>
       disconnection_characteristic(GetBaseGATTCharacteristic(
           "Disconnection Characteristic", disconnection_service.get(),
@@ -516,8 +575,9 @@ LayoutTestBluetoothAdapterProvider::GetBlacklistTestAdapter() {
   device->AddMockService(GetDeviceInformationService(device.get()));
   device->AddMockService(GetGenericAccessService(device.get()));
   device->AddMockService(GetHeartRateService(adapter.get(), device.get()));
-  device->AddMockService(
-      GetBaseGATTService(device.get(), kHumanInterfaceDeviceServiceUUID));
+  device->AddMockService(GetBaseGATTService("Human Interface Device",
+                                            device.get(),
+                                            kHumanInterfaceDeviceServiceUUID));
   adapter->AddMockDevice(std::move(device));
 
   return adapter;
@@ -551,7 +611,7 @@ LayoutTestBluetoothAdapterProvider::GetFailingGATTOperationsAdapter() {
       GetConnectableDevice(adapter.get(), "Errors Device", uuids));
 
   std::unique_ptr<NiceMockBluetoothGattService> service(
-      GetBaseGATTService(device.get(), errorsServiceUUID));
+      GetBaseGATTService("Errors Service", device.get(), errorsServiceUUID));
 
   for (int error = BluetoothRemoteGattService::GATT_ERROR_UNKNOWN;
        error <= BluetoothRemoteGattService::GATT_ERROR_NOT_SUPPORTED; error++) {
@@ -694,12 +754,13 @@ LayoutTestBluetoothAdapterProvider::GetHeartRateDevice(
 // static
 std::unique_ptr<NiceMockBluetoothGattService>
 LayoutTestBluetoothAdapterProvider::GetBaseGATTService(
+    const std::string& identifier,
     MockBluetoothDevice* device,
     const std::string& uuid) {
   std::unique_ptr<NiceMockBluetoothGattService> service(
-      new NiceMockBluetoothGattService(
-          device, uuid /* identifier */, BluetoothUUID(uuid),
-          true /* is_primary */, false /* is_local */));
+      new NiceMockBluetoothGattService(device, identifier, BluetoothUUID(uuid),
+                                       true /* is_primary */,
+                                       false /* is_local */));
 
   ON_CALL(*service, GetCharacteristics())
       .WillByDefault(Invoke(service.get(),
@@ -717,7 +778,7 @@ std::unique_ptr<NiceMockBluetoothGattService>
 LayoutTestBluetoothAdapterProvider::GetBlacklistTestService(
     device::MockBluetoothDevice* device) {
   std::unique_ptr<NiceMockBluetoothGattService> blacklist_test_service(
-      GetBaseGATTService(device, kBlacklistTestServiceUUID));
+      GetBaseGATTService("Blacklist Test", device, kBlacklistTestServiceUUID));
 
   std::unique_ptr<NiceMockBluetoothGattCharacteristic>
       blacklist_exclude_reads_characteristic(GetBaseGATTCharacteristic(
@@ -753,7 +814,8 @@ std::unique_ptr<NiceMockBluetoothGattService>
 LayoutTestBluetoothAdapterProvider::GetDeviceInformationService(
     device::MockBluetoothDevice* device) {
   std::unique_ptr<NiceMockBluetoothGattService> device_information(
-      GetBaseGATTService(device, kDeviceInformationServiceUUID));
+      GetBaseGATTService("Device Information", device,
+                         kDeviceInformationServiceUUID));
 
   std::unique_ptr<NiceMockBluetoothGattCharacteristic> serial_number_string(
       GetBaseGATTCharacteristic(
@@ -781,7 +843,7 @@ std::unique_ptr<NiceMockBluetoothGattService>
 LayoutTestBluetoothAdapterProvider::GetGenericAccessService(
     device::MockBluetoothDevice* device) {
   std::unique_ptr<NiceMockBluetoothGattService> generic_access(
-      GetBaseGATTService(device, kGenericAccessServiceUUID));
+      GetBaseGATTService("Generic Access", device, kGenericAccessServiceUUID));
 
   {  // Device Name:
     std::unique_ptr<NiceMockBluetoothGattCharacteristic> device_name(
@@ -841,7 +903,7 @@ LayoutTestBluetoothAdapterProvider::GetHeartRateService(
     MockBluetoothAdapter* adapter,
     MockBluetoothDevice* device) {
   std::unique_ptr<NiceMockBluetoothGattService> heart_rate(
-      GetBaseGATTService(device, kHeartRateServiceUUID));
+      GetBaseGATTService("Heart Rate", device, kHeartRateServiceUUID));
 
   // Heart Rate Measurement
   std::unique_ptr<NiceMockBluetoothGattCharacteristic> heart_rate_measurement(

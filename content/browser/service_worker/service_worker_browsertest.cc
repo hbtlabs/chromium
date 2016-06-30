@@ -25,10 +25,12 @@
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/cache_storage/cache_storage_cache.h"
+#include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
@@ -60,6 +62,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/test/test_content_browser_client.h"
+#include "net/log/net_log.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -528,11 +531,12 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void AddControlleeOnIOThread() {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     std::unique_ptr<ServiceWorkerProviderHost> host(
-        new ServiceWorkerProviderHost(33 /* dummy render process id */,
-                                      MSG_ROUTING_NONE /* render_frame_id */,
-                                      1 /* dummy provider_id */,
-                                      SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-                                      wrapper()->context()->AsWeakPtr(), NULL));
+        new ServiceWorkerProviderHost(
+            33 /* dummy render process id */,
+            MSG_ROUTING_NONE /* render_frame_id */, 1 /* dummy provider_id */,
+            SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+            ServiceWorkerProviderHost::FrameSecurityLevel::SECURE,
+            wrapper()->context()->AsWeakPtr(), NULL));
     host->SetDocumentUrl(
         embedded_test_server()->GetURL("/service_worker/host"));
     host->AssociateRegistration(registration_.get(),
@@ -651,9 +655,12 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     int request_id =
         version_->StartRequest(ServiceWorkerMetrics::EventType::INSTALL,
                                CreateReceiver(BrowserThread::UI, done, result));
-    version_->DispatchEvent<ServiceWorkerHostMsg_InstallEventFinished>(
-        request_id, ServiceWorkerMsg_InstallEvent(request_id),
-        base::Bind(&self::ReceiveInstallEventOnIOThread, this, done, result));
+    version_
+        ->RegisterRequestCallback<ServiceWorkerHostMsg_InstallEventFinished>(
+            request_id, base::Bind(&self::ReceiveInstallEventOnIOThread, this,
+                                   done, result));
+    version_->DispatchEvent({request_id},
+                            ServiceWorkerMsg_InstallEvent(request_id));
   }
 
   void ReceiveInstallEventOnIOThread(const base::Closure& done,
@@ -717,7 +724,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
     fetch_dispatcher_.reset(new ServiceWorkerFetchDispatcher(
         std::move(request), version_.get(), RESOURCE_TYPE_MAIN_FRAME,
-        CreatePrepareReceiver(prepare_result),
+        net::BoundNetLog(), CreatePrepareReceiver(prepare_result),
         CreateResponseReceiver(done, blob_context_.get(), result)));
     fetch_dispatcher_->Run();
   }
@@ -979,7 +986,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
 
   // The script has loaded but start has not completed yet.
   ASSERT_EQ(SERVICE_WORKER_ERROR_FAILED, status);
-  EXPECT_EQ(ServiceWorkerVersion::STARTING, version_->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STARTING, version_->running_status());
 
   // Simulate execution timeout. Use a delay to prevent killing the worker
   // before it's started execution.
@@ -1655,22 +1662,26 @@ class CacheStorageSideDataSizeChecker
                                          this, result, continuation));
   }
 
-  void OnCacheStorageOpenCallback(int* result,
-                                  const base::Closure& continuation,
-                                  scoped_refptr<CacheStorageCache> cache,
-                                  CacheStorageError error) {
+  void OnCacheStorageOpenCallback(
+      int* result,
+      const base::Closure& continuation,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+      CacheStorageError error) {
     ASSERT_EQ(CACHE_STORAGE_OK, error);
     std::unique_ptr<ServiceWorkerFetchRequest> scoped_request(
         new ServiceWorkerFetchRequest());
     scoped_request->url = url_;
-    cache->Match(std::move(scoped_request),
-                 base::Bind(&self::OnCacheStorageCacheMatchCallback, this,
-                            result, continuation));
+    CacheStorageCache* cache = cache_handle->value();
+    cache->Match(
+        std::move(scoped_request),
+        base::Bind(&self::OnCacheStorageCacheMatchCallback, this, result,
+                   continuation, base::Passed(std::move(cache_handle))));
   }
 
   void OnCacheStorageCacheMatchCallback(
       int* result,
       const base::Closure& continuation,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
       CacheStorageError error,
       std::unique_ptr<ServiceWorkerResponse> response,
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
@@ -1730,6 +1741,56 @@ class ServiceWorkerV8CacheStrategiesTest : public ServiceWorkerBrowserTest {
   ~ServiceWorkerV8CacheStrategiesTest() override {}
 
  protected:
+  void CheckStrategyIsNone() {
+    RegisterAndActivateServiceWorker();
+
+    NavigateToTestPage();
+    EXPECT_EQ(0, GetSideDataSize());
+
+    NavigateToTestPage();
+    EXPECT_EQ(0, GetSideDataSize());
+
+    NavigateToTestPage();
+    EXPECT_EQ(0, GetSideDataSize());
+  }
+
+  void CheckStrategyIsNormal() {
+    RegisterAndActivateServiceWorker();
+
+    NavigateToTestPage();
+    // fetch_event_response_via_cache.js returns |cloned_response| for the first
+    // load. So the V8 code cache should not be stored to the CacheStorage.
+    EXPECT_EQ(0, GetSideDataSize());
+
+    NavigateToTestPage();
+    // V8ScriptRunner::setCacheTimeStamp() stores 12 byte data (tag +
+    // timestamp).
+    EXPECT_EQ(kV8CacheTimeStampDataSize, GetSideDataSize());
+
+    NavigateToTestPage();
+    // The V8 code cache must be stored to the CacheStorage which must be bigger
+    // than 12 byte.
+    EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+  }
+
+  void CheckStrategyIsAggressive() {
+    RegisterAndActivateServiceWorker();
+
+    NavigateToTestPage();
+    // fetch_event_response_via_cache.js returns |cloned_response| for the first
+    // load. So the V8 code cache should not be stored to the CacheStorage.
+    EXPECT_EQ(0, GetSideDataSize());
+
+    NavigateToTestPage();
+    // The V8 code cache must be stored to the CacheStorage which must be bigger
+    // than 12 byte.
+    EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+
+    NavigateToTestPage();
+    EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+  }
+
+ private:
   static const std::string kPageUrl;
   static const std::string kWorkerUrl;
   static const std::string kScriptUrl;
@@ -1764,7 +1825,6 @@ class ServiceWorkerV8CacheStrategiesTest : public ServiceWorkerBrowserTest {
         std::string("cache_name"), embedded_test_server()->GetURL(kScriptUrl));
   }
 
- private:
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerV8CacheStrategiesTest);
 };
 
@@ -1777,6 +1837,12 @@ const std::string ServiceWorkerV8CacheStrategiesTest::kScriptUrl =
 // V8ScriptRunner::setCacheTimeStamp() stores 12 byte data (tag + timestamp).
 const int ServiceWorkerV8CacheStrategiesTest::kV8CacheTimeStampDataSize =
     sizeof(unsigned) + sizeof(double);
+
+IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesTest,
+                       V8CacheOnCacheStorage) {
+  // The strategy is "aggressive" on default.
+  CheckStrategyIsAggressive();
+}
 
 class ServiceWorkerV8CacheStrategiesNoneTest
     : public ServiceWorkerV8CacheStrategiesTest {
@@ -1794,16 +1860,7 @@ class ServiceWorkerV8CacheStrategiesNoneTest
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNoneTest,
                        V8CacheOnCacheStorage) {
-  RegisterAndActivateServiceWorker();
-
-  NavigateToTestPage();
-  EXPECT_EQ(0, GetSideDataSize());
-
-  NavigateToTestPage();
-  EXPECT_EQ(0, GetSideDataSize());
-
-  NavigateToTestPage();
-  EXPECT_EQ(0, GetSideDataSize());
+  CheckStrategyIsNone();
 }
 
 class ServiceWorkerV8CacheStrategiesNormalTest
@@ -1822,21 +1879,7 @@ class ServiceWorkerV8CacheStrategiesNormalTest
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesNormalTest,
                        V8CacheOnCacheStorage) {
-  RegisterAndActivateServiceWorker();
-
-  NavigateToTestPage();
-  // fetch_event_response_via_cache.js returns |cloned_response| for the first
-  // load. So the V8 code cache should not be stored to the CacheStorage.
-  EXPECT_EQ(0, GetSideDataSize());
-
-  NavigateToTestPage();
-  // V8ScriptRunner::setCacheTimeStamp() stores 12 byte data (tag + timestamp).
-  EXPECT_EQ(kV8CacheTimeStampDataSize, GetSideDataSize());
-
-  NavigateToTestPage();
-  // The V8 code cache must be stored to the CacheStorage which must be bigger
-  // than 12 byte.
-  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+  CheckStrategyIsNormal();
 }
 
 class ServiceWorkerV8CacheStrategiesAggressiveTest
@@ -1855,20 +1898,7 @@ class ServiceWorkerV8CacheStrategiesAggressiveTest
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerV8CacheStrategiesAggressiveTest,
                        V8CacheOnCacheStorage) {
-  RegisterAndActivateServiceWorker();
-
-  NavigateToTestPage();
-  // fetch_event_response_via_cache.js returns |cloned_response| for the first
-  // load. So the V8 code cache should not be stored to the CacheStorage.
-  EXPECT_EQ(0, GetSideDataSize());
-
-  NavigateToTestPage();
-  // The V8 code cache must be stored to the CacheStorage which must be bigger
-  // than 12 byte.
-  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
-
-  NavigateToTestPage();
-  EXPECT_GT(GetSideDataSize(), kV8CacheTimeStampDataSize);
+  CheckStrategyIsAggressive();
 }
 
 }  // namespace content

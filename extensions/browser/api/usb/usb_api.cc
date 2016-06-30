@@ -469,8 +469,13 @@ void UsbTransferFunction::OnCompleted(UsbTransferStatus status,
   std::unique_ptr<base::DictionaryValue> transfer_info(
       new base::DictionaryValue());
   transfer_info->SetInteger(kResultCodeKey, status);
-  transfer_info->Set(kDataKey, base::BinaryValue::CreateWithCopiedBuffer(
-                                   data->data(), length));
+
+  if (data) {
+    transfer_info->Set(kDataKey, base::BinaryValue::CreateWithCopiedBuffer(
+                                     data->data(), length));
+  } else {
+    transfer_info->Set(kDataKey, new base::BinaryValue());
+  }
 
   if (status == device::USB_TRANSFER_COMPLETED) {
     Respond(OneArgument(std::move(transfer_info)));
@@ -686,7 +691,7 @@ ExtensionFunction::ResponseAction UsbGetConfigurationsFunction::Run() {
   }
 
   std::unique_ptr<base::ListValue> configs(new base::ListValue());
-  const UsbConfigDescriptor* active_config = device->GetActiveConfiguration();
+  const UsbConfigDescriptor* active_config = device->active_configuration();
   for (const UsbConfigDescriptor& config : device->configurations()) {
     ConfigDescriptor api_config = ConvertConfigDescriptor(config);
     if (active_config &&
@@ -815,7 +820,7 @@ ExtensionFunction::ResponseAction UsbGetConfigurationFunction::Run() {
   }
 
   const UsbConfigDescriptor* config_descriptor =
-      device_handle->GetDevice()->GetActiveConfiguration();
+      device_handle->GetDevice()->active_configuration();
   if (config_descriptor) {
     ConfigDescriptor config = ConvertConfigDescriptor(*config_descriptor);
     config.active = true;
@@ -843,7 +848,7 @@ ExtensionFunction::ResponseAction UsbListInterfacesFunction::Run() {
   }
 
   const UsbConfigDescriptor* config_descriptor =
-      device_handle->GetDevice()->GetActiveConfiguration();
+      device_handle->GetDevice()->active_configuration();
   if (config_descriptor) {
     ConfigDescriptor config = ConvertConfigDescriptor(*config_descriptor);
 
@@ -1207,8 +1212,10 @@ void UsbIsochronousTransferFunction::OnCompleted(
       status = packet.status;
     }
 
-    memcpy(&buffer[buffer_offset], data->data() + data_offset,
-           packet.transferred_length);
+    if (data) {
+      memcpy(&buffer[buffer_offset], data->data() + data_offset,
+             packet.transferred_length);
+    }
     buffer_offset += packet.transferred_length;
     data_offset += packet.length;
   }

@@ -68,9 +68,10 @@ DEPENDENCY_IDL_FILES = frozenset([
     'TestImplements.idl',
     'TestImplements2.idl',
     'TestImplements3.idl',
-    'TestPartialInterface.idl',
-    'TestPartialInterface2.idl',
-    'TestPartialInterface3.idl',
+    'TestInterfacePartial.idl',
+    'TestInterfacePartial2.idl',
+    'TestInterfacePartial3.idl',
+    'TestInterfacePartial4.idl',
     'TestInterface2Partial.idl',
     'TestInterface2Partial2.idl',
 ])

@@ -4,6 +4,7 @@
 
 #include "content/browser/dom_storage/dom_storage_context_impl.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 #include <stdlib.h>
 
@@ -14,6 +15,7 @@
 #include "base/guid.h"
 #include "base/location.h"
 #include "base/metrics/histogram.h"
+#include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -432,47 +434,87 @@ void DOMStorageContextImpl::PurgeMemory(PurgeOption purge_option) {
 
   DOMStorageNamespace::UsageStatistics initial_stats =
       GetTotalNamespaceStatistics(namespaces_);
+  if (!initial_stats.total_area_count)
+    return;
 
   // Track the total localStorage cache size.
   UMA_HISTOGRAM_CUSTOM_COUNTS("LocalStorage.BrowserLocalStorageCacheSizeInKB",
                               initial_stats.total_cache_size / 1024, 1, 100000,
                               50);
 
+  const char* purge_reason = nullptr;
   if (purge_option == PURGE_IF_NEEDED) {
     // Purging is done based on the cache sizes without including the database
     // size since it can be expensive trying to estimate the sqlite usage for
     // all databases. For low end devices purge all inactive areas.
-    bool should_purge =
-        initial_stats.inactive_area_count &&
-        (is_low_end_device_ || initial_stats.total_cache_size > kMaxCacheSize ||
-         initial_stats.total_area_count > kMaxStorageAreaCount);
-    if (!should_purge)
+    if (initial_stats.total_cache_size > kMaxCacheSize)
+      purge_reason = "SizeLimitExceeded";
+    else if (initial_stats.total_area_count > kMaxStorageAreaCount)
+      purge_reason = "AreaCountLimitExceeded";
+    else if (is_low_end_device_)
+      purge_reason = "InactiveOnLowEndDevice";
+    if (!purge_reason)
       return;
 
     purge_option = PURGE_UNOPENED;
+  } else {
+    if (purge_option == PURGE_AGGRESSIVE)
+      purge_reason = "AggressivePurgeTriggered";
+    else
+      purge_reason = "ModeratePurgeTriggered";
   }
 
+  // Return if no areas can be purged with the given option.
   bool aggressively = purge_option == PURGE_AGGRESSIVE;
+  if (!aggressively && !initial_stats.inactive_area_count) {
+    return;
+  }
   for (const auto& it : namespaces_)
     it.second->PurgeMemory(aggressively);
 
   // Track the size of cache purged.
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "LocalStorage.BrowserLocalStorageCachePurgedInKB",
+  size_t purged_size_kib =
       (initial_stats.total_cache_size -
        GetTotalNamespaceStatistics(namespaces_).total_cache_size) /
-          1024,
-      1, 100000, 50);
+      1024;
+  std::string full_histogram_name =
+      std::string("LocalStorage.BrowserLocalStorageCachePurgedInKB.") +
+      purge_reason;
+  base::HistogramBase* histogram = base::Histogram::FactoryGet(
+      full_histogram_name, 1, 100000, 50,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  if (histogram)
+    histogram->Add(purged_size_kib);
+  UMA_HISTOGRAM_CUSTOM_COUNTS("LocalStorage.BrowserLocalStorageCachePurgedInKB",
+                              purged_size_kib, 1, 100000, 50);
 }
 
 bool DOMStorageContextImpl::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
+  if (session_storage_database_)
+    session_storage_database_->OnMemoryDump(pmd);
+  if (args.level_of_detail ==
+      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+    DOMStorageNamespace::UsageStatistics total_stats =
+        GetTotalNamespaceStatistics(namespaces_);
+    auto mad = pmd->CreateAllocatorDump(
+        base::StringPrintf("dom_storage/0x%" PRIXPTR "/cache_size",
+                           reinterpret_cast<uintptr_t>(this)));
+    mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                   base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                   total_stats.total_cache_size);
+    mad->AddScalar("inactive_areas",
+                   base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                   total_stats.inactive_area_count);
+    mad->AddScalar("total_areas",
+                   base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                   total_stats.total_area_count);
+    return true;
+  }
   for (const auto& it : namespaces_) {
     it.second->OnMemoryDump(pmd);
   }
-  if (session_storage_database_)
-    session_storage_database_->OnMemoryDump(pmd);
   return true;
 }
 

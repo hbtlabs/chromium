@@ -256,11 +256,6 @@ BrowserContext* NavigationControllerImpl::GetBrowserContext() const {
   return browser_context_;
 }
 
-void NavigationControllerImpl::SetBrowserContext(
-    BrowserContext* browser_context) {
-  browser_context_ = browser_context;
-}
-
 void NavigationControllerImpl::Restore(
     int selected_navigation,
     RestoreType type,
@@ -669,7 +664,10 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
   switch (params.load_type) {
     case LOAD_TYPE_DEFAULT:
       break;
-    case LOAD_TYPE_BROWSER_INITIATED_HTTP_POST:
+    case LOAD_TYPE_HTTP_POST:
+      // TODO(lukasza): This assertion is false - it is also possible to POST to
+      // an chrome-extension://... URI.  This might be more common when
+      // allowing renderer-initiated POST after fixing https://crbug.com/344348.
       if (!params.url.SchemeIs(url::kHttpScheme) &&
           !params.url.SchemeIs(url::kHttpsScheme)) {
         NOTREACHED() << "Http post load must use http(s) scheme.";
@@ -768,10 +766,9 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
   switch (params.load_type) {
     case LOAD_TYPE_DEFAULT:
       break;
-    case LOAD_TYPE_BROWSER_INITIATED_HTTP_POST:
+    case LOAD_TYPE_HTTP_POST:
       entry->SetHasPostData(true);
-      entry->SetBrowserInitiatedPostData(
-          params.browser_initiated_post_data.get());
+      entry->SetPostData(params.post_data);
       break;
     case LOAD_TYPE_DATA:
       entry->SetBaseURLForDataURL(params.base_url_for_data_url);
@@ -826,8 +823,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
   details->type = ClassifyNavigation(rfh, params);
 
   // is_in_page must be computed before the entry gets committed.
-  details->is_in_page = IsURLInPageNavigation(
-      params.url, params.was_within_same_page, rfh);
+  details->is_in_page = IsURLInPageNavigation(params.url, params.origin,
+                                              params.was_within_same_page, rfh);
 
   switch (details->type) {
     case NAVIGATION_TYPE_NEW_PAGE:
@@ -1311,8 +1308,15 @@ bool NavigationControllerImpl::RendererDidNavigateAutoSubframe(
       // origin. Otherwise the renderer process may be confused, leading to a
       // URL spoof. We can't check the path since that may change
       // (https://crbug.com/373041).
-      if (GetLastCommittedEntry()->GetURL().GetOrigin() !=
-          GetEntryAtIndex(entry_index)->GetURL().GetOrigin()) {
+      // TODO(creis): For now, restrict this check to HTTP(S) origins, because
+      // about:blank, file, and unique origins are more subtle to get right.
+      // We'll abstract out the relevant checks from IsURLInPageNavigation and
+      // share them here.  See https://crbug.com/618104.
+      const GURL& dest_top_url = GetEntryAtIndex(entry_index)->GetURL();
+      const GURL& current_top_url = GetLastCommittedEntry()->GetURL();
+      if (current_top_url.SchemeIsHTTPOrHTTPS() &&
+          dest_top_url.SchemeIsHTTPOrHTTPS() &&
+          current_top_url.GetOrigin() != dest_top_url.GetOrigin()) {
         bad_message::ReceivedBadMessage(rfh->GetProcess(),
                                         bad_message::NC_AUTO_SUBFRAME);
       }
@@ -1372,8 +1376,13 @@ int NavigationControllerImpl::GetIndexOfEntry(
 // in-page. Therefore, trust the renderer if the URLs are on the same origin,
 // and assume the renderer is malicious if a cross-origin navigation claims to
 // be in-page.
+//
+// TODO(creis): Clean up and simplify the about:blank and origin checks below,
+// which are likely redundant with each other.  Be careful about data URLs vs
+// about:blank, both of which are unique origins and thus not considered equal.
 bool NavigationControllerImpl::IsURLInPageNavigation(
     const GURL& url,
+    const url::Origin& origin,
     bool renderer_says_in_page,
     RenderFrameHost* rfh) const {
   RenderFrameHostImpl* rfhi = static_cast<RenderFrameHostImpl*>(rfh);
@@ -1406,6 +1415,7 @@ bool NavigationControllerImpl::IsURLInPageNavigation(
                         // for now.
                         last_committed_url == GURL(url::kAboutBlankURL) ||
                         last_committed_url.GetOrigin() == url.GetOrigin() ||
+                        committed_origin == origin ||
                         !prefs.web_security_enabled ||
                         (prefs.allow_universal_access_from_file_urls &&
                          committed_origin.scheme() == url::kFileScheme);
@@ -1669,7 +1679,8 @@ int NavigationControllerImpl::GetPendingEntryIndex() const {
 void NavigationControllerImpl::InsertOrReplaceEntry(
     std::unique_ptr<NavigationEntryImpl> entry,
     bool replace) {
-  DCHECK(entry->GetTransitionType() != ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  DCHECK(!ui::PageTransitionCoreTypeIs(entry->GetTransitionType(),
+                                       ui::PAGE_TRANSITION_AUTO_SUBFRAME));
 
   // If the pending_entry_index_ is -1, the navigation was to a new page, and we
   // need to keep continuity with the pending entry, so copy the pending entry's

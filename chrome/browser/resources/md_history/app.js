@@ -7,6 +7,7 @@
  *            searchTerm: string,
  *            results: ?Array<!HistoryEntry>,
  *            info: ?HistoryQuery,
+ *            incremental: boolean,
  *            range: HistoryRange,
  *            groupedOffset: number,
  *            sessionList: ?Array<!ForeignSession>}}
@@ -18,10 +19,17 @@ Polymer({
 
   properties: {
     // The id of the currently selected page.
-    selectedPage_: String,
+    selectedPage_: {
+      type: String,
+      value: 'history-list',
+      observer: 'unselectAll'
+    },
 
     // Whether domain-grouped history is enabled.
-    grouped_: Boolean,
+    grouped_: {
+      type: Boolean,
+      reflectToAttribute: true
+    },
 
     // Whether the first set of results have returned.
     firstLoad_: { type: Boolean, value: true },
@@ -40,6 +48,8 @@ Polymer({
           querying: true,
           searchTerm: '',
           results: null,
+          // Whether the most recent query was incremental.
+          incremental: false,
           info: null,
           range: HistoryRange.ALL_TIME,
           // TODO(calamity): Make history toolbar buttons change the offset.
@@ -57,6 +67,7 @@ Polymer({
 
   // TODO(calamity): Replace these event listeners with data bound properties.
   listeners: {
+    'cr-menu-tap': 'onMenuTap_',
     'history-checkbox-select': 'checkboxSelected',
     'unselect-all': 'unselectAll',
     'delete-selected': 'deleteSelected',
@@ -64,8 +75,14 @@ Polymer({
     'load-more-history': 'loadMoreHistory_',
   },
 
+  /** @override */
   ready: function() {
     this.grouped_ = loadTimeData.getBoolean('groupByDomain');
+  },
+
+  /** @private */
+  onMenuTap_: function() {
+    this.$['side-bar'].toggle();
   },
 
   /**
@@ -81,6 +98,7 @@ Polymer({
   /**
    * Listens for call to cancel selection and loops through all items to set
    * checkbox to be unselected.
+   * @private
    */
   unselectAll: function() {
     var historyList =
@@ -175,6 +193,7 @@ Polymer({
       return;
 
     this.set('queryState_.querying', true);
+    this.set('queryState_.incremental', incremental);
 
     var queryState = this.queryState_;
 
@@ -204,6 +223,11 @@ Polymer({
     this.set('queryState_.sessionList', sessionList);
   },
 
+  /**
+   * @param {string} selectedPage
+   * @param {HistoryRange} range
+   * @return {string}
+   */
   getSelectedPage: function(selectedPage, range) {
     if (selectedPage == 'history-list' && range != HistoryRange.ALL_TIME)
       return 'history-grouped-list';
@@ -211,7 +235,35 @@ Polymer({
     return selectedPage;
   },
 
-  syncedTabsSelected_(selectedPage) {
+  /**
+   * Update sign in state of synced device manager after user logs in or out.
+   * @param {boolean} isUserSignedIn
+   */
+  updateSignInState: function(isUserSignedIn) {
+    var syncedDeviceManagerElem =
+      /** @type {HistorySyncedDeviceManagerElement} */this
+          .$$('history-synced-device-manager');
+    syncedDeviceManagerElem.updateSignInState(isUserSignedIn);
+  },
+
+  /**
+   * @param {string} selectedPage
+   * @return {boolean}
+   * @private
+   */
+  syncedTabsSelected_: function(selectedPage) {
     return selectedPage == 'history-synced-device-manager';
+  },
+
+  /**
+   * @param {boolean} querying
+   * @param {boolean} incremental
+   * @param {string} searchTerm
+   * @return {boolean} Whether a loading spinner should be shown (implies the
+   *     backend is querying a new search term).
+   * @private
+   */
+  shouldShowSpinner_: function(querying, incremental, searchTerm) {
+    return querying && !incremental && searchTerm != '';
   }
 });

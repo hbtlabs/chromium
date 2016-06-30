@@ -61,9 +61,27 @@ int RegisterCustomEventType() {
   return ++g_custom_event_types;
 }
 
-base::TimeDelta EventTimeForNow() {
-  return base::TimeDelta::FromInternalValue(
-      base::TimeTicks::Now().ToInternalValue());
+void ValidateEventTimeClock(base::TimeTicks* timestamp) {
+// Restrict this validation to DCHECK builds except when using X11 which is
+// known to provide bogus timestamps that require correction (crbug.com/611950).
+#if defined(USE_X11) || DCHECK_IS_ON()
+  if (base::debug::BeingDebugged())
+    return;
+
+  base::TimeTicks now = EventTimeForNow();
+  int64_t delta = (now - *timestamp).InMilliseconds();
+  if (delta < 0 || delta > 60 * 1000) {
+    UMA_HISTOGRAM_BOOLEAN("Event.TimestampHasValidTimebase", false);
+#if defined(USE_X11)
+    *timestamp = now;
+#else
+    NOTREACHED() << "Unexpected event timestamp, now:" << now
+                 << " event timestamp:" << *timestamp;
+#endif
+  }
+
+  UMA_HISTOGRAM_BOOLEAN("Event.TimestampHasValidTimebase", true);
+#endif
 }
 
 bool ShouldDefaultToNaturalScroll() {
@@ -86,8 +104,8 @@ display::Display::TouchSupport GetInternalDisplayTouchSupport() {
 }
 
 void ComputeEventLatencyOS(const base::NativeEvent& native_event) {
-  base::TimeDelta current_time = EventTimeForNow();
-  base::TimeDelta time_stamp = EventTimeFromNative(native_event);
+  base::TimeTicks current_time = EventTimeForNow();
+  base::TimeTicks time_stamp = EventTimeFromNative(native_event);
   base::TimeDelta delta = current_time - time_stamp;
 
   EventType type = EventTypeFromNative(native_event);

@@ -110,11 +110,10 @@ public:
     {
     }
 
-    // TODO(peria): Protect this mehtod.
-    String takeWireString();
-
 protected:
     friend class ScriptValueSerializer;
+
+    String takeWireString();
 
     // Write functions for primitive types.
     void writeUndefined();
@@ -143,7 +142,7 @@ protected:
     void writeArrayBufferView(const DOMArrayBufferView&);
     void doWriteImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
-    void writeImageBitmap(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
+    void writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeRegExp(v8::Local<v8::String> pattern, v8::RegExp::Flags);
     void writeTransferredMessagePort(uint32_t index);
     void writeTransferredArrayBuffer(uint32_t index);
@@ -204,20 +203,19 @@ class CORE_EXPORT ScriptValueSerializer {
     WTF_MAKE_NONCOPYABLE(ScriptValueSerializer);
 protected:
     class StateBase;
-public:
-    enum Status {
+    enum class Status {
         Success,
         InputError,
         DataCloneError,
         JSException
     };
 
-    ScriptValueSerializer(SerializedScriptValueWriter&, const Transferables*, WebBlobInfoArray*, BlobDataHandleMap& blobDataHandles, v8::TryCatch&, ScriptState*);
+public:
+    ScriptValueSerializer(SerializedScriptValueWriter&, WebBlobInfoArray*, ScriptState*);
     v8::Isolate* isolate() { return m_scriptState->isolate(); }
     v8::Local<v8::Context> context() { return m_scriptState->context(); }
 
-    Status serialize(v8::Local<v8::Value>);
-    String errorMessage() { return m_errorMessage; }
+    PassRefPtr<SerializedScriptValue> serialize(v8::Local<v8::Value>, Transferables*, ExceptionState&);
 
     static String serializeWTFString(const String&);
     static String serializeNullValue();
@@ -368,12 +366,21 @@ protected:
     typedef CollectionState<v8::Map> MapState;
     typedef CollectionState<v8::Set> SetState;
 
-    // Functions used by serialization states.
     virtual StateBase* doSerializeObject(v8::Local<v8::Object>, StateBase* next);
+
+    // Marks object as having been visited by the serializer and assigns it a unique object reference ID.
+    // An object may only be greyed once.
+    void greyObject(const v8::Local<v8::Object>&);
+
+    StateBase* handleError(Status errorStatus, const String& message, StateBase*);
+
+    SerializedScriptValueWriter& writer() { return m_writer; }
 
 private:
     StateBase* doSerialize(v8::Local<v8::Value>, StateBase* next);
     StateBase* doSerializeArrayBuffer(v8::Local<v8::Value> arrayBuffer, StateBase* next);
+    void transferData(Transferables*, ExceptionState&, SerializedScriptValue*);
+
     StateBase* checkException(StateBase*);
     StateBase* writeObject(uint32_t numProperties, StateBase*);
     StateBase* writeSparseArray(uint32_t numProperties, uint32_t length, StateBase*);
@@ -385,7 +392,7 @@ private:
     {
         ASSERT(state);
         ++m_depth;
-        return checkComposite(state) ? state : handleError(InputError, "Value being cloned is either cyclic or too deeply nested.", state);
+        return checkComposite(state) ? state : handleError(Status::InputError, "Value being cloned is either cyclic or too deeply nested.", state);
     }
 
     StateBase* pop(StateBase* state)
@@ -423,23 +430,11 @@ private:
     bool appendBlobInfo(const String& uuid, const String& type, unsigned long long size, int* index);
     bool appendFileInfo(const File*, int* index);
 
-protected:
-    // Marks object as having been visited by the serializer and assigns it a unique object reference ID.
-    // An object may only be greyed once.
-    void greyObject(const v8::Local<v8::Object>&);
-
-    StateBase* handleError(Status errorStatus, const String& message, StateBase*);
-
-    SerializedScriptValueWriter& writer() { return m_writer; }
-    uint32_t nextObjectReference() const { return m_nextObjectReference; }
-
-private:
-
     void copyTransferables(const Transferables&);
 
     RefPtr<ScriptState> m_scriptState;
     SerializedScriptValueWriter& m_writer;
-    v8::TryCatch& m_tryCatch;
+    v8::TryCatch m_tryCatch;
     int m_depth;
     Status m_status;
     String m_errorMessage;
@@ -451,7 +446,7 @@ private:
     ObjectPool m_transferredOffscreenCanvas;
     uint32_t m_nextObjectReference;
     WebBlobInfoArray* m_blobInfo;
-    BlobDataHandleMap& m_blobDataHandles;
+    BlobDataHandleMap* m_blobDataHandles;
 };
 
 class ScriptValueDeserializer;
@@ -479,6 +474,10 @@ public:
 
     ScriptState* getScriptState() const { return m_scriptState.get(); }
 
+    virtual bool read(v8::Local<v8::Value>*, ScriptValueDeserializer&);
+    bool readVersion(uint32_t& version);
+    void setVersion(uint32_t);
+
 protected:
     v8::Isolate* isolate() const { return m_scriptState->isolate(); }
     v8::Local<v8::Context> context() const { return m_scriptState->context(); }
@@ -492,12 +491,6 @@ protected:
         return allocated;
     }
 
-public:
-    virtual bool read(v8::Local<v8::Value>*, ScriptValueDeserializer&);
-    bool readVersion(uint32_t& version);
-    void setVersion(uint32_t);
-
-protected:
     bool readWithTag(SerializationTag, v8::Local<v8::Value>*, ScriptValueDeserializer&);
 
     bool readTag(SerializationTag*);
@@ -550,7 +543,6 @@ private:
     bool doReadNumber(double* number);
     PassRefPtr<BlobDataHandle> getOrCreateBlobDataHandle(const String& uuid, const String& type, long long size = -1);
 
-private:
     RefPtr<ScriptState> m_scriptState;
     const uint8_t* m_buffer;
     const unsigned m_length;

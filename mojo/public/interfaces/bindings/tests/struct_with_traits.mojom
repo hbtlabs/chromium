@@ -4,11 +4,19 @@
 
 module mojo.test;
 
+// TODO(yzshen): Rename *WithTraits* types to something more readable.
+
 struct NestedStructWithTraits {
   int32 value;
 };
 
+enum EnumWithTraits {
+  VALUE_0,
+  VALUE_1
+};
+
 struct StructWithTraits {
+  EnumWithTraits f_enum;
   bool f_bool;
   uint32 f_uint32;
   uint64 f_uint64;
@@ -35,9 +43,18 @@ struct PassByValueStructWithTraitsContainer {
   PassByValueStructWithTraits f_struct;
 };
 
+struct StructWithTraitsForUniquePtrTest {
+  int32 f_int32;
+};
+
 interface TraitsTestService {
   EchoStructWithTraits(StructWithTraits s) => (StructWithTraits passed);
 
   EchoPassByValueStructWithTraits(PassByValueStructWithTraits s) =>
       (PassByValueStructWithTraits passed);
+
+  EchoEnumWithTraits(EnumWithTraits e) => (EnumWithTraits passed);
+
+  EchoStructWithTraitsForUniquePtrTest(StructWithTraitsForUniquePtrTest e) => (
+      StructWithTraitsForUniquePtrTest passed);
 };

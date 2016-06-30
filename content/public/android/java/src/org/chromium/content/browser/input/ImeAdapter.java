@@ -183,23 +183,26 @@ public class ImeAdapter {
         // not on an editable node. Even when we return null here, key events can still go
         // through ImeAdapter#dispatchKeyEvent().
         if (mTextInputType == TextInputType.NONE) {
-            // Unblock if view loses focus, no input form or content editable is focused, or render
-            // crashes, or navigates to another page, etc.
-            // Even when InputConnection methods are blocked IMM can still call this.
-            if (mInputConnection != null) mInputConnection.unblockOnUiThread();
-            mInputConnection = null;
+            setInputConnection(null);
             if (DEBUG_LOGS) Log.w(TAG, "onCreateInputConnection returns null.");
             return null;
         }
         if (mInputConnectionFactory == null) return null;
-        mInputConnection = mInputConnectionFactory.initializeAndGet(
+        setInputConnection(mInputConnectionFactory.initializeAndGet(
                 mViewEmbedder.getAttachedView(), this, mTextInputType, mTextInputFlags,
-                mLastSelectionStart, mLastSelectionEnd, outAttrs);
+                mLastSelectionStart, mLastSelectionEnd, outAttrs));
         if (DEBUG_LOGS) Log.w(TAG, "onCreateInputConnection: " + mInputConnection);
         if (mCursorAnchorInfoController != null) {
             mCursorAnchorInfoController.resetMonitoringState();
         }
         return mInputConnection;
+    }
+
+    private void setInputConnection(ChromiumBaseInputConnection inputConnection) {
+        if (mInputConnection == inputConnection) return;
+        // The previous input connection might be waiting for state update.
+        if (mInputConnection != null) mInputConnection.unblockOnUiThread();
+        mInputConnection = inputConnection;
     }
 
     /**
@@ -393,12 +396,34 @@ public class ImeAdapter {
     }
 
     /**
+     * Call this when window's focus has changed.
+     * @param gainFocus True if we're gaining focus.
+     */
+    public void onWindowFocusChanged(boolean gainFocus) {
+        if (mInputConnectionFactory != null) {
+            mInputConnectionFactory.onWindowFocusChanged(gainFocus);
+        }
+    }
+
+    /**
+     * Call this when view is detached from window
+     */
+    public void onViewDetachedFromWindow() {
+        if (mInputConnectionFactory != null) {
+            mInputConnectionFactory.onViewDetachedFromWindow();
+        }
+    }
+
+    /**
      * Call this when view's focus has changed.
      * @param gainFocus True if we're gaining focus.
      */
     public void onViewFocusChanged(boolean gainFocus) {
         if (DEBUG_LOGS) Log.w(TAG, "onViewFocusChanged: gainFocus [%b]", gainFocus);
         if (!gainFocus) resetAndHideKeyboard();
+        if (mInputConnectionFactory != null) {
+            mInputConnectionFactory.onViewFocusChanged(gainFocus);
+        }
     }
 
     /**

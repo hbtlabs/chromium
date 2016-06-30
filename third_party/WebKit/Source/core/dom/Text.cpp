@@ -415,23 +415,20 @@ static bool shouldUpdateLayoutByReattaching(const Text& textNode, LayoutText* te
     if (!textNode.textLayoutObjectIsNeeded(*textLayoutObject->style(), *textLayoutObject->parent()))
         return true;
     if (textLayoutObject->isTextFragment()) {
-        FirstLetterPseudoElement* pseudo = toLayoutTextFragment(textLayoutObject)->firstLetterPseudoElement();
-        if (pseudo && !FirstLetterPseudoElement::firstLetterTextLayoutObject(*pseudo))
-            return true;
+        // Changes of |textNode| may change first letter part, so we should
+        // reattach.
+        return toLayoutTextFragment(textLayoutObject)->firstLetterPseudoElement();
     }
     return false;
 }
 
-void Text::updateTextLayoutObject(unsigned offsetOfReplacedData, unsigned lengthOfReplacedData, RecalcStyleBehavior recalcStyleBehavior)
+void Text::updateTextLayoutObject(unsigned offsetOfReplacedData, unsigned lengthOfReplacedData)
 {
     if (!inActiveDocument())
         return;
     LayoutText* textLayoutObject = layoutObject();
     if (shouldUpdateLayoutByReattaching(*this, textLayoutObject)) {
         lazyReattachIfAttached();
-        // FIXME: Editing should be updated so this is not neccesary.
-        if (recalcStyleBehavior == DeprecatedRecalcStyleImmediatlelyForEditing)
-            document().updateStyleAndLayoutTree();
         return;
     }
     textLayoutObject->setTextWithOffset(dataImpl(), offsetOfReplacedData, lengthOfReplacedData);

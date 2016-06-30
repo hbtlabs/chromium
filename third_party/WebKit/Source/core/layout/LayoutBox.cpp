@@ -61,6 +61,7 @@
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/FloatRoundedRect.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 #include <math.h>
 
@@ -161,7 +162,7 @@ void LayoutBox::removeFloatingOrPositionedChildFromBlockLists()
 
     if (isFloating()) {
         LayoutBlockFlow* parentBlockFlow = nullptr;
-        for (LayoutObject* curr = parent(); curr && !curr->isLayoutView(); curr = curr->parent()) {
+        for (LayoutObject* curr = parent(); curr; curr = curr->parent()) {
             if (curr->isLayoutBlockFlow()) {
                 LayoutBlockFlow* currBlockFlow = toLayoutBlockFlow(curr);
                 if (!parentBlockFlow || currBlockFlow->containsFloat(this))
@@ -457,12 +458,12 @@ int LayoutBox::pixelSnappedClientHeight() const
     return snapSizeToPixel(clientHeight(), location().y() + clientTop());
 }
 
-int LayoutBox::pixelSnappedOffsetWidth() const
+int LayoutBox::pixelSnappedOffsetWidth(const Element*) const
 {
     return snapSizeToPixel(offsetWidth(), location().x() + clientLeft());
 }
 
-int LayoutBox::pixelSnappedOffsetHeight() const
+int LayoutBox::pixelSnappedOffsetHeight(const Element*) const
 {
     return snapSizeToPixel(offsetHeight(), location().y() + clientTop());
 }
@@ -1555,9 +1556,6 @@ PaintInvalidationReason LayoutBox::invalidatePaintIfNeeded(const PaintInvalidati
 
     PaintInvalidationReason reason = LayoutBoxModelObject::invalidatePaintIfNeeded(paintInvalidationState);
 
-    if (!view()->doingFullPaintInvalidation() && !isFullPaintInvalidationReason(reason))
-        invalidatePaintForOverflowIfNeeded();
-
     if (PaintLayerScrollableArea* area = getScrollableArea())
         area->invalidatePaintOfScrollControlsIfNeeded(paintInvalidationState);
 
@@ -2076,7 +2074,10 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ances
     // We are now in our parent container's coordinate space.  Apply our transform to obtain a bounding box
     // in the parent's coordinate space that encloses us.
     if (hasLayer() && layer()->transform()) {
-        rect = LayoutRect(layer()->transform()->mapRect(pixelSnappedIntRect(rect)));
+        // Use enclosingIntRect because we cannot properly compute pixel snapping for painted elements within
+        // the transform since we don't know the desired subpixel accumulation at this point, and the transform may
+        // include a scale.
+        rect = LayoutRect(layer()->transform()->mapRect(enclosingIntRect(rect)));
         topLeft = rect.location();
         topLeft.move(locationOffset());
     }
@@ -2277,7 +2278,7 @@ LayoutUnit LayoutBox::fillAvailableMeasure(LayoutUnit availableLogicalWidth, Lay
 LayoutUnit LayoutBox::computeIntrinsicLogicalWidthUsing(const Length& logicalWidthLength, LayoutUnit availableLogicalWidth, LayoutUnit borderAndPadding) const
 {
     if (logicalWidthLength.type() == FillAvailable)
-        return fillAvailableMeasure(availableLogicalWidth);
+        return std::max(borderAndPadding, fillAvailableMeasure(availableLogicalWidth));
 
     LayoutUnit minLogicalWidth;
     LayoutUnit maxLogicalWidth;
@@ -2624,8 +2625,12 @@ LayoutUnit LayoutBox::computeLogicalHeightWithoutLayout() const
 LayoutUnit LayoutBox::computeLogicalHeightUsing(SizeType heightType, const Length& height, LayoutUnit intrinsicContentHeight) const
 {
     LayoutUnit logicalHeight = computeContentAndScrollbarLogicalHeightUsing(heightType, height, intrinsicContentHeight);
-    if (logicalHeight != -1)
-        logicalHeight = adjustBorderBoxLogicalHeightForBoxSizing(logicalHeight);
+    if (logicalHeight != -1) {
+        if (height.isSpecified())
+            logicalHeight = adjustBorderBoxLogicalHeightForBoxSizing(logicalHeight);
+        else
+            logicalHeight += borderAndPaddingLogicalHeight();
+    }
     return logicalHeight;
 }
 
@@ -2634,7 +2639,12 @@ LayoutUnit LayoutBox::computeContentLogicalHeight(SizeType heightType, const Len
     LayoutUnit heightIncludingScrollbar = computeContentAndScrollbarLogicalHeightUsing(heightType, height, intrinsicContentHeight);
     if (heightIncludingScrollbar == -1)
         return LayoutUnit(-1);
-    return std::max(LayoutUnit(), adjustContentBoxLogicalHeightForBoxSizing(heightIncludingScrollbar) - scrollbarLogicalHeight());
+    LayoutUnit adjusted = heightIncludingScrollbar;
+    if (height.isSpecified()) {
+        // Keywords don't get adjusted for box-sizing
+        adjusted = adjustContentBoxLogicalHeightForBoxSizing(heightIncludingScrollbar);
+    }
+    return std::max(LayoutUnit(), adjusted - scrollbarLogicalHeight());
 }
 
 LayoutUnit LayoutBox::computeIntrinsicLogicalContentHeightUsing(const Length& logicalHeightLength, LayoutUnit intrinsicContentHeight, LayoutUnit borderAndPadding) const
@@ -2731,17 +2741,16 @@ LayoutUnit LayoutBox::computePercentageLogicalHeight(const Length& height) const
         availableHeight = containingBlockChild->containingBlockLogicalWidthForContent();
     } else if (stretchedFlexHeight != LayoutUnit(-1)) {
         availableHeight = stretchedFlexHeight;
-    } else if (hasOverrideContainingBlockLogicalHeight()) {
+    } else if (hasOverrideContainingBlockLogicalHeight() && !isOutOfFlowPositionedWithSpecifiedHeight) {
         availableHeight = overrideContainingBlockContentLogicalHeight();
+    } else if (cb->isGridItem() && cb->hasOverrideLogicalContentHeight()) {
+        availableHeight = cb->overrideLogicalContentHeight();
     } else if (cbstyle.logicalHeight().isFixed()) {
         LayoutUnit contentBoxHeight = cb->adjustContentBoxLogicalHeightForBoxSizing(cbstyle.logicalHeight().value());
         availableHeight = cb->constrainContentBoxLogicalHeightByMinMax(
             contentBoxHeight - cb->scrollbarLogicalHeight(), LayoutUnit(-1)).clampNegativeToZero();
-        if (cb->isTableCell()) {
+        if (cb->isTableCell())
             includeBorderPadding = true;
-            // We're sizing content to the height from the cell's style so don't involve the intrinsic padding used to align the content.
-            availableHeight -= cb->computedCSSPaddingBefore() + cb->computedCSSPaddingAfter() + cb->borderBefore() + cb->borderAfter();
-        }
     } else if (cb->isTableCell()) {
         if (!skippedAutoHeightContainingBlock) {
             // Table cells violate what the CSS spec says to do with heights. Basically we
@@ -2907,8 +2916,14 @@ LayoutUnit LayoutBox::computeReplacedLogicalHeightUsing(SizeType sizeType, const
         LayoutObject* cb = isOutOfFlowPositioned() ? container() : containingBlock();
         while (cb->isAnonymous())
             cb = cb->containingBlock();
-        if (cb->isLayoutBlock())
-            toLayoutBlock(cb)->addPercentHeightDescendant(const_cast<LayoutBox*>(this));
+        LayoutUnit stretchedFlexHeight(-1);
+        if (cb->isLayoutBlock()) {
+            LayoutBlock* block = toLayoutBlock(cb);
+            block->addPercentHeightDescendant(const_cast<LayoutBox*>(this));
+            if (block->isFlexItem())
+                stretchedFlexHeight = toLayoutFlexibleBox(block->parent())->childLogicalHeightForPercentageResolution(*block);
+
+        }
 
         if (cb->isOutOfFlowPositioned() && cb->style()->height().isAuto() && !(cb->style()->top().isAuto() || cb->style()->bottom().isAuto())) {
             ASSERT_WITH_SECURITY_IMPLICATION(cb->isLayoutBlock());
@@ -2926,6 +2941,8 @@ LayoutUnit LayoutBox::computeReplacedLogicalHeightUsing(SizeType sizeType, const
         LayoutUnit availableHeight;
         if (isOutOfFlowPositioned()) {
             availableHeight = containingBlockLogicalHeightForPositioned(toLayoutBoxModelObject(cb));
+        } else if (stretchedFlexHeight != -1) {
+            availableHeight = stretchedFlexHeight;
         } else {
             availableHeight = containingBlockLogicalHeightForContent(IncludeMarginBorderPadding);
             // It is necessary to use the border-box to match WinIE's broken
@@ -3300,11 +3317,15 @@ void LayoutBox::computePositionedLogicalWidthUsing(SizeType widthSizeType, Lengt
     const Length& logicalLeft, const Length& logicalRight, const Length& marginLogicalLeft,
     const Length& marginLogicalRight, LogicalExtentComputedValues& computedValues) const
 {
+    LayoutUnit logicalWidthValue;
+
     ASSERT(widthSizeType == MinSize || widthSizeType == MainOrPreferredSize || !logicalWidth.isAuto());
     if (widthSizeType == MinSize && logicalWidth.isAuto())
-        logicalWidth = Length(0, Fixed);
+        logicalWidthValue = LayoutUnit();
     else if (logicalWidth.isIntrinsic())
-        logicalWidth = Length(computeIntrinsicLogicalWidthUsing(logicalWidth, containerLogicalWidth, bordersPlusPadding) - bordersPlusPadding, Fixed);
+        logicalWidthValue = computeIntrinsicLogicalWidthUsing(logicalWidth, containerLogicalWidth, bordersPlusPadding) - bordersPlusPadding;
+    else
+        logicalWidthValue = adjustContentBoxLogicalWidthForBoxSizing(valueForLength(logicalWidth, containerLogicalWidth));
 
     // 'left' and 'right' cannot both be 'auto' because one would of been
     // converted to the static position already
@@ -3316,7 +3337,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(SizeType widthSizeType, Lengt
 
     const LayoutUnit containerRelativeLogicalWidth = containingBlockLogicalWidthForPositioned(containerBlock, false);
 
-    bool logicalWidthIsAuto = logicalWidth.isIntrinsicOrAuto();
+    bool logicalWidthIsAuto = logicalWidth.isAuto();
     bool logicalLeftIsAuto = logicalLeft.isAuto();
     bool logicalRightIsAuto = logicalRight.isAuto();
     LayoutUnit& marginLogicalLeftValue = style()->isLeftToRightDirection() ? computedValues.m_margins.m_start : computedValues.m_margins.m_end;
@@ -3337,7 +3358,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(SizeType widthSizeType, Lengt
         // NOTE:  It is not necessary to solve for 'right' in the over constrained
         // case because the value is not used for any further calculations.
 
-        computedValues.m_extent = adjustContentBoxLogicalWidthForBoxSizing(valueForLength(logicalWidth, containerLogicalWidth));
+        computedValues.m_extent = logicalWidthValue;
 
         const LayoutUnit availableSpace = containerLogicalWidth - (logicalLeftValue + computedValues.m_extent + logicalRightValue + bordersPlusPadding);
 
@@ -3435,7 +3456,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(SizeType widthSizeType, Lengt
             computedValues.m_extent = shrinkToFitLogicalWidth(availableSpace, bordersPlusPadding);
         } else if (logicalLeftIsAuto && !logicalWidthIsAuto && !logicalRightIsAuto) {
             // RULE 4: (solve for left)
-            computedValues.m_extent = adjustContentBoxLogicalWidthForBoxSizing(valueForLength(logicalWidth, containerLogicalWidth));
+            computedValues.m_extent = logicalWidthValue;
             logicalLeftValue = availableSpace - computedValues.m_extent;
         } else if (!logicalLeftIsAuto && logicalWidthIsAuto && !logicalRightIsAuto) {
             // RULE 5: (solve for width)
@@ -3445,7 +3466,7 @@ void LayoutBox::computePositionedLogicalWidthUsing(SizeType widthSizeType, Lengt
                 computedValues.m_extent = std::max(LayoutUnit(), availableSpace);
         } else if (!logicalLeftIsAuto && !logicalWidthIsAuto && logicalRightIsAuto) {
             // RULE 6: (no need solve for right)
-            computedValues.m_extent = adjustContentBoxLogicalWidthForBoxSizing(valueForLength(logicalWidth, containerLogicalWidth));
+            computedValues.m_extent = logicalWidthValue;
         }
     }
 
@@ -4197,7 +4218,7 @@ void LayoutBox::addLayoutOverflow(const LayoutRect& rect)
     }
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new BoxOverflowModel(clientBox, borderBoxRect()));
+        m_overflow = wrapUnique(new BoxOverflowModel(clientBox, borderBoxRect()));
 
     m_overflow->addLayoutOverflow(overflowRect);
 }
@@ -4212,7 +4233,7 @@ void LayoutBox::addSelfVisualOverflow(const LayoutRect& rect)
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new BoxOverflowModel(noOverflowRect(), borderBox));
+        m_overflow = wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
 
     m_overflow->addSelfVisualOverflow(rect);
 }
@@ -4230,7 +4251,7 @@ void LayoutBox::addContentsVisualOverflow(const LayoutRect& rect)
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new BoxOverflowModel(noOverflowRect(), borderBox));
+        m_overflow = wrapUnique(new BoxOverflowModel(noOverflowRect(), borderBox));
     m_overflow->addContentsVisualOverflow(rect);
 }
 
@@ -4247,56 +4268,10 @@ void LayoutBox::clearLayoutOverflow()
     m_overflow->setLayoutOverflow(noOverflowRect());
 }
 
-static bool logicalWidthIsResolvable(const LayoutBox& layoutBox)
-{
-    const LayoutBox* box = &layoutBox;
-    while (!box->isLayoutView() && !box->isOutOfFlowPositioned()
-        && (box->style()->logicalWidth().isAuto() || box->isAnonymousBlock())
-        && !box->hasOverrideContainingBlockLogicalWidth())
-        box = box->containingBlock();
-
-    if (box->style()->logicalWidth().isFixed())
-        return true;
-    if (box->isLayoutView())
-        return true;
-    // The size of the containing block of an absolutely positioned element is always definite with respect to that
-    // element (http://dev.w3.org/csswg/css-sizing-3/#definite).
-    if (box->isOutOfFlowPositioned())
-        return true;
-    if (box->hasOverrideContainingBlockLogicalWidth())
-        return box->overrideContainingBlockContentLogicalWidth() != -1;
-    if (box->style()->logicalWidth().hasPercent())
-        return logicalWidthIsResolvable(*box->containingBlock());
-
-    return false;
-}
-
-bool LayoutBox::hasDefiniteLogicalWidth() const
-{
-    return logicalWidthIsResolvable(*this);
-}
-
 bool LayoutBox::percentageLogicalHeightIsResolvable() const
 {
     Length fakeLength(100, Percent);
     return computePercentageLogicalHeight(fakeLength) != -1;
-}
-
-bool LayoutBox::hasDefiniteLogicalHeight() const
-{
-    const Length& logicalHeight = style()->logicalHeight();
-    if (logicalHeight.isIntrinsicOrAuto())
-        return false;
-    if (logicalHeight.isFixed())
-        return true;
-    // The size of the containing block of an absolutely positioned element is always definite with respect to that
-    // element (http://dev.w3.org/csswg/css-sizing-3/#definite).
-    if (isOutOfFlowPositioned())
-        return true;
-    if (hasOverrideContainingBlockLogicalHeight())
-        return overrideContainingBlockContentLogicalHeight() != -1;
-
-    return percentageLogicalHeightIsResolvable();
 }
 
 bool LayoutBox::hasUnsplittableScrollingOverflow() const
@@ -4480,14 +4455,14 @@ LayoutRect LayoutBox::visualOverflowRect() const
     return unionRect(m_overflow->selfVisualOverflowRect(), m_overflow->contentsVisualOverflowRect());
 }
 
-LayoutUnit LayoutBox::offsetLeft() const
+LayoutUnit LayoutBox::offsetLeft(const Element* parent) const
 {
-    return adjustedPositionRelativeToOffsetParent(topLeftLocation()).x();
+    return adjustedPositionRelativeTo(topLeftLocation(), parent).x();
 }
 
-LayoutUnit LayoutBox::offsetTop() const
+LayoutUnit LayoutBox::offsetTop(const Element* parent) const
 {
-    return adjustedPositionRelativeToOffsetParent(topLeftLocation()).y();
+    return adjustedPositionRelativeTo(topLeftLocation(), parent).y();
 }
 
 LayoutPoint LayoutBox::flipForWritingModeForChild(const LayoutBox* child, const LayoutPoint& point) const
@@ -4705,7 +4680,46 @@ void LayoutBox::logicalExtentAfterUpdatingLogicalWidth(const LayoutUnit& newLogi
     setMarginRight(oldMarginRight);
 }
 
-inline bool LayoutBox::mustInvalidateFillLayersPaintOnWidthChange(const FillLayer& layer) const
+bool LayoutBox::mustInvalidateFillLayersPaintOnHeightChange(const FillLayer& layer) const
+{
+    // Nobody will use multiple layers without wanting fancy positioning.
+    if (layer.next())
+        return true;
+
+    // Make sure we have a valid image.
+    StyleImage* img = layer.image();
+    if (!img || !img->canRender())
+        return false;
+
+    if (layer.repeatY() != RepeatFill && layer.repeatY() != NoRepeatFill)
+        return true;
+
+    // TODO(alancutter): Make this work correctly for calc lengths.
+    if (layer.yPosition().hasPercent() && !layer.yPosition().isZero())
+        return true;
+
+    if (layer.backgroundYOrigin() != TopEdge)
+        return true;
+
+    EFillSizeType sizeType = layer.sizeType();
+
+    if (sizeType == Contain || sizeType == Cover)
+        return true;
+
+    if (sizeType == SizeLength) {
+        // TODO(alancutter): Make this work correctly for calc lengths.
+        if (layer.sizeLength().height().hasPercent() && !layer.sizeLength().height().isZero())
+            return true;
+        if (img->isGeneratedImage() && layer.sizeLength().height().isAuto())
+            return true;
+    } else if (img->usesImageContainerSize()) {
+        return true;
+    }
+
+    return false;
+}
+
+bool LayoutBox::mustInvalidateFillLayersPaintOnWidthChange(const FillLayer& layer) const
 {
     // Nobody will use multiple layers without wanting fancy positioning.
     if (layer.next())

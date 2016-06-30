@@ -143,12 +143,21 @@ cr.define('settings_about_page', function() {
 
     suite('AboutPageTest', function() {
       var page = null;
-      var browserProxy = null;
+
+      /** @type {?settings.TestAboutPageBrowserProxy} */
+      var aboutBrowserProxy = null;
+
+      /** @type {?settings.TestLifetimeBrowserProxy} */
+      var lifetimeBrowserProxy = null;
+
       var SPINNER_ICON = 'chrome://resources/images/throbber_small.svg';
 
       setup(function() {
-        browserProxy = new TestAboutPageBrowserProxy();
-        settings.AboutPageBrowserProxyImpl.instance_ = browserProxy;
+        lifetimeBrowserProxy = new settings.TestLifetimeBrowserProxy();
+        settings.LifetimeBrowserProxyImpl.instance_ = lifetimeBrowserProxy;
+
+        aboutBrowserProxy = new TestAboutPageBrowserProxy();
+        settings.AboutPageBrowserProxyImpl.instance_ = aboutBrowserProxy;
         return initNewPage();
       });
 
@@ -163,48 +172,56 @@ cr.define('settings_about_page', function() {
 
       /** @return {!Promise} */
       function initNewPage() {
-        browserProxy.reset();
+        aboutBrowserProxy.reset();
+        lifetimeBrowserProxy.reset();
         PolymerTest.clearBody();
         page = document.createElement('settings-about-page');
         document.body.appendChild(page);
-        return browserProxy.whenCalled('refreshUpdateStatus');
+        return aboutBrowserProxy.whenCalled('refreshUpdateStatus');
       }
 
       /**
-       * Test that the status icon updates according to incoming
-       * 'update-status-changed' events.
+       * Test that the status icon and status message update according to
+       * incoming 'update-status-changed' events.
        */
-      test('IconUpdates', function() {
+      test('IconAndMessageUpdates', function() {
         var icon = page.$$('iron-icon');
         assertTrue(!!icon);
+        var statusMessageEl = page.$.updateStatusMessage;
+        var previousMessageText = statusMessageEl.textContent;
 
         fireStatusChanged(UpdateStatus.CHECKING);
         assertEquals(SPINNER_ICON, icon.src);
         assertEquals(null, icon.getAttribute('icon'));
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
         fireStatusChanged(UpdateStatus.UPDATING);
         assertEquals(SPINNER_ICON, icon.src);
         assertEquals(null, icon.getAttribute('icon'));
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
         fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
         assertEquals(null, icon.src);
         assertEquals('settings:check-circle', icon.icon);
-
-        fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
-        assertEquals(null, icon.src);
-        assertEquals('settings:check-circle', icon.icon);
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
         fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
         assertEquals(null, icon.src);
         assertEquals('cr:domain', icon.icon);
+        assertEquals(0, statusMessageEl.textContent.trim().length);
 
         fireStatusChanged(UpdateStatus.FAILED);
         assertEquals(null, icon.src);
         assertEquals('settings:error', icon.icon);
+        assertEquals(0, statusMessageEl.textContent.trim().length);
 
         fireStatusChanged(UpdateStatus.DISABLED);
         assertEquals(null, icon.src);
         assertEquals(null, icon.getAttribute('icon'));
+        assertEquals(0, statusMessageEl.textContent.trim().length);
       });
 
       /**
@@ -285,6 +302,18 @@ cr.define('settings_about_page', function() {
         });
       });
 
+      test('Relaunch', function() {
+        var relaunch = page.$.relaunch;
+        assertTrue(!!relaunch);
+        assertTrue(relaunch.hidden);
+
+        fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
+        assertFalse(relaunch.hidden);
+
+        MockInteractions.tap(relaunch);
+        return lifetimeBrowserProxy.whenCalled('relaunch');
+      });
+
       if (cr.isChromeOS) {
         /**
          * Test that all buttons update according to incoming
@@ -345,8 +374,9 @@ cr.define('settings_about_page', function() {
          * is more stable than current channel.
          */
         test('ButtonsUpdate_BetaToStable', function() {
-          browserProxy.setChannels(BrowserChannel.BETA, BrowserChannel.STABLE);
-          browserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
+          aboutBrowserProxy.setChannels(
+              BrowserChannel.BETA, BrowserChannel.STABLE);
+          aboutBrowserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
 
           return initNewPage().then(function() {
             assertTrue(!!page.$.relaunch);
@@ -354,6 +384,9 @@ cr.define('settings_about_page', function() {
 
             assertTrue(page.$.relaunch.hidden);
             assertFalse(page.$.relaunchAndPowerwash.hidden);
+
+            MockInteractions.tap(page.$.relaunchAndPowerwash);
+            return lifetimeBrowserProxy.whenCalled('factoryReset');
           });
         });
 
@@ -363,8 +396,9 @@ cr.define('settings_about_page', function() {
          * is less stable than current channel.
          */
         test('ButtonsUpdate_StableToBeta', function() {
-          browserProxy.setChannels(BrowserChannel.STABLE, BrowserChannel.BETA);
-          browserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
+          aboutBrowserProxy.setChannels(
+              BrowserChannel.STABLE, BrowserChannel.BETA);
+          aboutBrowserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
 
           return initNewPage().then(function() {
             assertTrue(!!page.$.relaunch);
@@ -372,6 +406,9 @@ cr.define('settings_about_page', function() {
 
             assertFalse(page.$.relaunch.hidden);
             assertTrue(page.$.relaunchAndPowerwash.hidden);
+
+            MockInteractions.tap(page.$.relaunch);
+            return lifetimeBrowserProxy.whenCalled('relaunch');
           });
         });
 
@@ -381,8 +418,9 @@ cr.define('settings_about_page', function() {
          * <settings-channel-switcher-dialog>).
          */
         test('ButtonsUpdate_TargetChannelChangedEvent', function() {
-          browserProxy.setChannels(BrowserChannel.BETA, BrowserChannel.BETA);
-          browserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
+          aboutBrowserProxy.setChannels(
+              BrowserChannel.BETA, BrowserChannel.BETA);
+          aboutBrowserProxy.setUpdateStatus(UpdateStatus.NEARLY_UPDATED);
 
           return initNewPage().then(function() {
             assertFalse(page.$.relaunch.hidden);
@@ -408,7 +446,7 @@ cr.define('settings_about_page', function() {
            * @return {!Promise}
            */
           function checkRegulatoryInfo(isShowing) {
-            return browserProxy.whenCalled('getRegulatoryInfo').then(
+            return aboutBrowserProxy.whenCalled('getRegulatoryInfo').then(
                 function() {
                   var regulatoryInfoEl = page.$.regulatoryInfo;
                   assertTrue(!!regulatoryInfoEl);
@@ -425,7 +463,7 @@ cr.define('settings_about_page', function() {
 
           return checkRegulatoryInfo(false).then(function() {
             regulatoryInfo = {text: 'foo', url: 'bar'};
-            browserProxy.setRegulatoryInfo(regulatoryInfo);
+            aboutBrowserProxy.setRegulatoryInfo(regulatoryInfo);
             return initNewPage();
           }).then(function() {
             return checkRegulatoryInfo(true);
@@ -468,7 +506,7 @@ cr.define('settings_about_page', function() {
       test('GetHelp', function() {
         assertTrue(!!page.$.help);
         MockInteractions.tap(page.$.help);
-        return browserProxy.whenCalled('openHelpPage');
+        return aboutBrowserProxy.whenCalled('openHelpPage');
       });
     });
   }

@@ -9,15 +9,17 @@
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
+#include "media/mojo/interfaces/image_capture.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "platform/AsyncMethodRunner.h"
-#include "public/platform/modules/imagecapture/image_capture.mojom-blink.h"
+#include <memory>
 
 namespace blink {
 
 class ExceptionState;
 class MediaStreamTrack;
+class PhotoSettings;
 class WebImageCaptureFrameGrabber;
 
 // TODO(mcasas): Consideradding a LayoutTest checking that this class is not
@@ -46,6 +48,8 @@ public:
 
     ScriptPromise getPhotoCapabilities(ScriptState*, ExceptionState&);
 
+    ScriptPromise setOptions(ScriptState*, const PhotoSettings&, ExceptionState&);
+
     ScriptPromise takePhoto(ScriptState*, ExceptionState&);
 
     ScriptPromise grabFrame(ScriptState*, ExceptionState&);
@@ -55,13 +59,14 @@ public:
 private:
     ImageCapture(ExecutionContext*, MediaStreamTrack*);
 
-    void onCapabilities(ScriptPromiseResolver*, mojom::blink::PhotoCapabilitiesPtr);
+    void onCapabilities(ScriptPromiseResolver*, media::mojom::blink::PhotoCapabilitiesPtr);
+    void onSetOptions(ScriptPromiseResolver*, bool);
     void onTakePhoto(ScriptPromiseResolver*, const String& mimeType, mojo::WTFArray<uint8_t> data);
     void onServiceConnectionError();
 
     Member<MediaStreamTrack> m_streamTrack;
-    OwnPtr<WebImageCaptureFrameGrabber> m_frameGrabber;
-    mojom::blink::ImageCapturePtr m_service;
+    std::unique_ptr<WebImageCaptureFrameGrabber> m_frameGrabber;
+    media::mojom::blink::ImageCapturePtr m_service;
 
     HeapHashSet<Member<ScriptPromiseResolver>> m_serviceRequests;
 };

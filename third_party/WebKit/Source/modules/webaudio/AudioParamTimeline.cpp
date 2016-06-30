@@ -225,6 +225,11 @@ void AudioParamTimeline::setValueCurveAtTime(DOMFloat32Array* curve, double time
     }
 
     insertEvent(ParamEvent::createSetValueCurveEvent(curve, time, duration), exceptionState);
+
+    // Insert a setValueAtTime event too to establish an event so that all
+    // following events will process from the end of the curve instead of the
+    // beginning.
+    insertEvent(ParamEvent::createSetValueEvent(curve->data()[curve->length() - 1], time + duration), exceptionState);
 }
 
 void AudioParamTimeline::insertEvent(const ParamEvent& event, ExceptionState& exceptionState)
@@ -332,7 +337,7 @@ void AudioParamTimeline::cancelScheduledValues(double startTime, ExceptionState&
     }
 }
 
-float AudioParamTimeline::valueForContextTime(AudioDestinationHandler& audioDestination, float defaultValue, bool& hasValue)
+float AudioParamTimeline::valueForContextTime(AudioDestinationHandler& audioDestination, float defaultValue, bool& hasValue, float minValue, float maxValue)
 {
     {
         MutexTryLocker tryLocker(m_eventsLock);
@@ -347,7 +352,7 @@ float AudioParamTimeline::valueForContextTime(AudioDestinationHandler& audioDest
     double sampleRate = audioDestination.sampleRate();
     size_t startFrame = audioDestination.currentSampleFrame();
     double controlRate = sampleRate / AudioHandler::ProcessingSizeInFrames; // one parameter change per render quantum
-    value = valuesForFrameRange(startFrame, startFrame + 1, defaultValue, &value, 1, sampleRate, controlRate);
+    value = valuesForFrameRange(startFrame, startFrame + 1, defaultValue, &value, 1, sampleRate, controlRate, minValue, maxValue);
 
     hasValue = true;
     return value;
@@ -360,7 +365,9 @@ float AudioParamTimeline::valuesForFrameRange(
     float* values,
     unsigned numberOfValues,
     double sampleRate,
-    double controlRate)
+    double controlRate,
+    float minValue,
+    float maxValue)
 {
     // We can't contend the lock in the realtime audio thread.
     MutexTryLocker tryLocker(m_eventsLock);
@@ -372,7 +379,13 @@ float AudioParamTimeline::valuesForFrameRange(
         return defaultValue;
     }
 
-    return valuesForFrameRangeImpl(startFrame, endFrame, defaultValue, values, numberOfValues, sampleRate, controlRate);
+    float lastValue = valuesForFrameRangeImpl(startFrame, endFrame, defaultValue, values, numberOfValues, sampleRate, controlRate);
+
+    // Clamp the values now to the nominal range
+    for (unsigned k = 0; k < numberOfValues; ++k)
+        values[k] = clampTo(values[k], minValue, maxValue);
+
+    return lastValue;
 }
 
 float AudioParamTimeline::valuesForFrameRangeImpl(
@@ -394,6 +407,31 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
         for (unsigned i = 0; i < numberOfValues; ++i)
             values[i] = defaultValue;
         return defaultValue;
+    }
+
+    // Optimize the case where the last event is in the past.
+    if (m_events.size() > 0) {
+        ParamEvent& lastEvent = m_events[m_events.size() - 1];
+        ParamEvent::Type lastEventType = lastEvent.getType();
+        double lastEventTime = lastEvent.time();
+        double currentTime = startFrame / sampleRate;
+
+        // If the last event is in the past and the event has ended, then we can
+        // just propagate the same value.  Except for SetTarget which lasts
+        // "forever".  SetValueCurve also has an explicit SetValue at the end of
+        // the curve, so we don't need to worry that SetValueCurve time is a
+        // start time, not an end time.
+        if (lastEventTime < currentTime && lastEventType != ParamEvent::SetTarget) {
+            // The event has finished, so just copy the default value out.
+            // Since all events are now also in the past, we can just remove all
+            // timeline events too because |defaultValue| has the expected
+            // value.
+            for (unsigned i = 0; i < numberOfValues; ++i)
+                values[i] = defaultValue;
+            m_smoothedValue = defaultValue;
+            m_events.clear();
+            return defaultValue;
+        }
     }
 
     // Maintain a running time (frame) and index for writing the values buffer.
@@ -431,6 +469,19 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
         ParamEvent* nextEvent = i < n - 1 ? &(m_events[i + 1]) : 0;
 
         // Wait until we get a more recent event.
+        //
+        // WARNING: due to round-off it might happen that nextEvent->time() is
+        // just larger than currentFrame/sampleRate.  This means that we will end
+        // up running the |event| again.  The code below had better be prepared
+        // for this case!  What should happen is the fillToFrame should be 0 so
+        // that while the event is actually run again, nothing actually gets
+        // computed, and we move on to the next event.
+        //
+        // An example of this case is setValueCurveAtTime.  The time at which
+        // setValueCurveAtTime ends (and the setValueAtTime begins) might be
+        // just past currentTime/sampleRate.  Then setValueCurveAtTime will be
+        // processed again before advancing to setValueAtTime.  The number of
+        // frames to be processed should be zero in this case.
         if (nextEvent && nextEvent->time() < currentFrame / sampleRate) {
             // But if the current event is a SetValue event and the event time is between
             // currentFrame - 1 and curentFrame (in time). we don't want to skip it.  If we do skip
@@ -875,7 +926,7 @@ float AudioParamTimeline::valuesForFrameRangeImpl(
                         values[writeIndex] = value;
 
                     // Re-adjust current time
-                    currentFrame = nextEventFillToFrame;
+                    currentFrame += nextEventFillToFrame;
 
                     break;
                 }

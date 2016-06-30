@@ -51,7 +51,6 @@
 
 using blink::protocol::Array;
 using blink::protocol::Debugger::CallFrame;
-using blink::protocol::Debugger::CollectionEntry;
 using blink::protocol::Debugger::FunctionDetails;
 using blink::protocol::Debugger::GeneratorObjectDetails;
 using blink::protocol::Runtime::PropertyDescriptor;
@@ -94,7 +93,7 @@ std::unique_ptr<InjectedScript> InjectedScript::create(InspectedContext* inspect
     v8::Local<v8::Value> info[] = { scriptHostWrapper, windowGlobal, v8::Number::New(isolate, inspectedContext->contextId()) };
     v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     v8::Local<v8::Value> injectedScriptValue;
-    if (!function->Call(context, windowGlobal, WTF_ARRAY_LENGTH(info), info).ToLocal(&injectedScriptValue))
+    if (!function->Call(context, windowGlobal, PROTOCOL_ARRAY_LENGTH(info), info).ToLocal(&injectedScriptValue))
         return nullptr;
     if (!injectedScriptValue->IsObject())
         return nullptr;
@@ -405,14 +404,8 @@ bool InjectedScript::Scope::initialize()
 
 bool InjectedScript::Scope::installCommandLineAPI()
 {
-    DCHECK(m_injectedScript && !m_context.IsEmpty() && m_global.IsEmpty());
-    m_extensionPrivate = V8Debugger::scopeExtensionPrivate(m_debugger->isolate());
-    v8::Local<v8::Object> global = m_context->Global();
-    if (!global->SetPrivate(m_context, m_extensionPrivate, m_injectedScript->commandLineAPI()).FromMaybe(false)) {
-        *m_errorString = "Internal error";
-        return false;
-    }
-    m_global = global;
+    DCHECK(m_injectedScript && !m_context.IsEmpty() && !m_commandLineAPIScope.get());
+    m_commandLineAPIScope.reset(new V8Console::CommandLineAPIScope(m_context, m_injectedScript->commandLineAPI(), m_context->Global()));
     return true;
 }
 
@@ -420,7 +413,7 @@ void InjectedScript::Scope::ignoreExceptionsAndMuteConsole()
 {
     DCHECK(!m_ignoreExceptionsAndMuteConsole);
     m_ignoreExceptionsAndMuteConsole = true;
-    m_debugger->client()->muteConsole();
+    m_debugger->muteConsole();
     m_previousPauseOnExceptionsState = setPauseOnExceptionsState(V8DebuggerImpl::DontPauseOnExceptions);
 }
 
@@ -443,12 +436,7 @@ void InjectedScript::Scope::pretendUserGesture()
 
 void InjectedScript::Scope::cleanup()
 {
-    v8::Local<v8::Object> global;
-    if (m_global.ToLocal(&global)) {
-        DCHECK(!m_context.IsEmpty());
-        global->DeletePrivate(m_context, m_extensionPrivate);
-        m_global = v8::MaybeLocal<v8::Object>();
-    }
+    m_commandLineAPIScope.reset();
     if (!m_context.IsEmpty()) {
         m_context->Exit();
         m_context.Clear();
@@ -459,7 +447,7 @@ InjectedScript::Scope::~Scope()
 {
     if (m_ignoreExceptionsAndMuteConsole) {
         setPauseOnExceptionsState(m_previousPauseOnExceptionsState);
-        m_debugger->client()->unmuteConsole();
+        m_debugger->unmuteConsole();
     }
     if (m_userGesture)
         m_debugger->client()->endUserGesture();

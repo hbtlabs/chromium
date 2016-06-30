@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">ไม่มีรายการถัดไป</translation>
 <translation id="1157782847298808853">ความช่วยเหลือเกี่ยวกับแป้นพิมพ์</translation>
 <translation id="1157843803349774103">ช่องตัวเลือกรวม <ph name="NAME" /> <ph name="VALUE" /></translation>
+<translation id="1161762950103988776">กระโดด</translation>
 <translation id="1167230103353892028">รายการเมนู <ph name="NAME" /> ที่มีเมนูย่อย</translation>
 <translation id="1177863135347784049">ที่กำหนดเอง</translation>
 <translation id="1188858454923323853">ส่วนเสริม</translation>
+<translation id="1201402288615127009">ถัดไป</translation>
 <translation id="1206619573307042055">ตัวอักษรวิ่ง</translation>
 <translation id="1213216066620407844">ChromeVox - ทำให้ Chrome สามารถพูดได้</translation>
 <translation id="1229276918471378188">การข้ามก่อนหน้า</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">ข้อผิดพลาดทางไวยากรณ์</translation>
 <translation id="257674075312929031">กลุ่ม</translation>
 <translation id="2582407057977008361">ส่วนที่ไม่เกี่ยวข้อง</translation>
-<translation id="2589102159832527089">หน้าเว็บนี้มีข้อความที่ดึงออกมาจากไฟล์ PDF โดยอัตโนมัติ &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; &lt;a href="<ph name="URL" />"&gt;คลิกที่นี่เพื่อดูต้นฉบับ&lt;/a&gt;</translation>
 <translation id="2606210917827248971">ที่มี {COUNT,plural, =1{# รายการ}other{# รายการ}}</translation>
 <translation id="2614981083756825552">รูปแบบ ML คณิตศาสตร์</translation>
 <translation id="2626530649491650971">คลิกได้</translation>
@@ -245,6 +246,7 @@
         "vi": "เวียดนาม",
         "zh": "จีน",
         "zh_TW": "จีน (อักษรฮั่นตัวเต็ม)"}</translation>
+<translation id="335581015389089642">คำพูด</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{เครื่องหมายบวก}other{# เครื่องหมายบวก}}</translation>
 <translation id="338583716107319301">ตัวแยก</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">ช่องว่าง</translation>
 <translation id="6142308968191113180">ส่วนหัวระดับ 4</translation>
 <translation id="6169420925157477918">ภาพมีคำอธิบายยาว</translation>
-<translation id="6172087735260766220">ไม่สามารถเข้าถึงข้อความที่ควรเข้าถึงได้จาก PDF ที่ป้องกันการคัดลอก</translation>
 <translation id="6186305613600865047">ไปที่ส่วนล่างสุดของหน้าเว็บ</translation>
 <translation id="6193330012414963395">AM PM</translation>
 <translation id="622484624075952240">ลง</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">แท็บ</translation>
 <translation id="667999046851023355">เอกสาร</translation>
 <translation id="6697092096875747123">ช่องตัวเลือกรวมก่อนหน้า</translation>
+<translation id="6710213216561001401">ก่อนหน้า</translation>
 <translation id="6714813999819678458">ส่วนหัวระดับ 2 ก่อนหน้า</translation>
 <translation id="6716505898850596801">คีย์ตัวปรับแต่ง</translation>
 <translation id="671916444866103745">ไม่มีจุดสังเกต ARIA ถัดไป</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">ตัวจับเวลา</translation>
 <translation id="8065607967589909823">รายการที่เลือกคือ</translation>
 <translation id="8066678206530322333">แบนเนอร์</translation>
+<translation id="8076492880354921740">แท็บ</translation>
 <translation id="8110647606445335195">ไม่มีจุดสังเกต ARIA</translation>
 <translation id="8153880621934657047">ไม่ได้อยู่ในตาราง</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{เครื่องหมายขีดล่าง}other{# เครื่องหมายขีดล่าง}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">ไม่มีส่วนหัวระดับ 3 ถัดไป</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">ไม่มีช่องทำเครื่องหมายก่อนหน้า</translation>
+<translation id="8446884382197647889">เรียนรู้เพิ่มเติม</translation>
 <translation id="8455868257606149352">สูงสุด <ph name="X" /></translation>
 <translation id="84575901236241018">มีรหัสการเข้าถึง <ph name="KEY" /></translation>
 <translation id="8476508772960940536">ภาพรวมหน้าต่าง</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">ใช้แป้นลูกศรขึ้นและลงเพื่อเรียกดู หรือพิมพ์เพื่อค้นหา</translation>
 <translation id="9192904702577636854">ตัวอักษรวิ่ง</translation>
 <translation id="9212322457209634662">ไม่มีส่วนถัดไป</translation>
+<translation id="923331726185079994">ChromeVox อัปเดตแล้ว</translation>
 <translation id="930275611743429116">เริ่มต้นหรือสิ้นสุดการเลือก</translation>
 <translation id="948171205378458592">ลดความเร็วการพูด</translation>
 <translation id="962913030769097253">ส่วนหัวระดับ 1 ถัดไป</translation>
 <translation id="973955474346881951">เปิด/ปิดโหมดติดหนึบ</translation>
+<translation id="976849232629612000">ไม่มีรายการ</translation>
 </translationbundle>

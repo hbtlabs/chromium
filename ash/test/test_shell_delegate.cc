@@ -8,16 +8,15 @@
 
 #include "ash/app_list/app_list_presenter_delegate.h"
 #include "ash/app_list/app_list_presenter_delegate_factory.h"
+#include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/media_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/container_delegate_aura.h"
-#include "ash/default_accessibility_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/gpu_support_stub.h"
-#include "ash/media_delegate.h"
 #include "ash/new_window_delegate.h"
 #include "ash/pointer_watcher_delegate_aura.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/shell.h"
 #include "ash/test/test_keyboard_ui.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shelf_delegate.h"
@@ -33,7 +32,7 @@
 #include "ui/gfx/image/image.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/system/tray/system_tray_notifier.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
 #endif
 
 namespace ash {
@@ -111,8 +110,7 @@ TestShellDelegate::TestShellDelegate()
       app_list_presenter_delegate_factory_(new AppListPresenterDelegateFactory(
           base::WrapUnique(new AppListViewDelegateFactoryImpl))) {}
 
-TestShellDelegate::~TestShellDelegate() {
-}
+TestShellDelegate::~TestShellDelegate() {}
 
 bool TestShellDelegate::IsFirstRunAfterBoot() const {
   return false;
@@ -130,7 +128,7 @@ bool TestShellDelegate::IsRunningInForcedAppMode() const {
   return false;
 }
 
-bool TestShellDelegate::CanShowWindowForUser(aura::Window* window) const {
+bool TestShellDelegate::CanShowWindowForUser(WmWindow* window) const {
   return true;
 }
 
@@ -138,11 +136,9 @@ bool TestShellDelegate::IsForceMaximizeOnFirstRun() const {
   return force_maximize_on_first_run_;
 }
 
-void TestShellDelegate::PreInit() {
-}
+void TestShellDelegate::PreInit() {}
 
-void TestShellDelegate::PreShutdown() {
-}
+void TestShellDelegate::PreShutdown() {}
 
 void TestShellDelegate::Exit() {
   num_exit_requests_++;
@@ -206,19 +202,13 @@ MediaDelegate* TestShellDelegate::CreateMediaDelegate() {
   return new MediaDelegateImpl;
 }
 
-std::unique_ptr<ash::ContainerDelegate>
-TestShellDelegate::CreateContainerDelegate() {
-  return base::WrapUnique(new ContainerDelegateAura);
-}
-
 std::unique_ptr<PointerWatcherDelegate>
 TestShellDelegate::CreatePointerWatcherDelegate() {
   return base::WrapUnique(new PointerWatcherDelegateAura);
 }
 
-ui::MenuModel* TestShellDelegate::CreateContextMenu(
-    ash::Shelf* shelf,
-    const ash::ShelfItem* item) {
+ui::MenuModel* TestShellDelegate::CreateContextMenu(WmShelf* wm_shelf,
+                                                    const ShelfItem* item) {
   return nullptr;
 }
 
@@ -237,10 +227,9 @@ gfx::Image TestShellDelegate::GetDeprecatedAcceleratorImage() const {
 
 void TestShellDelegate::SetMediaCaptureState(MediaCaptureState state) {
 #if defined(OS_CHROMEOS)
-  Shell* shell = Shell::GetInstance();
-  static_cast<MediaDelegateImpl*>(shell->media_delegate())
+  static_cast<MediaDelegateImpl*>(WmShell::Get()->media_delegate())
       ->set_media_capture_state(state);
-  shell->system_tray_notifier()->NotifyMediaCaptureChanged();
+  WmShell::Get()->system_tray_notifier()->NotifyMediaCaptureChanged();
 #endif
 }
 

@@ -11,13 +11,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-config("system_config") {
-  defines = [
-    # Ensures that dependent projects import the core functions on Windows.
-    "MOJO_USE_SYSTEM_IMPL",
-  ]
-}
-
 component("system") {
   output_name = "mojo_system_impl"
 
@@ -82,12 +75,7 @@ component("system") {
     "watcher_set.h",
   ]
 
-  defines = [
-    "MOJO_SYSTEM_IMPL_IMPLEMENTATION",
-    "MOJO_SYSTEM_IMPLEMENTATION",
-  ]
-
-  all_dependent_configs = [ ":system_config" ]
+  defines = [ "MOJO_SYSTEM_IMPL_IMPLEMENTATION" ]
 
   public_deps = [
     "//mojo/edk/embedder",
@@ -100,7 +88,6 @@ component("system") {
 
   deps = [
     "//base",
-    "//base/third_party/dynamic_annotations",
   ]
 
   if (!is_nacl) {
@@ -124,7 +111,14 @@ component("system") {
       "broker_host_posix.cc",
       "broker_posix.cc",
       "channel_posix.cc",
+      "remote_message_pipe_bootstrap.cc",
     ]
+  }
+
+  # Use target_os == "chromeos" instead of is_chromeos because we need to
+  # build NaCl targets (i.e. IRT) for ChromeOS the same as the rest of ChromeOS.
+  if (is_android || target_os == "chromeos") {
+    defines += [ "MOJO_EDK_LEGACY_PROTOCOL" ]
   }
 
   allow_circular_includes_from = [ "//mojo/edk/embedder" ]

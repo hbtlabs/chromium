@@ -19,6 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
@@ -143,6 +144,7 @@ DataReductionProxyConfigServiceClient::DataReductionProxyConfigServiceClient(
     DataReductionProxyMutableConfigValues* config_values,
     DataReductionProxyConfig* config,
     DataReductionProxyEventCreator* event_creator,
+    DataReductionProxyIOData* io_data,
     net::NetLog* net_log,
     ConfigStorer config_storer)
     : params_(std::move(params)),
@@ -150,10 +152,11 @@ DataReductionProxyConfigServiceClient::DataReductionProxyConfigServiceClient(
       config_values_(config_values),
       config_(config),
       event_creator_(event_creator),
+      io_data_(io_data),
       net_log_(net_log),
       config_storer_(config_storer),
       backoff_entry_(&backoff_policy),
-      config_service_url_(AddApiKeyToUrl(params::GetConfigServiceURL())),
+      config_service_url_(util::AddApiKeyToUrl(params::GetConfigServiceURL())),
       enabled_(false),
       remote_config_applied_(false),
       url_request_context_getter_(nullptr),
@@ -167,6 +170,7 @@ DataReductionProxyConfigServiceClient::DataReductionProxyConfigServiceClient(
   DCHECK(config_values);
   DCHECK(config);
   DCHECK(event_creator);
+  DCHECK(io_data);
   DCHECK(net_log);
   DCHECK(config_service_url_.is_valid());
   // Constructed on the UI thread, but should be checked on the IO thread.
@@ -366,6 +370,15 @@ void DataReductionProxyConfigServiceClient::RetrieveRemoteConfig() {
   const std::string& session_key = request_options_->GetSecureSession();
   if (!session_key.empty())
     request.set_session_key(request_options_->GetSecureSession());
+  data_reduction_proxy::VersionInfo* version_info =
+      request.mutable_version_info();
+  uint32_t build;
+  uint32_t patch;
+  util::GetChromiumBuildAndPatchAsInts(util::ChromiumVersion(), &build, &patch);
+  version_info->set_client(util::GetStringForClient(io_data_->client()));
+  version_info->set_build(build);
+  version_info->set_patch(patch);
+  version_info->set_channel(io_data_->channel());
   request.SerializeToString(&serialized_request);
   std::unique_ptr<net::URLFetcher> fetcher =
       GetURLFetcherForConfig(config_service_url_, serialized_request);
@@ -386,6 +399,7 @@ void DataReductionProxyConfigServiceClient::InvalidateConfig() {
   config_storer_.Run(std::string());
   request_options_->Invalidate();
   config_values_->Invalidate();
+  io_data_->SetPingbackReportingFraction(0.0f);
   config_->ReloadConfig();
 }
 
@@ -465,6 +479,15 @@ void DataReductionProxyConfigServiceClient::HandleResponse(
 bool DataReductionProxyConfigServiceClient::ParseAndApplyProxyConfig(
     const ClientConfig& config) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  float reporting_fraction = 0.0f;
+  if (config.has_pageload_metrics_config() &&
+      config.pageload_metrics_config().has_reporting_fraction()) {
+    reporting_fraction = config.pageload_metrics_config().reporting_fraction();
+  }
+  DCHECK_LE(0.0f, reporting_fraction);
+  DCHECK_GE(1.0f, reporting_fraction);
+  io_data_->SetPingbackReportingFraction(reporting_fraction);
+
   if (!config.has_proxy_config())
     return false;
 

@@ -158,6 +158,22 @@ void ImageTransportSurfaceOverlayMac::SendAcceleratedSurfaceBuffersSwapped(
   params.scale_factor = scale_factor;
   params.latency_info = std::move(latency_info);
   params.result = gfx::SwapResult::SWAP_ACK;
+
+  for (auto& query : ca_layer_in_use_queries_) {
+    gpu::TextureInUseResponse response;
+    response.texture = query.texture;
+    bool in_use = false;
+    gl::GLImageIOSurface* io_surface_image =
+        gl::GLImageIOSurface::FromGLImage(query.image.get());
+    if (io_surface_image) {
+      in_use = io_surface_image->CanCheckIOSurfaceIsInUse() &&
+               IOSurfaceIsInUse(io_surface_image->io_surface());
+    }
+    response.in_use = in_use;
+    params.in_use_responses.push_back(std::move(response));
+  }
+  ca_layer_in_use_queries_.clear();
+
   stub_->SendSwapBuffersCompleted(params);
 }
 
@@ -183,8 +199,18 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
       // Mac, leading to high CPU usage. Instead we poll with a 1ms delay. This
       // should have minimal impact, as we will only hit this path when we are
       // more than one frame (16ms) behind.
-      while (!previous_frame_fence_->HasCompleted()) {
+      //
+      // Note that on some platforms (10.9), fences appear to sometimes get
+      // lost and will never pass. Add a 32ms timout to prevent these
+      // situations from causing a GPU process hang. crbug.com/618075
+      int timeout_msec = 32;
+      while (!previous_frame_fence_->HasCompleted() && timeout_msec > 0) {
+        --timeout_msec;
         base::PlatformThread::Sleep(base::TimeDelta::FromMilliseconds(1));
+      }
+      if (!previous_frame_fence_->HasCompleted()) {
+        // We timed out waiting for the above fence, just issue a glFinish.
+        glFinish();
       }
     }
 
@@ -216,7 +242,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
   // appropriate window.
 
   // Update the latency info to reflect the swap time.
-  for (auto latency_info : latency_info_) {
+  for (auto& latency_info : latency_info_) {
     latency_info.AddLatencyNumberWithTimestamp(
         ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, 0, 0, finish_time, 1);
     latency_info.AddLatencyNumberWithTimestamp(
@@ -294,8 +320,14 @@ bool ImageTransportSurfaceOverlayMac::ScheduleOverlayPlane(
     DLOG(ERROR) << "Invalid non-zero Z order.";
     return false;
   }
+  gl::GLImageIOSurface* io_surface_image =
+      gl::GLImageIOSurface::FromGLImage(image);
+  if (!io_surface_image) {
+    DLOG(ERROR) << "Not an IOSurface image.";
+    return false;
+  }
   return ca_layer_tree_coordinator_->SetPendingGLRendererBackbuffer(
-      static_cast<gl::GLImageIOSurface*>(image)->io_surface());
+      io_surface_image->io_surface());
 }
 
 bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
@@ -314,7 +346,11 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
   if (contents_image) {
     gl::GLImageIOSurface* io_surface_image =
-        static_cast<gl::GLImageIOSurface*>(contents_image);
+        gl::GLImageIOSurface::FromGLImage(contents_image);
+    if (!io_surface_image) {
+      DLOG(ERROR) << "Cannot schedule CALayer with non-IOSurface GLImage";
+      return false;
+    }
     io_surface = io_surface_image->io_surface();
     cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
   }
@@ -324,6 +360,11 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
                         cv_pixel_buffer, contents_rect,
                         gfx::ToEnclosingRect(rect), background_color,
                         edge_aa_mask, opacity, filter);
+}
+
+void ImageTransportSurfaceOverlayMac::ScheduleCALayerInUseQuery(
+    std::vector<CALayerInUseQuery> queries) {
+  ca_layer_in_use_queries_.swap(queries);
 }
 
 bool ImageTransportSurfaceOverlayMac::IsSurfaceless() const {

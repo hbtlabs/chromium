@@ -13,6 +13,7 @@
 #include "core/html/parser/HTMLResourcePreloader.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -80,13 +81,13 @@ public:
     }
 
 protected:
-    void preload(PassOwnPtr<PreloadRequest> preloadRequest, const NetworkHintsInterface&) override
+    void preload(std::unique_ptr<PreloadRequest> preloadRequest, const NetworkHintsInterface&) override
     {
         m_preloadRequest = std::move(preloadRequest);
     }
 
 private:
-    OwnPtr<PreloadRequest> m_preloadRequest;
+    std::unique_ptr<PreloadRequest> m_preloadRequest;
 };
 
 class HTMLPreloadScannerTest : public testing::Test {
@@ -171,8 +172,8 @@ protected:
     }
 
 private:
-    OwnPtr<DummyPageHolder> m_dummyPageHolder;
-    OwnPtr<HTMLPreloadScanner> m_scanner;
+    std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
+    std::unique_ptr<HTMLPreloadScanner> m_scanner;
 };
 
 TEST_F(HTMLPreloadScannerTest, testImages)
@@ -407,6 +408,35 @@ TEST_F(HTMLPreloadScannerTest, testLinkRelPreload)
         {"http://example.test", "<link rel=preload href=bla as=track>", "bla", "http://example.test/", Resource::TextTrack, 0},
         {"http://example.test", "<link rel=preload href=bla as=image media=\"(max-width: 800px)\">", "bla", "http://example.test/", Resource::Image, 0},
         {"http://example.test", "<link rel=preload href=bla as=image media=\"(max-width: 400px)\">", nullptr, "http://example.test/", Resource::Image, 0},
+    };
+
+    for (const auto& testCase : testCases)
+        test(testCase);
+}
+
+// The preload scanner should follow the same policy that the ScriptLoader does
+// with regard to the type and language attribute.
+TEST_F(HTMLPreloadScannerTest, testScriptTypeAndLanguage)
+{
+    TestCase testCases[] = {
+        // Allow empty src and language attributes.
+        {"http://example.test", "<script src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        {"http://example.test", "<script type='' language='' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        // Allow standard language and type attributes.
+        {"http://example.test", "<script type='text/javascript' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        {"http://example.test", "<script type='text/javascript' language='javascript' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        // Allow legacy languages in the "language" attribute with an empty
+        // type.
+        {"http://example.test", "<script language='javascript1.1' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        // Allow legacy languages in the "type" attribute.
+        {"http://example.test", "<script type='javascript' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        {"http://example.test", "<script type='javascript1.7' src='test.js'></script>", "test.js", "http://example.test/", Resource::Script, 0},
+        // Do not allow invalid types in the "type" attribute.
+        {"http://example.test", "<script type='invalid' src='test.js'></script>", nullptr, "http://example.test/", Resource::Script, 0},
+        {"http://example.test", "<script type='asdf' src='test.js'></script>", nullptr, "http://example.test/", Resource::Script, 0},
+        // Do not allow invalid languages.
+        {"http://example.test", "<script language='french' src='test.js'></script>", nullptr, "http://example.test/", Resource::Script, 0},
+        {"http://example.test", "<script language='python' src='test.js'></script>", nullptr, "http://example.test/", Resource::Script, 0},
     };
 
     for (const auto& testCase : testCases)

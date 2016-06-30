@@ -195,6 +195,11 @@ void WebRuntimeFeatures::enablePagePopup(bool enable)
     RuntimeEnabledFeatures::setPagePopupEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableParseHTMLOnMainThread(bool enable)
+{
+    RuntimeEnabledFeatures::setParseHTMLOnMainThreadEnabled(enable);
+}
+
 void WebRuntimeFeatures::enablePermissionsAPI(bool enable)
 {
     RuntimeEnabledFeatures::setPermissionsEnabled(enable);
@@ -318,6 +323,11 @@ void WebRuntimeFeatures::enableRenderingPipelineThrottling(bool enable)
 void WebRuntimeFeatures::enableScrollAnchoring(bool enable)
 {
     RuntimeEnabledFeatures::setScrollAnchoringEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableAutoplayMutedVideos(bool enable)
+{
+    RuntimeEnabledFeatures::setAutoplayMutedVideosEnabled(enable);
 }
 
 } // namespace blink

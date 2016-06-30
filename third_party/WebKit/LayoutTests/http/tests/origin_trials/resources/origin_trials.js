@@ -19,8 +19,36 @@ expect_failure = (t) => {
   }, {
     desc: 'Attribute should not exist, with trial disabled',
     code: () => {
+        assert_false('frobulateBindings' in window.internals);
         assert_not_exists(window.internals, 'frobulateBindings');
         assert_equals(window.internals['frobulateBindings'], undefined);
+      }
+  }, {
+    desc: 'Constant should not exist, with trial disabled',
+    code: () => {
+        assert_false('FROBULATE_CONST' in window.internals);
+        assert_not_exists(window.internals, 'FROBULATE_CONST');
+        assert_equals(window.internals['FROBULATE_CONST'], undefined);
+      }
+  }, {
+    desc: 'Attribute should not exist on partial interface, with trial disabled',
+    code: () => {
+        assert_not_exists(window.internals, 'frobulatePartial');
+        assert_equals(window.internals['frobulatePartial'], undefined);
+      }
+  }, {
+    desc: 'Constant should not exist on partial interface, with trial disabled',
+    code: () => {
+        assert_false('FROBULATE_CONST_PARTIAL' in window.internals);
+        assert_not_exists(window.internals, 'FROBULATE_CONST_PARTIAL');
+        assert_equals(window.internals['FROBULATE_CONST_PARTIAL'], undefined);
+      }
+  }, {
+    desc: 'Method should not exist on partial interface, with trial disabled',
+    code: () => {
+        assert_false('frobulateMethodPartial' in window.internals);
+        assert_not_exists(window.internals, 'frobulateMethodPartial');
+        assert_equals(window.internals['frobulateMethodPartial'], undefined);
       }
   }];
 
@@ -46,6 +74,32 @@ test(() => {
     assert_idl_attribute(window.internals, 'frobulateBindings');
     assert_true(window.internals.frobulateBindings, 'Attribute should return boolean value');
   }, 'Attribute should exist and return value');
+
+test(() => {
+    assert_idl_attribute(window.internals, 'FROBULATE_CONST');
+    assert_equals(window.internals.FROBULATE_CONST, 1, 'Constant should return integer value');
+  }, 'Constant should exist and return value');
+
+test(() => {
+    assert_idl_attribute(window.internals, 'FROBULATE_CONST');
+    window.internals.FROBULATE_CONST = 10;
+    assert_equals(window.internals.FROBULATE_CONST, 1, 'Constant should not be modifiable');
+  }, 'Constant should exist and not be modifiable');
+
+test(() => {
+    assert_idl_attribute(window.internals, 'frobulatePartial');
+    assert_true(window.internals.frobulatePartial, 'Attribute should return boolean value');
+  }, 'Attribute should exist on partial interface and return value');
+
+test(() => {
+    assert_idl_attribute(window.internals, 'FROBULATE_CONST_PARTIAL');
+    assert_equals(window.internals.FROBULATE_CONST_PARTIAL, 2, 'Constant should return integer value');
+  }, 'Constant should exist on partial interface and return value');
+
+test(() => {
+    assert_idl_attribute(window.internals, 'frobulateMethodPartial');
+    assert_true(window.internals.frobulateMethodPartial(), 'Method should return boolean value');
+  }, 'Method should exist on partial interface and return value');
 
 fetch_tests_from_worker(new Worker('resources/enabled-worker.js'));
 };

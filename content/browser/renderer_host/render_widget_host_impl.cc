@@ -76,12 +76,14 @@
 #include "third_party/WebKit/public/web/WebCompositionUnderline.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/snapshot/snapshot.h"
 
 #if defined(OS_MACOSX)
+#include "device/power_save_blocker/power_save_blocker.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
@@ -188,7 +190,6 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
       is_hidden_(hidden),
       repaint_ack_pending_(false),
       resize_ack_pending_(false),
-      color_profile_out_of_date_(false),
       auto_resize_enabled_(false),
       waiting_for_screen_rects_ack_(false),
       needs_repainting_on_restore_(false),
@@ -217,6 +218,16 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   CHECK(delegate_);
   CHECK_NE(MSG_ROUTING_NONE, routing_id_);
 
+#if defined(OS_WIN)
+  // Update the display color profile cache so that it is likely to be up to
+  // date when the renderer process requests the color profile.
+  if (gfx::ColorSpace::CachedProfilesNeedUpdate()) {
+    BrowserThread::PostBlockingPoolTask(
+        FROM_HERE,
+        base::Bind(&gfx::ColorSpace::UpdateCachedProfilesOnBackgroundThread));
+  }
+#endif
+
   std::pair<RoutingIDWidgetMap::iterator, bool> result =
       g_routing_id_widget_map.Get().insert(std::make_pair(
           RenderWidgetHostID(process->GetID(), routing_id_), this));
@@ -231,8 +242,7 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
   latency_tracker_.Initialize(routing_id_, GetProcess()->GetID());
 
   input_router_.reset(new InputRouterImpl(
-      process_->GetImmediateSender(), this, this, routing_id_,
-      GetInputRouterConfigForPlatform()));
+      process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
 
   touch_emulator_.reset();
 
@@ -569,7 +579,7 @@ bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
   if (delegate_) {
     resize_params->resizer_rect = delegate_->GetRootWindowResizerRect(this);
     resize_params->is_fullscreen_granted =
-        delegate_->IsFullscreenForCurrentTab(this);
+        delegate_->IsFullscreenForCurrentTab();
     resize_params->display_mode = delegate_->GetDisplayMode(this);
   } else {
     resize_params->is_fullscreen_granted = false;
@@ -625,14 +635,10 @@ void RenderWidgetHostImpl::WasResized() {
   // it's web contents is being deleted.
   if (resize_ack_pending_ || !process_->HasConnection() || !view_ ||
       !renderer_initialized_ || auto_resize_enabled_ || !delegate_) {
-    if (resize_ack_pending_ && color_profile_out_of_date_)
-      DispatchColorProfile();
     return;
   }
 
   std::unique_ptr<ResizeParams> params(new ResizeParams);
-  if (color_profile_out_of_date_)
-    DispatchColorProfile();
   if (!GetResizeParams(params.get()))
     return;
 
@@ -646,44 +652,6 @@ void RenderWidgetHostImpl::WasResized() {
 
   if (delegate_)
     delegate_->RenderWidgetWasResized(this, width_changed);
-}
-
-void RenderWidgetHostImpl::DispatchColorProfile() {
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-  static bool image_profiles = base::CommandLine::ForCurrentProcess()->
-     HasSwitch(switches::kEnableImageColorProfiles);
-  if (!image_profiles)
-    return;
-#if defined(OS_WIN)
-  // Windows will read disk to get the color profile data if needed, so
-  // dispatch the SendColorProfile() work off the UI thread.
-  BrowserThread::PostBlockingPoolTask(
-      FROM_HERE,
-      base::Bind(&RenderWidgetHostImpl::SendColorProfile,
-                 weak_factory_.GetWeakPtr()));
-#elif !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-  // Only support desktop Mac and Linux at this time.
-  SendColorProfile();
-#endif
-#endif
-}
-
-void RenderWidgetHostImpl::SendColorProfile() {
-  if (!view_ || !delegate_)
-    return;
-  DCHECK(!view_->GetRequestedRendererSize().IsEmpty());
-#if defined(OS_WIN)
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::UI));
-  DCHECK(!BrowserThread::CurrentlyOn(BrowserThread::IO));
-#endif
-  std::vector<char> color_profile;
-  if (!GetScreenColorProfile(&color_profile))
-    return;
-  if (!renderer_initialized_ || !process_->HasConnection())
-    return;
-  if (!Send(new ViewMsg_ColorProfile(routing_id_, color_profile)))
-    return;
-  color_profile_out_of_date_ = false;
 }
 
 void RenderWidgetHostImpl::ResizeRectChanged(const gfx::Rect& new_rect) {
@@ -744,10 +712,12 @@ void RenderWidgetHostImpl::SetActive(bool active) {
 }
 
 void RenderWidgetHostImpl::LostMouseLock() {
-  Send(new ViewMsg_MouseLockLost(routing_id_));
-
   if (delegate_)
     delegate_->LostMouseLock(this);
+}
+
+void RenderWidgetHostImpl::SendMouseLockLost() {
+  Send(new ViewMsg_MouseLockLost(routing_id_));
 }
 
 void RenderWidgetHostImpl::ViewDestroyed() {
@@ -975,7 +945,7 @@ void RenderWidgetHostImpl::ForwardMouseEventWithLatencyInfo(
     return;
 
   MouseEventWithLatencyInfo mouse_with_latency(mouse_event, ui_latency);
-  latency_tracker_.OnInputEvent(mouse_event, &mouse_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(mouse_event, &mouse_with_latency.latency);
   input_router_->SendMouseEvent(mouse_with_latency);
 }
 
@@ -997,7 +967,7 @@ void RenderWidgetHostImpl::ForwardWheelEventWithLatencyInfo(
     return;
 
   MouseWheelEventWithLatencyInfo wheel_with_latency(wheel_event, ui_latency);
-  latency_tracker_.OnInputEvent(wheel_event, &wheel_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(wheel_event, &wheel_with_latency.latency);
   input_router_->SendWheelEvent(wheel_with_latency);
 }
 
@@ -1053,7 +1023,8 @@ void RenderWidgetHostImpl::ForwardGestureEventWithLatencyInfo(
     return;
 
   GestureEventWithLatencyInfo gesture_with_latency(gesture_event, ui_latency);
-  latency_tracker_.OnInputEvent(gesture_event, &gesture_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(gesture_event,
+                                    &gesture_with_latency.latency);
   input_router_->SendGestureEvent(gesture_with_latency);
 
   if (scroll_update_needs_wrapping) {
@@ -1067,7 +1038,7 @@ void RenderWidgetHostImpl::ForwardEmulatedTouchEvent(
   TRACE_EVENT0("input", "RenderWidgetHostImpl::ForwardEmulatedTouchEvent");
 
   TouchEventWithLatencyInfo touch_with_latency(touch_event);
-  latency_tracker_.OnInputEvent(touch_event, &touch_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(touch_event, &touch_with_latency.latency);
   input_router_->SendTouchEvent(touch_with_latency);
 }
 
@@ -1089,7 +1060,7 @@ void RenderWidgetHostImpl::ForwardTouchEventWithLatencyInfo(
     return;
   }
 
-  latency_tracker_.OnInputEvent(touch_event, &touch_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(touch_event, &touch_with_latency.latency);
   input_router_->SendTouchEvent(touch_with_latency);
 }
 
@@ -1158,7 +1129,7 @@ void RenderWidgetHostImpl::ForwardKeyboardEvent(
 
   NativeWebKeyboardEventWithLatencyInfo key_event_with_latency(key_event);
   key_event_with_latency.event.isBrowserShortcut = is_shortcut;
-  latency_tracker_.OnInputEvent(key_event, &key_event_with_latency.latency);
+  DispatchInputEventWithLatencyInfo(key_event, &key_event_with_latency.latency);
   input_router_->SendKeyboardEvent(key_event_with_latency);
 }
 
@@ -1230,6 +1201,17 @@ void RenderWidgetHostImpl::RemoveMouseEventCallback(
   }
 }
 
+void RenderWidgetHostImpl::AddInputEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  if (!input_event_observers_.HasObserver(observer))
+    input_event_observers_.AddObserver(observer);
+}
+
+void RenderWidgetHostImpl::RemoveInputEventObserver(
+    RenderWidgetHost::InputEventObserver* observer) {
+  input_event_observers_.RemoveObserver(observer);
+}
+
 void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetWebScreenInfo");
   if (view_)
@@ -1243,14 +1225,6 @@ void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
     input_router_->SetDeviceScaleFactor(result->deviceScaleFactor);
 }
 
-bool RenderWidgetHostImpl::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  DCHECK(color_profile->empty());
-  if (view_)
-    return view_->GetScreenColorProfile(color_profile);
-  return false;
-}
-
 void RenderWidgetHostImpl::HandleCompositorProto(
     const std::vector<uint8_t>& proto) {
   DCHECK(!proto.empty());
@@ -1258,8 +1232,6 @@ void RenderWidgetHostImpl::HandleCompositorProto(
 }
 
 void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
-  color_profile_out_of_date_ = true;
-
   if (delegate_)
     delegate_->ScreenInfoChanged();
 
@@ -1272,6 +1244,20 @@ void RenderWidgetHostImpl::NotifyScreenInfoChanged() {
 void RenderWidgetHostImpl::GetSnapshotFromBrowser(
     const GetSnapshotFromBrowserCallback& callback) {
   int id = next_browser_snapshot_id_++;
+
+#if defined(OS_MACOSX)
+  // MacOS version of underlying GrabViewSnapshot() blocks while
+  // display/GPU are in a power-saving mode, so make sure display
+  // does not go to sleep for the duration of reading a snapshot.
+  if (pending_browser_snapshots_.empty()) {
+    DCHECK(!power_save_blocker_);
+    power_save_blocker_.reset(new device::PowerSaveBlocker(
+        device::PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
+        device::PowerSaveBlocker::kReasonOther, "GetSnapshot",
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+  }
+#endif
   pending_browser_snapshots_.insert(std::make_pair(id, callback));
   Send(new ViewMsg_ForceRedraw(GetRoutingID(), id));
 }
@@ -1351,8 +1337,7 @@ void RenderWidgetHostImpl::RendererExited(base::TerminationStatus status,
   // event. (In particular, the above call to view_->RenderProcessGone will
   // destroy the aura window, which may dispatch a synthetic mouse move.)
   input_router_.reset(new InputRouterImpl(
-      process_->GetImmediateSender(), this, this, routing_id_,
-      GetInputRouterConfigForPlatform()));
+      process_, this, this, routing_id_, GetInputRouterConfigForPlatform()));
 
   synthetic_gesture_controller_.reset();
 }
@@ -1561,20 +1546,19 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
   ViewHostMsg_SwapCompositorFrame::Param param;
   if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
     return false;
-  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
+  cc::CompositorFrame frame(std::move(std::get<1>(param)));
   uint32_t output_surface_id = std::get<0>(param);
-  std::get<1>(param).AssignTo(frame.get());
   std::vector<IPC::Message> messages_to_deliver_with_frame;
   messages_to_deliver_with_frame.swap(std::get<2>(param));
 
-  if (!ui::LatencyInfo::Verify(frame->metadata.latency_info,
+  if (!ui::LatencyInfo::Verify(frame.metadata.latency_info,
                                "RenderWidgetHostImpl::OnSwapCompositorFrame")) {
-    std::vector<ui::LatencyInfo>().swap(frame->metadata.latency_info);
+    std::vector<ui::LatencyInfo>().swap(frame.metadata.latency_info);
   }
 
-  latency_tracker_.OnSwapCompositorFrame(&frame->metadata.latency_info);
+  latency_tracker_.OnSwapCompositorFrame(&frame.metadata.latency_info);
 
-  bool is_mobile_optimized = IsMobileOptimizedFrame(frame->metadata);
+  bool is_mobile_optimized = IsMobileOptimizedFrame(frame.metadata);
   input_router_->NotifySiteIsMobileOptimized(is_mobile_optimized);
   if (touch_emulator_)
     touch_emulator_->SetDoubleTapSupportForPageEnabled(!is_mobile_optimized);
@@ -1584,13 +1568,11 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
     view_->DidReceiveRendererFrame();
   } else {
     cc::CompositorFrameAck ack;
-    if (frame->gl_frame_data) {
-      ack.gl_frame_data = std::move(frame->gl_frame_data);
-      ack.gl_frame_data->sync_token.Clear();
-    } else if (frame->delegated_frame_data) {
+    if (frame.gl_frame_data) {
+      ack.gl_frame_data = std::move(frame.gl_frame_data);
+    } else if (frame.delegated_frame_data) {
       cc::TransferableResource::ReturnResources(
-          frame->delegated_frame_data->resource_list,
-          &ack.resources);
+          frame.delegated_frame_data->resource_list, &ack.resources);
     }
     SendSwapCompositorFrameAck(routing_id_, output_surface_id,
                                process_->GetID(), ack);
@@ -1749,10 +1731,6 @@ void RenderWidgetHostImpl::OnLockMouse(bool user_gesture,
     Send(new ViewMsg_LockMouse_ACK(routing_id_, false));
     return;
   }
-  if (IsMouseLocked()) {
-    Send(new ViewMsg_LockMouse_ACK(routing_id_, true));
-    return;
-  }
 
   pending_mouse_lock_request_ = true;
   if (privileged && allow_privileged_mouse_lock_) {
@@ -1887,6 +1865,14 @@ void RenderWidgetHostImpl::DidOverscroll(const DidOverscrollParams& params) {
 void RenderWidgetHostImpl::DidStopFlinging() {
   if (view_)
     view_->DidStopFlinging();
+}
+
+void RenderWidgetHostImpl::DispatchInputEventWithLatencyInfo(
+    const blink::WebInputEvent& event,
+    ui::LatencyInfo* latency) {
+  latency_tracker_.OnInputEvent(event, latency);
+  FOR_EACH_OBSERVER(InputEventObserver, input_event_observers_,
+                    OnInputEvent(event));
 }
 
 void RenderWidgetHostImpl::OnKeyboardEventAck(
@@ -2070,11 +2056,10 @@ void RenderWidgetHostImpl::FrameSwapped(const ui::LatencyInfo& latency_info) {
     // is drawn to the screen, and when the snapshot will actually pick up
     // that content. Insert a manual delay of 1/6th of a second (to simulate
     // 10 frames at 60 fps) before actually taking the snapshot.
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&RenderWidgetHostImpl::WindowSnapshotReachedScreen,
-                   weak_factory_.GetWeakPtr(),
-                   sequence_number),
+                   weak_factory_.GetWeakPtr(), sequence_number),
         base::TimeDelta::FromSecondsD(1. / 6));
 #else
     WindowSnapshotReachedScreen(sequence_number);
@@ -2124,6 +2109,10 @@ void RenderWidgetHostImpl::OnSnapshotDataReceived(int snapshot_id,
         ++it;
       }
   }
+#if defined(OS_MACOSX)
+  if (pending_browser_snapshots_.empty())
+    power_save_blocker_.reset();
+#endif
 }
 
 void RenderWidgetHostImpl::OnSnapshotDataReceivedAsync(

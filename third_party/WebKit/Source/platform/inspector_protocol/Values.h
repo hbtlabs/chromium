@@ -5,11 +5,12 @@
 #ifndef Values_h
 #define Values_h
 
-#include "platform/PlatformExport.h"
 #include "platform/inspector_protocol/Allocator.h"
 #include "platform/inspector_protocol/Collections.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/inspector_protocol/String16.h"
-#include "wtf/PtrUtil.h"
+
+#include <vector>
 
 namespace blink {
 namespace protocol {
@@ -175,10 +176,19 @@ public:
 
 private:
     DictionaryValue();
+    template<typename T>
+    void set(const String16& key, std::unique_ptr<T>& value)
+    {
+        DCHECK(value);
+        bool isNew = m_data.find(key) == m_data.end();
+        m_data[key] = std::move(value);
+        if (isNew)
+            m_order.push_back(key);
+    }
 
     using Dictionary = protocol::HashMap<String16, std::unique_ptr<Value>>;
     Dictionary m_data;
-    protocol::Vector<String16> m_order;
+    std::vector<String16> m_order;
 };
 
 class PLATFORM_EXPORT ListValue : public Value {
@@ -212,7 +222,7 @@ public:
 
 private:
     ListValue();
-    protocol::Vector<std::unique_ptr<Value>> m_data;
+    std::vector<std::unique_ptr<Value>> m_data;
 };
 
 } // namespace protocol

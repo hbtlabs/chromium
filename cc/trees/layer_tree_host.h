@@ -22,6 +22,8 @@
 #include "base/time/time.h"
 #include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
+#include "cc/blimp/client_picture_cache.h"
+#include "cc/blimp/engine_picture_cache.h"
 #include "cc/debug/micro_benchmark.h"
 #include "cc/debug/micro_benchmark_controller.h"
 #include "cc/input/event_listener_properties.h"
@@ -93,6 +95,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner;
     std::unique_ptr<BeginFrameSource> external_begin_frame_source;
     ImageSerializationProcessor* image_serialization_processor = nullptr;
+    std::unique_ptr<AnimationHost> animation_host;
 
     InitParams();
     ~InitParams();
@@ -348,6 +351,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   Layer* LayerById(int id) const;
 
+  Layer* LayerByElementId(ElementId element_id) const;
+  void AddToElementMap(Layer* layer);
+  void RemoveFromElementMap(Layer* layer);
+
   void AddLayerShouldPushProperties(Layer* layer);
   void RemoveLayerShouldPushProperties(Layer* layer);
   std::unordered_set<Layer*>& LayersThatShouldPushProperties();
@@ -421,13 +428,19 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   bool IsRemoteClient() const;
   void BuildPropertyTreesForTesting();
 
+  void SetElementIdsForTesting();
+
   ImageSerializationProcessor* image_serialization_processor() const {
     return image_serialization_processor_;
   }
 
-  void ReportFixedRasterScaleUseCounters(
-      bool has_fixed_raster_scale_blurry_content,
-      bool has_fixed_raster_scale_potential_performance_regression);
+  EnginePictureCache* engine_picture_cache() const {
+    return engine_picture_cache_ ? engine_picture_cache_.get() : nullptr;
+  }
+
+  ClientPictureCache* client_picture_cache() const {
+    return client_picture_cache_ ? client_picture_cache_.get() : nullptr;
+  }
 
  protected:
   LayerTreeHost(InitParams* params, CompositorMode mode);
@@ -450,6 +463,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
       std::unique_ptr<TaskRunnerProvider> task_runner_provider,
       std::unique_ptr<Proxy> proxy_for_testing,
       std::unique_ptr<BeginFrameSource> external_begin_frame_source);
+  void InitializePictureCacheForTesting();
   void SetOutputSurfaceLostForTesting(bool is_lost) {
     output_surface_lost_ = is_lost;
   }
@@ -583,6 +597,8 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   TaskGraphRunner* task_graph_runner_;
 
   ImageSerializationProcessor* image_serialization_processor_;
+  std::unique_ptr<EnginePictureCache> engine_picture_cache_;
+  std::unique_ptr<ClientPictureCache> client_picture_cache_;
 
   std::vector<std::unique_ptr<SwapPromise>> swap_promise_list_;
   std::set<SwapPromiseMonitor*> swap_promise_monitor_;
@@ -591,6 +607,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   using LayerIdMap = std::unordered_map<int, Layer*>;
   LayerIdMap layer_id_map_;
+
+  using ElementLayersMap = std::unordered_map<ElementId, Layer*, ElementIdHash>;
+  ElementLayersMap element_layers_map_;
+
   // Set of layers that need to push properties.
   std::unordered_set<Layer*> layers_that_should_push_properties_;
 

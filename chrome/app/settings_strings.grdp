@@ -28,7 +28,7 @@
       Updating your device
     </message>
     <message name="IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated ChromiumOS/ChromeOS">
-      Nearly up-to-date! Restart your device to finish updating.
+      Nearly up to date! Restart your device to finish updating.
     </message>
     <message name="IDS_SETTINGS_UPGRADE_UPDATING_CHANNEL_SWITCH" desc="Status label: Updating ChromiumOS/ChromeOS to a specified channel">
       Updating your device to <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph> channel
@@ -194,8 +194,8 @@
   <message name="IDS_SETTINGS_BASIC" desc="Name of the settings page which displays advanced preferences.">
     Basic
   </message>
-  <message name="IDS_SETTINGS_INTERNAL_SEARCH" desc="Label for input field to search within settings.">
-    Search
+  <message name="IDS_SETTINGS_SEARCH_PROMPT" desc="Label for input field to search within settings.">
+    Search settings
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
@@ -221,6 +221,9 @@
   <message name="IDS_SETTINGS_AUTOFILL" desc="Name for the autofill section and toggle.">
     Autofill settings
   </message>
+  <message name="IDS_SETTINGS_GOOGLE_PAYMENTS" desc="Label used to differentiate when an address or credit card entry comes from Google Payments. This should follow the casing of the 'Google Payments' brand.">
+    Google Payments
+  </message>
   <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_HEADING" desc="Title for the list of addresses that chrome has saved for use in filling in forms.">
     Addresses
   </message>
@@ -236,9 +239,6 @@
   <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_TYPE_COLUMN_LABEL" desc="Label for the column containing the type of credit card that is saved. The type is in the format: `Visa ****1234`.">
     Type
   </message>
-  <message name="IDS_SETTINGS_AUTOFILL_CREDIT_CARD_EXPIRATION_COLUMN_LABEL" desc="Label for the heading containing the expiration date for the credit card that has been saved.">
-    Expiration date
-  </message>
   <message name="IDS_SETTINGS_AUTOFILL_DETAIL" desc="Description of what toggling the 'Autofill' setting does. Immediately underneath IDS_SETTINGS_AUTOFILL">
     Enable Autofill to fill out forms in a single click
   </message>
@@ -253,6 +253,30 @@
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_REMOVE" desc="Label for a context menu item that removes the selected credit card." meaning="Remove selected credit card.">
    Remove
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_CLEAR" desc="Label for a context menu item clears the locally cached credit card that is also saved on Google Payments. Clicking this will NOT remove the credit card from Google Payments.">
+   Clear copy
+  </message>
+  <message name="IDS_SETTINGS_EDIT_CREDIT_CARD_TITLE" desc="The title for the dialog that's shown when editing a credit card.">
+    Edit credit card
+  </message>
+  <message name="IDS_SETTINGS_ADD_CREDIT_CARD_TITLE" desc="The title for the dialog that's shown when entering the information for a new credit card.">
+    Add credit card
+  </message>
+  <message name="IDS_SETTINGS_NAME_ON_CREDIT_CARD" desc="The title for the input that lets users modify the name on the credit card.">
+    Name on card
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_NUMBER" desc="The title for the input that lets users modify the credit card number for a credit card.">
+    Credit card number
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRATION_DATE" desc="Label for the expiration date fields of a credit card that has been or is being saved.">
+    Expiration date
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRATION_MONTH" desc="Accessibility label on the month drop down to let users know the field corresponds to the expiration month">
+    Expiration month
+  </message>
+  <message name="IDS_SETTINGS_CREDIT_CARD_EXPIRATION_YEAR" desc="Accessibility label on the year drop down to let users know the field corresponds to the expiration year">
+    Expiration year
   </message>
   <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
     Manage passwords
@@ -561,8 +585,8 @@
   <message name="IDS_SETTINGS_CLEAR_HOSTED_APP_DATA" desc="Checkbox for deleting data of hosted apps">
     Hosted app data
   </message>
-  <message name="IDS_SETTINGS_DEAUTHORIZE_CONTENT_LICENSES" desc="Checkbox for deauthorizing content licenses (DRM videos, etc.)">
-    Content licenses
+  <message name="IDS_SETTINGS_CLEAR_MEDIA_LICENSES" desc="Checkbox for deleting media licenses (premium content, etc.)">
+    Media licenses
   </message>
   <message name="IDS_SETTINGS_CLEAR_DATA_HOUR" desc="deletion period combo box: hour. In English this finishes the sentence that starts with 'Obliterate the following items from'.">
     the past hour
@@ -720,11 +744,30 @@
   </message>
 
   <!-- Languages Page -->
-  <message name="IDS_SETTINGS_LANGUAGES_PAGE_TITLE" desc="Name of the settings page which displays language preferences.">
-    Languages
-  </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_LANGUAGES_PAGE_TITLE" desc="Name of the settings page which displays language and input method preferences.">
+      Languages and input
+    </message>
+  </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_LANGUAGES_PAGE_TITLE" desc="Name of the settings page which displays language preferences.">
+      Languages
+    </message>
+  </if>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE" desc="Title for the currently used language in the header for the collapsible list of languages.">
     Language
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_ORDERING_INSTRUCTIONS" desc="Explanatory message about ordering the list of languages.">
+    Order languages based on your preference.
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_UP" desc="Label for the menu item that moves the language up in the list of languages.">
+    Move up
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_DOWN" desc="Label for the menu item that moves the language down in the list of languages.">
+    Move down
+  </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_LANGUAGE_DETAIL" desc="Label for the menu item which opens a sub-page that displays details for a language.">
+    Language settings
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_MANAGE" desc="Button under the list of enabled languages which opens a sub-page that lets the user enable or disable languages.">
     Manage languages
@@ -735,18 +778,17 @@
   <message name="IDS_SETTINGS_LANGUAGES_CANNOT_TRANSLATE_IN_THIS_LANGUAGE" desc="The string displayed in the details for a language when the language cannot be translated from.">
     This language cannot be translated
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the current input method in the header for the collapsible list of enabled input methods (keyboard layouts and input method editors).">
-    Input method
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGE" desc="Button under the list of input methods which opens a sub-page that lets the user enable or disable keyboard layouts and input method editors.">
-    Manage input methods
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_LIST_TITLE" desc="Title for the section containing the dropdown used to select the language to use for spell checking. The dropdown contains the enabled languages which support spell checking.">
-    Spell check
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_MANAGE" desc="Button under the dropdown of spell check languages which opens a sub-page that lets the user add or remove words to the custom list of words whitelisted for spell checking.">
-    Custom spelling
-  </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE" desc="Title for the current input method in the header for the collapsible list of enabled input methods (keyboard layouts and input method editors).">
+      Input method
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_INPUT_METHODS_MANAGE" desc="Button under the list of input methods which opens a sub-page that lets the user enable or disable keyboard layouts and input method editors.">
+      Manage input methods
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_TITLE" desc="Name of the settings sub-page which allows enabling and disabling input methods.">
+      Manage input methods
+    </message>
+  </if>
   <message name="IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE" desc="Name of the settings sub-page which allows enabling and disabling languages.">
     Manage languages
   </message>
@@ -756,21 +798,35 @@
   <message name="IDS_SETTINGS_LANGUAGES_ENABLED_LANGUAGES" desc="Header for the list of enabled languages, which the user can use to disable languages, on the Manage Languages page.">
     Enabled languages
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_TITLE" desc="Name of the settings sub-page which allows enabling and disabling input methods.">
-    Manage input methods
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_TITLE" desc="Name of the settings sub-page which allows adding and remove custom words from the custom spell check dictionary.">
-    Manage spell check
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD" desc="Label for the text input used to add a new word to the custom spell check dictionary.">
-    Add a new word
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD_BUTTON" desc="Button next to the 'add word' text input used to add the word typed by the user to the custom spell check dictionary.">
-    Add word
-  </message>
-  <message name="IDS_SETTINGS_LANGUAGES_DICTIONARY_WORDS" desc="Header for the list of custom dictionary words used for spell check.">
-    Custom words
-  </message>
+  <if expr="not is_macosx">
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_LIST_TITLE" desc="Title for the section containing the dropdown used to select the language to use for spell checking. The dropdown contains the enabled languages which support spell checking.">
+      Spell check
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_SUMMARY_TWO_LANGUAGES" desc="Subtitle for the spell check section when spell check is enabled for two languages, listing those languages.">
+      <ph name="LANGUAGE_1">$1<ex>English (United States)</ex></ph>, <ph name="LANGUAGE_2">$2<ex>Italian</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_SUMMARY_THREE_LANGUAGES" desc="Subtitle for the spell check section when spell check is enabled for three languages, listing only the first two.">
+      <ph name="LANGUAGE_1">$1<ex>English (United States)</ex></ph>, <ph name="LANGUAGE_2">$2<ex>Italian</ex></ph>, and 1 other
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_SUMMARY_MULTIPLE_LANGUAGES" desc="Subtitle for the spell check section when spell check is enabled for more than three languages, listing only the first two.">
+      <ph name="LANGUAGE_1">$1<ex>English (United States)</ex></ph>, <ph name="LANGUAGE_2">$2<ex>Italian</ex></ph>, and <ph name="NUM_ADDITIONAL_LANGUAGES">$3<ex>2</ex></ph> others
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_SPELL_CHECK_MANAGE" desc="Button under the dropdown of spell check languages which opens a sub-page that lets the user add or remove words to the custom list of words whitelisted for spell checking.">
+      Custom spelling
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_EDIT_DICTIONARY_TITLE" desc="Name of the settings sub-page which allows adding and remove custom words from the custom spell check dictionary.">
+      Manage spell check
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD" desc="Label for the text input used to add a new word to the custom spell check dictionary.">
+      Add a new word
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_ADD_DICTIONARY_WORD_BUTTON" desc="Button next to the 'add word' text input used to add the word typed by the user to the custom spell check dictionary.">
+      Add word
+    </message>
+    <message name="IDS_SETTINGS_LANGUAGES_DICTIONARY_WORDS" desc="Header for the list of custom dictionary words used for spell check.">
+      Custom words
+    </message>
+  </if>
 
   <!-- Privacy Page -->
   <message name="IDS_SETTINGS_PRIVACY" desc="Name of the settings page which allows users to modify privacy and security settings.">
@@ -1051,6 +1107,9 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK" desc="Label for add block sites in site settings.">
     Block
   </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY" desc="Label for sites in site settings allowing cookies for the current session only.">
+    Clear on exit
+  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_EXCEPTIONS" desc="Label for exception sites in site settings.">
     Exceptions
   </message>
@@ -1068,6 +1127,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_RESET_MENU" desc="Label for the menu item to reset the permission for a particular site (make it ask you again next time).">
     Reset to ask
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY_MENU" desc="Label for the menu item to set cookies to be deleted on browser exit.">
+    Clear on exit
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_USAGE" desc="The Usage header, used to group disk and battery usage information on the Site Details page.">
     Usage
@@ -1095,10 +1157,64 @@
   <message name="IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE" desc="Label for the button that opens the multi-profile user manager.">
     Manage other people
   </message>
+  <message name="IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS" desc="Label for the button that opens the supervised users dashboard.">
+    Manage supervised users
+  </message>
+  <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO" desc="The text on the Google profile photo of the user.">
+    Google Profile photo
+  </message>
 
   <if expr="chromeos">
     <message name="IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK" desc="The text on the checkbox to enable screenlocker for current user.">
       Require password to wake from sleep
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_TITLE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
+      Configure quick unlock
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIRM_LOGIN" desc="Text above a password input field that tells the user they need to submit their password to configure these settings.">
+      Confirm your login to continue
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_PASSWORD_LABEL" desc="An input box label that tells the user to enter their password in that input box.">
+      Password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_INVALID_PASSWORD" desc="Text on a password field that tells the user the password is incorrect.">
+      Not valid
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CHOOSE_UNLOCK_METHOD" desc="Text below the page title that tells the user to select a method to unlock the device. This is *only* for unlocking a device; it cannot be used to sign into a device.">
+      Choose the method you would like to use to log back in to your account:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PASSWORD" desc="Only the account password can be used to unlock the device.">
+      Only password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PIN_AND_PASSWORD" desc="The account password or a custom PIN can be used to unlock the device.">
+      PIN or password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_NONE" desc="After the device resumes, there will not be a lock screen and no password of any type will be required.">
+      None
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BUTTON" desc="Button that is only shown when the user has selected PIN as their unlock method. This button opens up the configuration flow where the user selects the PIN they would like to use.">
+      Configure PIN
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_TITLE" desc="Message shown below the title that tells the user to enter the initial PIN.">
+      Choose your PIN:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_WEAK_PIN_WARNING" desc="Message shown below the title that warns the user they have entered a PIN that is easy to guess.">
+      This PIN is easy to guess:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_TOO_SHORT" desc="Message shown below the title that tells the user that the PIN they entered needs to be at least four digits long.">
+      PIN must be at least 4 digits:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONTINUE_BUTTON" desc="A button that accepts the users initial PIN. The user will have to enter the PIN again after hitting this button to confirm that they entered it correctly.">
+      Continue
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONFIRM_PIN_TITLE" desc="Message shown below the title that tells the user to confirm their initial PIN entry.">
+      Confirm your PIN:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_MISMATCHED_PINS" desc="Message shown below the title that tells the user they have entered two different PIN values.">
+      PIN's don't match:
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BACK_BUTTON" desc="Button that goes from the confirm PIN screen to the initial PIN setup screen.">
+      Back
     </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE" desc="Title of the subpage shown when user wants to change his/her picture.">
       Change picture
@@ -1139,9 +1255,6 @@
     <message name="IDS_SETTINGS_CHANGE_PICTURE_AUTHOR_TEXT" desc="Author label.">
       Photo by
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_PHOTO" desc="The text on the Google profile photo of the user.">
-      Google Profile photo
-    </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO" desc="The text on the loading stub for Google profile image.">
       Google Profile photo (loading)
     </message>
@@ -1151,6 +1264,12 @@
   </if>
 
   <if expr="not chromeos">
+    <message name="IDS_SETTINGS_PEOPLE_DOMAIN_MANAGED_PROFILE" desc="Provides the domain information for domain-managed accounts.">
+      Managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_SYNC_DISCONNECT_MANAGED_PROFILE_EXPLANATION" desc="The text to display in the 'Sign out of Chrome' dialog to stop syncing for managed profiles.">
+      Because this account is managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>, your bookmarks, history, passwords, and other settings will be cleared from this device. However, your data will remain stored in your Google Account.
+    </message>
     <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage">
       Edit person
     </message>
@@ -1162,14 +1281,14 @@
   <message name="IDS_SETTINGS_SYNC_DISCONNECT" desc="The text to display on the button to indicate stop syncing functionality.">
     Sign Out
   </message>
-  <message name="IDS_SETTINGS_SYNC_DISCONNECT_TITLE" desc="The title of the dialog that explains what 'stop syncing' means.">
-    Disconnect your Google Account
+  <message name="IDS_SETTINGS_SYNC_DISCONNECT_EXPLANATION" desc="The text to display in the Sign out of Chrome dialog to stop syncing for non-managed profiles.">
+    Changes to your bookmarks, history, passwords, and other settings will no longer be synced to your Google Account. However, your existing data will remain stored in your Google Account.
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_DELETE_PROFILE" desc="The text to display by the checkbox asking user whether to also delete profile when stopping sync.">
-    Also clear your history, bookmarks, settings, and other Chrome data stored on this device.
+    Also remove your existing data from this device.
   </message>
   <message name="IDS_SETTINGS_SYNC_DISCONNECT_CONFIRM" desc="The text to display on the button to confirm the user wishes to stop syncing.">
-    Clear and Disconnect
+    Clear and Sign Out
   </message>
 
   <message name="IDS_SETTINGS_SYNC" desc="Name of the sync service.">
@@ -1211,8 +1330,17 @@
   <message name="IDS_SETTINGS_PASSWORDS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing passwords between multiple browser instances.">
     Passwords
   </message>
+  <message name="IDS_SETTINGS_ENABLE_PAYMENTS_INTEGRATION_CHECKBOX_LABEL" desc="Label for the checkbox that controls the Autofill/Payments integration feature.">
+    Credit cards and addresses using Google Payments
+  </message>
   <message name="IDS_SETTINGS_OPEN_TABS_CHECKBOX_LABEL" desc="Label for the checkbox which enables or disables syncing open tabs between multiple browser instances.">
     Open Tabs
+  </message>
+  <message name="IDS_SETTINGS_MANAGE_SYNCED_DATA_TITLE" desc="Title for the link to manage Chrome Sync data via Google Dashboard.">
+    Manage synced data
+  </message>
+  <message name="IDS_SETTINGS_MANAGE_SYNCED_DATA_DESCRIPTION" desc="Subtitle for the link to manage Chrome Sync data via Google Dashboard.">
+    Opens Google Dashboard
   </message>
   <message name="IDS_SETTINGS_ENCRYPTION_OPTIONS" desc="Title for the section which includes options for encrypting sync settings.">
     Encryption options
@@ -1254,7 +1382,7 @@
     Personalize Google services
   </message>
   <message name="IDS_SETTINGS_PERSONALIZE_GOOGLE_SERVICES_TEXT" desc="Text of the personalize Google services section. When clicked, takes the user to the Google Activity Controls.">
-    Control how your browsing history personalizes Search and other Google services
+    Control how Google uses your browsing history to personalize Search, ads, and other Google services
   </message>
 
   <!-- Users Page -->
@@ -1478,6 +1606,24 @@
     </message>
     <message name="IDS_SETTINGS_DISPLAY_ORIENTATION_STANDARD" desc="In Device Settings > Displays, the label for standard orientation (0 rotation).">
       Standard
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_TITLE" desc="Name of the settings subpage which adjusts display overscan.">
+      Overscan
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_INSTRUCTIONS" desc="Instructions for changing the overscan calibration.">
+      Use arrow keys to adjust picture size and alignment.
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_RESIZE" desc="Label for resizing overscan calibration.">
+      Shrink/expand
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_POSITION" desc="Label for positioning overscan calibration.">
+      Move
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_RESET" desc="Label for resetting overscan calibration.">
+      Reset
+    </message>
+    <message name="IDS_SETTINGS_DISPLAY_OVERSCAN_SAVE" desc="Label for saving overscan calibration.">
+      Save
     </message>
   </if>
 

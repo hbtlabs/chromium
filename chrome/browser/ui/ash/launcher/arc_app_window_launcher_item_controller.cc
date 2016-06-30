@@ -7,8 +7,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item_v2app.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/launcher_application_menu_item_model.h"
 
 ArcAppWindowLauncherItemController::ArcAppWindowLauncherItemController(
     const std::string& arc_app_id,
@@ -22,10 +24,10 @@ ArcAppWindowLauncherItemController::~ArcAppWindowLauncherItemController() {}
 
 base::string16 ArcAppWindowLauncherItemController::GetTitle() {
   ArcAppListPrefs* arc_prefs =
-      ArcAppListPrefs::Get(launcher_controller()->profile());
+      ArcAppListPrefs::Get(launcher_controller()->GetProfile());
   DCHECK(arc_prefs);
-  std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
-      arc_prefs->GetApp(app_id());
+  std::unique_ptr<ArcAppListPrefs::AppInfo> app_info = arc_prefs->GetApp(
+      ArcAppWindowLauncherController::GetArcAppIdFromShelfAppId(app_id()));
   if (!app_info) {
     NOTREACHED();
     return base::string16();
@@ -36,7 +38,7 @@ base::string16 ArcAppWindowLauncherItemController::GetTitle() {
 
 ash::ShelfMenuModel* ArcAppWindowLauncherItemController::CreateApplicationMenu(
     int event_flags) {
-  return nullptr;
+  return new LauncherApplicationMenuItemModel(GetApplicationList(event_flags));
 }
 
 ChromeLauncherAppMenuItems

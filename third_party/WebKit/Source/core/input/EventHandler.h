@@ -28,6 +28,7 @@
 
 #include "core/CoreExport.h"
 #include "core/events/TextEventInputType.h"
+#include "core/input/KeyboardEventManager.h"
 #include "core/input/PointerEventManager.h"
 #include "core/input/ScrollManager.h"
 #include "core/layout/HitTestRequest.h"
@@ -42,7 +43,6 @@
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "public/platform/WebFocusType.h"
 #include "public/platform/WebInputEventResult.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
@@ -66,7 +66,6 @@ class FrameHost;
 class HTMLFrameSetElement;
 class HitTestRequest;
 class HitTestResult;
-class KeyboardEvent;
 class LayoutObject;
 class LocalFrame;
 class Node;
@@ -150,7 +149,6 @@ public:
     WebInputEventResult handleMousePressEvent(const PlatformMouseEvent&);
     WebInputEventResult handleMouseReleaseEvent(const PlatformMouseEvent&);
     WebInputEventResult handleWheelEvent(const PlatformWheelEvent&);
-    void defaultWheelEventHandler(Node*, WheelEvent*);
 
     // Called on the local root frame exactly once per gesture event.
     WebInputEventResult handleGestureEvent(const PlatformGestureEvent&);
@@ -195,7 +193,6 @@ public:
     static WebInputEventResult mergeEventResult(WebInputEventResult resultA, WebInputEventResult resultB);
     static WebInputEventResult toWebInputEventResult(DispatchEventResult);
 
-    static PlatformEvent::Modifiers accessKeyModifiers();
     bool handleAccessKey(const PlatformKeyboardEvent&);
     WebInputEventResult keyEvent(const PlatformKeyboardEvent&);
     void defaultKeyboardEventHandler(KeyboardEvent*);
@@ -221,6 +218,21 @@ public:
 
     SelectionController& selectionController() const { return *m_selectionController; }
 
+    // FIXME(nzolghadr): This function is technically a private function of
+    // EventHandler class. Making it public temporary to make it possible to
+    // move some code around in the refactoring process.
+    // Performs a chaining logical scroll, within a *single* frame, starting
+    // from either a provided starting node or a default based on the focused or
+    // most recently clicked node, falling back to the frame.
+    // Returns true if the scroll was consumed.
+    // direction - The logical direction to scroll in. This will be converted to
+    //             a physical direction for each LayoutBox we try to scroll
+    //             based on that box's writing mode.
+    // granularity - The units that the  scroll delta parameter is in.
+    // startNode - Optional. If provided, start chaining from the given node.
+    //             If not, use the current focus or last clicked node.
+    bool logicalScroll(ScrollDirection, ScrollGranularity, Node* startNode = nullptr);
+
 private:
     static DragState& dragState();
 
@@ -234,6 +246,7 @@ private:
 
     HitTestRequest::HitTestRequestType getHitTypeForGestureType(PlatformEvent::EventType);
     void applyTouchAdjustment(PlatformGestureEvent*, HitTestResult*);
+    WebInputEventResult handleGestureTapDown(const GestureEventWithHitTestResults&);
     WebInputEventResult handleGestureTap(const GestureEventWithHitTestResults&);
     WebInputEventResult handleGestureLongPress(const GestureEventWithHitTestResults&);
     WebInputEventResult handleGestureLongTap(const GestureEventWithHitTestResults&);
@@ -372,6 +385,7 @@ private:
 
     PointerEventManager m_pointerEventManager;
     ScrollManager m_scrollManager;
+    KeyboardEventManager m_keyboardEventManager;
 
     double m_maxMouseMovedDuration;
 
@@ -380,6 +394,11 @@ private:
     Timer<EventHandler> m_activeIntervalTimer;
     double m_lastShowPressTimestamp;
     Member<Element> m_lastDeferredTapElement;
+
+    // Set on GestureTapDown if the |pointerdown| event corresponding to the
+    // triggering |touchstart| event was canceled. This suppresses mouse event
+    // firing for the current gesture sequence (i.e. until next GestureTapDown).
+    bool m_suppressMouseEventsFromGestures;
 };
 
 } // namespace blink

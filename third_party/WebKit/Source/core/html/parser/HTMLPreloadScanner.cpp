@@ -34,6 +34,7 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Document.h"
+#include "core/dom/ScriptLoader.h"
 #include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -50,6 +51,7 @@
 #include "platform/Histogram.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/TraceEvent.h"
+#include <memory>
 
 namespace blink {
 
@@ -206,7 +208,7 @@ public:
         }
     }
 
-    PassOwnPtr<PreloadRequest> createPreloadRequest(const KURL& predictedBaseURL, const SegmentedString& source, const ClientHintsPreferences& clientHintsPreferences, const PictureData& pictureData, const ReferrerPolicy documentReferrerPolicy)
+    std::unique_ptr<PreloadRequest> createPreloadRequest(const KURL& predictedBaseURL, const SegmentedString& source, const ClientHintsPreferences& clientHintsPreferences, const PictureData& pictureData, const ReferrerPolicy documentReferrerPolicy)
     {
         PreloadRequest::RequestType requestType = PreloadRequest::RequestTypePreload;
         if (shouldPreconnect()) {
@@ -219,7 +221,6 @@ public:
                 return nullptr;
             }
         }
-
 
         TextPosition position = TextPosition(source.currentLine(), source.currentColumn());
         FetchRequest::ResourceWidth resourceWidth;
@@ -240,7 +241,7 @@ public:
 
         // The element's 'referrerpolicy' attribute (if present) takes precedence over the document's referrer policy.
         ReferrerPolicy referrerPolicy = (m_referrerPolicy != ReferrerPolicyDefault) ? m_referrerPolicy : documentReferrerPolicy;
-        OwnPtr<PreloadRequest> request = PreloadRequest::create(initiatorFor(m_tagImpl), position, m_urlToLoad, predictedBaseURL, type, referrerPolicy, resourceWidth, clientHintsPreferences, requestType);
+        std::unique_ptr<PreloadRequest> request = PreloadRequest::create(initiatorFor(m_tagImpl), position, m_urlToLoad, predictedBaseURL, type, referrerPolicy, resourceWidth, clientHintsPreferences, requestType);
         request->setCrossOrigin(m_crossOrigin);
         request->setCharset(charset());
         request->setDefer(m_defer);
@@ -271,6 +272,10 @@ private:
         // explanation.
         else if (match(attributeName, integrityAttr))
             SubresourceIntegrity::parseIntegrityAttribute(attributeValue, m_integrityMetadata);
+        else if (match(attributeName, typeAttr))
+            m_typeAttributeValue = attributeValue;
+        else if (match(attributeName, languageAttr))
+            m_languageAttributeValue = attributeValue;
     }
 
     template<typename NameType>
@@ -439,6 +444,8 @@ private:
             return false;
         if (match(m_tagImpl, inputTag) && !m_inputIsImage)
             return false;
+        if (match(m_tagImpl, scriptTag) && !ScriptLoader::isValidScriptTypeAndLanguage(m_typeAttributeValue, m_languageAttributeValue, ScriptLoader::AllowLegacyTypeInTypeAttribute))
+            return false;
         return true;
     }
 
@@ -470,6 +477,8 @@ private:
     String m_imgSrcUrl;
     String m_srcsetAttributeValue;
     String m_asAttributeValue;
+    String m_typeAttributeValue;
+    String m_languageAttributeValue;
     float m_sourceSize;
     bool m_sourceSizeSet;
     FetchRequest::DeferOption m_defer;
@@ -480,7 +489,7 @@ private:
     IntegrityMetadataSet m_integrityMetadata;
 };
 
-TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> documentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData)
+TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, std::unique_ptr<CachedDocumentParameters> documentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData)
     : m_documentURL(documentURL)
     , m_inStyle(false)
     , m_inPicture(false)
@@ -744,7 +753,7 @@ void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& 
         scanner.processAttributes(token.attributes());
         if (m_inPicture)
             scanner.handlePictureSourceURL(m_pictureData);
-        OwnPtr<PreloadRequest> request = scanner.createPreloadRequest(m_predictedBaseElementURL, source, m_clientHintsPreferences, m_pictureData, m_documentParameters->referrerPolicy);
+        std::unique_ptr<PreloadRequest> request = scanner.createPreloadRequest(m_predictedBaseElementURL, source, m_clientHintsPreferences, m_pictureData, m_documentParameters->referrerPolicy);
         if (request)
             requests.append(std::move(request));
         return;
@@ -765,7 +774,7 @@ void TokenPreloadScanner::updatePredictedBaseURL(const Token& token)
     }
 }
 
-HTMLPreloadScanner::HTMLPreloadScanner(const HTMLParserOptions& options, const KURL& documentURL, PassOwnPtr<CachedDocumentParameters> documentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData)
+HTMLPreloadScanner::HTMLPreloadScanner(const HTMLParserOptions& options, const KURL& documentURL, std::unique_ptr<CachedDocumentParameters> documentParameters, const MediaValuesCached::MediaValuesCachedData& mediaValuesCachedData)
     : m_scanner(documentURL, std::move(documentParameters), mediaValuesCachedData)
     , m_tokenizer(HTMLTokenizer::create(options))
 {

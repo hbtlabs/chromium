@@ -37,7 +37,7 @@
 #include "platform/graphics/ImageSource.h"
 #include "platform/image-decoders/ImageAnimation.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -140,6 +140,12 @@ private:
     void startAnimation(CatchUpAnimation = CatchUp) override;
     void stopAnimation();
     void advanceAnimation(Timer<BitmapImage>*);
+    // Advance the animation and let the next frame get scheduled without
+    // catch-up logic. For large images with slow or heavily-loaded systems,
+    // throwing away data as we go (see destroyDecodedData()) means we can spend
+    // so much time re-decoding data that we are always behind. To prevent this,
+    // we force the next animation to skip the catch up logic.
+    void advanceAnimationWithoutCatchUp(Timer<BitmapImage>*);
 
     // Function that does the real work of advancing the animation.  When
     // skippingFrames is true, we're in the middle of a loop trying to skip over
@@ -158,7 +164,7 @@ private:
     RefPtr<SkImage> m_cachedFrame; // A cached copy of the most recently-accessed frame.
     size_t m_cachedFrameIndex; // Index of the frame that is cached.
 
-    OwnPtr<Timer<BitmapImage>> m_frameTimer;
+    std::unique_ptr<Timer<BitmapImage>> m_frameTimer;
     int m_repetitionCount; // How many total animation loops we should do.  This will be cAnimationNone if this image type is incapable of animation.
     RepetitionCountStatus m_repetitionCountStatus;
     int m_repetitionsComplete;  // How many repetitions we've finished.

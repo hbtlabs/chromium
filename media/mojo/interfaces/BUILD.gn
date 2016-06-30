@@ -27,7 +27,14 @@ mojom("interfaces") {
     sources += [ "provision_fetcher.mojom" ]
   }
 
-  deps = [
+  public_deps = [
     "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+mojom("image_capture") {
+  sources = [
+    "image_capture.mojom",
   ]
 }

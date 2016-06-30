@@ -14,13 +14,16 @@ gypi_values =
                 [ "../../chrome_browser_extensions.gypi" ])
 
 # GYP version: chrome/chrome_browser_extensions.gypi:browser_extensions
-source_set("extensions") {
+static_library("extensions") {
   sources = []
   sources += rebase_path(gypi_values.chrome_browser_extensions_enabled_sources,
                          ".",
                          "//chrome")
 
-  configs += [ "//build/config:precompiled_headers" ]
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
   defines = []
 
   # Since browser and browser_extensions actually depend on each other,

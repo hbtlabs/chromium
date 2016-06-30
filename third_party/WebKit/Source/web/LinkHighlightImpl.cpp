@@ -25,6 +25,7 @@
 
 #include "web/LinkHighlightImpl.h"
 
+#include "core/dom/DOMNodeIds.h"
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/Node.h"
 #include "core/frame/FrameView.h"
@@ -34,11 +35,14 @@
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/animation/CompositorAnimation.h"
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/animation/CompositorFloatAnimationCurve.h"
+#include "platform/animation/CompositorTargetProperty.h"
 #include "platform/animation/TimingFunction.h"
 #include "platform/graphics/Color.h"
-#include "platform/graphics/CompositorFactory.h"
+#include "platform/graphics/CompositorElementId.h"
+#include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "public/platform/Platform.h"
@@ -58,13 +62,15 @@
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
-PassOwnPtr<LinkHighlightImpl> LinkHighlightImpl::create(Node* node, WebViewImpl* owningWebViewImpl)
+std::unique_ptr<LinkHighlightImpl> LinkHighlightImpl::create(Node* node, WebViewImpl* owningWebViewImpl)
 {
-    return adoptPtr(new LinkHighlightImpl(node, owningWebViewImpl));
+    return wrapUnique(new LinkHighlightImpl(node, owningWebViewImpl));
 }
 
 LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewImpl* owningWebViewImpl)
@@ -80,27 +86,29 @@ LinkHighlightImpl::LinkHighlightImpl(Node* node, WebViewImpl* owningWebViewImpl)
     DCHECK(owningWebViewImpl);
     WebCompositorSupport* compositorSupport = Platform::current()->compositorSupport();
     DCHECK(compositorSupport);
-    m_contentLayer = adoptPtr(compositorSupport->createContentLayer(this));
-    m_clipLayer = adoptPtr(compositorSupport->createLayer());
+    m_contentLayer = wrapUnique(compositorSupport->createContentLayer(this));
+    m_clipLayer = wrapUnique(compositorSupport->createLayer());
     m_clipLayer->setTransformOrigin(WebFloatPoint3D());
     m_clipLayer->addChild(m_contentLayer->layer());
 
-    m_compositorPlayer = adoptPtr(CompositorFactory::current().createAnimationPlayer());
+    m_compositorPlayer = CompositorAnimationPlayer::create();
     DCHECK(m_compositorPlayer);
     m_compositorPlayer->setAnimationDelegate(this);
     if (m_owningWebViewImpl->linkHighlightsTimeline())
         m_owningWebViewImpl->linkHighlightsTimeline()->playerAttached(*this);
-    m_compositorPlayer->attachLayer(m_contentLayer->layer());
 
+    CompositorElementId elementId = createCompositorElementId(DOMNodeIds::idForNode(node), CompositorSubElementId::LinkHighlight);
+    m_compositorPlayer->attachElement(elementId);
     m_contentLayer->layer()->setDrawsContent(true);
     m_contentLayer->layer()->setOpacity(1);
+    m_contentLayer->layer()->setElementId(elementId);
     m_geometryNeedsUpdate = true;
 }
 
 LinkHighlightImpl::~LinkHighlightImpl()
 {
-    if (m_compositorPlayer->isLayerAttached())
-        m_compositorPlayer->detachLayer();
+    if (m_compositorPlayer->isElementAttached())
+        m_compositorPlayer->detachElement();
     if (m_owningWebViewImpl->linkHighlightsTimeline())
         m_owningWebViewImpl->linkHighlightsTimeline()->playerDestroyed(*this);
     m_compositorPlayer->setAnimationDelegate(nullptr);
@@ -301,7 +309,7 @@ void LinkHighlightImpl::startHighlightAnimationIfNeeded()
 
     m_contentLayer->layer()->setOpacity(startOpacity);
 
-    OwnPtr<CompositorFloatAnimationCurve> curve = adoptPtr(CompositorFactory::current().createFloatAnimationCurve());
+    std::unique_ptr<CompositorFloatAnimationCurve> curve = CompositorFloatAnimationCurve::create();
 
     const auto easeType = CubicBezierTimingFunction::EaseType::EASE;
 
@@ -313,10 +321,10 @@ void LinkHighlightImpl::startHighlightAnimationIfNeeded()
     // For layout tests we don't fade out.
     curve->addCubicBezierKeyframe(CompositorFloatKeyframe(fadeDuration + extraDurationRequired, layoutTestMode() ? startOpacity : 0), easeType);
 
-    OwnPtr<CompositorAnimation> animation = adoptPtr(CompositorFactory::current().createAnimation(*curve, CompositorTargetProperty::OPACITY));
+    std::unique_ptr<CompositorAnimation> animation = CompositorAnimation::create(*curve, CompositorTargetProperty::OPACITY, 0, 0);
 
     m_contentLayer->layer()->setDrawsContent(true);
-    m_compositorPlayer->addAnimation(animation.leakPtr());
+    m_compositorPlayer->addAnimation(animation.release());
 
     invalidate();
     m_owningWebViewImpl->scheduleAnimation();
@@ -345,7 +353,6 @@ void LinkHighlightImpl::notifyAnimationFinished(double, int)
 class LinkHighlightDisplayItemClientForTracking : public DisplayItemClient {
     String debugName() const final { return "LinkHighlight"; }
     LayoutRect visualRect() const final { return LayoutRect(); }
-    DISPLAY_ITEM_CACHE_STATUS_UNCACHEABLE_IMPLEMENTATION
 };
 
 void LinkHighlightImpl::updateGeometry()
@@ -366,8 +373,8 @@ void LinkHighlightImpl::updateGeometry()
             // we can just re-position the layer without needing to repaint.
             m_contentLayer->layer()->invalidate();
 
-            if (m_currentGraphicsLayer && m_currentGraphicsLayer->isTrackingPaintInvalidations())
-                m_currentGraphicsLayer->trackPaintInvalidation(LinkHighlightDisplayItemClientForTracking(), FloatRect(layer()->position().x, layer()->position().y, layer()->bounds().width, layer()->bounds().height), PaintInvalidationFull);
+            if (m_currentGraphicsLayer)
+                m_currentGraphicsLayer->trackPaintInvalidation(LinkHighlightDisplayItemClientForTracking(), enclosingIntRect(FloatRect(layer()->position().x, layer()->position().y, layer()->bounds().width, layer()->bounds().height)), PaintInvalidationFull);
         }
     } else {
         clearGraphicsLayerLinkHighlightPointer();

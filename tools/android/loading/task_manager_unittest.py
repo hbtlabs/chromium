@@ -4,6 +4,7 @@
 
 import argparse
 import contextlib
+import errno
 import os
 import re
 import shutil
@@ -12,18 +13,19 @@ import sys
 import tempfile
 import unittest
 
+import common_util
 import task_manager
 
 
 _GOLDEN_GRAPHVIZ = """digraph graphname {
   n0 [label="0: b", color=black, shape=ellipse];
-  n1 [label="1: c", color=black, shape=ellipse];
-  n0 -> n1;
-  n2 [label="a", color=blue, shape=plaintext];
-  n2 -> n1;
-  n3 [label="2: d", color=black, shape=ellipse];
-  n1 -> n3;
-  n4 [label="3: f", color=black, shape=box];
+  n1 [label="1: a", color=black, shape=ellipse];
+  n2 [label="2: c", color=black, shape=ellipse];
+  n0 -> n2;
+  n1 -> n2;
+  n3 [label="3: d", color=black, shape=ellipse];
+  n2 -> n3;
+  n4 [label="4: f", color=black, shape=box];
   n3 -> n4;
   n5 [label="e", color=blue, shape=ellipse];
   n5 -> n4;
@@ -66,19 +68,11 @@ class TaskManagerTestCase(unittest.TestCase):
 
 
 class TaskTest(TaskManagerTestCase):
-  def testStaticTask(self):
-    task = task_manager.Task('hello.json', 'what/ever/hello.json', [], None)
-    self.assertTrue(task.IsStatic())
-    self.assertTrue(task._is_done)
-    with self.assertRaises(task_manager.TaskError):
-      task.Execute()
-
-  def testDynamicTask(self):
+  def testTaskExecution(self):
     def Recipe():
       Recipe.counter += 1
     Recipe.counter = 0
     task = task_manager.Task('hello.json', 'what/ever/hello.json', [], Recipe)
-    self.assertFalse(task.IsStatic())
     self.assertFalse(task._is_done)
     self.assertEqual(0, Recipe.counter)
     task.Execute()
@@ -86,7 +80,7 @@ class TaskTest(TaskManagerTestCase):
     task.Execute()
     self.assertEqual(1, Recipe.counter)
 
-  def testDynamicTaskWithUnexecutedDeps(self):
+  def testTaskExecutionWithUnexecutedDeps(self):
     def RecipeA():
       self.fail()
 
@@ -102,29 +96,12 @@ class TaskTest(TaskManagerTestCase):
 
 
 class BuilderTest(TaskManagerTestCase):
-  def testCreateUnexistingStaticTask(self):
-    builder = task_manager.Builder(self.output_directory, None)
-    with self.assertRaises(task_manager.TaskError):
-      builder.CreateStaticTask('hello.txt', '/__unexisting/file/path')
-
-  def testCreateStaticTask(self):
-    builder = task_manager.Builder(self.output_directory, None)
-    task = builder.CreateStaticTask('hello.py', __file__)
-    self.assertTrue(task.IsStatic())
-
-  def testDuplicateStaticTask(self):
-    builder = task_manager.Builder(self.output_directory, None)
-    builder.CreateStaticTask('hello.py', __file__)
-    with self.assertRaises(task_manager.TaskError):
-      builder.CreateStaticTask('hello.py', __file__)
-
   def testRegisterTask(self):
     builder = task_manager.Builder(self.output_directory, None)
     @builder.RegisterTask('hello.txt')
     def TaskA():
       TaskA.executed = True
     TaskA.executed = False
-    self.assertFalse(TaskA.IsStatic())
     self.assertEqual(os.path.join(self.output_directory, 'hello.txt'),
                      TaskA.path)
     self.assertFalse(TaskA.executed)
@@ -153,37 +130,24 @@ class BuilderTest(TaskManagerTestCase):
       pass
     self.assertEqual(TaskA, TaskB)
 
-  def testStaticTaskMergingError(self):
-    builder = task_manager.Builder(self.output_directory, None)
-    builder.CreateStaticTask('hello.py', __file__)
-    with self.assertRaises(task_manager.TaskError):
-      @builder.RegisterTask('hello.py', merge=True)
-      def TaskA():
-        pass
-      del TaskA # unused
-
   def testOutputSubdirectory(self):
     builder = task_manager.Builder(self.output_directory, 'subdir')
-
-    builder.CreateStaticTask('hello.py', __file__)
-    self.assertIn('subdir/hello.py', builder._tasks)
-    self.assertNotIn('hello.py', builder._tasks)
-
-    builder.CreateStaticTask('subdir/hello.py', __file__)
-    self.assertIn('subdir/subdir/hello.py', builder._tasks)
 
     @builder.RegisterTask('world.txt')
     def TaskA():
       pass
     del TaskA # unused
+
     self.assertIn('subdir/world.txt', builder._tasks)
-    self.assertNotIn('hello.py', builder._tasks)
+    self.assertNotIn('subdir/subdir/world.txt', builder._tasks)
+    self.assertNotIn('world.txt', builder._tasks)
 
     @builder.RegisterTask('subdir/world.txt')
     def TaskB():
       pass
     del TaskB # unused
     self.assertIn('subdir/subdir/world.txt', builder._tasks)
+    self.assertNotIn('world.txt', builder._tasks)
 
 
 class GenerateScenarioTest(TaskManagerTestCase):
@@ -296,11 +260,13 @@ class GenerateScenarioTest(TaskManagerTestCase):
 
   def testGraphVizOutput(self):
     builder = task_manager.Builder(self.output_directory, None)
-    static_task = builder.CreateStaticTask('a', __file__)
+    @builder.RegisterTask('a')
+    def TaskA():
+      pass
     @builder.RegisterTask('b')
     def TaskB():
       pass
-    @builder.RegisterTask('c', dependencies=[TaskB, static_task])
+    @builder.RegisterTask('c', dependencies=[TaskB, TaskA])
     def TaskC():
       pass
     @builder.RegisterTask('d', dependencies=[TaskC])
@@ -321,11 +287,10 @@ class GenerateScenarioTest(TaskManagerTestCase):
   def testListResumingTasksToFreeze(self):
     TaskManagerTestCase.setUp(self)
     builder = task_manager.Builder(self.output_directory, None)
-    static_task = builder.CreateStaticTask('static', __file__)
     @builder.RegisterTask('a')
     def TaskA():
       pass
-    @builder.RegisterTask('b', dependencies=[static_task])
+    @builder.RegisterTask('b')
     def TaskB():
       pass
     @builder.RegisterTask('c', dependencies=[TaskA, TaskB])
@@ -356,17 +321,17 @@ class GenerateScenarioTest(TaskManagerTestCase):
           task_manager.GenerateScenario(final_tasks, resume_frozen_tasks)
       self.assertEqual(skipped_tasks, set(new_scenario))
 
-    RunSubTest([TaskA], set([]), set([TaskA]), set([]))
-    RunSubTest([TaskD], set([]), set([TaskA, TaskD]), set([]))
-    RunSubTest([TaskD], set([]), set([TaskD]), set([TaskA]))
+    RunSubTest([TaskA], set([]), set([TaskA]), [])
+    RunSubTest([TaskD], set([]), set([TaskA, TaskD]), [])
+    RunSubTest([TaskD], set([]), set([TaskD]), [TaskA])
     RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskB, TaskC, TaskE, TaskF]),
-               set([TaskA]))
+               [TaskA])
     RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskC, TaskE, TaskF]),
-               set([TaskA, TaskB]))
-    RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskE, TaskF]), set([TaskC]))
-    RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskF]), set([TaskC, TaskE]))
+               [TaskA, TaskB])
+    RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskE, TaskF]), [TaskC])
+    RunSubTest([TaskE, TaskF], set([TaskA]), set([TaskF]), [TaskE, TaskC])
     RunSubTest([TaskD, TaskE, TaskF], set([]), set([TaskD, TaskF]),
-               set([TaskA, TaskE, TaskC]))
+               [TaskA, TaskE, TaskC])
 
 
 class CommandLineControlledExecutionTest(TaskManagerTestCase):
@@ -405,12 +370,28 @@ class CommandLineControlledExecutionTest(TaskManagerTestCase):
     def SimulateKillTask():
       self.task_execution_history.append(SimulateKillTask.name)
       raise MemoryError
+    @builder.RegisterTask('timeout_error', dependencies=[TaskD])
+    def SimulateTimeoutError():
+      self.task_execution_history.append(SimulateTimeoutError.name)
+      raise common_util.TimeoutError
+    @builder.RegisterTask('errno_ENOSPC', dependencies=[TaskD])
+    def SimulateENOSPC():
+      self.task_execution_history.append(SimulateENOSPC.name)
+      raise IOError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+    @builder.RegisterTask('errno_EPERM', dependencies=[TaskD])
+    def SimulateEPERM():
+      self.task_execution_history.append(SimulateEPERM.name)
+      raise IOError(errno.EPERM, os.strerror(errno.EPERM))
 
     default_final_tasks = [TaskD, TaskE]
     if self.with_raise_exception_tasks:
-      default_final_tasks.append(RaiseExceptionTask)
-      default_final_tasks.append(RaiseKeyboardInterruptTask)
-      default_final_tasks.append(SimulateKillTask)
+      default_final_tasks.extend([
+          RaiseExceptionTask,
+          RaiseKeyboardInterruptTask,
+          SimulateKillTask,
+          SimulateTimeoutError,
+          SimulateENOSPC,
+          SimulateEPERM])
     task_parser = task_manager.CommandLineParser()
     parser = argparse.ArgumentParser(parents=[task_parser],
         fromfile_prefix_chars=task_manager.FROMFILE_PREFIX_CHARS)
@@ -429,14 +410,10 @@ class CommandLineControlledExecutionTest(TaskManagerTestCase):
   def testSimple(self):
     self.assertEqual(0, self.Execute([]))
     self.assertListEqual(['a', 'd', 'b', 'c', 'e'], self.task_execution_history)
-    self.assertTrue(
-        os.path.exists(self.OutputPath(task_manager._TASK_EXECUTION_LOG_NAME)))
 
   def testDryRun(self):
     self.assertEqual(0, self.Execute(['-d']))
     self.assertListEqual([], self.task_execution_history)
-    self.assertFalse(
-        os.path.exists(self.OutputPath(task_manager._TASK_EXECUTION_LOG_NAME)))
 
   def testRegex(self):
     self.assertEqual(0, self.Execute(['-e', 'b', '-e', 'd']))
@@ -525,6 +502,39 @@ class CommandLineControlledExecutionTest(TaskManagerTestCase):
     self.assertListEqual(['sudden_death'], self.task_execution_history)
     with open(self.ResumeFilePath()) as resume_input:
       self.assertEqual(EXPECTED_RESUME_FILE_CONTENT, resume_input.read())
+
+  def testTimeoutError(self):
+    self.with_raise_exception_tasks = True
+    self.Execute(['-k', '-e', 'timeout_error', '-e', r'^b$'])
+    self.assertListEqual(['a', 'd', 'timeout_error', 'b'],
+                         self.task_execution_history)
+    with open(self.ResumeFilePath()) as resume_input:
+      self.assertEqual('-f\n^d$\n-f\n^b$', resume_input.read())
+
+  def testENOSPC(self):
+    self.with_raise_exception_tasks = True
+    with self.assertRaises(IOError):
+      self.Execute(['-k', '-e', 'errno_ENOSPC', '-e', r'^a$'])
+    self.assertListEqual(
+        ['a', 'd', 'errno_ENOSPC'], self.task_execution_history)
+    with open(self.ResumeFilePath()) as resume_input:
+      self.assertEqual('-f\n^a$\n-f\n^d$\n', resume_input.read())
+
+  def testEPERM(self):
+    self.with_raise_exception_tasks = True
+    self.Execute(['-k', '-e', 'errno_EPERM', '-e', r'^b$'])
+    self.assertListEqual(['a', 'd', 'errno_EPERM', 'b'],
+                         self.task_execution_history)
+    with open(self.ResumeFilePath()) as resume_input:
+      self.assertEqual('-f\n^d$\n-f\n^b$', resume_input.read())
+
+  def testImpossibleTasks(self):
+    self.assertEqual(1, self.Execute(['-f', r'^a$', '-e', r'^c$']))
+    self.assertListEqual([], self.task_execution_history)
+
+    self.assertEqual(0, self.Execute(
+        ['-f', r'^a$', '-e', r'^c$', '-e', r'^b$']))
+    self.assertListEqual(['b'], self.task_execution_history)
 
 
 if __name__ == '__main__':

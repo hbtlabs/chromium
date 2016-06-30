@@ -57,6 +57,10 @@
         "type": "FLOAT"
     },
     {
+        "name": "contentful_predicted_no_state_prefetch_ms",
+        "type": "FLOAT"
+    },
+    {
         "name": "contentful_preloaded_requests",
         "type": "INTEGER"
     },
@@ -113,6 +117,10 @@
         "type": "FLOAT"
     },
     {
+        "name": "first_text_predicted_no_state_prefetch_ms",
+        "type": "FLOAT"
+    },
+    {
         "name": "first_text_preloaded_requests",
         "type": "INTEGER"
     },
@@ -161,6 +169,10 @@
         "type": "FLOAT"
     },
     {
+        "name": "plt_predicted_no_state_prefetch_ms",
+        "type": "FLOAT"
+    },
+    {
         "name": "plt_preloaded_requests",
         "type": "INTEGER"
     },
@@ -201,6 +213,10 @@
         "type": "FLOAT"
     },
     {
+        "name": "significant_predicted_no_state_prefetch_ms",
+        "type": "FLOAT"
+    },
+    {
         "name": "significant_preloaded_requests",
         "type": "INTEGER"
     },
@@ -235,5 +251,25 @@
     {
         "name": "transfer_size",
         "type": "INTEGER"
+    },
+    {
+      "name": "total_queuing_blocked_msec",
+      "type": "FLOAT"
+    },
+    {
+      "name": "total_queuing_load_msec",
+      "type": "FLOAT"
+    },
+    {
+      "name": "average_blocking_request_count",
+      "type": "FLOAT"
+    },
+    {
+      "name": "median_blocking_request_count",
+      "type": "FLOAT"
+    },
+    {
+      "name": "total_requests",
+      "type": "INTEGER"
     }
 ]

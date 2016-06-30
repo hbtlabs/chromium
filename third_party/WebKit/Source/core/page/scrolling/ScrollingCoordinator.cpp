@@ -49,7 +49,6 @@
 #include "platform/exported/WebScrollbarThemeGeometryNative.h"
 #include "platform/geometry/Region.h"
 #include "platform/geometry/TransformState.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/GraphicsLayer.h"
 #if OS(MACOSX)
 #include "platform/mac/ScrollAnimatorMac.h"
@@ -64,7 +63,9 @@
 #include "public/platform/WebScrollbarLayer.h"
 #include "public/platform/WebScrollbarThemeGeometry.h"
 #include "public/platform/WebScrollbarThemePainter.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 using blink::WebLayer;
 using blink::WebLayerPositionConstraint;
@@ -274,25 +275,25 @@ void ScrollingCoordinator::willDestroyScrollableArea(ScrollableArea* scrollableA
 void ScrollingCoordinator::removeWebScrollbarLayer(ScrollableArea* scrollableArea, ScrollbarOrientation orientation)
 {
     ScrollbarMap& scrollbars = orientation == HorizontalScrollbar ? m_horizontalScrollbars : m_verticalScrollbars;
-    if (OwnPtr<WebScrollbarLayer> scrollbarLayer = scrollbars.take(scrollableArea))
+    if (std::unique_ptr<WebScrollbarLayer> scrollbarLayer = scrollbars.take(scrollableArea))
         GraphicsLayer::unregisterContentsLayer(scrollbarLayer->layer());
 }
 
-static PassOwnPtr<WebScrollbarLayer> createScrollbarLayer(Scrollbar& scrollbar, float deviceScaleFactor)
+static std::unique_ptr<WebScrollbarLayer> createScrollbarLayer(Scrollbar& scrollbar, float deviceScaleFactor)
 {
     ScrollbarTheme& theme = scrollbar.theme();
     WebScrollbarThemePainter painter(theme, scrollbar, deviceScaleFactor);
-    OwnPtr<WebScrollbarThemeGeometry> geometry(WebScrollbarThemeGeometryNative::create(theme));
+    std::unique_ptr<WebScrollbarThemeGeometry> geometry(WebScrollbarThemeGeometryNative::create(theme));
 
-    OwnPtr<WebScrollbarLayer> scrollbarLayer = adoptPtr(Platform::current()->compositorSupport()->createScrollbarLayer(WebScrollbarImpl::create(&scrollbar), painter, geometry.leakPtr()));
+    std::unique_ptr<WebScrollbarLayer> scrollbarLayer = wrapUnique(Platform::current()->compositorSupport()->createScrollbarLayer(WebScrollbarImpl::create(&scrollbar), painter, geometry.release()));
     GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
     return scrollbarLayer;
 }
 
-PassOwnPtr<WebScrollbarLayer> ScrollingCoordinator::createSolidColorScrollbarLayer(ScrollbarOrientation orientation, int thumbThickness, int trackStart, bool isLeftSideVerticalScrollbar)
+std::unique_ptr<WebScrollbarLayer> ScrollingCoordinator::createSolidColorScrollbarLayer(ScrollbarOrientation orientation, int thumbThickness, int trackStart, bool isLeftSideVerticalScrollbar)
 {
     WebScrollbar::Orientation webOrientation = (orientation == HorizontalScrollbar) ? WebScrollbar::Horizontal : WebScrollbar::Vertical;
-    OwnPtr<WebScrollbarLayer> scrollbarLayer = adoptPtr(Platform::current()->compositorSupport()->createSolidColorScrollbarLayer(webOrientation, thumbThickness, trackStart, isLeftSideVerticalScrollbar));
+    std::unique_ptr<WebScrollbarLayer> scrollbarLayer = wrapUnique(Platform::current()->compositorSupport()->createSolidColorScrollbarLayer(webOrientation, thumbThickness, trackStart, isLeftSideVerticalScrollbar));
     GraphicsLayer::registerContentsLayer(scrollbarLayer->layer());
     return scrollbarLayer;
 }
@@ -319,7 +320,7 @@ static void setupScrollbarLayer(GraphicsLayer* scrollbarGraphicsLayer, WebScroll
     scrollbarGraphicsLayer->setDrawsContent(false);
 }
 
-WebScrollbarLayer* ScrollingCoordinator::addWebScrollbarLayer(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, PassOwnPtr<WebScrollbarLayer> scrollbarLayer)
+WebScrollbarLayer* ScrollingCoordinator::addWebScrollbarLayer(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, std::unique_ptr<WebScrollbarLayer> scrollbarLayer)
 {
     ScrollbarMap& scrollbars = orientation == HorizontalScrollbar ? m_horizontalScrollbars : m_verticalScrollbars;
     return scrollbars.add(scrollableArea, std::move(scrollbarLayer)).storedValue->value.get();
@@ -333,6 +334,9 @@ WebScrollbarLayer* ScrollingCoordinator::getWebScrollbarLayer(ScrollableArea* sc
 
 void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea* scrollableArea, ScrollbarOrientation orientation)
 {
+    if (!m_page || !m_page->mainFrame())
+        return;
+
     bool isMainFrame = isForMainFrame(scrollableArea);
     GraphicsLayer* scrollbarGraphicsLayer = orientation == HorizontalScrollbar
         ? scrollableArea->layerForHorizontalScrollbar()
@@ -342,14 +346,18 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
         Scrollbar& scrollbar = orientation == HorizontalScrollbar ? *scrollableArea->horizontalScrollbar() : *scrollableArea->verticalScrollbar();
         if (scrollbar.isCustomScrollbar()) {
             detachScrollbarLayer(scrollbarGraphicsLayer);
+            scrollbarGraphicsLayer->platformLayer()->addMainThreadScrollingReasons(MainThreadScrollingReason::kCustomScrollbarScrolling);
             return;
         }
 
+        // Invalidate custom scrollbar scrolling reason in case a custom
+        // scrollbar becomes a non-custom one.
+        scrollbarGraphicsLayer->platformLayer()->clearMainThreadScrollingReasons(MainThreadScrollingReason::kCustomScrollbarScrolling);
         WebScrollbarLayer* scrollbarLayer = getWebScrollbarLayer(scrollableArea, orientation);
         if (!scrollbarLayer) {
             Settings* settings = m_page->mainFrame()->settings();
 
-            OwnPtr<WebScrollbarLayer> webScrollbarLayer;
+            std::unique_ptr<WebScrollbarLayer> webScrollbarLayer;
             if (settings->useSolidColorScrollbars()) {
                 ASSERT(RuntimeEnabledFeatures::overlayScrollbarsEnabled());
                 webScrollbarLayer = createSolidColorScrollbarLayer(orientation, scrollbar.theme().thumbThickness(scrollbar), scrollbar.theme().trackPosition(scrollbar), scrollableArea->shouldPlaceVerticalScrollbarOnLeft());
@@ -373,12 +381,13 @@ void ScrollingCoordinator::scrollableAreaScrollbarLayerDidChange(ScrollableArea*
 
 bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* scrollableArea)
 {
+    if (!m_page || !m_page->mainFrame())
+        return false;
+
     GraphicsLayer* scrollLayer = scrollableArea->layerForScrolling();
 
-    if (scrollLayer) {
-        ASSERT(m_page);
+    if (scrollLayer)
         scrollLayer->setScrollableArea(scrollableArea, isForViewport(scrollableArea));
-    }
 
     WebLayer* webLayer = toWebLayer(scrollableArea->layerForScrolling());
     WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
@@ -661,12 +670,15 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
 {
     if (!m_page->mainFrame()->isLocalFrame() || !m_page->deprecatedLocalMainFrame()->view())
         return;
+
     GraphicsLayer* layer = m_page->deprecatedLocalMainFrame()->view()->layerForScrolling();
     if (WebLayer* scrollLayer = toWebLayer(layer)) {
         m_lastMainThreadScrollingReasons = mainThreadScrollingReasons;
         if (mainThreadScrollingReasons) {
-            if (ScrollAnimatorBase* scrollAnimator = layer->getScrollableArea()->existingScrollAnimator())
+            if (ScrollAnimatorBase* scrollAnimator = layer->getScrollableArea()->existingScrollAnimator()) {
+                DCHECK(m_page->deprecatedLocalMainFrame()->document()->lifecycle().state() >= DocumentLifecycle::CompositingClean);
                 scrollAnimator->takeOverCompositorAnimation();
+            }
             scrollLayer->addMainThreadScrollingReasons(mainThreadScrollingReasons);
         } else {
             // Clear all main thread scrolling reasons except the one that's set
@@ -681,7 +693,7 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
 void ScrollingCoordinator::layerTreeViewInitialized(WebLayerTreeView& layerTreeView)
 {
     if (Platform::current()->isThreadedAnimationEnabled()) {
-        m_programmaticScrollAnimatorTimeline = adoptPtr(CompositorFactory::current().createAnimationTimeline());
+        m_programmaticScrollAnimatorTimeline = CompositorAnimationTimeline::create();
         layerTreeView.attachCompositorAnimationTimeline(m_programmaticScrollAnimatorTimeline->animationTimeline());
     }
 }

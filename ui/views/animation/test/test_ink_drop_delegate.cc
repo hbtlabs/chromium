@@ -2,60 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/test/test_ink_drop_delegate.h"
 
 namespace views {
 namespace test {
 
-class TestInkDrop : public InkDrop {
- public:
-  TestInkDrop() : InkDrop() {}
-  ~TestInkDrop() override {}
-
-  InkDropState GetTargetInkDropState() const override {
-    NOTREACHED();
-    return InkDropState::HIDDEN;
-  }
-
-  bool IsVisible() const override {
-    NOTREACHED();
-    return false;
-  }
-  void AnimateToState(InkDropState ink_drop_state) override { NOTREACHED(); }
-  void SnapToActivated() override { NOTREACHED(); }
-  void SetHovered(bool is_hovered) override { NOTREACHED(); }
-  void SetFocused(bool is_focused) override {}
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestInkDrop);
-};
-
-TestInkDropDelegate::TestInkDropDelegate()
-    : state_(InkDropState::HIDDEN), is_hovered_(false) {}
+TestInkDropDelegate::TestInkDropDelegate() {}
 
 TestInkDropDelegate::~TestInkDropDelegate() {}
 
 void TestInkDropDelegate::OnAction(InkDropState state) {
-  state_ = state;
+  ink_drop_.AnimateToState(state);
 }
 
 void TestInkDropDelegate::SnapToActivated() {
-  state_ = InkDropState::ACTIVATED;
+  ink_drop_.SnapToActivated();
 }
 
 void TestInkDropDelegate::SetHovered(bool is_hovered) {
-  is_hovered_ = is_hovered;
+  ink_drop_.SetHovered(is_hovered);
 }
 
 InkDropState TestInkDropDelegate::GetTargetInkDropState() const {
-  return state_;
+  return ink_drop_.GetTargetInkDropState();
 }
 
 InkDrop* TestInkDropDelegate::GetInkDrop() {
-  if (!ink_drop_.get())
-    ink_drop_.reset(new TestInkDrop);
-  return ink_drop_.get();
+  return &ink_drop_;
 }
 
 }  // namespace test

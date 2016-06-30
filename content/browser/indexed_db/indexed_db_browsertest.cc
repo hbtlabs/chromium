@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
@@ -93,8 +94,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     if (result != "pass") {
       std::string js_result;
       ASSERT_TRUE(ExecuteScriptAndExtractString(
-          the_browser->web_contents(),
-          "window.domAutomationController.send(getLog())",
+          the_browser, "window.domAutomationController.send(getLog())",
           &js_result));
       FAIL() << "Failed: " << js_result;
     }
@@ -156,7 +156,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
         BrowserMainLoop::GetInstance()->indexed_db_thread()->task_runner()));
     EXPECT_TRUE(helper->Run());
     // Wait for DidGetDiskUsage to be called.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return disk_usage_;
   }
 
@@ -170,7 +170,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
         BrowserMainLoop::GetInstance()->indexed_db_thread()->task_runner()));
     EXPECT_TRUE(helper->Run());
     // Wait for DidGetBlobFileCount to be called.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return blob_file_count_;
   }
 
@@ -246,14 +246,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CallbackAccounting) {
   SimpleTest(GetTestUrl("indexeddb", "callback_accounting.html"));
 }
 
-
-// https://crbug.com/616155
-#if defined(ANDROID)
-#define MAYBE_GetAllMaxMessageSize DISABLED_GetAllMaxMessageSize
-#else
-#define MAYBE_GetAllMaxMessageSize GetAllMaxMessageSize
-#endif
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, MAYBE_GetAllMaxMessageSize) {
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, GetAllMaxMessageSize) {
   SimpleTest(GetTestUrl("indexeddb", "getall_max_message_size.html"));
 }
 
@@ -437,9 +430,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, LevelDBLogFileTest) {
   EXPECT_GT(size, 0);
 }
 
-// Disabled due to flakes on Android bots. See crbug.com/616100.
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
-                       DISABLED_CanDeleteWhenOverQuotaTest) {
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, CanDeleteWhenOverQuotaTest) {
   SimpleTest(GetTestUrl("indexeddb", "fill_up_5k.html"));
   int64_t size = RequestDiskUsage();
   const int kQuotaKilobytes = 2;
@@ -475,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, DISABLED_BlobDidAck) {
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   content::ChromeBlobStorageContext* blob_context =
       ChromeBlobStorageContext::GetFor(
           shell()->web_contents()->GetBrowserContext());
@@ -488,7 +479,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack_prefetch.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   content::ChromeBlobStorageContext* blob_context =
       ChromeBlobStorageContext::GetFor(
           shell()->web_contents()->GetBrowserContext());
@@ -740,14 +731,8 @@ INSTANTIATE_TEST_CASE_P(IndexedDBBrowserTestInstantiation,
                                           "iterate",
                                           "failTransactionCommit",
                                           "clearObjectStore"));
-// https://crbug.com/616155
-#if defined(ANDROID)
-#define MAYBE_DeleteCompactsBackingStore DISABLED_DeleteCompactsBackingStore
-#else
-#define MAYBE_DeleteCompactsBackingStore DeleteCompactsBackingStore
-#endif
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
-                       MAYBE_DeleteCompactsBackingStore) {
+
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteCompactsBackingStore) {
   const GURL test_url = GetTestUrl("indexeddb", "delete_compact.html");
   SimpleTest(GURL(test_url.spec() + "#fill"));
   int64_t after_filling = RequestDiskUsage();

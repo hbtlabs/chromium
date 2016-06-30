@@ -47,7 +47,6 @@ class UsbDeviceImpl : public UsbDevice {
  public:
   // UsbDevice implementation:
   void Open(const OpenCallback& callback) override;
-  const UsbConfigDescriptor* GetActiveConfiguration() const override;
 
   // These functions are used during enumeration only. The values must not
   // change during the object's lifetime.
@@ -71,7 +70,6 @@ class UsbDeviceImpl : public UsbDevice {
  protected:
   friend class UsbServiceImpl;
   friend class UsbDeviceHandleImpl;
-  friend class UsbDeviceHandleUsbfs;
 
   // Called by UsbServiceImpl only;
   UsbDeviceImpl(scoped_refptr<UsbContext> context,
@@ -81,16 +79,12 @@ class UsbDeviceImpl : public UsbDevice {
 
   ~UsbDeviceImpl() override;
 
+  void ReadAllConfigurations();
+  void RefreshActiveConfiguration();
+
   // Called only by UsbServiceImpl.
   void set_visited(bool visited) { visited_ = visited; }
   bool was_visited() const { return visited_; }
-  void OnDisconnect();
-  void ReadAllConfigurations();
-
-  // Called by UsbDeviceHandleImpl.
-  void HandleClosed(UsbDeviceHandle* handle);
-  void ActiveConfigurationChanged(int configuration_value);
-  void RefreshActiveConfiguration();
 
  private:
   void GetAllConfigurations();
@@ -102,16 +96,8 @@ class UsbDeviceImpl : public UsbDevice {
   PlatformUsbDevice platform_device_;
   bool visited_ = false;
 
-  // The current device configuration descriptor. May be null if the device is
-  // in an unconfigured state; if not null, it is a pointer to one of the
-  // items at UsbDevice::configurations_.
-  const UsbConfigDescriptor* active_configuration_ = nullptr;
-
   // Retain the context so that it will not be released before UsbDevice.
   scoped_refptr<UsbContext> context_;
-
-  // Opened handles.
-  std::list<UsbDeviceHandle*> handles_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;

@@ -12,7 +12,6 @@
 #include "platform/inspector_protocol/Values.h"
 #include "platform/v8_inspector/public/V8InspectorSessionClient.h"
 #include "wtf/Forward.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 
@@ -28,7 +27,8 @@ class V8InspectorSession;
 
 class CORE_EXPORT InspectorSession
     : public GarbageCollectedFinalized<InspectorSession>
-    , public V8InspectorSessionClient {
+    , public V8InspectorSessionClient
+    , public protocol::FrontendChannel {
     WTF_MAKE_NONCOPYABLE(InspectorSession);
 public:
     class Client {
@@ -37,6 +37,8 @@ public:
         virtual void resumeStartup() { }
         virtual void profilingStarted() { }
         virtual void profilingStopped() { }
+        virtual void consoleEnabled() { }
+        virtual void consoleCleared() { }
         virtual ~Client() {}
     };
 
@@ -54,12 +56,6 @@ public:
 
     // Instrumentation methods marked by [V8]
     void scriptExecutionBlockedByCSP(const String& directiveText);
-    void asyncTaskScheduled(const String& taskName, void* task);
-    void asyncTaskScheduled(const String& taskName, void* task, bool recurring);
-    void asyncTaskCanceled(void* task);
-    void allAsyncTasksCanceled();
-    void asyncTaskStarted(void* task);
-    void asyncTaskFinished(void* task);
     void didStartProvisionalLoad(LocalFrame*);
     void didClearDocumentOfWindowObject(LocalFrame*);
 
@@ -77,6 +73,8 @@ private:
     bool canExecuteScripts() override;
     void profilingStarted() override;
     void profilingStopped() override;
+    void consoleEnabled() override;
+    void consoleCleared() override;
 
     void forceContextsInAllFrames();
     bool isInstrumenting();

@@ -273,6 +273,7 @@ textOrientation
 textOverflow
 textRendering
 textShadow
+textSizeAdjust
 textTransform
 textUnderlinePosition
 top
@@ -329,7 +330,6 @@ webkitClipPath
 webkitColumnBreakAfter
 webkitColumnBreakBefore
 webkitColumnBreakInside
-webkitFilter
 webkitFontSizeDelta
 webkitFontSmoothing
 webkitHighlight

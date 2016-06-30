@@ -51,7 +51,7 @@ public:
     BLINK_EXPORT static void enableTestOnlyFeatures(bool);
 
     // Enables a feature by its string identifier from
-    // RuntimeEnabledFeatures.in.
+    // Source/platform/RuntimeEnabledFeatures.in.
     // Note: We use std::string instead of WebString because this API can
     // be called before blink::initalize(). We can't create WebString objects
     // before blink::initialize().
@@ -90,6 +90,7 @@ public:
     BLINK_EXPORT static void enableOrientationEvent(bool);
     BLINK_EXPORT static void enableOverlayScrollbars(bool);
     BLINK_EXPORT static void enablePagePopup(bool);
+    BLINK_EXPORT static void enableParseHTMLOnMainThread(bool);
     BLINK_EXPORT static void enablePermissionsAPI(bool);
     BLINK_EXPORT static void enablePreciseMemoryInfo(bool);
     BLINK_EXPORT static void enablePresentationAPI(bool);
@@ -114,6 +115,7 @@ public:
     BLINK_EXPORT static void enableWebVR(bool);
     BLINK_EXPORT static void enableXSLT(bool);
     BLINK_EXPORT static void forceOverlayFullscreenVideo(bool);
+    BLINK_EXPORT static void enableAutoplayMutedVideos(bool);
 
 private:
     WebRuntimeFeatures();

@@ -130,6 +130,7 @@ host</translation>
 <translation id="4156740505453712750">Om de toegang tot deze computer te beschermen, kies je een pincode van <ph name="BOLD_START" />ten minste zes cijfers<ph name="BOLD_END" />. Je moet deze pincode opgeven wanneer je verbinding maakt vanaf een andere locatie.</translation>
 <translation id="4176825807642096119">Toegangscode</translation>
 <translation id="4207623512727273241">Voer het installatieprogramma uit voordat je doorgaat.</translation>
+<translation id="4227991223508142681">Hulpprogramma voor hostprovisioning</translation>
 <translation id="4240294130679914010">Verwijderprogramma voor Chromoting-host</translation>
 <translation id="4277463233460010382">Deze computer is geconfigureerd om een of meer clients toestemming te geven verbinding te maken zonder een pincode op te geven.</translation>
 <translation id="4277736576214464567">De toegangscode is ongeldig. Probeer het opnieuw.</translation>
@@ -213,7 +214,7 @@ Desktop-host</translation>
 <translation id="6381670701864002291">Iets anders.</translation>
 <translation id="6398765197997659313">Volledig scherm sluiten</translation>
 <translation id="6408143143164565232">• Luisteren naar audio vanaf Windows- of Linux-computers.
-• Ongewenste verbindingen verwijderen door op de computernaam te tikken en vast te houden.
+• Ongewenste verbindingen verwijderen door lang op de computernaam te drukken.
 • Soepeler knijpen om te zoomen en scrollen met twee vingers.
 • Nieuw scherm voor Help en feedback.</translation>
 <translation id="6441316101718669559">Bureaubladintegratie wordt niet ondersteund op dit platform. Je kunt de app nog steeds gebruiken, maar de gebruikerservaring is beperkt.</translation>

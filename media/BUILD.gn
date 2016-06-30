@@ -19,7 +19,6 @@ buildflag_header("media_features") {
     "ENABLE_AC3_EAC3_AUDIO_DEMUXING=$enable_ac3_eac3_audio_demuxing",
     "ENABLE_HEVC_DEMUXING=$enable_hevc_demuxing",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
-    "ENABLE_MP4_VP9_DEMUXING=0",
   ]
 }
 
@@ -118,6 +117,8 @@ component("media") {
     "filters/audio_clock.h",
     "filters/audio_renderer_algorithm.cc",
     "filters/audio_renderer_algorithm.h",
+    "filters/audio_timestamp_validator.cc",
+    "filters/audio_timestamp_validator.h",
     "filters/chunk_demuxer.cc",
     "filters/chunk_demuxer.h",
     "filters/context_3d.h",
@@ -338,8 +339,6 @@ component("media") {
     deps += [
       "//media/base/android",
       "//media/base/android:media_jni_headers",
-      "//media/capture/video/android:capture_java",
-      "//media/capture/video/android:capture_jni_headers",
     ]
 
     # Only 64 bit builds are using android-21 NDK library, check common.gypi
@@ -363,6 +362,12 @@ component("media") {
 
   if (is_mac) {
     public_deps += [ "//media/base/mac" ]
+    libs += [
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "Foundation.framework",
+    ]
   }
 
   if (is_ios) {
@@ -371,12 +376,6 @@ component("media") {
 
   if (is_win) {
     deps += [ "//media/base/win" ]
-    libs += [
-      "mf.lib",
-      "mfplat.lib",
-      "mfreadwrite.lib",
-      "mfuuid.lib",
-    ]
   }
 
   if (proprietary_codecs) {
@@ -463,7 +462,6 @@ component("media") {
     ":shared_memory_support",
     "//media/audio",
     "//media/base",
-    "//media/capture",
     "//third_party/opus",
   ]
 
@@ -478,7 +476,6 @@ component("media") {
     "//skia",
     "//third_party/libwebm",
     "//third_party/libyuv",
-    "//third_party/opus",
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -533,6 +530,7 @@ test("media_unittests") {
     "filters/audio_clock_unittest.cc",
     "filters/audio_decoder_selector_unittest.cc",
     "filters/audio_renderer_algorithm_unittest.cc",
+    "filters/audio_timestamp_validator_unittest.cc",
     "filters/chunk_demuxer_unittest.cc",
     "filters/decrypting_audio_decoder_unittest.cc",
     "filters/decrypting_demuxer_stream_unittest.cc",
@@ -599,7 +597,6 @@ test("media_unittests") {
     "//media/audio:unittests",
     "//media/base:test_support",
     "//media/base:unittests",
-    "//media/capture:unittests",
     "//media/test:pipeline_integration_tests",
     "//skia",  # Direct dependency required to inherit config.
     "//testing/gmock",
@@ -621,7 +618,6 @@ test("media_unittests") {
     deps += [
       "//media/base/android:media_java",
       "//media/base/android:unittests",
-      "//media/capture/video/android:capture_java",
       "//ui/android:ui_java",
     ]
   }
@@ -733,15 +729,16 @@ test("media_perftests") {
     "//third_party/widevine/cdm:version_h",
     "//ui/gfx:test_support",
   ]
-  if (is_android) {
-    deps += [ "//ui/gl" ]
-  }
   if (media_use_ffmpeg) {
     deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
   }
 
   # This target should not require the Chrome executable to run.
   assert_no_deps = [ "//chrome" ]
+
+  data = [
+    "test/data/",
+  ]
 }
 
 # For running the subset of media_unittests that might require audio hardware
@@ -791,6 +788,7 @@ component("shared_memory_support") {
     "base/audio_parameters.h",
     "base/audio_point.cc",
     "base/audio_point.h",
+    "base/audio_sample_types.h",
     "base/channel_layout.cc",
     "base/channel_layout.h",
     "base/limits.h",

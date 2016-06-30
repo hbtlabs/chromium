@@ -17,7 +17,7 @@ namespace remoting {
 
 class ChromotingJniRuntime;
 class ChromotingJniInstance;
-class JniDisplayHandler;
+class DisplayUpdaterFactory;
 class JniPairingSecretFetcher;
 
 // Houses resources scoped to a session and exposes JNI interface to the
@@ -32,7 +32,7 @@ class JniClient {
   // Initiates a connection with the specified host. To skip the attempt at
   // pair-based authentication, leave |pairing_id| and |pairing_secret| as
   // empty strings.
-  void ConnectToHost(base::WeakPtr<JniDisplayHandler> handler,
+  void ConnectToHost(DisplayUpdaterFactory* updater_factory,
                      const std::string& username,
                      const std::string& auth_token,
                      const std::string& host_jid,
@@ -80,7 +80,6 @@ class JniClient {
 
   void Connect(JNIEnv* env,
                const base::android::JavaParamRef<jobject>& caller,
-               jlong display_handler_ptr,
                const base::android::JavaParamRef<jstring>& username,
                const base::android::JavaParamRef<jstring>& authToken,
                const base::android::JavaParamRef<jstring>& hostJid,
@@ -158,7 +157,7 @@ class JniClient {
   // Reference to the Java client object.
   base::android::ScopedJavaGlobalRef<jobject> java_client_;
 
-  base::WeakPtr<JniDisplayHandler> display_handler_;
+  std::unique_ptr<DisplayUpdaterFactory> display_handler_;
 
   // Deleted on UI thread.
   std::unique_ptr<JniPairingSecretFetcher> secret_fetcher_;

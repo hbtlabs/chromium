@@ -5,9 +5,11 @@
 #include "ash/wm/panels/attached_panel_window_targeter.h"
 
 #include "ash/aura/wm_shelf_aura.h"
+#include "ash/aura/wm_window_aura.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shell.h"
+#include "ui/aura/window.h"
 
 namespace ash {
 
@@ -22,25 +24,25 @@ AttachedPanelWindowTargeter::AttachedPanelWindowTargeter(
       panel_container_(container),
       panel_layout_manager_(panel_layout_manager),
       default_touch_extend_(default_touch_extend) {
-  Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 AttachedPanelWindowTargeter::~AttachedPanelWindowTargeter() {
-  Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 void AttachedPanelWindowTargeter::OnShelfCreatedForRootWindow(
-    aura::Window* root_window) {
-  UpdateTouchExtend(root_window);
+    WmWindow* root_window) {
+  UpdateTouchExtend(WmWindowAura::GetAuraWindow(root_window));
 }
 
 void AttachedPanelWindowTargeter::OnShelfAlignmentChanged(
-    aura::Window* root_window) {
+    WmWindow* root_window) {
   // Don't update the touch insets if the shelf has not yet been created.
   if (!panel_layout_manager_->shelf())
     return;
 
-  UpdateTouchExtend(root_window);
+  UpdateTouchExtend(WmWindowAura::GetAuraWindow(root_window));
 }
 
 void AttachedPanelWindowTargeter::UpdateTouchExtend(aura::Window* root_window) {

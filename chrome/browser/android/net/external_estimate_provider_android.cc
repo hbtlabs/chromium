@@ -7,7 +7,8 @@
 #include <stdint.h>
 
 #include "base/android/context_utils.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/ExternalEstimateProviderAndroid_jni.h"
 
@@ -18,8 +19,8 @@ ExternalEstimateProviderAndroid::ExternalEstimateProviderAndroid()
     : task_runner_(nullptr),
       delegate_(nullptr),
       weak_factory_(this) {
-  if (base::MessageLoop::current())
-    task_runner_ = base::MessageLoop::current()->task_runner();
+  if (base::ThreadTaskRunnerHandle::IsSet())
+    task_runner_ = base::ThreadTaskRunnerHandle::Get();
   JNIEnv* env = base::android::AttachCurrentThread();
   j_external_estimate_provider_.Reset(
       Java_ExternalEstimateProviderAndroid_create(

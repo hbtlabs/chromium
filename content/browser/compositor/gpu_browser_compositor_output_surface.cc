@@ -22,20 +22,19 @@ namespace content {
 GpuBrowserCompositorOutputSurface::GpuBrowserCompositorOutputSurface(
     scoped_refptr<ContextProviderCommandBuffer> context,
     scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-    base::SingleThreadTaskRunner* task_runner,
+    cc::SyntheticBeginFrameSource* begin_frame_source,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator)
     : BrowserCompositorOutputSurface(std::move(context),
                                      std::move(vsync_manager),
-                                     task_runner,
+                                     begin_frame_source,
                                      std::move(overlay_candidate_validator)),
       swap_buffers_completion_callback_(base::Bind(
           &GpuBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted,
           base::Unretained(this))),
       update_vsync_parameters_callback_(base::Bind(
           &BrowserCompositorOutputSurface::OnUpdateVSyncParametersFromGpu,
-          base::Unretained(this))) {
-}
+          base::Unretained(this))) {}
 
 GpuBrowserCompositorOutputSurface::~GpuBrowserCompositorOutputSurface() {}
 
@@ -66,6 +65,11 @@ bool GpuBrowserCompositorOutputSurface::BindToClient(
   return true;
 }
 
+uint32_t GpuBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
+  auto* gl = static_cast<ContextProviderCommandBuffer*>(context_provider());
+  return gl->GetCopyTextureInternalFormat();
+}
+
 void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
   if (!reflector_) {
     reflector_texture_.reset();
@@ -75,30 +79,29 @@ void GpuBrowserCompositorOutputSurface::OnReflectorChanged() {
   }
 }
 
-void GpuBrowserCompositorOutputSurface::SwapBuffers(
-    cc::CompositorFrame* frame) {
-  DCHECK(frame->gl_frame_data);
+void GpuBrowserCompositorOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
+  DCHECK(frame.gl_frame_data);
 
-  GetCommandBufferProxy()->SetLatencyInfo(frame->metadata.latency_info);
+  GetCommandBufferProxy()->SetLatencyInfo(frame.metadata.latency_info);
 
   if (reflector_) {
-    if (frame->gl_frame_data->sub_buffer_rect ==
-        gfx::Rect(frame->gl_frame_data->size)) {
+    if (frame.gl_frame_data->sub_buffer_rect ==
+        gfx::Rect(frame.gl_frame_data->size)) {
       reflector_texture_->CopyTextureFullImage(SurfaceSize());
       reflector_->OnSourceSwapBuffers();
     } else {
-      const gfx::Rect& rect = frame->gl_frame_data->sub_buffer_rect;
+      const gfx::Rect& rect = frame.gl_frame_data->sub_buffer_rect;
       reflector_texture_->CopyTextureSubImage(rect);
       reflector_->OnSourcePostSubBuffer(rect);
     }
   }
 
-  if (frame->gl_frame_data->sub_buffer_rect ==
-      gfx::Rect(frame->gl_frame_data->size)) {
+  if (frame.gl_frame_data->sub_buffer_rect ==
+      gfx::Rect(frame.gl_frame_data->size)) {
     context_provider_->ContextSupport()->Swap();
   } else {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame->gl_frame_data->sub_buffer_rect);
+        frame.gl_frame_data->sub_buffer_rect);
   }
 
   client_->DidSwapBuffers();

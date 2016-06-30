@@ -45,8 +45,8 @@ class HatsNotificationController : public NotificationDelegate,
       const NetworkState* network,
       const NetworkPortalDetector::CaptivePortalState& state) override;
 
-  void ShowNotification();
   Notification* CreateNotification();
+  void UpdateLastInteractionTime();
 
   Profile* profile_;
 

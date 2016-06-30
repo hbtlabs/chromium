@@ -47,19 +47,12 @@ source_set("app") {
   public_deps = [
     ":app_non_mac_win",
     ":lib",
-    "//third_party/kasko:kasko_features",
+    "//third_party/kasko",
   ]
   deps = [
     "//base",
   ]
 
-  if (is_win) {
-    deps += [
-      # TODO(fdoray): Remove this once the PreRead field trial has expired.
-      # crbug.com/577698
-      "//components/startup_metric_utils/common",
-    ]
-  }
   if (is_mac || is_win) {
     deps += [
       "//third_party/crashpad/crashpad/client",

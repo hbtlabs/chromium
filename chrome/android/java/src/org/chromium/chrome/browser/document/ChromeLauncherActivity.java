@@ -7,22 +7,19 @@ package org.chromium.chrome.browser.document;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.StrictMode;
 import android.provider.Browser;
 import android.support.customtabs.CustomTabsIntent;
 import android.text.TextUtils;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
-import org.chromium.base.BuildInfo;
 import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -32,7 +29,6 @@ import org.chromium.chrome.browser.AppLinkHandler;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
-import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
 import org.chromium.chrome.browser.UrlConstants;
@@ -46,13 +42,13 @@ import org.chromium.chrome.browser.metrics.MediaNotificationUma;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.notifications.NotificationPlatformBridge;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
-import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
 import org.chromium.chrome.browser.upgrade.UpgradeActivity;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.chrome.browser.webapps.ActivityAssigner;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 
 import java.lang.ref.WeakReference;
@@ -118,7 +114,13 @@ public class ChromeLauncherActivity extends Activity
      */
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+        // Third-party code adds disk access to Activity.onCreate. http://crbug.com/619824
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            super.onCreate(savedInstanceState);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
         // This Activity is only transient. It launches another activity and
         // terminates itself. However, some of the work is performed outside of
         // {@link Activity#onCreate()}. To capture this, the TraceEvent starts
@@ -140,7 +142,7 @@ public class ChromeLauncherActivity extends Activity
         mIsInLegacyMultiInstanceMode =
                 MultiWindowUtils.getInstance().shouldRunInLegacyMultiInstanceMode(this);
         mIntentHandler = new IntentHandler(this, getPackageName());
-        mIsCustomTabIntent = isCustomTabIntent();
+        mIsCustomTabIntent = isCustomTabIntent(getIntent());
         if (!mIsCustomTabIntent) {
             mIsHerbIntent = isHerbIntent();
             mIsCustomTabIntent = mIsHerbIntent;
@@ -286,9 +288,6 @@ public class ChromeLauncherActivity extends Activity
             return false;
         }
 
-        // Custom Tabs have to be available.
-        if (!ChromePreferenceManager.getInstance(context).getCustomTabsEnabled()) return false;
-
         return true;
     }
 
@@ -304,15 +303,8 @@ public class ChromeLauncherActivity extends Activity
                 || TextUtils.equals(ChromeSwitches.HERB_FLAVOR_DISABLED, flavor)) {
             return false;
         } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ELDERBERRY)) {
-            boolean isAllowedToReturnToExternalApp = IntentUtils.safeGetBooleanExtra(getIntent(),
+            return IntentUtils.safeGetBooleanExtra(getIntent(),
                     ChromeLauncherActivity.EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, true);
-
-            if (isAllowedToReturnToExternalApp
-                    && (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
-                        || (getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
-                getIntent().addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
-            }
-            return isAllowedToReturnToExternalApp;
         } else if (TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_ANISE)
                 || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_BASIL)
                 || TextUtils.equals(flavor, ChromeSwitches.HERB_FLAVOR_DILL)) {
@@ -344,37 +336,29 @@ public class ChromeLauncherActivity extends Activity
                 FeatureUtilities.getHerbFlavor(), ChromeSwitches.HERB_FLAVOR_ELDERBERRY)
                 && (newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0
                         || (newIntent.getFlags() & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
-            newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
+            String uuid = UUID.randomUUID().toString();
+            newIntent.addFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
+            newIntent.setFlags(
+                    newIntent.getFlags() & ~Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // Force a new document L+ to ensure the proper task/stack creation.
+                newIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                newIntent.setClassName(context, SeparateTaskCustomTabActivity.class.getName());
+            } else {
+                int activityIndex =
+                        ActivityAssigner.instance(ActivityAssigner.SEPARATE_TASK_CCT_NAMESPACE)
+                        .assign(uuid);
+                String className = SeparateTaskCustomTabActivity.class.getName() + activityIndex;
+                newIntent.setClassName(context, className);
+            }
 
             String url = IntentHandler.getUrlFromIntent(newIntent);
             assert url != null;
-
             newIntent.setData(new Uri.Builder().scheme(UrlConstants.CUSTOM_TAB_SCHEME)
-                    .authority(UUID.randomUUID().toString())
-                    .query(url).build());
+                    .authority(uuid).query(url).build());
         }
 
-        Bundle herbActionButtonBundle = new Bundle();
-
-        Bitmap herbIcon =
-                BitmapFactory.decodeResource(context.getResources(), R.drawable.btn_open_in_chrome);
-        herbActionButtonBundle.putParcelable(CustomTabsIntent.KEY_ICON, herbIcon);
-
-        // Fallback in case the Custom Tab fails to trigger opening in Chrome.
-        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        intent.putExtra(EXTRA_IS_ALLOWED_TO_RETURN_TO_PARENT, false);
-
-        PendingIntent pendingIntent =
-                PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_ONE_SHOT);
-        herbActionButtonBundle.putParcelable(CustomTabsIntent.KEY_PENDING_INTENT, pendingIntent);
-
-        String openString = context.getString(
-                R.string.menu_open_in_product, BuildInfo.getPackageLabel(context));
-        herbActionButtonBundle.putString(CustomTabsIntent.KEY_DESCRIPTION, openString);
-
-        newIntent.putExtra(CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE, herbActionButtonBundle);
-        newIntent.putExtra(CustomTabsIntent.EXTRA_TINT_ACTION_BUTTON, true);
         newIntent.putExtra(CustomTabsIntent.EXTRA_DEFAULT_SHARE_MENU_ITEM, true);
         newIntent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
         newIntent.putExtra(CustomTabIntentDataProvider.EXTRA_SHOW_STAR_ICON, true);
@@ -384,18 +368,13 @@ public class ChromeLauncherActivity extends Activity
     }
 
     /**
-     * @return Whether the intent sent is for launching a Custom Tab.
+     * @return Whether the intent is for launching a Custom Tab.
      */
-    private boolean isCustomTabIntent() {
-        if (getIntent() == null || !getIntent().hasExtra(CustomTabsIntent.EXTRA_SESSION)) {
+    public static boolean isCustomTabIntent(Intent intent) {
+        if (intent == null || !intent.hasExtra(CustomTabsIntent.EXTRA_SESSION)) {
             return false;
         }
-
-        String url = IntentHandler.getUrlFromIntent(getIntent());
-        if (url == null) return false;
-
-        if (!ChromePreferenceManager.getInstance(this).getCustomTabsEnabled()) return false;
-        return true;
+        return IntentHandler.getUrlFromIntent(intent) != null;
     }
 
     /**
@@ -425,7 +404,7 @@ public class ChromeLauncherActivity extends Activity
 
         // Create and fire a launch intent.
         startActivity(createCustomTabActivityIntent(
-                this, getIntent(), !isCustomTabIntent() && mIsHerbIntent));
+                this, getIntent(), !isCustomTabIntent(getIntent()) && mIsHerbIntent));
         if (mIsHerbIntent) overridePendingTransition(R.anim.slide_in_up, R.anim.no_anim);
     }
 
@@ -434,11 +413,8 @@ public class ChromeLauncherActivity extends Activity
         maybePrefetchDnsInBackground();
 
         Intent newIntent = new Intent(getIntent());
-        String className = ChromeTabbedActivity.class.getName();
-        if (newIntent.hasExtra(IntentHandler.EXTRA_WINDOW_ID)
-                && IntentUtils.safeGetIntExtra(newIntent, IntentHandler.EXTRA_WINDOW_ID, 0) == 2) {
-            className = ChromeTabbedActivity2.class.getName();
-        }
+        String className = MultiWindowUtils.getInstance().getTabbedActivityForIntent(
+                newIntent, this).getName();
         newIntent.setClassName(getApplicationContext().getPackageName(), className);
         newIntent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -451,7 +427,15 @@ public class ChromeLauncherActivity extends Activity
         if (mIsInLegacyMultiInstanceMode) {
             MultiWindowUtils.getInstance().makeLegacyMultiInstanceIntent(this, newIntent);
         }
-        startActivity(newIntent);
+
+        // This system call is often modified by OEMs and not actionable. http://crbug.com/619646.
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        StrictMode.allowThreadDiskWrites();
+        try {
+            startActivity(newIntent);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
     }
 
     /**

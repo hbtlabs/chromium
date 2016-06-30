@@ -19,6 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/fileapi/mock_url_request_delegate.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/common/cache_storage/cache_storage_types.h"
@@ -266,12 +267,14 @@ class TestCacheStorageCache : public CacheStorageCache {
       const GURL& origin,
       const std::string& cache_name,
       const base::FilePath& path,
+      CacheStorage* cache_storage,
       const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
       const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context)
       : CacheStorageCache(origin,
                           cache_name,
                           path,
+                          cache_storage,
                           request_context_getter,
                           quota_manager_proxy,
                           blob_context),
@@ -303,7 +306,11 @@ class TestCacheStorageCache : public CacheStorageCache {
   }
 
  private:
-  ~TestCacheStorageCache() override {}
+  std::unique_ptr<CacheStorageCacheHandle> CreateCacheHandle() override {
+    // Returns an empty handle. There is no need for CacheStorage and its
+    // handles in these tests.
+    return std::unique_ptr<CacheStorageCacheHandle>();
+  }
 
   bool delay_backend_creation_;
   ErrorCallback backend_creation_callback_;
@@ -349,11 +356,11 @@ class CacheStorageCacheTest : public testing::Test {
 
     CreateRequests(blob_storage_context);
 
-    cache_ = make_scoped_refptr(new TestCacheStorageCache(
-        GURL(kOrigin), kCacheName, temp_dir_.path(),
-        BrowserContext::GetDefaultStoragePartition(&browser_context_)->
-            GetURLRequestContext(),
-        quota_manager_proxy_, blob_storage_context->context()->AsWeakPtr()));
+    cache_ = base::MakeUnique<TestCacheStorageCache>(
+        GURL(kOrigin), kCacheName, temp_dir_.path(), nullptr /* CacheStorage */,
+        BrowserContext::GetDefaultStoragePartition(&browser_context_)
+            ->GetURLRequestContext(),
+        quota_manager_proxy_, blob_storage_context->context()->AsWeakPtr());
   }
 
   void TearDown() override {
@@ -670,7 +677,7 @@ class CacheStorageCacheTest : public testing::Test {
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
   storage::BlobStorageContext* blob_storage_context_;
 
-  scoped_refptr<TestCacheStorageCache> cache_;
+  std::unique_ptr<TestCacheStorageCache> cache_;
 
   ServiceWorkerFetchRequest body_request_;
   ServiceWorkerResponse body_response_;
@@ -1165,9 +1172,9 @@ TEST_P(CacheStorageCacheTestP, WriteSideData) {
   ASSERT_TRUE(Delete(body_request_));
 }
 
-TEST_P(CacheStorageCacheTestP, WriteSideData_QuotaExeeded) {
+TEST_P(CacheStorageCacheTestP, WriteSideData_QuotaExceeded) {
   mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
-                                1024 * 1024);
+                                1024 * 1023);
   base::Time response_time(base::Time::Now());
   ServiceWorkerResponse response;
   response.response_time = response_time;
@@ -1287,7 +1294,7 @@ TEST_P(CacheStorageCacheTestP, QuotaManagerModified) {
 TEST_P(CacheStorageCacheTestP, PutObeysQuotaLimits) {
   mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
                                 0);
-  EXPECT_FALSE(Put(no_body_request_, no_body_response_));
+  EXPECT_FALSE(Put(body_request_, body_response_));
   EXPECT_EQ(CACHE_STORAGE_ERROR_QUOTA_EXCEEDED, callback_error_);
 }
 
@@ -1305,41 +1312,6 @@ TEST_P(CacheStorageCacheTestP, Size) {
 
   EXPECT_TRUE(Delete(body_request_));
   EXPECT_EQ(0, Size());
-}
-
-TEST_P(CacheStorageCacheTestP, SizeOperationsArePrioritized) {
-  // Test that pending size operations (those waiting for initialization) run
-  // before other scheduler operations.
-  cache_->set_delay_backend_creation(true);  // Delay cache initialization
-
-  CacheStorageBatchOperation operation;
-  operation.operation_type = CACHE_STORAGE_CACHE_OPERATION_TYPE_PUT;
-  operation.request = body_request_;
-  operation.response = body_response_;
-
-  callback_error_ = CACHE_STORAGE_ERROR_NOT_FOUND;
-  base::RunLoop run_loop;
-  // Start a put operation that blocks on initialization.
-  cache_->BatchOperation(std::vector<CacheStorageBatchOperation>(1, operation),
-                         base::Bind(&CacheStorageCacheTest::ErrorTypeCallback,
-                                    base::Unretained(this), &run_loop));
-
-  // Next start a size operation that also blocks on initialization.
-  bool size_callback_called = false;
-  cache_->Size(base::Bind(&CacheStorageCacheTest::SizeCallback,
-                          base::Unretained(this), nullptr,
-                          &size_callback_called));
-
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(size_callback_called);
-  EXPECT_EQ(CACHE_STORAGE_ERROR_NOT_FOUND, callback_error_);
-
-  // Finish initialization. The Size operation should complete before Put gets
-  // to run as Size has priority. See crbug.com/605663.
-  cache_->ContinueCreateBackend();
-  run_loop.Run();
-  EXPECT_TRUE(size_callback_called);
-  EXPECT_EQ(CACHE_STORAGE_OK, callback_error_);
 }
 
 TEST_P(CacheStorageCacheTestP, GetSizeThenClose) {

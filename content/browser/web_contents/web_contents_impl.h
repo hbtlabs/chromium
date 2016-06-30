@@ -73,6 +73,7 @@ class SavePackage;
 class ScreenOrientationDispatcherHost;
 class SiteInstance;
 class TestWebContents;
+class TextInputManager;
 class WakeLockServiceContext;
 class WebContentsAudioMuter;
 class WebContentsDelegate;
@@ -291,8 +292,6 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCapturerCount() const override;
   bool IsAudioMuted() const override;
   void SetAudioMuted(bool mute) override;
-  void IncrementBluetoothConnectedDeviceCount();
-  void DecrementBluetoothConnectedDeviceCount();
   bool IsConnectedToBluetoothDevice() const override;
   bool IsCrashed() const override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
@@ -429,6 +428,8 @@ class CONTENT_EXPORT WebContentsImpl
   void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
                               bool is_reload,
                               IPC::Message* reply_msg) override;
+  void RunFileChooser(RenderFrameHost* render_frame_host,
+                      const FileChooserParams& params) override;
   void DidAccessInitialDocument() override;
   void DidChangeName(RenderFrameHost* render_frame_host,
                      const std::string& name) override;
@@ -497,8 +498,6 @@ class CONTENT_EXPORT WebContentsImpl
                         uint64_t upload_position,
                         uint64_t upload_size) override;
   void Activate() override;
-  void RunFileChooser(RenderViewHost* render_view_host,
-                      const FileChooserParams& params) override;
   void UpdatePreferredSize(const gfx::Size& pref_size) override;
   void CreateNewWindow(
       SiteInstance* source_site_instance,
@@ -619,8 +618,7 @@ class CONTENT_EXPORT WebContentsImpl
                           bool last_unlocked_by_target) override;
   gfx::Rect GetRootWindowResizerRect(
       RenderWidgetHostImpl* render_widget_host) const override;
-  bool IsFullscreenForCurrentTab(
-      RenderWidgetHostImpl* render_widget_host) const override;
+  bool IsFullscreenForCurrentTab() const override;
   blink::WebDisplayMode GetDisplayMode(
       RenderWidgetHostImpl* render_widget_host) const override;
   void LostCapture(RenderWidgetHostImpl* render_widget_host) override;
@@ -630,6 +628,7 @@ class CONTENT_EXPORT WebContentsImpl
   void OnRenderFrameProxyVisibilityChanged(bool visible) override;
   void SendScreenRects() override;
   void OnFirstPaintAfterLoad(RenderWidgetHostImpl* render_widget_host) override;
+  TextInputManager* GetTextInputManager() override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -753,6 +752,10 @@ class CONTENT_EXPORT WebContentsImpl
                        const gfx::Rect& selection_rect,
                        int active_match_ordinal,
                        bool final_update);
+
+  // Modify the counter of connected devices for this WebContents.
+  void IncrementBluetoothConnectedDeviceCount();
+  void DecrementBluetoothConnectedDeviceCount();
 
 #if defined(OS_ANDROID)
   // Called by FindRequestManager when all of the find match rects are in.
@@ -1080,6 +1083,9 @@ class CONTENT_EXPORT WebContentsImpl
   void SetJavaScriptDialogManagerForTesting(
       JavaScriptDialogManager* dialog_manager);
 
+  // Returns the outermost WebContents in this WebContents's tree.
+  WebContentsImpl* GetOutermostWebContents();
+
   // Returns the FindRequestManager, or creates one if it doesn't already exist.
   FindRequestManager* GetOrCreateFindRequestManager();
 
@@ -1133,7 +1139,7 @@ class CONTENT_EXPORT WebContentsImpl
   // SavePackage, lazily created.
   scoped_refptr<SavePackage> save_package_;
 
-  // Manages/coordinates find-in-page requests. Created lazily.
+  // Manages/coordinates multi-process find-in-page requests. Created lazily.
   std::unique_ptr<FindRequestManager> find_request_manager_;
 
   // Data for loading state ----------------------------------------------------
@@ -1382,6 +1388,18 @@ class CONTENT_EXPORT WebContentsImpl
   PageImportanceSignals page_importance_signals_;
 
   bool page_scale_factor_is_one_;
+
+  // TextInputManager tracks the IME-related state for all the
+  // RenderWidgetHostViews on this WebContents. Only exists on the outermost
+  // WebContents and is automatically destroyed when a WebContents becomes an
+  // inner WebContents by attaching to an outer WebContents. Then the
+  // IME-related state for RenderWidgetHosts on the inner WebContents is tracked
+  // by the TextInputManager in the outer WebContents.
+  std::unique_ptr<TextInputManager> text_input_manager_;
+
+  // Stores the RenderWidgetHost that currently holds a mouse lock or nullptr if
+  // there's no RenderWidgetHost holding a lock.
+  RenderWidgetHostImpl* mouse_lock_widget_;
 
   base::WeakPtrFactory<WebContentsImpl> loading_weak_factory_;
   base::WeakPtrFactory<WebContentsImpl> weak_factory_;

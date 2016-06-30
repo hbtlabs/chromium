@@ -106,6 +106,7 @@ namespace content {
 class ContentDecryptorDelegate;
 class FullscreenContainer;
 class MessageChannel;
+class PepperAudioController;
 class PepperCompositorHost;
 class PepperGraphics2DHost;
 class PluginInstanceThrottlerImpl;
@@ -268,7 +269,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   bool StartFind(const base::string16& search_text,
                  bool case_sensitive,
                  int identifier);
-  void SelectFindResult(bool forward);
+  void SelectFindResult(bool forward, int identifier);
   void StopFind();
 
   bool SupportsPrintInterface();
@@ -556,6 +557,10 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // PluginInstanceThrottler::Observer
   void OnThrottleStateChange() override;
   void OnHiddenForPlaceholder(bool hidden) override;
+
+  PepperAudioController& audio_controller() {
+    return *audio_controller_;
+  }
 
  private:
   friend class base::RefCounted<PepperPluginInstanceImpl>;
@@ -976,6 +981,9 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   std::vector<TextureMailboxRefCount> texture_ref_counts_;
 
   bool initialized_;
+
+  // The controller for all active audios of this pepper instance.
+  std::unique_ptr<PepperAudioController> audio_controller_;
 
   // We use a weak ptr factory for scheduling DidChangeView events so that we
   // can tell whether updates are pending and consolidate them. When there's

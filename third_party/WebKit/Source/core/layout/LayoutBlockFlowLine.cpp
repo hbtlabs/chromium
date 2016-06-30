@@ -739,7 +739,6 @@ static void deleteLineRange(LineLayoutState& layoutState, RootInlineBox* startLi
 {
     RootInlineBox* boxToDelete = startLine;
     while (boxToDelete && boxToDelete != stopLine) {
-        layoutState.updatePaintInvalidationRangeFromBox(boxToDelete);
         // Note: deleteLineRange(firstRootBox()) is not identical to deleteLineBoxTree().
         // deleteLineBoxTree uses nextLineBox() instead of nextRootBox() when traversing.
         RootInlineBox* next = boxToDelete->nextRootBox();
@@ -764,11 +763,8 @@ void LayoutBlockFlow::layoutRunsAndFloats(LineLayoutState& layoutState)
     if (!layoutState.isFullLayout() && startLine)
         determineEndPosition(layoutState, startLine, cleanLineStart, cleanLineBidiStatus);
 
-    if (startLine) {
-        if (!layoutState.usesPaintInvalidationBounds())
-            layoutState.setPaintInvalidationRange(logicalHeight());
+    if (startLine)
         deleteLineRange(layoutState, startLine);
-    }
 
     layoutRunsAndFloatsInRange(layoutState, resolver, cleanLineStart, cleanLineBidiStatus);
     linkToEndLineIfNeeded(layoutState);
@@ -908,9 +904,6 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState,
 
             if (lineBox) {
                 lineBox->setLineBreakInfo(endOfLine.getLineLayoutItem(), endOfLine.offset(), resolver.status());
-                if (layoutState.usesPaintInvalidationBounds())
-                    layoutState.updatePaintInvalidationRangeFromBox(lineBox);
-
                 if (paginated) {
                     if (paginationStrutFromDeletedLine) {
                         // This is a line that got re-created because it got pushed to the next fragmentainer, and there
@@ -925,9 +918,6 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState,
                         if (adjustment) {
                             LayoutUnit oldLineWidth = availableLogicalWidthForLine(oldLogicalHeight, layoutState.lineInfo().isFirstLine() ? IndentText : DoNotIndentText);
                             lineBox->moveInBlockDirection(adjustment);
-                            if (layoutState.usesPaintInvalidationBounds())
-                                layoutState.updatePaintInvalidationRangeFromBox(lineBox);
-
                             if (availableLogicalWidthForLine(oldLogicalHeight + adjustment, layoutState.lineInfo().isFirstLine() ? IndentText: DoNotIndentText) != oldLineWidth) {
                                 // We have to delete this line, remove all floats that got added, and let line layout
                                 // re-run. We had just calculated the pagination strut for this line, and we need to
@@ -1047,10 +1037,8 @@ void LayoutBlockFlow::linkToEndLineIfNeeded(LineLayoutState& layoutState)
                     delta -= line->paginationStrut();
                     adjustLinePositionForPagination(*line, delta);
                 }
-                if (delta) {
-                    layoutState.updatePaintInvalidationRangeFromBox(line, delta);
+                if (delta)
                     line->moveInBlockDirection(delta);
-                }
                 if (Vector<LayoutBox*>* cleanLineFloats = line->floatsPtr()) {
                     for (auto* box : *cleanLineFloats) {
                         FloatingObject* floatingObject = insertFloatingObject(*box);
@@ -1546,12 +1534,12 @@ static inline bool shouldTruncateOverflowingText(const LayoutBlockFlow* block)
     return objectToCheck->hasOverflowClip() && objectToCheck->style()->getTextOverflow();
 }
 
-void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& paintInvalidationLogicalTop, LayoutUnit& paintInvalidationLogicalBottom, LayoutUnit afterEdge)
+void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit afterEdge)
 {
     // Figure out if we should clear out our line boxes.
     // FIXME: Handle resize eventually!
     bool isFullLayout = !firstLineBox() || selfNeedsLayout() || relayoutChildren;
-    LineLayoutState layoutState(isFullLayout, paintInvalidationLogicalTop, paintInvalidationLogicalBottom);
+    LineLayoutState layoutState(isFullLayout);
 
     if (isFullLayout) {
         // Ensure the old line boxes will be erased.
@@ -1590,7 +1578,9 @@ void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit& pa
                     layoutState.floats().append(FloatWithRect(box));
                     if (box->needsLayout()) {
                         box->layout();
-                        markLinesDirtyInBlockRange(toLayoutBox(o)->logicalTop(), toLayoutBox(o)->logicalBottom());
+                        // Dirty any lineboxes potentially affected by the float, but don't search outside this
+                        // object as we are only interested in dirtying lineboxes to which we may attach the float.
+                        dirtyLinesFromChangedChild(box, MarkOnlyThis);
                     }
                 } else if (isFullLayout || o->needsLayout()) {
                     // Atomic inline.
@@ -1659,8 +1649,6 @@ RootInlineBox* LayoutBlockFlow::determineStartPosition(LineLayoutState& layoutSt
                         layoutState.markForFullLayout();
                         break;
                     }
-
-                    layoutState.updatePaintInvalidationRangeFromBox(curr, paginationDelta);
                     curr->moveInBlockDirection(paginationDelta);
                 }
             }
@@ -2066,11 +2054,11 @@ LayoutUnit LayoutBlockFlow::startAlignedOffsetForLine(LayoutUnit position, Inden
     return logicalLeft;
 }
 
-void LayoutBlockFlow::invalidateDisplayItemClientsOfFirstLine()
+void LayoutBlockFlow::setShouldDoFullPaintInvalidationForFirstLine()
 {
     ASSERT(childrenInline());
     if (RootInlineBox* firstRootBox = this->firstRootBox())
-        firstRootBox->invalidateDisplayItemClientsRecursively();
+        firstRootBox->setShouldDoFullPaintInvalidationRecursively();
 }
 
 PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
@@ -2087,7 +2075,7 @@ PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInva
     // It's the RootInlineBox that paints the ::first-line background. Note that since it may be
     // expensive to figure out if the first line is affected by any ::first-line selectors at all,
     // we just invalidate it unconditionally, since that's typically cheaper.
-    invalidateDisplayItemClient(*line);
+    invalidateDisplayItemClient(*line, reason);
     return reason;
 }
 

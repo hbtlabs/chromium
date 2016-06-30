@@ -53,10 +53,10 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "public/platform/WebFocusType.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -150,6 +150,7 @@ class ScriptRunner;
 class ScriptableDocumentParser;
 class ScriptedAnimationController;
 class ScriptedIdleTaskController;
+class ScrollStateCallback;
 class SecurityOrigin;
 class SegmentedString;
 class SelectorQueryCache;
@@ -217,6 +218,8 @@ enum CreateElementFlags {
     CreatedByParser = 1 << 0,
     // Synchronous custom elements flag:
     // https://dom.spec.whatwg.org/#concept-create-element
+    // TODO(kojii): Remove these flags, add an option not to queue upgrade, and
+    // let parser/DOM methods to upgrade synchronously when necessary.
     SynchronousCustomElements = 0 << 1,
     AsynchronousCustomElements = 1 << 1,
 
@@ -669,7 +672,7 @@ public:
     void setWindowAttributeEventListener(const AtomicString& eventType, EventListener*);
     EventListener* getWindowAttributeEventListener(const AtomicString& eventType);
 
-    static void registerEventFactory(PassOwnPtr<EventFactoryBase>);
+    static void registerEventFactory(std::unique_ptr<EventFactoryBase>);
     static Event* createEvent(ExecutionContext*, const String& eventType, ExceptionState&);
 
     // keep track of what types of event listeners are registered, so we don't
@@ -704,7 +707,6 @@ public:
     NodeIntersectionObserverData& ensureIntersectionObserverData();
 
     void updateViewportDescription();
-    void processReferrerPolicy(const String& policy);
 
     // Returns the owning element in the parent document. Returns nullptr if
     // this is the top level document or the owner is remote.
@@ -810,7 +812,7 @@ public:
     void pushCurrentScript(Element*);
     void popCurrentScript();
 
-    void setTransformSource(PassOwnPtr<TransformSource>);
+    void setTransformSource(std::unique_ptr<TransformSource>);
     TransformSource* transformSource() const { return m_transformSource.get(); }
 
     void incDOMTreeVersion() { DCHECK(m_lifecycle.stateAllowsTreeMutations()); m_domTreeVersion = ++s_globalTreeVersion; }
@@ -844,7 +846,7 @@ public:
     void parseDNSPrefetchControlHeader(const String&);
 
     // FIXME(crbug.com/305497): This should be removed once LocalDOMWindow is an ExecutionContext.
-    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override; // Executes the task on context's thread asynchronously.
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String& taskNameForInstrumentation = emptyString()) override; // Executes the task on context's thread asynchronously.
     void postInspectorTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>);
 
     void tasksWereSuspended() final;
@@ -917,7 +919,8 @@ public:
     // Only one event for a target/event type combination will be dispatched per frame.
     void enqueueUniqueAnimationFrameEvent(Event*);
     void enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryListListener>>&);
-    void enqueueVisualViewportChangedEvent();
+    void enqueueVisualViewportScrollEvent();
+    void enqueueVisualViewportResizeEvent();
 
     void dispatchEventsForPrinting();
 
@@ -947,7 +950,7 @@ public:
     void cancelIdleCallback(int id);
 
     EventTarget* errorEventTarget() final;
-    void logExceptionToConsole(const String& errorMessage, PassOwnPtr<SourceLocation>) final;
+    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) final;
 
     void initDNSPrefetch();
 
@@ -1071,7 +1074,7 @@ public:
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
 
-    void enforceStrictMixedContentChecking();
+    void enforceInsecureRequestPolicy(WebInsecureRequestPolicy);
 
     bool mayContainV0Shadow() const { return m_mayContainV0Shadow; }
 
@@ -1082,7 +1085,11 @@ public:
 
     Element* rootScroller() const;
     void setRootScroller(Element*, ExceptionState&);
-    bool isEffectiveRootScroller(const Element&) const;
+    const Element* effectiveRootScroller() const;
+
+    // TODO(bokan): Temporarily added to allow ScrollCustomization to properly
+    // opt out for wheel scrolls. crbug.com/623079.
+    bool isViewportScrollCallback(const ScrollStateCallback*);
 
     bool isInMainFrame() const;
 
@@ -1143,7 +1150,7 @@ private:
     bool childTypeAllowed(NodeType) const final;
     Node* cloneNode(bool deep) final;
     void cloneDataFromDocument(const Document&);
-    bool isSecureContextImpl(String* errorMessage, const SecureContextCheck priviligeContextCheck) const;
+    bool isSecureContextImpl(const SecureContextCheck priviligeContextCheck) const;
 
     ShadowCascadeOrder m_shadowCascadeOrder = ShadowCascadeNone;
 
@@ -1175,7 +1182,7 @@ private:
 
     void setHoverNode(Node*);
 
-    using EventFactorySet = HashSet<OwnPtr<EventFactoryBase>>;
+    using EventFactorySet = HashSet<std::unique_ptr<EventFactoryBase>>;
     static EventFactorySet& eventFactories();
 
     void setNthIndexCache(NthIndexCache* nthIndexCache) { DCHECK(!m_nthIndexCache || !nthIndexCache); m_nthIndexCache = nthIndexCache; }
@@ -1208,7 +1215,7 @@ private:
     KURL m_baseURLOverride; // An alternative base URL that takes precedence over m_baseURL (but not m_baseElementURL).
     KURL m_baseElementURL; // The URL set by the <base> element.
     KURL m_cookieURL; // The URL to use for cookie access.
-    OwnPtr<OriginAccessEntry> m_accessEntryFromURL;
+    std::unique_ptr<OriginAccessEntry> m_accessEntryFromURL;
 
     AtomicString m_baseTarget;
 
@@ -1227,7 +1234,7 @@ private:
     CompatibilityMode m_compatibilityMode;
     bool m_compatibilityModeLocked; // This is cheaper than making setCompatibilityMode virtual.
 
-    OwnPtr<CancellableTaskFactory> m_executeScriptsWaitingForResourcesTask;
+    std::unique_ptr<CancellableTaskFactory> m_executeScriptsWaitingForResourcesTask;
 
     bool m_hasAutofocused;
     Timer<Document> m_clearFocusedElementTimer;
@@ -1294,7 +1301,7 @@ private:
 
     HeapVector<Member<Element>> m_currentScriptStack;
 
-    OwnPtr<TransformSource> m_transformSource;
+    std::unique_ptr<TransformSource> m_transformSource;
 
     String m_xmlEncoding;
     String m_xmlVersion;
@@ -1320,7 +1327,7 @@ private:
     bool m_hasAnnotatedRegions;
     bool m_annotatedRegionsDirty;
 
-    OwnPtr<SelectorQueryCache> m_selectorQueryCache;
+    std::unique_ptr<SelectorQueryCache> m_selectorQueryCache;
 
     // It is safe to keep a raw, untraced pointer to this stack-allocated
     // cache object: it is set upon the cache object being allocated on
@@ -1364,7 +1371,7 @@ private:
 
     Member<ScriptedAnimationController> m_scriptedAnimationController;
     Member<ScriptedIdleTaskController> m_scriptedIdleTaskController;
-    OwnPtr<MainThreadTaskRunner> m_taskRunner;
+    std::unique_ptr<MainThreadTaskRunner> m_taskRunner;
     Member<TextAutosizer> m_textAutosizer;
 
     Member<V0CustomElementRegistrationContext> m_registrationContext;
@@ -1375,7 +1382,7 @@ private:
 
     Member<ElementDataCache> m_elementDataCache;
 
-    using LocaleIdentifierToLocaleMap = HashMap<AtomicString, OwnPtr<Locale>>;
+    using LocaleIdentifierToLocaleMap = HashMap<AtomicString, std::unique_ptr<Locale>>;
     LocaleIdentifierToLocaleMap m_localeCache;
 
     Member<AnimationTimeline> m_timeline;

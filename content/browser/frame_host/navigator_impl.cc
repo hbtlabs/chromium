@@ -272,7 +272,7 @@ bool NavigatorImpl::NavigateToEntry(
     NavigationController::ReloadType reload_type,
     bool is_same_document_history_load,
     bool is_pending_entry,
-    const scoped_refptr<ResourceRequestBody>& post_body) {
+    const scoped_refptr<ResourceRequestBodyImpl>& post_body) {
   TRACE_EVENT0("browser,navigation", "NavigatorImpl::NavigateToEntry");
 
   GURL dest_url = frame_entry.url();
@@ -476,7 +476,8 @@ void NavigatorImpl::DidNavigate(
                         has_embedded_credentials);
 
   bool is_navigation_within_page = controller_->IsURLInPageNavigation(
-      params.url, params.was_within_same_page, render_frame_host);
+      params.url, params.origin, params.was_within_same_page,
+      render_frame_host);
 
   // If a frame claims it navigated within page, it must be the current frame,
   // not a pending one.
@@ -528,8 +529,8 @@ void NavigatorImpl::DidNavigate(
   render_frame_host->frame_tree_node()->SetCurrentOrigin(
       params.origin, params.has_potentially_trustworthy_unique_origin);
 
-  render_frame_host->frame_tree_node()->SetEnforceStrictMixedContentChecking(
-      params.should_enforce_strict_mixed_content_checking);
+  render_frame_host->frame_tree_node()->SetInsecureRequestPolicy(
+      params.insecure_request_policy);
 
   // Navigating to a new location means a new, fresh set of http headers and/or
   // <meta> elements - we need to reset CSP policy to an empty set.
@@ -647,13 +648,16 @@ bool NavigatorImpl::ShouldAssignSiteForURL(const GURL& url) {
   return GetContentClient()->browser()->ShouldAssignSiteForURL(url);
 }
 
-void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                                   const GURL& url,
-                                   SiteInstance* source_site_instance,
-                                   const Referrer& referrer,
-                                   WindowOpenDisposition disposition,
-                                   bool should_replace_current_entry,
-                                   bool user_gesture) {
+void NavigatorImpl::RequestOpenURL(
+    RenderFrameHostImpl* render_frame_host,
+    const GURL& url,
+    bool uses_post,
+    const scoped_refptr<ResourceRequestBodyImpl>& body,
+    SiteInstance* source_site_instance,
+    const Referrer& referrer,
+    WindowOpenDisposition disposition,
+    bool should_replace_current_entry,
+    bool user_gesture) {
   // Note: This can be called for subframes (even when OOPIFs are not possible)
   // if the disposition calls for a different window.
 
@@ -691,6 +695,8 @@ void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
   OpenURLParams params(dest_url, referrer, frame_tree_node_id, disposition,
                        ui::PAGE_TRANSITION_LINK,
                        true /* is_renderer_initiated */);
+  params.uses_post = uses_post;
+  params.post_data = body;
   params.source_site_instance = source_site_instance;
   if (redirect_chain.size() > 0)
     params.redirect_chain = redirect_chain;
@@ -716,6 +722,9 @@ void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
     params.is_renderer_initiated = false;
   }
 
+  GetContentClient()->browser()->OverrideOpenURLParams(current_site_instance,
+                                                       &params);
+
   if (delegate_)
     delegate_->RequestOpenURL(render_frame_host, params);
 }
@@ -730,7 +739,7 @@ void NavigatorImpl::RequestTransferURL(
     const GlobalRequestID& transferred_global_request_id,
     bool should_replace_current_entry,
     const std::string& method,
-    scoped_refptr<ResourceRequestBody> post_body) {
+    scoped_refptr<ResourceRequestBodyImpl> post_body) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
     NOTREACHED();

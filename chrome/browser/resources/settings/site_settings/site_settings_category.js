@@ -22,14 +22,6 @@ Polymer({
     },
 
     /**
-     * Preferences state.
-     */
-    prefs: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * Represents the state of the main toggle shown for the category. For
      * example, the Location category can be set to Block/Ask so false, in that
      * case, represents Block and true represents Ask.
@@ -59,14 +51,8 @@ Polymer({
   ],
 
   ready: function() {
-    this.$.blockList.categorySubtype = settings.PermissionValues.BLOCK;
-    this.$.allowList.categorySubtype = settings.PermissionValues.ALLOW;
-
     this.addWebUIListener('contentSettingCategoryChanged',
         this.defaultValueForCategoryChanged_.bind(this));
-
-    if (this.category == settings.ContentSettingsTypes.COOKIES)
-      this.$.cookieControls.hidden = false;
   },
 
   /**
@@ -134,21 +120,5 @@ Polymer({
             this.category).then(function(enabled) {
               this.categoryEnabled = enabled;
             }.bind(this));
-  },
-
-  /**
-   * A handler for the Add Site button.
-   * @private
-   */
-  onAddSiteTap_: function() {
-    var dialog = document.createElement('add-site-dialog');
-    dialog.category = this.category;
-    this.shadowRoot.appendChild(dialog);
-
-    dialog.open();
-
-    dialog.addEventListener('iron-overlay-closed', function() {
-      dialog.remove();
-    });
   },
 });

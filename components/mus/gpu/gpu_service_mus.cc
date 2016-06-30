@@ -8,7 +8,8 @@
 #include "base/memory/singleton.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/mus/gpu/gpu_memory_buffer_manager_mus_local.h"
+#include "build/build_config.h"
+#include "components/mus/gpu/mus_gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_info_collector.h"
@@ -29,6 +30,10 @@
 #include "ui/gl/init/gl_factory.h"
 #include "url/gurl.h"
 
+#if defined(USE_OZONE)
+#include "ui/ozone/public/ozone_platform.h"
+#endif
+
 namespace mus {
 namespace {
 
@@ -36,15 +41,18 @@ const int kLocalGpuChannelClientId = 1;
 const uint64_t kLocalGpuChannelClientTracingId = 1;
 
 void EstablishGpuChannelDone(
-    std::unique_ptr<IPC::ChannelHandle> channel_handle,
+    int client_id,
+    const IPC::ChannelHandle* channel_handle,
     const GpuServiceMus::EstablishGpuChannelCallback& callback) {
-  callback.Run(*channel_handle);
+  callback.Run(channel_handle ? client_id : -1, *channel_handle);
 }
 }
 
 GpuServiceMus::GpuServiceMus()
-    : main_message_loop_(base::MessageLoop::current()),
-      shutdown_event_(true, false),
+    : next_client_id_(kLocalGpuChannelClientId),
+      main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      shutdown_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED),
       gpu_thread_("GpuThread"),
       io_thread_("GpuIOThread") {
   Initialize();
@@ -60,28 +68,28 @@ GpuServiceMus::~GpuServiceMus() {
 }
 
 void GpuServiceMus::EstablishGpuChannel(
-    int client_id,
     uint64_t client_tracing_id,
     bool preempts,
     bool allow_view_command_buffers,
     bool allow_real_time_streams,
     const EstablishGpuChannelCallback& callback) {
-  DCHECK_GT(client_id, kLocalGpuChannelClientId);
+  DCHECK(CalledOnValidThread());
 
   if (!gpu_channel_manager_) {
-    callback.Run(IPC::ChannelHandle());
+    callback.Run(-1, IPC::ChannelHandle());
     return;
   }
 
-  std::unique_ptr<IPC::ChannelHandle> channel_handle(new IPC::ChannelHandle);
+  const int client_id = ++next_client_id_;
+  IPC::ChannelHandle* channel_handle = new IPC::ChannelHandle;
   gpu_thread_.task_runner()->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&GpuServiceMus::EstablishGpuChannelOnGpuThread,
                  base::Unretained(this), client_id, client_tracing_id, preempts,
                  allow_view_command_buffers, allow_real_time_streams,
-                 base::Unretained(channel_handle.get())),
-      base::Bind(&EstablishGpuChannelDone, base::Passed(&channel_handle),
-                 callback));
+                 base::Unretained(channel_handle)),
+      base::Bind(&EstablishGpuChannelDone, client_id,
+                 base::Owned(channel_handle), callback));
 }
 
 gfx::GpuMemoryBufferHandle GpuServiceMus::CreateGpuMemoryBuffer(
@@ -91,23 +99,16 @@ gfx::GpuMemoryBufferHandle GpuServiceMus::CreateGpuMemoryBuffer(
     gfx::BufferUsage usage,
     int client_id,
     gpu::SurfaceHandle surface_handle) {
+  DCHECK(CalledOnValidThread());
   return gpu_memory_buffer_factory_->CreateGpuMemoryBuffer(
       id, size, format, usage, client_id, surface_handle);
-}
-
-gfx::GpuMemoryBufferHandle GpuServiceMus::CreateGpuMemoryBufferFromeHandle(
-    gfx::GpuMemoryBufferHandle buffer_handle,
-    gfx::GpuMemoryBufferId id,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    int client_id) {
-  return gpu_memory_buffer_factory_->CreateGpuMemoryBufferFromHandle(
-      buffer_handle, id, size, format, client_id);
 }
 
 void GpuServiceMus::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                            int client_id,
                                            const gpu::SyncToken& sync_token) {
+  DCHECK(CalledOnValidThread());
+
   if (gpu_channel_manager_)
     gpu_channel_manager_->DestroyGpuMemoryBuffer(id, client_id, sync_token);
 }
@@ -154,6 +155,7 @@ void GpuServiceMus::SetActiveURL(const GURL& url) {
 }
 
 void GpuServiceMus::Initialize() {
+  DCHECK(CalledOnValidThread());
   base::Thread::Options thread_options(base::MessageLoop::TYPE_DEFAULT, 0);
   thread_options.priority = base::ThreadPriority::NORMAL;
   CHECK(gpu_thread_.StartWithOptions(thread_options));
@@ -168,19 +170,18 @@ void GpuServiceMus::Initialize() {
   CHECK(io_thread_.StartWithOptions(thread_options));
 
   IPC::ChannelHandle channel_handle;
-  bool manual_reset = true;
-  bool initially_signaled = false;
-  base::WaitableEvent event(manual_reset, initially_signaled);
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   gpu_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&GpuServiceMus::InitializeOnGpuThread,
                             base::Unretained(this), &channel_handle, &event));
   event.Wait();
 
-  gpu_memory_buffer_manager_mus_local_.reset(new GpuMemoryBufferManagerMusLocal(
-      kLocalGpuChannelClientId, kLocalGpuChannelClientTracingId));
+  gpu_memory_buffer_manager_local_.reset(
+      new MusGpuMemoryBufferManager(this, kLocalGpuChannelClientId));
   gpu_channel_local_ = gpu::GpuChannelHost::Create(
       this, kLocalGpuChannelClientId, gpu_info_, channel_handle,
-      &shutdown_event_, gpu_memory_buffer_manager_mus_local_.get());
+      &shutdown_event_, gpu_memory_buffer_manager_local_.get());
 }
 
 void GpuServiceMus::InitializeOnGpuThread(IPC::ChannelHandle* channel_handle,
@@ -191,6 +192,10 @@ void GpuServiceMus::InitializeOnGpuThread(IPC::ChannelHandle* channel_handle,
       media::GpuVideoEncodeAccelerator::GetSupportedProfiles(gpu_preferences_);
   gpu_info_.jpeg_decode_accelerator_supported =
       media::GpuJpegDecodeAccelerator::IsSupported();
+
+#if defined(USE_OZONE)
+  ui::OzonePlatform::InitializeForGPU();
+#endif
 
   if (gpu::GetNativeGpuMemoryBufferType() != gfx::EMPTY_BUFFER) {
     gpu_memory_buffer_factory_ =
@@ -243,7 +248,7 @@ void GpuServiceMus::EstablishGpuChannelOnGpuThread(
 }
 
 bool GpuServiceMus::IsMainThread() {
-  return main_message_loop_ == base::MessageLoop::current();
+  return main_task_runner_->BelongsToCurrentThread();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

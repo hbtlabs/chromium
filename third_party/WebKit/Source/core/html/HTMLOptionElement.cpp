@@ -94,7 +94,7 @@ void HTMLOptionElement::attach(const AttachContext& context)
     if (context.resolvedStyle) {
         ASSERT(!m_style || m_style == context.resolvedStyle);
         m_style = context.resolvedStyle;
-    } else {
+    } else if (parentComputedStyle()) {
         updateNonComputedStyle();
         optionContext.resolvedStyle = m_style.get();
     }
@@ -310,7 +310,7 @@ void HTMLOptionElement::childrenChanged(const ChildrenChange& change)
     if (HTMLDataListElement* dataList = ownerDataListElement())
         dataList->optionElementChildrenChanged();
     else if (HTMLSelectElement* select = ownerSelectElement())
-        select->optionElementChildrenChanged();
+        select->optionElementChildrenChanged(*this);
     updateLabel();
     HTMLElement::childrenChanged(change);
 }

@@ -202,6 +202,8 @@ action("inspector_protocol_sources") {
     "v8_inspector/js_protocol.json",
   ]
   outputs = [
+    "$blink_platform_output_dir/v8_inspector/protocol/Console.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Console.h",
     "$blink_platform_output_dir/v8_inspector/protocol/Debugger.cpp",
     "$blink_platform_output_dir/v8_inspector/protocol/Debugger.h",
     "$blink_platform_output_dir/v8_inspector/protocol/HeapProfiler.cpp",
@@ -361,10 +363,10 @@ component("platform") {
   deps = [
     ":blink_common",
     "//components/link_header_util:link_header_util",
-    "//mojo/public/c/system:for_component",
-    "//mojo/public/cpp/bindings:callback",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:wtf_support",
     "//third_party/WebKit/Source/platform/heap",
+    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/harfbuzz-ng",
     "//third_party/icu",
     "//ui/gfx",

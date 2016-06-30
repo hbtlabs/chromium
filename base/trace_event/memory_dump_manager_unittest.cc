@@ -226,7 +226,7 @@ class MemoryDumpManagerTest : public testing::Test {
     RunLoop run_loop;
     MemoryDumpCallback callback =
         Bind(&MemoryDumpManagerTest::DumpCallbackAdapter, Unretained(this),
-             MessageLoop::current()->task_runner(), run_loop.QuitClosure());
+             ThreadTaskRunnerHandle::Get(), run_loop.QuitClosure());
     mdm_->RequestGlobalDump(dump_type, level_of_detail, callback);
     run_loop.Run();
   }
@@ -339,7 +339,8 @@ TEST_F(MemoryDumpManagerTest, SharedSessionState) {
   RegisterDumpProvider(&mdp2);
 
   EnableTracingWithLegacyCategories(MemoryDumpManager::kTraceCategory);
-  const MemoryDumpSessionState* session_state = mdm_->session_state().get();
+  const MemoryDumpSessionState* session_state =
+      mdm_->session_state_for_testing().get();
   EXPECT_CALL(*delegate_, RequestGlobalMemoryDump(_, _)).Times(2);
   EXPECT_CALL(mdp1, OnMemoryDump(_, _))
       .Times(2)
@@ -472,11 +473,11 @@ TEST_F(MemoryDumpManagerTest, RespectTaskRunnerAffinity) {
   // invoked a number of times equal to its index.
   for (uint32_t i = kNumInitialThreads; i > 0; --i) {
     threads.push_back(WrapUnique(new Thread("test thread")));
-    auto thread = threads.back().get();
+    auto* thread = threads.back().get();
     thread->Start();
     scoped_refptr<SingleThreadTaskRunner> task_runner = thread->task_runner();
     mdps.push_back(WrapUnique(new MockMemoryDumpProvider()));
-    auto mdp = mdps.back().get();
+    auto* mdp = mdps.back().get();
     RegisterDumpProvider(mdp, task_runner, kDefaultOptions);
     EXPECT_CALL(*mdp, OnMemoryDump(_, _))
         .Times(i)
@@ -942,7 +943,7 @@ TEST_F(MemoryDumpManagerTest, DisableTracingWhileDumping) {
   RunLoop run_loop;
   MemoryDumpCallback callback =
       Bind(&MemoryDumpManagerTest::DumpCallbackAdapter, Unretained(this),
-           MessageLoop::current()->task_runner(), run_loop.QuitClosure());
+           ThreadTaskRunnerHandle::Get(), run_loop.QuitClosure());
   mdm_->RequestGlobalDump(MemoryDumpType::EXPLICITLY_TRIGGERED,
                           MemoryDumpLevelOfDetail::DETAILED, callback);
   DisableTracing();
@@ -1148,7 +1149,19 @@ TEST_F(MemoryDumpManagerTest, TestBackgroundTracingSetup) {
   EXPECT_CALL(*delegate_, RequestGlobalMemoryDump(_, _)).Times(AnyNumber());
 
   EnableTracingWithTraceConfig(
-      TraceConfigMemoryTestUtil::GetTraceConfig_BackgroundTrigger());
+      TraceConfigMemoryTestUtil::GetTraceConfig_BackgroundTrigger(
+          1 /* period_ms */));
+
+  // Only background mode dumps should be allowed with the trace config.
+  last_callback_success_ = false;
+  RequestGlobalDumpAndWait(MemoryDumpType::EXPLICITLY_TRIGGERED,
+                           MemoryDumpLevelOfDetail::LIGHT);
+  EXPECT_FALSE(last_callback_success_);
+  last_callback_success_ = false;
+  RequestGlobalDumpAndWait(MemoryDumpType::EXPLICITLY_TRIGGERED,
+                           MemoryDumpLevelOfDetail::DETAILED);
+  EXPECT_FALSE(last_callback_success_);
+
   ASSERT_TRUE(IsPeriodicDumpingEnabled());
   run_loop.Run();
   DisableTracing();

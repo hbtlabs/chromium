@@ -66,6 +66,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -223,12 +229,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "ipc_mojo_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "ipc_tests"
       },
       {
@@ -308,12 +308,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_shell_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "swarming": {
@@ -472,7 +466,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -565,6 +561,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -1009,6 +1011,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -1172,12 +1180,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "ipc_mojo_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "ipc_tests"
       },
       {
@@ -1257,12 +1259,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_shell_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "swarming": {
@@ -1403,7 +1399,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1474,6 +1472,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -1791,7 +1795,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1806,14 +1812,14 @@
       }
     ]
   },
-  "Win8 Aura": {
+  "Win8 GYP": {
     "additional_compile_targets": [
-      "base_unittests"
+      "chrome_official_builder"
     ]
   },
-  "Win8 GN (dbg)": {
+  "Win8 GYP (dbg)": {
     "additional_compile_targets": [
-      "base_unittests"
+      "all"
     ]
   }
 }

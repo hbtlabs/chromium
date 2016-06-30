@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/autofill_profile_comparator.h"
 #include "components/autofill/core/browser/country_data.h"
 #include "components/autofill/core/browser/country_names.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -39,6 +40,7 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/version_info/version_info.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_formatter.h"
 
@@ -324,6 +326,10 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
         ReceiveLoadedDbValues(h, result, &pending_profiles_query_,
                               &web_profiles_);
         LogProfileCount();  // This only logs local profiles.
+        // Since these two routines both re-launch the database queries, don't
+        // run them on the same query response.
+        if (!ApplyDedupingRoutine())
+          ApplyProfileUseDatesFix();
       } else {
         ReceiveLoadedDbValues(h, result, &pending_server_profiles_query_,
                               &server_profiles_);
@@ -333,9 +339,14 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
           base::string16 email =
               base::UTF8ToUTF16(
                   account_tracker_->GetAccountInfo(account_id).email);
-          DCHECK(!email.empty());
-          for (AutofillProfile* profile : server_profiles_)
-            profile->SetRawInfo(EMAIL_ADDRESS, email);
+
+          // User may have signed out during the fulfillment of the web data
+          // request, in which case there is no point updating
+          // |server_profiles_| as it will be cleared.
+          if (!email.empty()) {
+            for (AutofillProfile* profile : server_profiles_)
+              profile->SetRawInfo(EMAIL_ADDRESS, email);
+          }
         }
       }
       break;
@@ -574,6 +585,33 @@ void PersonalDataManager::UpdateServerCreditCard(
   Refresh();
 }
 
+void PersonalDataManager::UpdateServerCardBillingAddress(
+    const CreditCard& credit_card) {
+  DCHECK_NE(CreditCard::LOCAL_CARD, credit_card.record_type());
+
+  if (!database_.get())
+    return;
+
+  CreditCard* existing_credit_card = nullptr;
+  for (auto it : server_credit_cards_) {
+    if (credit_card.guid() == it->guid()) {
+      existing_credit_card = it;
+      break;
+    }
+  }
+  if (!existing_credit_card
+      || existing_credit_card->billing_address_id() ==
+          credit_card.billing_address_id()) {
+    return;
+  }
+
+  existing_credit_card->set_billing_address_id(
+      credit_card.billing_address_id());
+  database_->UpdateServerCardBillingAddress(*existing_credit_card);
+
+  Refresh();
+}
+
 void PersonalDataManager::ResetFullServerCard(const std::string& guid) {
   for (const CreditCard* card : server_credit_cards_) {
     if (card->guid() == guid) {
@@ -714,8 +752,9 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
   if (IsInAutofillSuggestionsDisabledExperiment())
     return std::vector<Suggestion>();
 
+  AutofillProfileComparator comparator(app_locale_);
   base::string16 field_contents_canon =
-      AutofillProfile::CanonicalizeProfileString(field_contents);
+      comparator.NormalizeForComparison(field_contents);
 
   // Get the profiles to suggest, which are already sorted.
   std::vector<AutofillProfile*> profiles = GetProfilesToSuggest();
@@ -729,8 +768,7 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
       continue;
 
     bool prefix_matched_suggestion;
-    base::string16 suggestion_canon =
-        AutofillProfile::CanonicalizeProfileString(value);
+    base::string16 suggestion_canon = comparator.NormalizeForComparison(value);
     if (IsValidSuggestionForFieldContents(
             suggestion_canon, field_contents_canon, type,
             /* is_masked_server_card= */ false, &prefix_matched_suggestion)) {
@@ -889,7 +927,8 @@ bool PersonalDataManager::IsValidLearnableProfile(
   return true;
 }
 
-// static
+// TODO(crbug.com/618448): Refactor MergeProfile to not depend on class
+// variables.
 std::string PersonalDataManager::MergeProfile(
     const AutofillProfile& new_profile,
     std::vector<AutofillProfile*> existing_profiles,
@@ -898,11 +937,16 @@ std::string PersonalDataManager::MergeProfile(
   merged_profiles->clear();
 
   // Sort the existing profiles in decreasing order of frecency, so the "best"
-  // profiles are checked first.
+  // profiles are checked first. Put the verified profiles last so the non
+  // verified profiles get deduped among themselves before reaching the verified
+  // profiles.
+  // TODO(crbug.com/620521): Remove the check for verified from the sort.
   base::Time comparison_time = base::Time::Now();
   std::sort(existing_profiles.begin(), existing_profiles.end(),
             [comparison_time](const AutofillDataModel* a,
                               const AutofillDataModel* b) {
+              if (a->IsVerified() != b->IsVerified())
+                return !a->IsVerified();
               return a->CompareFrecency(b, comparison_time);
             });
 
@@ -912,8 +956,10 @@ std::string PersonalDataManager::MergeProfile(
 
   // If we have already saved this address, merge in any missing values.
   // Only merge with the first match.
+  AutofillProfileComparator comparator(app_locale);
   for (AutofillProfile* existing_profile : existing_profiles) {
-    if (!matching_profile_found && !new_profile.PrimaryValue().empty() &&
+    if (!matching_profile_found &&
+        comparator.AreMergeable(new_profile, *existing_profile) &&
         existing_profile->SaveAdditionalInfo(new_profile, app_locale)) {
       // Unverified profiles should always be updated with the newer data,
       // whereas verified profiles should only ever be overwritten by verified
@@ -1535,6 +1581,141 @@ std::vector<Suggestion> PersonalDataManager::GetSuggestionsForCards(
   }
 
   return suggestions;
+}
+
+void PersonalDataManager::ApplyProfileUseDatesFix() {
+  // Don't run if the fix has already been applied.
+  if (pref_service_->GetBoolean(prefs::kAutofillProfileUseDatesFixed))
+    return;
+
+  std::vector<AutofillProfile> profiles;
+  bool has_changed_data = false;
+  for (AutofillProfile* profile : web_profiles()) {
+    if (profile->use_date() == base::Time()) {
+      profile->set_use_date(base::Time::Now() - base::TimeDelta::FromDays(14));
+      has_changed_data = true;
+    }
+    profiles.push_back(*profile);
+  }
+
+  // Set the pref so that this fix is never run again.
+  pref_service_->SetBoolean(prefs::kAutofillProfileUseDatesFixed, true);
+
+  if (has_changed_data)
+    SetProfiles(&profiles);
+}
+
+bool PersonalDataManager::ApplyDedupingRoutine() {
+  if (!IsAutofillProfileCleanupEnabled())
+    return false;
+
+  int current_major_version = atoi(version_info::GetVersionNumber().c_str());
+
+  // Check if the deduping routine has already been run on this major version.
+  if (pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) >=
+      current_major_version)
+    return false;
+
+  std::vector<AutofillProfile*> existing_profiles = web_profiles_.get();
+  std::unordered_set<AutofillProfile*> profiles_to_delete;
+  profiles_to_delete.reserve(existing_profiles.size());
+
+  DedupeProfiles(&existing_profiles, &profiles_to_delete);
+
+  // Apply the changes to the database.
+  for (AutofillProfile* profile : existing_profiles) {
+    // If the profile was set to be deleted, remove it from the database.
+    if (profiles_to_delete.count(profile)) {
+      database_->RemoveAutofillProfile(profile->guid());
+    } else {
+      // Otherwise, update the profile in the database.
+      database_->UpdateAutofillProfile(*profile);
+    }
+  }
+
+  // Set the pref to the current major version.
+  pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
+                            current_major_version);
+
+  // Refresh the local cache and send notifications to observers.
+  Refresh();
+
+  return true;
+}
+
+void PersonalDataManager::DedupeProfiles(
+    std::vector<AutofillProfile*>* existing_profiles,
+    std::unordered_set<AutofillProfile*>* profiles_to_delete) {
+  AutofillMetrics::LogNumberOfProfilesConsideredForDedupe(
+      existing_profiles->size());
+
+  // Sort the profiles by frecency with all the verified profiles at the end.
+  // That way the most relevant profiles will get merged into the less relevant
+  // profiles, which keeps the syntax of the most relevant profiles data.
+  // Verified profiles are put at the end because they do not merge into other
+  // profiles, so the loop can be stopped when we reach those. However they need
+  // to be in the vector because an unverified profile trying to merge into a
+  // similar verified profile will be discarded.
+  base::Time comparison_time = base::Time::Now();
+  std::sort(existing_profiles->begin(), existing_profiles->end(),
+            [comparison_time](const AutofillDataModel* a,
+                              const AutofillDataModel* b) {
+              if (a->IsVerified() != b->IsVerified())
+                return !a->IsVerified();
+              return a->CompareFrecency(b, comparison_time);
+            });
+
+  AutofillProfileComparator comparator(app_locale_);
+
+  for (size_t i = 0; i < existing_profiles->size(); ++i) {
+    AutofillProfile* profile_to_merge = (*existing_profiles)[i];
+
+    // If the profile was set to be deleted, skip it. It has already been
+    // merged into another profile.
+    if (profiles_to_delete->count(profile_to_merge))
+      continue;
+
+    // If we have reached the verified profiles, stop trying to merge. Verified
+    // profiles do not get merged.
+    if (profile_to_merge->IsVerified())
+      break;
+
+    // If we have not reached the last profile, try to merge |profile_to_merge|
+    // with all the less relevant |existing_profiles|.
+    for (size_t j = i + 1; j < existing_profiles->size(); ++j) {
+      AutofillProfile* existing_profile = (*existing_profiles)[j];
+
+      // Don't try to merge a profile that was already set for deletion.
+      if (profiles_to_delete->count(existing_profile))
+        continue;
+
+      // Move on if the profiles are not mergeable.
+      if (!comparator.AreMergeable(*existing_profile, *profile_to_merge))
+        continue;
+
+      // The profiles are found to be mergeable. Attempt to update the existing
+      // profile. This returns true if the merge was successful, or if the
+      // merge would have been successful but the existing profile IsVerified()
+      // and will not accept updates from profile_to_merge.
+      if (existing_profile->SaveAdditionalInfo(*profile_to_merge,
+                                               app_locale_)) {
+        // Since |profile_to_merge| was a duplicate of |existing_profile|
+        // and was merged sucessfully, it can now be deleted.
+        profiles_to_delete->insert(profile_to_merge);
+
+        // Now try to merge the new resulting profile with the rest of the
+        // existing profiles.
+        profile_to_merge = existing_profile;
+
+        // Verified profiles do not get merged. Save some time by not
+        // trying.
+        if (profile_to_merge->IsVerified())
+          break;
+      }
+    }
+  }
+  AutofillMetrics::LogNumberOfProfilesRemovedDuringDedupe(
+      profiles_to_delete->size());
 }
 
 }  // namespace autofill

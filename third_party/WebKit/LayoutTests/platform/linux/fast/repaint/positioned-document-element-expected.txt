@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -45,30 +47,44 @@
         {
           "object": "LayoutText #text",
           "rect": [108, 116, 402, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [8, 16, 402, 19],
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'Tests that the entire viewport is painted with a floated html element.'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'Tests that the entire viewport is painted with a floated html element.'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
+          "reason": "forced by layout"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutView #document",
+      "reason": "style change"
+    },
+    {
+      "object": "LayoutBlockFlow (positioned) HTML class='changed'",
+      "reason": "style change"
+    },
+    {
+      "object": "LayoutBlockFlow BODY",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutBlockFlow P",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "InlineTextBox 'Tests that the entire viewport is painted with a floated html element.'",
+      "reason": "forced by layout"
     }
   ]
 }

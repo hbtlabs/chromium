@@ -6,9 +6,9 @@
 # Chrome should be here.  Other components that are useful only in
 # Mojo land like mojo_shell should be in mojo.gyp.
 {
-  'includes': [
-    'mojo_variables.gypi',
-  ],
+  'variables': {
+    'chromium_code': 1,
+  },
   'targets': [
     {
       'target_name': 'mojo_base',
@@ -44,11 +44,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
-        '<(mojo_system_for_component)',
-      ],
-      'export_dependent_settings': [
-        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../mojo/mojo_public.gyp:mojo_public_system',
       ],
       'sources': [
         'common/common_type_converters.cc',
@@ -74,24 +70,6 @@
         '../ipc/ipc.gyp:ipc',
       ],
       'includes': [ 'mojom_bindings_generator_explicit.gypi' ],
-    },
-    {
-      # GN version: //mojo/common:url_type_converters
-      'target_name': 'mojo_url_type_converters',
-      'type': 'static_library',
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
-        '../url/url.gyp:url_lib',
-        '<(mojo_system_for_component)',
-      ],
-      'export_dependent_settings': [
-        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
-      ],
-      'sources': [
-        'common/url_type_converters.cc',
-        'common/url_type_converters.h',
-      ],
     },
     {
       # GN version: //mojo/common:test_common_custom_types
@@ -128,7 +106,6 @@
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_public.gyp:mojo_cpp_bindings',
         'mojo_public.gyp:mojo_public_test_utils',
-        'mojo_url_type_converters',
       ],
       'sources': [
         'common/common_custom_types_unittest.cc',
@@ -160,7 +137,6 @@
           'type': 'static_library',
           'dependencies': [
             '../base/base.gyp:base',
-            '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
             'mojo_common_lib',
             'mojo_edk.gyp:mojo_system_impl',
             'mojo_jni_headers',

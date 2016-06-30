@@ -25,9 +25,6 @@ crbug.com/366029 compositing/fixed-body-background-positioned.html [ Failure Pas
 # FIXME: The below tests crashes when the leak detector is run on debug builds
 crbug.com/366043 [ Debug ] fast/history/history-traversal-is-asynchronous.html [ Crash ]
 
-# FIXME: html imports tests are flaky from extra navigation from leak detector
-crbug.com/366477 http/tests/htmlimports/redirect.html [ Failure Pass ]
-
 # The leak detector doesn't wait for worker threads to completely clean up, so leaks are expected.
 crbug.com/301515 fast/workers/worker-terminate.html [ Leak ]
 
@@ -35,10 +32,6 @@ crbug.com/301515 fast/workers/worker-terminate.html [ Leak ]
 # codereview.chromium.org/1236913004/ for context.
 crbug.com/410974 virtual/scroll_customization/fast/scroll-behavior/scroll-customization/touch-scroll-customization.html [ Leak ]
 crbug.com/410974 virtual/scroll_customization/fast/scroll-behavior/scroll-customization/scrollstate-distribute-to-scroll-chain-descendant.html [ Leak ]
-
-crbug.com/616775 http/tests/inspector-enabled/dedicated-workers-list.html [ Crash ]
-
-crbug.com/617137 http/tests/notifications/serviceworker-notification-properties.html [ Leak ]
 
 # -----------------------------------------------------------------
 # Untriaged but known real leaks.
@@ -66,7 +59,6 @@ crbug.com/480769 http/tests/inspector/service-workers/user-agent-override.html [
 crbug.com/506529 fast/mediastream/MediaStreamConstructor.html [ Leak ]
 crbug.com/506529 fast/events/constructors/media-stream-event-constructor.html [ Leak ]
 crbug.com/506529 fast/files/workers/worker-read-blob-async-crash.html [ Leak ]
-crbug.com/506529 virtual/pointerevent/fast/events/constructors/media-stream-event-constructor.html [ Leak ]
 
 # -----------------------------------------------------------------
 # Untriaged but known leaks of ActiveDOMObject (IndexedDB).

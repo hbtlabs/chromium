@@ -85,7 +85,8 @@ BidirectionalStream::BidirectionalStream(
       send_request_headers_automatically_(send_request_headers_automatically),
       request_headers_sent_(false),
       delegate_(delegate),
-      timer_(std::move(timer)) {
+      timer_(std::move(timer)),
+      weak_factory_(this) {
   DCHECK(delegate_);
   DCHECK(request_info_);
 
@@ -104,8 +105,8 @@ BidirectionalStream::BidirectionalStream(
   if (!request_info_->url.SchemeIs(url::kHttpsScheme)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&BidirectionalStream::Delegate::OnFailed,
-                   base::Unretained(delegate_), ERR_DISALLOWED_URL_SCHEME));
+        base::Bind(&BidirectionalStream::NotifyFailed,
+                   weak_factory_.GetWeakPtr(), ERR_DISALLOWED_URL_SCHEME));
     return;
   }
 
@@ -212,6 +213,11 @@ int64_t BidirectionalStream::GetTotalSentBytes() const {
 
 void BidirectionalStream::OnStreamReady(bool request_headers_sent) {
   request_headers_sent_ = request_headers_sent;
+  if (net_log_.IsCapturing()) {
+    net_log_.AddEvent(
+        NetLog::TYPE_BIDIRECTIONAL_STREAM_READY,
+        NetLog::BoolCallback("request_headers_sent", request_headers_sent));
+  }
   delegate_->OnStreamReady(request_headers_sent);
 }
 
@@ -220,7 +226,7 @@ void BidirectionalStream::OnHeadersReceived(
   HttpResponseInfo response_info;
   if (!SpdyHeadersToHttpResponse(response_headers, HTTP2, &response_info)) {
     DLOG(WARNING) << "Invalid headers";
-    delegate_->OnFailed(ERR_FAILED);
+    NotifyFailed(ERR_FAILED);
     return;
   }
   if (net_log_.IsCapturing()) {
@@ -250,10 +256,19 @@ void BidirectionalStream::OnDataSent() {
   DCHECK_EQ(write_buffer_list_.size(), write_buffer_len_list_.size());
 
   if (net_log_.IsCapturing()) {
+    if (write_buffer_list_.size() > 1) {
+      net_log_.BeginEvent(
+          NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED,
+          NetLog::IntCallback("num_buffers_coalesced",
+                              write_buffer_list_.size()));
+    }
     for (size_t i = 0; i < write_buffer_list_.size(); ++i) {
       net_log_.AddByteTransferEvent(
           NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT,
           write_buffer_len_list_[i], write_buffer_list_[i]->data());
+    }
+    if (write_buffer_list_.size() > 1) {
+      net_log_.EndEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_BYTES_SENT_COALESCED);
     }
   }
   write_buffer_list_.clear();
@@ -270,7 +285,11 @@ void BidirectionalStream::OnTrailersReceived(const SpdyHeaderBlock& trailers) {
 }
 
 void BidirectionalStream::OnFailed(int status) {
-  delegate_->OnFailed(status);
+  if (net_log_.IsCapturing()) {
+    net_log_.AddEvent(NetLog::TYPE_BIDIRECTIONAL_STREAM_FAILED,
+                      NetLog::IntCallback("net_error", status));
+  }
+  NotifyFailed(status);
 }
 
 void BidirectionalStream::OnStreamReady(const SSLConfig& used_ssl_config,
@@ -300,13 +319,12 @@ void BidirectionalStream::OnWebSocketHandshakeStreamReady(
 }
 
 void BidirectionalStream::OnStreamFailed(int result,
-                                         const SSLConfig& used_ssl_config,
-                                         SSLFailureState ssl_failure_state) {
+                                         const SSLConfig& used_ssl_config) {
   DCHECK_LT(result, 0);
   DCHECK_NE(result, ERR_IO_PENDING);
   DCHECK(stream_request_);
 
-  delegate_->OnFailed(result);
+  NotifyFailed(result);
 }
 
 void BidirectionalStream::OnCertificateError(int result,
@@ -316,7 +334,7 @@ void BidirectionalStream::OnCertificateError(int result,
   DCHECK_NE(result, ERR_IO_PENDING);
   DCHECK(stream_request_);
 
-  delegate_->OnFailed(result);
+  NotifyFailed(result);
 }
 
 void BidirectionalStream::OnNeedsProxyAuth(
@@ -326,14 +344,14 @@ void BidirectionalStream::OnNeedsProxyAuth(
     HttpAuthController* auth_controller) {
   DCHECK(stream_request_);
 
-  delegate_->OnFailed(ERR_PROXY_AUTH_REQUESTED);
+  NotifyFailed(ERR_PROXY_AUTH_REQUESTED);
 }
 
 void BidirectionalStream::OnNeedsClientAuth(const SSLConfig& used_ssl_config,
                                             SSLCertRequestInfo* cert_info) {
   DCHECK(stream_request_);
 
-  delegate_->OnFailed(ERR_SSL_CLIENT_AUTH_CERT_NEEDED);
+  NotifyFailed(ERR_SSL_CLIENT_AUTH_CERT_NEEDED);
 }
 
 void BidirectionalStream::OnHttpsProxyTunnelResponse(
@@ -343,9 +361,13 @@ void BidirectionalStream::OnHttpsProxyTunnelResponse(
     HttpStream* stream) {
   DCHECK(stream_request_);
 
-  delegate_->OnFailed(ERR_HTTPS_PROXY_TUNNEL_RESPONSE);
+  NotifyFailed(ERR_HTTPS_PROXY_TUNNEL_RESPONSE);
 }
 
 void BidirectionalStream::OnQuicBroken() {}
+
+void BidirectionalStream::NotifyFailed(int error) {
+  delegate_->OnFailed(error);
+}
 
 }  // namespace net

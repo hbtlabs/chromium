@@ -83,7 +83,11 @@ class Builder(object):
         # FIXME: This should cache that the result was a 404 and stop hitting the network.
         results_file = NetworkTransaction(convert_404_to_None=True).run(
             lambda: self._fetch_file_from_results(results_url, "failing_results.json"))
-        return LayoutTestResults.results_from_string(results_file)
+        revision = NetworkTransaction(convert_404_to_None=True).run(
+            lambda: self._fetch_file_from_results(results_url, "LAST_CHANGE"))
+        if not revision:
+            results_file = None
+        return LayoutTestResults.results_from_string(results_file, revision)
 
     def url_encoded_name(self):
         return urllib.quote(self._name)
@@ -94,18 +98,17 @@ class Builder(object):
 
     # This provides a single place to mock
     def _fetch_build(self, build_number):
-        build_dictionary = self._buildbot._fetch_build_dictionary(self, build_number)
+        build_dictionary = self._buildbot.fetch_build_dictionary(self, build_number)
         if not build_dictionary:
             return None
-        revision_string = build_dictionary['sourceStamp']['revision']
+        revision_string = build_dictionary['sourceStamp'].get('revision')
         return Build(self,
                      build_number=int(build_dictionary['number']),
                      # 'revision' may be None if a trunk build was started by the force-build button on the web page.
                      revision=(int(revision_string) if revision_string else None),
                      # Buildbot uses any number other than 0 to mean fail.  Since we fetch with
                      # filter=1, passing builds may contain no 'results' value.
-                     is_green=(not build_dictionary.get('results')),
-                     )
+                     is_green=(not build_dictionary.get('results')))
 
     def build(self, build_number):
         if not build_number:
@@ -179,8 +182,7 @@ class Builder(object):
             build = Build(self,
                           build_number=build_number,
                           revision=revision,
-                          is_green=False,
-                          )
+                          is_green=False)
         return build
 
 
@@ -200,8 +202,7 @@ class Build(object):
         return self.build_url(self.builder(), self._number)
 
     def results_url(self):
-        results_directory = "r%s (%s)" % (self.revision(), self._number)
-        return "%s/%s" % (self._builder.results_url(), urllib.quote(results_directory))
+        return "%s/%s/layout-test-results" % (self._builder.results_url(), self._number)
 
     def results_zip_url(self):
         return "%s.zip" % self.results_url()
@@ -232,9 +233,7 @@ class BuildBot(object):
             # Will be either a revision number or a build number
             revision_string = status_link.string
             # If revision_string has non-digits assume it's not a revision number.
-            builder['built_revision'] = int(revision_string) \
-                if not re.match('\D', revision_string) \
-                else None
+            builder['built_revision'] = int(revision_string) if not re.match(r'\D', revision_string) else None
 
             # FIXME: We treat slave lost as green even though it is not to
             # work around the Qts bot being on a broken internet connection.
@@ -258,7 +257,7 @@ class BuildBot(object):
         activity_lines = cell.renderContents().split("<br />")
         builder["activity"] = activity_lines[0]  # normally "building" or "idle"
         # The middle lines document how long left for any current builds.
-        match = re.match("(?P<pending_builds>\d) pending", activity_lines[-1])
+        match = re.match(r'(?P<pending_builds>\d) pending', activity_lines[-1])
         builder["pending_builds"] = int(match.group("pending_builds")) if match else 0
 
     def _parse_builder_status_from_row(self, status_row):
@@ -280,7 +279,8 @@ class BuildBot(object):
         return False
 
     # FIXME: These _fetch methods should move to a networking class.
-    def _fetch_build_dictionary(self, builder, build_number):
+    @staticmethod
+    def fetch_build_dictionary(builder, build_number):
         # Note: filter=1 will remove None and {} and '', which cuts noise but can
         # cause keys to be missing which you might otherwise expect.
         # FIXME: The bot sends a *huge* amount of data for each request, we should
@@ -336,11 +336,11 @@ class BuildBot(object):
         soup = BeautifulSoup(builders_page_content)
         return [self._parse_builder_status_from_row(status_row) for status_row in soup.find('table').findAll('tr')]
 
-    def builder_with_name(self, name, master_name='chromium.webkit'):
-        builder = self._builder_by_name.get(name)
+    def builder_with_name(self, builder_name, master_name='chromium.webkit'):
+        builder = self._builder_by_name.get(builder_name)
         if not builder:
-            builder = Builder(name, self, master_name=master_name)
-            self._builder_by_name[name] = builder
+            builder = Builder(builder_name, self, master_name=master_name)
+            self._builder_by_name[builder_name] = builder
         return builder
 
     def _latest_builds_from_builders(self):

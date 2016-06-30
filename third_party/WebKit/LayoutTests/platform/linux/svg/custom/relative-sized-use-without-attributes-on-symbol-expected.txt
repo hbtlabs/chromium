@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -24,7 +26,7 @@
         {
           "object": "LayoutSVGRoot svg",
           "rect": [27, 69, 364, 364],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutSVGViewportContainer svg id='gamesBorder'",
@@ -44,26 +46,40 @@
         {
           "object": "LayoutSVGRoot svg",
           "rect": [13, 207, 92, 91],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutSVGViewportContainer svg id='gamesBorder'",
           "rect": [13, 207, 92, 91],
           "reason": "bounds change"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow div id='contentBox'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutSVGRoot svg",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutSVGContainer use",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutSVGViewportContainer svg id='gamesBorder'",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutSVGPath path",
+      "reason": "bounds change"
     }
   ]
 }

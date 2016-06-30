@@ -26,6 +26,7 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/pepper_plugin_info.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandbox_type.h"
@@ -317,7 +318,8 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
     const PepperPluginInfo& info,
     const base::FilePath& profile_data_directory)
     : profile_data_directory_(profile_data_directory),
-      is_broker_(false) {
+      is_broker_(false),
+      mojo_child_token_(mojo::edk::GenerateRandomToken()) {
   uint32_t base_permissions = info.permissions;
 
   // We don't have to do any whitelisting for APIs in this process host, so
@@ -328,7 +330,7 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
   permissions_ = ppapi::PpapiPermissions::GetForCommandLine(base_permissions);
 
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_PPAPI_PLUGIN, this, mojo::edk::GenerateRandomToken()));
+      PROCESS_TYPE_PPAPI_PLUGIN, this, mojo_child_token_));
 
   host_impl_.reset(new BrowserPpapiHostImpl(this, permissions_, info.name,
                                             info.path, profile_data_directory,
@@ -350,9 +352,10 @@ PpapiPluginProcessHost::PpapiPluginProcessHost(
 }
 
 PpapiPluginProcessHost::PpapiPluginProcessHost()
-    : is_broker_(true) {
+    : is_broker_(true),
+      mojo_child_token_(mojo::edk::GenerateRandomToken()) {
   process_.reset(new BrowserChildProcessHostImpl(
-      PROCESS_TYPE_PPAPI_BROKER, this, mojo::edk::GenerateRandomToken()));
+      PROCESS_TYPE_PPAPI_BROKER, this, mojo_child_token_));
 
   ppapi::PpapiPermissions permissions;  // No permissions.
   // The plugin name, path and profile data directory shouldn't be needed for
@@ -372,8 +375,9 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
     process_->SetName(base::UTF8ToUTF16(info.name));
   }
 
-  std::string channel_id = process_->GetHost()->CreateChannel();
-  if (channel_id.empty()) {
+  std::string mojo_channel_token =
+      process_->GetHost()->CreateChannelMojo(mojo_child_token_);
+  if (mojo_channel_token.empty()) {
     VLOG(1) << "Could not create pepper host channel.";
     return false;
   }
@@ -399,13 +403,11 @@ bool PpapiPluginProcessHost::Init(const PepperPluginInfo& info) {
   cmd_line->AppendSwitchASCII(switches::kProcessType,
                               is_broker_ ? switches::kPpapiBrokerProcess
                                          : switches::kPpapiPluginProcess);
-  cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
+  cmd_line->AppendSwitchASCII(switches::kMojoChannelToken, mojo_channel_token);
 
 #if defined(OS_WIN)
-  if (GetContentClient()->browser()->ShouldUseWindowsPrefetchArgument()) {
-    cmd_line->AppendArg(is_broker_ ? switches::kPrefetchArgumentPpapiBroker
-                                   : switches::kPrefetchArgumentPpapi);
-  }
+  cmd_line->AppendArg(is_broker_ ? switches::kPrefetchArgumentPpapiBroker
+                                 : switches::kPrefetchArgumentPpapi);
 #endif  // defined(OS_WIN)
 
   // These switches are forwarded to both plugin and broker pocesses.
@@ -467,8 +469,12 @@ void PpapiPluginProcessHost::RequestPluginChannel(Client* client) {
   int renderer_child_id;
   client->GetPpapiChannelInfo(&process_handle, &renderer_child_id);
 
-  base::ProcessId process_id = (process_handle == base::kNullProcessHandle) ?
-      0 : base::GetProcId(process_handle);
+  base::ProcessId process_id = base::kNullProcessId;
+  if (process_handle != base::kNullProcessHandle) {
+    // This channel is not used by the browser itself.
+    process_id = base::GetProcId(process_handle);
+    CHECK_NE(base::kNullProcessId, process_id);
+  }
 
   // We can't send any sync messages from the browser because it might lead to
   // a hang. See the similar code in PluginProcessHost for more description.

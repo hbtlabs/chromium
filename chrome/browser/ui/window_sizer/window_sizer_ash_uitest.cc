@@ -10,6 +10,9 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
@@ -46,7 +49,7 @@ class WindowSizerTest : public InProcessBrowserTest {
 
 void CloseBrowser(Browser* browser) {
   browser->window()->Close();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 gfx::Rect GetChromeIconBoundsForRootWindow(aura::Window* root_window) {
@@ -148,7 +151,7 @@ class WindowSizerContextMenuTest : public WindowSizerTest {
   }
 
   static void QuitLoop() {
-    base::MessageLoop::current()->task_runner()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 

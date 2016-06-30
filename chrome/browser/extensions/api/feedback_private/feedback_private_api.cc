@@ -31,7 +31,12 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN)
+#include "base/feature_list.h"
 #include "chrome/browser/safe_browsing/srt_fetcher_win.h"
 #endif
 
@@ -49,6 +54,13 @@ std::string StripFakepath(const std::string& path) {
     return path.substr(arraysize(kFakePathStr) - 1);
   return path;
 }
+
+#if defined(OS_WIN)
+// Allows enabling/disabling SRT Prompt as a Variations feature.
+constexpr base::Feature kSrtPromptOnFeedbackForm {
+  "SrtPromptOnFeedbackForm", base::FEATURE_DISABLED_BY_DEFAULT
+};
+#endif
 
 }  // namespace
 
@@ -89,14 +101,14 @@ void FeedbackPrivateAPI::RequestFeedback(
 #if defined(OS_WIN)
   // Show prompt for Software Removal Tool if the Reporter component has found
   // unwanted software, and the user has never run the cleaner before.
-  if (safe_browsing::ReporterFoundUws() &&
+  if (base::FeatureList::IsEnabled(kSrtPromptOnFeedbackForm) &&
+      safe_browsing::ReporterFoundUws() &&
       !safe_browsing::UserHasRunCleaner()) {
     RequestFeedbackForFlow(description_template, category_tag, page_url,
                            FeedbackFlow::FEEDBACK_FLOW_SHOWSRTPROMPT);
     return;
   }
 #endif
-
   RequestFeedbackForFlow(description_template, category_tag, page_url,
                          FeedbackFlow::FEEDBACK_FLOW_REGULAR);
 }
@@ -145,8 +157,19 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   SET_STRING("screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL);
   SET_STRING("user-email", IDS_FEEDBACK_USER_EMAIL_LABEL);
 #if defined(OS_CHROMEOS)
-  SET_STRING("sys-info",
-             IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX);
+  // We must check ArcBridgeService::available() before
+  // ArcAuthService::IsArcEnabled() to avoid crashes in browsertests when
+  // |profile_| is not set in ArcAuthService when ARC is not available.
+  if (arc::ArcBridgeService::Get() &&
+      arc::ArcBridgeService::Get()->available() &&
+      arc::ArcAuthService::Get() &&
+      arc::ArcAuthService::Get()->IsArcEnabled()) {
+    SET_STRING("sys-info",
+               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC);
+  } else {
+    SET_STRING("sys-info",
+               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX);
+  }
 #else
   SET_STRING("sys-info", IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_CHKBOX);
 #endif

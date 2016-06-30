@@ -25,11 +25,14 @@ namespace blink {
 class WebBluetoothRemoteGATTCharacteristic;
 }
 
+namespace shell {
+class InterfaceProvider;
+}
+
 namespace content {
 
 class BluetoothDispatcher;
 class ThreadSafeSender;
-class ServiceRegistry;
 
 // Implementation of blink::WebBluetooth. Passes calls through to the thread
 // specific BluetoothDispatcher.
@@ -37,7 +40,7 @@ class CONTENT_EXPORT WebBluetoothImpl
     : NON_EXPORTED_BASE(public blink::mojom::WebBluetoothServiceClient),
       NON_EXPORTED_BASE(public blink::WebBluetooth) {
  public:
-  WebBluetoothImpl(ServiceRegistry* service_registry);
+  WebBluetoothImpl(shell::InterfaceProvider* remote_interfaces);
   ~WebBluetoothImpl() override;
 
   // blink::WebBluetooth interface:
@@ -49,10 +52,11 @@ class CONTENT_EXPORT WebBluetoothImpl
       blink::WebBluetoothDevice* device,
       blink::WebBluetoothRemoteGATTServerConnectCallbacks* callbacks) override;
   void disconnect(const blink::WebString& device_id) override;
-  void getPrimaryService(
+  void getPrimaryServices(
       const blink::WebString& device_id,
-      const blink::WebString& service_uuid,
-      blink::WebBluetoothGetPrimaryServiceCallbacks* callbacks) override;
+      blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+      const blink::WebString& services_uuid,
+      blink::WebBluetoothGetPrimaryServicesCallbacks* callbacks) override;
   void getCharacteristics(
       const blink::WebString& service_instance_id,
       blink::mojom::WebBluetoothGATTQueryQuantity quantity,
@@ -93,11 +97,11 @@ class CONTENT_EXPORT WebBluetoothImpl
       std::unique_ptr<blink::WebBluetoothRemoteGATTServerConnectCallbacks>
           callbacks,
       blink::mojom::WebBluetoothError error);
-  void OnGetPrimaryServiceComplete(
+  void OnGetPrimaryServicesComplete(
       const blink::WebString& device_id,
-      std::unique_ptr<blink::WebBluetoothGetPrimaryServiceCallbacks> callbacks,
+      std::unique_ptr<blink::WebBluetoothGetPrimaryServicesCallbacks> callbacks,
       blink::mojom::WebBluetoothError error,
-      blink::mojom::WebBluetoothRemoteGATTServicePtr service);
+      mojo::Array<blink::mojom::WebBluetoothRemoteGATTServicePtr> services);
   void OnGetCharacteristicsComplete(
       const blink::WebString& service_instance_id,
       std::unique_ptr<blink::WebBluetoothGetCharacteristicsCallbacks> callbacks,
@@ -123,7 +127,7 @@ class CONTENT_EXPORT WebBluetoothImpl
       const std::vector<uint8_t>& value);
 
   blink::mojom::WebBluetoothService& GetWebBluetoothService();
-  ServiceRegistry* const service_registry_;
+  shell::InterfaceProvider* const remote_interfaces_;
   blink::mojom::WebBluetoothServicePtr web_bluetooth_service_;
 
   // Map of characteristic_instance_ids to

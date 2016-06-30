@@ -83,6 +83,7 @@ public:
     int marginWidth() const override { return -1; }
     int marginHeight() const override { return -1; }
     bool allowFullscreen() const override { return false; }
+    const WebVector<WebPermissionType>& delegatedPermissions() const override;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -140,7 +141,9 @@ public:
     }
 
 private:
-    CORE_EXPORT static HeapHashCountedSet<Member<Node>>& disabledSubtreeRoots();
+    using SubtreeRootSet = HeapHashCountedSet<Member<Node>>;
+
+    CORE_EXPORT static SubtreeRootSet& disabledSubtreeRoots();
 
     Member<Node> m_root;
 };

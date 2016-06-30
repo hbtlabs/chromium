@@ -5,10 +5,9 @@
 #ifndef Maybe_h
 #define Maybe_h
 
-#include "platform/PlatformExport.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/inspector_protocol/String16.h"
 
-#include "wtf/Assertions.h"
 #include <memory>
 
 namespace blink {
@@ -19,7 +18,7 @@ class String16;
 template<typename T>
 class Maybe {
 public:
-    Maybe() { }
+    Maybe() : m_value() { }
     Maybe(std::unique_ptr<T> value) : m_value(std::move(value)) { }
     void operator=(std::unique_ptr<T> value) { m_value = std::move(value); }
     T* fromJust() const { DCHECK(m_value); return m_value.get(); }

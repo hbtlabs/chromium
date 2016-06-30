@@ -95,7 +95,7 @@
 #include "ui/base/ui_base_types.h"
 
 #if defined(USE_ASH)
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "chrome/browser/extensions/api/tabs/ash_panel_contents.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #endif
@@ -1025,8 +1025,7 @@ bool TabsQueryFunction::RunSync() {
 
       result->Append(ExtensionTabUtil::CreateTabObject(web_contents, tab_strip,
                                                        i, extension())
-                         ->ToValue()
-                         .release());
+                         ->ToValue());
     }
   }
 
@@ -1537,8 +1536,7 @@ bool TabsMoveFunction::MoveTab(int tab_id,
         tab_values->Append(
             ExtensionTabUtil::CreateTabObject(web_contents, target_tab_strip,
                                               *new_index, extension())
-                ->ToValue()
-                .release());
+                ->ToValue());
       }
 
       return true;
@@ -1558,8 +1556,7 @@ bool TabsMoveFunction::MoveTab(int tab_id,
   if (has_callback()) {
     tab_values->Append(ExtensionTabUtil::CreateTabObject(
                            contents, source_tab_strip, *new_index, extension())
-                           ->ToValue()
-                           .release());
+                           ->ToValue());
   }
 
   return true;

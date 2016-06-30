@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/tools/bindings/mojom.gni")
-
 declare_args() {
   # Overrides os name in uma metrics log to "Blimp".
   metrics_use_blimp = false
@@ -56,6 +54,8 @@ source_set("metrics") {
     "metrics_pref_names.h",
     "metrics_provider.cc",
     "metrics_provider.h",
+    "metrics_reporting_default_state.cc",
+    "metrics_reporting_default_state.h",
     "metrics_reporting_scheduler.cc",
     "metrics_reporting_scheduler.h",
     "metrics_service.cc",
@@ -300,14 +300,6 @@ if (is_linux) {
     ]
     deps = [
       "//base",
-    ]
-  }
-}
-
-if (is_chromeos) {
-  mojom("interfaces") {
-    sources = [
-      "leak_detector/leak_detector_remote.mojom",
     ]
   }
 }

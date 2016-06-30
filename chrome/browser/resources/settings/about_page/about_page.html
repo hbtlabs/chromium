@@ -2,6 +2,7 @@
 <link rel="import" href="/about_page/about_page_browser_proxy.html">
 <link rel="import" href="/i18n_setup.html">
 <link rel="import" href="/icons.html">
+<link rel="import" href="/lifetime_browser_proxy.html">
 <link rel="import" href="/settings_page/main_page_behavior.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_section.html">
@@ -25,8 +26,8 @@
     <style include="settings-shared settings-page-styles">
       .product-title {
         font-size: 20px;
-        margin-top: auto;
         margin-bottom: auto;
+        margin-top: auto;
       }
 
       img {
@@ -37,11 +38,11 @@
         -webkit-margin-end: var(--iron-icon-spacing);
       }
 
-      iron-icon[icon="settings:check-circle"] {
+      iron-icon[icon='settings:check-circle'] {
         fill: var(--paper-blue-600);
       }
 
-      iron-icon[icon="settings:error"] {
+      iron-icon[icon='settings:error'] {
         fill: var(--paper-red-600);
       }
 
@@ -53,6 +54,10 @@
 
       .info-section {
         margin-bottom: 12px;
+      }
+
+      #regulatoryInfo img {
+        width: 330px;
       }
     </style>
     <div data-page="about">
@@ -78,8 +83,13 @@
                 <div id="updateStatusMessage"
                     hidden="[[!shouldShowUpdateStatusMessage_(
                         currentUpdateStatusEvent_)]]">
+<if expr="not chromeos">
+                  [[getUpdateStatusMessage_(currentUpdateStatusEvent_)]]
+</if>
+<if expr="chromeos">
                   [[getUpdateStatusMessage_(
-                      currentUpdateStatusEvent_,targetChannel)]]
+                      currentUpdateStatusEvent_, targetChannel_)]]
+</if>
                 </div>
                 <span id="deprecationWarning"
                     hidden="[[!obsoleteSystemInfo_.obsolete]]">
@@ -115,17 +125,19 @@
               </paper-button>
 </if>
             </div>
-            <div id="help" class="settings-box two-line" on-tap="onHelpTap_">
+            <div id="help" class="settings-box two-line" on-tap="onHelpTap_"
+                actionable>
               $i18n{aboutGetHelpUsingChrome}
             </div>
 <if expr="_google_chrome">
-            <div id="reportIssue" class="settings-box"
+            <div id="reportIssue" class="settings-box" actionable
                 on-tap="onReportIssueTap_">
               $i18n{aboutReportAnIssue}
             </div>
 </if>
 <if expr="chromeos">
-            <div class="settings-box" on-tap="onDetailedBuildInfoTap_">
+            <div class="settings-box" on-tap="onDetailedBuildInfoTap_"
+                actionable>
               <!-- TODO(dpapad): Localize string. -->
               Detailed build info
             </div>

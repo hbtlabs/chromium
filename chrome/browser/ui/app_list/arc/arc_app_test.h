@@ -10,10 +10,12 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "components/arc/common/app.mojom.h"
 
 namespace arc {
 namespace mojom {
 class AppInfo;
+class ArcPackageInfo;
 }
 class ArcAuthService;
 class FakeArcBridgeService;
@@ -38,10 +40,23 @@ class ArcAppTest {
   void TearDown();
 
   static std::string GetAppId(const arc::mojom::AppInfo& app_info);
+  static std::string GetAppId(const arc::mojom::ShortcutInfo& shortcut);
+
+  const std::vector<arc::mojom::ArcPackageInfo>& fake_packages() const {
+    return fake_packages_;
+  }
+
+  void AddPackage(const arc::mojom::ArcPackageInfo& package);
+
+  void RemovePackage(const arc::mojom::ArcPackageInfo& package);
 
   // The 0th item is sticky but not the followings.
   const std::vector<arc::mojom::AppInfo>& fake_apps() const {
     return fake_apps_;
+  }
+
+  const std::vector<arc::mojom::ShortcutInfo>& fake_shortcuts() const {
+    return fake_shortcuts_;
   }
 
   chromeos::FakeChromeUserManager* GetUserManager();
@@ -56,6 +71,7 @@ class ArcAppTest {
 
  private:
   void CreateUserAndLogin();
+  bool FindPackage(const arc::mojom::ArcPackageInfo& package);
 
   // Unowned pointer.
   Profile* profile_ = nullptr;
@@ -67,6 +83,8 @@ class ArcAppTest {
   std::unique_ptr<arc::ArcAuthService> auth_service_;
   std::unique_ptr<chromeos::ScopedUserManagerEnabler> user_manager_enabler_;
   std::vector<arc::mojom::AppInfo> fake_apps_;
+  std::vector<arc::mojom::ArcPackageInfo> fake_packages_;
+  std::vector<arc::mojom::ShortcutInfo> fake_shortcuts_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAppTest);
 };

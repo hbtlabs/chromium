@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_CHOOSER_BUBBLE_UI_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_CHOOSER_BUBBLE_UI_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/bubble/bubble_ui.h"
 #include "ui/views/bubble/bubble_border.h"
@@ -24,7 +26,8 @@ class ChooserBubbleUiViewDelegate;
 // BubbleManager.
 class ChooserBubbleUiView : public BubbleUi {
  public:
-  ChooserBubbleUiView(Browser* browser, ChooserController* controller);
+  ChooserBubbleUiView(Browser* browser,
+                      std::unique_ptr<ChooserController> chooser_controller);
   ~ChooserBubbleUiView() override;
 
   // BubbleUi:
@@ -37,8 +40,8 @@ class ChooserBubbleUiView : public BubbleUi {
   views::View* GetAnchorView();
   views::BubbleBorder::Arrow GetAnchorArrow();
 
-  Browser* browser_;               // Weak.
-  ChooserController* controller_;  // Weak.
+  Browser* browser_;  // Weak.
+  // Weak. Owned by its parent view.
   ChooserBubbleUiViewDelegate* chooser_bubble_ui_view_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ChooserBubbleUiView);

@@ -4,7 +4,9 @@
 
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 
-#include "ash/system/chromeos/devicetype_utils.h"
+#include <string>
+
+#include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/i18n/timezone.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -15,20 +17,27 @@
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
+#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/user_manager/known_user.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 
 namespace {
 const char kAction[] = "action";
-const char kCode[] = "code";
+const char kBackupRestoreEnabled[] = "backupRestoreEnabled";
 const char kCanEnable[] = "canEnable";
-const char kStatus[] = "status";
+const char kCode[] = "code";
 const char kData[] = "data";
+const char kDeviceId[] = "deviceId";
+const char kEnabled[] = "enabled";
 const char kOn[] = "on";
 const char kPage[] = "page";
+const char kStatus[] = "status";
 const char kText[] = "text";
 const char kActionInitialize[] = "initialize";
 const char kActionSetMetricsMode[] = "setMetricsMode";
@@ -36,6 +45,8 @@ const char kActionStartLso[] = "startLso";
 const char kActionCancelAuthCode[] = "cancelAuthCode";
 const char kActionSetAuthCode[] = "setAuthCode";
 const char kActionEnableMetrics[] = "enableMetrics";
+const char kActionSendFeedback[] = "sendFeedback";
+const char kActionSetBackupRestore[] = "setBackupRestore";
 const char kActionCloseUI[] = "closeUI";
 const char kActionShowPage[] = "showPage";
 }  // namespace
@@ -91,48 +102,64 @@ void ArcSupportHost::Start(Client* client) {
 
 void ArcSupportHost::Initialize() {
   DCHECK(client_);
-  std::unique_ptr<base::DictionaryValue> localized_strings(
+  std::unique_ptr<base::DictionaryValue> loadtime_data(
       new base::DictionaryValue());
   base::string16 device_name = ash::GetChromeOSDeviceName();
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "greetingHeader",
       l10n_util::GetStringFUTF16(IDS_ARC_OPT_IN_DIALOG_HEADER, device_name));
-  localized_strings->SetString(
-      "greetingDescription",
-      l10n_util::GetStringFUTF16(IDS_ARC_OPT_IN_DIALOG_DESCRIPTION,
-                                 device_name));
-  localized_strings->SetString(
+  loadtime_data->SetString("greetingDescription",
+                           l10n_util::GetStringFUTF16(
+                               IDS_ARC_OPT_IN_DIALOG_DESCRIPTION, device_name));
+  loadtime_data->SetString(
       "buttonAgree",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BUTTON_AGREE));
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "buttonCancel",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BUTTON_CANCEL));
-  localized_strings->SetString(
+  loadtime_data->SetString(
+      "buttonSendFeedback",
+      l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BUTTON_SEND_FEEDBACK));
+  loadtime_data->SetString(
       "buttonRetry",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BUTTON_RETRY));
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "progressLsoLoading",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_PROGRESS_LSO));
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "progressAndroidLoading",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_PROGRESS_ANDROID));
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "authorizationFailed",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_AUTHORIZATION_FAILED));
-  localized_strings->SetString(
+  loadtime_data->SetString(
       "termsOfService",
       l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_TERMS_OF_SERVICE));
+  loadtime_data->SetString(
+      "textBackupRestore",
+      l10n_util::GetStringUTF16(IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE));
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
   const std::string& country_code = base::CountryCodeForCurrentTimezone();
-  localized_strings->SetString("countryCode", country_code);
+  loadtime_data->SetString("countryCode", country_code);
 
-  webui::SetLoadTimeDataDefaults(app_locale, localized_strings.get());
+  arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
+
+  loadtime_data->SetBoolean(kBackupRestoreEnabled,
+                            arc_auth_service->profile()->GetPrefs()->GetBoolean(
+                                prefs::kArcBackupRestoreEnabled));
+
+  webui::SetLoadTimeDataDefaults(app_locale, loadtime_data.get());
+  DCHECK(arc_auth_service);
+  const std::string device_id = user_manager::known_user::GetDeviceId(
+      multi_user_util::GetAccountIdFromProfile(arc_auth_service->profile()));
+  DCHECK(!device_id.empty());
 
   base::DictionaryValue request;
   std::string request_string;
   request.SetString(kAction, kActionInitialize);
-  request.Set(kData, std::move(localized_strings));
+  request.Set(kData, std::move(loadtime_data));
+  request.SetString(kDeviceId, device_id);
   base::JSONWriter::Write(request, &request_string);
   client_->PostMessageFromNativeHost(request_string);
 }
@@ -197,8 +224,13 @@ void ArcSupportHost::OnOptInUIShowPage(arc::ArcAuthService::UIPage page,
   client_->PostMessageFromNativeHost(response_string);
 }
 
-void ArcSupportHost::EnableMetrics() {
-  InitiateMetricsReportingChange(true, OnMetricsReportingCallbackType());
+void ArcSupportHost::EnableMetrics(bool is_enabled) {
+  InitiateMetricsReportingChange(is_enabled, OnMetricsReportingCallbackType());
+}
+
+void ArcSupportHost::EnableBackupRestore(bool is_enabled) {
+  PrefService* pref_service = arc::ArcAuthService::Get()->profile()->GetPrefs();
+  pref_service->SetBoolean(prefs::kArcBackupRestoreEnabled, is_enabled);
 }
 
 void ArcSupportHost::OnMessage(const std::string& request_string) {
@@ -231,7 +263,21 @@ void ArcSupportHost::OnMessage(const std::string& request_string) {
   } else if (action == kActionCancelAuthCode) {
     arc_auth_service->CancelAuthCode();
   } else if (action == kActionEnableMetrics) {
-    EnableMetrics();
+    bool is_enabled;
+    if (!request->GetBoolean(kEnabled, &is_enabled)) {
+      NOTREACHED();
+      return;
+    }
+    EnableMetrics(is_enabled);
+  } else if (action == kActionSendFeedback) {
+    chrome::OpenFeedbackDialog(nullptr);
+  } else if (action == kActionSetBackupRestore) {
+    bool is_enabled;
+    if (!request->GetBoolean(kEnabled, &is_enabled)) {
+      NOTREACHED();
+      return;
+    }
+    EnableBackupRestore(is_enabled);
   } else {
     NOTREACHED();
   }

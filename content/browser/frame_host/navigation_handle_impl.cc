@@ -11,9 +11,8 @@
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/common/frame_messages.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
@@ -183,9 +182,12 @@ net::Error NavigationHandleImpl::GetNetErrorCode() {
 }
 
 RenderFrameHostImpl* NavigationHandleImpl::GetRenderFrameHost() {
-  CHECK(state_ >= READY_TO_COMMIT)
-      << "This accessor should only be called "
-         "after the navigation is ready to commit.";
+  // TODO(mkwst): Change this to check against 'READY_TO_COMMIT' once
+  // ReadyToCommitNavigation is available whether or not PlzNavigate is
+  // enabled. https://crbug.com/621856
+  CHECK_GE(state_, WILL_PROCESS_RESPONSE)
+      << "This accessor should only be called after a response has been "
+         "delivered for processing.";
   return render_frame_host_;
 }
 
@@ -255,13 +257,13 @@ NavigationHandleImpl::CallWillStartRequestForTesting(
     bool is_external_protocol) {
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
 
-  scoped_refptr<ResourceRequestBody> resource_request_body;
+  scoped_refptr<ResourceRequestBodyImpl> resource_request_body;
   std::string method = "GET";
   if (is_post) {
     method = "POST";
 
     std::string body = "test=body";
-    resource_request_body = new ResourceRequestBody();
+    resource_request_body = new ResourceRequestBodyImpl();
     resource_request_body->AppendBytes(body.data(), body.size());
   }
 
@@ -295,16 +297,9 @@ NavigationData* NavigationHandleImpl::GetNavigationData() {
   return navigation_data_.get();
 }
 
-void NavigationHandleImpl::InitServiceWorkerHandle(
-    ServiceWorkerContextWrapper* service_worker_context) {
-  DCHECK(IsBrowserSideNavigationEnabled());
-  service_worker_handle_.reset(
-      new ServiceWorkerNavigationHandle(service_worker_context));
-}
-
 void NavigationHandleImpl::WillStartRequest(
     const std::string& method,
-    scoped_refptr<content::ResourceRequestBody> resource_request_body,
+    scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
     const Referrer& sanitized_referrer,
     bool has_user_gesture,
     ui::PageTransition transition,
@@ -442,6 +437,7 @@ NavigationHandleImpl::CheckWillStartRequest() {
 
       case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
+      case NavigationThrottle::BLOCK_REQUEST:
         state_ = CANCELING;
         return result;
 
@@ -449,9 +445,6 @@ NavigationHandleImpl::CheckWillStartRequest() {
         state_ = DEFERRING_START;
         next_index_ = i + 1;
         return result;
-
-      default:
-        NOTREACHED();
     }
   }
   next_index_ = 0;
@@ -481,7 +474,7 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
         next_index_ = i + 1;
         return result;
 
-      default:
+      case NavigationThrottle::BLOCK_REQUEST:
         NOTREACHED();
     }
   }
@@ -516,6 +509,9 @@ NavigationHandleImpl::CheckWillProcessResponse() {
         state_ = DEFERRING_RESPONSE;
         next_index_ = i + 1;
         return result;
+
+      case NavigationThrottle::BLOCK_REQUEST:
+        NOTREACHED();
     }
   }
   next_index_ = 0;

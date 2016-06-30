@@ -60,9 +60,11 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StringHasher.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringUTF8Adaptor.h"
+#include <memory>
 
 namespace blink {
 
@@ -146,10 +148,9 @@ ContentSecurityPolicy::ContentSecurityPolicy()
     , m_scriptHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
     , m_styleHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone)
     , m_sandboxMask(0)
-    , m_enforceStrictMixedContentChecking(false)
     , m_referrerPolicy(ReferrerPolicyDefault)
     , m_treatAsPublicAddress(false)
-    , m_insecureRequestsPolicy(SecurityContext::InsecureRequestsDoNotUpgrade)
+    , m_insecureRequestPolicy(kLeaveInsecureRequestsAlone)
 {
 }
 
@@ -184,13 +185,12 @@ void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext()
             UseCounter::count(document, UseCounter::SandboxViaCSP);
             document->enforceSandboxFlags(m_sandboxMask);
         }
-        if (m_enforceStrictMixedContentChecking)
-            document->enforceStrictMixedContentChecking();
         if (m_treatAsPublicAddress)
             document->setAddressSpace(WebAddressSpacePublic);
-        if (m_insecureRequestsPolicy == SecurityContext::InsecureRequestsUpgrade) {
+
+        document->enforceInsecureRequestPolicy(m_insecureRequestPolicy);
+        if (m_insecureRequestPolicy & kUpgradeInsecureRequests) {
             UseCounter::count(document, UseCounter::UpgradeInsecureRequestsEnabled);
-            document->setInsecureRequestsPolicy(m_insecureRequestsPolicy);
             if (!securityOrigin->host().isNull())
                 document->addInsecureNavigationUpgrade(securityOrigin->host().impl()->hash());
         }
@@ -203,7 +203,7 @@ void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext()
             UseCounter::count(*document, getUseCounterType(policy->headerType()));
 
         if (allowDynamic())
-            UseCounter::count(*document, UseCounter::CSPWithUnsafeDynamic);
+            UseCounter::count(*document, UseCounter::CSPWithStrictDynamic);
     }
 
     // We disable 'eval()' even in the case of report-only policies, and rely on the check in the
@@ -345,9 +345,9 @@ void ContentSecurityPolicy::setOverrideURLForSelf(const KURL& url)
     m_selfSource = new CSPSource(this, m_selfProtocol, origin->host(), origin->port(), String(), CSPSource::NoWildcard, CSPSource::NoWildcard);
 }
 
-PassOwnPtr<Vector<CSPHeaderAndType>> ContentSecurityPolicy::headers() const
+std::unique_ptr<Vector<CSPHeaderAndType>> ContentSecurityPolicy::headers() const
 {
-    OwnPtr<Vector<CSPHeaderAndType>> headers = adoptPtr(new Vector<CSPHeaderAndType>);
+    std::unique_ptr<Vector<CSPHeaderAndType>> headers = wrapUnique(new Vector<CSPHeaderAndType>);
     for (const auto& policy : m_policies) {
         CSPHeaderAndType headerAndType(policy->header(), policy->headerType());
         headers->append(headerAndType);
@@ -743,11 +743,6 @@ void ContentSecurityPolicy::enforceSandboxFlags(SandboxFlags mask)
     m_sandboxMask |= mask;
 }
 
-void ContentSecurityPolicy::enforceStrictMixedContentChecking()
-{
-    m_enforceStrictMixedContentChecking = true;
-}
-
 void ContentSecurityPolicy::treatAsPublicAddress()
 {
     if (!RuntimeEnabledFeatures::corsRFC1918Enabled())
@@ -755,10 +750,14 @@ void ContentSecurityPolicy::treatAsPublicAddress()
     m_treatAsPublicAddress = true;
 }
 
-void ContentSecurityPolicy::setInsecureRequestsPolicy(SecurityContext::InsecureRequestsPolicy policy)
+void ContentSecurityPolicy::enforceStrictMixedContentChecking()
 {
-    if (policy > m_insecureRequestsPolicy)
-        m_insecureRequestsPolicy = policy;
+    m_insecureRequestPolicy |= kBlockAllMixedContent;
+}
+
+void ContentSecurityPolicy::upgradeInsecureRequests()
+{
+    m_insecureRequestPolicy |= kUpgradeInsecureRequests;
 }
 
 static String stripURLForUseInReport(Document* document, const KURL& url, RedirectStatus redirectStatus)
@@ -811,7 +810,7 @@ static void gatherSecurityPolicyViolationEventData(SecurityPolicyViolationEventI
     if (!SecurityOrigin::isSecure(document->url()) && document->loader())
         init.setStatusCode(document->loader()->response().httpStatusCode());
 
-    OwnPtr<SourceLocation> location = SourceLocation::capture(document);
+    std::unique_ptr<SourceLocation> location = SourceLocation::capture(document);
     if (location->lineNumber()) {
         KURL source = KURL(ParsedURLString, location->url());
         init.setSourceFile(stripURLForUseInReport(document, source, redirectStatus));

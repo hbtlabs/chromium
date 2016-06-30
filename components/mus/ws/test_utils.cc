@@ -8,9 +8,10 @@
 #include "cc/output/copy_output_request.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/display_binding.h"
+#include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/server_window_surface_manager_test_api.h"
 #include "components/mus/ws/window_manager_access_policy.h"
-#include "components/mus/ws/window_manager_factory_service.h"
+#include "components/mus/ws/window_manager_window_tree_factory.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,6 +54,7 @@ class TestPlatformDisplay : public PlatformDisplay {
   bool IsFramePending() const override { return false; }
   void RequestCopyOfOutput(
       std::unique_ptr<cc::CopyOutputRequest> output_request) override {}
+  int64_t GetDisplayId() const override { return 1; }
 
  private:
   ViewportMetrics display_metrics_;
@@ -75,22 +77,22 @@ ClientWindowId NextUnusedClientWindowId(WindowTree* tree) {
 
 }  // namespace
 
-// WindowManagerFactoryRegistryTestApi ----------------------------------------
+// WindowManagerWindowTreeFactorySetTestApi ------------------------------------
 
-WindowManagerFactoryRegistryTestApi::WindowManagerFactoryRegistryTestApi(
-    WindowManagerFactoryRegistry* registry)
-    : registry_(registry) {}
+WindowManagerWindowTreeFactorySetTestApi::
+    WindowManagerWindowTreeFactorySetTestApi(
+        WindowManagerWindowTreeFactorySet*
+            window_manager_window_tree_factory_set)
+    : window_manager_window_tree_factory_set_(
+          window_manager_window_tree_factory_set) {}
 
-WindowManagerFactoryRegistryTestApi::~WindowManagerFactoryRegistryTestApi() {}
+WindowManagerWindowTreeFactorySetTestApi::
+    ~WindowManagerWindowTreeFactorySetTestApi() {}
 
-void WindowManagerFactoryRegistryTestApi::AddService(
-    const UserId& user_id,
-    mojom::WindowManagerFactory* factory) {
-  std::unique_ptr<WindowManagerFactoryService> service_ptr(
-      new WindowManagerFactoryService(registry_, user_id));
-  WindowManagerFactoryService* service = service_ptr.get();
-  registry_->AddServiceImpl(std::move(service_ptr));
-  service->SetWindowManagerFactoryImpl(factory);
+void WindowManagerWindowTreeFactorySetTestApi::Add(const UserId& user_id) {
+  WindowManagerWindowTreeFactory* factory =
+      window_manager_window_tree_factory_set_->Add(user_id, nullptr);
+  factory->CreateWindowTree(nullptr, nullptr);
 }
 
 // TestPlatformDisplayFactory  -------------------------------------------------
@@ -143,9 +145,12 @@ int EventDispatcherTestApi::NumberPointerTargetsForWindow(
 // TestDisplayBinding ---------------------------------------------------------
 
 WindowTree* TestDisplayBinding::CreateWindowTree(ServerWindow* root) {
-  return window_server_->EmbedAtWindow(
+  const uint32_t embed_flags = 0;
+  WindowTree* tree = window_server_->EmbedAtWindow(
       root, shell::mojom::kRootUserID, mus::mojom::WindowTreeClientPtr(),
-      base::WrapUnique(new WindowManagerAccessPolicy));
+      embed_flags, base::WrapUnique(new WindowManagerAccessPolicy));
+  tree->ConfigureWindowManager();
+  return tree;
 }
 
 // TestWindowManager ----------------------------------------------------------
@@ -161,7 +166,8 @@ void TestWindowManager::WmCreateTopLevelWindow(
 void TestWindowManager::WmClientJankinessChanged(ClientSpecificId client_id,
                                                  bool janky) {}
 
-void TestWindowManager::OnAccelerator(uint32_t id, mojom::EventPtr event) {
+void TestWindowManager::OnAccelerator(uint32_t id,
+                                      std::unique_ptr<ui::Event> event) {
   on_accelerator_called_ = true;
   on_accelerator_id_ = id;
 }
@@ -268,14 +274,14 @@ void TestWindowTreeClient::OnWindowSharedPropertyChanged(
 
 void TestWindowTreeClient::OnWindowInputEvent(uint32_t event_id,
                                               uint32_t window,
-                                              mojom::EventPtr event,
+                                              std::unique_ptr<ui::Event> event,
                                               uint32_t event_observer_id) {
-  tracker_.OnWindowInputEvent(window, std::move(event), event_observer_id);
+  tracker_.OnWindowInputEvent(window, *event.get(), event_observer_id);
 }
 
-void TestWindowTreeClient::OnEventObserved(mojom::EventPtr event,
+void TestWindowTreeClient::OnEventObserved(std::unique_ptr<ui::Event> event,
                                            uint32_t event_observer_id) {
-  tracker_.OnEventObserved(std::move(event), event_observer_id);
+  tracker_.OnEventObserved(*event.get(), event_observer_id);
 }
 
 void TestWindowTreeClient::OnWindowFocused(uint32_t focused_window_id) {
@@ -391,7 +397,8 @@ ServerWindow* WindowEventTargetingHelper::CreatePrimaryTree(
   mojom::WindowTreeClientPtr client;
   mojom::WindowTreeClientRequest client_request = GetProxy(&client);
   wm_client_->Bind(std::move(client_request));
-  wm_tree->Embed(embed_window_id, std::move(client));
+  const uint32_t embed_flags = 0;
+  wm_tree->Embed(embed_window_id, std::move(client), embed_flags);
   ServerWindow* embed_window = wm_tree->GetWindowByClientId(embed_window_id);
   WindowTree* tree1 = window_server_->GetTreeWithRoot(embed_window);
   EXPECT_NE(nullptr, tree1);
@@ -441,16 +448,6 @@ void WindowEventTargetingHelper::SetTaskRunner(
 
 // ----------------------------------------------------------------------------
 
-TestWindowManagerFactory::TestWindowManagerFactory() {}
-
-TestWindowManagerFactory::~TestWindowManagerFactory() {}
-
-void TestWindowManagerFactory::CreateWindowManager(
-    mus::mojom::DisplayPtr display,
-    mus::mojom::WindowTreeClientRequest client) {}
-
-// ----------------------------------------------------------------------------
-
 ServerWindow* FirstRoot(WindowTree* tree) {
   return tree->roots().size() == 1u
              ? tree->GetWindow((*tree->roots().begin())->id())
@@ -472,7 +469,12 @@ ClientWindowId ClientWindowIdForWindow(WindowTree* tree,
 }
 
 ServerWindow* NewWindowInTree(WindowTree* tree, ClientWindowId* client_id) {
-  ServerWindow* parent = FirstRoot(tree);
+  return NewWindowInTreeWithParent(tree, FirstRoot(tree), client_id);
+}
+
+ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
+                                        ServerWindow* parent,
+                                        ClientWindowId* client_id) {
   if (!parent)
     return nullptr;
   ClientWindowId parent_client_id;

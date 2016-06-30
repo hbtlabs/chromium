@@ -93,7 +93,6 @@
 #include "platform/TraceEvent.h"
 #include "platform/TracedValue.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/allocator/Partitions.h"
 #include "wtf/text/CString.h"
@@ -165,8 +164,9 @@ void Node::dumpStatistics()
                 if (!result.isNewEntry)
                     result.storedValue->value++;
 
-                if (const ElementData* elementData = element->elementData()) {
-                    attributes += elementData->attributes().size();
+                size_t attributeCount = element->attributesWithoutUpdate().size();
+                if (attributeCount) {
+                    attributes += attributeCount;
                     ++elementsWithAttributeStorage;
                 }
                 break;
@@ -636,6 +636,25 @@ Node& Node::shadowIncludingRoot() const
     return *root;
 }
 
+bool Node::isUnclosedNodeOf(const Node& other) const
+{
+    if (!isInShadowTree() || treeScope() == other.treeScope())
+        return true;
+
+    const TreeScope* scope = &treeScope();
+    for (; scope->parentTreeScope(); scope = scope->parentTreeScope()) {
+        const ContainerNode& root = scope->rootNode();
+        if (root.isShadowRoot() && !toShadowRoot(root).isOpenOrV0())
+            break;
+    }
+
+    for (TreeScope* otherScope = &other.treeScope(); otherScope; otherScope = otherScope->parentTreeScope()) {
+        if (otherScope == scope)
+            return true;
+    }
+    return false;
+}
+
 bool Node::needsDistributionRecalc() const
 {
     return shadowIncludingRoot().childNeedsDistributionRecalc();
@@ -683,7 +702,7 @@ void Node::setIsLink(bool isLink)
 
 void Node::setNeedsStyleInvalidation()
 {
-    DCHECK(isElementNode());
+    DCHECK(isElementNode() || isShadowRoot());
     setFlag(NeedsStyleInvalidationFlag);
     markAncestorsWithChildNeedsStyleInvalidation();
 }
@@ -2111,13 +2130,8 @@ void Node::dispatchSimulatedClick(Event* underlyingEvent, SimulatedClickMouseEve
 
 void Node::dispatchInputEvent()
 {
-    if (RuntimeEnabledFeatures::inputEventEnabled()) {
-        InputEventInit eventInitDict;
-        eventInitDict.setBubbles(true);
-        dispatchScopedEvent(InputEvent::create(EventTypeNames::input, eventInitDict));
-    } else {
-        dispatchScopedEvent(Event::createBubble(EventTypeNames::input));
-    }
+    // Legacy 'input' event for forms set value and checked.
+    dispatchScopedEvent(Event::createBubble(EventTypeNames::input));
 }
 
 void Node::defaultEventHandler(Event* event)
@@ -2165,21 +2179,11 @@ void Node::defaultEventHandler(Event* event)
             }
         }
 #endif
-    } else if ((eventType == EventTypeNames::wheel || eventType == EventTypeNames::mousewheel) && event->hasInterface(EventNames::WheelEvent)) {
-        WheelEvent* wheelEvent = toWheelEvent(event);
-
-        // If we don't have a layoutObject, send the wheel event to the first node we find with a layoutObject.
-        // This is needed for <option> and <optgroup> elements so that <select>s get a wheel scroll.
-        Node* startNode = this;
-        while (startNode && !startNode->layoutObject())
-            startNode = startNode->parentOrShadowHostNode();
-
-        if (startNode && startNode->layoutObject()) {
-            if (LocalFrame* frame = document().frame())
-                frame->eventHandler().defaultWheelEventHandler(startNode, wheelEvent);
-        }
     } else if (event->type() == EventTypeNames::webkitEditableContentChanged) {
-        dispatchInputEvent();
+        // TODO(chongz): Remove after shipped.
+        // New InputEvent are dispatched in Editor::appliedEditing, etc.
+        if (!RuntimeEnabledFeatures::inputEventEnabled())
+            dispatchInputEvent();
     }
 }
 

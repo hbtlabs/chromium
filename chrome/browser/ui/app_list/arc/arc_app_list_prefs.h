@@ -20,6 +20,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/common/app.mojom.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/base/layout.h"
@@ -52,16 +53,41 @@ class ArcAppListPrefs : public KeyedService,
     AppInfo(const std::string& name,
             const std::string& package_name,
             const std::string& activity,
+            const std::string& intent_uri,
+            const std::string& icon_resource_id,
             const base::Time& last_launch_time,
             bool sticky,
-            bool ready);
+            bool notifications_enabled,
+            bool ready,
+            bool showInLauncher,
+            bool shortcut);
+    ~AppInfo();
 
     std::string name;
     std::string package_name;
     std::string activity;
+    std::string intent_uri;
+    std::string icon_resource_id;
     base::Time last_launch_time;
     bool sticky;
+    bool notifications_enabled;
     bool ready;
+    bool showInLauncher;
+    bool shortcut;
+  };
+
+  struct PackageInfo {
+    PackageInfo(const std::string& package_name,
+                int32_t package_version,
+                int64_t last_backup_android_id,
+                int64_t last_backup_time,
+                bool should_sync);
+
+    std::string package_name;
+    int32_t package_version;
+    int64_t last_backup_android_id;
+    int64_t last_backup_time;
+    bool should_sync;
   };
 
   class Observer {
@@ -88,6 +114,9 @@ class ArcAppListPrefs : public KeyedService,
     virtual void OnTaskDestroyed(int32_t task_id) {}
     // Notifies that task has been activated and moved to the front.
     virtual void OnTaskSetActive(int32_t task_id) {}
+
+    virtual void OnNotificationsEnabledChanged(
+        const std::string& package_name, bool enabled) {}
 
    protected:
     virtual ~Observer() {}
@@ -117,6 +146,14 @@ class ArcAppListPrefs : public KeyedService,
   // not found.
   std::unique_ptr<AppInfo> GetApp(const std::string& app_id) const;
 
+  // Get current installed package names.
+  std::vector<std::string> GetPackagesFromPrefs() const;
+
+  // Extracts attributes of a package based on its package name. Returns
+  // nullptr if the package is not found.
+  std::unique_ptr<PackageInfo> GetPackage(
+      const std::string& package_name) const;
+
   // Constructs path to app local data.
   base::FilePath GetAppPath(const std::string& app_id) const;
 
@@ -133,8 +170,16 @@ class ArcAppListPrefs : public KeyedService,
   // OnAppIconUpdated.
   void RequestIcon(const std::string& app_id, ui::ScaleFactor scale_factor);
 
+  // Sets notification enabled flag for given value. If the app or Arc bridge
+  // service is not ready, then defer this request until the app gets
+  // available. Once new value is set notifies an observer
+  // OnNotificationsEnabledChanged.
+  void SetNotificationsEnabled(const std::string& app_id, bool enabled);
+
   // Returns true if app is registered.
   bool IsRegistered(const std::string& app_id) const;
+  // Returns true if app is a shortcut
+  bool IsShortcut(const std::string& app_id) const;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -143,8 +188,11 @@ class ArcAppListPrefs : public KeyedService,
   // arc::ArcAuthService::Observer:
   void OnOptInEnabled(bool enabled) override;
 
+  // Removes app with the given app_id.
+  void RemoveApp(const std::string& app_id);
+
  private:
-  FRIEND_TEST_ALL_PREFIXES(ChromeLauncherControllerTest, ArcAppPinPolicy);
+  FRIEND_TEST_ALL_PREFIXES(ChromeLauncherControllerImplTest, ArcAppPinPolicy);
 
   // See the Create methods.
   ArcAppListPrefs(const base::FilePath& base_path, PrefService* prefs);
@@ -152,24 +200,40 @@ class ArcAppListPrefs : public KeyedService,
   // arc::ArcBridgeService::Observer:
   void OnStateChanged(arc::ArcBridgeService::State state) override;
   void OnAppInstanceReady() override;
+  void OnAppInstanceClosed() override;
 
   // arc::mojom::AppHost:
   void OnAppListRefreshed(mojo::Array<arc::mojom::AppInfoPtr> apps) override;
   void OnAppAdded(arc::mojom::AppInfoPtr app) override;
+  void OnInstallShortcut(arc::mojom::ShortcutInfoPtr app) override;
   void OnPackageRemoved(const mojo::String& package_name) override;
   void OnAppIcon(const mojo::String& package_name,
                  const mojo::String& activity,
                  arc::mojom::ScaleFactor scale_factor,
                  mojo::Array<uint8_t> icon_png_data) override;
+  void OnIcon(const mojo::String& app_id,
+              arc::mojom::ScaleFactor scale_factor,
+              mojo::Array<uint8_t> icon_png_data);
   void OnTaskCreated(int32_t task_id,
                      const mojo::String& package_name,
                      const mojo::String& activity) override;
   void OnTaskDestroyed(int32_t task_id) override;
   void OnTaskSetActive(int32_t task_id) override;
+  void OnNotificationsEnabledChanged(const mojo::String& package_name,
+                                     bool enabled) override;
+  void OnPackageAdded(arc::mojom::ArcPackageInfoPtr package_info) override;
+  void OnPackageModified(arc::mojom::ArcPackageInfoPtr package_info) override;
+  void OnPackageListRefreshed(
+      mojo::Array<arc::mojom::ArcPackageInfoPtr> packages) override;
 
-
-  void AddApp(const arc::mojom::AppInfo& app);
-  void RemoveApp(const std::string& app_id);
+  void AddAppAndShortcut(const std::string& name,
+                         const std::string& package_name,
+                         const std::string& activity,
+                         const std::string& intent_uri,
+                         const std::string& icon_resource_id,
+                         const bool sticky,
+                         const bool notifications_enabled,
+                         const bool shortcut);
   void DisableAllApps();
   void RemoveAllApps();
   std::vector<std::string> GetAppIdsNoArcEnabledCheck() const;

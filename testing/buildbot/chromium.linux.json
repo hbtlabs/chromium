@@ -31,6 +31,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "6",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -45,6 +46,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -58,6 +60,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -74,11 +77,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 960
+          "hard_timeout": 600
         },
         "test": "blimp_test_apk"
       },
@@ -88,6 +92,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -101,11 +106,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 60
+          "hard_timeout": 120
         },
         "test": "blink_heap_unittests"
       },
@@ -115,6 +121,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -123,11 +130,26 @@
         "test": "breakpad_unittests"
       },
       {
+        "override_isolate_target": "capture_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "android_devices": "4",
+              "device_os": "KTU84P",
+              "device_type": "hammerhead"
+            }
+          ]
+        },
+        "test": "capture_unittests"
+      },
+      {
         "override_isolate_target": "cc_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -144,6 +166,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "6",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -161,11 +184,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 960
+          "hard_timeout": 600
         },
         "test": "chrome_sync_shell_test_apk"
       },
@@ -175,6 +199,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -188,6 +213,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -201,6 +227,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "6",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -218,11 +245,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 960
+          "hard_timeout": 1920
         },
         "test": "content_shell_test_apk"
       },
@@ -232,6 +260,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -245,6 +274,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -258,6 +288,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -271,6 +302,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -284,11 +316,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "gl_unittests"
       },
@@ -298,6 +331,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -311,6 +345,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -319,25 +354,12 @@
         "test": "gpu_unittests"
       },
       {
-        "override_isolate_target": "ipc_mojo_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 30
-        },
-        "test": "ipc_mojo_unittests"
-      },
-      {
         "override_isolate_target": "ipc_tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -351,6 +373,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -364,11 +387,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "mojo_common_unittests"
       },
@@ -378,11 +402,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "mojo_public_application_unittests"
       },
@@ -392,11 +417,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "mojo_public_bindings_unittests"
       },
@@ -406,11 +432,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "mojo_public_system_unittests"
       },
@@ -420,27 +447,14 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 30
+          "hard_timeout": 60
         },
         "test": "mojo_runner_host_unittests"
-      },
-      {
-        "override_isolate_target": "mojo_surfaces_lib_unittests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "device_os": "KTU84P",
-              "device_type": "hammerhead"
-            }
-          ],
-          "hard_timeout": 30
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "override_isolate_target": "mojo_system_unittests",
@@ -448,11 +462,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 60
+          "hard_timeout": 120
         },
         "test": "mojo_system_unittests"
       },
@@ -462,6 +477,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -475,6 +491,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -488,6 +505,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -501,6 +519,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -514,6 +533,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -527,6 +547,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -540,6 +561,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -553,6 +575,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
@@ -576,11 +599,13 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
+              "android_devices": "4",
               "device_os": "KTU84P",
               "device_type": "hammerhead"
             }
           ],
-          "hard_timeout": 960
+          "hard_timeout": 960,
+          "shards": 1
         }
       }
     ],
@@ -614,6 +639,9 @@
       },
       {
         "test": "webapk_client_junit_tests"
+      },
+      {
+        "test": "webapk_runtime_library_junit_tests"
       }
     ],
     "scripts": [
@@ -642,6 +670,9 @@
           "breakpad_unittests"
         ],
         "test": "breakpad_unittests"
+      },
+      {
+        "test": "capture_unittests"
       },
       {
         "test": "cc_unittests"
@@ -677,9 +708,6 @@
         "test": "gpu_unittests"
       },
       {
-        "test": "ipc_mojo_unittests"
-      },
-      {
         "test": "ipc_tests"
       },
       {
@@ -699,9 +727,6 @@
       },
       {
         "test": "mojo_runner_host_unittests"
-      },
-      {
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "test": "mojo_system_unittests"
@@ -794,6 +819,13 @@
       }
     ]
   },
+  "Blimp Linux (dbg)": {
+    "gtest_tests": [
+      {
+        "test": "blimp_browsertests"
+      }
+    ]
+  },
   "Cast Linux": {
     "gtest_tests": [
       {
@@ -807,6 +839,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "test": "cast_alsa_cma_backend_unittests"
@@ -1005,6 +1043,12 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
+        "test": "capture_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
         "test": "cast_unittests"
       },
       {
@@ -1044,6 +1088,17 @@
         "test": "compositor_unittests"
       },
       {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "content_browsertests"
+      },
+      {
+        "args": [
+          "--enable-browser-side-navigation",
+          "--test-launcher-filter-file=../../testing/buildbot/filters/browser-side-navigation.linux.content_browsertests.filter"
+        ],
+        "name": "browser_side_navigation_content_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true
         },
@@ -1161,12 +1216,6 @@
         "swarming": {
           "can_use_on_swarming_builders": true
         },
-        "test": "ipc_mojo_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
         "test": "ipc_tests"
       },
       {
@@ -1258,12 +1307,6 @@
           "can_use_on_swarming_builders": true
         },
         "test": "mojo_shell_unittests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "mojo_surfaces_lib_unittests"
       },
       {
         "swarming": {
@@ -1428,7 +1471,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1511,6 +1556,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -1644,12 +1695,6 @@
           "shards": 3
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {
@@ -1847,7 +1892,9 @@
           "telemetry_perf_unittests_run"
         ],
         "swarming": {
-          "can_use_on_swarming_builders": true
+          "can_use_on_swarming_builders": true,
+          "hard_timeout": 960,
+          "shards": 12
         }
       },
       {
@@ -1918,6 +1965,12 @@
           "can_use_on_swarming_builders": true
         },
         "test": "cacheinvalidation_unittests"
+      },
+      {
+        "swarming": {
+          "can_use_on_swarming_builders": true
+        },
+        "test": "capture_unittests"
       },
       {
         "swarming": {
@@ -2039,12 +2092,6 @@
           "shards": 3
         },
         "test": "interactive_ui_tests"
-      },
-      {
-        "swarming": {
-          "can_use_on_swarming_builders": true
-        },
-        "test": "ipc_mojo_unittests"
       },
       {
         "swarming": {

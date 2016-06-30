@@ -25,6 +25,7 @@ size_t RegisterEngineCrashKeys() {
       { crash_keys::kVariations, crash_keys::kLargeSize },
 
       // //content crash keys
+      { "bad_message_reason", crash_keys::kSmallSize },
       { "channel_error_bt", crash_keys::kMediumSize },
       { "discardable-memory-allocated", crash_keys::kSmallSize },
       { "discardable-memory-free", crash_keys::kSmallSize },
@@ -33,6 +34,9 @@ size_t RegisterEngineCrashKeys() {
       { "rwhvm_window", crash_keys::kMediumSize },
       { "subresource_url", crash_keys::kLargeSize },
       { "total-discardable-memory-allocated", crash_keys::kSmallSize },
+
+      // gin/:
+      { "v8-ignition", crash_keys::kSmallSize },
 
       // Temporary for http://crbug.com/575245.
       { "commit_frame_id", crash_keys::kSmallSize },
@@ -68,6 +72,12 @@ size_t RegisterEngineCrashKeys() {
 
       // Temporary for https://crbug.com/612711.
       { "aci_wrong_sp_extension_id", crash_keys::kSmallSize },
+
+      // Temporary for http://crbug.com/621730.
+      { "postmessage_src_origin", crash_keys::kMediumSize },
+      { "postmessage_dst_origin", crash_keys::kMediumSize },
+      { "postmessage_dst_url", crash_keys::kLargeSize },
+      { "postmessage_script_info", crash_keys::kLargeSize },
 
       // Temporary for https://crbug.com/616149.
       { "existing_extension_pref_value_type", crash_keys::kSmallSize },

@@ -158,21 +158,6 @@
     "args": ["--enable-smooth-scrolling"]
   },
   {
-    "prefix": "pointerevent",
-    "base": "fast/events",
-    "args": ["--enable-blink-features=PointerEvent"]
-  },
-  {
-    "prefix": "pointerevent",
-    "base": "imported/wpt/pointerevents",
-    "args": ["--enable-blink-features=PointerEvent"]
-  },
-  {
-    "prefix": "pointerevent",
-    "base": "inspector/sources/debugger-breakpoints",
-    "args": ["--enable-blink-features=PointerEvent"]
-  },
-  {
     "prefix": "mediasession",
     "base": "media/mediasession",
     "args": ["--enable-blink-features=MediaSession"]
@@ -182,11 +167,6 @@
     "base": "fast/workers",
     "args": ["--js-flags=--harmony-sharedarraybuffer",
              "--enable-blink-features=SharedArrayBuffer"]
-  },
-  {
-    "prefix": "trustedeventsdefaultaction",
-    "base": "fast/events",
-    "args": ["--enable-blink-features=TrustedEventsDefaultAction"]
   },
   {
     "prefix": "threaded",
@@ -262,5 +242,10 @@
     "prefix": "documentwriteevaluator",
     "base": "http/tests/preload/document-write",
     "args": ["--enable-blink-features=DocumentWriteEvaluator"]
+  },
+  {
+    "prefix": "asyncawait",
+    "base": "inspector/sources/debugger-async/async-await",
+    "args": ["--js-flags=--harmony-async-await"]
   }
 ]

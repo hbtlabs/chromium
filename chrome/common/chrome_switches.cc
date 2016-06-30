@@ -12,7 +12,7 @@ namespace switches {
 
 // -----------------------------------------------------------------------------
 // Can't find the switch you are looking for? Try looking in:
-// ash/ash_switches.cc
+// ash/common/ash_switches.cc
 // base/base_switches.cc
 // chromeos/chromeos_switches.cc
 // etc.
@@ -319,6 +319,11 @@ const char kDisableSessionCrashedBubble[] = "disable-session-crashed-bubble";
 // and allocates certain resources accordingly.
 const char kDisableSiteEngagementService[] = "disable-site-engagement-service";
 
+#if defined(OS_ANDROID)
+// Disable VR UI if supported.
+const char kDisableVrShell[] = "disable-vr-shell";
+#endif
+
 // Disables Web Notification custom layouts.
 const char kDisableWebNotificationCustomLayouts[] =
     "disable-web-notification-custom-layouts";
@@ -539,6 +544,11 @@ const char kEnableThumbnailRetargeting[]   = "enable-thumbnail-retargeting";
 const char kEnableUserAlternateProtocolPorts[] =
     "enable-user-controlled-alternate-protocol-ports";
 
+#if defined(OS_ANDROID)
+// Enable VR UI if supported.
+const char kEnableVrShell[] = "enable-vr-shell";
+#endif
+
 // Enables a new "web app" style frame for hosted apps (including bookmark
 // apps).
 const char kEnableWebAppFrame[] = "enable-web-app-frame";
@@ -650,10 +660,6 @@ const char kInstantProcess[]                = "instant-process";
 // The URL for the interests API.
 const char kInterestsURL[]                  = "interests-url";
 
-// Dumps IPC messages sent from renderer processes to the browser process to
-// the given directory. Used primarily to gather samples for IPC fuzzing.
-const char kIpcDumpDirectory[]              = "ipc-dump-directory";
-
 // Used for testing - keeps browser alive after last browser window closes.
 const char kKeepAliveForTest[]              = "keep-alive-for-test";
 
@@ -764,6 +770,10 @@ const char kOpenInNewWindow[]               = "new-window";
 // The time that a new chrome process which is delegating to an already running
 // chrome process started. (See ProcessSingleton for more details.)
 const char kOriginalProcessStartTime[]      = "original-process-start-time";
+
+// Contains a list of feature names for which origin trial experiments should
+// be disabled. Names should be separated by "|" characters.
+const char kOriginTrialDisabledFeatures[] = "origin-trial-disabled-features";
 
 // Overrides the default public key for checking origin trial tokens.
 const char kOriginTrialPublicKey[] = "origin-trial-public-key";
@@ -1134,6 +1144,10 @@ const char kDisableAppInfoDialogMac[] = "disable-app-info-dialog-mac";
 // Disables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kDisableAppWindowCycling[] = "disable-app-window-cycling";
 
+// Disables fullscreen low power mode on Mac.
+const char kDisableFullscreenLowPowerMode[] =
+    "disable-fullscreen-low-power-mode";
+
 // Disables tab detaching in fullscreen mode on Mac.
 const char kDisableFullscreenTabDetaching[] =
     "disable-fullscreen-tab-detaching";
@@ -1158,9 +1172,6 @@ const char kEnableAppInfoDialogMac[] = "enable-app-info-dialog-mac";
 // Enables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kEnableAppWindowCycling[] = "enable-app-window-cycling";
 
-// Enables fullscreen low power mode transitions on Mac.
-const char kEnableFullscreenLowPowerMode[] = "enable-fullscreen-low-power-mode";
-
 // Enables tab detaching in fullscreen mode on Mac.
 const char kEnableFullscreenTabDetaching[] = "enable-fullscreen-tab-detaching";
 
@@ -1170,6 +1181,10 @@ const char kEnableHostedAppsInWindows[] = "enable-hosted-apps-in-windows";
 // Enables use of toolkit-views based native app windows.
 const char kEnableMacViewsNativeAppWindows[] =
     "enable-mac-views-native-app-windows";
+
+// Enables the fullscreen toolbar to reveal itself for tab strip changes.
+const char kEnableFullscreenToolbarReveal[] =
+    "enable-fullscreen-toolbar-reveal";
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";
@@ -1233,11 +1248,6 @@ const char kWatcherProcess[]                = "watcher";
 // Indicates that chrome was launched to service a search request in Windows 8.
 const char kWindows8Search[]                = "windows8-search";
 #endif  // defined(OS_WIN)
-
-#if defined(ENABLE_IPC_FUZZER)
-// Specifies the testcase used by the IPC fuzzer.
-const char kIpcFuzzerTestcase[]             = "ipc-fuzzer-testcase";
-#endif
 
 #if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 // Enables support to debug printing subsystem.

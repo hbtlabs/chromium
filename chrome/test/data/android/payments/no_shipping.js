@@ -12,11 +12,11 @@
 function buy() {  // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
-        ['visa'],
+        [{supportedMethods: ['visa']}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}})
         .show()
         .then(function(resp) {
-          resp.complete(true)
+          resp.complete('success')
               .then(function() {
                 print(
                     resp.methodName + '<br>' +

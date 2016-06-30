@@ -36,7 +36,7 @@
 #include "core/page/WindowFeatures.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "web/WebExport.h"
-#include "wtf/PassOwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -67,7 +67,7 @@ public:
     void startDragging(LocalFrame*, const WebDragData&, WebDragOperationsMask, const WebImage& dragImage, const WebPoint& dragImageOffset) override;
     bool acceptsLoadDrops() const override;
     Page* createWindow(
-        LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSetOpener) override;
+        LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy) override;
     void show(NavigationPolicy) override;
     void didOverscroll(
         const FloatSize& overscrollDelta,
@@ -156,8 +156,8 @@ public:
 
     bool shouldOpenModalDialogDuringPageDismissal(const DialogType&, const String& dialogMessage, Document::PageDismissalType) const override;
 
-    bool requestPointerLock() override;
-    void requestPointerUnlock() override;
+    bool requestPointerLock(LocalFrame*) override;
+    void requestPointerUnlock(LocalFrame*) override;
 
     // AutofillClient pass throughs:
     void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) override;
@@ -184,7 +184,7 @@ public:
 
     void didObserveNonGetFetchFromScript() const override;
 
-    PassOwnPtr<WebFrameScheduler> createFrameScheduler(BlameContext*) override;
+    std::unique_ptr<WebFrameScheduler> createFrameScheduler(BlameContext*) override;
 
     double lastFrameTimeMonotonic() const override;
 

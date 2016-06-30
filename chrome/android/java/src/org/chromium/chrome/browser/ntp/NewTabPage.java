@@ -8,7 +8,6 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.Context;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Rect;
 import android.net.Uri;
@@ -46,15 +45,12 @@ import org.chromium.chrome.browser.ntp.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage;
 import org.chromium.chrome.browser.ntp.interests.InterestsPage.InterestsClickListener;
-import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.SnippetsObserver;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
-import org.chromium.chrome.browser.profiles.MostVisitedSites.ThumbnailCallback;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrlServiceObserver;
@@ -93,6 +89,10 @@ public class NewTabPage
     static final int ID_OPEN_IN_NEW_TAB = 1;
     static final int ID_OPEN_IN_INCOGNITO_TAB = 2;
     static final int ID_REMOVE = 3;
+
+    // The name of the trial for obtaining variation parameters for the ntp snippets feature. Also
+    // defined in ntp_snippets_constants.cc.
+    public static final String FIELD_TRIAL_NAME = "NTPSnippets";
 
     // UMA enum constants. CTA means the "click-to-action" icon.
     private static final String LOGO_SHOWN_UMA_NAME = "NewTabPage.LogoShown";
@@ -302,56 +302,14 @@ public class NewTabPage
 
         @Override
         public void openSnippet(String url) {
-            if (mIsDestroyed) return;
+            openUrl(url);
+            NewTabPageUma.monitorVisit(mTab);
+        }
+
+        @Override
+        public void openUrl(String url) {
+            assert !mIsDestroyed;
             mTab.loadUrl(new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
-            mTab.addObserver(new EmptyTabObserver() {
-                private final long mStartTimeNs = SystemClock.elapsedRealtime();
-
-                @Override
-                public void onHidden(Tab tab) {
-                    endRecording(tab);
-                }
-
-                @Override
-                public void onDestroyed(Tab tab) {
-                    endRecording(null);
-                }
-
-                @Override
-                public void onUpdateUrl(Tab tab, String url) {
-                    // onLoadUrl below covers many exit conditions to stop recording but not all,
-                    // such as navigating back. We therefore stop recording if a URL change
-                    // indicates some non-Web page was visited.
-                    if (!url.startsWith(UrlConstants.CHROME_SCHEME)
-                            && !url.startsWith(UrlConstants.CHROME_NATIVE_SCHEME)) {
-                        assert !isNTPUrl(url);
-                        return;
-                    }
-                    if (isNTPUrl(url)) {
-                        RecordUserAction.record("MobileNTP.Snippets.VisitEndBackInNTP");
-                    }
-                    endRecording(tab);
-                }
-
-                @Override
-                public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
-                    // End recording if a new URL gets loaded e.g. after entering a new query in
-                    // the omnibox. This doesn't cover the nagivate-back case so we also need
-                    // onUpdateUrl.
-                    int transitionTypeMask = PageTransition.FROM_ADDRESS_BAR
-                            | PageTransition.HOME_PAGE | PageTransition.CHAIN_START
-                            | PageTransition.CHAIN_END;
-
-                    if ((params.getTransitionType() & transitionTypeMask) != 0) endRecording(tab);
-                }
-
-                private void endRecording(Tab removeObserverFromTab) {
-                    if (removeObserverFromTab != null) removeObserverFromTab.removeObserver(this);
-                    RecordUserAction.record("MobileNTP.Snippets.VisitEnd");
-                    RecordHistogram.recordLongTimesHistogram("NewTabPage.Snippets.VisitDuration",
-                            SystemClock.elapsedRealtime() - mStartTimeNs, TimeUnit.MILLISECONDS);
-                }
-            });
         }
 
         @Override
@@ -445,18 +403,6 @@ public class NewTabPage
         }
 
         @Override
-        public void setSnippetsObserver(SnippetsObserver observer) {
-            if (mIsDestroyed) return;
-            mSnippetsBridge.setObserver(observer);
-        }
-
-        @Override
-        public void getURLThumbnail(String url, ThumbnailCallback thumbnailCallback) {
-            if (mIsDestroyed) return;
-            mMostVisitedSites.getURLThumbnail(url, thumbnailCallback);
-        }
-
-        @Override
         public void getLocalFaviconImageForURL(
                 String url, int size, FaviconImageCallback faviconCallback) {
             if (mIsDestroyed) return;
@@ -473,11 +419,11 @@ public class NewTabPage
 
         @Override
         public void ensureIconIsAvailable(String pageUrl, String iconUrl, boolean isLargeIcon,
-                IconAvailabilityCallback callback) {
+                boolean isTemporary, IconAvailabilityCallback callback) {
             if (mIsDestroyed) return;
             if (mFaviconHelper == null) mFaviconHelper = new FaviconHelper();
-            mFaviconHelper.ensureIconIsAvailable(
-                    mProfile, mTab.getWebContents(), pageUrl, iconUrl, isLargeIcon, callback);
+            mFaviconHelper.ensureIconIsAvailable(mProfile, mTab.getWebContents(), pageUrl, iconUrl,
+                    isLargeIcon, isTemporary, callback);
         }
 
         private boolean isLocalUrl(String url) {
@@ -603,29 +549,6 @@ public class NewTabPage
             }
             SyncSessionsMetrics.recordYoungestForeignTabAgeOnNTP();
         }
-
-        @Override
-        public void onSnippetDismissed(SnippetArticle dismissedSnippet) {
-            if (mIsDestroyed) return;
-
-            mSnippetsBridge.getSnippedVisited(dismissedSnippet, new Callback<Boolean>() {
-                @Override
-                public void onResult(Boolean result) {
-                    NewTabPageUma.recordSnippetAction(result
-                            ? NewTabPageUma.SNIPPETS_ACTION_DISMISSED_VISITED
-                            : NewTabPageUma.SNIPPETS_ACTION_DISMISSED_UNVISITED);
-                }
-            });
-
-            mSnippetsBridge.discardSnippet(dismissedSnippet);
-        }
-
-        @Override
-        public void fetchSnippetImage(SnippetArticle snippet, Callback<Bitmap> callback) {
-            if (mIsDestroyed) return;
-
-            mSnippetsBridge.fetchSnippetImage(snippet, callback);
-        }
     };
 
     /**
@@ -671,8 +594,7 @@ public class NewTabPage
 
         LayoutInflater inflater = LayoutInflater.from(activity);
         mNewTabPageView = (NewTabPageView) inflater.inflate(R.layout.new_tab_page_view, null);
-        mNewTabPageView.initialize(mNewTabPageManager, mSearchProviderHasLogo,
-                mSnippetsBridge != null);
+        mNewTabPageView.initialize(mNewTabPageManager, mSearchProviderHasLogo, mSnippetsBridge);
 
         RecordHistogram.recordBooleanHistogram(
                 "NewTabPage.MobileIsUserOnline", NetworkChangeNotifier.isOnline());
@@ -714,6 +636,11 @@ public class NewTabPage
     @VisibleForTesting
     NewTabPageView getNewTabPageView() {
         return mNewTabPageView;
+    }
+
+    /** @return whether the NTP is using the cards UI. */
+    public boolean isCardsUiEnabled() {
+        return SnippetsConfig.isEnabled();
     }
 
     /**

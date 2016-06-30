@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 
-#include "ash/system/chromeos/devicetype_utils.h"
+#include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -741,6 +741,7 @@ void GaiaScreenHandler::ShowGaiaScreenIfReady() {
   LoadAuthExtension(!gaia_silent_load_ /* force */, false /* offline */);
   signin_screen_handler_->UpdateUIState(
       SigninScreenHandler::UI_STATE_GAIA_SIGNIN, nullptr);
+  core_oobe_actor_->UpdateKeyboardState();
 
   if (gaia_silent_load_) {
     // The variable is assigned to false because silently loaded Gaia page was

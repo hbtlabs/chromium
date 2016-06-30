@@ -18,6 +18,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_socket_thread.h"
@@ -350,6 +351,18 @@ void BluetoothAdapterBlueZ::SetDiscoverable(
           discoverable,
           base::Bind(&BluetoothAdapterBlueZ::OnSetDiscoverable,
                      weak_ptr_factory_.GetWeakPtr(), callback, error_callback));
+}
+
+uint32_t BluetoothAdapterBlueZ::GetDiscoverableTimeout() const {
+  if (!IsPresent())
+    return 0;
+
+  bluez::BluetoothAdapterClient::Properties* properties =
+      bluez::BluezDBusManager::Get()
+          ->GetBluetoothAdapterClient()
+          ->GetProperties(object_path_);
+
+  return properties->discoverable_timeout.value();
 }
 
 bool BluetoothAdapterBlueZ::IsDiscovering() const {
@@ -811,6 +824,30 @@ void BluetoothAdapterBlueZ::OnRegisterAudioSink(
   callback.Run(audio_sink);
 }
 
+void BluetoothAdapterBlueZ::CreateServiceRecord(
+    const BluetoothServiceRecordBlueZ& record,
+    const ServiceRecordCallback& callback,
+    const ServiceRecordErrorCallback& error_callback) {
+  bluez::BluezDBusManager::Get()
+      ->GetBluetoothAdapterClient()
+      ->CreateServiceRecord(
+          object_path_, record, callback,
+          base::Bind(&BluetoothAdapterBlueZ::ServiceRecordErrorConnector,
+                     weak_ptr_factory_.GetWeakPtr(), error_callback));
+}
+
+void BluetoothAdapterBlueZ::RemoveServiceRecord(
+    uint32_t handle,
+    const base::Closure& callback,
+    const ServiceRecordErrorCallback& error_callback) {
+  bluez::BluezDBusManager::Get()
+      ->GetBluetoothAdapterClient()
+      ->RemoveServiceRecord(
+          object_path_, handle, callback,
+          base::Bind(&BluetoothAdapterBlueZ::ServiceRecordErrorConnector,
+                     weak_ptr_factory_.GetWeakPtr(), error_callback));
+}
+
 BluetoothDeviceBlueZ* BluetoothAdapterBlueZ::GetDeviceWithPath(
     const dbus::ObjectPath& object_path) {
   if (!IsPresent())
@@ -1264,8 +1301,8 @@ void BluetoothAdapterBlueZ::AddDiscoverySession(
   if (discovery_filter) {
     discovery_request_pending_ = true;
 
-    std::unique_ptr<BluetoothDiscoveryFilter> df(new BluetoothDiscoveryFilter(
-        BluetoothDiscoveryFilter::Transport::TRANSPORT_DUAL));
+    std::unique_ptr<BluetoothDiscoveryFilter> df(
+        new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_DUAL));
     df->CopyFrom(*discovery_filter);
     SetDiscoveryFilter(
         std::move(df),
@@ -1382,13 +1419,11 @@ void BluetoothAdapterBlueZ::SetDiscoveryFilter(
       dbus_discovery_filter.rssi.reset(new int16_t(rssi));
 
     transport = current_filter_->GetTransport();
-    if (transport == BluetoothDiscoveryFilter::Transport::TRANSPORT_LE) {
+    if (transport == device::BLUETOOTH_TRANSPORT_LE) {
       dbus_discovery_filter.transport.reset(new std::string("le"));
-    } else if (transport ==
-               BluetoothDiscoveryFilter::Transport::TRANSPORT_CLASSIC) {
+    } else if (transport == device::BLUETOOTH_TRANSPORT_CLASSIC) {
       dbus_discovery_filter.transport.reset(new std::string("bredr"));
-    } else if (transport ==
-               BluetoothDiscoveryFilter::Transport::TRANSPORT_DUAL) {
+    } else if (transport == device::BLUETOOTH_TRANSPORT_DUAL) {
       dbus_discovery_filter.transport.reset(new std::string("auto"));
     }
 
@@ -1631,6 +1666,28 @@ void BluetoothAdapterBlueZ::RegisterApplicationOnError(
     const std::string& /* error_name */,
     const std::string& /* error_message */) {
   RegisterApplication(callback, error_callback);
+}
+
+void BluetoothAdapterBlueZ::ServiceRecordErrorConnector(
+    const ServiceRecordErrorCallback& error_callback,
+    const std::string& error_name,
+    const std::string& error_message) {
+  VLOG(1) << "Creating service record failed: error: " << error_name << " - "
+          << error_message;
+
+  BluetoothServiceRecordBlueZ::ErrorCode code =
+      BluetoothServiceRecordBlueZ::ErrorCode::UNKNOWN;
+  if (error_name == bluetooth_adapter::kErrorInvalidArguments) {
+    code = BluetoothServiceRecordBlueZ::ErrorCode::ERROR_INVALID_ARGUMENTS;
+  } else if (error_name == bluetooth_adapter::kErrorDoesNotExist) {
+    code = BluetoothServiceRecordBlueZ::ErrorCode::ERROR_RECORD_DOES_NOT_EXIST;
+  } else if (error_name == bluetooth_adapter::kErrorAlreadyExists) {
+    code = BluetoothServiceRecordBlueZ::ErrorCode::ERROR_RECORD_ALREADY_EXISTS;
+  } else if (error_name == bluetooth_adapter::kErrorNotReady) {
+    code = BluetoothServiceRecordBlueZ::ErrorCode::ERROR_ADAPTER_NOT_READY;
+  }
+
+  error_callback.Run(code);
 }
 
 }  // namespace bluez

@@ -387,21 +387,11 @@ void RenderWidgetInputHandler::HandleInputEvent(
     }
   }
 
-  // Send mouse wheel events and their disposition to the compositor thread, so
-  // that they can be used to produce the elastic overscroll effect on Mac.
-  if (input_event.type == WebInputEvent::MouseWheel) {
-    const WebMouseWheelEvent& wheel_event =
-        static_cast<const WebMouseWheelEvent&>(input_event);
-    if (wheel_event.canScroll) {
-      delegate_->ObserveWheelEventAndResult(
-          wheel_event,
-          event_overscroll ? event_overscroll->latest_overscroll_delta
-                           : gfx::Vector2dF(),
-          processed != WebInputEventResult::NotHandled);
-    }
-  } else if (input_event.type == WebInputEvent::GestureScrollBegin ||
-             input_event.type == WebInputEvent::GestureScrollEnd ||
-             input_event.type == WebInputEvent::GestureScrollUpdate) {
+  // Send gesture scroll events and their dispositions to the compositor thread,
+  // so that they can be used to produce the elastic overscroll effect on Mac.
+  if (input_event.type == WebInputEvent::GestureScrollBegin ||
+      input_event.type == WebInputEvent::GestureScrollEnd ||
+      input_event.type == WebInputEvent::GestureScrollUpdate) {
     const WebGestureEvent& gesture_event =
         static_cast<const WebGestureEvent&>(input_event);
     if (gesture_event.sourceDevice == blink::WebGestureDeviceTouchpad) {
@@ -438,7 +428,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
       dispatch_type == DISPATCH_TYPE_NON_BLOCKING_NOTIFY_MAIN) {
     // |non_blocking| means it was ack'd already by the InputHandlerProxy
     // so let the delegate know the event has been handled.
-    delegate_->NotifyInputEventHandled(input_event.type);
+    delegate_->NotifyInputEventHandled(input_event.type, ack_result);
   }
 
   if ((dispatch_type == DISPATCH_TYPE_BLOCKING ||

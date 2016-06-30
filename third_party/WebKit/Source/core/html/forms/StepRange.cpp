@@ -60,10 +60,10 @@ StepRange::StepRange(const Decimal& stepBase, const Decimal& minimum, const Deci
     , m_hasStep(step.isFinite())
     , m_hasRangeLimitations(hasRangeLimitations)
 {
-    ASSERT(m_maximum.isFinite());
-    ASSERT(m_minimum.isFinite());
-    ASSERT(m_step.isFinite());
-    ASSERT(m_stepBase.isFinite());
+    DCHECK(m_maximum.isFinite());
+    DCHECK(m_minimum.isFinite());
+    DCHECK(m_step.isFinite());
+    DCHECK(m_stepBase.isFinite());
 }
 
 Decimal StepRange::acceptableError() const
@@ -108,7 +108,7 @@ Decimal StepRange::parseStep(AnyStepHandling anyStepHandling, const StepDescript
         case AnyIsDefaultStep:
             return stepDescription.defaultValue();
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
         }
     }
 
@@ -131,10 +131,10 @@ Decimal StepRange::parseStep(AnyStepHandling anyStepHandling, const StepDescript
         step = std::max(step.round(), Decimal(1));
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
-    ASSERT(step > 0);
+    DCHECK_GT(step, 0);
     return step;
 }
 
@@ -166,6 +166,21 @@ bool StepRange::stepMismatch(const Decimal& valueForCheck) const
     // can't represent.
     const Decimal computedAcceptableError = acceptableError();
     return computedAcceptableError < remainder && remainder < (m_step - computedAcceptableError);
+}
+
+Decimal StepRange::stepSnappedMaximum() const
+{
+    Decimal base = stepBase();
+    Decimal step = this->step();
+    if (base - step == base || !(base / step).isFinite())
+        return Decimal::nan();
+    Decimal alignedMaximum = base + ((maximum() - base) / step).floor() * step;
+    if (alignedMaximum > maximum())
+        alignedMaximum -= step;
+    DCHECK_LE(alignedMaximum, maximum());
+    if (alignedMaximum < minimum())
+        return Decimal::nan();
+    return alignedMaximum;
 }
 
 } // namespace blink

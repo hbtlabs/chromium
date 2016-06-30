@@ -23,6 +23,10 @@
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
+namespace display {
+class Display;
+}
+
 namespace gfx {
 class Insets;
 class Size;
@@ -39,7 +43,20 @@ class WindowTreeClientPrivate;
 class WindowTreeClientObserver;
 enum class ChangeType;
 
-// Manages the connection with the Window Server service.
+// Manages the connection with mus.
+//
+// WindowTreeClient is deleted by any of the following:
+// . If all the roots of the connection are destroyed and the connection is
+//   configured to delete when there are no roots (true if the WindowTreeClient
+//   is created with a mojom::WindowTreeClientRequest). This happens
+//   if the owner of the roots Embed()s another app in all the roots, or all
+//   the roots are explicitly deleted.
+// . The connection to mus is lost.
+// . Explicitly by way of calling delete.
+//
+// When WindowTreeClient is deleted all windows are deleted (and observers
+// notified). This is followed by calling
+// WindowTreeClientDelegate::OnWindowTreeClientDestroyed().
 class WindowTreeClient : public mojom::WindowTreeClient,
                          public mojom::WindowManager,
                          public WindowManagerClient {
@@ -51,6 +68,9 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   // Establishes the connection by way of the WindowTreeFactory.
   void ConnectViaWindowTreeFactory(shell::Connector* connector);
+
+  // Establishes the connection by way of WindowManagerWindowTreeFactory.
+  void ConnectAsWindowManager(shell::Connector* connector);
 
   // Wait for OnEmbed(), returning when done.
   void WaitForEmbed();
@@ -105,6 +125,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   void Embed(Id window_id,
              mojom::WindowTreeClientPtr client,
+             uint32_t flags,
              const mojom::WindowTree::EmbedCallback& callback);
 
   void RequestClose(Window* window);
@@ -171,6 +192,13 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   void AddObserver(WindowTreeClientObserver* observer);
   void RemoveObserver(WindowTreeClientObserver* observer);
 
+#if !defined(NDEBUG)
+  std::string GetDebugWindowHierarchy() const;
+  void BuildDebugInfo(const std::string& depth,
+                      Window* window,
+                      std::string* result) const;
+#endif
+
  private:
   friend class WindowTreeClientPrivate;
 
@@ -199,6 +227,12 @@ class WindowTreeClient : public mojom::WindowTreeClient,
   Window* NewWindowImpl(NewWindowType type,
                         const Window::SharedProperties* properties);
 
+  // Sets the mojom::WindowTree implementation.
+  void SetWindowTree(mojom::WindowTreePtr window_tree_ptr);
+
+  // Called when the mojom::WindowTree connection is lost, deletes this.
+  void OnConnectionLost();
+
   // OnEmbed() calls into this. Exposed as a separate function for testing.
   void OnEmbedImpl(mojom::WindowTree* window_tree,
                    ClientSpecificId client_id,
@@ -206,6 +240,11 @@ class WindowTreeClient : public mojom::WindowTreeClient,
                    int64_t display_id,
                    Id focused_window_id,
                    bool drawn);
+
+  // Called by WmNewDisplayAdded().
+  void WmNewDisplayAddedImpl(const display::Display& display,
+                             mojom::WindowDataPtr root_data,
+                             bool parent_drawn);
 
   void OnReceivedCursorLocationMemory(mojo::ScopedSharedBufferHandle handle);
 
@@ -253,9 +292,9 @@ class WindowTreeClient : public mojom::WindowTreeClient,
                                      mojo::Array<uint8_t> new_data) override;
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
-                          mojom::EventPtr event,
+                          std::unique_ptr<ui::Event> event,
                           uint32_t event_observer_id) override;
-  void OnEventObserved(mojom::EventPtr event,
+  void OnEventObserved(std::unique_ptr<ui::Event> event,
                        uint32_t event_observer_id) override;
   void OnWindowFocused(Id focused_window_id) override;
   void OnWindowPredefinedCursorChanged(Id window_id,
@@ -266,6 +305,10 @@ class WindowTreeClient : public mojom::WindowTreeClient,
       mojo::AssociatedInterfaceRequest<WindowManager> internal) override;
 
   // Overridden from WindowManager:
+  void OnConnect(ClientSpecificId client_id) override;
+  void WmNewDisplayAdded(mojom::DisplayPtr display,
+                         mojom::WindowDataPtr root_data,
+                         bool parent_drawn) override;
   void WmSetBounds(uint32_t change_id,
                    Id window_id,
                    const gfx::Rect& transit_bounds) override;
@@ -279,7 +322,7 @@ class WindowTreeClient : public mojom::WindowTreeClient,
                                   transport_properties) override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
-  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event) override;
+  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override;
 
   // Overridden from WindowManagerClient:
   void SetFrameDecorationValues(
@@ -297,6 +340,13 @@ class WindowTreeClient : public mojom::WindowTreeClient,
       Window* window,
       const gfx::Vector2d& offset,
       const gfx::Insets& hit_area) override;
+
+  // The one int in |cursor_location_mapping_|. When we read from this
+  // location, we must always read from it atomically.
+  base::subtle::Atomic32* cursor_location_memory() {
+    return reinterpret_cast<base::subtle::Atomic32*>(
+        cursor_location_mapping_.get());
+  }
 
   // This is set once and only once when we get OnEmbed(). It gives the unique
   // id for this client.
@@ -332,13 +382,9 @@ class WindowTreeClient : public mojom::WindowTreeClient,
 
   bool in_destructor_;
 
-  // A handle to shared memory that is one 32 bit integer long. The window
+  // A mapping to shared memory that is one 32 bit integer long. The window
   // server uses this to let us synchronously read the cursor location.
-  mojo::ScopedSharedBufferHandle cursor_location_handle_;
-
-  // The one int in |cursor_location_handle_|. When we read from this
-  // location, we must always read from it atomically.
-  base::subtle::Atomic32* cursor_location_memory_;
+  mojo::ScopedSharedBufferMapping cursor_location_mapping_;
 
   base::ObserverList<WindowTreeClientObserver> observers_;
 

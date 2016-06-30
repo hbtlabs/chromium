@@ -341,7 +341,7 @@ std::unique_ptr<base::Value> NetLogProcTaskFailedCallback(
     dict->SetString("os_error_string", gai_strerror(os_error));
 #elif defined(OS_WIN)
     // Map the error code to a human-readable string.
-    LPWSTR error_string = NULL;
+    LPWSTR error_string = nullptr;
     FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
                   0,  // Use the internal message table.
                   os_error,
@@ -494,6 +494,14 @@ class PriorityTracker {
   size_t counts_[NUM_PRIORITIES];
 };
 
+void MakeNotStale(HostCache::EntryStaleness* stale_info) {
+  if (!stale_info)
+    return;
+  stale_info->expired_by = base::TimeDelta::FromSeconds(-1);
+  stale_info->network_changes = 0;
+  stale_info->stale_hits = 0;
+}
+
 }  // namespace
 
 //-----------------------------------------------------------------------------
@@ -530,15 +538,15 @@ class HostResolverImpl::Request {
       : source_net_log_(source_net_log),
         info_(info),
         priority_(priority),
-        job_(NULL),
+        job_(nullptr),
         callback_(callback),
         addresses_(addresses),
         request_time_(base::TimeTicks::Now()) {}
 
   // Mark the request as canceled.
   void MarkAsCanceled() {
-    job_ = NULL;
-    addresses_ = NULL;
+    job_ = nullptr;
+    addresses_ = nullptr;
     callback_.Reset();
   }
 
@@ -1302,7 +1310,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       // Clean-up, record in the log, but don't run any callbacks.
       if (is_proc_running()) {
         proc_task_->Cancel();
-        proc_task_ = NULL;
+        proc_task_ = nullptr;
       }
       // Clean up now for nice NetLog.
       KillDnsTask();
@@ -1643,7 +1651,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
                         int net_error) {
     DNS_HISTOGRAM("AsyncDNS.ResolveFail", duration);
 
-    if (dns_task == NULL)
+    if (!dns_task)
       return;
 
     dns_task_error_ = net_error;
@@ -1733,7 +1741,7 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
       if (is_proc_running()) {
         DCHECK(!is_queued());
         proc_task_->Cancel();
-        proc_task_ = NULL;
+        proc_task_ = nullptr;
       }
       KillDnsTask();
 
@@ -1805,13 +1813,9 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
     return priority_tracker_.total_count();
   }
 
-  bool is_dns_running() const {
-    return dns_task_.get() != NULL;
-  }
+  bool is_dns_running() const { return !!dns_task_; }
 
-  bool is_proc_running() const {
-    return proc_task_.get() != NULL;
-  }
+  bool is_proc_running() const { return !!proc_task_; }
 
   base::WeakPtr<HostResolverImpl> resolver_;
 
@@ -1923,7 +1927,8 @@ int HostResolverImpl::Resolve(const RequestInfo& info,
   // outstanding jobs map.
   Key key = GetEffectiveKeyForRequest(info, ip_address_ptr, source_net_log);
 
-  int rv = ResolveHelper(key, info, ip_address_ptr, addresses, source_net_log);
+  int rv = ResolveHelper(key, info, ip_address_ptr, addresses, false, nullptr,
+                         source_net_log);
   if (rv != ERR_DNS_CACHE_MISS) {
     LogFinishRequest(source_net_log, info, rv);
     RecordTotalTime(HaveDnsConfig(), info.is_speculative(), base::TimeDelta());
@@ -2032,29 +2037,41 @@ int HostResolverImpl::ResolveHelper(const Key& key,
                                     const RequestInfo& info,
                                     const IPAddress* ip_address,
                                     AddressList* addresses,
+                                    bool allow_stale,
+                                    HostCache::EntryStaleness* stale_info,
                                     const BoundNetLog& source_net_log) {
+  DCHECK(allow_stale == !!stale_info);
   // The result of |getaddrinfo| for empty hosts is inconsistent across systems.
   // On Windows it gives the default interface's address, whereas on Linux it
   // gives an error. We will make it fail on all platforms for consistency.
-  if (info.hostname().empty() || info.hostname().size() > kMaxHostLength)
+  if (info.hostname().empty() || info.hostname().size() > kMaxHostLength) {
+    MakeNotStale(stale_info);
     return ERR_NAME_NOT_RESOLVED;
+  }
 
   int net_error = ERR_UNEXPECTED;
-  if (ResolveAsIP(key, info, ip_address, &net_error, addresses))
+  if (ResolveAsIP(key, info, ip_address, &net_error, addresses)) {
+    MakeNotStale(stale_info);
     return net_error;
-  if (ServeFromCache(key, info, &net_error, addresses)) {
+  }
+  if (ServeFromCache(key, info, &net_error, addresses, allow_stale,
+                     stale_info)) {
     source_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_CACHE_HIT);
+    // |ServeFromCache()| will set |*stale_info| as needed.
     return net_error;
   }
   // TODO(szym): Do not do this if nsswitch.conf instructs not to.
   // http://crbug.com/117655
   if (ServeFromHosts(key, info, addresses)) {
     source_net_log.AddEvent(NetLog::TYPE_HOST_RESOLVER_IMPL_HOSTS_HIT);
+    MakeNotStale(stale_info);
     return OK;
   }
 
-  if (ServeLocalhost(key, info, addresses))
+  if (ServeLocalhost(key, info, addresses)) {
+    MakeNotStale(stale_info);
     return OK;
+  }
 
   return ERR_DNS_CACHE_MISS;
 }
@@ -2075,7 +2092,8 @@ int HostResolverImpl::ResolveFromCache(const RequestInfo& info,
 
   Key key = GetEffectiveKeyForRequest(info, ip_address_ptr, source_net_log);
 
-  int rv = ResolveHelper(key, info, ip_address_ptr, addresses, source_net_log);
+  int rv = ResolveHelper(key, info, ip_address_ptr, addresses, false, nullptr,
+                         source_net_log);
   LogFinishRequest(source_net_log, info, rv);
   return rv;
 }
@@ -2122,10 +2140,35 @@ std::unique_ptr<base::Value> HostResolverImpl::GetDnsConfigAsValue() const {
   // Check if async DNS is enabled, but we currently have no configuration
   // for it.
   const DnsConfig* dns_config = dns_client_->GetConfig();
-  if (dns_config == NULL)
+  if (!dns_config)
     return base::WrapUnique(new base::DictionaryValue());
 
   return dns_config->ToValue();
+}
+
+int HostResolverImpl::ResolveStaleFromCache(
+    const RequestInfo& info,
+    AddressList* addresses,
+    HostCache::EntryStaleness* stale_info,
+    const BoundNetLog& source_net_log) {
+  DCHECK(CalledOnValidThread());
+  DCHECK(addresses);
+  DCHECK(stale_info);
+
+  // Update the net log and notify registered observers.
+  LogStartRequest(source_net_log, info);
+
+  IPAddress ip_address;
+  IPAddress* ip_address_ptr = nullptr;
+  if (ip_address.AssignFromIPLiteral(info.hostname()))
+    ip_address_ptr = &ip_address;
+
+  Key key = GetEffectiveKeyForRequest(info, ip_address_ptr, source_net_log);
+
+  int rv = ResolveHelper(key, info, ip_address_ptr, addresses, true, stale_info,
+                         source_net_log);
+  LogFinishRequest(source_net_log, info, rv);
+  return rv;
 }
 
 bool HostResolverImpl::ResolveAsIP(const Key& key,
@@ -2155,14 +2198,20 @@ bool HostResolverImpl::ResolveAsIP(const Key& key,
 bool HostResolverImpl::ServeFromCache(const Key& key,
                                       const RequestInfo& info,
                                       int* net_error,
-                                      AddressList* addresses) {
+                                      AddressList* addresses,
+                                      bool allow_stale,
+                                      HostCache::EntryStaleness* stale_info) {
   DCHECK(addresses);
   DCHECK(net_error);
+  DCHECK(allow_stale == !!stale_info);
   if (!info.allow_cached_response() || !cache_.get())
     return false;
 
-  const HostCache::Entry* cache_entry = cache_->Lookup(
-      key, base::TimeTicks::Now());
+  const HostCache::Entry* cache_entry;
+  if (allow_stale)
+    cache_entry = cache_->LookupStale(key, base::TimeTicks::Now(), stale_info);
+  else
+    cache_entry = cache_->Lookup(key, base::TimeTicks::Now());
   if (!cache_entry)
     return false;
 
@@ -2466,9 +2515,8 @@ bool HostResolverImpl::HaveDnsConfig() const {
   // ScopedDefaultHostResolverProc.
   // The alternative is to use NetworkChangeNotifier to override DnsConfig,
   // but that would introduce construction order requirements for NCN and SDHRP.
-  return (dns_client_.get() != NULL) && (dns_client_->GetConfig() != NULL) &&
-         !(proc_params_.resolver_proc.get() == NULL &&
-           HostResolverProc::GetDefault() != NULL);
+  return dns_client_ && dns_client_->GetConfig() &&
+         (proc_params_.resolver_proc || !HostResolverProc::GetDefault());
 }
 
 void HostResolverImpl::OnDnsTaskResolve(int net_error) {

@@ -47,18 +47,19 @@
 #include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThreadStartupData.h"
 #include "wtf/WTF.h"
+#include <memory>
 
 namespace blink {
 
 namespace {
 
-void processUnhandledExceptionOnWorkerGlobalScope(const String& errorMessage, PassOwnPtr<SourceLocation> location, ExecutionContext* scriptContext)
+void processUnhandledExceptionOnWorkerGlobalScope(const String& errorMessage, std::unique_ptr<SourceLocation> location, ExecutionContext* scriptContext)
 {
     WorkerGlobalScope* globalScope = toWorkerGlobalScope(scriptContext);
     globalScope->exceptionUnhandled(errorMessage, std::move(location));
 }
 
-void processMessageOnWorkerGlobalScope(PassRefPtr<SerializedScriptValue> message, PassOwnPtr<MessagePortChannelArray> channels, InProcessWorkerObjectProxy* workerObjectProxy, ExecutionContext* scriptContext)
+void processMessageOnWorkerGlobalScope(PassRefPtr<SerializedScriptValue> message, std::unique_ptr<MessagePortChannelArray> channels, InProcessWorkerObjectProxy* workerObjectProxy, ExecutionContext* scriptContext)
 {
     WorkerGlobalScope* globalScope = toWorkerGlobalScope(scriptContext);
     MessagePortArray* ports = MessagePort::entanglePorts(*scriptContext, std::move(channels));
@@ -117,7 +118,7 @@ void InProcessWorkerMessagingProxy::startWorkerGlobalScope(const KURL& scriptURL
     DCHECK(csp);
 
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
-    OwnPtr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(scriptURL, userAgent, sourceCode, nullptr, startMode, csp->headers().get(), starterOrigin, m_workerClients.release(), document->addressSpace(), OriginTrialContext::getTokens(document).get());
+    std::unique_ptr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(scriptURL, userAgent, sourceCode, nullptr, startMode, csp->headers().get(), m_workerObject->referrerPolicy(), starterOrigin, m_workerClients.release(), document->addressSpace(), OriginTrialContext::getTokens(document).get());
     double originTime = document->loader() ? document->loader()->timing().referenceMonotonicTime() : monotonicallyIncreasingTime();
 
     m_loaderProxy = WorkerLoaderProxy::create(this);
@@ -127,7 +128,7 @@ void InProcessWorkerMessagingProxy::startWorkerGlobalScope(const KURL& scriptURL
     m_workerInspectorProxy->workerThreadCreated(document, m_workerThread.get(), scriptURL);
 }
 
-void InProcessWorkerMessagingProxy::postMessageToWorkerObject(PassRefPtr<SerializedScriptValue> message, PassOwnPtr<MessagePortChannelArray> channels)
+void InProcessWorkerMessagingProxy::postMessageToWorkerObject(PassRefPtr<SerializedScriptValue> message, std::unique_ptr<MessagePortChannelArray> channels)
 {
     DCHECK(isParentContextThread());
     if (!m_workerObject || m_askedToTerminate)
@@ -137,13 +138,13 @@ void InProcessWorkerMessagingProxy::postMessageToWorkerObject(PassRefPtr<Seriali
     m_workerObject->dispatchEvent(MessageEvent::create(ports, message));
 }
 
-void InProcessWorkerMessagingProxy::postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue> message, PassOwnPtr<MessagePortChannelArray> channels)
+void InProcessWorkerMessagingProxy::postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue> message, std::unique_ptr<MessagePortChannelArray> channels)
 {
     DCHECK(isParentContextThread());
     if (m_askedToTerminate)
         return;
 
-    std::unique_ptr<ExecutionContextTask> task = createCrossThreadTask(&processMessageOnWorkerGlobalScope, message, passed(std::move(channels)), AllowCrossThreadAccess(&workerObjectProxy()));
+    std::unique_ptr<ExecutionContextTask> task = createCrossThreadTask(&processMessageOnWorkerGlobalScope, message, passed(std::move(channels)), crossThreadUnretained(&workerObjectProxy()));
     if (m_workerThread) {
         ++m_unconfirmedMessageCount;
         m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
@@ -168,7 +169,7 @@ void InProcessWorkerMessagingProxy::postTaskToLoader(std::unique_ptr<ExecutionCo
     getExecutionContext()->postTask(BLINK_FROM_HERE, std::move(task));
 }
 
-void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, PassOwnPtr<SourceLocation> location)
+void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
     DCHECK(isParentContextThread());
     if (!m_workerObject)
@@ -185,7 +186,7 @@ void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, 
         postTaskToWorkerGlobalScope(createCrossThreadTask(&processUnhandledExceptionOnWorkerGlobalScope, errorMessage, passed(std::move(location))));
 }
 
-void InProcessWorkerMessagingProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, PassOwnPtr<SourceLocation> location)
+void InProcessWorkerMessagingProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, std::unique_ptr<SourceLocation> location)
 {
     DCHECK(isParentContextThread());
     if (m_askedToTerminate)
@@ -220,7 +221,7 @@ void InProcessWorkerMessagingProxy::workerObjectDestroyed()
     // cleared before this method gets called.
     DCHECK(!m_workerObject);
 
-    getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&InProcessWorkerMessagingProxy::workerObjectDestroyedInternal, AllowCrossThreadAccess(this)));
+    getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&InProcessWorkerMessagingProxy::workerObjectDestroyedInternal, crossThreadUnretained(this)));
 }
 
 void InProcessWorkerMessagingProxy::workerObjectDestroyedInternal()

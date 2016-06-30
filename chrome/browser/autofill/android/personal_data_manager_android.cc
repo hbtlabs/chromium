@@ -31,6 +31,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_service.h"
@@ -154,18 +155,18 @@ const struct PaymentRequestData {
 // Converts the card type into PaymentRequest type according to the basic card
 // payment spec and an icon. Will set the type and the icon to "generic" for
 // unrecognized card type.
-const PaymentRequestData* GetPaymentRequestData(const std::string& type) {
+const PaymentRequestData& GetPaymentRequestData(const std::string& type) {
   for (size_t i = 0; i < arraysize(kPaymentRequestData); ++i) {
     if (type == kPaymentRequestData[i].card_type)
-      return &kPaymentRequestData[i];
+      return kPaymentRequestData[i];
   }
-  return &kPaymentRequestData[0];
+  return kPaymentRequestData[0];
 }
 
 ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
     JNIEnv* env,
     const CreditCard& card) {
-  const PaymentRequestData* payment_request_data =
+  const PaymentRequestData& payment_request_data =
       GetPaymentRequestData(card.type());
   return Java_CreditCard_create(
       env, ConvertUTF8ToJavaString(env, card.guid()).obj(),
@@ -181,11 +182,10 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
       ConvertUTF16ToJavaString(env,
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR))
           .obj(),
-      ConvertUTF8ToJavaString(env,
-                              payment_request_data->basic_card_payment_type)
+      ConvertUTF8ToJavaString(env, payment_request_data.basic_card_payment_type)
           .obj(),
-      ResourceMapper::MapFromChromiumId(
-          payment_request_data->icon_resource_id));
+      ResourceMapper::MapFromChromiumId(payment_request_data.icon_resource_id),
+      ConvertUTF8ToJavaString(env, card.billing_address_id()) .obj());
 }
 
 void PopulateNativeCreditCardFromJava(
@@ -206,6 +206,8 @@ void PopulateNativeCreditCardFromJava(
   card->SetRawInfo(
       CREDIT_CARD_EXP_4_DIGIT_YEAR,
       ConvertJavaStringToUTF16(Java_CreditCard_getYear(env, jcard)));
+  card->set_billing_address_id(
+      ConvertJavaStringToUTF8(Java_CreditCard_getBillingAddressId(env, jcard)));
 }
 
 // Self-deleting requester of full card details, including full PAN and the CVC
@@ -352,6 +354,32 @@ PersonalDataManagerAndroid::GetProfileLabelsToSuggest(
                           personal_data_manager_->GetProfilesToSuggest());
 }
 
+base::android::ScopedJavaLocalRef<jstring>
+PersonalDataManagerAndroid::GetAddressLabelForPaymentRequest(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& unused_obj,
+    const base::android::JavaParamRef<jobject>& jprofile) {
+  std::vector<ServerFieldType> label_fields;
+  label_fields.push_back(COMPANY_NAME);
+  label_fields.push_back(ADDRESS_HOME_LINE1);
+  label_fields.push_back(ADDRESS_HOME_LINE2);
+  label_fields.push_back(ADDRESS_HOME_DEPENDENT_LOCALITY);
+  label_fields.push_back(ADDRESS_HOME_CITY);
+  label_fields.push_back(ADDRESS_HOME_STATE);
+  label_fields.push_back(ADDRESS_HOME_ZIP);
+  label_fields.push_back(ADDRESS_HOME_SORTING_CODE);
+  label_fields.push_back(ADDRESS_HOME_COUNTRY);
+  label_fields.push_back(PHONE_HOME_WHOLE_NUMBER);
+
+  AutofillProfile profile;
+  PopulateNativeProfileFromJava(jprofile, env, &profile);
+
+  return ConvertUTF16ToJavaString(
+      env, profile.ConstructInferredLabel(
+               label_fields, label_fields.size(),
+               g_browser_process->GetApplicationLocale()));
+}
+
 base::android::ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetCreditCardGUIDsForSettings(
     JNIEnv* env,
@@ -397,6 +425,19 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetCreditCard(
     personal_data_manager_->UpdateCreditCard(card);
   }
   return ConvertUTF8ToJavaString(env, card.guid());
+}
+
+
+void PersonalDataManagerAndroid::UpdateServerCardBillingAddress(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& unused_obj,
+    const JavaParamRef<jstring>& jguid,
+    const JavaParamRef<jstring>& jbilling_address_id) {
+  CreditCard card(ConvertJavaStringToUTF8(env, jguid), kSettingsOrigin);
+  card.set_record_type(CreditCard::MASKED_SERVER_CARD);
+  card.set_billing_address_id(ConvertJavaStringToUTF8(env,
+      jbilling_address_id));
+  personal_data_manager_->UpdateServerCardBillingAddress(card);
 }
 
 void PersonalDataManagerAndroid::AddServerCreditCardForTest(
@@ -522,6 +563,7 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     suggested_fields->push_back(ADDRESS_HOME_ZIP);
     suggested_fields->push_back(ADDRESS_HOME_SORTING_CODE);
     suggested_fields->push_back(ADDRESS_HOME_COUNTRY);
+    suggested_fields->push_back(PHONE_HOME_WHOLE_NUMBER);
     minimal_fields_shown = suggested_fields->size();
   }
 

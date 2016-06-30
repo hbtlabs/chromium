@@ -92,6 +92,8 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                        const GURL& origin) override;
   bool ShouldAllowOpenURL(content::SiteInstance* site_instance,
                           const GURL& url) override;
+  void OverrideOpenURLParams(content::SiteInstance* site_instance,
+                             content::OpenURLParams* params) override;
   bool IsSuitableHost(content::RenderProcessHost* process_host,
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
@@ -208,7 +210,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   net::NetLog* GetNetLog() override;
-  content::AccessTokenStore* CreateAccessTokenStore() override;
+
+  content::GeolocationDelegate* CreateGeolocationDelegate() override;
+
   bool IsFastShutdownPossible() override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* prefs) override;
@@ -228,10 +232,14 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const content::SocketPermissionRequest* params) override;
   bool IsPepperVpnProviderAPIAllowed(content::BrowserContext* browser_context,
                                      const GURL& url) override;
+  std::unique_ptr<content::VpnServiceProxy> GetVpnServiceProxy(
+      content::BrowserContext* browser_context) override;
   ui::SelectFilePolicy* CreateSelectFilePolicy(
       content::WebContents* web_contents) override;
   void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) override;
+  void GetSchemesBypassingSecureContextCheckWhitelist(
+      std::set<std::string>* schemes) override;
   void GetURLRequestAutoMountHandlers(
       std::vector<storage::URLRequestAutoMountHandler>* handlers) override;
   void GetAdditionalFileSystemBackends(
@@ -246,7 +254,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   bool IsPluginAllowedToUseDevChannelAPIs(
       content::BrowserContext* browser_context,
       const GURL& url) override;
-  void AddMojoShellConnectionListeners() override;
   void OverridePageVisibilityState(
       content::RenderFrameHost* render_frame_host,
       blink::WebPageVisibilityState* visibility_state) override;
@@ -270,13 +277,15 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       int sandbox_type) const override;
   bool IsWin32kLockdownEnabledForMimeType(
       const std::string& mime_type) const override;
-  bool ShouldUseWindowsPrefetchArgument() const override;
 #endif
-  void RegisterFrameMojoShellServices(
-      content::ServiceRegistry* registry,
+  void ExposeInterfacesToRenderer(
+      shell::InterfaceRegistry* registry,
+      content::RenderProcessHost* render_process_host) override;
+  void RegisterFrameMojoShellInterfaces(
+      shell::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
-  void RegisterRenderFrameMojoServices(
-      content::ServiceRegistry* registry,
+  void RegisterRenderFrameMojoInterfaces(
+      shell::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
   void RegisterInProcessMojoApplications(
       StaticMojoApplicationMap* apps) override;

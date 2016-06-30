@@ -32,27 +32,53 @@ public:
         CustomElementsRegistry*,
         const CustomElementDescriptor&,
         const v8::Local<v8::Object>& constructor,
-        const v8::Local<v8::Object>& prototype);
+        const v8::Local<v8::Object>& prototype,
+        const v8::Local<v8::Function>& connectedCallback,
+        const v8::Local<v8::Function>& disconnectedCallback,
+        const v8::Local<v8::Function>& attributeChangedCallback,
+        const HashSet<AtomicString>& observedAttributes);
 
     virtual ~ScriptCustomElementDefinition() = default;
 
     v8::Local<v8::Object> constructor() const;
     v8::Local<v8::Object> prototype() const;
 
+    HTMLElement* createElementSync(Document&, const QualifiedName&) override;
+    HTMLElement* createElementSync(Document&, const QualifiedName&, ExceptionState&) override;
+
+    bool hasConnectedCallback() const override;
+    bool hasDisconnectedCallback() const override;
+
+    void runConnectedCallback(Element*) override;
+    void runDisconnectedCallback(Element*) override;
+    void runAttributeChangedCallback(Element*, const QualifiedName&,
+        const AtomicString& oldValue, const AtomicString& newValue) override;
+
 private:
     ScriptCustomElementDefinition(
         ScriptState*,
         const CustomElementDescriptor&,
         const v8::Local<v8::Object>& constructor,
-        const v8::Local<v8::Object>& prototype);
+        const v8::Local<v8::Object>& prototype,
+        const v8::Local<v8::Function>& connectedCallback,
+        const v8::Local<v8::Function>& disconnectedCallback,
+        const v8::Local<v8::Function>& attributeChangedCallback,
+        const HashSet<AtomicString>& observedAttributes);
 
     // Implementations of |CustomElementDefinition|
     ScriptValue getConstructorForScript() final;
     bool runConstructor(Element*) override;
+    Element* runConstructor();
+
+    void runCallback(v8::Local<v8::Function>, Element*,
+        int argc = 0, v8::Local<v8::Value> argv[] = nullptr);
 
     RefPtr<ScriptState> m_scriptState;
     ScopedPersistent<v8::Object> m_constructor;
     ScopedPersistent<v8::Object> m_prototype;
+    ScopedPersistent<v8::Function> m_connectedCallback;
+    ScopedPersistent<v8::Function> m_disconnectedCallback;
+    ScopedPersistent<v8::Function> m_attributeChangedCallback;
 };
 
 } // namespace blink

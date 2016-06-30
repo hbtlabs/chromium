@@ -12,6 +12,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
+#include "components/exo/notification_surface.h"
+#include "components/exo/notification_surface_manager.h"
 #include "components/exo/shared_memory.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
@@ -29,15 +31,13 @@
 
 namespace exo {
 
-const char kUseExoSurfaceLayer[] = "use-exo-surface-layer";
-
 ////////////////////////////////////////////////////////////////////////////////
 // Display, public:
 
-Display::Display() {
-  Surface::SetUseSurfaceLayer(
-      base::CommandLine::ForCurrentProcess()->HasSwitch(kUseExoSurfaceLayer));
-}
+Display::Display() : notification_surface_manager_(nullptr) {}
+
+Display::Display(NotificationSurfaceManager* notification_surface_manager)
+    : notification_surface_manager_(notification_surface_manager) {}
 
 Display::~Display() {}
 
@@ -60,18 +60,24 @@ std::unique_ptr<SharedMemory> Display::CreateSharedMemory(
 
 #if defined(USE_OZONE)
 std::unique_ptr<Buffer> Display::CreateLinuxDMABufBuffer(
-    base::ScopedFD fd,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    int stride) {
+    const std::vector<int>& strides,
+    const std::vector<int>& offsets,
+    std::vector<base::ScopedFD>&& fds) {
   TRACE_EVENT1("exo", "Display::CreateLinuxDMABufBuffer", "size",
                size.ToString());
 
   gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::OZONE_NATIVE_PIXMAP;
-  handle.native_pixmap_handle.fds.emplace_back(
-      base::FileDescriptor(std::move(fd)));
-  handle.native_pixmap_handle.strides.push_back(stride);
+  for (auto& fd : fds)
+    handle.native_pixmap_handle.fds.emplace_back(std::move(fd));
+
+  DCHECK_EQ(strides.size(), offsets.size());
+  for (size_t plane = 0; plane < strides.size(); ++plane) {
+    handle.native_pixmap_handle.strides_and_offsets.emplace_back(
+        strides[plane], offsets[plane]);
+  }
 
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer =
       aura::Env::GetInstance()
@@ -121,7 +127,7 @@ std::unique_ptr<ShellSurface> Display::CreatePopupShellSurface(
   TRACE_EVENT2("exo", "Display::CreatePopupShellSurface", "surface",
                surface->AsTracedValue(), "parent", parent->AsTracedValue());
 
-  if (surface->Contains(parent->GetWidget()->GetNativeWindow())) {
+  if (surface->window()->Contains(parent->GetWidget()->GetNativeWindow())) {
     DLOG(ERROR) << "Parent is contained within surface's hierarchy";
     return nullptr;
   }
@@ -136,7 +142,8 @@ std::unique_ptr<ShellSurface> Display::CreatePopupShellSurface(
   // container origin.
   gfx::Rect initial_bounds(position, gfx::Size(1, 1));
   aura::Window::ConvertRectToTarget(
-      ShellSurface::GetMainSurface(parent->GetWidget()->GetNativeWindow()),
+      ShellSurface::GetMainSurface(parent->GetWidget()->GetNativeWindow())
+          ->window(),
       parent->GetWidget()->GetNativeWindow()->parent(), &initial_bounds);
 
   return base::WrapUnique(
@@ -164,7 +171,7 @@ std::unique_ptr<SubSurface> Display::CreateSubSurface(Surface* surface,
   TRACE_EVENT2("exo", "Display::CreateSubSurface", "surface",
                surface->AsTracedValue(), "parent", parent->AsTracedValue());
 
-  if (surface->Contains(parent)) {
+  if (surface->window()->Contains(parent->window())) {
     DLOG(ERROR) << "Parent is contained within surface's hierarchy";
     return nullptr;
   }
@@ -175,6 +182,22 @@ std::unique_ptr<SubSurface> Display::CreateSubSurface(Surface* surface,
   }
 
   return base::WrapUnique(new SubSurface(surface, parent));
+}
+
+std::unique_ptr<NotificationSurface> Display::CreateNotificationSurface(
+    Surface* surface,
+    const std::string& notification_id) {
+  TRACE_EVENT2("exo", "Display::CreateNotificationSurface", "surface",
+               surface->AsTracedValue(), "notification_id", notification_id);
+
+  if (!notification_surface_manager_ ||
+      notification_surface_manager_->GetSurface(notification_id)) {
+    DLOG(ERROR) << "Invalid notification id, id=" << notification_id;
+    return nullptr;
+  }
+
+  return base::MakeUnique<NotificationSurface>(notification_surface_manager_,
+                                               surface, notification_id);
 }
 
 }  // namespace exo

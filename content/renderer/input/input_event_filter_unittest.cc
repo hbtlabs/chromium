@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
@@ -115,7 +116,7 @@ void AddMessagesToFilter(IPC::MessageFilter* message_filter,
   for (size_t i = 0; i < events.size(); ++i)
     message_filter->OnMessageReceived(events[i]);
 
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 template <typename T>
@@ -178,7 +179,7 @@ TEST_F(InputEventFilterTest, Basic) {
   EXPECT_EQ(0U, event_recorder_.record_count());
   EXPECT_EQ(0U, message_recorder_.message_count());
 
-  filter_->DidAddInputHandler(kTestRoutingID);
+  filter_->RegisterRoutingID(kTestRoutingID);
 
   AddEventsToFilter(filter_.get(), kEvents, arraysize(kEvents));
   ASSERT_EQ(arraysize(kEvents), ipc_sink_.message_count());
@@ -254,7 +255,7 @@ TEST_F(InputEventFilterTest, Basic) {
 }
 
 TEST_F(InputEventFilterTest, PreserveRelativeOrder) {
-  filter_->DidAddInputHandler(kTestRoutingID);
+  filter_->RegisterRoutingID(kTestRoutingID);
   event_recorder_.set_send_to_widget(true);
 
 
@@ -317,7 +318,7 @@ TEST_F(InputEventFilterTest, NonBlockingWheel) {
       SyntheticWebMouseWheelEventBuilder::Build(30, 30, 0, 53, 1, false),
   };
 
-  filter_->DidAddInputHandler(kTestRoutingID);
+  filter_->RegisterRoutingID(kTestRoutingID);
   event_recorder_.set_send_to_widget(true);
   event_recorder_.set_passive(true);
 
@@ -329,20 +330,23 @@ TEST_F(InputEventFilterTest, NonBlockingWheel) {
   EXPECT_EQ(1u, message_recorder_.message_count());
 
   // Second event was queued; ack the first.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   ASSERT_EQ(4u, ipc_sink_.message_count());
   EXPECT_EQ(2u, message_recorder_.message_count());
 
   // Third event won't be coalesced into the second because modifiers are
   // different.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3u, message_recorder_.message_count());
 
   // The last events will be coalesced.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::MouseWheel,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3u, message_recorder_.message_count());
 
   // First two messages should be identical.
@@ -395,7 +399,7 @@ TEST_F(InputEventFilterTest, NonBlockingTouch) {
   kEvents[3].PressPoint(10, 10);
   kEvents[3].MovePoint(0, 35, 35);
 
-  filter_->DidAddInputHandler(kTestRoutingID);
+  filter_->RegisterRoutingID(kTestRoutingID);
   event_recorder_.set_send_to_widget(true);
   event_recorder_.set_passive(true);
 
@@ -407,20 +411,23 @@ TEST_F(InputEventFilterTest, NonBlockingTouch) {
   EXPECT_EQ(1u, message_recorder_.message_count());
 
   // Second event was queued; ack the first.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchStart);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchStart,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   ASSERT_EQ(4u, ipc_sink_.message_count());
   EXPECT_EQ(2u, message_recorder_.message_count());
 
   // Third event won't be coalesced into the second because modifiers are
   // different.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchMove);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchMove,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3u, message_recorder_.message_count());
 
   // The last events will be coalesced.
-  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchMove);
-  base::MessageLoop::current()->RunUntilIdle();
+  filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchMove,
+                                   INPUT_EVENT_ACK_STATE_CONSUMED);
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(3u, message_recorder_.message_count());
 
   // First two messages should be identical.
@@ -469,7 +476,7 @@ TEST_F(InputEventFilterTest, IntermingledNonBlockingTouch) {
   SyntheticWebTouchEvent kBlockingEvents[1];
   kBlockingEvents[0].PressPoint(10, 10);
 
-  filter_->DidAddInputHandler(kTestRoutingID);
+  filter_->RegisterRoutingID(kTestRoutingID);
   event_recorder_.set_send_to_widget(true);
   event_recorder_.set_passive(true);
   AddEventsToFilter(filter_.get(), kEvents, arraysize(kEvents));
@@ -502,8 +509,9 @@ TEST_F(InputEventFilterTest, IntermingledNonBlockingTouch) {
 
   {
     // Second event was queued; ack the first.
-    filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchStart);
-    base::MessageLoop::current()->RunUntilIdle();
+    filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchStart,
+                                     INPUT_EVENT_ACK_STATE_CONSUMED);
+    base::RunLoop().RunUntilIdle();
     EXPECT_EQ(2u, message_recorder_.message_count());
 
     const IPC::Message& message = message_recorder_.message_at(1);
@@ -523,8 +531,9 @@ TEST_F(InputEventFilterTest, IntermingledNonBlockingTouch) {
 
   {
     // Third event should be put in the queue.
-    filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchEnd);
-    base::MessageLoop::current()->RunUntilIdle();
+    filter_->NotifyInputEventHandled(kTestRoutingID, WebInputEvent::TouchEnd,
+                                     INPUT_EVENT_ACK_STATE_CONSUMED);
+    base::RunLoop().RunUntilIdle();
     EXPECT_EQ(3u, message_recorder_.message_count());
 
     const IPC::Message& message = message_recorder_.message_at(2);

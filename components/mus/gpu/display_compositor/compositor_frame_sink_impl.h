@@ -36,13 +36,13 @@ class CompositorFrameSinkImpl : public cc::SurfaceFactoryClient,
   // mojom::CompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
   void SubmitCompositorFrame(
-      mus::mojom::CompositorFramePtr frame,
+      cc::CompositorFrame compositor_frame,
       const SubmitCompositorFrameCallback& callback) override;
 
  private:
   // SurfaceFactoryClient implementation.
   void ReturnResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface(cc::SurfaceId surface_id,
+  void WillDrawSurface(const cc::SurfaceId& surface_id,
                        const gfx::Rect& damage_rect) override;
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 

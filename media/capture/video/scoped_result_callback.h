@@ -5,8 +5,9 @@
 #ifndef MEDIA_CAPTURE_VIDEO_SCOPED_RESULT_CALLBACK_H_
 #define MEDIA_CAPTURE_VIDEO_SCOPED_RESULT_CALLBACK_H_
 
-#include "base/callback_forward.h"
-#include "mojo/public/cpp/bindings/callback.h"
+#include "base/callback.h"
+#include "base/callback_helpers.h"
+#include "base/macros.h"
 
 namespace media {
 
@@ -14,8 +15,6 @@ namespace media {
 // to |on_error_callback_| on destruction. Inspired by ScopedWebCallbacks<>.
 template <typename CallbackType>
 class ScopedResultCallback {
-  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedResultCallback);
-
  public:
   using OnErrorCallback = base::Callback<void(const CallbackType&)>;
   ScopedResultCallback(const CallbackType& callback,
@@ -33,7 +32,7 @@ class ScopedResultCallback {
 
   ScopedResultCallback& operator=(ScopedResultCallback&& other) {
     callback_ = other.callback_;
-    other.callback_.reset();
+    other.callback_.Reset();
     on_error_callback_ = other.on_error_callback_;
     other.on_error_callback_.Reset();
     return *this;
@@ -42,15 +41,14 @@ class ScopedResultCallback {
   template <typename... Args>
   void Run(Args... args) {
     on_error_callback_.Reset();
-    // TODO(mcasas): Use base::ResetAndReturn() when mojo::Callback<> is
-    // compatible with base::Callback<>, see https://crbug.com/596521.
-    callback_.Run(std::forward<Args>(args)...);
-    callback_.reset();
+    base::ResetAndReturn(&callback_).Run(std::forward<Args>(args)...);
   }
 
  private:
   CallbackType callback_;
   OnErrorCallback on_error_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedResultCallback);
 };
 
 }  // namespace media

@@ -20,11 +20,11 @@ protected:
     void checkPaintInvalidationStateRectMapping(const LayoutRect& expectedRect, const LayoutRect& rect, const LayoutObject& object, const LayoutView& layoutView, const LayoutObject& paintInvalidationContainer)
     {
         Vector<const LayoutObject*> ancestors;
-        for (const LayoutObject* ancestor = &object; ancestor != layoutView; ancestor = ancestor->parentCrossingFrameBoundaries())
+        for (const LayoutObject* ancestor = &object; ancestor != layoutView; ancestor = ancestor->paintInvalidationParent())
             ancestors.append(ancestor);
 
         Vector<Optional<PaintInvalidationState>> paintInvalidationStates(ancestors.size() + 1);
-        Vector<LayoutObject*> pendingDelayedPaintInvalidations;
+        Vector<const LayoutObject*> pendingDelayedPaintInvalidations;
         paintInvalidationStates[0].emplace(layoutView, pendingDelayedPaintInvalidations);
         if (layoutView != object)
             paintInvalidationStates[0]->updateForChildren(PaintInvalidationFull);

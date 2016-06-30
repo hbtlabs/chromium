@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -23,19 +25,32 @@
         },
         {
           "object": "LayoutSVGRect rect",
-          "rect": [0, 2, 10, 8],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutSVGRect rect",
-          "rect": [2, 0, 8, 10],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutSVGResourceMarker marker id='markerStart'",
+          "rect": [0, 0, 10, 10],
           "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutSVGRoot svg",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutSVGResourceMarker marker id='markerStart'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGRect rect",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGContainer g",
+      "reason": "bounds change"
+    },
+    {
+      "object": "LayoutSVGPath path id='go'",
+      "reason": "full"
     }
   ]
 }

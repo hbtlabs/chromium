@@ -31,7 +31,7 @@ if (is_win) {
     ]
   }
 
-  source_set("lib") {
+  static_library("lib") {
     sources = [
       "app_launcher_installer.cc",
       "app_launcher_installer.h",
@@ -63,6 +63,7 @@ if (is_win) {
       "//chrome/common:version_header",
       "//chrome/installer/util:with_rc_strings",
       "//chrome_elf:constants",
+      "//components/base32",
       "//components/crash/content/app:app",
       "//components/crash/content/app:lib",
       "//components/crash/core/common",

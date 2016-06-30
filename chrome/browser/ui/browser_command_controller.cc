@@ -70,8 +70,8 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/multi_profile_uma.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -79,7 +79,7 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
 using content::NavigationEntry;
@@ -321,21 +321,23 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
   switch (id) {
     // Navigation commands
     case IDC_BACKSPACE_BACK:
-      if (!base::FeatureList::IsEnabled(kBackspaceGoesBackFeature)) {
-        browser_->window()->ShowNewBackShortcutBubble(false);
-        break;
-      }
-      // FALL THROUGH
+      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+        GoBack(browser_, disposition);
+      else
+        browser_->window()->MaybeShowNewBackShortcutBubble(false);
+      break;
     case IDC_BACK:
+      browser_->window()->HideNewBackShortcutBubble();
       GoBack(browser_, disposition);
       break;
     case IDC_BACKSPACE_FORWARD:
-      if (!base::FeatureList::IsEnabled(kBackspaceGoesBackFeature)) {
-        browser_->window()->ShowNewBackShortcutBubble(true);
-        break;
-      }
-      // FALL THROUGH
+      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+        GoForward(browser_, disposition);
+      else
+        browser_->window()->MaybeShowNewBackShortcutBubble(true);
+      break;
     case IDC_FORWARD:
+      browser_->window()->HideNewBackShortcutBubble();
       GoForward(browser_, disposition);
       break;
     case IDC_RELOAD:
@@ -413,11 +415,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ConvertPopupToTabbedBrowser(browser_);
       break;
     case IDC_FULLSCREEN:
-#if defined(OS_MACOSX)
-      chrome::ToggleFullscreenWithToolbarOrFallback(browser_);
-#else
       chrome::ToggleFullscreenMode(browser_);
-#endif
       break;
 
 #if defined(OS_CHROMEOS)

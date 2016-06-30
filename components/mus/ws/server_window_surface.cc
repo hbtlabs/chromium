@@ -4,10 +4,10 @@
 
 #include "components/mus/ws/server_window_surface.h"
 
+#include "base/callback.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/surface_draw_quad.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/server_window_delegate.h"
@@ -17,7 +17,7 @@ namespace mus {
 namespace ws {
 namespace {
 
-void CallCallback(const mojo::Closure& callback, cc::SurfaceDrawStatus status) {
+void CallCallback(const base::Closure& callback, cc::SurfaceDrawStatus status) {
   callback.Run();
 }
 
@@ -49,9 +49,10 @@ ServerWindowSurface::~ServerWindowSurface() {
 }
 
 void ServerWindowSurface::SubmitCompositorFrame(
-    mojom::CompositorFramePtr frame,
+    cc::CompositorFrame frame,
     const SubmitCompositorFrameCallback& callback) {
-  gfx::Size frame_size = frame->passes[0]->output_rect.size();
+  gfx::Size frame_size =
+      frame.delegated_frame_data->render_pass_list[0]->output_rect.size();
   if (!surface_id_.is_null()) {
     // If the size of the CompostiorFrame has changed then destroy the existing
     // Surface and create a new one of the appropriate size.
@@ -69,8 +70,7 @@ void ServerWindowSurface::SubmitCompositorFrame(
       surface_factory_.Create(surface_id_);
     }
   }
-  surface_factory_.SubmitCompositorFrame(surface_id_,
-                                         ConvertCompositorFrame(frame),
+  surface_factory_.SubmitCompositorFrame(surface_id_, std::move(frame),
                                          base::Bind(&CallCallback, callback));
   last_submitted_frame_size_ = frame_size;
   window()->delegate()->OnScheduleWindowPaint(window());
@@ -92,61 +92,6 @@ void ServerWindowSurface::RegisterForBeginFrames() {
 
 ServerWindow* ServerWindowSurface::window() {
   return manager_->window();
-}
-
-std::unique_ptr<cc::CompositorFrame>
-ServerWindowSurface::ConvertCompositorFrame(
-    const mojom::CompositorFramePtr& input) {
-  referenced_window_ids_.clear();
-  return ConvertToCompositorFrame(input, this);
-}
-
-bool ServerWindowSurface::ConvertSurfaceDrawQuad(
-    const mojom::QuadPtr& input,
-    const mojom::CompositorFrameMetadataPtr& metadata,
-    cc::SharedQuadState* sqs,
-    cc::RenderPass* render_pass) {
-  // Surface ids originate from the client, meaning they are ClientWindowIds
-  // and can only be resolved by the client that submitted the frame.
-  const ClientWindowId other_client_window_id(
-      input->surface_quad_state->surface.local_id());
-  ServerWindow* other_window = window()->delegate()->FindWindowForSurface(
-      window(), mojom::SurfaceType::DEFAULT, other_client_window_id);
-  if (!other_window) {
-    DVLOG(2) << "The window ID '" << other_client_window_id.id
-             << "' does not exist.";
-    // TODO(fsamuel): We return true here so that the CompositorFrame isn't
-    // entirely rejected. We just drop this SurfaceDrawQuad. This failure
-    // can happen if the client has an out of date view of the window tree.
-    // It would be nice if we can avoid reaching this state in the future.
-    return true;
-  }
-
-  referenced_window_ids_.insert(other_window->id());
-
-  ServerWindowSurface* default_surface =
-      other_window->GetOrCreateSurfaceManager()->GetDefaultSurface();
-  ServerWindowSurface* underlay_surface =
-      other_window->GetOrCreateSurfaceManager()->GetUnderlaySurface();
-
-  if (!default_surface && !underlay_surface)
-    return true;
-
-  cc::SurfaceDrawQuad* surface_quad =
-      render_pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
-  if (default_surface) {
-    surface_quad->SetAll(sqs, input->rect, input->opaque_rect,
-                         input->visible_rect, input->needs_blending,
-                         default_surface->id());
-  }
-  if (underlay_surface) {
-    cc::SurfaceDrawQuad* underlay_quad =
-        render_pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
-    underlay_quad->SetAll(sqs, input->rect, input->opaque_rect,
-                          input->visible_rect, input->needs_blending,
-                          underlay_surface->id());
-  }
-  return true;
 }
 
 void ServerWindowSurface::ReturnResources(

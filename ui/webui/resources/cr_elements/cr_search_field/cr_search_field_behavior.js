@@ -2,16 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @interface */
-var SearchFieldDelegate = function() {};
-
-SearchFieldDelegate.prototype = {
-  /**
-   * @param {string} value
-   */
-  onSearchTermSearch: assertNotReached,
-};
-
 /**
  * Implements an incremental search field which can be shown and hidden.
  * Canonical implementation is <cr-search-field>.
@@ -37,7 +27,11 @@ var CrSearchFieldBehavior = {
       reflectToAttribute: true
     },
 
-    hasSearchText: Boolean,
+    /** @private */
+    lastValue_: {
+      type: String,
+      value: '',
+    },
   },
 
   /**
@@ -48,19 +42,14 @@ var CrSearchFieldBehavior = {
   },
 
   /**
-   * Sets the value of the search field, if it exists.
+   * Sets the value of the search field.
    * @param {string} value
    */
   setValue: function(value) {
     // Use bindValue when setting the input value so that changes propagate
     // correctly.
     this.$.searchInput.bindValue = value;
-    this.hasSearchText = value != '';
-  },
-
-  /** @param {SearchFieldDelegate} delegate */
-  setDelegate: function(delegate) {
-    this.delegate_ = delegate;
+    this.onValueChanged_(value);
   },
 
   showAndFocus: function() {
@@ -74,9 +63,21 @@ var CrSearchFieldBehavior = {
   },
 
   onSearchTermSearch: function() {
-    this.hasSearchText = this.getValue() != '';
-    if (this.delegate_)
-      this.delegate_.onSearchTermSearch(this.getValue());
+    this.onValueChanged_(this.getValue());
+  },
+
+  /**
+   * Updates the internal state of the search field based on a change that has
+   * already happened.
+   * @param {string} newValue
+   * @private
+   */
+  onValueChanged_: function(newValue) {
+    if (newValue == this.lastValue_)
+      return;
+
+    this.fire('search-changed', newValue);
+    this.lastValue_ = newValue;
   },
 
   onSearchTermKeydown: function(e) {
@@ -93,7 +94,6 @@ var CrSearchFieldBehavior = {
 
     this.setValue('');
     this.$.searchInput.blur();
-    this.onSearchTermSearch();
   },
 
   /** @private */

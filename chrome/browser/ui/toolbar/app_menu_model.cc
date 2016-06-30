@@ -77,7 +77,7 @@
 #if defined(OS_WIN)
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
-#include "chrome/browser/enumerate_modules_model_win.h"
+#include "chrome/browser/win/enumerate_modules_model.h"
 #include "content/public/browser/gpu_data_manager.h"
 #endif
 
@@ -745,7 +745,7 @@ void AppMenuModel::TabReplacedAt(TabStripModel* tab_strip_model,
 void AppMenuModel::Observe(int type,
                            const content::NotificationSource& source,
                            const content::NotificationDetails& details) {
-  DCHECK(type == content::NOTIFICATION_NAV_ENTRY_COMMITTED);
+  DCHECK_EQ(content::NOTIFICATION_NAV_ENTRY_COMMITTED, type);
   UpdateZoomControls();
 }
 

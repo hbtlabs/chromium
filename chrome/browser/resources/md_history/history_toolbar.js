@@ -2,22 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @constructor
- * @implements {SearchFieldDelegate}
- * @param {!HistoryToolbarElement} toolbar This history-toolbar.
- */
-function ToolbarSearchFieldDelegate(toolbar) {
-  this.toolbar_ = toolbar;
-}
-
-ToolbarSearchFieldDelegate.prototype = {
-  /** @override */
-  onSearchTermSearch: function(searchTerm) {
-    this.toolbar_.onSearch(searchTerm);
-  }
-};
-
 Polymer({
   is: 'history-toolbar',
   properties: {
@@ -43,8 +27,9 @@ Polymer({
       notify: true,
     },
 
-    // True if waiting on the search backend.
-    searching: {
+    // True if the backend is processing and a spinner should be shown in the
+    // toolbar.
+    spinnerActive: {
       type: Boolean,
       value: false
     },
@@ -96,17 +81,11 @@ Polymer({
   },
 
   /**
-   * If the search term has changed reload for the new search.
+   * @param {!CustomEvent} event
+   * @private
    */
-  onSearch: function(searchTerm) {
-    if (searchTerm != this.searchTerm)
-      this.searchTerm = searchTerm;
-  },
-
-  attached: function() {
-    this.searchFieldDelegate_ = new ToolbarSearchFieldDelegate(this);
-    /** @type {!CrToolbarElement} */(this.$['main-toolbar']).getSearchField()
-        .setDelegate(this.searchFieldDelegate_);
+  onSearchChanged_: function(event) {
+    this.searchTerm = /** @type {string} */ (event.detail);
   },
 
   onClearSelectionTap_: function() {

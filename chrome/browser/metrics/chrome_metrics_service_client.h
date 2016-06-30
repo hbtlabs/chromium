@@ -22,6 +22,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 
+class AntiVirusMetricsProvider;
 class ChromeOSMetricsProvider;
 class GoogleUpdateMetricsProviderWin;
 class PluginMetricsProvider;
@@ -76,7 +77,7 @@ class ChromeMetricsServiceClient
   base::string16 GetRegistryBackupKey() override;
   void OnPluginLoadingError(const base::FilePath& plugin_path) override;
   bool IsReportingPolicyManaged() override;
-  EnableMetricsDefault GetDefaultOptIn() override;
+  metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
   bool IsUMACellularUploadLogicEnabled() override;
 
   // Persistent browser metrics need to be persisted somewhere. This constant
@@ -103,8 +104,12 @@ class ChromeMetricsServiceClient
   void OnInitTaskGotPluginInfo();
 
   // Called after GoogleUpdate init task has been completed that continues the
-  // init task by loading drive metrics.
+  // init task by loading AntiVirus metrics.
   void OnInitTaskGotGoogleUpdateData();
+
+  // Called after AntiVirus init task has been completed that continues the
+  // init task by loading drive metrics.
+  void OnInitTaskGotAntiVirusData();
 
   // Called after the drive metrics init task has been completed that continues
   // the init task by loading profiler data.
@@ -190,6 +195,10 @@ class ChromeMetricsServiceClient
   // The GoogleUpdateMetricsProviderWin instance that was registered with
   // MetricsService. Has the same lifetime as |metrics_service_|.
   GoogleUpdateMetricsProviderWin* google_update_metrics_provider_;
+
+  // The AntiVirusMetricsProvider instance that was registered with
+  // MetricsService. Has the same lifetime as |metrics_service_|.
+  AntiVirusMetricsProvider* antivirus_metrics_provider_;
 #endif
 
   // The DriveMetricsProvider instance that was registered with MetricsService.

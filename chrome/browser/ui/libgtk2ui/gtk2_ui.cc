@@ -836,12 +836,12 @@ gfx::FontRenderParams Gtk2UI::GetDefaultFontRenderParams() const {
 void Gtk2UI::GetDefaultFontDescription(
     std::string* family_out,
     int* size_pixels_out,
-    bool* italic_out,
+    int* style_out,
     gfx::Font::Weight* weight_out,
     gfx::FontRenderParams* params_out) const {
   *family_out = default_font_family_;
   *size_pixels_out = default_font_size_pixels_;
-  *italic_out = (default_font_style_ & gfx::Font::ITALIC) != 0;
+  *style_out = default_font_style_;
   *weight_out = default_font_weight_;
   *params_out = default_font_render_params_;
 }
@@ -996,13 +996,18 @@ void Gtk2UI::LoadGtkValues() {
 void Gtk2UI::UpdateMaterialDesignColors() {
   // TODO(varkha): This should be merged back into LoadGtkValues() once Material
   // Design is on unconditionally.
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    NativeThemeGtk2* theme = NativeThemeGtk2::instance();
-    SkColor label_color =
-        theme->GetSystemColor(ui::NativeTheme::kColorId_LabelEnabledColor);
-    colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
-        color_utils::BlendTowardOppositeLuma(label_color, 50);
+  // Early return when Material Design Controller is not initialized yet. This
+  // is harmless and the colors will get updated when this method is called
+  // again after the initialization. See http://crbug.com/622234.
+  if (!ui::MaterialDesignController::is_mode_initialized() ||
+      !ui::MaterialDesignController::IsModeMaterial()) {
+    return;
   }
+  NativeThemeGtk2* theme = NativeThemeGtk2::instance();
+  SkColor label_color =
+      theme->GetSystemColor(ui::NativeTheme::kColorId_LabelEnabledColor);
+  colors_[ThemeProperties::COLOR_BACKGROUND_TAB_TEXT] =
+      color_utils::BlendTowardOppositeLuma(label_color, 50);
 }
 
 SkColor Gtk2UI::BuildFrameColors() {

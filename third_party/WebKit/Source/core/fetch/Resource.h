@@ -37,8 +37,8 @@
 #include "wtf/Allocator.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -46,7 +46,6 @@ struct FetchInitiatorInfo;
 class CachedMetadata;
 class FetchRequest;
 class ResourceClient;
-class ResourceFetcher;
 class ResourceTimingInfo;
 class ResourceLoader;
 class SecurityOrigin;
@@ -92,8 +91,6 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
-    void load(ResourceFetcher*);
-
     virtual void setEncoding(const String&) { }
     virtual String encoding() const { return String(); }
     virtual void appendData(const char*, size_t);
@@ -118,6 +115,8 @@ public:
     const ResourceRequest& lastResourceRequest() const;
 
     virtual void setRevalidatingRequest(const ResourceRequest&);
+
+    void setFetcherSecurityOrigin(SecurityOrigin* origin) { m_fetcherSecurityOrigin = origin; }
 
     // This url can have a fragment, but it can match resources that differ by the fragment only.
     const KURL& url() const { return m_resourceRequest.url();}
@@ -155,6 +154,7 @@ public:
     bool isLoading() const { return m_status == Pending; }
     bool stillNeedsLoad() const { return m_status < Pending; }
 
+    void setLoader(ResourceLoader*);
     ResourceLoader* loader() const { return m_loader.get(); }
 
     virtual bool isImage() const { return false; }
@@ -181,7 +181,7 @@ public:
     // already been made to not follow it.
     virtual void willNotFollowRedirect() {}
 
-    virtual void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>);
+    virtual void responseReceived(const ResourceResponse&, std::unique_ptr<WebDataConsumerHandle>);
     void setResponse(const ResourceResponse&);
     const ResourceResponse& response() const { return m_response; }
 
@@ -212,7 +212,7 @@ public:
     bool canReuseRedirectChain();
     bool mustRevalidateDueToCacheHeaders();
     bool canUseCacheValidator();
-    bool isCacheValidator() const { return !m_revalidatingRequest.isNull(); }
+    bool isCacheValidator() const { return m_isRevalidating; }
     bool hasCacheControlNoStoreHeader() const;
     bool hasVaryHeader() const;
     virtual bool mustRefetchDueToIntegrityMetadata(const FetchRequest& request) const { return false; }
@@ -291,7 +291,6 @@ protected:
     String getMemoryDumpName() const;
 
     ResourceRequest m_resourceRequest;
-    ResourceRequest m_revalidatingRequest;
     Member<ResourceLoader> m_loader;
     ResourceLoaderOptions m_options;
 
@@ -345,6 +344,7 @@ private:
 
     unsigned m_needsSynchronousCacheHit : 1;
     unsigned m_linkPreload : 1;
+    bool m_isRevalidating : 1;
 
     // Ordered list of all redirects followed while fetching this resource.
     Vector<RedirectPair> m_redirectChain;

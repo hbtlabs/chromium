@@ -30,6 +30,8 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
 
   static std::vector<WmWindow*> FromAuraWindows(
       const std::vector<aura::Window*>& aura_windows);
+  static std::vector<aura::Window*> ToAuraWindows(
+      const std::vector<WmWindow*>& windows);
 
   static aura::Window* GetAuraWindow(WmWindow* wm_window) {
     return const_cast<aura::Window*>(
@@ -109,6 +111,8 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   void SetShowState(ui::WindowShowState show_state) override;
   ui::WindowShowState GetShowState() const override;
   void SetRestoreShowState(ui::WindowShowState show_state) override;
+  void SetRestoreOverrides(const gfx::Rect& bounds_override,
+                           ui::WindowShowState window_state_override) override;
   void SetLockedToRoot(bool value) override;
   void SetCapture() override;
   bool HasCapture() override;
@@ -126,6 +130,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   bool IsAlwaysOnTop() const override;
   void Hide() override;
   void Show() override;
+  views::Widget* GetInternalWidget() override;
   void CloseWidget() override;
   bool IsFocused() const override;
   bool IsActive() const override;
@@ -135,6 +140,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   void Maximize() override;
   void Minimize() override;
   void Unminimize() override;
+  void SetExcludedFromMru(bool excluded_from_mru) override;
   std::vector<WmWindow*> GetChildren() override;
   void ShowResizeShadow(int component) override;
   void HideResizeShadow() override;
@@ -146,9 +152,11 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   void SetDescendantsStayInSameRootWindow(bool value) override;
   void AddObserver(WmWindowObserver* observer) override;
   void RemoveObserver(WmWindowObserver* observer) override;
+  bool HasObserver(const WmWindowObserver* observer) const override;
 
  private:
   // aura::WindowObserver:
+  void OnWindowHierarchyChanging(const HierarchyChangeParams& params) override;
   void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
   void OnWindowStackingChanged(aura::Window* window) override;
   void OnWindowPropertyChanged(aura::Window* window,
@@ -158,6 +166,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
   void OnWindowDestroying(aura::Window* window) override;
+  void OnWindowDestroyed(aura::Window* window) override;
   void OnWindowVisibilityChanging(aura::Window* window, bool visible) override;
   void OnWindowTitleChanged(aura::Window* window) override;
 

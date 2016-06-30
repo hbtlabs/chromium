@@ -45,7 +45,7 @@ class ScrollAnimatorBase;
 class ScrollableArea;
 class ScrollbarTheme;
 
-class PLATFORM_EXPORT Scrollbar : public Widget, public ScrollbarThemeClient {
+class PLATFORM_EXPORT Scrollbar : public Widget, public ScrollbarThemeClient, public DisplayItemClient {
 public:
     static Scrollbar* create(ScrollableArea* scrollableArea, ScrollbarOrientation orientation, ScrollbarControlSize size, HostWindow* hostWindow)
     {
@@ -231,8 +231,6 @@ private:
 
     bool m_trackNeedsRepaint;
     bool m_thumbNeedsRepaint;
-
-    DISPLAY_ITEM_CACHE_STATUS_IMPLEMENTATION
 };
 
 DEFINE_TYPE_CASTS(Scrollbar, Widget, widget, widget->isScrollbar(), widget.isScrollbar());

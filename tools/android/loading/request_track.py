@@ -24,6 +24,7 @@ import devtools_monitor
 
 class Timing(object):
   """Collects the timing data for a request."""
+  UNVAILABLE = -1
   _TIMING_NAMES = (
       ('connectEnd', 'connect_end'), ('connectStart', 'connect_start'),
       ('dnsEnd', 'dns_end'), ('dnsStart', 'dns_start'),
@@ -44,7 +45,7 @@ class Timing(object):
     Initialize with keywords arguments from __slots__.
     """
     for slot in self.__slots__:
-      setattr(self, slot, -1)
+      setattr(self, slot, self.UNVAILABLE)
     for (attr, value) in kwargs.items():
       setattr(self, attr, value)
 
@@ -174,6 +175,7 @@ class Request(object):
                  chunks received, with their offset in ms relative to
                  Timing.requestTime.
     failed: (bool) Whether the request failed.
+    error_text: (str) User friendly error message when request failed.
     start_msec: (float) Request start time, in milliseconds from chrome start.
     end_msec: (float) Request end time, in milliseconds from chrome start.
       start_msec.
@@ -210,6 +212,7 @@ class Request(object):
     self.encoded_data_length = 0
     self.data_chunks = []
     self.failed = False
+    self.error_text = None
 
   @property
   def start_msec(self):
@@ -249,6 +252,25 @@ class Request(object):
     else:
       result.timing = Timing(request_time=result.timestamp)
     return result
+
+  def GetEncodedDataLength(self):
+    """Get the total amount of encoded data no matter whether load has finished
+    or not.
+    """
+    assert self.HasReceivedResponse()
+    assert not self.from_disk_cache and not self.served_from_cache
+    assert self.protocol != 'about'
+    if self.failed:
+      # TODO(gabadie): Once crbug.com/622018 is fixed, remove this branch.
+      return 0
+    if self.timing.loading_finished != Timing.UNVAILABLE:
+      encoded_data_length = self.encoded_data_length
+      assert encoded_data_length > 0
+    else:
+      encoded_data_length = sum(
+          [chunk_size for _, chunk_size in self.data_chunks])
+      assert encoded_data_length > 0 or len(self.data_chunks) == 0
+    return encoded_data_length
 
   def GetHTTPResponseHeader(self, header_name):
     """Gets the value of a HTTP response header.
@@ -730,7 +752,8 @@ class RequestTrack(devtools_monitor.Track):
     return initiator
 
   def _RequestServedFromCache(self, request_id, _):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (request, status) = self._requests_in_flight[request_id]
     assert status == RequestTrack._STATUS_SENT
     request.served_from_cache = True
@@ -777,6 +800,8 @@ class RequestTrack(devtools_monitor.Track):
     self._request_id_to_response_received[request_id] = params
 
   def _DataReceived(self, request_id, params):
+    if request_id not in self._requests_in_flight:
+      return
     (r, status) = self._requests_in_flight[request_id]
     assert (status == RequestTrack._STATUS_RESPONSE
             or status == RequestTrack._STATUS_DATA)
@@ -785,27 +810,32 @@ class RequestTrack(devtools_monitor.Track):
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_DATA)
 
   def _LoadingFinished(self, request_id, params):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (r, status) = self._requests_in_flight[request_id]
     assert (status == RequestTrack._STATUS_RESPONSE
             or status == RequestTrack._STATUS_DATA)
     r.encoded_data_length = params['encodedDataLength']
+    assert (r.encoded_data_length > 0 or r.protocol == 'about' or
+            r.from_disk_cache or r.served_from_cache)
     r.timing.loading_finished = r._TimestampOffsetFromStartMs(
         params['timestamp'])
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)
     self._FinalizeRequest(request_id)
 
-  def _LoadingFailed(self, request_id, _):
+  def _LoadingFailed(self, request_id, params):
     if request_id not in self._requests_in_flight:
       logging.warning('An unknown request failed: %s' % request_id)
       return
     (r, _) = self._requests_in_flight[request_id]
     r.failed = True
+    r.error_text = params['errorText']
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)
     self._FinalizeRequest(request_id)
 
   def _FinalizeRequest(self, request_id):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (request, status) = self._requests_in_flight[request_id]
     assert status == RequestTrack._STATUS_FINISHED
     del self._requests_in_flight[request_id]

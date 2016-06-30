@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -14,26 +16,36 @@
         {
           "object": "LayoutBlockFlow DIV id='inner-editor'",
           "rect": [30, 30, 200, 23],
-          "reason": "invalidate paint rectangle"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [30, 30, 46, 23],
           "reason": "full"
-        },
-        {
-          "object": "InlineTextBox ''",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'NEW'",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutTextControl (positioned) INPUT id='input'",
+      "reason": "style change"
+    },
+    {
+      "object": "LayoutBlockFlow DIV id='inner-editor'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "full"
+    },
+    {
+      "object": "InlineTextBox 'NEW'",
+      "reason": "full"
     }
   ]
 }

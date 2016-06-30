@@ -4,6 +4,8 @@
 
 #include "net/tools/quic/quic_spdy_client_stream.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -55,7 +57,7 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(bool fin,
     return;
   }
 
-  if (!ParseHeaderStatusCode(&response_headers_, &response_code_)) {
+  if (!ParseHeaderStatusCode(response_headers_, &response_code_)) {
     DLOG(ERROR) << "Received invalid response code: "
                 << response_headers_[":status"].as_string();
     Reset(QUIC_BAD_APPLICATION_PAYLOAD);
@@ -83,7 +85,7 @@ void QuicSpdyClientStream::OnInitialHeadersComplete(
     return;
   }
 
-  if (!ParseHeaderStatusCode(&response_headers_, &response_code_)) {
+  if (!ParseHeaderStatusCode(response_headers_, &response_code_)) {
     DLOG(ERROR) << "Received invalid response code: "
                 << response_headers_[":status"].as_string();
     Reset(QUIC_BAD_APPLICATION_PAYLOAD);
@@ -180,12 +182,13 @@ void QuicSpdyClientStream::OnDataAvailable() {
   }
 }
 
-size_t QuicSpdyClientStream::SendRequest(const SpdyHeaderBlock& headers,
+size_t QuicSpdyClientStream::SendRequest(SpdyHeaderBlock headers,
                                          StringPiece body,
                                          bool fin) {
   bool send_fin_with_headers = fin && body.empty();
   size_t bytes_sent = body.size();
-  header_bytes_written_ = WriteHeaders(headers, send_fin_with_headers, nullptr);
+  header_bytes_written_ =
+      WriteHeaders(std::move(headers), send_fin_with_headers, nullptr);
   bytes_sent += header_bytes_written_;
 
   if (!body.empty()) {

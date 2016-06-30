@@ -64,6 +64,7 @@ test("blimp_unittests") {
     "//blimp/client:app_unit_tests",
     "//blimp/client:blimp_client_unit_tests",
     "//blimp/client:feature_unit_tests",
+    "//blimp/client/core:unit_tests",
     "//blimp/common:unit_tests",
     "//blimp/net:unit_tests",
   ]
@@ -76,7 +77,7 @@ test("blimp_unittests") {
 if (is_linux) {
   test("blimp_browsertests") {
     deps = [
-      "//blimp/test:engine_browsertests",
+      "//blimp/engine:browser_tests",
     ]
   }
 
@@ -135,6 +136,45 @@ if (is_linux) {
     # itself).
     deps = [
       ":blimp_engine_env_tests_group",
+    ]
+  }
+
+  # Builds and bundles the tests into a tarball that can be used to build a
+  # Docker image.
+  action("blimp_engine_env_tests_bundle") {
+    testonly = true
+    script = "//blimp/tools/create-bundle.py"
+
+    # These form the arguments to the script.
+    _rebased_out_dir = rebase_path(root_out_dir)
+    _rebased_dockerfile = rebase_path("//blimp/engine/testing/Dockerfile")
+    _rebased_dockerfile_base = rebase_path("//blimp/tools/Dockerfile.base")
+    _bundle = "$root_out_dir/blimp_engine_env_tests_bundle.tar.gz"
+
+    # Depending on this ensures that both the manifest is generated
+    # and everything listed in the manifest has been built.
+    deps = [
+      ":generate_blimp_engine_env_tests_manifest",
+    ]
+
+    sources = [
+      _blimp_engine_env_tests_manifest,
+      _rebased_dockerfile,
+      _rebased_dockerfile_base,
+    ]
+    outputs = [
+      _bundle,
+    ]
+    args = [
+      "--build-dir",
+      _rebased_out_dir,
+      "--filelist",
+      _rebased_dockerfile,
+      _rebased_dockerfile_base,
+      "--manifest",
+      _rebased_blimp_engine_env_tests_manifest,
+      "--output",
+      rebase_path(_bundle),
     ]
   }
 }

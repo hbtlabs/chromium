@@ -29,7 +29,7 @@ class NavigationControllerImpl;
 class NavigationEntryImpl;
 class NavigationRequest;
 class RenderFrameHostImpl;
-class ResourceRequestBody;
+class ResourceRequestBodyImpl;
 class StreamHandle;
 struct BeginNavigationParams;
 struct CommonNavigationParams;
@@ -110,13 +110,16 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
 
   // The RenderFrameHostImpl has received a request to open a URL with the
   // specified |disposition|.
-  virtual void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                              const GURL& url,
-                              SiteInstance* source_site_instance,
-                              const Referrer& referrer,
-                              WindowOpenDisposition disposition,
-                              bool should_replace_current_entry,
-                              bool user_gesture) {}
+  virtual void RequestOpenURL(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      bool uses_post,
+      const scoped_refptr<ResourceRequestBodyImpl>& body,
+      SiteInstance* source_site_instance,
+      const Referrer& referrer,
+      WindowOpenDisposition disposition,
+      bool should_replace_current_entry,
+      bool user_gesture) {}
 
   // The RenderFrameHostImpl wants to transfer the request to a new renderer.
   // |redirect_chain| contains any redirect URLs (excluding |url|) that happened
@@ -132,7 +135,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const GlobalRequestID& transferred_global_request_id,
       bool should_replace_current_entry,
       const std::string& method,
-      scoped_refptr<ResourceRequestBody> post_body) {}
+      scoped_refptr<ResourceRequestBodyImpl> post_body) {}
 
   // PlzNavigate
   // Called after receiving a BeforeUnloadACK IPC from the renderer. If

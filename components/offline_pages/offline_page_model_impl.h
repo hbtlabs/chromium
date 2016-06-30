@@ -27,6 +27,7 @@
 #include "components/offline_pages/offline_page_archiver.h"
 #include "components/offline_pages/offline_page_metadata_store.h"
 #include "components/offline_pages/offline_page_model.h"
+#include "components/offline_pages/offline_page_model_event_logger.h"
 #include "components/offline_pages/offline_page_storage_manager.h"
 #include "components/offline_pages/offline_page_types.h"
 
@@ -103,7 +104,7 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
       const SingleOfflinePageItemCallback callback) override;
   const OfflinePageItem* MaybeGetBestPageForOnlineURL(
       const GURL& online_url) const override;
-  void CheckForExternalFileDeletion() override;
+  void CheckMetadataConsistency() override;
   void ExpirePages(const std::vector<int64_t>& offline_ids,
                    const base::Time& expiration_time,
                    const base::Callback<void(bool)>& callback) override;
@@ -115,6 +116,8 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   OfflinePageStorageManager* GetStorageManager();
 
   bool is_loaded() const override;
+
+  OfflineEventLogger* GetLogger() override;
 
  protected:
   // Adding a protected constructor for testing-only purposes in
@@ -149,6 +152,8 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void GetBestPageForOnlineURLWhenLoadDone(
       const GURL& online_url,
       const SingleOfflinePageItemCallback& callback) const;
+  void MarkPageAccessedWhenLoadDone(int64_t offline_id);
+  void CheckMetadataConsistencyWhenLoadDone();
 
   // Callback for checking whether we have offline pages.
   void HasPagesAfterLoadDone(const std::string& name_space,
@@ -193,12 +198,27 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void OnMarkPageAccesseDone(const OfflinePageItem& offline_page_item,
                              bool success);
 
-  // Callbacks for checking if offline pages are missing archive files.
-  void ScanForMissingArchiveFiles(
+  // Callbacks for checking metadata consistency.
+  void CheckMetadataConsistencyForArchivePaths(
       const std::set<base::FilePath>& archive_paths);
-  void OnRemoveOfflinePagesMissingArchiveFileDone(
-      const std::vector<std::pair<int64_t, ClientId>>& offline_client_id_pairs,
-      DeletePageResult result);
+  // Callback called after headless archives deleted. Orphaned archives are
+  // archives files on disk which are not pointed to by any of the page items
+  // in metadata store.
+  void ExpirePagesMissingArchiveFile(
+      const std::set<base::FilePath>& archive_paths);
+  void OnExpirePagesMissingArchiveFileDone(
+      const std::vector<int64_t>& offline_ids,
+      bool success);
+  void DeleteOrphanedArchives(const std::set<base::FilePath>& archive_paths);
+  void OnDeleteOrphanedArchivesDone(const std::vector<base::FilePath>& archives,
+                                    bool success);
+
+  // Callbacks for deleting pages with same URL when saving pages.
+  void OnPagesFoundWithSameURL(const ClientId& client_id,
+                               int64_t offline_id,
+                               size_t pages_allowed,
+                               const MultipleOfflinePageItemResult& items);
+  void OnDeleteOldPagesWithSameURL(DeletePageResult result);
 
   // Steps for clearing all.
   void OnRemoveAllFilesDoneForClearAll(const base::Closure& callback,
@@ -233,6 +253,9 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void OnStorageCleared(size_t expired_page_count,
                         OfflinePageStorageManager::ClearStorageResult result);
 
+  // Post task to clear storage.
+  void PostClearStorageIfNeededTask();
+
   void RunWhenLoaded(const base::Closure& job);
 
   // Persistent store for offline page metadata.
@@ -264,6 +287,9 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
 
   // Manager for the offline archive files and directory.
   std::unique_ptr<ArchiveManager> archive_manager_;
+
+  // Logger to facilitate recording of events.
+  OfflinePageModelEventLogger offline_event_logger_;
 
   base::WeakPtrFactory<OfflinePageModelImpl> weak_ptr_factory_;
 

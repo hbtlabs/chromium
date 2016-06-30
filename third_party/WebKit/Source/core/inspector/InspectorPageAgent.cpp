@@ -71,6 +71,7 @@
 #include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/TextEncoding.h"
+#include <memory>
 
 namespace blink {
 
@@ -148,12 +149,12 @@ static bool hasTextContent(Resource* cachedResource)
     return type == Resource::CSSStyleSheet || type == Resource::XSLStyleSheet || type == Resource::Script || type == Resource::Raw || type == Resource::ImportResource || type == Resource::MainResource;
 }
 
-static PassOwnPtr<TextResourceDecoder> createResourceTextDecoder(const String& mimeType, const String& textEncodingName)
+static std::unique_ptr<TextResourceDecoder> createResourceTextDecoder(const String& mimeType, const String& textEncodingName)
 {
     if (!textEncodingName.isEmpty())
         return TextResourceDecoder::create("text/plain", textEncodingName);
     if (DOMImplementation::isXMLMIMEType(mimeType)) {
-        OwnPtr<TextResourceDecoder> decoder = TextResourceDecoder::create("application/xml");
+        std::unique_ptr<TextResourceDecoder> decoder = TextResourceDecoder::create("application/xml");
         decoder->useLenientXMLDecoding();
         return decoder;
     }
@@ -163,7 +164,7 @@ static PassOwnPtr<TextResourceDecoder> createResourceTextDecoder(const String& m
         return TextResourceDecoder::create("text/plain", "UTF-8");
     if (DOMImplementation::isTextMIMEType(mimeType))
         return TextResourceDecoder::create("text/plain", "ISO-8859-1");
-    return PassOwnPtr<TextResourceDecoder>();
+    return std::unique_ptr<TextResourceDecoder>();
 }
 
 static void maybeEncodeTextContent(const String& textContent, PassRefPtr<SharedBuffer> buffer, String* result, bool* base64Encoded)
@@ -188,7 +189,7 @@ bool InspectorPageAgent::sharedBufferContent(PassRefPtr<SharedBuffer> buffer, co
         return false;
 
     String textContent;
-    OwnPtr<TextResourceDecoder> decoder = createResourceTextDecoder(mimeType, textEncodingName);
+    std::unique_ptr<TextResourceDecoder> decoder = createResourceTextDecoder(mimeType, textEncodingName);
     WTF::TextEncoding encoding(textEncodingName);
 
     if (decoder) {
@@ -498,7 +499,7 @@ void InspectorPageAgent::getResourceContent(ErrorString* errorString, const Stri
         callback->sendFailure("Agent is not enabled.");
         return;
     }
-    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorPageAgent::getResourceContentAfterResourcesContentLoaded, this, frameId, url, passed(std::move(callback))));
+    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorPageAgent::getResourceContentAfterResourcesContentLoaded, wrapPersistent(this), frameId, url, passed(std::move(callback))));
 }
 
 void InspectorPageAgent::searchContentAfterResourcesContentLoaded(const String& frameId, const String& url, const String& query, bool caseSensitive, bool isRegex, std::unique_ptr<SearchInResourceCallback> callback)
@@ -526,7 +527,7 @@ void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, c
         callback->sendFailure("Agent is not enabled.");
         return;
     }
-    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorPageAgent::searchContentAfterResourcesContentLoaded, this, frameId, url, query, optionalCaseSensitive.fromMaybe(false), optionalIsRegex.fromMaybe(false), passed(std::move(callback))));
+    m_inspectorResourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorPageAgent::searchContentAfterResourcesContentLoaded, wrapPersistent(this), frameId, url, query, optionalCaseSensitive.fromMaybe(false), optionalIsRegex.fromMaybe(false), passed(std::move(callback))));
 }
 
 void InspectorPageAgent::setDocumentContent(ErrorString* errorString, const String& frameId, const String& html)

@@ -66,9 +66,15 @@ class SmoothnessToughFiltersCases(_Smoothness):
     return 'smoothness.tough_filters_cases'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # http://crbug.com/616520
-    return (cls.IsSvelte(possible_browser) and
-            possible_browser.browser_type == 'reference')
+  def ShouldDisable(cls, possible_browser):
+    # http://crbug.com/616520
+    if (cls.IsSvelte(possible_browser) and
+        possible_browser.browser_type == 'reference'):
+      return True
+    # http://crbug.com/624032
+    if possible_browser.platform.GetDeviceTypeName() == 'Nexus 6':
+      return True
+    return False
 
 
 class SmoothnessToughPathRenderingCases(_Smoothness):
@@ -83,6 +89,7 @@ class SmoothnessToughPathRenderingCases(_Smoothness):
 
 
 @benchmark.Disabled('android')  # crbug.com/526901
+@benchmark.Disabled('win', 'mac')  # crbug.com/623105
 class SmoothnessToughCanvasCases(_Smoothness):
   """Measures frame rate and a variety of other statistics.
 

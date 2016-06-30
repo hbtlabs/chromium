@@ -31,6 +31,10 @@ namespace ui {
 class Layer;
 }
 
+namespace views {
+class Widget;
+}
+
 namespace ash {
 
 class WmLayoutManager;
@@ -53,6 +57,8 @@ class ASH_EXPORT WmWindow {
     USE_LOCAL_COORDINATES,
     USE_SCREEN_COORDINATES,
   };
+
+  using Windows = std::vector<WmWindow*>;
 
   WmWindow* GetRootWindow() {
     return const_cast<WmWindow*>(
@@ -132,7 +138,7 @@ class ASH_EXPORT WmWindow {
         const_cast<const WmWindow*>(this)->GetTransientParent());
   }
   virtual const WmWindow* GetTransientParent() const = 0;
-  virtual std::vector<WmWindow*> GetTransientChildren() = 0;
+  virtual Windows GetTransientChildren() = 0;
 
   virtual void SetLayoutManager(
       std::unique_ptr<WmLayoutManager> layout_manager) = 0;
@@ -185,6 +191,13 @@ class ASH_EXPORT WmWindow {
 
   virtual void SetRestoreShowState(ui::WindowShowState show_state) = 0;
 
+  // Sets the restore bounds and show state overrides. These values take
+  // precedence over the restore bounds and restore show state (if set).
+  // If |bounds_override| is empty the values are cleared.
+  virtual void SetRestoreOverrides(
+      const gfx::Rect& bounds_override,
+      ui::WindowShowState window_state_override) = 0;
+
   // If |value| is true the window can not be moved to another root, regardless
   // of the bounds set on it.
   virtual void SetLockedToRoot(bool value) = 0;
@@ -201,6 +214,11 @@ class ASH_EXPORT WmWindow {
   virtual void Hide() = 0;
   virtual void Show() = 0;
 
+  // Returns the widget associated with this window, or null if not associated
+  // with a widget. Only ash system UI widgets are returned, not widgets created
+  // by the mus window manager code to show a non-client frame.
+  virtual views::Widget* GetInternalWidget() = 0;
+
   // Requests the window to close and destroy itself. This is intended to
   // forward to an associated widget.
   virtual void CloseWidget() = 0;
@@ -216,6 +234,7 @@ class ASH_EXPORT WmWindow {
   virtual void Maximize() = 0;
   virtual void Minimize() = 0;
   virtual void Unminimize() = 0;
+  virtual void SetExcludedFromMru(bool excluded_from_mru) = 0;
 
   virtual bool CanMaximize() const = 0;
   virtual bool CanMinimize() const = 0;
@@ -227,7 +246,7 @@ class ASH_EXPORT WmWindow {
   virtual void StackChildAbove(WmWindow* child, WmWindow* target) = 0;
   virtual void StackChildBelow(WmWindow* child, WmWindow* target) = 0;
 
-  virtual std::vector<WmWindow*> GetChildren() = 0;
+  virtual Windows GetChildren() = 0;
 
   // Shows/hides the resize shadow. |component| is the component to show the
   // shadow for (one of the constants in ui/base/hit_test.h).
@@ -254,6 +273,7 @@ class ASH_EXPORT WmWindow {
 
   virtual void AddObserver(WmWindowObserver* observer) = 0;
   virtual void RemoveObserver(WmWindowObserver* observer) = 0;
+  virtual bool HasObserver(const WmWindowObserver* observer) const = 0;
 
  protected:
   virtual ~WmWindow() {}

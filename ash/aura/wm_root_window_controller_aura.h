@@ -6,8 +6,8 @@
 #define ASH_AURA_WM_ROOT_CONTROLLER_AURA_H_
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/common/wm_root_window_controller.h"
-#include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -36,6 +36,9 @@ class ASH_EXPORT WmRootWindowControllerAura : public WmRootWindowController,
   bool HasShelf() override;
   WmShell* GetShell() override;
   wm::WorkspaceWindowState GetWorkspaceWindowState() override;
+  void SetMaximizeBackdropDelegate(
+      std::unique_ptr<WorkspaceLayoutManagerBackdropDelegate> delegate)
+      override;
   AlwaysOnTopController* GetAlwaysOnTopController() override;
   WmShelf* GetShelf() override;
   WmWindow* GetWindow() override;
@@ -50,8 +53,8 @@ class ASH_EXPORT WmRootWindowControllerAura : public WmRootWindowController,
   // ShellObserver:
   void OnDisplayWorkAreaInsetsChanged() override;
   void OnFullscreenStateChanged(bool is_fullscreen,
-                                aura::Window* root_window) override;
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
+                                WmWindow* root_window) override;
+  void OnShelfAlignmentChanged(WmWindow* root_window) override;
 
  private:
   RootWindowController* root_window_controller_;

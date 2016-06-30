@@ -61,6 +61,7 @@ class CdmFactory;
 }
 
 namespace shell {
+class InterfaceRegistry;
 class ShellClient;
 }
 
@@ -106,6 +107,7 @@ class BrowserURLHandler;
 class ClientCertificateDelegate;
 class DevToolsManagerDelegate;
 class ExternalVideoSurfaceContainer;
+class GeolocationDelegate;
 class LocationProvider;
 class MediaObserver;
 class NavigationHandle;
@@ -116,10 +118,10 @@ class RenderFrameHost;
 class RenderProcessHost;
 class RenderViewHost;
 class ResourceContext;
-class ServiceRegistry;
 class SiteInstance;
 class SpeechRecognitionManagerDelegate;
 class TracingDelegate;
+class VpnServiceProxy;
 class WebContents;
 class WebContentsViewDelegate;
 struct MainFunctionParams;
@@ -241,6 +243,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns whether a URL should be allowed to open from a specific context.
   // This also applies in cases where the new URL will open in another process.
   virtual bool ShouldAllowOpenURL(SiteInstance* site_instance, const GURL& url);
+
+  // Allows the embedder to override OpenURLParams.
+  virtual void OverrideOpenURLParams(SiteInstance* site_instance,
+                                     OpenURLParams* params) {}
 
   // Returns whether a new view for a given |site_url| can be launched in a
   // given |process_host|.
@@ -529,8 +535,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Getters for common objects.
   virtual net::NetLog* GetNetLog();
 
-  // Creates a new AccessTokenStore for gelocation.
-  virtual AccessTokenStore* CreateAccessTokenStore();
+  // Allows the embedder to provide a Delegate for Geolocation to override some
+  // functionality of the API (e.g. AccessTokenStore, LocationProvider).
+  virtual GeolocationDelegate* CreateGeolocationDelegate();
 
   // Returns true if fast shutdown is possible.
   virtual bool IsFastShutdownPossible();
@@ -587,6 +594,11 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool IsPepperVpnProviderAPIAllowed(BrowserContext* browser_context,
                                              const GURL& url);
 
+  // Creates a new VpnServiceProxy. The caller owns the returned value. It's
+  // valid to return nullptr.
+  virtual std::unique_ptr<VpnServiceProxy> GetVpnServiceProxy(
+      BrowserContext* browser_context);
+
   // Returns an implementation of a file selecition policy. Can return nullptr.
   virtual ui::SelectFilePolicy* CreateSelectFilePolicy(
       WebContents* web_contents);
@@ -595,6 +607,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   // FileSystem API.
   virtual void GetAdditionalAllowedSchemesForFileSystem(
       std::vector<std::string>* additional_schemes) {}
+
+  // |schemes| is a return value parameter that gets a whitelist of schemes that
+  // should bypass the Is Privileged Context check.
+  // See http://www.w3.org/TR/powerful-features/#settings-privileged
+  virtual void GetSchemesBypassingSecureContextCheckWhitelist(
+      std::set<std::string>* schemes) {}
 
   // Returns auto mount handlers for URL requests for FileSystem APIs.
   virtual void GetURLRequestAutoMountHandlers(
@@ -608,13 +626,6 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* browser_context,
       const base::FilePath& storage_partition_path,
       ScopedVector<storage::FileSystemBackend>* additional_backends) {}
-
-  // Allows an embedder to return its own LocationProvider implementation.
-  // Return nullptr to use the default one for the platform to be created.
-  // FYI: Used by an external project; please don't remove.
-  // Contact Viatcheslav Ostapenko at sl.ostapenko@samsung.com for more
-  // information.
-  virtual LocationProvider* OverrideSystemLocationProvider();
 
   // Creates a new DevToolsManagerDelegate. The caller owns the returned value.
   // It's valid to return nullptr.
@@ -635,23 +646,27 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* browser_context,
       const GURL& url);
 
-  // Allows the embedder to register MojoShellConnection::Listeners.
-  virtual void AddMojoShellConnectionListeners() {}
+  // Generate a Shell user-id for the supplied browser context. Defaults to
+  // returning a random GUID.
+  virtual std::string GetShellUserIdForBrowserContext(
+      BrowserContext* browser_context);
 
-  // Allows to register browser Mojo services exposed through the
+  // Allows to register browser Mojo interfaces exposed through the
   // RenderProcessHost.
-  virtual void RegisterRenderProcessMojoServices(ServiceRegistry* registry) {}
+  virtual void ExposeInterfacesToRenderer(
+      shell::InterfaceRegistry* registry,
+      RenderProcessHost* render_process_host) {}
 
-  // Allows to register browser Mojo services exposed through the
+  // Allows to register browser Mojo interfaces exposed through the
   // FrameMojoShell.
-  virtual void RegisterFrameMojoShellServices(
-      ServiceRegistry* registry,
+  virtual void RegisterFrameMojoShellInterfaces(
+      shell::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
-  // Allows to register browser Mojo services exposed through the
+  // Allows to register browser Mojo interfaces exposed through the
   // RenderFrameHost.
-  virtual void RegisterRenderFrameMojoServices(
-      ServiceRegistry* registry,
+  virtual void RegisterRenderFrameMojoInterfaces(
+      shell::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
   using StaticMojoApplicationMap = std::map<std::string, MojoApplicationInfo>;
@@ -762,10 +777,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // a process hosting a plugin with the specified |mime_type|.
   virtual bool IsWin32kLockdownEnabledForMimeType(
       const std::string& mime_type) const;
-
-  // Returns true if processes should be launched with a /prefetch:# argument.
-  // See the kPrefetchArgument* constants in content_switches.cc for details.
-  virtual bool ShouldUseWindowsPrefetchArgument() const;
 #endif
 
 #if defined(VIDEO_HOLE)

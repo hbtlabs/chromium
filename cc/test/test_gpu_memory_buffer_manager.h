@@ -21,10 +21,6 @@ class TestGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
   CreateClientGpuMemoryBufferManager();
   int GetClientId() { return client_id_; }
 
-  void SetGpuMemoryBufferIsInUseByMacOSWindowServer(
-      gfx::GpuMemoryBuffer* gpu_memory_buffer,
-      bool in_use);
-
   void OnGpuMemoryBufferDestroyed(gfx::GpuMemoryBufferId gpu_memory_buffer_id);
 
   // Overridden from gpu::GpuMemoryBufferManager:
@@ -37,9 +33,6 @@ class TestGpuMemoryBufferManager : public gpu::GpuMemoryBufferManager {
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,
       gfx::BufferFormat format) override;
-  std::unique_ptr<gfx::GpuMemoryBuffer> CreateGpuMemoryBufferFromClientId(
-      int client_id,
-      const gfx::GpuMemoryBufferId& gpu_memory_buffer_id) override;
   gfx::GpuMemoryBuffer* GpuMemoryBufferFromClientBuffer(
       ClientBuffer buffer) override;
   void SetDestructionSyncToken(gfx::GpuMemoryBuffer* buffer,

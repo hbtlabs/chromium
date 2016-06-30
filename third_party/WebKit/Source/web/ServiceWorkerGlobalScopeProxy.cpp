@@ -64,8 +64,8 @@
 #include "web/WebEmbeddedWorkerImpl.h"
 #include "wtf/Assertions.h"
 #include "wtf/Functional.h"
-#include "wtf/PassOwnPtr.h"
-
+#include "wtf/PtrUtil.h"
+#include <memory>
 #include <utility>
 
 namespace blink {
@@ -124,16 +124,17 @@ void ServiceWorkerGlobalScopeProxy::dispatchExtendableMessageEvent(int eventID, 
     String origin;
     if (!sourceOrigin.isUnique())
         origin = sourceOrigin.toString();
-    ServiceWorker* source = ServiceWorker::from(m_workerGlobalScope->getExecutionContext(), adoptPtr(handle.release()));
+    ServiceWorker* source = ServiceWorker::from(m_workerGlobalScope->getExecutionContext(), wrapUnique(handle.release()));
     WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Message, eventID);
 
     Event* event = ExtendableMessageEvent::create(value, origin, ports, source, observer);
     workerGlobalScope()->dispatchExtendableEvent(event, observer);
 }
 
-void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest)
+void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int responseID, int eventFinishID, const WebServiceWorkerRequest& webRequest)
 {
-    RespondWithObserver* observer = RespondWithObserver::create(workerGlobalScope(), eventID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext());
+    WaitUntilObserver* waitUntilObserver = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Fetch, eventFinishID);
+    RespondWithObserver* respondWithObserver = RespondWithObserver::create(workerGlobalScope(), responseID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext(), waitUntilObserver);
     Request* request = Request::create(workerGlobalScope()->scriptController()->getScriptState(), webRequest);
     request->getHeaders()->setGuard(Headers::ImmutableGuard);
     FetchEventInit eventInit;
@@ -141,24 +142,33 @@ void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int eventID, const WebSer
     eventInit.setRequest(request);
     eventInit.setClientId(webRequest.isMainResourceLoad() ? WebString() : webRequest.clientId());
     eventInit.setIsReload(webRequest.isReload());
-    FetchEvent* fetchEvent = FetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::fetch, eventInit, observer);
+    FetchEvent* fetchEvent = FetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::fetch, eventInit, respondWithObserver, waitUntilObserver);
+    waitUntilObserver->willDispatchEvent();
     DispatchEventResult dispatchResult = workerGlobalScope()->dispatchEvent(fetchEvent);
-    observer->didDispatchEvent(dispatchResult);
+    respondWithObserver->didDispatchEvent(dispatchResult);
+    // false is okay because waitUntil for fetch event doesn't care about the
+    // promise rejection or an uncaught runtime script error.
+    waitUntilObserver->didDispatchEvent(false /* errorOccurred */);
 }
 
-void ServiceWorkerGlobalScopeProxy::dispatchForeignFetchEvent(int eventID, const WebServiceWorkerRequest& webRequest)
+void ServiceWorkerGlobalScopeProxy::dispatchForeignFetchEvent(int responseID, int eventFinishID, const WebServiceWorkerRequest& webRequest)
 {
     RefPtr<SecurityOrigin> origin = SecurityOrigin::create(webRequest.referrerUrl());
-    ForeignFetchRespondWithObserver* observer = ForeignFetchRespondWithObserver::create(workerGlobalScope(), eventID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext(), origin);
+    WaitUntilObserver* waitUntilObserver = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Fetch, eventFinishID);
+    ForeignFetchRespondWithObserver* respondWithObserver = ForeignFetchRespondWithObserver::create(workerGlobalScope(), responseID, webRequest.url(), webRequest.mode(), webRequest.frameType(), webRequest.requestContext(), origin, waitUntilObserver);
     Request* request = Request::create(workerGlobalScope()->scriptController()->getScriptState(), webRequest);
     request->getHeaders()->setGuard(Headers::ImmutableGuard);
     ForeignFetchEventInit eventInit;
     eventInit.setCancelable(true);
     eventInit.setRequest(request);
     eventInit.setOrigin(origin->toString());
-    ForeignFetchEvent* fetchEvent = ForeignFetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::foreignfetch, eventInit, observer);
+    ForeignFetchEvent* fetchEvent = ForeignFetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::foreignfetch, eventInit, respondWithObserver, waitUntilObserver);
+    waitUntilObserver->willDispatchEvent();
     DispatchEventResult dispatchResult = workerGlobalScope()->dispatchEvent(fetchEvent);
-    observer->didDispatchEvent(dispatchResult);
+    respondWithObserver->didDispatchEvent(dispatchResult);
+    // false is okay because waitUntil for foreign fetch event doesn't care
+    // about the promise rejection or an uncaught runtime script error.
+    waitUntilObserver->didDispatchEvent(false /* errorOccurred */);
 }
 
 void ServiceWorkerGlobalScopeProxy::dispatchInstallEvent(int eventID)
@@ -217,7 +227,7 @@ bool ServiceWorkerGlobalScopeProxy::hasFetchEventHandler()
     return m_workerGlobalScope->hasEventListeners(EventTypeNames::fetch);
 }
 
-void ServiceWorkerGlobalScopeProxy::reportException(const String& errorMessage, PassOwnPtr<SourceLocation> location)
+void ServiceWorkerGlobalScopeProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
     client().reportException(errorMessage, location->lineNumber(), location->columnNumber(), location->url());
 }
@@ -230,7 +240,7 @@ void ServiceWorkerGlobalScopeProxy::reportConsoleMessage(ConsoleMessage* console
 void ServiceWorkerGlobalScopeProxy::postMessageToPageInspector(const String& message)
 {
     DCHECK(m_embeddedWorker);
-    document().postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebEmbeddedWorkerImpl::postMessageToPageInspector, AllowCrossThreadAccess(m_embeddedWorker), message));
+    document().postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebEmbeddedWorkerImpl::postMessageToPageInspector, crossThreadUnretained(m_embeddedWorker), message));
 }
 
 void ServiceWorkerGlobalScopeProxy::didEvaluateWorkerScript(bool success)

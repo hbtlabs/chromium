@@ -43,8 +43,10 @@
 #include "public/platform/WebExternalTextureLayer.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "wtf/CheckedNumeric.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
 #include <algorithm>
+#include <memory>
 
 namespace blink {
 
@@ -79,7 +81,7 @@ static bool shouldFailDrawingBufferCreationForTesting = false;
 
 } // namespace
 
-PassRefPtr<DrawingBuffer> DrawingBuffer::create(PassOwnPtr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, bool premultipliedAlpha, bool wantAlphaChannel, bool wantDepthBuffer, bool wantStencilBuffer, bool wantAntialiasing, PreserveDrawingBuffer preserve)
+PassRefPtr<DrawingBuffer> DrawingBuffer::create(std::unique_ptr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, bool premultipliedAlpha, bool wantAlphaChannel, bool wantDepthBuffer, bool wantStencilBuffer, bool wantAntialiasing, PreserveDrawingBuffer preserve)
 {
     ASSERT(contextProvider);
 
@@ -88,7 +90,7 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::create(PassOwnPtr<WebGraphicsContext3DP
         return nullptr;
     }
 
-    OwnPtr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(contextProvider->contextGL());
+    std::unique_ptr<Extensions3DUtil> extensionsUtil = Extensions3DUtil::create(contextProvider->contextGL());
     if (!extensionsUtil->isValid()) {
         // This might be the first time we notice that the GL context is lost.
         return nullptr;
@@ -124,8 +126,8 @@ void DrawingBuffer::forceNextDrawingBufferCreationToFail()
 }
 
 DrawingBuffer::DrawingBuffer(
-    PassOwnPtr<WebGraphicsContext3DProvider> contextProvider,
-    PassOwnPtr<Extensions3DUtil> extensionsUtil,
+    std::unique_ptr<WebGraphicsContext3DProvider> contextProvider,
+    std::unique_ptr<Extensions3DUtil> extensionsUtil,
     bool discardFramebufferSupported,
     bool wantAlphaChannel,
     bool premultipliedAlpha,
@@ -253,10 +255,12 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
         bitmap->setSize(size());
 
         unsigned char* pixels = bitmap->pixels();
+        if (!pixels)
+            return false;
+
         bool needPremultiply = m_wantAlphaChannel && !m_premultipliedAlpha;
         WebGLImageConversion::AlphaOp op = needPremultiply ? WebGLImageConversion::AlphaDoPremultiply : WebGLImageConversion::AlphaDoNothing;
-        if (pixels)
-            readBackFramebuffer(pixels, size().width(), size().height(), ReadbackSkia, op);
+        readBackFramebuffer(pixels, size().width(), size().height(), ReadbackSkia, op);
     }
 
     // We must restore the texture binding since creating new textures,
@@ -296,6 +300,7 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
     frontColorBufferMailbox->mailbox.allowOverlay = frontColorBufferMailbox->textureInfo.imageId != 0;
     frontColorBufferMailbox->mailbox.textureTarget = frontColorBufferMailbox->textureInfo.parameters.target;
     frontColorBufferMailbox->mailbox.textureSize = WebSize(m_size.width(), m_size.height());
+    frontColorBufferMailbox->mailbox.gpuMemoryBufferId = frontColorBufferMailbox->textureInfo.gpuMemoryBufferId;
     setBufferClearNeeded(true);
 
     // set m_parentDrawingBuffer to make sure 'this' stays alive as long as it has live mailboxes
@@ -390,13 +395,18 @@ PassRefPtr<DrawingBuffer::MailboxInfo> DrawingBuffer::recycledMailbox()
     if (m_recycledMailboxQueue.isEmpty())
         return PassRefPtr<MailboxInfo>();
 
+    // Creation of image backed mailboxes is very expensive, so be less
+    // aggressive about pruning them.
+    size_t cacheLimit = 1;
+    if (RuntimeEnabledFeatures::webGLImageChromiumEnabled())
+        cacheLimit = 4;
+
     WebExternalTextureMailbox mailbox;
-    while (!m_recycledMailboxQueue.isEmpty()) {
+    while (m_recycledMailboxQueue.size() > cacheLimit) {
         mailbox = m_recycledMailboxQueue.takeLast();
-        // Never have more than one mailbox in the released state.
-        if (!m_recycledMailboxQueue.isEmpty())
-            deleteMailbox(mailbox);
+        deleteMailbox(mailbox);
     }
+    mailbox = m_recycledMailboxQueue.takeLast();
 
     RefPtr<MailboxInfo> mailboxInfo;
     for (size_t i = 0; i < m_textureMailboxes.size(); i++) {
@@ -559,7 +569,7 @@ GLuint DrawingBuffer::framebuffer() const
 WebLayer* DrawingBuffer::platformLayer()
 {
     if (!m_layer) {
-        m_layer = adoptPtr(Platform::current()->compositorSupport()->createExternalTextureLayer(this));
+        m_layer = wrapUnique(Platform::current()->compositorSupport()->createExternalTextureLayer(this));
 
         m_layer->setOpaque(!m_wantAlphaChannel);
         m_layer->setBlendBackgroundColor(m_wantAlphaChannel);

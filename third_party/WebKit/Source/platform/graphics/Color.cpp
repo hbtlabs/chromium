@@ -26,6 +26,7 @@
 #include "platform/graphics/Color.h"
 
 #include "platform/Decimal.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/Assertions.h"
 #include "wtf/HexNumber.h"
 #include "wtf/MathExtras.h"
@@ -121,6 +122,8 @@ static inline bool parseHexColorInternal(const CharacterType* name, unsigned len
 {
     if (length != 3 && length != 4 && length != 6 && length != 8)
         return false;
+    if ((length == 8 || length == 4) && !RuntimeEnabledFeatures::cssHexAlphaColorEnabled())
+        return false;
     unsigned value = 0;
     for (unsigned i = 0; i < length; ++i) {
         if (!isASCIIHexDigit(name[i]))
@@ -164,11 +167,9 @@ bool Color::parseHexColor(const UChar* name, unsigned length, RGBA32& rgb)
     return parseHexColorInternal(name, length, rgb);
 }
 
-bool Color::parseHexColor(const String& name, RGBA32& rgb)
+bool Color::parseHexColor(const StringView& name, RGBA32& rgb)
 {
-    unsigned length = name.length();
-
-    if (!length)
+    if (name.isEmpty())
         return false;
     if (name.is8Bit())
         return parseHexColor(name.characters8(), name.length(), rgb);

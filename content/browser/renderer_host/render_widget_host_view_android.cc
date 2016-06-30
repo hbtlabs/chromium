@@ -12,13 +12,15 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/surface_layer.h"
@@ -94,15 +96,15 @@ namespace content {
 namespace {
 
 void SatisfyCallback(cc::SurfaceManager* manager,
-                     cc::SurfaceSequence sequence) {
+                     const cc::SurfaceSequence& sequence) {
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   manager->DidSatisfySequences(sequence.id_namespace, &sequences);
 }
 
 void RequireCallback(cc::SurfaceManager* manager,
-                     cc::SurfaceId id,
-                     cc::SurfaceSequence sequence) {
+                     const cc::SurfaceId& id,
+                     const cc::SurfaceSequence& sequence) {
   cc::Surface* surface = manager->GetSurfaceForId(id);
   if (!surface) {
     LOG(ERROR) << "Attempting to require callback on nonexistent surface";
@@ -187,8 +189,7 @@ void GLHelperHolder::Initialize() {
   provider_ = new ContextProviderCommandBuffer(
       std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
       gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle, url,
-      gl::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
-      attributes, nullptr,
+      automatic_flushes, support_locking, limits, attributes, nullptr,
       command_buffer_metrics::BROWSER_OFFSCREEN_MAINTHREAD_CONTEXT);
   if (!provider_->BindToCurrentThread())
     return;
@@ -205,7 +206,7 @@ void GLHelperHolder::Initialize() {
 void GLHelperHolder::OnContextLost() {
   // Need to post a task because the command buffer client cannot be deleted
   // from within this callback.
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&RenderWidgetHostViewAndroid::OnContextLost));
 }
 
@@ -287,7 +288,7 @@ gfx::RectF GetSelectionRect(const ui::TouchSelectionController& controller) {
 
 RenderWidgetHostViewAndroid::LastFrameInfo::LastFrameInfo(
     uint32_t output_id,
-    std::unique_ptr<cc::CompositorFrame> output_frame)
+    cc::CompositorFrame output_frame)
     : output_surface_id(output_id), frame(std::move(output_frame)) {}
 
 RenderWidgetHostViewAndroid::LastFrameInfo::~LastFrameInfo() {}
@@ -606,9 +607,9 @@ gfx::Rect RenderWidgetHostViewAndroid::GetViewBounds() const {
 
 gfx::Size RenderWidgetHostViewAndroid::GetVisibleViewportSize() const {
   if (!content_view_core_)
-    return gfx::Rect(default_size_).size();
+    return default_size_;
 
-  return gfx::Rect(content_view_core_->GetViewSize()).size();
+  return content_view_core_->GetViewSize();
 }
 
 gfx::Size RenderWidgetHostViewAndroid::GetPhysicalBackingSize() const {
@@ -619,12 +620,10 @@ gfx::Size RenderWidgetHostViewAndroid::GetPhysicalBackingSize() const {
 }
 
 bool RenderWidgetHostViewAndroid::DoTopControlsShrinkBlinkSize() const {
-  if (!content_view_core_)
-    return false;
-
   // Whether or not Blink's viewport size should be shrunk by the height of the
   // URL-bar.
-  return content_view_core_->DoTopControlsShrinkBlinkSize();
+  return content_view_core_ &&
+         content_view_core_->DoTopControlsShrinkBlinkSize();
 }
 
 float RenderWidgetHostViewAndroid::GetTopControlsHeight() const {
@@ -995,7 +994,7 @@ void RenderWidgetHostViewAndroid::CheckOutputSurfaceChanged(
 }
 
 void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   cc::SurfaceManager* manager = CompositorImpl::GetSurfaceManager();
   if (!surface_factory_) {
     surface_factory_ = base::WrapUnique(new cc::SurfaceFactory(manager, this));
@@ -1003,8 +1002,8 @@ void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
   if (surface_id_.is_null() ||
       texture_size_in_layer_ != current_surface_size_ ||
       location_bar_content_translation_ !=
-          frame->metadata.location_bar_content_translation ||
-      current_viewport_selection_ != frame->metadata.selection) {
+          frame.metadata.location_bar_content_translation ||
+      current_viewport_selection_ != frame.metadata.selection) {
     RemoveLayers();
     if (!surface_id_.is_null())
       surface_factory_->Destroy(surface_id_);
@@ -1016,8 +1015,8 @@ void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
 
     current_surface_size_ = texture_size_in_layer_;
     location_bar_content_translation_ =
-        frame->metadata.location_bar_content_translation;
-    current_viewport_selection_ = frame->metadata.selection;
+        frame.metadata.location_bar_content_translation;
+    current_viewport_selection_ = frame.metadata.selection;
     AttachLayers();
   }
 
@@ -1030,17 +1029,9 @@ void RenderWidgetHostViewAndroid::SubmitCompositorFrame(
 
 void RenderWidgetHostViewAndroid::SwapDelegatedFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   CheckOutputSurfaceChanged(output_surface_id);
   bool has_content = !texture_size_in_layer_.IsEmpty();
-
-  // DelegatedRendererLayerImpl applies the inverse device_scale_factor of the
-  // renderer frame, assuming that the browser compositor will scale
-  // it back up to device scale.  But on Android we put our browser layers in
-  // physical pixels and set our browser CC device_scale_factor to 1, so this
-  // suppresses the transform.  This line may need to be removed when fixing
-  // http://crbug.com/384134 or http://crbug.com/310763
-  frame->delegated_frame_data->device_scale_factor = 1.0f;
 
   base::Closure ack_callback =
       base::Bind(&RenderWidgetHostViewAndroid::SendDelegatedFrameAck,
@@ -1067,9 +1058,9 @@ void RenderWidgetHostViewAndroid::SwapDelegatedFrame(
 
 void RenderWidgetHostViewAndroid::InternalSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
-  if (!frame->delegated_frame_data) {
+    cc::CompositorFrame frame) {
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
+  if (!frame.delegated_frame_data) {
     LOG(ERROR) << "Non-delegated renderer path no longer supported";
     return;
   }
@@ -1082,32 +1073,32 @@ void RenderWidgetHostViewAndroid::InternalSwapCompositorFrame(
 
   if (!CompositorImpl::GetSurfaceManager() && layer_.get() &&
       layer_->layer_tree_host()) {
-    for (size_t i = 0; i < frame->metadata.latency_info.size(); i++) {
+    for (size_t i = 0; i < frame.metadata.latency_info.size(); i++) {
       std::unique_ptr<cc::SwapPromise> swap_promise(
-          new cc::LatencyInfoSwapPromise(frame->metadata.latency_info[i]));
+          new cc::LatencyInfoSwapPromise(frame.metadata.latency_info[i]));
       layer_->layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
     }
   }
 
-  DCHECK(!frame->delegated_frame_data->render_pass_list.empty());
+  DCHECK(!frame.delegated_frame_data->render_pass_list.empty());
 
   cc::RenderPass* root_pass =
-      frame->delegated_frame_data->render_pass_list.back().get();
+      frame.delegated_frame_data->render_pass_list.back().get();
   texture_size_in_layer_ = root_pass->output_rect.size();
 
-  cc::CompositorFrameMetadata metadata = frame->metadata;
+  cc::CompositorFrameMetadata metadata = frame.metadata.Clone();
 
   SwapDelegatedFrame(output_surface_id, std::move(frame));
   frame_evictor_->SwappedFrame(!host_->is_hidden());
 
   // As the metadata update may trigger view invalidation, always call it after
   // any potential compositor scheduling.
-  OnFrameMetadataUpdated(metadata);
+  OnFrameMetadataUpdated(std::move(metadata));
 }
 
 void RenderWidgetHostViewAndroid::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   InternalSwapCompositorFrame(output_surface_id, std::move(frame));
 }
 
@@ -1115,9 +1106,8 @@ void RenderWidgetHostViewAndroid::ClearCompositorFrame() {
   DestroyDelegatedContent();
 }
 
-void RenderWidgetHostViewAndroid::RetainFrame(
-    uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+void RenderWidgetHostViewAndroid::RetainFrame(uint32_t output_surface_id,
+                                              cc::CompositorFrame frame) {
   DCHECK(locks_on_frame_count_);
 
   // Store the incoming frame so that it can be swapped when all the locks have
@@ -1137,19 +1127,14 @@ void RenderWidgetHostViewAndroid::RetainFrame(
       new LastFrameInfo(output_surface_id, std::move(frame)));
 }
 
-SynchronousCompositorHost*
-RenderWidgetHostViewAndroid::GetSynchronousCompositor() {
-  return sync_compositor_.get();
-}
-
 void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
-    const cc::CompositorFrameMetadata& frame_metadata) {
+    cc::CompositorFrameMetadata frame_metadata) {
   if (!content_view_core_)
     return;
 
   // This is a subset of OnSwapCompositorFrame() used in the synchronous
   // compositor flow.
-  OnFrameMetadataUpdated(frame_metadata);
+  OnFrameMetadataUpdated(frame_metadata.Clone());
 
   // DevTools ScreenCast support for Android WebView.
   WebContents* web_contents = content_view_core_->GetWebContents();
@@ -1162,7 +1147,7 @@ void RenderWidgetHostViewAndroid::SynchronousFrameMetadata(
         base::Bind(
             &RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame,
             static_cast<RenderFrameDevToolsAgentHost*>(dtah.get()),
-            frame_metadata));
+            base::Passed(&frame_metadata)));
   }
 }
 
@@ -1506,13 +1491,6 @@ void RenderWidgetHostViewAndroid::GetScreenInfo(blink::WebScreenInfo* result) {
   RenderWidgetHostViewBase::GetDefaultScreenInfo(result);
 }
 
-bool RenderWidgetHostViewAndroid::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  DCHECK(color_profile->empty());
-  NOTREACHED();
-  return false;
-}
-
 // TODO(jrg): Find out the implications and answer correctly here,
 // as we are returning the WebView and not root window bounds.
 gfx::Rect RenderWidgetHostViewAndroid::GetBoundsInRootWindow() {
@@ -1782,8 +1760,6 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
     sync_compositor_ = SynchronousCompositorHost::Create(
         this, content_view_core_->GetWebContents());
   }
-  if (sync_compositor_)
-    sync_compositor_->DidBecomeCurrent();
 }
 
 void RenderWidgetHostViewAndroid::RunAckCallbacks(

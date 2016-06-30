@@ -73,6 +73,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Appearance settings.
   (*s_whitelist)["extensions.theme.id"] =
       settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["webkit.webprefs.default_fixed_font_size"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["webkit.webprefs.default_font_size"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["webkit.webprefs.minimum_font_size"] =
@@ -149,7 +151,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.clear_data.hosted_apps_data"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.content_licenses"] =
+  (*s_whitelist)["browser.clear_data.media_licenses"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.clear_data.time_period"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;

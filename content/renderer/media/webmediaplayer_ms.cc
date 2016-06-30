@@ -18,7 +18,7 @@
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
-#include "content/public/renderer/video_frame_provider.h"
+#include "content/public/renderer/media_stream_video_renderer.h"
 #include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
@@ -81,10 +81,12 @@ WebMediaPlayerMS::~WebMediaPlayerMS() {
   DVLOG(1) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (compositor_ && !compositor_task_runner_->BelongsToCurrentThread())
-    compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_.release());
-
+  // Destruct compositor resources in the proper order.
   get_client()->setWebLayer(nullptr);
+  if (video_weblayer_)
+    static_cast<cc::VideoLayer*>(video_weblayer_->layer())->StopUsingProvider();
+  if (compositor_)
+    compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_.release());
 
   if (video_frame_provider_)
     video_frame_provider_->Stop();
@@ -122,7 +124,7 @@ void WebMediaPlayerMS::load(LoadType load_type,
       web_stream.isNull() ? std::string() : web_stream.id().utf8();
   media_log_->AddEvent(media_log_->CreateLoadEvent(stream_id));
 
-  video_frame_provider_ = renderer_factory_->GetVideoFrameProvider(
+  video_frame_provider_ = renderer_factory_->GetVideoRenderer(
       web_stream, base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr()),
       base::Bind(&WebMediaPlayerMS::OnFrameAvailable, AsWeakPtr()),
       media_task_runner_, worker_task_runner_, gpu_factories_);
@@ -150,8 +152,8 @@ void WebMediaPlayerMS::load(LoadType load_type,
   }
   if (video_frame_provider_)
     video_frame_provider_->Start();
-  if (audio_renderer_ && !video_frame_provider_) {
-    // This is audio-only mode.
+  if (audio_renderer_) {
+    // Do not wait for first video frame to start playing
     SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
     SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
   }
@@ -166,7 +168,7 @@ void WebMediaPlayerMS::play() {
     return;
 
   if (video_frame_provider_)
-    video_frame_provider_->Play();
+    video_frame_provider_->Resume();
 
   compositor_->StartRendering();
 
@@ -486,8 +488,10 @@ void WebMediaPlayerMS::OnFrameAvailable(
 
   if (!received_first_frame_) {
     received_first_frame_ = true;
-    SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
-    SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
+    if (getReadyState() < WebMediaPlayer::ReadyStateHaveEnoughData) {
+      SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
+      SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
+    }
 
     if (video_frame_provider_.get()) {
       video_weblayer_.reset(new cc_blink::WebLayerImpl(

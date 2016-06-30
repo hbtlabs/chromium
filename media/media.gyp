@@ -49,7 +49,6 @@
     ],
   },
   'includes': [
-    'capture.gypi',
     'media_cdm.gypi',
     'media_variables.gypi',
   ],
@@ -65,7 +64,6 @@
           "ENABLE_AC3_EAC3_AUDIO_DEMUXING=<(enable_ac3_eac3_audio_demuxing)",
           "ENABLE_HEVC_DEMUXING=<(enable_hevc_demuxing)",
           "ENABLE_MSE_MPEG2TS_STREAM_PARSER=<(enable_mse_mpeg2ts_stream_parser)",
-          "ENABLE_MP4_VP9_DEMUXING=0",
         ],
       },
     },
@@ -103,11 +101,7 @@
       'include_dirs': [
         '..',
       ],
-      'includes': [
-        'capture.gypi',
-      ],
       'sources': [
-        '<@(capture_sources)',
         'audio/agc_audio_stream.h',
         'audio/alsa/alsa_input.cc',
         'audio/alsa/alsa_input.h',
@@ -268,6 +262,8 @@
         'base/audio_hardware_config.h',
         'base/audio_hash.cc',
         'base/audio_hash.h',
+        'base/audio_latency.cc',
+        'base/audio_latency.h',
         'base/audio_pull_fifo.cc',
         'base/audio_pull_fifo.h',
         'base/audio_push_fifo.cc',
@@ -476,8 +472,6 @@
         'base/video_util.h',
         'base/wall_clock_time_source.cc',
         'base/wall_clock_time_source.h',
-        'base/win/mf_initializer.cc',
-        'base/win/mf_initializer.h',
         'base/yuv_convert.cc',
         'base/yuv_convert.h',
         'cdm/aes_decryptor.cc',
@@ -507,6 +501,8 @@
         'filters/audio_file_reader.h',
         'filters/audio_renderer_algorithm.cc',
         'filters/audio_renderer_algorithm.h',
+        'filters/audio_timestamp_validator.cc',
+        'filters/audio_timestamp_validator.h',
         'filters/blocking_url_protocol.cc',
         'filters/blocking_url_protocol.h',
         'filters/chunk_demuxer.cc',
@@ -714,11 +710,9 @@
         }],
         ['OS=="android"', {
           'dependencies': [
-            'capture_java',
             'media_android_jni_headers',
             'media_java',
             'player_android',
-            'video_capture_android_jni_headers',
           ],
           'sources!': [
             'base/audio_video_metadata_extractor.cc',
@@ -821,12 +815,6 @@
                 'audio/cras/cras_unified.h',
               ],
             }],
-
-            ['use_udev==1', {
-              'dependencies': [
-                '<(DEPTH)/device/udev_linux/udev.gyp:udev_linux',
-              ],
-            }],
           ],
         }],
         ['OS!="linux"', {
@@ -924,10 +912,6 @@
           ],
         }],
         ['OS=="mac"', {
-          'dependencies': [
-            '<(DEPTH)/third_party/decklink/decklink.gyp:decklink',
-          ],
-
           'link_settings': {
             'libraries': [
               '$(SDKROOT)/System/Library/Frameworks/AudioToolbox.framework',
@@ -940,39 +924,6 @@
           },
         }],
         ['OS=="win"', {
-          'link_settings':  {
-            'libraries': [
-              '-ldxguid.lib',
-              '-lmf.lib',
-              '-lmfplat.lib',
-              '-lmfreadwrite.lib',
-              '-lmfuuid.lib',
-              '-lsetupapi.lib',
-              '-lwinmm.lib',
-            ],
-          },
-          # Specify delayload for media.dll.
-          'msvs_settings': {
-            'VCLinkerTool': {
-              'DelayLoadDLLs': [
-                'mf.dll',
-                'mfplat.dll',
-                'mfreadwrite.dll',
-              ],
-            },
-          },
-          # Specify delayload for components that link with media.lib.
-          'all_dependent_settings': {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'DelayLoadDLLs': [
-                  'mf.dll',
-                  'mfplat.dll',
-                  'mfreadwrite.dll',
-                ],
-              },
-            },
-          },
           # TODO(wolenetz): Fix size_t to int truncations in win64. See
           # http://crbug.com/171009
           'conditions': [
@@ -1150,7 +1101,6 @@
         '../url/url.gyp:url_lib',
       ],
       'sources': [
-        '<@(capture_unittests_sources)',
         'base/android/access_unit_queue_unittest.cc',
         'base/android/media_codec_decoder_unittest.cc',
         'base/android/media_drm_bridge_unittest.cc',
@@ -1170,12 +1120,14 @@
         'base/audio_fifo_unittest.cc',
         'base/audio_hardware_config_unittest.cc',
         'base/audio_hash_unittest.cc',
+	'base/audio_latency_unittest.cc',
         'base/audio_parameters_unittest.cc',
         'base/audio_point_unittest.cc',
         'base/audio_pull_fifo_unittest.cc',
         'base/audio_push_fifo_unittest.cc',
         'base/audio_renderer_mixer_input_unittest.cc',
         'base/audio_renderer_mixer_unittest.cc',
+        'base/audio_sample_types_unittest.cc',
         'base/audio_shifter_unittest.cc',
         'base/audio_splicer_unittest.cc',
         'base/audio_timestamp_helper_unittest.cc',
@@ -1234,6 +1186,7 @@
         'filters/audio_decoder_unittest.cc',
         'filters/audio_file_reader_unittest.cc',
         'filters/audio_renderer_algorithm_unittest.cc',
+        'filters/audio_timestamp_validator_unittest.cc',
         'filters/blocking_url_protocol_unittest.cc',
         'filters/chunk_demuxer_unittest.cc',
         'filters/decrypting_audio_decoder_unittest.cc',
@@ -1546,7 +1499,7 @@
     },
     {
       # GN version: //media:audio_unittests
-      # For running the subset of media_unittests that might require audio
+      # For running the subset of tests that might require audio
       # hardware separately on GPU bots. media_unittests includes these too.
       'target_name': 'audio_unittests',
       'type': '<(gtest_target_type)',
@@ -1561,6 +1514,17 @@
       ],
       'sources': [
         'base/run_all_unittests.cc',
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          'link_settings':  {
+            'libraries': [
+              '-ldxguid.lib',
+              '-lsetupapi.lib',
+              '-lwinmm.lib',
+            ],
+          },
+        }],
       ],
     },
     {
@@ -1749,6 +1713,56 @@
         },
       ], # targets
     }],
+    ['OS=="win"', {
+      'targets': [
+        {
+          # GN version: //media/base/win
+          'target_name': 'mf_initializer',
+          'type': '<(component)',
+          'include_dirs': [ '..', ],
+          'defines': [ 'MF_INITIALIZER_IMPLEMENTATION', ],
+          'sources': [
+            'base/win/mf_initializer_export.h',
+            'base/win/mf_initializer.cc',
+            'base/win/mf_initializer.h',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+          ],
+          'link_settings':  {
+            'libraries': [
+              '-ldxguid.lib',
+              '-lmf.lib',
+              '-lmfplat.lib',
+              '-lmfreadwrite.lib',
+              '-lmfuuid.lib',
+              '-lsetupapi.lib',
+              '-lwinmm.lib',
+            ],
+          },
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'DelayLoadDLLs': [
+                'mf.dll',
+                'mfplat.dll',
+                'mfreadwrite.dll',
+              ],
+            },
+          },
+          'all_dependent_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'DelayLoadDLLs': [
+                  'mf.dll',
+                  'mfplat.dll',
+                  'mfreadwrite.dll',
+                ],
+              },
+            },
+          },
+        },
+      ],
+    }],
     ['OS=="android"', {
       'targets': [
         {
@@ -1756,7 +1770,6 @@
           'target_name': 'media_unittests_apk',
           'type': 'none',
           'dependencies': [
-            'capture_java',
             'media_java',
             'media_unittests',
           ],
@@ -1771,7 +1784,6 @@
           'target_name': 'media_perftests_apk',
           'type': 'none',
           'dependencies': [
-            'capture_java',
             'media_java',
             'media_perftests',
           ],
@@ -1793,19 +1805,6 @@
             'base/android/java/src/org/chromium/media/MediaDrmBridge.java',
             'base/android/java/src/org/chromium/media/MediaPlayerBridge.java',
             'base/android/java/src/org/chromium/media/MediaPlayerListener.java',
-          ],
-          'variables': {
-            'jni_gen_package': 'media',
-          },
-          'includes': ['../build/jni_generator.gypi'],
-        },
-        {
-          # GN: //media/capture/video/android:capture_jni_headers
-          'target_name': 'video_capture_android_jni_headers',
-          'type': 'none',
-          'sources': [
-            'capture/video/android/java/src/org/chromium/media/VideoCapture.java',
-            'capture/video/android/java/src/org/chromium/media/VideoCaptureFactory.java',
           ],
           'variables': {
             'jni_gen_package': 'media',
@@ -1872,8 +1871,6 @@
             'base/android/video_decoder_job.h',
             'base/android/video_media_codec_decoder.cc',
             'base/android/video_media_codec_decoder.h',
-            'capture/video/android/capture_jni_registrar.cc',
-            'capture/video/android/capture_jni_registrar.h',
           ],
           'conditions': [
             # Only 64 bit builds are using android-21 NDK library, check common.gypi
@@ -1902,23 +1899,6 @@
           ],
         },
         {
-          # GN: //media/capture/video/android:capture_java
-          'target_name': 'capture_java',
-          'type': 'none',
-          'dependencies': [
-            '../base/base.gyp:base',
-            'media_android_captureapitype',
-            'media_android_imageformat',
-          ],
-          'export_dependent_settings': [
-            '../base/base.gyp:base',
-          ],
-          'variables': {
-            'java_in_dir': 'capture/video/android/java',
-          },
-          'includes': ['../build/java.gypi'],
-        },
-        {
           # GN: //media/base/android:media_java
           'target_name': 'media_java',
           'type': 'none',
@@ -1932,24 +1912,6 @@
             'java_in_dir': 'base/android/java',
           },
           'includes': ['../build/java.gypi'],
-        },
-        {
-          # GN: //media/base/android:media_android_captureapitype
-          'target_name': 'media_android_captureapitype',
-          'type': 'none',
-          'variables': {
-            'source_file': 'capture/video/video_capture_device.h',
-          },
-          'includes': [ '../build/android/java_cpp_enum.gypi' ],
-        },
-        {
-          # GN: //media/base/android:media_android_imageformat
-          'target_name': 'media_android_imageformat',
-          'type': 'none',
-          'variables': {
-            'source_file': 'capture/video/android/video_capture_device_android.h',
-          },
-          'includes': [ '../build/android/java_cpp_enum.gypi' ],
         },
       ],
       'conditions': [

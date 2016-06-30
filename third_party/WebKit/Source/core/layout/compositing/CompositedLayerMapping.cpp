@@ -36,6 +36,7 @@
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/html/HTMLVideoElement.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/LayoutEmbeddedObject.h"
@@ -70,6 +71,7 @@
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -221,9 +223,9 @@ CompositedLayerMapping::~CompositedLayerMapping()
     destroyGraphicsLayers();
 }
 
-PassOwnPtr<GraphicsLayer> CompositedLayerMapping::createGraphicsLayer(CompositingReasons reasons, SquashingDisallowedReasons squashingDisallowedReasons)
+std::unique_ptr<GraphicsLayer> CompositedLayerMapping::createGraphicsLayer(CompositingReasons reasons, SquashingDisallowedReasons squashingDisallowedReasons)
 {
-    OwnPtr<GraphicsLayer> graphicsLayer = GraphicsLayer::create(this);
+    std::unique_ptr<GraphicsLayer> graphicsLayer = GraphicsLayer::create(this);
 
     graphicsLayer->setCompositingReasons(reasons);
     graphicsLayer->setSquashingDisallowedReasons(squashingDisallowedReasons);
@@ -501,7 +503,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration()
 
     updateChildClippingMaskLayer(needsChildClippingMask);
 
-    if (layerToApplyChildClippingMask == m_graphicsLayer) {
+    if (layerToApplyChildClippingMask == m_graphicsLayer.get()) {
         if (m_graphicsLayer->maskLayer() != m_childClippingMaskLayer.get()) {
             m_graphicsLayer->setMaskLayer(m_childClippingMaskLayer.get());
             maskLayerChanged = true;
@@ -798,7 +800,6 @@ void CompositedLayerMapping::updateMainGraphicsLayerGeometry(const IntRect& rela
     // descendants. So, the visibility flag for m_graphicsLayer should be true if there are any
     // non-compositing visible layers.
     bool contentsVisible = m_owningLayer.hasVisibleContent() || hasVisibleNonCompositingDescendant(&m_owningLayer);
-
     m_graphicsLayer->setContentsVisible(contentsVisible);
 
     m_graphicsLayer->setBackfaceVisibility(layoutObject()->style()->backfaceVisibility() == BackfaceVisibilityVisible);
@@ -1223,7 +1224,13 @@ void CompositedLayerMapping::updateContentsOffsetInCompositingLayer(const IntPoi
 
 void CompositedLayerMapping::updateDrawsContent()
 {
-    bool hasPaintedContent = containsPaintedContent();
+    bool inOverlayFullscreenVideo = false;
+    if (layoutObject()->isVideo()) {
+        HTMLVideoElement* videoElement = toHTMLVideoElement(layoutObject()->node());
+        if (videoElement->isFullscreen() && videoElement->usesOverlayFullscreenVideo())
+            inOverlayFullscreenVideo = true;
+    }
+    bool hasPaintedContent = inOverlayFullscreenVideo ? false : containsPaintedContent();
     m_graphicsLayer->setDrawsContent(hasPaintedContent);
 
     if (m_scrollingLayer) {
@@ -1329,7 +1336,7 @@ void CompositedLayerMapping::setBackgroundLayerPaintsFixedRootBackground(bool ba
     m_backgroundLayerPaintsFixedRootBackground = backgroundLayerPaintsFixedRootBackground;
 }
 
-bool CompositedLayerMapping::toggleScrollbarLayerIfNeeded(OwnPtr<GraphicsLayer>& layer, bool needsLayer, CompositingReasons reason)
+bool CompositedLayerMapping::toggleScrollbarLayerIfNeeded(std::unique_ptr<GraphicsLayer>& layer, bool needsLayer, CompositingReasons reason)
 {
     if (needsLayer == !!layer)
         return false;
@@ -1521,36 +1528,52 @@ void CompositedLayerMapping::updateShouldFlattenTransform()
     }
 }
 
+// Some background on when you receive an element id or mutable properties.
+//
+// element id:
+//   If you have a compositor proxy, an animation, or you're a scroller (and
+//   might impl animate).
+//
+// mutable properties:
+//   Only if you have a compositor proxy.
+//
+// The element id for the scroll layers is assigned when they're constructed,
+// since this is unconditional. However, the element id for the primary layer as
+// well as the mutable properties for all layers may change according to the
+// rules above so we update those values here.
 void CompositedLayerMapping::updateElementIdAndCompositorMutableProperties()
 {
-    if (!RuntimeEnabledFeatures::compositorWorkerEnabled())
-        return;
-
-    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("compositor-worker"), "CompositedLayerMapping::updateElementId()");
-
-    uint64_t elementId = 0;
-    uint32_t mainMutableProperties = CompositorMutableProperty::kNone;
+    int elementId = 0;
+    uint32_t primaryMutableProperties = CompositorMutableProperty::kNone;
     uint32_t scrollMutableProperties = CompositorMutableProperty::kNone;
 
-    if (m_owningLayer.layoutObject()->style()->hasCompositorProxy()) {
-        if (Node* owningNode = m_owningLayer.layoutObject()->generatingNode()) {
-            if (owningNode->isElementNode()) {
-                Element* owningElement = toElement(owningNode);
-                uint32_t compositorMutableProperties = owningElement->compositorMutableProperties();
-                elementId = DOMNodeIds::idForNode(owningNode);
-                mainMutableProperties = (CompositorMutableProperty::kOpacity | CompositorMutableProperty::kTransform) & compositorMutableProperties;
-                scrollMutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & compositorMutableProperties;
-            }
-        }
+    Node* owningNode = m_owningLayer.layoutObject()->generatingNode();
+    Element* owningElement = nullptr;
+    if (owningNode && owningNode->isElementNode())
+        owningElement = toElement(owningNode);
+
+    if (RuntimeEnabledFeatures::compositorWorkerEnabled() && owningElement && m_owningLayer.layoutObject()->style()->hasCompositorProxy()) {
+        uint32_t compositorMutableProperties = owningElement->compositorMutableProperties();
+        elementId = DOMNodeIds::idForNode(owningNode);
+        primaryMutableProperties = (CompositorMutableProperty::kOpacity | CompositorMutableProperty::kTransform) & compositorMutableProperties;
+        scrollMutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & compositorMutableProperties;
     }
 
-    m_graphicsLayer->setElementId(elementId);
-    m_graphicsLayer->setCompositorMutableProperties(mainMutableProperties);
+    if (m_owningLayer.layoutObject()->style()->shouldCompositeForCurrentAnimations() && owningNode)
+        elementId = DOMNodeIds::idForNode(owningNode);
 
-    if (m_scrollingContentsLayer.get()) {
-        m_scrollingContentsLayer->setElementId(elementId);
+    CompositorElementId compositorElementId;
+    if (elementId)
+        compositorElementId = createCompositorElementId(elementId, CompositorSubElementId::Primary);
+
+    m_graphicsLayer->setElementId(compositorElementId);
+    m_graphicsLayer->setCompositorMutableProperties(primaryMutableProperties);
+
+    // We always set the elementId for m_scrollingContentsLayer since it can be
+    // animated for smooth scrolling, so we don't need to set it conditionally
+    // here.
+    if (m_scrollingContentsLayer.get())
         m_scrollingContentsLayer->setCompositorMutableProperties(scrollMutableProperties);
-    }
 }
 
 bool CompositedLayerMapping::updateForegroundLayer(bool needsForegroundLayer)
@@ -1637,6 +1660,12 @@ bool CompositedLayerMapping::updateScrollingLayers(bool needsScrollingLayers)
 
             // Inner layer which renders the content that scrolls.
             m_scrollingContentsLayer = createGraphicsLayer(CompositingReasonLayerForScrollingContents);
+
+            if (Node* owningNode = m_owningLayer.layoutObject()->generatingNode()) {
+                m_scrollingContentsLayer->setElementId(createCompositorElementId(DOMNodeIds::idForNode(owningNode), CompositorSubElementId::Scroll));
+                m_scrollingContentsLayer->setCompositorMutableProperties(CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop);
+            }
+
             m_scrollingLayer->addChild(m_scrollingContentsLayer.get());
 
             layerChanged = true;
@@ -2139,20 +2168,6 @@ void CompositedLayerMapping::setScrollingContentsNeedDisplayInRect(const LayoutR
     ApplyToGraphicsLayers(this, functor, ApplyToScrollingContentLayers);
 }
 
-void CompositedLayerMapping::scrollingDisplayItemClientWasInvalidated(const DisplayItemClient& displayItemClient, PaintInvalidationReason paintInvalidationReason)
-{
-    ApplyToGraphicsLayers(this, [&displayItemClient, paintInvalidationReason](GraphicsLayer* layer) {
-        layer->displayItemClientWasInvalidated(displayItemClient, paintInvalidationReason);
-    }, ApplyToScrollingContentLayers);
-}
-
-void CompositedLayerMapping::displayItemClientWasInvalidated(const DisplayItemClient& displayItemClient, PaintInvalidationReason paintInvalidationReason)
-{
-    ApplyToGraphicsLayers(this, [&displayItemClient, paintInvalidationReason](GraphicsLayer* layer) {
-        layer->displayItemClientWasInvalidated(displayItemClient, paintInvalidationReason);
-    }, ApplyToContentLayers);
-}
-
 const GraphicsLayerPaintInfo* CompositedLayerMapping::containingSquashedLayer(const LayoutObject* layoutObject, const Vector<GraphicsLayerPaintInfo>& layers, unsigned maxSquashedLayerIndex)
 {
     for (size_t i = 0; i < layers.size() && i < maxSquashedLayerIndex; ++i) {
@@ -2263,7 +2278,7 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
 
     IntSize offsetFromAnchorLayoutObject;
     const LayoutBoxModelObject* anchorLayoutObject;
-    if (graphicsLayer == m_squashingLayer) {
+    if (graphicsLayer == m_squashingLayer.get()) {
         // TODO(chrishtr): this is a speculative fix for crbug.com/561306. However, it should never be the case that
         // m_squashingLayer exists yet m_squashedLayers.size() == 0. There must be a bug elsewhere.
         if (m_squashedLayers.size() == 0)
@@ -2274,7 +2289,7 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
         anchorLayoutObject = m_squashedLayers[0].paintLayer->layoutObject();
         offsetFromAnchorLayoutObject = m_squashedLayers[0].offsetFromLayoutObject;
     } else {
-        ASSERT(graphicsLayer == m_graphicsLayer || graphicsLayer == m_scrollingContentsLayer);
+        ASSERT(graphicsLayer == m_graphicsLayer.get() || graphicsLayer == m_scrollingContentsLayer.get());
         anchorLayoutObject = m_owningLayer.layoutObject();
         offsetFromAnchorLayoutObject = graphicsLayer->offsetFromLayoutObject();
         adjustForCompositedScrolling(graphicsLayer, offsetFromAnchorLayoutObject);
@@ -2359,7 +2374,7 @@ IntRect CompositedLayerMapping::computeInterestRect(const GraphicsLayer* graphic
     // Paint the whole layer if "mainFrameClipsContent" is false, meaning that WebPreferences::record_whole_document is true.
     bool shouldPaintWholePage = !m_owningLayer.layoutObject()->document().settings()->mainFrameClipsContent();
     if (shouldPaintWholePage
-        || (graphicsLayer != m_graphicsLayer && graphicsLayer != m_squashingLayer && graphicsLayer != m_squashingLayer && graphicsLayer != m_scrollingContentsLayer))
+        || (graphicsLayer != m_graphicsLayer.get() && graphicsLayer != m_squashingLayer.get() && graphicsLayer != m_squashingLayer.get() && graphicsLayer != m_scrollingContentsLayer.get()))
         return wholeLayerRect;
 
     IntRect newInterestRect = recomputeInterestRect(graphicsLayer);
@@ -2418,7 +2433,7 @@ void CompositedLayerMapping::paintContents(const GraphicsLayer* graphicsLayer, G
     if (graphicsLayerPaintingPhase & GraphicsLayerPaintCompositedScroll)
         paintLayerFlags |= PaintLayerPaintingCompositingScrollingPhase;
 
-    if (graphicsLayer == m_backgroundLayer)
+    if (graphicsLayer == m_backgroundLayer.get())
         paintLayerFlags |= (PaintLayerPaintingRootBackgroundOnly | PaintLayerPaintingCompositingForegroundPhase); // Need PaintLayerPaintingCompositingForegroundPhase to walk child layers.
     else if (compositor()->fixedRootBackgroundLayer())
         paintLayerFlags |= PaintLayerPaintingSkipRootBackground;

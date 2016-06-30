@@ -194,11 +194,11 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
     feature_info = new FeatureInfo(*command_line, gpu_driver_bug_workaround);
   }
 
-  group_ = scoped_refptr<ContextGroup>(new ContextGroup(
-      gpu_preferences_, NULL, memory_tracker_,
-      new ShaderTranslatorCache(gpu_preferences_),
-      new FramebufferCompletenessCache, feature_info,
-      normalized_init.bind_generates_resource));
+  group_ = scoped_refptr<ContextGroup>(
+      new ContextGroup(gpu_preferences_, NULL, memory_tracker_,
+                       new ShaderTranslatorCache(gpu_preferences_),
+                       new FramebufferCompletenessCache, feature_info,
+                       normalized_init.bind_generates_resource, nullptr));
   bool use_default_textures = normalized_init.bind_generates_resource;
 
   InSequence sequence;
@@ -468,8 +468,7 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   decoder_->SetIgnoreCachedStateForTest(ignore_cached_state_for_test_);
   decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
   ASSERT_TRUE(decoder_->Initialize(surface_, context_, false,
-                                   surface_->GetSize(), DisallowedFeatures(),
-                                   attribs));
+                                   DisallowedFeatures(), attribs));
 
   EXPECT_CALL(*context_, MakeCurrent(surface_.get())).WillOnce(Return(true));
   if (context_->WasAllocatedUsingRobustnessExtension()) {

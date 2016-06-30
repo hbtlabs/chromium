@@ -11,7 +11,7 @@
 • Sa bawat isa sa iyong mga computer, i-set up ang malayuang pag-access gamit ang Chrome Remote Desktop app mula sa Chrome Web Store: https://chrome.google.com/remotedesktop
 • Sa iyong Android device, buksan ang app at pindutin ang alinman sa iyong mga online na computer upang kumonekta.
 
-Ang mga remote na computer na may mga keyboard na hindi US-Ingles ay maaaring makatanggap ng hindi tamang pag-input ng teksto. Paparating na ang suporta para sa iba pang mga layout ng keyboard!
+Ang mga remote na computer na may mga keyboard na hindi US-English ay maaaring makatanggap ng hindi tamang pag-input ng teksto. Paparating na ang suporta para sa iba pang mga layout ng keyboard!
 
 Para sa higit pang impormasyon tungkol sa privacy, pakitingnan ang Patakaran sa Privacy ng Google (http://goo.gl/SyrVzj) at ang Patakaran sa Privacy ng Chrome Privacy Policy (http://goo.gl/0uXE5d).</translation>
 <translation id="1324095856329524885">(hindi pa available ang feature na ito para sa iyong computer)</translation>
@@ -130,6 +130,7 @@ Host</translation>
 <translation id="4156740505453712750">Upang protektahan ang access sa computer na ito, mangyaring pumili ng PIN na may <ph name="BOLD_START" />hindi bababa sa anim na digit<ph name="BOLD_END" />. Kakailanganin ang PIN na ito kapag kumokonekta mula sa isa pang lokasyon.</translation>
 <translation id="4176825807642096119">Access code</translation>
 <translation id="4207623512727273241">Mangyaring patakbuhin ang installer bago magpatuloy.</translation>
+<translation id="4227991223508142681">Host na Provisioning Utility</translation>
 <translation id="4240294130679914010">Uninstaller ng Chromoting Host</translation>
 <translation id="4277463233460010382">Naka-configure ang computer na ito na payagan ang isa o higit pang mga client na kumonekta nang hindi naglalagay ng PIN.</translation>
 <translation id="4277736576214464567">Di-wasto ang access code. Pakisubukang muli.</translation>

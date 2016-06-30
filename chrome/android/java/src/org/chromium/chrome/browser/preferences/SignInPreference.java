@@ -23,18 +23,19 @@ import org.chromium.chrome.browser.signin.AccountSigninActivity;
 import org.chromium.chrome.browser.signin.SigninAccessPoint;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninManager.SignInAllowedObserver;
-import org.chromium.chrome.browser.sync.GoogleServiceAuthError;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
 import org.chromium.sync.AndroidSyncSettings;
 import org.chromium.sync.signin.ChromeSigninController;
 
 /**
  * A preference that displays "Sign in to Chrome" when the user is not sign in, and displays
- * the user's name, email, and profile image when the user is signed in.
+ * the user's name, email, profile image and sync error icon if necessary when the user is signed
+ * in.
  */
-public class SignInPreference extends Preference implements SignInAllowedObserver,
-        ProfileDownloader.Observer, AndroidSyncSettings.AndroidSyncSettingsObserver {
-
+public class SignInPreference extends Preference
+        implements SignInAllowedObserver, ProfileDownloader.Observer,
+                   AndroidSyncSettings.AndroidSyncSettingsObserver, SyncStateChangedListener {
     private boolean mViewEnabled;
 
     /**
@@ -47,7 +48,7 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
     }
 
     /**
-     * Starts listening for updates to the sign-in state.
+     * Starts listening for updates to the sign-in and sync state.
      */
     public void registerForUpdates() {
         SigninManager manager = SigninManager.get(getContext());
@@ -55,17 +56,25 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
         ProfileDownloader.addObserver(this);
         FirstRunSignInProcessor.updateSigninManagerFirstRunCheckDone(getContext());
         AndroidSyncSettings.registerObserver(getContext(), this);
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.addSyncStateChangedListener(this);
+        }
     }
 
     /**
-     * Stops listening for updates to the sign-in state. Every call to registerForUpdates() must
-     * be matched with a call to this method.
+     * Stops listening for updates to the sign-in and sync state. Every call to registerForUpdates()
+     * must be matched with a call to this method.
      */
     public void unregisterForUpdates() {
         SigninManager manager = SigninManager.get(getContext());
         manager.removeSignInAllowedObserver(this);
         ProfileDownloader.removeObserver(this);
         AndroidSyncSettings.unregisterObserver(getContext(), this);
+        ProfileSyncService syncService = ProfileSyncService.get();
+        if (syncService != null) {
+            syncService.removeSyncStateChangedListener(this);
+        }
     }
 
     /**
@@ -82,7 +91,7 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
             summary = getContext().getString(R.string.sign_in_to_chrome_summary);
             fragment = null;
         } else {
-            summary = getSyncSummaryString(getContext(), account.name);
+            summary = SyncPreference.getSyncStatusSummary(getContext());
             fragment = AccountManagementFragment.class.getName();
             title = AccountManagementFragment.getCachedUserName(account.name);
             if (title == null) {
@@ -95,16 +104,12 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
                 }
                 title = TextUtils.isEmpty(cachedName) ? account.name : cachedName;
             }
-            if (ProfileSyncService.get().getAuthError() != GoogleServiceAuthError.State.NONE) {
-                setWidgetLayoutResource(R.layout.sync_error_widget);
-            } else {
-                setWidgetLayoutResource(0);
-            }
         }
 
         setTitle(title);
         setSummary(summary);
         setFragment(fragment);
+        updateSyncStatusIcon();
 
         ChromeSigninController signinController = ChromeSigninController.get(getContext());
         boolean enabled = signinController.isSignedIn()
@@ -127,30 +132,24 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
         setOnPreferenceClickListener(new OnPreferenceClickListener() {
             @Override
             public boolean onPreferenceClick(Preference preference) {
-                if (ChromeSigninController.get(getContext()).isSignedIn()) return false;
-                if (!SigninManager.get(getContext()).isSignInAllowed()) {
-                    if (SigninManager.get(getContext()).isSigninDisabledByPolicy()) {
-                        ManagedPreferencesUtils.showManagedByAdministratorToast(getContext());
-                    }
+                if (!AccountSigninActivity.startIfAllowed(
+                            getContext(), SigninAccessPoint.SETTINGS)) {
                     return false;
                 }
 
                 setEnabled(false);
-                AccountSigninActivity.startAccountSigninActivity(
-                        getContext(), SigninAccessPoint.SETTINGS);
                 return true;
             }
         });
     }
 
-    private static String getSyncSummaryString(Context context, String accountName) {
-        boolean syncEnabled = AndroidSyncSettings.isSyncEnabled(context);
-        if (syncEnabled) {
-            return String.format(
-                context.getString(R.string.account_management_sync_summary), accountName);
+    private void updateSyncStatusIcon() {
+        if (SyncPreference.showSyncErrorIcon(getContext())
+                && ChromeSigninController.get(getContext()).isSignedIn()) {
+            setWidgetLayoutResource(R.layout.sync_error_widget);
+        } else {
+            setWidgetLayoutResource(0);
         }
-
-        return context.getString(R.string.sync_is_disabled);
     }
 
     @Override
@@ -160,6 +159,13 @@ public class SignInPreference extends Preference implements SignInAllowedObserve
         view.setEnabled(mViewEnabled);
         view.findViewById(android.R.id.title).setEnabled(mViewEnabled);
         view.findViewById(android.R.id.summary).setEnabled(mViewEnabled);
+    }
+
+    // ProfileSyncServiceListener implementation:
+
+    @Override
+    public void syncStateChanged() {
+        update();
     }
 
     // SignInAllowedObserver

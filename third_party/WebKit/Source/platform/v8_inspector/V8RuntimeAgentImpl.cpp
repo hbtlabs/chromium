@@ -87,11 +87,13 @@ void V8RuntimeAgentImpl::evaluate(
     if (executionContextId.isJust()) {
         contextId = executionContextId.fromJust();
     } else {
-        contextId = m_debugger->client()->ensureDefaultContextInGroup(m_session->contextGroupId());
-        if (!contextId) {
+        v8::HandleScope handles(m_debugger->isolate());
+        v8::Local<v8::Context> defaultContext = m_debugger->client()->ensureDefaultContextInGroup(m_session->contextGroupId());
+        if (defaultContext.IsEmpty()) {
             *errorString = "Cannot find default execution context";
             return;
         }
+        contextId = V8DebuggerImpl::contextId(defaultContext);
     }
 
     InjectedScript::ContextScope scope(errorString, m_debugger, m_session->contextGroupId(), contextId);
@@ -218,7 +220,7 @@ void V8RuntimeAgentImpl::getProperties(
     if (!errorString->isEmpty() || exceptionDetails->isJust() || accessorPropertiesOnly.fromMaybe(false))
         return;
     v8::Local<v8::Array> propertiesArray;
-    if (hasInternalError(errorString, !v8::Debug::GetInternalProperties(m_debugger->isolate(), scope.object()).ToLocal(&propertiesArray)))
+    if (hasInternalError(errorString, !m_debugger->internalProperties(scope.context(), scope.object()).ToLocal(&propertiesArray)))
         return;
     std::unique_ptr<protocol::Array<InternalPropertyDescriptor>> propertiesProtocolArray = protocol::Array<InternalPropertyDescriptor>::create();
     for (uint32_t i = 0; i < propertiesArray->Length(); i += 2) {
@@ -295,7 +297,7 @@ void V8RuntimeAgentImpl::compileScript(ErrorString* errorString,
 
     String16 scriptValueId = String16::number(script->GetUnboundScript()->GetId());
     std::unique_ptr<v8::Global<v8::Script>> global(new v8::Global<v8::Script>(m_debugger->isolate(), script));
-    m_compiledScripts.set(scriptValueId, std::move(global));
+    m_compiledScripts[scriptValueId] = std::move(global);
     *scriptId = scriptValueId;
 }
 
@@ -313,7 +315,8 @@ void V8RuntimeAgentImpl::runScript(ErrorString* errorString,
         return;
     }
 
-    if (!m_compiledScripts.contains(scriptId)) {
+    auto it = m_compiledScripts.find(scriptId);
+    if (it == m_compiledScripts.end()) {
         *errorString = "Script execution failed";
         return;
     }
@@ -325,7 +328,8 @@ void V8RuntimeAgentImpl::runScript(ErrorString* errorString,
     if (doNotPauseOnExceptionsAndMuteConsole.fromMaybe(false))
         scope.ignoreExceptionsAndMuteConsole();
 
-    std::unique_ptr<v8::Global<v8::Script>> scriptWrapper = m_compiledScripts.take(scriptId);
+    std::unique_ptr<v8::Global<v8::Script>> scriptWrapper = std::move(it->second);
+    m_compiledScripts.erase(it);
     v8::Local<v8::Script> script = scriptWrapper->Get(m_debugger->isolate());
     if (script.IsEmpty()) {
         *errorString = "Script execution failed";

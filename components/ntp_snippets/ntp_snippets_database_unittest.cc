@@ -80,14 +80,13 @@ class NTPSnippetsDatabaseTest : public testing::Test {
 
   NTPSnippetsDatabase* db() { return db_.get(); }
 
-  bool db_inited() { return db_->database_initialized_; }
-
   void OnSnippetsLoaded(NTPSnippet::PtrVector snippets) {
     OnSnippetsLoadedImpl(snippets);
   }
-
   MOCK_METHOD1(OnSnippetsLoadedImpl,
                void(const NTPSnippet::PtrVector& snippets));
+
+  MOCK_METHOD1(OnImageLoaded, void(std::string));
 
  private:
   base::MessageLoop message_loop_;
@@ -101,112 +100,189 @@ TEST_F(NTPSnippetsDatabaseTest, Init) {
   ASSERT_FALSE(db());
 
   CreateDatabase();
-  EXPECT_FALSE(db_inited());
+  EXPECT_FALSE(db()->IsInitialized());
 
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(db_inited());
+  EXPECT_TRUE(db()->IsInitialized());
 }
 
 TEST_F(NTPSnippetsDatabaseTest, LoadBeforeInit) {
   CreateDatabase();
-  EXPECT_FALSE(db_inited());
+  EXPECT_FALSE(db()->IsInitialized());
 
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
+  // Start a snippet and image load before the DB is initialized.
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
+  db()->LoadImage("id", base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                                   base::Unretained(this)));
 
+  // They should be serviced once initialization finishes.
   EXPECT_CALL(*this, OnSnippetsLoadedImpl(_));
+  EXPECT_CALL(*this, OnImageLoaded(_));
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(db_inited());
+  EXPECT_TRUE(db()->IsInitialized());
 }
 
 TEST_F(NTPSnippetsDatabaseTest, LoadAfterInit) {
   CreateDatabase();
-  EXPECT_FALSE(db_inited());
+  EXPECT_FALSE(db()->IsInitialized());
 
   EXPECT_CALL(*this, OnSnippetsLoadedImpl(_)).Times(0);
   base::RunLoop().RunUntilIdle();
-  EXPECT_TRUE(db_inited());
+  EXPECT_TRUE(db()->IsInitialized());
 
   Mock::VerifyAndClearExpectations(this);
 
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
-
   EXPECT_CALL(*this, OnSnippetsLoadedImpl(_));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
+  EXPECT_CALL(*this, OnImageLoaded(_));
+  db()->LoadImage("id", base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                                   base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(NTPSnippetsDatabaseTest, Save) {
   CreateDatabase();
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(db_inited());
+  ASSERT_TRUE(db()->IsInitialized());
 
   std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::string image_data("pretty image");
 
-  db()->Save(*snippet);
-  base::RunLoop().RunUntilIdle();
+  // Store a snippet and an image.
+  db()->SaveSnippet(*snippet);
+  db()->SaveImage(snippet->id(), image_data);
 
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
-
+  // Make sure they're there.
   EXPECT_CALL(*this,
               OnSnippetsLoadedImpl(ElementsAre(SnippetEq(snippet.get()))));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 
   Mock::VerifyAndClearExpectations(this);
 
-  // The snippet should still exist after recreating the database.
-  CreateDatabase();
+  EXPECT_CALL(*this, OnImageLoaded(image_data));
+  db()->LoadImage(snippet->id(),
+                  base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                             base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+}
 
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
+TEST_F(NTPSnippetsDatabaseTest, SavePersist) {
+  CreateDatabase();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(db()->IsInitialized());
+
+  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::string image_data("pretty image");
+
+  // Store a snippet and an image.
+  db()->SaveSnippet(*snippet);
+  db()->SaveImage(snippet->id(), image_data);
+  base::RunLoop().RunUntilIdle();
+
+  // They should still exist after recreating the database.
+  CreateDatabase();
 
   EXPECT_CALL(*this,
               OnSnippetsLoadedImpl(ElementsAre(SnippetEq(snippet.get()))));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
+  EXPECT_CALL(*this, OnImageLoaded(image_data));
+  db()->LoadImage(snippet->id(),
+                  base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                             base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(NTPSnippetsDatabaseTest, Update) {
   CreateDatabase();
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(db_inited());
+  ASSERT_TRUE(db()->IsInitialized());
 
   std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
 
-  db()->Save(*snippet);
-  base::RunLoop().RunUntilIdle();
+  // Store a snippet.
+  db()->SaveSnippet(*snippet);
 
+  // Change it.
   const std::string text("some text");
   snippet->set_snippet(text);
+  db()->SaveSnippet(*snippet);
 
-  db()->Save(*snippet);
-  base::RunLoop().RunUntilIdle();
-
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
-
+  // Make sure we get the updated version.
   EXPECT_CALL(*this,
               OnSnippetsLoadedImpl(ElementsAre(SnippetEq(snippet.get()))));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(NTPSnippetsDatabaseTest, Delete) {
   CreateDatabase();
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(db_inited());
+  ASSERT_TRUE(db()->IsInitialized());
 
   std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
 
-  db()->Save(*snippet);
+  // Store a snippet.
+  db()->SaveSnippet(*snippet);
+
+  // Make sure it's there.
+  EXPECT_CALL(*this,
+              OnSnippetsLoadedImpl(ElementsAre(SnippetEq(snippet.get()))));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 
-  db()->Delete(snippet->id());
-  base::RunLoop().RunUntilIdle();
+  Mock::VerifyAndClearExpectations(this);
 
-  db()->Load(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
-                        base::Unretained(this)));
+  // Delete the snippet.
+  db()->DeleteSnippet(snippet->id());
 
+  // Make sure it's gone.
   EXPECT_CALL(*this, OnSnippetsLoadedImpl(IsEmpty()));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(NTPSnippetsDatabaseTest, DeleteSnippetAlsoDeletesImage) {
+  CreateDatabase();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_TRUE(db()->IsInitialized());
+
+  std::unique_ptr<NTPSnippet> snippet = CreateTestSnippet();
+  std::string image_data("pretty image");
+
+  // Store a snippet and image.
+  db()->SaveSnippet(*snippet);
+  db()->SaveImage(snippet->id(), image_data);
+  base::RunLoop().RunUntilIdle();
+
+  // Make sure they're there.
+  EXPECT_CALL(*this,
+              OnSnippetsLoadedImpl(ElementsAre(SnippetEq(snippet.get()))));
+  db()->LoadSnippets(base::Bind(&NTPSnippetsDatabaseTest::OnSnippetsLoaded,
+                                base::Unretained(this)));
+  EXPECT_CALL(*this, OnImageLoaded(image_data));
+  db()->LoadImage(snippet->id(),
+                  base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                             base::Unretained(this)));
+  base::RunLoop().RunUntilIdle();
+
+  Mock::VerifyAndClearExpectations(this);
+
+  // Delete the snippet.
+  db()->DeleteSnippet(snippet->id());
+
+  // Make sure the image is gone.
+  EXPECT_CALL(*this, OnImageLoaded(std::string()));
+  db()->LoadImage(snippet->id(),
+                  base::Bind(&NTPSnippetsDatabaseTest::OnImageLoaded,
+                             base::Unretained(this)));
   base::RunLoop().RunUntilIdle();
 }
 

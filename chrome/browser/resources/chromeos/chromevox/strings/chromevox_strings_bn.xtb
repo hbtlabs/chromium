@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">কোনো পরবর্তী তালিকা আইটেম নেই৷</translation>
 <translation id="1157782847298808853">কীবোর্ড সহায়তা</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, কম্বো বাক্স</translation>
+<translation id="1161762950103988776">জাম্প</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, মেনু আইটেম, উপমেনু সহ</translation>
 <translation id="1177863135347784049">কাস্টম</translation>
 <translation id="1188858454923323853">পরিপূরক</translation>
+<translation id="1201402288615127009">পরবর্তী</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - Chrome কে ভয়েস প্রদান</translation>
 <translation id="1229276918471378188">পূর্ববর্তী জাম্প</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">ব্যাকরণগত ভুল</translation>
 <translation id="257674075312929031">গোষ্ঠী</translation>
 <translation id="2582407057977008361">একপাশে</translation>
-<translation id="2589102159832527089">এই পৃষ্ঠাটিতে PDF ফাইল &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; থেকে স্বয়ংক্রিয়ভাবে নিষ্কাশিত হওয়া পাঠ্য রয়েছে৷ &lt;a href="<ph name="URL" />"&gt;আসলটির জন্য এখানে ক্লিক করুন৷&lt;/a&gt;</translation>
 <translation id="2606210917827248971">সাথে আছে {COUNT,plural, =1{#টি আইটেম}one{#টি আইটেম}other{#টি আইটেম}}</translation>
 <translation id="2614981083756825552">গাণিতিক ML লেআউট</translation>
 <translation id="2626530649491650971">ক্লিক যোগ্য</translation>
@@ -245,6 +246,7 @@
         "vi": "ভিয়েতনামী",
         "zh": "চীনা",
         "zh_TW": "চীনা (ঐতিহ্যবাহি হান)"}</translation>
+<translation id="335581015389089642">স্পিচ</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{যুক্ত}one{#টি যুক্ত চিহ্ন}other{#টি যুক্ত চিহ্ন}}</translation>
 <translation id="338583716107319301">পৃথককারী</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">ব্যবধান</translation>
 <translation id="6142308968191113180">শিরোলেখ ৪</translation>
 <translation id="6169420925157477918">দীর্ঘ বিবরণ সহ চিত্র</translation>
-<translation id="6172087735260766220">অনুলিপি-সুরক্ষিত PDF থেকে অ্যাক্সেসযোগ্য পাঠ্য অ্যাক্সেস করতে অক্ষম।</translation>
 <translation id="6186305613600865047">পৃষ্ঠাটির একেবারে নীচে চলে যান</translation>
 <translation id="6193330012414963395">AM PM</translation>
 <translation id="622484624075952240">নিচের</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">ট্যাব</translation>
 <translation id="667999046851023355">দস্তাবেজ</translation>
 <translation id="6697092096875747123">পূর্ববর্তী কম্বো বাক্স</translation>
+<translation id="6710213216561001401">পূর্ববর্তী</translation>
 <translation id="6714813999819678458">পূর্ববর্তী স্তর ২ শিরোনাম</translation>
 <translation id="6716505898850596801">সংশোধক কীগুলি</translation>
 <translation id="671916444866103745">কোনো পরবর্তী ARIA ল্যান্ডমার্ক নেই৷</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">টাইমার</translation>
 <translation id="8065607967589909823">নির্বাচনটি</translation>
 <translation id="8066678206530322333">ব্যানার</translation>
+<translation id="8076492880354921740">ট্যাবসমূহ</translation>
 <translation id="8110647606445335195">কোনো ARIA ল্যান্ডমার্ক নেই৷</translation>
 <translation id="8153880621934657047">সারণীর ভিতরে নয়৷</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{আন্ডারস্কোর}one{#টি আন্ডারস্কোর}other{#টি আন্ডারস্কোর}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">কোনো পূর্ববর্তী স্তর ২ শিরোনাম নেই৷</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">কোনো পূর্ববর্তী চেকবাক্স নেই৷</translation>
+<translation id="8446884382197647889">আরো জানুন</translation>
 <translation id="8455868257606149352">সর্বোচ্চ <ph name="X" /></translation>
 <translation id="84575901236241018">অ্যাক্সেস কী আছে, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">এক নজরে উইন্ডো</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">ব্রাউজ করতে উপরের বা নীচের তীর চিহ্ন কী ব্যবহার করুন, বা অনুসন্ধান করতে টাইপ করুন৷</translation>
 <translation id="9192904702577636854">মার্কি</translation>
 <translation id="9212322457209634662">এরপরে কোনো বিভাগ নেই৷</translation>
+<translation id="923331726185079994">ChromeVox আপডেট হয়েছে</translation>
 <translation id="930275611743429116">নির্বাচন সূচনা বা সমাপ্ত করুন৷</translation>
 <translation id="948171205378458592">স্পিচের হার কমান</translation>
 <translation id="962913030769097253">পরবর্তী স্তর ১ শিরোনাম</translation>
 <translation id="973955474346881951">স্টিকি মোড সক্ষম/অক্ষম করুন</translation>
+<translation id="976849232629612000">কোনো আইটেম নেই।</translation>
 </translationbundle>

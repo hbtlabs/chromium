@@ -43,8 +43,8 @@
 #include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
 #include "wtf/Compiler.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -229,7 +229,7 @@ public:
     bool find(
         int identifier, const WebString& searchText, const WebFindOptions&,
         bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow = nullptr) override;
-    void stopFinding(bool clearSelection) override;
+    void stopFinding(StopFindAction) override;
     void scopeStringMatches(
         int identifier, const WebString& searchText, const WebFindOptions&,
         bool reset) override;
@@ -240,8 +240,12 @@ public:
     WebFloatRect activeFindMatchRect() override;
     void findMatchRects(WebVector<WebFloatRect>&) override;
     int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
+    float distanceToNearestFindMatch(const WebFloatPoint&) override;
     void setTickmarks(const WebVector<WebRect>&) override;
     WebFrameWidget* frameWidget() const override;
+    void copyImageAt(const WebPoint&) override;
+    void saveImageAt(const WebPoint&) override;
+    void clearActiveFindMatch() override;
 
     // WebFrameImplBase methods:
     void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
@@ -348,8 +352,13 @@ private:
 
     void loadJavaScriptURL(const KURL&);
 
+    HitTestResult hitTestResultForVisualViewportPos(const IntPoint&);
+
     WebPlugin* focusedPluginIfInputMethodSupported();
     ScrollableArea* layoutViewportScrollableArea() const;
+
+    // Returns true if the frame is focused.
+    bool isFocused() const;
 
     Member<FrameLoaderClientImpl> m_frameLoaderClientImpl;
 
@@ -366,7 +375,7 @@ private:
     WebFrameClient* m_client;
     WebAutofillClient* m_autofillClient;
     WebContentSettingsClient* m_contentSettingsClient;
-    OwnPtr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
+    std::unique_ptr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
 
     // Will be initialized after first call to find() or scopeStringMatches().
     Member<TextFinder> m_textFinder;

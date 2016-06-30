@@ -293,8 +293,7 @@ void ClientSession::CreateVideoStreams(
   video_stream_ = connection_->StartVideoStream(
       desktop_environment_->CreateVideoCapturer());
 
-  video_stream_->SetSizeCallback(
-      base::Bind(&ClientSession::OnScreenSizeChanged, base::Unretained(this)));
+  video_stream_->SetObserver(this);
 
   // Apply video-control parameters to the new stream.
   video_stream_->SetLosslessEncode(lossless_video_encode_);
@@ -426,6 +425,17 @@ void ClientSession::SetDisableInputs(bool disable_inputs) {
   disable_clipboard_filter_.set_enabled(!disable_inputs);
 }
 
+uint32_t ClientSession::desktop_session_id() const {
+  DCHECK(CalledOnValidThread());
+  DCHECK(desktop_environment_);
+  return desktop_environment_->GetDesktopSessionId();
+}
+
+ClientSessionControl* ClientSession::session_control() {
+  DCHECK(CalledOnValidThread());
+  return this;
+}
+
 std::unique_ptr<protocol::ClipboardStub> ClientSession::CreateClipboardProxy() {
   DCHECK(CalledOnValidThread());
 
@@ -434,8 +444,9 @@ std::unique_ptr<protocol::ClipboardStub> ClientSession::CreateClipboardProxy() {
                                          base::ThreadTaskRunnerHandle::Get()));
 }
 
-void ClientSession::OnScreenSizeChanged(const webrtc::DesktopSize& size,
-                                        const webrtc::DesktopVector& dpi) {
+void ClientSession::OnVideoSizeChanged(protocol::VideoStream* video_stream,
+                                       const webrtc::DesktopSize& size,
+                                       const webrtc::DesktopVector& dpi) {
   DCHECK(CalledOnValidThread());
 
   mouse_clamping_filter_.set_output_size(size);
@@ -474,6 +485,12 @@ void ClientSession::OnScreenSizeChanged(const webrtc::DesktopSize& size,
       break;
     }
   }
+}
+
+void ClientSession::OnVideoFrameSent(protocol::VideoStream* stream,
+                                     uint32_t frame_id,
+                                     int64_t input_event_timestamp) {
+  // TODO(sergeyu): Send a message to the client to notify about the new frame.
 }
 
 }  // namespace remoting

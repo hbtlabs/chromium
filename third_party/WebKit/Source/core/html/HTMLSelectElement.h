@@ -38,6 +38,8 @@ namespace blink {
 
 class AutoscrollController;
 class ExceptionState;
+class HTMLHRElement;
+class HTMLOptGroupElement;
 class HTMLOptionElement;
 class HTMLOptionElementOrHTMLOptGroupElement;
 class HTMLElementOrLong;
@@ -86,9 +88,8 @@ public:
     HTMLOptionsCollection* options();
     HTMLCollection* selectedOptions();
 
-    void optionElementChildrenChanged();
+    void optionElementChildrenChanged(const HTMLOptionElement&);
 
-    void setRecalcListItems();
     void invalidateSelectedItems();
 
     using ListItems = HeapVector<Member<HTMLElement>>;
@@ -120,8 +121,11 @@ public:
     // For use in the implementation of HTMLOptionElement.
     void optionSelectionStateChanged(HTMLOptionElement*, bool optionIsSelected);
     void optionInserted(HTMLOptionElement&, bool optionIsSelected);
-    void optionRemoved(const HTMLOptionElement&);
+    void optionRemoved(HTMLOptionElement&);
     bool anonymousIndexedSetter(unsigned, HTMLOptionElement*, ExceptionState&);
+
+    void optGroupInsertedOrRemoved(HTMLOptGroupElement&);
+    void hrInsertedOrRemoved(HTMLHRElement&);
 
     void updateListOnLayoutObject();
 
@@ -192,10 +196,17 @@ private:
 
     void dispatchInputAndChangeEventForMenuList();
 
+    // |subject| is an element which was inserted or removed.
+    void setRecalcListItems(HTMLElement& subject);
     void recalcListItems() const;
-    void resetToDefaultSelection();
+    enum ResetReason {
+        ResetReasonSelectedOptionRemoved,
+        ResetReasonOthers
+    };
+    void resetToDefaultSelection(ResetReason = ResetReasonOthers);
     void typeAheadFind(KeyboardEvent*);
     void saveLastSelection();
+    void saveListboxActiveSelection();
     // Returns the first selected OPTION, or nullptr.
     HTMLOptionElement* selectedOption() const;
 
@@ -210,8 +221,8 @@ private:
         MakeOptionDirty = 1 << 2,
     };
     typedef unsigned SelectOptionFlags;
-    void selectOption(int optionIndex, SelectOptionFlags = 0);
-    void selectOption(HTMLOptionElement*, SelectOptionFlags = 0);
+    void selectOption(int optionIndex, SelectOptionFlags);
+    void selectOption(HTMLOptionElement*, SelectOptionFlags);
     void selectOption(HTMLOptionElement*, int optionIndex, SelectOptionFlags);
     void deselectItemsWithoutValidation(HTMLElement* elementToExclude = 0);
     void parseMultipleAttribute(const AtomicString&);
@@ -241,7 +252,6 @@ private:
     AutoscrollController* autoscrollController() const;
     void scrollToOptionTask();
 
-    void childrenChanged(const ChildrenChange&) override;
     bool areAuthorShadowsAllowed() const override { return false; }
     void finishParsingChildren() override;
 

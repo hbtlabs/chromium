@@ -45,6 +45,8 @@
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -108,10 +110,10 @@ public:
 
 private:
     ImageResourceTestMockFetchContext()
-        :  m_runner(adoptPtr(new MockTaskRunner))
+        :  m_runner(wrapUnique(new MockTaskRunner))
     { }
 
-    OwnPtr<MockTaskRunner> m_runner;
+    std::unique_ptr<MockTaskRunner> m_runner;
 };
 
 TEST(ImageResourceTest, MultipartImage)
@@ -123,7 +125,7 @@ TEST(ImageResourceTest, MultipartImage)
     // Emulate starting a real load, but don't expect any "real" WebURLLoaderClient callbacks.
     ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL));
     cachedImage->setIdentifier(createUniqueIdentifier());
-    cachedImage->load(fetcher);
+    fetcher->startLoad(cachedImage);
     Platform::current()->getURLLoaderMockFactory()->unregisterURL(testURL);
 
     Persistent<MockImageResourceClient> client = new MockImageResourceClient(cachedImage);
@@ -188,7 +190,7 @@ TEST(ImageResourceTest, CancelOnDetach)
     ImageResource* cachedImage = ImageResource::create(ResourceRequest(testURL));
     cachedImage->setIdentifier(createUniqueIdentifier());
 
-    cachedImage->load(fetcher);
+    fetcher->startLoad(cachedImage);
     memoryCache()->add(cachedImage);
 
     Persistent<MockImageResourceClient> client = new MockImageResourceClient(cachedImage);

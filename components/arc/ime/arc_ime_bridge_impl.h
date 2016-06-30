@@ -32,15 +32,17 @@ class ArcImeBridgeImpl : public ArcImeBridge,
   // arc::ArcBridgeService::Observer overrides:
   void OnImeInstanceReady() override;
 
-  // ArcImeHost overrides:
+  // ArcImeBridge overrides:
   void SendSetCompositionText(const ui::CompositionText& composition) override;
   void SendConfirmCompositionText() override;
   void SendInsertText(const base::string16& text) override;
+  void SendOnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
 
   // arc::mojom::ImeHost overrides:
   void OnTextInputTypeChanged(arc::mojom::TextInputType type) override;
   void OnCursorRectChanged(arc::mojom::CursorRectPtr rect) override;
   void OnCancelComposition() override;
+  void ShowImeIfNeeded() override;
 
  private:
   mojo::Binding<mojom::ImeHost> binding_;

@@ -88,9 +88,6 @@ class VIEWS_EXPORT Textfield : public View,
   // Inserts |new_text| at the cursor position, replacing any selected text.
   void InsertOrReplaceText(const base::string16& new_text);
 
-  // Returns the text direction.
-  base::i18n::TextDirection GetTextDirection() const;
-
   // Returns the text that is currently selected.
   base::string16 GetSelectedText() const;
 
@@ -203,9 +200,6 @@ class VIEWS_EXPORT Textfield : public View,
   // Set the accessible name of the text field.
   void SetAccessibleName(const base::string16& name);
 
-  // Performs the action associated with the specified command id.
-  void ExecuteCommand(int command_id);
-
   // Returns whether there is a drag operation originating from the textfield.
   bool HasTextBeingDragged();
 
@@ -219,6 +213,7 @@ class VIEWS_EXPORT Textfield : public View,
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  bool OnKeyReleased(const ui::KeyEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   bool CanHandleAccelerators() const override;
@@ -288,6 +283,7 @@ class VIEWS_EXPORT Textfield : public View,
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
@@ -306,8 +302,8 @@ class VIEWS_EXPORT Textfield : public View,
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override;
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override;
+  bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
  protected:
   // Inserts or appends a character in response to an IME operation.
@@ -320,6 +316,9 @@ class VIEWS_EXPORT Textfield : public View,
 
   // Get the text from the selection clipboard.
   virtual base::string16 GetSelectionClipboardText() const;
+
+  // Executes the given |command|.
+  virtual void ExecuteTextEditCommand(ui::TextEditCommand command);
 
  private:
   friend class TextfieldTestApi;
@@ -395,11 +394,12 @@ class VIEWS_EXPORT Textfield : public View,
   // This is the current listener for events from this Textfield.
   TextfieldController* controller_;
 
-  // If non-zero, an edit command to execute on the next key event. When set,
-  // the key event is still passed to |controller_|, but otherwise ignored in
-  // favor of the edit command. Set via SetEditCommandForNextKeyEvent() during
-  // dispatch of that key event (see comment in TextInputClient).
-  int scheduled_edit_command_;
+  // An edit command to execute on the next key event. When set to a valid
+  // value, the key event is still passed to |controller_|, but otherwise
+  // ignored in favor of the edit command. Set via
+  // SetTextEditCommandForNextKeyEvent() during dispatch of that key event (see
+  // comment in TextInputClient).
+  ui::TextEditCommand scheduled_text_edit_command_;
 
   // True if this Textfield cannot accept input and is read-only.
   bool read_only_;
@@ -462,7 +462,7 @@ class VIEWS_EXPORT Textfield : public View,
 
   // State variables used to track double and triple clicks.
   size_t aggregated_clicks_;
-  base::TimeDelta last_click_time_;
+  base::TimeTicks last_click_time_;
   gfx::Point last_click_location_;
   gfx::Range double_click_word_;
 

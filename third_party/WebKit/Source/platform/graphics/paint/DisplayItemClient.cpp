@@ -11,7 +11,7 @@
 
 namespace blink {
 
-DisplayItemCacheGeneration::Generation DisplayItemCacheGeneration::s_nextGeneration = 1;
+DisplayItemClient::CacheGenerationOrInvalidationReason::ValueType DisplayItemClient::CacheGenerationOrInvalidationReason::s_nextGeneration = kFirstValidGeneration;
 
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
 
@@ -39,6 +39,8 @@ DisplayItemClient::~DisplayItemClient()
         }
     }
     liveDisplayItemClients->remove(this);
+    // In case this object is a subsequence owner.
+    endShouldKeepAliveAllClients(this);
 }
 
 bool DisplayItemClient::isAlive() const
@@ -46,20 +48,28 @@ bool DisplayItemClient::isAlive() const
     return liveDisplayItemClients && liveDisplayItemClients->contains(this);
 }
 
-void DisplayItemClient::beginShouldKeepAlive(const void* paintController) const
+void DisplayItemClient::beginShouldKeepAlive(const void* owner) const
 {
     CHECK(isAlive());
     if (!displayItemClientsShouldKeepAlive)
         displayItemClientsShouldKeepAlive = new HashMap<const void*, HashMap<const DisplayItemClient*, String>>();
-    auto addResult = displayItemClientsShouldKeepAlive->add(paintController, HashMap<const DisplayItemClient*, String>()).storedValue->value.add(this, "");
+    auto addResult = displayItemClientsShouldKeepAlive->add(owner, HashMap<const DisplayItemClient*, String>()).storedValue->value.add(this, "");
     if (addResult.isNewEntry)
         addResult.storedValue->value = debugName();
 }
 
-void DisplayItemClient::endShouldKeepAliveAllClients(const void* paintController)
+void DisplayItemClient::endShouldKeepAlive() const
+{
+    if (displayItemClientsShouldKeepAlive) {
+        for (auto item : *displayItemClientsShouldKeepAlive)
+            item.value.remove(this);
+    }
+}
+
+void DisplayItemClient::endShouldKeepAliveAllClients(const void* owner)
 {
     if (displayItemClientsShouldKeepAlive)
-        displayItemClientsShouldKeepAlive->remove(paintController);
+        displayItemClientsShouldKeepAlive->remove(owner);
 }
 
 void DisplayItemClient::endShouldKeepAliveAllClients()

@@ -63,7 +63,7 @@ static const MediaQueryEvaluator& printEval()
 
 static StyleSheetContents* parseUASheet(const String& str)
 {
-    StyleSheetContents* sheet = StyleSheetContents::create(CSSParserContext(UASheetMode, 0));
+    StyleSheetContents* sheet = StyleSheetContents::create(CSSParserContext(UASheetMode, nullptr));
     sheet->parseString(str);
     // User Agent stylesheets are parsed once for the lifetime of the renderer
     // process and are intentionally leaked.
@@ -186,7 +186,7 @@ void CSSDefaultStyleSheets::ensureDefaultStyleSheetForFullscreen()
     if (m_fullscreenStyleSheet)
         return;
 
-    String fullscreenRules = loadResourceAsASCIIString("fullscreen.css") + LayoutTheme::theme().extraFullScreenStyleSheet();
+    String fullscreenRules = loadResourceAsASCIIString("fullscreen.css") + LayoutTheme::theme().extraFullscreenStyleSheet();
     m_fullscreenStyleSheet = parseUASheet(fullscreenRules);
     m_defaultStyle->addRulesFromSheet(fullscreenStyleSheet(), screenEval());
     m_defaultQuirksStyle->addRulesFromSheet(fullscreenStyleSheet(), screenEval());
