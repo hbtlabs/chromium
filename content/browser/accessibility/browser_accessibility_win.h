@@ -886,10 +886,21 @@ BrowserAccessibilityWin
   // or a menu list option with a parent of type menu list popup.
   bool IsListBoxOptionOrMenuListOption();
 
-  // Given an int list attribute containing the ids of related elements,
-  // add a new IAccessibleRelation for this object with the given type name.
-  void AddRelations(ui::AXIntListAttribute src_attr,
-                    const base::string16& iaccessiblerelation_type);
+  // For adding / removing IA2 relations.
+
+  void AddRelation(const base::string16& relation_type, int target_id);
+  void AddBidirectionalRelations(const base::string16& relation_type,
+                                 const base::string16& reverse_relation_type,
+                                 ui::AXIntListAttribute attribute);
+  // Clears all the forward relations from this object to any other object and
+  // the associated  reverse relations on the other objects, but leaves any
+  // reverse relations on this object alone.
+  void ClearOwnRelations();
+  void RemoveBidirectionalRelationsOfType(
+      const base::string16& relation_type,
+      const base::string16& reverse_relation_type);
+  void RemoveTargetFromRelation(const base::string16& relation_type,
+                                int target_id);
 
   // Updates object attributes of IA2 with html attributes.
   void UpdateRequiredAttributes();
@@ -928,8 +939,10 @@ BrowserAccessibilityWin
     // |hyperlinks_|.
     std::map<int32_t, int32_t> hyperlink_offset_to_index;
 
-    // The id of a BrowserAccessibilityWin for each hyperlink.
-    // TODO(nektar): Replace object IDs with child indices.
+    // The unique id of a BrowserAccessibilityWin for each hyperlink.
+    // TODO(nektar): Replace object IDs with child indices if we decide that
+    // we are not implementing IA2 hyperlinks for anything other than IA2
+    // Hypertext.
     std::vector<int32_t> hyperlinks;
   };
 

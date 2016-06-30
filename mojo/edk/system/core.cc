@@ -30,6 +30,7 @@
 #include "mojo/edk/system/message_for_transit.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
 #include "mojo/edk/system/platform_handle_dispatcher.h"
+#include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/ports/node.h"
 #include "mojo/edk/system/remote_message_pipe_bootstrap.h"
 #include "mojo/edk/system/request_context.h"
@@ -169,10 +170,12 @@ scoped_refptr<Dispatcher> Core::GetDispatcher(MojoHandle handle) {
 
 void Core::AddChild(base::ProcessHandle process_handle,
                     ScopedPlatformHandle platform_handle,
-                    const std::string& child_token) {
+                    const std::string& child_token,
+                    const ProcessErrorCallback& process_error_callback) {
   GetNodeController()->ConnectToChild(process_handle,
                                       std::move(platform_handle),
-                                      child_token);
+                                      child_token,
+                                      process_error_callback);
 }
 
 void Core::ChildLaunchFailed(const std::string& child_token) {
@@ -374,6 +377,17 @@ MojoResult Core::AsyncWait(MojoHandle handle,
   return rv;
 }
 
+MojoResult Core::SetProperty(MojoPropertyType type, const void* value) {
+  base::AutoLock locker(property_lock_);
+  switch (type) {
+    case MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED:
+      property_sync_call_allowed_ = *static_cast<const bool*>(value);
+      return MOJO_RESULT_OK;
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
+}
+
 MojoTimeTicks Core::GetTimeTicksNow() {
   return base::TimeTicks::Now().ToInternalValue();
 }
@@ -521,6 +535,17 @@ MojoResult Core::GetMessageBuffer(MojoMessageHandle message, void** buffer) {
   *buffer = reinterpret_cast<MessageForTransit*>(message)->mutable_bytes();
 
   return MOJO_RESULT_OK;
+}
+
+MojoResult Core::GetProperty(MojoPropertyType type, void* value) {
+  base::AutoLock locker(property_lock_);
+  switch (type) {
+    case MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED:
+      *static_cast<bool*>(value) = property_sync_call_allowed_;
+      return MOJO_RESULT_OK;
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
 }
 
 MojoResult Core::CreateWaitSet(MojoHandle* wait_set_handle) {
@@ -749,6 +774,24 @@ MojoResult Core::FuseMessagePipes(MojoHandle handle0, MojoHandle handle1) {
   if (!mpd0->Fuse(mpd1))
     return MOJO_RESULT_FAILED_PRECONDITION;
 
+  return MOJO_RESULT_OK;
+}
+
+MojoResult Core::NotifyBadMessage(MojoMessageHandle message,
+                                  const char* error,
+                                  size_t error_num_bytes) {
+  if (!message)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  const PortsMessage& ports_message =
+      reinterpret_cast<MessageForTransit*>(message)->ports_message();
+  if (ports_message.source_node() == ports::kInvalidNodeName) {
+    DVLOG(1) << "Received invalid message from unknown node.";
+    return MOJO_RESULT_OK;
+  }
+
+  GetNodeController()->NotifyBadMessageFrom(
+      ports_message.source_node(), std::string(error, error_num_bytes));
   return MOJO_RESULT_OK;
 }
 

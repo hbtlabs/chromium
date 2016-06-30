@@ -22,8 +22,13 @@ public class SectionInformation {
      */
     public static final int NO_SELECTION = -1;
 
+    /**
+     * This value indicates that user selection is invalid in this section.
+     */
+    public static final int INVALID_SELECTION = -2;
+
     @PaymentRequestUI.DataType private final int mDataType;
-    private final ArrayList<PaymentOption> mItems;
+    private ArrayList<PaymentOption> mItems;
     private int mSelectedItem;
 
     /**
@@ -100,8 +105,8 @@ public class SectionInformation {
     /**
      * Sets the currently selected item by index.
      *
-     * @param index The index of the currently selected item, or NO_SELECTION if a selection has not
-     *              yet been made.
+     * @param index The index of the currently selected item, NO_SELECTION if a selection has not
+     *              yet been made, or INVALID_SELECTION if an invalid selection has been made.
      */
     public void setSelectedItemIndex(int index) {
         mSelectedItem = index;
@@ -126,8 +131,8 @@ public class SectionInformation {
     /**
      * Returns the index of the selected item.
      *
-     * @return The index of the currently selected item, or NO_SELECTION if a selection has not yet
-     * been made.
+     * @return The index of the currently selected item, NO_SELECTION if a selection has not yet
+     *         been made, or INVALID_SELECTION if an invalid selection has been made.
      */
     public int getSelectedItemIndex() {
         return mSelectedItem;
@@ -143,6 +148,17 @@ public class SectionInformation {
     }
 
     /**
+     * Adds the given item at the head of the list and selects it.
+     *
+     * @param item The item to add.
+     */
+    public void addAndSelectItem(PaymentOption item) {
+        if (mItems == null) mItems = new ArrayList<>();
+        mItems.add(0, item);
+        mSelectedItem = 0;
+    }
+
+    /**
      * Returns the resource ID for the string telling users that they can add a new option.
      *
      * @return ID if the user can add a new option, or 0 if they can't.
@@ -150,6 +166,8 @@ public class SectionInformation {
     public int getAddStringId() {
         if (mDataType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
             return R.string.payments_add_address;
+        } else if (mDataType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+            return R.string.payments_add_contact;
         } else if (mDataType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
             return R.string.payments_add_payment_instrument;
         }

@@ -40,21 +40,16 @@
 #include "core/CSSValueKeywords.h"
 #include "core/StyleBuilderFunctions.h"
 #include "core/StylePropertyShorthand.h"
-#include "core/css/BasicShapeFunctions.h"
-#include "core/css/CSSBasicShapeValues.h"
 #include "core/css/CSSCounterValue.h"
 #include "core/css/CSSCursorImageValue.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSFunctionValue.h"
-#include "core/css/CSSGradientValue.h"
 #include "core/css/CSSGridTemplateAreasValue.h"
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSImageSetValue.h"
-#include "core/css/CSSPathValue.h"
+#include "core/css/CSSPendingSubstitutionValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSPropertyMetadata.h"
-#include "core/css/CSSURIValue.h"
-#include "core/css/CSSValuePair.h"
 #include "core/css/CSSVariableReferenceValue.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/StyleRule.h"
@@ -66,18 +61,20 @@
 #include "core/css/resolver/TransformBuilder.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/style/ContentData.h"
-#include "core/style/CounterContent.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
+#include "core/style/ContentData.h"
+#include "core/style/CounterContent.h"
 #include "core/style/QuotesData.h"
 #include "core/style/SVGComputedStyle.h"
 #include "core/style/StyleGeneratedImage.h"
 #include "core/style/StyleVariableData.h"
 #include "platform/fonts/FontDescription.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -110,8 +107,14 @@ static inline bool isValidVisitedLinkProperty(CSSPropertyID id)
 
 void StyleBuilder::applyProperty(CSSPropertyID id, StyleResolverState& state, const CSSValue& value)
 {
-    if (RuntimeEnabledFeatures::cssVariablesEnabled() && id != CSSPropertyVariable && value.isVariableReferenceValue()) {
-        CSSVariableResolver::resolveAndApplyVariableReferences(state, id, toCSSVariableReferenceValue(value));
+    if (RuntimeEnabledFeatures::cssVariablesEnabled() && id != CSSPropertyVariable
+        && (value.isVariableReferenceValue() || value.isPendingSubstitutionValue())) {
+
+        const CSSValue* resolvedValue = value.isVariableReferenceValue() ?
+            CSSVariableResolver::resolveVariableReferences(state, id, toCSSVariableReferenceValue(value)) :
+            CSSVariableResolver::resolvePendingSubstitutions(state, id, toCSSPendingSubstitutionValue(value));
+        applyProperty(id, state, *resolvedValue);
+
         if (!state.style()->hasVariableReferenceFromNonInheritedProperty() && !CSSPropertyMetadata::isInheritedProperty(id))
             state.style()->setHasVariableReferenceFromNonInheritedProperty();
         return;
@@ -195,16 +198,16 @@ void StyleBuilderFunctions::applyValueCSSPropertyCursor(StyleResolverState& stat
         int len = list.length();
         state.style()->setCursor(CURSOR_AUTO);
         for (int i = 0; i < len; i++) {
-            const CSSValue* item = list.item(i);
-            if (item->isCursorImageValue()) {
-                const CSSCursorImageValue* image = toCSSCursorImageValue(item);
-                IntPoint hotSpot = image->hotSpot();
-                bool hotSpotSpecified = image->hotSpotSpecified();
+            const CSSValue& item = list.item(i);
+            if (item.isCursorImageValue()) {
+                const CSSCursorImageValue& image = toCSSCursorImageValue(item);
+                IntPoint hotSpot = image.hotSpot();
+                bool hotSpotSpecified = image.hotSpotSpecified();
 
                 Element* element = state.element();
-                if (SVGCursorElement* cursorElement = image->getSVGCursorElement(element)) {
-                    if (image->cachedImageURL() != element->document().completeURL(cursorElement->href()->currentValue()->value()))
-                        image->clearImageResource();
+                if (SVGCursorElement* cursorElement = image.getSVGCursorElement(element)) {
+                    if (image.cachedImageURL() != element->document().completeURL(cursorElement->href()->currentValue()->value()))
+                        image.clearImageResource();
 
                     // Set the hot spot if it wasn't specified in the CSS but is specified in the SVG.
                     if (!hotSpotSpecified) {
@@ -218,16 +221,16 @@ void StyleBuilderFunctions::applyValueCSSPropertyCursor(StyleResolverState& stat
                     }
 
                     SVGElement* svgElement = toSVGElement(element);
-                    svgElement->setCursorImageValue(image);
+                    svgElement->setCursorImageValue(&image);
                     cursorElement->addClient(svgElement);
 
                     // Elements with SVG cursors are not allowed to share style.
                     state.style()->setUnique();
                 }
 
-                state.style()->addCursor(state.styleImage(CSSPropertyCursor, *image), hotSpotSpecified, hotSpot);
+                state.style()->addCursor(state.styleImage(CSSPropertyCursor, image), hotSpotSpecified, hotSpot);
             } else {
-                state.style()->setCursor(toCSSPrimitiveValue(item)->convertTo<ECursor>());
+                state.style()->setCursor(toCSSPrimitiveValue(item).convertTo<ECursor>());
             }
         }
     } else {
@@ -319,9 +322,9 @@ void StyleBuilderFunctions::applyValueCSSPropertyResize(StyleResolverState& stat
 
 static float mmToPx(float mm) { return mm * cssPixelsPerMillimeter; }
 static float inchToPx(float inch) { return inch * cssPixelsPerInch; }
-static FloatSize getPageSizeFromName(const CSSPrimitiveValue* pageSizeName)
+static FloatSize getPageSizeFromName(const CSSPrimitiveValue& pageSizeName)
 {
-    switch (pageSizeName->getValueID()) {
+    switch (pageSizeName.getValueID()) {
     case CSSValueA5:
         return FloatSize(mmToPx(148), mmToPx(210));
     case CSSValueA4:
@@ -354,32 +357,32 @@ void StyleBuilderFunctions::applyValueCSSPropertySize(StyleResolverState& state,
     const CSSValueList& list = toCSSValueList(value);
     if (list.length() == 2) {
         // <length>{2} | <page-size> <orientation>
-        const CSSPrimitiveValue* first = toCSSPrimitiveValue(list.item(0));
-        const CSSPrimitiveValue* second = toCSSPrimitiveValue(list.item(1));
-        if (first->isLength()) {
+        const CSSPrimitiveValue& first = toCSSPrimitiveValue(list.item(0));
+        const CSSPrimitiveValue& second = toCSSPrimitiveValue(list.item(1));
+        if (first.isLength()) {
             // <length>{2}
-            size = FloatSize(first->computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0)),
-                second->computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0)));
+            size = FloatSize(first.computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0)),
+                second.computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0)));
         } else {
             // <page-size> <orientation>
             size = getPageSizeFromName(first);
 
-            DCHECK(second->getValueID() == CSSValueLandscape || second->getValueID() == CSSValuePortrait);
-            if (second->getValueID() == CSSValueLandscape)
+            DCHECK(second.getValueID() == CSSValueLandscape || second.getValueID() == CSSValuePortrait);
+            if (second.getValueID() == CSSValueLandscape)
                 size = size.transposedSize();
         }
         pageSizeType = PAGE_SIZE_RESOLVED;
     } else {
         DCHECK_EQ(list.length(), 1U);
         // <length> | auto | <page-size> | [ portrait | landscape]
-        const CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(list.item(0));
-        if (primitiveValue->isLength()) {
+        const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(list.item(0));
+        if (primitiveValue.isLength()) {
             // <length>
             pageSizeType = PAGE_SIZE_RESOLVED;
-            float width = primitiveValue->computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0));
+            float width = primitiveValue.computeLength<float>(state.cssToLengthConversionData().copyWithAdjustedZoom(1.0));
             size = FloatSize(width, width);
         } else {
-            switch (primitiveValue->getValueID()) {
+            switch (primitiveValue.getValueID()) {
             case CSSValueAuto:
                 pageSizeType = PAGE_SIZE_AUTO;
                 break;
@@ -415,9 +418,9 @@ void StyleBuilderFunctions::applyInheritCSSPropertySnapHeight(StyleResolverState
 void StyleBuilderFunctions::applyValueCSSPropertySnapHeight(StyleResolverState& state, const CSSValue& value)
 {
     const CSSValueList& list = toCSSValueList(value);
-    const CSSPrimitiveValue* first = toCSSPrimitiveValue(list.item(0));
-    DCHECK(first->isLength());
-    int unit = first->computeLength<int>(state.cssToLengthConversionData());
+    const CSSPrimitiveValue& first = toCSSPrimitiveValue(list.item(0));
+    DCHECK(first.isLength());
+    int unit = first.computeLength<int>(state.cssToLengthConversionData());
     DCHECK_GE(unit, 0);
     state.style()->setSnapHeightUnit(clampTo<uint8_t>(unit));
 
@@ -427,9 +430,9 @@ void StyleBuilderFunctions::applyValueCSSPropertySnapHeight(StyleResolverState& 
     }
 
     DCHECK_EQ(list.length(), 2U);
-    const CSSPrimitiveValue* second = toCSSPrimitiveValue(list.item(1));
-    DCHECK(second->isNumber());
-    int position = second->getIntValue();
+    const CSSPrimitiveValue& second = toCSSPrimitiveValue(list.item(1));
+    DCHECK(second.isNumber());
+    int position = second.getIntValue();
     DCHECK(position > 0 && position <= 100);
     state.style()->setSnapHeightPosition(position);
 }
@@ -474,7 +477,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextIndent(StyleResolverState& 
     TextIndentType textIndentTypeValue = ComputedStyle::initialTextIndentType();
 
     for (auto& listValue : toCSSValueList(value)) {
-        CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(listValue.get());
+        const CSSPrimitiveValue* primitiveValue = toCSSPrimitiveValue(listValue.get());
         if (!primitiveValue->getValueID())
             lengthOrPercentageValue = primitiveValue->convertToLength(state.cssToLengthConversionData());
         else if (primitiveValue->getValueID() == CSSValueEachLine)
@@ -567,22 +570,6 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitBorderImage(StyleResolver
     state.style()->setBorderImage(image);
 }
 
-void StyleBuilderFunctions::applyValueCSSPropertyWebkitClipPath(StyleResolverState& state, const CSSValue& value)
-{
-    if (value.isBasicShapeValue()) {
-        state.style()->setClipPath(ShapeClipPathOperation::create(basicShapeForValue(state, value)));
-    }
-    if (value.isPrimitiveValue() && toCSSPrimitiveValue(value).getValueID() == CSSValueNone) {
-        state.style()->setClipPath(nullptr);
-    }
-    if (value.isURIValue()) {
-        String cssURLValue = toCSSURIValue(value).value();
-        KURL url = state.document().completeURL(cssURLValue);
-        // FIXME: It doesn't work with forward or external SVG references (see https://bugs.webkit.org/show_bug.cgi?id=90405)
-        state.style()->setClipPath(ReferenceClipPathOperation::create(cssURLValue, AtomicString(url.fragmentIdentifier())));
-    }
-}
-
 void StyleBuilderFunctions::applyInitialCSSPropertyWebkitTextEmphasisStyle(StyleResolverState& state)
 {
     state.style()->setTextEmphasisFill(ComputedStyle::initialTextEmphasisFill());
@@ -603,11 +590,11 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextEmphasisStyle(StyleRe
         const CSSValueList& list = toCSSValueList(value);
         DCHECK_EQ(list.length(), 2U);
         for (unsigned i = 0; i < 2; ++i) {
-            const CSSPrimitiveValue* value = toCSSPrimitiveValue(list.item(i));
-            if (value->getValueID() == CSSValueFilled || value->getValueID() == CSSValueOpen)
-                state.style()->setTextEmphasisFill(value->convertTo<TextEmphasisFill>());
+            const CSSPrimitiveValue& value = toCSSPrimitiveValue(list.item(i));
+            if (value.getValueID() == CSSValueFilled || value.getValueID() == CSSValueOpen)
+                state.style()->setTextEmphasisFill(value.convertTo<TextEmphasisFill>());
             else
-                state.style()->setTextEmphasisMark(value->convertTo<TextEmphasisMark>());
+                state.style()->setTextEmphasisMark(value.convertTo<TextEmphasisMark>());
         }
         state.style()->setTextEmphasisCustomMark(nullAtom);
         return;
@@ -702,12 +689,12 @@ void StyleBuilderFunctions::applyValueCSSPropertyContent(StyleResolverState& sta
         if (item->isImageGeneratorValue() || item->isImageSetValue() || item->isImageValue()) {
             nextContent = ContentData::create(state.styleImage(CSSPropertyContent, *item));
         } else if (item->isCounterValue()) {
-            CSSCounterValue* counterValue = toCSSCounterValue(item.get());
+            const CSSCounterValue* counterValue = toCSSCounterValue(item.get());
             EListStyleType listStyleType = NoneListStyle;
             CSSValueID listStyleIdent = counterValue->listStyle();
             if (listStyleIdent != CSSValueNone)
                 listStyleType = static_cast<EListStyleType>(listStyleIdent - CSSValueDisc);
-            OwnPtr<CounterContent> counter = adoptPtr(new CounterContent(AtomicString(counterValue->identifier()), listStyleType, AtomicString(counterValue->separator())));
+            std::unique_ptr<CounterContent> counter = wrapUnique(new CounterContent(AtomicString(counterValue->identifier()), listStyleType, AtomicString(counterValue->separator())));
             nextContent = ContentData::create(std::move(counter));
         } else if (item->isPrimitiveValue()) {
             QuoteType quoteType;
@@ -731,14 +718,14 @@ void StyleBuilderFunctions::applyValueCSSPropertyContent(StyleResolverState& sta
         } else {
             String string;
             if (item->isFunctionValue()) {
-                CSSFunctionValue* functionValue = toCSSFunctionValue(item.get());
+                const CSSFunctionValue* functionValue = toCSSFunctionValue(item.get());
                 DCHECK_EQ(functionValue->functionType(), CSSValueAttr);
                 // FIXME: Can a namespace be specified for an attr(foo)?
                 if (state.style()->styleType() == PseudoIdNone)
                     state.style()->setUnique();
                 else
                     state.parentStyle()->setUnique();
-                QualifiedName attr(nullAtom, AtomicString(toCSSCustomIdentValue(functionValue->item(0))->value()), nullAtom);
+                QualifiedName attr(nullAtom, AtomicString(toCSSCustomIdentValue(functionValue->item(0)).value()), nullAtom);
                 const AtomicString& value = state.element()->getAttribute(attr);
                 string = value.isNull() ? emptyString() : value.getString();
             } else {

@@ -29,14 +29,16 @@
 #include "content/common/accessibility_mode_enums.h"
 #include "content/common/ax_content_node_data.h"
 #include "content/common/content_export.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/image_downloader/image_downloader.mojom.h"
-#include "content/common/mojo/service_registry_impl.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_message_type.h"
 #include "net/http/http_response_headers.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
@@ -92,13 +94,17 @@ class TimeoutMonitor;
 class WebBluetoothServiceImpl;
 struct ContentSecurityPolicyHeader;
 struct ContextMenuParams;
+struct FileChooserParams;
 struct GlobalRequestID;
+struct FileChooserParams;
 struct Referrer;
 struct ResourceResponse;
 
-class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
-                                           public BrowserAccessibilityDelegate,
-                                           public SiteInstanceImpl::Observer {
+class CONTENT_EXPORT RenderFrameHostImpl
+    : public RenderFrameHost,
+      NON_EXPORTED_BASE(public mojom::FrameHost),
+      public BrowserAccessibilityDelegate,
+      public SiteInstanceImpl::Observer {
  public:
   using AXTreeSnapshotCallback =
       base::Callback<void(
@@ -145,11 +151,20 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
       const base::string16& javascript) override;
   void ActivateFindInPageResultForAccessibility(int request_id) override;
   void InsertVisualStateCallback(const VisualStateCallback& callback) override;
+  void CopyImageAt(int x, int y) override;
+  void SaveImageAt(int x, int y) override;
   RenderViewHost* GetRenderViewHost() override;
-  ServiceRegistry* GetServiceRegistry() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
   blink::WebPageVisibilityState GetVisibilityState() override;
   bool IsRenderFrameLive() override;
   int GetProxyCount() override;
+  void FilesSelectedInChooser(const std::vector<FileChooserFileInfo>& files,
+                              FileChooserParams::Mode permissions) override;
+
+  // mojom::FrameHost
+  void GetInterfaceProvider(
+      shell::mojom::InterfaceProviderRequest interfaces) override;
 
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
@@ -606,6 +621,8 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
                            RenderViewInitAfterNewProxyAndProcessKill);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
                            UnloadPushStateOnCrossProcessNavigation);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest,
+                           WebUIJavascriptDisallowedAfterSwapOut);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrashSubframe);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            RenderViewHostIsNotReusedAfterDelayedSwapOutACK);
@@ -650,6 +667,7 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   void OnRunBeforeUnloadConfirm(const GURL& frame_url,
                                 bool is_reload,
                                 IPC::Message* reply_msg);
+  void OnRunFileChooser(const FileChooserParams& params);
   void OnTextSurroundingSelectionResponse(const base::string16& content,
                                           uint32_t start_offset,
                                           uint32_t end_offset);
@@ -657,7 +675,7 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   void OnDidChangeOpener(int32_t opener_routing_id);
   void OnDidChangeName(const std::string& name, const std::string& unique_name);
   void OnDidAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
-  void OnEnforceStrictMixedContentChecking();
+  void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
   void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
   void OnDidAssignPageId(int32_t page_id);
   void OnDidChangeSandboxFlags(int32_t frame_routing_id,
@@ -697,8 +715,8 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   void OnHidePopup();
 #endif
 
-  // Registers Mojo services that this frame host makes available.
-  void RegisterMojoServices();
+  // Registers Mojo interfaces that this frame host makes available.
+  void RegisterMojoInterfaces();
 
   // Resets any waiting state of this RenderFrameHost that is no longer
   // relevant.
@@ -723,6 +741,23 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
 
   // Informs the content client that geolocation permissions were used.
   void DidUseGeolocationPermission();
+
+  // Returns whether the current RenderProcessHost has read access to all the
+  // files reported in |state|.
+  bool CanAccessFilesOfPageState(const PageState& state);
+
+  // Grants the current RenderProcessHost read access to any file listed in
+  // |validated_state|.  It is important that the PageState has been validated
+  // upon receipt from the renderer process to prevent it from forging access to
+  // files without the user's consent.
+  void GrantFileAccessFromPageState(const PageState& validated_state);
+
+  // Grants the current RenderProcessHost read access to any file listed in
+  // |body|.  It is important that the ResourceRequestBody has been validated
+  // upon receipt from the renderer process to prevent it from forging access to
+  // files without the user's consent.
+  void GrantFileAccessFromResourceRequestBody(
+      const ResourceRequestBodyImpl& body);
 
   void UpdatePermissionsForNavigation(
       const CommonNavigationParams& common_params,
@@ -826,6 +861,12 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   // The FrameTreeNode which this RenderFrameHostImpl is hosted in.
   FrameTreeNode* frame_tree_node_;
 
+  // The active parent RenderFrameHost for this frame, if it is a subframe.
+  // Null for the main frame.  This is cached because the parent FrameTreeNode
+  // may change its current RenderFrameHost while this child is pending
+  // deletion, and GetParent() should never return a different value.
+  RenderFrameHostImpl* parent_;
+
   // Track this frame's last committed URL.
   GURL last_committed_url_;
 
@@ -913,7 +954,8 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   // SiteInstance.  May be null in tests.
   std::unique_ptr<TimeoutMonitor> swapout_event_monitor_timeout_;
 
-  std::unique_ptr<ServiceRegistryImpl> service_registry_;
+  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
 
 #if defined(OS_ANDROID)
   std::unique_ptr<ServiceRegistryAndroid> service_registry_android_;
@@ -993,6 +1035,9 @@ class CONTENT_EXPORT RenderFrameHostImpl : public RenderFrameHost,
   // history navigation of subframes to ensure that subframes navigate with the
   // same LoFi status as the top-level frame.
   LoFiState last_navigation_lofi_state_;
+
+  mojo::Binding<mojom::FrameHost> frame_host_binding_;
+  mojom::FramePtr frame_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

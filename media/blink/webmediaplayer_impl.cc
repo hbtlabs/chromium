@@ -17,8 +17,10 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
+#include "base/location.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -56,6 +58,10 @@
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
+
+#if defined(OS_ANDROID)
+#include "media/base/android/media_codec_util.h"
+#endif
 
 using blink::WebCanvas;
 using blink::WebMediaPlayer;
@@ -175,7 +181,6 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       should_notify_time_changed_(false),
       fullscreen_(false),
       decoder_requires_restart_for_fullscreen_(false),
-      supports_overlay_fullscreen_video_(false),
       client_(client),
       encrypted_client_(encrypted_client),
       delegate_(delegate),
@@ -188,10 +193,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       chunk_demuxer_(NULL),
       url_index_(url_index),
       // Threaded compositing isn't enabled universally yet.
-      compositor_task_runner_(
-          params.compositor_task_runner()
-              ? params.compositor_task_runner()
-              : base::MessageLoop::current()->task_runner()),
+      compositor_task_runner_(params.compositor_task_runner()
+                                  ? params.compositor_task_runner()
+                                  : base::ThreadTaskRunnerHandle::Get()),
       compositor_(new VideoFrameCompositor(compositor_task_runner_)),
       is_cdm_attached_(false),
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -201,6 +205,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       volume_multiplier_(1.0),
       renderer_factory_(std::move(renderer_factory)),
       surface_manager_(params.surface_manager()),
+      fullscreen_surface_id_(SurfaceManager::kNoSurfaceID),
       suppress_destruction_errors_(false),
       can_suspend_state_(CanSuspendState::UNKNOWN) {
   DCHECK(!adjust_allocated_memory_cb_.is_null());
@@ -230,25 +235,13 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
 }
 
 WebMediaPlayerImpl::~WebMediaPlayerImpl() {
-  client_->setWebLayer(NULL);
-
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
+  suppress_destruction_errors_ = true;
   if (delegate_) {
     delegate_->PlayerGone(delegate_id_);
     delegate_->RemoveObserver(delegate_id_);
   }
-
-  // Abort any pending IO so stopping the pipeline doesn't get blocked.
-  suppress_destruction_errors_ = true;
-  if (data_source_)
-    data_source_->Abort();
-  if (chunk_demuxer_) {
-    chunk_demuxer_->Shutdown();
-    chunk_demuxer_ = nullptr;
-  }
-
-  renderer_factory_.reset();
 
   // Pipeline must be stopped before it is destroyed.
   pipeline_.Stop();
@@ -256,6 +249,10 @@ WebMediaPlayerImpl::~WebMediaPlayerImpl() {
   if (last_reported_memory_usage_)
     adjust_allocated_memory_cb_.Run(-last_reported_memory_usage_);
 
+  // Destruct compositor resources in the proper order.
+  client_->setWebLayer(nullptr);
+  if (video_weblayer_)
+    static_cast<cc::VideoLayer*>(video_weblayer_->layer())->StopUsingProvider();
   compositor_task_runner_->DeleteSoon(FROM_HERE, compositor_);
 
   media_log_->AddEvent(
@@ -280,22 +277,7 @@ void WebMediaPlayerImpl::load(LoadType load_type,
 
 bool WebMediaPlayerImpl::supportsOverlayFullscreenVideo() {
 #if defined(OS_ANDROID)
-  // OverlayFullscreenVideo is only used when we're H/W decoding to an
-  // SurfaceView underlay on Android. It's possible that we haven't initialized
-  // any decoders before entering fullscreen, so we won't know whether to use
-  // OverlayFullscreenVideo. In that case we'll default to
-  // non-OverlayFullscreenVideo, which still works correctly, but has janky
-  // orientation changes.
-
-  // We return a consistent value while in fullscreen to avoid us getting into a
-  // state where some of the OverlayFullscreenVideo adjustments are applied and
-  // some aren't.
-  // TODO(watk): Implement dynamic OverlayFullscreenVideo switching in blink.
-  if (!fullscreen_) {
-    supports_overlay_fullscreen_video_ =
-        decoder_requires_restart_for_fullscreen_;
-  }
-  return supports_overlay_fullscreen_video_;
+  return true;
 #else
   return false;
 #endif
@@ -303,12 +285,20 @@ bool WebMediaPlayerImpl::supportsOverlayFullscreenVideo() {
 
 void WebMediaPlayerImpl::enteredFullscreen() {
   fullscreen_ = true;
+  if (surface_manager_) {
+    surface_created_cb_.Reset(
+        base::Bind(&WebMediaPlayerImpl::OnSurfaceCreated, AsWeakPtr()));
+    surface_manager_->CreateFullscreenSurface(pipeline_metadata_.natural_size,
+                                              surface_created_cb_.callback());
+  }
   if (decoder_requires_restart_for_fullscreen_)
     ScheduleRestart();
 }
 
 void WebMediaPlayerImpl::exitedFullscreen() {
   fullscreen_ = false;
+  surface_created_cb_.Cancel();
+  fullscreen_surface_id_ = SurfaceManager::kNoSurfaceID;
   if (decoder_requires_restart_for_fullscreen_)
     ScheduleRestart();
 }
@@ -843,21 +833,17 @@ void WebMediaPlayerImpl::OnFFmpegMediaTracksUpdated(
   // Report the media track information to blink.
   for (const auto& track : tracks->tracks()) {
     if (track->type() == MediaTrack::Audio) {
-      auto track_id = client_->addAudioTrack(
-          blink::WebString::fromUTF8(track->id()),
-          blink::WebMediaPlayerClient::AudioTrackKindMain,
-          blink::WebString::fromUTF8(track->label()),
-          blink::WebString::fromUTF8(track->language()),
-          /*enabled*/ true);
-      (void)track_id;
+      client_->addAudioTrack(blink::WebString::fromUTF8(track->id()),
+                             blink::WebMediaPlayerClient::AudioTrackKindMain,
+                             blink::WebString::fromUTF8(track->label()),
+                             blink::WebString::fromUTF8(track->language()),
+                             /*enabled*/ true);
     } else if (track->type() == MediaTrack::Video) {
-      auto track_id = client_->addVideoTrack(
-          blink::WebString::fromUTF8(track->id()),
-          blink::WebMediaPlayerClient::VideoTrackKindMain,
-          blink::WebString::fromUTF8(track->label()),
-          blink::WebString::fromUTF8(track->language()),
-          /*selected*/ true);
-      (void)track_id;
+      client_->addVideoTrack(blink::WebString::fromUTF8(track->id()),
+                             blink::WebMediaPlayerClient::VideoTrackKindMain,
+                             blink::WebString::fromUTF8(track->label()),
+                             blink::WebString::fromUTF8(track->language()),
+                             /*selected*/ true);
     } else {
       // Text tracks are not supported through this code path yet.
       NOTREACHED();
@@ -989,17 +975,18 @@ void WebMediaPlayerImpl::OnMetadata(PipelineMetadata metadata) {
   SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
 
   if (hasVideo()) {
-    DCHECK(!video_weblayer_);
-    scoped_refptr<cc::VideoLayer> layer =
-        cc::VideoLayer::Create(compositor_, pipeline_metadata_.video_rotation);
-
     if (pipeline_metadata_.video_rotation == VIDEO_ROTATION_90 ||
         pipeline_metadata_.video_rotation == VIDEO_ROTATION_270) {
       gfx::Size size = pipeline_metadata_.natural_size;
       pipeline_metadata_.natural_size = gfx::Size(size.height(), size.width());
     }
 
-    video_weblayer_.reset(new cc_blink::WebLayerImpl(layer));
+    if (fullscreen_ && surface_manager_)
+      surface_manager_->NaturalSizeChanged(pipeline_metadata_.natural_size);
+
+    DCHECK(!video_weblayer_);
+    video_weblayer_.reset(new cc_blink::WebLayerImpl(cc::VideoLayer::Create(
+        compositor_, pipeline_metadata_.video_rotation)));
     video_weblayer_->layer()->SetContentsOpaque(opaque_);
     video_weblayer_->SetContentsOpaqueIsFixed(true);
     client_->setWebLayer(video_weblayer_.get());
@@ -1113,11 +1100,16 @@ void WebMediaPlayerImpl::OnVideoOpacityChange(bool opaque) {
 void WebMediaPlayerImpl::OnHidden() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   UpdatePlayState();
+
+  // Schedule suspended playing media to be paused if the user doesn't come back
+  // to it within some timeout period to avoid any autoplay surprises.
+  ScheduleIdlePauseTimer();
 }
 
 void WebMediaPlayerImpl::OnShown() {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   must_suspend_ = false;
+  background_pause_timer_.Stop();
   UpdatePlayState();
 }
 
@@ -1225,6 +1217,23 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
   DVLOG(1) << __FUNCTION__;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
+#if defined(OS_ANDROID)
+  // We can't play HLS URLs with WebMediaPlayerImpl, so in cases where they are
+  // encountered, instruct the HTML media element to create a new WebMediaPlayer
+  // instance with the correct URL to trigger WebMediaPlayerAndroid creation.
+  //
+  // TODO(tguilbert): Remove this code path once we have the ability to host a
+  // MediaPlayer within a Mojo media renderer.  http://crbug.com/580626
+  if (data_source_) {
+    const GURL url_after_redirects = data_source_->GetUrlAfterRedirects();
+    if (MediaCodecUtil::IsHLSPath(url_after_redirects)) {
+      client_->requestReload(url_after_redirects);
+      // |this| may be destructed, do nothing after this.
+      return;
+    }
+  }
+#endif
+
   if (!success) {
     SetNetworkState(WebMediaPlayer::NetworkStateFormatError);
 
@@ -1250,6 +1259,12 @@ void WebMediaPlayerImpl::NotifyDownloading(bool is_downloading) {
           "is_downloading_data", is_downloading));
 }
 
+void WebMediaPlayerImpl::OnSurfaceCreated(int surface_id) {
+  fullscreen_surface_id_ = surface_id;
+  if (!pending_surface_request_cb_.is_null())
+    base::ResetAndReturn(&pending_surface_request_cb_).Run(surface_id);
+}
+
 // TODO(watk): Move this state management out of WMPI.
 void WebMediaPlayerImpl::OnSurfaceRequested(
     const SurfaceCreatedCB& surface_created_cb) {
@@ -1259,6 +1274,7 @@ void WebMediaPlayerImpl::OnSurfaceRequested(
   // A null callback indicates that the decoder is going away.
   if (surface_created_cb.is_null()) {
     decoder_requires_restart_for_fullscreen_ = false;
+    pending_surface_request_cb_.Reset();
     return;
   }
 
@@ -1271,8 +1287,10 @@ void WebMediaPlayerImpl::OnSurfaceRequested(
   // cases where it isn't necessary.
   decoder_requires_restart_for_fullscreen_ = true;
   if (fullscreen_) {
-    surface_manager_->CreateFullscreenSurface(pipeline_metadata_.natural_size,
-                                              surface_created_cb);
+    if (fullscreen_surface_id_ != SurfaceManager::kNoSurfaceID)
+      surface_created_cb.Run(fullscreen_surface_id_);
+    else
+      pending_surface_request_cb_ = surface_created_cb;
   } else {
     // Tell the decoder to create its own surface.
     surface_created_cb.Run(SurfaceManager::kNoSurfaceID);
@@ -1408,10 +1426,11 @@ void WebMediaPlayerImpl::UpdatePlayState() {
 #else
   bool is_remote = false;
 #endif
+  bool is_suspended = pipeline_controller_.IsSuspended();
   bool is_backgrounded =
       IsBackgroundedSuspendEnabled() && delegate_ && delegate_->IsHidden();
-  PlayState state =
-      UpdatePlayState_ComputePlayState(is_remote, is_backgrounded);
+  PlayState state = UpdatePlayState_ComputePlayState(is_remote, is_suspended,
+                                                     is_backgrounded);
   SetDelegateState(state.delegate_state);
   SetMemoryReportingState(state.is_memory_reporting_enabled);
   SetSuspendState(state.is_suspended || pending_suspend_resume_cycle_);
@@ -1502,6 +1521,7 @@ void WebMediaPlayerImpl::SetSuspendState(bool is_suspended) {
 
 WebMediaPlayerImpl::PlayState
 WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
+                                                     bool is_suspended,
                                                      bool is_backgrounded) {
   PlayState result;
 
@@ -1516,8 +1536,13 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
   bool have_future_data =
       highest_ready_state_ >= WebMediaPlayer::ReadyStateHaveFutureData;
 
-  // Background suspend is not enabled for audio-only players.
+  // Background suspend is not enabled for audio-only players unless paused,
+  // though in the case of audio-only the session should be kept.
   bool background_suspended = is_backgrounded && have_metadata && hasVideo();
+
+  // The |paused_| state is not reliable until we |have_future_data|.
+  bool background_pause_suspended =
+      is_backgrounded && have_future_data && paused_;
 
   // Idle suspend is enabled once there is future data. We don't want to idle
   // suspend before that because play() may never be triggered to leave the idle
@@ -1533,7 +1558,10 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
 
   // Combined suspend state.
   result.is_suspended =
-      is_remote || must_suspend_ || idle_suspended || background_suspended;
+      is_remote || must_suspend_ || idle_suspended || background_suspended ||
+      background_pause_suspended ||
+      // If we're already suspended, see if we can wait for user interaction.
+      (is_suspended && have_future_data && paused_ && !seeking_);
 
   // We do not treat |playback_rate_| == 0 as paused. For the media session,
   // being paused implies displaying a play button, which is incorrect in this
@@ -1571,7 +1599,7 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
     result.delegate_state = DelegateState::PLAYING;
   }
 
-  // It's not  critical if some cases where memory usage can change are missed,
+  // It's not critical if some cases where memory usage can change are missed,
   // since media memory changes are usually gradual.
   result.is_memory_reporting_enabled =
       can_play && !result.is_suspended && !paused_;
@@ -1617,6 +1645,24 @@ void WebMediaPlayerImpl::FinishMemoryUsageReport(int64_t demuxer_memory_usage) {
   const int64_t delta = current_memory_usage - last_reported_memory_usage_;
   last_reported_memory_usage_ = current_memory_usage;
   adjust_allocated_memory_cb_.Run(delta);
+}
+
+void WebMediaPlayerImpl::ScheduleIdlePauseTimer() {
+  // Only schedule the pause timer if we're playing and are suspended. We use
+  // delegate state as a proxy for suspended here since the suspension may be in
+  // flight at the time of this call.
+  if (paused_ || delegate_state_ != DelegateState::GONE)
+    return;
+
+#if defined(OS_ANDROID)
+  // Remote players will be suspended and locally paused.
+  if (isRemote())
+    return;
+#endif
+
+  // Idle timeout chosen arbitrarily.
+  background_pause_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(5),
+                                this, &WebMediaPlayerImpl::OnPause);
 }
 
 }  // namespace media

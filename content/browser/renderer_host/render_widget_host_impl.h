@@ -68,6 +68,12 @@ namespace cc {
 class CompositorFrameAck;
 }
 
+#if defined(OS_MACOSX)
+namespace device {
+class PowerSaveBlocker;
+}  // namespace device
+#endif
+
 namespace gfx {
 class Range;
 }
@@ -169,8 +175,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
       const KeyPressEventCallback& callback) override;
   void AddMouseEventCallback(const MouseEventCallback& callback) override;
   void RemoveMouseEventCallback(const MouseEventCallback& callback) override;
+  void AddInputEventObserver(
+      RenderWidgetHost::InputEventObserver* observer) override;
+  void RemoveInputEventObserver(
+      RenderWidgetHost::InputEventObserver* observer) override;
   void GetWebScreenInfo(blink::WebScreenInfo* result) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
 
   // Notification that the screen info has changed.
@@ -244,6 +253,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Called to notify the RenderWidget that it has lost the mouse lock.
   void LostMouseLock();
+
+  // Notifies the RenderWidget that it lost the mouse lock.
+  void SendMouseLockLost();
 
   // Noifies the RenderWidget of the current mouse cursor visibility state.
   void SendCursorVisibilityState(bool is_visible);
@@ -548,10 +560,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // NotifyRendererResponsive.
   void RendererIsResponsive();
 
-  // Routines used to send the RenderWidget its screen color profile.
-  void DispatchColorProfile();
-  void SendColorProfile();
-
   // IPC message handlers
   void OnRenderProcessGone(int status, int error_code);
   void OnClose();
@@ -604,6 +612,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void DidFlush() override;
   void DidOverscroll(const DidOverscrollParams& params) override;
   void DidStopFlinging() override;
+
+  // Dispatch input events with latency information
+  void DispatchInputEventWithLatencyInfo(const blink::WebInputEvent& event,
+                                         ui::LatencyInfo* latency);
 
   // InputAckHandler
   void OnKeyboardEventAck(const NativeWebKeyboardEventWithLatencyInfo& event,
@@ -669,10 +681,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // True when waiting for RESIZE_ACK.
   bool resize_ack_pending_;
 
-  // Set if the color profile should fetched and sent to the RenderWidget
-  // during the WasResized() resize message flow.
-  bool color_profile_out_of_date_;
-
   // The current size of the RenderWidget.
   gfx::Size current_size_;
 
@@ -701,6 +709,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // Mouse event callbacks.
   std::vector<MouseEventCallback> mouse_event_callbacks_;
+
+  // Input event callbacks.
+  base::ObserverList<RenderWidgetHost::InputEventObserver>
+      input_event_observers_;
 
   // If true, then we should repaint when restoring even if we have a
   // backingstore.  This flag is set to true if we receive a paint message
@@ -808,6 +820,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // This value indicates how long to wait for a new compositor frame from a
   // renderer process before clearing any previously displayed content.
   base::TimeDelta new_content_rendering_delay_;
+
+#if defined(OS_MACOSX)
+  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+#endif
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

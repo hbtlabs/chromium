@@ -54,12 +54,6 @@ static bool isHTMLListOrBlockquoteElement(const Node* node)
     return isHTMLUListElement(element) || isHTMLOListElement(element) || element.hasTagName(blockquoteTag);
 }
 
-static bool isInline(const Node* node)
-{
-    return node && node->layoutObject() && node->layoutObject()->isInline();
-}
-
-
 IndentOutdentCommand::IndentOutdentCommand(Document& document, EIndentType typeOfAction)
     : ApplyBlockElementCommand(document, blockquoteTag, "margin: 0 0 0 40px; border: none; padding: 0px;")
     , m_typeOfAction(typeOfAction)
@@ -99,7 +93,7 @@ bool IndentOutdentCommand::tryIndentingAsListItem(const Position& start, const P
     if (end.anchorNode() == selectedListItem || end.anchorNode()->isDescendantOf(selectedListItem->lastChild())) {
         moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(end), newList, selectedListItem, editingState);
     } else {
-        moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(Position::afterNode(selectedListItem->lastChild())), newList, selectedListItem, editingState);
+        moveParagraphWithClones(createVisiblePosition(start), VisiblePosition::afterNode(selectedListItem->lastChild()), newList, selectedListItem, editingState);
         if (editingState->isAborted())
             return false;
         removeNode(selectedListItem, editingState);
@@ -231,7 +225,7 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState)
     insertNodeBefore(placeholder, splitBlockquoteNode, editingState);
     if (editingState->isAborted())
         return;
-    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, createVisiblePosition(Position::beforeNode(placeholder)), editingState, true);
+    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, VisiblePosition::beforeNode(placeholder), editingState, PreserveSelection);
 }
 
 // FIXME: We should merge this function with ApplyBlockElementCommand::formatSelection

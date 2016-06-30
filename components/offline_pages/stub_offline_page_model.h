@@ -62,12 +62,13 @@ class StubOfflinePageModel : public OfflinePageModel {
       const SingleOfflinePageItemCallback callback) override;
   const OfflinePageItem* MaybeGetBestPageForOnlineURL(
       const GURL& online_url) const override;
-  void CheckForExternalFileDeletion() override;
+  void CheckMetadataConsistency() override;
   void ExpirePages(const std::vector<int64_t>& offline_ids,
                    const base::Time& expiration_time,
                    const base::Callback<void(bool)>& callback) override;
   ClientPolicyController* GetPolicyController() override;
   bool is_loaded() const override;
+  OfflineEventLogger* GetLogger() override;
 
  private:
   std::vector<int64_t> offline_ids_;

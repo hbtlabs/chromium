@@ -426,11 +426,6 @@ void FindBarView::ButtonPressed(
             sender->id() == VIEW_ID_FIND_IN_PAGE_NEXT_BUTTON,
             false);  // Not case sensitive.
       }
-
-      if (event.IsMouseEvent()) {
-        // Move focus to the find textfield.
-        find_text_->RequestFocus();
-      }
       break;
     case VIEW_ID_FIND_IN_PAGE_CLOSE_BUTTON:
       find_bar_host()->GetFindBarController()->EndFindSession(
@@ -455,7 +450,8 @@ bool FindBarView::HandleKeyEvent(views::Textfield* sender,
   if (find_bar_host()->MaybeForwardKeyEventToWebpage(key_event))
     return true;  // Handled, we are done!
 
-  if (key_event.key_code() == ui::VKEY_RETURN) {
+  if (key_event.key_code() == ui::VKEY_RETURN &&
+      key_event.type() == ui::ET_KEY_PRESSED) {
     // Pressing Return/Enter starts the search (unless text box is empty).
     base::string16 find_string = find_text_->text();
     if (!find_string.empty()) {

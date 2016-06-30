@@ -35,6 +35,7 @@
 #include "content/renderer/pepper/host_dispatcher_wrapper.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/message_channel.h"
+#include "content/renderer/pepper/pepper_audio_controller.h"
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_compositor_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
@@ -529,6 +530,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       isolate_(v8::Isolate::GetCurrent()),
       is_deleted_(false),
       initialized_(false),
+      audio_controller_(new PepperAudioController(this)),
       view_change_weak_ptr_factory_(this),
       weak_factory_(this) {
   pp_instance_ = HostGlobals::Get()->AddInstance(this);
@@ -584,6 +586,8 @@ PepperPluginInstanceImpl::~PepperPluginInstanceImpl() {
 
   if (TrackedCallback::IsPending(lock_mouse_callback_))
     lock_mouse_callback_->Abort();
+
+  audio_controller_->OnPepperInstanceDeleted();
 
   if (render_frame_)
     render_frame_->PepperInstanceDeleted(this);
@@ -684,7 +688,7 @@ void PepperPluginInstanceImpl::Delete() {
 
   // Force-unbind any Graphics. In the case of Graphics2D, if the plugin
   // leaks the graphics 2D, it may actually get cleaned up after our
-  // destruction, so we need its pointers to be up-to-date.
+  // destruction, so we need its pointers to be up to date.
   BindGraphics(pp_instance(), 0);
   container_ = NULL;
 }
@@ -884,6 +888,10 @@ bool PepperPluginInstanceImpl::Initialize(
     if (message_channel_)
       message_channel_->Start();
   }
+
+  if (render_frame_->render_accessibility() && LoadPdfInterface())
+    plugin_pdf_interface_->EnableAccessibility(pp_instance());
+
   initialized_ = success;
   return success;
 }
@@ -1460,12 +1468,13 @@ bool PepperPluginInstanceImpl::StartFind(const base::string16& search_text,
                                         PP_FromBool(case_sensitive)));
 }
 
-void PepperPluginInstanceImpl::SelectFindResult(bool forward) {
+void PepperPluginInstanceImpl::SelectFindResult(bool forward, int identifier) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
-  if (LoadFindInterface())
-    plugin_find_interface_->SelectFindResult(pp_instance(),
-                                             PP_FromBool(forward));
+  if (!LoadFindInterface())
+    return;
+  find_identifier_ = identifier;
+  plugin_find_interface_->SelectFindResult(pp_instance(), PP_FromBool(forward));
 }
 
 void PepperPluginInstanceImpl::StopFind() {
@@ -1676,6 +1685,9 @@ void PepperPluginInstanceImpl::SendDidChangeView() {
   if (bound_graphics_2d_platform_)
     bound_graphics_2d_platform_->set_viewport_to_dip_scale(
         viewport_to_dip_scale_);
+
+  module_->renderer_ppapi_host()->set_viewport_to_dip_scale(
+      viewport_to_dip_scale_);
 
   // During the first view update, initialize the throttler.
   if (!sent_initial_did_change_view_) {

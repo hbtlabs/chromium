@@ -67,6 +67,10 @@ class MediaLog;
 class RendererFactory;
 }
 
+namespace shell {
+class InterfaceRegistry;
+}
+
 namespace content {
 class BrowserPluginDelegate;
 class DocumentState;
@@ -350,6 +354,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // from the worker thread.
   virtual void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) {}
+
+  // Allows the client to expose interfaces from the renderer process to the
+  // browser process via |registry|.
+  virtual void ExposeInterfacesToBrowser(
+      shell::InterfaceRegistry* interface_registry) {}
 };
 
 }  // namespace content

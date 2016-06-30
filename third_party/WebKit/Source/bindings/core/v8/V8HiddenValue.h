@@ -9,7 +9,8 @@
 #include "bindings/core/v8/ScriptPromiseProperties.h"
 #include "core/CoreExport.h"
 #include "wtf/Allocator.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -28,9 +29,6 @@ class ScriptWrappable;
     V(customElementTagName) \
     V(customElementType) \
     V(customElementsRegistryMap) \
-    V(detail) \
-    V(document) \
-    V(error) \
     V(event) \
     V(idbCursorRequest) \
     V(internalBodyBuffer) \
@@ -62,7 +60,7 @@ class CORE_EXPORT V8HiddenValue {
     USING_FAST_MALLOC(V8HiddenValue);
     WTF_MAKE_NONCOPYABLE(V8HiddenValue);
 public:
-    static PassOwnPtr<V8HiddenValue> create() { return adoptPtr(new V8HiddenValue()); }
+    static std::unique_ptr<V8HiddenValue> create() { return wrapUnique(new V8HiddenValue()); }
 
 #define V8_DECLARE_METHOD(name) static v8::Local<v8::String> name(v8::Isolate* isolate);
     V8_HIDDEN_VALUES(V8_DECLARE_METHOD);

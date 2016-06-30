@@ -26,7 +26,7 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBox.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -35,7 +35,7 @@ class LineLayoutBox;
 class WordMeasurement;
 
 typedef WTF::ListHashSet<LayoutBox*, 16> TrackedLayoutBoxListHashSet;
-typedef WTF::HashMap<const LayoutBlock*, OwnPtr<TrackedLayoutBoxListHashSet>> TrackedDescendantsMap;
+typedef WTF::HashMap<const LayoutBlock*, std::unique_ptr<TrackedLayoutBoxListHashSet>> TrackedDescendantsMap;
 typedef WTF::HashMap<const LayoutBox*, LayoutBlock*> TrackedContainerMap;
 typedef Vector<WordMeasurement, 64> WordMeasurements;
 
@@ -228,6 +228,7 @@ public:
 
 protected:
     bool recalcNormalFlowChildOverflowIfNeeded(LayoutObject*);
+    bool recalcPositionedDescendantsOverflowAfterStyleChange();
 public:
     virtual bool recalcChildOverflowAfterStyleChange();
     bool recalcOverflowAfterStyleChange();
@@ -265,7 +266,7 @@ protected:
     void layoutPositionedObjects(bool relayoutChildren, PositionedLayoutBehavior = DefaultLayout);
     void markFixedPositionObjectForLayoutIfNeeded(LayoutObject* child, SubtreeLayoutScope&);
 
-    LayoutUnit marginIntrinsicLogicalWidthForChild(LayoutBox& child) const;
+    LayoutUnit marginIntrinsicLogicalWidthForChild(const LayoutBox& child) const;
 
     int beforeMarginInLineDirection(LineDirectionMode) const;
 

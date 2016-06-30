@@ -24,7 +24,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = { gin::kEmbedderBlink, {{dom_template}}, {{v8_class}}::getHeapObjectHeader, {{v8_class}}::trace, {{to_active_scriptwrappable}}, {{visit_dom_wrapper}}, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", {{parent_wrapper_type_info}}, WrapperTypeInfo::{{wrapper_type_prototype}}, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
+{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = { gin::kEmbedderBlink, {{dom_template}}, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{to_active_scriptwrappable}}, {{visit_dom_wrapper}}, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", {{parent_wrapper_type_info}}, WrapperTypeInfo::{{wrapper_type_prototype}}, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -48,7 +48,7 @@ static void (*{{method.name}}MethodForPartialInterface)(const v8::FunctionCallba
 {# Constants #}
 {% from 'constants.cpp' import constant_getter_callback
        with context %}
-{% for constant in special_getter_constants %}
+{% for constant in constants | has_special_getter %}
 {{constant_getter_callback(constant)}}
 {% endfor %}
 {# Attributes #}
@@ -218,9 +218,9 @@ const V8DOMConfiguration::AccessorConfiguration {{v8_class}}Accessors[] = {
 {##############################################################################}
 {% block install_methods %}
 {% from 'methods.cpp' import method_configuration with context %}
-{% if method_configuration_methods %}
+{% if methods | has_method_configuration(is_partial) %}
 const V8DOMConfiguration::MethodConfiguration {{v8_class}}Methods[] = {
-    {% for method in method_configuration_methods %}
+    {% for method in methods | has_method_configuration(is_partial) %}
     {{method_configuration(method)}},
     {% endfor %}
 };
@@ -237,6 +237,7 @@ const V8DOMConfiguration::MethodConfiguration {{v8_class}}Methods[] = {
 {% from 'methods.cpp' import install_custom_signature with context %}
 {% from 'attributes.cpp' import attribute_configuration with context %}
 {% from 'constants.cpp' import install_constants with context %}
+{% from 'methods.cpp' import method_configuration with context %}
 {% if has_partial_interface or is_partial %}
 void {{v8_class_or_partial}}::install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {% else %}
@@ -282,7 +283,7 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
     {% if attributes | has_accessor_configuration %}
     V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, {{'%sAccessors' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAccessors)' % v8_class}});
     {% endif %}
-    {% if method_configuration_methods %}
+    {% if methods | has_method_configuration(is_partial) %}
     V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, {{'%sMethods' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sMethods)' % v8_class}});
     {% endif %}
     {% endfilter %}
@@ -340,8 +341,8 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
     instanceTemplate->MarkAsUndetectable();
     {% endif %}
 
-    {%- if custom_registration_methods %}{{newline}}
-    {% for method in custom_registration_methods %}
+    {%- if methods | custom_registration(is_partial) %}{{newline}}
+    {% for method in methods | custom_registration(is_partial) %}
     {# install_custom_signature #}
     {% filter exposed(method.overloads.exposed_test_all
                       if method.overloads else
@@ -365,13 +366,27 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
 {##############################################################################}
 {% block origin_trials %}
 {% from 'attributes.cpp' import attribute_configuration with context %}
-{% for group in attributes|origin_trial_enabled_attributes|groupby('origin_trial_feature_name') %}{{newline}}
-void {{v8_class_or_partial}}::install{{group.grouper}}(ScriptState* scriptState, v8::Local<v8::Object> instance)
+{% from 'constants.cpp' import constant_configuration with context %}
+{% from 'methods.cpp' import method_configuration with context %}
+{% for origin_trial_feature_name in origin_trial_feature_names %}{{newline}}
+void {{v8_class_or_partial}}::install{{origin_trial_feature_name}}(ScriptState* scriptState, v8::Local<v8::Object> instance)
 {
     v8::Local<v8::Object> prototype = instance->GetPrototype()->ToObject(scriptState->isolate());
-    v8::Local<v8::Signature> signature;
+
+    {# Origin-Trial-enabled attributes #}
+    {% if attributes | for_origin_trial_feature(origin_trial_feature_name) or
+          methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) %}
+    V8PerIsolateData* perIsolateData = V8PerIsolateData::from(scriptState->isolate());
+    v8::Local<v8::FunctionTemplate> interfaceTemplate = perIsolateData->findInterfaceTemplate(scriptState->world(), &{{v8_class}}::wrapperTypeInfo);
+    v8::Local<v8::Signature> signature = v8::Signature::New(scriptState->isolate(), interfaceTemplate);
     ALLOW_UNUSED_LOCAL(signature);
-    {% for attribute in group.list | unique_by('name') | sort %}
+    {% endif %}
+    {% if constants | for_origin_trial_feature(origin_trial_feature_name) or
+          methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) %}
+    V8PerContextData* perContextData = V8PerContextData::from(scriptState->context());
+    v8::Local<v8::Function> interface = perContextData->constructorForType(&{{v8_class}}::wrapperTypeInfo);
+    {% endif %}
+    {% for attribute in attributes | for_origin_trial_feature(origin_trial_feature_name) | unique_by('name') | sort %}
     {% if attribute.is_data_type_property %}
     const V8DOMConfiguration::AttributeConfiguration attribute{{attribute.name}}Configuration = \
         {{attribute_configuration(attribute)}};
@@ -381,6 +396,18 @@ void {{v8_class_or_partial}}::install{{group.grouper}}(ScriptState* scriptState,
         {{attribute_configuration(attribute)}};
     V8DOMConfiguration::installAccessor(scriptState->isolate(), scriptState->world(), instance, prototype, v8::Local<v8::Function>(), signature, accessor{{attribute.name}}Configuration);
     {% endif %}
+    {% endfor %}
+    {# Origin-Trial-enabled constants #}
+    {% for constant in constants | for_origin_trial_feature(origin_trial_feature_name) | unique_by('name') | sort %}
+    {% set constant_name = constant.name.title().replace('_', '') %}
+    const V8DOMConfiguration::ConstantConfiguration constant{{constant_name}}Configuration = {{constant_configuration(constant)}};
+    V8DOMConfiguration::installConstant(scriptState->isolate(), interface, prototype, constant{{constant_name}}Configuration);
+    {% endfor %}
+    {# Origin-Trial-enabled methods (no overloads) #}
+    {% for method in methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) | unique_by('name') | sort %}
+    {% set method_name = method.name.title().replace('_', '') %}
+    const V8DOMConfiguration::MethodConfiguration method{{method_name}}Configuration = {{method_configuration(method)}};
+    V8DOMConfiguration::installMethod(scriptState->isolate(), scriptState->world(), instance, prototype, interface, signature, method{{method_name}}Configuration);
     {% endfor %}
 }
 {% endfor %}

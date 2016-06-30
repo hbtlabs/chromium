@@ -56,11 +56,13 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.download.DownloadActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.incognito.IncognitoNotificationManager;
+import org.chromium.chrome.browser.infobar.DataReductionPromoInfoBar;
 import org.chromium.chrome.browser.metrics.ActivityStopMetrics;
 import org.chromium.chrome.browser.metrics.LaunchMetrics;
 import org.chromium.chrome.browser.metrics.StartupMetrics;
@@ -519,7 +521,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             if (isTablet()) {
                 EmptyBackgroundViewWrapper bgViewWrapper = new EmptyBackgroundViewWrapper(
                         getTabModelSelector(), getTabCreator(false), ChromeTabbedActivity.this,
-                        getAppMenuHandler(), mLayoutManager);
+                        getAppMenuHandler(), getSnackbarManager(), mLayoutManager);
                 bgViewWrapper.initialize();
             }
 
@@ -995,6 +997,15 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     mIsFirstPageLoadStart = false;
                 }
             }
+
+            @Override
+            public void onDidNavigateMainFrame(Tab tab, String url, String baseUrl,
+                    boolean isNavigationToDifferentPage, boolean isFragmentNavigation,
+                    int statusCode) {
+                DataReductionPromoInfoBar.maybeLaunchPromoInfoBar(ChromeTabbedActivity.this,
+                        tab.getWebContents(), url, tab.isShowingErrorPage(), isFragmentNavigation,
+                        statusCode);
+            }
         };
 
         if (startIncognito) mTabModelSelectorImpl.selectModel(true);
@@ -1066,6 +1077,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             if (isUrlBarVisible) {
                 getToolbarManager().setUrlBarFocus(true);
             }
+        } else if (id == R.id.downloads_menu_id) {
+            DownloadActivity.launch(this);
         } else {
             return super.onMenuOrKeyboardAction(id, fromMenu);
         }
@@ -1085,16 +1098,13 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         if (targetActivity == null) return;
 
         Intent intent = new Intent(this, targetActivity);
-        intent.setClass(this, targetActivity);
-        intent.setFlags(MultiWindowUtils.FLAG_ACTIVITY_LAUNCH_ADJACENT);
+        MultiWindowUtils.setOpenInOtherWindowIntentExtras(intent, this, targetActivity);
 
-        tab.detachAndStartReparenting(intent, null, null);
+        tab.detachAndStartReparenting(intent, null, null, true);
     }
 
     @Override
     public boolean handleBackPressed() {
-        RecordUserAction.record("SystemBack");
-
         if (!mUIInitialized) return false;
         final Tab currentTab = getActivityTab();
 

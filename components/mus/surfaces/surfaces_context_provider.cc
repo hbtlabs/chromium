@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/mus/common/switches.h"
 #include "components/mus/gles2/command_buffer_driver.h"
 #include "components/mus/gles2/command_buffer_impl.h"
@@ -34,9 +35,15 @@ SurfacesContextProvider::SurfacesContextProvider(
       delegate_(nullptr),
       widget_(widget),
       command_buffer_local_(nullptr) {
+// TODO(penghuang): Kludge: Use mojo command buffer when running on Windows
+// since Chrome command buffer breaks unit tests
+#if defined(OS_WIN)
+  use_chrome_gpu_command_buffer_ = false;
+#else
   use_chrome_gpu_command_buffer_ =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseChromeGpuCommandBufferInMus);
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMojoGpuCommandBufferInMus);
+#endif
   if (!use_chrome_gpu_command_buffer_) {
     command_buffer_local_ = new CommandBufferLocal(this, widget_, state);
   } else {
@@ -52,14 +59,18 @@ SurfacesContextProvider::SurfacesContextProvider(
     attributes.sample_buffers = 0;
     attributes.bind_generates_resource = false;
     attributes.lose_context_when_out_of_memory = true;
-    gl::GpuPreference gpu_preference = gl::PreferIntegratedGpu;
     GURL active_url;
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
         base::ThreadTaskRunnerHandle::Get();
     command_buffer_proxy_impl_ = gpu::CommandBufferProxyImpl::Create(
-        service->gpu_channel_local(), widget, gfx::Size(),
-        shared_command_buffer, stream_id, stream_priority, attributes,
-        active_url, gpu_preference, task_runner);
+        service->gpu_channel_local(), widget, shared_command_buffer, stream_id,
+        stream_priority, attributes, active_url, task_runner);
+    command_buffer_proxy_impl_->SetSwapBuffersCompletionCallback(
+        base::Bind(&SurfacesContextProvider::OnGpuSwapBuffersCompleted,
+                   base::Unretained(this)));
+    command_buffer_proxy_impl_->SetUpdateVSyncParametersCallback(
+        base::Bind(&SurfacesContextProvider::OnUpdateVSyncParameters,
+                   base::Unretained(this)));
   }
 }
 
@@ -158,8 +169,9 @@ SurfacesContextProvider::~SurfacesContextProvider() {
   }
 }
 
-void SurfacesContextProvider::UpdateVSyncParameters(int64_t timebase,
-                                                    int64_t interval) {
+void SurfacesContextProvider::UpdateVSyncParameters(
+    const base::TimeTicks& timebase,
+    const base::TimeDelta& interval) {
   if (delegate_)
     delegate_->OnVSyncParametersUpdated(timebase, interval);
 }
@@ -168,6 +180,22 @@ void SurfacesContextProvider::GpuCompletedSwapBuffers(gfx::SwapResult result) {
   if (!swap_buffers_completion_callback_.is_null()) {
     swap_buffers_completion_callback_.Run(result);
   }
+}
+
+void SurfacesContextProvider::OnGpuSwapBuffersCompleted(
+    const std::vector<ui::LatencyInfo>& latency_info,
+    gfx::SwapResult result,
+    const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) {
+  if (!swap_buffers_completion_callback_.is_null()) {
+    swap_buffers_completion_callback_.Run(result);
+  }
+}
+
+void SurfacesContextProvider::OnUpdateVSyncParameters(
+    base::TimeTicks timebase,
+    base::TimeDelta interval) {
+  if (delegate_)
+    delegate_->OnVSyncParametersUpdated(timebase, interval);
 }
 
 void SurfacesContextProvider::SetSwapBuffersCompletionCallback(

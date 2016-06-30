@@ -618,22 +618,6 @@ Polymer({
   },
 
   /**
-   * @param {!media_router.Route} route
-   * @return {number} Bitmask of cast modes available for the sink of |route|.
-   *     There will be no more than 1 bit set if the user has selected a
-   *     specific cast mode.
-   */
-  computeAvailableCastModesForRoute_: function(route) {
-    if (route && route.sinkId && this.sinkMap_[route.sinkId]) {
-      var sinkCastModes = this.sinkMap_[route.sinkId].castModes;
-      return this.shownCastModeValue_ == media_router.CastModeType.AUTO ?
-          sinkCastModes :
-          this.shownCastModeValue_ & sinkCastModes;
-    }
-    return 0;
-  },
-
-  /**
    * If |allSinks| supports only a single cast mode, returns that cast mode.
    * Otherwise, returns AUTO_MODE. Only called if |userHasSelectedCastMode_| is
    * |false|.
@@ -704,6 +688,18 @@ Polymer({
    */
   computeDeviceMissingHidden_: function(sinksToShow) {
     return sinksToShow.length != 0;
+  },
+
+  /**
+   * @param {?Element} element Element to compute padding for.
+   * @return {number} Computes the amount of vertical padding (top + bottom) on
+   *     |element|.
+   * @private
+   */
+  computeElementVerticalPadding_: function(element) {
+    var paddingBottom, paddingTop;
+    [paddingBottom, paddingTop] = this.getElementVerticalPadding_(element);
+    return paddingBottom + paddingTop;
   },
 
   /**
@@ -817,18 +813,6 @@ Polymer({
   computeRouteDetailsHidden_: function(view, issue) {
     return view != media_router.MediaRouterView.ROUTE_DETAILS ||
         (!!issue && issue.isBlocking);
-  },
-
-  /**
-   * @param {?Element} element Element to compute padding for.
-   * @return {number} Computes the amount of vertical padding (top + bottom) on
-   *     |element|.
-   * @private
-   */
-  computeElementVerticalPadding_: function(element) {
-    var paddingBottom, paddingTop;
-    [paddingBottom, paddingTop] = this.getElementVerticalPadding_(element);
-    return paddingBottom + paddingTop;
   },
 
   /**
@@ -1193,6 +1177,15 @@ Polymer({
   },
 
   /**
+   * @param {?media_router.Route} route Route to get the sink for.
+   * @return {?media_router.Sink} Sink associated with |route| or
+   *     undefined if we don't have data for the sink.
+   */
+  getSinkForRoute_: function(route) {
+    return route ? this.sinkMap_[route.sinkId] : null;
+  },
+
+  /**
    * @param {?Element} element Conditionally-templated element to check.
    * @return {boolean} Whether |element| is considered present in the document
    *     as a conditionally-templated element. This does not check the |hidden|
@@ -1300,14 +1293,15 @@ Polymer({
     var focusedSink =
         this.$$('#searchResults').itemForElement(focusedElem).sinkItem;
     setTimeout(function() {
+      var sinkListPaperMenu = this.$$('#sink-list');
+      var sinks = sinkListPaperMenu.children;
       var sinkList = this.$$('#sinkList');
-      var sinks = this.$['sink-list-view'].querySelectorAll('paper-item');
-      Array.prototype.some.call(sinks, function(sink) {
-        if (sinkList.itemForElement(sink).id == focusedSink.id) {
-          sink.focus();
-          return true;
+      for (var i = 0; i < sinks.length; i++) {
+        if (sinkList.itemForElement(sinks[i]).id == focusedSink.id) {
+          sinkListPaperMenu.selectIndex(i);
+          break;
         }
-      });
+      }
     }.bind(this));
   },
 

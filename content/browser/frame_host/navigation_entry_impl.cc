@@ -18,7 +18,7 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_state_serialization.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_constants.h"
@@ -419,14 +419,13 @@ int64_t NavigationEntryImpl::GetPostID() const {
   return frame_tree_->frame_entry->post_id();
 }
 
-void NavigationEntryImpl::SetBrowserInitiatedPostData(
-    const base::RefCountedMemory* data) {
-  browser_initiated_post_data_ = data;
+void NavigationEntryImpl::SetPostData(
+    const scoped_refptr<ResourceRequestBody>& data) {
+  post_data_ = static_cast<ResourceRequestBodyImpl*>(data.get());
 }
 
-const base::RefCountedMemory*
-NavigationEntryImpl::GetBrowserInitiatedPostData() const {
-  return browser_initiated_post_data_.get();
+scoped_refptr<ResourceRequestBody> NavigationEntryImpl::GetPostData() const {
+  return post_data_.get();
 }
 
 
@@ -550,7 +549,7 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->is_overriding_user_agent_ = is_overriding_user_agent_;
   copy->timestamp_ = timestamp_;
   copy->http_status_code_ = http_status_code_;
-  // ResetForCommit: browser_initiated_post_data_
+  // ResetForCommit: post_data_
   copy->screenshot_ = screenshot_;
   copy->extra_headers_ = extra_headers_;
   copy->base_url_for_data_url_ = base_url_for_data_url_;
@@ -570,22 +569,9 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   return copy;
 }
 
-scoped_refptr<ResourceRequestBody>
-NavigationEntryImpl::ConstructBodyFromBrowserInitiatedPostData() const {
-  scoped_refptr<ResourceRequestBody> browser_initiated_post_body;
-  if (GetHasPostData()) {
-    if (const base::RefCountedMemory* memory = GetBrowserInitiatedPostData()) {
-      browser_initiated_post_body = new ResourceRequestBody();
-      browser_initiated_post_body->AppendBytes(memory->front_as<char>(),
-                                               memory->size());
-    }
-  }
-  return browser_initiated_post_body;
-}
-
 CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
     const FrameNavigationEntry& frame_entry,
-    const scoped_refptr<ResourceRequestBody>& post_body,
+    const scoped_refptr<ResourceRequestBodyImpl>& post_body,
     const GURL& dest_url,
     const Referrer& dest_referrer,
     FrameMsg_Navigate_Type::Value navigation_type,
@@ -613,8 +599,7 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
       dest_url, dest_referrer, GetTransitionType(), navigation_type,
       !IsViewSourceMode(), should_replace_entry(), ui_timestamp, report_type,
       GetBaseURLForDataURL(), GetHistoryURLForDataURL(), lofi_state,
-      navigation_start, method,
-      post_body ? post_body : ConstructBodyFromBrowserInitiatedPostData());
+      navigation_start, method, post_body ? post_body : post_data_);
 }
 
 StartNavigationParams NavigationEntryImpl::ConstructStartNavigationParams()
@@ -683,7 +668,7 @@ void NavigationEntryImpl::ResetForCommit(FrameNavigationEntry* frame_entry) {
   // cleared here.
   // TODO(creis): This state should be moved to NavigationRequest once
   // PlzNavigate is enabled.
-  SetBrowserInitiatedPostData(nullptr);
+  SetPostData(nullptr);
   set_is_renderer_initiated(false);
   set_transferred_global_request_id(GlobalRequestID());
   set_should_replace_entry(false);

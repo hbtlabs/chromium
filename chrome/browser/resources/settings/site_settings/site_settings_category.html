@@ -1,11 +1,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-icon-item.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item-body.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="/settings_shared_css.html">
-<link rel="import" href="/site_settings/add_site_dialog.html">
 <link rel="import" href="/site_settings/constants.html">
 <link rel="import" href="/site_settings/site_details.html">
 <link rel="import" href="/site_settings/site_list.html">
@@ -35,14 +33,12 @@
         border-bottom: none;
       }
 
-      .button-container {
-        -webkit-margin-start: 18px;
-      }
-
       paper-toggle-button {
         --paper-toggle-button-label-spacing: 0;
       }
     </style>
+    <content select=".media-picker"></content>
+
     <div class="settings-box first two-line">
       <div class="start secondary">
         [[computeCategoryDesc(category, categoryEnabled, showRecommendation)]]
@@ -51,32 +47,29 @@
           on-change="onToggleChange_"></paper-toggle-button>
     </div>
 
-    <div id="cookieControls" hidden>
-      <div class="settings-box">
-        <settings-checkbox class="start"
-            label="$i18n{thirdPartyCookie}"
-            sub-label="$i18n{thirdPartyCookieSublabel}"
-            pref="{{prefs.profile.block_third_party_cookies}}">
-        </settings-checkbox>
-      </div>
-    </div>
+    <content select=".cookie-controls"></content>
 
-    <settings-site-list id="blockList"
+    <settings-site-list
         category="[[category]]"
+        category-subtype="[[PermissionValues.BLOCK]]"
         current-route="{{currentRoute}}"
         category-enabled="[[categoryEnabled]]"
         selected-site="{{selectedSite}}">
     </settings-site-list>
-    <settings-site-list id="allowList"
+    <settings-site-list
         category="[[category]]"
+        category-subtype="[[PermissionValues.ALLOW]]"
         current-route="{{currentRoute}}"
         category-enabled="[[categoryEnabled]]"
         selected-site="{{selectedSite}}">
     </settings-site-list>
-    <div class="button-container">
-      <paper-button on-tap="onAddSiteTap_" class="primary-button"
-          hidden$="[[categoryEnabled]]">$i18n{addSiteLink}</paper-button>
-    </div>
+    <settings-site-list
+        category="[[category]]"
+        category-subtype="[[PermissionValues.SESSION_ONLY]]"
+        current-route="{{currentRoute}}"
+        category-enabled="[[categoryEnabled]]"
+        selected-site="{{selectedSite}}">
+    </settings-site-list>
   </template>
   <script src="site_settings_category.js"></script>
 </dom-module>

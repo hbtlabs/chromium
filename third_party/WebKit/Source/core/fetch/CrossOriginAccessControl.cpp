@@ -34,16 +34,18 @@
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Threading.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/StringBuilder.h"
 #include <algorithm>
+#include <memory>
 
 namespace blink {
 
-static PassOwnPtr<HTTPHeaderSet> createAllowedCrossOriginResponseHeadersSet()
+static std::unique_ptr<HTTPHeaderSet> createAllowedCrossOriginResponseHeadersSet()
 {
-    OwnPtr<HTTPHeaderSet> headerSet = adoptPtr(new HashSet<String, CaseFoldingHash>);
+    std::unique_ptr<HTTPHeaderSet> headerSet = wrapUnique(new HashSet<String, CaseFoldingHash>);
 
     headerSet->add("cache-control");
     headerSet->add("content-language");
@@ -57,7 +59,7 @@ static PassOwnPtr<HTTPHeaderSet> createAllowedCrossOriginResponseHeadersSet()
 
 bool isOnAccessControlResponseHeaderWhitelist(const String& name)
 {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(HTTPHeaderSet, allowedCrossOriginResponseHeaders, (createAllowedCrossOriginResponseHeadersSet().leakPtr()));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(HTTPHeaderSet, allowedCrossOriginResponseHeaders, (createAllowedCrossOriginResponseHeadersSet().release()));
 
     return allowedCrossOriginResponseHeaders.contains(name);
 }
@@ -79,7 +81,7 @@ ResourceRequest createAccessControlPreflightRequest(const ResourceRequest& reque
     preflightRequest.setHTTPHeaderField(HTTPNames::Access_Control_Request_Method, AtomicString(request.httpMethod()));
     preflightRequest.setPriority(request.priority());
     preflightRequest.setRequestContext(request.requestContext());
-    preflightRequest.setSkipServiceWorker(true);
+    preflightRequest.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::All);
 
     if (request.isExternalRequest())
         preflightRequest.setHTTPHeaderField(HTTPNames::Access_Control_Request_External, "true");

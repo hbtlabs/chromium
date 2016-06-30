@@ -387,7 +387,7 @@ void BlinkPlatformImpl::InternalInit() {
         ChildThreadImpl::current()->notification_dispatcher();
     push_dispatcher_ = ChildThreadImpl::current()->push_dispatcher();
     permission_client_.reset(new PermissionDispatcher(
-        ChildThreadImpl::current()->service_registry()));
+        ChildThreadImpl::current()->GetRemoteInterfaces()));
     main_thread_sync_provider_.reset(
         new BackgroundSyncProvider(main_thread_task_runner_.get()));
   }
@@ -689,6 +689,9 @@ const DataResource kDataResources[] = {
     {"themeChromiumAndroid.css",
      IDR_UASTYLE_THEME_CHROMIUM_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},
+    {"fullscreenAndroid.css",
+      IDR_UASTYLE_FULLSCREEN_ANDROID_CSS,
+      ui::SCALE_FACTOR_NONE},
     {"mediaControlsAndroid.css",
      IDR_UASTYLE_MEDIA_CONTROLS_ANDROID_CSS,
      ui::SCALE_FACTOR_NONE},

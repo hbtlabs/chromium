@@ -231,7 +231,7 @@ TEST_F(ArcAuthServiceTest, CancelFetchingDisablesArc) {
 
   auth_service()->CancelAuthCode();
   ASSERT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
-  ASSERT_EQ(false, pref->GetBoolean(prefs::kArcEnabled));
+  ASSERT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
 
   // Correctly stop service.
   auth_service()->Shutdown();
@@ -249,7 +249,7 @@ TEST_F(ArcAuthServiceTest, CloseUIKeepsArcEnabled) {
 
   auth_service()->CancelAuthCode();
   ASSERT_EQ(ArcAuthService::State::ACTIVE, auth_service()->state());
-  ASSERT_EQ(true, pref->GetBoolean(prefs::kArcEnabled));
+  ASSERT_TRUE(pref->GetBoolean(prefs::kArcEnabled));
 
   // Correctly stop service.
   auth_service()->Shutdown();
@@ -297,7 +297,7 @@ TEST_F(ArcAuthServiceTest, SignInStatus) {
 
   // Report failure.
   auth_service()->OnSignInFailed(
-      arc::mojom::ArcSignInFailureReason::UNKNOWN_ERROR);
+      arc::mojom::ArcSignInFailureReason::NETWORK_ERROR);
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
   EXPECT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
   EXPECT_EQ(ArcBridgeService::State::STOPPED, bridge_service()->state());

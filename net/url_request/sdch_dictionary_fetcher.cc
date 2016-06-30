@@ -225,7 +225,7 @@ void SdchDictionaryFetcher::ResetRequest() {
   current_request_.reset();
   buffer_ = nullptr;
   current_callback_.Reset();
-  dictionary_.clear();
+  dictionary_.reset();
   return;
 }
 
@@ -286,6 +286,7 @@ int SdchDictionaryFetcher::DoSendRequest(int rv) {
   current_request_->SetLoadFlags(load_flags);
 
   buffer_ = new IOBuffer(kBufferSize);
+  dictionary_.reset(new std::string());
   current_callback_ = info.callback;
 
   current_request_->Start();
@@ -308,10 +309,8 @@ int SdchDictionaryFetcher::DoSendRequestPending(int rv) {
 
   // If there's been an error, abort the current request.
   if (rv != OK) {
-    current_request_.reset();
-    buffer_ = NULL;
+    ResetRequest();
     next_state_ = STATE_SEND_REQUEST;
-
     return OK;
   }
 
@@ -343,8 +342,7 @@ int SdchDictionaryFetcher::DoReadBodyComplete(int rv) {
 
   // An error; abort the current request.
   if (rv < 0) {
-    current_request_.reset();
-    buffer_ = NULL;
+    ResetRequest();
     next_state_ = STATE_SEND_REQUEST;
     return OK;
   }
@@ -353,7 +351,7 @@ int SdchDictionaryFetcher::DoReadBodyComplete(int rv) {
 
   // Data; append to the dictionary and look for more data.
   if (rv > 0) {
-    dictionary_.append(buffer_->data(), rv);
+    dictionary_->append(buffer_->data(), rv);
     next_state_ = STATE_READ_BODY;
     return OK;
   }
@@ -368,7 +366,7 @@ int SdchDictionaryFetcher::DoCompleteRequest(int rv) {
 
   // If the dictionary was successfully fetched, add it to the manager.
   if (rv == OK) {
-    current_callback_.Run(dictionary_, current_request_->url(),
+    current_callback_.Run(*dictionary_, current_request_->url(),
                           current_request_->net_log(),
                           current_request_->was_cached());
   }

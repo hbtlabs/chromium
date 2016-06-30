@@ -101,6 +101,9 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
 {% set setter = indexed_property_setter %}
 static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    {% if setter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if setter.is_custom %}
     {{v8_class}}::indexedPropertySetterCustom(index, v8Value, info);
     {% else %}
@@ -150,6 +153,9 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 {% set deleter = indexed_property_deleter %}
 static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
+    {% if deleter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if deleter.is_custom %}
     {{v8_class}}::indexedPropertyDeleterCustom(index, info);
     {% else %}
@@ -275,6 +281,9 @@ static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::
 {
     if (!name->IsString())
         return;
+    {% if setter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if setter.is_custom %}
     {{v8_class}}::namedPropertySetterCustom(name, v8Value, info);
     {% else %}
@@ -379,6 +388,9 @@ static void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::Pro
 {
     if (!name->IsString())
         return;
+    {% if deleter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if deleter.is_custom %}
     {{v8_class}}::namedPropertyDeleterCustom(name, info);
     {% else %}
@@ -438,7 +450,7 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
 {
     if (!name->IsString())
         return;
-    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
+    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.Holder(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
     {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
@@ -449,8 +461,8 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
         return;
     }
 
-    {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.This() is an Object. #}
-    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), name.As<v8::String>(), v8Value);
+    {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.Holder() is an Object. #}
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), name.As<v8::String>(), v8Value);
 }
 
 static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
@@ -474,7 +486,7 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::getHeapObjectHeader, {{v8_class}}::trace, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes_on_instance %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes_on_instance %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -858,7 +870,7 @@ void {{v8_class}}::installConditionallyEnabledProperties(v8::Local<v8::Object> i
 {##############################################################################}
 {% block prepare_prototype_and_interface_object %}
 {% from 'methods.cpp' import install_conditionally_enabled_methods with context %}
-{% if unscopeables or has_conditional_attributes_on_prototype or conditionally_enabled_methods %}
+{% if unscopeables or has_conditional_attributes_on_prototype or methods | conditionally_exposed(is_partial) %}
 void {{v8_class}}::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, const DOMWrapperWorld& world, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     v8::Isolate* isolate = context->GetIsolate();
@@ -868,7 +880,7 @@ void {{v8_class}}::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> con
 {% if has_conditional_attributes_on_prototype %}
     {{install_conditionally_enabled_attributes_on_prototype() | indent}}
 {% endif %}
-{% if conditionally_enabled_methods %}
+{% if methods | conditionally_exposed(is_partial) %}
     {{install_conditionally_enabled_methods() | indent}}
 {% endif %}
 }

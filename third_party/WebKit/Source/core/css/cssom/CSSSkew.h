@@ -5,12 +5,12 @@
 #ifndef CSSSkew_h
 #define CSSSkew_h
 
-#include "core/css/cssom/MatrixTransformComponent.h"
-#include "core/css/cssom/TransformComponent.h"
+#include "core/css/cssom/CSSMatrixTransformComponent.h"
+#include "core/css/cssom/CSSTransformComponent.h"
 
 namespace blink {
 
-class CORE_EXPORT CSSSkew final : public TransformComponent {
+class CORE_EXPORT CSSSkew final : public CSSTransformComponent {
     WTF_MAKE_NONCOPYABLE(CSSSkew);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -19,20 +19,22 @@ public:
         return new CSSSkew(ax, ay);
     }
 
+    static CSSSkew* fromCSSValue(const CSSFunctionValue& value) { return nullptr; }
+
     double ax() const { return m_ax; }
     double ay() const { return m_ay; }
 
     TransformComponentType type() const override { return SkewType; }
 
-    MatrixTransformComponent* asMatrix() const override
+    CSSMatrixTransformComponent* asMatrix() const override
     {
-        return MatrixTransformComponent::skew(m_ax, m_ay);
+        return CSSMatrixTransformComponent::skew(m_ax, m_ay);
     }
 
     CSSFunctionValue* toCSSValue() const override;
 
 private:
-    CSSSkew(double ax, double ay) : TransformComponent(), m_ax(ax), m_ay(ay) { }
+    CSSSkew(double ax, double ay) : CSSTransformComponent(), m_ax(ax), m_ay(ay) { }
 
     double m_ax;
     double m_ay;

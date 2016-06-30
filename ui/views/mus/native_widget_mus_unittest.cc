@@ -172,7 +172,7 @@ class NativeWidgetMusTest : public ViewsTestBase {
   std::unique_ptr<ui::MouseEvent> CreateMouseEvent() {
     return base::WrapUnique(new ui::MouseEvent(
         ui::ET_MOUSE_PRESSED, gfx::Point(50, 50), gfx::Point(50, 50),
-        base::TimeDelta(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
+        base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
   }
 
   // Simulates an input event to the NativeWidget.
@@ -417,7 +417,7 @@ TEST_F(NativeWidgetMusTest, WidgetReceivesEvent) {
   NativeWidgetMus* native_widget =
       static_cast<NativeWidgetMus*>(widget->native_widget_private());
   mus::WindowTreeClientPrivate test_api(native_widget->window());
-  test_api.CallOnWindowInputEvent(native_widget->window(), *mouse);
+  test_api.CallOnWindowInputEvent(native_widget->window(), std::move(mouse));
   EXPECT_EQ(1, handler.num_mouse_events());
 }
 

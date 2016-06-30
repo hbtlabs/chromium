@@ -56,6 +56,7 @@ struct ModifierToLabel {
   {chromeos::input_method::kVoidKey, "disabled"},
   {chromeos::input_method::kCapsLockKey, "caps lock"},
   {chromeos::input_method::kEscapeKey, "esc"},
+  {chromeos::input_method::kBackspaceKey, "backspace"},
 };
 
 struct I18nContentToMessage {
@@ -209,8 +210,6 @@ struct I18nContentToMessage {
   { "keyboardOverlayOpenAddressInNewTab",
     IDS_KEYBOARD_OVERLAY_OPEN_ADDRESS_IN_NEW_TAB },
   { "keyboardOverlayOpenFileManager", IDS_KEYBOARD_OVERLAY_OPEN_FILE_MANAGER },
-  { "keyboardOverlayOpenGoogleCloudPrint",
-    IDS_KEYBOARD_OVERLAY_OPEN_GOOGLE_CLOUD_PRINT },
   { "keyboardOverlayPageDown", IDS_KEYBOARD_OVERLAY_PAGE_DOWN },
   { "keyboardOverlayPageUp", IDS_KEYBOARD_OVERLAY_PAGE_UP },
   { "keyboardOverlayPaste", IDS_KEYBOARD_OVERLAY_PASTE },
@@ -374,7 +373,7 @@ void KeyboardOverlayHandler::GetInputMethodId(const base::ListValue* args) {
   const chromeos::input_method::InputMethodDescriptor& descriptor =
       manager->GetActiveIMEState()->GetCurrentInputMethod();
   base::StringValue param(descriptor.id());
-  web_ui()->CallJavascriptFunction("initKeyboardOverlayId", param);
+  web_ui()->CallJavascriptFunctionUnsafe("initKeyboardOverlayId", param);
 }
 
 void KeyboardOverlayHandler::GetLabelMap(const base::ListValue* args) {
@@ -397,7 +396,7 @@ void KeyboardOverlayHandler::GetLabelMap(const base::ListValue* args) {
     dict.SetString(ModifierKeyToLabel(i->first), ModifierKeyToLabel(i->second));
   }
 
-  web_ui()->CallJavascriptFunction("initIdentifierMap", dict);
+  web_ui()->CallJavascriptFunctionUnsafe("initIdentifierMap", dict);
 }
 
 void KeyboardOverlayHandler::OpenLearnMorePage(const base::ListValue* args) {

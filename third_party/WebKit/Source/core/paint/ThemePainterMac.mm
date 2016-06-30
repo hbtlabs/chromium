@@ -183,7 +183,7 @@ bool ThemePainterMac::paintMenuList(const LayoutObject& o, const PaintInfo& pain
 
     NSView *view = m_layoutTheme.documentViewFor(o);
     [popupButton drawWithFrame:inflatedRect inView:view];
-    if (!ThemeMac::drawWithFrameDrawsFocusRing() && LayoutTheme::isFocused(o) && o.styleRef().outlineStyleIsAuto())
+    if (LayoutTheme::isFocused(o) && o.styleRef().outlineStyleIsAuto())
         [popupButton cr_drawFocusRingWithFrame:inflatedRect inView:view];
     [popupButton setControlView:nil];
 
@@ -224,7 +224,7 @@ bool ThemePainterMac::paintProgressBar(const LayoutObject& layoutObject, const P
     trackInfo.reserved = 0;
     trackInfo.filler1 = 0;
 
-    OwnPtr<ImageBuffer> imageBuffer = ImageBuffer::create(inflatedRect.size());
+    std::unique_ptr<ImageBuffer> imageBuffer = ImageBuffer::create(inflatedRect.size());
     if (!imageBuffer)
         return true;
 

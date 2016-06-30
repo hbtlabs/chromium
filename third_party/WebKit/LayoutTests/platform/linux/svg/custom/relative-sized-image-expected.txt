@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -13,27 +15,33 @@
         },
         {
           "object": "LayoutSVGImage image",
-          "rect": [109, 73, 300, 400],
-          "reason": "incremental"
+          "rect": [9, 73, 400, 400],
+          "reason": "full"
         },
         {
           "object": "LayoutSVGRoot svg",
-          "rect": [109, 73, 300, 400],
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
+          "rect": [9, 73, 400, 400],
+          "reason": "forced by layout"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow div id='contentBox'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutSVGRoot svg",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutSVGImage image",
+      "reason": "full"
     }
   ]
 }

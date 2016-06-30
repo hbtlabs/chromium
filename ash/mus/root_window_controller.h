@@ -7,81 +7,68 @@
 
 #include <memory>
 
+#include "ash/mus/disconnected_app_handler.h"
 #include "ash/mus/shelf_layout_manager_delegate.h"
 #include "ash/public/interfaces/container.mojom.h"
 #include "components/mus/public/cpp/window_observer.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/cpp/window_tree_client_delegate.h"
 #include "components/mus/public/interfaces/window_manager_constants.mojom.h"
-#include "components/mus/public/interfaces/window_tree_host.mojom.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "ui/display/display.h"
-
-namespace mus {
-class WindowManagerClient;
-}
 
 namespace shell {
 class Connector;
 }
 
-namespace ui {
-class Event;
-}
-
 namespace ash {
 
 class AlwaysOnTopController;
+class RootWindowControllerCommon;
+class WorkspaceLayoutManager;
 
 namespace mus {
 
 class LayoutManager;
-class ShadowController;
 class ShelfLayoutManager;
 class StatusLayoutManager;
 class WindowManager;
-class WindowManagerApplication;
 class WmRootWindowControllerMus;
 class WmShelfMus;
 class WmTestBase;
 class WmTestHelper;
+class WmWindowMus;
 
 // RootWindowController manages the windows and state for a single display.
-//
-// RootWindowController deletes itself when the root mus::Window is destroyed.
-// You can trigger deletion explicitly by way of Destroy().
-class RootWindowController : public ::mus::WindowObserver,
-                             public ::mus::WindowTreeClientDelegate,
-                             public ShelfLayoutManagerDelegate {
+// RootWindowController is tied to the lifetime of the ::mus::Window it is
+// created with. It is assumed the RootWindowController is deleted once the
+// associated ::mus::Window is destroyed.
+class RootWindowController : public ShelfLayoutManagerDelegate {
  public:
-  static RootWindowController* CreateFromDisplay(
-      WindowManagerApplication* app,
-      ::mus::mojom::DisplayPtr display,
-      mojo::InterfaceRequest<::mus::mojom::WindowTreeClient> client_request);
-
-  // Deletes this.
-  void Destroy();
+  RootWindowController(WindowManager* window_manager,
+                       ::mus::Window* root,
+                       const display::Display& display);
+  ~RootWindowController() override;
 
   shell::Connector* GetConnector();
 
   ::mus::Window* root() { return root_; }
 
   int window_count() { return window_count_; }
-  void IncrementWindowCount() { ++window_count_; }
+
+  ::mus::Window* NewTopLevelWindow(
+      std::map<std::string, std::vector<uint8_t>>* properties);
 
   ::mus::Window* GetWindowForContainer(mojom::Container container);
-  bool WindowIsContainer(const ::mus::Window* window) const;
 
-  WindowManager* window_manager() { return window_manager_.get(); }
+  WmWindowMus* GetWindowByShellWindowId(int id);
 
-  ::mus::WindowManagerClient* window_manager_client();
-
-  void OnAccelerator(uint32_t id, const ui::Event& event);
+  WindowManager* window_manager() { return window_manager_; }
 
   const display::Display& display() const { return display_; }
 
   ShelfLayoutManager* GetShelfLayoutManager();
   StatusLayoutManager* GetStatusLayoutManager();
+  WorkspaceLayoutManager* workspace_layout_manager() {
+    return workspace_layout_manager_;
+  }
 
   AlwaysOnTopController* always_on_top_controller() {
     return always_on_top_controller_.get();
@@ -93,43 +80,33 @@ class RootWindowController : public ::mus::WindowObserver,
   friend class WmTestBase;
   friend class WmTestHelper;
 
-  explicit RootWindowController(WindowManagerApplication* app);
-  ~RootWindowController() override;
-
-  void AddAccelerators();
-
-  // WindowTreeClientDelegate:
-  void OnEmbed(::mus::Window* root) override;
-  void OnWindowTreeClientDestroyed(::mus::WindowTreeClient* client) override;
-  void OnEventObserved(const ui::Event& event, ::mus::Window* target) override;
-
-  // ::mus::WindowObserver:
-  void OnWindowDestroyed(::mus::Window* window) override;
+  gfx::Rect CalculateDefaultBounds(::mus::Window* window) const;
+  gfx::Rect GetMaximizedWindowBounds() const;
 
   // ShelfLayoutManagerDelegate:
   void OnShelfWindowAvailable() override;
 
-  // Sets up the window containers used for z-space management.
-  void CreateContainer(mojom::Container container,
-                       mojom::Container parent_container);
-  void CreateContainers();
+  // Creates the necessary set of layout managers in the shell windows.
+  void CreateLayoutManagers();
 
-  WindowManagerApplication* app_;
+  WindowManager* window_manager_;
   ::mus::Window* root_;
-  int window_count_;
+  int window_count_ = 0;
+
+  display::Display display_;
+
+  std::unique_ptr<RootWindowControllerCommon> root_window_controller_common_;
 
   std::unique_ptr<WmRootWindowControllerMus> wm_root_window_controller_;
   std::unique_ptr<WmShelfMus> wm_shelf_;
 
-  std::unique_ptr<WindowManager> window_manager_;
-
+  // Owned by the corresponding container.
+  WorkspaceLayoutManager* workspace_layout_manager_ = nullptr;
   std::map<::mus::Window*, std::unique_ptr<LayoutManager>> layout_managers_;
 
-  std::unique_ptr<ShadowController> shadow_controller_;
-
-  display::Display display_;
-
   std::unique_ptr<AlwaysOnTopController> always_on_top_controller_;
+
+  std::unique_ptr<DisconnectedAppHandler> disconnected_app_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(RootWindowController);
 };

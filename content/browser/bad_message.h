@@ -28,7 +28,7 @@ enum BadMessageReason {
   RFH_NO_PROXY_TO_PARENT = 4,
   RPH_DESERIALIZATION_FAILED = 5,
   RVH_CAN_ACCESS_FILES_OF_PAGE_STATE = 6,
-  RVH_FILE_CHOOSER_PATH = 7,
+  RFH_FILE_CHOOSER_PATH = 7,
   RWH_SYNTHETIC_GESTURE = 8,
   RWH_FOCUS = 9,  // obsolete; no longer used
   RWH_BLUR = 10,
@@ -144,6 +144,11 @@ enum BadMessageReason {
   RFH_FAIL_PROVISIONAL_LOAD_NO_HANDLE = 120,
   RFH_FAIL_PROVISIONAL_LOAD_NO_ERROR = 121,
   NI_IN_PAGE_NAVIGATION = 122,
+  RPH_MOJO_PROCESS_ERROR = 123,
+  DBMF_INVALID_ORIGIN_ON_GET_SPACE = 124,
+  DBMF_INVALID_ORIGIN_ON_MODIFIED = 125,
+  DBMF_INVALID_ORIGIN_ON_CLOSED = 126,
+  WSH_INVALID_HEADER_VALUE = 127,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the

@@ -697,8 +697,8 @@
   --filters=<path_prefixes>
       Semicolon-separated list of label patterns used to limit the set
       of generated projects (see "gn help label_pattern"). Only
-      matching targets will be included to the solution. Only used for
-      Visual Studio and Xcode.
+      matching targets and their dependencies will be included in the
+      solution. Only used for Visual Studio and Xcode.
 
 ```
 
@@ -864,8 +864,8 @@
 ```
   Finds paths of dependencies between two targets. Each unique path
   will be printed in one group, and groups will be separate by newlines.
-  The two targets can appear in either order: paths will be found going
-  in either direction.
+  The two targets can appear in either order (paths will be found going
+  in either direction).
 
   By default, a single path will be printed. If there is a path with
   only public dependencies, the shortest public path will be printed.
@@ -876,13 +876,23 @@
 
 ```
 
+### **Interesting paths**
+
+```
+  In a large project, there can be 100's of millions of unique paths
+  between a very high level and a common low-level target. To make the
+  output more useful (and terminate in a reasonable time), GN will not
+  revisit sub-paths previously known to lead to the target.
+
+```
+
 ### **Options**
 
 ```
   --all
-     Prints all paths found rather than just the first one. Public paths
-     will be printed first in order of increasing length, followed by
-     non-public paths in order of increasing length.
+     Prints all "interesting" paths found rather than just the first
+     one. Public paths will be printed first in order of increasing
+     length, followed by non-public paths in order of increasing length.
 
   --public
      Considers only public paths. Can't be used with --with-data.
@@ -1426,12 +1436,32 @@
 
 ```
 
+### **Code signing**
+
+```
+  Some bundle needs to be code signed as part of the build (on iOS all
+  application needs to be code signed to run on a device). The code
+  signature can be configured via the code_signing_script variable.
+
+  If set, code_signing_script is the path of a script that invoked after
+  all files have been moved into the bundle. The script must not change
+  any file in the bundle, but may add new files.
+
+  If code_signing_script is defined, then code_signing_outputs must also
+  be defined and non-empty to inform when the script needs to be re-run.
+  The code_signing_args will be passed as is to the script (so path have
+  to be rebased) and additional inputs may be listed with the variable
+  code_signing_sources.
+
+```
+
 ### **Variables**
 
 ```
   bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,
   bundle_plugins_dir*, deps, data_deps, public_deps, visibility,
-  product_type
+  product_type, code_signing_args, code_signing_script,
+  code_signing_sources, code_signing_outputs
   * = required
 
 ```
@@ -1467,25 +1497,26 @@
 
       executable("${app_name}_generate_executable") {
         forward_variables_from(invoker, "*", [
-                                                "output_name",
-                                                "visibility",
-                                               ])
+                                               "output_name",
+                                               "visibility",
+                                             ])
         output_name =
             rebase_path("$gen_path/$app_name", root_build_dir)
       }
 
-      bundle_data("${app_name}_bundle_executable") {
-        deps = [ ":${app_name}_generate_executable" ]
-        sources = [ "$gen_path/$app_name" ]
-        outputs = [ "{{bundle_executable_dir}}/$app_name" ]
+      code_signing =
+          defined(invoker.code_signing) && invoker.code_signing
+
+      if (is_ios && !code_signing) {
+        bundle_data("${app_name}_bundle_executable") {
+          deps = [ ":${app_name}_generate_executable" ]
+          sources = [ "$gen_path/$app_name" ]
+          outputs = [ "{{bundle_executable_dir}}/$app_name" ]
+        }
       }
 
       create_bundle("${app_name}.app") {
         product_type = "com.apple.product-type.application"
-        deps = [
-          ":${app_name}_bundle_executable",
-          ":${app_name}_bundle_info_plist",
-        ]
         if (is_ios) {
           bundle_root_dir = "${root_build_dir}/$target_name"
           bundle_resources_dir = bundle_root_dir
@@ -1497,11 +1528,33 @@
           bundle_executable_dir = bundle_root_dir + "/MacOS"
           bundle_plugins_dir = bundle_root_dir + "/Plugins"
         }
-      }
-
-      group(target_name) {
-        forward_variables_from(invoker, ["visibility"])
-        deps = [ ":${app_name}.app" ]
+        deps = [ ":${app_name}_bundle_info_plist" ]
+        if (is_ios && code_signing) {
+          deps += [ ":${app_name}_generate_executable" ]
+          code_signing_script = "//build/config/ios/codesign.py"
+          code_signing_sources = [
+            invoker.entitlements_path,
+            "$target_gen_dir/$app_name",
+          ]
+          code_signing_outputs = [
+            "$bundle_root_dir/$app_name",
+            "$bundle_root_dir/_CodeSignature/CodeResources",
+            "$bundle_root_dir/embedded.mobileprovision",
+            "$target_gen_dir/$app_name.xcent",
+          ]
+          code_signing_args = [
+            "-i=" + ios_code_signing_identity,
+            "-b=" + rebase_path(
+                "$target_gen_dir/$app_name", root_build_dir),
+            "-e=" + rebase_path(
+                invoker.entitlements_path, root_build_dir),
+            "-e=" + rebase_path(
+                "$target_gen_dir/$app_name.xcent", root_build_dir),
+            rebase_path(bundle_root_dir, root_build_dir),
+          ]
+        } else {
+          deps += [ ":${app_name}_bundle_executable" ]
+        }
       }
     }
   }
@@ -2151,8 +2204,8 @@
   the number of tasks that may run simultaneously.
 
   As the file containing the pool definition may be executed in the
-  of more than one toolchain it is recommended to specify an explicit
-  toolchain when definining and referencing a pool.
+  context of more than one toolchain it is recommended to specify an
+  explicit toolchain when defining and referencing a pool.
 
   A pool is referenced by its label just like a target.
 
@@ -3611,13 +3664,13 @@
 ```
   This value should be used to indicate the desired architecture for
   the primary objects of the build. It will match the cpu architecture
-  of the default toolchain.
+  of the default toolchain, but not necessarily the current toolchain.
 
   In many cases, this is the same as "host_cpu", but in the case
-  of cross-compiles, this can be set to something different. This 
-  value is different from "current_cpu" in that it can be referenced
-  from inside any toolchain. This value can also be ignored if it is
-  not needed or meaningful for a project.
+  of cross-compiles, this can be set to something different. This
+  value is different from "current_cpu" in that it does not change
+  based on the current toolchain. When writing rules, "current_cpu"
+  should be used rather than "target_cpu" most of the time.
 
   This value is not used internally by GN for any purpose, so it
   may be set to whatever value is needed for the build.
@@ -4262,6 +4315,48 @@
 
 
 ```
+## **code_signing_args**: [string list] Arguments passed to code signing script.
+
+```
+  For create_bundle targets, code_signing_args is the list of arguments
+  to pass to the code signing script. Typically you would use source
+  expansion (see "gn help source_expansion") to insert the source file
+  names.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_outputs**: [file list] Output files for code signing step.
+
+```
+  Outputs from the code signing step of a create_bundle target. Must
+  refer to files in the build directory.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_script**: [file name] Script for code signing.
+```
+  An absolute or buildfile-relative file name of a Python script to run
+  for a create_bundle target to perform code signing step.
+
+  See also "gn help create_bundle".
+
+
+```
+## **code_signing_sources**: [file list] Sources for code signing step.
+
+```
+  A list of files used as input for code signing script step of a
+  create_bundle target. Non-absolute paths will be resolved relative to
+  the current build file.
+
+  See also "gn help create_bundle".
+
+
+```
 ## **complete_static_lib**: [boolean] Links all deps into a static library.
 
 ```
@@ -4676,7 +4771,7 @@
 
   The problem happens if a file is ever removed because the inputs are
   not listed on the command line to the script. Because the script
-  hasn't changed and all inputs are up-to-date, the script will not
+  hasn't changed and all inputs are up to date, the script will not
   re-run and you will get a stale build. Instead, either list all
   inputs on the command line to the script, or if there are many, create
   a separate list file that the script reads. As long as this file is
@@ -4693,13 +4788,11 @@
   files in a target are compiled. So if you depend on generated headers,
   you do not typically need to list them in the inputs section.
 
-  Inputs for binary targets will be treated as order-only dependencies,
-  meaning that they will be forced up-to-date before compiling or
-  any files in the target, but changes in the inputs will not
-  necessarily force the target to compile. This is because it is
-  expected that the compiler will report the precise list of input
-  dependencies required to recompile each file once the initial build
-  is done.
+  Inputs for binary targets will be treated as implicit dependencies,
+  meaning that changes in any of the inputs will force all sources in
+  the target to be recompiled. If an input only applies to a subset of
+  source files, you may want to split those into a separate target to
+  avoid unnecessary recompiles.
 
 ```
 
@@ -5949,8 +6042,8 @@
   When a tool produces more than one output, only the first output
   is considered. For example, a shared library target may produce a
   .dll and a .lib file on Windows. Only the .dll file will be considered
-  a runtime dependency. This applies only to linker tools, scripts and
-  copy steps with multiple outputs will also get all outputs listed.
+  a runtime dependency. This applies only to linker tools. Scripts and
+  copy steps with multiple outputs will get all outputs listed.
 
 
 ```

@@ -46,6 +46,8 @@
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -77,15 +79,19 @@ public:
 
     void setCachePolicy(CachePolicy policy) { m_policy = policy; }
     CachePolicy getCachePolicy() const override { return m_policy; }
+    void setLoadComplete(bool complete) { m_complete = complete; }
+    bool isLoadComplete() const override { return m_complete; }
 
 private:
     ResourceFetcherTestMockFetchContext()
         : m_policy(CachePolicyVerify)
-        , m_runner(adoptPtr(new MockTaskRunner))
+        , m_runner(wrapUnique(new MockTaskRunner))
+        , m_complete(false)
     { }
 
     CachePolicy m_policy;
-    OwnPtr<MockTaskRunner> m_runner;
+    std::unique_ptr<MockTaskRunner> m_runner;
+    bool m_complete;
 };
 
 class ResourceFetcherTest : public ::testing::Test {
@@ -113,9 +119,9 @@ TEST_F(ResourceFetcherTest, StartLoadAfterFrameDetach)
     EXPECT_EQ(resource, static_cast<Resource*>(nullptr));
     EXPECT_EQ(memoryCache()->resourceForURL(secureURL), static_cast<Resource*>(nullptr));
 
-    // Try calling Resource::load directly. This shouldn't crash.
-    Resource* resource2 = Resource::create(secureURL, Resource::Raw);
-    resource2->load(fetcher);
+    // Start by calling startLoad() directly, rather than via requestResource().
+    // This shouldn't crash.
+    fetcher->startLoad(Resource::create(secureURL, Resource::Raw));
 }
 
 TEST_F(ResourceFetcherTest, UseExistingResource)
@@ -272,6 +278,61 @@ TEST_F(ResourceFetcherTest, RevalidateWhileFinishingLoading)
     memoryCache()->remove(resource1);
 }
 
+TEST_F(ResourceFetcherTest, RevalidateDeferedResourceFromTwoInitiators)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/font.woff");
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(200);
+    response.setHTTPHeaderField(HTTPNames::ETag, "1234567890");
+    Platform::current()->getURLLoaderMockFactory()->registerURL(url, WrappedResourceResponse(response), "");
+
+    ResourceFetcherTestMockFetchContext* context = ResourceFetcherTestMockFetchContext::create();
+    ResourceFetcher* fetcher = ResourceFetcher::create(context);
+
+    // Fetch to cache a resource.
+    ResourceRequest request1(url);
+    FetchRequest fetchRequest1 = FetchRequest(request1, FetchInitiatorInfo());
+    Resource* resource1 = fetcher->requestResource(fetchRequest1, TestResourceFactory(Resource::Font));
+    ASSERT_TRUE(resource1);
+    fetcher->startLoad(resource1);
+    Platform::current()->getURLLoaderMockFactory()->serveAsynchronousRequests();
+    EXPECT_TRUE(resource1->isLoaded());
+    EXPECT_FALSE(resource1->errorOccurred());
+
+    // Set the context as it is on reloads.
+    context->setLoadComplete(true);
+    context->setCachePolicy(CachePolicyRevalidate);
+
+    // Revalidate the resource.
+    ResourceRequest request2(url);
+    FetchRequest fetchRequest2 = FetchRequest(request2, FetchInitiatorInfo());
+    Resource* resource2 = fetcher->requestResource(fetchRequest2, TestResourceFactory(Resource::Font));
+    ASSERT_TRUE(resource2);
+    EXPECT_EQ(resource1, resource2);
+    EXPECT_TRUE(resource2->isCacheValidator());
+    EXPECT_TRUE(resource2->stillNeedsLoad());
+
+    // Fetch the same resource again before actual load operation starts.
+    ResourceRequest request3(url);
+    FetchRequest fetchRequest3 = FetchRequest(request3, FetchInitiatorInfo());
+    Resource* resource3 = fetcher->requestResource(fetchRequest3, TestResourceFactory(Resource::Font));
+    ASSERT_TRUE(resource3);
+    EXPECT_EQ(resource2, resource3);
+    EXPECT_TRUE(resource3->isCacheValidator());
+    EXPECT_TRUE(resource3->stillNeedsLoad());
+
+    // startLoad() can be called from any initiator. Here, call it from the latter.
+    fetcher->startLoad(resource3);
+    Platform::current()->getURLLoaderMockFactory()->serveAsynchronousRequests();
+    EXPECT_TRUE(resource3->isLoaded());
+    EXPECT_FALSE(resource3->errorOccurred());
+    EXPECT_TRUE(resource2->isLoaded());
+    EXPECT_FALSE(resource2->errorOccurred());
+
+    memoryCache()->remove(resource1);
+}
+
 TEST_F(ResourceFetcherTest, DontReuseMediaDataUrl)
 {
     ResourceFetcher* fetcher = ResourceFetcher::create(ResourceFetcherTestMockFetchContext::create());
@@ -295,7 +356,7 @@ public:
     // No callbacks should be received except for the notifyFinished()
     // triggered by ResourceLoader::cancel().
     void dataSent(Resource*, unsigned long long, unsigned long long) override { ASSERT_TRUE(false); }
-    void responseReceived(Resource*, const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>) override { ASSERT_TRUE(false); }
+    void responseReceived(Resource*, const ResourceResponse&, std::unique_ptr<WebDataConsumerHandle>) override { ASSERT_TRUE(false); }
     void setSerializedCachedMetadata(Resource*, const char*, size_t) override { ASSERT_TRUE(false); }
     void dataReceived(Resource*, const char*, size_t) override { ASSERT_TRUE(false); }
     void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) override { ASSERT_TRUE(false); }

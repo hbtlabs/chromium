@@ -439,8 +439,11 @@ class TestExpectationLine(object):
     def is_flaky(self):
         return len(self.parsed_expectations) > 1
 
-    def is_whitespace_or_comment(self):
-        return bool(re.match("^\s*$", self.original_string.split('#')[0]))
+    def is_comment(self):
+        return bool(re.match(r"^\s*#.*$", self.original_string))
+
+    def is_whitespace(self):
+        return not self.original_string.strip()
 
     @staticmethod
     def create_passing_expectation(test):
@@ -900,7 +903,7 @@ class TestExpectations(object):
 
     @classmethod
     def expectation_from_string(cls, string):
-        assert(' ' not in string)  # This only handles one expectation at a time.
+        assert ' ' not in string  # This only handles one expectation at a time.
         return cls.EXPECTATIONS.get(string.lower())
 
     @staticmethod
@@ -910,7 +913,7 @@ class TestExpectations(object):
             result: actual result of a test execution
             expected_results: set of results listed in test_expectations
             test_needs_rebaselining: whether test was marked as REBASELINE"""
-        if not (set(expected_results) - (set(TestExpectations.NON_TEST_OUTCOME_EXPECTATIONS))):
+        if not set(expected_results) - set(TestExpectations.NON_TEST_OUTCOME_EXPECTATIONS):
             expected_results = set([PASS])
 
         if result in expected_results:
@@ -965,18 +968,23 @@ class TestExpectations(object):
         return set(suffixes)
 
     @staticmethod
-    def suffixes_for_actual_expectations_string(expectations):
+    # test_result is an instance of webkitpy.common.net.layouttestresults.LayoutTestResult
+    def suffixes_for_test_result(test_result):
         suffixes = set()
-        if 'TEXT' in expectations:
+        actual_results = test_result.actual_results()
+        if 'TEXT' in actual_results:
             suffixes.add('txt')
-        if 'IMAGE' in expectations:
+        if 'IMAGE' in actual_results:
             suffixes.add('png')
-        if 'AUDIO' in expectations:
+        if 'AUDIO' in actual_results:
             suffixes.add('wav')
-        if 'MISSING' in expectations:
-            suffixes.add('txt')
-            suffixes.add('png')
-            suffixes.add('wav')
+        if 'MISSING' in actual_results:
+            if test_result.is_missing_text():
+                suffixes.add('txt')
+            if test_result.is_missing_image():
+                suffixes.add('png')
+            if test_result.is_missing_audio():
+                suffixes.add('wav')
         return suffixes
 
     # FIXME: This constructor does too much work. We should move the actual parsing of
@@ -1116,8 +1124,11 @@ class TestExpectations(object):
             index = self._expectations.index(expectation)
             self._expectations.remove(expectation)
 
-            if index == len(self._expectations) or self._expectations[index].is_whitespace_or_comment():
-                while index and self._expectations[index - 1].is_whitespace_or_comment():
+            if index == len(self._expectations) or self._expectations[index].is_whitespace() or self._expectations[index].is_comment():
+                while index and self._expectations[index - 1].is_comment():
+                    index = index - 1
+                    self._expectations.pop(index)
+                while index and self._expectations[index - 1].is_whitespace():
                     index = index - 1
                     self._expectations.pop(index)
 

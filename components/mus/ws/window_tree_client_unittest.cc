@@ -19,13 +19,10 @@
 #include "services/shell/public/cpp/shell_test.h"
 
 using mojo::Array;
-using mojo::Callback;
 using shell::Connection;
 using mojo::InterfaceRequest;
 using shell::ShellClient;
 using mojo::String;
-using mus::mojom::ErrorCode;
-using mus::mojom::EventPtr;
 using mus::mojom::WindowDataPtr;
 using mus::mojom::WindowTree;
 using mus::mojom::WindowTreeClient;
@@ -70,7 +67,8 @@ bool EmbedUrl(shell::Connector* connector,
   {
     mojom::WindowTreeClientPtr client;
     connector->ConnectToInterface(url.get(), &client);
-    tree->Embed(root_id, std::move(client),
+    const uint32_t embed_flags = 0;
+    tree->Embed(root_id, std::move(client), embed_flags,
                 base::Bind(&EmbedCallbackImpl, &run_loop, &result));
   }
   run_loop.Run();
@@ -81,7 +79,8 @@ bool Embed(WindowTree* tree, Id root_id, mojom::WindowTreeClientPtr client) {
   bool result = false;
   base::RunLoop run_loop;
   {
-    tree->Embed(root_id, std::move(client),
+    const uint32_t embed_flags = 0;
+    tree->Embed(root_id, std::move(client), embed_flags,
                 base::Bind(&EmbedCallbackImpl, &run_loop, &result));
   }
   run_loop.Run();
@@ -349,7 +348,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   }
   void OnWindowInputEvent(uint32_t event_id,
                           Id window_id,
-                          EventPtr event,
+                          std::unique_ptr<ui::Event> event,
                           uint32_t event_observer_id) override {
     // Ack input events to clear the state on the server. These can be received
     // during test startup. X11Window::DispatchEvent sends a synthetic move
@@ -358,7 +357,8 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
     // Don't log input events as none of the tests care about them and they
     // may come in at random points.
   }
-  void OnEventObserved(EventPtr event, uint32_t event_observer_id) override {}
+  void OnEventObserved(std::unique_ptr<ui::Event>,
+                       uint32_t event_observer_id) override {}
   void OnWindowSharedPropertyChanged(uint32_t window,
                                      const String& name,
                                      Array<uint8_t> new_data) override {
@@ -387,6 +387,12 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
   }
 
   // mojom::WindowManager:
+  void OnConnect(uint16_t client_id) override {}
+  void WmNewDisplayAdded(mojom::DisplayPtr display,
+                         mojom::WindowDataPtr root_data,
+                         bool drawn) override {
+    NOTIMPLEMENTED();
+  }
   void WmSetBounds(uint32_t change_id,
                    uint32_t window_id,
                    const gfx::Rect& bounds) override {
@@ -408,7 +414,7 @@ class TestWindowTreeClient : public mojom::WindowTreeClient,
                                 bool janky) override {
     NOTIMPLEMENTED();
   }
-  void OnAccelerator(uint32_t id, mojom::EventPtr event) override {
+  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override {
     NOTIMPLEMENTED();
   }
 

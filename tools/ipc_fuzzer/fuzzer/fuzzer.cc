@@ -719,8 +719,6 @@ struct FuzzTraits<cc::CompositorFrameAck> {
 template <>
 struct FuzzTraits<cc::DelegatedFrameData> {
   static bool Fuzz(cc::DelegatedFrameData* p, Fuzzer* fuzzer) {
-    if (!FuzzParam(&p->device_scale_factor, fuzzer))
-      return false;
     if (!FuzzParam(&p->resource_list, fuzzer))
       return false;
     if (!FuzzParam(&p->render_pass_list, fuzzer))
@@ -973,6 +971,23 @@ struct FuzzTraits<content::SyntheticGesturePacket> {
           return false;
         if (!FuzzParam(&params->duration_ms, fuzzer))
           return false;
+        gesture_params.reset(params);
+        break;
+      }
+      case content::SyntheticGestureParams::GestureType::POINTER_ACTION: {
+        content::SyntheticPointerActionParams::PointerActionType action_type;
+        gfx::PointF position;
+        int index;
+        if (!FuzzParam(&action_type, fuzzer))
+          return false;
+        if (!FuzzParam(&position, fuzzer))
+          return false;
+        if (!FuzzParam(&index, fuzzer))
+          return false;
+        content::SyntheticPointerActionParams* params =
+            new content::SyntheticPointerActionParams(action_type);
+        params->set_position(position);
+        params->set_index(index);
         gesture_params.reset(params);
         break;
       }
@@ -1793,8 +1808,7 @@ struct FuzzTraits<ui::LatencyInfo> {
     bool terminated = p->terminated();
     uint32_t input_coordinates_size = static_cast<uint32_t>(
         RandInRange(ui::LatencyInfo::kMaxInputCoordinates + 1));
-    ui::LatencyInfo::InputCoordinate
-        input_coordinates[ui::LatencyInfo::kMaxInputCoordinates];
+    gfx::PointF input_coordinates[ui::LatencyInfo::kMaxInputCoordinates];
     if (!FuzzParamArray(
         input_coordinates, input_coordinates_size, fuzzer))
       return false;
@@ -1809,18 +1823,6 @@ struct FuzzTraits<ui::LatencyInfo> {
     }
     *p = latency;
 
-    return true;
-  }
-};
-
-template <>
-struct FuzzTraits<ui::LatencyInfo::InputCoordinate> {
-  static bool Fuzz(
-      ui::LatencyInfo::InputCoordinate* p, Fuzzer* fuzzer) {
-    if (!FuzzParam(&p->x, fuzzer))
-      return false;
-    if (!FuzzParam(&p->y, fuzzer))
-      return false;
     return true;
   }
 };

@@ -75,7 +75,6 @@ class _W3CTestConverter(HTMLParser):
         self.style_data = []
         self.filename = filename
         self.reference_support_info = reference_support_info
-
         resources_path = self.path_from_webkit_root('LayoutTests', 'resources')
         resources_relpath = self._filesystem.relpath(resources_path, new_path)
         self.resources_relpath = resources_relpath
@@ -83,8 +82,8 @@ class _W3CTestConverter(HTMLParser):
         # These settings might vary between WebKit and Blink.
         self._css_property_file = self.path_from_webkit_root('Source', 'core', 'css', 'CSSProperties.in')
         self.prefixed_properties = self.read_webkit_prefixed_css_property_list()
-        prop_regex = '([\s{]|^)(' + "|".join(
-            prop.replace('-webkit-', '') for prop in self.prefixed_properties) + ')(\s+:|:)'
+        prop_regex = r'([\s{]|^)(' + '|'.join(
+            prop.replace('-webkit-', '') for prop in self.prefixed_properties) + r')(\s+:|:)'
         self.prop_re = re.compile(prop_regex)
 
     def output(self):
@@ -99,12 +98,12 @@ class _W3CTestConverter(HTMLParser):
 
         contents = self._filesystem.read_text_file(self._css_property_file)
         for line in contents.splitlines():
-            if re.match('^(#|//|$)', line):
+            if re.match(r'^(#|//|$)', line):
                 # skip comments and preprocessor directives.
                 continue
             prop = line.split()[0]
             # Find properties starting with the -webkit- prefix.
-            match = re.match('-webkit-([\w|-]*)', prop)
+            match = re.match(r'-webkit-([\w|-]*)', prop)
             if match:
                 prefixed_properties.append(match.group(1))
             else:
@@ -169,10 +168,6 @@ class _W3CTestConverter(HTMLParser):
             if attr_name == 'style':
                 new_style = self.convert_style_data(attr_value)
                 converted = re.sub(re.escape(attr_value), new_style, converted)
-            if attr_name == 'class' and 'instructions' in attr_value:
-                # Always hide instructions, they're for manual testers.
-                converted = re.sub(' style=".*?"', '', converted)
-                converted = re.sub('\>', ' style="display:none">', converted)
 
         src_tags = ('script', 'img', 'style', 'frame', 'iframe', 'input', 'layer', 'textarea', 'video', 'audio')
         if tag in src_tags and self.reference_support_info is not None and self.reference_support_info != {}:
@@ -182,6 +177,14 @@ class _W3CTestConverter(HTMLParser):
                     converted = re.sub(re.escape(attr_value), new_path, converted)
 
         self.converted_data.append(converted)
+
+    def parse_endtag(self, i):
+        # parse_endtag is being overridden here instead of handle_endtag
+        # so we can get the original end tag text with the original
+        # capitalization
+        endpos = HTMLParser.parse_endtag(self, i)
+        self.converted_data.extend([self.rawdata[i:endpos]])
+        return endpos
 
     def handle_starttag(self, tag, attrs):
         if tag == 'style':
@@ -193,7 +196,6 @@ class _W3CTestConverter(HTMLParser):
             self.converted_data.append(self.convert_style_data(''.join(self.style_data)))
             self.in_style_tag = False
             self.style_data = []
-        self.converted_data.extend(['</', tag, '>'])
 
     def handle_startendtag(self, tag, attrs):
         self.convert_attributes_if_needed(tag, attrs)
@@ -211,7 +213,7 @@ class _W3CTestConverter(HTMLParser):
         self.converted_data.extend(['&#', name, ';'])
 
     def handle_comment(self, data):
-        self.converted_data.extend(['<!-- ', data, ' -->'])
+        self.converted_data.extend(['<!--', data, '-->'])
 
     def handle_decl(self, decl):
         self.converted_data.extend(['<!', decl, '>'])

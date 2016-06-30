@@ -167,11 +167,11 @@ void DeleteSelectionCommand::initializePositionData(EditingState* editingState)
     initializeStartEnd(start, end);
     DCHECK(start.isNotNull());
     DCHECK(end.isNotNull());
-    if (!isEditablePosition(start, ContentIsEditable, DoNotUpdateStyle)) {
+    if (!isEditablePosition(start, ContentIsEditable)) {
         editingState->abort();
         return;
     }
-    if (!isEditablePosition(end, ContentIsEditable, DoNotUpdateStyle)) {
+    if (!isEditablePosition(end, ContentIsEditable)) {
         Node* highestRoot = highestEditableRoot(start);
         DCHECK(highestRoot);
         end = lastEditablePositionBeforePositionInRoot(end, *highestRoot);
@@ -323,7 +323,7 @@ bool DeleteSelectionCommand::handleSpecialCaseBRDelete(EditingState* editingStat
 
     // FIXME: This code doesn't belong in here.
     // We detect the case where the start is an empty line consisting of BR not wrapped in a block element.
-    if (upstreamStartIsBR && downstreamStartIsBR && !(isStartOfBlock(createVisiblePosition(Position::beforeNode(nodeAfterUpstreamStart))) && isEndOfBlock(createVisiblePosition(Position::afterNode(nodeAfterUpstreamStart))))) {
+    if (upstreamStartIsBR && downstreamStartIsBR && !(isStartOfBlock(VisiblePosition::beforeNode(nodeAfterUpstreamStart)) && isEndOfBlock(VisiblePosition::afterNode(nodeAfterUpstreamStart)))) {
         m_startsAtEmptyLine = true;
         m_endingPosition = m_downstreamEnd;
     }
@@ -707,7 +707,7 @@ void DeleteSelectionCommand::mergeParagraphs(EditingState* editingState)
     // removals that it does cause the insertion of *another* placeholder.
     bool needPlaceholder = m_needPlaceholder;
     bool paragraphToMergeIsEmpty = startOfParagraphToMove.deepEquivalent() == endOfParagraphToMove.deepEquivalent();
-    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, mergeDestination, editingState, false, !paragraphToMergeIsEmpty);
+    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, mergeDestination, editingState, DoNotPreserveSelection, paragraphToMergeIsEmpty ? DoNotPreserveStyle : PreserveStyle);
     if (editingState->isAborted())
         return;
     m_needPlaceholder = needPlaceholder;

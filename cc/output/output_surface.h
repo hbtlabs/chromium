@@ -17,6 +17,7 @@
 #include "cc/output/overlay_candidate_validator.h"
 #include "cc/output/software_output_device.h"
 #include "cc/output/vulkan_context_provider.h"
+#include "gpu/command_buffer/common/texture_in_use_response.h"
 
 namespace base { class SingleThreadTaskRunner; }
 
@@ -25,6 +26,7 @@ class LatencyInfo;
 }
 
 namespace gfx {
+class ColorSpace;
 class Rect;
 class Size;
 class Transform;
@@ -110,6 +112,9 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   // thread-specific data for the output surface can be initialized, since from
   // this point to when DetachFromClient() is called the output surface will
   // only be used on the compositor thread.
+  // The caller should call DetachFromClient() on the same thread before
+  // destroying the OutputSurface, even if this fails. And BindToClient should
+  // not be called twice for a given OutputSurface.
   virtual bool BindToClient(OutputSurfaceClient* client);
 
   // Called by the compositor on the compositor thread. This is a place where
@@ -119,7 +124,10 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   virtual void EnsureBackbuffer();
   virtual void DiscardBackbuffer();
 
-  virtual void Reshape(const gfx::Size& size, float scale_factor, bool alpha);
+  virtual void Reshape(const gfx::Size& size,
+                       float scale_factor,
+                       const gfx::ColorSpace& color_space,
+                       bool alpha);
   gfx::Size SurfaceSize() const { return surface_size_; }
   float device_scale_factor() const { return device_scale_factor_; }
 
@@ -128,14 +136,23 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   virtual void ForceReclaimResources() {}
 
   virtual void BindFramebuffer();
+  // Gives the GL internal format that should be used for calling CopyTexImage2D
+  // when the framebuffer is bound via BindFramebuffer().
+  virtual uint32_t GetFramebufferCopyTextureFormat() = 0;
 
   // The implementation may destroy or steal the contents of the CompositorFrame
   // passed in (though it will not take ownership of the CompositorFrame
   // itself). For successful swaps, the implementation must call
   // OutputSurfaceClient::DidSwapBuffers() and eventually
   // DidSwapBuffersComplete().
-  virtual void SwapBuffers(CompositorFrame* frame) = 0;
+  virtual void SwapBuffers(CompositorFrame frame) = 0;
   virtual void OnSwapBuffersComplete();
+
+  // Called by subclasses after receiving a response from the gpu process to a
+  // query about whether a given set of textures is still in use by the OS
+  // compositor.
+  void DidReceiveTextureInUseResponses(
+      const gpu::TextureInUseResponses& responses);
 
   bool HasClient() { return !!client_; }
 

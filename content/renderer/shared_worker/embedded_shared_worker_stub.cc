@@ -18,6 +18,7 @@
 #include "content/child/shared_worker_devtools_agent.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/worker_messages.h"
+#include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/shared_worker/embedded_shared_worker_content_settings_client_proxy.h"
 #include "ipc/ipc_message_macros.h"
@@ -90,8 +91,11 @@ class WebServiceWorkerNetworkProviderImpl
     // renderer process hasn't received SetControllerServiceWorker message.
     if (request.getRequestContext() !=
             blink::WebURLRequest::RequestContextSharedWorker &&
-        !provider->IsControlledByServiceWorker()) {
-      request.setSkipServiceWorker(true);
+        !provider->IsControlledByServiceWorker() &&
+        request.skipServiceWorker() !=
+            blink::WebURLRequest::SkipServiceWorker::All) {
+      request.setSkipServiceWorker(
+          blink::WebURLRequest::SkipServiceWorker::Controlling);
     }
   }
 
@@ -241,7 +245,8 @@ EmbeddedSharedWorkerStub::createServiceWorkerNetworkProvider(
   // we can observe its requests.
   std::unique_ptr<ServiceWorkerNetworkProvider> provider(
       new ServiceWorkerNetworkProvider(
-          route_id_, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER));
+          route_id_, SERVICE_WORKER_PROVIDER_FOR_SHARED_WORKER,
+          true /* is_parent_frame_secure */));
 
   // The provider is kept around for the lifetime of the DataSource
   // and ownership is transferred to the DataSource.
@@ -261,6 +266,11 @@ void EmbeddedSharedWorkerStub::sendDevToolsMessage(
     const blink::WebString& state) {
   worker_devtools_agent_->SendDevToolsMessage(
       session_id, call_id, message, state);
+}
+
+blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
+EmbeddedSharedWorkerStub::createDevToolsMessageLoop() {
+  return DevToolsAgent::createMessageLoopWrapper();
 }
 
 void EmbeddedSharedWorkerStub::Shutdown() {

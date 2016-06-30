@@ -118,8 +118,6 @@ class CC_EXPORT LayerTreeImpl {
   AnimationHost* animation_host() const {
     return layer_tree_host_impl_->animation_host();
   }
-  void SetFixedRasterScaleHasBlurryContent();
-  void SetFixedRasterScaleAttemptedToChangeScale();
 
   // Tree specific methods exposed to layer-impl tree.
   // ---------------------------------------------------------------------------
@@ -133,11 +131,16 @@ class CC_EXPORT LayerTreeImpl {
 
   // Other public methods
   // ---------------------------------------------------------------------------
-  LayerImpl* root_layer() const { return root_layer_; }
-  void SetRootLayer(std::unique_ptr<LayerImpl>);
+  LayerImpl* root_layer_for_testing() {
+    return layer_list_.empty() ? nullptr : layer_list_[0];
+  }
+  RenderSurfaceImpl* RootRenderSurface() const;
+  bool LayerListIsEmpty() const;
+  void SetRootLayerForTesting(std::unique_ptr<LayerImpl>);
+  void SetRootLayerFromLayerListForTesting();
+  void OnCanDrawStateChangedForTree();
   bool IsRootLayer(const LayerImpl* layer) const;
   std::unique_ptr<OwnedLayerImplList> DetachLayers();
-  void ClearLayers();
 
   void SetPropertyTrees(PropertyTrees* property_trees);
   PropertyTrees* property_trees() { return &property_trees_; }
@@ -148,25 +151,14 @@ class CC_EXPORT LayerTreeImpl {
 
   void MoveChangeTrackingToLayers();
 
-  LayerListIterator<LayerImpl> begin() const;
-  LayerListIterator<LayerImpl> end() const;
-  LayerListReverseIterator<LayerImpl> rbegin();
-  LayerListReverseIterator<LayerImpl> rend();
-
-  struct CC_EXPORT ElementLayers {
-    // Transform and opacity mutations apply to this layer.
-    LayerImpl* main = nullptr;
-    // Scroll mutations apply to this layer.
-    LayerImpl* scroll = nullptr;
-  };
-
-  void AddToElementMap(LayerImpl* layer);
-  void RemoveFromElementMap(LayerImpl* layer);
+  LayerImplList::const_iterator begin() const;
+  LayerImplList::const_iterator end() const;
+  LayerImplList::reverse_iterator rbegin();
+  LayerImplList::reverse_iterator rend();
 
   void AddToOpacityAnimationsMap(int id, float opacity);
   void AddToTransformAnimationsMap(int id, gfx::Transform transform);
 
-  ElementLayers GetMutableLayers(uint64_t element_id);
   int source_frame_number() const { return source_frame_number_; }
   void set_source_frame_number(int frame_number) {
     source_frame_number_ = frame_number;
@@ -264,11 +256,13 @@ class CC_EXPORT LayerTreeImpl {
     return top_controls_shown_ratio_.get();
   }
 
+  void SetElementIdsForTesting();
+
   // Updates draw properties and render surface layer list, as well as tile
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
   bool UpdateDrawProperties(bool update_lcd_text);
-  void BuildPropertyTreesForTesting();
+  void BuildLayerListAndPropertyTreesForTesting();
 
   void set_needs_update_draw_properties() {
     needs_update_draw_properties_ = true;
@@ -305,6 +299,13 @@ class CC_EXPORT LayerTreeImpl {
   gfx::Rect RootScrollLayerDeviceViewportBounds() const;
 
   LayerImpl* LayerById(int id) const;
+
+  // TODO(vollick): this is deprecated. It is used by
+  // animation/compositor-worker to look up layers to mutate, but in future, we
+  // will update property trees.
+  LayerImpl* LayerByElementId(ElementId element_id) const;
+  void AddToElementMap(LayerImpl* layer);
+  void RemoveFromElementMap(LayerImpl* layer);
 
   void AddLayerShouldPushProperties(LayerImpl* layer);
   void RemoveLayerShouldPushProperties(LayerImpl* layer);
@@ -390,9 +391,7 @@ class CC_EXPORT LayerTreeImpl {
 
   void AddSurfaceLayer(LayerImpl* layer);
   void RemoveSurfaceLayer(LayerImpl* layer);
-  const std::vector<LayerImpl*>& SurfaceLayers() const {
-    return surface_layers_;
-  }
+  const LayerImplList& SurfaceLayers() const { return surface_layers_; }
 
   LayerImpl* FindFirstScrollingLayerOrScrollbarLayerThatIsHitByPoint(
       const gfx::PointF& screen_space_point);
@@ -475,6 +474,12 @@ class CC_EXPORT LayerTreeImpl {
 
   void ResetAllChangeTracking();
 
+  void AddToLayerList(LayerImpl* layer);
+
+  void ClearLayerList();
+
+  void BuildLayerListForTesting();
+
  protected:
   explicit LayerTreeImpl(
       LayerTreeHostImpl* layer_tree_host_impl,
@@ -491,10 +496,12 @@ class CC_EXPORT LayerTreeImpl {
   void UpdateScrollbars(int scroll_layer_id, int clip_layer_id);
   void DidUpdatePageScale();
   void PushTopControls(const float* top_controls_shown_ratio);
+  bool ClampTopControlsShownRatio();
+
   LayerTreeHostImpl* layer_tree_host_impl_;
   int source_frame_number_;
   int is_first_frame_after_commit_tracker_;
-  LayerImpl* root_layer_;
+  LayerImpl* root_layer_for_testing_;
   HeadsUpDisplayLayerImpl* hud_layer_;
   PropertyTrees property_trees_;
   SkColor background_color_;
@@ -519,10 +526,11 @@ class CC_EXPORT LayerTreeImpl {
 
   std::unique_ptr<OwnedLayerImplList> layers_;
   LayerImplMap layer_id_map_;
+  LayerImplList layer_list_;
   // Set of layers that need to push properties.
   std::unordered_set<LayerImpl*> layers_that_should_push_properties_;
 
-  std::unordered_map<uint64_t, ElementLayers> element_layers_map_;
+  std::unordered_map<ElementId, LayerImpl*, ElementIdHash> element_layers_map_;
 
   std::unordered_map<int, float> opacity_animations_map_;
   std::unordered_map<int, gfx::Transform> transform_animations_map_;
@@ -539,7 +547,7 @@ class CC_EXPORT LayerTreeImpl {
   std::multimap<int, int> scrollbar_map_;
 
   std::vector<PictureLayerImpl*> picture_layers_;
-  std::vector<LayerImpl*> surface_layers_;
+  LayerImplList surface_layers_;
 
   // List of visible layers for the most recently prepared frame.
   LayerImplList render_surface_layer_list_;

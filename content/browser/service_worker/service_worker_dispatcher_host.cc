@@ -17,11 +17,11 @@
 #include "content/browser/message_port_message_filter.h"
 #include "content/browser/message_port_service.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_client_utils.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_handle.h"
-#include "content/browser/service_worker/service_worker_navigation_handle_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_registration_handle.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
@@ -746,7 +746,8 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
 void ServiceWorkerDispatcherHost::OnProviderCreated(
     int provider_id,
     int route_id,
-    ServiceWorkerProviderType provider_type) {
+    ServiceWorkerProviderType provider_type,
+    bool is_parent_frame_secure) {
   // TODO(pkasting): Remove ScopedTracker below once crbug.com/477117 is fixed.
   tracked_objects::ScopedTracker tracking_profile(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
@@ -761,34 +762,14 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
     return;
   }
 
-  std::unique_ptr<ServiceWorkerProviderHost> provider_host;
-  if (IsBrowserSideNavigationEnabled() &&
-      ServiceWorkerUtils::IsBrowserAssignedProviderId(provider_id)) {
-    // PlzNavigate
-    // Retrieve the provider host previously created for navigation requests.
-    ServiceWorkerNavigationHandleCore* navigation_handle_core =
-        GetContext()->GetNavigationHandleCore(provider_id);
-    if (navigation_handle_core != nullptr)
-      provider_host = navigation_handle_core->RetrievePreCreatedHost();
-
-    // If no host is found, the navigation has been cancelled in the meantime.
-    // Just return as the navigation will be stopped in the renderer as well.
-    if (provider_host == nullptr)
-      return;
-    DCHECK_EQ(SERVICE_WORKER_PROVIDER_FOR_WINDOW, provider_type);
-    provider_host->CompleteNavigationInitialized(render_process_id_, route_id,
-                                                 this);
-  } else {
-    if (ServiceWorkerUtils::IsBrowserAssignedProviderId(provider_id)) {
-      bad_message::ReceivedBadMessage(
-          this, bad_message::SWDH_PROVIDER_CREATED_NO_HOST);
-      return;
-    }
-    provider_host = std::unique_ptr<ServiceWorkerProviderHost>(
-        new ServiceWorkerProviderHost(render_process_id_, route_id, provider_id,
-                                      provider_type, GetContext()->AsWeakPtr(),
-                                      this));
-  }
+  ServiceWorkerProviderHost::FrameSecurityLevel parent_frame_security_level =
+      is_parent_frame_secure
+          ? ServiceWorkerProviderHost::FrameSecurityLevel::SECURE
+          : ServiceWorkerProviderHost::FrameSecurityLevel::INSECURE;
+  std::unique_ptr<ServiceWorkerProviderHost> provider_host =
+      std::unique_ptr<ServiceWorkerProviderHost>(new ServiceWorkerProviderHost(
+          render_process_id_, route_id, provider_id, provider_type,
+          parent_frame_security_level, GetContext()->AsWeakPtr(), this));
   GetContext()->AddProviderHost(std::move(provider_host));
 }
 
@@ -831,7 +812,7 @@ void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
   // We might not be STARTING if the stop sequence was entered (STOPPING) or
   // ended up being detached (STOPPED).
   ServiceWorkerVersion* version = GetContext()->GetLiveVersion(version_id);
-  if (!version || version->running_status() != ServiceWorkerVersion::STARTING)
+  if (!version || version->running_status() != EmbeddedWorkerStatus::STARTING)
     return;
 
   if (!provider_host->SetHostedVersion(version)) {

@@ -13,7 +13,6 @@
 
 #include "base/i18n/icu_encoding_detection.h"
 #include "base/i18n/icu_string_conversions.h"
-#include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -23,7 +22,6 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "gin/array_buffer.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
@@ -67,46 +65,48 @@ namespace chrome_pdf {
 
 namespace {
 
-#define kPageShadowTop    3
-#define kPageShadowBottom 7
-#define kPageShadowLeft   5
-#define kPageShadowRight  5
+const int32_t kPageShadowTop = 3;
+const int32_t kPageShadowBottom = 7;
+const int32_t kPageShadowLeft = 5;
+const int32_t kPageShadowRight = 5;
 
-#define kPageSeparatorThickness 4
-#define kHighlightColorR 153
-#define kHighlightColorG 193
-#define kHighlightColorB 218
+const int32_t kPageSeparatorThickness = 4;
+const int32_t kHighlightColorR = 153;
+const int32_t kHighlightColorG = 193;
+const int32_t kHighlightColorB = 218;
 
 const uint32_t kPendingPageColor = 0xFFEEEEEE;
 
-#define kFormHighlightColor 0xFFE4DD
-#define kFormHighlightAlpha 100
+const uint32_t kFormHighlightColor = 0xFFE4DD;
+const int32_t kFormHighlightAlpha = 100;
 
-#define kMaxPasswordTries 3
+const int32_t kMaxPasswordTries = 3;
 
 // See Table 3.20 in
 // http://www.adobe.com/devnet/acrobat/pdfs/pdf_reference_1-7.pdf
-#define kPDFPermissionPrintLowQualityMask  1 << 2
-#define kPDFPermissionPrintHighQualityMask 1 << 11
-#define kPDFPermissionCopyMask             1 << 4
-#define kPDFPermissionCopyAccessibleMask   1 << 9
+const uint32_t kPDFPermissionPrintLowQualityMask = 1 << 2;
+const uint32_t kPDFPermissionPrintHighQualityMask = 1 << 11;
+const uint32_t kPDFPermissionCopyMask = 1 << 4;
+const uint32_t kPDFPermissionCopyAccessibleMask = 1 << 9;
 
-#define kLoadingTextVerticalOffset 50
+const int32_t kLoadingTextVerticalOffset = 50;
 
 // The maximum amount of time we'll spend doing a paint before we give back
 // control of the thread.
-#define kMaxProgressivePaintTimeMs 50
+const int32_t kMaxProgressivePaintTimeMs = 300;
 
 // The maximum amount of time we'll spend doing the first paint. This is less
-// than the above to keep things smooth if the user is scrolling quickly. We
-// try painting a little because with accelerated compositing, we get flushes
-// only every 16 ms. If we were to wait until the next flush to paint the rest
-// of the pdf, we would never get to draw the pdf and would only draw the
-// scrollbars. This value is picked to give enough time for gpu related code to
-// do its thing and still fit within the timelimit for 60Hz. For the
-// non-composited case, this doesn't make things worse since we're still
-// painting the scrollbars > 60 Hz.
-#define kMaxInitialProgressivePaintTimeMs 10
+// than the above to keep things smooth if the user is scrolling quickly. This
+// is set to 250 ms to give enough time for most PDFs to render, while avoiding
+// adding too much latency to the display of the final image when the user
+// stops scrolling.
+// Setting a higher value has minimal benefit (scrolling at less than 4 fps will
+// never be a great experience) and there is some cost, since when the user
+// stops scrolling the in-progress painting has to complete or timeout before
+// the final painting can start.
+// The scrollbar will always be responsive since it is managed by a separate
+// process.
+const int32_t kMaxInitialProgressivePaintTimeMs = 250;
 
 std::vector<uint32_t> GetPageNumbersFromPrintPageNumberRange(
     const PP_PrintPageNumberRange_Dev* page_ranges,
@@ -298,7 +298,7 @@ FPDF_SYSFONTINFO g_font_info = {
 };
 #endif  // defined(OS_LINUX)
 
-PDFiumEngine* g_engine_for_unsupported;
+PDFiumEngine* g_engine_for_unsupported = nullptr;
 
 void Unsupported_Handler(UNSUPPORT_INFO*, int type) {
   if (!g_engine_for_unsupported) {
@@ -1049,6 +1049,7 @@ void PDFiumEngine::OnPartialDocumentLoaded() {
 
 void PDFiumEngine::OnPendingRequestComplete() {
   if (!doc_ || !form_) {
+    DCHECK(fpdf_availability_);
     LoadDocument();
     return;
   }
@@ -2291,30 +2292,14 @@ void PDFiumEngine::OnCallback(int id) {
     client_->ScheduleCallback(id, timers_[id].first);
 }
 
-std::string PDFiumEngine::GetPageAsJSON(int index) {
-  if (!(HasPermission(PERMISSION_COPY) ||
-        HasPermission(PERMISSION_COPY_ACCESSIBLE))) {
-    return "{}";
-  }
-
-  if (index < 0 || static_cast<size_t>(index) > pages_.size() - 1)
-    return "{}";
-
-  std::unique_ptr<base::Value> node(
-      pages_[index]->GetAccessibleContentAsValue(current_rotation_));
-  std::string page_json;
-  base::JSONWriter::Write(*node, &page_json);
-  return page_json;
-}
-
 int PDFiumEngine::GetCharCount(int page_index) {
   DCHECK(page_index >= 0 && page_index < static_cast<int>(pages_.size()));
   return pages_[page_index]->GetCharCount();
 }
 
-double PDFiumEngine::GetCharWidth(int page_index, int char_index) {
+pp::FloatRect PDFiumEngine::GetCharBounds(int page_index, int char_index) {
   DCHECK(page_index >= 0 && page_index < static_cast<int>(pages_.size()));
-  return pages_[page_index]->GetCharWidth(char_index);
+  return pages_[page_index]->GetCharBounds(char_index);
 }
 
 uint32_t PDFiumEngine::GetCharUnicode(int page_index, int char_index) {
@@ -2445,8 +2430,13 @@ void PDFiumEngine::LoadDocument() {
 bool PDFiumEngine::TryLoadingDoc(const std::string& password,
                                  bool* needs_password) {
   *needs_password = false;
-  if (doc_)
+  if (doc_) {
+    // This is probably not necessary, because it should have already been
+    // called below in the |doc_| initialization path. However, the previous
+    // call may have failed, so call it again for good measure.
+    FPDFAvail_IsDocAvail(fpdf_availability_, &download_hints_);
     return true;
+  }
 
   const char* password_cstr = nullptr;
   if (!password.empty()) {
@@ -2459,11 +2449,16 @@ bool PDFiumEngine::TryLoadingDoc(const std::string& password,
   } else {
     doc_ = FPDFAvail_GetDocument(fpdf_availability_, password_cstr);
   }
+  if (!doc_) {
+    if (FPDF_GetLastError() == FPDF_ERR_PASSWORD)
+      *needs_password = true;
+    return false;
+  }
 
-  if (!doc_ && FPDF_GetLastError() == FPDF_ERR_PASSWORD)
-    *needs_password = true;
-
-  return !!doc_;
+  // Always call FPDFAvail_IsDocAvail() so PDFium initializes internal data
+  // structures.
+  FPDFAvail_IsDocAvail(fpdf_availability_, &download_hints_);
+  return true;
 }
 
 void PDFiumEngine::GetPasswordAndLoad() {
@@ -2671,7 +2666,7 @@ bool PDFiumEngine::CheckPageAvailable(int index, std::vector<int>* pending) {
 
   if (index < num_pages)
     pages_[index]->set_available(true);
-  if (!default_page_size_.GetArea())
+  if (default_page_size_.IsEmpty())
     default_page_size_ = GetPageSize(index);
   return true;
 }

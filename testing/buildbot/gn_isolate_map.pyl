@@ -167,6 +167,10 @@
       "--test-launcher-bot-mode",
     ],
   },
+  "capture_unittests": {
+    "label": "//media/capture:capture_unittests",
+    "type": "windowed_test_launcher",
+  },
   "cast_alsa_cma_backend_unittests": {
     "label": "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests",
     "type": "unknown",
@@ -270,6 +274,10 @@
     "label": "//ui/events:events_unittests",
     "type": "windowed_test_launcher",
   },
+  "exo_unittests": {
+    "label": "//components/exo:exo_unittests",
+    "type": "windowed_test_launcher",
+  },
   "extensions_browsertests": {
     "label": "//extensions:extensions_browsertests",
     "type": "windowed_test_launcher",
@@ -346,10 +354,6 @@
     "label": "//chrome/test:interactive_ui_tests",
     "type": "windowed_test_launcher",
   },
-  "ipc_mojo_unittests": {
-    "label": "//ipc/mojo:ipc_mojo_unittests",
-    "type": "console_test_launcher",
-  },
   "ipc_tests": {
     "label": "//ipc:ipc_tests",
     "type": "console_test_launcher",
@@ -382,6 +386,10 @@
   },
   "media_mojo_shell_unittests": {
     "label": "//media/mojo/services:media_mojo_shell_unittests",
+    "type": "console_test_launcher",
+  },
+  "media_mojo_unittests": {
+    "label": "//media/mojo:media_mojo_unittests",
     "type": "console_test_launcher",
   },
   "media_blink_unittests": {
@@ -424,10 +432,6 @@
     "label": "//services/shell/tests:mojo_shell_unittests",
     "type": "console_test_launcher",
   },
-  "mojo_surfaces_lib_unittests": {
-    "label": "//components/mus/public/cpp/surfaces/tests:mojo_surfaces_lib_unittests",
-    "type": "windowed_test_launcher",
-  },
   "mojo_system_unittests": {
     "label": "//mojo/edk/system:mojo_system_unittests",
     "type": "console_test_launcher",
@@ -442,7 +446,7 @@
   },
   "message_center_unittests": {
     "label": "//ui/message_center:message_center_unittests",
-    "type": "console_test_launcher",
+    "type": "windowed_test_launcher",
   },
   "mash_unittests": {
     "label": "//mash:mash_unittests",
@@ -530,6 +534,14 @@
     "label": "//chrome/test:browser_tests",
     "type": "gpu_browser_test",
     "gtest_filter": "CastStreamingApiTestWithPixelOutput.EndToEnd*:TabCaptureApiPixelTest.EndToEnd*",
+  },
+  "telemetry_gpu_integration_test": {
+    "label": "//chrome/test:telemetry_gpu_integration_test",
+    "type": "script",
+    "script": "//testing/scripts/run_gpu_integration_test_as_googletest.py",
+    "args": [
+      "../../content/test/gpu/run_gpu_integration_test.py",
+    ],
   },
   "telemetry_gpu_test": {
     "label": "//chrome/test:telemetry_gpu_test",

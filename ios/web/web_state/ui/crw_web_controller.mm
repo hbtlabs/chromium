@@ -13,6 +13,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/containers/mru_cache.h"
 #include "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
@@ -29,6 +30,7 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -54,6 +56,7 @@
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/cert_store.h"
 #include "ios/web/public/favicon_url.h"
+#import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/origin_util.h"
@@ -62,7 +65,6 @@
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/url_scheme_util.h"
 #include "ios/web/public/url_util.h"
-#include "ios/web/public/user_metrics.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_kit_constants.h"
 #import "ios/web/public/web_state/context_menu_params.h"
@@ -852,6 +854,14 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
              completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
                                          NSURLCredential*))completionHandler;
 
+// Helper to respond to |webView:runJavaScript...| delegate methods.
+// |completionHandler| must not be nil.
+- (void)runJavaScriptDialogOfType:(web::JavaScriptDialogType)type
+                 initiatedByFrame:(WKFrameInfo*)frame
+                          message:(NSString*)message
+                      defaultText:(NSString*)defaultText
+                       completion:(void (^)(BOOL, NSString*))completionHandler;
+
 // Called when WKWebView estimatedProgress has been changed.
 - (void)webViewEstimatedProgressDidChange;
 // Called when WKWebView certificateChain or hasOnlySecureContent property has
@@ -1129,12 +1139,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   [[_webViewProxy scrollViewProxy] removeObserver:self];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   [super dealloc];
-}
-
-- (BOOL)runUnloadListenerBeforeClosing {
-  // There's not much that can be done since there's limited access to WebKit.
-  // Always return that it's ok to close immediately.
-  return YES;
 }
 
 - (void)dismissKeyboard {
@@ -1418,6 +1422,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         stringWithFormat:@"__gCrWeb.setSuppressGeolocationDialogs(%d);",
                          shouldSuppressDialogs];
     [self evaluateJavaScript:kSetSuppressDialogs stringResultHandler:nil];
+    _shouldSuppressDialogsOnWindowIDInjection = NO;
   } else {
     _shouldSuppressDialogsOnWindowIDInjection = shouldSuppressDialogs;
   }
@@ -1514,6 +1519,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (void)setDocumentURL:(const GURL&)newURL {
   if (newURL != _documentURL) {
+    CHECK(newURL.is_valid());
     _documentURL = newURL;
     _interactionRegisteredSinceLastURLChange = NO;
   }
@@ -1705,10 +1711,12 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // Transfer time is registered so that further transitions within the time
   // envelope are not also registered as links.
   _lastTransferTimeInSeconds = CFAbsoluteTimeGetCurrent();
-  // Before changing phases, the delegate should be informed that any existing
-  // request is being cancelled before completion.
-  [self loadCancelled];
-  DCHECK(_loadPhase == web::PAGE_LOADED);
+  if (!(transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK)) {
+    // Before changing phases, the delegate should be informed that any existing
+    // request is being cancelled before completion.
+    [self loadCancelled];
+    DCHECK(_loadPhase == web::PAGE_LOADED);
+  }
 
   _loadPhase = web::LOAD_REQUESTED;
   _lastRegisteredRequestURL = requestURL;
@@ -2135,7 +2143,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // implementation. This will be inaccurate if the reload fails or is
   // cancelled.
   _lastUserInteraction.reset();
-  web::RecordAction(UserMetricsAction("Reload"));
+  base::RecordAction(UserMetricsAction("Reload"));
   if (_webView) {
     web::NavigationItem* transientItem =
         _webStateImpl->GetNavigationManagerImpl().GetTransientItem();
@@ -2286,7 +2294,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   [self optOutScrollsToTopForSubviews];
 
   // Ensure the URL is as expected (and already reported to the delegate).
-  DCHECK(currentURL == _lastRegisteredRequestURL)
+  // If |_lastRegisteredRequestURL| is invalid then |currentURL| will be
+  // "about:blank".
+  DCHECK((currentURL == _lastRegisteredRequestURL) ||
+         (!_lastRegisteredRequestURL.is_valid() &&
+          _documentURL.spec() == url::kAboutBlankURL))
       << std::endl
       << "currentURL = [" << currentURL << "]" << std::endl
       << "_lastRegisteredRequestURL = [" << _lastRegisteredRequestURL << "]";
@@ -3298,7 +3310,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   BOOL isOpenInNewTabNavigation =
       !_webStateImpl->GetNavigationManager()->GetItemCount();
   BOOL isPossibleLinkClick = [self isLinkNavigation:action.navigationType];
-  if (isPossibleLinkClick || isOpenInNewTabNavigation) {
+  if (isPossibleLinkClick || isOpenInNewTabNavigation ||
+      [self currentTransition] == ui::PAGE_TRANSITION_AUTO_BOOKMARK) {
     // Check If the URL is handled by a native app.
     if ([self urlTriggersNativeAppLaunch:requestURL
                                sourceURL:[self currentNavigationURL]
@@ -3748,6 +3761,21 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
           credentialWithUser:user
                     password:password
                  persistence:NSURLCredentialPersistenceForSession]);
+}
+
+#pragma mark -
+#pragma mark JavaScript Dialog
+
+- (void)runJavaScriptDialogOfType:(web::JavaScriptDialogType)type
+                 initiatedByFrame:(WKFrameInfo*)frame
+                          message:(NSString*)message
+                      defaultText:(NSString*)defaultText
+                       completion:(void (^)(BOOL, NSString*))completionHandler {
+  self.webStateImpl->RunJavaScriptDialog(
+      net::GURLWithNSURL(frame.request.URL), type, message, defaultText,
+      base::BindBlock(^(bool success, NSString* input) {
+        completionHandler(success, input);
+      }));
 }
 
 #pragma mark -
@@ -4684,6 +4712,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
+  _webStateImpl->CancelActiveAndPendingDialogs();
 
   if (allowCache)
     _expectedReconstructionURL = [self currentNavigationURL];
@@ -4702,6 +4731,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
+  _webStateImpl->CancelActiveAndPendingDialogs();
 
   SEL rendererCrashSelector = @selector(webControllerWebProcessDidCrash:);
   if ([self.delegate respondsToSelector:rendererCrashSelector])
@@ -4767,7 +4797,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)stopLoading {
   _stoppedWKNavigation.reset(_latestWKNavigation);
 
-  web::RecordAction(UserMetricsAction("Stop"));
+  base::RecordAction(UserMetricsAction("Stop"));
   // Discard the pending and transient entried before notifying the tab model
   // observers of the change via |-abortLoad|.
   [[self sessionController] discardNonCommittedEntries];
@@ -4842,8 +4872,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         runJavaScriptAlertPanelWithMessage:message
                                 requestURL:net::GURLWithNSURL(frame.request.URL)
                          completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler();
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_ALERT
+                   initiatedByFrame:frame
+                            message:message
+                        defaultText:nil
+                         completion:^(BOOL, NSString*) {
+                           completionHandler();
+                         }];
   }
 }
 
@@ -4868,8 +4904,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                                   requestURL:net::GURLWithNSURL(
                                                  frame.request.URL)
                            completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler(NO);
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_CONFIRM
+                   initiatedByFrame:frame
+                            message:message
+                        defaultText:nil
+                         completion:^(BOOL success, NSString*) {
+                           if (completionHandler) {
+                             completionHandler(success);
+                           }
+                         }];
   }
 }
 
@@ -4906,8 +4950,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                                   defaultText:defaultText
                                    requestURL:requestURL
                             completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler(nil);
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_PROMPT
+                   initiatedByFrame:frame
+                            message:prompt
+                        defaultText:defaultText
+                         completion:^(BOOL, NSString* input) {
+                           if (completionHandler) {
+                             completionHandler(input);
+                           }
+                         }];
   }
 }
 
@@ -5090,7 +5142,17 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // This is the point where the document's URL has actually changed, and
   // pending navigation information should be applied to state information.
   [self setDocumentURL:net::GURLWithNSURL([_webView URL])];
-  DCHECK(_documentURL == _lastRegisteredRequestURL);
+
+  if (!_lastRegisteredRequestURL.is_valid() &&
+      _documentURL != _lastRegisteredRequestURL) {
+    // if |_lastRegisteredRequestURL| is an invalid URL, then |_documentURL|
+    // will be "about:blank".
+    [[self sessionController] updatePendingEntry:_documentURL];
+  }
+  DCHECK(_documentURL == _lastRegisteredRequestURL ||
+         (!_lastRegisteredRequestURL.is_valid() &&
+          _documentURL.spec() == url::kAboutBlankURL));
+
   self.webStateImpl->OnNavigationCommitted(_documentURL);
   [self commitPendingNavigationInfo];
   if ([self currentBackForwardListItemHolder]->navigation_type() ==

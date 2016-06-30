@@ -100,7 +100,8 @@ void MockWebRTCPeerConnectionHandler::PostRequestFailure(
 void MockWebRTCPeerConnectionHandler::createOffer(
     const WebRTCSessionDescriptionRequest& request,
     const blink::WebRTCOfferOptions& options) {
-  if (options.iceRestart() && options.voiceActivityDetection()) {
+  if (options.iceRestart() && options.voiceActivityDetection() &&
+      options.offerToReceiveAudio() > 0 && options.offerToReceiveVideo() > 0) {
     WebRTCSessionDescription session_description;
     session_description.initialize("offer", "local");
     PostRequestResult(request, session_description);
@@ -248,6 +249,9 @@ bool MockWebRTCPeerConnectionHandler::updateICE(
     const WebRTCConfiguration& configuration) {
   return true;
 }
+
+void MockWebRTCPeerConnectionHandler::logSelectedRtcpMuxPolicy(
+    blink::RtcpMuxPolicy selectedRtcpMuxPolicy) {}
 
 bool MockWebRTCPeerConnectionHandler::addICECandidate(
     const WebRTCICECandidate& ice_candidate) {

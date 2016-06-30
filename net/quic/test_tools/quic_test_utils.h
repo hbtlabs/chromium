@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -557,6 +558,7 @@ class MockQuicSpdySession : public QuicSpdySession {
   ~MockQuicSpdySession() override;
 
   QuicCryptoStream* GetCryptoStream() override { return crypto_stream_.get(); }
+  const SpdyHeaderBlock& GetWriteHeaders() { return write_headers_; }
 
   // From QuicSession.
   MOCK_METHOD3(OnConnectionClosed,
@@ -604,9 +606,21 @@ class MockQuicSpdySession : public QuicSpdySession {
                     QuicStreamId promised_stream_id,
                     size_t frame_len,
                     const QuicHeaderList& header_list));
-  MOCK_METHOD5(WriteHeaders,
+  // Methods taking non-copyable types like SpdyHeaderBlock by value cannot be
+  // mocked directly.
+  size_t WriteHeaders(
+      QuicStreamId id,
+      SpdyHeaderBlock headers,
+      bool fin,
+      SpdyPriority priority,
+      QuicAckListenerInterface* ack_notifier_delegate) override {
+    write_headers_ = std::move(headers);
+    return WriteHeadersMock(id, write_headers_, fin, priority,
+                            ack_notifier_delegate);
+  }
+  MOCK_METHOD5(WriteHeadersMock,
                size_t(QuicStreamId id,
-                      SpdyHeaderBlock headers,
+                      const SpdyHeaderBlock& headers,
                       bool fin,
                       SpdyPriority priority,
                       QuicAckListenerInterface* ack_notifier_delegate));
@@ -616,6 +630,7 @@ class MockQuicSpdySession : public QuicSpdySession {
 
  private:
   std::unique_ptr<QuicCryptoStream> crypto_stream_;
+  SpdyHeaderBlock write_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuicSpdySession);
 };
@@ -636,6 +651,8 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
       QuicCompressedCertsCache* compressed_certs_cache) override;
 
   QuicCryptoServerStream* GetCryptoStream() override;
+
+  MockQuicServerSessionHelper* helper() { return &helper_; }
 
  private:
   MockQuicServerSessionVisitor visitor_;
@@ -724,7 +741,7 @@ class MockSendAlgorithm : public SendAlgorithmInterface {
   MOCK_CONST_METHOD2(TimeUntilSend,
                      QuicTime::Delta(QuicTime now,
                                      QuicByteCount bytes_in_flight));
-  MOCK_CONST_METHOD0(PacingRate, QuicBandwidth(void));
+  MOCK_CONST_METHOD1(PacingRate, QuicBandwidth(QuicByteCount));
   MOCK_CONST_METHOD0(BandwidthEstimate, QuicBandwidth(void));
   MOCK_CONST_METHOD0(HasReliableBandwidthEstimate, bool());
   MOCK_METHOD1(OnRttUpdated, void(QuicPacketNumber));
@@ -814,6 +831,7 @@ class MockNetworkChangeVisitor
 
   MOCK_METHOD0(OnCongestionChange, void());
   MOCK_METHOD0(OnPathDegrading, void());
+  MOCK_METHOD1(OnPathMtuIncreased, void(QuicPacketLength));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockNetworkChangeVisitor);

@@ -78,6 +78,20 @@
       'hard_dependency': 1,
     },
     {
+      # GN version: //content/public/app:gpu_manifest
+      'target_name': 'content_app_gpu_manifest',
+      'type': 'none',
+      'variables': {
+        'application_type': 'exe',
+        'application_name': 'content_gpu',
+        'source_manifest': '<(DEPTH)/content/public/app/mojo/content_gpu_manifest.json',
+      },
+      'includes': [
+        '../mojo/public/mojo_application_manifest.gypi',
+      ],
+      'hard_dependency': 1,
+    },
+    {
       # GN version: //content/public/app:renderer_manifest
       'target_name': 'content_app_renderer_manifest',
       'type': 'none',
@@ -85,6 +99,20 @@
         'application_type': 'exe',
         'application_name': 'content_renderer',
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_renderer_manifest.json',
+      },
+      'includes': [
+        '../mojo/public/mojo_application_manifest.gypi',
+      ],
+      'hard_dependency': 1,
+    },
+    {
+      # GN version: //content/public/app:utility_manifest
+      'target_name': 'content_app_utility_manifest',
+      'type': 'none',
+      'variables': {
+        'application_type': 'exe',
+        'application_name': 'content_utility',
+        'source_manifest': '<(DEPTH)/content/public/app/mojo/content_utility_manifest.json',
       },
       'includes': [
         '../mojo/public/mojo_application_manifest.gypi',
@@ -232,6 +260,11 @@
               'dependencies': [
                 'content_utility',
               ],
+            }],
+            # Shard this target into parts to work around linker limitations
+            # on link time code generation builds. See crbug.com/616946
+            ['OS=="win" and buildtype=="Official"', {
+              'msvs_shard': 5,
             }],
           ],
         },

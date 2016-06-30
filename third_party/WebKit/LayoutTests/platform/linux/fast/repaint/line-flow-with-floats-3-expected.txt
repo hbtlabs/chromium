@@ -1,217 +1,57 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
-          "object": "LayoutBlockFlow P",
-          "rect": [8, 380, 418, 219],
-          "reason": "invalidate paint rectangle"
+          "object": "LayoutText #text",
+          "rect": [14, 240, 407, 139],
+          "reason": "forced by layout"
+        },
+        {
+          "object": "LayoutText #text",
+          "rect": [14, 500, 407, 99],
+          "reason": "forced by layout"
+        },
+        {
+          "object": "LayoutText #text",
+          "rect": [14, 440, 355, 59],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [14, 420, 339, 39],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [65, 380, 304, 59],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [65, 380, 289, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
+        },
+        {
+          "object": "LayoutText #text",
+          "rect": [134, 360, 131, 19],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [303, 420, 67, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutBlockFlow (floating) SPAN id='greenFloat'",
           "rect": [356, 383, 64, 81],
           "reason": "bounds change"
-        },
-        {
-          "object": "LayoutText #text",
-          "rect": [353, 440, 16, 59],
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox ' was in a furious passion, and went\n'",
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox 'Alice began to feel very uneasy: to be sure, she had not as\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'Queen'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'The players all played at once without waiting\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'The players all played at once without waiting'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'They\u2019re dreadfully fond of beheading people here; the great'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'a very short time '",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'a very short time '",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'about, and shouting \u2018Off with his head!\u2019 or \u2018Off with\n'",
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox 'any dispute with the Queen, but she knew that it might\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'for the hedgehogs; and in\n'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'for turns,\n'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'for'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'happen any'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'head!\u2019 about once in a minute.\n'",
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox 'hedgehogs; and in\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'her head!\u2019 about'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'her'",
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox 'me?'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'minute, \u2018and then,\u2019 thought she, \u2018what would become of\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'once in a minute.\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'quarrelling all the while, and fighting for the'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'quarrelling all the while, and fighting'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'shouting \u2018Off with his head!\u2019 or \u2018Off with\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'stamping about, and'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'stamping'",
-          "reason": "incremental"
-        },
-        {
-          "object": "InlineTextBox 'the Queen'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'the'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox 'turns,\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'was in a furious passion, and went\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'wonder is, that there\u2018s any one left alive!\u2019'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'yet had'",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
     }

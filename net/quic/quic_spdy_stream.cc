@@ -4,6 +4,8 @@
 
 #include "net/quic/quic_spdy_stream.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/quic/quic_bug_tracker.h"
@@ -12,8 +14,8 @@
 #include "net/quic/quic_write_blocked_list.h"
 #include "net/quic/spdy_utils.h"
 
+using base::IntToString;
 using base::StringPiece;
-using net::SpdyPriority;
 using std::min;
 using std::string;
 
@@ -30,8 +32,7 @@ QuicSpdyStream::QuicSpdyStream(QuicStreamId id, QuicSpdySession* spdy_session)
       headers_decompressed_(false),
       priority_(kDefaultPriority),
       trailers_decompressed_(false),
-      trailers_delivered_(false),
-      avoid_empty_nonfin_writes_(FLAGS_quic_avoid_empty_nonfin_writes) {
+      trailers_delivered_(false) {
   DCHECK_NE(kCryptoStreamId, id);
   // Don't receive any callbacks from the sequencer until headers
   // are complete.
@@ -69,11 +70,11 @@ void QuicSpdyStream::StopReading() {
 }
 
 size_t QuicSpdyStream::WriteHeaders(
-    const SpdyHeaderBlock& header_block,
+    SpdyHeaderBlock header_block,
     bool fin,
     QuicAckListenerInterface* ack_notifier_delegate) {
   size_t bytes_written = spdy_session_->WriteHeaders(
-      id(), header_block, fin, priority_, ack_notifier_delegate);
+      id(), std::move(header_block), fin, priority_, ack_notifier_delegate);
   if (fin) {
     // TODO(rch): Add test to ensure fin_sent_ is set whenever a fin is sent.
     set_fin_sent(true);
@@ -90,7 +91,7 @@ void QuicSpdyStream::WriteOrBufferBody(
 }
 
 size_t QuicSpdyStream::WriteTrailers(
-    const SpdyHeaderBlock& trailer_block,
+    SpdyHeaderBlock trailer_block,
     QuicAckListenerInterface* ack_notifier_delegate) {
   if (fin_sent()) {
     QUIC_BUG << "Trailers cannot be sent after a FIN.";
@@ -101,16 +102,15 @@ size_t QuicSpdyStream::WriteTrailers(
   // trailers may be processed out of order at the peer.
   DVLOG(1) << "Inserting trailer: (" << kFinalOffsetHeaderKey << ", "
            << stream_bytes_written() + queued_data_bytes() << ")";
-  SpdyHeaderBlock trailer_block_with_offset(trailer_block);
-  trailer_block_with_offset.insert(std::make_pair(
+  trailer_block.insert(std::make_pair(
       kFinalOffsetHeaderKey,
-      base::IntToString(stream_bytes_written() + queued_data_bytes())));
+      IntToString(stream_bytes_written() + queued_data_bytes())));
 
   // Write the trailing headers with a FIN, and close stream for writing:
   // trailers are the last thing to be sent on a stream.
   const bool kFin = true;
   size_t bytes_written = spdy_session_->WriteHeaders(
-      id(), trailer_block_with_offset, kFin, priority_, ack_notifier_delegate);
+      id(), std::move(trailer_block), kFin, priority_, ack_notifier_delegate);
   set_fin_sent(kFin);
 
   // Trailers are the last thing to be sent on a stream, but if there is still
@@ -280,7 +280,6 @@ void QuicSpdyStream::OnTrailingHeadersComplete(bool fin, size_t /*frame_len*/) {
   }
 
   size_t final_byte_offset = 0;
-  SpdyHeaderBlock trailers;
   if (!SpdyUtils::ParseTrailers(decompressed_trailers().data(),
                                 decompressed_trailers().length(),
                                 &final_byte_offset, &received_trailers_)) {
@@ -362,9 +361,13 @@ bool QuicSpdyStream::FinishedReadingHeaders() const {
          header_list_.empty();
 }
 
-bool QuicSpdyStream::ParseHeaderStatusCode(SpdyHeaderBlock* header,
+bool QuicSpdyStream::ParseHeaderStatusCode(const SpdyHeaderBlock& header,
                                            int* status_code) const {
-  StringPiece status = (*header)[":status"];
+  SpdyHeaderBlock::const_iterator it = header.find(":status");
+  if (it == header.end()) {
+    return false;
+  }
+  const StringPiece status(it->second);
   if (status.size() != 3) {
     return false;
   }

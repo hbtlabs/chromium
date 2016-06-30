@@ -21,7 +21,7 @@ import org.chromium.sync.signin.ChromeSigninController;
 
 /**
  * A preference that displays the current sync account and status (enabled, error, needs passphrase,
- * etc)."
+ * etc).
  */
 public class SyncPreference extends Preference {
     public SyncPreference(Context context, AttributeSet attrs) {
@@ -35,7 +35,10 @@ public class SyncPreference extends Preference {
     public void updateSyncSummaryAndIcon() {
         setSummary(getSyncStatusSummary(getContext()));
 
-        if (ProfileSyncService.get().getAuthError() == GoogleServiceAuthError.State.NONE) {
+        if (SyncPreference.showSyncErrorIcon(getContext())) {
+            setIcon(ApiCompatibilityUtils.getDrawable(
+                    getContext().getResources(), R.drawable.sync_error));
+        } else {
             // Sets preference icon and tints it to blue.
             Drawable icon = ApiCompatibilityUtils.getDrawable(
                     getContext().getResources(), R.drawable.permission_background_sync);
@@ -43,13 +46,41 @@ public class SyncPreference extends Preference {
                                         getContext().getResources(), R.color.light_active_color),
                     PorterDuff.Mode.SRC_IN);
             setIcon(icon);
-        } else {
-            setIcon(ApiCompatibilityUtils.getDrawable(
-                    getContext().getResources(), R.drawable.sync_error));
         }
     }
 
-    private static String getSyncStatusSummary(Context context) {
+    /**
+     * Checks if sync error icon should be shown. Show sync error icon if sync is off because
+     * of error, passphrase required or disabled in Android.
+     */
+    static boolean showSyncErrorIcon(Context context) {
+        if (!AndroidSyncSettings.isMasterSyncEnabled(context)) {
+            return true;
+        }
+
+        ProfileSyncService profileSyncService = ProfileSyncService.get();
+        if (profileSyncService != null) {
+            if (profileSyncService.hasUnrecoverableError()) {
+                return true;
+            }
+
+            if (profileSyncService.getAuthError() != GoogleServiceAuthError.State.NONE) {
+                return true;
+            }
+
+            if (profileSyncService.isSyncActive()
+                    && profileSyncService.isPassphraseRequiredForDecryption()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Return a short summary of the current sync status.
+     */
+    static String getSyncStatusSummary(Context context) {
         if (!ChromeSigninController.get(context).isSignedIn()) return "";
 
         ProfileSyncService profileSyncService = ProfileSyncService.get();

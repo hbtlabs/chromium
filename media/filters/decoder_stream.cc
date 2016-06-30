@@ -47,7 +47,8 @@ DecoderStream<StreamType>::DecoderStream(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     ScopedVector<Decoder> decoders,
     const scoped_refptr<MediaLog>& media_log)
-    : task_runner_(task_runner),
+    : traits_(media_log),
+      task_runner_(task_runner),
       media_log_(media_log),
       state_(STATE_UNINITIALIZED),
       stream_(NULL),
@@ -110,6 +111,8 @@ void DecoderStream<StreamType>::Initialize(
   waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
   stream_ = stream;
 
+  traits_.OnStreamReset(stream_);
+
   state_ = STATE_INITIALIZING;
   SelectDecoder(cdm_context);
 }
@@ -165,6 +168,7 @@ void DecoderStream<StreamType>::Reset(const base::Closure& closure) {
   }
 
   ready_outputs_.clear();
+  traits_.OnStreamReset(stream_);
 
   // It's possible to have received a DECODE_ERROR and entered STATE_ERROR right
   // before a Reset() is executed. If we are still waiting for a demuxer read,
@@ -245,7 +249,7 @@ base::TimeDelta DecoderStream<StreamType>::AverageDuration() const {
 template <DemuxerStream::Type StreamType>
 void DecoderStream<StreamType>::SelectDecoder(CdmContext* cdm_context) {
   decoder_selector_->SelectDecoder(
-      stream_, cdm_context,
+      &traits_, stream_, cdm_context,
       base::Bind(&DecoderStream<StreamType>::OnDecoderSelected,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,
@@ -360,6 +364,8 @@ void DecoderStream<StreamType>::DecodeInternal(
   DCHECK(reset_cb_.is_null());
   DCHECK(buffer.get());
 
+  traits_.OnDecode(buffer);
+
   int buffer_size = buffer->end_of_stream() ? 0 : buffer->data_size();
 
   TRACE_EVENT_ASYNC_BEGIN2(
@@ -391,7 +397,7 @@ void DecoderStream<StreamType>::OnDecodeDone(int buffer_size,
                                              DecodeStatus status) {
   FUNCTION_DVLOG(2) << ": " << status;
   DCHECK(state_ == STATE_NORMAL || state_ == STATE_FLUSHING_DECODER ||
-         state_ == STATE_PENDING_DEMUXER_READ || state_ == STATE_ERROR)
+         state_ == STATE_ERROR)
       << state_;
   DCHECK_GT(pending_decode_requests_, 0);
 
@@ -425,7 +431,7 @@ void DecoderStream<StreamType>::OnDecodeDone(int buffer_size,
 
         state_ = STATE_REINITIALIZING_DECODER;
         decoder_selector_->SelectDecoder(
-            stream_, nullptr,
+            &traits_, stream_, nullptr,
             base::Bind(&DecoderStream<StreamType>::OnDecoderSelected,
                        weak_factory_.GetWeakPtr()),
             base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,
@@ -475,7 +481,7 @@ void DecoderStream<StreamType>::OnDecodeOutputReady(
   FUNCTION_DVLOG(2) << ": " << output->timestamp().InMilliseconds() << " ms";
   DCHECK(output.get());
   DCHECK(state_ == STATE_NORMAL || state_ == STATE_FLUSHING_DECODER ||
-         state_ == STATE_PENDING_DEMUXER_READ || state_ == STATE_ERROR)
+         state_ == STATE_ERROR)
       << state_;
 
   if (state_ == STATE_ERROR) {
@@ -487,6 +493,8 @@ void DecoderStream<StreamType>::OnDecodeOutputReady(
   // The resetting process will be handled when the decoder is reset.
   if (!reset_cb_.is_null())
     return;
+
+  traits_.OnDecodeDone(output);
 
   ++decoded_frames_since_fallback_;
 
@@ -531,12 +539,11 @@ void DecoderStream<StreamType>::ReadFromDemuxerStream() {
     return;
   }
 
-  // Set a flag in addition to the state, because the state can be overwritten
-  // when encountering an error. See crbug.com/597605.
-  DCHECK(!pending_demuxer_read_);
-  pending_demuxer_read_ = true;
+  // We may get here when a read is already pending, ignore this.
+  if (pending_demuxer_read_)
+    return;
 
-  state_ = STATE_PENDING_DEMUXER_READ;
+  pending_demuxer_read_ = true;
   stream_->Read(base::Bind(&DecoderStream<StreamType>::OnBufferReady,
                            weak_factory_.GetWeakPtr()));
 }
@@ -552,17 +559,13 @@ void DecoderStream<StreamType>::OnBufferReady(
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(pending_demuxer_read_);
   if (decoded_frames_since_fallback_) {
-    DCHECK(state_ == STATE_PENDING_DEMUXER_READ || state_ == STATE_ERROR)
-        << state_;
+    DCHECK(pending_demuxer_read_ || state_ == STATE_ERROR) << state_;
   } else {
-    DCHECK(state_ == STATE_PENDING_DEMUXER_READ || state_ == STATE_ERROR ||
-           state_ == STATE_REINITIALIZING_DECODER || state_ == STATE_NORMAL)
+    DCHECK(state_ == STATE_ERROR || state_ == STATE_REINITIALIZING_DECODER ||
+           state_ == STATE_NORMAL)
         << state_;
   }
   DCHECK_EQ(buffer.get() != NULL, status == DemuxerStream::kOk) << status;
-
-  // Unset the flag. STATE_PENDING_DEMUXER_READ might have been overwritten.
-  // See crbug.com/597605.
   pending_demuxer_read_ = false;
 
   // If parallel decode requests are supported, multiple read requests might
@@ -688,7 +691,7 @@ void DecoderStream<StreamType>::ReinitializeDecoder() {
 
   state_ = STATE_REINITIALIZING_DECODER;
   // Decoders should not need a new CDM during reinitialization.
-  DecoderStreamTraits<StreamType>::InitializeDecoder(
+  traits_.InitializeDecoder(
       decoder_.get(), stream_, nullptr,
       base::Bind(&DecoderStream<StreamType>::OnDecoderReinitialized,
                  weak_factory_.GetWeakPtr()),

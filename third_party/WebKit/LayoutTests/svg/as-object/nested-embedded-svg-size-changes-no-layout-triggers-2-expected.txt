@@ -1,15 +1,17 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow BODY",
-          "rect": [0, 0, 800, 202],
-          "reason": "invalidate paint rectangle"
+          "rect": [0, 0, 800, 600],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutEmbeddedObject OBJECT",
@@ -29,12 +31,7 @@
         {
           "object": "LayoutEmbeddedObject OBJECT",
           "rect": [1, 1, 400, 200],
-          "reason": "bounds change"
-        },
-        {
-          "object": "LayoutView #document",
-          "rect": [1, 1, 400, 200],
-          "reason": "full"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutView #document",
@@ -64,7 +61,7 @@
         {
           "object": "LayoutEmbeddedObject OBJECT",
           "rect": [0, 0, 285, 135],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutView #document",
@@ -115,52 +112,22 @@
           "object": "LayoutView #document",
           "rect": [285, 135, 15, 15],
           "reason": "scroll"
-        },
-        {
-          "object": "HorizontalScrollbar",
-          "reason": "full"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "LayoutText #text",
-          "reason": "none"
-        },
-        {
-          "object": "LayoutView #document",
-          "reason": "scroll"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "VerticalScrollbar",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow BODY",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutEmbeddedObject OBJECT",
+      "reason": "style change"
     }
   ]
 }

@@ -97,6 +97,9 @@ extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
 extern const char kDisableSessionCrashedBubble[];
 extern const char kDisableSiteEngagementService[];
+#if defined(OS_ANDROID)
+extern const char kDisableVrShell[];
+#endif
 extern const char kDisableWebNotificationCustomLayouts[];
 extern const char kDisableWebUsbSecurity[];
 extern const char kDisableZeroBrowsersOpenForTests[];
@@ -161,6 +164,9 @@ extern const char kEnableSupervisedUserManagedBookmarksFolder[];
 extern const char kEnableTabAudioMuting[];
 extern const char kEnableThumbnailRetargeting[];
 extern const char kEnableUserAlternateProtocolPorts[];
+#if defined(OS_ANDROID)
+extern const char kEnableVrShell[];
+#endif
 extern const char kEnableWebAppFrame[];
 #if defined(OS_ANDROID)
 extern const char kEnableWebApk[];
@@ -188,7 +194,6 @@ extern const char kInstallChromeApp[];
 extern const char kInstallSupervisedUserWhitelists[];
 extern const char kInstantProcess[];
 extern const char kInterestsURL[];
-extern const char kIpcDumpDirectory[];
 extern const char kKeepAliveForTest[];
 extern const char kKioskMode[];
 extern const char kKioskModePrinting[];
@@ -216,6 +221,7 @@ extern const char kNoSupervisedUserAcknowledgmentCheck[];
 extern const char kNumPacThreads[];
 extern const char kOpenInNewWindow[];
 extern const char kOriginalProcessStartTime[];
+extern const char kOriginTrialDisabledFeatures[];
 extern const char kOriginTrialPublicKey[];
 extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
@@ -336,6 +342,7 @@ extern const char kAppsKeepChromeAliveInTests[];
 extern const char kHostedAppQuitNotification[];
 extern const char kDisableAppInfoDialogMac[];
 extern const char kDisableAppWindowCycling[];
+extern const char kDisableFullscreenLowPowerMode[];
 extern const char kDisableFullscreenTabDetaching[];
 extern const char kDisableHostedAppShimCreation[];
 extern const char kDisableHostedAppsInWindows[];
@@ -343,8 +350,8 @@ extern const char kDisableMacViewsNativeAppWindows[];
 extern const char kDisableTranslateNewUX[];
 extern const char kEnableAppInfoDialogMac[];
 extern const char kEnableAppWindowCycling[];
-extern const char kEnableFullscreenLowPowerMode[];
 extern const char kEnableFullscreenTabDetaching[];
+extern const char kEnableFullscreenToolbarReveal[];
 extern const char kEnableHostedAppsInWindows[];
 extern const char kEnableMacViewsNativeAppWindows[];
 extern const char kEnableTranslateNewUX[];
@@ -366,10 +373,6 @@ extern const char kViewerLaunchViaAppId[];
 extern const char kWatcherProcess[];
 extern const char kWindows8Search[];
 #endif  // defined(OS_WIN)
-
-#if defined(ENABLE_IPC_FUZZER)
-extern const char kIpcFuzzerTestcase[];
-#endif
 
 #if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 extern const char kDebugPrint[];

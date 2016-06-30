@@ -15,6 +15,7 @@
 #include "platform/graphics/paint/SubsequenceRecorder.h"
 #include "platform/testing/FakeDisplayItemClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -38,7 +39,7 @@ private:
         RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(m_originalSlimmingPaintV2Enabled);
     }
 
-    OwnPtr<PaintController> m_paintController;
+    std::unique_ptr<PaintController> m_paintController;
     bool m_originalSlimmingPaintV2Enabled;
 };
 
@@ -502,6 +503,10 @@ TEST_F(PaintControllerTest, CachedSubsequenceSwapOrder)
         TestDisplayItem(content1, foregroundDrawingType),
         TestDisplayItem(container1, foregroundDrawingType),
         TestDisplayItem(container1, DisplayItem::EndSubsequence));
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
 TEST_F(PaintControllerTest, OutOfOrderNoCrash)
@@ -620,6 +625,10 @@ TEST_F(PaintControllerTest, CachedNestedSubsequenceUpdate)
         TestDisplayItem(content1, DisplayItem::EndSubsequence),
         TestDisplayItem(container1, foregroundDrawingType),
         TestDisplayItem(container1, DisplayItem::EndSubsequence));
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
 TEST_F(PaintControllerTest, SkipCache)
@@ -893,9 +902,14 @@ TEST_F(PaintControllerTest, IsNotSuitableForGpuRasterizationSinglePictureManyPat
     EXPECT_TRUE(SubsequenceRecorder::useCachedSubsequenceIfPossible(context, container));
     getPaintController().commitNewDisplayItems(LayoutSize());
     EXPECT_FALSE(getPaintController().paintArtifact().isSuitableForGpuRasterization());
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
-TEST_F(PaintControllerTest, IsNotSuitableForGpuRasterizationConcaveClipPath)
+// Temporarily disabled (pref regressions due to GPU veto stickiness: http://crbug.com/603969).
+TEST_F(PaintControllerTest, DISABLED_IsNotSuitableForGpuRasterizationConcaveClipPath)
 {
     Path path;
     path.addLineTo(FloatPoint(50, 50));

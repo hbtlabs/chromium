@@ -507,7 +507,6 @@ ui::EventRewriteStatus TouchExplorationController::InTouchExploreSecondPress(
     const ui::TouchEvent& event,
     std::unique_ptr<ui::Event>* rewritten_event) {
   ui::EventType type = event.type();
-  gfx::PointF location = event.location_f();
   if (type == ui::ET_TOUCH_PRESSED) {
     // A third finger being pressed means that a split tap can no longer go
     // through. The user enters the wait state, Since there has already been
@@ -693,12 +692,11 @@ ui::EventRewriteStatus TouchExplorationController::InTwoFingerTap(
   return ui::EVENT_REWRITE_DISCARD;
 }
 
-base::TimeDelta TouchExplorationController::Now() {
+base::TimeTicks TouchExplorationController::Now() {
   if (tick_clock_) {
     // This is the same as what EventTimeForNow() does, but here we do it
     // with a clock that can be replaced with a simulated clock for tests.
-    return base::TimeDelta::FromInternalValue(
-        tick_clock_->NowTicks().ToInternalValue());
+    return tick_clock_->NowTicks();
   }
   return ui::EventTimeForNow();
 }
@@ -1027,9 +1025,8 @@ TouchExplorationController::CreateMouseMoveEvent(const gfx::PointF& location,
   // event to the new ChromeVox background page via the automation api.
   flags |= ui::EF_COMMAND_DOWN;
 
-  std::unique_ptr<ui::MouseEvent> event(
-      new ui::MouseEvent(ui::ET_MOUSE_MOVED, gfx::Point(), gfx::Point(),
-                         ui::EventTimeForNow(), flags, 0));
+  std::unique_ptr<ui::MouseEvent> event(new ui::MouseEvent(
+      ui::ET_MOUSE_MOVED, gfx::Point(), gfx::Point(), Now(), flags, 0));
   event->set_location_f(location);
   event->set_root_location_f(location);
   return event;

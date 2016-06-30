@@ -22,16 +22,17 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "modules/webaudio/OfflineAudioDestinationNode.h"
 #include "core/dom/CrossThreadTask.h"
 #include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "modules/webaudio/OfflineAudioContext.h"
+#include "modules/webaudio/OfflineAudioDestinationNode.h"
 #include "platform/audio/AudioBus.h"
 #include "platform/audio/DenormalDisabler.h"
 #include "platform/audio/HRTFDatabaseLoader.h"
 #include "public/platform/Platform.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 
 namespace blink {
@@ -41,7 +42,7 @@ const size_t OfflineAudioDestinationHandler::renderQuantumSize = 128;
 OfflineAudioDestinationHandler::OfflineAudioDestinationHandler(AudioNode& node, AudioBuffer* renderTarget)
     : AudioDestinationHandler(node, renderTarget->sampleRate())
     , m_renderTarget(renderTarget)
-    , m_renderThread(adoptPtr(Platform::current()->createThread("offline audio renderer")))
+    , m_renderThread(wrapUnique(Platform::current()->createThread("offline audio renderer")))
     , m_framesProcessed(0)
     , m_framesToProcess(0)
     , m_isRenderingStarted(false)
@@ -114,14 +115,14 @@ void OfflineAudioDestinationHandler::startRendering()
     if (!m_isRenderingStarted) {
         m_isRenderingStarted = true;
         m_renderThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
-            threadSafeBind(&OfflineAudioDestinationHandler::startOfflineRendering, this));
+            crossThreadBind(&OfflineAudioDestinationHandler::startOfflineRendering, wrapPassRefPtr(this)));
         return;
     }
 
     // Rendering is already started, which implicitly means we resume the
     // rendering by calling |doOfflineRendering| on the render thread.
     m_renderThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
-        threadSafeBind(&OfflineAudioDestinationHandler::doOfflineRendering, this));
+        crossThreadBind(&OfflineAudioDestinationHandler::doOfflineRendering, wrapPassRefPtr(this)));
 }
 
 void OfflineAudioDestinationHandler::stopRendering()

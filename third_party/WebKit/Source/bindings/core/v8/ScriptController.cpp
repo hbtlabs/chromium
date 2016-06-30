@@ -56,6 +56,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -98,6 +99,7 @@ DEFINE_TRACE(ScriptController)
 void ScriptController::clearForClose()
 {
     m_windowProxyManager->clearForClose();
+    MainThreadDebugger::instance()->didClearContextsForFrame(frame());
 }
 
 void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
@@ -132,13 +134,13 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8:
             v8CacheOptions = frame()->settings()->v8CacheOptions();
         if (source.resource() && !source.resource()->response().cacheStorageCacheName().isNull()) {
             switch (frame()->settings()->v8CacheStrategiesForCacheStorage()) {
-            case V8CacheStrategiesForCacheStorage::Default:
             case V8CacheStrategiesForCacheStorage::None:
                 v8CacheOptions = V8CacheOptionsNone;
                 break;
             case V8CacheStrategiesForCacheStorage::Normal:
                 v8CacheOptions = V8CacheOptionsCode;
                 break;
+            case V8CacheStrategiesForCacheStorage::Default:
             case V8CacheStrategiesForCacheStorage::Aggressive:
                 v8CacheOptions = V8CacheOptionsAlways;
                 break;
@@ -265,11 +267,7 @@ void ScriptController::clearWindowProxy()
     // V8 binding expects ScriptController::clearWindowProxy only be called
     // when a frame is loading a new page. This creates a new context for the new page.
     m_windowProxyManager->clearForNavigation();
-}
-
-void ScriptController::setCaptureCallStackForUncaughtExceptions(v8::Isolate* isolate, bool value)
-{
-    isolate->SetCaptureStackTraceForUncaughtExceptions(value, V8StackTrace::maxCallStackSizeToCapture, stackTraceOptions);
+    MainThreadDebugger::instance()->didClearContextsForFrame(frame());
 }
 
 void ScriptController::collectIsolatedContexts(Vector<std::pair<ScriptState*, SecurityOrigin*>>& result)

@@ -696,7 +696,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         // restore. We shouldn't call setChecked() even if this has the checked
         // attribute. So, delay the setChecked() call until
         // finishParsingChildren() is called if parsing is in progress.
-        if (!m_parsingInProgress && !m_dirtyCheckedness) {
+        if ((!m_parsingInProgress || !document().formController().hasFormStates()) && !m_dirtyCheckedness) {
             setChecked(!value.isNull());
             m_dirtyCheckedness = false;
         }
@@ -744,9 +744,6 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
     } else if (name == patternAttr) {
         setNeedsValidityCheck();
         UseCounter::count(document(), UseCounter::PatternAttribute);
-    } else if (name == disabledAttr) {
-        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
-        m_inputTypeView->disabledAttributeChanged();
     } else if (name == readonlyAttr) {
         HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
         m_inputTypeView->readonlyAttributeChanged();
@@ -1212,7 +1209,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
         // FIXME: Remove type check.
         if (type() == InputTypeNames::search)
-            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, this));
+            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, wrapPersistent(this)));
         // Form submission finishes editing, just as loss of focus does.
         // If there was a change, send the event now.
         if (wasChangedSinceLastFormControlChangeEvent())
@@ -1531,6 +1528,12 @@ void HTMLInputElement::requiredAttributeChanged()
     if (RadioButtonGroupScope* scope = radioButtonGroupScope())
         scope->requiredAttributeChanged(this);
     m_inputTypeView->requiredAttributeChanged();
+}
+
+void HTMLInputElement::disabledAttributeChanged()
+{
+    HTMLTextFormControlElement::disabledAttributeChanged();
+    m_inputTypeView->disabledAttributeChanged();
 }
 
 void HTMLInputElement::selectColorInColorChooser(const Color& color)

@@ -328,10 +328,6 @@ def main():
                if args.blacklist_file
                else None)
 
-  last_devices_path = os.path.join(
-      args.out_dir, device_list.LAST_DEVICES_FILENAME)
-  args.known_devices_files.append(last_devices_path)
-
   expected_devices = set()
   try:
     for path in args.known_devices_files:
@@ -413,6 +409,8 @@ def main():
                       and not _IsBlacklisted(status['serial'], blacklist))]
 
   # If all devices failed, or if there are no devices, it's an infra error.
+  if not live_devices:
+    logging.error('No available devices.')
   return 0 if live_devices else exit_codes.INFRA
 
 

@@ -61,15 +61,15 @@ class ScrollbarAnimationControllerThinningTest
             kTrackStart, kIsLeftSideVerticalScrollbar, kIsOverlayScrollbar);
     scrollbar_layer_ = scrollbar.get();
 
-    scroll_layer->AddChild(std::move(scrollbar));
-    clip_layer_->AddChild(std::move(scroll_layer));
-    host_impl_.active_tree()->SetRootLayer(std::move(clip));
+    scroll_layer->test_properties()->AddChild(std::move(scrollbar));
+    clip_layer_->test_properties()->AddChild(std::move(scroll_layer));
+    host_impl_.active_tree()->SetRootLayerForTesting(std::move(clip));
 
     scrollbar_layer_->SetScrollLayerId(scroll_layer_ptr->id());
     scrollbar_layer_->test_properties()->opacity_can_animate = true;
     clip_layer_->SetBounds(gfx::Size(100, 100));
     scroll_layer_ptr->SetBounds(gfx::Size(200, 200));
-    host_impl_.active_tree()->BuildPropertyTreesForTesting();
+    host_impl_.active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
     scrollbar_controller_ = ScrollbarAnimationControllerThinning::Create(
         scroll_layer_ptr->id(), this, base::TimeDelta::FromSeconds(2),

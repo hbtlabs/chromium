@@ -31,6 +31,7 @@ namespace content {
 class BrowserAccessibilityManager;
 class RenderWidgetHostImpl;
 class RenderWidgetHostInputEventRouter;
+class TextInputManager;
 struct NativeWebKeyboardEvent;
 
 //
@@ -154,8 +155,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
       RenderWidgetHostImpl* render_widget_host) const;
 
   // Returns whether the associated tab is in fullscreen mode.
-  virtual bool IsFullscreenForCurrentTab(
-      RenderWidgetHostImpl* render_widget_host) const;
+  virtual bool IsFullscreenForCurrentTab() const;
 
   // Returns the display mode for the view.
   virtual blink::WebDisplayMode GetDisplayMode(
@@ -185,6 +185,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // after a navigation.
   virtual void OnFirstPaintAfterLoad(RenderWidgetHostImpl* render_widget_host) {
   }
+
+  // Returns the TextInputManager tracking text input state.
+  virtual TextInputManager* GetTextInputManager();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

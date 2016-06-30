@@ -7,6 +7,7 @@
 
 #include "wtf/Allocator.h"
 #include "wtf/HashFunctions.h"
+#include "wtf/HashTraits.h"
 
 namespace blink {
 
@@ -272,6 +273,7 @@ public:
 
 namespace WTF {
 
+// PtrHash is the default hash for hash tables with Member<>-derived elements.
 template <typename T>
 struct MemberHash : PtrHash<T> {
     STATIC_ONLY(MemberHash);
@@ -282,17 +284,6 @@ struct MemberHash : PtrHash<T> {
 };
 
 template <typename T>
-struct WeakMemberHash : MemberHash<T> {
-    STATIC_ONLY(WeakMemberHash);
-};
-
-template <typename T>
-struct UntracedMemberHash : MemberHash<T> {
-    STATIC_ONLY(UntracedMemberHash);
-};
-
-// PtrHash is the default hash for hash tables with members.
-template <typename T>
 struct DefaultHash<blink::Member<T>> {
     STATIC_ONLY(DefaultHash);
     using Hash = MemberHash<T>;
@@ -301,18 +292,18 @@ struct DefaultHash<blink::Member<T>> {
 template <typename T>
 struct DefaultHash<blink::WeakMember<T>> {
     STATIC_ONLY(DefaultHash);
-    using Hash = WeakMemberHash<T>;
+    using Hash = MemberHash<T>;
 };
 
 template <typename T>
 struct DefaultHash<blink::UntracedMember<T>> {
     STATIC_ONLY(DefaultHash);
-    using Hash = UntracedMemberHash<T>;
+    using Hash = MemberHash<T>;
 };
 
 template<typename T>
-struct NeedsTracing<blink::Member<T>> {
-    STATIC_ONLY(NeedsTracing);
+struct IsTraceable<blink::Member<T>> {
+    STATIC_ONLY(IsTraceable);
     static const bool value = true;
 };
 
@@ -322,7 +313,12 @@ struct IsWeak<blink::WeakMember<T>> {
     static const bool value = true;
 };
 
+template<typename T>
+struct IsTraceable<blink::WeakMember<T>> {
+    STATIC_ONLY(IsTraceable);
+    static const bool value = true;
+};
+
 } // namespace WTF
 
 #endif // Member_h
-

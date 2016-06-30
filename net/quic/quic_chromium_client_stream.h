@@ -42,7 +42,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
     virtual void OnDataAvailable() = 0;
 
     // Called when the stream is closed by the peer.
-    virtual void OnClose(QuicErrorCode error) = 0;
+    virtual void OnClose() = 0;
 
     // Called when the stream is closed because of an error.
     virtual void OnError(int error) = 0;
@@ -73,10 +73,13 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
                                  const QuicHeaderList& header_list) override;
   void OnPromiseHeadersComplete(QuicStreamId promised_stream_id,
                                 size_t frame_len) override;
+  void OnPromiseHeaderList(QuicStreamId promised_id,
+                           size_t frame_len,
+                           const QuicHeaderList& header_list) override;
   void OnDataAvailable() override;
   void OnClose() override;
   void OnCanWrite() override;
-  size_t WriteHeaders(const SpdyHeaderBlock& header_block,
+  size_t WriteHeaders(SpdyHeaderBlock header_block,
                       bool fin,
                       QuicAckListenerInterface* ack_notifier_delegate) override;
   SpdyPriority priority() const override;
@@ -121,7 +124,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
   using QuicSpdyStream::HasBufferedData;
 
  private:
-  void NotifyDelegateOfHeadersCompleteLater(const SpdyHeaderBlock& headers,
+  void NotifyDelegateOfHeadersCompleteLater(SpdyHeaderBlock headers,
                                             size_t frame_len);
   void NotifyDelegateOfHeadersComplete(SpdyHeaderBlock headers,
                                        size_t frame_len);

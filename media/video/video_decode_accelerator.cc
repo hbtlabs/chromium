@@ -9,8 +9,13 @@
 
 namespace media {
 
+VideoDecodeAccelerator::Config::Config() = default;
+VideoDecodeAccelerator::Config::Config(const Config& config) = default;
+
 VideoDecodeAccelerator::Config::Config(VideoCodecProfile video_codec_profile)
     : profile(video_codec_profile) {}
+
+VideoDecodeAccelerator::Config::~Config() = default;
 
 std::string VideoDecodeAccelerator::Config::AsHumanReadableString() const {
   std::ostringstream s;
@@ -42,10 +47,6 @@ void VideoDecodeAccelerator::ImportBufferForPicture(
 
 GLenum VideoDecodeAccelerator::GetSurfaceInternalFormat() const {
   return GL_RGBA;
-}
-
-VideoPixelFormat VideoDecodeAccelerator::GetOutputFormat() const {
-  return PIXEL_FORMAT_UNKNOWN;
 }
 
 VideoDecodeAccelerator::SupportedProfile::SupportedProfile()

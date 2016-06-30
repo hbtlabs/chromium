@@ -2,29 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_shell.h"
+#include "ash/wm/window_state_aura.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/exo/buffer.h"
+#include "components/exo/display.h"
 #include "components/exo/shell_surface.h"
+#include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/shadow.h"
+#include "ui/wm/core/shadow_controller.h"
+#include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_util.h"
 
 namespace exo {
 namespace {
 
-class ShellSurfaceTest : public test::ExoTestBase,
-                         public ::testing::WithParamInterface<bool> {
-  void SetUp() override {
-    Surface::SetUseSurfaceLayer(GetParam());
-    test::ExoTestBase::SetUp();
-  }
-};
+using ShellSurfaceTest = test::ExoTestBase;
 
 uint32_t ConfigureFullscreen(uint32_t serial,
                              const gfx::Size& size,
@@ -35,7 +39,7 @@ uint32_t ConfigureFullscreen(uint32_t serial,
   return serial;
 }
 
-TEST_P(ShellSurfaceTest, AcknowledgeConfigure) {
+TEST_F(ShellSurfaceTest, AcknowledgeConfigure) {
   gfx::Size buffer_size(32, 32);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -48,7 +52,7 @@ TEST_P(ShellSurfaceTest, AcknowledgeConfigure) {
   gfx::Point origin(100, 100);
   shell_surface->GetWidget()->SetBounds(gfx::Rect(origin, buffer_size));
   EXPECT_EQ(origin.ToString(),
-            surface->GetBoundsInRootWindow().origin().ToString());
+            surface->window()->GetBoundsInRootWindow().origin().ToString());
 
   const uint32_t kSerial = 1;
   shell_surface->set_configure_callback(
@@ -57,7 +61,7 @@ TEST_P(ShellSurfaceTest, AcknowledgeConfigure) {
 
   // Surface origin should not change until configure request is acknowledged.
   EXPECT_EQ(origin.ToString(),
-            surface->GetBoundsInRootWindow().origin().ToString());
+            surface->window()->GetBoundsInRootWindow().origin().ToString());
 
   shell_surface->AcknowledgeConfigure(kSerial);
   std::unique_ptr<Buffer> fullscreen_buffer(
@@ -67,10 +71,10 @@ TEST_P(ShellSurfaceTest, AcknowledgeConfigure) {
   surface->Commit();
 
   EXPECT_EQ(gfx::Point().ToString(),
-            surface->GetBoundsInRootWindow().origin().ToString());
+            surface->window()->GetBoundsInRootWindow().origin().ToString());
 }
 
-TEST_P(ShellSurfaceTest, SetParent) {
+TEST_F(ShellSurfaceTest, SetParent) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> parent_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -94,7 +98,7 @@ TEST_P(ShellSurfaceTest, SetParent) {
       wm::GetTransientParent(shell_surface->GetWidget()->GetNativeWindow()));
 }
 
-TEST_P(ShellSurfaceTest, Maximize) {
+TEST_F(ShellSurfaceTest, Maximize) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -108,7 +112,7 @@ TEST_P(ShellSurfaceTest, Maximize) {
             shell_surface->GetWidget()->GetWindowBoundsInScreen().width());
 }
 
-TEST_P(ShellSurfaceTest, Minimize) {
+TEST_F(ShellSurfaceTest, Minimize) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -121,7 +125,7 @@ TEST_P(ShellSurfaceTest, Minimize) {
   EXPECT_TRUE(shell_surface->GetWidget()->IsMinimized());
 }
 
-TEST_P(ShellSurfaceTest, Restore) {
+TEST_F(ShellSurfaceTest, Restore) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -131,10 +135,6 @@ TEST_P(ShellSurfaceTest, Restore) {
   surface->Attach(buffer.get());
   surface->Commit();
   // Note: Remove contents to avoid issues with maximize animations in tests.
-  if (!GetParam()) {
-    surface->Attach(nullptr);
-    surface->Commit();
-  }
   shell_surface->Maximize();
   shell_surface->Restore();
   EXPECT_EQ(
@@ -142,7 +142,7 @@ TEST_P(ShellSurfaceTest, Restore) {
       shell_surface->GetWidget()->GetWindowBoundsInScreen().size().ToString());
 }
 
-TEST_P(ShellSurfaceTest, SetFullscreen) {
+TEST_F(ShellSurfaceTest, SetFullscreen) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -156,7 +156,25 @@ TEST_P(ShellSurfaceTest, SetFullscreen) {
             shell_surface->GetWidget()->GetWindowBoundsInScreen().ToString());
 }
 
-TEST_P(ShellSurfaceTest, SetTitle) {
+TEST_F(ShellSurfaceTest, SetPinned) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  shell_surface->SetPinned(true);
+  EXPECT_TRUE(
+      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
+          ->IsPinned());
+
+  shell_surface->SetPinned(false);
+  EXPECT_FALSE(
+      ash::wm::GetWindowState(shell_surface->GetWidget()->GetNativeWindow())
+          ->IsPinned());
+}
+
+TEST_F(ShellSurfaceTest, SetTitle) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -164,7 +182,7 @@ TEST_P(ShellSurfaceTest, SetTitle) {
   surface->Commit();
 }
 
-TEST_P(ShellSurfaceTest, SetApplicationId) {
+TEST_F(ShellSurfaceTest, SetApplicationId) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -176,7 +194,7 @@ TEST_P(ShellSurfaceTest, SetApplicationId) {
                         shell_surface->GetWidget()->GetNativeWindow()));
 }
 
-TEST_P(ShellSurfaceTest, Move) {
+TEST_F(ShellSurfaceTest, Move) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -190,7 +208,7 @@ TEST_P(ShellSurfaceTest, Move) {
   shell_surface.reset();
 }
 
-TEST_P(ShellSurfaceTest, Resize) {
+TEST_F(ShellSurfaceTest, Resize) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -204,7 +222,7 @@ TEST_P(ShellSurfaceTest, Resize) {
   surface.reset();
 }
 
-TEST_P(ShellSurfaceTest, SetGeometry) {
+TEST_F(ShellSurfaceTest, SetGeometry) {
   gfx::Size buffer_size(64, 64);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -220,10 +238,10 @@ TEST_P(ShellSurfaceTest, SetGeometry) {
       shell_surface->GetWidget()->GetWindowBoundsInScreen().size().ToString());
   EXPECT_EQ(gfx::Rect(gfx::Point() - geometry.OffsetFromOrigin(), buffer_size)
                 .ToString(),
-            surface->bounds().ToString());
+            surface->window()->bounds().ToString());
 }
 
-TEST_P(ShellSurfaceTest, SetScale) {
+TEST_F(ShellSurfaceTest, SetScale) {
   gfx::Size buffer_size(64, 64);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
@@ -238,14 +256,33 @@ TEST_P(ShellSurfaceTest, SetScale) {
   gfx::Transform transform;
   transform.Scale(1.0 / scale, 1.0 / scale);
   EXPECT_EQ(transform.ToString(),
-            surface->layer()->GetTargetTransform().ToString());
+            surface->window()->layer()->GetTargetTransform().ToString());
+}
+
+TEST_F(ShellSurfaceTest, SetTopInset) {
+  gfx::Size buffer_size(64, 64);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
+
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  ASSERT_TRUE(window);
+  EXPECT_EQ(0, window->GetProperty(aura::client::kTopViewInset));
+  int top_inset_height = 20;
+  shell_surface->SetTopInset(top_inset_height);
+  surface->Commit();
+  EXPECT_EQ(top_inset_height, window->GetProperty(aura::client::kTopViewInset));
 }
 
 void Close(int* close_call_count) {
   (*close_call_count)++;
 }
 
-TEST_P(ShellSurfaceTest, CloseCallback) {
+TEST_F(ShellSurfaceTest, CloseCallback) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -258,13 +295,17 @@ TEST_P(ShellSurfaceTest, CloseCallback) {
   EXPECT_EQ(0, close_call_count);
   shell_surface->GetWidget()->Close();
   EXPECT_EQ(1, close_call_count);
+
+  ui::KeyEvent event(ui::ET_KEY_PRESSED, ui::VKEY_W, ui::EF_CONTROL_DOWN);
+  shell_surface->GetWidget()->OnKeyEvent(&event);
+  EXPECT_EQ(2, close_call_count);
 }
 
 void DestroyShellSurface(std::unique_ptr<ShellSurface>* shell_surface) {
   shell_surface->reset();
 }
 
-TEST_P(ShellSurfaceTest, SurfaceDestroyedCallback) {
+TEST_F(ShellSurfaceTest, SurfaceDestroyedCallback) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -293,7 +334,7 @@ uint32_t Configure(gfx::Size* suggested_size,
   return 0;
 }
 
-TEST_P(ShellSurfaceTest, ConfigureCallback) {
+TEST_F(ShellSurfaceTest, ConfigureCallback) {
   std::unique_ptr<Surface> surface(new Surface);
   std::unique_ptr<ShellSurface> shell_surface(new ShellSurface(surface.get()));
 
@@ -338,7 +379,118 @@ TEST_P(ShellSurfaceTest, ConfigureCallback) {
   EXPECT_TRUE(is_resizing);
 }
 
-INSTANTIATE_TEST_CASE_P(, ShellSurfaceTest, ::testing::Bool());
+TEST_F(ShellSurfaceTest, ModalWindow) {
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(
+      new ShellSurface(surface.get(), nullptr, gfx::Rect(), true,
+                       ash::kShellWindowId_SystemModalContainer));
+  gfx::Size desktop_size(640, 480);
+  std::unique_ptr<Buffer> desktop_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(desktop_size)));
+  surface->Attach(desktop_buffer.get());
+  surface->SetInputRegion(SkRegion());
+  surface->Commit();
+
+  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+
+  // Creating a surface without input region should not make it modal.
+  std::unique_ptr<Display> display(new Display);
+  std::unique_ptr<Surface> child = display->CreateSurface();
+  gfx::Size buffer_size(128, 128);
+  std::unique_ptr<Buffer> child_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  child->Attach(child_buffer.get());
+  std::unique_ptr<SubSurface> sub_surface(
+      display->CreateSubSurface(child.get(), surface.get()));
+  surface->SetSubSurfacePosition(child.get(), gfx::Point(10, 10));
+  child->Commit();
+  surface->Commit();
+  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+
+  // Making the surface opaque shouldn't make it modal either.
+  child->SetBlendMode(SkXfermode::kSrc_Mode);
+  child->Commit();
+  surface->Commit();
+  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+
+  // Setting input regions won't make it modal either.
+  surface->SetInputRegion(
+      SkRegion(gfx::RectToSkIRect(gfx::Rect(10, 10, 100, 100))));
+  surface->Commit();
+  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+
+  // Only SetSystemModal changes modality.
+  shell_surface->SetSystemModal(true);
+  EXPECT_TRUE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+
+  shell_surface->SetSystemModal(false);
+  EXPECT_FALSE(ash::WmShell::Get()->IsSystemModalWindowOpen());
+}
+
+TEST_F(ShellSurfaceTest, Shadow) {
+  std::unique_ptr<Surface> surface(new Surface);
+  std::unique_ptr<ShellSurface> shell_surface(
+      new ShellSurface(surface.get(), nullptr, gfx::Rect(), true,
+                       ash::kShellWindowId_DefaultContainer));
+  surface->Commit();
+
+  views::Widget* widget = shell_surface->GetWidget();
+  aura::Window* window = widget->GetNativeWindow();
+
+  // 1) Initial state, no shadow.
+  wm::Shadow* shadow = wm::ShadowController::GetShadowForWindow(window);
+  ASSERT_TRUE(shadow);
+  EXPECT_FALSE(shadow->layer()->visible());
+
+  std::unique_ptr<Display> display(new Display);
+
+  // 2) Just creating a sub surface won't create a shadow.
+  std::unique_ptr<Surface> child = display->CreateSurface();
+  gfx::Size buffer_size(128, 128);
+  std::unique_ptr<Buffer> child_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  child->Attach(child_buffer.get());
+  std::unique_ptr<SubSurface> sub_surface(
+      display->CreateSubSurface(child.get(), surface.get()));
+  surface->Commit();
+
+  EXPECT_FALSE(shadow->layer()->visible());
+
+  // 3) Create a shadow.
+  shell_surface->SetRectangularShadow(gfx::Rect(10, 10, 100, 100));
+  surface->Commit();
+  EXPECT_TRUE(shadow->layer()->visible());
+
+  gfx::Rect before = shadow->layer()->bounds();
+
+  // 4) Shadow bounds is independent of the sub surface.
+  gfx::Size new_buffer_size(256, 256);
+  std::unique_ptr<Buffer> new_child_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(new_buffer_size)));
+  child->Attach(new_child_buffer.get());
+  child->Commit();
+  surface->Commit();
+
+  EXPECT_EQ(before, shadow->layer()->bounds());
+
+  // 4) Updating the widget's window bounds should not change the shadow bounds.
+  window->SetBounds(gfx::Rect(10, 10, 100, 100));
+  EXPECT_EQ(before, shadow->layer()->bounds());
+
+  // 5) Set empty content bounds should disable shadow.
+  shell_surface->SetRectangularShadow(gfx::Rect());
+  surface->Commit();
+
+  EXPECT_EQ(wm::SHADOW_TYPE_NONE, wm::GetShadowType(window));
+  EXPECT_FALSE(shadow->layer()->visible());
+
+  // 6) Seting non empty content bounds should enable shadow.
+  shell_surface->SetRectangularShadow(gfx::Rect(10, 10, 100, 100));
+  surface->Commit();
+
+  EXPECT_EQ(wm::SHADOW_TYPE_RECTANGULAR, wm::GetShadowType(window));
+  EXPECT_TRUE(shadow->layer()->visible());
+}
 
 }  // namespace
 }  // namespace exo

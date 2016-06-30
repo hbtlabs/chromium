@@ -36,9 +36,9 @@
 #include "core/frame/LocalFrameLifecycleObserver.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
-
 #include "wtf/Assertions.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -56,7 +56,7 @@ class Page;
 class PostMessageTimer;
 class SecurityOrigin;
 class SourceLocation;
-class VisualViewport;
+class DOMVisualViewport;
 
 enum PageshowEventPersistence {
     PageshowEventNotPersisted = 0,
@@ -106,7 +106,7 @@ public:
     int screenY() const override;
     double scrollX() const override;
     double scrollY() const override;
-    VisualViewport* visualViewport() override;
+    DOMVisualViewport* visualViewport() override;
     const AtomicString& name() const override;
     void setName(const AtomicString&) override;
     String status() const override;
@@ -170,7 +170,7 @@ public:
 
     void postMessageTimerFired(PostMessageTimer*);
     void removePostMessageTimer(PostMessageTimer*);
-    void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event*, PassOwnPtr<SourceLocation>);
+    void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event*, std::unique_ptr<SourceLocation>);
 
     // Events
     // EventTarget API
@@ -202,6 +202,8 @@ public:
 
     void acceptLanguagesChanged();
 
+    FloatSize getViewportSize(IncludeScrollbarsInRect) const;
+
 protected:
     // EventTarget overrides.
     void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
@@ -230,6 +232,7 @@ private:
 
     Member<WindowFrameObserver> m_frameObserver;
     Member<Document> m_document;
+    Member<DOMVisualViewport> m_visualViewport;
 
     bool m_shouldPrintWhenFinishedLoading;
 

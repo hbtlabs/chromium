@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/media/media_stream_messages.h"
 #include "content/public/common/content_client.h"
@@ -29,12 +30,12 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/media/gpu/rtc_video_decoder_factory.h"
+#include "content/renderer/media/gpu/rtc_video_encoder_factory.h"
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
-#include "content/renderer/media/rtc_video_decoder_factory.h"
-#include "content/renderer/media/rtc_video_encoder_factory.h"
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
@@ -390,7 +391,7 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
       // time. It's safe to use Unretained here since both destructor and
       // Initialize can only be called on the worker thread.
       chrome_worker_thread_.task_runner()->PostTask(
-          FROM_HERE, base::Bind(&FilteringNetworkManager::Initialize,
+          FROM_HERE, base::Bind(&FilteringNetworkManager::CheckPermission,
                                 base::Unretained(filtering_network_manager)));
     }
     network_manager.reset(filtering_network_manager);
@@ -486,7 +487,7 @@ void PeerConnectionDependencyFactory::TryScheduleStunProbeTrial() {
   // The underneath IPC channel has to be connected before sending any IPC
   // message.
   if (!p2p_socket_dispatcher_->connected()) {
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&PeerConnectionDependencyFactory::TryScheduleStunProbeTrial,
                    base::Unretained(this)),

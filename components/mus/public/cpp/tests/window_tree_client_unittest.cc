@@ -24,7 +24,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
-#include "ui/events/mojo/input_events_type_converters.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace mus {
@@ -452,14 +451,14 @@ TEST_F(WindowTreeClientTest, InputEventBasic) {
       new ui::MouseEvent(ui::ET_MOUSE_MOVED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_NONE, 0));
   setup.window_tree_client()->OnWindowInputEvent(
-      1, server_id(root), mojom::Event::From(*ui_event.get()), 0);
+      1, server_id(root), ui::Event::Clone(*ui_event.get()), 0);
   EXPECT_TRUE(event_handler.received_event());
   EXPECT_TRUE(setup.window_tree()->WasEventAcked(1));
   event_handler.Reset();
 
   event_handler.set_should_manually_ack();
   setup.window_tree_client()->OnWindowInputEvent(
-      33, server_id(root), mojom::Event::From(*ui_event.get()), 0);
+      33, server_id(root), ui::Event::Clone(*ui_event.get()), 0);
   EXPECT_TRUE(event_handler.received_event());
   EXPECT_FALSE(setup.window_tree()->WasEventAcked(33));
 
@@ -477,7 +476,7 @@ TEST_F(WindowTreeClientTest, OnEventObserved) {
   // Set up an event observer.
   mojom::EventMatcherPtr matcher = mojom::EventMatcher::New();
   matcher->type_matcher = mojom::EventTypeMatcher::New();
-  matcher->type_matcher->type = mojom::EventType::POINTER_DOWN;
+  matcher->type_matcher->type = ui::mojom::EventType::POINTER_DOWN;
   setup.client()->SetEventObserver(std::move(matcher));
 
   // Simulate the server sending an observed event.
@@ -485,8 +484,8 @@ TEST_F(WindowTreeClientTest, OnEventObserved) {
   std::unique_ptr<ui::Event> ui_event(
       new ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_CONTROL_DOWN, 0));
-  setup.window_tree_client()->OnEventObserved(
-      mojom::Event::From(*ui_event.get()), event_observer_id);
+  setup.window_tree_client()->OnEventObserved(ui::Event::Clone(*ui_event.get()),
+                                              event_observer_id);
 
   // Delegate sensed the event.
   ui::Event* last_event = setup.window_tree_delegate()->last_event_observed();
@@ -498,8 +497,8 @@ TEST_F(WindowTreeClientTest, OnEventObserved) {
   setup.client()->SetEventObserver(nullptr);
 
   // Simulate another event from the server.
-  setup.window_tree_client()->OnEventObserved(
-      mojom::Event::From(*ui_event.get()), event_observer_id);
+  setup.window_tree_client()->OnEventObserved(ui::Event::Clone(*ui_event.get()),
+                                              event_observer_id);
 
   // No event was sensed.
   EXPECT_FALSE(setup.window_tree_delegate()->last_event_observed());
@@ -514,7 +513,7 @@ TEST_F(WindowTreeClientTest, OnWindowInputEventWithEventObserver) {
   // Set up an event observer.
   mojom::EventMatcherPtr matcher = mojom::EventMatcher::New();
   matcher->type_matcher = mojom::EventTypeMatcher::New();
-  matcher->type_matcher->type = mojom::EventType::POINTER_DOWN;
+  matcher->type_matcher->type = ui::mojom::EventType::POINTER_DOWN;
   setup.client()->SetEventObserver(std::move(matcher));
 
   // Simulate the server dispatching an event that also matched the observer.
@@ -523,8 +522,7 @@ TEST_F(WindowTreeClientTest, OnWindowInputEventWithEventObserver) {
       new ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_CONTROL_DOWN, 0));
   setup.window_tree_client()->OnWindowInputEvent(
-      1, server_id(root), mojom::Event::From(*ui_event.get()),
-      event_observer_id);
+      1, server_id(root), std::move(ui_event), event_observer_id);
 
   // Delegate sensed the event.
   ui::Event* last_event = setup.window_tree_delegate()->last_event_observed();
@@ -542,14 +540,14 @@ TEST_F(WindowTreeClientTest, EventObserverReplaced) {
   // Set up an event observer.
   mojom::EventMatcherPtr matcher1 = mojom::EventMatcher::New();
   matcher1->type_matcher = mojom::EventTypeMatcher::New();
-  matcher1->type_matcher->type = mojom::EventType::POINTER_DOWN;
+  matcher1->type_matcher->type = ui::mojom::EventType::POINTER_DOWN;
   setup.client()->SetEventObserver(std::move(matcher1));
   uint32_t event_observer_id1 = setup.GetEventObserverId();
 
   // Replace it with a second observer.
   mojom::EventMatcherPtr matcher2 = mojom::EventMatcher::New();
   matcher2->type_matcher = mojom::EventTypeMatcher::New();
-  matcher2->type_matcher->type = mojom::EventType::POINTER_UP;
+  matcher2->type_matcher->type = ui::mojom::EventType::POINTER_UP;
   setup.client()->SetEventObserver(std::move(matcher2));
   uint32_t event_observer_id2 = setup.GetEventObserverId();
 
@@ -558,8 +556,8 @@ TEST_F(WindowTreeClientTest, EventObserverReplaced) {
   std::unique_ptr<ui::Event> pressed_event(
       new ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_NONE, 0));
-  setup.window_tree_client()->OnEventObserved(
-      mojom::Event::From(*pressed_event.get()), event_observer_id1);
+  setup.window_tree_client()->OnEventObserved(std::move(pressed_event),
+                                              event_observer_id1);
 
   // The event was not sensed, because it does not match the current observer.
   EXPECT_FALSE(setup.window_tree_delegate()->last_event_observed());
@@ -568,8 +566,8 @@ TEST_F(WindowTreeClientTest, EventObserverReplaced) {
   std::unique_ptr<ui::Event> released_event(
       new ui::MouseEvent(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
                          ui::EventTimeForNow(), ui::EF_CONTROL_DOWN, 0));
-  setup.window_tree_client()->OnEventObserved(
-      mojom::Event::From(*released_event.get()), event_observer_id2);
+  setup.window_tree_client()->OnEventObserved(std::move(released_event),
+                                              event_observer_id2);
 
   // The delegate sensed the event.
   ui::Event* last_event = setup.window_tree_delegate()->last_event_observed();

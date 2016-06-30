@@ -20,6 +20,7 @@
 #include "components/test_runner/mock_content_settings_client.h"
 #include "components/test_runner/mock_credential_manager_client.h"
 #include "components/test_runner/mock_screen_orientation_client.h"
+#include "components/test_runner/mock_web_document_subresource_filter.h"
 #include "components/test_runner/mock_web_speech_recognizer.h"
 #include "components/test_runner/mock_web_user_media_client.h"
 #include "components/test_runner/pixel_dump.h"
@@ -209,6 +210,8 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetCustomPolicyDelegate(gin::Arguments* args);
   void SetCustomTextOutput(const std::string& output);
   void SetDatabaseQuota(int quota);
+  void SetDisallowedSubresourcePathSuffixes(
+      const std::vector<std::string>& suffixes);
   void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
                                                 const std::string& scheme);
   void SetDumpConsoleMessages(bool value);
@@ -363,6 +366,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::DisableAutoResizeMode)
       .SetMethod("disableMockScreenOrientation",
                  &TestRunnerBindings::DisableMockScreenOrientation)
+      .SetMethod("setDisallowedSubresourcePathSuffixes",
+                 &TestRunnerBindings::SetDisallowedSubresourcePathSuffixes)
       .SetMethod("dispatchBeforeInstallPromptEvent",
                  &TestRunnerBindings::DispatchBeforeInstallPromptEvent)
       .SetMethod("dumpAsMarkup", &TestRunnerBindings::DumpAsMarkup)
@@ -470,8 +475,7 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::ResetTestHelperControllers)
       .SetMethod("resolveBeforeInstallPromptPromise",
                  &TestRunnerBindings::ResolveBeforeInstallPromptPromise)
-      .SetMethod("runIdleTasks",
-                 &TestRunnerBindings::RunIdleTasks)
+      .SetMethod("runIdleTasks", &TestRunnerBindings::RunIdleTasks)
       .SetMethod("selectionAsMarkup", &TestRunnerBindings::SelectionAsMarkup)
 
       // The Bluetooth functions are specified at
@@ -485,8 +489,7 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetAllowFileAccessFromFileURLs)
       .SetMethod("setAllowRunningOfInsecureContent",
                  &TestRunnerBindings::SetAllowRunningOfInsecureContent)
-      .SetMethod("setAutoplayAllowed",
-                 &TestRunnerBindings::SetAutoplayAllowed)
+      .SetMethod("setAutoplayAllowed", &TestRunnerBindings::SetAutoplayAllowed)
       .SetMethod("setAllowUniversalAccessFromFileURLs",
                  &TestRunnerBindings::SetAllowUniversalAccessFromFileURLs)
       .SetMethod("setAlwaysAcceptCookies",
@@ -935,6 +938,12 @@ void TestRunnerBindings::SetMockScreenOrientation(
 void TestRunnerBindings::DisableMockScreenOrientation() {
   if (runner_)
     runner_->DisableMockScreenOrientation();
+}
+
+void TestRunnerBindings::SetDisallowedSubresourcePathSuffixes(
+    const std::vector<std::string>& suffixes) {
+  if (runner_)
+    runner_->SetDisallowedSubresourcePathSuffixes(suffixes);
 }
 
 void TestRunnerBindings::DidAcquirePointerLock() {
@@ -1604,10 +1613,6 @@ void TestRunner::Reset() {
   }
 
   dump_as_audio_ = false;
-  dump_create_view_ = false;
-  can_open_windows_ = false;
-  dump_window_status_changes_ = false;
-  dump_spell_check_callbacks_ = false;
   dump_back_forward_list_ = false;
   test_repaint_ = false;
   sweep_horizontally_ = false;
@@ -1778,11 +1783,11 @@ bool TestRunner::shouldDumpIconChanges() const {
 }
 
 bool TestRunner::shouldDumpCreateView() const {
-  return dump_create_view_;
+  return layout_test_runtime_flags_.dump_create_view();
 }
 
 bool TestRunner::canOpenWindows() const {
-  return can_open_windows_;
+  return layout_test_runtime_flags_.can_open_windows();
 }
 
 bool TestRunner::shouldDumpResourceLoadCallbacks() const {
@@ -1805,11 +1810,11 @@ void TestRunner::InitializeWebViewWithMocks(blink::WebView* web_view) {
 }
 
 bool TestRunner::shouldDumpStatusCallbacks() const {
-  return dump_window_status_changes_;
+  return layout_test_runtime_flags_.dump_window_status_changes();
 }
 
 bool TestRunner::shouldDumpSpellCheckCallbacks() const {
-  return dump_spell_check_callbacks_;
+  return layout_test_runtime_flags_.dump_spell_check_callbacks();
 }
 
 bool TestRunner::ShouldDumpBackForwardList() const {
@@ -2429,11 +2434,13 @@ void TestRunner::DumpTitleChanges() {
 }
 
 void TestRunner::DumpCreateView() {
-  dump_create_view_ = true;
+  layout_test_runtime_flags_.set_dump_create_view(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::SetCanOpenWindows() {
-  can_open_windows_ = true;
+  layout_test_runtime_flags_.set_can_open_windows(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpResourceLoadCallbacks() {
@@ -2487,12 +2494,21 @@ void TestRunner::DumpPermissionClientCallbacks() {
   OnLayoutTestRuntimeFlagsChanged();
 }
 
+void TestRunner::SetDisallowedSubresourcePathSuffixes(
+    const std::vector<std::string>& suffixes) {
+  DCHECK(main_view_);
+  main_view_->mainFrame()->dataSource()->setSubresourceFilter(
+      new MockWebDocumentSubresourceFilter(suffixes));
+}
+
 void TestRunner::DumpWindowStatusChanges() {
-  dump_window_status_changes_ = true;
+  layout_test_runtime_flags_.set_dump_window_status_changes(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpSpellCheckCallbacks() {
-  dump_spell_check_callbacks_ = true;
+  layout_test_runtime_flags_.set_dump_spell_check_callbacks(true);
+  OnLayoutTestRuntimeFlagsChanged();
 }
 
 void TestRunner::DumpBackForwardList() {

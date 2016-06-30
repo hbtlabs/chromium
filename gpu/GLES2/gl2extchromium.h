@@ -102,8 +102,8 @@ typedef void (
 #define GL_READ_WRITE_CHROMIUM 0x78F2
 #endif
 
-#ifndef GL_RGB_YUV_420_CHROMIUM
-#define GL_RGB_YUV_420_CHROMIUM 0x78FA
+#ifndef GL_RGB_YCRCB_420_CHROMIUM
+#define GL_RGB_YCRCB_420_CHROMIUM 0x78FA
 #endif
 
 #ifndef GL_RGB_YCBCR_422_CHROMIUM
@@ -792,6 +792,8 @@ glScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                           GLint sorting_context_id,
                           const GLfloat* transform,
                           GLuint filter);
+GL_APICALL void GL_APIENTRY
+glScheduleCALayerInUseQueryCHROMIUM(GLsizei count, const GLuint* textures);
 #endif
 typedef void(GL_APIENTRYP PFNGLSCHEDULECALAYERCHROMIUMPROC)(
     GLuint contents_texture_id,
@@ -805,6 +807,9 @@ typedef void(GL_APIENTRYP PFNGLSCHEDULECALAYERCHROMIUMPROC)(
     GLint sorting_context_id,
     const GLfloat* transform,
     GLuint filter);
+typedef void(GL_APIENTRYP PFNGLSCHEDULECALAYERINUSEQUERYCHROMIUMPROC)(
+    GLsizei count,
+    const GLuint* textures);
 #endif /* GL_CHROMIUM_schedule_ca_layer */
 
 /* GL_CHROMIUM_sync_query */

@@ -23,13 +23,13 @@ promise_test(t => {
     return paymentRequestMock
       .then(m => {
           mock = m;
-          var result = new PaymentRequest(['visa'], details).show();
+          var result = new PaymentRequest([{'supportedMethods': ['visa']}], details).show();
           gc();
           mock.onPaymentResponse(response_data);
           return result;
         })
       .then(response => {
-          completeResult = response.complete(true);
+          completeResult = response.complete("success");
           // Return before calling gc() to make sure reference to response
           // is gone.
         })

@@ -19,6 +19,9 @@ class WindowTreeClient;
 }
 
 namespace ash {
+
+class WmShellCommon;
+
 namespace mus {
 
 class WmRootWindowControllerMus;
@@ -42,32 +45,42 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
   WmRootWindowControllerMus* GetRootWindowControllerWithDisplayId(int64_t id);
 
   // WmShell:
+  MruWindowTracker* GetMruWindowTracker() override;
   WmWindow* NewContainerWindow() override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
   WmWindow* GetPrimaryRootWindow() override;
   WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
   WmWindow* GetRootWindowForNewWindows() override;
-  std::vector<WmWindow*> GetMruWindowList() override;
-  std::vector<WmWindow*> GetMruWindowListIgnoreModals() override;
+  const DisplayInfo& GetDisplayInfo(int64_t display_id) const override;
   bool IsForceMaximizeOnFirstRun() override;
-  bool IsUserSessionBlocked() override;
-  bool IsScreenLocked() override;
+  bool IsPinned() override;
+  void SetPinnedWindow(WmWindow* window) override;
+  bool CanShowWindowForUser(WmWindow* window) override;
   void LockCursor() override;
   void UnlockCursor() override;
   std::vector<WmWindow*> GetAllRootWindows() override;
-  void RecordUserMetricsAction(wm::WmUserMetricsAction action) override;
+  void RecordUserMetricsAction(UserMetricsAction action) override;
   std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) override;
-  bool IsOverviewModeSelecting() override;
-  bool IsOverviewModeRestoringMinimizedWindows() override;
+  std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
+      override;
+  void OnOverviewModeStarting() override;
+  void OnOverviewModeEnded() override;
+  AccessibilityDelegate* GetAccessibilityDelegate() override;
+  SessionStateDelegate* GetSessionStateDelegate() override;
   void AddActivationObserver(WmActivationObserver* observer) override;
   void RemoveActivationObserver(WmActivationObserver* observer) override;
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
-  void AddOverviewModeObserver(WmOverviewModeObserver* observer) override;
-  void RemoveOverviewModeObserver(WmOverviewModeObserver* observer) override;
+  void AddShellObserver(ShellObserver* observer) override;
+  void RemoveShellObserver(ShellObserver* observer) override;
+  void AddPointerWatcher(views::PointerWatcher* watcher) override;
+  void RemovePointerWatcher(views::PointerWatcher* watcher) override;
+#if defined(OS_CHROMEOS)
+  void ToggleIgnoreExternalKeyboard() override;
+#endif
 
  private:
   // Returns true if |window| is a window that can have active children.
@@ -82,7 +95,13 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
 
   ::mus::WindowTreeClient* client_;
 
+  std::unique_ptr<WmShellCommon> wm_shell_common_;
+
   std::vector<WmRootWindowControllerMus*> root_window_controllers_;
+
+  std::unique_ptr<SessionStateDelegate> session_state_delegate_;
+
+  std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
 
   base::ObserverList<WmActivationObserver> activation_observers_;
 

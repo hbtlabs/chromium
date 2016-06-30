@@ -87,8 +87,6 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
   void PermitExternalProtocolHandler() override;
   bool IsRunningInForcedAppMode() override;
   bool IsLoggedInAsPublicAccount() override;
-  ApiActivityMonitor* GetApiActivityMonitor(
-      content::BrowserContext* context) override;
   ExtensionSystemProvider* GetExtensionSystemFactory() override;
   void RegisterExtensionFunctions(
       ExtensionFunctionRegistry* registry) const override;
@@ -123,6 +121,7 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
   std::unique_ptr<content::BluetoothChooser> CreateBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
+  bool IsActivityLoggingEnabled(content::BrowserContext* context) override;
 
  private:
   friend struct base::DefaultLazyInstanceTraits<ChromeExtensionsBrowserClient>;

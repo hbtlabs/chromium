@@ -35,22 +35,11 @@ class GpuServiceImpl : public mojom::GpuService {
       const mojom::GpuService::CreateGpuMemoryBufferCallback& callback)
       override;
 
-  void CreateGpuMemoryBufferFromHandle(
-      mojom::GpuMemoryBufferHandlePtr buffer_handle,
-      mojom::GpuMemoryBufferIdPtr id,
-      const gfx::Size& size,
-      mojom::BufferFormat format,
-      const mojom::GpuService::CreateGpuMemoryBufferFromHandleCallback&
-          callback) override;
-
   void DestroyGpuMemoryBuffer(mojom::GpuMemoryBufferIdPtr id,
                               const gpu::SyncToken& sync_token) override;
 
  private:
   mojo::StrongBinding<GpuService> binding_;
-
-  // A unique client id for constructing the GpuChannel.
-  const int32_t client_id_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuServiceImpl);
 };

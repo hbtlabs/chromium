@@ -9,13 +9,13 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/common/session/session_state_observer.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shell_observer.h"
 #include "ash/common/wm/background_animator.h"
 #include "ash/common/wm/dock/docked_window_layout_manager_observer.h"
 #include "ash/common/wm/workspace/workspace_types.h"
-#include "ash/session/session_state_observer.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shell_observer.h"
 #include "ash/snap_to_pixel_layout_manager.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/gestures/shelf_gesture_handler.h"
@@ -69,21 +69,6 @@ class ASH_EXPORT ShelfLayoutManager
       public SnapToPixelLayoutManager,
       public SessionStateObserver {
  public:
-  // We reserve a small area on the edge of the workspace area to ensure that
-  // the resize handle at the edge of the window can be hit.
-  static const int kWorkspaceAreaVisibleInset;
-
-  // When autohidden we extend the touch hit target onto the screen so that the
-  // user can drag the shelf out.
-  static const int kWorkspaceAreaAutoHideInset;
-
-  // Size of the shelf when auto-hidden.
-  static const int kAutoHideSize;
-
-  // Inset between the inner edge of the shelf (towards centre of screen), and
-  // the shelf items, notifications, status area etc.
-  static const int kShelfItemInset;
-
   explicit ShelfLayoutManager(ShelfWidget* shelf_widget);
   ~ShelfLayoutManager() override;
 
@@ -167,14 +152,18 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Overridden from ash::ShellObserver:
   void OnLockStateChanged(bool locked) override;
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
-  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
+  void OnShelfAlignmentChanged(WmWindow* root_window) override;
+  void OnShelfAutoHideBehaviorChanged(WmWindow* root_window) override;
+  void OnPinnedStateChanged(WmWindow* pinned_window) override;
 
   // Overriden from aura::client::ActivationChangeObserver:
   void OnWindowActivated(
       aura::client::ActivationChangeObserver::ActivationReason reason,
       aura::Window* gained_active,
       aura::Window* lost_active) override;
+
+  // Overridden from keyboard::KeyboardControllerObserver:
+  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
 
   // Overridden from ash::LockStateObserver:
   void OnLockStateEvent(LockStateObserver::EventType event) override;
@@ -202,7 +191,7 @@ class ASH_EXPORT ShelfLayoutManager
     return right;
   }
 
-  template<typename T>
+  template <typename T>
   T PrimaryAxisValue(T horizontal, T vertical) const {
     return IsHorizontalAlignment() ? horizontal : vertical;
   }
@@ -252,11 +241,11 @@ class ASH_EXPORT ShelfLayoutManager
     // appropriate.
     bool Equals(const State& other) const {
       return other.visibility_state == visibility_state &&
-          (visibility_state != SHELF_AUTO_HIDE ||
-           other.auto_hide_state == auto_hide_state) &&
-          other.window_state == window_state &&
-          other.is_screen_locked == is_screen_locked &&
-          other.is_adding_user_screen == is_adding_user_screen;
+             (visibility_state != SHELF_AUTO_HIDE ||
+              other.auto_hide_state == auto_hide_state) &&
+             other.window_state == window_state &&
+             other.is_screen_locked == is_screen_locked &&
+             other.is_adding_user_screen == is_adding_user_screen;
     }
 
     ShelfVisibilityState visibility_state;
@@ -313,10 +302,7 @@ class ASH_EXPORT ShelfLayoutManager
   // Returns true if |window| is a descendant of the shelf.
   bool IsShelfWindow(aura::Window* window);
 
-  int GetWorkAreaSize(const State& state, int size) const;
-
-  // Overridden from keyboard::KeyboardControllerObserver:
-  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
+  int GetWorkAreaInsets(const State& state, int size) const;
 
   // Overridden from DockedWindowLayoutManagerObserver:
   void OnDockBoundsChanging(
@@ -325,6 +311,9 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Called when the LoginUI changes from visible to invisible.
   void UpdateShelfVisibilityAfterLoginUIChange();
+
+  // Compute |target_bounds| opacity based on gesture and shelf visibility.
+  float ComputeTargetOpacity(const State& state);
 
   // The RootWindow is cached so that we don't invoke Shell::GetInstance() from
   // our destructor. We avoid that as at the time we're deleted Shell is being

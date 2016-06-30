@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -40,8 +41,8 @@ static std::unique_ptr<base::DictionaryValue> CreateBasicArrayTypeDictionary() {
   return value;
 }
 
-static base::Value* CreateItemValue(int val) {
-  base::DictionaryValue* value(new base::DictionaryValue());
+std::unique_ptr<base::DictionaryValue> CreateItemValue(int val) {
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   value->Set("val", new base::FundamentalValue(val));
   return value;
 }
@@ -186,7 +187,7 @@ TEST(JsonSchemaCompilerArrayTest, IntegerArrayParamsCreate) {
   integer_array->AppendInteger(2);
   integer_array->AppendInteger(4);
   integer_array->AppendInteger(8);
-  params_value->Append(integer_array.release());
+  params_value->Append(std::move(integer_array));
   std::unique_ptr<IntegerArray::Params> params(
       IntegerArray::Params::Create(*params_value));
   EXPECT_TRUE(params.get());
@@ -202,7 +203,7 @@ TEST(JsonSchemaCompilerArrayTest, AnyArrayParamsCreate) {
   any_array->AppendInteger(1);
   any_array->AppendString("test");
   any_array->Append(CreateItemValue(2));
-  params_value->Append(any_array.release());
+  params_value->Append(std::move(any_array));
   std::unique_ptr<AnyArray::Params> params(
       AnyArray::Params::Create(*params_value));
   EXPECT_TRUE(params.get());
@@ -217,7 +218,7 @@ TEST(JsonSchemaCompilerArrayTest, ObjectArrayParamsCreate) {
   std::unique_ptr<base::ListValue> item_array(new base::ListValue());
   item_array->Append(CreateItemValue(1));
   item_array->Append(CreateItemValue(2));
-  params_value->Append(item_array.release());
+  params_value->Append(std::move(item_array));
   std::unique_ptr<ObjectArray::Params> params(
       ObjectArray::Params::Create(*params_value));
   EXPECT_TRUE(params.get());
@@ -231,7 +232,7 @@ TEST(JsonSchemaCompilerArrayTest, RefArrayParamsCreate) {
   std::unique_ptr<base::ListValue> item_array(new base::ListValue());
   item_array->Append(CreateItemValue(1));
   item_array->Append(CreateItemValue(2));
-  params_value->Append(item_array.release());
+  params_value->Append(std::move(item_array));
   std::unique_ptr<RefArray::Params> params(
       RefArray::Params::Create(*params_value));
   EXPECT_TRUE(params.get());
@@ -248,10 +249,10 @@ TEST(JsonSchemaCompilerArrayTest, ReturnIntegerArrayResultCreate) {
       ReturnIntegerArray::Results::Create(integers);
 
   base::ListValue expected;
-  base::ListValue* expected_argument = new base::ListValue();
+  std::unique_ptr<base::ListValue> expected_argument(new base::ListValue());
   expected_argument->AppendInteger(1);
   expected_argument->AppendInteger(2);
-  expected.Append(expected_argument);
+  expected.Append(std::move(expected_argument));
   EXPECT_TRUE(results->Equals(&expected));
 }
 
@@ -265,13 +266,13 @@ TEST(JsonSchemaCompilerArrayTest, ReturnRefArrayResultCreate) {
       ReturnRefArray::Results::Create(items);
 
   base::ListValue expected;
-  base::ListValue* expected_argument = new base::ListValue();
-  base::DictionaryValue* first = new base::DictionaryValue();
+  std::unique_ptr<base::ListValue> expected_argument(new base::ListValue());
+  std::unique_ptr<base::DictionaryValue> first(new base::DictionaryValue());
   first->SetInteger("val", 1);
-  expected_argument->Append(first);
-  base::DictionaryValue* second = new base::DictionaryValue();
+  expected_argument->Append(std::move(first));
+  std::unique_ptr<base::DictionaryValue> second(new base::DictionaryValue());
   second->SetInteger("val", 2);
-  expected_argument->Append(second);
-  expected.Append(expected_argument);
+  expected_argument->Append(std::move(second));
+  expected.Append(std::move(expected_argument));
   EXPECT_TRUE(results->Equals(&expected));
 }

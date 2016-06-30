@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">Tidak ada item daftar berikutnya.</translation>
 <translation id="1157782847298808853">Bantuan Keyboard</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, kotak kombo</translation>
+<translation id="1161762950103988776">Lompat</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, item menu, dengan submenu</translation>
 <translation id="1177863135347784049">Sesuaikan</translation>
 <translation id="1188858454923323853">komplementer</translation>
+<translation id="1201402288615127009">Berikutnya</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">ChromeVox - Memberikan Suara untuk Chrome</translation>
 <translation id="1229276918471378188">Lompatan sebelumnya</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">kesalahan tata bahasa</translation>
 <translation id="257674075312929031">Grup</translation>
 <translation id="2582407057977008361">Pinggir</translation>
-<translation id="2589102159832527089">Laman ini berisi teks yang diekstrak secara otomatis dari file PDF &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt;. &lt;a href="<ph name="URL" />"&gt;Klik di sini untuk aslinya.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">dengan {COUNT,plural, =1{# item}other{# item}}</translation>
 <translation id="2614981083756825552">Tata Letak Math ML</translation>
 <translation id="2626530649491650971">dapat diklik</translation>
@@ -245,6 +246,7 @@
         "vi": "Vietnam",
         "zh": "China",
         "zh_TW": "China (Han Tradisional)"}</translation>
+<translation id="335581015389089642">Ucapan</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{tambah}other{# tanda tambah}}</translation>
 <translation id="338583716107319301">Pemisah</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">Spasi</translation>
 <translation id="6142308968191113180">Judul 4</translation>
 <translation id="6169420925157477918">Gambar dengan deskripsi panjang</translation>
-<translation id="6172087735260766220">Tidak dapat mengakses teks yang dapat diakses, dari PDF yang tidak dapat disalin.</translation>
 <translation id="6186305613600865047">Melompat ke bagian bawah laman</translation>
 <translation id="6193330012414963395">AM PM</translation>
 <translation id="622484624075952240">Bawah</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">Tab</translation>
 <translation id="667999046851023355">Dokumen</translation>
 <translation id="6697092096875747123">Kotak kombo sebelumnya</translation>
+<translation id="6710213216561001401">Sebelumnya</translation>
 <translation id="6714813999819678458">Judul tingkat 2 sebelumnya</translation>
 <translation id="6716505898850596801">Tombol pengubah</translation>
 <translation id="671916444866103745">Tidak ada bangunan terkenal ARIA berikutnya.</translation>
@@ -661,9 +663,10 @@
 <translation id="8033827949643255796">dipilih</translation>
 <translation id="8035962149453661158">max:<ph name="X" /></translation>
 <translation id="8042761080832772327">Mengedit teks, entri penelusuran</translation>
-<translation id="8049189770492311300">Pewaktu</translation>
+<translation id="8049189770492311300">Timer</translation>
 <translation id="8065607967589909823">Pemilihannya adalah</translation>
 <translation id="8066678206530322333">Spanduk</translation>
+<translation id="8076492880354921740">Tab</translation>
 <translation id="8110647606445335195">Tidak ada bangunan terkenal ARIA.</translation>
 <translation id="8153880621934657047">Tidak ada di dalam tabel.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{garis bawah}other{# garis bawah}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">Tidak ada judul tingkat 3 berikutnya.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">Tidak ada kotak centang sebelumnya.</translation>
+<translation id="8446884382197647889">Pelajari Lebih Lanjut</translation>
 <translation id="8455868257606149352">Maks <ph name="X" /></translation>
 <translation id="84575901236241018">memiliki tombol akses, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">ringkasan jendela</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">Gunakan tombol panah atas dan bawah untuk menjelajahi, atau ketik untuk menelusuri.</translation>
 <translation id="9192904702577636854">Marquee</translation>
 <translation id="9212322457209634662">Tidak ada bagian berikutnya.</translation>
+<translation id="923331726185079994">ChromeVox Telah Diperbarui</translation>
 <translation id="930275611743429116">Mulai atau akhiri pemilihan.</translation>
 <translation id="948171205378458592">Mengurangi laju ucapan</translation>
 <translation id="962913030769097253">Judul tingkat 1 berikutnya</translation>
 <translation id="973955474346881951">Mengaktifkan/Menonaktifkan mode lekat</translation>
+<translation id="976849232629612000">Tidak ada item.</translation>
 </translationbundle>

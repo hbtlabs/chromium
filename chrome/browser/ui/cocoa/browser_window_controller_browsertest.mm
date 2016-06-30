@@ -15,7 +15,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
-#include "chrome/browser/fullscreen.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -23,6 +22,8 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_window_cocoa.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller_private.h"
@@ -36,6 +37,7 @@
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
 #import "chrome/browser/ui/cocoa/tab_contents/overlayable_contents_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_view.h"
+#import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
@@ -49,6 +51,7 @@
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #import "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -181,6 +184,54 @@ class ViewExposedChecker {
 };
 
 }  // namespace
+
+// Mock PresentationModeController used to test if the toolbar reveal animation
+// is called correctly.
+@interface MockPresentationModeController : PresentationModeController
+
+// True if revealToolbarForTabStripChanges was called.
+@property(nonatomic, assign) BOOL isRevealingToolbarForTabstrip;
+
+// Initializer.
+- (id)initWithBrowserController:(BrowserWindowController*)controller;
+
+// Sets isRevealingToolbarForTabstrip back to false.
+- (void)resetToolbarFlag;
+
+// Overridden to set isRevealingToolbarForTabstrip to true when it's called.
+- (void)revealToolbarForTabStripChanges;
+
+// Overridden so that we don't have to deal with the DCHECKs when the
+// BWC exits fullscreen.
+- (void)exitPresentationMode;
+
+@end
+
+@implementation MockPresentationModeController
+
+@synthesize isRevealingToolbarForTabstrip = isRevealingToolbarForTabstrip_;
+
+- (id)initWithBrowserController:(BrowserWindowController*)controller {
+  if ((self = [super
+           initWithBrowserController:controller
+                               style:fullscreen_mac::OMNIBOX_TABS_HIDDEN])) {
+  }
+
+  return self;
+}
+
+- (void)resetToolbarFlag {
+  isRevealingToolbarForTabstrip_ = NO;
+}
+
+- (void)revealToolbarForTabStripChanges {
+  isRevealingToolbarForTabstrip_ = YES;
+}
+
+- (void)exitPresentationMode {
+}
+
+@end
 
 @interface InfoBarContainerController(TestingAPI)
 - (BOOL)isTopInfoBarAnimationRunning;
@@ -380,7 +431,7 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
     browser()
         ->exclusive_access_manager()
         ->fullscreen_controller()
-        ->ToggleBrowserFullscreenWithToolbar();
+        ->ToggleBrowserFullscreenMode();
     waiter->Wait();
   }
 
@@ -389,6 +440,15 @@ class BrowserWindowControllerTest : public InProcessBrowserTest {
   void VerifyFullscreenResizeFlagsAfterTransition() {
     ASSERT_FALSE([controller() isLayoutSubviewsBlocked]);
     ASSERT_FALSE([controller() isActiveTabContentsControllerResizeBlocked]);
+  }
+
+  // Inserts a new tab into the tabstrip at the background.
+  void AddTabAtBackground(int index, GURL url) {
+    chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+    params.tabstrip_index = index;
+    params.disposition = NEW_BACKGROUND_TAB;
+    chrome::Navigate(&params);
+    content::WaitForLoadStopWithoutSuccessCheck(params.target_contents);
   }
 
  private:
@@ -691,10 +751,6 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest, FullscreenResizeFlags) {
 // Flakily times out. http://crbug.com/599119
 IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
                        DISABLED_FullscreenToolbarIsVisibleAccordingToPrefs) {
-  // This feature is only available on SystemFullscreen.
-  if (!chrome::mac::SupportsSystemFullscreen())
-    return;
-
   // Tests that the preference is set to true by default.
   PrefService* prefs = browser()->profile()->GetPrefs();
   EXPECT_TRUE(prefs->GetBoolean(prefs::kShowFullscreenToolbar));
@@ -720,4 +776,48 @@ IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
 
   chrome::ExecuteCommand(browser(), IDC_TOGGLE_FULLSCREEN_TOOLBAR);
   EXPECT_TRUE(prefs->GetBoolean(prefs::kShowFullscreenToolbar));
+}
+
+// Tests that the toolbar (tabstrip and omnibox) reveal animation is correctly
+// triggered by the changes in the tabstrip. The animation should not trigger
+// if the current tab is a NTP, since the location bar would be focused.
+IN_PROC_BROWSER_TEST_F(BrowserWindowControllerTest,
+                       FullscreenToolbarExposedForTabstripChanges) {
+  base::scoped_nsobject<MockPresentationModeController>
+      presentationModeController([[MockPresentationModeController alloc]
+          initWithBrowserController:controller()]);
+  [controller() setPresentationModeController:presentationModeController.get()];
+
+  ToggleFullscreenAndWaitForNotification();
+
+  // Insert a non-NTP new tab in the foreground.
+  AddTabAtIndex(0, GURL("http://google.com"), ui::PAGE_TRANSITION_LINK);
+  ASSERT_FALSE([[controller() toolbarController] isLocationBarFocused]);
+  EXPECT_TRUE([presentationModeController isRevealingToolbarForTabstrip]);
+  [presentationModeController resetToolbarFlag];
+
+  // Insert a new tab in the background.
+  AddTabAtBackground(0, GURL("about:blank"));
+  EXPECT_TRUE([presentationModeController isRevealingToolbarForTabstrip]);
+  [presentationModeController resetToolbarFlag];
+
+  // Insert a NTP new tab in the foreground.
+  AddTabAtIndex(0, GURL("about:blank"), ui::PAGE_TRANSITION_LINK);
+  ASSERT_TRUE([[controller() toolbarController] isLocationBarFocused]);
+  EXPECT_FALSE([presentationModeController isRevealingToolbarForTabstrip]);
+  [presentationModeController resetToolbarFlag];
+
+  // Insert a new tab in the background. The animation should not be triggered
+  // since the location bar should still be focused.
+  AddTabAtBackground(1, GURL("http://google.com"));
+  ASSERT_TRUE([[controller() toolbarController] isLocationBarFocused]);
+  EXPECT_FALSE([presentationModeController isRevealingToolbarForTabstrip]);
+  [presentationModeController resetToolbarFlag];
+
+  // Switch to a non-NTP tab.
+  TabStripModel* model = browser()->tab_strip_model();
+  model->ActivateTabAt(1, true);
+  ASSERT_FALSE([[controller() toolbarController] isLocationBarFocused]);
+  EXPECT_TRUE([presentationModeController isRevealingToolbarForTabstrip]);
+  [presentationModeController resetToolbarFlag];
 }

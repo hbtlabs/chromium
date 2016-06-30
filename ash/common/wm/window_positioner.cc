@@ -4,6 +4,7 @@
 
 #include "ash/common/wm/window_positioner.h"
 
+#include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_screen_util.h"
@@ -63,7 +64,7 @@ bool WindowPositionCanBeManaged(const WmWindow* window) {
   const wm::WindowState* window_state = window->GetWindowState();
   return window_state->window_position_managed() &&
          !window_state->IsMinimized() && !window_state->IsMaximized() &&
-         !window_state->IsFullscreen() &&
+         !window_state->IsFullscreen() && !window_state->IsPinned() &&
          !window_state->bounds_changed_by_user();
 }
 
@@ -161,8 +162,9 @@ WmWindow* GetReferenceWindow(const WmWindow* root_window,
     active = NULL;
 
   // Get a list of all windows.
-  const std::vector<WmWindow*> windows =
-      root_window->GetShell()->GetMruWindowListIgnoreModals();
+  const std::vector<WmWindow*> windows = root_window->GetShell()
+                                             ->GetMruWindowTracker()
+                                             ->BuildWindowListIgnoreModal();
 
   if (windows.empty())
     return nullptr;
@@ -475,7 +477,8 @@ gfx::Rect WindowPositioner::NormalPopupPosition(const gfx::Rect& old_pos,
 gfx::Rect WindowPositioner::SmartPopupPosition(const gfx::Rect& old_pos,
                                                const gfx::Rect& work_area,
                                                int grid) {
-  const std::vector<WmWindow*> windows = shell_->GetMruWindowListIgnoreModals();
+  const std::vector<WmWindow*> windows =
+      shell_->GetMruWindowTracker()->BuildWindowListIgnoreModal();
 
   std::vector<const gfx::Rect*> regions;
   // Process the window list and check if we can bail immediately.
@@ -486,7 +489,7 @@ gfx::Rect WindowPositioner::SmartPopupPosition(const gfx::Rect& old_pos,
          windows[i]->GetLayer()->GetTargetOpacity() == 1.0)) {
       wm::WindowState* window_state = windows[i]->GetWindowState();
       // When any window is maximized we cannot find any free space.
-      if (window_state->IsMaximizedOrFullscreen())
+      if (window_state->IsMaximizedOrFullscreenOrPinned())
         return gfx::Rect(0, 0, 0, 0);
       if (window_state->IsNormalOrSnapped())
         regions.push_back(&windows[i]->GetBounds());

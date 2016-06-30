@@ -9,6 +9,7 @@
 
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/json/json_writer.h"
@@ -204,7 +205,7 @@ TEST(ValuesUtilTest, PopIntArray) {
   // Create the expected value.
   std::unique_ptr<base::ListValue> list_value(new base::ListValue);
   for (size_t i = 0; i != data.size(); ++i)
-    list_value->Append(new base::FundamentalValue(data[i]));
+    list_value->AppendInteger(data[i]);
 
   // Pop an int32_t array.
   MessageReader reader(response.get());
@@ -227,7 +228,7 @@ TEST(ValuesUtilTest, PopStringArray) {
   // Create the expected value.
   std::unique_ptr<base::ListValue> list_value(new base::ListValue);
   for (size_t i = 0; i != data.size(); ++i)
-    list_value->Append(new base::StringValue(data[i]));
+    list_value->AppendString(data[i]);
 
   // Pop a string array.
   MessageReader reader(response.get());
@@ -254,10 +255,10 @@ TEST(ValuesUtilTest, PopStruct) {
 
   // Create the expected value.
   base::ListValue list_value;
-  list_value.Append(new base::FundamentalValue(kBoolValue));
-  list_value.Append(new base::FundamentalValue(kInt32Value));
-  list_value.Append(new base::FundamentalValue(kDoubleValue));
-  list_value.Append(new base::StringValue(kStringValue));
+  list_value.AppendBoolean(kBoolValue);
+  list_value.AppendInteger(kInt32Value);
+  list_value.AppendDouble(kDoubleValue);
+  list_value.AppendString(kStringValue);
 
   // Pop a struct.
   MessageReader reader(response.get());
@@ -613,11 +614,12 @@ TEST(ValuesUtilTest, AppendList) {
   const double kDoubleValue = 4.9;
   const std::string kStringValue = "fifty";
 
-  base::ListValue* list_value = new base::ListValue();
+  std::unique_ptr<base::ListValue> list_value(new base::ListValue());
   list_value->AppendBoolean(kBoolValue);
   list_value->AppendInteger(kInt32Value);
 
-  base::DictionaryValue* dictionary_value = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> dictionary_value(
+      new base::DictionaryValue());
   dictionary_value->SetBoolean(kKey1, kBoolValue);
   dictionary_value->SetInteger(kKey2, kDoubleValue);
 
@@ -626,8 +628,8 @@ TEST(ValuesUtilTest, AppendList) {
   test_list.AppendInteger(kInt32Value);
   test_list.AppendDouble(kDoubleValue);
   test_list.AppendString(kStringValue);
-  test_list.Append(list_value);  // takes ownership
-  test_list.Append(dictionary_value);  // takes ownership
+  test_list.Append(std::move(list_value));
+  test_list.Append(std::move(dictionary_value));
 
   std::unique_ptr<Response> response(Response::CreateEmpty());
   MessageWriter writer(response.get());
@@ -656,11 +658,12 @@ TEST(ValuesUtilTest, AppendListAsVariant) {
   const double kDoubleValue = 4.9;
   const std::string kStringValue = "fifty";
 
-  base::ListValue* list_value = new base::ListValue();
+  std::unique_ptr<base::ListValue> list_value(new base::ListValue());
   list_value->AppendBoolean(kBoolValue);
   list_value->AppendInteger(kInt32Value);
 
-  base::DictionaryValue* dictionary_value = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> dictionary_value(
+      new base::DictionaryValue());
   dictionary_value->SetBoolean(kKey1, kBoolValue);
   dictionary_value->SetInteger(kKey2, kDoubleValue);
 
@@ -669,8 +672,8 @@ TEST(ValuesUtilTest, AppendListAsVariant) {
   test_list.AppendInteger(kInt32Value);
   test_list.AppendDouble(kDoubleValue);
   test_list.AppendString(kStringValue);
-  test_list.Append(list_value);  // takes ownership
-  test_list.Append(dictionary_value);  // takes ownership
+  test_list.Append(std::move(list_value));
+  test_list.Append(std::move(dictionary_value));
 
   std::unique_ptr<Response> response(Response::CreateEmpty());
   MessageWriter writer(response.get());

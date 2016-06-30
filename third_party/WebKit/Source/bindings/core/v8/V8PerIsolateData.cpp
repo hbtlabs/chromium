@@ -37,6 +37,7 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "public/platform/Platform.h"
 #include "wtf/LeakAnnotations.h"
+#include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace blink {
@@ -54,8 +55,8 @@ static void microtasksCompletedCallback(v8::Isolate* isolate)
 }
 
 V8PerIsolateData::V8PerIsolateData()
-    : m_isolateHolder(adoptPtr(new gin::IsolateHolder()))
-    , m_stringCache(adoptPtr(new StringCache(isolate())))
+    : m_isolateHolder(wrapUnique(new gin::IsolateHolder()))
+    , m_stringCache(wrapUnique(new StringCache(isolate())))
     , m_hiddenValue(V8HiddenValue::create())
     , m_privateProperty(V8PrivateProperty::create())
     , m_constructorMode(ConstructorMode::CreateNewObject)
@@ -90,9 +91,9 @@ v8::Isolate* V8PerIsolateData::initialize()
     return isolate;
 }
 
-void V8PerIsolateData::enableIdleTasks(v8::Isolate* isolate, PassOwnPtr<gin::V8IdleTaskRunner> taskRunner)
+void V8PerIsolateData::enableIdleTasks(v8::Isolate* isolate, std::unique_ptr<gin::V8IdleTaskRunner> taskRunner)
 {
-    from(isolate)->m_isolateHolder->EnableIdleTasks(std::unique_ptr<gin::V8IdleTaskRunner>(taskRunner.leakPtr()));
+    from(isolate)->m_isolateHolder->EnableIdleTasks(std::unique_ptr<gin::V8IdleTaskRunner>(taskRunner.release()));
 }
 
 void V8PerIsolateData::useCounterCallback(v8::Isolate* isolate, v8::Isolate::UseCounterFeature feature)
@@ -163,6 +164,36 @@ void V8PerIsolateData::useCounterCallback(v8::Isolate* isolate, v8::Isolate::Use
         break;
     case v8::Isolate::kForInInitializer:
         blinkFeature = UseCounter::V8ForInInitializer;
+        break;
+    case v8::Isolate::kArrayProtectorDirtied:
+        blinkFeature = UseCounter::V8ArrayProtectorDirtied;
+        break;
+    case v8::Isolate::kArraySpeciesModified:
+        blinkFeature = UseCounter::V8ArraySpeciesModified;
+        break;
+    case v8::Isolate::kArrayPrototypeConstructorModified:
+        blinkFeature = UseCounter::V8ArrayPrototypeConstructorModified;
+        break;
+    case v8::Isolate::kArrayInstanceProtoModified:
+        blinkFeature = UseCounter::V8ArrayInstanceProtoModified;
+        break;
+    case v8::Isolate::kArrayInstanceConstructorModified:
+        blinkFeature = UseCounter::V8ArrayInstanceConstructorModified;
+        break;
+    case v8::Isolate::kLegacyFunctionDeclaration:
+        blinkFeature = UseCounter::V8LegacyFunctionDeclaration;
+        break;
+    case v8::Isolate::kRegExpPrototypeSourceGetter:
+        blinkFeature = UseCounter::V8RegExpPrototypeSourceGetter;
+        break;
+    case v8::Isolate::kRegExpPrototypeOldFlagGetter:
+        blinkFeature = UseCounter::V8RegExpPrototypeOldFlagGetter;
+        break;
+    case v8::Isolate::kDecimalWithLeadingZeroInStrictMode:
+        blinkFeature = UseCounter::V8DecimalWithLeadingZeroInStrictMode;
+        break;
+    case v8::Isolate::kLegacyDateParser:
+        blinkFeature = UseCounter::V8LegacyDateParser;
         break;
     default:
         // This can happen if V8 has added counters that this version of Blink
@@ -316,14 +347,14 @@ v8::Local<v8::Object> V8PerIsolateData::findInstanceInPrototypeChain(const Wrapp
     return v8::Local<v8::Object>::Cast(value)->FindInstanceInPrototypeChain(templ);
 }
 
-void V8PerIsolateData::addEndOfScopeTask(PassOwnPtr<EndOfScopeTask> task)
+void V8PerIsolateData::addEndOfScopeTask(std::unique_ptr<EndOfScopeTask> task)
 {
     m_endOfScopeTasks.append(std::move(task));
 }
 
 void V8PerIsolateData::runEndOfScopeTasks()
 {
-    Vector<OwnPtr<EndOfScopeTask>> tasks;
+    Vector<std::unique_ptr<EndOfScopeTask>> tasks;
     tasks.swap(m_endOfScopeTasks);
     for (const auto& task : tasks)
         task->run();
@@ -335,7 +366,7 @@ void V8PerIsolateData::clearEndOfScopeTasks()
     m_endOfScopeTasks.clear();
 }
 
-void V8PerIsolateData::setThreadDebugger(PassOwnPtr<ThreadDebugger> threadDebugger)
+void V8PerIsolateData::setThreadDebugger(std::unique_ptr<ThreadDebugger> threadDebugger)
 {
     ASSERT(!m_threadDebugger);
     m_threadDebugger = std::move(threadDebugger);

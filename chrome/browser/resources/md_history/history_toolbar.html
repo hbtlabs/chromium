@@ -15,6 +15,7 @@
     <style include="shared-style">
       :host {
         color: #fff;
+        display: block;
         transition: background-color 150ms;
         width: 100%;
       }
@@ -33,17 +34,13 @@
       }
 
       #toolbar-container {
-        height: 56px;
+        height: var(--toolbar-height);
       }
 
       #overlay-buttons {
         margin: 0 auto;
         max-width: var(--card-max-width);
         padding: 0 var(--card-padding-side);
-      }
-
-      #overlay-wrapper {
-        -webkit-margin-start: var(--side-bar-width);
       }
 
       #number-selected {
@@ -72,14 +69,13 @@
 
       paper-tabs {
         --paper-tabs-selection-bar-color: var(--google-blue-500);
-        height: 45px;
+        height: calc(var(--toolbar-grouped-height) - var(--toolbar-height));
         min-width: 300px;
       }
 
       #grouped-buttons-container {
         @apply(--layout-center);
         @apply(--layout-horizontal);
-        -webkit-margin-start: var(--side-bar-width);
       }
 
       #grouped-range-buttons {
@@ -96,7 +92,7 @@
         transition: opacity 150ms;
       }
 
-      :host([grouped-range="0"]) #grouped-nav-container {
+      :host([grouped-range='0']) #grouped-nav-container {
         opacity: 0;
         pointer-events: none;
       }
@@ -117,7 +113,8 @@
     <div id="toolbar-container">
       <cr-toolbar id="main-toolbar" page-name="$i18n{title}"
           clear-label="$i18n{clearSearch}" search-prompt="$i18n{searchPrompt}"
-          hidden$="[[itemsSelected_]]">
+          hidden$="[[itemsSelected_]]" spinner-active="[[spinnerActive]]"
+          on-search-changed="onSearchChanged_">
       </cr-toolbar>
       <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
         <div id="overlay-buttons">

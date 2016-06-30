@@ -611,6 +611,7 @@ class Enum(Kind):
   def __init__(self, name=None, module=None, attributes=None):
     self.module = module
     self.name = name
+    self.native_only = False
     self.imported_from = None
     if name is not None:
       spec = 'x:' + name
@@ -779,6 +780,11 @@ def IsAnyHandleKind(kind):
           IsMessagePipeKind(kind) or
           IsSharedBufferKind(kind) or
           IsInterfaceRequestKind(kind))
+
+
+def IsAnyHandleOrInterfaceKind(kind):
+  return (IsAnyHandleKind(kind) or IsInterfaceKind(kind) or
+          IsAssociatedKind(kind))
 
 
 def IsAssociatedKind(kind):

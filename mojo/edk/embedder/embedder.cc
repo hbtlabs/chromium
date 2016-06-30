@@ -15,6 +15,7 @@
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "mojo/edk/embedder/embedder_internal.h"
+#include "mojo/edk/embedder/entrypoints.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/process_delegate.h"
 #include "mojo/edk/system/core.h"
@@ -44,9 +45,17 @@ void SetMaxMessageSize(size_t bytes) {
 void ChildProcessLaunched(base::ProcessHandle child_process,
                           ScopedPlatformHandle server_pipe,
                           const std::string& child_token) {
+  ChildProcessLaunched(child_process, std::move(server_pipe),
+                       child_token, ProcessErrorCallback());
+}
+
+void ChildProcessLaunched(base::ProcessHandle child_process,
+                          ScopedPlatformHandle server_pipe,
+                          const std::string& child_token,
+                          const ProcessErrorCallback& process_error_callback) {
   CHECK(internal::g_core);
   internal::g_core->AddChild(child_process, std::move(server_pipe),
-                             child_token);
+                             child_token, process_error_callback);
 }
 
 void ChildProcessLaunchFailed(const std::string& child_token) {
@@ -68,6 +77,10 @@ void SetParentPipeHandleFromCommandLine() {
 }
 
 void Init() {
+  MojoSystemThunks thunks = MakeSystemThunks();
+  size_t expected_size = MojoEmbedderSetSystemThunks(&thunks);
+  DCHECK_EQ(expected_size, sizeof(thunks));
+
   internal::g_core = new Core();
 }
 
@@ -157,6 +170,11 @@ std::string GenerateRandomToken() {
   crypto::RandBytes(random_bytes, 16);
 #endif
   return base::HexEncode(random_bytes, 16);
+}
+
+MojoResult SetProperty(MojoPropertyType type, const void* value) {
+  CHECK(internal::g_core);
+  return internal::g_core->SetProperty(type, value);
 }
 
 }  // namespace edk

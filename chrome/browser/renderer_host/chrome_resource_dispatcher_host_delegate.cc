@@ -48,7 +48,6 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
@@ -69,6 +68,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
+#include "net/ssl/client_cert_store.h"
 #include "net/url_request/url_request.h"
 
 #if !defined(DISABLE_NACL)
@@ -313,8 +313,8 @@ void LogMainFrameMetricsOnUIThread(
         template_url_service->GetDefaultSearchProvider();
     if (!default_provider)
       return;
-    if (TemplateURLPrepopulateData::GetEngineType(
-            *default_provider, template_url_service->search_terms_data()) ==
+    if (default_provider->GetEngineType(
+            template_url_service->search_terms_data()) ==
         SearchEngineType::SEARCH_ENGINE_GOOGLE) {
       if (net_error == net::OK) {
         UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Google.RequestTime2.Success",
@@ -479,7 +479,6 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
     content::ResourceContext* resource_context,
     int child_id,
     int route_id,
-    int request_id,
     bool is_content_initiated,
     bool must_download,
     ScopedVector<content::ResourceThrottle>* throttles) {
@@ -497,7 +496,7 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
 #if BUILDFLAG(ANDROID_JAVA_UI)
     throttles->push_back(
         new chrome::InterceptDownloadResourceThrottle(
-            request, child_id, route_id, request_id, must_download));
+            request, child_id, route_id, must_download));
 #endif
   }
 
@@ -849,4 +848,11 @@ ChromeResourceDispatcherHostDelegate::GetNavigationData(
   if (data_reduction_proxy_data)
     data->SetDataReductionProxyData(data_reduction_proxy_data->DeepCopy());
   return data;
+}
+
+std::unique_ptr<net::ClientCertStore>
+ChromeResourceDispatcherHostDelegate::CreateClientCertStore(
+    content::ResourceContext* resource_context) {
+  return ProfileIOData::FromResourceContext(resource_context)->
+      CreateClientCertStore();
 }

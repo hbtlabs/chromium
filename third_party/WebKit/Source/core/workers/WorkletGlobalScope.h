@@ -13,6 +13,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "platform/heap/Handle.h"
+#include <memory>
 
 namespace blink {
 
@@ -47,14 +48,14 @@ public:
     using SecurityContext::contentSecurityPolicy;
 
     DOMTimerCoordinator* timers() final { NOTREACHED(); return nullptr; } // WorkletGlobalScopes don't have timers.
-    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String&) override
     {
         // TODO(ikilpatrick): implement.
         NOTREACHED();
     }
 
     void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
-    void logExceptionToConsole(const String& errorMessage, PassOwnPtr<SourceLocation>) final;
+    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) final;
 
     DECLARE_VIRTUAL_TRACE();
 

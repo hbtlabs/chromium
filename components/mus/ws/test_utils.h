@@ -17,10 +17,11 @@
 #include "components/mus/ws/platform_display.h"
 #include "components/mus/ws/platform_display_factory.h"
 #include "components/mus/ws/test_change_tracker.h"
+#include "components/mus/ws/user_activity_monitor.h"
 #include "components/mus/ws/user_display_manager.h"
 #include "components/mus/ws/user_id.h"
-#include "components/mus/ws/window_manager_factory_registry.h"
 #include "components/mus/ws/window_manager_state.h"
+#include "components/mus/ws/window_manager_window_tree_factory_set.h"
 #include "components/mus/ws/window_server_delegate.h"
 #include "components/mus/ws/window_tree.h"
 #include "components/mus/ws/window_tree_binding.h"
@@ -31,18 +32,19 @@ namespace test {
 
 // Collection of utilities useful in creating mus tests.
 
-class WindowManagerFactoryRegistryTestApi {
+class WindowManagerWindowTreeFactorySetTestApi {
  public:
-  explicit WindowManagerFactoryRegistryTestApi(
-      WindowManagerFactoryRegistry* registry);
-  ~WindowManagerFactoryRegistryTestApi();
+  explicit WindowManagerWindowTreeFactorySetTestApi(
+      WindowManagerWindowTreeFactorySet*
+          window_manager_window_tree_factory_set);
+  ~WindowManagerWindowTreeFactorySetTestApi();
 
-  void AddService(const UserId& user_id, mojom::WindowManagerFactory* factory);
+  void Add(const UserId& user_id);
 
  private:
-  WindowManagerFactoryRegistry* registry_;
+  WindowManagerWindowTreeFactorySet* window_manager_window_tree_factory_set_;
 
-  DISALLOW_COPY_AND_ASSIGN(WindowManagerFactoryRegistryTestApi);
+  DISALLOW_COPY_AND_ASSIGN(WindowManagerWindowTreeFactorySetTestApi);
 };
 
 // -----------------------------------------------------------------------------
@@ -66,6 +68,23 @@ class UserDisplayManagerTestApi {
 
 // -----------------------------------------------------------------------------
 
+class UserActivityMonitorTestApi {
+ public:
+  explicit UserActivityMonitorTestApi(UserActivityMonitor* monitor)
+      : monitor_(monitor) {}
+
+  void SetTimerTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    monitor_->idle_timer_.SetTaskRunner(task_runner);
+  }
+
+ private:
+  UserActivityMonitor* monitor_;
+  DISALLOW_COPY_AND_ASSIGN(UserActivityMonitorTestApi);
+};
+
+// -----------------------------------------------------------------------------
+
 class WindowTreeTestApi {
  public:
   explicit WindowTreeTestApi(WindowTree* tree);
@@ -75,9 +94,14 @@ class WindowTreeTestApi {
   void set_window_manager_internal(mojom::WindowManager* wm_internal) {
     tree_->window_manager_internal_ = wm_internal;
   }
-
-  void ClearAck() { tree_->event_ack_id_ = 0; }
+  void AckOldestEvent() {
+    tree_->OnWindowInputEventAck(tree_->event_ack_id_,
+                                 mojom::EventResult::UNHANDLED);
+  }
   void EnableCapture() { tree_->event_ack_id_ = 1u; }
+  void AckLastEvent(mojom::EventResult result) {
+    tree_->OnWindowInputEventAck(tree_->event_ack_id_, result);
+  }
 
   void SetEventObserver(mojom::EventMatcherPtr matcher,
                         uint32_t event_observer_id);
@@ -151,15 +175,26 @@ class WindowManagerStateTestApi {
   ~WindowManagerStateTestApi() {}
 
   void DispatchInputEventToWindow(ServerWindow* target,
-                                  bool in_nonclient_area,
+                                  ClientSpecificId client_id,
                                   const ui::Event& event,
                                   Accelerator* accelerator) {
-    wms_->DispatchInputEventToWindow(
-        target, in_nonclient_area, event, accelerator);
+    wms_->DispatchInputEventToWindow(target, client_id, event, accelerator);
   }
+
+  ClientSpecificId GetEventTargetClientId(ServerWindow* window,
+                                          bool in_nonclient_area) {
+    return wms_->GetEventTargetClientId(window, in_nonclient_area);
+  }
+
+  void ProcessEvent(const ui::Event& event) { wms_->ProcessEvent(event); }
 
   void OnEventAckTimeout(ClientSpecificId client_id) {
     wms_->OnEventAckTimeout(client_id);
+  }
+
+  ClientSpecificId GetEventTargetClientId(const ServerWindow* window,
+                                          bool in_nonclient_area) {
+    return wms_->GetEventTargetClientId(window, in_nonclient_area);
   }
 
   mojom::WindowTree* tree_awaiting_input_ack() {
@@ -232,6 +267,10 @@ class TestWindowManager : public mojom::WindowManager {
 
  private:
   // WindowManager:
+  void OnConnect(uint16_t client_id) override {}
+  void WmNewDisplayAdded(mus::mojom::DisplayPtr display,
+                         mus::mojom::WindowDataPtr root,
+                         bool drawn) override {}
   void WmSetBounds(uint32_t change_id,
                    uint32_t window_id,
                    const gfx::Rect& bounds) override {}
@@ -245,7 +284,7 @@ class TestWindowManager : public mojom::WindowManager {
       mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
-  void OnAccelerator(uint32_t id, mojom::EventPtr event) override;
+  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override;
 
   bool got_create_top_level_window_;
   uint32_t change_id_;
@@ -317,9 +356,9 @@ class TestWindowTreeClient : public mus::mojom::WindowTreeClient {
                                      mojo::Array<uint8_t> new_data) override;
   void OnWindowInputEvent(uint32_t event_id,
                           uint32_t window,
-                          mojom::EventPtr event,
+                          std::unique_ptr<ui::Event> event,
                           uint32_t event_observer_id) override;
-  void OnEventObserved(mojom::EventPtr event,
+  void OnEventObserved(std::unique_ptr<ui::Event> event,
                        uint32_t event_observer_id) override;
   void OnWindowFocused(uint32_t focused_window_id) override;
   void OnWindowPredefinedCursorChanged(uint32_t window_id,
@@ -472,21 +511,6 @@ class WindowEventTargetingHelper {
 
 // -----------------------------------------------------------------------------
 
-class TestWindowManagerFactory : public mojom::WindowManagerFactory {
- public:
-  TestWindowManagerFactory();
-  ~TestWindowManagerFactory() override;
-
-  // mojom::WindowManagerFactory:
-  void CreateWindowManager(mus::mojom::DisplayPtr display,
-                           mus::mojom::WindowTreeClientRequest client) override;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestWindowManagerFactory);
-};
-
-// -----------------------------------------------------------------------------
-
 // Returns the first and only root of |tree|. If |tree| has zero or more than
 // one root returns null.
 ServerWindow* FirstRoot(WindowTree* tree);
@@ -502,6 +526,9 @@ ClientWindowId ClientWindowIdForWindow(WindowTree* tree,
 // Creates a new visible window as a child of the single root of |tree|.
 // |client_id| set to the ClientWindowId of the new window.
 ServerWindow* NewWindowInTree(WindowTree* tree, ClientWindowId* client_id);
+ServerWindow* NewWindowInTreeWithParent(WindowTree* tree,
+                                        ServerWindow* parent,
+                                        ClientWindowId* client_id);
 
 }  // namespace test
 }  // namespace ws

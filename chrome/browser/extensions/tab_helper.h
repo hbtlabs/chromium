@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/scoped_observer.h"
 #include "chrome/browser/extensions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/extension_reenabler.h"
 #include "chrome/common/extensions/webstore_install_result.h"
@@ -22,6 +23,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/browser/extension_registry_observer.h"
 #include "extensions/browser/script_execution_observer.h"
 #include "extensions/browser/script_executor.h"
 #include "extensions/common/stack_frame.h"
@@ -47,7 +49,8 @@ class WebstoreInlineInstallerFactory;
 
 // Per-tab extension helper. Also handles non-extension apps.
 class TabHelper : public content::WebContentsObserver,
-                  public extensions::ExtensionFunctionDispatcher::Delegate,
+                  public ExtensionFunctionDispatcher::Delegate,
+                  public ExtensionRegistryObserver,
                   public base::SupportsWeakPtr<TabHelper>,
                   public content::NotificationObserver,
                   public content::WebContentsUserData<TabHelper> {
@@ -123,6 +126,8 @@ class TabHelper : public content::WebContentsObserver,
       WebstoreInlineInstallerFactory* factory);
 
  private:
+  class InlineInstallObserver;
+
   // Utility function to invoke member functions on all relevant
   // ContentRulesRegistries.
   template <class Func>
@@ -160,6 +165,11 @@ class TabHelper : public content::WebContentsObserver,
   extensions::WindowController* GetExtensionWindowController() const override;
   content::WebContents* GetAssociatedWebContents() const override;
 
+  // ExtensionRegistryObserver:
+  void OnExtensionUnloaded(content::BrowserContext* browser_context,
+                           const Extension* extension,
+                           UnloadedExtensionInfo::Reason reason) override;
+
   // Message handlers.
   void OnDidGetWebApplicationInfo(const WebApplicationInfo& info);
   void OnInlineWebstoreInstall(content::RenderFrameHost* host,
@@ -190,6 +200,7 @@ class TabHelper : public content::WebContentsObserver,
   // WebstoreStandaloneInstaller::Callback.
   void OnInlineInstallComplete(int install_id,
                                int return_route_id,
+                               const std::string& extension_id,
                                bool success,
                                const std::string& error,
                                webstore_install::Result result);
@@ -197,6 +208,7 @@ class TabHelper : public content::WebContentsObserver,
   // ExtensionReenabler::Callback.
   void OnReenableComplete(int install_id,
                           int return_route_id,
+                          const std::string& extension_id,
                           ExtensionReenabler::ReenableResult result);
 
   // content::NotificationObserver.
@@ -258,6 +270,17 @@ class TabHelper : public content::WebContentsObserver,
 
   // The reenable prompt for disabled extensions, if any.
   std::unique_ptr<ExtensionReenabler> extension_reenabler_;
+
+  ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
+      registry_observer_;
+
+  // Map of extension id -> InlineInstallObserver for inline installations that
+  // have progress listeners.
+  std::map<std::string, std::unique_ptr<InlineInstallObserver>>
+      install_observers_;
+
+  // The set of extension ids that are currently being installed.
+  std::set<std::string> pending_inline_installations_;
 
   // Vend weak pointers that can be invalidated to stop in-progress loads.
   base::WeakPtrFactory<TabHelper> image_loader_ptr_factory_;

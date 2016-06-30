@@ -17,43 +17,63 @@ import org.chromium.chrome.browser.ChromeBackgroundService;
  * The background scheduler class is for setting GCM Network Manager tasks.
  */
 public class BackgroundScheduler {
-    /** Bundle key for the timestamp in milliseconds when the request started. */
-    public static final String DATE_TAG = "Date";
     private static final long ONE_WEEK_IN_SECONDS = 60 * 60 * 24 * 7;
+    private static final long NO_DELAY = 0;
+    private static final boolean OVERWRITE = true;
 
     /**
      * For the given Triggering conditions, start a new GCM Network Manager request.
      */
-    public static void schedule(Context context) {
-        // Get the GCM Network Scheduler.
-        GcmNetworkManager gcmNetworkManager = GcmNetworkManager.getInstance(context);
+    public static void schedule(Context context, TriggerConditions triggerConditions) {
+        schedule(context, triggerConditions, NO_DELAY, OVERWRITE);
+    }
 
-        // TODO(petewil): Move the bundle packing and unpacking into a new SchedulerBridge
-        // class which can be mocked, and calls the static BackgroundSchdeulerBridge.
-        // TODO(petewil): Add the triggering conditions into the argument bundle.
-        // Triggering conditions will include network state and charging requirements, maybe
-        // also battery percentage.
-        Bundle taskExtras = new Bundle();
-        taskExtras.putLong(DATE_TAG, System.currentTimeMillis());
-
-        Task task = new OneoffTask.Builder()
-                .setService(ChromeBackgroundService.class)
-                .setExecutionWindow(0, ONE_WEEK_IN_SECONDS)
-                .setTag(OfflinePageUtils.TASK_TAG)
-                .setUpdateCurrent(true)
-                .setRequiredNetwork(Task.NETWORK_STATE_CONNECTED)
-                .setRequiresCharging(false)
-                .setExtras(taskExtras)
-                .setPersisted(true)
-                .build();
-
-        gcmNetworkManager.schedule(task);
+    /**
+     * If there is no currently scheduled task, then start a GCM Network Manager request
+     * for the given Triggering conditions but delayed to run after {@code delayStartSecs}.
+     * Typically, the Request Coordinator will overwrite this task after task processing
+     * and/or queue updates. This is a backup task in case processing is killed by the
+     * system.
+     */
+    public static void backupSchedule(
+            Context context, TriggerConditions triggerConditions, long delayStartSecs) {
+        schedule(context, triggerConditions, delayStartSecs, !OVERWRITE);
     }
 
     /**
      * Cancel any outstanding GCM Network Manager requests.
      */
     public static void unschedule(Context context) {
-        // TODO(petewil): Take our task off the task queue.
+        // Get the GCM Network Scheduler.
+        GcmNetworkManager gcmNetworkManager = GcmNetworkManager.getInstance(context);
+        gcmNetworkManager.cancelTask(OfflinePageUtils.TASK_TAG, ChromeBackgroundService.class);
+    }
+
+    /**
+     * For the given Triggering conditions, start a new GCM Network Manager request allowed
+     * to run after {@code delayStartSecs} seconds.
+     */
+    private static void schedule(Context context, TriggerConditions triggerConditions,
+            long delayStartSecs, boolean overwrite) {
+        // Get the GCM Network Scheduler.
+        GcmNetworkManager gcmNetworkManager = GcmNetworkManager.getInstance(context);
+
+        Bundle taskExtras = new Bundle();
+        TaskExtrasPacker.packTimeInBundle(taskExtras);
+        TaskExtrasPacker.packTriggerConditionsInBundle(taskExtras, triggerConditions);
+
+        Task task = new OneoffTask.Builder()
+                            .setService(ChromeBackgroundService.class)
+                            .setExecutionWindow(delayStartSecs, ONE_WEEK_IN_SECONDS)
+                            .setTag(OfflinePageUtils.TASK_TAG)
+                            .setUpdateCurrent(overwrite)
+                            .setRequiredNetwork(triggerConditions.requireUnmeteredNetwork()
+                                            ? Task.NETWORK_STATE_UNMETERED
+                                            : Task.NETWORK_STATE_CONNECTED)
+                            .setRequiresCharging(triggerConditions.requirePowerConnected())
+                            .setExtras(taskExtras)
+                            .build();
+
+        gcmNetworkManager.schedule(task);
     }
 }

@@ -9,8 +9,10 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
+#include "media/base/media_log.h"
 #include "media/base/stream_parser.h"
 #include "media/base/stream_parser_buffer.h"
 
@@ -189,8 +191,6 @@ class MEDIA_EXPORT MediaSourceState {
 
   // The object used to parse appended data.
   std::unique_ptr<StreamParser> stream_parser_;
-
-  std::unique_ptr<MediaTracks> media_tracks_;
 
   ChunkDemuxerStream* audio_;  // Not owned by |this|.
   ChunkDemuxerStream* video_;  // Not owned by |this|.

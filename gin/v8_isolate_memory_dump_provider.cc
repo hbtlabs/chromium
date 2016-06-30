@@ -4,6 +4,7 @@
 
 #include "gin/v8_isolate_memory_dump_provider.h"
 
+#include <inttypes.h>
 #include <stddef.h>
 
 #include "base/strings/stringprintf.h"
@@ -84,8 +85,9 @@ void DumpCodeStatistics(
 void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* process_memory_dump) {
-  std::string dump_base_name =
-      base::StringPrintf("v8/isolate_%p", isolate_holder_->isolate());
+  std::string dump_base_name = base::StringPrintf(
+      "v8/isolate_0x%" PRIXPTR,
+      reinterpret_cast<uintptr_t>(isolate_holder_->isolate()));
 
   // Dump statistics of the heap's spaces.
   std::string space_name_prefix = dump_base_name + "/heap_spaces";
@@ -110,7 +112,8 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
 
     std::string space_dump_name =
         space_name_prefix + "/" + space_statistics.space_name();
-    auto space_dump = process_memory_dump->CreateAllocatorDump(space_dump_name);
+    auto* space_dump =
+        process_memory_dump->CreateAllocatorDump(space_dump_name);
     space_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                           base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                           space_physical_size);
@@ -126,7 +129,8 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
 
   // Compute the rest of the memory, not accounted by the spaces above.
   std::string other_spaces_name = space_name_prefix + "/other_spaces";
-  auto other_dump = process_memory_dump->CreateAllocatorDump(other_spaces_name);
+  auto* other_dump =
+      process_memory_dump->CreateAllocatorDump(other_spaces_name);
 
   other_dump->AddScalar(
       base::trace_event::MemoryAllocatorDump::kNameSize,
@@ -146,7 +150,7 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
   // so we add an extra dump to avoid mismatches w.r.t. the total
   // resident values.
   if (heap_statistics.does_zap_garbage()) {
-    auto zap_dump = process_memory_dump->CreateAllocatorDump(
+    auto* zap_dump = process_memory_dump->CreateAllocatorDump(
         dump_base_name + "/zapped_for_debug");
     zap_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
@@ -156,7 +160,7 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
 
   // Dump statistics about malloced memory.
   std::string malloc_name = dump_base_name + "/malloc";
-  auto malloc_dump = process_memory_dump->CreateAllocatorDump(malloc_name);
+  auto* malloc_dump = process_memory_dump->CreateAllocatorDump(malloc_name);
   malloc_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                          base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                          heap_statistics.malloced_memory());
@@ -170,7 +174,7 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
 
   // Add an empty row for the heap_spaces. This is to keep the shape of the
   // dump stable, whether code stats are enabled or not.
-  auto heap_spaces_dump =
+  auto* heap_spaces_dump =
       process_memory_dump->CreateAllocatorDump(space_name_prefix);
 
   // Dump object statistics only for detailed dumps.
@@ -196,7 +200,7 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
         object_name_prefix + "/" + object_statistics.object_type();
     if (object_statistics.object_sub_type()[0] != '\0')
       dump_name += std::string("/") + object_statistics.object_sub_type();
-    auto object_dump = process_memory_dump->CreateAllocatorDump(dump_name);
+    auto* object_dump = process_memory_dump->CreateAllocatorDump(dump_name);
 
     object_dump->AddScalar(
         base::trace_event::MemoryAllocatorDump::kNameObjectCount,
@@ -210,9 +214,9 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
 
   if (process_memory_dump->GetAllocatorDump(object_name_prefix +
                                             "/CODE_TYPE")) {
-    auto code_kind_dump = process_memory_dump->CreateAllocatorDump(
+    auto* code_kind_dump = process_memory_dump->CreateAllocatorDump(
         object_name_prefix + "/CODE_TYPE/CODE_KIND");
-    auto code_age_dump = process_memory_dump->CreateAllocatorDump(
+    auto* code_age_dump = process_memory_dump->CreateAllocatorDump(
         object_name_prefix + "/CODE_TYPE/CODE_AGE");
     process_memory_dump->AddOwnershipEdge(code_kind_dump->guid(),
                                           code_age_dump->guid());

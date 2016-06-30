@@ -90,7 +90,6 @@ enum IPCMessageStart {
   MediaStreamTrackMetricsHostMsgStart,
   ChromeExtensionMsgStart,
   TranslateMsgStart,
-  CldDataProviderMsgStart,
   PushMessagingMsgStart,
   GinJavaBridgeMsgStart,
   ChromeUtilityPrintingMsgStart,
@@ -125,12 +124,12 @@ enum IPCMessageStart {
   ArcInstanceMsgStart,
   ArcInstanceHostMsgStart,
   DistillerMsgStart,
-  StartupMetricMsgStart,
   ArcCameraMsgStart,
   DWriteFontProxyMsgStart,
   MediaPlayerDelegateMsgStart,
   SurfaceViewManagerMsgStart,
   ExtensionWorkerMsgStart,
+  SubresourceFilterMsgStart,
   LastIPCMsgStart  // Must come last.
 };
 

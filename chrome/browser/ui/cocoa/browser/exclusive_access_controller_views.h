@@ -14,6 +14,7 @@
 
 #import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views_context.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -43,8 +44,9 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   // Shows the bubble once the NSWindow has received -windowDidEnterFullScreen:.
   void Show();
 
-  // Shows the new Back shortcut bubble.
-  void ShowNewBackShortcutBubble(bool forward);
+  // See comments on BrowserWindow::{MaybeShow,Hide}NewBackShortcutBubble().
+  void MaybeShowNewBackShortcutBubble(bool forward);
+  void HideNewBackShortcutBubble();
 
   // Closes any open bubble.
   void Destroy();
@@ -55,13 +57,10 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   // ExclusiveAccessContext:
   Profile* GetProfile() override;
   bool IsFullscreen() const override;
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override;
+  void UpdateUIForTabFullscreen(TabFullscreenState state) override;
   void UpdateFullscreenToolbar() override;
-  bool IsFullscreenWithToolbar() const override;
   void EnterFullscreen(const GURL& url,
-                       ExclusiveAccessBubbleType type,
-                       bool with_toolbar) override;
+                       ExclusiveAccessBubbleType type) override;
   void ExitFullscreen() override;
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
@@ -102,6 +101,7 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   // This class also manages the new Back shortcut bubble (which functions the
   // same way as ExclusiveAccessBubbleViews).
   std::unique_ptr<NewBackShortcutBubble> new_back_shortcut_bubble_;
+  base::TimeTicks last_back_shortcut_press_time_;
 
   // Used to keep track of the kShowFullscreenToolbar preference.
   PrefChangeRegistrar pref_registrar_;

@@ -4,14 +4,20 @@
 
 #include "content/renderer/media/audio_device_factory.h"
 
+#include <algorithm>
+
 #include "base/logging.h"
+#include "build/build_config.h"
+#include "content/common/content_constants_internal.h"
 #include "content/renderer/media/audio_input_message_filter.h"
 #include "content/renderer/media/audio_message_filter.h"
 #include "content/renderer/media/audio_renderer_mixer_manager.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/audio/audio_input_device.h"
 #include "media/audio/audio_output_device.h"
+#include "media/base/audio_latency.h"
 #include "media/base/audio_renderer_mixer_input.h"
+#include "media/base/media_switches.h"
 #include "url/origin.h"
 
 namespace content {
@@ -20,6 +26,35 @@ namespace content {
 AudioDeviceFactory* AudioDeviceFactory::factory_ = NULL;
 
 namespace {
+#if defined(OS_WIN)
+// Due to driver deadlock issues on Windows (http://crbug/422522) there is a
+// chance device authorization response is never received from the browser side.
+// In this case we will time out, to avoid renderer hang forever waiting for
+// device authorization (http://crbug/615589). This will result in "no audio".
+const int64_t kMaxAuthorizationTimeoutMs = 900;
+#else
+const int64_t kMaxAuthorizationTimeoutMs = 0;  // No timeout.
+#endif  // defined(OS_WIN)
+
+media::AudioLatency::LatencyType GetSourceLatencyType(
+    AudioDeviceFactory::SourceType source) {
+  switch (source) {
+    case AudioDeviceFactory::kSourceWebAudioInteractive:
+      return media::AudioLatency::LATENCY_INTERACTIVE;
+    case AudioDeviceFactory::kSourceNone:
+    case AudioDeviceFactory::kSourceWebRtc:
+    case AudioDeviceFactory::kSourceNonRtcAudioTrack:
+    case AudioDeviceFactory::kSourceWebAudioBalanced:
+      return media::AudioLatency::LATENCY_RTC;
+    case AudioDeviceFactory::kSourceMediaElement:
+    case AudioDeviceFactory::kSourceWebAudioPlayback:
+      return media::AudioLatency::LATENCY_PLAYBACK;
+    case AudioDeviceFactory::kSourceWebAudioExact:
+      return media::AudioLatency::LATENCY_EXACT_MS;
+  }
+  NOTREACHED();
+  return media::AudioLatency::LATENCY_INTERACTIVE;
+}
 
 scoped_refptr<media::AudioOutputDevice> NewOutputDevice(
     int render_frame_id,
@@ -29,7 +64,11 @@ scoped_refptr<media::AudioOutputDevice> NewOutputDevice(
   AudioMessageFilter* const filter = AudioMessageFilter::Get();
   scoped_refptr<media::AudioOutputDevice> device(new media::AudioOutputDevice(
       filter->CreateAudioOutputIPC(render_frame_id), filter->io_task_runner(),
-      session_id, device_id, security_origin));
+      session_id, device_id, security_origin,
+      // Set authorization request timeout at 80% of renderer hung timeout, but
+      // no more than kMaxAuthorizationTimeout.
+      base::TimeDelta::FromMilliseconds(std::min(kHungRendererDelayMs * 8 / 10,
+                                                 kMaxAuthorizationTimeoutMs))));
   device->RequestDeviceAuthorization();
   return device;
 }
@@ -40,12 +79,12 @@ bool IsMixable(AudioDeviceFactory::SourceType source_type) {
   if (source_type == AudioDeviceFactory::kSourceMediaElement)
     return true;  // Must ALWAYS go through mixer.
 
-  // TODO(olka): make a decision for the rest of the sources basing on OS
-  // type and configuration parameters.
-  return false;
+  // Mix everything if experiment is enabled; otherwise mix nothing else.
+  return base::FeatureList::IsEnabled(media::kNewAudioRenderingMixingStrategy);
 }
 
 scoped_refptr<media::SwitchableAudioRendererSink> NewMixableSink(
+    AudioDeviceFactory::SourceType source_type,
     int render_frame_id,
     int session_id,
     const std::string& device_id,
@@ -53,7 +92,8 @@ scoped_refptr<media::SwitchableAudioRendererSink> NewMixableSink(
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   return scoped_refptr<media::AudioRendererMixerInput>(
       render_thread->GetAudioRendererMixerManager()->CreateInput(
-          render_frame_id, session_id, device_id, security_origin));
+          render_frame_id, session_id, device_id, security_origin,
+          GetSourceLatencyType(source_type)));
 }
 
 }  // namespace
@@ -85,7 +125,7 @@ AudioDeviceFactory::NewAudioRendererSink(SourceType source_type,
   }
 
   if (IsMixable(source_type))
-    return NewMixableSink(render_frame_id, session_id, device_id,
+    return NewMixableSink(source_type, render_frame_id, session_id, device_id,
                           security_origin);
 
   return NewFinalAudioRendererSink(render_frame_id, session_id, device_id,
@@ -110,7 +150,7 @@ AudioDeviceFactory::NewSwitchableAudioRendererSink(
   }
 
   if (IsMixable(source_type))
-    return NewMixableSink(render_frame_id, session_id, device_id,
+    return NewMixableSink(source_type, render_frame_id, session_id, device_id,
                           security_origin);
 
   // AudioOutputDevice is not RestartableAudioRendererSink, so we can't return

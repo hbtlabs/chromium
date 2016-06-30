@@ -9,10 +9,6 @@
 #include "platform/heap/ThreadState.h"
 #include "platform/heap/Visitor.h"
 #include "wtf/Allocator.h"
-#include "wtf/Functional.h"
-#include "wtf/HashFunctions.h"
-#include "wtf/Locker.h"
-#include "wtf/TypeTraits.h"
 
 namespace blink {
 
@@ -108,12 +104,6 @@ protected:
         return true;
     }
 
-    Derived* toDerived()
-    {
-        return static_cast<Derived*>(this);
-    }
-
-protected:
     inline void registerWeakCellWithCallback(void** cell, WeakCallback callback)
     {
         ASSERT(toDerived()->getMarkingMode() != Visitor::WeakProcessing);
@@ -121,6 +111,11 @@ protected:
         if (toDerived()->getMarkingMode() == Visitor::SnapshotMarking)
             return;
         toDerived()->heap().pushGlobalWeakCallback(cell, callback);
+    }
+
+    Derived* toDerived()
+    {
+        return static_cast<Derived*>(this);
     }
 
 private:

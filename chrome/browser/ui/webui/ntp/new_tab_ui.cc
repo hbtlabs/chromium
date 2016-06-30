@@ -96,7 +96,8 @@ void NewTabUI::OnShowBookmarkBarChanged() {
   base::StringValue attached(
       GetProfile()->GetPrefs()->GetBoolean(bookmarks::prefs::kShowBookmarkBar) ?
           "true" : "false");
-  web_ui()->CallJavascriptFunction("ntp.setBookmarkBarAttached", attached);
+  web_ui()->CallJavascriptFunctionUnsafe("ntp.setBookmarkBarAttached",
+                                         attached);
 }
 
 // static
@@ -242,7 +243,8 @@ std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyStyleSrc()
 
 std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyImgSrc()
     const {
-  return "img-src chrome-search://thumb chrome-search://thumb2 data:;";
+  return "img-src chrome-search://thumb chrome-search://thumb2 "
+      "chrome-search://theme chrome://theme data:;";
 }
 
 std::string NewTabUI::NewTabHTMLSource::GetContentSecurityPolicyChildSrc()

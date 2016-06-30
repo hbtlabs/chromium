@@ -28,33 +28,18 @@ AndroidCopyingBackingStrategy::~AndroidCopyingBackingStrategy() {}
 
 gl::ScopedJavaSurface AndroidCopyingBackingStrategy::Initialize(
     int surface_view_id) {
-  if (surface_view_id != media::VideoDecodeAccelerator::Config::kNoSurfaceID) {
+  if (surface_view_id != VideoDecodeAccelerator::Config::kNoSurfaceID) {
     LOG(ERROR) << "The copying strategy should not be initialized with a "
                   "surface id.";
     return gl::ScopedJavaSurface();
   }
 
-  // Create a texture and attach the SurfaceTexture to it.
-  glGenTextures(1, &surface_texture_id_);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, surface_texture_id_);
-
-  // Note that the target will be correctly sized, so nearest filtering is all
-  // that's needed.
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  state_provider_->GetGlDecoder()->RestoreTextureUnitBindings(0);
-  state_provider_->GetGlDecoder()->RestoreActiveTexture();
-
-  surface_texture_ = gl::SurfaceTexture::Create(surface_texture_id_);
-
+  surface_texture_ =
+      state_provider_->CreateAttachedSurfaceTexture(&surface_texture_id_);
   return gl::ScopedJavaSurface(surface_texture_.get());
 }
 
-void AndroidCopyingBackingStrategy::Cleanup(
+void AndroidCopyingBackingStrategy::BeginCleanup(
     bool have_context,
     const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) {
   DCHECK(state_provider_->ThreadChecker().CalledOnValidThread());
@@ -65,6 +50,8 @@ void AndroidCopyingBackingStrategy::Cleanup(
   if (surface_texture_id_ && have_context)
     glDeleteTextures(1, &surface_texture_id_);
 }
+
+void AndroidCopyingBackingStrategy::EndCleanup() {}
 
 scoped_refptr<gl::SurfaceTexture>
 AndroidCopyingBackingStrategy::GetSurfaceTexture() const {
@@ -81,7 +68,7 @@ gfx::Size AndroidCopyingBackingStrategy::GetPictureBufferSize() const {
 
 void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
     int32_t codec_buf_index,
-    const media::PictureBuffer& picture_buffer) {
+    const PictureBuffer& picture_buffer) {
   // Make sure that the decoder is available.
   RETURN_ON_FAILURE(state_provider_, state_provider_->GetGlDecoder().get(),
                     "Failed to get gles2 decoder instance.", ILLEGAL_STATE);
@@ -145,8 +132,7 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
       true, false, false, transform_matrix);
 }
 
-void AndroidCopyingBackingStrategy::CodecChanged(
-    media::VideoCodecBridge* codec) {
+void AndroidCopyingBackingStrategy::CodecChanged(VideoCodecBridge* codec) {
   media_codec_ = codec;
 }
 
@@ -162,7 +148,7 @@ bool AndroidCopyingBackingStrategy::ArePicturesOverlayable() {
 }
 
 void AndroidCopyingBackingStrategy::UpdatePictureBufferSize(
-    media::PictureBuffer* picture_buffer,
+    PictureBuffer* picture_buffer,
     const gfx::Size& new_size) {
   // This strategy uses 2D textures who's allocated memory is dependent on the
   // size. To update size in all places, we must:

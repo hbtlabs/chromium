@@ -29,7 +29,14 @@
         'gl_initializer_x11.cc',
         'gl_factory.cc',
         'gl_factory.h',
+        'gl_factory_android.cc',
+        'gl_factory_mac.cc',
+        'gl_factory_ozone.cc',
+        'gl_factory_win.cc',
+        'gl_factory_x11.cc',
         'gl_init_export.h',
+        'gl_surface_ozone.cc',
+        'gl_surface_ozone.h',
       ],
       'conditions': [
         ['OS=="mac"', {
@@ -38,6 +45,12 @@
               '$(SDKROOT)/System/Library/Frameworks/OpenGL.framework',
             ],
           },
+        }],
+        ['use_ozone==1', {
+          'dependencies': [
+            '../../ozone/ozone.gyp:ozone',
+            '../../ozone/ozone.gyp:ozone_base',
+          ],
         }],
       ],
     },

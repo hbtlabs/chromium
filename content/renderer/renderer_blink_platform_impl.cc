@@ -46,7 +46,6 @@
 #include "content/common/gpu_process_launch_causes.h"
 #include "content/common/render_process_messages.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/media_stream_utils.h"
@@ -104,7 +103,6 @@
 #include "third_party/WebKit/public/platform/mime_registry.mojom.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
-#include "ui/gfx/color_profile.h"
 #include "url/gurl.h"
 
 #if defined(OS_MACOSX)
@@ -244,7 +242,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     scheduler::RendererScheduler* renderer_scheduler,
-    base::WeakPtr<ServiceRegistry> service_registry)
+    base::WeakPtr<shell::InterfaceProvider> remote_interfaces)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
@@ -256,7 +254,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       loading_task_runner_(renderer_scheduler->LoadingTaskRunner()),
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
       renderer_scheduler_(renderer_scheduler),
-      blink_service_registry_(new BlinkServiceRegistryImpl(service_registry)) {
+      blink_service_registry_(
+          new BlinkServiceRegistryImpl(remote_interfaces)) {
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
@@ -517,10 +516,8 @@ WebString RendererBlinkPlatformImpl::MimeRegistry::mimeTypeForExtension(
     const WebString& file_extension) {
   // The sandbox restricts our access to the registry, so we need to proxy
   // these calls over to the browser process.
-  if (!mime_registry_) {
-    RenderThread::Get()->GetServiceRegistry()->ConnectToRemoteService(
-        mojo::GetProxy(&mime_registry_));
-  }
+  if (!mime_registry_)
+    RenderThread::Get()->GetRemoteInterfaces()->GetInterface(&mime_registry_);
 
   mojo::String mime_type;
   if (!mime_registry_->GetMimeTypeFromExtension(
@@ -651,11 +648,8 @@ long long RendererBlinkPlatformImpl::databaseGetFileSize(
 
 long long RendererBlinkPlatformImpl::databaseGetSpaceAvailableForOrigin(
     const blink::WebSecurityOrigin& origin) {
-  // TODO(jsbell): Pass url::Origin over IPC instead of database
-  // identifier/GURL. https://crbug.com/591482
-  return DatabaseUtil::DatabaseGetSpaceAvailable(WebString::fromUTF8(
-      storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin))),
-      sync_message_filter_.get());
+  return DatabaseUtil::DatabaseGetSpaceAvailable(origin,
+                                                 sync_message_filter_.get());
 }
 
 bool RendererBlinkPlatformImpl::databaseSetFileSize(
@@ -844,27 +838,6 @@ blink::WebString RendererBlinkPlatformImpl::signedPublicKeyAndChallengeString(
       static_cast<uint32_t>(key_size_index), challenge.utf8(), GURL(url),
       GURL(top_origin), &signed_public_key));
   return WebString::fromUTF8(signed_public_key);
-}
-
-//------------------------------------------------------------------------------
-
-void RendererBlinkPlatformImpl::screenColorProfile(
-    WebVector<char>* to_profile) {
-#if defined(OS_WIN)
-  // On Windows screen color profile is only available in the browser.
-  std::vector<char> profile;
-  // This Send() can be called from any impl-side thread. Use a thread
-  // safe send to avoid crashing trying to access RenderThread::Get(),
-  // which is not accessible from arbitrary threads.
-  thread_safe_sender_->Send(
-      new RenderProcessHostMsg_GetMonitorColorProfile(&profile));
-  *to_profile = profile;
-#else
-  // On other platforms, the primary monitor color profile can be read
-  // directly.
-  gfx::ColorProfile profile;
-  *to_profile = profile.profile();
-#endif
 }
 
 //------------------------------------------------------------------------------
@@ -1111,6 +1084,8 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
+  // Prefer discrete GPU for WebGL.
+  attributes.gpu_preference = gl::PreferDiscreteGpu;
 
   attributes.fail_if_major_perf_caveat =
       web_attributes.failIfMajorPerformanceCaveat;
@@ -1123,15 +1098,13 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
 
   constexpr bool automatic_flushes = true;
   constexpr bool support_locking = false;
-  // Prefer discrete GPU for WebGL.
-  constexpr gl::GpuPreference gpu_preference = gl::PreferDiscreteGpu;
 
   scoped_refptr<ContextProviderCommandBuffer> provider(
       new ContextProviderCommandBuffer(
           std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
           gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
-          GURL(top_document_web_url), gpu_preference, automatic_flushes,
-          support_locking, gpu::SharedMemoryLimits(), attributes, share_context,
+          GURL(top_document_web_url), automatic_flushes, support_locking,
+          gpu::SharedMemoryLimits(), attributes, share_context,
           command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_WEBGL));
   return new WebGraphicsContext3DProviderImpl(std::move(provider));
 }

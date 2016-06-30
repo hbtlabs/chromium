@@ -10,6 +10,8 @@
 #include "platform/animation/CompositorTransformKeyframe.h"
 #include "platform/animation/TimingFunction.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace cc {
 class KeyframedTransformAnimationCurve;
@@ -25,7 +27,11 @@ namespace blink {
 class PLATFORM_EXPORT CompositorTransformAnimationCurve : public CompositorAnimationCurve {
     WTF_MAKE_NONCOPYABLE(CompositorTransformAnimationCurve);
 public:
-    CompositorTransformAnimationCurve();
+    static std::unique_ptr<CompositorTransformAnimationCurve> create()
+    {
+        return wrapUnique(new CompositorTransformAnimationCurve());
+    }
+
     ~CompositorTransformAnimationCurve() override;
 
     void addLinearKeyframe(const CompositorTransformKeyframe&);
@@ -44,6 +50,8 @@ public:
     std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;
 
 private:
+    CompositorTransformAnimationCurve();
+
     std::unique_ptr<cc::KeyframedTransformAnimationCurve> m_curve;
 };
 

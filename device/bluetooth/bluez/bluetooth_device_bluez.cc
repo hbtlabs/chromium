@@ -21,6 +21,7 @@
 #include "device/bluetooth/bluez/bluetooth_gatt_connection_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_pairing_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_remote_gatt_service_bluez.h"
+#include "device/bluetooth/bluez/bluetooth_service_record_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_socket_bluez.h"
 #include "device/bluetooth/dbus/bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/bluetooth_device_client.h"
@@ -185,6 +186,28 @@ uint32_t BluetoothDeviceBlueZ::GetBluetoothClass() const {
   DCHECK(properties);
 
   return properties->bluetooth_class.value();
+}
+
+device::BluetoothTransport BluetoothDeviceBlueZ::GetType() const {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+
+  if (!properties->type.is_valid())
+    return device::BLUETOOTH_TRANSPORT_INVALID;
+
+  std::string type = properties->type.value();
+  if (type == bluez::BluetoothDeviceClient::kTypeBredr) {
+    return device::BLUETOOTH_TRANSPORT_CLASSIC;
+  } else if (type == bluez::BluetoothDeviceClient::kTypeLe) {
+    return device::BLUETOOTH_TRANSPORT_LE;
+  } else if (type == bluez::BluetoothDeviceClient::kTypeDual) {
+    return device::BLUETOOTH_TRANSPORT_DUAL;
+  }
+
+  NOTREACHED();
+  return device::BLUETOOTH_TRANSPORT_INVALID;
 }
 
 void BluetoothDeviceBlueZ::CreateGattConnectionImpl() {
@@ -531,6 +554,12 @@ void BluetoothDeviceBlueZ::CreateGattConnection(
   Connect(NULL, base::Bind(&BluetoothDeviceBlueZ::OnCreateGattConnection,
                            weak_ptr_factory_.GetWeakPtr(), callback),
           error_callback);
+}
+
+std::vector<BluetoothServiceRecordBlueZ*>
+BluetoothDeviceBlueZ::GetServiceRecords() {
+  // TODO(rkc): Implement this.
+  return std::vector<BluetoothServiceRecordBlueZ*>();
 }
 
 BluetoothPairingBlueZ* BluetoothDeviceBlueZ::BeginPairing(

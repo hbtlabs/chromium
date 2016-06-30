@@ -16,7 +16,6 @@
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -46,7 +45,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
-#include "components/omnibox/browser/omnibox_view.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
@@ -59,6 +58,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/geoposition.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -158,8 +158,8 @@ void NavigateToURLWithPost(Browser* browser, const GURL& url) {
                                 ui::PAGE_TRANSITION_FORM_SUBMIT);
 
   std::string post_data("test=body");
-  params.browser_initiated_post_data =
-      base::RefCountedString::TakeString(&post_data);
+  params.post_data = content::ResourceRequestBody::CreateFromBytes(
+      post_data.data(), post_data.size());
   params.uses_post = true;
 
   NavigateToURL(&params);

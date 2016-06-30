@@ -203,10 +203,21 @@ IPC_MESSAGE_CONTROL5(
 // MSG_ROUTING_NONE. |provider_type| identifies whether this provider is for
 // Service Worker controllees (documents and Shared Workers) or for controllers
 // (Service Workers).
-IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_ProviderCreated,
+//
+// |is_parent_frame_secure| is false if the provider is created for a
+// document whose parent frame is not secure from the point of view of the
+// document; that is, blink::WebFrame::canHaveSecureChild() returns false.
+// This doesn't mean the document is necessarily an insecure context,
+// because the document may have a URL whose scheme is granted an exception
+// that allows bypassing the ancestor secure context check. See the
+// comment in blink::Document::isSecureContextImpl for more details.
+// If the provider is not created for a document, or the document does not have
+// a parent frame, |is_parent_frame_secure| is true.
+IPC_MESSAGE_CONTROL4(ServiceWorkerHostMsg_ProviderCreated,
                      int /* provider_id */,
                      int /* route_id */,
-                     content::ServiceWorkerProviderType /* provider_type */)
+                     content::ServiceWorkerProviderType /* provider_type */,
+                     bool /* is_parent_frame_secure */)
 
 // Informs the browser of a ServiceWorkerProvider being destroyed.
 IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_ProviderDestroyed,
@@ -253,10 +264,13 @@ IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_ActivateEventFinished,
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_ExtendableMessageEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
-IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventFinished,
-                    int /* request_id */,
+IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventResponse,
+                    int /* response_id */,
                     content::ServiceWorkerFetchEventResult,
                     content::ServiceWorkerResponse)
+IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_FetchEventFinished,
+                    int /* event_finish_id */,
+                    blink::WebServiceWorkerEventResult)
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_NotificationClickEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
@@ -466,8 +480,9 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_ActivateEvent,
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_ExtendableMessageEvent,
                      int /* request_id */,
                      ServiceWorkerMsg_ExtendableMessageEvent_Params)
-IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_FetchEvent,
-                     int /* request_id */,
+IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_FetchEvent,
+                     int /* response_id */,
+                     int /* event_finish_id */,
                      content::ServiceWorkerFetchRequest)
 IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_NotificationClickEvent,
                      int /* request_id */,

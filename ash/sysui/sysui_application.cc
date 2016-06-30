@@ -9,12 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/ash_window_tree_host_platform.h"
-#include "ash/material_design/material_design_controller.h"
 #include "ash/public/interfaces/ash_window_type.mojom.h"
 #include "ash/public/interfaces/container.mojom.h"
 #include "ash/root_window_settings.h"
@@ -30,7 +30,9 @@
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "components/mus/common/gpu_service.h"
 #include "components/mus/public/cpp/property_type_converters.h"
+#include "components/mus/public/interfaces/input_devices/input_device_server.mojom.h"
 #include "services/catalog/public/cpp/resource_loader.h"
 #include "services/shell/public/cpp/connector.h"
 #include "ui/aura/env.h"
@@ -49,7 +51,6 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "device/bluetooth/dbus/bluez_dbus_manager.h"
-#include "ui/events/devices/device_data_manager.h"
 #endif
 
 using views::ViewsDelegate;
@@ -64,26 +65,40 @@ const char kResourceFile100[] = "ash_resources_100_percent.pak";
 const char kResourceFile200[] = "ash_resources_200_percent.pak";
 
 // Tries to determine the corresponding mash container from widget init params.
-ash::mojom::Container GetContainerId(const views::Widget::InitParams& params) {
-  const int id = params.parent->id();
-  if (id == kShellWindowId_DesktopBackgroundContainer)
-    return ash::mojom::Container::USER_BACKGROUND;
-  if (id == kShellWindowId_ShelfContainer)
-    return ash::mojom::Container::USER_PRIVATE_SHELF;
-  if (id == kShellWindowId_StatusContainer)
-    return ash::mojom::Container::STATUS;
+bool GetContainerForWidget(const views::Widget::InitParams& params,
+                           ash::mojom::Container* container) {
+  switch (params.parent->id()) {
+    case kShellWindowId_DesktopBackgroundContainer:
+      *container = ash::mojom::Container::USER_BACKGROUND;
+      return true;
+
+    case kShellWindowId_ShelfContainer:
+      *container = ash::mojom::Container::USER_PRIVATE_SHELF;
+      return true;
+
+    case kShellWindowId_StatusContainer:
+      *container = ash::mojom::Container::STATUS;
+      return true;
+  }
 
   // Determine the container based on Widget type.
   switch (params.type) {
     case views::Widget::InitParams::Type::TYPE_BUBBLE:
-      return ash::mojom::Container::BUBBLES;
+      *container = ash::mojom::Container::BUBBLES;
+      return true;
+
     case views::Widget::InitParams::Type::TYPE_MENU:
-      return ash::mojom::Container::MENUS;
+      *container = ash::mojom::Container::MENUS;
+      return true;
+
     case views::Widget::InitParams::Type::TYPE_TOOLTIP:
-      return ash::mojom::Container::DRAG_AND_TOOLTIPS;
+      *container = ash::mojom::Container::DRAG_AND_TOOLTIPS;
+      return true;
+
     default:
-      return ash::mojom::Container::COUNT;
+      break;
   }
+  return false;
 }
 
 // Tries to determine the corresponding ash window type from the ash container
@@ -144,8 +159,8 @@ class NativeWidgetFactory {
       views::internal::NativeWidgetDelegate* delegate) {
     std::map<std::string, std::vector<uint8_t>> properties;
     if (params.parent) {
-      ash::mojom::Container container = GetContainerId(params);
-      if (container != ash::mojom::Container::COUNT) {
+      ash::mojom::Container container;
+      if (GetContainerForWidget(params, &container)) {
         properties[ash::mojom::kWindowContainer_Property] =
             mojo::ConvertTo<std::vector<uint8_t>>(
                 static_cast<int32_t>(container));
@@ -203,11 +218,8 @@ class AshInit {
     InitializeResourceBundle(connector);
     aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
     MaterialDesignController::Initialize();
-    views::WindowManagerConnection::Create(connector, identity);
-
-    display::Screen* screen = display::Screen::GetScreen();
-    DCHECK(screen);
-    gfx::Size size = screen->GetPrimaryDisplay().bounds().size();
+    window_manager_connection_ =
+        views::WindowManagerConnection::Create(connector, identity);
 
     // Uninstall the ScreenMus installed by WindowManagerConnection, so that ash
     // installs and uses the ScreenAsh. This can be removed once ash learns to
@@ -236,7 +248,7 @@ class AshInit {
         base::Bind(&KeyboardUIMus::Create, connector);
     Shell::CreateInstance(init_params);
     Shell::GetInstance()->CreateShelf();
-    Shell::GetInstance()->UpdateAfterLoginStatusChange(user::LOGGED_IN_USER);
+    Shell::GetInstance()->UpdateAfterLoginStatusChange(LoginStatus::USER);
 
     Shell::GetPrimaryRootWindow()->GetHost()->Show();
   }
@@ -271,7 +283,6 @@ class AshInit {
     message_center::MessageCenter::Initialize();
 
 #if defined(OS_CHROMEOS)
-    ui::DeviceDataManager::CreateInstance();
     chromeos::DBusThreadManager::Initialize();
     bluez::BluezDBusManager::Initialize(
         chromeos::DBusThreadManager::Get()->GetSystemBus(),
@@ -286,6 +297,7 @@ class AshInit {
   std::unique_ptr<views::AuraInit> aura_init_;
   ShellDelegateMus* ash_delegate_ = nullptr;
   std::unique_ptr<NativeWidgetFactory> native_widget_factory_;
+  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(AshInit);
 };
@@ -297,8 +309,14 @@ SysUIApplication::~SysUIApplication() {}
 void SysUIApplication::Initialize(::shell::Connector* connector,
                                   const ::shell::Identity& identity,
                                   uint32_t id) {
+  mus::GpuService::Initialize(connector);
+
   ash_init_.reset(new AshInit());
   ash_init_->Initialize(connector, identity);
+
+  mus::mojom::InputDeviceServerPtr server;
+  connector->ConnectToInterface("mojo:mus", &server);
+  input_device_client_.Connect(std::move(server));
 }
 
 bool SysUIApplication::AcceptConnection(::shell::Connection* connection) {

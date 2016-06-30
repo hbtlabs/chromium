@@ -155,6 +155,10 @@ bool WmWindowMus::ShouldUseExtendedHitRegion() const {
   return parent && parent->children_use_extended_hit_region_;
 }
 
+bool WmWindowMus::IsContainer() const {
+  return GetShellWindowId() != kShellWindowId_Invalid;
+}
+
 const WmWindow* WmWindowMus::GetRootWindow() const {
   return Get(window_->GetRoot());
 }
@@ -302,6 +306,10 @@ bool WmWindowMus::GetBoolProperty(WmWindowProperty key) {
 
     case WmWindowProperty::ALWAYS_ON_TOP:
       return IsAlwaysOnTop();
+
+    case WmWindowProperty::EXCLUDE_FROM_MRU:
+      NOTIMPLEMENTED();
+      return false;
 
     default:
       NOTREACHED();
@@ -498,6 +506,13 @@ void WmWindowMus::SetRestoreShowState(ui::WindowShowState show_state) {
   restore_show_state_ = show_state;
 }
 
+void WmWindowMus::SetRestoreOverrides(
+    const gfx::Rect& bounds_override,
+    ui::WindowShowState window_state_override) {
+  // TODO(sky): see http://crbug.com/623314.
+  NOTIMPLEMENTED();
+}
+
 void WmWindowMus::SetLockedToRoot(bool value) {
   // TODO(sky): there is no getter for this. Investigate where used.
   NOTIMPLEMENTED();
@@ -571,6 +586,14 @@ void WmWindowMus::Show() {
   window_->SetVisible(true);
 }
 
+views::Widget* WmWindowMus::GetInternalWidget() {
+  // Don't return the window frame widget for an embedded client window.
+  if (widget_creation_type_ == WidgetCreationType::FOR_CLIENT)
+    return nullptr;
+
+  return widget_;
+}
+
 void WmWindowMus::CloseWidget() {
   DCHECK(widget_);
   // Allow the client to service the close request for remote widgets.
@@ -619,6 +642,10 @@ void WmWindowMus::Minimize() {
 void WmWindowMus::Unminimize() {
   SetWindowShowState(window_, MojomWindowShowStateFromUI(restore_show_state_));
   restore_show_state_ = ui::SHOW_STATE_DEFAULT;
+}
+
+void WmWindowMus::SetExcludedFromMru(bool excluded_from_mru) {
+  NOTIMPLEMENTED();
 }
 
 std::vector<WmWindow*> WmWindowMus::GetChildren() {
@@ -688,6 +715,19 @@ void WmWindowMus::RemoveObserver(WmWindowObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+bool WmWindowMus::HasObserver(const WmWindowObserver* observer) const {
+  return observers_.HasObserver(observer);
+}
+
+void WmWindowMus::OnTreeChanging(const TreeChangeParams& params) {
+  WmWindowObserver::TreeChangeParams wm_params;
+  wm_params.target = Get(params.target);
+  wm_params.new_parent = Get(params.new_parent);
+  wm_params.old_parent = Get(params.old_parent);
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                    OnWindowTreeChanging(this, wm_params));
+}
+
 void WmWindowMus::OnTreeChanged(const TreeChangeParams& params) {
   WmWindowObserver::TreeChangeParams wm_params;
   wm_params.target = Get(params.target);
@@ -733,6 +773,10 @@ void WmWindowMus::OnWindowBoundsChanged(::mus::Window* window,
 
 void WmWindowMus::OnWindowDestroying(::mus::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroying(this));
+}
+
+void WmWindowMus::OnWindowDestroyed(::mus::Window* window) {
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroyed(this));
 }
 
 }  // namespace mus

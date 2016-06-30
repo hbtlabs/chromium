@@ -74,7 +74,8 @@ class NodeController : public ports::NodeDelegate,
   // Connects this node to a child node. This node will initiate a handshake.
   void ConnectToChild(base::ProcessHandle process_handle,
                       ScopedPlatformHandle platform_handle,
-                      const std::string& child_token);
+                      const std::string& child_token,
+                      const ProcessErrorCallback& process_error_callback);
 
   // Closes all reserved ports which associated with the child process
   // |child_token|.
@@ -121,6 +122,11 @@ class NodeController : public ports::NodeDelegate,
   // transfer.
   void RequestShutdown(const base::Closure& callback);
 
+  // Notifies the NodeController that we received a bad message from the given
+  // node.
+  void NotifyBadMessageFrom(const ports::NodeName& source_node,
+                            const std::string& error);
+
  private:
   friend Core;
 
@@ -133,9 +139,11 @@ class NodeController : public ports::NodeDelegate,
     const std::string child_token;
   };
 
-  void ConnectToChildOnIOThread(base::ProcessHandle process_handle,
-                                ScopedPlatformHandle platform_handle,
-                                ports::NodeName token);
+  void ConnectToChildOnIOThread(
+      base::ProcessHandle process_handle,
+      ScopedPlatformHandle platform_handle,
+      ports::NodeName token,
+      const ProcessErrorCallback& process_error_callback);
   void ConnectToParentOnIOThread(ScopedPlatformHandle platform_handle);
 
   scoped_refptr<NodeChannel> GetPeerChannel(const ports::NodeName& name);
@@ -157,6 +165,7 @@ class NodeController : public ports::NodeDelegate,
                     ports::ScopedMessage* message) override;
   void ForwardMessage(const ports::NodeName& node,
                       ports::ScopedMessage message) override;
+  void BroadcastMessage(ports::ScopedMessage message) override;
   void PortStatusChanged(const ports::PortRef& port) override;
 
   // NodeChannel::Delegate:
@@ -185,11 +194,16 @@ class NodeController : public ports::NodeDelegate,
   void OnIntroduce(const ports::NodeName& from_node,
                    const ports::NodeName& name,
                    ScopedPlatformHandle channel_handle) override;
+  void OnBroadcast(const ports::NodeName& from_node,
+                   Channel::MessagePtr message) override;
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
   void OnRelayPortsMessage(const ports::NodeName& from_node,
                            base::ProcessHandle from_process,
                            const ports::NodeName& destination,
                            Channel::MessagePtr message) override;
+  void OnPortsMessageFromRelay(const ports::NodeName& from_node,
+                               const ports::NodeName& source_node,
+                               Channel::MessagePtr message) override;
 #endif
   void OnChannelError(const ports::NodeName& from_node) override;
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -286,7 +300,7 @@ class NodeController : public ports::NodeDelegate,
   // Must only be accessed from the IO thread.
   bool destroy_on_io_thread_shutdown_ = false;
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL)
+#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_NACL_SFI)
   // Broker for sync shared buffer creation (non-Mac posix-only) in children.
   std::unique_ptr<Broker> broker_;
 #endif

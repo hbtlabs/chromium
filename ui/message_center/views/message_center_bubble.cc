@@ -68,6 +68,10 @@ MessageCenterBubble::MessageCenterBubble(MessageCenter* message_center,
       first_item_has_no_margin_(first_item_has_no_margin) {}
 
 MessageCenterBubble::~MessageCenterBubble() {
+  // Removs this from the widget observers just in case. MessageCenterBubble
+  // might be destoryed without calling its Widget's Close/CloseNow.
+  if (bubble_view() && bubble_view()->GetWidget())
+    bubble_view()->GetWidget()->RemoveObserver(this);
 }
 
 void MessageCenterBubble::SetSettingsVisible() {
@@ -103,6 +107,10 @@ void MessageCenterBubble::InitializeContents(
   // |new_bubble_view| actually wants. See crbug.com/169390.
   bubble_view()->Layout();
   UpdateBubbleView();
+  bubble_view()
+      ->GetFocusManager()
+      ->GetNextFocusableView(nullptr, nullptr, false, false)
+      ->RequestFocus();
 }
 
 void MessageCenterBubble::OnBubbleViewDestroyed() {
@@ -120,7 +128,8 @@ void MessageCenterBubble::UpdateBubbleView() {
 }
 
 void MessageCenterBubble::OnWidgetClosing(views::Widget* widget) {
-  bubble_view()->GetWidget()->RemoveObserver(this);
+  if (bubble_view() && bubble_view()->GetWidget())
+    bubble_view()->GetWidget()->RemoveObserver(this);
   if (message_center_view_)
     message_center_view_->SetIsClosing(true);
 }

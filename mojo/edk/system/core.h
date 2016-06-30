@@ -54,7 +54,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // Called in the parent process any time a new child is launched.
   void AddChild(base::ProcessHandle process_handle,
                 ScopedPlatformHandle platform_handle,
-                const std::string& child_token);
+                const std::string& child_token,
+                const ProcessErrorCallback& process_error_callback);
 
   // Called in the parent process when a child process fails to launch.
   void ChildLaunchFailed(const std::string& child_token);
@@ -123,6 +124,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                        MojoHandleSignals signals,
                        const base::Callback<void(MojoResult)>& callback);
 
+  MojoResult SetProperty(MojoPropertyType type, const void* value);
+
   // ---------------------------------------------------------------------------
 
   // The following methods are essentially implementations of the Mojo Core
@@ -157,6 +160,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                           MojoMessageHandle* message);
   MojoResult FreeMessage(MojoMessageHandle message);
   MojoResult GetMessageBuffer(MojoMessageHandle message, void** buffer);
+  MojoResult GetProperty(MojoPropertyType type, void* value);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/wait_set.h":
@@ -200,6 +204,9 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                             uint32_t* num_handles,
                             MojoReadMessageFlags flags);
   MojoResult FuseMessagePipes(MojoHandle handle0, MojoHandle handle1);
+  MojoResult NotifyBadMessage(MojoMessageHandle message,
+                              const char* error,
+                              size_t error_num_bytes);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/data_pipe.h":
@@ -296,6 +303,10 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   base::Lock mapping_table_lock_;  // Protects |mapping_table_|.
   MappingTable mapping_table_;
+
+  base::Lock property_lock_;
+  // Properties that can be read using the MojoGetProperty() API.
+  bool property_sync_call_allowed_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };

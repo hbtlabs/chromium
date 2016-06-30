@@ -10,7 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.graphics.Rect;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
@@ -24,6 +23,7 @@ import android.view.inputmethod.InputMethodManager;
 
 import org.chromium.base.Log;
 import org.chromium.chromoting.jni.Client;
+import org.chromium.chromoting.jni.Display;
 
 /**
  * The user interface for viewing and interacting with a specific remote host.
@@ -39,13 +39,15 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     private static final String TAG = "Chromoting";
 
     private final RenderData mRenderData;
-    private final TouchInputHandlerInterface mInputHandler;
+    private final TouchInputHandler mInputHandler;
 
     /** The parent Desktop activity. */
     private Desktop mDesktop;
 
     /** The Client connection, used to inject input and fetch the video frames. */
     private Client mClient;
+
+    private Display mDisplay;
 
 
     // Flag to prevent multiple repaint requests from being backed up. Requests for repainting will
@@ -59,6 +61,11 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     private boolean mSurfaceCreated = false;
 
     private final Event.Raisable<PaintEventParameter> mOnPaint = new Event.Raisable<>();
+    private final Event.Raisable<SizeChangedEventParameter> mOnClientSizeChanged =
+            new Event.Raisable<>();
+    private final Event.Raisable<SizeChangedEventParameter> mOnHostSizeChanged =
+            new Event.Raisable<>();
+    private final Event.Raisable<TouchEventParameter> mOnTouch = new Event.Raisable<>();
 
     // Variables to control animation by the TouchInputHandler.
 
@@ -82,21 +89,35 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         getHolder().addCallback(this);
     }
 
+    @Override
+    public void init(Desktop desktop, Client client) {
+        Preconditions.isNull(mDesktop);
+        Preconditions.isNull(mClient);
+        Preconditions.isNull(mDisplay);
+        Preconditions.notNull(desktop);
+        Preconditions.notNull(client);
+        Preconditions.notNull(client.getDisplay());
+        Preconditions.isTrue(client.getDisplay() instanceof Display);
+        mDesktop = desktop;
+        mClient = client;
+        mDisplay = (Display) client.getDisplay();
+        mInputHandler.init(desktop, new InputEventSender(client));
+    }
+
     public Event<PaintEventParameter> onPaint() {
         return mOnPaint;
     }
 
-    public void setDesktop(Desktop desktop) {
-        mDesktop = desktop;
+    public Event<SizeChangedEventParameter> onClientSizeChanged() {
+        return mOnClientSizeChanged;
     }
 
-    public void setClient(Client client) {
-        mClient = client;
+    public Event<SizeChangedEventParameter> onHostSizeChanged() {
+        return mOnHostSizeChanged;
     }
 
-    /** See {@link TouchInputHandler#onSoftInputMethodVisibilityChanged} for API details. */
-    public void onSoftInputMethodVisibilityChanged(boolean inputMethodVisible, Rect bounds) {
-        mInputHandler.onSoftInputMethodVisibilityChanged(inputMethodVisible, bounds);
+    public Event<TouchEventParameter> onTouch() {
+        return mOnTouch;
     }
 
     /** Request repainting of the desktop view. */
@@ -107,7 +128,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
             mRepaintPending = true;
         }
-        mClient.getDisplay().redrawGraphics();
+        mDisplay.redrawGraphics();
     }
 
     /**
@@ -122,7 +143,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             Log.w(TAG, "Canvas being redrawn on UI thread");
         }
 
-        Bitmap image = mClient.getDisplay().getVideoFrame();
+        Bitmap image = mDisplay.getVideoFrame();
         if (image == null) {
             // This can happen if the client is connected, but a complete video frame has not yet
             // been decoded.
@@ -143,7 +164,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
         }
         if (sizeChanged) {
-            mInputHandler.onHostSizeChanged(width, height);
+            mOnHostSizeChanged.raise(new SizeChangedEventParameter(width, height));
         }
 
         Canvas canvas;
@@ -177,9 +198,9 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         mOnPaint.raise(new PaintEventParameter(cursorPosition, canvas, scaleFactor));
 
         if (drawCursor) {
-            Bitmap cursorBitmap = mClient.getDisplay().getCursorBitmap();
+            Bitmap cursorBitmap = mDisplay.getCursorBitmap();
             if (cursorBitmap != null) {
-                Point hotspot = mClient.getDisplay().getCursorHotspot();
+                Point hotspot = mDisplay.getCursorHotspot();
                 canvas.drawBitmap(cursorBitmap, cursorPosition.x - hotspot.x,
                         cursorPosition.y - hotspot.y, new Paint());
             }
@@ -187,18 +208,14 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
 
         getHolder().unlockCanvasAndPost(canvas);
 
-        if (!mOnPaint.isEmpty()) {
-            requestRepaint();
-        } else {
-            synchronized (mAnimationLock) {
-                if (mInputAnimationRunning) {
-                    getHandler().postAtTime(new Runnable() {
-                        @Override
-                        public void run() {
-                            processAnimation();
-                        }
-                    }, startTimeMs + 30);
-                }
+        synchronized (mAnimationLock) {
+            if (mInputAnimationRunning || !mOnPaint.isEmpty()) {
+                getHandler().postAtTime(new Runnable() {
+                    @Override
+                    public void run() {
+                        processAnimation();
+                    }
+                }, startTimeMs + 30);
             }
         }
     }
@@ -210,6 +227,8 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         }
         if (running) {
             mInputHandler.processAnimation();
+            requestRepaint();
+        } else if (!mOnPaint.isEmpty()) {
             requestRepaint();
         }
     }
@@ -226,12 +245,12 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         }
 
         attachRedrawCallback();
-        mInputHandler.onClientSizeChanged(width, height);
+        mOnClientSizeChanged.raise(new SizeChangedEventParameter(width, height));
         requestRepaint();
     }
 
     public void attachRedrawCallback() {
-        mClient.getDisplay().provideRedrawCallback(new Runnable() {
+        mDisplay.provideRedrawCallback(new Runnable() {
             @Override
             public void run() {
                 paint();
@@ -279,7 +298,9 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     /** Called whenever the user attempts to touch the canvas. */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return mInputHandler.onTouchEvent(event);
+        TouchEventParameter parameter = new TouchEventParameter(event);
+        mOnTouch.raise(parameter);
+        return parameter.handled;
     }
 
     @Override
@@ -292,7 +313,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
 
     @Override
     public void showActionBar() {
-        mDesktop.showActionBar();
+        mDesktop.showSystemUi();
     }
 
     @Override
@@ -308,6 +329,18 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     }
 
     @Override
+    public void cursorMoved() {
+        // For current implementation, cursorMoved() is always followed by transformationChanged()
+        // even if the canvas isn't really changed. For future we should improve this by not calling
+        // transformationChanged() if the cursor is moved but the canvas is not changed.
+    }
+
+    @Override
+    public void cursorVisibilityChanged() {
+        requestRepaint();
+    }
+
+    @Override
     public void setAnimationEnabled(boolean enabled) {
         synchronized (mAnimationLock) {
             if (enabled && !mInputAnimationRunning) {
@@ -315,36 +348,5 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
             mInputAnimationRunning = enabled;
         }
-    }
-
-    /** Updates the current InputStrategy used by the TouchInputHandler. */
-    public void changeInputMode(
-            Desktop.InputMode inputMode, CapabilityManager.HostCapability hostTouchCapability) {
-        // We need both input mode and host input capabilities to select the input strategy.
-        if (!inputMode.isSet() || !hostTouchCapability.isSet()) {
-            return;
-        }
-
-        switch (inputMode) {
-            case TRACKPAD:
-                mInputHandler.setInputStrategy(new TrackpadInputStrategy(mRenderData, mClient));
-                break;
-
-            case TOUCH:
-                if (hostTouchCapability.isSupported()) {
-                    mInputHandler.setInputStrategy(new TouchInputStrategy(mRenderData, mClient));
-                } else {
-                    mInputHandler.setInputStrategy(
-                            new SimulatedTouchInputStrategy(mRenderData, mClient, getContext()));
-                }
-                break;
-
-            default:
-                // Unreachable, but required by Google Java style and findbugs.
-                assert false : "Unreached";
-        }
-
-        // Ensure the cursor state is updated appropriately.
-        requestRepaint();
     }
 }

@@ -12,6 +12,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.widget.TextView;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -65,21 +66,14 @@ public class BlimpRendererActivity
     private int mSent;
     private int mReceived;
     private int mCommits;
+    private String mToken = null;
 
     @Override
     @SuppressFBWarnings("DM_EXIT")  // FindBugs doesn't like System.exit().
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Build a TokenSource that will internally retry accessing the underlying TokenSourceImpl.
-        // This will exponentially backoff while it tries to get the access token.  See
-        // {@link RetryingTokenSource} for more information.  The underlying
-        // TokenSourceImpl will attempt to query GoogleAuthUtil, but might fail if there is no
-        // account selected, in which case it will ask this Activity to show an account chooser and
-        // notify it of the selection result.
-        mTokenSource = new RetryingTokenSource(new TokenSourceImpl(this));
-        mTokenSource.setCallback(this);
-        mTokenSource.getToken();
+        buildAndTriggerTokenSourceIfNeeded();
 
         try {
             BlimpLibraryLoader.startAsync(this, this);
@@ -178,6 +172,21 @@ public class BlimpRendererActivity
         mTabControlFeature = new TabControlFeature(mBlimpClientSession, mBlimpView);
 
         handleUrlFromIntent(getIntent());
+
+        // If Blimp client has command line flag "engine-ip", client will use the command line token
+        // to connect. See GetAssignmentFromCommandLine() in
+        // blimp/client/session/assignment_source.cc
+        // In normal cases, where client uses the engine ip given by the Assigner,
+        // connection to the engine is triggered by the successful retrieval of a token as
+        // TokenSource.Callback.
+        if (CommandLine.getInstance().hasSwitch(BlimpClientSwitches.ENGINE_IP)) {
+            mBlimpClientSession.connect(null);
+        } else {
+            if (mToken != null) {
+                mBlimpClientSession.connect(mToken);
+                mToken = null;
+            }
+        }
     }
 
     // ToolbarMenu.ToolbarMenuDelegate implementation.
@@ -244,7 +253,11 @@ public class BlimpRendererActivity
     // TokenSource.Callback implementation.
     @Override
     public void onTokenReceived(String token) {
-        if (mBlimpClientSession != null) mBlimpClientSession.connect(token);
+        if (mBlimpClientSession != null) {
+            mBlimpClientSession.connect(token);
+        } else {
+            mToken = token;
+        }
     }
 
     @Override
@@ -312,5 +325,22 @@ public class BlimpRendererActivity
                      String.format(getResources().getString(R.string.network_disconnected), reason),
                      Toast.LENGTH_LONG)
                 .show();
+    }
+
+    private void buildAndTriggerTokenSourceIfNeeded() {
+        // If Blimp client is given the engine ip by the command line, then there is no need to
+        // build a TokenSource, because token, engine ip, engine port, and transport protocol are
+        // all given by command line.
+        if (CommandLine.getInstance().hasSwitch(BlimpClientSwitches.ENGINE_IP)) return;
+
+        // Build a TokenSource that will internally retry accessing the underlying
+        // TokenSourceImpl. This will exponentially backoff while it tries to get the access
+        // token.  See {@link RetryingTokenSource} for more information.  The underlying
+        // TokenSourceImpl will attempt to query GoogleAuthUtil, but might fail if there is no
+        // account selected, in which case it will ask this Activity to show an account chooser
+        // and notify it of the selection result.
+        mTokenSource = new RetryingTokenSource(new TokenSourceImpl(this));
+        mTokenSource.setCallback(this);
+        mTokenSource.getToken();
     }
 }

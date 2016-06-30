@@ -1,9 +1,10 @@
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
 <link rel="import" href="/settings_root_css.html">
 
 <!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
   <template>
-    <style>
+    <style include="cr-shared-style">
       h2 {
         align-items: center;
         display: flex;
@@ -52,6 +53,13 @@
         text-decoration: none;
       }
 
+      /*
+       * There are three main button styles, .primary-button, .secondary-button,
+       * and .tertiary-button. The primary is the action button (e.g. "edit",
+       * "delete") while the secondary is often a "Cancel" button. A tertiary
+       * button may be used to get more information or similar, that we expect
+       * most users will not need.
+       */
       paper-button.primary-button {
         --paper-button: {
           font-weight: 500;
@@ -59,6 +67,7 @@
         };
       }
 
+      /* See notes in .primary-button. */
       paper-button.secondary-button {
         --paper-button: {
           color: var(--paper-grey-600);
@@ -70,6 +79,7 @@
         };
       }
 
+      /* See notes in .primary-button. */
       paper-button.tertiary-button {
         --paper-button: {
           font-weight: 400;
@@ -118,29 +128,11 @@
         text-align: end;
       }
 
-      .action-button {
-        background: var(--google-blue-500);
-        color: white;
-        --paper-button-flat-keyboard-focus: {
-          background-color: rgb(58, 117, 215);  /* 88% of --google-blue-500) */
-        };
-      }
-
-      .action-button[disabled] {
-        opacity: .25;  /* TODO(dbeam): check this value with bettes. */
-      }
-
-      .cancel-button {
-        --paper-button-flat-keyboard-focus: {
-          background-color: rgba(0, 0, 0, .12);
-        };
-      }
-
-      .action-button,
-      .cancel-button {
-        font-weight: 500;
-      }
-
+      /*
+       * A list-frame is an outer container for list-items. It is intended to be
+       * outside of a settings-box. A list-frame is likely to follow a
+       * settings box.
+       */
       .list-frame {
         -webkit-padding-end: 20px;
         -webkit-padding-start: 56px;
@@ -155,6 +147,10 @@
         @apply(--settings-secondary);
       }
 
+      /*
+       * A list-item is intended to be contained within a list-frame. The list
+       * frame will setup the initial start margin.
+       */
       .list-item {
         align-items: center;
         display: flex;
@@ -162,6 +158,7 @@
         padding: 0;
       }
 
+      /* A thin separator line under a list item. */
       .list-item.underbar {
         border-bottom: var(--settings-separator-line);
       }
@@ -174,17 +171,19 @@
         -webkit-margin-start: 4px;
       }
 
+      /* The middle part (horizontally) of a list item. */
       .list-item > .middle {
         flex: 1;
         margin: 8px 16px;
-        overflow: hidden;
-        white-space: nowrap;
       }
 
+      /* The start (left in LTR) part (horizontally) of a list item. */
       .list-item > .start {
         flex: 1;
-        overflow: hidden;
-        white-space: nowrap;
+      }
+
+      .list-item > label span[disabled] {
+        opacity: .65;  /* TODO(michaelpg): check this value with bettes. */
       }
 
       .list-item > paper-icon-item {
@@ -198,6 +197,10 @@
         font-weight: 500;
       }
 
+      /*
+       * A settings-box is a horizontal row of text or controls within a
+       * setting section (page or subpage).
+       */
       .settings-box {
         align-items: center;
         border-top: var(--settings-separator-line);
@@ -206,6 +209,11 @@
         padding: 0 20px;
       }
 
+      /*
+       * We use an explicit tag to remove the top border, rather than a
+       * :first-of-type modifier. This is a conscious choice, please consult
+       * with dbeam@ or dschuyler@ prior to changing it.
+       */
       .settings-box.first,
       .settings-box.continuation {
         border-top: none;
@@ -215,20 +223,30 @@
         display: block;
       }
 
+      /*
+       * A row with two lines of text. Often the lower line will be .secondary.
+       */
       .settings-box.two-line {
         min-height: 56px;
       }
 
+      [actionable] {
+        @apply(--settings-actionable);
+      }
+
+      /* The lower line of text in a .settings-box.two-line. */
       .settings-box .secondary {
         @apply(--settings-secondary);
       }
 
+      /* The middle part (horizontally) of a row. */
       .settings-box .middle {
         -webkit-margin-start: 16px;
         align-items: center;
         flex: auto;
       }
 
+      /* The start (left in LTR) part (horizontally) of a row. */
       .settings-box .start {
         align-items: center;
         flex: auto;
@@ -254,6 +272,7 @@
         padding: 8px;
       }
 
+      /* Helper for a list frame to automatically avoid the separator line. */
       .vertical-list > *:not(:first-of-type) {
         border-top: var(--settings-separator-line);
       }

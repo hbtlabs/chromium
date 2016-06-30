@@ -12,7 +12,6 @@
 
 namespace blink {
 
-class CustomElementDefinition;
 class Element;
 
 class CORE_EXPORT CustomElementUpgradeReaction final
@@ -20,12 +19,9 @@ class CORE_EXPORT CustomElementUpgradeReaction final
     WTF_MAKE_NONCOPYABLE(CustomElementUpgradeReaction);
 public:
     CustomElementUpgradeReaction(CustomElementDefinition*);
-    ~CustomElementUpgradeReaction() override;
-    DECLARE_VIRTUAL_TRACE();
+
 private:
     void invoke(Element*) override;
-
-    Member<CustomElementDefinition> m_definition;
 };
 
 } // namespace blink

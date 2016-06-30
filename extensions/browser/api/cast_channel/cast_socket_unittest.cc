@@ -9,14 +9,17 @@
 #include <utility>
 #include <vector>
 
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_byteorder.h"
 #include "base/test/simple_test_clock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/mock_timer.h"
 #include "extensions/browser/api/cast_channel/cast_auth_util.h"
 #include "extensions/browser/api/cast_channel/cast_framer.h"
@@ -32,6 +35,8 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/ssl/ssl_info.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -108,9 +113,8 @@ class MockTCPSocket : public net::TCPClientSocket {
 
     if (connect_data_.mode == net::ASYNC) {
       CHECK_NE(connect_data_.result, net::ERR_IO_PENDING);
-      base::MessageLoop::current()->PostTask(
-          FROM_HERE,
-          base::Bind(callback, connect_data_.result));
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::Bind(callback, connect_data_.result));
       return net::ERR_IO_PENDING;
     } else {
       return connect_data_.result;
@@ -314,10 +318,10 @@ class TestCastSocket : public CastSocketImpl {
   }
 
   scoped_refptr<net::X509Certificate> ExtractPeerCert() override {
-    return extract_cert_result_ ? make_scoped_refptr<net::X509Certificate>(
-                                      new net::X509Certificate(
-                                          "", "", base::Time(), base::Time()))
-                                : nullptr;
+    return extract_cert_result_
+               ? net::ImportCertFromFile(net::GetTestCertsDirectory(),
+                                         "ok_cert.pem")
+               : nullptr;
   }
 
   bool VerifyChallengeReply() override {

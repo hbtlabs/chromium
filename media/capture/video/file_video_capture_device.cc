@@ -313,7 +313,7 @@ void FileVideoCaptureDevice::AllocateAndStart(
   CHECK(!capture_thread_.IsRunning());
 
   capture_thread_.Start();
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&FileVideoCaptureDevice::OnAllocateAndStart,
                  base::Unretained(this), params, base::Passed(&client)));
@@ -323,7 +323,7 @@ void FileVideoCaptureDevice::StopAndDeAllocate() {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(capture_thread_.IsRunning());
 
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&FileVideoCaptureDevice::OnStopAndDeAllocate,
                             base::Unretained(this)));
   capture_thread_.Stop();
@@ -332,7 +332,7 @@ void FileVideoCaptureDevice::StopAndDeAllocate() {
 void FileVideoCaptureDevice::OnAllocateAndStart(
     const VideoCaptureParams& params,
     std::unique_ptr<VideoCaptureDevice::Client> client) {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
 
   client_ = std::move(client);
 
@@ -346,20 +346,20 @@ void FileVideoCaptureDevice::OnAllocateAndStart(
   DVLOG(1) << "Opened video file " << capture_format_.frame_size.ToString()
            << ", fps: " << capture_format_.frame_rate;
 
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&FileVideoCaptureDevice::OnCaptureTask,
                             base::Unretained(this)));
 }
 
 void FileVideoCaptureDevice::OnStopAndDeAllocate() {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
   file_parser_.reset();
   client_.reset();
   next_frame_time_ = base::TimeTicks();
 }
 
 void FileVideoCaptureDevice::OnCaptureTask() {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
   if (!client_)
     return;
 

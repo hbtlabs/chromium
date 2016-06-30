@@ -24,6 +24,7 @@ bool ShouldMakeNetworkRequestForURL(const GURL& url) {
   // network stack. Neither should pushState/popState.
   return !url.SchemeIs(url::kDataScheme) && url != GURL(url::kAboutBlankURL) &&
          !url.SchemeIs(url::kJavaScriptScheme) && !url.is_empty() &&
+         !url.SchemeIs(url::kContentIDScheme) &&
          url != GURL(content::kAboutSrcDocURL);
 }
 
@@ -51,7 +52,7 @@ CommonNavigationParams::CommonNavigationParams(
     LoFiState lofi_state,
     const base::TimeTicks& navigation_start,
     std::string method,
-    const scoped_refptr<ResourceRequestBody>& post_data)
+    const scoped_refptr<ResourceRequestBodyImpl>& post_data)
     : url(url),
       referrer(referrer),
       transition(transition),
@@ -144,8 +145,7 @@ RequestNavigationParams::RequestNavigationParams()
       current_history_list_length(0),
       is_view_source(false),
       should_clear_history_list(false),
-      should_create_service_worker(false),
-      service_worker_provider_id(kInvalidServiceWorkerProviderId) {}
+      should_create_service_worker(false) {}
 
 RequestNavigationParams::RequestNavigationParams(
     bool is_overriding_user_agent,
@@ -178,8 +178,7 @@ RequestNavigationParams::RequestNavigationParams(
       current_history_list_length(current_history_list_length),
       is_view_source(is_view_source),
       should_clear_history_list(should_clear_history_list),
-      should_create_service_worker(false),
-      service_worker_provider_id(kInvalidServiceWorkerProviderId) {}
+      should_create_service_worker(false) {}
 
 RequestNavigationParams::RequestNavigationParams(
     const RequestNavigationParams& other) = default;

@@ -23,7 +23,7 @@ namespace ws {
 
 class Display;
 class DisplayManager;
-class WindowManagerState;
+class DisplayManagerDelegate;
 
 namespace test {
 class UserDisplayManagerTestApi;
@@ -33,10 +33,12 @@ class UserDisplayManagerTestApi;
 class UserDisplayManager : public mojom::DisplayManager {
  public:
   UserDisplayManager(ws::DisplayManager* display_manager,
+                     DisplayManagerDelegate* delegate,
                      const UserId& user_id);
   ~UserDisplayManager() override;
 
-  void OnFrameDecorationValuesChanged(WindowManagerState* wms);
+  // Called when the frame decorations for this user change.
+  void OnFrameDecorationValuesChanged();
 
   void AddDisplayManagerBinding(
       mojo::InterfaceRequest<mojom::DisplayManager> request);
@@ -58,28 +60,31 @@ class UserDisplayManager : public mojom::DisplayManager {
  private:
   friend class test::UserDisplayManagerTestApi;
 
-  // Returns the WindowManagerStates for the associated user that have frame
-  // decoration values.
-  std::set<const WindowManagerState*> GetWindowManagerStatesForUser() const;
-
+  // Called when a new observer is added. If frame decorations are available
+  // notifies the observer immediately.
   void OnObserverAdded(mojom::DisplayManagerObserver* observer);
+
+  mojo::Array<mojom::DisplayPtr> GetAllDisplays();
 
   // Calls OnDisplays() on |observer|.
   void CallOnDisplays(mojom::DisplayManagerObserver* observer);
 
-  // Calls observer->OnDisplaysChanged() with the display for |display|.
-  void CallOnDisplayChanged(const WindowManagerState* wms,
-                            mojom::DisplayManagerObserver* observer);
-
   // Overriden from mojom::DisplayManager:
   void AddObserver(mojom::DisplayManagerObserverPtr observer) override;
 
+  base::subtle::Atomic32* cursor_location_memory() {
+    return reinterpret_cast<base::subtle::Atomic32*>(
+        cursor_location_mapping_.get());
+  }
+
   ws::DisplayManager* display_manager_;
+
+  DisplayManagerDelegate* delegate_;
 
   const UserId user_id_;
 
   // Set to true the first time at least one Display has valid frame values.
-  bool got_valid_frame_decorations_ = false;
+  bool got_valid_frame_decorations_;
 
   mojo::BindingSet<mojom::DisplayManager> display_manager_bindings_;
 
@@ -91,7 +96,7 @@ class UserDisplayManager : public mojom::DisplayManager {
   mojom::DisplayManagerObserver* test_observer_ = nullptr;
 
   // The current location of the cursor. This is always kept up to date so we
-  // can atomically write this to |cursor_location_memory_| once it is created.
+  // can atomically write this to |cursor_location_memory()| once it is created.
   base::subtle::Atomic32 current_cursor_location_;
 
   // A handle to a shared memory buffer that is one 64 bit integer long. We
@@ -102,7 +107,7 @@ class UserDisplayManager : public mojom::DisplayManager {
   // The one int32 in |cursor_location_handle_|. When we write to this
   // location, we must always write to it atomically. (On the other side of the
   // mojo connection, this data must be read atomically.)
-  base::subtle::Atomic32* cursor_location_memory_;
+  mojo::ScopedSharedBufferMapping cursor_location_mapping_;
 
   DISALLOW_COPY_AND_ASSIGN(UserDisplayManager);
 };

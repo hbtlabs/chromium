@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/bluetooth/bluetooth_allowed_devices_map.h"
 #include "content/browser/bluetooth/cache_query_result.h"
@@ -99,14 +100,15 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
       const mojo::String& device_id,
       const RemoteServerConnectCallback& callback) override;
   void RemoteServerDisconnect(const mojo::String& device_id) override;
-  void RemoteServerGetPrimaryService(
+  void RemoteServerGetPrimaryServices(
       const mojo::String& device_id,
-      const mojo::String& service_uuid,
-      const RemoteServerGetPrimaryServiceCallback& callback) override;
+      blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+      const base::Optional<device::BluetoothUUID>& services_uuid,
+      const RemoteServerGetPrimaryServicesCallback& callback) override;
   void RemoteServiceGetCharacteristics(
       const mojo::String& service_instance_id,
       blink::mojom::WebBluetoothGATTQueryQuantity quantity,
-      const mojo::String& characteristics_uuid,
+      const base::Optional<device::BluetoothUUID>& characteristics_uuid,
       const RemoteServiceGetCharacteristicsCallback& callback) override;
   void RemoteCharacteristicReadValue(
       const mojo::String& characteristic_instance_id,
@@ -129,9 +131,11 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
 
   // Should only be run after the services have been discovered for
   // |device_address|.
-  void RemoteServerGetPrimaryServiceImpl(
-      const std::string& service_uuid,
-      const RemoteServerGetPrimaryServiceCallback& callback,
+  void RemoteServerGetPrimaryServicesImpl(
+      const mojo::String& device_id,
+      blink::mojom::WebBluetoothGATTQueryQuantity quantity,
+      const base::Optional<device::BluetoothUUID>& services_uuid,
+      const RemoteServerGetPrimaryServicesCallback& callback,
       device::BluetoothDevice* device);
 
   // Callbacks for BluetoothDeviceChooserController::GetDevice.

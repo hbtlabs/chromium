@@ -25,14 +25,12 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
-import os
 import re
 import unittest
 
 from webkitpy.common.host import Host
 from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.common.webkit_finder import WebKitFinder
-from webkitpy.thirdparty.BeautifulSoup import BeautifulSoup
 from webkitpy.w3c.test_converter import _W3CTestConverter, convert_for_webkit
 from webkitpy.common.system.systemhost_mock import MockSystemHost
 from webkitpy.common.system.filesystem_mock import MockFileSystem
@@ -213,36 +211,6 @@ CONTENT OF TEST
         self.verify_conversion_happened(converted)
         self.verify_prefixed_properties(converted, test_content[0])
 
-    def test_hides_all_instructions_for_manual_testers(self):
-        test_html = """<body>
-<h1 class="instructions">Hello manual tester!</h1>
-<p class="instructions some_other_class">This is how you run this test.</p>
-<p style="willbeoverwritten" class="instructions">...</p>
-<doesntmatterwhichtagitis class="some_other_class instructions">...</p>
-<p>Legit content may contain the instructions string</p>
-</body>
-"""
-        expected_test_html = """<body>
-<h1 class="instructions" style="display:none">Hello manual tester!</h1>
-<p class="instructions some_other_class" style="display:none">This is how you run this test.</p>
-<p class="instructions" style="display:none">...</p>
-<doesntmatterwhichtagitis class="some_other_class instructions" style="display:none">...</p>
-<p>Legit content may contain the instructions string</p>
-</body>
-"""
-        converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, None)
-
-        oc = OutputCapture()
-        oc.capture_output()
-        try:
-            converter.feed(test_html)
-            converter.close()
-            converted = converter.output()
-        finally:
-            oc.restore_output()
-
-        self.assertEqual(converted[1], expected_test_html)
-
     def test_convert_attributes_if_needed(self):
         """Tests convert_attributes_if_needed() using a reference file that has some relative src paths."""
 
@@ -325,3 +293,15 @@ CONTENT OF TEST
                  '/mock-checkout/third_party/WebKit/Source/core/css/CSSProperties.in': '', }
         host = MockSystemHost(filesystem=MockFileSystem(files=files))
         convert_for_webkit('', '/file', '', host)
+
+    def test_for_capital_end_tags(self):
+        test_html = """<FONT></FONT>"""
+        converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, None)
+        converter.feed(test_html)
+        self.assertEqual(converter.output(), ([], """<FONT></FONT>"""))
+
+    def test_for_comments(self):
+        test_html = """<!--abc--><!-- foo -->"""
+        converter = _W3CTestConverter(DUMMY_PATH, DUMMY_FILENAME, None)
+        converter.feed(test_html)
+        self.assertEqual(converter.output(), ([], """<!--abc--><!-- foo -->"""))

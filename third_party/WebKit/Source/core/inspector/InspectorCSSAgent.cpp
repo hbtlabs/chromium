@@ -62,7 +62,7 @@
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorHistory.h"
-#include "core/inspector/InspectorResourceAgent.h"
+#include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/layout/HitTestResult.h"
@@ -102,7 +102,7 @@ String createShorthandValue(Document* document, const String& shorthand, const S
 {
     StyleSheetContents* styleSheetContents = StyleSheetContents::create(strictCSSParserContext());
     String text = " div { " + shorthand  + ": " + oldText + "; }";
-    CSSParser::parseSheet(CSSParserContext(*document, 0), styleSheetContents, text);
+    CSSParser::parseSheet(CSSParserContext(*document, nullptr), styleSheetContents, text);
 
     CSSStyleSheet* styleSheet = CSSStyleSheet::create(styleSheetContents);
     CSSStyleRule* rule = toCSSStyleRule(styleSheet->item(0));
@@ -609,10 +609,10 @@ CSSMediaRule* InspectorCSSAgent::asCSSMediaRule(CSSRule* rule)
     return toCSSMediaRule(rule);
 }
 
-InspectorCSSAgent::InspectorCSSAgent(InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames, InspectorResourceAgent* resourceAgent, InspectorResourceContentLoader* resourceContentLoader, InspectorResourceContainer* resourceContainer)
+InspectorCSSAgent::InspectorCSSAgent(InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames, InspectorNetworkAgent* networkAgent, InspectorResourceContentLoader* resourceContentLoader, InspectorResourceContainer* resourceContainer)
     : m_domAgent(domAgent)
     , m_inspectedFrames(inspectedFrames)
-    , m_resourceAgent(resourceAgent)
+    , m_networkAgent(networkAgent)
     , m_resourceContentLoader(resourceContentLoader)
     , m_resourceContainer(resourceContainer)
     , m_creatingViaInspectorStyleSheet(false)
@@ -665,7 +665,7 @@ void InspectorCSSAgent::enable(ErrorString* errorString, std::unique_ptr<EnableC
         return;
     }
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, true);
-    m_resourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorCSSAgent::resourceContentLoaded, this, passed(std::move(prpCallback))));
+    m_resourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorCSSAgent::resourceContentLoaded, wrapPersistent(this), passed(std::move(prpCallback))));
 }
 
 void InspectorCSSAgent::resourceContentLoaded(std::unique_ptr<EnableCallback> callback)
@@ -1579,7 +1579,7 @@ InspectorStyleSheet* InspectorCSSAgent::bindStyleSheet(CSSStyleSheet* styleSheet
     InspectorStyleSheet* inspectorStyleSheet = m_cssStyleSheetToInspectorStyleSheet.get(styleSheet);
     if (!inspectorStyleSheet) {
         Document* document = styleSheet->ownerDocument();
-        inspectorStyleSheet = InspectorStyleSheet::create(m_resourceAgent, styleSheet, detectOrigin(styleSheet, document), InspectorDOMAgent::documentURLString(document), this, m_resourceContainer);
+        inspectorStyleSheet = InspectorStyleSheet::create(m_networkAgent, styleSheet, detectOrigin(styleSheet, document), InspectorDOMAgent::documentURLString(document), this, m_resourceContainer);
         m_idToInspectorStyleSheet.set(inspectorStyleSheet->id(), inspectorStyleSheet);
         m_cssStyleSheetToInspectorStyleSheet.set(styleSheet, inspectorStyleSheet);
         if (m_creatingViaInspectorStyleSheet)
@@ -1890,7 +1890,7 @@ CSSStyleDeclaration* InspectorCSSAgent::findEffectiveDeclaration(CSSPropertyID p
 void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* element, CSSStyleDeclaration* style, CSSPropertyID propertyId, const String& value, bool forceImportant)
 {
     InspectorStyleSheetBase* inspectorStyleSheet =  nullptr;
-    CSSRuleSourceData* sourceData = nullptr;
+    RefPtr<CSSRuleSourceData> sourceData;
     // An absence of the parent rule means that given style is an inline style.
     if (style->parentRule()) {
         InspectorStyleSheet* styleSheet = bindStyleSheet(style->parentStyleSheet());
@@ -1914,7 +1914,7 @@ void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* 
     String longhand = getPropertyNameString(propertyId);
 
     int foundIndex = -1;
-    HeapVector<CSSPropertySourceData> properties = sourceData->styleSourceData->propertyData;
+    Vector<CSSPropertySourceData> properties = sourceData->styleSourceData->propertyData;
     for (unsigned i = 0; i < properties.size(); ++i) {
         CSSPropertySourceData property = properties[properties.size() - i - 1];
         String name = property.name;
@@ -1964,7 +1964,7 @@ void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* 
 void InspectorCSSAgent::layoutEditorItemSelected(Element* element, CSSStyleDeclaration* style)
 {
     InspectorStyleSheetBase* inspectorStyleSheet =  nullptr;
-    CSSRuleSourceData* sourceData = nullptr;
+    RefPtr<CSSRuleSourceData> sourceData;
     if (style->parentRule()) {
         InspectorStyleSheet* styleSheet = bindStyleSheet(style->parentStyleSheet());
         inspectorStyleSheet = styleSheet;
@@ -2064,7 +2064,7 @@ DEFINE_TRACE(InspectorCSSAgent)
 {
     visitor->trace(m_domAgent);
     visitor->trace(m_inspectedFrames);
-    visitor->trace(m_resourceAgent);
+    visitor->trace(m_networkAgent);
     visitor->trace(m_resourceContentLoader);
     visitor->trace(m_resourceContainer);
     visitor->trace(m_idToInspectorStyleSheet);

@@ -134,6 +134,7 @@
     # Because of transitive dependency on make_platform_generated.
     'hard_dependency': 1,
     'dependencies': [
+      '../../public/blink.gyp:mojo_bindings',
       '../config.gyp:config',
       '../wtf/wtf.gyp:wtf',
       'blink_common',
@@ -205,6 +206,7 @@
       '<(blink_platform_output_dir)/RuntimeEnabledFeatures.h',
 
       # Additional .cpp files from the protocol_sources list.
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Console.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Debugger.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/HeapProfiler.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Profiler.cpp',

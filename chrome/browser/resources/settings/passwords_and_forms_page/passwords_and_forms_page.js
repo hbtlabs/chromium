@@ -71,7 +71,7 @@ PasswordManager.prototype = {
 
   /**
    * Should remove the password exception and notify that the list has changed.
-   * @param {!string} exception The exception that should be removed from the
+   * @param {string} exception The exception that should be removed from the
    *     list. No-op if |exception| is not in the list.
    */
   removeException: assertNotReached,
@@ -116,7 +116,7 @@ AutofillManager.prototype = {
    */
   getAddressList: assertNotReached,
 
-  /** @param {!AutofillManager.AddressEntry} address The address to remove.  */
+  /** @param {string} guid The guid of the address to remove.  */
   removeAddress: assertNotReached,
 
   /**
@@ -137,11 +137,17 @@ AutofillManager.prototype = {
    */
   getCreditCardList: assertNotReached,
 
-  /**
-   * @param {!AutofillManager.CreditCardEntry} creditCard The credit card to
-   *     remove.
-   */
+  /** @param {string} guid The GUID of the credit card to remove.  */
   removeCreditCard: assertNotReached,
+
+  /** @param {string} guid The GUID to credit card to remove from the cache. */
+  clearCachedCreditCard: assertNotReached,
+
+  /**
+   * Saves the given credit card.
+   * @param {!AutofillManager.CreditCardEntry} creditCard
+   */
+  saveCreditCard: assertNotReached,
 };
 
 /**
@@ -241,8 +247,9 @@ AutofillManagerImpl.prototype = {
   },
 
   /** @override */
-  removeAddress: function(address) {
-    chrome.autofillPrivate.removeEntry(/** @type {string} */(address.guid));
+  removeAddress: function(guid) {
+    assert(guid);
+    chrome.autofillPrivate.removeEntry(guid);
   },
 
   /** @override */
@@ -261,9 +268,21 @@ AutofillManagerImpl.prototype = {
   },
 
   /** @override */
-  removeCreditCard: function(creditCard) {
-    chrome.autofillPrivate.removeEntry(/** @type {string} */(creditCard.guid));
+  removeCreditCard: function(guid) {
+    assert(guid);
+    chrome.autofillPrivate.removeEntry(guid);
   },
+
+  /** @override */
+  clearCachedCreditCard: function(guid) {
+    assert(guid);
+    chrome.autofillPrivate.maskCreditCard(guid);
+  },
+
+  /** @override */
+  saveCreditCard: function(creditCard) {
+    chrome.autofillPrivate.saveCreditCard(creditCard);
+  }
 };
 
 (function() {
@@ -293,40 +312,34 @@ Polymer({
      * An array of passwords to display.
      * @type {!Array<!PasswordManager.PasswordUiEntry>}
      */
-    savedPasswords: {
-      type: Array,
-    },
+    savedPasswords: Array,
 
     /**
      * An array of sites to display.
      * @type {!Array<!PasswordManager.ExceptionPair>}
      */
-    passwordExceptions: {
-      type: Array,
-    },
+    passwordExceptions: Array,
 
      /**
      * An array of saved addresses.
      * @type {!Array<!AutofillManager.AddressEntry>}
      */
-    addresses: {
-      type: Array,
-    },
+    addresses: Array,
 
     /**
      * An array of saved addresses.
      * @type {!Array<!AutofillManager.CreditCardEntry>}
      */
-    creditCards: {
-      type: Array,
-    },
+    creditCards: Array,
  },
 
   listeners: {
+    'clear-credit-card': 'clearCreditCard_',
     'remove-address': 'removeAddress_',
     'remove-credit-card': 'removeCreditCard_',
     'remove-password-exception': 'removePasswordException_',
     'remove-saved-password': 'removeSavedPassword_',
+    'save-credit-card': 'saveCreditCard_',
     'show-password': 'showPassword_',
   },
 
@@ -418,7 +431,7 @@ Polymer({
    * @private
    */
   removeAddress_: function(event) {
-    this.autofillManager_.removeAddress(event.detail);
+    this.autofillManager_.removeAddress(event.detail.guid);
   },
 
   /**
@@ -427,7 +440,16 @@ Polymer({
    * @private
    */
   removeCreditCard_: function(event) {
-    this.autofillManager_.removeCreditCard(event.detail);
+    this.autofillManager_.removeCreditCard(event.detail.guid);
+  },
+
+  /**
+   * Listens for the clear-credit-card event, and calls the private API.
+   * @param {!Event} event
+   * @private
+   */
+  clearCreditCard_: function(event) {
+    this.autofillManager_.clearCachedCreditCard(event.detail.guid);
   },
 
   /**
@@ -455,6 +477,15 @@ Polymer({
         this.getPref('profile.password_manager_enabled').value) {
       this.$.pages.setSubpageChain(['manage-passwords']);
     }
+  },
+
+  /**
+   * Listens for the save-credit-card event, and calls the private API.
+   * @param {!Event} event
+   * @private
+   */
+  saveCreditCard_: function(event) {
+    this.autofillManager_.saveCreditCard(event.detail);
   },
 
   /**

@@ -87,6 +87,7 @@
 #include "core/svg/SVGImageElement.h"
 #include "platform/KillRing.h"
 #include "platform/weborigin/KURL.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/CharacterNames.h"
 
 namespace blink {
@@ -94,6 +95,61 @@ namespace blink {
 using namespace HTMLNames;
 using namespace WTF;
 using namespace Unicode;
+
+namespace {
+
+void dispatchInputEvent(Element* target, InputEvent::InputType inputType, const String& data, InputEvent::EventIsComposing isComposing)
+{
+    if (!RuntimeEnabledFeatures::inputEventEnabled())
+        return;
+    if (!target)
+        return;
+    // TODO(chongz): Pass appreciate |ranges| after it's defined on spec.
+    // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+    InputEvent* inputEvent = InputEvent::createInput(inputType, data, isComposing, nullptr);
+    target->dispatchScopedEvent(inputEvent);
+}
+
+void dispatchInputEventEditableContentChanged(Element* startRoot, Element* endRoot, InputEvent::InputType inputType, const String& data, InputEvent::EventIsComposing isComposing)
+{
+    if (startRoot)
+        dispatchInputEvent(startRoot, inputType, data, isComposing);
+    if (endRoot && endRoot != startRoot)
+        dispatchInputEvent(endRoot, inputType, data, isComposing);
+}
+
+InputEvent::InputType inputTypeFromCommand(const CompositeEditCommand* command)
+{
+    if (command->isTypingCommand()) {
+        const TypingCommand* typingCommand = toTypingCommand(command);
+        // TODO(chongz): Separate command types into more detailed InputType.
+        switch (typingCommand->commandTypeOfOpenCommand()) {
+        case TypingCommand::DeleteSelection:
+        case TypingCommand::DeleteKey:
+        case TypingCommand::ForwardDeleteKey:
+            return InputEvent::InputType::DeleteContent;
+        case TypingCommand::InsertText:
+        case TypingCommand::InsertLineBreak:
+        case TypingCommand::InsertParagraphSeparator:
+        case TypingCommand::InsertParagraphSeparatorInQuotedContent:
+            return InputEvent::InputType::InsertText;
+        default:
+            return InputEvent::InputType::None;
+        }
+    }
+
+    // TODO(chongz): Handle other edit actions.
+    return InputEvent::InputType::None;
+}
+
+InputEvent::EventIsComposing isComposingFromCommand(const CompositeEditCommand* command)
+{
+    if (command->isTypingCommand() && toTypingCommand(command)->compositionType() != TypingCommand::TextCompositionNone)
+        return InputEvent::EventIsComposing::IsComposing;
+    return InputEvent::EventIsComposing::NotComposing;
+}
+
+} // anonymous namespace
 
 Editor::RevealSelectionScope::RevealSelectionScope(Editor* editor)
     : m_editor(editor)
@@ -504,6 +560,7 @@ bool Editor::canSmartReplaceWithPasteboard(Pasteboard* pasteboard)
 
 void Editor::replaceSelectionWithFragment(DocumentFragment* fragment, bool selectReplacement, bool smartReplace, bool matchStyle)
 {
+    frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
     if (frame().selection().isNone() || !frame().selection().isContentEditable() || !fragment)
         return;
 
@@ -701,6 +758,9 @@ void Editor::appliedEditing(CompositeEditCommand* cmd)
     EditCommandComposition* composition = cmd->composition();
     DCHECK(composition);
     dispatchEditableContentChangedEvents(composition->startingRootEditableElement(), composition->endingRootEditableElement());
+    // TODO(chongz): Filter empty InputType after spec is finalized.
+    // TODO(chongz): Fill in |data| field.
+    dispatchInputEventEditableContentChanged(composition->startingRootEditableElement(), composition->endingRootEditableElement(), inputTypeFromCommand(cmd), emptyString(), isComposingFromCommand(cmd));
     VisibleSelection newSelection(cmd->endingSelection());
 
     // Don't clear the typing style with this selection change. We do those things elsewhere if necessary.
@@ -729,6 +789,7 @@ void Editor::unappliedEditing(EditCommandComposition* cmd)
     frame().document()->updateStyleAndLayout();
 
     dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(), cmd->endingRootEditableElement());
+    dispatchInputEventEditableContentChanged(cmd->startingRootEditableElement(), cmd->endingRootEditableElement(), InputEvent::InputType::Undo, emptyString(), InputEvent::EventIsComposing::NotComposing);
 
     VisibleSelection newSelection(cmd->startingSelection());
     newSelection.validatePositionsIfNeeded();
@@ -747,6 +808,7 @@ void Editor::reappliedEditing(EditCommandComposition* cmd)
     frame().document()->updateStyleAndLayout();
 
     dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(), cmd->endingRootEditableElement());
+    dispatchInputEventEditableContentChanged(cmd->startingRootEditableElement(), cmd->endingRootEditableElement(), InputEvent::InputType::Redo, emptyString(), InputEvent::EventIsComposing::NotComposing);
 
     VisibleSelection newSelection(cmd->endingSelection());
     changeSelectionAfterCommand(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
@@ -768,7 +830,7 @@ Editor::Editor(LocalFrame& frame)
     , m_shouldStartNewKillRingSequence(false)
     // This is off by default, since most editors want this behavior (this matches IE but not FF).
     , m_shouldStyleWithCSS(false)
-    , m_killRing(adoptPtr(new KillRing))
+    , m_killRing(wrapUnique(new KillRing))
     , m_areMarkedTextMatchesHighlighted(false)
     , m_defaultParagraphSeparator(EditorParagraphSeparatorIsDiv)
     , m_overwriteModeEnabled(false)
@@ -1238,7 +1300,7 @@ static Range* findStringBetweenPositions(const String& target, const EphemeralRa
         }
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 

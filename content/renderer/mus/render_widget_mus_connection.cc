@@ -10,9 +10,8 @@
 #include "base/macros.h"
 #include "components/mus/public/cpp/context_provider.h"
 #include "components/mus/public/cpp/output_surface.h"
-#include "components/mus/public/cpp/surfaces/surfaces_utils.h"
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
-#include "components/mus/public/interfaces/compositor_frame.mojom.h"
+#include "components/mus/public/interfaces/surface.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
@@ -47,8 +46,8 @@ std::unique_ptr<cc::OutputSurface>
 RenderWidgetMusConnection::CreateOutputSurface() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_surface_binding_);
-  scoped_refptr<cc::ContextProvider> context_provider(
-      new mus::ContextProvider(MojoShellConnection::Get()->GetConnector()));
+  scoped_refptr<cc::ContextProvider> context_provider(new mus::ContextProvider(
+      MojoShellConnection::GetForProcess()->GetConnector()));
 
   std::unique_ptr<cc::OutputSurface> surface(new mus::OutputSurface(
       context_provider, mus::WindowSurface::Create(&window_surface_binding_)));
@@ -94,13 +93,6 @@ bool RenderWidgetMusConnection::HasTouchEventHandlersAt(
   return true;
 }
 
-void RenderWidgetMusConnection::ObserveWheelEventAndResult(
-    const blink::WebMouseWheelEvent& wheel_event,
-    const gfx::Vector2dF& wheel_unused_delta,
-    bool event_processed) {
-  NOTIMPLEMENTED();
-}
-
 void RenderWidgetMusConnection::ObserveGestureEventAndResult(
     const blink::WebGestureEvent& gesture_event,
     const gfx::Vector2dF& wheel_unused_delta,
@@ -128,7 +120,8 @@ void RenderWidgetMusConnection::OnInputEventAck(
 }
 
 void RenderWidgetMusConnection::NotifyInputEventHandled(
-    blink::WebInputEvent::Type handled_type) {
+    blink::WebInputEvent::Type handled_type,
+    InputEventAckState ack_result) {
   NOTIMPLEMENTED();
 }
 

@@ -55,6 +55,7 @@
 #include "core/paint/FramePainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "platform/Histogram.h"
+#include "platform/JSONValues.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
@@ -405,13 +406,9 @@ void PaintLayerCompositor::updateIfNeeded()
     if (updateType != CompositingUpdateNone) {
         if (RuntimeEnabledFeatures::compositorWorkerEnabled() && m_scrollLayer) {
             if (Element* scrollingElement = m_layoutView.document().scrollingElement()) {
-                uint64_t elementId = 0;
                 uint32_t mutableProperties = CompositorMutableProperty::kNone;
-                if (scrollingElement->hasCompositorProxy()) {
-                    elementId = DOMNodeIds::idForNode(scrollingElement);
+                if (scrollingElement->hasCompositorProxy())
                     mutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & scrollingElement->compositorMutableProperties();
-                }
-                m_scrollLayer->setElementId(elementId);
                 m_scrollLayer->setCompositorMutableProperties(mutableProperties);
             }
         }
@@ -437,10 +434,10 @@ void PaintLayerCompositor::updateIfNeeded()
             GraphicsLayerTreeBuilder().rebuild(*updateRoot, ancestorInfo);
         }
 
-        if (childList.isEmpty())
-            destroyRootLayer();
-        else if (m_rootContentLayer)
+        if (!childList.isEmpty()) {
+            CHECK(m_rootContentLayer && m_compositing);
             m_rootContentLayer->setChildren(childList);
+        }
 
         applyOverlayFullscreenVideoAdjustmentIfNeeded();
     }
@@ -646,12 +643,12 @@ bool PaintLayerCompositor::scrollingLayerDidChange(PaintLayer* layer)
     return false;
 }
 
-String PaintLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
+PassRefPtr<JSONObject> PaintLayerCompositor::layerTreeAsJSON(LayerTreeFlags flags) const
 {
     ASSERT(lifecycle().state() >= DocumentLifecycle::PaintInvalidationClean || m_layoutView.frameView()->shouldThrottleRendering());
 
     if (!m_rootContentLayer)
-        return String();
+        return nullptr;
 
     // We skip dumping the scroll and clip layers to keep layerTreeAsText output
     // similar between platforms (unless we explicitly request dumping from the
@@ -660,7 +657,7 @@ String PaintLayerCompositor::layerTreeAsText(LayerTreeFlags flags)
     if (flags & LayerTreeIncludesRootLayer)
         rootLayer = rootGraphicsLayer();
 
-    return rootLayer->layerTreeAsText(flags);
+    return rootLayer->layerTreeAsJSON(flags);
 }
 
 PaintLayerCompositor* PaintLayerCompositor::frameContentsCompositor(LayoutPart* layoutObject)
@@ -894,30 +891,24 @@ GraphicsLayer* PaintLayerCompositor::fixedRootBackgroundLayer() const
     return nullptr;
 }
 
-static void resetTrackedPaintInvalidationRectsRecursive(GraphicsLayer* graphicsLayer)
+static void setTracksPaintInvalidationsRecursive(GraphicsLayer* graphicsLayer, bool tracksPaintInvalidations)
 {
     if (!graphicsLayer)
         return;
 
-    graphicsLayer->resetTrackedPaintInvalidations();
+    graphicsLayer->setTracksPaintInvalidations(tracksPaintInvalidations);
 
     for (size_t i = 0; i < graphicsLayer->children().size(); ++i)
-        resetTrackedPaintInvalidationRectsRecursive(graphicsLayer->children()[i]);
+        setTracksPaintInvalidationsRecursive(graphicsLayer->children()[i], tracksPaintInvalidations);
 
     if (GraphicsLayer* replicaLayer = graphicsLayer->replicaLayer())
-        resetTrackedPaintInvalidationRectsRecursive(replicaLayer);
+        setTracksPaintInvalidationsRecursive(replicaLayer, tracksPaintInvalidations);
 
     if (GraphicsLayer* maskLayer = graphicsLayer->maskLayer())
-        resetTrackedPaintInvalidationRectsRecursive(maskLayer);
+        setTracksPaintInvalidationsRecursive(maskLayer, tracksPaintInvalidations);
 
     if (GraphicsLayer* clippingMaskLayer = graphicsLayer->contentsClippingMaskLayer())
-        resetTrackedPaintInvalidationRectsRecursive(clippingMaskLayer);
-}
-
-void PaintLayerCompositor::resetTrackedPaintInvalidationRects()
-{
-    if (GraphicsLayer* rootLayer = rootGraphicsLayer())
-        resetTrackedPaintInvalidationRectsRecursive(rootLayer);
+        setTracksPaintInvalidationsRecursive(clippingMaskLayer, tracksPaintInvalidations);
 }
 
 void PaintLayerCompositor::setTracksPaintInvalidations(bool tracksPaintInvalidations)
@@ -929,6 +920,8 @@ void PaintLayerCompositor::setTracksPaintInvalidations(bool tracksPaintInvalidat
 #endif
 
     m_isTrackingPaintInvalidations = tracksPaintInvalidations;
+    if (GraphicsLayer* rootLayer = rootGraphicsLayer())
+        setTracksPaintInvalidationsRecursive(rootLayer, tracksPaintInvalidations);
 }
 
 bool PaintLayerCompositor::isTrackingPaintInvalidations() const
@@ -1052,6 +1045,8 @@ void PaintLayerCompositor::ensureRootLayer()
         m_scrollLayer = GraphicsLayer::create(this);
         if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
             scrollingCoordinator->setLayerIsContainerForFixedPositionLayers(m_scrollLayer.get(), true);
+
+        m_scrollLayer->setElementId(createCompositorElementId(DOMNodeIds::idForNode(&m_layoutView.document()), CompositorSubElementId::Scroll));
 
         // Hook them up
         m_overflowControlsHostLayer->addChild(m_containerLayer.get());

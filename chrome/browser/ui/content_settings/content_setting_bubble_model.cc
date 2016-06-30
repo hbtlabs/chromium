@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -33,6 +34,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
+#include "components/rappor/rappor_utils.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -976,7 +978,9 @@ ContentSettingMixedScriptBubbleModel::ContentSettingMixedScriptBubbleModel(
 }
 
 void ContentSettingMixedScriptBubbleModel::OnCustomLinkClicked() {
-  DCHECK(web_contents());
+  if (!web_contents())
+    return;
+
   web_contents()->SendToAllFrames(
       new ChromeViewMsg_SetAllowRunningInsecureContent(MSG_ROUTING_NONE, true));
   web_contents()->GetMainFrame()->Send(new ChromeViewMsg_ReloadFrame(
@@ -984,8 +988,10 @@ void ContentSettingMixedScriptBubbleModel::OnCustomLinkClicked() {
 
   content_settings::RecordMixedScriptAction(
       content_settings::MIXED_SCRIPT_ACTION_CLICKED_ALLOW);
-  content_settings::RecordMixedScriptActionWithRAPPOR(
-      content_settings::MIXED_SCRIPT_ACTION_CLICKED_ALLOW,
+
+  rappor::SampleDomainAndRegistryFromGURL(
+      g_browser_process->rappor_service(),
+      "ContentSettings.MixedScript.UserClickedAllow",
       web_contents()->GetLastCommittedURL());
 }
 
@@ -1079,6 +1085,9 @@ void ContentSettingRPHBubbleModel::OnRadioClicked(int radio_index) {
 }
 
 void ContentSettingRPHBubbleModel::OnDoneClicked() {
+  if (!web_contents())
+    return;
+
   // The user has one chance to deal with the RPH content setting UI,
   // then we remove it.
   TabSpecificContentSettings::FromWebContents(web_contents())->
@@ -1090,6 +1099,9 @@ void ContentSettingRPHBubbleModel::OnDoneClicked() {
 }
 
 void ContentSettingRPHBubbleModel::RegisterProtocolHandler() {
+  if (!web_contents())
+    return;
+
   // A no-op if the handler hasn't been ignored, but needed in case the user
   // selects sequences like register/ignore/register.
   registry_->RemoveIgnoredHandler(pending_handler_);
@@ -1100,6 +1112,9 @@ void ContentSettingRPHBubbleModel::RegisterProtocolHandler() {
 }
 
 void ContentSettingRPHBubbleModel::UnregisterProtocolHandler() {
+  if (!web_contents())
+    return;
+
   registry_->OnDenyRegisterProtocolHandler(pending_handler_);
   TabSpecificContentSettings::FromWebContents(web_contents())->
       set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
@@ -1107,6 +1122,9 @@ void ContentSettingRPHBubbleModel::UnregisterProtocolHandler() {
 }
 
 void ContentSettingRPHBubbleModel::IgnoreProtocolHandler() {
+  if (!web_contents())
+    return;
+
   registry_->OnIgnoreRegisterProtocolHandler(pending_handler_);
   TabSpecificContentSettings::FromWebContents(web_contents())->
       set_pending_protocol_handler_setting(CONTENT_SETTING_DEFAULT);

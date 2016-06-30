@@ -65,6 +65,7 @@
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/browser/screen_orientation/screen_orientation_dispatcher_host_impl.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/wake_lock/wake_lock_service_context.h"
@@ -95,6 +96,7 @@
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/screen_orientation_dispatcher_host.h"
@@ -114,7 +116,6 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/web_preferences.h"
-#include "mojo/common/url_type_converters.h"
 #include "net/base/url_util.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_transaction_factory.h"
@@ -416,6 +417,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       bluetooth_connected_device_count_(0),
       virtual_keyboard_requested_(false),
       page_scale_factor_is_one_(true),
+      mouse_lock_widget_(nullptr),
       loading_weak_factory_(this),
       weak_factory_(this) {
   frame_tree_.SetFrameRemoveListener(
@@ -704,6 +706,8 @@ bool WebContentsImpl::OnMessageReceived(RenderViewHost* render_view_host,
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(FrameHostMsg_FindMatchRects_Reply,
                         OnFindMatchRectsReply)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_GetNearestFindResult_Reply,
+                        OnGetNearestFindResultReply)
     IPC_MESSAGE_HANDLER(ViewHostMsg_OpenDateTimeDialog,
                         OnOpenDateTimeDialog)
 #endif
@@ -724,13 +728,6 @@ bool WebContentsImpl::HasValidFrameSource() {
   }
 
   return true;
-}
-
-void WebContentsImpl::RunFileChooser(
-    RenderViewHost* render_view_host,
-    const FileChooserParams& params) {
-  if (delegate_)
-    delegate_->RunFileChooser(this, params);
 }
 
 NavigationControllerImpl& WebContentsImpl::GetController() {
@@ -1217,23 +1214,6 @@ void WebContentsImpl::SetAudioMuted(bool mute) {
   NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
 }
 
-void WebContentsImpl::IncrementBluetoothConnectedDeviceCount() {
-  // Notify for UI updates if the state changes.
-  bluetooth_connected_device_count_++;
-  if (bluetooth_connected_device_count_ == 1) {
-    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
-  }
-}
-
-void WebContentsImpl::DecrementBluetoothConnectedDeviceCount() {
-  // Notify for UI updates if the state changes.
-  DCHECK(bluetooth_connected_device_count_ != 0);
-  bluetooth_connected_device_count_--;
-  if (bluetooth_connected_device_count_ == 0) {
-    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
-  }
-}
-
 bool WebContentsImpl::IsConnectedToBluetoothDevice() const {
   return bluetooth_connected_device_count_ > 0;
 }
@@ -1311,6 +1291,8 @@ void WebContentsImpl::WasShown() {
     }
   }
 
+  SendPageMessage(new PageMsg_WasShown(MSG_ROUTING_NONE));
+
   last_active_time_ = base::TimeTicks::Now();
 
   // The resize rect might have changed while this was inactive -- send the new
@@ -1340,6 +1322,8 @@ void WebContentsImpl::WasHidden() {
       if (view)
         view->Hide();
     }
+
+    SendPageMessage(new PageMsg_WasHidden(MSG_ROUTING_NONE));
   }
 
   FOR_EACH_OBSERVER(WebContentsObserver, observers_, WasHidden());
@@ -1413,6 +1397,15 @@ void WebContentsImpl::AttachToOuterWebContentsFrame(
   static_cast<RenderWidgetHostViewChildFrame*>(
       render_manager->GetRenderWidgetHostView())
       ->RegisterSurfaceNamespaceId();
+
+  // At this point, we should destroy the TextInputManager which will notify all
+  // the RWHV in this WebContents. The RWHV in this WebContents should use the
+  // TextInputManager owned by the outer WebContents.
+  // TODO(ekaramad): Is it possible to have TextInputState before attaching to
+  // outer WebContents? In such a case, is this still the right way to hand off
+  // state tracking from inner WebContents's TextInputManager to that of the
+  // outer WebContent (crbug.com/609846)?
+  text_input_manager_.reset(nullptr);
 }
 
 void WebContentsImpl::Stop() {
@@ -1513,7 +1506,7 @@ void WebContentsImpl::Init(const WebContents::CreateParams& params) {
       GetContentClient()->browser()->GetWebContentsViewDelegate(this);
 
 #if defined(MOJO_SHELL_CLIENT)
-  if (MojoShellConnection::Get() &&
+  if (MojoShellConnection::GetForProcess() &&
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseMusInRenderer)) {
     mus::Window* mus_window = aura::GetMusWindow(params.context);
@@ -1694,6 +1687,9 @@ void WebContentsImpl::RenderWidgetDeleted(
     if (fullscreen_widget_had_focus_at_shutdown_)
       view_->RestoreFocus();
   }
+
+  if (mouse_lock_widget_ == render_widget_host)
+    mouse_lock_widget_ = nullptr;
 }
 
 void WebContentsImpl::RenderWidgetGotFocus(
@@ -1747,8 +1743,7 @@ bool WebContentsImpl::HandleWheelEvent(
   //      (i.e. control+tab) then the OS's buffered scroll events will come in
   //      with control key set which isn't what the user wants
   if (delegate_ && event.wheelTicksY &&
-      (event.modifiers & blink::WebInputEvent::ControlKey) &&
-      !event.canScroll) {
+      !WebInputEventTraits::CanCauseScroll(event)) {
     // Count only integer cumulative scrolls as zoom events; this handles
     // smooth scroll and regular scroll device behavior.
     zoom_scroll_remainder_ += event.wheelTicksY;
@@ -1824,11 +1819,9 @@ void WebContentsImpl::EnterFullscreenMode(const GURL& origin) {
   if (delegate_)
     delegate_->EnterFullscreenModeForTab(this, origin);
 
-  FOR_EACH_OBSERVER(WebContentsObserver, observers_,
-                    DidToggleFullscreenModeForTab(
-                        IsFullscreenForCurrentTab(
-                            GetRenderViewHost()->GetWidget()),
-                        false));
+  FOR_EACH_OBSERVER(
+      WebContentsObserver, observers_,
+      DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab(), false));
 }
 
 void WebContentsImpl::ExitFullscreenMode(bool will_cause_resize) {
@@ -1865,15 +1858,11 @@ void WebContentsImpl::ExitFullscreenMode(bool will_cause_resize) {
   }
 
   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
-                    DidToggleFullscreenModeForTab(
-                        IsFullscreenForCurrentTab(
-                            GetRenderViewHost()->GetWidget()),
-                        will_cause_resize));
+                    DidToggleFullscreenModeForTab(IsFullscreenForCurrentTab(),
+                                                  will_cause_resize));
 }
 
-// TODO(alexmos): Remove the unused |render_widget_host| parameter.
-bool WebContentsImpl::IsFullscreenForCurrentTab(
-    RenderWidgetHostImpl* render_widget_host) const {
+bool WebContentsImpl::IsFullscreenForCurrentTab() const {
   return delegate_ ? delegate_->IsFullscreenForTabOrPending(this) : false;
 }
 
@@ -1890,20 +1879,32 @@ void WebContentsImpl::RequestToLockMouse(
     RenderWidgetHostImpl* render_widget_host,
     bool user_gesture,
     bool last_unlocked_by_target) {
-  if (render_widget_host != GetRenderViewHost()->GetWidget()) {
+  if (mouse_lock_widget_) {
     render_widget_host->GotResponseToLockMouseRequest(false);
     return;
   }
 
-  if (delegate_)
+  bool widget_in_frame_tree = false;
+  for (FrameTreeNode* node : frame_tree_.Nodes()) {
+    if (node->current_frame_host()->GetRenderWidgetHost() ==
+        render_widget_host) {
+      widget_in_frame_tree = true;
+      break;
+    }
+  }
+
+  if (widget_in_frame_tree && delegate_) {
+    mouse_lock_widget_ = render_widget_host;
     delegate_->RequestToLockMouse(this, user_gesture, last_unlocked_by_target);
-  else
-    GotResponseToLockMouseRequest(false);
+  } else {
+    render_widget_host->GotResponseToLockMouseRequest(false);
+  }
 }
 
 void WebContentsImpl::LostMouseLock(RenderWidgetHostImpl* render_widget_host) {
-  if (!RenderViewHostImpl::From(render_widget_host))
-    return;
+  CHECK(mouse_lock_widget_);
+  mouse_lock_widget_->SendMouseLockLost();
+  mouse_lock_widget_ = nullptr;
 
   if (delegate_)
     delegate_->LostMouseLock();
@@ -2065,9 +2066,7 @@ void WebContentsImpl::CreateNewWindow(
           params.user_gesture, &was_blocked);
     }
     if (!was_blocked) {
-      OpenURLParams open_params(params.target_url,
-                                Referrer(),
-                                CURRENT_TAB,
+      OpenURLParams open_params(params.target_url, params.referrer, CURRENT_TAB,
                                 ui::PAGE_TRANSITION_LINK,
                                 true /* is_renderer_initiated */);
       open_params.user_gesture = params.user_gesture;
@@ -2383,6 +2382,16 @@ void WebContentsImpl::OnFirstPaintAfterLoad(
     RenderWidgetHostImpl* render_widget_host) {
   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
                     DidFirstPaintAfterLoad(render_widget_host));
+}
+
+TextInputManager* WebContentsImpl::GetTextInputManager() {
+  if (GetOuterWebContents())
+    return GetOuterWebContents()->GetTextInputManager();
+
+  if (!text_input_manager_)
+    text_input_manager_.reset(new TextInputManager());
+
+  return text_input_manager_.get();
 }
 
 BrowserAccessibilityManager*
@@ -2958,10 +2967,9 @@ bool WebContentsImpl::GotResponseToLockMouseRequest(bool allowed) {
   if (GetBrowserPluginGuest())
     return GetBrowserPluginGuest()->LockMouse(allowed);
 
-  return GetRenderViewHost()
-             ? GetRenderViewHost()->GetWidget()->GotResponseToLockMouseRequest(
-                   allowed)
-             : false;
+  if (mouse_lock_widget_)
+    return mouse_lock_widget_->GotResponseToLockMouseRequest(allowed);
+  return false;
 }
 
 bool WebContentsImpl::HasOpener() const {
@@ -3025,7 +3033,7 @@ int WebContentsImpl::DownloadImage(
   }
 
   mojo_image_downloader->DownloadImage(
-      mojo::String::From(url), is_favicon, max_bitmap_size, bypass_cache,
+      url, is_favicon, max_bitmap_size, bypass_cache,
       base::Bind(&WebContentsImpl::OnDidDownloadImage,
                  weak_factory_.GetWeakPtr(), callback, download_id, url));
   return download_id;
@@ -3288,9 +3296,9 @@ void WebContentsImpl::DidNavigateMainFramePreCommit(
     // No page change?  Then, the renderer and browser can remain in fullscreen.
     return;
   }
-  if (IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()))
+  if (IsFullscreenForCurrentTab())
     ExitFullscreen(false);
-  DCHECK(!IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()));
+  DCHECK(!IsFullscreenForCurrentTab());
 }
 
 void WebContentsImpl::DidNavigateMainFramePostCommit(
@@ -3616,6 +3624,12 @@ void WebContentsImpl::OnFindMatchRectsReply(
     const gfx::RectF& active_rect) {
   GetOrCreateFindRequestManager()->OnFindMatchRectsReply(
       render_frame_message_source_, version, rects, active_rect);
+}
+
+void WebContentsImpl::OnGetNearestFindResultReply(int request_id,
+                                                  float distance) {
+  GetOrCreateFindRequestManager()->OnGetNearestFindResultReply(
+      render_frame_message_source_, request_id, distance);
 }
 
 void WebContentsImpl::OnOpenDateTimeDialog(
@@ -4089,6 +4103,12 @@ void WebContentsImpl::RunBeforeUnloadConfirm(
                  false));
 }
 
+void WebContentsImpl::RunFileChooser(RenderFrameHost* render_frame_host,
+                                     const FileChooserParams& params) {
+  if (delegate_)
+    delegate_->RunFileChooser(render_frame_host, params);
+}
+
 WebContents* WebContentsImpl::GetAsWebContents() {
   return this;
 }
@@ -4191,7 +4211,7 @@ void WebContentsImpl::RenderViewTerminated(RenderViewHost* rvh,
 
   // Ensure fullscreen mode is exited in the |delegate_| since a crashed
   // renderer may not have made a clean exit.
-  if (IsFullscreenForCurrentTab(GetRenderViewHost()->GetWidget()))
+  if (IsFullscreenForCurrentTab())
     ExitFullscreenMode(false);
 
   // Cancel any visible dialogs so they are not left dangling over the sad tab.
@@ -4564,7 +4584,7 @@ void WebContentsImpl::OnUserInteraction(
   // Exclude scroll events as user gestures for resource load dispatches.
   // rdh is NULL in unittests.
   if (rdh && type != blink::WebInputEvent::MouseWheel)
-    rdh->OnUserGesture(this);
+    rdh->OnUserGesture();
 }
 
 void WebContentsImpl::OnIgnoredUIEvent() {
@@ -4985,6 +5005,19 @@ WebUI* WebContentsImpl::CreateWebUI(const GURL& url,
   return NULL;
 }
 
+// TODO(paulmeyer): This method will not be used until find-in-page across
+// GuestViews is implemented.
+WebContentsImpl* WebContentsImpl::GetOutermostWebContents() {
+  // Find the outer-most WebContents.
+  WebContentsImpl* outermost_web_contents = this;
+  while (outermost_web_contents->node_ &&
+         outermost_web_contents->node_->outer_web_contents()) {
+    outermost_web_contents =
+        outermost_web_contents->node_->outer_web_contents();
+  }
+  return outermost_web_contents;
+}
+
 FindRequestManager* WebContentsImpl::GetOrCreateFindRequestManager() {
   // TODO(paulmeyer): This method will need to access (or potentially create)
   // the FindRequestManager in the outermost WebContents once find-in-page
@@ -5003,6 +5036,33 @@ void WebContentsImpl::NotifyFindReply(int request_id,
   if (delegate_) {
     delegate_->FindReply(this, request_id, number_of_matches, selection_rect,
                          active_match_ordinal, final_update);
+  }
+}
+
+void WebContentsImpl::IncrementBluetoothConnectedDeviceCount() {
+  // Trying to invalidate the tab state while being destroyed could result in a
+  // use after free.
+  if (IsBeingDestroyed()) {
+    return;
+  }
+  // Notify for UI updates if the state changes.
+  bluetooth_connected_device_count_++;
+  if (bluetooth_connected_device_count_ == 1) {
+    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
+  }
+}
+
+void WebContentsImpl::DecrementBluetoothConnectedDeviceCount() {
+  // Trying to invalidate the tab state while being destroyed could result in a
+  // use after free.
+  if (IsBeingDestroyed()) {
+    return;
+  }
+  // Notify for UI updates if the state changes.
+  DCHECK(bluetooth_connected_device_count_ != 0);
+  bluetooth_connected_device_count_--;
+  if (bluetooth_connected_device_count_ == 0) {
+    NotifyNavigationStateChanged(INVALIDATE_TYPE_TAB);
   }
 }
 

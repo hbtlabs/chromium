@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/bitmap_uploader/bitmap_uploader.h"
 #include "components/mus/public/cpp/property_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_observer.h"
@@ -25,6 +26,9 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_property.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/view_prop.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/path.h"
@@ -69,6 +73,28 @@ class FocusRulesImpl : public wm::BaseFocusRules {
   aura::Window* root_;
 
   DISALLOW_COPY_AND_ASSIGN(FocusRulesImpl);
+};
+
+// This makes sure that an aura::Window focused (or activated) through the
+// aura::client::FocusClient (or ActivationClient) focuses (or activates) the
+// corresponding mus::Window too.
+class FocusControllerMus : public wm::FocusController {
+ public:
+  explicit FocusControllerMus(wm::FocusRules* rules) : FocusController(rules) {}
+  ~FocusControllerMus() override {}
+
+ private:
+  void FocusWindow(aura::Window* window) override {
+    FocusController::FocusWindow(window);
+    if (window) {
+      mus::Window* mus_window =
+          window->GetRootWindow()->GetProperty(kMusWindow);
+      if (mus_window)
+        mus_window->SetFocus();
+    }
+  }
+
+  DISALLOW_COPY_AND_ASSIGN(FocusControllerMus);
 };
 
 class ContentWindowLayoutManager : public aura::LayoutManager {
@@ -363,11 +389,6 @@ class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
   void OnWindowVisibilityChanged(mus::Window* window) override {
     native_widget_mus_->OnMusWindowVisibilityChanged(window);
   }
-  void OnWindowBoundsChanged(mus::Window* window,
-                             const gfx::Rect& old_bounds,
-                             const gfx::Rect& new_bounds) override {
-    platform_window_delegate()->OnBoundsChanged(new_bounds);
-  }
   void OnWindowPredefinedCursorChanged(mus::Window* window,
                                        mus::mojom::Cursor cursor) override {
     DCHECK_EQ(window, mus_window());
@@ -491,22 +512,35 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
 
   // TODO(fsamuel): Figure out lifetime of |window_|.
   aura::SetMusWindow(content_, window_);
-
   window->SetLocalProperty(kNativeWidgetMusKey, this);
+
   // WindowTreeHost creates the compositor using the ContextFactory from
   // aura::Env. Install |context_factory_| there so that |context_factory_| is
   // picked up.
   ui::ContextFactory* default_context_factory =
       aura::Env::GetInstance()->context_factory();
   // For Chrome, we need the GpuProcessTransportFactory so that renderer and
-  // browser pixels are composited into a single backing
-  // SoftwareOutputDeviceMus.
-  if (!default_context_factory && connector) {
+  // browser pixels are composited into a single backing SoftwareOutputDeviceMus
+  // (which also requires the BitmapUploader).
+  bool needs_bitmap_uploader = false;
+  if (!default_context_factory) {
     context_factory_.reset(
         new SurfaceContextFactory(connector, window_, surface_type_));
     aura::Env::GetInstance()->set_context_factory(context_factory_.get());
+  } else {
+    needs_bitmap_uploader = true;
   }
-  window_tree_host_.reset(new WindowTreeHostMus(connector, this, window_));
+
+  window_tree_host_.reset(new WindowTreeHostMus(this, window_));
+  if (needs_bitmap_uploader) {
+    bitmap_uploader_.reset(new bitmap_uploader::BitmapUploader(window));
+    bitmap_uploader_->Init(connector);
+    prop_.reset(
+        new ui::ViewProp(window_tree_host_->GetAcceleratedWidget(),
+                         bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
+                         bitmap_uploader_.get()));
+  }
+
   aura::Env::GetInstance()->set_context_factory(default_context_factory);
 }
 
@@ -653,7 +687,7 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   hosted_window->SetProperty(kMusWindow, window_);
 
   focus_client_.reset(
-      new wm::FocusController(new FocusRulesImpl(hosted_window)));
+      new FocusControllerMus(new FocusRulesImpl(hosted_window)));
 
   aura::client::SetFocusClient(hosted_window, focus_client_.get());
   aura::client::SetActivationClient(hosted_window, focus_client_.get());
@@ -677,7 +711,7 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   capture_client_.reset(new MusCaptureClient(hosted_window, content_, window_));
 
   content_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
-  content_->Init(ui::LAYER_TEXTURED);
+  content_->Init(params.layer_type);
   if (window_->visible())
     content_->Show();
   content_->SetTransparent(true);
@@ -807,6 +841,12 @@ void NativeWidgetMus::CenterWindow(const gfx::Size& size) {
   // TODO(beng): clear user-placed property and set preferred size property.
   window_->SetSharedProperty<gfx::Size>(
       mus::mojom::WindowManager::kPreferredSize_Property, size);
+
+  gfx::Rect bounds = display::Screen::GetScreen()
+                         ->GetDisplayNearestWindow(content_)
+                         .work_area();
+  bounds.ClampToCenteredSize(size);
+  window_->SetBounds(bounds);
 }
 
 void NativeWidgetMus::GetWindowPlacement(
@@ -971,10 +1011,11 @@ bool NativeWidgetMus::IsVisible() const {
 }
 
 void NativeWidgetMus::Activate() {
-  if (window_)
-    window_->SetFocus();
   static_cast<aura::client::ActivationClient*>(focus_client_.get())
       ->ActivateWindow(content_);
+  // FocusControllerMus should have focused |window_| when |content_| is
+  // activated.
+  DCHECK(!window_ || window_->HasFocus());
 }
 
 void NativeWidgetMus::Deactivate() {

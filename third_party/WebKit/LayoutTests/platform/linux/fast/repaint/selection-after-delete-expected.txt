@@ -1,25 +1,17 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow DIV id='test'",
-          "rect": [38, 79, 152, 99],
-          "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "LayoutBlockFlow DIV id='test'",
-          "rect": [38, 99, 152, 81],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutBlockFlow DIV id='test'",
-          "rect": [38, 100, 152, 80],
-          "reason": "incremental"
+          "rect": [38, 78, 152, 102],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
@@ -30,80 +22,34 @@
           "object": "LayoutBlockFlow DIV id='test'",
           "rect": [38, 78, 3, 21],
           "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "InlineTextBox '\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox '\n'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox ' '",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox ' '",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox ' '",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox ' '",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'hello world hello world'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'hello world hello world'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'hello world hello world'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'hello world hello world'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'hello'",
-          "reason": "full"
-        },
-        {
-          "object": "LayoutBR BR",
-          "reason": "bounds change"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutText #text",
+      "reason": "layoutObject removal"
+    },
+    {
+      "object": "LayoutBlockFlow DIV id='test'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutBR BR",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "InlineTextBox '\n'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutBlockFlow DIV id='test'",
+      "reason": "invalidate paint rectangle"
     }
   ]
 }

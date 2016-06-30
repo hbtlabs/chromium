@@ -17,8 +17,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/animation/animation_host.h"
-#include "cc/animation/keyframed_animation_curve.h"
-#include "cc/animation/mutable_properties.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/base/synced_property.h"
@@ -57,7 +55,7 @@ LayerTreeImpl::LayerTreeImpl(
     : layer_tree_host_impl_(layer_tree_host_impl),
       source_frame_number_(-1),
       is_first_frame_after_commit_tracker_(-1),
-      root_layer_(nullptr),
+      root_layer_for_testing_(nullptr),
       hud_layer_(nullptr),
       background_color_(0),
       has_transparent_background_(false),
@@ -92,24 +90,24 @@ LayerTreeImpl::~LayerTreeImpl() {
 
   // Need to explicitly clear the tree prior to destroying this so that
   // the LayerTreeImpl pointer is still valid in the LayerImpl dtor.
-  DCHECK(!root_layer_);
+  DCHECK(LayerListIsEmpty());
+  DCHECK(layers_->empty());
 }
 
 void LayerTreeImpl::Shutdown() {
-  if (root_layer_)
-    RemoveLayer(root_layer_->id());
-  root_layer_ = nullptr;
+  DetachLayers();
+  DCHECK(LayerListIsEmpty());
 }
 
 void LayerTreeImpl::ReleaseResources() {
-  if (root_layer_) {
+  if (!LayerListIsEmpty()) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         this, [](LayerImpl* layer) { layer->ReleaseResources(); });
   }
 }
 
 void LayerTreeImpl::RecreateResources() {
-  if (root_layer_) {
+  if (!LayerListIsEmpty()) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         this, [](LayerImpl* layer) { layer->RecreateResources(); });
   }
@@ -255,17 +253,50 @@ void LayerTreeImpl::UpdateScrollbars(int scroll_layer_id, int clip_layer_id) {
   }
 }
 
-void LayerTreeImpl::SetRootLayer(std::unique_ptr<LayerImpl> layer) {
-  if (root_layer_ && layer.get() != root_layer_)
-    RemoveLayer(root_layer_->id());
-  root_layer_ = layer.get();
+RenderSurfaceImpl* LayerTreeImpl::RootRenderSurface() const {
+  return layer_list_.empty() ? nullptr : layer_list_[0]->render_surface();
+}
+
+bool LayerTreeImpl::LayerListIsEmpty() const {
+  return layer_list_.empty();
+}
+
+void LayerTreeImpl::SetRootLayerForTesting(std::unique_ptr<LayerImpl> layer) {
+  if (root_layer_for_testing_ && layer.get() != root_layer_for_testing_)
+    RemoveLayer(root_layer_for_testing_->id());
+  root_layer_for_testing_ = layer.get();
   if (layer)
     AddLayer(std::move(layer));
+  BuildLayerListForTesting();
   layer_tree_host_impl_->OnCanDrawStateChangedForTree();
 }
 
+void LayerTreeImpl::SetRootLayerFromLayerListForTesting() {
+  root_layer_for_testing_ = layer_list_.empty() ? nullptr : layer_list_[0];
+}
+
+void LayerTreeImpl::OnCanDrawStateChangedForTree() {
+  layer_tree_host_impl_->OnCanDrawStateChangedForTree();
+}
+
+void LayerTreeImpl::AddToLayerList(LayerImpl* layer) {
+  layer_list_.push_back(layer);
+}
+
+void LayerTreeImpl::ClearLayerList() {
+  layer_list_.clear();
+}
+
+void LayerTreeImpl::BuildLayerListForTesting() {
+  ClearLayerList();
+  LayerListIterator<LayerImpl> it(root_layer_for_testing_);
+  for (; it != LayerListIterator<LayerImpl>(nullptr); ++it) {
+    AddToLayerList(*it);
+  }
+}
+
 bool LayerTreeImpl::IsRootLayer(const LayerImpl* layer) const {
-  return root_layer_ == layer;
+  return layer_list_.empty() ? false : layer_list_[0] == layer;
 }
 
 LayerImpl* LayerTreeImpl::InnerViewportScrollLayer() const {
@@ -301,17 +332,13 @@ gfx::ScrollOffset LayerTreeImpl::TotalMaxScrollOffset() const {
 }
 
 std::unique_ptr<OwnedLayerImplList> LayerTreeImpl::DetachLayers() {
-  root_layer_ = nullptr;
+  root_layer_for_testing_ = nullptr;
+  layer_list_.clear();
   render_surface_layer_list_.clear();
   set_needs_update_draw_properties();
   std::unique_ptr<OwnedLayerImplList> ret = std::move(layers_);
   layers_.reset(new OwnedLayerImplList);
   return ret;
-}
-
-void LayerTreeImpl::ClearLayers() {
-  SetRootLayer(nullptr);
-  DCHECK(layers_->empty());
 }
 
 static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
@@ -444,38 +471,44 @@ void LayerTreeImpl::MoveChangeTrackingToLayers() {
   }
 }
 
-LayerListIterator<LayerImpl> LayerTreeImpl::begin() const {
-  return LayerListIterator<LayerImpl>(root_layer_);
+LayerImplList::const_iterator LayerTreeImpl::begin() const {
+  return layer_list_.cbegin();
 }
 
-LayerListIterator<LayerImpl> LayerTreeImpl::end() const {
-  return LayerListIterator<LayerImpl>(nullptr);
+LayerImplList::const_iterator LayerTreeImpl::end() const {
+  return layer_list_.cend();
 }
 
-LayerListReverseIterator<LayerImpl> LayerTreeImpl::rbegin() {
-  return LayerListReverseIterator<LayerImpl>(root_layer_);
+LayerImplList::reverse_iterator LayerTreeImpl::rbegin() {
+  return layer_list_.rbegin();
 }
 
-LayerListReverseIterator<LayerImpl> LayerTreeImpl::rend() {
-  return LayerListReverseIterator<LayerImpl>(nullptr);
+LayerImplList::reverse_iterator LayerTreeImpl::rend() {
+  return layer_list_.rend();
+}
+
+LayerImpl* LayerTreeImpl::LayerByElementId(ElementId element_id) const {
+  auto iter = element_layers_map_.find(element_id);
+  if (iter == element_layers_map_.end())
+    return nullptr;
+
+  return iter->second;
 }
 
 void LayerTreeImpl::AddToElementMap(LayerImpl* layer) {
-  if (!layer->element_id() || !layer->mutable_properties())
+  if (!layer->element_id())
     return;
 
   TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerTreeImpl::AddToElementMap", "element_id",
-               layer->element_id(), "layer_id", layer->id());
+               "LayerTreeImpl::AddToElementMap", "element",
+               layer->element_id().AsValue().release(), "layer_id",
+               layer->id());
 
-  ElementLayers& layers = element_layers_map_[layer->element_id()];
-  if ((!layers.main || layer->IsActive()) && !layer->scrollable()) {
-    layers.main = layer;
-  } else if ((!layers.scroll || layer->IsActive()) && layer->scrollable()) {
-    TRACE_EVENT2("compositor-worker", "LayerTreeImpl::AddToElementMap scroll",
-                 "element_id", layer->element_id(), "layer_id", layer->id());
-    layers.scroll = layer;
-  }
+  element_layers_map_[layer->element_id()] = layer;
+
+  layer_tree_host_impl_->animation_host()->RegisterElement(
+      layer->element_id(),
+      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING);
 }
 
 void LayerTreeImpl::RemoveFromElementMap(LayerImpl* layer) {
@@ -483,17 +516,15 @@ void LayerTreeImpl::RemoveFromElementMap(LayerImpl* layer) {
     return;
 
   TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("compositor-worker"),
-               "LayerTreeImpl::RemoveFromElementMap", "element_id",
-               layer->element_id(), "layer_id", layer->id());
+               "LayerTreeImpl::RemoveFromElementMap", "element",
+               layer->element_id().AsValue().release(), "layer_id",
+               layer->id());
 
-  ElementLayers& layers = element_layers_map_[layer->element_id()];
-  if (!layer->scrollable())
-    layers.main = nullptr;
-  if (layer->scrollable())
-    layers.scroll = nullptr;
+  layer_tree_host_impl_->animation_host()->UnregisterElement(
+      layer->element_id(),
+      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING);
 
-  if (!layers.main && !layers.scroll)
-    element_layers_map_.erase(layer->element_id());
+  element_layers_map_.erase(layer->element_id());
 }
 
 void LayerTreeImpl::AddToOpacityAnimationsMap(int id, float opacity) {
@@ -503,15 +534,6 @@ void LayerTreeImpl::AddToOpacityAnimationsMap(int id, float opacity) {
 void LayerTreeImpl::AddToTransformAnimationsMap(int id,
                                                 gfx::Transform transform) {
   transform_animations_map_[id] = transform;
-}
-
-LayerTreeImpl::ElementLayers LayerTreeImpl::GetMutableLayers(
-    uint64_t element_id) {
-  auto iter = element_layers_map_.find(element_id);
-  if (iter == element_layers_map_.end())
-    return ElementLayers();
-
-  return iter->second;
 }
 
 LayerImpl* LayerTreeImpl::InnerViewportContainerLayer() const {
@@ -581,7 +603,7 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
   // updates from scrolling deltas on the compositor thread that have occurred
   // after begin frame and updates from animations that have ticked since begin
   // frame to a newly-committed property tree.
-  if (!root_layer())
+  if (layer_list_.empty())
     return;
   for (auto& layer_id_to_opacity : opacity_animations_map_) {
     const int id = layer_id_to_opacity.first;
@@ -628,7 +650,7 @@ void LayerTreeImpl::SetPageScaleOnActiveTree(float active_page_scale) {
           property_trees(), PageScaleLayer(), current_page_scale_factor(),
           device_scale_factor(), layer_tree_host_impl_->DrawTransform());
     } else {
-      DCHECK(!root_layer_ || active_page_scale == 1);
+      DCHECK(layer_list_.empty() || active_page_scale == 1);
     }
   }
 }
@@ -676,7 +698,7 @@ void LayerTreeImpl::PushPageScaleFactorAndLimits(const float* page_scale_factor,
           property_trees(), PageScaleLayer(), current_page_scale_factor(),
           device_scale_factor(), layer_tree_host_impl_->DrawTransform());
     } else {
-      DCHECK(!root_layer_ || *page_scale_factor == 1);
+      DCHECK(layer_list_.empty() || *page_scale_factor == 1);
     }
   }
 }
@@ -699,10 +721,17 @@ void LayerTreeImpl::set_top_controls_height(float top_controls_height) {
     layer_tree_host_impl_->UpdateViewportContainerSizes();
 }
 
-bool LayerTreeImpl::SetCurrentTopControlsShownRatio(float ratio) {
+bool LayerTreeImpl::ClampTopControlsShownRatio() {
+  float ratio = top_controls_shown_ratio_->Current(true);
   ratio = std::max(ratio, 0.f);
   ratio = std::min(ratio, 1.f);
   return top_controls_shown_ratio_->SetCurrent(ratio);
+}
+
+bool LayerTreeImpl::SetCurrentTopControlsShownRatio(float ratio) {
+  bool changed = top_controls_shown_ratio_->SetCurrent(ratio);
+  changed |= ClampTopControlsShownRatio();
+  return changed;
 }
 
 void LayerTreeImpl::PushTopControlsFromMainThread(
@@ -718,7 +747,9 @@ void LayerTreeImpl::PushTopControls(const float* top_controls_shown_ratio) {
     top_controls_shown_ratio_->PushFromMainThread(*top_controls_shown_ratio);
   }
   if (IsActiveTree()) {
-    if (top_controls_shown_ratio_->PushPendingToActive())
+    bool changed_active = top_controls_shown_ratio_->PushPendingToActive();
+    changed_active |= ClampTopControlsShownRatio();
+    if (changed_active)
       layer_tree_host_impl_->DidChangeTopControlsPosition();
   }
 }
@@ -788,7 +819,7 @@ void LayerTreeImpl::ApplySentScrollAndScaleDeltasFromAbortedCommit() {
   top_controls_shown_ratio()->AbortCommit();
   elastic_overscroll()->AbortCommit();
 
-  if (!root_layer())
+  if (layer_list_.empty())
     return;
 
   property_trees()->scroll_tree.ApplySentScrollDeltasFromAbortedCommit();
@@ -812,6 +843,18 @@ void LayerTreeImpl::ClearViewportLayers() {
   outer_viewport_scroll_layer_id_ = Layer::INVALID_ID;
 }
 
+// For unit tests, we use the layer's id as its element id.
+static void SetElementIdForTesting(LayerImpl* layer) {
+  layer->SetElementId(LayerIdToElementIdForTesting(layer->id()));
+}
+
+void LayerTreeImpl::SetElementIdsForTesting() {
+  LayerListIterator<LayerImpl> it(root_layer_for_testing_);
+  for (; it != LayerListIterator<LayerImpl>(nullptr); ++it) {
+    SetElementIdForTesting(*it);
+  }
+}
+
 bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
   if (!needs_update_draw_properties_)
     return true;
@@ -830,7 +873,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
   // possible to hit test even without a renderer.
   render_surface_layer_list_.clear();
 
-  if (!root_layer())
+  if (layer_list_.empty())
     return false;
 
   {
@@ -842,7 +885,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         (!is_in_resourceless_software_draw_mode());
 
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
-        root_layer(), DrawViewportSize(),
+        layer_list_[0], DrawViewportSize(),
         layer_tree_host_impl_->DrawTransform(), device_scale_factor(),
         current_page_scale_factor(), PageScaleLayer(),
         InnerViewportScrollLayer(), OuterViewportScrollLayer(),
@@ -870,7 +913,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
                  "IsActive", IsActiveTree(), "SourceFrameNumber",
                  source_frame_number_);
     OcclusionTracker occlusion_tracker(
-        root_layer()->render_surface()->content_rect());
+        layer_list_[0]->render_surface()->content_rect());
     occlusion_tracker.set_minimum_tracking_size(
         settings().minimum_occlusion_tracking_size);
 
@@ -909,7 +952,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         // Masks are used to draw the contributing surface, so should have
         // the same occlusion as the surface (nothing inside the surface
         // occludes them).
-        if (LayerImpl* mask = it->mask_layer()) {
+        if (LayerImpl* mask = it->render_surface()->MaskLayer()) {
           Occlusion mask_occlusion =
               inside_replica
                   ? Occlusion()
@@ -918,9 +961,10 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
                         it->DrawTransform());
           mask->draw_properties().occlusion_in_content_space = mask_occlusion;
         }
-        if (LayerImpl* replica = it->replica_layer()) {
-          if (LayerImpl* mask = replica->mask_layer())
-            mask->draw_properties().occlusion_in_content_space = Occlusion();
+        if (LayerImpl* replica_mask =
+                it->render_surface()->ReplicaMaskLayer()) {
+          replica_mask->draw_properties().occlusion_in_content_space =
+              Occlusion();
         }
       }
 
@@ -976,11 +1020,13 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
   return true;
 }
 
-void LayerTreeImpl::BuildPropertyTreesForTesting() {
-  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(root_layer_);
+void LayerTreeImpl::BuildLayerListAndPropertyTreesForTesting() {
+  BuildLayerListForTesting();
+  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(
+      root_layer_for_testing_);
   property_trees_.transform_tree.set_source_to_parent_updates_allowed(true);
   PropertyTreeBuilder::BuildPropertyTrees(
-      root_layer_, PageScaleLayer(), InnerViewportScrollLayer(),
+      root_layer_for_testing_, PageScaleLayer(), InnerViewportScrollLayer(),
       OuterViewportScrollLayer(), OverscrollElasticityLayer(),
       elastic_overscroll()->Current(IsActiveTree()),
       current_page_scale_factor(), device_scale_factor(),
@@ -1019,7 +1065,7 @@ gfx::SizeF LayerTreeImpl::ScrollableSize() const {
 
 LayerImpl* LayerTreeImpl::LayerById(int id) const {
   LayerImplMap::const_iterator iter = layer_id_map_.find(id);
-  return iter != layer_id_map_.end() ? iter->second : NULL;
+  return iter != layer_id_map_.end() ? iter->second : nullptr;
 }
 
 void LayerTreeImpl::AddLayerShouldPushProperties(LayerImpl* layer) {
@@ -1043,18 +1089,11 @@ bool LayerTreeImpl::LayerNeedsPushPropertiesForTesting(LayerImpl* layer) {
 void LayerTreeImpl::RegisterLayer(LayerImpl* layer) {
   DCHECK(!LayerById(layer->id()));
   layer_id_map_[layer->id()] = layer;
-  layer_tree_host_impl_->animation_host()->RegisterElement(
-      layer->id(),
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING);
 }
 
 void LayerTreeImpl::UnregisterLayer(LayerImpl* layer) {
   DCHECK(LayerById(layer->id()));
-  layer_tree_host_impl_->animation_host()->UnregisterElement(
-      layer->id(),
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING);
   layer_id_map_.erase(layer->id());
-  DCHECK_NE(root_layer_, layer);
 }
 
 // These manage ownership of the LayerImpl.
@@ -1065,8 +1104,6 @@ void LayerTreeImpl::AddLayer(std::unique_ptr<LayerImpl> layer) {
 }
 
 std::unique_ptr<LayerImpl> LayerTreeImpl::RemoveLayer(int id) {
-  if (root_layer_ && root_layer_->id() == id)
-    root_layer_ = nullptr;
   for (auto it = layers_->begin(); it != layers_->end(); ++it) {
     if ((*it) && (*it)->id() != id)
       continue;
@@ -1092,7 +1129,7 @@ void LayerTreeImpl::DidBecomeActive() {
   // if we were in a good state.
   layer_tree_host_impl_->ResetRequiresHighResToDraw();
 
-  if (root_layer()) {
+  if (!layer_list_.empty()) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         this, [](LayerImpl* layer) { layer->DidBecomeActive(); });
   }
@@ -1506,7 +1543,7 @@ void LayerTreeImpl::AddSurfaceLayer(LayerImpl* layer) {
 }
 
 void LayerTreeImpl::RemoveSurfaceLayer(LayerImpl* layer) {
-  std::vector<LayerImpl*>::iterator it =
+  LayerImplList::iterator it =
       std::find(surface_layers_.begin(), surface_layers_.end(), layer);
   DCHECK(it != surface_layers_.end());
   surface_layers_.erase(it);
@@ -1751,7 +1788,8 @@ LayerImpl*
 LayerTreeImpl::FindFirstScrollingLayerOrScrollbarLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
   FindClosestMatchingLayerState state;
-  FindClosestMatchingLayer(screen_space_point, root_layer(),
+  LayerImpl* root_layer = layer_list_.empty() ? nullptr : layer_list_[0];
+  FindClosestMatchingLayer(screen_space_point, root_layer,
                            FindScrollingLayerOrScrollbarLayerFunctor(),
                            property_trees_.transform_tree,
                            property_trees_.clip_tree, &state);
@@ -1768,13 +1806,13 @@ struct HitTestVisibleScrollableOrTouchableFunctor {
 
 LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPoint(
     const gfx::PointF& screen_space_point) {
-  if (!root_layer())
+  if (layer_list_.empty())
     return NULL;
   bool update_lcd_text = false;
   if (!UpdateDrawProperties(update_lcd_text))
     return NULL;
   FindClosestMatchingLayerState state;
-  FindClosestMatchingLayer(screen_space_point, root_layer(),
+  FindClosestMatchingLayer(screen_space_point, layer_list_[0],
                            HitTestVisibleScrollableOrTouchableFunctor(),
                            property_trees_.transform_tree,
                            property_trees_.clip_tree, &state);
@@ -1815,7 +1853,7 @@ struct FindTouchEventLayerFunctor {
 
 LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPointInTouchHandlerRegion(
     const gfx::PointF& screen_space_point) {
-  if (!root_layer())
+  if (layer_list_.empty())
     return NULL;
   bool update_lcd_text = false;
   if (!UpdateDrawProperties(update_lcd_text))
@@ -1824,7 +1862,7 @@ LayerImpl* LayerTreeImpl::FindLayerThatIsHitByPointInTouchHandlerRegion(
                                      property_trees_.transform_tree,
                                      property_trees_.clip_tree};
   FindClosestMatchingLayerState state;
-  FindClosestMatchingLayer(screen_space_point, root_layer(), func,
+  FindClosestMatchingLayer(screen_space_point, layer_list_[0], func,
                            property_trees_.transform_tree,
                            property_trees_.clip_tree, &state);
   return state.closest_match;
@@ -1920,14 +1958,6 @@ VideoFrameControllerClient* LayerTreeImpl::GetVideoFrameControllerClient()
   return layer_tree_host_impl_;
 }
 
-void LayerTreeImpl::SetFixedRasterScaleHasBlurryContent() {
-  layer_tree_host_impl_->set_fixed_raster_scale_has_blurry_content();
-}
-
-void LayerTreeImpl::SetFixedRasterScaleAttemptedToChangeScale() {
-  layer_tree_host_impl_->SetFixedRasterScaleAttemptedToChangeScale();
-}
-
 void LayerTreeImpl::SetPendingPageScaleAnimation(
     std::unique_ptr<PendingPageScaleAnimation> pending_animation) {
   pending_page_scale_animation_ = std::move(pending_animation);
@@ -1942,21 +1972,21 @@ bool LayerTreeImpl::IsAnimatingFilterProperty(const LayerImpl* layer) const {
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->IsAnimatingFilterProperty(
-      layer->id(), list_type);
+      layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::IsAnimatingOpacityProperty(const LayerImpl* layer) const {
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->IsAnimatingOpacityProperty(
-      layer->id(), list_type);
+      layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::IsAnimatingTransformProperty(const LayerImpl* layer) const {
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->IsAnimatingTransformProperty(
-      layer->id(), list_type);
+      layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::HasPotentiallyRunningFilterAnimation(
@@ -1964,7 +1994,7 @@ bool LayerTreeImpl::HasPotentiallyRunningFilterAnimation(
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningFilterAnimation(layer->id(), list_type);
+      ->HasPotentiallyRunningFilterAnimation(layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::HasPotentiallyRunningOpacityAnimation(
@@ -1972,7 +2002,7 @@ bool LayerTreeImpl::HasPotentiallyRunningOpacityAnimation(
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningOpacityAnimation(layer->id(), list_type);
+      ->HasPotentiallyRunningOpacityAnimation(layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::HasPotentiallyRunningTransformAnimation(
@@ -1980,27 +2010,27 @@ bool LayerTreeImpl::HasPotentiallyRunningTransformAnimation(
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningTransformAnimation(layer->id(), list_type);
+      ->HasPotentiallyRunningTransformAnimation(layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::HasAnyAnimationTargetingProperty(
     const LayerImpl* layer,
     TargetProperty::Type property) const {
   return layer_tree_host_impl_->animation_host()
-      ->HasAnyAnimationTargetingProperty(layer->id(), property);
+      ->HasAnyAnimationTargetingProperty(layer->element_id(), property);
 }
 
 bool LayerTreeImpl::AnimationsPreserveAxisAlignment(
     const LayerImpl* layer) const {
   return layer_tree_host_impl_->animation_host()
-      ->AnimationsPreserveAxisAlignment(layer->id());
+      ->AnimationsPreserveAxisAlignment(layer->element_id());
 }
 
 bool LayerTreeImpl::HasOnlyTranslationTransforms(const LayerImpl* layer) const {
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->HasOnlyTranslationTransforms(
-      layer->id(), list_type);
+      layer->element_id(), list_type);
 }
 
 bool LayerTreeImpl::MaximumTargetScale(const LayerImpl* layer,
@@ -2009,7 +2039,7 @@ bool LayerTreeImpl::MaximumTargetScale(const LayerImpl* layer,
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->MaximumTargetScale(
-      layer->id(), list_type, max_scale);
+      layer->element_id(), list_type, max_scale);
 }
 
 bool LayerTreeImpl::AnimationStartScale(const LayerImpl* layer,
@@ -2018,32 +2048,32 @@ bool LayerTreeImpl::AnimationStartScale(const LayerImpl* layer,
   ElementListType list_type =
       IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
   return layer_tree_host_impl_->animation_host()->AnimationStartScale(
-      layer->id(), list_type, start_scale);
+      layer->element_id(), list_type, start_scale);
 }
 
 bool LayerTreeImpl::HasFilterAnimationThatInflatesBounds(
     const LayerImpl* layer) const {
   return layer_tree_host_impl_->animation_host()
-      ->HasFilterAnimationThatInflatesBounds(layer->id());
+      ->HasFilterAnimationThatInflatesBounds(layer->element_id());
 }
 
 bool LayerTreeImpl::HasTransformAnimationThatInflatesBounds(
     const LayerImpl* layer) const {
   return layer_tree_host_impl_->animation_host()
-      ->HasTransformAnimationThatInflatesBounds(layer->id());
+      ->HasTransformAnimationThatInflatesBounds(layer->element_id());
 }
 
 bool LayerTreeImpl::HasAnimationThatInflatesBounds(
     const LayerImpl* layer) const {
   return layer_tree_host_impl_->animation_host()
-      ->HasAnimationThatInflatesBounds(layer->id());
+      ->HasAnimationThatInflatesBounds(layer->element_id());
 }
 
 bool LayerTreeImpl::FilterAnimationBoundsForBox(const LayerImpl* layer,
                                                 const gfx::BoxF& box,
                                                 gfx::BoxF* bounds) const {
   return layer_tree_host_impl_->animation_host()->FilterAnimationBoundsForBox(
-      layer->id(), box, bounds);
+      layer->element_id(), box, bounds);
 }
 
 bool LayerTreeImpl::TransformAnimationBoundsForBox(const LayerImpl* layer,
@@ -2051,7 +2081,7 @@ bool LayerTreeImpl::TransformAnimationBoundsForBox(const LayerImpl* layer,
                                                    gfx::BoxF* bounds) const {
   *bounds = gfx::BoxF();
   return layer_tree_host_impl_->animation_host()
-      ->TransformAnimationBoundsForBox(layer->id(), box, bounds);
+      ->TransformAnimationBoundsForBox(layer->element_id(), box, bounds);
 }
 
 void LayerTreeImpl::ScrollAnimationAbort(bool needs_completion) {
@@ -2061,7 +2091,8 @@ void LayerTreeImpl::ScrollAnimationAbort(bool needs_completion) {
 
 void LayerTreeImpl::ResetAllChangeTracking() {
   layers_that_should_push_properties_.clear();
-  for (auto* layer : *this)
+  // Iterate over all layers, including masks and replicas.
+  for (auto& layer : *layers_)
     layer->ResetChangeTracking();
   property_trees_.ResetAllChangeTracking();
 }

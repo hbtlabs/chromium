@@ -265,7 +265,7 @@ double KeyframeEffect::calculateTimeToEffectChange(bool forwards, double localTi
             ? std::numeric_limits<double>::infinity()
             : localTime - afterTime;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return std::numeric_limits<double>::infinity();
     }
 }
@@ -352,14 +352,6 @@ void KeyframeEffect::pauseAnimationForTestingOnCompositor(double pauseTime)
     ASSERT(animation());
     for (const auto& compositorAnimationId : m_compositorAnimationIds)
         CompositorAnimations::pauseAnimationForTestingOnCompositor(*m_target, *animation(), compositorAnimationId, pauseTime);
-}
-
-bool KeyframeEffect::canAttachCompositedLayers() const
-{
-    if (!m_target || !animation())
-        return false;
-
-    return CompositorAnimations::canAttachCompositedLayers(*m_target, *animation());
 }
 
 void KeyframeEffect::attachCompositedLayers()

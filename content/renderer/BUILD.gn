@@ -7,6 +7,7 @@ import("//build/config/ui.gni")
 import("//content/renderer/renderer.gni")
 import("//media/media_options.gni")
 import("//third_party/webrtc/build/webrtc.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 source_set("renderer") {
   # Only the public target should depend on this. All other targets (even
@@ -51,13 +52,14 @@ source_set("renderer") {
     "//device/bluetooth",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
+    "//device/vr:mojo_bindings",
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
-    "//ipc/mojo",
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
+    "//media/capture",
     "//media/gpu",
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
@@ -98,6 +100,7 @@ source_set("renderer") {
   if (use_aura) {
     public_deps += [ "//content/renderer/mus" ]
     allow_circular_includes_from += [ "//content/renderer/mus" ]
+    deps += [ "//components/mus/common:mus_common" ]
   }
 
   if (use_external_popup_menu) {
@@ -237,7 +240,7 @@ source_set("renderer") {
       "//media/mojo/interfaces",
 
       # Defines in mojo_media_config are also pulled in here.
-      "//media/mojo/services:proxy",
+      "//media/mojo/clients",
     ]
   }
 
@@ -247,6 +250,10 @@ source_set("renderer") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
 }
 

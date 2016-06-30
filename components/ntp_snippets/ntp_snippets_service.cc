@@ -19,6 +19,7 @@
 #include "base/task_runner_util.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/image_fetcher/image_decoder.h"
 #include "components/image_fetcher/image_fetcher.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/ntp_snippets/ntp_snippets_database.h"
@@ -27,10 +28,10 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/suggestions/proto/suggestions.pb.h"
-#include "components/sync_driver/sync_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "ui/gfx/image/image.h"
 
+using image_fetcher::ImageDecoder;
 using image_fetcher::ImageFetcher;
 using suggestions::ChromeSuggestion;
 using suggestions::SuggestionsProfile;
@@ -180,40 +181,41 @@ void Compact(NTPSnippet::PtrVector* snippets) {
 NTPSnippetsService::NTPSnippetsService(
     bool enabled,
     PrefService* pref_service,
-    sync_driver::SyncService* sync_service,
     SuggestionsService* suggestions_service,
     const std::string& application_language_code,
     NTPSnippetsScheduler* scheduler,
     std::unique_ptr<NTPSnippetsFetcher> snippets_fetcher,
     std::unique_ptr<ImageFetcher> image_fetcher,
-    std::unique_ptr<NTPSnippetsDatabase> database)
-    : state_(State::INITED),
-      enabled_(enabled),
+    std::unique_ptr<ImageDecoder> image_decoder,
+    std::unique_ptr<NTPSnippetsDatabase> database,
+    std::unique_ptr<NTPSnippetsStatusService> status_service)
+    : state_(State::NOT_INITED),
       pref_service_(pref_service),
-      sync_service_(sync_service),
-      sync_service_observer_(this),
       suggestions_service_(suggestions_service),
       application_language_code_(application_language_code),
       scheduler_(scheduler),
       snippets_fetcher_(std::move(snippets_fetcher)),
       image_fetcher_(std::move(image_fetcher)),
+      image_decoder_(std::move(image_decoder)),
       database_(std::move(database)),
+      snippets_status_service_(std::move(status_service)),
       fetch_after_load_(false) {
-  snippets_fetcher_->SetCallback(base::Bind(
-      &NTPSnippetsService::OnFetchFinished, base::Unretained(this)));
+  // TODO(dgn) should be removed after branch point (https://crbug.com/617585).
+  ClearDeprecatedPrefs();
 
-  // |sync_service_| can be null in tests or if sync is disabled.
-  if (sync_service_)
-    sync_service_observer_.Add(sync_service_);
-
-  if (enabled_) {
-    database_->Load(base::Bind(&NTPSnippetsService::OnDatabaseLoaded,
-                               base::Unretained(this)));
+  if (!enabled || database_->IsErrorState()) {
+    // Don't even bother loading the database.
+    EnterState(State::SHUT_DOWN);
+    return;
   }
 
-  RescheduleFetching();
+  database_->SetErrorCallback(base::Bind(&NTPSnippetsService::OnDatabaseError,
+                                         base::Unretained(this)));
 
-  ClearDeprecatedPrefs();
+  // We transition to other states while finalizing the initialization, when the
+  // database is done loading.
+  database_->LoadSnippets(base::Bind(&NTPSnippetsService::OnDatabaseLoaded,
+                                     base::Unretained(this)));
 }
 
 NTPSnippetsService::~NTPSnippetsService() {
@@ -227,19 +229,13 @@ void NTPSnippetsService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kSnippetHosts);
 }
 
+// Inherited from KeyedService.
 void NTPSnippetsService::Shutdown() {
-  DCHECK(state_ == State::INITED || state_ == State::LOADED);
-  state_ = State::SHUT_DOWN;
-
-  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
-                    NTPSnippetsServiceShutdown());
-  expiry_timer_.Stop();
-  suggestions_service_subscription_.reset();
-  enabled_ = false;
+  EnterState(State::SHUT_DOWN);
 }
 
 void NTPSnippetsService::FetchSnippets() {
-  if (loaded())
+  if (ready())
     FetchSnippetsFromHosts(GetSuggestionsHosts());
   else
     fetch_after_load_ = true;
@@ -247,7 +243,7 @@ void NTPSnippetsService::FetchSnippets() {
 
 void NTPSnippetsService::FetchSnippetsFromHosts(
     const std::set<std::string>& hosts) {
-  if (!loaded())
+  if (!ready())
     return;
   snippets_fetcher_->FetchSnippetsFromHosts(hosts, application_language_code_,
                                             kMaxSnippetCount);
@@ -258,7 +254,7 @@ void NTPSnippetsService::RescheduleFetching() {
   if (!scheduler_)
     return;
 
-  if (enabled_) {
+  if (ready()) {
     base::Time now = base::Time::Now();
     scheduler_->Schedule(
         GetFetchingIntervalWifiCharging(), GetFetchingIntervalWifi(now),
@@ -271,28 +267,20 @@ void NTPSnippetsService::RescheduleFetching() {
 void NTPSnippetsService::FetchSnippetImage(
     const std::string& snippet_id,
     const ImageFetchedCallback& callback) {
-  auto it =
-      std::find_if(snippets_.begin(), snippets_.end(),
-                   [&snippet_id](const std::unique_ptr<NTPSnippet>& snippet) {
-                     return snippet->id() == snippet_id;
-                   });
-  if (it == snippets_.end()) {
-    gfx::Image empty_image;
-    callback.Run(snippet_id, empty_image);
-    return;
-  }
-
-  const NTPSnippet& snippet = *it->get();
-  image_fetcher_->StartOrQueueNetworkRequest(
-      snippet.id(), snippet.salient_image_url(), callback);
-  // TODO(treib): Cache/persist the snippet image.
+  database_->LoadImage(
+      snippet_id,
+      base::Bind(&NTPSnippetsService::OnSnippetImageFetchedFromDatabase,
+                 base::Unretained(this), snippet_id, callback));
 }
 
 void NTPSnippetsService::ClearSnippets() {
-  if (!loaded())
+  if (!initialized())
     return;
 
-  database_->Delete(snippets_);
+  if (snippets_.empty())
+    return;
+
+  database_->DeleteSnippets(snippets_);
   snippets_.clear();
 
   FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
@@ -310,7 +298,7 @@ std::set<std::string> NTPSnippetsService::GetSuggestionsHosts() const {
 }
 
 bool NTPSnippetsService::DiscardSnippet(const std::string& snippet_id) {
-  if (!loaded())
+  if (!ready())
     return false;
 
   auto it =
@@ -323,7 +311,8 @@ bool NTPSnippetsService::DiscardSnippet(const std::string& snippet_id) {
 
   (*it)->set_discarded(true);
 
-  database_->Save(**it);
+  database_->SaveSnippet(**it);
+  database_->DeleteImage((*it)->id());
 
   discarded_snippets_.push_back(std::move(*it));
   snippets_.erase(it);
@@ -334,13 +323,14 @@ bool NTPSnippetsService::DiscardSnippet(const std::string& snippet_id) {
 }
 
 void NTPSnippetsService::ClearDiscardedSnippets() {
-  if (!loaded())
+  if (!initialized())
     return;
 
-  database_->Delete(discarded_snippets_);
-  discarded_snippets_.clear();
+  if (discarded_snippets_.empty())
+    return;
 
-  FetchSnippets();
+  database_->DeleteSnippets(discarded_snippets_);
+  discarded_snippets_.clear();
 }
 
 void NTPSnippetsService::AddObserver(NTPSnippetsServiceObserver* observer) {
@@ -359,26 +349,28 @@ int NTPSnippetsService::GetMaxSnippetCountForTesting() {
 ////////////////////////////////////////////////////////////////////////////////
 // Private methods
 
-// sync_driver::SyncServiceObserver implementation.
-void NTPSnippetsService::OnStateChanged() {
-  if (IsSyncStateIncompatible()) {
-    ClearSnippets();
-    FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
-                      NTPSnippetsServiceDisabled());
+// image_fetcher::ImageFetcherDelegate implementation.
+void NTPSnippetsService::OnImageDataFetched(const std::string& snippet_id,
+                                            const std::string& image_data) {
+  if (image_data.empty())
     return;
-  }
 
-  // TODO(dgn): When the data sources change, we may want to not fetch here,
-  // as we will get notified of changes from the snippet sources as well, and
-  // start multiple fetches.
-  FetchSnippets();
+  // Only save the image if the corresponding snippet still exists.
+  auto it =
+      std::find_if(snippets_.begin(), snippets_.end(),
+                   [&snippet_id](const std::unique_ptr<NTPSnippet>& snippet) {
+                     return snippet->id() == snippet_id;
+                   });
+  if (it == snippets_.end())
+    return;
+
+  database_->SaveImage(snippet_id, image_data);
 }
 
 void NTPSnippetsService::OnDatabaseLoaded(NTPSnippet::PtrVector snippets) {
-  DCHECK(state_ == State::INITED || state_ == State::SHUT_DOWN);
+  DCHECK(state_ == State::NOT_INITED || state_ == State::SHUT_DOWN);
   if (state_ == State::SHUT_DOWN)
     return;
-  state_ = State::LOADED;
 
   DCHECK(snippets_.empty());
   DCHECK(discarded_snippets_.empty());
@@ -393,27 +385,18 @@ void NTPSnippetsService::OnDatabaseLoaded(NTPSnippet::PtrVector snippets) {
                const std::unique_ptr<NTPSnippet>& rhs) {
               return lhs->score() > rhs->score();
             });
-  LoadingSnippetsFinished();
 
-  // If host restrictions are enabled, register for host list updates.
-  // |suggestions_service_| can be null in tests.
-  if (snippets_fetcher_->UsesHostRestrictions() && suggestions_service_) {
-    suggestions_service_subscription_ =
-        suggestions_service_->AddCallback(base::Bind(
-            &NTPSnippetsService::OnSuggestionsChanged, base::Unretained(this)));
-  }
+  ClearExpiredSnippets();
+  FinishInitialization();
+}
 
-  // Start a fetch if we don't have any snippets yet, or a fetch was requested
-  // earlier.
-  if (snippets_.empty() || fetch_after_load_) {
-    fetch_after_load_ = false;
-    FetchSnippets();
-  }
+void NTPSnippetsService::OnDatabaseError() {
+  EnterState(State::SHUT_DOWN);
 }
 
 void NTPSnippetsService::OnSuggestionsChanged(
     const SuggestionsProfile& suggestions) {
-  DCHECK(loaded());
+  DCHECK(initialized());
 
   std::set<std::string> hosts = GetSuggestionsHostsImpl(suggestions);
   if (hosts == GetSnippetHostsFromPrefs())
@@ -430,7 +413,7 @@ void NTPSnippetsService::OnSuggestionsChanged(
   }
   Compact(&snippets_);
   // Then delete the removed snippets from the database.
-  database_->Delete(to_delete);
+  database_->DeleteSnippets(to_delete);
 
   StoreSnippetHostsToPrefs(hosts);
 
@@ -442,7 +425,7 @@ void NTPSnippetsService::OnSuggestionsChanged(
 
 void NTPSnippetsService::OnFetchFinished(
     NTPSnippetsFetcher::OptionalSnippets snippets) {
-  if (!loaded())
+  if (!ready())
     return;
 
   if (snippets) {
@@ -453,11 +436,31 @@ void NTPSnippetsService::OnFetchFinished(
                                 snippets->size());
     MergeSnippets(std::move(*snippets));
   }
-  LoadingSnippetsFinished();
+
+  ClearExpiredSnippets();
+
+  // If there are more snippets than we want to show, delete the extra ones.
+  if (snippets_.size() > kMaxSnippetCount) {
+    NTPSnippet::PtrVector to_delete(
+        std::make_move_iterator(snippets_.begin() + kMaxSnippetCount),
+        std::make_move_iterator(snippets_.end()));
+    snippets_.resize(kMaxSnippetCount);
+    database_->DeleteSnippets(to_delete);
+  }
+
+  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticles",
+                              snippets_.size());
+  if (snippets_.empty() && !discarded_snippets_.empty()) {
+    UMA_HISTOGRAM_COUNTS("NewTabPage.Snippets.NumArticlesZeroDueToDiscarded",
+                         discarded_snippets_.size());
+  }
+
+  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
+                    NTPSnippetsServiceLoaded());
 }
 
 void NTPSnippetsService::MergeSnippets(NTPSnippet::PtrVector new_snippets) {
-  DCHECK(loaded());
+  DCHECK(ready());
 
   // Remove new snippets that we already have, or that have been discarded.
   std::set<std::string> old_snippet_ids;
@@ -511,7 +514,7 @@ void NTPSnippetsService::MergeSnippets(NTPSnippet::PtrVector new_snippets) {
   }
 
   // Save the new snippets to the DB.
-  database_->Save(new_snippets);
+  database_->SaveSnippets(new_snippets);
 
   // Insert the new snippets at the front.
   snippets_.insert(snippets_.begin(),
@@ -539,10 +542,7 @@ void NTPSnippetsService::StoreSnippetHostsToPrefs(
   pref_service_->Set(prefs::kSnippetHosts, list);
 }
 
-void NTPSnippetsService::LoadingSnippetsFinished() {
-  DCHECK(loaded());
-
-  // Remove expired snippets.
+void NTPSnippetsService::ClearExpiredSnippets() {
   base::Time expiry = base::Time::Now();
 
   // Move expired snippets over into |to_delete|.
@@ -553,16 +553,6 @@ void NTPSnippetsService::LoadingSnippetsFinished() {
   }
   Compact(&snippets_);
 
-  // If there are still more snippets than we want to show, move the extra ones
-  // over into |to_delete| as well.
-  if (snippets_.size() > kMaxSnippetCount) {
-    to_delete.insert(
-        to_delete.end(),
-        std::make_move_iterator(snippets_.begin() + kMaxSnippetCount),
-        std::make_move_iterator(snippets_.end()));
-    snippets_.resize(kMaxSnippetCount);
-  }
-
   // Move expired discarded snippets over into |to_delete| as well.
   for (std::unique_ptr<NTPSnippet>& snippet : discarded_snippets_) {
     if (snippet->expiry_date() <= expiry)
@@ -571,17 +561,7 @@ void NTPSnippetsService::LoadingSnippetsFinished() {
   Compact(&discarded_snippets_);
 
   // Finally, actually delete the removed snippets from the DB.
-  database_->Delete(to_delete);
-
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticles",
-                              snippets_.size());
-  if (snippets_.empty() && !discarded_snippets_.empty()) {
-    UMA_HISTOGRAM_COUNTS("NewTabPage.Snippets.NumArticlesZeroDueToDiscarded",
-                         discarded_snippets_.size());
-  }
-
-  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
-                    NTPSnippetsServiceLoaded());
+  database_->DeleteSnippets(to_delete);
 
   // If there are any snippets left, schedule a timer for the next expiry.
   if (snippets_.empty() && discarded_snippets_.empty())
@@ -598,17 +578,184 @@ void NTPSnippetsService::LoadingSnippetsFinished() {
   }
   DCHECK_GT(next_expiry, expiry);
   expiry_timer_.Start(FROM_HERE, next_expiry - expiry,
-                      base::Bind(&NTPSnippetsService::LoadingSnippetsFinished,
+                      base::Bind(&NTPSnippetsService::ClearExpiredSnippets,
                                  base::Unretained(this)));
 }
 
-bool NTPSnippetsService::IsSyncStateIncompatible() {
-  if (!sync_service_ || !sync_service_->CanSyncStart())
-    return true;
-  if (!sync_service_->IsSyncActive() || !sync_service_->ConfigurationDone())
-    return false;  // Sync service is not initialized, yet not disabled.
-  return !sync_service_->GetActiveDataTypes().Has(
-      syncer::HISTORY_DELETE_DIRECTIVES);
+void NTPSnippetsService::OnSnippetImageFetchedFromDatabase(
+    const std::string& snippet_id,
+    const ImageFetchedCallback& callback,
+    std::string data) {
+  // |image_decoder_| is null in tests.
+  if (image_decoder_ && !data.empty()) {
+    image_decoder_->DecodeImage(
+        std::move(data),
+        base::Bind(&NTPSnippetsService::OnSnippetImageDecoded,
+                   base::Unretained(this), snippet_id, callback));
+    return;
+  }
+
+  // Fetching from the DB failed; start a network fetch.
+  FetchSnippetImageFromNetwork(snippet_id, callback);
+}
+
+void NTPSnippetsService::OnSnippetImageDecoded(
+    const std::string& snippet_id,
+    const ImageFetchedCallback& callback,
+    const gfx::Image& image) {
+  if (!image.IsEmpty()) {
+    callback.Run(snippet_id, image);
+    return;
+  }
+
+  // If decoding the image failed, delete the DB entry.
+  database_->DeleteImage(snippet_id);
+
+  FetchSnippetImageFromNetwork(snippet_id, callback);
+}
+
+void NTPSnippetsService::FetchSnippetImageFromNetwork(
+    const std::string& snippet_id,
+    const ImageFetchedCallback& callback) {
+  auto it =
+      std::find_if(snippets_.begin(), snippets_.end(),
+                   [&snippet_id](const std::unique_ptr<NTPSnippet>& snippet) {
+                     return snippet->id() == snippet_id;
+                   });
+  if (it == snippets_.end()) {
+    callback.Run(snippet_id, gfx::Image());
+    return;
+  }
+
+  const NTPSnippet& snippet = *it->get();
+  image_fetcher_->StartOrQueueNetworkRequest(
+      snippet.id(), snippet.salient_image_url(), callback);
+}
+
+void NTPSnippetsService::EnterStateEnabled(bool fetch_snippets) {
+  if (fetch_snippets)
+    FetchSnippets();
+
+  // If host restrictions are enabled, register for host list updates.
+  // |suggestions_service_| can be null in tests.
+  if (snippets_fetcher_->UsesHostRestrictions() && suggestions_service_) {
+    suggestions_service_subscription_ =
+        suggestions_service_->AddCallback(base::Bind(
+            &NTPSnippetsService::OnSuggestionsChanged, base::Unretained(this)));
+  }
+
+  RescheduleFetching();
+}
+
+void NTPSnippetsService::EnterStateDisabled() {
+  ClearSnippets();
+  ClearDiscardedSnippets();
+
+  expiry_timer_.Stop();
+  suggestions_service_subscription_.reset();
+  RescheduleFetching();
+}
+
+void NTPSnippetsService::EnterStateShutdown() {
+  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
+                    NTPSnippetsServiceShutdown());
+
+  expiry_timer_.Stop();
+  suggestions_service_subscription_.reset();
+  RescheduleFetching();
+
+  snippets_status_service_.reset();
+}
+
+void NTPSnippetsService::FinishInitialization() {
+  snippets_fetcher_->SetCallback(
+      base::Bind(&NTPSnippetsService::OnFetchFinished, base::Unretained(this)));
+
+  // |image_fetcher_| can be null in tests.
+  if (image_fetcher_)
+    image_fetcher_->SetImageFetcherDelegate(this);
+
+  // Note: Initializing the status service will run the callback right away with
+  // the current state.
+  snippets_status_service_->Init(base::Bind(
+      &NTPSnippetsService::UpdateStateForStatus, base::Unretained(this)));
+
+  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
+                    NTPSnippetsServiceLoaded());
+}
+
+void NTPSnippetsService::UpdateStateForStatus(DisabledReason disabled_reason) {
+  FOR_EACH_OBSERVER(NTPSnippetsServiceObserver, observers_,
+                    NTPSnippetsServiceDisabledReasonChanged(disabled_reason));
+
+  State new_state;
+  switch (disabled_reason) {
+    case DisabledReason::NONE:
+      new_state = State::READY;
+      break;
+
+    case DisabledReason::HISTORY_SYNC_STATE_UNKNOWN:
+      // HistorySync is not initialized yet, so we don't know what the actual
+      // state is and we just return the current one. If things change,
+      // |OnStateChanged| will call this function again to update the state.
+      DVLOG(1) << "Sync configuration incomplete, continuing based on the "
+                  "current state.";
+      new_state = state_;
+      break;
+
+    case DisabledReason::EXPLICITLY_DISABLED:
+    case DisabledReason::SIGNED_OUT:
+    case DisabledReason::SYNC_DISABLED:
+    case DisabledReason::PASSPHRASE_ENCRYPTION_ENABLED:
+    case DisabledReason::HISTORY_SYNC_DISABLED:
+      new_state = State::DISABLED;
+      break;
+
+    default:
+      // All cases should be handled by the above switch
+      NOTREACHED();
+      new_state = State::DISABLED;
+      break;
+  }
+
+  EnterState(new_state);
+}
+
+void NTPSnippetsService::EnterState(State state) {
+  if (state == state_)
+    return;
+
+  switch (state) {
+    case State::NOT_INITED:
+      // Initial state, it should not be possible to get back there.
+      NOTREACHED();
+      return;
+
+    case State::READY: {
+      DCHECK(state_ == State::NOT_INITED || state_ == State::DISABLED);
+
+      bool fetch_snippets = snippets_.empty() || fetch_after_load_;
+      DVLOG(1) << "Entering state: READY";
+      state_ = State::READY;
+      fetch_after_load_ = false;
+      EnterStateEnabled(fetch_snippets);
+      return;
+    }
+
+    case State::DISABLED:
+      DCHECK(state_ == State::NOT_INITED || state_ == State::READY);
+
+      DVLOG(1) << "Entering state: DISABLED";
+      state_ = State::DISABLED;
+      EnterStateDisabled();
+      return;
+
+    case State::SHUT_DOWN:
+      DVLOG(1) << "Entering state: SHUT_DOWN";
+      state_ = State::SHUT_DOWN;
+      EnterStateShutdown();
+      return;
+  }
 }
 
 void NTPSnippetsService::ClearDeprecatedPrefs() {

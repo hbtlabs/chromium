@@ -613,7 +613,7 @@ cr.define('cr.ui.login', function() {
         // Manually hide 'add-user' header bar, because of the case when
         // 'Cancel' button is used on the offline login page.
         $('add-user-header-bar-item').hidden = true;
-        Oobe.showSigninUI(true);
+        Oobe.showSigninUI();
         return;
       }
 
@@ -1018,7 +1018,6 @@ cr.define('cr.ui.login', function() {
    * @param {string} assetId The device asset ID.
    */
   DisplayManager.setEnterpriseInfo = function(messageText, assetId) {
-    $('offline-gaia').enterpriseInfo = messageText;
     $('asset-id').textContent = ((assetId == "") ? "" :
         loadTimeData.getStringF('assetIdLabel', assetId));
   };

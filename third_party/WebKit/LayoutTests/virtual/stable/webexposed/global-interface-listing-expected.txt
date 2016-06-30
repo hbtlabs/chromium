@@ -1046,6 +1046,7 @@ interface DynamicsCompressorNode : AudioNode
 interface Element : Node
     attribute @@toStringTag
     attribute @@unscopables
+    getter assignedSlot
     getter attributes
     getter childElementCount
     getter children
@@ -1081,8 +1082,10 @@ interface Element : Node
     getter scrollTop
     getter scrollWidth
     getter shadowRoot
+    getter slot
     getter tagName
     method animate
+    method attachShadow
     method closest
     method constructor
     method createShadowRoot
@@ -1137,6 +1140,7 @@ interface Element : Node
     setter outerHTML
     setter scrollLeft
     setter scrollTop
+    setter slot
 interface ErrorEvent : Event
     attribute @@toStringTag
     getter colno
@@ -1170,6 +1174,7 @@ interface Event
     getter bubbles
     getter cancelBubble
     getter cancelable
+    getter composed
     getter currentTarget
     getter defaultPrevented
     getter eventPhase
@@ -1179,6 +1184,7 @@ interface Event
     getter target
     getter timeStamp
     getter type
+    method composedPath
     method constructor
     method initEvent
     method preventDefault
@@ -2346,6 +2352,7 @@ interface HTMLObjectElement : HTMLElement
     getter codeBase
     getter codeType
     getter contentDocument
+    getter contentWindow
     getter data
     getter declare
     getter form
@@ -2538,6 +2545,12 @@ interface HTMLShadowElement : HTMLElement
     attribute @@toStringTag
     method constructor
     method getDistributedNodes
+interface HTMLSlotElement : HTMLElement
+    attribute @@toStringTag
+    getter name
+    method assignedNodes
+    method constructor
+    setter name
 interface HTMLSourceElement : HTMLElement
     attribute @@toStringTag
     getter media
@@ -3090,6 +3103,8 @@ interface MediaDevices : EventTarget
     attribute @@toStringTag
     method constructor
     method enumerateDevices
+    method getSupportedConstraints
+    method getUserMedia
 interface MediaElementAudioSourceNode : AudioSourceNode
     attribute @@toStringTag
     getter mediaElement
@@ -3203,6 +3218,9 @@ interface MediaSource : EventTarget
     attribute @@toStringTag
     getter activeSourceBuffers
     getter duration
+    getter onsourceclose
+    getter onsourceended
+    getter onsourceopen
     getter readyState
     getter sourceBuffers
     method addSourceBuffer
@@ -3210,6 +3228,9 @@ interface MediaSource : EventTarget
     method endOfStream
     method removeSourceBuffer
     setter duration
+    setter onsourceclose
+    setter onsourceended
+    setter onsourceopen
 interface MediaStreamAudioDestinationNode : AudioNode
     attribute @@toStringTag
     getter stream
@@ -3237,6 +3258,7 @@ interface MediaStreamTrack : EventTarget
     getter remote
     method clone
     method constructor
+    method getConstraints
     method stop
     setter enabled
     setter onended
@@ -3380,6 +3402,7 @@ interface Navigator
     method constructor
     method getBattery
     method getGamepads
+    method getUserMedia
     method javaEnabled
     method registerProtocolHandler
     method requestMIDIAccess
@@ -3485,6 +3508,8 @@ interface Notification : EventTarget
     static getter permission
     static method requestPermission
     attribute @@toStringTag
+    getter actions
+    getter badge
     getter body
     getter data
     getter dir
@@ -3500,6 +3525,7 @@ interface Notification : EventTarget
     getter tag
     getter timestamp
     getter title
+    getter vibrate
     method close
     method constructor
     setter onclick
@@ -5081,9 +5107,12 @@ interface ServiceWorkerRegistration : EventTarget
 interface ShadowRoot : DocumentFragment
     attribute @@toStringTag
     getter activeElement
+    getter delegatesFocus
     getter host
     getter innerHTML
+    getter mode
     getter olderShadowRoot
+    getter pointerLockElement
     getter styleSheets
     method cloneNode
     method constructor
@@ -5109,6 +5138,11 @@ interface SourceBuffer : EventTarget
     getter appendWindowStart
     getter buffered
     getter mode
+    getter onabort
+    getter onerror
+    getter onupdate
+    getter onupdateend
+    getter onupdatestart
     getter timestampOffset
     getter updating
     method abort
@@ -5118,12 +5152,21 @@ interface SourceBuffer : EventTarget
     setter appendWindowEnd
     setter appendWindowStart
     setter mode
+    setter onabort
+    setter onerror
+    setter onupdate
+    setter onupdateend
+    setter onupdatestart
     setter timestampOffset
 interface SourceBufferList : EventTarget
     attribute @@toStringTag
     getter length
+    getter onaddsourcebuffer
+    getter onremovesourcebuffer
     method @@iterator
     method constructor
+    setter onaddsourcebuffer
+    setter onremovesourcebuffer
 interface SpeechSynthesisEvent : Event
     attribute @@toStringTag
     getter charIndex
@@ -5218,6 +5261,7 @@ interface SyncManager
     method register
 interface Text : CharacterData
     attribute @@toStringTag
+    getter assignedSlot
     getter wholeText
     method constructor
     method getDestinationInsertionPoints
@@ -6459,6 +6503,7 @@ interface webkitURL
     attribute accessibilityController
     attribute applicationCache
     attribute caches
+    attribute chrome
     attribute clientInformation
     attribute closed
     attribute console

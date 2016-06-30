@@ -1,7 +1,3 @@
 # List below tests to be excluded from running.
 
-# crbug.com/589177: ProcessManagerBrowserTest.FrameClassification is flaky with --site-per-process
--ProcessManagerBrowserTest.FrameClassification
-
-# crbug.com/576867: ExtensionResourceRequestPolicyTest.IframeNavigateToInaccessible fails in --isolate-extensions mode.
--ExtensionResourceRequestPolicyTest.IframeNavigateToInaccessible
+# This list is currently empty. Hooray!

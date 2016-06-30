@@ -11,6 +11,7 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm/window_animation_types.h"
 #include "ash/common/wm/window_parenting_utils.h"
 #include "ash/common/wm/window_state.h"
@@ -245,8 +246,7 @@ PanelLayoutManager::PanelLayoutManager(WmWindow* panel_container)
   WmShell* shell = panel_container->GetShell();
   shell->AddActivationObserver(this);
   shell->AddDisplayObserver(this);
-  shell->AddOverviewModeObserver(this);
-  root_window_controller_->AddObserver(this);
+  shell->AddShellObserver(this);
 }
 
 PanelLayoutManager::~PanelLayoutManager() {
@@ -277,8 +277,7 @@ void PanelLayoutManager::Shutdown() {
   WmShell* shell = panel_container_->GetShell();
   shell->RemoveActivationObserver(this);
   shell->RemoveDisplayObserver(this);
-  shell->RemoveOverviewModeObserver(this);
-  root_window_controller_->RemoveObserver(this);
+  shell->RemoveShellObserver(this);
 }
 
 void PanelLayoutManager::StartDragging(WmWindow* panel) {
@@ -439,8 +438,9 @@ void PanelLayoutManager::OnOverviewModeEnded() {
   Relayout();
 }
 
-void PanelLayoutManager::OnShelfAlignmentChanged() {
-  Relayout();
+void PanelLayoutManager::OnShelfAlignmentChanged(WmWindow* root_window) {
+  if (root_window_controller_->GetWindow() == root_window)
+    Relayout();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -572,16 +572,18 @@ void PanelLayoutManager::RestorePanel(WmWindow* panel) {
 }
 
 void PanelLayoutManager::Relayout() {
-  if (!shelf_)
+  if (!shelf_ || !shelf_->GetWindow())
     return;
 
   // Suppress layouts during overview mode because changing window bounds
   // interfered with overview mode animations. However, layouts need to be done
   // when the WindowSelectorController is restoring minimized windows so that
   // they actually become visible.
-  WmShell* shell = panel_container_->GetShell();
-  if (in_layout_ || (shell->IsOverviewModeSelecting() &&
-                     !shell->IsOverviewModeRestoringMinimizedWindows())) {
+  WindowSelectorController* window_selector_controller =
+      WmShell::Get()->window_selector_controller();
+  if (in_layout_ ||
+      (window_selector_controller->IsSelecting() &&
+       !window_selector_controller->IsRestoringMinimizedWindows())) {
     return;
   }
 

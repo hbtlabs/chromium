@@ -50,7 +50,8 @@ class NET_EXPORT ParsedCertificate
   static scoped_refptr<ParsedCertificate> CreateFromCertificateData(
       const uint8_t* data,
       size_t length,
-      DataSource source);
+      DataSource source,
+      const ParseCertificateOptions& options);
 
   // Creates a ParsedCertificate and appends it to |chain|. Returns true if the
   // certificate was successfully parsed and added. If false is return, |chain|
@@ -59,11 +60,13 @@ class NET_EXPORT ParsedCertificate
       const uint8_t* data,
       size_t length,
       DataSource source,
+      const ParseCertificateOptions& options,
       std::vector<scoped_refptr<net::ParsedCertificate>>* chain);
 
   // Creates a ParsedCertificate, copying the data from |data|.
   static scoped_refptr<ParsedCertificate> CreateFromCertificateCopy(
-      const base::StringPiece& data);
+      const base::StringPiece& data,
+      const ParseCertificateOptions& options);
 
   // Returns the DER-encoded certificate data for this cert.
   const der::Input& der_cert() const { return cert_; }
@@ -152,6 +155,22 @@ class NET_EXPORT ParsedCertificate
     return *name_constraints_;
   }
 
+  // Returns true if the certificate has an AuthorityInfoAccess extension.
+  bool has_authority_info_access() const { return has_authority_info_access_; }
+
+  // Returns the ParsedExtension struct for the AuthorityInfoAccess extension.
+  const ParsedExtension& authority_info_access_extension() const {
+    return authority_info_access_extension_;
+  }
+
+  // Returns any caIssuers URIs from the AuthorityInfoAccess extension.
+  const std::vector<base::StringPiece>& ca_issuers_uris() const {
+    return ca_issuers_uris_;
+  }
+
+  // Returns any OCSP URIs from the AuthorityInfoAccess extension.
+  const std::vector<base::StringPiece>& ocsp_uris() const { return ocsp_uris_; }
+
   // Returns a map of unhandled extensions (excludes the ones above).
   const ExtensionsMap& unparsed_extensions() const {
     return unparsed_extensions_;
@@ -201,6 +220,15 @@ class NET_EXPORT ParsedCertificate
 
   // NameConstraints extension.
   std::unique_ptr<NameConstraints> name_constraints_;
+
+  // AuthorityInfoAccess extension.
+  bool has_authority_info_access_ = false;
+  ParsedExtension authority_info_access_extension_;
+  // CaIssuers and Ocsp URIs parsed from the AuthorityInfoAccess extension. Note
+  // that the AuthorityInfoAccess may have contained other AccessDescriptions
+  // which are not represented here.
+  std::vector<base::StringPiece> ca_issuers_uris_;
+  std::vector<base::StringPiece> ocsp_uris_;
 
   // The remaining extensions (excludes the standard ones above).
   ExtensionsMap unparsed_extensions_;

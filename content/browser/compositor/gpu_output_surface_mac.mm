@@ -4,6 +4,7 @@
 
 #include "content/browser/compositor/gpu_output_surface_mac.h"
 
+#include "cc/output/compositor_frame.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
@@ -49,7 +50,7 @@ GpuOutputSurfaceMac::GpuOutputSurfaceMac(
     scoped_refptr<ContextProviderCommandBuffer> context,
     gpu::SurfaceHandle surface_handle,
     scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-    base::SingleThreadTaskRunner* task_runner,
+    cc::SyntheticBeginFrameSource* begin_frame_source,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
         overlay_candidate_validator,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager)
@@ -57,7 +58,7 @@ GpuOutputSurfaceMac::GpuOutputSurfaceMac(
           std::move(context),
           surface_handle,
           std::move(vsync_manager),
-          task_runner,
+          begin_frame_source,
           std::move(overlay_candidate_validator),
           GL_TEXTURE_RECTANGLE_ARB,
           GL_RGBA,
@@ -66,8 +67,8 @@ GpuOutputSurfaceMac::GpuOutputSurfaceMac(
 
 GpuOutputSurfaceMac::~GpuOutputSurfaceMac() {}
 
-void GpuOutputSurfaceMac::SwapBuffers(cc::CompositorFrame* frame) {
-  GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(frame);
+void GpuOutputSurfaceMac::SwapBuffers(cc::CompositorFrame frame) {
+  GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(std::move(frame));
 
   if (should_show_frames_state_ ==
       SHOULD_NOT_SHOW_FRAMES_NO_SWAP_AFTER_SUSPENDED) {
@@ -102,6 +103,7 @@ void GpuOutputSurfaceMac::OnGpuSwapBuffersCompleted(
       }
     }
   }
+  DidReceiveTextureInUseResponses(params_mac->responses);
   GpuSurfacelessBrowserCompositorOutputSurface::OnGpuSwapBuffersCompleted(
       latency_info, result, params_mac);
 }

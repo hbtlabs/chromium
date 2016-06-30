@@ -29,7 +29,7 @@ class DXVAPictureBuffer {
  public:
   static linked_ptr<DXVAPictureBuffer> Create(
       const DXVAVideoDecodeAccelerator& decoder,
-      const media::PictureBuffer& buffer,
+      const PictureBuffer& buffer,
       EGLConfig egl_config);
   virtual ~DXVAPictureBuffer();
 
@@ -62,10 +62,10 @@ class DXVAPictureBuffer {
   virtual bool BindSampleToTexture(base::win::ScopedComPtr<IMFSample> sample);
 
  protected:
-  explicit DXVAPictureBuffer(const media::PictureBuffer& buffer);
+  explicit DXVAPictureBuffer(const PictureBuffer& buffer);
 
   bool available_;
-  media::PictureBuffer picture_buffer_;
+  PictureBuffer picture_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(DXVAPictureBuffer);
 };
@@ -73,7 +73,7 @@ class DXVAPictureBuffer {
 // Copies the video result into an RGBA EGL pbuffer.
 class PbufferPictureBuffer : public DXVAPictureBuffer {
  public:
-  explicit PbufferPictureBuffer(const media::PictureBuffer& buffer);
+  explicit PbufferPictureBuffer(const PictureBuffer& buffer);
   ~PbufferPictureBuffer() override;
 
   bool Initialize(const DXVAVideoDecodeAccelerator& decoder,
@@ -130,7 +130,7 @@ class PbufferPictureBuffer : public DXVAPictureBuffer {
 // Shares the decoded texture with ANGLE without copying by using an EGL stream.
 class EGLStreamPictureBuffer : public DXVAPictureBuffer {
  public:
-  explicit EGLStreamPictureBuffer(const media::PictureBuffer& buffer);
+  explicit EGLStreamPictureBuffer(const PictureBuffer& buffer);
   ~EGLStreamPictureBuffer() override;
 
   bool Initialize();
@@ -142,6 +142,45 @@ class EGLStreamPictureBuffer : public DXVAPictureBuffer {
 
   base::win::ScopedComPtr<IMFSample> current_d3d_sample_;
   base::win::ScopedComPtr<ID3D11Texture2D> dx11_decoding_texture_;
+};
+
+// Creates an NV12 texture and copies to it, then shares that with ANGLE.
+class EGLStreamCopyPictureBuffer : public DXVAPictureBuffer {
+ public:
+  explicit EGLStreamCopyPictureBuffer(const PictureBuffer& buffer);
+  ~EGLStreamCopyPictureBuffer() override;
+
+  bool Initialize(const DXVAVideoDecodeAccelerator& decoder);
+  bool ReusePictureBuffer() override;
+
+  bool CopyOutputSampleDataToPictureBuffer(DXVAVideoDecodeAccelerator* decoder,
+                                           IDirect3DSurface9* dest_surface,
+                                           ID3D11Texture2D* dx11_texture,
+                                           int input_buffer_id) override;
+  bool CopySurfaceComplete(IDirect3DSurface9* src_surface,
+                           IDirect3DSurface9* dest_surface) override;
+
+ private:
+  EGLStreamKHR stream_;
+
+  // This ID3D11Texture2D interface pointer is used to hold a reference to the
+  // MFT decoder texture during the course of a copy operation. This reference
+  // is released when the copy completes.
+  base::win::ScopedComPtr<ID3D11Texture2D> dx11_decoding_texture_;
+
+  base::win::ScopedComPtr<IDXGIKeyedMutex> egl_keyed_mutex_;
+  base::win::ScopedComPtr<IDXGIKeyedMutex> dx11_keyed_mutex_;
+
+  HANDLE texture_share_handle_;
+  // This is the texture (created on ANGLE's device) that will be put in the
+  // EGLStream.
+  base::win::ScopedComPtr<ID3D11Texture2D> angle_copy_texture_;
+  // This is another copy of that shared resource that will be copied to from
+  // the decoder.
+  base::win::ScopedComPtr<ID3D11Texture2D> decoder_copy_texture_;
+
+  // This is the last value that was used to release the keyed mutex.
+  uint64_t keyed_mutex_value_ = 0;
 };
 
 }  // namespace media

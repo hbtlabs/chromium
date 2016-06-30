@@ -45,9 +45,15 @@ enum class ThreadInstance { MAIN, IMPL };
 class CC_EXPORT AnimationHost {
  public:
   using ElementToAnimationsMap =
-      std::unordered_map<ElementId, scoped_refptr<ElementAnimations>>;
+      std::unordered_map<ElementId,
+                         scoped_refptr<ElementAnimations>,
+                         ElementIdHash>;
 
-  static std::unique_ptr<AnimationHost> Create(ThreadInstance thread_instance);
+  static std::unique_ptr<AnimationHost> CreateMainInstance();
+  static std::unique_ptr<AnimationHost> CreateForTesting(
+      ThreadInstance thread_instance);
+  std::unique_ptr<AnimationHost> CreateImplInstance(
+      bool supports_impl_scrolling) const;
   ~AnimationHost();
 
   void AddAnimationTimeline(scoped_refptr<AnimationTimeline> timeline);

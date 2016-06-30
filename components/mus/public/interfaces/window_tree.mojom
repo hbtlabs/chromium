@@ -5,52 +5,16 @@
 module mus.mojom;
 
 import "cc/ipc/surface_id.mojom";
-import "components/mus/public/interfaces/compositor_frame.mojom";
 import "components/mus/public/interfaces/cursor.mojom";
 import "components/mus/public/interfaces/event_matcher.mojom";
-import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/mus_constants.mojom";
+import "components/mus/public/interfaces/surface.mojom";
 import "components/mus/public/interfaces/window_manager.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
+import "components/mus/public/interfaces/window_tree_constants.mojom";
+import "ui/events/mojo/event.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "ui/platform_window/mojo/text_input_state.mojom";
-
-struct WindowData {
-  uint32 parent_id;
-  uint32 window_id;
-  gfx.mojom.Rect bounds;
-  map<string, array<uint8>> properties;
-  // True if this window is visible. The window may not be drawn on screen (see
-  // OnWindowParentDrawnStateChanged() for details).
-  bool visible;
-};
-
-enum ErrorCode {
-  NONE,
-  VALUE_IN_USE,
-  ILLEGAL_ARGUMENT,
-};
-
-// Each Window has support for two surfaces. Generally the |DEFAULT| surface
-// is used. The |UNDERLAY| surface is useful if the owner of a window wants to
-// to Embed() another client and at the same time draw something under the
-// embedded apps representation.
-enum SurfaceType {
-  // Only the owner of a window may obtain this surface.
-  // The window manager can change the offset of this by way of
-  // SetUnderlaySurfaceOffsetAndExtendedHitArea().
-  UNDERLAY,
-
-  // Only the embedded app may obtain this surface. If an app is not embedded
-  // in the Window than the owner may also render to this surface as well.
-  DEFAULT,
-};
-
-// The result of an input event sent to a client app.
-enum EventResult {
-  HANDLED,
-  UNHANDLED,
-};
 
 // Windows are identified by a uint32. The upper 16 bits are the connection id,
 // and the lower 16 the id assigned by the client.
@@ -213,6 +177,9 @@ interface WindowTree {
   // The caller must have created |window_id|. If not the request fails and the
   // response is false.
   //
+  // The embedder can dictate the behaviour of the embedded client by setting
+  // the appropriate embed flags (e.g. kEmbedFlagEmbedderInterceptsEvents).
+  //
   // When a connection embeds a WindowTreeClient the originating connection no
   // longer has privileges to access or see any of the children of the window.
   // If the window had existing children the children are removed. The
@@ -228,7 +195,8 @@ interface WindowTree {
   // OnEmbeddedAppDisconnected().
   //
   // The callback returns whether the embedding was successful.
-  Embed(uint32 window_id, WindowTreeClient client) => (bool success);
+  Embed(uint32 window_id, WindowTreeClient client, uint32 embed_flags)
+      => (bool success);
 
   // Sets focus to the specified window, use 0 to clear focus. For a window to
   // get focus the following has to happen: the window is drawn, the window has
@@ -373,13 +341,13 @@ interface WindowTreeClient {
   // receive farther events until the event is ack'ed.
   OnWindowInputEvent(uint32 event_id,
                      uint32 window,
-                     Event event,
+                     ui.mojom.Event event,
                      uint32 event_observer_id);
 
   // Invoked when an |event| is sent via the EventObserver and not targeted at a
   // specific window. The |event_observer_id| is the one supplied to
   // SetEventObserver. The client should not acknowledge these events.
-  OnEventObserved(Event event, uint32 event_observer_id);
+  OnEventObserved(ui.mojom.Event event, uint32 event_observer_id);
 
   // Called in two distinct cases: when a window known to the connection gains
   // focus, or when focus moves from a window known to the connection to a

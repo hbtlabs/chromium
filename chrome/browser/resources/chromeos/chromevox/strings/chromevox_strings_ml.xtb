@@ -17,9 +17,11 @@
 <translation id="1155043339247954670">അടുത്ത ലിസ്റ്റ് ഇനം ഒന്നുമില്ല.</translation>
 <translation id="1157782847298808853">കീബോർഡ് സഹായം</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, കോംബോ ബോക്സ്</translation>
+<translation id="1161762950103988776">ജമ്പ്</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, ഉപമെനു ഉള്ള മെനു ഇനം</translation>
 <translation id="1177863135347784049">ഇഷ്ടാനുസൃതം</translation>
 <translation id="1188858454923323853">കോംപ്ലിമെന്ററി</translation>
+<translation id="1201402288615127009">അടുത്തത്</translation>
 <translation id="1206619573307042055">മാർക്യൂ</translation>
 <translation id="1213216066620407844">ChromeVox - Chrome-ന് ശബ്‌ദം നൽകുന്നു</translation>
 <translation id="1229276918471378188">മുൻ ജമ്പ്</translation>
@@ -121,7 +123,6 @@
 <translation id="2553108862507765288">വ്യാകരണ പിശക്</translation>
 <translation id="257674075312929031">ഗ്രൂപ്പ്</translation>
 <translation id="2582407057977008361">അരികിൽ</translation>
-<translation id="2589102159832527089">ഈ പേജിൽ &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; എന്ന PDF ഫയലിൽ നിന്ന് എക്‌സ്‌ട്രാക്റ്റ് ചെയ്‌ത വാചകമുണ്ട്. &lt;a href="<ph name="URL" />"&gt;യഥാർത്ഥമായത് ലഭിക്കാൻ ഇവിടെ ക്ലിക്കുചെയ്യുക.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">ഇവ ഉൾപ്പെടുന്നു {COUNT,plural, =1{# ഇനം}other{# ഇനങ്ങൾ}}</translation>
 <translation id="2614981083756825552">മാത്ത് ML ലേഔട്ട്</translation>
 <translation id="2626530649491650971">ക്ലിക്കുചെയ്യാവുന്നത്</translation>
@@ -245,6 +246,7 @@
         "vi": "വിയറ്റ്‌നാമീസ്",
         "zh": "ചൈനീസ്",
         "zh_TW": "ചൈനീസ് (പരമ്പരാഗത ഹാൻ)"}</translation>
+<translation id="335581015389089642">സംഭാഷണം</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{അധിക ചിഹ്നം}other{# അധിക ചിഹ്നങ്ങൾ}}</translation>
 <translation id="338583716107319301">സെപ്പറേറ്റര്‍</translation>
@@ -508,7 +510,6 @@
 <translation id="6129953537138746214">സ്പെയ്സ്</translation>
 <translation id="6142308968191113180">ശീർഷകം 4</translation>
 <translation id="6169420925157477918">ദൈർഘ്യമേറിയ വിവരണമുള്ള ചിത്രം</translation>
-<translation id="6172087735260766220">പകർപ്പ് പരിരക്ഷിത PDF-ൽ നിന്ന് ആക്‌സസ്സ് ചെയ്യാനാകുന്ന ടെക്‌സ്റ്റ് ആക്‌സസ്സ് ചെയ്യാനാകുന്നില്ല.</translation>
 <translation id="6186305613600865047">പേജിന്റെ താഴേയ്‌ക്ക് പോകുക</translation>
 <translation id="6193330012414963395">AM PM</translation>
 <translation id="622484624075952240">താഴേക്കുള്ള കീ</translation>
@@ -547,6 +548,7 @@
 <translation id="6659594942844771486">ടാബ്</translation>
 <translation id="667999046851023355">പ്രമാണം</translation>
 <translation id="6697092096875747123">മുൻ കോംബോ ബോക്സ്</translation>
+<translation id="6710213216561001401">കഴിഞ്ഞ</translation>
 <translation id="6714813999819678458">മുൻ നില 2 ശീർഷകം</translation>
 <translation id="6716505898850596801">മോഡിഫയര്‍ കീകള്‍</translation>
 <translation id="671916444866103745">അടുത്ത ARIA ലാൻഡ്‌മാർക്ക് ഒന്നുമില്ല.</translation>
@@ -664,6 +666,7 @@
 <translation id="8049189770492311300">ടൈമർ</translation>
 <translation id="8065607967589909823">തിരഞ്ഞെടുത്തത് ഇതാണ്</translation>
 <translation id="8066678206530322333">ബാനര്‍‌</translation>
+<translation id="8076492880354921740">ടാബുകള്‍‌</translation>
 <translation id="8110647606445335195">ARIA ലാൻഡ്‌മാർക്കുകൾ ഒന്നുമില്ല.</translation>
 <translation id="8153880621934657047">പട്ടികയ്‌ക്കുള്ളിലല്ല.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{അടിവര}other{# അടിവരകൾ}}</translation>
@@ -687,6 +690,7 @@
 <translation id="842922884199979200">അടുത്ത നില 3 ശീർഷകം ഒന്നുമില്ല.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">മുൻ ചെക്ക്ബോക്‌സ് ഒന്നുമില്ല.</translation>
+<translation id="8446884382197647889">കൂടുതലറിയുക</translation>
 <translation id="8455868257606149352">പരമാവധി <ph name="X" /></translation>
 <translation id="84575901236241018">ഇതിന് ആക്‌സസ്സ് കീ <ph name="KEY" /> ഉണ്ട്</translation>
 <translation id="8476508772960940536">വിൻഡോ ചുരുക്കവിവരണം</translation>
@@ -757,8 +761,10 @@
 <translation id="9178973770513562274">ബ്രൗസുചെയ്യുന്നതിന് മുകളിലേക്കും താഴേക്കുമുള്ള കീകൾ ഉപയോഗിക്കുക അല്ലെങ്കിൽ തിരയുന്നതിന് ടൈപ്പുചെയ്യുക.</translation>
 <translation id="9192904702577636854">മാർക്യൂ</translation>
 <translation id="9212322457209634662">അടുത്ത വിഭാഗങ്ങളൊന്നുമില്ല.</translation>
+<translation id="923331726185079994">ChromeVox അപ്‌ഡേറ്റുചെയ്‌തു</translation>
 <translation id="930275611743429116">തിരഞ്ഞെടുക്കൽ ആരംഭിക്കുകയോ അവസാനിപ്പിക്കുകയോ ചെയ്യുക.</translation>
 <translation id="948171205378458592">സംഭാഷണ റേറ്റ് കുറയ്ക്കുക</translation>
 <translation id="962913030769097253">അടുത്ത നില 1 ശീർഷകം</translation>
 <translation id="973955474346881951">സ്റ്റിക്കി മോഡ് പ്രവർത്തനക്ഷമമാക്കുക/പ്രവർത്തനരഹിതമാക്കുക</translation>
+<translation id="976849232629612000">ഇനങ്ങളൊന്നുമില്ല.</translation>
 </translationbundle>

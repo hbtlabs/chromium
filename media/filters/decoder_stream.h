@@ -5,7 +5,9 @@
 #ifndef MEDIA_FILTERS_DECODER_STREAM_H_
 #define MEDIA_FILTERS_DECODER_STREAM_H_
 
+#include <deque>
 #include <list>
+#include <memory>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -13,6 +15,7 @@
 #include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "media/base/audio_decoder.h"
+#include "media/base/audio_timestamp_helper.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
 #include "media/base/media_log.h"
@@ -138,7 +141,6 @@ class MEDIA_EXPORT DecoderStream {
     STATE_INITIALIZING,
     STATE_NORMAL,  // Includes idle, pending decoder decode/reset.
     STATE_FLUSHING_DECODER,
-    STATE_PENDING_DEMUXER_READ,
     STATE_REINITIALIZING_DECODER,
     STATE_END_OF_STREAM,  // End of stream reached; returns EOS on all reads.
     STATE_ERROR,
@@ -190,6 +192,8 @@ class MEDIA_EXPORT DecoderStream {
 
   void ResetDecoder();
   void OnDecoderReset();
+
+  DecoderStreamTraits<StreamType> traits_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
@@ -252,8 +256,8 @@ class MEDIA_EXPORT DecoderStream {
   // crbug.com/603713
   bool received_config_change_during_reinit_;
 
-  // Used to track read requests in case the STATE_PENDIND_DEMUXER_READ get
-  // overwritten by an error.
+  // Used to track read requests; not rolled into |state_| since that is
+  // overwritten in many cases.
   bool pending_demuxer_read_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.

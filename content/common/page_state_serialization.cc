@@ -15,7 +15,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -28,45 +28,50 @@ float g_device_scale_factor_for_testing = 0.0;
 
 //-----------------------------------------------------------------------------
 
-void AppendDataToHttpBody(ExplodedHttpBody* http_body, const char* data,
-                          int data_length) {
-  http_body->request_body->AppendBytes(data, data_length);
+void AppendDataToRequestBody(
+    const scoped_refptr<ResourceRequestBodyImpl>& request_body,
+    const char* data,
+    int data_length) {
+  request_body->AppendBytes(data, data_length);
 }
 
-void AppendFileRangeToHttpBody(ExplodedHttpBody* http_body,
-                               const base::NullableString16& file_path,
-                               int file_start,
-                               int file_length,
-                               double file_modification_time) {
-  http_body->request_body->AppendFileRange(
+void AppendFileRangeToRequestBody(
+    const scoped_refptr<ResourceRequestBodyImpl>& request_body,
+    const base::NullableString16& file_path,
+    int file_start,
+    int file_length,
+    double file_modification_time) {
+  request_body->AppendFileRange(
       base::FilePath::FromUTF16Unsafe(file_path.string()),
       static_cast<uint64_t>(file_start), static_cast<uint64_t>(file_length),
       base::Time::FromDoubleT(file_modification_time));
 }
 
-void AppendURLRangeToHttpBody(ExplodedHttpBody* http_body,
-                              const GURL& url,
-                              int file_start,
-                              int file_length,
-                              double file_modification_time) {
-  http_body->request_body->AppendFileSystemFileRange(
+void AppendURLRangeToRequestBody(
+    const scoped_refptr<ResourceRequestBodyImpl>& request_body,
+    const GURL& url,
+    int file_start,
+    int file_length,
+    double file_modification_time) {
+  request_body->AppendFileSystemFileRange(
       url, static_cast<uint64_t>(file_start),
       static_cast<uint64_t>(file_length),
       base::Time::FromDoubleT(file_modification_time));
 }
 
-void AppendBlobToHttpBody(ExplodedHttpBody* http_body,
-                          const std::string& uuid) {
-  http_body->request_body->AppendBlob(uuid);
+void AppendBlobToRequestBody(
+    const scoped_refptr<ResourceRequestBodyImpl>& request_body,
+    const std::string& uuid) {
+  request_body->AppendBlob(uuid);
 }
 
 //----------------------------------------------------------------------------
 
 void AppendReferencedFilesFromHttpBody(
-    const std::vector<ResourceRequestBody::Element>& elements,
+    const std::vector<ResourceRequestBodyImpl::Element>& elements,
     std::vector<base::NullableString16>* referenced_files) {
   for (size_t i = 0; i < elements.size(); ++i) {
-    if (elements[i].type() == ResourceRequestBody::Element::TYPE_FILE)
+    if (elements[i].type() == ResourceRequestBodyImpl::Element::TYPE_FILE)
       referenced_files->push_back(
           base::NullableString16(elements[i].path().AsUTF16Unsafe(), false));
   }
@@ -387,21 +392,16 @@ void ReadStringVector(SerializeObject* obj,
     (*result)[i] = ReadString(obj);
 }
 
-// Writes an ExplodedHttpBody object into a SerializeObject for serialization.
-void WriteHttpBody(const ExplodedHttpBody& http_body, SerializeObject* obj) {
-  bool is_null = http_body.request_body == nullptr;
-  WriteBoolean(!is_null, obj);
-  if (is_null)
-    return;
-
-  WriteAndValidateVectorSize(*http_body.request_body->elements(), obj);
-  for (const auto& element : *http_body.request_body->elements()) {
+void WriteResourceRequestBody(const ResourceRequestBodyImpl& request_body,
+                              SerializeObject* obj) {
+  WriteAndValidateVectorSize(*request_body.elements(), obj);
+  for (const auto& element : *request_body.elements()) {
     switch (element.type()) {
-      case ResourceRequestBody::Element::TYPE_BYTES:
+      case ResourceRequestBodyImpl::Element::TYPE_BYTES:
         WriteInteger(blink::WebHTTPBody::Element::TypeData, obj);
         WriteData(element.bytes(), static_cast<int>(element.length()), obj);
         break;
-      case ResourceRequestBody::Element::TYPE_FILE:
+      case ResourceRequestBodyImpl::Element::TYPE_FILE:
         WriteInteger(blink::WebHTTPBody::Element::TypeFile, obj);
         WriteString(
             base::NullableString16(element.path().AsUTF16Unsafe(), false), obj);
@@ -409,34 +409,30 @@ void WriteHttpBody(const ExplodedHttpBody& http_body, SerializeObject* obj) {
         WriteInteger64(static_cast<int64_t>(element.length()), obj);
         WriteReal(element.expected_modification_time().ToDoubleT(), obj);
         break;
-      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
+      case ResourceRequestBodyImpl::Element::TYPE_FILE_FILESYSTEM:
         WriteInteger(blink::WebHTTPBody::Element::TypeFileSystemURL, obj);
         WriteGURL(element.filesystem_url(), obj);
         WriteInteger64(static_cast<int64_t>(element.offset()), obj);
         WriteInteger64(static_cast<int64_t>(element.length()), obj);
         WriteReal(element.expected_modification_time().ToDoubleT(), obj);
         break;
-      case ResourceRequestBody::Element::TYPE_BLOB:
+      case ResourceRequestBodyImpl::Element::TYPE_BLOB:
         WriteInteger(blink::WebHTTPBody::Element::TypeBlob, obj);
         WriteStdString(element.blob_uuid(), obj);
         break;
-      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
-      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
+      case ResourceRequestBodyImpl::Element::TYPE_BYTES_DESCRIPTION:
+      case ResourceRequestBodyImpl::Element::TYPE_DISK_CACHE_ENTRY:
       default:
         NOTREACHED();
         continue;
     }
   }
-  WriteInteger64(http_body.request_body->identifier(), obj);
-  WriteBoolean(http_body.contains_passwords, obj);
+  WriteInteger64(request_body.identifier(), obj);
 }
 
-void ReadHttpBody(SerializeObject* obj, ExplodedHttpBody* http_body) {
-  // An initial boolean indicates if we have an HTTP body.
-  if (!ReadBoolean(obj))
-    return;
-
-  http_body->request_body = new ResourceRequestBody();
+void ReadResourceRequestBody(
+    SerializeObject* obj,
+    const scoped_refptr<ResourceRequestBodyImpl>& request_body) {
   int num_elements = ReadInteger(obj);
   for (int i = 0; i < num_elements; ++i) {
     int type = ReadInteger(obj);
@@ -445,33 +441,53 @@ void ReadHttpBody(SerializeObject* obj, ExplodedHttpBody* http_body) {
       int length = -1;
       ReadData(obj, &data, &length);
       if (length >= 0) {
-        AppendDataToHttpBody(http_body, static_cast<const char*>(data),
-                             length);
+        AppendDataToRequestBody(request_body, static_cast<const char*>(data),
+                                length);
       }
     } else if (type == blink::WebHTTPBody::Element::TypeFile) {
       base::NullableString16 file_path = ReadString(obj);
       int64_t file_start = ReadInteger64(obj);
       int64_t file_length = ReadInteger64(obj);
       double file_modification_time = ReadReal(obj);
-      AppendFileRangeToHttpBody(http_body, file_path, file_start, file_length,
-                                file_modification_time);
+      AppendFileRangeToRequestBody(request_body, file_path, file_start,
+                                   file_length, file_modification_time);
     } else if (type == blink::WebHTTPBody::Element::TypeFileSystemURL) {
       GURL url = ReadGURL(obj);
       int64_t file_start = ReadInteger64(obj);
       int64_t file_length = ReadInteger64(obj);
       double file_modification_time = ReadReal(obj);
-      AppendURLRangeToHttpBody(http_body, url, file_start, file_length,
-                               file_modification_time);
+      AppendURLRangeToRequestBody(request_body, url, file_start, file_length,
+                                  file_modification_time);
     } else if (type == blink::WebHTTPBody::Element::TypeBlob) {
       if (obj->version >= 16) {
         std::string blob_uuid = ReadStdString(obj);
-        AppendBlobToHttpBody(http_body, blob_uuid);
+        AppendBlobToRequestBody(request_body, blob_uuid);
       } else {
         ReadGURL(obj); // Skip the obsolete blob url value.
       }
     }
   }
-  http_body->request_body->set_identifier(ReadInteger64(obj));
+  request_body->set_identifier(ReadInteger64(obj));
+}
+
+// Writes an ExplodedHttpBody object into a SerializeObject for serialization.
+void WriteHttpBody(const ExplodedHttpBody& http_body, SerializeObject* obj) {
+  bool is_null = http_body.request_body == nullptr;
+  WriteBoolean(!is_null, obj);
+  if (is_null)
+    return;
+
+  WriteResourceRequestBody(*http_body.request_body, obj);
+  WriteBoolean(http_body.contains_passwords, obj);
+}
+
+void ReadHttpBody(SerializeObject* obj, ExplodedHttpBody* http_body) {
+  // An initial boolean indicates if we have an HTTP body.
+  if (!ReadBoolean(obj))
+    return;
+
+  http_body->request_body = new ResourceRequestBodyImpl();
+  ReadResourceRequestBody(obj, http_body->request_body);
 
   if (obj->version >= 12)
     http_body->contains_passwords = ReadBoolean(obj);
@@ -743,6 +759,24 @@ bool DecodePageStateWithDeviceScaleFactorForTesting(
   g_device_scale_factor_for_testing = 0.0;
   return rv;
 }
+
+scoped_refptr<ResourceRequestBodyImpl> DecodeResourceRequestBody(
+    const char* data,
+    size_t size) {
+  scoped_refptr<ResourceRequestBodyImpl> result = new ResourceRequestBodyImpl();
+  SerializeObject obj(data, static_cast<int>(size));
+  ReadResourceRequestBody(&obj, result);
+  return obj.parse_error ? nullptr : result;
+}
+
+std::string EncodeResourceRequestBody(
+    const ResourceRequestBodyImpl& resource_request_body) {
+  SerializeObject obj;
+  obj.version = kCurrentVersion;
+  WriteResourceRequestBody(resource_request_body, &obj);
+  return obj.GetAsString();
+}
+
 #endif
 
 }  // namespace content

@@ -6,6 +6,7 @@
 #define MOJO_PUBLIC_CPP_BINDINGS_LIB_MAP_SERIALIZATION_H_
 
 #include <type_traits>
+#include <vector>
 
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
@@ -82,13 +83,13 @@ struct Serializer<Map<Key, Value>, MaybeConstUserType> {
   using Traits = MapTraits<UserType>;
   using UserKey = typename Traits::Key;
   using UserValue = typename Traits::Value;
-  using Data = typename Map<Key, Value>::Data_;
+  using Data = typename MojomTypeTraits<Map<Key, Value>>::Data;
   using KeyArraySerializer = ArraySerializer<Array<Key>,
-                                             Array<UserKey>,
+                                             std::vector<UserKey>,
                                              MapKeyReader<MaybeConstUserType>>;
   using ValueArraySerializer =
       ArraySerializer<Array<Value>,
-                      Array<UserValue>,
+                      std::vector<UserValue>,
                       MapValueReader<MaybeConstUserType>>;
 
   static size_t PrepareToSerialize(MaybeConstUserType& input,
@@ -121,7 +122,8 @@ struct Serializer<Map<Key, Value>, MaybeConstUserType> {
 
     auto result = Data::New(buf);
     if (result) {
-      result->keys.ptr = Array<Key>::Data_::New(Traits::GetSize(input), buf);
+      result->keys.ptr =
+          MojomTypeTraits<Array<Key>>::Data::New(Traits::GetSize(input), buf);
       if (result->keys.ptr) {
         MapKeyReader<MaybeConstUserType> key_reader(input);
         KeyArraySerializer::SerializeElements(
@@ -130,7 +132,7 @@ struct Serializer<Map<Key, Value>, MaybeConstUserType> {
       }
 
       result->values.ptr =
-          Array<Value>::Data_::New(Traits::GetSize(input), buf);
+          MojomTypeTraits<Array<Value>>::Data::New(Traits::GetSize(input), buf);
       if (result->values.ptr) {
         MapValueReader<MaybeConstUserType> value_reader(input);
         ValueArraySerializer::SerializeElements(
@@ -147,8 +149,8 @@ struct Serializer<Map<Key, Value>, MaybeConstUserType> {
     if (!input)
       return CallSetToNullIfExists<Traits>(output);
 
-    Array<UserKey> keys;
-    Array<UserValue> values;
+    std::vector<UserKey> keys;
+    std::vector<UserValue> values;
 
     if (!KeyArraySerializer::DeserializeElements(input->keys.ptr, &keys,
                                                  context) ||
@@ -161,8 +163,10 @@ struct Serializer<Map<Key, Value>, MaybeConstUserType> {
     size_t size = keys.size();
     Traits::SetToEmpty(output);
 
-    for (size_t i = 0; i < size; ++i)
-      Traits::Insert(*output, std::move(keys[i]), std::move(values[i]));
+    for (size_t i = 0; i < size; ++i) {
+      if (!Traits::Insert(*output, std::move(keys[i]), std::move(values[i])))
+        return false;
+    }
     return true;
   }
 };

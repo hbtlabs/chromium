@@ -13,23 +13,24 @@
 function buy() {  // eslint-disable-line no-unused-vars
   try {
     var request = new PaymentRequest(
-        ['visa'], {
+        [{supportedMethods: ['visa']}], {
           total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}},
           shippingOptions: [{
             id: 'freeShippingOption',
             label: 'Free global shipping',
-            amount: {currency: 'USD', value: '0'}
+            amount: {currency: 'USD', value: '0'},
+            selected: true
           }]
         },
         {requestShipping: true});
     request.show()
         .then(function(resp) {
-          resp.complete(true)
+          resp.complete('success')
               .then(function() {
                 print(
-                    request.shippingOption + '<br>' +
+                    resp.shippingOption + '<br>' +
                     JSON.stringify(
-                        toDictionary(request.shippingAddress), undefined, 2) +
+                        toDictionary(resp.shippingAddress), undefined, 2) +
                     '<br>' + resp.methodName + '<br>' +
                     JSON.stringify(resp.details, undefined, 2));
               })

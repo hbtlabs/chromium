@@ -272,6 +272,10 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
   if (AutomationPredicate.structuralContainer(node))
     return true;
 
+  // Ignore list markers since we already announce listitem role.
+  if (node.role == RoleType.listMarker)
+    return true;
+
   // Don't ignore nodes with names.
   if (node.name || node.value || node.description)
     return false;
@@ -283,6 +287,19 @@ AutomationPredicate.shouldIgnoreNode = function(node) {
        node.role == RoleType.group ||
        node.role == RoleType.image ||
        node.role == RoleType.staticText);
+};
+
+
+/**
+ * Returns if the node has a meaningful checked state.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.checkable = function(node) {
+  return node.role == RoleType.checkBox ||
+      node.role == RoleType.radioButton ||
+      node.role == RoleType.menuItemCheckBox ||
+      node.role == RoleType.menuItemRadio;
 };
 
 });  // goog.scope

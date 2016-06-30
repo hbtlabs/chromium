@@ -104,8 +104,9 @@ public abstract class WebsitePreferenceBridge {
     @SuppressWarnings("unchecked")
     @CalledByNative
     private static void insertLocalStorageInfoIntoMap(
-            HashMap map, String origin, String fullOrigin, long size) {
-        ((HashMap<String, LocalStorageInfo>) map).put(origin, new LocalStorageInfo(origin, size));
+            HashMap map, String origin, String fullOrigin, long size, boolean important) {
+        ((HashMap<String, LocalStorageInfo>) map)
+                .put(origin, new LocalStorageInfo(origin, size, important));
     }
 
     /**
@@ -258,7 +259,7 @@ public abstract class WebsitePreferenceBridge {
     static native int nativeGetNotificationSettingForOrigin(
             String origin, boolean isIncognito);
     static native void nativeSetNotificationSettingForOrigin(
-            String origin, String embedder, int value, boolean isIncognito);
+            String origin, int value, boolean isIncognito);
     private static native void nativeGetProtectedMediaIdentifierOrigins(Object list);
     static native int nativeGetProtectedMediaIdentifierSettingForOrigin(
             String origin, String embedder, boolean isIncognito);

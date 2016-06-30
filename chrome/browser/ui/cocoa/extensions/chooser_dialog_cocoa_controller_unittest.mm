@@ -10,67 +10,14 @@
 #include <vector>
 
 #include "base/strings/utf_string_conversions.h"
-#import "chrome/browser/ui/cocoa/chooser_content_view.h"
+#import "chrome/browser/ui/cocoa/chooser_content_view_cocoa.h"
 #import "chrome/browser/ui/cocoa/cocoa_profile_test.h"
 #include "chrome/browser/ui/cocoa/cocoa_test_helper.h"
 #import "chrome/browser/ui/cocoa/extensions/chooser_dialog_cocoa.h"
+#include "components/chooser_controller/mock_chooser_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
-
-namespace {
-
-class MockChooserController : public ChooserController {
- public:
-  explicit MockChooserController(content::RenderFrameHost* owner)
-      : ChooserController(owner) {}
-  ~MockChooserController() override {}
-
-  // ChooserController:
-  size_t NumOptions() const override { return option_names_.size(); }
-
-  // ChooserController:
-  const base::string16& GetOption(size_t index) const override {
-    return option_names_[index];
-  }
-
-  // ChooserController:
-  MOCK_METHOD1(Select, void(size_t index));
-
-  // ChooserController:
-  MOCK_METHOD0(Cancel, void());
-
-  // ChooserController:
-  MOCK_METHOD0(Close, void());
-
-  // ChooserController:
-  MOCK_CONST_METHOD0(OpenHelpCenterUrl, void());
-
-  void OptionAdded(const base::string16 option_name) {
-    option_names_.push_back(option_name);
-    if (observer())
-      observer()->OnOptionAdded(option_names_.size() - 1);
-  }
-
-  void OptionRemoved(const base::string16 option_name) {
-    for (auto it = option_names_.begin(); it != option_names_.end(); ++it) {
-      if (*it == option_name) {
-        size_t index = it - option_names_.begin();
-        option_names_.erase(it);
-        if (observer())
-          observer()->OnOptionRemoved(index);
-        return;
-      }
-    }
-  }
-
- private:
-  std::vector<base::string16> option_names_;
-
-  DISALLOW_COPY_AND_ASSIGN(MockChooserController);
-};
-
-}  // namespace
 
 class ChooserDialogCocoaControllerTest : public CocoaProfileTest {
  protected:
@@ -88,11 +35,12 @@ class ChooserDialogCocoaControllerTest : public CocoaProfileTest {
         content::WebContents::Create(content::WebContents::CreateParams(
             profile(), content::SiteInstance::Create(profile())));
     ASSERT_TRUE(web_contents);
-    chooser_controller_.reset(
+    std::unique_ptr<MockChooserController> chooser_controller(
         new MockChooserController(web_contents->GetMainFrame()));
-    ASSERT_TRUE(chooser_controller_);
+    ASSERT_TRUE(chooser_controller);
+    chooser_controller_ = chooser_controller.get();
     chooser_dialog_.reset(
-        new ChooserDialogCocoa(web_contents, chooser_controller_.get()));
+        new ChooserDialogCocoa(web_contents, std::move(chooser_controller)));
     ASSERT_TRUE(chooser_dialog_);
     chooser_dialog_controller_ =
         chooser_dialog_->chooser_dialog_cocoa_controller_.get();
@@ -109,11 +57,11 @@ class ChooserDialogCocoaControllerTest : public CocoaProfileTest {
     ASSERT_TRUE(help_button_);
   }
 
-  std::unique_ptr<MockChooserController> chooser_controller_;
   std::unique_ptr<ChooserDialogCocoa> chooser_dialog_;
 
+  MockChooserController* chooser_controller_;
   ChooserDialogCocoaController* chooser_dialog_controller_;
-  ChooserContentView* chooser_content_view_;
+  ChooserContentViewCocoa* chooser_content_view_;
   NSTableView* table_view_;
   NSButton* connect_button_;
   NSButton* cancel_button_;
@@ -128,12 +76,12 @@ TEST_F(ChooserDialogCocoaControllerTest, InitialState) {
 
   // Since "No devices found." needs to be displayed on the |table_view_|,
   // the number of rows is 1.
-  EXPECT_EQ(table_view_.numberOfRows, 1);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   // |table_view_| should be disabled since there is no option shown.
   ASSERT_FALSE(table_view_.enabled);
   // No option selected.
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
   // |connect_button_| should be disabled since no option selected.
   ASSERT_FALSE(connect_button_.enabled);
   ASSERT_TRUE(cancel_button_.enabled);
@@ -144,26 +92,26 @@ TEST_F(ChooserDialogCocoaControllerTest, AddOption) {
   CreateChooserDialog();
 
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  EXPECT_EQ(table_view_.numberOfRows, 1);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   // |table_view_| should be enabled since there is an option.
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
   ASSERT_FALSE(connect_button_.enabled);
   ASSERT_TRUE(cancel_button_.enabled);
   ASSERT_TRUE(help_button_.enabled);
 
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(2, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
-  EXPECT_EQ(table_view_.numberOfRows, 3);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(3, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 }
 
 TEST_F(ChooserDialogCocoaControllerTest, RemoveOption) {
@@ -174,53 +122,51 @@ TEST_F(ChooserDialogCocoaControllerTest, RemoveOption) {
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
 
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("b"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(2, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 
   // Remove a non-existent option, the number of rows should not change.
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("non-existent"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(2, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("c"));
-  EXPECT_EQ(table_view_.numberOfRows, 1);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   ASSERT_TRUE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("a"));
   // There is no option shown now. But since "No devices found."
   // needs to be displayed on the |table_view_|, the number of rows is 1.
-  EXPECT_EQ(table_view_.numberOfRows, 1);
-  EXPECT_EQ(table_view_.numberOfColumns, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.numberOfColumns);
   // |table_view_| should be disabled since all options are removed.
   ASSERT_FALSE(table_view_.enabled);
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
 }
 
 TEST_F(ChooserDialogCocoaControllerTest, AddAndRemoveOption) {
   CreateChooserDialog();
 
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  EXPECT_EQ(table_view_.numberOfRows, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
+  EXPECT_EQ(2, table_view_.numberOfRows);
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("b"));
-  EXPECT_EQ(table_view_.numberOfRows, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
+  EXPECT_EQ(2, table_view_.numberOfRows);
   chooser_controller_->OptionAdded(base::ASCIIToUTF16("d"));
-  EXPECT_EQ(table_view_.numberOfRows, 3);
+  EXPECT_EQ(3, table_view_.numberOfRows);
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("d"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
+  EXPECT_EQ(2, table_view_.numberOfRows);
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("c"));
-  // There is no option shown now. But since "No devices found."
-  // needs to be displayed on the |table_view_|, the number of rows is 1.
-  EXPECT_EQ(table_view_.numberOfRows, 1);
+  EXPECT_EQ(1, table_view_.numberOfRows);
 }
 
 TEST_F(ChooserDialogCocoaControllerTest, SelectAndDeselectAnOption) {
@@ -233,23 +179,23 @@ TEST_F(ChooserDialogCocoaControllerTest, SelectAndDeselectAnOption) {
   // Select option 0.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.selectedRow, 0);
+  EXPECT_EQ(0, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 
-  // Disselect option 0.
+  // Deselect option 0.
   [table_view_ deselectRow:0];
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
   ASSERT_FALSE(connect_button_.enabled);
 
   // Select option 1.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:1]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.selectedRow, 1);
+  EXPECT_EQ(1, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 
-  // Disselect option 1.
+  // Deselect option 1.
   [table_view_ deselectRow:1];
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
   ASSERT_FALSE(connect_button_.enabled);
 }
 
@@ -264,19 +210,47 @@ TEST_F(ChooserDialogCocoaControllerTest,
   // Select option 0.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.selectedRow, 0);
+  EXPECT_EQ(0, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 
   // Select option 1.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:1]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.selectedRow, 1);
+  EXPECT_EQ(1, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 
   // Select option 2.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:2]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.selectedRow, 2);
+  EXPECT_EQ(2, table_view_.selectedRow);
+  ASSERT_TRUE(connect_button_.enabled);
+}
+
+TEST_F(ChooserDialogCocoaControllerTest, SelectAnOptionAndRemoveAnotherOption) {
+  CreateChooserDialog();
+
+  chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
+  chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
+  chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+
+  // Select option 1.
+  [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:1]
+           byExtendingSelection:NO];
+  EXPECT_EQ(3, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.selectedRow);
+  ASSERT_TRUE(connect_button_.enabled);
+
+  // Remove option 0. The list becomes: b c. And the index of the previously
+  // selected item "b" becomes 0.
+  chooser_controller_->OptionRemoved(base::ASCIIToUTF16("a"));
+  EXPECT_EQ(2, table_view_.numberOfRows);
+  EXPECT_EQ(0, table_view_.selectedRow);
+  ASSERT_TRUE(connect_button_.enabled);
+
+  // Remove option 1. The list becomes: b.
+  chooser_controller_->OptionRemoved(base::ASCIIToUTF16("c"));
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(0, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 }
 
@@ -291,15 +265,41 @@ TEST_F(ChooserDialogCocoaControllerTest,
   // Select option 1.
   [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:1]
            byExtendingSelection:NO];
-  EXPECT_EQ(table_view_.numberOfRows, 3);
-  EXPECT_EQ(table_view_.selectedRow, 1);
+  EXPECT_EQ(3, table_view_.numberOfRows);
+  EXPECT_EQ(1, table_view_.selectedRow);
   ASSERT_TRUE(connect_button_.enabled);
 
   // Remove option 1
   chooser_controller_->OptionRemoved(base::ASCIIToUTF16("b"));
-  EXPECT_EQ(table_view_.numberOfRows, 2);
+  EXPECT_EQ(2, table_view_.numberOfRows);
   // No option selected.
-  EXPECT_EQ(table_view_.selectedRow, -1);
+  EXPECT_EQ(-1, table_view_.selectedRow);
+  // Since no option selected, the "Connect" button should be disabled.
+  ASSERT_FALSE(connect_button_.enabled);
+}
+
+TEST_F(ChooserDialogCocoaControllerTest,
+       AddAnOptionAndSelectItAndRemoveTheSelectedOption) {
+  CreateChooserDialog();
+
+  chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
+
+  // Select option 0.
+  [table_view_ selectRowIndexes:[NSIndexSet indexSetWithIndex:0]
+           byExtendingSelection:NO];
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  EXPECT_EQ(0, table_view_.selectedRow);
+  ASSERT_TRUE(connect_button_.enabled);
+
+  // Remove option 0.
+  chooser_controller_->OptionRemoved(base::ASCIIToUTF16("a"));
+  // There is no option shown now. But since "No devices found."
+  // needs to be displayed on the |table_view_|, the number of rows is 1.
+  EXPECT_EQ(1, table_view_.numberOfRows);
+  // No option selected.
+  EXPECT_EQ(-1, table_view_.selectedRow);
+  // |table_view_| should be disabled since there is no option shown.
+  ASSERT_FALSE(table_view_.enabled);
   // Since no option selected, the "Connect" button should be disabled.
   ASSERT_FALSE(connect_button_.enabled);
 }

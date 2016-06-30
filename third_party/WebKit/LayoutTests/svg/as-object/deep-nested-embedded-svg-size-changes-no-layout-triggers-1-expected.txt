@@ -1,1 +1,17 @@
+{
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow BODY",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutEmbeddedObject OBJECT",
+      "reason": "style change"
+    }
+  ]
+}
 

@@ -8,56 +8,59 @@
 // "fin" is received by the native page. Refer to
 // ios/web/webui/web_ui_mojo_inttest.mm for testing code.
 
-define('main', [
-  'mojo/public/js/bindings',
-  'mojo/public/js/core',
-  'mojo/public/js/connection',
-  'ios/web/test/mojo_test.mojom',
-  'content/public/renderer/frame_service_registry',
-], function(bindings, core, connection, browser, serviceRegistry) {
+/** @return {!Promise} */
+function getBrowserProxy() {
+  return new Promise(function(resolve, reject) {
+    define([
+      'mojo/public/js/connection',
+      'ios/web/test/mojo_test.mojom',
+      'content/public/renderer/frame_service_registry',
+    ], function(connection, mojom, serviceRegistry) {
+      var pageImpl, browserProxy;
 
-  var page;
+      /** @constructor */
+      function TestPageImpl() {};
 
-  function TestPageImpl(browser) {
-    this.browser_ = browser;
-  };
+      TestPageImpl.prototype = {
+        __proto__: mojom.TestPage.stubClass.prototype,
 
-  TestPageImpl.prototype = Object.create(browser.TestPage.stubClass.prototype);
+        /** @override */
+        handleNativeMessage: function(result) {
+          if (result.message == 'ack') {
+            // Native code has replied with "ack", send "fin" to complete the
+            // test.
+            browserProxy.handleJsMessage('fin');
+          }
+        },
+      };
 
-  /**
-   * Sends message as a string to the native code.
-   *
-   * @param {string} message Message to send.
-   */
-  TestPageImpl.prototype.sendMessage = function(message) {
-    var pipe = core.createMessagePipe();
-    var stub = connection.bindHandleToStub(pipe.handle0, browser.TestPage);
-    bindings.StubBindings(stub).delegate = page;
-    page.stub_ = stub;
-    this.browser_.handleJsMessage(message, pipe.handle1);
-  };
+      browserProxy = connection.bindHandleToProxy(
+          serviceRegistry.connectToService(mojom.TestUIHandlerMojo.name),
+          mojom.TestUIHandlerMojo);
+      pageImpl = new TestPageImpl();
 
-  /**
-   * Called by native code with "ack" message.
-   *
-   * @param {!NativeMessageResultMojo} result Object received from the native
-       code.
-   */
-  TestPageImpl.prototype.handleNativeMessage = function(result) {
-    if (result.message == 'ack') {
-      // Native code has replied with "ack", send "fin" to complete the test.
-      this.sendMessage('fin');
-    }
-  };
+      browserProxy.setClientPage(connection.bindStubDerivedImpl(pageImpl));
+      resolve(browserProxy);
+    });
+  });
+}
 
-  return function() {
-    var browserProxy = connection.bindHandleToProxy(
-        serviceRegistry.connectToService(browser.TestUIHandlerMojo.name),
-        browser.TestUIHandlerMojo);
+/**
+ * @return {!Promise} Fires when DOMContentLoaded event is received.
+ */
+function whenDomContentLoaded() {
+  return new Promise(function(resolve, reject) {
+    document.addEventListener('DOMContentLoaded', resolve);
+  });
+}
 
-    page = new TestPageImpl(browserProxy);
-
+function main() {
+  Promise.all([
+    whenDomContentLoaded(), getBrowserProxy()
+  ]).then(function(results) {
+    var browserProxy = results[1];
     // Send "syn" so native code should reply with "ack".
-    page.sendMessage('syn');
-  };
-});
+    browserProxy.handleJsMessage('syn');
+  });
+}
+main();

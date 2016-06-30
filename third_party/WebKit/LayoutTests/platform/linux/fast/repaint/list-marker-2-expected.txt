@@ -1,20 +1,17 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutListItem LI",
-          "rect": [30, 100, 762, 104],
-          "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "LayoutListItem LI",
-          "rect": [48, 155, 744, 50],
-          "reason": "incremental"
+          "rect": [48, 100, 744, 105],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutImage IMG id='target'",
@@ -24,30 +21,32 @@
         {
           "object": "LayoutListMarker (anonymous)",
           "rect": [30, 185, 7, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutListMarker (anonymous)",
           "rect": [30, 135, 7, 19],
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
+          "reason": "forced by layout"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutListItem LI",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutListMarker (anonymous)",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutImage IMG id='target'",
+      "reason": "forced by layout"
     }
   ]
 }

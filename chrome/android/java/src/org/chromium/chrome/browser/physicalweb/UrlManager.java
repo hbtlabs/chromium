@@ -107,7 +107,7 @@ class UrlManager {
         mContext = context;
         mNotificationManager = new NotificationManagerProxyImpl(
                 (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE));
-        mPwsClient = new PwsClientImpl();
+        mPwsClient = new PwsClientImpl(context);
         mObservers = new ObserverList<Listener>();
         mNearbyUrls = new HashSet<>();
         mResolvedUrls = new HashSet<>();
@@ -258,14 +258,21 @@ class UrlManager {
     /**
      * Forget all stored URLs and clear the notification.
      */
-    public void clearUrls() {
-        mNearbyUrls.clear();
+    public void clearAllUrls() {
+        clearNearbyUrls();
         mResolvedUrls.clear();
         mUrlsSortedByTimestamp.clear();
         mUrlInfoMap.clear();
-        putCachedNearbyUrls();
         putCachedResolvedUrls();
         putCachedUrlInfoMap();
+    }
+
+    /**
+     * Forget all nearby URLs and clear the notification.
+     */
+    public void clearNearbyUrls() {
+        mNearbyUrls.clear();
+        putCachedNearbyUrls();
         clearNotification();
         cancelClearNotificationAlarm();
     }
@@ -467,9 +474,10 @@ class UrlManager {
 
     private void showNotification() {
         // We should only show notifications if there's no other notification-based client.
-        if (PhysicalWebEnvironment
-                .getInstance((ChromeApplication) mContext.getApplicationContext())
-                .hasNotificationBasedClient()) {
+        if (!PhysicalWeb.shouldIgnoreOtherClients()
+                && PhysicalWebEnvironment
+                        .getInstance((ChromeApplication) mContext.getApplicationContext())
+                        .hasNotificationBasedClient()) {
             return;
         }
 
@@ -587,8 +595,10 @@ class UrlManager {
             if ((System.currentTimeMillis() - urlInfo.getScanTimestamp() <= MAX_CACHE_TIME
                     && mUrlsSortedByTimestamp.size() <= MAX_CACHE_SIZE)
                     || mNearbyUrls.contains(url)) {
+                Log.d(TAG, "Not garbage collecting: ", urlInfo);
                 break;
             }
+            Log.d(TAG, "Garbage collecting: ", urlInfo);
             // The min value cannot have changed at this point, so it's OK to just remove via
             // poll().
             mUrlsSortedByTimestamp.poll();

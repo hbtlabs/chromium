@@ -89,6 +89,7 @@ FeatureInfo::FeatureFlags::FeatureFlags()
       multisampled_render_to_texture(false),
       use_img_for_multisampled_render_to_texture(false),
       chromium_screen_space_antialiasing(false),
+      use_chromium_screen_space_antialiasing_via_shaders(false),
       oes_standard_derivatives(false),
       oes_egl_image_external(false),
       nv_egl_stream_consumer_external(false),
@@ -135,7 +136,8 @@ FeatureInfo::FeatureFlags::FeatureFlags()
       ext_render_buffer_format_bgra8888(false),
       ext_multisample_compatibility(false),
       ext_blend_func_extended(false),
-      ext_read_format_bgra(false) {}
+      ext_read_format_bgra(false),
+      desktop_srgb_support(false) {}
 
 FeatureInfo::FeatureInfo() {
   InitializeBasicState(base::CommandLine::InitializedForCurrentProcess()
@@ -538,6 +540,12 @@ void FeatureInfo::InitializeFeatures() {
     validators_.index_type.AddValue(GL_UNSIGNED_INT);
   }
 
+  if (gl_version_info_->IsAtLeastGL(3, 2) ||
+      (gl_version_info_->IsAtLeastGL(2, 0) &&
+       (extensions.Contains("GL_EXT_framebuffer_sRGB") ||
+        extensions.Contains("GL_ARB_framebuffer_sRGB")))) {
+    feature_flags_.desktop_srgb_support = true;
+  }
   // With EXT_sRGB, unsized SRGB_EXT and SRGB_ALPHA_EXT are accepted by the
   // <format> and <internalformat> parameter of TexImage2D. GLES3 adds support
   // for SRGB Textures but the accepted internal formats for TexImage2D are only
@@ -547,7 +555,7 @@ void FeatureInfo::InitializeFeatures() {
   if ((((gl_version_info_->is_es3 ||
          extensions.Contains("GL_OES_rgb8_rgba8")) &&
         extensions.Contains("GL_EXT_sRGB")) ||
-       gl::HasDesktopGLFeatures()) &&
+       feature_flags_.desktop_srgb_support) &&
       (context_type_ == CONTEXT_TYPE_WEBGL1 ||
        context_type_ == CONTEXT_TYPE_OPENGLES2)) {
     AddExtensionString("GL_EXT_sRGB");
@@ -880,6 +888,17 @@ void FeatureInfo::InitializeFeatures() {
 
   if (extensions.Contains("GL_INTEL_framebuffer_CMAA")) {
     feature_flags_.chromium_screen_space_antialiasing = true;
+    AddExtensionString("GL_CHROMIUM_screen_space_antialiasing");
+  } else if (!workarounds_.disable_framebuffer_cmaa &&
+             (gl_version_info_->IsAtLeastGLES(3, 1) ||
+              (gl_version_info_->IsAtLeastGL(3, 0) &&
+               extensions.Contains("GL_ARB_shading_language_420pack") &&
+               extensions.Contains("GL_ARB_texture_gather") &&
+               extensions.Contains("GL_ARB_explicit_uniform_location") &&
+               extensions.Contains("GL_ARB_explicit_attrib_location") &&
+               extensions.Contains("GL_ARB_shader_image_load_store")))) {
+    feature_flags_.chromium_screen_space_antialiasing = true;
+    feature_flags_.use_chromium_screen_space_antialiasing_via_shaders = true;
     AddExtensionString("GL_CHROMIUM_screen_space_antialiasing");
   }
 
@@ -1298,7 +1317,7 @@ bool FeatureInfo::IsES3Capable() const {
   if (workarounds_.disable_texture_storage)
     return false;
   if (gl_version_info_)
-    return gl_version_info_->IsES3Capable();
+    return gl_version_info_->is_es3_capable;
   return false;
 }
 

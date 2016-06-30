@@ -88,10 +88,6 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
                  /*delegate=*/nullptr),
         send_algorithm_(new StrictMock<MockSendAlgorithm>),
         network_change_visitor_(new StrictMock<MockNetworkChangeVisitor>) {
-    // These tests only work with pacing enabled.
-    saved_FLAGS_quic_disable_pacing_ = FLAGS_quic_disable_pacing;
-    FLAGS_quic_disable_pacing = false;
-
     QuicSentPacketManagerPeer::SetSendAlgorithm(&manager_, send_algorithm_);
     // Disable tail loss probes for most tests.
     QuicSentPacketManagerPeer::SetMaxTailLossProbes(&manager_, 0);
@@ -106,11 +102,12 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
         .WillRepeatedly(Return(QuicBandwidth::Zero()));
     EXPECT_CALL(*send_algorithm_, InSlowStart()).Times(AnyNumber());
     EXPECT_CALL(*send_algorithm_, InRecovery()).Times(AnyNumber());
+    EXPECT_CALL(*network_change_visitor_, OnPathMtuIncreased(1000))
+        .Times(AnyNumber());
   }
 
   ~QuicSentPacketManagerTest() override {
     STLDeleteElements(&packets_);
-    FLAGS_quic_disable_pacing = saved_FLAGS_quic_disable_pacing_;
   }
 
   QuicByteCount BytesInFlight() {
@@ -312,7 +309,6 @@ class QuicSentPacketManagerTest : public ::testing::TestWithParam<TestParams> {
   QuicConnectionStats stats_;
   MockSendAlgorithm* send_algorithm_;
   std::unique_ptr<MockNetworkChangeVisitor> network_change_visitor_;
-  bool saved_FLAGS_quic_disable_pacing_;
 };
 
 INSTANTIATE_TEST_CASE_P(QuicSentPacketManagerTest,
@@ -536,7 +532,6 @@ TEST_P(QuicSentPacketManagerTest, RetransmitTwiceThenAckFirst) {
 }
 
 TEST_P(QuicSentPacketManagerTest, AckOriginalTransmission) {
-  FLAGS_quic_adaptive_loss_recovery = true;
   MockLossAlgorithm* loss_algorithm = new MockLossAlgorithm();
   QuicSentPacketManagerPeer::SetLossAlgorithm(&manager_, loss_algorithm);
 
@@ -1075,7 +1070,7 @@ TEST_P(QuicSentPacketManagerTest, NewRetransmissionTimeout) {
   client_config.SetConnectionOptionsToSend(options);
   EXPECT_CALL(*network_change_visitor_, OnCongestionChange());
   EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
-  EXPECT_CALL(*send_algorithm_, PacingRate())
+  EXPECT_CALL(*send_algorithm_, PacingRate(_))
       .WillRepeatedly(Return(QuicBandwidth::Zero()));
   EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
       .WillOnce(Return(10 * kDefaultTCPMSS));
@@ -1576,7 +1571,7 @@ TEST_P(QuicSentPacketManagerTest, NegotiateUndoFromOptionsAtServer) {
   // Ensure undo works as intended.
   // Send 5 packets, mark the first 4 for retransmission, and then cancel
   // them when 1 is acked.
-  EXPECT_CALL(*send_algorithm_, PacingRate())
+  EXPECT_CALL(*send_algorithm_, PacingRate(_))
       .WillRepeatedly(Return(QuicBandwidth::Zero()));
   EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
       .WillOnce(Return(10 * kDefaultTCPMSS));
@@ -1639,7 +1634,7 @@ TEST_P(QuicSentPacketManagerTest,
   EXPECT_CALL(*send_algorithm_, SetFromConfig(_, _));
   EXPECT_CALL(*send_algorithm_,
               SetMaxCongestionWindow(kMinSocketReceiveBuffer * 0.6));
-  EXPECT_CALL(*send_algorithm_, PacingRate())
+  EXPECT_CALL(*send_algorithm_, PacingRate(_))
       .WillRepeatedly(Return(QuicBandwidth::Zero()));
   EXPECT_CALL(*send_algorithm_, GetCongestionWindow())
       .WillOnce(Return(10 * kDefaultTCPMSS));
@@ -1781,6 +1776,24 @@ TEST_P(QuicSentPacketManagerTest, ConnectionMigrationPortChange) {
   EXPECT_EQ(2 * default_init_rtt, rtt_stats->initial_rtt_us());
   EXPECT_EQ(1u, manager_.GetConsecutiveRtoCount());
   EXPECT_EQ(2u, manager_.GetConsecutiveTlpCount());
+}
+
+TEST_P(QuicSentPacketManagerTest, PathMtuIncreased) {
+  FLAGS_quic_no_mtu_discovery_ack_listener = true;
+  EXPECT_CALL(*send_algorithm_, OnPacketSent(_, BytesInFlight(), 1, _, _))
+      .Times(1)
+      .WillOnce(Return(true));
+  SerializedPacket packet(kDefaultPathId, 1, PACKET_6BYTE_PACKET_NUMBER,
+                          nullptr, kDefaultLength + 100, 0u, false, false);
+  manager_.OnPacketSent(&packet, kInvalidPathId, 0, clock_.Now(),
+                        NOT_RETRANSMISSION, HAS_RETRANSMITTABLE_DATA);
+
+  // Ack the large packet and expect the path MTU to increase.
+  ExpectAck(1);
+  EXPECT_CALL(*network_change_visitor_,
+              OnPathMtuIncreased(kDefaultLength + 100));
+  QuicAckFrame ack_frame = InitAckFrame(1);
+  manager_.OnIncomingAck(ack_frame, clock_.Now());
 }
 
 }  // namespace

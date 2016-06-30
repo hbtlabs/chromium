@@ -85,6 +85,7 @@
 #include "core/xml/parser/XMLDocumentParser.h"
 #include "platform/Logging.h"
 #include "platform/PluginScriptForbiddenScope.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -99,6 +100,7 @@
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 using blink::WebURLRequest;
 
@@ -158,7 +160,7 @@ ResourceRequest FrameLoader::resourceRequestForReload(FrameLoadType frameLoadTyp
         request.setURL(overrideURL);
         request.clearHTTPReferrer();
     }
-    request.setSkipServiceWorker(frameLoadType == FrameLoadTypeReloadBypassingCache);
+    request.setSkipServiceWorker(frameLoadType == FrameLoadTypeReloadBypassingCache ? WebURLRequest::SkipServiceWorker::All : WebURLRequest::SkipServiceWorker::None);
     return request;
 }
 
@@ -304,7 +306,6 @@ void FrameLoader::clear()
 
     m_frame->editor().clear();
     m_frame->document()->removeFocusedElementOfSubtree(m_frame->document());
-    m_frame->selection().prepareForDestruction();
     m_frame->eventHandler().clear();
     if (m_frame->view())
         m_frame->view()->clear();
@@ -513,6 +514,13 @@ void FrameLoader::didBeginDocument()
         }
 
         OriginTrialContext::addTokensFromHeader(m_frame->document(), m_documentLoader->response().httpHeaderField(HTTPNames::Origin_Trial));
+    }
+
+    if (m_documentLoader && RuntimeEnabledFeatures::referrerPolicyHeaderEnabled()) {
+        String referrerPolicyHeader = m_documentLoader->response().httpHeaderField(HTTPNames::Referrer_Policy);
+        if (!referrerPolicyHeader.isNull()) {
+            m_frame->document()->parseAndSetReferrerPolicy(referrerPolicyHeader);
+        }
     }
 
     client()->didCreateNewDocument();
@@ -726,6 +734,7 @@ void FrameLoader::detachDocumentLoader(Member<DocumentLoader>& loader)
     if (!loader)
         return;
 
+    FrameNavigationDisabler navigationDisabler(*m_frame);
     loader->detachFromFrame();
     loader = nullptr;
 }
@@ -767,15 +776,19 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     takeObjectSnapshot();
 }
 
-void FrameLoader::setReferrerForFrameRequest(ResourceRequest& request, ShouldSendReferrer shouldSendReferrer, Document* originDocument)
+// static
+void FrameLoader::setReferrerForFrameRequest(FrameLoadRequest& frameRequest)
 {
+    ResourceRequest& request = frameRequest.resourceRequest();
+    Document* originDocument = frameRequest.originDocument();
+
     if (!originDocument)
         return;
     // Anchor elements with the 'referrerpolicy' attribute will have
     // already set the referrer on the request.
     if (request.didSetHTTPReferrer())
         return;
-    if (shouldSendReferrer == NeverSendReferrer)
+    if (frameRequest.getShouldSendReferrer() == NeverSendReferrer)
         return;
 
     // Always use the initiating document to generate the referrer.
@@ -950,7 +963,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest, FrameLoadType fram
         return;
     }
 
-    setReferrerForFrameRequest(request.resourceRequest(), request.getShouldSendReferrer(), request.originDocument());
+    setReferrerForFrameRequest(request);
 
     FrameLoadType newLoadType = (frameLoadType == FrameLoadTypeStandard) ?
         determineFrameLoadType(request) : frameLoadType;
@@ -960,7 +973,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest, FrameLoadType fram
             client()->loadURLExternally(request.resourceRequest(), NavigationPolicyDownload, String(), false);
         } else {
             request.resourceRequest().setFrameType(WebURLRequest::FrameTypeAuxiliary);
-            createWindowForRequest(request, *m_frame, policy, request.getShouldSendReferrer(), request.getShouldSetOpener());
+            createWindowForRequest(request, *m_frame, policy);
         }
         return;
     }
@@ -1110,7 +1123,6 @@ bool FrameLoader::prepareForCommit()
     // At this point, the provisional document loader should not detach, because
     // then the FrameLoader would not have any attached DocumentLoaders.
     if (m_documentLoader) {
-        FrameNavigationDisabler navigationDisabler(*m_frame);
         TemporaryChange<bool> inDetachDocumentLoader(m_protectProvisionalLoader, true);
         detachDocumentLoader(m_documentLoader);
     }
@@ -1417,10 +1429,7 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
         return;
 
     m_frame->document()->cancelParsing();
-    if (m_provisionalDocumentLoader) {
-        FrameNavigationDisabler navigationDisabler(*m_frame);
-        detachDocumentLoader(m_provisionalDocumentLoader);
-    }
+    detachDocumentLoader(m_provisionalDocumentLoader);
 
     // beforeunload fired above, and detaching a DocumentLoader can fire
     // events, which can detach this frame.
@@ -1572,28 +1581,13 @@ SandboxFlags FrameLoader::effectiveSandboxFlags() const
     return flags;
 }
 
-bool FrameLoader::shouldEnforceStrictMixedContentChecking() const
+WebInsecureRequestPolicy FrameLoader::getInsecureRequestPolicy() const
 {
     Frame* parentFrame = m_frame->tree().parent();
     if (!parentFrame)
-        return false;
+        return kLeaveInsecureRequestsAlone;
 
-    return parentFrame->securityContext()->shouldEnforceStrictMixedContentChecking();
-}
-
-SecurityContext::InsecureRequestsPolicy FrameLoader::getInsecureRequestsPolicy() const
-{
-    Frame* parentFrame = m_frame->tree().parent();
-    if (!parentFrame)
-        return SecurityContext::InsecureRequestsDoNotUpgrade;
-
-    // FIXME: We need a way to propagate insecure requests policy flags to
-    // out-of-process frames. For now, we'll always use default behavior.
-    if (!parentFrame->isLocalFrame())
-        return SecurityContext::InsecureRequestsDoNotUpgrade;
-
-    ASSERT(toLocalFrame(parentFrame)->document());
-    return toLocalFrame(parentFrame)->document()->getInsecureRequestsPolicy();
+    return parentFrame->securityContext()->getInsecureRequestPolicy();
 }
 
 SecurityContext::InsecureNavigationsSet* FrameLoader::insecureNavigationsToUpgrade() const
@@ -1612,9 +1606,9 @@ SecurityContext::InsecureNavigationsSet* FrameLoader::insecureNavigationsToUpgra
     return toLocalFrame(parentFrame)->document()->insecureNavigationsToUpgrade();
 }
 
-PassOwnPtr<TracedValue> FrameLoader::toTracedValue() const
+std::unique_ptr<TracedValue> FrameLoader::toTracedValue() const
 {
-    OwnPtr<TracedValue> tracedValue = TracedValue::create();
+    std::unique_ptr<TracedValue> tracedValue = TracedValue::create();
     tracedValue->beginDictionary("frame");
     tracedValue->setString("id_ref", String::format("0x%" PRIx64, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(m_frame.get()))));
     tracedValue->endDictionary();

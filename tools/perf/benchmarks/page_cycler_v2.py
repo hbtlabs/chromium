@@ -13,40 +13,46 @@ import page_sets
 
 from telemetry import benchmark
 from telemetry.page import cache_temperature
-from telemetry.timeline import tracing_category_filter
+from telemetry.timeline import chrome_trace_category_filter
 from telemetry.web_perf import timeline_based_measurement
 
 
 class _PageCyclerV2(perf_benchmark.PerfBenchmark):
   def CreateTimelineBasedMeasurementOptions(self):
-    cat_filter = tracing_category_filter.TracingCategoryFilter(
-        filter_string='*,blink.console,navigation,blink.user_timing,loading')
+    cat_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(
+        filter_string='blink.console,navigation,blink.user_timing,loading')
+
+    # Below categories are needed for first-meaningful-paint computation.
+    cat_filter.AddDisabledByDefault('disabled-by-default-blink.debug.layout')
+    cat_filter.AddIncludedCategory('devtools.timeline')
 
     tbm_options = timeline_based_measurement.Options(
         overhead_level=cat_filter)
     tbm_options.SetTimelineBasedMetric('firstPaintMetric')
     return tbm_options
 
-
-@benchmark.Disabled('win')  # crbug.com/615178
+# crbug.com/619254
+@benchmark.Disabled('reference')
 class PageCyclerV2Typical25(_PageCyclerV2):
   """Page load time benchmark for a 25 typical web pages.
 
   Designed to represent typical, not highly optimized or highly popular web
   sites. Runs against pages recorded in June, 2014.
   """
-  options = {'pageset_repeat': 3}
+  options = {'pageset_repeat': 2}
 
   @classmethod
   def Name(cls):
     return 'page_cycler_v2.typical_25'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):  # crbug.com/615178
-    return ((possible_browser.browser_type == 'reference' and
-             possible_browser.platform.GetOSName() == 'android') or
-            cls.IsSvelte(possible_browser) or  # crbug.com/616781
-            possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+  def ShouldDisable(cls, possible_browser):
+    # crbug.com/616781
+    if (cls.IsSvelte(possible_browser) or
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X' or
+        possible_browser.platform.GetDeviceTypeName() == 'AOSP on BullHead'):
+      return True
+    return False
 
   def CreateStorySet(self, options):
     return page_sets.Typical25PageSet(run_no_page_interactions=True,

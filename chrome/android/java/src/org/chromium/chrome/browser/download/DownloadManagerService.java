@@ -30,8 +30,6 @@ import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
-import org.chromium.content.browser.DownloadController;
-import org.chromium.content.browser.DownloadInfo;
 import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifierAutoDetect;
 import org.chromium.net.RegistrationPolicyAlwaysRegister;
@@ -316,6 +314,14 @@ public class DownloadManagerService extends BroadcastReceiver implements
         }
         updateDownloadProgress(item, status);
         scheduleUpdateIfNeeded();
+    }
+
+    /**
+     * Called when browser activity is launched. For background resumption and cancellation, this
+     * will not be called.
+     */
+    public void onActivityLaunched() {
+        DownloadNotificationService.clearResumptionAttemptLeft();
     }
 
     /**
@@ -1101,12 +1107,14 @@ public class DownloadManagerService extends BroadcastReceiver implements
     /**
      * Called to cancel a download.
      * @param downloadGuid GUID of the download.
+     * @param isNotificationDismissed Whether cancel is caused by dismissing the notification.
      */
-    void cancelDownload(String downloadGuid) {
+    void cancelDownload(String downloadGuid, boolean isNotificationDismissed) {
         DownloadProgress progress = mDownloadProgressMap.get(downloadGuid);
         boolean isOffTheRecord = progress == null
                 ? false : progress.mDownloadItem.getDownloadInfo().isOffTheRecord();
-        nativeCancelDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord);
+        nativeCancelDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord,
+                isNotificationDismissed);
         recordDownloadFinishedUMA(DOWNLOAD_STATUS_CANCELLED, downloadGuid, 0);
     }
 
@@ -1454,12 +1462,13 @@ public class DownloadManagerService extends BroadcastReceiver implements
     public void onNetworkDisconnect(int netId) {}
 
     @Override
-    public void updateActiveNetworkList(int[] activeNetIds) {}
+    public void purgeActiveNetworkList(int[] activeNetIds) {}
 
     private native long nativeInit();
     private native void nativeResumeDownload(
             long nativeDownloadManagerService, String downloadGuid);
     private native void nativeCancelDownload(
-            long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord);
+            long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord,
+            boolean isNotificationDismissed);
     private native void nativePauseDownload(long nativeDownloadManagerService, String downloadGuid);
 }

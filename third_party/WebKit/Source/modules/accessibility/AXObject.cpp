@@ -519,9 +519,7 @@ void AXObject::updateCachedAttributeValuesIfNeeded() const
     m_cachedHasInheritedPresentationalRole = (inheritsPresentationalRoleFrom() != 0);
     m_cachedIsPresentationalChild = (ancestorForWhichThisIsAPresentationalChild() != 0);
     m_cachedIsIgnored = computeAccessibilityIsIgnored();
-    m_cachedLiveRegionRoot = isLiveRegion() ?
-        this :
-        (parentObjectIfExists() ? parentObjectIfExists()->liveRegionRoot() : 0);
+    m_cachedLiveRegionRoot = isLiveRegion() ? const_cast<AXObject*>(this) : (parentObjectIfExists() ? parentObjectIfExists()->liveRegionRoot() : 0);
     m_cachedAncestorExposesActiveDescendant = computeAncestorExposesActiveDescendant();
 }
 
@@ -1099,7 +1097,7 @@ bool AXObject::isLiveRegion() const
     return equalIgnoringCase(liveRegion, "polite") || equalIgnoringCase(liveRegion, "assertive");
 }
 
-const AXObject* AXObject::liveRegionRoot() const
+AXObject* AXObject::liveRegionRoot() const
 {
     updateCachedAttributeValuesIfNeeded();
     return m_cachedLiveRegionRoot;
@@ -1347,6 +1345,13 @@ void AXObject::setScrollOffset(const IntPoint& offset) const
 
     // TODO(bokan): This should potentially be a UserScroll.
     area->setScrollPosition(DoublePoint(offset.x(), offset.y()), ProgrammaticScroll);
+}
+
+void AXObject::getRelativeBounds(AXObject** container, FloatRect& boundsInContainer, SkMatrix44& containerTransform) const
+{
+    *container = nullptr;
+    boundsInContainer = FloatRect();
+    containerTransform.setIdentity();
 }
 
 //

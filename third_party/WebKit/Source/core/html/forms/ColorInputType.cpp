@@ -49,7 +49,6 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/graphics/Color.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -135,13 +134,13 @@ Color ColorInputType::valueAsColor() const
 {
     Color color;
     bool success = color.setFromString(element().value());
-    ASSERT_UNUSED(success, success);
+    DCHECK(success);
     return color;
 }
 
 void ColorInputType::createShadowSubtree()
 {
-    ASSERT(element().shadow());
+    DCHECK(element().shadow());
 
     Document& document = element().document();
     HTMLDivElement* wrapperElement = HTMLDivElement::create(document);

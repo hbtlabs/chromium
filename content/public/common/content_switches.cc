@@ -305,9 +305,6 @@ const char kDisableWebSecurity[]            = "disable-web-security";
 // Disables Blink's XSSAuditor. The XSSAuditor mitigates reflective XSS.
 const char kDisableXSSAuditor[]             = "disable-xss-auditor";
 
-// Disable gesture generation for wheel events.
-const char kDisableWheelGestures[] = "disable-wheel-gestures";
-
 // Disable rasterizer that writes directly to GPU memory associated with tiles.
 const char kDisableZeroCopy[]                = "disable-zero-copy";
 
@@ -412,6 +409,9 @@ const char kEnableMemoryBenchmarking[]      = "enable-memory-benchmarking";
 // Enables the network information API.
 const char kEnableNetworkInformation[]      = "enable-network-information";
 
+// Enable the video decoder to draw to an NV12 textures instead of ARGB.
+const char kEnableNv12DxgiVideo[] = "enable-nv12-dxgi-video";
+
 // Enables compositor-accelerated touch-screen pinch gestures.
 const char kEnablePinch[]                   = "enable-pinch";
 
@@ -515,9 +515,6 @@ const char kEnableWebGLImageChromium[] = "enable-webgl-image-chromium";
 
 // Enables interaction with virtual reality devices.
 const char kEnableWebVR[] = "enable-webvr";
-
-// Enables gesture generation for wheel events.
-const char kEnableWheelGestures[] = "enable-wheel-gestures";
 
 // Enable rasterizer that writes directly to GPU memory associated with tiles.
 const char kEnableZeroCopy[]                = "enable-zero-copy";
@@ -950,6 +947,10 @@ const char kEnableLongpressDragSelection[]  = "enable-longpress-drag-selection";
 // The telephony region (ISO country code) to use in phone number detection.
 const char kNetworkCountryIso[] = "network-country-iso";
 
+// When blink should declare a load "done" for the purpose of the
+// progress bar.
+const char kProgressBarCompletion[] = "progress-bar-completion";
+
 // Enables remote debug over HTTP on the specified socket name.
 const char kRemoteDebuggingSocketName[]     = "remote-debugging-socket-name";
 
@@ -1046,6 +1047,15 @@ const char kMemoryPressureThresholdsMb[] = "memory-pressure-thresholds-mb";
 // Enables the exporting of the tracing events to ETW. This is only supported on
 // Windows Vista and later.
 const char kTraceExportEventsToETW[] = "trace-export-events-to-etw";
+#endif
+
+#if defined(ENABLE_IPC_FUZZER)
+// Dumps IPC messages sent from renderer processes to the browser process to
+// the given directory. Used primarily to gather samples for IPC fuzzing.
+const char kIpcDumpDirectory[] = "ipc-dump-directory";
+
+// Specifies the testcase used by the IPC fuzzer.
+const char kIpcFuzzerTestcase[] = "ipc-fuzzer-testcase";
 #endif
 
 // Don't dump stuff here, follow the same order as the header.

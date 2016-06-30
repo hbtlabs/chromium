@@ -21,7 +21,6 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
@@ -33,6 +32,8 @@
 #include "net/log/net_log.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -78,10 +79,10 @@ const char* const kBadPath[] = {
     nullptr,
 };
 
-// A mock ReportSender that just remembers the latest report
+// A mock ReportSenderInterface that just remembers the latest report
 // URI and report to be sent.
 class MockCertificateReportSender
-    : public TransportSecurityState::ReportSender {
+    : public TransportSecurityState::ReportSenderInterface {
  public:
   MockCertificateReportSender() {}
   ~MockCertificateReportSender() override {}
@@ -107,16 +108,16 @@ class MockCertificateReportSender
   std::string latest_report_;
 };
 
-// A mock ReportSender that simulates a net error on every report sent.
+// A mock ReportSenderInterface that simulates a net error on every report sent.
 class MockFailingCertificateReportSender
-    : public TransportSecurityState::ReportSender {
+    : public TransportSecurityState::ReportSenderInterface {
  public:
   MockFailingCertificateReportSender() : net_error_(ERR_CONNECTION_FAILED) {}
   ~MockFailingCertificateReportSender() override {}
 
   int net_error() { return net_error_; }
 
-  // TransportSecurityState::ReportSender:
+  // TransportSecurityState::ReportSenderInterface:
   void Send(const GURL& report_uri, const std::string& report) override {
     ASSERT_FALSE(error_callback_.is_null());
     error_callback_.Run(report_uri, net_error_);
@@ -158,6 +159,12 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
   GURL report_uri_;
   SSLInfo ssl_info_;
   uint32_t num_failures_;
+};
+
+class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
+ public:
+  MOCK_METHOD1(IsCTRequiredForHost,
+               CTRequirementLevel(const std::string& hostname));
 };
 
 void CompareCertificateChainWithList(
@@ -868,6 +875,7 @@ TEST_F(TransportSecurityStateTest, Preloaded) {
   EXPECT_TRUE(StaticShouldRedirect("www.googlemail.com"));
   EXPECT_TRUE(StaticShouldRedirect("googleplex.com"));
   EXPECT_TRUE(StaticShouldRedirect("www.googleplex.com"));
+  EXPECT_TRUE(StaticShouldRedirect("www.google-analytics.com"));
 
   // These domains used to be only HSTS when SNI was available.
   EXPECT_TRUE(state.GetStaticDomainState("gmail.com", &sts_state, &pkp_state));
@@ -1047,7 +1055,6 @@ TEST_F(TransportSecurityStateTest, PreloadedPins) {
   EXPECT_TRUE(OnlyPinningInStaticState("ytimg.com"));
   EXPECT_TRUE(OnlyPinningInStaticState("googleusercontent.com"));
   EXPECT_TRUE(OnlyPinningInStaticState("www.googleusercontent.com"));
-  EXPECT_TRUE(OnlyPinningInStaticState("www.google-analytics.com"));
   EXPECT_TRUE(OnlyPinningInStaticState("googleapis.com"));
   EXPECT_TRUE(OnlyPinningInStaticState("googleadservices.com"));
   EXPECT_TRUE(OnlyPinningInStaticState("googlecode.com"));
@@ -1146,6 +1153,7 @@ TEST_F(TransportSecurityStateTest, BuiltinCertPins) {
   EXPECT_TRUE(HasStaticPublicKeyPins("plus.google.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("groups.google.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("apis.google.com"));
+  EXPECT_TRUE(HasStaticPublicKeyPins("www.google-analytics.com"));
 
   EXPECT_TRUE(HasStaticPublicKeyPins("ssl.gstatic.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("gstatic.com"));
@@ -1203,9 +1211,6 @@ TEST_F(TransportSecurityStateTest, OptionalHSTSCertPins) {
   TransportSecurityState state;
   EnableStaticPins(&state);
 
-  EXPECT_FALSE(StaticShouldRedirect("www.google-analytics.com"));
-
-  EXPECT_TRUE(HasStaticPublicKeyPins("www.google-analytics.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("google.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("www.google.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("mail-attachment.googleusercontent.com"));
@@ -1270,26 +1275,49 @@ TEST_F(TransportSecurityStateTest, HPKPReporting) {
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
 
   std::string failure_log;
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::DISABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::DISABLE_PIN_REPORTS, &failure_log));
 
   // No report should have been sent because of the DISABLE_PIN_REPORTS
   // argument.
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
 
-  EXPECT_TRUE(state.CheckPublicKeyPins(
-      host_port_pair, true, good_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::OK,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, good_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   // No report should have been sent because there was no violation.
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
 
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::BYPASSED,
+            state.CheckPublicKeyPins(
+                host_port_pair, false, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+
+  // No report should have been sent because the certificate chained to a
+  // non-public root.
+  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
+  EXPECT_EQ(std::string(), mock_report_sender.latest_report());
+
+  EXPECT_EQ(TransportSecurityState::PKPStatus::OK,
+            state.CheckPublicKeyPins(
+                host_port_pair, false, good_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+
+  // No report should have been sent because there was no violation, even though
+  // the certificate chained to a local trust anchor.
+  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
+  EXPECT_EQ(std::string(), mock_report_sender.latest_report());
+
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   // Now a report should have been sent. Check that it contains the
   // right information.
@@ -1300,9 +1328,11 @@ TEST_F(TransportSecurityStateTest, HPKPReporting) {
                                           cert1.get(), cert2.get(),
                                           good_hashes));
   mock_report_sender.Clear();
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      subdomain_host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(subdomain_host_port_pair, true, bad_hashes,
+                                     cert1.get(), cert2.get(),
+                                     TransportSecurityState::ENABLE_PIN_REPORTS,
+                                     &failure_log));
 
   // Now a report should have been sent for the subdomain. Check that it
   // contains the right information.
@@ -1349,9 +1379,10 @@ TEST_F(TransportSecurityStateTest, UMAOnHPKPReportingFailure) {
   state.AddHPKP(kHost, expiry, true, good_hashes, report_uri);
 
   std::string failure_log;
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   // Check that the UMA histogram was updated when the report failed to
   // send.
@@ -1535,9 +1566,10 @@ TEST_F(TransportSecurityStateTest, PreloadedPKPReportUri) {
 
   // Trigger a violation and check that it sends a report.
   std::string failure_log;
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   EXPECT_EQ(report_uri, mock_report_sender.latest_report_uri());
 
@@ -1583,17 +1615,19 @@ TEST_F(TransportSecurityStateTest, HPKPReportUriToSameHost) {
   // Trigger a violation and check that it does not send a report
   // because the report-uri is HTTPS and same-host as the pins.
   std::string failure_log;
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   EXPECT_TRUE(mock_report_sender.latest_report_uri().is_empty());
 
   // An HTTP report uri to the same host should be okay.
   state.AddHPKP("example.test", expiry, true, good_hashes, http_report_uri);
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   EXPECT_EQ(http_report_uri, mock_report_sender.latest_report_uri());
 }
@@ -1631,9 +1665,10 @@ TEST_F(TransportSecurityStateTest, HPKPReportRateLimiting) {
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
 
   std::string failure_log;
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
 
   // A report should have been sent. Check that it contains the
   // right information.
@@ -1647,9 +1682,10 @@ TEST_F(TransportSecurityStateTest, HPKPReportRateLimiting) {
 
   // Now trigger the same violation; a duplicative report should not be
   // sent.
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
 
@@ -1657,9 +1693,10 @@ TEST_F(TransportSecurityStateTest, HPKPReportRateLimiting) {
   // should be sent.
   GURL report_uri2("http://report-example2.test/test");
   state.AddHPKP(kHost, expiry, true, good_hashes, report_uri2);
-  EXPECT_FALSE(state.CheckPublicKeyPins(
-      host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
-      TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
+  EXPECT_EQ(TransportSecurityState::PKPStatus::VIOLATED,
+            state.CheckPublicKeyPins(
+                host_port_pair, true, bad_hashes, cert1.get(), cert2.get(),
+                TransportSecurityState::ENABLE_PIN_REPORTS, &failure_log));
   EXPECT_EQ(report_uri2, mock_report_sender.latest_report_uri());
   report = mock_report_sender.latest_report();
   ASSERT_FALSE(report.empty());
@@ -1849,6 +1886,73 @@ TEST_F(TransportSecurityStateTest, ExpectCTReporter) {
   EXPECT_EQ(host_port.host(), reporter.host_port_pair().host());
   EXPECT_EQ(host_port.port(), reporter.host_port_pair().port());
   EXPECT_EQ(GURL(kExpectCTStaticReportURI), reporter.report_uri());
+}
+
+// Tests that TransportSecurityState always consults the RequireCTDelegate,
+// if supplied.
+TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
+  using ::testing::_;
+  using ::testing::Return;
+  using CTRequirementLevel =
+      TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
+
+  // Dummy cert to use as the validate chain. The contents do not matter.
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "expired_cert.pem");
+  ASSERT_TRUE(cert);
+
+  HashValueVector hashes;
+  hashes.push_back(HashValue(
+      X509Certificate::CalculateFingerprint256(cert->os_cert_handle())));
+
+  {
+    TransportSecurityState state;
+    bool original_status =
+        state.ShouldRequireCT("www.example.com", cert.get(), hashes);
+
+    MockRequireCTDelegate always_require_delegate;
+    EXPECT_CALL(always_require_delegate, IsCTRequiredForHost(_))
+        .WillRepeatedly(Return(CTRequirementLevel::REQUIRED));
+    state.SetRequireCTDelegate(&always_require_delegate);
+    EXPECT_TRUE(state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+
+    state.SetRequireCTDelegate(nullptr);
+    EXPECT_EQ(original_status,
+              state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+  }
+
+  {
+    TransportSecurityState state;
+    bool original_status =
+        state.ShouldRequireCT("www.example.com", cert.get(), hashes);
+
+    MockRequireCTDelegate never_require_delegate;
+    EXPECT_CALL(never_require_delegate, IsCTRequiredForHost(_))
+        .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
+    state.SetRequireCTDelegate(&never_require_delegate);
+    EXPECT_FALSE(state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+
+    state.SetRequireCTDelegate(nullptr);
+    EXPECT_EQ(original_status,
+              state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+  }
+
+  {
+    TransportSecurityState state;
+    bool original_status =
+        state.ShouldRequireCT("www.example.com", cert.get(), hashes);
+
+    MockRequireCTDelegate default_require_ct_delegate;
+    EXPECT_CALL(default_require_ct_delegate, IsCTRequiredForHost(_))
+        .WillRepeatedly(Return(CTRequirementLevel::DEFAULT));
+    state.SetRequireCTDelegate(&default_require_ct_delegate);
+    EXPECT_EQ(original_status,
+              state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+
+    state.SetRequireCTDelegate(nullptr);
+    EXPECT_EQ(original_status,
+              state.ShouldRequireCT("www.example.com", cert.get(), hashes));
+  }
 }
 
 }  // namespace net

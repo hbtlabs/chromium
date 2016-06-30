@@ -93,7 +93,6 @@ bool GLES2DecoderPassthroughImpl::Initialize(
     const scoped_refptr<gl::GLSurface>& surface,
     const scoped_refptr<gl::GLContext>& context,
     bool offscreen,
-    const gfx::Size& offscreen_size,
     const DisallowedFeatures& disallowed_features,
     const ContextCreationAttribHelper& attrib_helper) {
   // Take ownership of the context and surface. The surface can be replaced
@@ -270,6 +269,12 @@ bool GLES2DecoderPassthroughImpl::HasMoreIdleWork() const {
 }
 
 void GLES2DecoderPassthroughImpl::PerformIdleWork() {}
+
+bool GLES2DecoderPassthroughImpl::HasPollingWork() const {
+  return false;
+}
+
+void GLES2DecoderPassthroughImpl::PerformPollingWork() {}
 
 bool GLES2DecoderPassthroughImpl::GetServiceTextureId(
     uint32_t client_texture_id,

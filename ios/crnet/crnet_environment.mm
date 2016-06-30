@@ -23,6 +23,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/worker_pool.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
@@ -37,6 +38,8 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/cookie_store.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_cache.h"
@@ -176,8 +179,7 @@ void CrNetEnvironment::StartNetLog(base::FilePath::StringType file_name,
 
 void CrNetEnvironment::StartNetLogInternal(
     base::FilePath::StringType file_name, bool log_bytes) {
-  DCHECK(base::MessageLoop::current() ==
-         file_user_blocking_thread_->message_loop());
+  DCHECK(file_user_blocking_thread_->task_runner()->BelongsToCurrentThread());
   DCHECK(file_name.length());
   DCHECK(net_log_);
 
@@ -210,8 +212,7 @@ void CrNetEnvironment::StopNetLog() {
 }
 
 void CrNetEnvironment::StopNetLogInternal() {
-  DCHECK(base::MessageLoop::current() ==
-         file_user_blocking_thread_->message_loop());
+  DCHECK(file_user_blocking_thread_->task_runner()->BelongsToCurrentThread());
   if (net_log_observer_) {
     net_log_observer_->StopObserving(nullptr);
     net_log_observer_.reset();
@@ -241,8 +242,7 @@ net::HttpNetworkSession* CrNetEnvironment::GetHttpNetworkSession(
 }
 
 void CrNetEnvironment::CloseAllSpdySessionsInternal() {
-  DCHECK(base::MessageLoop::current() ==
-         network_io_thread_->message_loop());
+  DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
 
   net::HttpNetworkSession* http_network_session =
       GetHttpNetworkSession(GetMainContextGetter()->GetURLRequestContext());
@@ -326,7 +326,7 @@ void CrNetEnvironment::SetHTTPProtocolHandlerRegistered(bool registered) {
 }
 
 void CrNetEnvironment::ConfigureSdchOnNetworkThread() {
-  DCHECK(base::MessageLoop::current() == network_io_thread_->message_loop());
+  DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
   net::URLRequestContext* context =
       main_context_getter_->GetURLRequestContext();
 
@@ -351,7 +351,7 @@ void CrNetEnvironment::ConfigureSdchOnNetworkThread() {
 }
 
 void CrNetEnvironment::InitializeOnNetworkThread() {
-  DCHECK(base::MessageLoop::current() == network_io_thread_->message_loop());
+  DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
 
   ConfigureSdchOnNetworkThread();
 
@@ -385,9 +385,10 @@ void CrNetEnvironment::InitializeOnNetworkThread() {
   main_context_->set_ssl_config_service(new net::SSLConfigServiceDefaults);
   main_context_->set_transport_security_state(
       new net::TransportSecurityState());
+  main_context_->set_cert_transparency_verifier(new net::MultiLogCTVerifier());
+  main_context_->set_ct_policy_enforcer(new net::CTPolicyEnforcer());
   http_server_properties_.reset(new net::HttpServerPropertiesImpl());
-  main_context_->set_http_server_properties(
-      http_server_properties_->GetWeakPtr());
+  main_context_->set_http_server_properties(http_server_properties_.get());
   // TODO(rdsmith): Note that the ".release()" calls below are leaking
   // the objects in question; this should be fixed by having an object
   // corresponding to URLRequestContextStorage that actually owns those

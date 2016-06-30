@@ -49,8 +49,8 @@ template("convert_plist") {
       "-convert",
       invoker.format,
       "-o",
-      rebase_path(invoker.output, root_out_dir),
-      rebase_path(invoker.source, root_out_dir),
+      rebase_path(invoker.output, root_build_dir),
+      rebase_path(invoker.source, root_build_dir),
     ]
   }
 }
@@ -270,7 +270,7 @@ template("framework_bundle") {
     # TODO(sdefresne): should we have a framework_dirs similar to lib_dirs
     # and include_dirs to avoid duplicate values on the command-line.
     visibility = [ ":$_framework_target" ]
-    ldflags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
+    ldflags = [ "-F" + rebase_path("$root_out_dir/.", root_build_dir) ]
     lib_dirs = [ root_out_dir ]
     libs = [ _framework_name ]
   }
@@ -312,12 +312,11 @@ template("framework_bundle") {
         visibility += [ ":$_target_name+link" ]
       }
 
-      script = "$root_out_dir/gyp-mac-tool"
+      script = "//build/config/mac/package_framework.py"
       outputs = [
         "$root_out_dir/$_framework_name/Versions/Current",
       ]
       args = [
-        "package-framework",
         "$_framework_name",
         "$_framework_version",
       ]

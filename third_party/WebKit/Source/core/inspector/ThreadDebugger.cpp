@@ -19,16 +19,17 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
 #include "core/inspector/InspectorTraceEvents.h"
-#include "core/inspector/ScriptArguments.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "wtf/CurrentTime.h"
-#include "wtf/OwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 ThreadDebugger::ThreadDebugger(v8::Isolate* isolate)
     : m_isolate(isolate)
     , m_debugger(V8Debugger::create(isolate, this))
+    , m_asyncInstrumentationEnabled(false)
 {
 }
 
@@ -36,37 +37,72 @@ ThreadDebugger::~ThreadDebugger()
 {
 }
 
+// static
+ThreadDebugger* ThreadDebugger::from(v8::Isolate* isolate)
+{
+    if (!isolate)
+        return nullptr;
+    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
+    return data ? data->threadDebugger() : nullptr;
+}
+
 void ThreadDebugger::willExecuteScript(v8::Isolate* isolate, int scriptId)
 {
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    if (data && data->threadDebugger())
-        data->threadDebugger()->debugger()->willExecuteScript(isolate->GetCurrentContext(), scriptId);
+    if (ThreadDebugger* debugger = ThreadDebugger::from(isolate))
+        debugger->debugger()->willExecuteScript(isolate->GetCurrentContext(), scriptId);
 }
 
 void ThreadDebugger::didExecuteScript(v8::Isolate* isolate)
 {
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    if (data && data->threadDebugger())
-        data->threadDebugger()->debugger()->didExecuteScript(isolate->GetCurrentContext());
+    if (ThreadDebugger* debugger = ThreadDebugger::from(isolate))
+        debugger->debugger()->didExecuteScript(isolate->GetCurrentContext());
 }
 
 void ThreadDebugger::idleStarted(v8::Isolate* isolate)
 {
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    if (data && data->threadDebugger())
-        data->threadDebugger()->debugger()->idleStarted();
+    if (ThreadDebugger* debugger = ThreadDebugger::from(isolate))
+        debugger->debugger()->idleStarted();
 }
 
 void ThreadDebugger::idleFinished(v8::Isolate* isolate)
 {
-    V8PerIsolateData* data = V8PerIsolateData::from(isolate);
-    if (data && data->threadDebugger())
-        data->threadDebugger()->debugger()->idleFinished();
+    if (ThreadDebugger* debugger = ThreadDebugger::from(isolate))
+        debugger->debugger()->idleFinished();
+}
+
+void ThreadDebugger::asyncTaskScheduled(const String& operationName, void* task, bool recurring)
+{
+    if (m_asyncInstrumentationEnabled)
+        m_debugger->asyncTaskScheduled(operationName, task, recurring);
+}
+
+void ThreadDebugger::asyncTaskCanceled(void* task)
+{
+    if (m_asyncInstrumentationEnabled)
+        m_debugger->asyncTaskCanceled(task);
+}
+
+void ThreadDebugger::allAsyncTasksCanceled()
+{
+    if (m_asyncInstrumentationEnabled)
+        m_debugger->allAsyncTasksCanceled();
+}
+
+void ThreadDebugger::asyncTaskStarted(void* task)
+{
+    if (m_asyncInstrumentationEnabled)
+        m_debugger->asyncTaskStarted(task);
+}
+
+void ThreadDebugger::asyncTaskFinished(void* task)
+{
+    if (m_asyncInstrumentationEnabled)
+        m_debugger->asyncTaskFinished(task);
 }
 
 void ThreadDebugger::beginUserGesture()
 {
-    m_userGestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+    m_userGestureIndicator = wrapUnique(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
 }
 
 void ThreadDebugger::endUserGesture()
@@ -116,6 +152,18 @@ bool ThreadDebugger::isInspectableHeapObject(v8::Local<v8::Object> object)
     return true;
 }
 
+void ThreadDebugger::enableAsyncInstrumentation()
+{
+    DCHECK(!m_asyncInstrumentationEnabled);
+    m_asyncInstrumentationEnabled = true;
+}
+
+void ThreadDebugger::disableAsyncInstrumentation()
+{
+    DCHECK(m_asyncInstrumentationEnabled);
+    m_asyncInstrumentationEnabled = false;
+}
+
 static void returnDataCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     info.GetReturnValue().Set(info.Data());
@@ -134,17 +182,6 @@ void ThreadDebugger::createFunctionProperty(v8::Local<v8::Context> context, v8::
         func->Set(v8String(context->GetIsolate(), "toString"), toStringFunction);
     if (!object->Set(context, funcName, func).FromMaybe(false))
         return;
-}
-
-bool ThreadDebugger::isCommandLineAPIMethod(const String& name)
-{
-    DEFINE_STATIC_LOCAL(HashSet<String>, methods, ());
-    if (methods.size() == 0) {
-        const char* members[] = { "monitorEvents", "unmonitorEvents", "getEventListeners" };
-        for (size_t i = 0; i < WTF_ARRAY_LENGTH(members); ++i)
-            methods.add(members[i]);
-    }
-    return methods.find(name) != methods.end() || V8Debugger::isCommandLineAPIMethod(name);
 }
 
 void ThreadDebugger::installAdditionalCommandLineAPI(v8::Local<v8::Context> context, v8::Local<v8::Object> object)
@@ -198,17 +235,7 @@ void ThreadDebugger::logCallback(const v8::FunctionCallbackInfo<v8::Value>& info
     Event* event = V8Event::toImplWithTypeCheck(info.GetIsolate(), info[0]);
     if (!event)
         return;
-
-    v8::Local<v8::Context> context = info.GetIsolate()->GetCurrentContext();
-    ScriptState* scriptState = ScriptState::from(context);
-    DCHECK(scriptState->contextIsValid());
-    Vector<ScriptValue> arguments = Vector<ScriptValue>({
-        ScriptValue(scriptState, v8String(info.GetIsolate(), event->type())),
-        ScriptValue(scriptState, info[0])
-    });
-
-    ConsoleMessage* consoleMessage = ConsoleMessage::createForConsoleAPI(LogMessageLevel, LogMessageType, event->type(), ScriptArguments::create(scriptState, arguments));
-    debugger->reportMessageToConsole(context, consoleMessage);
+    debugger->debugger()->logToConsole(info.GetIsolate()->GetCurrentContext(), event->type(), v8String(info.GetIsolate(), event->type()), info[0]);
 }
 
 v8::Local<v8::Function> ThreadDebugger::eventLogFunction()
@@ -271,7 +298,9 @@ void ThreadDebugger::getEventListenersCallback(const v8::FunctionCallbackInfo<v8
     V8EventListenerInfoList listenerInfo;
     // eventListeners call can produce message on ErrorEvent during lazy event listener compilation.
     debugger->muteWarningsAndDeprecations();
+    debugger->debugger()->muteConsole();
     InspectorDOMDebuggerAgent::eventListenersInfoForTarget(isolate, info[0], listenerInfo);
+    debugger->debugger()->unmuteConsole();
     debugger->unmuteWarningsAndDeprecations();
 
     v8::Local<v8::Object> result = v8::Object::New(isolate);
@@ -299,19 +328,6 @@ void ThreadDebugger::getEventListenersCallback(const v8::FunctionCallbackInfo<v8
     info.GetReturnValue().Set(result);
 }
 
-void ThreadDebugger::reportMessageToConsole(v8::Local<v8::Context> context, MessageType type, MessageLevel level, const String16& message, const v8::FunctionCallbackInfo<v8::Value>* arguments, unsigned skipArgumentCount)
-{
-    ScriptState* scriptState = ScriptState::from(context);
-    ScriptArguments* scriptArguments = nullptr;
-    if (arguments && scriptState->contextIsValid())
-        scriptArguments = ScriptArguments::create(scriptState, *arguments, skipArgumentCount);
-    String messageText = message;
-    if (messageText.isEmpty() && scriptArguments)
-        scriptArguments->getFirstArgumentAsString(messageText);
-
-    reportMessageToConsole(context, ConsoleMessage::createForConsoleAPI(level, type, messageText, scriptArguments));
-}
-
 void ThreadDebugger::consoleTime(const String16& title)
 {
     TRACE_EVENT_COPY_ASYNC_BEGIN0("blink.console", String(title).utf8().data(), this);
@@ -333,7 +349,7 @@ void ThreadDebugger::startRepeatingTimer(double interval, V8DebuggerClient::Time
     m_timerData.append(data);
     m_timerCallbacks.append(callback);
 
-    OwnPtr<Timer<ThreadDebugger>> timer = adoptPtr(new Timer<ThreadDebugger>(this, &ThreadDebugger::onTimer));
+    std::unique_ptr<Timer<ThreadDebugger>> timer = wrapUnique(new Timer<ThreadDebugger>(this, &ThreadDebugger::onTimer));
     Timer<ThreadDebugger>* timerPtr = timer.get();
     m_timers.append(std::move(timer));
     timerPtr->startRepeating(interval, BLINK_FROM_HERE);
@@ -355,7 +371,7 @@ void ThreadDebugger::cancelTimer(void* data)
 void ThreadDebugger::onTimer(Timer<ThreadDebugger>* timer)
 {
     for (size_t index = 0; index < m_timers.size(); ++index) {
-        if (m_timers[index] == timer) {
+        if (m_timers[index].get() == timer) {
             m_timerCallbacks[index](m_timerData[index]);
             return;
         }

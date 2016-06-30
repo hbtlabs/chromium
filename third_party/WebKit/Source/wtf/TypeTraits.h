@@ -63,7 +63,7 @@ class IsAssignable {
         char padding[8];
     };
 
-    template <typename T2, typename From2, typename = decltype(std::declval<T2>() = std::declval<From2>())>
+    template <typename T2, typename From2, typename = decltype(std::declval<T2&>() = std::declval<From2>())>
     static YesType checkAssignability(int);
     template <typename T2, typename From2>
     static NoType checkAssignability(...);
@@ -248,7 +248,7 @@ class Visitor;
 namespace WTF {
 
 template <typename T>
-class NeedsTracing {
+class IsTraceable {
     typedef char YesType;
     typedef struct NoType {
         char padding[8];
@@ -264,17 +264,17 @@ public:
     static const bool value = sizeof(YesType) + sizeof(T) == sizeof(checkHasTraceMethod<T>(nullptr)) + sizeof(T);
 };
 
-// Convenience template wrapping the NeedsTracingLazily template in
+// Convenience template wrapping the IsTraceableInCollection template in
 // Collection Traits. It helps make the code more readable.
 template <typename Traits>
-class NeedsTracingTrait {
+class IsTraceableInCollectionTrait {
 public:
-    static const bool value = Traits::template NeedsTracingLazily<>::value;
+    static const bool value = Traits::template IsTraceableInCollection<>::value;
 };
 
 template <typename T, typename U>
-struct NeedsTracing<std::pair<T, U>> {
-    static const bool value = NeedsTracing<T>::value || NeedsTracing<U>::value || IsWeak<T>::value || IsWeak<U>::value;
+struct IsTraceable<std::pair<T, U>> {
+    static const bool value = IsTraceable<T>::value || IsTraceable<U>::value;
 };
 
 // This is used to check that DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects are not

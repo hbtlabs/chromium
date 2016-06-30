@@ -7,9 +7,12 @@
 #include <algorithm>
 #include <memory>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/focus_cycler.h"
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -55,6 +58,10 @@ class KeyEventCounter : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(KeyEventCounter);
 };
 
+bool IsWindowMinimized(aura::Window* window) {
+  return WmWindowAura::Get(window)->GetWindowState()->IsMinimized();
+}
+
 }  // namespace
 
 using aura::test::CreateTestWindowWithId;
@@ -84,9 +91,9 @@ class WindowCycleControllerTest : public test::AshTestBase {
     return window;
   }
 
-  const WindowCycleList::WindowList& GetWindows(
-      WindowCycleController* controller) {
-    return controller->window_cycle_list()->windows();
+  const aura::Window::Windows GetWindows(WindowCycleController* controller) {
+    return WmWindowAura::ToAuraWindows(
+        controller->window_cycle_list()->windows());
   }
 
  private:
@@ -125,7 +132,7 @@ TEST_F(WindowCycleControllerTest, SingleWindowNotActive) {
 
   // Rotate focus, this should move focus to another window that isn't part of
   // the default container.
-  Shell::GetInstance()->RotateFocus(Shell::FORWARD);
+  WmShell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
   EXPECT_FALSE(wm::IsActiveWindow(window0.get()));
 
   // Cycling should activate the window.
@@ -198,14 +205,14 @@ TEST_F(WindowCycleControllerTest, HandleCycleWindow) {
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
   // When the screen is locked, cycling window does not take effect.
-  Shell::GetInstance()->session_state_delegate()->LockScreen();
+  WmShell::Get()->GetSessionStateDelegate()->LockScreen();
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
   controller->HandleCycleWindow(WindowCycleController::BACKWARD);
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
-  Shell::GetInstance()->session_state_delegate()->UnlockScreen();
+  WmShell::Get()->GetSessionStateDelegate()->UnlockScreen();
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
@@ -213,10 +220,8 @@ TEST_F(WindowCycleControllerTest, HandleCycleWindow) {
   EXPECT_TRUE(wm::IsActiveWindow(window2.get()));
 
   // When a modal window is active, cycling window does not take effect.
-  aura::Window* modal_container =
-      ash::Shell::GetContainer(
-          Shell::GetPrimaryRootWindow(),
-          kShellWindowId_SystemModalContainer);
+  aura::Window* modal_container = Shell::GetContainer(
+      Shell::GetPrimaryRootWindow(), kShellWindowId_SystemModalContainer);
   std::unique_ptr<Window> modal_window(
       CreateTestWindowWithId(-2, modal_container));
   modal_window->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_SYSTEM);
@@ -287,10 +292,8 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopWindow) {
   std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   std::unique_ptr<Window> window1(CreateTestWindowInShellWithId(1));
 
-  Window* top_container =
-      Shell::GetContainer(
-          Shell::GetPrimaryRootWindow(),
-          kShellWindowId_AlwaysOnTopContainer);
+  Window* top_container = Shell::GetContainer(
+      Shell::GetPrimaryRootWindow(), kShellWindowId_AlwaysOnTopContainer);
   std::unique_ptr<Window> window2(CreateTestWindowWithId(2, top_container));
   wm::ActivateWindow(window0.get());
 
@@ -331,10 +334,8 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultiWindow) {
   std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   std::unique_ptr<Window> window1(CreateTestWindowInShellWithId(1));
 
-  Window* top_container =
-      Shell::GetContainer(
-          Shell::GetPrimaryRootWindow(),
-          kShellWindowId_AlwaysOnTopContainer);
+  Window* top_container = Shell::GetContainer(
+      Shell::GetPrimaryRootWindow(), kShellWindowId_AlwaysOnTopContainer);
   std::unique_ptr<Window> window2(CreateTestWindowWithId(2, top_container));
   std::unique_ptr<Window> window3(CreateTestWindowWithId(3, top_container));
   wm::ActivateWindow(window0.get());
@@ -390,9 +391,7 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultipleRootWindows) {
   std::unique_ptr<Window> window0(CreateTestWindowInShellWithId(0));
   EXPECT_EQ(root_windows[0], window0->GetRootWindow());
   Window* top_container0 =
-      Shell::GetContainer(
-          root_windows[0],
-          kShellWindowId_AlwaysOnTopContainer);
+      Shell::GetContainer(root_windows[0], kShellWindowId_AlwaysOnTopContainer);
   std::unique_ptr<Window> window1(CreateTestWindowWithId(1, top_container0));
   EXPECT_EQ(root_windows[0], window1->GetRootWindow());
 
@@ -402,9 +401,7 @@ TEST_F(WindowCycleControllerTest, AlwaysOnTopMultipleRootWindows) {
   EXPECT_EQ(root_windows[1], window2->GetRootWindow());
 
   Window* top_container1 =
-      Shell::GetContainer(
-          root_windows[1],
-          kShellWindowId_AlwaysOnTopContainer);
+      Shell::GetContainer(root_windows[1], kShellWindowId_AlwaysOnTopContainer);
   std::unique_ptr<Window> window3(CreateTestWindowWithId(3, top_container1));
   EXPECT_EQ(root_windows[1], window3->GetRootWindow());
 
@@ -477,7 +474,6 @@ TEST_F(WindowCycleControllerTest, MostRecentlyUsed) {
   controller->StopCycling();
   EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
 
-
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_TRUE(wm::IsActiveWindow(window0.get()));
 
@@ -517,19 +513,19 @@ TEST_F(WindowCycleControllerTest, CyclePreservesMinimization) {
   wm::ActivateWindow(window1.get());
   wm::GetWindowState(window1.get())->Minimize();
   wm::ActivateWindow(window0.get());
-  EXPECT_TRUE(wm::IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(IsWindowMinimized(window1.get()));
 
   // On window 2.
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
-  EXPECT_FALSE(wm::IsWindowMinimized(window1.get()));
+  EXPECT_FALSE(IsWindowMinimized(window1.get()));
 
   // Back on window 1.
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
-  EXPECT_TRUE(wm::IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(IsWindowMinimized(window1.get()));
 
   controller->StopCycling();
 
-  EXPECT_TRUE(wm::IsWindowMinimized(window1.get()));
+  EXPECT_TRUE(IsWindowMinimized(window1.get()));
 }
 
 // Tests cycles between panel and normal windows.

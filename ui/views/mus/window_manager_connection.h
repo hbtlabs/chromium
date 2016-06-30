@@ -7,7 +7,10 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -22,6 +25,7 @@ class Connector;
 }
 
 namespace views {
+class ClipboardMus;
 class NativeWidget;
 class PointerWatcher;
 class ScreenMus;
@@ -31,6 +35,7 @@ class NativeWidgetDelegate;
 
 // Provides configuration to mus in views. This consists of the following:
 // . Provides a Screen implementation backed by mus.
+// . Provides a Clipboard implementation backed by mus.
 // . Creates and owns a WindowTreeClient.
 // . Registers itself as the factory for creating NativeWidgets so that a
 //   NativeWidgetMus is created.
@@ -41,13 +46,13 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
     : public NON_EXPORTED_BASE(mus::WindowTreeClientDelegate),
       public ScreenMusDelegate {
  public:
-  static void Create(shell::Connector* connector,
-                     const shell::Identity& identity);
+  static std::unique_ptr<WindowManagerConnection> Create(
+      shell::Connector* connector,
+      const shell::Identity& identity);
   static WindowManagerConnection* Get();
   static bool Exists();
 
-  // Destroys the singleton instance.
-  static void Reset();
+  ~WindowManagerConnection() override;
 
   shell::Connector* connector() { return connector_; }
 
@@ -67,7 +72,6 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
 
   WindowManagerConnection(shell::Connector* connector,
                           const shell::Identity& identity);
-  ~WindowManagerConnection() override;
 
   // Returns true if there is one or more pointer watchers for this client.
   bool HasPointerWatcher();
@@ -87,7 +91,6 @@ class VIEWS_MUS_EXPORT WindowManagerConnection
   std::unique_ptr<mus::WindowTreeClient> client_;
   // Must be empty on destruction.
   base::ObserverList<PointerWatcher, true> pointer_watchers_;
-  bool created_device_data_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerConnection);
 };

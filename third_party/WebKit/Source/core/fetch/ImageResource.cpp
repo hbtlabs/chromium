@@ -39,6 +39,7 @@
 #include "public/platform/WebCachePolicy.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -64,7 +65,7 @@ ImageResource::ImageResource(const ResourceRequest& resourceRequest, const Resou
     , m_image(nullptr)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(Timers, "new ImageResource(ResourceRequest) %p", this);
+    WTF_LOG(ResourceLoading, "new ImageResource(ResourceRequest) %p", this);
 }
 
 ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& options)
@@ -73,13 +74,13 @@ ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& o
     , m_image(image)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(Timers, "new ImageResource(Image) %p", this);
+    WTF_LOG(ResourceLoading, "new ImageResource(Image) %p", this);
     setStatus(Cached);
 }
 
 ImageResource::~ImageResource()
 {
-    WTF_LOG(Timers, "~ImageResource %p", this);
+    WTF_LOG(ResourceLoading, "~ImageResource %p", this);
     clearImage();
 }
 
@@ -106,13 +107,10 @@ void ImageResource::checkNotify()
 
 void ImageResource::markClientsAndObserversFinished()
 {
-    while (!m_observers.isEmpty()) {
-        HashCountedSet<ImageResourceObserver*>::iterator it = m_observers.begin();
-        for (int i = it->value; i; i--) {
-            m_finishedObservers.add(it->key);
-            m_observers.remove(it);
-        }
-    }
+    HashCountedSet<ImageResourceObserver*> observers;
+    m_observers.swap(observers);
+    for (const auto& it : observers)
+        m_finishedObservers.add(it.key, it.value);
 
     Resource::markClientsAndObserversFinished();
 }
@@ -123,7 +121,7 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
 
     m_observers.add(observer);
 
-    if (!m_revalidatingRequest.isNull())
+    if (isCacheValidator())
         return;
 
     if (m_data && !m_image && !errorOccurred()) {
@@ -192,24 +190,37 @@ bool ImageResource::isSafeToUnlock() const
 
 void ImageResource::destroyDecodedDataForFailedRevalidation()
 {
-    m_image = nullptr;
+    clearImage();
     setDecodedSize(0);
 }
 
 void ImageResource::destroyDecodedDataIfPossible()
 {
     if (!hasClientsOrObservers() && !isLoading() && (!m_image || (m_image->hasOneRef() && m_image->isBitmapImage()))) {
-        m_image = nullptr;
+        clearImage();
         setDecodedSize(0);
     } else if (m_image && !errorOccurred()) {
         m_image->destroyDecodedData();
     }
 }
 
+void ImageResource::doResetAnimation()
+{
+    if (m_image)
+        m_image->resetAnimation();
+}
+
 void ImageResource::allClientsAndObserversRemoved()
 {
-    if (m_image && !errorOccurred())
-        m_image->resetAnimation();
+    if (m_image && !errorOccurred()) {
+        // If possible, delay the resetting until back at the event loop.
+        // Doing so after a conservative GC prevents resetAnimation() from
+        // upsetting ongoing animation updates (crbug.com/613709)
+        if (!ThreadHeap::willObjectBeLazilySwept(this))
+            Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&ImageResource::doResetAnimation, wrapWeakPersistent(this)));
+        else
+            m_image->resetAnimation();
+    }
     if (m_multipartParser)
         m_multipartParser->cancel();
     Resource::allClientsAndObserversRemoved();
@@ -319,6 +330,7 @@ void ImageResource::clear()
 {
     prune();
     clearImage();
+    m_data.clear();
     setEncodedSize(0);
 }
 
@@ -408,7 +420,7 @@ void ImageResource::error(const ResourceError& error)
     notifyObservers();
 }
 
-void ImageResource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void ImageResource::responseReceived(const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT(!handle);
     ASSERT(!m_multipartParser);
@@ -508,7 +520,7 @@ void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
     else
         updateImageAndClearBuffer();
     setStatus(NotStarted);
-    load(fetcher);
+    fetcher->startLoad(this);
 }
 
 void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect)

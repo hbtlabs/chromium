@@ -32,10 +32,10 @@
 #include "core/layout/TextAutosizer.h"
 #include "core/style/AppliedTextDecoration.h"
 #include "core/style/BorderEdge.h"
-#include "core/style/ContentData.h"
-#include "core/style/DataEquivalency.h"
 #include "core/style/ComputedStyleConstants.h"
+#include "core/style/ContentData.h"
 #include "core/style/CursorData.h"
+#include "core/style/DataEquivalency.h"
 #include "core/style/QuotesData.h"
 #include "core/style/ShadowList.h"
 #include "core/style/StyleImage.h"
@@ -52,8 +52,8 @@
 #include "platform/transforms/TranslateTransformOperation.h"
 #include "wtf/MathExtras.h"
 #include "wtf/PtrUtil.h"
-
 #include <algorithm>
+#include <memory>
 
 namespace blink {
 
@@ -406,7 +406,7 @@ ComputedStyle* ComputedStyle::addCachedPseudoStyle(PassRefPtr<ComputedStyle> pse
     ComputedStyle* result = pseudo.get();
 
     if (!m_cachedPseudoStyles)
-        m_cachedPseudoStyles = adoptPtr(new PseudoStyleCache);
+        m_cachedPseudoStyles = wrapUnique(new PseudoStyleCache);
 
     m_cachedPseudoStyles->append(pseudo);
 
@@ -587,6 +587,7 @@ bool ComputedStyle::diffNeedsFullLayoutAndPaintInvalidation(const ComputedStyle&
             || rareInheritedData->m_textOrientation != other.rareInheritedData->m_textOrientation
             || rareInheritedData->m_textCombine != other.rareInheritedData->m_textCombine
             || rareInheritedData->m_tabSize != other.rareInheritedData->m_tabSize
+            || rareInheritedData->m_textSizeAdjust != other.rareInheritedData->m_textSizeAdjust
             || rareInheritedData->listStyleImage != other.rareInheritedData->listStyleImage
             || rareInheritedData->m_snapHeightUnit != other.rareInheritedData->m_snapHeightUnit
             || rareInheritedData->m_snapHeightPosition != other.rareInheritedData->m_snapHeightPosition
@@ -700,7 +701,8 @@ bool ComputedStyle::diffNeedsFullLayout(const ComputedStyle& other) const
             || rareNonInheritedData->m_alignSelf != other.rareNonInheritedData->m_alignSelf
             || rareNonInheritedData->m_justifyContent != other.rareNonInheritedData->m_justifyContent
             || rareNonInheritedData->m_justifyItems != other.rareNonInheritedData->m_justifyItems
-            || rareNonInheritedData->m_justifySelf != other.rareNonInheritedData->m_justifySelf)
+            || rareNonInheritedData->m_justifySelf != other.rareNonInheritedData->m_justifySelf
+            || rareNonInheritedData->m_contain != other.rareNonInheritedData->m_contain)
             return true;
 
         if (!RuntimeEnabledFeatures::cssBoxReflectFilterEnabled() && !rareNonInheritedData->reflectionDataEquivalent(*other.rareNonInheritedData.get()))
@@ -1149,9 +1151,9 @@ const CounterDirectiveMap* ComputedStyle::counterDirectives() const
 
 CounterDirectiveMap& ComputedStyle::accessCounterDirectives()
 {
-    OwnPtr<CounterDirectiveMap>& map = rareNonInheritedData.access()->m_counterDirectives;
+    std::unique_ptr<CounterDirectiveMap>& map = rareNonInheritedData.access()->m_counterDirectives;
     if (!map)
-        map = adoptPtr(new CounterDirectiveMap);
+        map = wrapUnique(new CounterDirectiveMap);
     return *map;
 }
 
@@ -1347,9 +1349,10 @@ Length ComputedStyle::lineHeight() const
     // recalculated on demand as we only store the specified line height.
     // FIXME: Should consider scaling the fixed part of any calc expressions
     // too, though this involves messily poking into CalcExpressionLength.
-    float multiplier = textAutosizingMultiplier();
-    if (multiplier > 1 && lh.isFixed())
+    if (lh.isFixed()) {
+        float multiplier = textAutosizingMultiplier();
         return Length(TextAutosizer::computeAutosizedFontSize(lh.value(), multiplier), Fixed);
+    }
 
     return lh;
 }
@@ -1406,10 +1409,8 @@ void ComputedStyle::setTextAutosizingMultiplier(float multiplier)
     desc.setSpecifiedSize(size);
     desc.setComputedSize(size);
 
-    if (multiplier > 1) {
-        float autosizedFontSize = TextAutosizer::computeAutosizedFontSize(size, multiplier);
-        desc.setComputedSize(std::min(maximumAllowedFontSize, autosizedFontSize));
-    }
+    float autosizedFontSize = TextAutosizer::computeAutosizedFontSize(size, multiplier);
+    desc.setComputedSize(std::min(maximumAllowedFontSize, autosizedFontSize));
 
     setFontDescription(desc);
     font().update(currentFontSelector);

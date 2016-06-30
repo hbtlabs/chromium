@@ -5,7 +5,7 @@
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
 
 #include "core/fileapi/Blob.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/image-encoders/JPEGImageEncoder.h"
 #include "platform/image-encoders/PNGImageEncoder.h"
@@ -17,6 +17,7 @@
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -90,7 +91,7 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(DOMUint8ClampedArray* data, MimeT
     , m_callback(callback)
 {
     ASSERT(m_data->length() == (unsigned) (size.height() * size.width() * 4));
-    m_encodedImage = adoptPtr(new Vector<unsigned char>());
+    m_encodedImage = wrapUnique(new Vector<unsigned char>());
     m_pixelRowStride = size.width() * NumChannelsPng;
     m_idleTaskStatus = IdleTaskNotSupported;
     m_numRowsCompleted = 0;
@@ -98,6 +99,14 @@ CanvasAsyncBlobCreator::CanvasAsyncBlobCreator(DOMUint8ClampedArray* data, MimeT
 
 CanvasAsyncBlobCreator::~CanvasAsyncBlobCreator()
 {
+}
+
+void CanvasAsyncBlobCreator::dispose()
+{
+    // Eagerly let go of references to prevent retention of these
+    // resources while any remaining posted tasks are queued.
+    m_data.clear();
+    m_callback.clear();
 }
 
 void CanvasAsyncBlobCreator::scheduleAsyncBlobCreation(bool canUseIdlePeriodScheduling, const double& quality)
@@ -118,16 +127,16 @@ void CanvasAsyncBlobCreator::scheduleAsyncBlobCreation(bool canUseIdlePeriodSche
         }
         // We post the below task to check if the above idle task isn't late.
         // There's no risk of concurrency as both tasks are on main thread.
-        this->postDelayedTaskToMainThread(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::idleTaskStartTimeoutEvent, this, quality), IdleTaskStartTimeoutDelay);
+        this->postDelayedTaskToMainThread(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::idleTaskStartTimeoutEvent, wrapPersistent(this), quality), IdleTaskStartTimeoutDelay);
     } else if (m_mimeType == MimeTypeWebp) {
         BackgroundTaskRunner::TaskSize taskSize = (m_size.height() * m_size.width() >= LongTaskImageSizeThreshold) ? BackgroundTaskRunner::TaskSizeLongRunningTask : BackgroundTaskRunner::TaskSizeShortRunningTask;
-        BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, threadSafeBind(&CanvasAsyncBlobCreator::encodeImageOnEncoderThread, wrapCrossThreadPersistent(this), quality), taskSize);
+        BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, crossThreadBind(&CanvasAsyncBlobCreator::encodeImageOnEncoderThread, wrapCrossThreadPersistent(this), quality), taskSize);
     }
 }
 
 void CanvasAsyncBlobCreator::scheduleInitiateJpegEncoding(const double& quality)
 {
-    Platform::current()->mainThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, bind<double>(&CanvasAsyncBlobCreator::initiateJpegEncoding, this, quality));
+    Platform::current()->mainThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::initiateJpegEncoding, wrapPersistent(this), quality));
 }
 
 void CanvasAsyncBlobCreator::initiateJpegEncoding(const double& quality, double deadlineSeconds)
@@ -149,7 +158,7 @@ void CanvasAsyncBlobCreator::initiateJpegEncoding(const double& quality, double 
 
 void CanvasAsyncBlobCreator::scheduleInitiatePngEncoding()
 {
-    Platform::current()->mainThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, bind<double>(&CanvasAsyncBlobCreator::initiatePngEncoding, this));
+    Platform::current()->mainThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::initiatePngEncoding, wrapPersistent(this)));
 }
 
 void CanvasAsyncBlobCreator::initiatePngEncoding(double deadlineSeconds)
@@ -180,7 +189,7 @@ void CanvasAsyncBlobCreator::idleEncodeRowsPng(double deadlineSeconds)
     for (int y = m_numRowsCompleted; y < m_size.height(); ++y) {
         if (isDeadlineNearOrPassed(deadlineSeconds)) {
             m_numRowsCompleted = y;
-            Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, bind<double>(&CanvasAsyncBlobCreator::idleEncodeRowsPng, this));
+            Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::idleEncodeRowsPng, wrapPersistent(this)));
             return;
         }
         PNGImageEncoder::writeOneRowToPng(inputPixels, m_pngEncoderState.get());
@@ -192,7 +201,7 @@ void CanvasAsyncBlobCreator::idleEncodeRowsPng(double deadlineSeconds)
     m_idleTaskStatus = IdleTaskCompleted;
 
     if (isDeadlineNearOrPassed(deadlineSeconds)) {
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, this));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, wrapPersistent(this)));
     } else {
         this->createBlobAndInvokeCallback();
     }
@@ -209,7 +218,7 @@ void CanvasAsyncBlobCreator::idleEncodeRowsJpeg(double deadlineSeconds)
     if (m_numRowsCompleted == m_size.height()) {
         m_idleTaskStatus = IdleTaskCompleted;
         if (isDeadlineNearOrPassed(deadlineSeconds)) {
-            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, this));
+            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, wrapPersistent(this)));
         } else {
             this->createBlobAndInvokeCallback();
         }
@@ -217,7 +226,7 @@ void CanvasAsyncBlobCreator::idleEncodeRowsJpeg(double deadlineSeconds)
         m_idleTaskStatus = IdleTaskFailed;
         this->createNullAndInvokeCallback();
     } else {
-        Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, bind<double>(&CanvasAsyncBlobCreator::idleEncodeRowsJpeg, this));
+        Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::idleEncodeRowsJpeg, wrapPersistent(this)));
     }
 }
 
@@ -255,21 +264,17 @@ void CanvasAsyncBlobCreator::createBlobAndInvokeCallback()
 {
     ASSERT(isMainThread());
     Blob* resultBlob = Blob::create(m_encodedImage->data(), m_encodedImage->size(), convertMimeTypeEnumToString(m_mimeType));
-    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&BlobCallback::handleEvent, m_callback, resultBlob));
-    // Since toBlob is done, timeout events are no longer needed. So we clear
-    // non-GC members to allow teardown of CanvasAsyncBlobCreator.
-    m_data.clear();
-    m_callback.clear();
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(m_callback.get()), wrapPersistent(resultBlob)));
+    // Avoid unwanted retention, see dispose().
+    dispose();
 }
 
 void CanvasAsyncBlobCreator::createNullAndInvokeCallback()
 {
     ASSERT(isMainThread());
-    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&BlobCallback::handleEvent, m_callback, nullptr));
-    // Since toBlob is done (failed), timeout events are no longer needed. So we
-    // clear non-GC members to allow teardown of CanvasAsyncBlobCreator.
-    m_data.clear();
-    m_callback.clear();
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(m_callback.get()), nullptr));
+    // Avoid unwanted retention, see dispose().
+    dispose();
 }
 
 void CanvasAsyncBlobCreator::encodeImageOnEncoderThread(double quality)
@@ -278,11 +283,11 @@ void CanvasAsyncBlobCreator::encodeImageOnEncoderThread(double quality)
     ASSERT(m_mimeType == MimeTypeWebp);
 
     if (!ImageDataBuffer(m_size, m_data->data()).encodeImage("image/webp", quality, m_encodedImage.get())) {
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&BlobCallback::handleEvent, wrapCrossThreadPersistent(m_callback.get()), nullptr));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&BlobCallback::handleEvent, wrapCrossThreadPersistent(m_callback.get()), nullptr));
         return;
     }
 
-    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, wrapCrossThreadPersistent(this)));
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&CanvasAsyncBlobCreator::createBlobAndInvokeCallback, wrapCrossThreadPersistent(this)));
 }
 
 bool CanvasAsyncBlobCreator::initializePngStruct()
@@ -309,7 +314,7 @@ void CanvasAsyncBlobCreator::idleTaskStartTimeoutEvent(double quality)
 {
     if (m_idleTaskStatus == IdleTaskStarted) {
         // Even if the task started quickly, we still want to ensure completion
-        this->postDelayedTaskToMainThread(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::idleTaskCompleteTimeoutEvent, this), IdleTaskCompleteTimeoutDelay);
+        this->postDelayedTaskToMainThread(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::idleTaskCompleteTimeoutEvent, wrapPersistent(this)), IdleTaskCompleteTimeoutDelay);
     } else if (m_idleTaskStatus == IdleTaskNotStarted) {
         // If the idle task does not start after a delay threshold, we will
         // force it to happen on main thread (even though it may cause more
@@ -319,7 +324,7 @@ void CanvasAsyncBlobCreator::idleTaskStartTimeoutEvent(double quality)
 
         if (m_mimeType == MimeTypePng) {
             if (initializePngStruct()) {
-                Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::encodeRowsPngOnMainThread, this));
+                Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::encodeRowsPngOnMainThread, wrapPersistent(this)));
             } else {
                 // Failing in initialization of png struct
                 this->signalAlternativeCodePathFinishedForTesting();
@@ -327,7 +332,7 @@ void CanvasAsyncBlobCreator::idleTaskStartTimeoutEvent(double quality)
         } else {
             ASSERT(m_mimeType == MimeTypeJpeg);
             if (initializeJpegStruct(quality)) {
-                Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::encodeRowsJpegOnMainThread, this));
+                Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::encodeRowsJpegOnMainThread, wrapPersistent(this)));
             } else {
                 // Failing in initialization of jpeg struct
                 this->signalAlternativeCodePathFinishedForTesting();
@@ -350,10 +355,10 @@ void CanvasAsyncBlobCreator::idleTaskCompleteTimeoutEvent()
         signalTaskSwitchInCompleteTimeoutEventForTesting();
 
         if (m_mimeType == MimeTypePng) {
-            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::encodeRowsPngOnMainThread, this));
+            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::encodeRowsPngOnMainThread, wrapPersistent(this)));
         } else {
             ASSERT(m_mimeType == MimeTypeJpeg);
-            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&CanvasAsyncBlobCreator::encodeRowsJpegOnMainThread, this));
+            Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&CanvasAsyncBlobCreator::encodeRowsJpegOnMainThread, wrapPersistent(this)));
         }
     } else {
         ASSERT(m_idleTaskStatus == IdleTaskFailed || m_idleTaskStatus == IdleTaskCompleted);
@@ -361,7 +366,7 @@ void CanvasAsyncBlobCreator::idleTaskCompleteTimeoutEvent()
     }
 }
 
-void CanvasAsyncBlobCreator::postDelayedTaskToMainThread(const WebTraceLocation& location, std::unique_ptr<SameThreadClosure> task, double delayMs)
+void CanvasAsyncBlobCreator::postDelayedTaskToMainThread(const WebTraceLocation& location, std::unique_ptr<WTF::Closure> task, double delayMs)
 {
     DCHECK(isMainThread());
     Platform::current()->mainThread()->getWebTaskRunner()->postDelayedTask(location, std::move(task), delayMs);

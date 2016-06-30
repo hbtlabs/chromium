@@ -11,8 +11,8 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/wm_shell_common.h"
 #include "ash/metrics/user_metrics_recorder.h"
-#include "ash/system/user/login_status.h"
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/compiler_specific.h"
@@ -88,7 +88,6 @@ class AshNativeCursorManager;
 class AutoclickController;
 class BluetoothNotificationController;
 class CaptureController;
-class ContainerDelegate;
 class DesktopBackgroundController;
 class DisplayChangeObserver;
 class DisplayColorManager;
@@ -101,20 +100,16 @@ class EventClientImpl;
 class EventRewriterEventFilter;
 class EventTransformationHandler;
 class FirstRunHelper;
-class FocusCycler;
 class GPUSupport;
 class HighContrastController;
-class KeyboardUI;
 class KeyboardUMAEventFilter;
-class LastWindowClosedLogoutReminder;
 class LinkHandlerModelFactory;
 class LocaleNotificationController;
 class LockStateController;
-class LogoutConfirmationController;
+enum class LoginStatus;
 class MagnificationController;
 class MaximizeModeController;
 class MaximizeModeWindowManager;
-class MediaDelegate;
 class MouseCursorEventFilter;
 class MruWindowTracker;
 class NewWindowDelegate;
@@ -132,6 +127,7 @@ class ScopedTargetRootWindow;
 class ScreenAsh;
 class ScreenOrientationController;
 class ScreenshotController;
+class ScreenPinningController;
 class ScreenPositionController;
 class SessionStateDelegate;
 class Shelf;
@@ -141,15 +137,12 @@ class ShelfModel;
 class ShelfWindowWatcher;
 class ShellDelegate;
 struct ShellInitParams;
-class ShellObserver;
 class SlowAnimationEventFilter;
 class StatusAreaWidget;
 class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
 class SystemTray;
-class SystemTrayDelegate;
-class SystemTrayNotifier;
 class ToastManager;
 class ToplevelWindowEventHandler;
 class TouchTransformerController;
@@ -161,8 +154,8 @@ class VideoDetector;
 class WebNotificationTray;
 class WindowCycleController;
 class WindowPositioner;
-class WindowSelectorController;
 class WmShellAura;
+class WmWindow;
 
 namespace shell {
 class WindowWatcher;
@@ -182,11 +175,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
                          public aura::client::ActivationChangeObserver {
  public:
   typedef std::vector<RootWindowController*> RootWindowControllerList;
-
-  enum Direction {
-    FORWARD,
-    BACKWARD
-  };
 
   // A shell must be explicitly created so that it can call |Init()| with the
   // delegate set. |delegate| can be NULL (if not required for initialization).
@@ -262,21 +250,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Returns app list target visibility.
   bool GetAppListTargetVisibility() const;
 
-  // Returns true if a system-modal dialog window is currently open.
-  bool IsSystemModalWindowOpen() const;
-
-  // For testing only: set simulation that a modal window is open
-  void SimulateModalWindowOpenForTesting(bool modal_window_open) {
-    simulate_modal_window_open_for_testing_ = modal_window_open;
-  }
-
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
   views::NonClientFrameView* CreateDefaultNonClientFrameView(
       views::Widget* widget);
-
-  // Rotates focus through containers that can receive focus.
-  void RotateFocus(Direction direction);
 
   // Sets the work area insets of the display that contains |window|,
   // this notifies observers too.
@@ -286,14 +263,14 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
                                 const gfx::Insets& insets);
 
   // Called when the user logs in.
-  void OnLoginStateChanged(user::LoginStatus status);
+  void OnLoginStateChanged(LoginStatus status);
 
   // Called after the logged-in user's profile is ready.
   void OnLoginUserProfilePrepared();
 
   // Called when the login status changes.
   // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
-  void UpdateAfterLoginStatusChange(user::LoginStatus status);
+  void UpdateAfterLoginStatusChange(LoginStatus status);
 
   // Called when the application is exiting.
   void OnAppTerminating();
@@ -305,13 +282,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Called when a casting session is started or stopped.
   void OnCastingSessionStartedOrStopped(bool started);
 
-  // Called when the overview mode is about to be started (before the windows
-  // get re-arranged).
-  void OnOverviewModeStarting();
-
-  // Called after overview mode has ended.
-  void OnOverviewModeEnded();
-
   // Called after maximize mode has started, windows might still animate though.
   void OnMaximizeModeStarted();
 
@@ -320,13 +290,13 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   void OnMaximizeModeEnded();
 
   // Called when a root window is created.
-  void OnRootWindowAdded(aura::Window* root_window);
+  void OnRootWindowAdded(WmWindow* root_window);
 
   // Initializes |shelf_|.  Does nothing if it's already initialized.
   void CreateShelf();
 
   // Called when the shelf is created for |root_window|.
-  void OnShelfCreatedForRootWindow(aura::Window* root_window);
+  void OnShelfCreatedForRootWindow(WmWindow* root_window);
 
   // Creates a virtual keyboard. Deletes the old virtual keyboard if it already
   // exists.
@@ -337,10 +307,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Show shelf view if it was created hidden (before session has started).
   void ShowShelf();
-
-  // Adds/removes observer.
-  void AddShellObserver(ShellObserver* observer);
-  void RemoveShellObserver(ShellObserver* observer);
 
   void AddPointerWatcher(views::PointerWatcher* watcher);
   void RemovePointerWatcher(views::PointerWatcher* watcher);
@@ -361,9 +327,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   DisplayConfigurationController* display_configuration_controller() {
     return display_configuration_controller_.get();
   }
-  ::wm::CompoundEventFilter* env_filter() {
-    return env_filter_.get();
-  }
+  ::wm::CompoundEventFilter* env_filter() { return env_filter_.get(); }
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
   }
@@ -385,18 +349,12 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return lock_state_controller_.get();
   }
   MruWindowTracker* mru_window_tracker() {
-    return mru_window_tracker_.get();
+    return wm_shell_common_->mru_window_tracker();
   }
-  VideoDetector* video_detector() {
-    return video_detector_.get();
-  }
+  VideoDetector* video_detector() { return video_detector_.get(); }
   WindowCycleController* window_cycle_controller() {
     return window_cycle_controller_.get();
   }
-  WindowSelectorController* window_selector_controller() {
-    return window_selector_controller_.get();
-  }
-  FocusCycler* focus_cycler() { return focus_cycler_.get(); }
   WindowTreeHostManager* window_tree_host_manager() {
     return window_tree_host_manager_.get();
   }
@@ -437,12 +395,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return new_window_delegate_.get();
   }
 
-  MediaDelegate* media_delegate() {
-    return media_delegate_.get();
-  }
-
-  ContainerDelegate* container_delegate() { return container_delegate_.get(); }
-
   HighContrastController* high_contrast_controller() {
     return high_contrast_controller_.get();
   }
@@ -467,9 +419,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return shelf_item_delegate_manager_.get();
   }
 
-  base::SequencedWorkerPool* blocking_pool() {
-    return blocking_pool_;
-  }
+  base::SequencedWorkerPool* blocking_pool() { return blocking_pool_; }
 
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
@@ -477,16 +427,16 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Called when the alignment for a shelf changes.
   // TODO(jamescook): Move to Shelf.
-  void OnShelfAlignmentChanged(aura::Window* root_window);
+  void OnShelfAlignmentChanged(WmWindow* root_window);
 
   // Called when the auto-hide behavior for a shelf changes.
   // TODO(jamescook): Move to Shelf.
-  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window);
+  void OnShelfAutoHideBehaviorChanged(WmWindow* root_window);
 
   // Notifies |observers_| when entering or exiting fullscreen mode in
   // |root_window|.
-  void NotifyFullscreenStateChange(bool is_fullscreen,
-                                   aura::Window* root_window);
+  // TODO(hidehiko): Rename this to NotifyFullscreenStateChanged.
+  void NotifyFullscreenStateChange(bool is_fullscreen, WmWindow* root_window);
 
   // Creates a modal background (a partially-opaque fullscreen window)
   // on all displays for |window|.
@@ -505,14 +455,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Returns the system tray on primary display.
   SystemTray* GetPrimarySystemTray();
-
-  SystemTrayDelegate* system_tray_delegate() {
-    return system_tray_delegate_.get();
-  }
-
-  SystemTrayNotifier* system_tray_notifier() {
-    return system_tray_notifier_.get();
-  }
 
   static void set_initially_hide_cursor(bool hide) {
     initially_hide_cursor_ = hide;
@@ -547,10 +489,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return resolution_notification_controller_.get();
   }
 
-  LogoutConfirmationController* logout_confirmation_controller() {
-    return logout_confirmation_controller_.get();
-  }
-
   ScreenOrientationController* screen_orientation_controller() {
     return screen_orientation_controller_.get();
   }
@@ -564,28 +502,20 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   }
 #endif  // defined(OS_CHROMEOS)
 
-  ShelfModel* shelf_model() {
-    return shelf_model_.get();
-  }
+  ShelfModel* shelf_model() { return shelf_model_.get(); }
 
-  WindowPositioner* window_positioner() {
-    return window_positioner_.get();
-  }
+  WindowPositioner* window_positioner() { return window_positioner_.get(); }
 
   // Returns the launcher delegate, creating if necesary.
   ShelfDelegate* GetShelfDelegate();
 
-  UserMetricsRecorder* metrics() {
-    return user_metrics_recorder_.get();
-  }
+  UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
 
   void SetTouchHudProjectionEnabled(bool enabled);
 
   bool is_touch_hud_projection_enabled() const {
     return is_touch_hud_projection_enabled_;
   }
-
-  KeyboardUI* keyboard_ui() { return keyboard_ui_.get(); }
 
   // TODO(sky): remove this. This was needed by sysui, but as sysui is going
   // away it should no longer be needed.
@@ -603,7 +533,12 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   StickyKeysController* sticky_keys_controller() {
     return sticky_keys_controller_.get();
   }
+
 #endif  // defined(OS_CHROMEOS)
+
+  ScreenPinningController* screen_pinning_controller() {
+    return screen_pinning_controller_.get();
+  }
 
   ToastManager* toast_manager() { return toast_manager_.get(); }
 
@@ -658,6 +593,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   std::unique_ptr<ScopedOverviewAnimationSettingsFactoryAura>
       scoped_overview_animation_settings_factory_;
+  std::unique_ptr<WmShellCommon> wm_shell_common_;
   std::unique_ptr<WmShellAura> wm_shell_;
 
   // When no explicit target display/RootWindow is given, new windows are
@@ -675,14 +611,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<UserMetricsRecorder> user_metrics_recorder_;
   std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<ShellDelegate> delegate_;
-  std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;
-  std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<UserWallpaperDelegate> user_wallpaper_delegate_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<NewWindowDelegate> new_window_delegate_;
-  std::unique_ptr<MediaDelegate> media_delegate_;
-  std::unique_ptr<ContainerDelegate> container_delegate_;
   std::unique_ptr<PointerWatcherDelegate> pointer_watcher_delegate_;
   std::unique_ptr<ShelfDelegate> shelf_delegate_;
   std::unique_ptr<ShelfItemDelegateManager> shelf_item_delegate_manager_;
@@ -701,12 +633,9 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
   std::unique_ptr<LockStateController> lock_state_controller_;
-  std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
   std::unique_ptr<VideoDetector> video_detector_;
   std::unique_ptr<WindowCycleController> window_cycle_controller_;
-  std::unique_ptr<WindowSelectorController> window_selector_controller_;
-  std::unique_ptr<FocusCycler> focus_cycler_;
   std::unique_ptr<WindowTreeHostManager> window_tree_host_manager_;
   std::unique_ptr<HighContrastController> high_contrast_controller_;
   std::unique_ptr<MagnificationController> magnification_controller_;
@@ -746,6 +675,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
       display_configuration_controller_;
 
   std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
+  std::unique_ptr<ScreenPinningController> screen_pinning_controller_;
 
 #if defined(OS_CHROMEOS)
   std::unique_ptr<PowerEventObserver> power_event_observer_;
@@ -756,9 +686,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
       resolution_notification_controller_;
   std::unique_ptr<BluetoothNotificationController>
       bluetooth_notification_controller_;
-  std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
-  std::unique_ptr<LastWindowClosedLogoutReminder>
-      last_window_closed_logout_reminder_;
   std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
   std::unique_ptr<chromeos::AudioA11yController> audio_a11y_controller_;
   // Controls video output device state.
@@ -790,8 +717,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // hide the cursor on Windows.
   std::unique_ptr<::wm::CursorManager> cursor_manager_;
 
-  base::ObserverList<ShellObserver> observers_;
-
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_testing_;
 
@@ -803,8 +728,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   base::SequencedWorkerPool* blocking_pool_;
 
   bool in_mus_ = false;
-
-  std::unique_ptr<KeyboardUI> keyboard_ui_;
 
   DISALLOW_COPY_AND_ASSIGN(Shell);
 };

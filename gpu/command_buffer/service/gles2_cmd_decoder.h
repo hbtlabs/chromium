@@ -154,7 +154,6 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   virtual bool Initialize(const scoped_refptr<gl::GLSurface>& surface,
                           const scoped_refptr<gl::GLContext>& context,
                           bool offscreen,
-                          const gfx::Size& offscreen_size,
                           const DisallowedFeatures& disallowed_features,
                           const ContextCreationAttribHelper& attrib_helper) = 0;
 
@@ -236,6 +235,12 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
 
   // Perform any idle work that needs to be made.
   virtual void PerformIdleWork() = 0;
+
+  // Whether there is state that needs to be regularly polled.
+  virtual bool HasPollingWork() const = 0;
+
+  // Perform necessary polling.
+  virtual void PerformPollingWork() = 0;
 
   // Get the service texture ID corresponding to a client texture ID.
   // If no such record is found then return false.

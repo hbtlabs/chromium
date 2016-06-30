@@ -11,8 +11,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "cc/animation/element_id.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/synced_property.h"
+#include "cc/output/filter_operations.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
@@ -31,10 +33,11 @@ class EffectNodeData;
 class PropertyTree;
 class PropertyTrees;
 class ScrollNodeData;
-class TranformNodeData;
+class TransformNodeData;
+class TransformCachedNodeData;
 class TransformTreeData;
 class TreeNode;
-}
+}  // namespace proto
 
 class CopyOutputRequest;
 class LayerTreeImpl;
@@ -93,17 +96,6 @@ struct CC_EXPORT TransformNodeData {
   gfx::Transform post_local;
 
   gfx::Transform to_parent;
-
-  gfx::Transform to_target;
-  gfx::Transform from_target;
-
-  gfx::Transform to_screen;
-  gfx::Transform from_screen;
-
-  int target_id;
-  // This id is used for all content that draws into a render surface associated
-  // with this transform node.
-  int content_target_id;
 
   // This is the node with respect to which source_offset is defined. This will
   // not be needed once layerization moves to cc, but is needed in order to
@@ -213,6 +205,26 @@ struct CC_EXPORT TransformNodeData {
   void AsValueInto(base::trace_event::TracedValue* value) const;
 };
 
+struct CC_EXPORT TransformCachedNodeData {
+  TransformCachedNodeData();
+  TransformCachedNodeData(const TransformCachedNodeData& other);
+  ~TransformCachedNodeData();
+
+  gfx::Transform from_target;
+  gfx::Transform to_target;
+  gfx::Transform from_screen;
+  gfx::Transform to_screen;
+  int target_id;
+  // This id is used for all content that draws into a render surface associated
+  // with this transform node.
+  int content_target_id;
+
+  bool operator==(const TransformCachedNodeData& other) const;
+
+  void ToProtobuf(proto::TransformCachedNodeData* proto) const;
+  void FromProtobuf(const proto::TransformCachedNodeData& proto);
+};
+
 typedef TreeNode<TransformNodeData> TransformNode;
 
 struct CC_EXPORT ClipNodeData {
@@ -277,10 +289,11 @@ struct CC_EXPORT EffectNodeData {
   float opacity;
   float screen_space_opacity;
 
+  FilterOperations background_filters;
+
   bool has_render_surface;
   RenderSurfaceImpl* render_surface;
   bool has_copy_request;
-  bool has_background_filters;
   bool hidden_by_backface_visibility;
   bool double_sided;
   bool is_drawn;
@@ -298,6 +311,9 @@ struct CC_EXPORT EffectNodeData {
   int clip_id;
   // Effect node id of which this effect contributes to.
   int target_id;
+  int mask_layer_id;
+  int replica_layer_id;
+  int replica_mask_layer_id;
 
   bool operator==(const EffectNodeData& other) const;
 
@@ -324,7 +340,7 @@ struct CC_EXPORT ScrollNodeData {
   bool should_flatten;
   bool user_scrollable_horizontal;
   bool user_scrollable_vertical;
-  int element_id;
+  ElementId element_id;
   int transform_id;
   // Number of drawn layers pointing to this node or any of its descendants.
   int num_drawn_descendants;
@@ -405,6 +421,8 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   ~TransformTree();
 
   bool operator==(const TransformTree& other) const;
+
+  int Insert(const TransformNode& tree_node, int parent_id);
 
   void clear();
 
@@ -505,6 +523,28 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
     return nodes_affected_by_outer_viewport_bounds_delta_;
   }
 
+  const gfx::Transform& FromTarget(int node_id) const;
+  void SetFromTarget(int node_id, const gfx::Transform& transform);
+
+  const gfx::Transform& ToTarget(int node_id) const;
+  void SetToTarget(int node_id, const gfx::Transform& transform);
+
+  const gfx::Transform& FromScreen(int node_id) const;
+  void SetFromScreen(int node_id, const gfx::Transform& transform);
+
+  const gfx::Transform& ToScreen(int node_id) const;
+  void SetToScreen(int node_id, const gfx::Transform& transform);
+
+  int TargetId(int node_id) const;
+  void SetTargetId(int node_id, int target_id);
+
+  int ContentTargetId(int node_id) const;
+  void SetContentTargetId(int node_id, int content_target_id);
+
+  const std::vector<TransformCachedNodeData>& cached_data() const {
+    return cached_data_;
+  }
+
   gfx::Transform ToScreenSpaceTransformWithoutSublayerScale(int id) const;
 
   void ToProtobuf(proto::PropertyTree* proto) const;
@@ -555,6 +595,7 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   float device_transform_scale_factor_;
   std::vector<int> nodes_affected_by_inner_viewport_bounds_delta_;
   std::vector<int> nodes_affected_by_outer_viewport_bounds_delta_;
+  std::vector<TransformCachedNodeData> cached_data_;
 };
 
 class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
@@ -577,6 +618,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   EffectTree& operator=(const EffectTree& from);
   bool operator==(const EffectTree& other) const;
 
+  void clear();
+
   float EffectiveOpacity(const EffectNode* node) const;
 
   void UpdateEffects(int id);
@@ -590,6 +633,13 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
       std::vector<std::unique_ptr<CopyOutputRequest>>* requests);
   bool HasCopyRequests() const;
   void ClearCopyRequests();
+
+  int ClosestAncestorWithCopyRequest(int id) const;
+
+  void AddMaskOrReplicaLayerId(int id);
+  const std::vector<int>& mask_replica_layer_ids() const {
+    return mask_replica_layer_ids_;
+  }
 
   bool ContributesToDrawnSurface(int id);
 
@@ -607,6 +657,10 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
   // Stores copy requests, keyed by node id.
   std::unordered_multimap<int, std::unique_ptr<CopyOutputRequest>>
       copy_requests_;
+
+  // Unsorted list of all mask, replica, and replica mask layer ids that
+  // effect nodes refer to.
+  std::vector<int> mask_replica_layer_ids_;
 };
 
 class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {

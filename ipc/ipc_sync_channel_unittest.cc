@@ -83,7 +83,7 @@ class Worker : public Listener, public Sender {
   bool Send(Message* msg) override { return channel_->Send(msg); }
   void WaitForChannelCreation() { channel_created_->Wait(); }
   void CloseChannel() {
-    DCHECK(base::MessageLoop::current() == ListenerThread()->message_loop());
+    DCHECK(ListenerThread()->task_runner()->BelongsToCurrentThread());
     channel_->Close();
   }
   void Start() {
@@ -200,7 +200,7 @@ class Worker : public Listener, public Sender {
 
     base::RunLoop().RunUntilIdle();
 
-    ipc_thread_.message_loop()->PostTask(
+    ipc_thread_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&Worker::OnIPCThreadShutdown, this,
                               listener_event, ipc_event));
   }

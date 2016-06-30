@@ -83,6 +83,9 @@ const char kDisableCloudImport[] = "disable-cloud-import";
 // Disables the ChromeOS demo.
 const char kDisableDemoMode[] = "disable-demo-mode";
 
+// Disable quick view in Files app.
+const char kDisableFilesQuickView[] = "disable-files-quick-view";
+
 // Disable HID-detection OOBE screen.
 const char kDisableHIDDetectionOnOOBE[] = "disable-hid-detection-on-oobe";
 
@@ -107,6 +110,9 @@ const char kDisableOfficeEditingComponentApp[] =
 // Disables rollback option on reset screen.
 const char kDisableRollbackOption[] = "disable-rollback-option";
 
+// Disables experimental storage manager to manage local storage.
+const char kDisableStorageManager[] = "disable-storage-manager";
+
 // Disables volume adjust sound.
 const char kDisableVolumeAdjustSound[] = "disable-volume-adjust-sound";
 
@@ -130,6 +136,9 @@ const char kEnableConsumerManagement[] = "enable-consumer-management";
 
 // Enables details panel in Files app.
 const char kEnableFilesDetailsPanel[] = "enable-files-details-panel";
+
+// Enables notification when device is in end of life status.
+const char kEnableEolNotification[] = "enable-eol-notification";
 
 // If this switch is set, the device cannot be remotely disabled by its owner.
 const char kDisableDeviceDisabling[] = "disable-device-disabling";
@@ -200,6 +209,10 @@ const char kEnterpriseEnrollmentInitialModulus[] =
 // auto-enrollment client.
 const char kEnterpriseEnrollmentModulusLimit[] =
     "enterprise-enrollment-modulus-limit";
+
+// Enables the zero-touch enterprise enrollment flow.
+const char kEnterpriseEnableZeroTouchEnrollment[] =
+    "enterprise-enable-zero-touch-enrollment";
 
 // Enables the chromecast support for video player app.
 const char kEnableVideoPlayerChromecastSupport[] =
@@ -367,9 +380,9 @@ const char kCrosRegion[] = "cros-region";
 const char kTestCrosGaiaIdMigration[] = "test-cros-gaia-id-migration";
 const char kTestCrosGaiaIdMigrationStarted[] = "started";
 
-// This flag enables SystemTimezoneAutomaticDetection policy.
-const char kEnableSystemTimezoneAutomaticDetectionPolicy[] =
-    "enable-system-timezone-automatic-detection";
+// This flag disables SystemTimezoneAutomaticDetection policy.
+const char kDisableSystemTimezoneAutomaticDetectionPolicy[] =
+    "disable-system-timezone-automatic-detection";
 
 // This flag enables material design OOBE UI.
 const char kEnableMdOobe[] = "enable-md-oobe";

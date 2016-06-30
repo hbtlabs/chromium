@@ -8,7 +8,6 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/output_surface_client.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/public/cpp/window_surface.h"
 
 namespace mus {
@@ -34,14 +33,25 @@ void OutputSurface::DetachFromClient() {
   cc::OutputSurface::DetachFromClient();
 }
 
-void OutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
+void OutputSurface::BindFramebuffer() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+}
+
+uint32_t OutputSurface::GetFramebufferCopyTextureFormat() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+  return 0;
+}
+
+void OutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   // TODO(fsamuel, rjkroege): We should probably throttle compositor frames.
   client_->DidSwapBuffers();
   // OutputSurface owns WindowSurface, and so if OutputSurface is
   // destroyed then SubmitCompositorFrame's callback will never get called.
   // Thus, base::Unretained is safe here.
   surface_->SubmitCompositorFrame(
-      mojom::CompositorFrame::From(*frame),
+      std::move(frame),
       base::Bind(&OutputSurface::SwapBuffersComplete, base::Unretained(this)));
 }
 

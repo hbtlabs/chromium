@@ -32,8 +32,6 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 # Chrome uses different keyboard accelerators from those used by Safari, so
 # this test will always fail.
 [ Linux Win ] fast/events/option-tab.html [ WontFix ]
-[ Linux Win ] virtual/pointerevent/fast/events/option-tab.html [ WontFix ]
-[ Linux Win ] virtual/trustedeventsdefaultaction/fast/events/option-tab.html [ WontFix ]
 
 # This test only applies to overlay scrollbar platforms.
 [ Win Linux ] fast/dom/partial-layout-overlay-scrollbars.html [ WontFix ]
@@ -55,22 +53,6 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 [ Linux Mac ] fast/events/panScroll-nested-divs.html [ WontFix ]
 [ Linux Mac ] fast/events/panScroll-panIcon.html [ WontFix ]
 [ Linux Mac ] fast/events/panScroll-nested-divs-forbidden.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-click.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-click-hyperlink.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-drag.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-event-fired.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-in-iframe.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-nested-divs.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-panIcon.html [ WontFix ]
-[ Linux Mac ] virtual/pointerevent/fast/events/panScroll-nested-divs-forbidden.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-click.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-click-hyperlink.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-drag.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-event-fired.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-in-iframe.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-nested-divs.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-panIcon.html [ WontFix ]
-[ Linux Mac ] virtual/trustedeventsdefaultaction/fast/events/panScroll-nested-divs-forbidden.html [ WontFix ]
 
 # These tests are specific to Windows and Linux.
 [ Mac ] fast/forms/calendar-picker/date-open-picker-with-f4-key.html [ WontFix ]
@@ -83,12 +65,7 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 [ Mac ] fast/events/menu-key-context-menu-document.html [ WontFix ]
 [ Mac ] fast/events/menu-key-context-menu.html [ WontFix ]
 [ Mac ] fast/events/menu-key-context-menu-position.html [ WontFix ]
-[ Mac ] virtual/pointerevent/fast/events/menu-key-context-menu-document.html [ WontFix ]
-[ Mac ] virtual/pointerevent/fast/events/menu-key-context-menu.html [ WontFix ]
-[ Mac ] virtual/pointerevent/fast/events/menu-key-context-menu-position.html [ WontFix ]
-[ Mac ] virtual/trustedeventsdefaultaction/fast/events/menu-key-context-menu-document.html [ WontFix ]
-[ Mac ] virtual/trustedeventsdefaultaction/fast/events/menu-key-context-menu.html [ WontFix ]
-[ Mac ] virtual/trustedeventsdefaultaction/fast/events/menu-key-context-menu-position.html [ WontFix ]
+[ Mac ] fast/events/menu-key-context-menu-reveal-focus.html [ WontFix ]
 
 # Link Highlighting is only supported on Windows and Linux
 [ Mac ] compositing/gestures [ WontFix ]
@@ -105,11 +82,6 @@ fast/harness/sample-fail-mismatch-reftest.html [ WontFix ]
 
 # Mac has different fallback behavior so that this test won't work there
 [ Mac ] fast/text/font-cachekey.html [ WontFix ]
-
-# These tests are specific to Android. Because long pressing on disabled/readonly input/textarea
-# won't trigger text selection on Linux/Mac/Windows platforms, hence we need to skip it.
-[ Linux Mac Win ] editing/selection/readonly-disabled-text-selection.html [ WontFix ]
-[ Linux Mac Win ] editing/selection/android-longtap-not-select-empty.html [ WontFix ]
 
 # AAT/mortx shaping not supported on platforms other than Mac
 [ Linux Win Android ] fast/text/aat-morx.html [ WontFix ]
@@ -138,6 +110,12 @@ fast/canvas/canvas-lost-gpu-context.html [ WontFix ]
 # aren't critical to run in this mode.
 virtual/threaded/printing/setPrinting.html [ WontFix ]
 virtual/threaded/printing/width-overflow.html [ WontFix ]
+
+# These tests are flaky/fail when threaded and add little value (they're just
+# reading back Blink's current animation value).
+virtual/threaded/animations/transition-and-animation-1.html [ WontFix ]
+virtual/threaded/animations/transition-and-animation-2.html [ WontFix ]
+virtual/threaded/transitions/transition-end-event-multiple-04.html [ WontFix ]
 
 # This test only fails with an ASSERT in Debug build.
 [ Release ] editing/input/orphan-set-selection-range.html [ WontFix ]

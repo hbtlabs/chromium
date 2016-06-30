@@ -4,7 +4,9 @@
 
 #include "content/renderer/media/html_video_element_capturer_source.h"
 
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/renderer/render_thread.h"
@@ -166,8 +168,8 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
                             0 /* crop_y */,
                             bitmap.info().width(),
                             bitmap.info().height(),
-                            frame->natural_size().width(),
-                            frame->natural_size().height(),
+                            frame->coded_size().width(),
+                            frame->coded_size().height(),
                             libyuv::kRotate0,
                             libyuv::FOURCC_ARGB) == 0) {
     // Success!
@@ -188,7 +190,7 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
       next_capture_time_ = current_time;
   }
   // Schedule next capture.
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&HtmlVideoElementCapturerSource::sendNewFrame,
                             weak_factory_.GetWeakPtr()),
       next_capture_time_ - current_time);

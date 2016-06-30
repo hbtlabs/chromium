@@ -5,25 +5,22 @@
 #include "core/css/cssom/CSSLengthValue.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/css/CSSPrimitiveValueUnitTrie.h"
+#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/cssom/CSSCalcDictionary.h"
 #include "core/css/cssom/CSSCalcLength.h"
 #include "core/css/cssom/CSSSimpleLength.h"
-#include "core/css/cssom/CalcDictionary.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
 
 CSSPrimitiveValue::UnitType CSSLengthValue::unitFromName(const String& name)
 {
-    if (equalIgnoringASCIICase(name, "percent") || name == "%") {
+    if (equalIgnoringASCIICase(name, "percent") || name == "%")
         return CSSPrimitiveValue::UnitType::Percentage;
-    }
-    if (name.is8Bit())
-        return lookupCSSPrimitiveValueUnit(name.characters8(), name.length());
-    return lookupCSSPrimitiveValueUnit(name.characters16(), name.length());
+    return CSSPrimitiveValue::stringToUnitType(name);
 }
 
-CSSLengthValue* CSSLengthValue::from(const String& cssString, ExceptionState& exceptionState)
+CSSLengthValue* CSSLengthValue::from(const String& cssText, ExceptionState& exceptionState)
 {
     // TODO: Implement
     return nullptr;
@@ -34,7 +31,7 @@ CSSLengthValue* CSSLengthValue::from(double value, const String& type, Exception
     return CSSSimpleLength::create(value, unitFromName(type));
 }
 
-CSSLengthValue* CSSLengthValue::from(const CalcDictionary& dictionary, ExceptionState& exceptionState)
+CSSLengthValue* CSSLengthValue::from(const CSSCalcDictionary& dictionary, ExceptionState& exceptionState)
 {
     return CSSCalcLength::create(dictionary, exceptionState);
 }

@@ -287,7 +287,7 @@ bool CSPDirectiveList::checkSourceAndReportViolation(SourceListDirective* direct
 
     String suffix = String();
     if (checkDynamic(directive))
-        suffix = " 'unsafe-dynamic' is present, so host-based whitelisting is disabled.";
+        suffix = " 'strict-dynamic' is present, so host-based whitelisting is disabled.";
     if (directive == m_defaultSrc)
         suffix = suffix + " Note that '" + effectiveDirective + "' was not explicitly set, so 'default-src' is used as a fallback.";
 
@@ -670,7 +670,7 @@ void CSPDirectiveList::enableInsecureRequestsUpgrade(const String& name, const S
     }
     m_upgradeInsecureRequests = true;
 
-    m_policy->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsUpgrade);
+    m_policy->upgradeInsecureRequests();
     if (!value.isEmpty())
         m_policy->reportValueForEmptyDirective(name, value);
 }
@@ -726,6 +726,8 @@ void CSPDirectiveList::parseReflectedXSS(const String& name, const String& value
 void CSPDirectiveList::parseReferrer(const String& name, const String& value)
 {
     m_didSetReferrerPolicy = true;
+
+    UseCounter::count(m_policy->document(), UseCounter::CSPReferrerDirective);
 
     if (value.isEmpty()) {
         m_policy->reportInvalidReferrer(value);

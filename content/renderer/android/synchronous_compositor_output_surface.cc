@@ -7,9 +7,12 @@
 #include <vector>
 
 #include "base/auto_reset.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
@@ -105,6 +108,8 @@ void SynchronousCompositorOutputSurface::SetSyncClient(
     SynchronousCompositorOutputSurfaceClient* compositor) {
   DCHECK(CalledOnValidThread());
   sync_client_ = compositor;
+  if (sync_client_)
+    Send(new SyncCompositorHostMsg_OutputSurfaceCreated(routing_id_));
 }
 
 bool SynchronousCompositorOutputSurface::OnMessageReceived(
@@ -130,7 +135,6 @@ bool SynchronousCompositorOutputSurface::BindToClient(
                  base::Unretained(this)));
   registry_->RegisterOutputSurface(routing_id_, this);
   registered_ = true;
-  Send(new SyncCompositorHostMsg_OutputSurfaceCreated(routing_id_));
   return true;
 }
 
@@ -144,18 +148,20 @@ void SynchronousCompositorOutputSurface::DetachFromClient() {
   CancelFallbackTick();
 }
 
-void SynchronousCompositorOutputSurface::Reshape(const gfx::Size& size,
-                                                 float scale_factor,
-                                                 bool has_alpha) {
+void SynchronousCompositorOutputSurface::Reshape(
+    const gfx::Size& size,
+    float scale_factor,
+    const gfx::ColorSpace& color_space,
+    bool has_alpha) {
   // Intentional no-op: surface size is controlled by the embedder.
 }
 
 void SynchronousCompositorOutputSurface::SwapBuffers(
-    cc::CompositorFrame* frame) {
+    cc::CompositorFrame frame) {
   DCHECK(CalledOnValidThread());
   DCHECK(sync_client_);
   if (!fallback_tick_running_) {
-    sync_client_->SwapBuffers(output_surface_id_, frame);
+    sync_client_->SwapBuffers(output_surface_id_, std::move(frame));
     DeliverMessages();
   }
   client_->DidSwapBuffers();
@@ -189,11 +195,22 @@ void SynchronousCompositorOutputSurface::Invalidate() {
     fallback_tick_.Reset(
         base::Bind(&SynchronousCompositorOutputSurface::FallbackTickFired,
                    base::Unretained(this)));
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, fallback_tick_.callback(),
         base::TimeDelta::FromMilliseconds(kFallbackTickTimeoutInMilliseconds));
     fallback_tick_pending_ = true;
   }
+}
+
+void SynchronousCompositorOutputSurface::BindFramebuffer() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+}
+
+uint32_t SynchronousCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+  return 0;
 }
 
 void SynchronousCompositorOutputSurface::DemandDrawHw(

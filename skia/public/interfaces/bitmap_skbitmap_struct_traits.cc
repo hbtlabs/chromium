@@ -46,15 +46,15 @@ SkAlphaType MojoAlphaTypeToSk(skia::mojom::AlphaType type) {
   return kUnknown_SkAlphaType;
 }
 
-SkColorProfileType MojoProfileTypeToSk(skia::mojom::ColorProfileType type) {
+sk_sp<SkColorSpace> MojoProfileTypeToSk(skia::mojom::ColorProfileType type) {
   switch (type) {
     case skia::mojom::ColorProfileType::LINEAR:
-      return kLinear_SkColorProfileType;
+      return nullptr;
     case skia::mojom::ColorProfileType::SRGB:
-      return kSRGB_SkColorProfileType;
+      return SkColorSpace::NewNamed(SkColorSpace::kSRGB_Named);
   }
   NOTREACHED();
-  return kLinear_SkColorProfileType;
+  return nullptr;
 }
 
 skia::mojom::ColorType SkColorTypeToMojo(SkColorType type) {
@@ -98,49 +98,13 @@ skia::mojom::AlphaType SkAlphaTypeToMojo(SkAlphaType type) {
   return skia::mojom::AlphaType::UNKNOWN;
 }
 
-skia::mojom::ColorProfileType SkProfileTypeToMojo(SkColorProfileType type) {
-  switch (type) {
-    case kLinear_SkColorProfileType:
-      return skia::mojom::ColorProfileType::LINEAR;
-    case kSRGB_SkColorProfileType:
-      return skia::mojom::ColorProfileType::SRGB;
-  }
-  NOTREACHED();
+skia::mojom::ColorProfileType SkColorSpaceToMojo(SkColorSpace* cs) {
+  if (cs && cs->gammaCloseToSRGB())
+    return skia::mojom::ColorProfileType::SRGB;
   return skia::mojom::ColorProfileType::LINEAR;
 }
 
 }  // namespace
-
-// static
-size_t ArrayTraits<BitmapBuffer>::GetSize(const BitmapBuffer& b) {
-  return b.size;
-}
-
-// static
-uint8_t* ArrayTraits<BitmapBuffer>::GetData(BitmapBuffer& b) {
-  return b.data;
-}
-
-// static
-const uint8_t* ArrayTraits<BitmapBuffer>::GetData(const BitmapBuffer& b) {
-  return b.data;
-}
-
-// static
-uint8_t& ArrayTraits<BitmapBuffer>::GetAt(BitmapBuffer& b, size_t i) {
-  return *(b.data + i);
-}
-
-// static
-const uint8_t& ArrayTraits<BitmapBuffer>::GetAt(const BitmapBuffer& b,
-                                                size_t i) {
-  return *(b.data + i);
-}
-
-// static
-void ArrayTraits<BitmapBuffer>::Resize(BitmapBuffer& b, size_t size) {
-  CHECK_EQ(size, b.size);
-}
 
 // static
 bool StructTraits<skia::mojom::Bitmap, SkBitmap>::IsNull(const SkBitmap& b) {
@@ -167,7 +131,7 @@ skia::mojom::AlphaType StructTraits<skia::mojom::Bitmap, SkBitmap>::alpha_type(
 // static
 skia::mojom::ColorProfileType
 StructTraits<skia::mojom::Bitmap, SkBitmap>::profile_type(const SkBitmap& b) {
-  return SkProfileTypeToMojo(b.profileType());
+  return SkColorSpaceToMojo(b.colorSpace());
 }
 
 // static
@@ -184,10 +148,7 @@ uint32_t StructTraits<skia::mojom::Bitmap, SkBitmap>::height(
 // static
 BitmapBuffer StructTraits<skia::mojom::Bitmap, SkBitmap>::pixel_data(
     const SkBitmap& b) {
-  BitmapBuffer bitmap_buffer;
-  bitmap_buffer.data = static_cast<uint8_t*>(b.getPixels());
-  bitmap_buffer.size = b.getSize();
-  return bitmap_buffer;
+  return {b.getSize(), b.getSize(), static_cast<uint8_t*>(b.getPixels())};
 }
 
 // static
@@ -215,10 +176,9 @@ bool StructTraits<skia::mojom::Bitmap, SkBitmap>::Read(
     return false;
   }
 
-  BitmapBuffer bitmap_buffer;
-  bitmap_buffer.data = static_cast<uint8_t*>(b->getPixels());
-  bitmap_buffer.size = b->getSize();
-  if (!data.ReadPixelData(&bitmap_buffer))
+  BitmapBuffer bitmap_buffer = {0, b->getSize(),
+                                static_cast<uint8_t*>(b->getPixels())};
+  if (!data.ReadPixelData(&bitmap_buffer) || bitmap_buffer.size != b->getSize())
     return false;
 
   b->notifyPixelsChanged();

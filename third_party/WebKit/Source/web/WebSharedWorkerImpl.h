@@ -42,8 +42,8 @@
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebSharedWorkerClient.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -75,7 +75,7 @@ public:
     explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
     // WorkerReportingProxy methods:
-    void reportException(const WTF::String&, PassOwnPtr<SourceLocation>) override;
+    void reportException(const WTF::String&, std::unique_ptr<SourceLocation>) override;
     void reportConsoleMessage(ConsoleMessage*) override;
     void postMessageToPageInspector(const WTF::String&) override;
     void postWorkerConsoleAgentEnabled() override { }
@@ -95,6 +95,7 @@ public:
     // WebDevToolsAgentClient overrides.
     void sendProtocolMessage(int sessionId, int callId, const WebString&, const WebString&) override;
     void resumeStartup() override;
+    WebDevToolsAgentClient::WebKitClientMessageLoop* createClientMessageLoop() override;
 
     // WebSharedWorker methods:
     void startWorkerContext(const WebURL&, const WebString& name, const WebString& contentSecurityPolicy, WebContentSecurityPolicyType, WebAddressSpace) override;
@@ -122,7 +123,7 @@ private:
     void didReceiveScriptLoaderResponse();
     void onScriptLoaderFinished();
 
-    static void connectTask(PassOwnPtr<WebMessagePortChannel>, ExecutionContext*);
+    static void connectTask(WebMessagePortChannelUniquePtr, ExecutionContext*);
     // Tasks that are run on the main thread.
     void workerGlobalScopeClosedOnMainThread();
     void workerThreadTerminatedOnMainThread();
@@ -140,11 +141,11 @@ private:
     bool m_askedToTerminate;
 
     // This one is bound to and used only on the main thread.
-    OwnPtr<WebServiceWorkerNetworkProvider> m_networkProvider;
+    std::unique_ptr<WebServiceWorkerNetworkProvider> m_networkProvider;
 
     Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
 
-    OwnPtr<WorkerThread> m_workerThread;
+    std::unique_ptr<WorkerThread> m_workerThread;
 
     WebSharedWorkerClient* m_client;
 

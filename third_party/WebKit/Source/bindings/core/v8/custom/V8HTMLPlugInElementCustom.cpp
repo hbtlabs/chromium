@@ -34,8 +34,8 @@
 #include "bindings/core/v8/V8HTMLEmbedElement.h"
 #include "bindings/core/v8/V8HTMLObjectElement.h"
 #include "core/frame/UseCounter.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -53,13 +53,11 @@ void getScriptableObjectProperty(PropertyType property, const v8::PropertyCallba
     if (instance.IsEmpty())
         return;
 
-    v8::Local<v8::Value> value;
-    if (!instance->Get(info.GetIsolate()->GetCurrentContext(), property).ToLocal(&value))
+    if (!v8CallBoolean(instance->HasOwnProperty(info.GetIsolate()->GetCurrentContext(), property)))
         return;
 
-    // We quit here to allow the binding code to look up general HTMLObjectElement properties
-    // if they are not overriden by plugin.
-    if (value->IsUndefined() && !v8CallBoolean(instance->Has(info.GetIsolate()->GetCurrentContext(), property)))
+    v8::Local<v8::Value> value;
+    if (!instance->Get(info.GetIsolate()->GetCurrentContext(), property).ToLocal(&value))
         return;
 
     v8SetReturnValue(info, value);
@@ -87,8 +85,7 @@ void setScriptableObjectProperty(PropertyType property, v8::Local<v8::Value> val
     // DOM element will also be set. For plugin's that don't intercept the call
     // (all except gTalk) this makes no difference at all. For gTalk the fact
     // that the property on the DOM element also gets set is inconsequential.
-    v8::Maybe<bool> unused = instance->Set(info.GetIsolate()->GetCurrentContext(), property, value);
-    ALLOW_UNUSED_LOCAL(unused);
+    v8CallBoolean(instance->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), property, value));
 }
 } // namespace
 
@@ -146,12 +143,12 @@ void invokeOnScriptableObject(const v8::FunctionCallbackInfo<v8::Value>& info)
     if (instance.IsEmpty())
         return;
 
-    WTF::OwnPtr<v8::Local<v8::Value>[] > arguments = adoptArrayPtr(new v8::Local<v8::Value>[info.Length()]);
+    std::unique_ptr<v8::Local<v8::Value>[] > arguments = wrapArrayUnique(new v8::Local<v8::Value>[info.Length()]);
     for (int i = 0; i < info.Length(); ++i)
         arguments[i] = info[i];
 
     v8::Local<v8::Value> retVal;
-    if (!instance->CallAsFunction(info.GetIsolate()->GetCurrentContext(), info.This(), info.Length(), arguments.get()).ToLocal(&retVal))
+    if (!instance->CallAsFunction(info.GetIsolate()->GetCurrentContext(), info.Holder(), info.Length(), arguments.get()).ToLocal(&retVal))
         return;
     v8SetReturnValue(info, retVal);
 }

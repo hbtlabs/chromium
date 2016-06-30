@@ -7,9 +7,11 @@
 #include <stddef.h>
 
 #include "base/auto_reset.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_view.h"
 #include "gin/converter.h"
@@ -54,7 +56,7 @@ WebViewPlugin::WebViewPlugin(content::RenderView* render_view,
     : content::RenderViewObserver(render_view),
       delegate_(delegate),
       container_(nullptr),
-      web_view_(WebView::create(this)),
+      web_view_(WebView::create(this, blink::WebPageVisibilityStateVisible)),
       finished_loading_(false),
       focused_(false),
       is_painting_(false),
@@ -156,7 +158,7 @@ void WebViewPlugin::destroy() {
   }
   container_ = nullptr;
   content::RenderViewObserver::Observe(nullptr);
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 v8::Local<v8::Object> WebViewPlugin::v8ScriptableObject(v8::Isolate* isolate) {
@@ -336,10 +338,7 @@ void WebViewPlugin::didReceiveResponse(unsigned identifier,
   WebFrameClient::didReceiveResponse(identifier, response);
 }
 
-void WebViewPlugin::OnDestruct() {
-  // By default RenderViewObservers are destroyed along with the RenderView.
-  // WebViewPlugin has a custom destruction mechanism, so we disable this.
-}
+void WebViewPlugin::OnDestruct() {}
 
 void WebViewPlugin::OnZoomLevelChanged() {
   if (container_) {

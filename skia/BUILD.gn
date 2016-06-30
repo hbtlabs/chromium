@@ -22,6 +22,7 @@ skia_support_pdf = !is_ios && (enable_basic_printing || enable_print_preview)
 
 declare_args() {
   skia_whitelist_serialized_typefaces = false
+
   # TODO(crbug.com/607933): Once GYP is no longer supported, port iOS to use
   # optimised skia.
   skia_build_no_opts = is_ios
@@ -521,6 +522,7 @@ component("skia") {
   if (is_mac) {
     libs = [
       "AppKit.framework",
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "CoreText.framework",
@@ -538,7 +540,7 @@ component("skia") {
     ]
     set_sources_assignment_filter(sources_assignment_filter)
 
-    # To disable warning "CGContextSelectFont' is deprecated"
+    # SkFontHost_mac.cpp uses API deprecated in iOS 7, crbug.com/408571
     cflags = [ "-Wno-deprecated-declarations" ]
   }
 }
@@ -708,7 +710,6 @@ test("skia_unittests") {
     "ext/image_operations_unittest.cc",
     "ext/platform_canvas_unittest.cc",
     "ext/recursive_gaussian_convolution_unittest.cc",
-    "ext/refptr_unittest.cc",
     "ext/skia_memory_dump_provider_unittest.cc",
     "ext/skia_utils_ios_unittest.mm",
     "ext/skia_utils_mac_unittest.mm",
@@ -721,14 +722,20 @@ test("skia_unittests") {
   deps = [
     ":skia",
     "//base",
-    "//base/test:run_all_unittests",
+    "//mojo/edk/test:run_all_unittests",
     "//testing/gtest",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
 
   if (!is_ios) {
-    deps += [ "//cc:test_support" ]  # TODO: Fix this test to not depend on cc.
+    sources += [ "public/interfaces/test/struct_traits_unittest.cc" ]
+    deps += [
+      # TODO: Fix this test to not depend on cc.
+      "//cc:test_support",
+      "//mojo/public/cpp/bindings",
+      "//skia/public/interfaces:test_interfaces",
+    ]
   }
 }
 
@@ -742,6 +749,7 @@ if (!is_ios) {
       ":skia",
       "//base",
       "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
     ]
   }
 
@@ -756,6 +764,7 @@ if (!is_ios) {
       "//base",
       "//base/test:test_support",
       "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
     ]
   }
 }

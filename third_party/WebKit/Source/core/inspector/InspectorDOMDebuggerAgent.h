@@ -37,7 +37,6 @@
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/protocol/DOMDebugger.h"
 #include "wtf/HashMap.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -63,7 +62,7 @@ public:
     ~InspectorDOMDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
-    // DOMDebugger API for InspectorFrontend
+    // DOMDebugger API for frontend
     void setDOMBreakpoint(ErrorString*, int nodeId, const String& type) override;
     void removeDOMBreakpoint(ErrorString*, int nodeId, const String& type) override;
     void setEventListenerBreakpoint(ErrorString*, const String& eventName, const Maybe<String>& targetName) override;

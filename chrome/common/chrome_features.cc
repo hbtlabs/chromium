@@ -58,6 +58,11 @@ const base::Feature kMaterialDesignHistoryFeature {
   "MaterialDesignHistory", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
+// Enables or disables the Material Design version of chrome://settings.
+// Also affects chrome://help.
+const base::Feature kMaterialDesignSettingsFeature{
+    "MaterialDesignSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in
 // the current instance of Chrome.
@@ -69,8 +74,7 @@ const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // A new user experience for transitioning into fullscreen and mouse pointer
-// lock states. The name is a misnomer (for historical reasons); affects both
-// Views and Android builds.
+// lock states.
 const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -85,7 +89,7 @@ const base::Feature kSyzyasanDeferredFree{"SyzyasanDeferredFree",
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.
 const base::Feature kOptInImeMenu{"OptInImeMenu",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace features

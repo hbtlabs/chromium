@@ -21,7 +21,6 @@
 #include "cc/resources/shared_bitmap_manager.h"
 #include "components/mus/public/cpp/context_provider.h"
 #include "components/mus/public/cpp/output_surface.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_tree_client.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -72,6 +71,9 @@ base::LazyInstance<base::ThreadLocalPointer<
 SurfaceBinding::PerClientState* SurfaceBinding::PerClientState::Get(
     shell::Connector* connector,
     mus::WindowTreeClient* client) {
+  // |connector| can be null in some unit-tests.
+  if (!connector)
+    return nullptr;
   ClientToStateMap* window_map = window_states.Pointer()->Get();
   if (!window_map) {
     window_map = new ClientToStateMap;
@@ -120,7 +122,7 @@ SurfaceBinding::SurfaceBinding(shell::Connector* connector,
 SurfaceBinding::~SurfaceBinding() {}
 
 std::unique_ptr<cc::OutputSurface> SurfaceBinding::CreateOutputSurface() {
-  return state_->CreateOutputSurface(window_, surface_type_);
+  return state_ ? state_->CreateOutputSurface(window_, surface_type_) : nullptr;
 }
 
 }  // namespace views

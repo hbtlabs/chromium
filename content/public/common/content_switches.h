@@ -99,7 +99,6 @@ extern const char kDisableV8IdleTasks[];
 CONTENT_EXPORT extern const char kDisableWebGLImageChromium[];
 CONTENT_EXPORT extern const char kDisableWebSecurity[];
 extern const char kDisableXSSAuditor[];
-CONTENT_EXPORT extern const char kDisableWheelGestures[];
 CONTENT_EXPORT extern const char kDisableZeroCopy[];
 CONTENT_EXPORT extern const char kDomAutomationController[];
 CONTENT_EXPORT extern const char kDownloadProcess[];
@@ -133,6 +132,7 @@ CONTENT_EXPORT extern const char kEnableLCDText[];
 CONTENT_EXPORT extern const char kEnableLogging[];
 extern const char kEnableMemoryBenchmarking[];
 CONTENT_EXPORT extern const char kEnableNetworkInformation[];
+CONTENT_EXPORT extern const char kEnableNv12DxgiVideo[];
 CONTENT_EXPORT extern const char kEnablePinch[];
 CONTENT_EXPORT extern const char kEnablePluginPlaceholderTesting[];
 CONTENT_EXPORT extern const char kEnablePreciseMemoryInfo[];
@@ -158,7 +158,6 @@ CONTENT_EXPORT extern const char kEnableWebFontsInterventionTrigger[];
 CONTENT_EXPORT extern const char kEnableWebGLDraftExtensions[];
 CONTENT_EXPORT extern const char kEnableWebGLImageChromium[];
 CONTENT_EXPORT extern const char kEnableWebVR[];
-CONTENT_EXPORT extern const char kEnableWheelGestures[];
 CONTENT_EXPORT extern const char kEnableZeroCopy[];
 CONTENT_EXPORT extern const char kEnableZeroCopyDxgiVideo[];
 CONTENT_EXPORT extern const char kExplicitlyAllowedPorts[];
@@ -277,6 +276,7 @@ CONTENT_EXPORT extern const char kEnableAdaptiveSelectionHandleOrientation[];
 CONTENT_EXPORT extern const char kEnableLongpressDragSelection[];
 CONTENT_EXPORT extern const char kHideScrollbars[];
 extern const char kNetworkCountryIso[];
+CONTENT_EXPORT extern const char kProgressBarCompletion[];
 CONTENT_EXPORT extern const char kRemoteDebuggingSocketName[];
 CONTENT_EXPORT extern const char kRendererWaitForJavaDebugger[];
 CONTENT_EXPORT extern const char kEnableOSKOverscroll[];
@@ -309,6 +309,11 @@ CONTENT_EXPORT extern const char kEnableWin7WebRtcHWH264Decoding[];
 CONTENT_EXPORT extern const char kFontCacheSharedHandle[];
 CONTENT_EXPORT extern const char kMemoryPressureThresholdsMb[];
 CONTENT_EXPORT extern const char kTraceExportEventsToETW[];
+#endif
+
+#if defined(ENABLE_IPC_FUZZER)
+extern const char kIpcDumpDirectory[];
+extern const char kIpcFuzzerTestcase[];
 #endif
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

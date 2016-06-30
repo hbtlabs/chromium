@@ -1,20 +1,17 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow body",
-          "rect": [8, 8, 784, 204],
-          "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "LayoutBlockFlow body",
-          "rect": [8, 113, 784, 100],
-          "reason": "incremental"
+          "rect": [8, 8, 784, 205],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutSVGContainer svg:use id='use'",
@@ -50,20 +47,46 @@
           "object": "LayoutSVGViewportContainer svg id='symbol'",
           "rect": [53, 53, 10, 10],
           "reason": "layoutObject removal"
-        },
-        {
-          "object": "InlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutSVGEllipse svg:circle id='circle'",
+      "reason": "layoutObject removal"
+    },
+    {
+      "object": "LayoutSVGViewportContainer svg id='symbol'",
+      "reason": "layoutObject removal"
+    },
+    {
+      "object": "LayoutBlockFlow body",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutSVGRoot svg:svg id='svg'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGEllipse svg:circle id='circle'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGContainer svg:use id='use'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGViewportContainer svg id='symbol'",
+      "reason": "layoutObject insertion"
+    },
+    {
+      "object": "LayoutSVGEllipse svg:circle id='circle'",
+      "reason": "layoutObject insertion"
     }
   ]
 }

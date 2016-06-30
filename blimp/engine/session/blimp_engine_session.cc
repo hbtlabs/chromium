@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
+#include "blimp/common/blob_cache/in_memory_blob_cache.h"
 #include "blimp/common/create_blimp_message.h"
 #include "blimp/common/proto/tab_control.pb.h"
 #include "blimp/engine/app/blimp_engine_config.h"
@@ -23,10 +24,13 @@
 #include "blimp/engine/app/ui/blimp_window_tree_host.h"
 #include "blimp/engine/common/blimp_browser_context.h"
 #include "blimp/engine/common/blimp_user_agent.h"
+#include "blimp/engine/session/tab.h"
 #include "blimp/net/blimp_connection.h"
 #include "blimp/net/blimp_connection_statistics.h"
 #include "blimp/net/blimp_message_multiplexer.h"
 #include "blimp/net/blimp_message_thread_pipe.h"
+#include "blimp/net/blob_channel/blob_channel_sender_impl.h"
+#include "blimp/net/blob_channel/helium_blob_sender_delegate.h"
 #include "blimp/net/browser_connection_handler.h"
 #include "blimp/net/common.h"
 #include "blimp/net/engine_authentication_handler.h"
@@ -222,10 +226,18 @@ BlimpEngineSession::BlimpEngineSession(
                                       QuitCurrentMessageLoopClosure())) {
   DCHECK(engine_config_);
   DCHECK(settings_manager_);
-  screen_->UpdateDisplayScaleAndSize(kDefaultScaleFactor,
-                                     gfx::Size(kDefaultDisplayWidth,
-                                               kDefaultDisplayHeight));
+
+  screen_->UpdateDisplayScaleAndSize(
+      kDefaultScaleFactor,
+      gfx::Size(kDefaultDisplayWidth, kDefaultDisplayHeight));
   render_widget_feature_.SetDelegate(kDummyTabId, this);
+
+  std::unique_ptr<HeliumBlobSenderDelegate> helium_blob_delegate(
+      new HeliumBlobSenderDelegate);
+  blob_delegate_ = helium_blob_delegate.get();
+  blob_channel_sender_ = base::WrapUnique(
+      new BlobChannelSenderImpl(base::WrapUnique(new InMemoryBlobCache),
+                                std::move(helium_blob_delegate)));
 }
 
 BlimpEngineSession::~BlimpEngineSession() {
@@ -233,11 +245,11 @@ BlimpEngineSession::~BlimpEngineSession() {
 
   window_tree_host_->GetInputMethod()->RemoveObserver(this);
 
-  page_load_tracker_.reset();
-
-  // Ensure that all WebContents are torn down first, since teardown will
-  // trigger RenderViewDeleted callbacks to their observers.
-  web_contents_.reset();
+  // Ensure that all tabs are torn down first, since teardown will
+  // trigger RenderViewDeleted callbacks to their observers, which will in turn
+  // send messages to net_components_, which is already deleted due to the line
+  // below.
+  tab_.reset();
 
   // Safely delete network components on the IO thread.
   content::BrowserThread::DeleteSoon(content::BrowserThread::IO, FROM_HERE,
@@ -312,6 +324,9 @@ void BlimpEngineSession::RegisterFeatures() {
   render_widget_feature_.set_ime_message_sender(
       thread_pipe_manager_->RegisterFeature(BlimpMessage::kIme,
                                             &render_widget_feature_));
+  blob_delegate_->set_outgoing_message_processor(
+      thread_pipe_manager_->RegisterFeature(BlimpMessage::kBlobChannel,
+                                            blob_delegate_));
 
   // The Settings feature does not need an outgoing message processor, since we
   // don't send any messages to the client right now.
@@ -319,11 +334,9 @@ void BlimpEngineSession::RegisterFeatures() {
                                         &settings_feature_);
 }
 
-bool BlimpEngineSession::CreateWebContents(const int target_tab_id) {
+bool BlimpEngineSession::CreateTab(const int target_tab_id) {
   DVLOG(1) << "Create tab " << target_tab_id;
-  // TODO(haibinlu): Support more than one active WebContents (crbug/547231).
-  if (web_contents_) {
-    DLOG(WARNING) << "Tab " << target_tab_id << " already existed";
+  if (tab_) {
     return false;
   }
 
@@ -331,19 +344,14 @@ bool BlimpEngineSession::CreateWebContents(const int target_tab_id) {
                                                    nullptr);
   std::unique_ptr<content::WebContents> new_contents =
       base::WrapUnique(content::WebContents::Create(create_params));
-  PlatformSetContents(std::move(new_contents));
-
-  // Transfer over the user agent override. The default user agent does not
-  // have client IO info.
-  web_contents_->SetUserAgentOverride(GetBlimpEngineUserAgent());
+  PlatformSetContents(std::move(new_contents), target_tab_id);
 
   return true;
 }
 
-void BlimpEngineSession::CloseWebContents(const int target_tab_id) {
+void BlimpEngineSession::CloseTab(const int target_tab_id) {
   DVLOG(1) << "Close tab " << target_tab_id;
-  DCHECK(web_contents_);
-  web_contents_->Close();
+  tab_.reset();
 }
 
 void BlimpEngineSession::HandleResize(float device_pixel_ratio,
@@ -351,49 +359,10 @@ void BlimpEngineSession::HandleResize(float device_pixel_ratio,
   DVLOG(1) << "Resize to " << size.ToString() << ", " << device_pixel_ratio;
   screen_->UpdateDisplayScaleAndSize(device_pixel_ratio, size);
   window_tree_host_->SetBounds(gfx::Rect(size));
-  if (web_contents_) {
-    const gfx::Size size_in_dips = screen_->GetPrimaryDisplay().bounds().size();
-    web_contents_->GetNativeView()->SetBounds(gfx::Rect(size_in_dips));
+  if (tab_) {
+    tab_->Resize(device_pixel_ratio,
+                 screen_->GetPrimaryDisplay().bounds().size());
   }
-
-  if (web_contents_ && web_contents_->GetRenderViewHost() &&
-      web_contents_->GetRenderViewHost()->GetWidget()) {
-    web_contents_->GetRenderViewHost()->GetWidget()->WasResized();
-  }
-}
-
-void BlimpEngineSession::LoadUrl(const int target_tab_id, const GURL& url) {
-  TRACE_EVENT1("blimp", "BlimpEngineSession::LoadUrl", "URL", url.spec());
-  DVLOG(1) << "Load URL " << url << " in tab " << target_tab_id;
-  if (!url.is_valid()) {
-    VLOG(1) << "Dropping invalid URL " << url;
-    return;
-  }
-
-  // TODO(dtrainor, haibinlu): Fix up the URL with url_fixer.h.  If that doesn't
-  // produce a valid spec() then try to build a search query?
-  content::NavigationController::LoadURLParams params(url);
-  params.transition_type = ui::PageTransitionFromInt(
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
-  params.override_user_agent =
-    content::NavigationController::UA_OVERRIDE_TRUE;
-  web_contents_->GetController().LoadURLWithParams(params);
-  web_contents_->Focus();
-}
-
-void BlimpEngineSession::GoBack(const int target_tab_id) {
-  DVLOG(1) << "Back in tab " << target_tab_id;
-  web_contents_->GetController().GoBack();
-}
-
-void BlimpEngineSession::GoForward(const int target_tab_id) {
-  DVLOG(1) << "Forward in tab " << target_tab_id;
-  web_contents_->GetController().GoForward();
-}
-
-void BlimpEngineSession::Reload(const int target_tab_id) {
-  DVLOG(1) << "Reload in tab " << target_tab_id;
-  web_contents_->GetController().Reload(true);
 }
 
 void BlimpEngineSession::OnWebGestureEvent(
@@ -427,7 +396,7 @@ void BlimpEngineSession::OnCaretBoundsChanged(
 //  - the TextInputType of the TextInputClient changes
 void BlimpEngineSession::OnTextInputStateChanged(
     const ui::TextInputClient* client) {
-  if (!web_contents_->GetRenderWidgetHostView())
+  if (!tab_ || !tab_->web_contents()->GetRenderWidgetHostView())
     return;
 
   ui::TextInputType type =
@@ -440,7 +409,7 @@ void BlimpEngineSession::OnTextInputStateChanged(
   if (type == ui::TEXT_INPUT_TYPE_NONE)
     render_widget_feature_.SendHideImeRequest(
         kDummyTabId,
-        web_contents_->GetRenderWidgetHostView()->GetRenderWidgetHost());
+        tab_->web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost());
 }
 
 void BlimpEngineSession::OnInputMethodDestroyed(
@@ -449,13 +418,13 @@ void BlimpEngineSession::OnInputMethodDestroyed(
 // Called when a user input should trigger showing the IME.
 void BlimpEngineSession::OnShowImeIfNeeded() {
   TRACE_EVENT0("blimp", "BlimpEngineSession::OnShowImeIfNeeded");
-  if (!web_contents_->GetRenderWidgetHostView() ||
+  if (!tab_ || !tab_->web_contents()->GetRenderWidgetHostView() ||
       !window_tree_host_->GetInputMethod()->GetTextInputClient())
     return;
 
   render_widget_feature_.SendShowImeRequest(
       kDummyTabId,
-      web_contents_->GetRenderWidgetHostView()->GetRenderWidgetHost(),
+      tab_->web_contents()->GetRenderWidgetHostView()->GetRenderWidgetHost(),
       window_tree_host_->GetInputMethod()->GetTextInputClient());
 }
 
@@ -472,11 +441,11 @@ void BlimpEngineSession::ProcessMessage(
   if (message->has_tab_control()) {
     switch (message->tab_control().tab_control_case()) {
       case TabControlMessage::kCreateTab:
-        if (!CreateWebContents(message->target_tab_id()))
+        if (!CreateTab(message->target_tab_id()))
           result = net::ERR_FAILED;
         break;
       case TabControlMessage::kCloseTab:
-        CloseWebContents(message->target_tab_id());
+        CloseTab(message->target_tab_id());
       case TabControlMessage::kSize:
         HandleResize(message->tab_control().size().device_pixel_ratio(),
                      gfx::Size(message->tab_control().size().width(),
@@ -486,27 +455,30 @@ void BlimpEngineSession::ProcessMessage(
         NOTIMPLEMENTED();
         result = net::ERR_NOT_IMPLEMENTED;
     }
-  } else if (message->has_navigation() && web_contents_) {
-    switch (message->navigation().type()) {
-      case NavigationMessage::LOAD_URL:
-        LoadUrl(message->target_tab_id(),
-                GURL(message->navigation().load_url().url()));
-        break;
-      case NavigationMessage::GO_BACK:
-        GoBack(message->target_tab_id());
-        break;
-      case NavigationMessage::GO_FORWARD:
-        GoForward(message->target_tab_id());
-        break;
-      case NavigationMessage::RELOAD:
-        Reload(message->target_tab_id());
-        break;
-      default:
-        NOTIMPLEMENTED();
-        result = net::ERR_NOT_IMPLEMENTED;
+  } else if (message->has_navigation()) {
+    if (tab_) {
+      switch (message->navigation().type()) {
+        case NavigationMessage::LOAD_URL:
+          tab_->LoadUrl(GURL(message->navigation().load_url().url()));
+          break;
+        case NavigationMessage::GO_BACK:
+          tab_->GoBack();
+          break;
+        case NavigationMessage::GO_FORWARD:
+          tab_->GoForward();
+          break;
+        case NavigationMessage::RELOAD:
+          tab_->Reload();
+          break;
+        default:
+          NOTIMPLEMENTED();
+          result = net::ERR_NOT_IMPLEMENTED;
+      }
+    } else {
+      VLOG(1) << "Tab " << message->target_tab_id() << " does not exist";
     }
   } else {
-    DVLOG(1) << "No WebContents for navigation control";
+    NOTREACHED();
     result = net::ERR_FAILED;
   }
 
@@ -542,7 +514,7 @@ content::WebContents* BlimpEngineSession::OpenURLFromTab(
       params.should_replace_current_entry;
   load_url_params.is_renderer_initiated = params.is_renderer_initiated;
   load_url_params.override_user_agent =
-    content::NavigationController::UA_OVERRIDE_TRUE;
+      content::NavigationController::UA_OVERRIDE_TRUE;
 
   source->GetController().LoadURLWithParams(load_url_params);
   return source;
@@ -555,9 +527,8 @@ void BlimpEngineSession::RequestToLockMouse(content::WebContents* web_contents,
 }
 
 void BlimpEngineSession::CloseContents(content::WebContents* source) {
-  if (source == web_contents_.get()) {
-    Observe(nullptr);
-    web_contents_.reset();
+  if (source == tab_->web_contents()) {
+    tab_.reset();
   }
 }
 
@@ -577,91 +548,24 @@ void BlimpEngineSession::NavigationStateChanged(
     content::WebContents* source,
     content::InvalidateTypes changed_flags) {
   TRACE_EVENT0("blimp", "BlimpEngineSession::NavigationStateChanged");
-  if (source != web_contents_.get() || !changed_flags)
-    return;
-
-  NavigationMessage* navigation_message;
-  std::unique_ptr<BlimpMessage> message =
-      CreateBlimpMessage(&navigation_message, kDummyTabId);
-  navigation_message->set_type(NavigationMessage::NAVIGATION_STATE_CHANGED);
-  NavigationStateChangeMessage* details =
-      navigation_message->mutable_navigation_state_changed();
-
-  if (changed_flags & content::InvalidateTypes::INVALIDATE_TYPE_URL)
-    details->set_url(source->GetURL().spec());
-
-  if (changed_flags & content::InvalidateTypes::INVALIDATE_TYPE_TAB) {
-    // TODO(dtrainor): Serialize the favicon? crbug.com/597094.
-    DVLOG(3) << "Tab favicon changed";
-  }
-
-  if (changed_flags & content::InvalidateTypes::INVALIDATE_TYPE_TITLE)
-    details->set_title(base::UTF16ToUTF8(source->GetTitle()));
-
-  if (changed_flags & content::InvalidateTypes::INVALIDATE_TYPE_LOAD)
-    details->set_loading(source->IsLoading());
-
-  navigation_message_sender_->ProcessMessage(std::move(message),
-                                             net::CompletionCallback());
-}
-
-void BlimpEngineSession::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
-  render_widget_feature_.OnRenderWidgetCreated(kDummyTabId,
-                                               render_view_host->GetWidget());
-}
-
-void BlimpEngineSession::RenderViewHostChanged(
-    content::RenderViewHost* old_host,
-    content::RenderViewHost* new_host) {
-  // Informs client that WebContents swaps its visible RenderViewHost with
-  // another one.
-  render_widget_feature_.OnRenderWidgetInitialized(kDummyTabId,
-                                                   new_host->GetWidget());
-}
-
-void BlimpEngineSession::RenderViewDeleted(
-    content::RenderViewHost* render_view_host) {
-  render_widget_feature_.OnRenderWidgetDeleted(kDummyTabId,
-                                               render_view_host->GetWidget());
-}
-
-void BlimpEngineSession::SendPageLoadStatusUpdate(PageLoadStatus load_status) {
-  bool page_load_completed = false;
-
-  switch (load_status) {
-    case PageLoadStatus::LOADING:
-      page_load_completed = false;
-      break;
-    case PageLoadStatus::LOADED:
-      page_load_completed = true;
-      break;
-  }
-
-  NavigationMessage* navigation_message = nullptr;
-  std::unique_ptr<BlimpMessage> message =
-      CreateBlimpMessage(&navigation_message, kDummyTabId);
-  navigation_message->set_type(NavigationMessage::NAVIGATION_STATE_CHANGED);
-  NavigationStateChangeMessage* details =
-      navigation_message->mutable_navigation_state_changed();
-  details->set_page_load_completed(page_load_completed);
-
-  navigation_message_sender_->ProcessMessage(std::move(message),
-                                             net::CompletionCallback());
+  if (source == tab_->web_contents())
+    tab_->NavigationStateChanged(changed_flags);
 }
 
 void BlimpEngineSession::PlatformSetContents(
-    std::unique_ptr<content::WebContents> new_contents) {
+    std::unique_ptr<content::WebContents> new_contents,
+    const int target_tab_id) {
   new_contents->SetDelegate(this);
-  Observe(new_contents.get());
-  web_contents_ = std::move(new_contents);
 
-  page_load_tracker_.reset(new PageLoadTracker(web_contents_.get(), this));
   aura::Window* parent = window_tree_host_->window();
-  aura::Window* content = web_contents_->GetNativeView();
+  aura::Window* content = new_contents->GetNativeView();
   if (!parent->Contains(content))
     parent->AddChild(content);
   content->Show();
+
+  tab_ = base::WrapUnique(new Tab(std::move(new_contents), target_tab_id,
+                                  &render_widget_feature_,
+                                  navigation_message_sender_.get()));
 }
 
 }  // namespace engine

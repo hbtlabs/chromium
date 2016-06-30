@@ -5,9 +5,8 @@
 #ifndef V8InspectorSession_h
 #define V8InspectorSession_h
 
-#include "platform/PlatformExport.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/v8_inspector/protocol/Runtime.h"
-#include "wtf/PtrUtil.h"
 
 #include <v8.h>
 
@@ -45,13 +44,6 @@ public:
     virtual void setSkipAllPauses(bool) = 0;
     virtual void resume() = 0;
     virtual void stepOver() = 0;
-
-    // API to report async call stacks.
-    virtual void asyncTaskScheduled(const String16& taskName, void* task, bool recurring) = 0;
-    virtual void asyncTaskCanceled(void* task) = 0;
-    virtual void asyncTaskStarted(void* task) = 0;
-    virtual void asyncTaskFinished(void* task) = 0;
-    virtual void allAsyncTasksCanceled() = 0;
 
     // API to work with remote objects.
     virtual std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(v8::Local<v8::Context>, v8::Local<v8::Value>, const String16& groupName, bool generatePreview = false) = 0;

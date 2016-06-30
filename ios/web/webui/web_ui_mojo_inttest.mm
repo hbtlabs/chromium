@@ -14,6 +14,7 @@
 #include "ios/web/test/mojo_test.mojom.h"
 #include "ios/web/test/test_url_constants.h"
 #import "ios/web/test/web_int_test.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/interface_registry.h"
@@ -45,7 +46,8 @@ class TestUIHandler : public TestUIHandlerMojo,
   bool IsFinReceived() { return fin_received_; }
 
   // TestUIHandlerMojo overrides.
-  void HandleJsMessage(const mojo::String& message, TestPagePtr page) override {
+  void SetClientPage(TestPagePtr page) override { page_ = std::move(page); }
+  void HandleJsMessage(const mojo::String& message) override {
     if (message.get() == "syn") {
       // Received "syn" message from WebUI page, send "ack" as reply.
       DCHECK(!syn_received_);
@@ -53,7 +55,7 @@ class TestUIHandler : public TestUIHandlerMojo,
       syn_received_ = true;
       NativeMessageResultMojoPtr result(NativeMessageResultMojo::New());
       result->message = mojo::String::From("ack");
-      page->HandleNativeMessage(std::move(result));
+      page_->HandleNativeMessage(std::move(result));
     } else if (message.get() == "fin") {
       // Received "fin" from the WebUI page in response to "ack".
       DCHECK(syn_received_);
@@ -72,6 +74,7 @@ class TestUIHandler : public TestUIHandlerMojo,
   }
 
   mojo::BindingSet<TestUIHandlerMojo> bindings_;
+  TestPagePtr page_ = nullptr;
   // |true| if "syn" has been received.
   bool syn_received_ = false;
   // |true| if "fin" has been received.

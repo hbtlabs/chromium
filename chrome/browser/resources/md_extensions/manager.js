@@ -91,8 +91,15 @@ cr.define('extensions', function() {
           /** @type {extensions.Sidebar} */(this.$$('extensions-sidebar'));
       this.listHelper_ = new ListHelper(this);
       this.sidebar.setListDelegate(this.listHelper_);
-      this.$.toolbar.setSearchDelegate(new SearchHelper(this));
       this.readyPromiseResolver.resolve();
+    },
+
+    /**
+     * @param {!CustomEvent} event
+     * @private
+     */
+    onFilterChanged_: function(event) {
+      this.filter = /** @type {string} */ (event.detail);
     },
 
     /**
@@ -272,25 +279,15 @@ cr.define('extensions', function() {
       this.manager_.changePage(Page.ITEM_LIST);
     },
 
+    /** @override */
     showKeyboardShortcuts: function() {
       this.manager_.changePage(Page.KEYBOARD_SHORTCUTS);
     },
-  };
 
-  /**
-   * @param {extensions.Manager} manager
-   * @constructor
-   * @implements {SearchFieldDelegate}
-   */
-  function SearchHelper(manager) {
-    this.manager_ = manager;
-  }
-
-  SearchHelper.prototype = {
     /** @override */
-    onSearchTermSearch: function(searchTerm) {
-      this.manager_.filter = searchTerm;
-    },
+    showPackDialog: function() {
+      this.manager_.$['pack-dialog'].show();
+    }
   };
 
   return {Manager: Manager};

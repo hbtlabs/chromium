@@ -126,8 +126,9 @@ public:
 
     // Creates a WebView that is NOT yet initialized. You will need to
     // call setMainFrame to finish the initialization. It is valid
-    // to pass a null client pointer.
-    BLINK_EXPORT static WebView* create(WebViewClient*);
+    // to pass a null client pointer. The WebPageVisibilityState defines the
+    // initial visibility of the page.
+    BLINK_EXPORT static WebView* create(WebViewClient*, WebPageVisibilityState);
 
     // After creating a WebView, you should immediately call this method.
     // You can optionally modify the settings before calling this method.
@@ -367,14 +368,6 @@ public:
     virtual WebHitTestResult hitTestResultForTap(const WebPoint& tapPoint,
         const WebSize& tapArea) = 0;
 
-    // Copy to the clipboard the image located at a particular point in the
-    // WebView (if there is such an image)
-    virtual void copyImageAt(const WebPoint&) = 0;
-
-    // Save as the image located at a particular point in the
-    // WebView (if there is such an image)
-    virtual void saveImageAt(const WebPoint&) = 0;
-
     // Notifies the WebView that a drag has terminated.
     virtual void dragSourceEndedAt(
         const WebPoint& clientPoint, const WebPoint& screenPoint,
@@ -396,6 +389,7 @@ public:
         int modifiers) = 0;
     virtual void dragTargetDragLeave() = 0;
     virtual void dragTargetDrop(
+        const WebDragData&,
         const WebPoint& clientPoint, const WebPoint& screenPoint,
         int modifiers) = 0;
 

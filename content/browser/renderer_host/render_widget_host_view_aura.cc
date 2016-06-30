@@ -83,7 +83,6 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_profile.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -109,8 +108,8 @@
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "content/common/input_messages.h"
-#include "ui/events/linux/text_edit_command_auralinux.h"
-#include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_command_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
 using gfx::RectToSkIRect;
@@ -453,10 +452,6 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
       popup_parent_host_view_(nullptr),
       popup_child_host_view_(nullptr),
       is_loading_(false),
-      text_input_type_(ui::TEXT_INPUT_TYPE_NONE),
-      text_input_mode_(ui::TEXT_INPUT_MODE_DEFAULT),
-      text_input_flags_(0),
-      can_compose_inline_(true),
       has_composition_text_(false),
       accept_return_character_(false),
       begin_frame_source_(nullptr),
@@ -483,6 +478,11 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
     host_->delegate()->GetInputEventRouter()->AddSurfaceIdNamespaceOwner(
         GetSurfaceIdNamespace(), this);
   }
+
+  // We should start observing the TextInputManager for IME-related events as
+  // well as monitoring its lifetime.
+  if (GetTextInputManager())
+    GetTextInputManager()->AddObserver(this);
 
   bool overscroll_enabled = base::CommandLine::ForCurrentProcess()->
       GetSwitchValueASCII(switches::kOverscrollHistoryNavigation) != "0";
@@ -863,7 +863,9 @@ bool RenderWidgetHostViewAura::ShouldRouteEvent(const ui::Event* event) const {
   //    in a similar manner to RenderWidgetHostViewGuest.
   bool result = host_->delegate() && host_->delegate()->GetInputEventRouter() &&
                 !disable_input_event_router_for_testing_;
-  if (event->IsMouseEvent())
+  // ScrollEvents get transformed into MouseWheel events, and so are treated
+  // the same as mouse events for routing purposes.
+  if (event->IsMouseEvent() || event->type() == ui::ET_SCROLL)
     result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible();
   return result;
 }
@@ -972,31 +974,6 @@ void RenderWidgetHostViewAura::UpdateCursor(const WebCursor& cursor) {
 void RenderWidgetHostViewAura::SetIsLoading(bool is_loading) {
   is_loading_ = is_loading;
   UpdateCursorIfOverSelf();
-}
-
-void RenderWidgetHostViewAura::TextInputStateChanged(
-    const TextInputState& params) {
-  if (text_input_type_ != params.type ||
-      text_input_mode_ != params.mode ||
-      can_compose_inline_ != params.can_compose_inline ||
-      text_input_flags_ != params.flags) {
-    text_input_type_ = params.type;
-    text_input_mode_ = params.mode;
-    can_compose_inline_ = params.can_compose_inline;
-    text_input_flags_ = params.flags;
-    if (GetInputMethod())
-      GetInputMethod()->OnTextInputTypeChanged(this);
-  }
-  if (params.show_ime_if_needed && params.type != ui::TEXT_INPUT_TYPE_NONE) {
-    if (GetInputMethod())
-      GetInputMethod()->ShowImeIfNeeded();
-  }
-}
-
-void RenderWidgetHostViewAura::ImeCancelComposition() {
-  if (GetInputMethod())
-    GetInputMethod()->CancelComposition(this);
-  has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::ImeCompositionRangeChanged(
@@ -1155,14 +1132,14 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
 
 void RenderWidgetHostViewAura::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
-  if (!frame->delegated_frame_data)
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
+  if (!frame.delegated_frame_data)
     return;
 
-  cc::Selection<gfx::SelectionBound> selection = frame->metadata.selection;
+  cc::Selection<gfx::SelectionBound> selection = frame.metadata.selection;
   if (IsUseZoomForDSFEnabled()) {
     float viewportToDIPScale = 1.0f / current_device_scale_factor_;
     gfx::PointF start_edge_top = selection.start.edge_top();
@@ -1203,13 +1180,6 @@ bool RenderWidgetHostViewAura::HasAcceleratedSurface(
 
 void RenderWidgetHostViewAura::GetScreenInfo(WebScreenInfo* results) {
   GetScreenInfoForWindow(results, window_->GetRootWindow() ? window_ : NULL);
-}
-
-bool RenderWidgetHostViewAura::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  DCHECK(color_profile->empty());
-  gfx::Rect bounds(window_->GetToplevelWindow()->GetBoundsInScreen());
-  return gfx::GetDisplayColorProfile(bounds, color_profile);
 }
 
 gfx::Rect RenderWidgetHostViewAura::GetBoundsInRootWindow() {
@@ -1456,8 +1426,7 @@ void RenderWidgetHostViewAura::UnlockMouse() {
 // RenderWidgetHostViewAura, ui::TextInputClient implementation:
 void RenderWidgetHostViewAura::SetCompositionText(
     const ui::CompositionText& composition) {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (!host_)
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
     return;
 
   // TODO(suzhe): convert both renderer_host and renderer to use
@@ -1477,35 +1446,36 @@ void RenderWidgetHostViewAura::SetCompositionText(
 
   // TODO(suzhe): due to a bug of webkit, we can't use selection range with
   // composition string. See: https://bugs.webkit.org/show_bug.cgi?id=37788
-  host_->ImeSetComposition(composition.text, underlines,
-                           gfx::Range::InvalidRange(),
-                           composition.selection.end(),
-                           composition.selection.end());
+  text_input_manager_->GetActiveWidget()->ImeSetComposition(
+      composition.text, underlines, gfx::Range::InvalidRange(),
+      composition.selection.end(), composition.selection.end());
 
   has_composition_text_ = !composition.text.empty();
 }
 
 void RenderWidgetHostViewAura::ConfirmCompositionText() {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_ && has_composition_text_) {
-    host_->ImeConfirmComposition(base::string16(), gfx::Range::InvalidRange(),
-                                 false);
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
+      has_composition_text_) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        base::string16(), gfx::Range::InvalidRange(), false);
   }
   has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::ClearCompositionText() {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_ && has_composition_text_)
-    host_->ImeCancelComposition();
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
+      has_composition_text_)
+    text_input_manager_->GetActiveWidget()->ImeCancelComposition();
   has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::InsertText(const base::string16& text) {
-  DCHECK(text_input_type_ != ui::TEXT_INPUT_TYPE_NONE);
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_)
-    host_->ImeConfirmComposition(text, gfx::Range::InvalidRange(), false);
+  DCHECK_NE(GetTextInputType(), ui::TEXT_INPUT_TYPE_NONE);
+
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        text, gfx::Range::InvalidRange(), false);
+  }
   has_composition_text_ = false;
 }
 
@@ -1525,19 +1495,32 @@ void RenderWidgetHostViewAura::InsertChar(const ui::KeyEvent& event) {
 }
 
 ui::TextInputType RenderWidgetHostViewAura::GetTextInputType() const {
-  return text_input_type_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->type;
+  return ui::TEXT_INPUT_TYPE_NONE;
 }
 
 ui::TextInputMode RenderWidgetHostViewAura::GetTextInputMode() const {
-  return text_input_mode_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->mode;
+  return ui::TEXT_INPUT_MODE_DEFAULT;
+}
+
+base::i18n::TextDirection RenderWidgetHostViewAura::GetTextDirection() const {
+  NOTIMPLEMENTED();
+  return base::i18n::UNKNOWN_DIRECTION;
 }
 
 int RenderWidgetHostViewAura::GetTextInputFlags() const {
-  return text_input_flags_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->flags;
+  return 0;
 }
 
 bool RenderWidgetHostViewAura::CanComposeInline() const {
-  return can_compose_inline_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->can_compose_inline;
+  return true;
 }
 
 gfx::Rect RenderWidgetHostViewAura::ConvertRectToScreen(
@@ -1691,12 +1674,13 @@ void RenderWidgetHostViewAura::EnsureCaretInRect(const gfx::Rect& rect) {
       ConvertRectFromScreen(intersected_rect));
 }
 
-bool RenderWidgetHostViewAura::IsEditCommandEnabled(int command_id) {
+bool RenderWidgetHostViewAura::IsTextEditCommandEnabled(
+    ui::TextEditCommand command) const {
   return false;
 }
 
-void RenderWidgetHostViewAura::SetEditCommandForNextKeyEvent(int command_id) {
-}
+void RenderWidgetHostViewAura::SetTextEditCommandForNextKeyEvent(
+    ui::TextEditCommand command) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, display::DisplayObserver implementation:
@@ -2004,7 +1988,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
         host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
             this, &mouse_wheel_event);
       } else {
-        ProcessMouseWheelEvent(mouse_wheel_event);
+        ProcessMouseWheelEvent(mouse_wheel_event, *event->latency());
       }
     }
   } else {
@@ -2023,7 +2007,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
         host_->delegate()->GetInputEventRouter()->RouteMouseEvent(this,
                                                                   &mouse_event);
       } else {
-        ProcessMouseEvent(mouse_event);
+        ProcessMouseEvent(mouse_event, *event->latency());
       }
 
       // Ensure that we get keyboard focus on mouse down as a plugin window may
@@ -2072,13 +2056,15 @@ uint32_t RenderWidgetHostViewAura::SurfaceIdNamespaceAtPoint(
 }
 
 void RenderWidgetHostViewAura::ProcessMouseEvent(
-    const blink::WebMouseEvent& event) {
-  host_->ForwardMouseEvent(event);
+    const blink::WebMouseEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardMouseEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewAura::ProcessMouseWheelEvent(
-    const blink::WebMouseWheelEvent& event) {
-  host_->ForwardWheelEvent(event);
+    const blink::WebMouseWheelEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardWheelEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewAura::ProcessTouchEvent(
@@ -2134,15 +2120,33 @@ void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
 #endif
     blink::WebGestureEvent gesture_event =
         MakeWebGestureEventFlingCancel();
-    host_->ForwardGestureEvent(gesture_event);
+    // Coordinates need to be transferred to the fling cancel gesture only
+    // for Surface-targeting to ensure that it is targeted to the correct
+    // RenderWidgetHost.
+    gesture_event.x = event->x();
+    gesture_event.y = event->y();
     blink::WebMouseWheelEvent mouse_wheel_event =
         MakeWebMouseWheelEvent(*event);
-    host_->ForwardWheelEvent(mouse_wheel_event);
+    if (ShouldRouteEvent(event)) {
+      host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
+          this, &gesture_event, ui::LatencyInfo());
+      host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
+          this, &mouse_wheel_event);
+    } else {
+      host_->ForwardGestureEvent(gesture_event);
+      host_->ForwardWheelEventWithLatencyInfo(mouse_wheel_event,
+                                              *event->latency());
+    }
     RecordAction(base::UserMetricsAction("TrackpadScroll"));
   } else if (event->type() == ui::ET_SCROLL_FLING_START ||
              event->type() == ui::ET_SCROLL_FLING_CANCEL) {
     blink::WebGestureEvent gesture_event = MakeWebGestureEvent(*event);
-    host_->ForwardGestureEvent(gesture_event);
+    if (ShouldRouteEvent(event)) {
+      host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
+          this, &gesture_event, ui::LatencyInfo());
+    } else {
+      host_->ForwardGestureEvent(gesture_event);
+    }
     if (event->type() == ui::ET_SCROLL_FLING_START)
       RecordAction(base::UserMetricsAction("TrackpadScrollFling"));
   }
@@ -2414,6 +2418,9 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
   }
 
 #endif
+
+  if (text_input_manager_)
+    text_input_manager_->RemoveObserver(this);
 }
 
 void RenderWidgetHostViewAura::CreateAuraWindow() {
@@ -2519,10 +2526,10 @@ bool RenderWidgetHostViewAura::NeedsMouseCapture() {
 void RenderWidgetHostViewAura::FinishImeCompositionSession() {
   if (!has_composition_text_)
     return;
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_) {
-    host_->ImeConfirmComposition(base::string16(), gfx::Range::InvalidRange(),
-                                 false);
+
+  if (!!text_input_manager_ && !!text_input_manager_->GetActiveWidget()) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        base::string16(), gfx::Range::InvalidRange(), false);
   }
   ImeCancelComposition();
 }
@@ -2585,7 +2592,12 @@ void RenderWidgetHostViewAura::SnapToPhysicalPixelBoundary() {
   // to avoid the web contents area looking blurry we translate the web contents
   // in the +x, +y direction to land on the nearest pixel boundary. This may
   // cause the bottom and right edges to be clipped slightly, but that's ok.
+#if defined(OS_CHROMEOS)
+  aura::Window* snapped = window_->GetToplevelWindow();
+#else
   aura::Window* snapped = window_->GetRootWindow();
+#endif
+
   if (snapped && snapped != window_)
     ui::SnapLayerToPhysicalPixelBoundary(snapped->layer(), window_->layer());
 
@@ -2756,9 +2768,6 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
     // RenderWidgetHosts for OOPIF.  See https://crbug.com/549334.
     target_host->Send(new InputMsg_SetEditCommandsForNextKeyEvent(
         target_host->GetRoutingID(), edit_commands));
-
-    NativeWebKeyboardEvent copy_event(event);
-    copy_event.match_edit_command = true;
     target_host->ForwardKeyboardEvent(event);
     return;
   }
@@ -2794,7 +2803,7 @@ void RenderWidgetHostViewAura::HandleGestureForTouchSelection(
   switch (event->type()) {
     case ui::ET_GESTURE_LONG_PRESS:
       if (selection_controller_->WillHandleLongPressEvent(
-              base::TimeTicks() + event->time_stamp(), event->location_f())) {
+              event->time_stamp(), event->location_f())) {
         event->SetHandled();
       }
       break;
@@ -2905,7 +2914,7 @@ SkColor RenderWidgetHostViewAura::DelegatedFrameHostGetGutterColor(
   // When making an element on the page fullscreen the element's background
   // may not match the page's, so use black as the gutter color to avoid
   // flashes of brighter colors during the transition.
-  if (host_->delegate() && host_->delegate()->IsFullscreenForCurrentTab(host_))
+  if (host_->delegate() && host_->delegate()->IsFullscreenForCurrentTab())
     return SK_ColorBLACK;
   return color;
 }
@@ -2993,6 +3002,37 @@ uint32_t RenderWidgetHostViewAura::GetSurfaceIdNamespace() {
 
 cc::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {
   return delegated_frame_host_->SurfaceIdForTesting();
+}
+
+void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
+    TextInputManager* text_input_manager,
+    RenderWidgetHostViewBase* updated_view,
+    bool did_update_state) {
+  DCHECK_EQ(text_input_manager_, text_input_manager);
+
+  if (!GetInputMethod())
+    return;
+
+  if (did_update_state)
+    GetInputMethod()->OnTextInputTypeChanged(this);
+
+  const TextInputState* state = text_input_manager_->GetTextInputState();
+
+  if (state && state->show_ime_if_needed &&
+      state->type != ui::TEXT_INPUT_TYPE_NONE)
+    GetInputMethod()->ShowImeIfNeeded();
+}
+
+void RenderWidgetHostViewAura::OnImeCancelComposition(
+    TextInputManager* text_input_manager,
+    RenderWidgetHostViewBase* view) {
+  // |view| is not necessarily the one corresponding to
+  // TextInputManager::GetActiveWidget() as RenderWidgetHostViewAura can call
+  // this method to finish any ongoing composition in response to a mouse down
+  // event.
+  if (GetInputMethod())
+    GetInputMethod()->CancelComposition(this);
+  has_composition_text_ = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

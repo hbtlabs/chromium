@@ -42,8 +42,10 @@
 #include "public/platform/Platform.h"
 #include "public/platform/linux/WebSandboxSupport.h"
 #include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/CString.h"
+#include <memory>
 #include <unicode/locid.h>
 
 #if !OS(WIN) && !OS(ANDROID)
@@ -161,7 +163,7 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
     if (creationParams.creationType() == CreateFontByFciIdAndTtcIndex) {
         if (Platform::current()->sandboxSupport())
             return typefaceForFontconfigInterfaceIdAndTtcIndex(creationParams.fontconfigInterfaceId(), creationParams.ttcIndex());
-        return adoptRef(SkTypeface::CreateFromFile(creationParams.filename().data(), creationParams.ttcIndex()));
+        return fromSkSp(SkTypeface::MakeFromFile(creationParams.filename().data(), creationParams.ttcIndex()));
     }
 #endif
 
@@ -201,7 +203,7 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
 }
 
 #if !OS(WIN)
-PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription,
+std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription,
     const FontFaceCreationParams& creationParams, float fontSize)
 {
     CString name;
@@ -209,7 +211,7 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
     if (!tf)
         return nullptr;
 
-    return adoptPtr(new FontPlatformData(tf,
+    return wrapUnique(new FontPlatformData(tf,
         name.data(),
         fontSize,
         (fontDescription.weight() > 200 + tf->fontStyle().weight()) || fontDescription.isSyntheticBold(),

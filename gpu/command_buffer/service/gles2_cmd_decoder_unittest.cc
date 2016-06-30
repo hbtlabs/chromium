@@ -487,7 +487,7 @@ TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateValidArgs) {
   EXPECT_TRUE(query_manager->IsValidQuery(kNewClientId));
 }
 
-TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateDuplicateIds) {
+TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateDuplicateOrNullIds) {
   cmds::GenQueriesEXTImmediate* cmd =
       GetImmediateAs<cmds::GenQueriesEXTImmediate>();
   GLuint temp[3] = {kNewClientId, kNewClientId + 1, kNewClientId};
@@ -497,6 +497,11 @@ TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateDuplicateIds) {
   ASSERT_TRUE(query_manager != NULL);
   EXPECT_FALSE(query_manager->IsValidQuery(kNewClientId));
   EXPECT_FALSE(query_manager->IsValidQuery(kNewClientId + 1));
+  GLuint null_id[2] = {kNewClientId, 0};
+  cmd->Init(2, null_id);
+  EXPECT_EQ(error::kInvalidArguments,
+            ExecuteImmediateCmd(*cmd, sizeof(temp)));
+  EXPECT_FALSE(query_manager->IsValidQuery(kNewClientId));
 }
 
 TEST_P(GLES2DecoderTest, GenQueriesEXTImmediateInvalidArgs) {
@@ -1713,12 +1718,16 @@ class GLES2DecoderDescheduleUntilFinishedTest : public GLES2DecoderTest {
                    base::Unretained(this)));
 
     EXPECT_CALL(*gl_, FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0))
-        .Times(1)
+        .Times(2)
         .WillOnce(Return(sync_service_id_))
+        .WillOnce(Return(sync_service_id2_))
         .RetiresOnSaturation();
     EXPECT_CALL(*gl_, IsSync(sync_service_id_)).WillRepeatedly(Return(GL_TRUE));
-    EXPECT_CALL(*gl_, Flush()).RetiresOnSaturation();
+    EXPECT_CALL(*gl_, Flush()).Times(2).RetiresOnSaturation();
     EXPECT_CALL(*gl_, DeleteSync(sync_service_id_))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl_, DeleteSync(sync_service_id2_))
         .Times(1)
         .RetiresOnSaturation();
   }
@@ -1734,6 +1743,7 @@ class GLES2DecoderDescheduleUntilFinishedTest : public GLES2DecoderTest {
   int deschedule_until_finished_callback_count_ = 0;
   int reschedule_after_finished_callback_count_ = 0;
   GLsync sync_service_id_ = reinterpret_cast<GLsync>(0x15);
+  GLsync sync_service_id2_ = reinterpret_cast<GLsync>(0x15);
 };
 
 TEST_P(GLES2DecoderDescheduleUntilFinishedTest, AlreadySignalled) {
@@ -1747,6 +1757,10 @@ TEST_P(GLES2DecoderDescheduleUntilFinishedTest, AlreadySignalled) {
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(0, deschedule_until_finished_callback_count_);
   EXPECT_EQ(0, reschedule_after_finished_callback_count_);
+
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(0, deschedule_until_finished_callback_count_);
+  EXPECT_EQ(0, reschedule_after_finished_callback_count_);
 }
 
 TEST_P(GLES2DecoderDescheduleUntilFinishedTest, NotYetSignalled) {
@@ -1757,6 +1771,10 @@ TEST_P(GLES2DecoderDescheduleUntilFinishedTest, NotYetSignalled) {
 
   cmds::DescheduleUntilFinishedCHROMIUM cmd;
   cmd.Init();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(0, deschedule_until_finished_callback_count_);
+  EXPECT_EQ(0, reschedule_after_finished_callback_count_);
+
   EXPECT_EQ(error::kDeferLaterCommands, ExecuteCmd(cmd));
   EXPECT_EQ(1, deschedule_until_finished_callback_count_);
   EXPECT_EQ(0, reschedule_after_finished_callback_count_);

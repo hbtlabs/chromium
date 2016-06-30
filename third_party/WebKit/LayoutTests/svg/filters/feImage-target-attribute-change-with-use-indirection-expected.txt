@@ -1,7 +1,9 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
@@ -9,6 +11,11 @@
         {
           "object": "LayoutSVGRect rect",
           "rect": [0, 0, 110, 110],
+          "reason": "full"
+        },
+        {
+          "object": "LayoutSVGContainer use id='use'",
+          "rect": [0, 0, 100, 100],
           "reason": "full"
         },
         {
@@ -22,16 +29,33 @@
           "reason": "layoutObject insertion"
         },
         {
-          "object": "LayoutSVGContainer use id='use'",
-          "rect": [1, 0, 99, 100],
-          "reason": "incremental"
-        },
-        {
           "object": "LayoutSVGRect rect id='rect'",
           "rect": [0, 0, 1, 100],
           "reason": "layoutObject removal"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutSVGRect rect id='rect'",
+      "reason": "layoutObject removal"
+    },
+    {
+      "object": "LayoutSVGRect rect id='rect'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGContainer use id='use'",
+      "reason": "full"
+    },
+    {
+      "object": "LayoutSVGRect rect id='rect'",
+      "reason": "layoutObject insertion"
+    },
+    {
+      "object": "LayoutSVGRect rect",
+      "reason": "full"
     }
   ]
 }

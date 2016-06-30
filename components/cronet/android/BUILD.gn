@@ -8,6 +8,7 @@ import("//build/config/android/rules.gni")
 import("//build/util/version.gni")
 import("//chrome/version.gni")
 import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
 import("//url/features.gni")
 
 assert(!is_component_build, "Cronet requires static library build.")
@@ -105,6 +106,20 @@ process_version("cronet_version_header") {
   ]
 }
 
+proto_library("cronet_android_cert_proto") {
+  visibility = [ "//components/cronet/android/*" ]
+
+  sources = [
+    "//components/cronet/android/cert/proto/cert_verification.proto",
+  ]
+
+  deps = [
+    "//third_party/protobuf:protobuf_lite",
+  ]
+
+  extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+}
+
 # Variables:
 #   defines: Extra defines.
 #   deps: Extra dependencies.
@@ -114,6 +129,7 @@ template("cronet_static_tmpl") {
 
     deps = [
       ":chromium_url_request_java",
+      ":cronet_android_cert_proto",
       ":cronet_jni_headers",
       ":cronet_version_header",
       "//base",
@@ -123,6 +139,8 @@ template("cronet_static_tmpl") {
       "//url:url_features",
     ]
     sources = [
+      "//components/cronet/android/cert/cert_verifier_cache_serializer.cc",
+      "//components/cronet/android/cert/cert_verifier_cache_serializer.h",
       "//components/cronet/android/chromium_url_request.cc",
       "//components/cronet/android/chromium_url_request.h",
       "//components/cronet/android/chromium_url_request_context.cc",
@@ -330,10 +348,9 @@ android_library("cronet_sample_apk_java") {
 android_apk("cronet_sample_apk") {
   apk_name = "CronetSample"
   android_manifest = "sample/AndroidManifest.xml"
-  native_libs = [ "libcronet.so" ]
+  shared_libraries = [ ":cronet" ]
 
   deps = [
-    ":cronet",
     ":cronet_sample_apk_java",
     ":cronet_sample_apk_resources",
     "//base:base_java",
@@ -341,7 +358,7 @@ android_apk("cronet_sample_apk") {
   ]
 
   run_findbugs_override = true
-  if (!is_debug) {
+  if (!is_java_debug) {
     proguard_enabled = true
     proguard_configs = [
       "proguard.cfg",
@@ -380,7 +397,7 @@ instrumentation_test_apk("cronet_sample_test_apk") {
   additional_apks = [ "//net/android:net_test_support_apk" ]
 
   run_findbugs_override = true
-  proguard_enabled = !is_debug
+  proguard_enabled = !is_java_debug
 }
 
 generate_jni("cronet_tests_jni_headers") {
@@ -533,14 +550,13 @@ android_apk("cronet_test_apk") {
   testonly = true
   apk_name = "CronetTest"
   android_manifest = "test/AndroidManifest.xml"
-  native_libs = [ "libcronet_tests.so" ]
+  shared_libraries = [ ":cronet_tests" ]
   loadable_modules = [ "$root_out_dir/libnetty-tcnative.so" ]
 
   deps = [
     ":cronet_test_apk_assets",
     ":cronet_test_apk_java",
     ":cronet_test_apk_resources",
-    ":cronet_tests",
     "//base:base_java",
     "//third_party/netty-tcnative:netty-tcnative_all",
   ]
@@ -573,6 +589,8 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/TestBidirectionalStreamCallback.java",
     "test/javatests/src/org/chromium/net/TestDrivenDataProvider.java",
     "test/javatests/src/org/chromium/net/TestHttpUrlRequestListener.java",
+    "test/javatests/src/org/chromium/net/TestNetworkQualityRttListener.java",
+    "test/javatests/src/org/chromium/net/TestNetworkQualityThroughputListener.java",
     "test/javatests/src/org/chromium/net/TestUploadDataProvider.java",
     "test/javatests/src/org/chromium/net/TestUrlRequestCallback.java",
     "test/javatests/src/org/chromium/net/UploadDataProvidersTest.java",
@@ -584,6 +602,7 @@ android_library("cronet_javatests") {
     "test/javatests/src/org/chromium/net/urlconnection/CronetHttpURLStreamHandlerTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/CronetURLStreamHandlerFactoryTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/MessageLoopTest.java",
+    "test/javatests/src/org/chromium/net/urlconnection/QuicUploadTest.java",
     "test/javatests/src/org/chromium/net/urlconnection/TestUtil.java",
     "test/javatests/src/org/chromium/net/UrlResponseInfoTest.java",
   ]
@@ -651,12 +670,11 @@ android_apk("cronet_perf_test_apk") {
   testonly = true
   apk_name = "CronetPerfTest"
   android_manifest = "test/javaperftests/AndroidManifest.xml"
-  native_libs = [ "libcronet_tests.so" ]
+  shared_libraries = [ ":cronet_tests" ]
 
   deps = [
     ":cronet_perf_test_apk_java",
     ":cronet_test_apk_java",
-    ":cronet_tests",
     "//base:base_java",
   ]
 
@@ -670,17 +688,20 @@ android_apk("cronet_perf_test_apk") {
 
 test("cronet_unittests") {
   sources = [
+    "//components/cronet/android/cert/cert_verifier_cache_serializer_unittest.cc",
     "//components/cronet/histogram_manager_unittest.cc",
     "//components/cronet/run_all_unittests.cc",
     "//components/cronet/url_request_context_config_unittest.cc",
   ]
 
   deps = [
+    ":cronet_android_cert_proto",
     ":cronet_static",
     "//base",
     "//base/test:test_support",
     "//components/metrics",
     "//net",
+    "//net:test_support",
     "//testing/gtest",
   ]
 

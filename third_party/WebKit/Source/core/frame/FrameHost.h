@@ -35,14 +35,12 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/AtomicString.h"
+#include <memory>
 
 namespace blink {
 
 class ChromeClient;
-class ConsoleMessageStorage;
 class CustomElementReactionStack;
 class Deprecation;
 class EventHandlerRegistry;
@@ -115,9 +113,6 @@ public:
     const AtomicString& overrideEncoding() const { return m_overrideEncoding; }
     void setOverrideEncoding(const AtomicString& encoding) { m_overrideEncoding = encoding; }
 
-    ConsoleMessageStorage& consoleMessageStorage();
-    const ConsoleMessageStorage& consoleMessageStorage() const;
-
     CustomElementReactionStack& customElementReactionStack();
     const CustomElementReactionStack& customElementReactionStack() const;
 
@@ -140,11 +135,10 @@ private:
 
     const Member<Page> m_page;
     const Member<TopControls> m_topControls;
-    const OwnPtr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
+    const std::unique_ptr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
     const Member<VisualViewport> m_visualViewport;
     const Member<OverscrollController> m_overscrollController;
     const Member<EventHandlerRegistry> m_eventHandlerRegistry;
-    const Member<ConsoleMessageStorage> m_consoleMessageStorage;
     const Member<CustomElementReactionStack> m_customElementReactionStack;
 
     AtomicString m_overrideEncoding;

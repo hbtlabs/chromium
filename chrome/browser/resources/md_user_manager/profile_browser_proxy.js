@@ -86,6 +86,13 @@ cr.define('signin', function() {
     },
 
     /**
+     * Cancels loading supervised users.
+     */
+    cancelLoadingSupervisedUsers: function() {
+      assertNotReached();
+    },
+
+    /**
      * Initializes the UserManager
      * @param {string} locationHash
      */
@@ -124,6 +131,14 @@ cr.define('signin', function() {
      *     profiles are locked.
      */
     areAllProfilesLocked: function() {
+      assertNotReached();
+    },
+
+    /**
+     * Authenticates the custodian profile with the given email address.
+     * @param {string} emailAddress Email address of the custodian profile.
+     */
+    authenticateCustodian: function(emailAddress) {
       assertNotReached();
     }
   };
@@ -173,6 +188,11 @@ cr.define('signin', function() {
     },
 
     /** @override */
+    cancelLoadingSupervisedUsers: function() {
+      chrome.send('cancelLoadingSupervisedUsers');
+    },
+
+    /** @override */
     initializeUserManager: function(locationHash) {
       chrome.send('userManagerInitialize', [locationHash]);
     },
@@ -195,6 +215,11 @@ cr.define('signin', function() {
     /** @override */
     areAllProfilesLocked: function() {
       return cr.sendWithPromise('areAllProfilesLocked');
+    },
+
+    /** @override */
+    authenticateCustodian: function(emailAddress) {
+      chrome.send('authenticateCustodian', [emailAddress]);
     }
   };
 

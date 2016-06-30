@@ -12,6 +12,7 @@
 #include "mojo/public/cpp/bindings/tests/rect_blink.h"
 #include "mojo/public/cpp/bindings/tests/rect_chromium.h"
 #include "mojo/public/cpp/bindings/tests/struct_with_traits_impl.h"
+#include "mojo/public/cpp/bindings/tests/struct_with_traits_impl_traits.h"
 #include "mojo/public/cpp/bindings/tests/variant_test_util.h"
 #include "mojo/public/interfaces/bindings/tests/struct_with_traits.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/test_native_types.mojom-blink.h"
@@ -139,6 +140,17 @@ class StructTraitsTest : public testing::Test,
     callback.Run(std::move(s));
   }
 
+  void EchoEnumWithTraits(EnumWithTraitsImpl e,
+                          const EchoEnumWithTraitsCallback& callback) override {
+    callback.Run(e);
+  }
+
+  void EchoStructWithTraitsForUniquePtrTest(
+      std::unique_ptr<int> e,
+      const EchoStructWithTraitsForUniquePtrTestCallback& callback) override {
+    callback.Run(std::move(e));
+  }
+
   base::MessageLoop loop_;
 
   ChromiumRectServiceImpl chromium_service_;
@@ -214,8 +226,24 @@ TEST_F(StructTraitsTest, BlinkProxyToChromiumService) {
   }
 }
 
+void ExpectStructWithTraits(const StructWithTraitsImpl& expected,
+                            const base::Closure& closure,
+                            const StructWithTraitsImpl& passed) {
+  EXPECT_EQ(expected.get_enum(), passed.get_enum());
+  EXPECT_EQ(expected.get_bool(), passed.get_bool());
+  EXPECT_EQ(expected.get_uint32(), passed.get_uint32());
+  EXPECT_EQ(expected.get_uint64(), passed.get_uint64());
+  EXPECT_EQ(expected.get_string(), passed.get_string());
+  EXPECT_EQ(expected.get_string_array(), passed.get_string_array());
+  EXPECT_EQ(expected.get_struct(), passed.get_struct());
+  EXPECT_EQ(expected.get_struct_array(), passed.get_struct_array());
+  EXPECT_EQ(expected.get_struct_map(), passed.get_struct_map());
+  closure.Run();
+}
+
 TEST_F(StructTraitsTest, EchoStructWithTraits) {
   StructWithTraitsImpl input;
+  input.set_enum(EnumWithTraitsImpl::CUSTOM_VALUE_1);
   input.set_bool(true);
   input.set_uint32(7);
   input.set_uint64(42);
@@ -231,17 +259,9 @@ TEST_F(StructTraitsTest, EchoStructWithTraits) {
   base::RunLoop loop;
   TraitsTestServicePtr proxy = GetTraitsTestProxy();
 
-  proxy->EchoStructWithTraits(input, [&](const StructWithTraitsImpl& passed) {
-    EXPECT_EQ(input.get_bool(), passed.get_bool());
-    EXPECT_EQ(input.get_uint32(), passed.get_uint32());
-    EXPECT_EQ(input.get_uint64(), passed.get_uint64());
-    EXPECT_EQ(input.get_string(), passed.get_string());
-    EXPECT_EQ(input.get_string_array(), passed.get_string_array());
-    EXPECT_EQ(input.get_struct(), passed.get_struct());
-    EXPECT_EQ(input.get_struct_array(), passed.get_struct_array());
-    EXPECT_EQ(input.get_struct_map(), passed.get_struct_map());
-    loop.Quit();
-  });
+  proxy->EchoStructWithTraits(
+      input,
+      base::Bind(&ExpectStructWithTraits, input, loop.QuitClosure()));
   loop.Run();
 }
 
@@ -254,6 +274,14 @@ TEST_F(StructTraitsTest, CloneStructWithTraitsContainer) {
   EXPECT_EQ(42u, cloned_container->f_struct.get_uint64());
 }
 
+void CaptureMessagePipe(ScopedMessagePipeHandle* storage,
+                        const base::Closure& closure,
+                        PassByValueStructWithTraitsImpl passed) {
+  storage->reset(MessagePipeHandle(
+      passed.get_mutable_handle().release().value()));
+  closure.Run();
+}
+
 TEST_F(StructTraitsTest, EchoPassByValueStructWithTraits) {
   MessagePipe mp;
   PassByValueStructWithTraitsImpl input;
@@ -264,11 +292,8 @@ TEST_F(StructTraitsTest, EchoPassByValueStructWithTraits) {
 
   ScopedMessagePipeHandle received;
   proxy->EchoPassByValueStructWithTraits(
-      std::move(input), [&](PassByValueStructWithTraitsImpl passed) {
-        received.reset(
-            MessagePipeHandle(passed.get_mutable_handle().release().value()));
-        loop.Quit();
-      });
+      std::move(input),
+      base::Bind(&CaptureMessagePipe, &received, loop.QuitClosure()));
   loop.Run();
 
   ASSERT_TRUE(received.is_valid());
@@ -290,6 +315,71 @@ TEST_F(StructTraitsTest, EchoPassByValueStructWithTraits) {
                            nullptr, MOJO_READ_MESSAGE_FLAG_NONE));
   EXPECT_EQ(kHelloSize, buffer_size);
   EXPECT_STREQ(kHello, buffer);
+}
+
+void ExpectEnumWithTraits(EnumWithTraitsImpl expected_value,
+                          const base::Closure& closure,
+                          EnumWithTraitsImpl value) {
+  EXPECT_EQ(expected_value, value);
+  closure.Run();
+}
+
+TEST_F(StructTraitsTest, EchoEnumWithTraits) {
+  base::RunLoop loop;
+  TraitsTestServicePtr proxy = GetTraitsTestProxy();
+
+  proxy->EchoEnumWithTraits(
+      EnumWithTraitsImpl::CUSTOM_VALUE_1,
+      base::Bind(&ExpectEnumWithTraits, EnumWithTraitsImpl::CUSTOM_VALUE_1,
+                 loop.QuitClosure()));
+  loop.Run();
+}
+
+TEST_F(StructTraitsTest, SerializeStructWithTraits) {
+  StructWithTraitsImpl input;
+  input.set_enum(EnumWithTraitsImpl::CUSTOM_VALUE_1);
+  input.set_bool(true);
+  input.set_uint32(7);
+  input.set_uint64(42);
+  input.set_string("hello world!");
+  input.get_mutable_string_array().assign({"hello", "world!"});
+  input.get_mutable_struct().value = 42;
+  input.get_mutable_struct_array().resize(2);
+  input.get_mutable_struct_array()[0].value = 1;
+  input.get_mutable_struct_array()[1].value = 2;
+  input.get_mutable_struct_map()["hello"] = NestedStructWithTraitsImpl(1024);
+  input.get_mutable_struct_map()["world"] = NestedStructWithTraitsImpl(2048);
+
+  mojo::Array<uint8_t> data = StructWithTraits::Serialize(&input);
+  StructWithTraitsImpl output;
+  ASSERT_TRUE(StructWithTraits::Deserialize(std::move(data), &output));
+
+  EXPECT_EQ(input.get_enum(), output.get_enum());
+  EXPECT_EQ(input.get_bool(), output.get_bool());
+  EXPECT_EQ(input.get_uint32(), output.get_uint32());
+  EXPECT_EQ(input.get_uint64(), output.get_uint64());
+  EXPECT_EQ(input.get_string(), output.get_string());
+  EXPECT_EQ(input.get_string_array(), output.get_string_array());
+  EXPECT_EQ(input.get_struct(), output.get_struct());
+  EXPECT_EQ(input.get_struct_array(), output.get_struct_array());
+  EXPECT_EQ(input.get_struct_map(), output.get_struct_map());
+}
+
+void ExpectUniquePtr(int expected,
+                     const base::Closure& closure,
+                     std::unique_ptr<int> value) {
+  EXPECT_EQ(expected, *value);
+  closure.Run();
+}
+
+TEST_F(StructTraitsTest, TypemapUniquePtr) {
+  base::RunLoop loop;
+  TraitsTestServicePtr proxy = GetTraitsTestProxy();
+
+  proxy->EchoStructWithTraitsForUniquePtrTest(
+      base::MakeUnique<int>(12345),
+      base::Bind(&ExpectUniquePtr, 12345, loop.QuitClosure()));
+  loop.Run();
 }
 
 }  // namespace test

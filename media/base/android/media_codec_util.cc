@@ -66,12 +66,14 @@ static bool IsSupportedAndroidMimeType(const std::string& mime_type) {
 }
 
 static std::string GetDefaultCodecName(const std::string& mime_type,
-                                       MediaCodecDirection direction) {
+                                       MediaCodecDirection direction,
+                                       bool require_software_codec) {
   DCHECK(MediaCodecUtil::IsMediaCodecAvailable());
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
   ScopedJavaLocalRef<jstring> j_codec_name =
-      Java_MediaCodecUtil_getDefaultCodecName(env, j_mime.obj(), direction);
+      Java_MediaCodecUtil_getDefaultCodecName(env, j_mime.obj(), direction,
+                                              require_software_codec);
   return ConvertJavaStringToUTF8(env, j_codec_name.obj());
 }
 
@@ -89,11 +91,13 @@ bool MediaCodecUtil::IsMediaCodecAvailable() {
   // MediaCodec is only available on JB and greater.
   if (base::android::BuildInfo::GetInstance()->sdk_int() < 16)
     return false;
+
   // Blacklist some devices on Jellybean as for MediaCodec support is buggy.
-  // http://crbug.com/365494.
-  if (base::android::BuildInfo::GetInstance()->sdk_int() == 16) {
+  // http://crbug.com/365494, http://crbug.com/615872
+  if (base::android::BuildInfo::GetInstance()->sdk_int() <= 19) {
     std::string model(base::android::BuildInfo::GetInstance()->model());
-    return model != "GT-I9100" && model != "GT-I9300" && model != "GT-N7000";
+    return model != "GT-I9100" && model != "GT-I9300" && model != "GT-N7000" &&
+           model != "GT-N7100";
   }
   return true;
 }
@@ -145,7 +149,8 @@ bool MediaCodecUtil::IsKnownUnaccelerated(const std::string& android_mime_type,
   if (!IsMediaCodecAvailable())
     return true;
 
-  std::string codec_name = GetDefaultCodecName(android_mime_type, direction);
+  std::string codec_name =
+      GetDefaultCodecName(android_mime_type, direction, false);
   DVLOG(1) << __FUNCTION__ << "Default codec for " << android_mime_type << " : "
            << codec_name << ", direction: " << direction;
   if (!codec_name.size())
@@ -176,23 +181,15 @@ bool MediaCodecUtil::IsKnownUnaccelerated(const std::string& android_mime_type,
 
 // static
 bool MediaCodecUtil::IsHLSPath(const GURL& url) {
-  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile())
-    return false;
-
-  std::string path = url.path();
-  return base::EndsWith(path, ".m3u8", base::CompareCase::INSENSITIVE_ASCII);
+  return (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile()) &&
+         base::EndsWith(url.path(), ".m3u8",
+                        base::CompareCase::INSENSITIVE_ASCII);
 }
 
 // static
 bool MediaCodecUtil::IsHLSURL(const GURL& url) {
-  if (!url.SchemeIsHTTPOrHTTPS() && !url.SchemeIsFile())
-    return false;
-
-  std::string spec = url.spec();
-  if (base::EndsWith(spec, ".m3u8", base::CompareCase::INSENSITIVE_ASCII))
-    return true;
-
-  return (spec.find("m3u8") != std::string::npos);
+  return (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile()) &&
+         url.spec().find("m3u8") != std::string::npos;
 }
 
 // static

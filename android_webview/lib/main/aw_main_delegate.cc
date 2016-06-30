@@ -121,15 +121,11 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     // Browser process (no type specified).
 
     base::android::RegisterApkAssetWithGlobalDescriptors(
-        kV8NativesDataDescriptor32,
-        gin::V8Initializer::GetNativesFilePath(true).AsUTF8Unsafe());
+        kV8NativesDataDescriptor,
+        gin::V8Initializer::GetNativesFilePath().AsUTF8Unsafe());
     base::android::RegisterApkAssetWithGlobalDescriptors(
         kV8SnapshotDataDescriptor32,
         gin::V8Initializer::GetSnapshotFilePath(true).AsUTF8Unsafe());
-
-    base::android::RegisterApkAssetWithGlobalDescriptors(
-        kV8NativesDataDescriptor64,
-        gin::V8Initializer::GetNativesFilePath(false).AsUTF8Unsafe());
     base::android::RegisterApkAssetWithGlobalDescriptors(
         kV8SnapshotDataDescriptor64,
         gin::V8Initializer::GetSnapshotFilePath(false).AsUTF8Unsafe());
@@ -140,10 +136,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     cl->AppendSwitchASCII(switches::kRendererProcessLimit, "1");
     cl->AppendSwitch(switches::kDisableRendererBackgrounding);
   }
-
-  // TODO(liberato, watk): Reenable after resolving fullscreen test failures.
-  // See http://crbug.com/597495
-  cl->AppendSwitch(switches::kDisableUnifiedMediaPipeline);
 
   return false;
 }

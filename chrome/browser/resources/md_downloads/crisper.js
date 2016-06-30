@@ -1865,7 +1865,7 @@ function quoteString(str) {
       return transformKey(keyEvent.key, noSpecialChars) ||
         transformKeyIdentifier(keyEvent.keyIdentifier) ||
         transformKeyCode(keyEvent.keyCode) ||
-        transformKey(keyEvent.detail.key, noSpecialChars) || '';
+        transformKey(keyEvent.detail ? keyEvent.detail.key : keyEvent.detail, noSpecialChars) || '';
     }
 
     function keyComboMatchesEvent(keyCombo, event) {
@@ -1933,7 +1933,9 @@ function quoteString(str) {
     Polymer.IronA11yKeysBehavior = {
       properties: {
         /**
-         * The HTMLElement that will be firing relevant KeyboardEvents.
+         * The EventTarget that will be firing relevant KeyboardEvents. Set it to
+         * `null` to disable the listeners.
+         * @type {?EventTarget}
          */
         keyEventTarget: {
           type: Object,
@@ -2079,6 +2081,9 @@ function quoteString(str) {
       },
 
       _listenKeyEventListeners: function() {
+        if (!this.keyEventTarget) {
+          return;
+        }
         Object.keys(this._keyBindings).forEach(function(eventName) {
           var keyBindings = this._keyBindings[eventName];
           var boundKeyHandler = this._onKeyBindingEvent.bind(this, keyBindings);
@@ -2368,6 +2373,7 @@ function quoteString(str) {
   var DEFAULT_PHYSICAL_COUNT = 3;
   var HIDDEN_Y = '-10000px';
   var DEFAULT_GRID_SIZE = 200;
+  var SECRET_TABINDEX = -100;
 
   Polymer({
 
@@ -2518,7 +2524,7 @@ function quoteString(str) {
     _physicalSize: 0,
 
     /**
-     * The average `F` of the tiles observed till now.
+     * The average `offsetHeight` of the tiles observed till now.
      */
     _physicalAverage: 0,
 
@@ -2786,7 +2792,6 @@ function quoteString(str) {
             if (physicalOffset > this._scrollPosition) {
               return this.grid ? vidx - (vidx % this._itemsPerRow) : vidx;
             }
-
             // Handle a partially rendered final row in grid mode
             if (this.grid && this._virtualCount - 1 === vidx) {
               return vidx - (vidx % this._itemsPerRow);
@@ -2805,21 +2810,17 @@ function quoteString(str) {
       if (this._lastVisibleIndexVal === null) {
         if (this.grid) {
           var lastIndex = this.firstVisibleIndex + this._estRowsInView * this._itemsPerRow - 1;
-          this._lastVisibleIndexVal = lastIndex > this._virtualCount ? this._virtualCount : lastIndex;
+          this._lastVisibleIndexVal = Math.min(this._virtualCount, lastIndex);
         } else {
           var physicalOffset = this._physicalTop;
-
           this._iterateItems(function(pidx, vidx) {
-            physicalOffset += this._getPhysicalSizeIncrement(pidx);
-
-            if(physicalOffset <= this._scrollBottom) {
-              if (this.grid) {
-                var lastIndex = vidx - vidx % this._itemsPerRow + this._itemsPerRow - 1;
-                this._lastVisibleIndexVal = lastIndex > this._virtualCount ? this._virtualCount : lastIndex;
-              } else {
-                this._lastVisibleIndexVal = vidx;
-              }
+            if (physicalOffset < this._scrollBottom) {
+              this._lastVisibleIndexVal = vidx;
+            } else {
+              // Break _iterateItems
+              return true;
             }
+            physicalOffset += this._getPhysicalSizeIncrement(pidx);
           });
         }
       }
@@ -3194,30 +3195,33 @@ function quoteString(str) {
       if (!this._physicalIndexForKey) {
         return;
       }
-      var inst;
       var dot = path.indexOf('.');
       var key = path.substring(0, dot < 0 ? path.length : dot);
       var idx = this._physicalIndexForKey[key];
-      var el = this._physicalItems[idx];
+      var offscreenItem = this._offscreenFocusedItem;
+      var el = offscreenItem && offscreenItem._templateInstance.__key__ === key ?
+          offscreenItem : this._physicalItems[idx];
 
-
-      if (idx === this._focusedIndex && this._offscreenFocusedItem) {
-        el = this._offscreenFocusedItem;
-      }
-      if (!el) {
-        return;
-      }
-
-      inst = el._templateInstance;
-
-      if (inst.__key__ !== key) {
+      if (!el || el._templateInstance.__key__ !== key) {
         return;
       }
       if (dot >= 0) {
         path = this.as + '.' + path.substring(dot+1);
-        inst.notifyPath(path, value, true);
+        el._templateInstance.notifyPath(path, value, true);
       } else {
-        inst[this.as] = value;
+        // Update selection if needed
+        var currentItem = el._templateInstance[this.as];
+        if (Array.isArray(this.selectedItems)) {
+          for (var i = 0; i < this.selectedItems.length; i++) {
+            if (this.selectedItems[i] === currentItem) {
+              this.set('selectedItems.' + i, value);
+              break;
+            }
+          }
+        } else if (this.selectedItem === currentItem) {
+          this.set('selectedItem', value);
+        }
+        el._templateInstance[this.as] = value;
       }
     },
 
@@ -3233,10 +3237,11 @@ function quoteString(str) {
         this._virtualCount = this.items ? this.items.length : 0;
         this._collection = this.items ? Polymer.Collection.get(this.items) : null;
         this._physicalIndexForKey = {};
+        this._firstVisibleIndexVal = null;
+        this._lastVisibleIndexVal = null;
 
         this._resetScrollPosition(0);
         this._removeFocusedItem();
-
         // create the initial physical items
         if (!this._physicalItems) {
           this._physicalCount = Math.max(1, Math.min(DEFAULT_PHYSICAL_COUNT, this._virtualCount));
@@ -3247,6 +3252,7 @@ function quoteString(str) {
         this._physicalStart = 0;
 
       } else if (change.path === 'items.splices') {
+
         this._adjustVirtualIndex(change.value.indexSplices);
         this._virtualCount = this.items ? this.items.length : 0;
 
@@ -3404,9 +3410,9 @@ function quoteString(str) {
     },
 
     _updateGridMetrics: function() {
-      this._viewportWidth = this._scrollTargetWidth;
+      this._viewportWidth = this.$.items.offsetWidth;
       // Set item width to the value of the _physicalItems offsetWidth
-      this._itemWidth = this._physicalCount > 0 ? this._physicalItems[0].offsetWidth : DEFAULT_GRID_SIZE;
+      this._itemWidth = this._physicalCount > 0 ? this._physicalItems[0].getBoundingClientRect().width : DEFAULT_GRID_SIZE;
       // Set row height to the value of the _physicalItems offsetHeight
       this._rowHeight = this._physicalCount > 0 ? this._physicalItems[0].offsetHeight : DEFAULT_GRID_SIZE;
       // If in grid mode compute how many items with exist in each row
@@ -3479,7 +3485,7 @@ function quoteString(str) {
       if (deltaHeight) {
         this._physicalTop = this._physicalTop - deltaHeight;
         // juking scroll position during interial scrolling on iOS is no bueno
-        if (!IOS_TOUCH_SCROLLING) {
+        if (!IOS_TOUCH_SCROLLING && this._physicalTop !== 0) {
           this._resetScrollPosition(this._scrollTop - deltaHeight);
         }
       }
@@ -3518,15 +3524,27 @@ function quoteString(str) {
         this._scrollHeight = this._estScrollHeight;
       }
     },
+
     /**
      * Scroll to a specific item in the virtual list regardless
+     * of the physical items in the DOM tree.
+     *
+     * @method scrollToItem
+     * @param {(Object)} item The item to be scrolled to
+     */
+    scrollToItem: function(item){
+      return this.scrollToIndex(this.items.indexOf(item));
+    },
+
+    /**
+     * Scroll to a specific index in the virtual list regardless
      * of the physical items in the DOM tree.
      *
      * @method scrollToIndex
      * @param {number} idx The index of the item
      */
     scrollToIndex: function(idx) {
-      if (typeof idx !== 'number') {
+      if (typeof idx !== 'number' || idx < 0 || idx > this.items.length - 1) {
         return;
       }
 
@@ -3721,12 +3739,32 @@ function quoteString(str) {
      * Select an item from an event object.
      */
     _selectionHandler: function(e) {
-      if (this.selectionEnabled) {
-        var model = this.modelForElement(e.target);
-        if (model) {
-          this.toggleSelectionForItem(model[this.as]);
-        }
+      var model = this.modelForElement(e.target);
+      if (!model) {
+        return;
       }
+      var modelTabIndex, activeElTabIndex;
+      var target = Polymer.dom(e).path[0];
+      var activeEl = Polymer.dom(this.domHost ? this.domHost.root : document).activeElement;
+      var physicalItem = this._physicalItems[this._getPhysicalIndex(model[this.indexAs])];
+      // Safari does not focus certain form controls via mouse
+      // https://bugs.webkit.org/show_bug.cgi?id=118043
+      if (target.localName === 'input' ||
+          target.localName === 'button' ||
+          target.localName === 'select') {
+        return;
+      }
+      // Set a temporary tabindex
+      modelTabIndex = model.tabIndex;
+      model.tabIndex = SECRET_TABINDEX;
+      activeElTabIndex = activeEl ? activeEl.tabIndex : -1;
+      model.tabIndex = modelTabIndex;
+      // Only select the item if the tap wasn't on a focusable child
+      // or the element bound to `tabIndex`
+      if (activeEl && physicalItem.contains(activeEl) && activeElTabIndex !== SECRET_TABINDEX) {
+        return;
+      }
+      this.toggleSelectionForItem(model[this.as]);
     },
 
     _multiSelectionChanged: function(multiSelection) {
@@ -3799,19 +3837,18 @@ function quoteString(str) {
       }
 
       var physicalItem = this._physicalItems[this._getPhysicalIndex(idx)];
-      var SECRET = ~(Math.random() * 100);
       var model = physicalItem._templateInstance;
       var focusable;
 
       // set a secret tab index
-      model.tabIndex = SECRET;
+      model.tabIndex = SECRET_TABINDEX;
       // check if focusable element is the physical item
-      if (physicalItem.tabIndex === SECRET) {
+      if (physicalItem.tabIndex === SECRET_TABINDEX) {
        focusable = physicalItem;
       }
       // search for the element which tabindex is bound to the secret tab index
       if (!focusable) {
-        focusable = Polymer.dom(physicalItem).querySelector('[tabindex="' + SECRET + '"]');
+        focusable = Polymer.dom(physicalItem).querySelector('[tabindex="' + SECRET_TABINDEX + '"]');
       }
       // restore the tab index
       model.tabIndex = 0;
@@ -5288,16 +5325,7 @@ Polymer({
       },
 
       get target () {
-        var ownerRoot = Polymer.dom(this).getOwnerRoot();
-        var target;
-
-        if (this.parentNode.nodeType == 11) { // DOCUMENT_FRAGMENT_NODE
-          target = ownerRoot.host;
-        } else {
-          target = this.parentNode;
-        }
-
-        return target;
+        return this.keyEventTarget;
       },
 
       keyBindings: {
@@ -5310,14 +5338,20 @@ Polymer({
         // Set up a11yKeysBehavior to listen to key events on the target,
         // so that space and enter activate the ripple even if the target doesn't
         // handle key events. The key handlers deal with `noink` themselves.
-        this.keyEventTarget = this.target;
-        this.listen(this.target, 'up', 'uiUpAction');
-        this.listen(this.target, 'down', 'uiDownAction');
+        if (this.parentNode.nodeType == 11) { // DOCUMENT_FRAGMENT_NODE
+          this.keyEventTarget = Polymer.dom(this).getOwnerRoot().host;
+        } else {
+          this.keyEventTarget = this.parentNode;
+        }
+        var keyEventTarget = /** @type {!EventTarget} */ (this.keyEventTarget);
+        this.listen(keyEventTarget, 'up', 'uiUpAction');
+        this.listen(keyEventTarget, 'down', 'uiDownAction');
       },
 
       detached: function() {
-        this.unlisten(this.target, 'up', 'uiUpAction');
-        this.unlisten(this.target, 'down', 'uiDownAction');
+        this.unlisten(this.keyEventTarget, 'up', 'uiUpAction');
+        this.unlisten(this.keyEventTarget, 'down', 'uiDownAction');
+        this.keyEventTarget = null;
       },
 
       get shouldKeepAnimating () {
@@ -5365,6 +5399,7 @@ Polymer({
         ripple.downAction(event);
 
         if (!this._animating) {
+          this._animating = true;
           this.animate();
         }
       },
@@ -5394,6 +5429,7 @@ Polymer({
           ripple.upAction(event);
         });
 
+        this._animating = true;
         this.animate();
       },
 
@@ -5432,10 +5468,11 @@ Polymer({
       },
 
       animate: function() {
+        if (!this._animating) {
+          return;
+        }
         var index;
         var ripple;
-
-        this._animating = true;
 
         for (index = 0; index < this.ripples.length; ++index) {
           ripple = this.ripples[index];
@@ -5481,6 +5518,15 @@ Polymer({
           this.upAction();
         }
       }
+
+      /**
+      Fired when the animation finishes.
+      This is useful if you want to wait until
+      the ripple animation finishes to perform some action.
+
+      @event transitionend
+      @param {{node: Object}} detail Contains the animated node.
+      */
     });
   })();
 /**
@@ -6233,7 +6279,7 @@ cr.define('downloads', function() {
       // TODO(dbeam): this gets called way more when I observe data.by_ext_id
       // and data.by_ext_name directly. Why?
       'observeControlledBy_(controlledBy_)',
-      'observeIsDangerous_(isDangerous_, data.file_path)',
+      'observeIsDangerous_(isDangerous_, data)',
     ],
 
     ready: function() {
@@ -6400,7 +6446,13 @@ cr.define('downloads', function() {
 
     /** @private */
     observeIsDangerous_: function() {
-      if (this.data && !this.isDangerous_) {
+      if (!this.data)
+        return;
+
+      if (this.isDangerous_) {
+        this.$.url.removeAttribute('href');
+      } else {
+        this.$.url.href = assert(this.data.url);
         var filePath = encodeURIComponent(this.data.file_path);
         var scaleFactor = '?scale=' + window.devicePixelRatio + 'x';
         this.$['file-icon'].src = 'chrome://fileicon/' + filePath + scaleFactor;
@@ -7657,6 +7709,7 @@ Use `noOverlap` to position the element around another element without overlappi
 
     /**
      * Memoize information needed to position and size the target element.
+     * @suppress {deprecated}
      */
     _discoverInfo: function() {
       if (this._fitInfo) {
@@ -8426,6 +8479,7 @@ Use `noOverlap` to position the element around another element without overlappi
      * Returns the deepest overlay in the path.
      * @param {Array<Element>=} path
      * @return {Element|undefined}
+     * @suppress {missingProperties}
      * @private
      */
     _overlayInPath: function(path) {
@@ -8483,12 +8537,11 @@ Use `noOverlap` to position the element around another element without overlappi
      * @param {!Element} overlay1
      * @param {!Element} overlay2
      * @return {boolean}
+     * @suppress {missingProperties}
      * @private
      */
     _shouldBeBehindOverlay: function(overlay1, overlay2) {
-      var o1 = /** @type {?} */ (overlay1);
-      var o2 = /** @type {?} */ (overlay2);
-      return !o1.alwaysOnTop && o2.alwaysOnTop;
+      return !overlay1.alwaysOnTop && overlay2.alwaysOnTop;
     }
   };
 
@@ -10337,16 +10390,6 @@ Polymer({
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @interface */
-var SearchFieldDelegate = function() {};
-
-SearchFieldDelegate.prototype = {
-  /**
-   * @param {string} value
-   */
-  onSearchTermSearch: assertNotReached,
-};
-
 /**
  * Implements an incremental search field which can be shown and hidden.
  * Canonical implementation is <cr-search-field>.
@@ -10372,7 +10415,11 @@ var CrSearchFieldBehavior = {
       reflectToAttribute: true
     },
 
-    hasSearchText: Boolean,
+    /** @private */
+    lastValue_: {
+      type: String,
+      value: '',
+    },
   },
 
   /**
@@ -10383,19 +10430,14 @@ var CrSearchFieldBehavior = {
   },
 
   /**
-   * Sets the value of the search field, if it exists.
+   * Sets the value of the search field.
    * @param {string} value
    */
   setValue: function(value) {
     // Use bindValue when setting the input value so that changes propagate
     // correctly.
     this.$.searchInput.bindValue = value;
-    this.hasSearchText = value != '';
-  },
-
-  /** @param {SearchFieldDelegate} delegate */
-  setDelegate: function(delegate) {
-    this.delegate_ = delegate;
+    this.onValueChanged_(value);
   },
 
   showAndFocus: function() {
@@ -10408,15 +10450,25 @@ var CrSearchFieldBehavior = {
     this.$.searchInput.focus();
   },
 
-  /** @private */
-  onSearchTermSearch_: function() {
-    this.hasSearchText = this.getValue() != '';
-    if (this.delegate_)
-      this.delegate_.onSearchTermSearch(this.getValue());
+  onSearchTermSearch: function() {
+    this.onValueChanged_(this.getValue());
   },
 
-  /** @private */
-  onSearchTermKeydown_: function(e) {
+  /**
+   * Updates the internal state of the search field based on a change that has
+   * already happened.
+   * @param {string} newValue
+   * @private
+   */
+  onValueChanged_: function(newValue) {
+    if (newValue == this.lastValue_)
+      return;
+
+    this.fire('search-changed', newValue);
+    this.lastValue_ = newValue;
+  },
+
+  onSearchTermKeydown: function(e) {
     if (e.key == 'Escape')
       this.showingSearch = false;
   },
@@ -10430,7 +10482,6 @@ var CrSearchFieldBehavior = {
 
     this.setValue('');
     this.$.searchInput.blur();
-    this.onSearchTermSearch_();
   },
 
   /** @private */
@@ -11218,10 +11269,6 @@ cr.define('downloads', function() {
     attached: function() {
       // isRTL() only works after i18n_template.js runs to set <html dir>.
       this.overflowAlign_ = isRTL() ? 'left' : 'right';
-
-      /** @private {!SearchFieldDelegate} */
-      this.searchFieldDelegate_ = new ToolbarSearchFieldDelegate(this);
-      this.$['search-input'].setDelegate(this.searchFieldDelegate_);
     },
 
     properties: {
@@ -11236,6 +11283,11 @@ cr.define('downloads', function() {
         type: String,
         value: 'right',
       },
+    },
+
+    listeners: {
+      'paper-dropdown-close': 'onPaperDropdownClose_',
+      'paper-dropdown-open': 'onPaperDropdownOpen_',
     },
 
     /** @return {boolean} Whether removal can be undone. */
@@ -11263,9 +11315,26 @@ cr.define('downloads', function() {
       this.updateClearAll_();
     },
 
-    /** @param {string} searchTerm */
-    onSearchTermSearch: function(searchTerm) {
-      downloads.ActionService.getInstance().search(searchTerm);
+    /** @private */
+    onPaperDropdownClose_: function() {
+      window.removeEventListener('resize', assert(this.boundResize_));
+    },
+
+    /** @private */
+    onPaperDropdownOpen_: function() {
+      this.boundResize_ = this.boundResize_ || function() {
+        this.$.more.close();
+      }.bind(this);
+      window.addEventListener('resize', this.boundResize_);
+    },
+
+    /**
+     * @param {!CustomEvent} event
+     * @private
+     */
+    onSearchChanged_: function(event) {
+      downloads.ActionService.getInstance().search(
+          /** @type {string} */ (event.detail));
       this.updateClearAll_();
     },
 
@@ -11280,24 +11349,6 @@ cr.define('downloads', function() {
       this.$$('paper-menu .clear-all').hidden = !this.canClearAll();
     },
   });
-
-  /**
-   * @constructor
-   * @implements {SearchFieldDelegate}
-   */
-  // TODO(devlin): This is a bit excessive, and it would be better to just have
-  // Toolbar implement SearchFieldDelegate. But for now, we don't know how to
-  // make that happen with closure compiler.
-  function ToolbarSearchFieldDelegate(toolbar) {
-    this.toolbar_ = toolbar;
-  }
-
-  ToolbarSearchFieldDelegate.prototype = {
-    /** @override */
-    onSearchTermSearch: function(searchTerm) {
-      this.toolbar_.onSearchTermSearch(searchTerm);
-    }
-  };
 
   return {Toolbar: Toolbar};
 });

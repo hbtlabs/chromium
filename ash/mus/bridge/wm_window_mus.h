@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_window.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -46,7 +47,6 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
     // The window manager creates a mus::Window and a views::Widget to show the
     // non-client frame decorations. In this case the creation type is
     // FOR_CLIENT.
-
     FOR_CLIENT,
   };
 
@@ -96,6 +96,9 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
 
   // See description of |children_use_extended_hit_region_|.
   bool ShouldUseExtendedHitRegion() const;
+
+  // Returns true if this window is considered a shell window container.
+  bool IsContainer() const;
 
   // WmWindow:
   const WmWindow* GetRootWindow() const override;
@@ -166,6 +169,8 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   void SetShowState(ui::WindowShowState show_state) override;
   ui::WindowShowState GetShowState() const override;
   void SetRestoreShowState(ui::WindowShowState show_state) override;
+  void SetRestoreOverrides(const gfx::Rect& bounds_override,
+                           ui::WindowShowState window_state_override) override;
   void SetLockedToRoot(bool value) override;
   void SetCapture() override;
   bool HasCapture() override;
@@ -175,6 +180,7 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   bool IsAlwaysOnTop() const override;
   void Hide() override;
   void Show() override;
+  views::Widget* GetInternalWidget() override;
   void CloseWidget() override;
   bool IsFocused() const override;
   bool IsActive() const override;
@@ -184,6 +190,7 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   void Maximize() override;
   void Minimize() override;
   void Unminimize() override;
+  void SetExcludedFromMru(bool) override;
   bool CanMaximize() const override;
   bool CanMinimize() const override;
   bool CanResize() const override;
@@ -203,9 +210,11 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   void SetDescendantsStayInSameRootWindow(bool value) override;
   void AddObserver(WmWindowObserver* observer) override;
   void RemoveObserver(WmWindowObserver* observer) override;
+  bool HasObserver(const WmWindowObserver* observer) const override;
 
  private:
   // mus::WindowObserver:
+  void OnTreeChanging(const TreeChangeParams& params) override;
   void OnTreeChanged(const TreeChangeParams& params) override;
   void OnWindowReordered(::mus::Window* window,
                          ::mus::Window* relative_window,
@@ -219,12 +228,13 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
   void OnWindowDestroying(::mus::Window* window) override;
+  void OnWindowDestroyed(::mus::Window* window) override;
 
   ::mus::Window* window_;
 
   // The shell window id of this window. Shell window ids are defined in
   // ash/common/shell_window_ids.h.
-  int shell_window_id_ = -1;
+  int shell_window_id_ = kShellWindowId_Invalid;
 
   std::unique_ptr<wm::WindowState> window_state_;
 

@@ -57,6 +57,13 @@
 #define DeAllocateCameraWhileRunning DISABLED_DeAllocateCameraWhileRunning
 #define DeAllocateCameraWhileRunning DISABLED_DeAllocateCameraWhileRunning
 #define MAYBE_CaptureMjpeg DISABLED_CaptureMjpeg
+#elif defined(OS_LINUX)
+// AllocateBadSize will hang when a real camera is attached and if more than one
+// test is trying to use the camera (even across processes). Do NOT renable
+// this test without fixing the many bugs associated with it:
+// http://crbug.com/94134 http://crbug.com/137260 http://crbug.com/417824
+#define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
+#define MAYBE_CaptureMjpeg CaptureMjpeg
 #else
 #define MAYBE_AllocateBadSize AllocateBadSize
 #define MAYBE_CaptureMjpeg CaptureMjpeg
@@ -67,9 +74,6 @@ using ::testing::SaveArg;
 
 namespace media {
 namespace {
-
-static const gfx::Size kCaptureSizes[] = {gfx::Size(640, 480),
-                                          gfx::Size(1280, 720)};
 
 class MockClient : public VideoCaptureDevice::Client {
  public:
@@ -112,9 +116,9 @@ class MockClient : public VideoCaptureDevice::Client {
                                 base::TimeDelta timestamp) override {
     DoOnIncomingCapturedBuffer();
   }
-  void OnIncomingCapturedVideoFrame(std::unique_ptr<Buffer> buffer,
-                                    const scoped_refptr<VideoFrame>& frame,
-                                    base::TimeTicks reference_time) override {
+  void OnIncomingCapturedVideoFrame(
+      std::unique_ptr<Buffer> buffer,
+      const scoped_refptr<VideoFrame>& frame) override {
     DoOnIncomingCapturedVideoFrame();
   }
   std::unique_ptr<Buffer> ResurrectLastOutputBuffer(
@@ -199,7 +203,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
     video_capture_device_factory_->EnumerateDeviceNames(
         base::Bind(&DeviceEnumerationListener::OnEnumeratedDevicesCallback,
                    device_enumeration_listener_));
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return std::unique_ptr<VideoCaptureDevice::Names>(names);
   }
 
@@ -332,6 +336,8 @@ TEST_P(VideoCaptureDeviceTest, CaptureWithSize) {
 }
 
 #if !defined(OS_ANDROID)
+const gfx::Size kCaptureSizes[] = {gfx::Size(640, 480), gfx::Size(1280, 720)};
+
 INSTANTIATE_TEST_CASE_P(VideoCaptureDeviceTests,
                         VideoCaptureDeviceTest,
                         testing::ValuesIn(kCaptureSizes));

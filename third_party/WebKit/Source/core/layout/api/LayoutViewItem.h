@@ -113,11 +113,6 @@ public:
         toView()->invalidatePaintForViewAndCompositedLayers();
     }
 
-    bool shouldDoFullPaintInvalidationForNextLayout() const
-    {
-        return toView()->shouldDoFullPaintInvalidationForNextLayout();
-    }
-
     void sendMediaPositionChangeNotifications(const IntRect& visibleRect)
     {
         toView()->sendMediaPositionChangeNotifications(visibleRect);
@@ -131,6 +126,11 @@ public:
     int viewWidth(IncludeScrollbarsInRect scrollbarInclusion = ExcludeScrollbars) const
     {
         return toView()->viewWidth(scrollbarInclusion);
+    }
+
+    FloatSize viewportSizeForViewportUnits() const
+    {
+        return toView()->viewportSizeForViewportUnits();
     }
 
 private:

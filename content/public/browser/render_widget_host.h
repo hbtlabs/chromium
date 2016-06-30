@@ -244,10 +244,20 @@ class CONTENT_EXPORT RenderWidgetHost : public IPC::Sender {
   virtual void AddMouseEventCallback(const MouseEventCallback& callback) = 0;
   virtual void RemoveMouseEventCallback(const MouseEventCallback& callback) = 0;
 
+  // Observer for WebInputEvents (but not input event acks).
+  class InputEventObserver {
+   public:
+    virtual ~InputEventObserver() {}
+
+    virtual void OnInputEvent(const blink::WebInputEvent&) = 0;
+  };
+
+  // Add/remove an input event observer.
+  virtual void AddInputEventObserver(InputEventObserver* observer) = 0;
+  virtual void RemoveInputEventObserver(InputEventObserver* observer) = 0;
+
   // Get the screen info corresponding to this render widget.
   virtual void GetWebScreenInfo(blink::WebScreenInfo* result) = 0;
-  // Get the color profile corresponding to this render widget.
-  virtual bool GetScreenColorProfile(std::vector<char>* color_profile) = 0;
 
   // Sends a compositor proto to the render widget.
   virtual void HandleCompositorProto(const std::vector<uint8_t>& proto) = 0;

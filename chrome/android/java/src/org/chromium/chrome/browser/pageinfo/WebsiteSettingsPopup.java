@@ -10,6 +10,8 @@ import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -20,6 +22,7 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Process;
 import android.provider.Settings;
+import android.support.annotation.IntDef;
 import android.support.v7.widget.AppCompatTextView;
 import android.text.Layout;
 import android.text.Spannable;
@@ -32,6 +35,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.Button;
@@ -41,11 +45,12 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.SingleOfflinePageItemCallback;
 import org.chromium.chrome.browser.offlinepages.OfflinePageItem;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.OmniboxUrlEmphasizer;
@@ -59,6 +64,7 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ssl.SecurityStateModel;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.location.LocationUtils;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
@@ -67,7 +73,10 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 import org.chromium.ui.interpolators.BakedBezierInterpolator;
+import org.chromium.ui.widget.Toast;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.text.DateFormat;
@@ -81,6 +90,13 @@ import java.util.List;
  *               WebsiteSettings* and website_settings_*. Do this on the C++ side as well.
  */
 public class WebsiteSettingsPopup implements OnClickListener {
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({OPENED_FROM_MENU, OPENED_FROM_TOOLBAR})
+    private @interface OpenedFromSource {}
+
+    public static final int OPENED_FROM_MENU = 1;
+    public static final int OPENED_FROM_TOOLBAR = 2;
+
     /**
      * An entry in the settings dropdown for a given permission. There are two options for each
      * permission: Allow and Block.
@@ -321,6 +337,18 @@ public class WebsiteSettingsPopup implements OnClickListener {
         mUrlTitle = (ElidedUrlTextView) mContainer.findViewById(R.id.website_settings_url);
         mUrlTitle.setProfile(mProfile);
         mUrlTitle.setOnClickListener(this);
+        // Long press the url text to copy it to the clipboard.
+        mUrlTitle.setOnLongClickListener(new OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View v) {
+                ClipboardManager clipboard = (ClipboardManager) mContext
+                        .getSystemService(Context.CLIPBOARD_SERVICE);
+                ClipData clip = ClipData.newPlainText("url", mUrlTitle.getText());
+                clipboard.setPrimaryClip(clip);
+                Toast.makeText(mContext, R.string.url_copied, Toast.LENGTH_SHORT).show();
+                return true;
+            }
+        });
 
         mUrlConnectionMessage = (TextView) mContainer
                 .findViewById(R.id.website_settings_connection_message);
@@ -565,15 +593,6 @@ public class WebsiteSettingsPopup implements OnClickListener {
                            == PackageManager.PERMISSION_GRANTED);
     }
 
-    private boolean isAndroidLocationDisabled() {
-        try {
-            return Settings.Secure.getInt(mContext.getContentResolver(),
-                    Settings.Secure.LOCATION_MODE) == Settings.Secure.LOCATION_MODE_OFF;
-        } catch (Settings.SettingNotFoundException e) {
-            return false;
-        }
-    }
-
     /**
      * Adds a new row for the given permission.
      *
@@ -613,11 +632,12 @@ public class WebsiteSettingsPopup implements OnClickListener {
 
             // If warningTextResource is non-zero, then the view must be tagged with either
             // permission_intent_override or permission_type.
+            LocationUtils locationUtils = LocationUtils.getInstance();
             if (permission.type == ContentSettingsType.CONTENT_SETTINGS_TYPE_GEOLOCATION
-                    && isAndroidLocationDisabled()) {
+                    && !locationUtils.isSystemLocationSettingEnabled(mContext)) {
                 warningTextResource = R.string.page_info_android_location_blocked;
                 permissionRow.setTag(R.id.permission_intent_override,
-                        new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS));
+                        locationUtils.getSystemLocationSettingsIntent());
             } else if (!hasAndroidPermission(permission.type)) {
                 warningTextResource = R.string.page_info_android_permission_blocked;
                 permissionRow.setTag(R.id.permission_type,
@@ -901,8 +921,18 @@ public class WebsiteSettingsPopup implements OnClickListener {
      * @param tab The tab hosting the web contents for which to show Website information. This
      *            information is retrieved for the visible entry.
      * @param contentPublisher The name of the publisher of the content.
+     * @param source Determines the source that triggered the popup.
      */
-    public static void show(final Activity activity, final Tab tab, final String contentPublisher) {
+    public static void show(final Activity activity, final Tab tab, final String contentPublisher,
+            @OpenedFromSource int source) {
+        if (source == OPENED_FROM_MENU) {
+            RecordUserAction.record("MobileWebsiteSettingsOpenedFromMenu");
+        } else if (source == OPENED_FROM_TOOLBAR) {
+            RecordUserAction.record("MobileWebsiteSettingsOpenedFromToolbar");
+        } else {
+            assert false : "Invalid source passed";
+        }
+
         OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(tab.getProfile());
         if (offlinePageBridge == null) {
             new WebsiteSettingsPopup(
@@ -910,7 +940,7 @@ public class WebsiteSettingsPopup implements OnClickListener {
             return;
         }
 
-        SingleOfflinePageItemCallback callback = new SingleOfflinePageItemCallback() {
+        Callback<OfflinePageItem> callback = new Callback<OfflinePageItem>() {
             @Override
             public void onResult(OfflinePageItem item) {
                 String offlinePageOriginalUrl = null;

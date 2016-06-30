@@ -12,7 +12,8 @@ var UI_PAGES = ['none',
                 'lso-loading',
                 'lso',
                 'arc-loading',
-                'error'];
+                'error',
+                'error-with-feedback'];
 
 /**
  * Chrome window that hosts UI. Only one window is allowed.
@@ -52,6 +53,12 @@ var windowClosedInternally = false;
 var termsReloadTimeout = null;
 
 /**
+ * Stores current device id.
+ * @type {string}
+ */
+var currentDeviceId = null;
+
+/**
  * Closes current window in response to request from native code. This does not
  * issue 'cancelAuthCode' message to native code.
  */
@@ -74,13 +81,16 @@ function sendNativeMessage(code, opt_Props) {
 /**
  * Applies localization for html content and sets terms webview.
  * @param {!Object} data Localized strings and relevant information.
+ * @param {string} deviceId Current device id.
  */
-function initialize(data) {
+function initialize(data, deviceId) {
+  currentDeviceId = deviceId;
   var doc = appWindow.contentWindow.document;
   var loadTimeData = appWindow.contentWindow.loadTimeData;
   loadTimeData.data = data;
   appWindow.contentWindow.i18nTemplate.process(doc, loadTimeData);
   var countryCode = data.countryCode.toLowerCase();
+  setBackupRestoreMode(data.textBackupRestore, data.backupRestoreEnabled);
 
   var scriptSetCountryCode = 'document.countryCode = \'' + countryCode + '\';';
   termsView.addContentScripts([
@@ -101,6 +111,17 @@ function initialize(data) {
 }
 
 /**
+ * Handles the event when the user clicks on a learn more link. Opens the
+ * support page for the user.
+ * @param {Event} event
+ */
+var onLearnMore = function(event) {
+  var url = 'https://support.google.com/chromebook?p=playapps';
+  chrome.browser.openTab({'url': url}, function() {});
+  event.preventDefault();
+};
+
+/**
  * Sets current metrics mode.
  * @param {string} text Describes current metrics state.
  * @param {boolean} canEnable Defines if user is allowed to change this metrics
@@ -118,18 +139,28 @@ function setMetricsMode(text, canEnable, on) {
     event.preventDefault();
   };
 
-  var onLearnMore = function(event) {
-    var url = 'https://support.google.com/chrome/answer/96817';
-    chrome.browser.openTab({'url': url}, function() {});
-    event.preventDefault();
-  };
-
   doc.getElementById('text-metrics').innerHTML = text;
   doc.getElementById('settings-link').addEventListener('click', onSettings);
-  doc.getElementById('learn-more-link').addEventListener('click', onLearnMore);
+  doc.getElementById('learn-more-link-metrics').addEventListener('click',
+      onLearnMore);
 
   // Applying metrics mode changes page layout, update terms height.
   updateTermsHeight();
+}
+
+/**
+ * Sets current metrics mode.
+ * @param {string} text String used to display next to checkbox.
+ * @param {boolean} defaultCheckValue Defines the default value for backup and
+ *     restore checkbox.
+ */
+function setBackupRestoreMode(text, defaultCheckValue) {
+  var doc = appWindow.contentWindow.document;
+  doc.getElementById('enable-backup-restore').checked = defaultCheckValue;
+
+  doc.getElementById('text-backup-restore').innerHTML = text;
+  doc.getElementById('learn-more-link-backup-restore').addEventListener('click',
+      onLearnMore);
 }
 
 /**
@@ -162,7 +193,7 @@ function onNativeMessage(message) {
   }
 
   if (message.action == 'initialize') {
-    initialize(message.data);
+    initialize(message.data, message.deviceId);
   } else if (message.action == 'setMetricsMode') {
     setMetricsMode(message.text, message.canEnable, message.on);
   } else if (message.action == 'closeUI') {
@@ -198,6 +229,14 @@ function showPage(pageDivId) {
 
   var doc = appWindow.contentWindow.document;
   var pages = doc.getElementsByClassName('section');
+  var sendFeedbackElement = doc.getElementById('button-send-feedback');
+  if (pageDivId == 'error-with-feedback') {
+    // Only show feedback button if the pageDivId is 'error-with-feedback'.
+    sendFeedbackElement.hidden = false;
+    pageDivId = 'error';
+  } else {
+    sendFeedbackElement.hidden = true;
+  }
   for (var i = 0; i < pages.length; i++) {
     pages[i].hidden = pages[i].id != pageDivId;
   }
@@ -207,8 +246,8 @@ function showPage(pageDivId) {
                   '1070009224336-sdh77n7uot3oc99ais00jmuft6sk2fg9.apps.' +
                   'googleusercontent.com&response_type=code&redirect_uri=oob&' +
                   'scope=https://www.google.com/accounts/OAuthLogin&' +
-                  'device_type=arc_plus_plus&device_id=0&hl=' +
-                  navigator.language;
+                  'device_type=arc_plus_plus&device_id=' + currentDeviceId +
+                  '&hl=' + navigator.language;
   }
   appWindow.show();
 }
@@ -240,7 +279,8 @@ function showPageWithStatus(pageId, status) {
 
   if (UI_PAGES[pageId] == 'start') {
     loadInitialTerms();
-  } else if (UI_PAGES[pageId] == 'error') {
+  } else if (UI_PAGES[pageId] == 'error' ||
+             UI_PAGES[pageId] == 'error-with-feedback') {
     setErrorMessage(status);
   }
   showPage(UI_PAGES[pageId]);
@@ -338,9 +378,17 @@ chrome.app.runtime.onLaunched.addListener(function() {
 
     var onAgree = function() {
       var enableMetrics = doc.getElementById('enable-metrics');
-      if (!enableMetrics.hidden && enableMetrics.checked) {
-        sendNativeMessage('enableMetrics');
+      if (!enableMetrics.hidden) {
+        sendNativeMessage('enableMetrics', {
+          'enabled': enableMetrics.checked
+        });
       }
+
+      var enableBackupRestore = doc.getElementById('enable-backup-restore');
+      sendNativeMessage('setBackupRestore', {
+        'enabled': enableBackupRestore.checked
+      });
+
       sendNativeMessage('startLso');
     };
 
@@ -356,9 +404,15 @@ chrome.app.runtime.onLaunched.addListener(function() {
       sendNativeMessage('startLso');
     };
 
+    var onSendFeedback = function() {
+      sendNativeMessage('sendFeedback');
+    };
+
     doc.getElementById('button-agree').addEventListener('click', onAgree);
     doc.getElementById('button-cancel').addEventListener('click', onCancel);
     doc.getElementById('button-retry').addEventListener('click', onRetry);
+    doc.getElementById('button-send-feedback')
+        .addEventListener('click', onSendFeedback);
 
     connectPort();
   };

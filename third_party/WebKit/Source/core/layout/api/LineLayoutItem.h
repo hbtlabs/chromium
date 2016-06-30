@@ -174,9 +174,9 @@ public:
         return m_layoutObject->length();
     }
 
-    void dirtyLinesFromChangedChild(LineLayoutItem item) const
+    void dirtyLinesFromChangedChild(LineLayoutItem item, MarkingBehavior markingBehaviour = MarkContainerChain) const
     {
-        m_layoutObject->dirtyLinesFromChangedChild(item.layoutObject());
+        m_layoutObject->dirtyLinesFromChangedChild(item.layoutObject(), markingBehaviour);
     }
 
     bool ancestorLineBoxDirty() const
@@ -420,11 +420,6 @@ public:
         return m_layoutObject->documentBeingDestroyed();
     }
 
-    void invalidateDisplayItemClient(const DisplayItemClient& displayItemClient)
-    {
-        return m_layoutObject->invalidateDisplayItemClient(displayItemClient);
-    }
-
     LayoutRect visualRect() const
     {
         return m_layoutObject->visualRect();
@@ -433,6 +428,11 @@ public:
     bool isHashTableDeletedValue() const
     {
         return m_layoutObject == kHashTableDeletedValue;
+    }
+
+    void setShouldDoFullPaintInvalidation()
+    {
+        m_layoutObject->setShouldDoFullPaintInvalidation();
     }
 
     struct LineLayoutItemHash {

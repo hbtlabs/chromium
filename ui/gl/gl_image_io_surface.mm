@@ -9,9 +9,11 @@
 #include "base/callback_helpers.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/scoped_api.h"
@@ -59,7 +61,7 @@ bool ValidFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
       return false;
   }
 
@@ -87,7 +89,7 @@ GLenum TextureFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
       NOTREACHED();
       return 0;
   }
@@ -114,7 +116,7 @@ GLenum DataFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
       return 0;
@@ -143,7 +145,7 @@ GLenum DataType(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       NOTREACHED();
       return 0;
@@ -231,6 +233,8 @@ unsigned GLImageIOSurface::GetInternalFormat() {
 
 bool GLImageIOSurface::BindTexImage(unsigned target) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  TRACE_EVENT0("gpu", "GLImageIOSurface::BindTexImage");
+  base::TimeTicks start_time = base::TimeTicks::Now();
 
   // YUV_420_BIPLANAR is not supported by BindTexImage.
   // CopyTexImage is supported by this format as that performs conversion to RGB
@@ -259,6 +263,8 @@ bool GLImageIOSurface::BindTexImage(unsigned target) {
     return false;
   }
 
+  UMA_HISTOGRAM_TIMES("GPU.IOSurface.TexImageTime",
+                      base::TimeTicks::Now() - start_time);
   return true;
 }
 
@@ -358,6 +364,10 @@ bool GLImageIOSurface::EmulatingRGB() const {
   return client_internalformat_ == GL_RGB;
 }
 
+bool GLImageIOSurface::CanCheckIOSurfaceIsInUse() const {
+  return !cv_pixel_buffer_;
+}
+
 base::ScopedCFTypeRef<IOSurfaceRef> GLImageIOSurface::io_surface() {
   return io_surface_;
 }
@@ -366,10 +376,22 @@ base::ScopedCFTypeRef<CVPixelBufferRef> GLImageIOSurface::cv_pixel_buffer() {
   return cv_pixel_buffer_;
 }
 
+GLImage::Type GLImageIOSurface::GetType() const {
+  return Type::IOSURFACE;
+}
+
 // static
 unsigned GLImageIOSurface::GetInternalFormatForTesting(
     gfx::BufferFormat format) {
   DCHECK(ValidFormat(format));
   return TextureFormat(format);
 }
+
+// static
+GLImageIOSurface* GLImageIOSurface::FromGLImage(GLImage* image) {
+  if (!image || image->GetType() != Type::IOSURFACE)
+    return nullptr;
+  return static_cast<GLImageIOSurface*>(image);
+}
+
 }  // namespace gl

@@ -589,18 +589,20 @@ void GLRenderer::DrawDebugBorderQuad(const DrawingFrame* frame,
 
 static sk_sp<SkImage> WrapTexture(
     const ResourceProvider::ScopedReadLockGL& lock,
-    GrContext* context) {
+    GrContext* context,
+    bool flip_texture) {
   // Wrap a given texture in a Ganesh platform texture.
   GrBackendTextureDesc backend_texture_description;
   GrGLTextureInfo texture_info;
   texture_info.fTarget = lock.target();
   texture_info.fID = lock.texture_id();
-  backend_texture_description.fWidth = lock.texture_size().width();
-  backend_texture_description.fHeight = lock.texture_size().height();
+  backend_texture_description.fWidth = lock.size().width();
+  backend_texture_description.fHeight = lock.size().height();
   backend_texture_description.fConfig = kSkia8888_GrPixelConfig;
   backend_texture_description.fTextureHandle =
       skia::GrGLTextureInfoToGrBackendObject(texture_info);
-  backend_texture_description.fOrigin = kBottomLeft_GrSurfaceOrigin;
+  backend_texture_description.fOrigin =
+      flip_texture ? kBottomLeft_GrSurfaceOrigin : kTopLeft_GrSurfaceOrigin;
 
   return SkImage::MakeFromTexture(context, backend_texture_description);
 }
@@ -612,16 +614,19 @@ static sk_sp<SkImage> ApplyImageFilter(
     const gfx::RectF& dst_rect,
     const gfx::Vector2dF& scale,
     sk_sp<SkImageFilter> filter,
-    ScopedResource* source_texture_resource,
+    const Resource* source_texture_resource,
     SkIPoint* offset,
-    SkIRect* subset) {
+    SkIRect* subset,
+    bool flip_texture) {
   if (!filter || !use_gr_context)
     return nullptr;
 
   ResourceProvider::ScopedReadLockGL lock(resource_provider,
                                           source_texture_resource->id());
 
-  sk_sp<SkImage> src_image = WrapTexture(lock, use_gr_context->context());
+  sk_sp<SkImage> src_image =
+      WrapTexture(lock, use_gr_context->context(), flip_texture);
+
   if (!src_image) {
     TRACE_EVENT_INSTANT0("cc",
                          "ApplyImageFilter wrap background texture failed",
@@ -636,7 +641,7 @@ static sk_sp<SkImage> ApplyImageFilter(
   SkIRect clip_bounds = gfx::RectFToSkRect(dst_rect).roundOut();
   clip_bounds.offset(-src_rect.x(), -src_rect.y());
   filter = filter->makeWithLocalMatrix(local_matrix);
-  SkIRect in_subset = SkIRect::MakeWH(src_image->width(), src_image->height());
+  SkIRect in_subset = SkIRect::MakeWH(src_rect.width(), src_rect.height());
   sk_sp<SkImage> image = src_image->makeWithFilter(filter.get(), in_subset,
                                                    clip_bounds, subset, offset);
 
@@ -795,9 +800,16 @@ gfx::Rect GLRenderer::GetBackdropBoundingBoxForRenderPassQuad(
       contents_device_transform, scaled_region.BoundingBox()));
 
   if (ShouldApplyBackgroundFilters(quad)) {
-    int top, right, bottom, left;
-    quad->background_filters.GetOutsets(&top, &right, &bottom, &left);
-    backdrop_rect.Inset(-left, -top, -right, -bottom);
+    SkMatrix matrix;
+    matrix.setScale(quad->filters_scale.x(), quad->filters_scale.y());
+    if (FlippedFramebuffer(frame)) {
+      // TODO(jbroman): This probably isn't the right way to account for this.
+      // Probably some combination of frame->projection_matrix,
+      // frame->window_matrix and contents_device_transform?
+      matrix.postScale(1, -1);
+    }
+    backdrop_rect =
+        quad->background_filters.MapRectReverse(backdrop_rect, matrix);
   }
 
   if (!backdrop_rect.IsEmpty() && use_aa) {
@@ -826,9 +838,9 @@ std::unique_ptr<ScopedResource> GLRenderer::GetBackdropTexture(
       bounding_rect.size(), ResourceProvider::TEXTURE_HINT_DEFAULT,
       resource_provider_->best_texture_format());
   {
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider_,
-                                             device_background_texture->id());
-    GetFramebufferTexture(lock.texture_id(), RGBA_8888, bounding_rect);
+    ResourceProvider::ScopedWriteLockGL lock(
+        resource_provider_, device_background_texture->id(), false);
+    GetFramebufferTexture(lock.texture_id(), bounding_rect);
   }
   return device_background_texture;
 }
@@ -852,7 +864,9 @@ sk_sp<SkImage> GLRenderer::ApplyBackgroundFilters(
   ResourceProvider::ScopedReadLockGL lock(resource_provider_,
                                           background_texture->id());
 
-  sk_sp<SkImage> src_image = WrapTexture(lock, use_gr_context->context());
+  bool flip_texture = true;
+  sk_sp<SkImage> src_image =
+      WrapTexture(lock, use_gr_context->context(), flip_texture);
   if (!src_image) {
     TRACE_EVENT_INSTANT0(
         "cc", "ApplyBackgroundFilters wrap background texture failed",
@@ -910,14 +924,82 @@ gfx::QuadF MapQuadToLocalSpace(const gfx::Transform& device_transform,
   return local_quad;
 }
 
+const TileDrawQuad* GLRenderer::CanPassBeDrawnDirectly(const RenderPass* pass) {
+  // Can only collapse a single tile quad.
+  if (pass->quad_list.size() != 1)
+    return nullptr;
+  // If we need copy requests, then render pass has to exist.
+  if (!pass->copy_requests.empty())
+    return nullptr;
+
+  const DrawQuad* quad = *pass->quad_list.BackToFrontBegin();
+  // Hack: this could be supported by concatenating transforms, but
+  // in practice if there is one quad, it is at the origin of the render pass.
+  if (!quad->shared_quad_state->quad_to_target_transform.IsIdentity())
+    return nullptr;
+  // The quad is expected to be the entire layer so that AA edges are correct.
+  if (gfx::Rect(quad->shared_quad_state->quad_layer_bounds) != quad->rect)
+    return nullptr;
+  if (quad->material != DrawQuad::TILED_CONTENT)
+    return nullptr;
+
+  const TileDrawQuad* tile_quad = TileDrawQuad::MaterialCast(quad);
+  // Hack: this could be supported by passing in a subrectangle to draw
+  // render pass, although in practice if there is only one quad there
+  // will be no border texels on the input.
+  if (tile_quad->tex_coord_rect != gfx::RectF(tile_quad->rect))
+    return nullptr;
+  // Tile quad features not supported in render pass shaders.
+  if (tile_quad->swizzle_contents || tile_quad->nearest_neighbor)
+    return nullptr;
+  // BUG=skia:3868, Skia currently doesn't support texture rectangle inputs.
+  // See also the DCHECKs about GL_TEXTURE_2D in DrawRenderPassQuad.
+  GLenum target =
+      resource_provider_->GetResourceTextureTarget(tile_quad->resource_id());
+  if (target != GL_TEXTURE_2D)
+    return nullptr;
+#if defined(OS_MACOSX)
+  // On Macs, this path can sometimes lead to all black output.
+  // TODO(enne): investigate this and remove this hack.
+  return nullptr;
+#endif
+
+  return tile_quad;
+}
+
 void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
                                     const RenderPassDrawQuad* quad,
                                     const gfx::QuadF* clip_region) {
-  ScopedResource* contents_texture =
-      render_pass_textures_[quad->render_pass_id].get();
-  DCHECK(contents_texture);
-  DCHECK(contents_texture->id());
+  auto bypass = render_pass_bypass_quads_.find(quad->render_pass_id);
+  if (bypass != render_pass_bypass_quads_.end()) {
+    TileDrawQuad* tile_quad = &bypass->second;
+    // RGBA_8888 here is arbitrary and unused.
+    Resource tile_resource(tile_quad->resource_id(), tile_quad->texture_size,
+                           ResourceFormat::RGBA_8888);
+    // The projection matrix used by GLRenderer has a flip.  As tile texture
+    // inputs are oriented opposite to framebuffer outputs, don't flip via
+    // texture coords and let the projection matrix naturallyd o it.
+    bool flip_texture = false;
+    DrawRenderPassQuadInternal(frame, quad, clip_region, &tile_resource,
+                               flip_texture);
+  } else {
+    ScopedResource* contents_texture =
+        render_pass_textures_[quad->render_pass_id].get();
+    DCHECK(contents_texture);
+    DCHECK(contents_texture->id());
+    // See above comments about texture flipping.  When the input is a
+    // render pass, it needs to an extra flip to be oriented correctly.
+    bool flip_texture = true;
+    DrawRenderPassQuadInternal(frame, quad, clip_region, contents_texture,
+                               flip_texture);
+  }
+}
 
+void GLRenderer::DrawRenderPassQuadInternal(DrawingFrame* frame,
+                                            const RenderPassDrawQuad* quad,
+                                            const gfx::QuadF* clip_region,
+                                            const Resource* contents_texture,
+                                            bool flip_texture) {
   SkMatrix scale_matrix;
   scale_matrix.setScale(quad->filters_scale.x(), quad->filters_scale.y());
   gfx::RectF dst_rect(quad->filters.MapRect(quad->rect, scale_matrix));
@@ -1022,7 +1104,6 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
   SkScalar color_matrix[20];
   bool use_color_matrix = false;
   gfx::Size texture_size = contents_texture->size();
-  bool flip_texture = true;
   gfx::Point src_offset;
   if (!quad->filters.IsEmpty()) {
     sk_sp<SkImageFilter> filter = RenderSurfaceFilters::BuildImageFilter(
@@ -1057,13 +1138,12 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
         SkIPoint offset;
         SkIRect subset;
         gfx::RectF src_rect(quad->rect);
-        filter_image = ApplyImageFilter(ScopedUseGrContext::Create(this, frame),
-                                        resource_provider_, src_rect, dst_rect,
-                                        quad->filters_scale, std::move(filter),
-                                        contents_texture, &offset, &subset);
-        if (!filter_image) {
+        filter_image = ApplyImageFilter(
+            ScopedUseGrContext::Create(this, frame), resource_provider_,
+            src_rect, dst_rect, quad->filters_scale, std::move(filter),
+            contents_texture, &offset, &subset, flip_texture);
+        if (!filter_image)
           return;
-        }
         filter_image_id = skia::GrBackendObjectToGrGLTextureInfo(
                               filter_image->getTextureHandle(true))
                               ->fID;
@@ -1074,6 +1154,7 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
             gfx::RectF(src_rect.x() + offset.fX, src_rect.y() + offset.fY,
                        subset.width(), subset.height());
         src_offset.SetPoint(subset.x(), subset.y());
+        // If the output of the filter needs to be flipped.
         flip_texture =
             filter_image->getTexture()->origin() == kBottomLeft_GrSurfaceOrigin;
       }
@@ -1199,6 +1280,8 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
     gl_->Uniform4f(locations.tex_transform, tex_rect.x(), 1.0f - tex_rect.y(),
                    tex_rect.width(), -tex_rect.height());
   } else {
+    // Tile textures are oriented opposite the framebuffer, so can use
+    // the projection transform to do the flip.
     gl_->Uniform4f(locations.tex_transform, tex_rect.x(), tex_rect.y(),
                    tex_rect.width(), tex_rect.height());
   }
@@ -1214,16 +1297,24 @@ void GLRenderer::DrawRenderPassQuad(DrawingFrame* frame,
       mask_uv_rect.Scale(quad->mask_texture_size.width(),
                          quad->mask_texture_size.height());
     }
-
-    // Mask textures are oriented vertically flipped relative to the framebuffer
-    // and the RenderPass contents texture, so we flip the tex coords from the
-    // RenderPass texture to find the mask texture coords.
-    gl_->Uniform2f(
-        locations.mask_tex_coord_offset, mask_uv_rect.x(),
-        mask_uv_rect.height() / tex_rect.height() + mask_uv_rect.y());
-    gl_->Uniform2f(locations.mask_tex_coord_scale,
-                   mask_uv_rect.width() / tex_rect.width(),
-                   -mask_uv_rect.height() / tex_rect.height());
+    if (flip_texture) {
+      // Mask textures are oriented vertically flipped relative to the
+      // framebuffer and the RenderPass contents texture, so we flip the tex
+      // coords from the RenderPass texture to find the mask texture coords.
+      gl_->Uniform2f(
+          locations.mask_tex_coord_offset, mask_uv_rect.x(),
+          mask_uv_rect.height() / tex_rect.height() + mask_uv_rect.y());
+      gl_->Uniform2f(locations.mask_tex_coord_scale,
+                     mask_uv_rect.width() / tex_rect.width(),
+                     -mask_uv_rect.height() / tex_rect.height());
+    } else {
+      // Tile textures are oriented the same way as mask textures.
+      gl_->Uniform2f(locations.mask_tex_coord_offset, mask_uv_rect.x(),
+                     mask_uv_rect.y());
+      gl_->Uniform2f(locations.mask_tex_coord_scale,
+                     mask_uv_rect.width() / tex_rect.width(),
+                     mask_uv_rect.height() / tex_rect.height());
+    }
 
     last_texture_unit = 1;
   }
@@ -2035,71 +2126,30 @@ void GLRenderer::DrawYUVVideoQuad(const DrawingFrame* frame,
   int y_texture_location = -1;
   int u_texture_location = -1;
   int v_texture_location = -1;
+  int uv_texture_location = -1;
   int a_texture_location = -1;
   int yuv_matrix_location = -1;
   int yuv_adj_location = -1;
   int alpha_location = -1;
-  if (use_alpha_plane) {
-    const VideoYUVAProgram* program =
-        GetVideoYUVAProgram(tex_coord_precision, sampler);
-    DCHECK(program && (program->initialized() || IsContextLost()));
-    SetUseProgram(program->program());
-    matrix_location = program->vertex_shader().matrix_location();
-    ya_tex_scale_location = program->vertex_shader().ya_tex_scale_location();
-    ya_tex_offset_location = program->vertex_shader().ya_tex_offset_location();
-    uv_tex_scale_location = program->vertex_shader().uv_tex_scale_location();
-    uv_tex_offset_location = program->vertex_shader().uv_tex_offset_location();
-    y_texture_location = program->fragment_shader().y_texture_location();
-    u_texture_location = program->fragment_shader().u_texture_location();
-    v_texture_location = program->fragment_shader().v_texture_location();
-    a_texture_location = program->fragment_shader().a_texture_location();
-    yuv_matrix_location = program->fragment_shader().yuv_matrix_location();
-    yuv_adj_location = program->fragment_shader().yuv_adj_location();
-    ya_clamp_rect_location =
-        program->fragment_shader().ya_clamp_rect_location();
-    uv_clamp_rect_location =
-        program->fragment_shader().uv_clamp_rect_location();
-    alpha_location = program->fragment_shader().alpha_location();
-  } else if (!use_nv12) {
-    const VideoYUVProgram* program =
-        GetVideoYUVProgram(tex_coord_precision, sampler);
-    DCHECK(program && (program->initialized() || IsContextLost()));
-    SetUseProgram(program->program());
-    matrix_location = program->vertex_shader().matrix_location();
-    ya_tex_scale_location = program->vertex_shader().ya_tex_scale_location();
-    ya_tex_offset_location = program->vertex_shader().ya_tex_offset_location();
-    uv_tex_scale_location = program->vertex_shader().uv_tex_scale_location();
-    uv_tex_offset_location = program->vertex_shader().uv_tex_offset_location();
-    y_texture_location = program->fragment_shader().y_texture_location();
-    u_texture_location = program->fragment_shader().u_texture_location();
-    v_texture_location = program->fragment_shader().v_texture_location();
-    yuv_matrix_location = program->fragment_shader().yuv_matrix_location();
-    yuv_adj_location = program->fragment_shader().yuv_adj_location();
-    ya_clamp_rect_location =
-        program->fragment_shader().ya_clamp_rect_location();
-    uv_clamp_rect_location =
-        program->fragment_shader().uv_clamp_rect_location();
-    alpha_location = program->fragment_shader().alpha_location();
-  } else {
-    const VideoNV12Program* program =
-        GetVideoNV12Program(tex_coord_precision, sampler);
-    DCHECK(program && (program->initialized() || IsContextLost()));
-    SetUseProgram(program->program());
-    matrix_location = program->vertex_shader().matrix_location();
-    ya_tex_scale_location = program->vertex_shader().ya_tex_scale_location();
-    ya_tex_offset_location = program->vertex_shader().ya_tex_offset_location();
-    uv_tex_scale_location = program->vertex_shader().uv_tex_scale_location();
-    uv_tex_offset_location = program->vertex_shader().uv_tex_offset_location();
-    y_texture_location = program->fragment_shader().y_texture_location();
-    u_texture_location = program->fragment_shader().uv_texture_location();
-    yuv_matrix_location = program->fragment_shader().yuv_matrix_location();
-    yuv_adj_location = program->fragment_shader().yuv_adj_location();
-    ya_clamp_rect_location =
-        program->fragment_shader().ya_clamp_rect_location();
-    uv_clamp_rect_location =
-        program->fragment_shader().uv_clamp_rect_location();
-    alpha_location = program->fragment_shader().alpha_location();
-  }
+  const VideoYUVProgram* program = GetVideoYUVProgram(
+      tex_coord_precision, sampler, use_alpha_plane, use_nv12);
+  DCHECK(program && (program->initialized() || IsContextLost()));
+  SetUseProgram(program->program());
+  matrix_location = program->vertex_shader().matrix_location();
+  ya_tex_scale_location = program->vertex_shader().ya_tex_scale_location();
+  ya_tex_offset_location = program->vertex_shader().ya_tex_offset_location();
+  uv_tex_scale_location = program->vertex_shader().uv_tex_scale_location();
+  uv_tex_offset_location = program->vertex_shader().uv_tex_offset_location();
+  y_texture_location = program->fragment_shader().y_texture_location();
+  u_texture_location = program->fragment_shader().u_texture_location();
+  v_texture_location = program->fragment_shader().v_texture_location();
+  uv_texture_location = program->fragment_shader().uv_texture_location();
+  a_texture_location = program->fragment_shader().a_texture_location();
+  yuv_matrix_location = program->fragment_shader().yuv_matrix_location();
+  yuv_adj_location = program->fragment_shader().yuv_adj_location();
+  ya_clamp_rect_location = program->fragment_shader().ya_clamp_rect_location();
+  uv_clamp_rect_location = program->fragment_shader().uv_clamp_rect_location();
+  alpha_location = program->fragment_shader().alpha_location();
 
   gfx::SizeF ya_tex_scale(1.0f, 1.0f);
   gfx::SizeF uv_tex_scale(1.0f, 1.0f);
@@ -2153,9 +2203,12 @@ void GLRenderer::DrawYUVVideoQuad(const DrawingFrame* frame,
                  uv_clamp_rect.right(), uv_clamp_rect.bottom());
 
   gl_->Uniform1i(y_texture_location, 1);
-  gl_->Uniform1i(u_texture_location, 2);
-  if (!use_nv12)
+  if (use_nv12) {
+    gl_->Uniform1i(uv_texture_location, 2);
+  } else {
+    gl_->Uniform1i(u_texture_location, 2);
     gl_->Uniform1i(v_texture_location, 3);
+  }
   if (use_alpha_plane)
     gl_->Uniform1i(a_texture_location, 4);
 
@@ -2459,7 +2512,7 @@ void GLRenderer::EnqueueTextureQuad(const DrawingFrame* frame,
     uv_transform = UVTransform(quad);
   if (sampler == SAMPLER_TYPE_2D_RECT) {
     // Un-normalize the texture coordiantes for rectangle targets.
-    gfx::Size texture_size = lock.texture_size();
+    gfx::Size texture_size = lock.size();
     uv_transform.data[0] *= texture_size.width();
     uv_transform.data[2] *= texture_size.width();
     uv_transform.data[1] *= texture_size.height();
@@ -2663,7 +2716,7 @@ void GLRenderer::Finish() {
   gl_->Finish();
 }
 
-void GLRenderer::SwapBuffers(const CompositorFrameMetadata& metadata) {
+void GLRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
   DCHECK(!is_backbuffer_discarded_);
 
   TRACE_EVENT0("cc,benchmark", "GLRenderer::SwapBuffers");
@@ -2672,7 +2725,7 @@ void GLRenderer::SwapBuffers(const CompositorFrameMetadata& metadata) {
   gfx::Size surface_size = output_surface_->SurfaceSize();
 
   CompositorFrame compositor_frame;
-  compositor_frame.metadata = metadata;
+  compositor_frame.metadata = std::move(metadata);
   compositor_frame.gl_frame_data = base::WrapUnique(new GLFrameData);
   compositor_frame.gl_frame_data->size = surface_size;
   if (capabilities_.using_partial_swap) {
@@ -2701,44 +2754,49 @@ void GLRenderer::SwapBuffers(const CompositorFrameMetadata& metadata) {
 
   // We always hold onto resources until an extra frame has swapped, to make
   // sure we don't update the buffer while it's being scanned out.
-  if (!settings_->release_overlay_resources_on_swap_complete &&
+  if (!settings_->release_overlay_resources_after_gpu_query &&
       swapping_overlay_resources_.size() > 2) {
     swapping_overlay_resources_.pop_front();
   }
 
-  output_surface_->SwapBuffers(&compositor_frame);
+  output_surface_->SwapBuffers(std::move(compositor_frame));
 
   swap_buffer_rect_ = gfx::Rect();
 }
 
 void GLRenderer::SwapBuffersComplete() {
-  // On OS X, the logic in this block moves resources into
-  // |swapped_and_acked_overlay_resources_|, and then erases resources from
-  // |swapped_and_acked_overlay_resources_| that are no longer in use by the
-  // Window Server. On other platforms, since resources are never in use by the
-  // Window Server, this is equivalent to just erasing all resources from the
-  // first element of |swapping_overlay_resources_|.
-  if (settings_->release_overlay_resources_on_swap_complete) {
-    // Move resources known to be acked into
-    // |swapped_and_acked_overlay_resources_|.
+  // Once a resouce has been swap-ACKed, send a query to the GPU process to ask
+  // if the resource is no longer being consumed by the system compositor. The
+  // response will come with the next swap-ACK.
+  if (settings_->release_overlay_resources_after_gpu_query) {
     if (!swapping_overlay_resources_.empty()) {
       for (OverlayResourceLock& lock : swapping_overlay_resources_.front()) {
-        swapped_and_acked_overlay_resources_[lock->GetResourceId()] =
-            std::move(lock);
+        unsigned texture = lock->texture_id();
+        if (swapped_and_acked_overlay_resources_.find(texture) ==
+            swapped_and_acked_overlay_resources_.end()) {
+          swapped_and_acked_overlay_resources_[texture] = std::move(lock);
+        }
       }
       swapping_overlay_resources_.pop_front();
     }
 
-    // Release resources that are no longer in use by the Window Server.
-    auto it = swapped_and_acked_overlay_resources_.begin();
-    while (it != swapped_and_acked_overlay_resources_.end()) {
-      if (it->second->GetGpuMemoryBuffer() &&
-          it->second->GetGpuMemoryBuffer()->IsInUseByMacOSWindowServer()) {
-        ++it;
-        continue;
+    if (!swapped_and_acked_overlay_resources_.empty()) {
+      std::vector<unsigned> textures;
+      textures.reserve(swapped_and_acked_overlay_resources_.size());
+      for (auto& pair : swapped_and_acked_overlay_resources_) {
+        textures.push_back(pair.first);
       }
+      gl_->ScheduleCALayerInUseQueryCHROMIUM(textures.size(), textures.data());
+    }
+  }
+}
 
-      it = swapped_and_acked_overlay_resources_.erase(it);
+void GLRenderer::DidReceiveTextureInUseResponses(
+    const gpu::TextureInUseResponses& responses) {
+  DCHECK(settings_->release_overlay_resources_after_gpu_query);
+  for (const gpu::TextureInUseResponse& response : responses) {
+    if (!response.in_use) {
+      swapped_and_acked_overlay_resources_.erase(response.texture);
     }
   }
 }
@@ -2818,7 +2876,7 @@ void GLRenderer::GetFramebufferPixelsAsync(
       texture_id =
           gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
     }
-    GetFramebufferTexture(texture_id, RGBA_8888, window_rect);
+    GetFramebufferTexture(texture_id, window_rect);
 
     const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
     gl_->ShallowFlushCHROMIUM();
@@ -2958,7 +3016,6 @@ void GLRenderer::FinishedReadback(unsigned source_buffer,
 }
 
 void GLRenderer::GetFramebufferTexture(unsigned texture_id,
-                                       ResourceFormat texture_format,
                                        const gfx::Rect& window_rect) {
   DCHECK(texture_id);
   DCHECK_GE(window_rect.x(), 0);
@@ -2966,9 +3023,19 @@ void GLRenderer::GetFramebufferTexture(unsigned texture_id,
   DCHECK_LE(window_rect.right(), current_surface_size_.width());
   DCHECK_LE(window_rect.bottom(), current_surface_size_.height());
 
+  // If copying a non-root renderpass then use the format of the bound
+  // texture. Otherwise, we use the format of the default framebuffer.
+  GLenum format = current_framebuffer_lock_
+                      ? GLCopyTextureInternalFormat(current_framebuffer_format_)
+                      : output_surface_->GetFramebufferCopyTextureFormat();
+  // Verify the format is valid for GLES2's glCopyTexImage2D.
+  DCHECK(format == GL_ALPHA || format == GL_LUMINANCE ||
+         format == GL_LUMINANCE_ALPHA || format == GL_RGB || format == GL_RGBA)
+      << format;
+
   gl_->BindTexture(GL_TEXTURE_2D, texture_id);
-  gl_->CopyTexImage2D(GL_TEXTURE_2D, 0, GLDataFormat(texture_format),
-                      window_rect.x(), window_rect.y(), window_rect.width(),
+  gl_->CopyTexImage2D(GL_TEXTURE_2D, 0, format, window_rect.x(),
+                      window_rect.y(), window_rect.width(),
                       window_rect.height(), 0);
   gl_->BindTexture(GL_TEXTURE_2D, 0);
 }
@@ -2997,7 +3064,8 @@ bool GLRenderer::BindFramebufferToTexture(DrawingFrame* frame,
   gl_->BindFramebuffer(GL_FRAMEBUFFER, offscreen_framebuffer_id_);
   current_framebuffer_lock_ =
       base::WrapUnique(new ResourceProvider::ScopedWriteLockGL(
-          resource_provider_, texture->id()));
+          resource_provider_, texture->id(), false));
+  current_framebuffer_format_ = texture->format();
   unsigned texture_id = current_framebuffer_lock_->texture_id();
   gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                             texture_id, 0);
@@ -3420,46 +3488,18 @@ GLRenderer::GetNonPremultipliedTextureBackgroundProgram(
 
 const GLRenderer::VideoYUVProgram* GLRenderer::GetVideoYUVProgram(
     TexCoordPrecision precision,
-    SamplerType sampler) {
+    SamplerType sampler,
+    bool use_alpha_plane,
+    bool use_nv12) {
   DCHECK_GE(precision, 0);
   DCHECK_LE(precision, LAST_TEX_COORD_PRECISION);
   DCHECK_GE(sampler, 0);
   DCHECK_LE(sampler, LAST_SAMPLER_TYPE);
-  VideoYUVProgram* program = &video_yuv_program_[precision][sampler];
+  VideoYUVProgram* program =
+      &video_yuv_program_[precision][sampler][use_alpha_plane][use_nv12];
   if (!program->initialized()) {
     TRACE_EVENT0("cc", "GLRenderer::videoYUVProgram::initialize");
-    program->Initialize(output_surface_->context_provider(), precision,
-                        sampler);
-  }
-  return program;
-}
-
-const GLRenderer::VideoNV12Program* GLRenderer::GetVideoNV12Program(
-    TexCoordPrecision precision,
-    SamplerType sampler) {
-  DCHECK_GE(precision, 0);
-  DCHECK_LE(precision, LAST_TEX_COORD_PRECISION);
-  DCHECK_GE(sampler, 0);
-  DCHECK_LE(sampler, LAST_SAMPLER_TYPE);
-  VideoNV12Program* program = &video_nv12_program_[precision][sampler];
-  if (!program->initialized()) {
-    TRACE_EVENT0("cc", "GLRenderer::videoNV12Program::initialize");
-    program->Initialize(output_surface_->context_provider(), precision,
-                        sampler);
-  }
-  return program;
-}
-
-const GLRenderer::VideoYUVAProgram* GLRenderer::GetVideoYUVAProgram(
-    TexCoordPrecision precision,
-    SamplerType sampler) {
-  DCHECK_GE(precision, 0);
-  DCHECK_LE(precision, LAST_TEX_COORD_PRECISION);
-  DCHECK_GE(sampler, 0);
-  DCHECK_LE(sampler, LAST_SAMPLER_TYPE);
-  VideoYUVAProgram* program = &video_yuva_program_[precision][sampler];
-  if (!program->initialized()) {
-    TRACE_EVENT0("cc", "GLRenderer::videoYUVAProgram::initialize");
+    program->mutable_fragment_shader()->SetFeatures(use_alpha_plane, use_nv12);
     program->Initialize(output_surface_->context_provider(), precision,
                         sampler);
   }
@@ -3501,9 +3541,11 @@ void GLRenderer::CleanupSharedObjects() {
         }
       }
 
-      video_yuv_program_[i][j].Cleanup(gl_);
-      video_yuva_program_[i][j].Cleanup(gl_);
-      video_nv12_program_[i][j].Cleanup(gl_);
+      for (int k = 0; k < 2; k++) {
+        for (int l = 0; l < 2; l++) {
+          video_yuv_program_[i][j][k][l].Cleanup(gl_);
+        }
+      }
     }
     for (int j = 0; j <= LAST_BLEND_MODE; j++) {
       render_pass_program_[i][j].Cleanup(gl_);
@@ -3596,9 +3638,9 @@ void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
     unsigned texture_id = 0;
     if (ca_layer_overlay.contents_resource_id) {
       pending_overlay_resources_.push_back(
-          base::WrapUnique(new ResourceProvider::ScopedReadLockGpuMemoryBuffer(
+          base::WrapUnique(new ResourceProvider::ScopedReadLockGL(
               resource_provider_, ca_layer_overlay.contents_resource_id)));
-      texture_id = pending_overlay_resources_.back()->GetTextureId();
+      texture_id = pending_overlay_resources_.back()->texture_id();
     }
     GLfloat contents_rect[4] = {
         ca_layer_overlay.contents_rect.x(), ca_layer_overlay.contents_rect.y(),
@@ -3639,9 +3681,9 @@ void GLRenderer::ScheduleOverlays(DrawingFrame* frame) {
       DCHECK(texture_id || IsContextLost());
     } else {
       pending_overlay_resources_.push_back(
-          base::WrapUnique(new ResourceProvider::ScopedReadLockGpuMemoryBuffer(
+          base::WrapUnique(new ResourceProvider::ScopedReadLockGL(
               resource_provider_, overlay.resource_id)));
-      texture_id = pending_overlay_resources_.back()->GetTextureId();
+      texture_id = pending_overlay_resources_.back()->texture_id();
     }
 
     context_support_->ScheduleOverlayPlane(

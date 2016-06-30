@@ -32,8 +32,9 @@ class ArcGpuVideoDecodeAccelerator
   ~ArcGpuVideoDecodeAccelerator() override;
 
   // Implementation of the ArcVideoAccelerator interface.
-  bool Initialize(const Config& config,
-                  ArcVideoAccelerator::Client* client) override;
+  ArcVideoAccelerator::Result Initialize(
+      const Config& config,
+      ArcVideoAccelerator::Client* client) override;
   void SetNumberOfOutputBuffers(size_t number) override;
   void BindSharedMemory(PortType port,
                         uint32_t index,
@@ -52,6 +53,7 @@ class ArcGpuVideoDecodeAccelerator
 
   // Implementation of the VideoDecodeAccelerator::Client interface.
   void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
+                             media::VideoPixelFormat output_format,
                              uint32_t textures_per_buffer,
                              const gfx::Size& dimensions,
                              uint32_t texture_target) override;
@@ -118,6 +120,12 @@ class ArcGpuVideoDecodeAccelerator
   // Finds the InputRecord which matches to given |bitstream_buffer_id|.
   // Returns |nullptr| if it cannot be found.
   InputRecord* FindInputRecord(int32_t bitstream_buffer_id);
+
+  // Global counter that keeps track the number of active clients (i.e., how
+  // many VDAs in use by this class).
+  // Since this class only works on the same thread, it's safe to access
+  // |client_count_| without lock.
+  static int client_count_;
 
   std::unique_ptr<media::VideoDecodeAccelerator> vda_;
 

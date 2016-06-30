@@ -9,8 +9,9 @@
 #include <algorithm>
 #include <vector>
 
+#include "ash/common/system/chromeos/devicetype_utils.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/chromeos/devicetype_utils.h"
 #include "ash/wm/lock_state_controller.h"
 #include "base/bind.h"
 #include "base/location.h"
@@ -35,6 +36,8 @@
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/hwid_checker.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage_factory.h"
 #include "chrome/browser/chromeos/login/reauth_stats.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/chromeos/login/screens/network_error.h"
@@ -274,6 +277,9 @@ SigninScreenHandler::SigninScreenHandler(
                  chrome::NOTIFICATION_AUTH_CANCELLED,
                  content::NotificationService::AllSources());
 
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
+      this);
+
   chromeos::input_method::ImeKeyboard* keyboard =
       chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
   if (keyboard)
@@ -291,6 +297,8 @@ SigninScreenHandler::~SigninScreenHandler() {
   OobeUI* oobe_ui = GetOobeUI();
   if (oobe_ui && oobe_ui_observer_added_)
     oobe_ui->RemoveObserver(this);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
+      this);
   chromeos::input_method::ImeKeyboard* keyboard =
       chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
   if (keyboard)
@@ -475,8 +483,6 @@ void SigninScreenHandler::DeclareLocalizedValues(
 
 void SigninScreenHandler::RegisterMessages() {
   AddCallback("authenticateUser", &SigninScreenHandler::HandleAuthenticateUser);
-  AddCallback("authenticateUserWithPin",
-              &SigninScreenHandler::HandleAuthenticateUserWithPin);
   AddCallback("launchIncognito", &SigninScreenHandler::HandleLaunchIncognito);
   AddCallback("showSupervisedUserCreationScreen",
               &SigninScreenHandler::HandleShowSupervisedUserCreationScreen);
@@ -886,6 +892,13 @@ void SigninScreenHandler::RefocusCurrentPod() {
   core_oobe_actor_->RefocusCurrentPod();
 }
 
+void SigninScreenHandler::HidePinKeyboardIfNeeded(const AccountId& account_id) {
+  chromeos::PinStorage* pin_storage =
+      chromeos::PinStorageFactory::GetForAccountId(account_id);
+  if (pin_storage && !pin_storage->IsPinAuthenticationAvailable())
+    CallJS("login.AccountPickerScreen.disablePinKeyboardForUser", account_id);
+}
+
 void SigninScreenHandler::OnUserRemoved(const AccountId& account_id,
                                         bool last_user_removed) {
   CallJS("login.AccountPickerScreen.removeUser", account_id);
@@ -992,6 +1005,13 @@ void SigninScreenHandler::Observe(int type,
   }
 }
 
+void SigninScreenHandler::SuspendDone(const base::TimeDelta& sleep_duration) {
+  for (user_manager::User* user :
+       user_manager::UserManager::Get()->GetUnlockUsers()) {
+    HidePinKeyboardIfNeeded(user->GetAccountId());
+  }
+}
+
 void SigninScreenHandler::OnMaximizeModeStarted() {
   CallJS("login.AccountPickerScreen.setTouchViewState", true);
 }
@@ -1023,17 +1043,8 @@ void SigninScreenHandler::HandleAuthenticateUser(const AccountId& account_id,
   UserContext user_context(account_id);
   user_context.SetKey(Key(password));
   delegate_->Login(user_context, SigninSpecifics());
-}
 
-void SigninScreenHandler::HandleAuthenticateUserWithPin(
-    const AccountId& account_id, const std::string& password) {
-  if (!delegate_)
-    return;
-  DCHECK_EQ(account_id.GetUserEmail(),
-            gaia::SanitizeEmail(account_id.GetUserEmail()));
-
-  // TODO(jdufault): Implement this.
-  NOTIMPLEMENTED();
+  HidePinKeyboardIfNeeded(account_id);
 }
 
 void SigninScreenHandler::HandleLaunchIncognito() {
@@ -1279,21 +1290,30 @@ void SigninScreenHandler::HandleShowLoadingTimeoutError() {
 }
 
 void SigninScreenHandler::HandleFocusPod(const AccountId& account_id) {
-  SetUserInputMethod(account_id.GetUserEmail(), ime_state_.get());
-  WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
   proximity_auth::ScreenlockBridge::Get()->SetFocusedUser(account_id);
   if (delegate_)
     delegate_->CheckUserStatus(account_id);
   if (!test_focus_pod_callback_.is_null())
     test_focus_pod_callback_.Run();
 
-  bool use_24hour_clock = false;
-  if (user_manager::known_user::GetBooleanPref(
-          account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
-    g_browser_process->platform_part()
-        ->GetSystemClock()
-        ->SetLastFocusedPodHourClockType(use_24hour_clock ? base::k24HourClock
-                                                          : base::k12HourClock);
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->FindUser(account_id);
+  // |user| may be nullptr in kiosk mode or unit tests.
+  if (user && user->is_logged_in() && !user->is_active()) {
+    ash::WmShell::Get()->GetSessionStateDelegate()->SwitchActiveUser(
+        account_id);
+  } else {
+    SetUserInputMethod(account_id.GetUserEmail(), ime_state_.get());
+    WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
+
+    bool use_24hour_clock = false;
+    if (user_manager::known_user::GetBooleanPref(
+            account_id, prefs::kUse24HourClock, &use_24hour_clock)) {
+      g_browser_process->platform_part()
+          ->GetSystemClock()
+          ->SetLastFocusedPodHourClockType(
+              use_24hour_clock ? base::k24HourClock : base::k12HourClock);
+    }
   }
 }
 

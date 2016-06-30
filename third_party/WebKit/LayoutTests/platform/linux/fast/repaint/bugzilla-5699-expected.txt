@@ -1,30 +1,27 @@
 {
+  "name": "Content Root Layer",
   "bounds": [800, 600],
   "children": [
     {
+      "name": "LayoutView #document",
       "bounds": [800, 600],
       "contentsOpaque": true,
       "drawsContent": true,
       "paintInvalidations": [
         {
           "object": "LayoutBlockFlow P",
-          "rect": [8, 136, 784, 67],
-          "reason": "invalidate paint rectangle"
-        },
-        {
-          "object": "LayoutBlockFlow P",
-          "rect": [8, 176, 784, 28],
-          "reason": "incremental"
+          "rect": [8, 136, 784, 68],
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [8, 184, 32, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutText #text",
           "rect": [8, 156, 32, 19],
-          "reason": "bounds change"
+          "reason": "forced by layout"
         },
         {
           "object": "LayoutInline SPAN id='d'",
@@ -40,52 +37,58 @@
           "object": "LayoutText #text",
           "rect": [8, 136, 4, 19],
           "reason": "style change"
-        },
-        {
-          "object": "InlineFlowBox",
-          "reason": "style change"
-        },
-        {
-          "object": "InlineTextBox '\n'",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox '\n'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox '\n'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox ''",
-          "reason": "full"
-        },
-        {
-          "object": "InlineTextBox 'Hello'",
-          "reason": "bounds change"
-        },
-        {
-          "object": "InlineTextBox '\u00A0'",
-          "reason": "style change"
-        },
-        {
-          "object": "LayoutBR BR",
-          "reason": "bounds change"
-        },
-        {
-          "object": "LayoutBR BR",
-          "reason": "bounds change"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
-        },
-        {
-          "object": "RootInlineBox",
-          "reason": "full"
         }
       ]
+    }
+  ],
+  "objectPaintInvalidations": [
+    {
+      "object": "LayoutBlockFlow P",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "RootInlineBox",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutInline SPAN id='d'",
+      "reason": "style change"
+    },
+    {
+      "object": "InlineFlowBox",
+      "reason": "style change"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "style change"
+    },
+    {
+      "object": "InlineTextBox '\u00A0'",
+      "reason": "style change"
+    },
+    {
+      "object": "LayoutBR BR",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "InlineTextBox '\n'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutText #text",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "InlineTextBox 'Hello'",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "LayoutBR BR",
+      "reason": "forced by layout"
+    },
+    {
+      "object": "InlineTextBox '\n'",
+      "reason": "forced by layout"
     }
   ]
 }

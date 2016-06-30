@@ -14,7 +14,6 @@
 #include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/move.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -305,12 +304,12 @@ BinaryValue::~BinaryValue() {
 }
 
 // static
-BinaryValue* BinaryValue::CreateWithCopiedBuffer(const char* buffer,
-                                                 size_t size) {
-  char* buffer_copy = new char[size];
-  memcpy(buffer_copy, buffer, size);
-  std::unique_ptr<char[]> scoped_buffer_copy(buffer_copy);
-  return new BinaryValue(std::move(scoped_buffer_copy), size);
+std::unique_ptr<BinaryValue> BinaryValue::CreateWithCopiedBuffer(
+    const char* buffer,
+    size_t size) {
+  std::unique_ptr<char[]> buffer_copy(new char[size]);
+  memcpy(buffer_copy.get(), buffer, size);
+  return base::MakeUnique<BinaryValue>(std::move(buffer_copy), size);
 }
 
 bool BinaryValue::GetAsBinary(const BinaryValue** out_value) const {
@@ -320,7 +319,7 @@ bool BinaryValue::GetAsBinary(const BinaryValue** out_value) const {
 }
 
 BinaryValue* BinaryValue::DeepCopy() const {
-  return CreateWithCopiedBuffer(buffer_.get(), size_);
+  return CreateWithCopiedBuffer(buffer_.get(), size_).release();
 }
 
 bool BinaryValue::Equals(const Value* other) const {

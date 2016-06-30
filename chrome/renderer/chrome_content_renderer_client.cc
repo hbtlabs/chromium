@@ -75,7 +75,9 @@
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/plugins/renderer/mobile_youtube_plugin.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/startup_metric_utils/common/startup_metric_messages.h"
+#include "components/startup_metric_utils/common/startup_metric.mojom.h"
+#include "components/subresource_filter/content/renderer/ruleset_dealer.h"
+#include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
@@ -92,6 +94,7 @@
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -125,10 +128,6 @@
 #include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/renderer_extension_registry.h"
-#endif
-
-#if defined(ENABLE_IPC_FUZZER)
-#include "chrome/common/external_ipc_dumper.h"
 #endif
 
 #if defined(ENABLE_PLUGINS)
@@ -295,6 +294,7 @@ class MediaLoadDeferrer : public content::RenderFrameObserver {
     continue_loading_cb_.Run();
     delete this;
   }
+  void OnDestruct() override { delete this; }
 
   const base::Closure continue_loading_cb_;
 
@@ -329,8 +329,11 @@ ChromeContentRendererClient::~ChromeContentRendererClient() {
 void ChromeContentRendererClient::RenderThreadStarted() {
   RenderThread* thread = RenderThread::Get();
 
-  thread->Send(new StartupMetricHostMsg_RecordRendererMainEntryTime(
-      main_entry_time_));
+  {
+    startup_metric_utils::mojom::StartupMetricHostPtr startup_metric_host;
+    thread->GetRemoteInterfaces()->GetInterface(&startup_metric_host);
+    startup_metric_host->RecordRendererMainEntryTime(main_entry_time_);
+  }
 
   chrome_observer_.reset(new ChromeRenderThreadObserver());
   web_cache_impl_.reset(new web_cache::WebCacheImpl());
@@ -354,6 +357,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   phishing_classifier_.reset(safe_browsing::PhishingClassifierFilter::Create());
 #endif
   prerender_dispatcher_.reset(new prerender::PrerenderDispatcher());
+  subresource_filter_ruleset_dealer_.reset(
+      new subresource_filter::RulesetDealer());
 #if defined(ENABLE_WEBRTC)
   webrtc_logging_message_filter_ = new WebRtcLoggingMessageFilter(
       thread->GetIOMessageLoopProxy());
@@ -365,6 +370,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #endif
   thread->AddObserver(visited_link_slave_.get());
   thread->AddObserver(prerender_dispatcher_.get());
+  thread->AddObserver(subresource_filter_ruleset_dealer_.get());
   thread->AddObserver(SearchBouncer::GetInstance());
 
 #if defined(ENABLE_WEBRTC)
@@ -405,16 +411,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #if defined(OS_ANDROID)
   WebSecurityPolicy::registerURLSchemeAsAllowedForReferrer(
       WebString::fromUTF8(chrome::kAndroidAppScheme));
-#endif
-
-#if defined(ENABLE_IPC_FUZZER)
-  if (command_line->HasSwitch(switches::kIpcDumpDirectory)) {
-    base::FilePath dump_directory =
-        command_line->GetSwitchValuePath(switches::kIpcDumpDirectory);
-    IPC::ChannelProxy::OutgoingMessageFilter* filter =
-        LoadExternalIPCDumper(dump_directory);
-    thread->GetChannel()->set_outgoing_message_filter(filter);
-  }
 #endif
 
   // chrome-search: pages should not be accessible by bookmarklets
@@ -515,6 +511,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
       new PasswordGenerationAgent(render_frame, password_autofill_agent);
   new AutofillAgent(render_frame, password_autofill_agent,
                     password_generation_agent);
+
+  new subresource_filter::SubresourceFilterAgent(
+      render_frame, subresource_filter_ruleset_dealer_.get());
 }
 
 void ChromeContentRendererClient::RenderViewCreated(
@@ -786,8 +785,8 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         std::unique_ptr<content::PluginInstanceThrottler> throttler;
 
         // Small content filter requires routing through a placeholder.
-        // TODO(groby): Verify this actually only triggers if PPS on.
-        if (ChromePluginPlaceholder::IsSmallContentFilterEnabled()) {
+        if (ChromePluginPlaceholder::IsSmallContentFilterEnabled() &&
+            power_saver_info.power_saver_enabled) {
           // The feature only applies to flash plugins.
           if (power_saver_info.is_eligible) {
             placeholder = ChromePluginPlaceholder::CreateDelayedPlugin(

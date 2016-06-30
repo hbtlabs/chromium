@@ -33,6 +33,8 @@ class MediaKeys;
 
 namespace shell {
 class Connection;
+class InterfaceProvider;
+class InterfaceRegistry;
 }
 
 namespace content {
@@ -40,7 +42,6 @@ class BrowserContext;
 class BrowserMessageFilter;
 class RenderProcessHostObserver;
 class RenderWidgetHost;
-class ServiceRegistry;
 class StoragePartition;
 struct GlobalRequestID;
 
@@ -178,14 +179,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Returns the renderer channel.
   virtual IPC::ChannelProxy* GetChannel() = 0;
 
-  // Returns an IPC::Sender which tries to send messages immediately from the
-  // calling thread. The returned Sender is owned by the RenderProcessHost.
-  virtual IPC::Sender* GetImmediateSender() = 0;
-
-  // Returns an IPC::Sender which always sends messages from the IO thread's
-  // task queue. The returned Sender is owned by the RenderProcessHost.
-  virtual IPC::Sender* GetIOThreadSender() = 0;
-
   // Adds a message filter to the IPC channel.
   virtual void AddFilter(BrowserMessageFilter* filter) = 0;
 
@@ -262,8 +255,13 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // have changed.
   virtual void NotifyTimezoneChange(const std::string& zone_id) = 0;
 
-  // Returns the ServiceRegistry for this process.
-  virtual ServiceRegistry* GetServiceRegistry() = 0;
+  // Returns the shell::InterfaceRegistry the browser process uses to expose
+  // interfaces to the renderer.
+  virtual shell::InterfaceRegistry* GetInterfaceRegistry() = 0;
+
+  // Returns the shell::InterfaceProvider the browser process can use to bind
+  // interfaces exposed to it from the renderer.
+  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
 
   // Returns the shell connection for this process.
   virtual shell::Connection* GetChildConnection() = 0;

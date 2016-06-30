@@ -24,13 +24,15 @@ class TestInkDropRipple : public SquareInkDropRipple {
                     const gfx::Size& small_size,
                     int small_corner_radius,
                     const gfx::Point& center_point,
-                    SkColor color)
+                    SkColor color,
+                    float visible_opacity)
       : SquareInkDropRipple(large_size,
                             large_corner_radius,
                             small_size,
                             small_corner_radius,
                             center_point,
-                            color) {}
+                            color,
+                            visible_opacity) {}
 
   ~TestInkDropRipple() override {}
 
@@ -52,7 +54,7 @@ class TestInkDropHighlight : public InkDropHighlight {
  public:
   TestInkDropHighlight(const gfx::Size& size,
                        int corner_radius,
-                       const gfx::Point& center_point,
+                       const gfx::PointF& center_point,
                        SkColor color)
       : InkDropHighlight(size, corner_radius, center_point, color) {}
 
@@ -89,8 +91,8 @@ void TestInkDropHost::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
 
 std::unique_ptr<InkDropRipple> TestInkDropHost::CreateInkDropRipple() const {
   gfx::Size size(10, 10);
-  std::unique_ptr<InkDropRipple> ripple(
-      new TestInkDropRipple(size, 5, size, 5, gfx::Point(), SK_ColorBLACK));
+  std::unique_ptr<InkDropRipple> ripple(new TestInkDropRipple(
+      size, 5, size, 5, gfx::Point(), SK_ColorBLACK, 0.175f));
   if (disable_timers_for_test_)
     ripple->GetTestApi()->SetDisableAnimationTimers(true);
   return ripple;
@@ -100,8 +102,8 @@ std::unique_ptr<InkDropHighlight> TestInkDropHost::CreateInkDropHighlight()
     const {
   std::unique_ptr<InkDropHighlight> highlight;
   if (should_show_highlight_) {
-    highlight.reset(new TestInkDropHighlight(gfx::Size(10, 10), 4, gfx::Point(),
-                                             SK_ColorBLACK));
+    highlight.reset(new TestInkDropHighlight(gfx::Size(10, 10), 4,
+                                             gfx::PointF(), SK_ColorBLACK));
     if (disable_timers_for_test_)
       highlight->GetTestApi()->SetDisableAnimationTimers(true);
   }

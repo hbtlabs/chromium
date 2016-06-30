@@ -10,23 +10,20 @@
 #include <memory>
 #include <set>
 
+#include "ash/mus/window_manager_observer.h"
 #include "ash/public/interfaces/shelf_layout.mojom.h"
 #include "ash/public/interfaces/user_window_controller.mojom.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
 #include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/accelerator_registrar.mojom.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
-#include "components/mus/public/interfaces/window_manager_factory.mojom.h"
-#include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/shell_client.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
 
-namespace display {
-class Screen;
+namespace mus {
+class WindowTreeClient;
 }
 
 namespace views {
@@ -42,48 +39,24 @@ namespace mus {
 
 class AcceleratorRegistrarImpl;
 class RootWindowController;
-class RootWindowsObserver;
 class ShelfLayoutImpl;
 class UserWindowControllerImpl;
-class WmShellMus;
-class WmLookupMus;
-class WmScreen;
+class WindowManager;
 
 class WindowManagerApplication
     : public shell::ShellClient,
-      public ::mus::mojom::WindowManagerFactory,
       public shell::InterfaceFactory<mojom::ShelfLayout>,
       public shell::InterfaceFactory<mojom::UserWindowController>,
-      public shell::InterfaceFactory<::mus::mojom::AcceleratorRegistrar> {
+      public shell::InterfaceFactory<::mus::mojom::AcceleratorRegistrar>,
+      public mash::session::mojom::ScreenlockStateListener,
+      public WindowManagerObserver {
  public:
   WindowManagerApplication();
   ~WindowManagerApplication() override;
 
   shell::Connector* connector() { return connector_; }
 
-  // Returns the RootWindowControllers that have valid roots.
-  //
-  // NOTE: this does not return |controllers_| as most clients want a
-  // RootWindowController that has a valid root window.
-  std::set<RootWindowController*> GetRootControllers();
-
-  WmShellMus* shell() { return shell_.get(); }
-
-  // Called when the root window of |root_controller| is obtained.
-  void OnRootWindowControllerGotRoot(RootWindowController* root_controller);
-
-  // Called after RootWindowController creates the necessary resources.
-  void OnRootWindowControllerDoneInit(RootWindowController* root_controller);
-
-  // Called when the root mus::Window of RootWindowController is destroyed.
-  // |root_controller| is destroyed after this call.
-  void OnRootWindowDestroyed(RootWindowController* root_controller);
-
-  // TODO(sky): figure out right place for this code.
-  void OnAccelerator(uint32_t id, const ui::Event& event);
-
-  void AddRootWindowsObserver(RootWindowsObserver* observer);
-  void RemoveRootWindowsObserver(RootWindowsObserver* observer);
+  WindowManager* window_manager() { return window_manager_.get(); }
 
   mash::session::mojom::Session* session() { return session_.get(); }
 
@@ -93,8 +66,7 @@ class WindowManagerApplication
 
   void OnAcceleratorRegistrarDestroyed(AcceleratorRegistrarImpl* registrar);
 
-  // Adds |root_window_controller| to the set of known roots.
-  void AddRootWindowController(RootWindowController* root_window_controller);
+  void InitWindowManager(::mus::WindowTreeClient* window_tree_client);
 
   // shell::ShellClient:
   void Initialize(shell::Connector* connector,
@@ -116,27 +88,25 @@ class WindowManagerApplication
               mojo::InterfaceRequest<::mus::mojom::AcceleratorRegistrar>
                   request) override;
 
-  // mus::mojom::WindowManagerFactory:
-  void CreateWindowManager(
-      ::mus::mojom::DisplayPtr display,
-      mojo::InterfaceRequest<::mus::mojom::WindowTreeClient> client_request)
-      override;
+  // session::mojom::ScreenlockStateListener:
+  void ScreenlockStateChanged(bool locked) override;
+
+  // WindowManagerObserver:
+  void OnRootWindowControllerAdded(RootWindowController* controller) override;
+  void OnWillDestroyRootWindowController(
+      RootWindowController* controller) override;
 
   shell::Connector* connector_;
 
   mojo::TracingImpl tracing_;
 
-  std::unique_ptr<display::Screen> screen_;
   std::unique_ptr<views::AuraInit> aura_init_;
-
-  std::unique_ptr<WmShellMus> shell_;
-  std::unique_ptr<WmLookupMus> lookup_;
 
   // The |shelf_layout_| object is created once OnEmbed() is called. Until that
   // time |shelf_layout_requests_| stores pending interface requests.
   std::unique_ptr<ShelfLayoutImpl> shelf_layout_;
   mojo::BindingSet<mojom::ShelfLayout> shelf_layout_bindings_;
-  std::vector<std::unique_ptr<mojo::InterfaceRequest<mojom::ShelfLayout>>>
+  std::vector<mojo::InterfaceRequest<mojom::ShelfLayout>>
       shelf_layout_requests_;
 
   // |user_window_controller_| is created once OnEmbed() is called. Until that
@@ -144,19 +114,17 @@ class WindowManagerApplication
   std::unique_ptr<UserWindowControllerImpl> user_window_controller_;
   mojo::BindingSet<mojom::UserWindowController>
       user_window_controller_bindings_;
-  std::vector<
-      std::unique_ptr<mojo::InterfaceRequest<mojom::UserWindowController>>>
+  std::vector<mojo::InterfaceRequest<mojom::UserWindowController>>
       user_window_controller_requests_;
 
-  std::set<AcceleratorRegistrarImpl*> accelerator_registrars_;
-  std::set<RootWindowController*> root_controllers_;
+  std::unique_ptr<WindowManager> window_manager_;
 
-  mojo::Binding<::mus::mojom::WindowManagerFactory>
-      window_manager_factory_binding_;
+  std::set<AcceleratorRegistrarImpl*> accelerator_registrars_;
 
   mash::session::mojom::SessionPtr session_;
 
-  base::ObserverList<RootWindowsObserver> root_windows_observers_;
+  mojo::Binding<mash::session::mojom::ScreenlockStateListener>
+      screenlock_state_listener_binding_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowManagerApplication);
 };

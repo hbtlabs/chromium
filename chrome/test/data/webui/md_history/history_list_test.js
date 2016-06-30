@@ -142,7 +142,9 @@ cr.define('md_history.history_list_test', function() {
           assertTrue(index != -1);
 
           // Check that the search term is bolded correctly in the history-item.
-          assertGT(title.innerHTML.indexOf('<b>google</b>'), -1);
+          assertGT(
+              title.children[0].$.container.innerHTML.indexOf('<b>google</b>'),
+              -1);
         });
       });
 
@@ -158,6 +160,39 @@ cr.define('md_history.history_list_test', function() {
         }).then(function() {
           assertTrue(element.$['no-results'].hidden);
           assertFalse(element.$['infinite-list'].hidden);
+        });
+      });
+
+      test('more from this site sends and sets correct data', function(done) {
+        app.queryingDisabled_ = false;
+        registerMessageCallback('queryHistory', this, function (info) {
+          assertEquals('example.com', info[0]);
+          flush().then(function() {
+            assertEquals(
+                'example.com',
+                toolbar.$['main-toolbar'].getSearchField().getValue());
+            done();
+          });
+        });
+
+        element.$.sharedMenu.itemData = {domain: 'example.com'};
+        MockInteractions.tap(element.$.menuMoreButton);
+      });
+
+      test('changing search deselects items', function() {
+        app.historyResult(
+            createHistoryInfo('ex'),
+            [createHistoryEntry('2016-06-9', 'https://www.example.com')]);
+        return flush().then(function() {
+          var item = element.$$('history-item');
+          MockInteractions.tap(item.$.checkbox);
+
+          assertEquals(1, toolbar.count);
+
+          app.historyResult(
+              createHistoryInfo('ample'),
+              [createHistoryEntry('2016-06-9', 'https://www.example.com')]);
+          assertEquals(0, toolbar.count);
         });
       });
 

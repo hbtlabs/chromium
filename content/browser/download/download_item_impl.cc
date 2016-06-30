@@ -31,7 +31,6 @@
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -93,10 +92,6 @@ static base::FilePath DownloadFileDetach(
 static void DownloadFileCancel(std::unique_ptr<DownloadFile> download_file) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
   download_file->Cancel();
-}
-
-bool IsDownloadResumptionEnabled() {
-  return base::FeatureList::IsEnabled(features::kDownloadResumption);
 }
 
 }  // namespace
@@ -483,9 +478,8 @@ bool DownloadItemImpl::CanResume() const {
       ResumeMode resume_mode = GetResumeMode();
       // Only allow Resume() calls if the resumption mode requires a user
       // action.
-      return IsDownloadResumptionEnabled() &&
-             (resume_mode == RESUME_MODE_USER_RESTART ||
-              resume_mode == RESUME_MODE_USER_CONTINUE);
+      return resume_mode == RESUME_MODE_USER_RESTART ||
+             resume_mode == RESUME_MODE_USER_CONTINUE;
     }
 
     case MAX_DOWNLOAD_INTERNAL_STATE:
@@ -844,9 +838,6 @@ std::string DownloadItemImpl::DebugString(bool verbose) const {
 DownloadItemImpl::ResumeMode DownloadItemImpl::GetResumeMode() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  if (!IsDownloadResumptionEnabled())
-    return RESUME_MODE_INVALID;
-
   // Only support resumption for HTTP(S).
   if (!GetURL().SchemeIsHTTPOrHTTPS())
     return RESUME_MODE_INVALID;
@@ -1183,9 +1174,9 @@ void DownloadItemImpl::Start(
 
     int64_t offset = new_create_info.save_info->offset;
     std::unique_ptr<crypto::SecureHash> hash_state =
-        base::WrapUnique(new_create_info.save_info->hash_state
-                             ? new_create_info.save_info->hash_state->Clone()
-                             : nullptr);
+        new_create_info.save_info->hash_state
+            ? new_create_info.save_info->hash_state->Clone()
+            : nullptr;
 
     // Interrupted downloads also need a target path.
     if (target_path_.empty()) {
@@ -1884,9 +1875,6 @@ void DownloadItemImpl::AutoResumeIfValid() {
 void DownloadItemImpl::ResumeInterruptedDownload(
     ResumptionRequestSource source) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!IsDownloadResumptionEnabled())
-    return;
-
   // If we're not interrupted, ignore the request; our caller is drunk.
   if (state_ != INTERRUPTED_INTERNAL)
     return;

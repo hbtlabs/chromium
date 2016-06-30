@@ -27,6 +27,7 @@
 #include "content/browser/compositor/owned_mailbox.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/public/common/context_menu_params.h"
@@ -95,6 +96,7 @@ struct TextInputState;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       public DelegatedFrameHostClient,
+      public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
       public aura::WindowTreeHostObserver,
@@ -140,8 +142,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(const TextInputState& params) override;
-  void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
@@ -170,7 +170,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void EndFrameSubscription() override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void WheelEventAck(const blink::WebMouseWheelEvent& event,
                      InputEventAckState ack_result) override;
@@ -188,9 +187,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
@@ -200,8 +198,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   uint32_t SurfaceIdNamespaceAtPoint(cc::SurfaceHittestDelegate* delegate,
                                      const gfx::Point& point,
                                      gfx::Point* transformed_point) override;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void ProcessMouseEvent(const blink::WebMouseEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
+                              const ui::LatencyInfo& latency) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
@@ -219,6 +219,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
@@ -237,8 +238,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override;
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override;
+  bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
   // Overridden from display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override;
@@ -348,7 +349,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   const ui::MotionEventAura& pointer_state() const { return pointer_state_; }
 
  private:
+  friend class InputMethodResultAuraTest;
   friend class RenderWidgetHostViewAuraCopyRequestTest;
+  friend class TestInputMethodObserver;
+  FRIEND_TEST_ALL_PREFIXES(InputMethodResultAuraTest,
+                           FinishImeCompositionSession);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            PopupRetainsCaptureAfterMouseRelease);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, SetCompositionText);
@@ -465,6 +470,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       const base::TimeDelta& interval) override;
   void SetBeginFrameSource(cc::BeginFrameSource* source) override;
 
+  // TextInputManager::Observer implementation.
+  void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
+                                    RenderWidgetHostViewBase* updated_view,
+                                    bool did_update_state) override;
+  void OnImeCancelComposition(TextInputManager* text_input_manager,
+                              RenderWidgetHostViewBase* updated_view) override;
+
   // cc::BeginFrameObserver implementation.
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
@@ -573,14 +585,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Stores the current state of the active pointers targeting this
   // object.
   ui::MotionEventAura pointer_state_;
-
-  // The current text input type.
-  ui::TextInputType text_input_type_;
-  // The current text input mode corresponding to HTML5 inputmode attribute.
-  ui::TextInputMode text_input_mode_;
-  // The current text input flags.
-  int text_input_flags_;
-  bool can_compose_inline_;
 
   // Bounds for the selection.
   gfx::SelectionBound selection_anchor_;

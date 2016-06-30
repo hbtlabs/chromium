@@ -19,6 +19,7 @@
 #include "media/base/byte_queue.h"
 #include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
+#include "media/base/media_tracks.h"
 #include "media/base/ranges.h"
 #include "media/base/stream_parser.h"
 #include "media/filters/media_source_state.h"
@@ -32,7 +33,9 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
  public:
   typedef std::deque<scoped_refptr<StreamParserBuffer> > BufferQueue;
 
-  ChunkDemuxerStream(Type type, bool splice_frames_enabled);
+  ChunkDemuxerStream(Type type,
+                     bool splice_frames_enabled,
+                     MediaTrack::Id media_track_id);
   ~ChunkDemuxerStream() override;
 
   // ChunkDemuxerStream control methods.
@@ -118,6 +121,8 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
 
   void SetLiveness(Liveness liveness);
 
+  MediaTrack::Id media_track_id() const { return media_track_id_; }
+
  private:
   enum State {
     UNINITIALIZED,
@@ -137,6 +142,8 @@ class MEDIA_EXPORT ChunkDemuxerStream : public DemuxerStream {
   Liveness liveness_;
 
   std::unique_ptr<SourceBufferStream> stream_;
+
+  const MediaTrack::Id media_track_id_;
 
   mutable base::Lock lock_;
   State state_;
@@ -219,8 +226,9 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
   // and possibly updating |*timestamp_offset| during coded frame processing.
   // |append_window_start| and |append_window_end| correspond to the MSE spec's
   // similarly named source buffer attributes that are used in coded frame
-  // processing.
-  void AppendData(const std::string& id,
+  // processing. Returns true on success, false if the caller needs to run the
+  // append error algorithm with decode error parameter set to true.
+  bool AppendData(const std::string& id,
                   const uint8_t* data,
                   size_t length,
                   base::TimeDelta append_window_start,
@@ -354,6 +362,9 @@ class MEDIA_EXPORT ChunkDemuxer : public Demuxer {
 
   // Seeks all SourceBufferStreams to |seek_time|.
   void SeekAllSources(base::TimeDelta seek_time);
+
+  // Generates and returns a unique media track id.
+  static MediaTrack::Id GenerateMediaTrackId();
 
   // Shuts down all DemuxerStreams by calling Shutdown() on
   // all objects in |source_state_map_|.

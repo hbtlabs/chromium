@@ -232,9 +232,9 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
     // with the new render frame if necessary.  Note that this call needs to
     // occur before initializing the RenderView; the flow of creating the
     // RenderView can cause browser-side code to execute that expects the this
-    // RFH's ServiceRegistry to be initialized (e.g., if the site is a WebUI
-    // site that is handled via Mojo, then Mojo WebUI code in //chrome will
-    // add a service to this RFH's ServiceRegistry).
+    // RFH's shell::InterfaceRegistry to be initialized (e.g., if the site is a
+    // WebUI site that is handled via Mojo, then Mojo WebUI code in //chrome
+    // will add an interface to this RFH's InterfaceRegistry).
     dest_render_frame_host->SetUpMojoIfNeeded();
 
     // Recreate the opener chain.
@@ -965,14 +965,14 @@ void RenderFrameHostManager::OnDidResetContentSecurityPolicy() {
   }
 }
 
-void RenderFrameHostManager::OnEnforceStrictMixedContentChecking(
-    bool should_enforce) {
+void RenderFrameHostManager::OnEnforceInsecureRequestPolicy(
+    blink::WebInsecureRequestPolicy policy) {
   if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
     return;
 
   for (const auto& pair : proxy_hosts_) {
-    pair.second->Send(new FrameMsg_EnforceStrictMixedContentChecking(
-        pair.second->GetRoutingID(), should_enforce));
+    pair.second->Send(new FrameMsg_EnforceInsecureRequestPolicy(
+        pair.second->GetRoutingID(), policy));
   }
 }
 
@@ -1768,7 +1768,8 @@ int RenderFrameHostManager::CreateRenderFrameProxy(SiteInstance* instance) {
   if (!render_view_host) {
     CHECK(frame_tree_node_->IsMainFrame());
     render_view_host = frame_tree_node_->frame_tree()->CreateRenderViewHost(
-        instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, true, true);
+        instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, true,
+        delegate_->IsHidden());
   }
 
   RenderFrameProxyHost* proxy = GetRenderFrameProxyHost(instance);

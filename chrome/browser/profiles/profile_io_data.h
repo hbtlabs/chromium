@@ -29,7 +29,6 @@
 #include "components/prefs/pref_member.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/resource_context.h"
-#include "net/cert/ct_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_network_session.h"
@@ -55,6 +54,7 @@ class ResourcePrefetchPredictorObserver;
 }
 
 namespace certificate_transparency {
+class CTPolicyManager;
 class TreeStateTracker;
 }
 
@@ -72,15 +72,17 @@ class InfoMap;
 }
 
 namespace net {
-class CertificateReportSender;
 class CertVerifier;
 class ChannelIDService;
+class ClientCertStore;
 class CookieStore;
+class CTVerifier;
 class FtpTransactionFactory;
 class HttpServerProperties;
 class HttpTransactionFactory;
 class ProxyConfigService;
 class ProxyService;
+class ReportSender;
 class SSLConfigService;
 class TransportSecurityPersister;
 class TransportSecurityState;
@@ -185,7 +187,11 @@ class ProfileIOData {
     return &network_prediction_options_;
   }
 
-  content::ResourceContext::SaltCallback GetMediaDeviceIDSalt() const;
+  bool HasMediaDeviceIDSalt() const {
+    return media_device_id_salt_.get() != nullptr;
+  }
+
+  std::string GetMediaDeviceIDSalt() const;
 
   DevToolsNetworkControllerHandle* network_controller_handle() const {
     return &network_controller_handle_;
@@ -199,8 +205,6 @@ class ProfileIOData {
   std::string username_hash() const {
     return username_hash_;
   }
-
-  bool use_system_key_slot() const { return use_system_key_slot_; }
 #endif
 
   Profile::ProfileType profile_type() const {
@@ -257,6 +261,9 @@ class ProfileIOData {
   // Returns the predictor service for this Profile. Returns nullptr if there is
   // no Predictor, as is the case with OffTheRecord profiles.
   virtual chrome_browser_net::Predictor* GetPredictor();
+
+  // Get platform ClientCertStore. May return nullptr.
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore();
 
  protected:
   // A URLRequestContext for media that owns its HTTP factory, to ensure
@@ -386,7 +393,7 @@ class ProfileIOData {
     return proxy_service_.get();
   }
 
-  base::WeakPtr<net::HttpServerProperties> http_server_properties() const;
+  net::HttpServerProperties* http_server_properties() const;
 
   void set_http_server_properties(
       std::unique_ptr<net::HttpServerProperties> http_server_properties) const;
@@ -429,14 +436,13 @@ class ProfileIOData {
     // ResourceContext implementation:
     net::HostResolver* GetHostResolver() override;
     net::URLRequestContext* GetRequestContext() override;
-    std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override;
     void CreateKeygenHandler(
         uint32_t key_size_in_bits,
         const std::string& challenge_string,
         const GURL& url,
         const base::Callback<void(std::unique_ptr<net::KeygenHandler>)>&
             callback) override;
-    SaltCallback GetMediaDeviceIDSalt() override;
+    std::string GetMediaDeviceIDSalt() override;
 
    private:
     friend class ProfileIOData;
@@ -576,10 +582,12 @@ class ProfileIOData {
   mutable std::unique_ptr<chromeos::CertificateProvider> certificate_provider_;
 #endif
 
+  // Pointed to by the TransportSecurityState.
   mutable std::unique_ptr<net::TransportSecurityPersister>
       transport_security_persister_;
-  mutable std::unique_ptr<net::CertificateReportSender>
-      certificate_report_sender_;
+  mutable std::unique_ptr<net::ReportSender> certificate_report_sender_;
+  mutable std::unique_ptr<certificate_transparency::CTPolicyManager>
+      ct_policy_manager_;
 
   // These are only valid in between LazyInitialize() and their accessor being
   // called.

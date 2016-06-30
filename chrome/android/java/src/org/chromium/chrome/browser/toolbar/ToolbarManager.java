@@ -894,19 +894,11 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     }
 
     /**
-     * Update the primary color used by the model to the given color.
-     * @param color The primary color for the current tab.
-     */
-    public void updatePrimaryColor(int color) {
-        updatePrimaryColor(color, true);
-    }
-
-    /**
-     * Update the primary color used by the model to the given color.
+     * Updates the primary color used by the model to the given color.
      * @param color The primary color for the current tab.
      * @param shouldAnimate Whether the change of color should be animated.
      */
-    private void updatePrimaryColor(int color, boolean shouldAnimate) {
+    public void updatePrimaryColor(int color, boolean shouldAnimate) {
         if (!mShouldUpdateToolbarPrimaryColor) return;
 
         boolean colorChanged = mToolbarModel.getPrimaryColor() != color;
@@ -1157,6 +1149,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
         progress = Math.max(progress, MINIMUM_LOAD_PROGRESS);
         mToolbar.setLoadProgress(progress / 100f);
+        if (progress == 100) finishLoadProgress(true);
     }
 
     private void finishLoadProgress(boolean delayed) {

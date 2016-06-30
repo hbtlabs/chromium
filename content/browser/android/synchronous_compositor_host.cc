@@ -68,6 +68,7 @@ SynchronousCompositorHost::SynchronousCompositorHost(
       client_(client),
       ui_task_runner_(
           BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)),
+      process_id_(rwhva_->GetRenderWidgetHost()->GetProcess()->GetID()),
       routing_id_(rwhva_->GetRenderWidgetHost()->GetRoutingID()),
       sender_(rwhva_->GetRenderWidgetHost()),
       use_in_process_zero_copy_software_draw_(use_in_proc_software_draw),
@@ -76,11 +77,11 @@ SynchronousCompositorHost::SynchronousCompositorHost(
       need_animate_scroll_(false),
       need_invalidate_count_(0u),
       did_activate_pending_tree_count_(0u) {
-  client_->DidInitializeCompositor(this);
+  client_->DidInitializeCompositor(this, process_id_, routing_id_);
 }
 
 SynchronousCompositorHost::~SynchronousCompositorHost() {
-  client_->DidDestroyCompositor(this);
+  client_->DidDestroyCompositor(this, process_id_, routing_id_);
 }
 
 bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
@@ -92,10 +93,6 @@ bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
-}
-
-void SynchronousCompositorHost::DidBecomeCurrent() {
-  client_->DidBecomeCurrent(this);
 }
 
 SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
@@ -122,14 +119,14 @@ SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
     frame.frame.reset();
   }
   if (frame.frame) {
-    UpdateFrameMetaData(frame.frame->metadata);
+    UpdateFrameMetaData(frame.frame->metadata.Clone());
   }
   return frame;
 }
 
 void SynchronousCompositorHost::UpdateFrameMetaData(
-    const cc::CompositorFrameMetadata& frame_metadata) {
-  rwhva_->SynchronousFrameMetadata(frame_metadata);
+    cc::CompositorFrameMetadata frame_metadata) {
+  rwhva_->SynchronousFrameMetadata(std::move(frame_metadata));
 }
 
 namespace {
@@ -164,7 +161,7 @@ bool SynchronousCompositorHost::DemandDrawSwInProc(SkCanvas* canvas) {
   if (!success)
     return false;
   ProcessCommonParams(common_renderer_params);
-  UpdateFrameMetaData(frame->metadata);
+  UpdateFrameMetaData(std::move(frame->metadata));
   return true;
 }
 
@@ -230,7 +227,7 @@ bool SynchronousCompositorHost::DemandDrawSw(SkCanvas* canvas) {
     return false;
 
   ProcessCommonParams(common_renderer_params);
-  UpdateFrameMetaData(frame->metadata);
+  UpdateFrameMetaData(std::move(frame->metadata));
 
   SkBitmap bitmap;
   if (!bitmap.installPixels(info, software_draw_shm_->shm.memory(), stride))
@@ -337,7 +334,7 @@ void SynchronousCompositorHost::OnComputeScroll(
 
 void SynchronousCompositorHost::DidOverscroll(
     const DidOverscrollParams& over_scroll_params) {
-  client_->DidOverscroll(over_scroll_params.accumulated_overscroll,
+  client_->DidOverscroll(this, over_scroll_params.accumulated_overscroll,
                          over_scroll_params.latest_overscroll_delta,
                          over_scroll_params.current_fling_velocity);
 }
@@ -371,13 +368,13 @@ void SynchronousCompositorHost::ProcessCommonParams(
 
   if (need_invalidate_count_ != params.need_invalidate_count) {
     need_invalidate_count_ = params.need_invalidate_count;
-    client_->PostInvalidate();
+    client_->PostInvalidate(this);
   }
 
   if (did_activate_pending_tree_count_ !=
       params.did_activate_pending_tree_count) {
     did_activate_pending_tree_count_ = params.did_activate_pending_tree_count;
-    client_->DidUpdateContent();
+    client_->DidUpdateContent(this);
   }
 
   // Ensure only valid values from compositor are sent to client.
@@ -385,7 +382,7 @@ void SynchronousCompositorHost::ProcessCommonParams(
   // for that case here.
   if (params.page_scale_factor) {
     client_->UpdateRootLayerState(
-        gfx::ScrollOffsetToVector2dF(params.total_scroll_offset),
+        this, gfx::ScrollOffsetToVector2dF(params.total_scroll_offset),
         gfx::ScrollOffsetToVector2dF(params.max_scroll_offset),
         params.scrollable_size, params.page_scale_factor,
         params.min_page_scale_factor, params.max_page_scale_factor);

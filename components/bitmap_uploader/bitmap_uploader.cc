@@ -9,9 +9,11 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "cc/ipc/compositor_frame.mojom.h"
+#include "cc/quads/render_pass.h"
+#include "cc/quads/solid_color_draw_quad.h"
+#include "cc/quads/texture_draw_quad.h"
 #include "components/mus/public/cpp/gles2_context.h"
-#include "components/mus/public/cpp/surfaces/surfaces_type_converters.h"
-#include "components/mus/public/cpp/surfaces/surfaces_utils.h"
 #include "components/mus/public/cpp/window.h"
 #include "components/mus/public/cpp/window_surface.h"
 
@@ -44,7 +46,7 @@ void BitmapUploader::Init(shell::Connector* connector) {
 
   gles2_context_ = mus::GLES2Context::CreateOffscreenContext(
       std::vector<int32_t>(), connector);
-  DCHECK(gles2_context_);
+  // CreateOffscreenContext() may return null.
 }
 
 // Sets the color which is RGBA.
@@ -70,20 +72,28 @@ void BitmapUploader::SetBitmap(int width,
 }
 
 void BitmapUploader::Upload() {
-  const gfx::Rect bounds(window_->bounds());
-  mus::mojom::PassPtr pass = mojo::CreateDefaultPass(1, bounds);
-  mus::mojom::CompositorFramePtr frame = mus::mojom::CompositorFrame::New();
+  if (!gles2_context_)
+    return;
 
-  // TODO(rjkroege): Support device scale factor in PDF viewer
-  mus::mojom::CompositorFrameMetadataPtr meta =
-      mus::mojom::CompositorFrameMetadata::New();
-  meta->device_scale_factor = 1.0f;
-  frame->metadata = std::move(meta);
+  const gfx::Rect bounds(window_->bounds().size());
 
-  frame->resources.resize(0u);
+  cc::CompositorFrame frame;
+  // TODO(rjkroege): Support device scale factors other than 1.
+  frame.metadata.device_scale_factor = 1.0f;
+  frame.delegated_frame_data.reset(new cc::DelegatedFrameData());
+  frame.delegated_frame_data->resource_list.resize(0u);
 
-  pass->quads.resize(0u);
-  pass->shared_quad_states.push_back(mojo::CreateDefaultSQS(bounds.size()));
+  const cc::RenderPassId render_pass_id(1, 1);
+  std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
+  pass->SetAll(render_pass_id, bounds, bounds, gfx::Transform(),
+               true /* has_transparent_background */);
+
+  // The SharedQuadState is owned by the SharedQuadStateList
+  // shared_quad_state_list.
+  cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
+  sqs->SetAll(gfx::Transform(), bounds.size(), bounds, bounds,
+              false /* is_clipped */, 1.f /* opacity */, SkXfermode::kSrc_Mode,
+              0 /* sorting_context_id */);
 
   if (bitmap_.get()) {
     gpu::gles2::GLES2Interface* gl = gles2_context_->interface();
@@ -114,9 +124,10 @@ void BitmapUploader::Upload() {
     resource.read_lock_fences_enabled = false;
     resource.is_software = false;
     resource.is_overlay_candidate = false;
+    frame.delegated_frame_data->resource_list.push_back(std::move(resource));
 
-    mus::mojom::QuadPtr quad = mus::mojom::Quad::New();
-    quad->material = mus::mojom::Material::TEXTURE_CONTENT;
+    cc::TextureDrawQuad* quad =
+        pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
 
     gfx::Size rect_size;
     if (width_ <= bounds.width() && height_ <= bounds.height()) {
@@ -133,51 +144,33 @@ void BitmapUploader::Upload() {
       }
     }
     gfx::Rect rect(rect_size);
-    quad->rect = rect;
-    quad->opaque_rect = rect;
-    quad->visible_rect = rect;
-    quad->needs_blending = true;
-    quad->shared_quad_state_index = 0u;
-
-    mus::mojom::TextureQuadStatePtr texture_state =
-        mus::mojom::TextureQuadState::New();
-    texture_state->resource_id = resource.id;
-    texture_state->premultiplied_alpha = true;
-    texture_state->uv_top_left.SetPoint(0.f, 0.f);
-    texture_state->uv_bottom_right.SetPoint(1.f, 1.f);
-    texture_state->background_color = mus::mojom::Color::New();
-    texture_state->background_color->rgba = g_transparent_color;
-    for (int i = 0; i < 4; ++i)
-      texture_state->vertex_opacity.push_back(1.f);
-    texture_state->y_flipped = false;
-
-    frame->resources.push_back(std::move(resource));
-    quad->texture_quad_state = std::move(texture_state);
-    pass->quads.push_back(std::move(quad));
+    const bool needs_blending = true;
+    const bool premultiplied_alpha = true;
+    const gfx::PointF uv_top_left(0.f, 0.f);
+    const gfx::PointF uv_bottom_right(1.f, 1.f);
+    float vertex_opacity[4] = {1.f, 1.f, 1.f, 1.f};
+    const bool y_flipped = false;
+    const bool nearest_neighbor = false;
+    quad->SetAll(sqs, rect, rect, rect, needs_blending, resource.id,
+                 gfx::Size(), premultiplied_alpha, uv_top_left, uv_bottom_right,
+                 g_transparent_color, vertex_opacity, y_flipped,
+                 nearest_neighbor, false);
   }
 
   if (color_ != g_transparent_color) {
-    mus::mojom::QuadPtr quad = mus::mojom::Quad::New();
-    quad->material = mus::mojom::Material::SOLID_COLOR;
-    quad->rect = bounds;
-    quad->visible_rect = bounds;
-    quad->needs_blending = true;
-    quad->shared_quad_state_index = 0u;
-
-    mus::mojom::SolidColorQuadStatePtr color_state =
-        mus::mojom::SolidColorQuadState::New();
-    color_state->color = mus::mojom::Color::New();
-    color_state->color->rgba = color_;
-    color_state->force_anti_aliasing_off = false;
-
-    quad->solid_color_quad_state = std::move(color_state);
-    pass->quads.push_back(std::move(quad));
+    cc::SolidColorDrawQuad* quad =
+        pass->CreateAndAppendDrawQuad<cc::SolidColorDrawQuad>();
+    const bool force_antialiasing_off = false;
+    const gfx::Rect opaque_rect(0, 0, 0, 0);
+    const bool needs_blending = true;
+    quad->SetAll(sqs, bounds, opaque_rect, bounds, needs_blending, color_,
+                 force_antialiasing_off);
   }
 
-  frame->passes.push_back(std::move(pass));
+  frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
 
   // TODO(rjkroege, fsamuel): We should throttle frames.
-  surface_->SubmitCompositorFrame(std::move(frame), mojo::Closure());
+  surface_->SubmitCompositorFrame(std::move(frame), base::Closure());
 }
 
 uint32_t BitmapUploader::BindTextureForSize(const gfx::Size& size) {

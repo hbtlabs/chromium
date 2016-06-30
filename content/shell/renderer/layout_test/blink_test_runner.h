@@ -104,7 +104,9 @@ class BlinkTestRunner : public RenderViewObserver,
                                     bool by_user) override;
   void SetDeviceScaleFactor(float factor) override;
   void SetDeviceColorProfile(const std::string& name) override;
+  float GetWindowToViewportScale() override;
   void EnableUseZoomForDSF() override;
+  bool IsUseZoomForDSFEnabled() override;
   void SetBluetoothFakeAdapter(const std::string& adapter_name,
                                const base::Closure& callback) override;
   void SetBluetoothManualChooser(bool enable) override;
@@ -178,6 +180,9 @@ class BlinkTestRunner : public RenderViewObserver,
   void OnTryLeakDetection();
   void OnReplyBluetoothManualChooserEvents(
       const std::vector<std::string>& events);
+
+  // RenderViewObserver implementation.
+  void OnDestruct() override;
 
   // After finishing the test, retrieves the audio, text, and pixel dumps from
   // the TestRunner library and sends them to the browser process.

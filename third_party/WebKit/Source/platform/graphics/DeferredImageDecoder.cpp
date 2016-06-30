@@ -30,9 +30,11 @@
 #include "platform/graphics/DecodingImageGenerator.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/ImageFrameGenerator.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -55,44 +57,33 @@ public:
     uint32_t m_uniqueID;
 };
 
-bool DeferredImageDecoder::s_enabled = true;
-
-PassOwnPtr<DeferredImageDecoder> DeferredImageDecoder::create(const SharedBuffer& data, ImageDecoder::AlphaOption alphaOption, ImageDecoder::GammaAndColorProfileOption colorOptions)
+std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::create(const SharedBuffer& data, ImageDecoder::AlphaOption alphaOption, ImageDecoder::GammaAndColorProfileOption colorOptions)
 {
-    OwnPtr<ImageDecoder> actualDecoder = ImageDecoder::create(data, alphaOption, colorOptions);
+    std::unique_ptr<ImageDecoder> actualDecoder = ImageDecoder::create(data, alphaOption, colorOptions);
 
     if (!actualDecoder)
         return nullptr;
 
-    return adoptPtr(new DeferredImageDecoder(std::move(actualDecoder)));
+    return wrapUnique(new DeferredImageDecoder(std::move(actualDecoder)));
 }
 
-PassOwnPtr<DeferredImageDecoder> DeferredImageDecoder::createForTesting(PassOwnPtr<ImageDecoder> actualDecoder)
+std::unique_ptr<DeferredImageDecoder> DeferredImageDecoder::createForTesting(std::unique_ptr<ImageDecoder> actualDecoder)
 {
-    return adoptPtr(new DeferredImageDecoder(std::move(actualDecoder)));
+    return wrapUnique(new DeferredImageDecoder(std::move(actualDecoder)));
 }
 
-DeferredImageDecoder::DeferredImageDecoder(PassOwnPtr<ImageDecoder> actualDecoder)
+DeferredImageDecoder::DeferredImageDecoder(std::unique_ptr<ImageDecoder> actualDecoder)
     : m_allDataReceived(false)
     , m_actualDecoder(std::move(actualDecoder))
     , m_repetitionCount(cAnimationNone)
     , m_hasColorProfile(false)
     , m_canYUVDecode(false)
+    , m_hasHotSpot(false)
 {
 }
 
 DeferredImageDecoder::~DeferredImageDecoder()
 {
-}
-
-void DeferredImageDecoder::setEnabled(bool enabled)
-{
-    s_enabled = enabled;
-}
-
-bool DeferredImageDecoder::enabled()
-{
-    return s_enabled;
 }
 
 String DeferredImageDecoder::filenameExtension() const
@@ -126,7 +117,7 @@ PassRefPtr<SkImage> DeferredImageDecoder::createFrameAtIndex(size_t index)
     if (!frame || frame->getStatus() == ImageFrame::FrameEmpty)
         return nullptr;
 
-    return adoptRef(SkImage::NewFromBitmap(frame->bitmap()));
+    return fromSkSp(SkImage::MakeFromBitmap(frame->bitmap()));
 }
 
 void DeferredImageDecoder::setData(SharedBuffer& data, bool allDataReceived)
@@ -139,7 +130,7 @@ void DeferredImageDecoder::setData(SharedBuffer& data, bool allDataReceived)
 
     if (m_frameGenerator) {
         if (!m_rwBuffer)
-            m_rwBuffer = adoptPtr(new SkRWBuffer(data.size()));
+            m_rwBuffer = wrapUnique(new SkRWBuffer(data.size()));
 
         const char* segment = 0;
         for (size_t length = data.getSomeData(segment, m_rwBuffer->size());
@@ -247,6 +238,7 @@ void DeferredImageDecoder::activateLazyDecoding()
         return;
 
     m_size = m_actualDecoder->size();
+    m_hasHotSpot = m_actualDecoder->hotSpot(m_hotSpot);
     m_filenameExtension = m_actualDecoder->filenameExtension();
     // JPEG images support YUV decoding: other decoders do not, WEBP could in future.
     m_canYUVDecode = RuntimeEnabledFeatures::decodeToYUVEnabled() && (m_filenameExtension == "jpg");
@@ -259,10 +251,8 @@ void DeferredImageDecoder::activateLazyDecoding()
 
 void DeferredImageDecoder::prepareLazyDecodedFrames()
 {
-    if (!s_enabled
-        || !m_actualDecoder
-        || !m_actualDecoder->isSizeAvailable()
-        || m_actualDecoder->filenameExtension() == "ico")
+    if (!m_actualDecoder
+        || !m_actualDecoder->isSizeAvailable())
         return;
 
     activateLazyDecoding();
@@ -308,7 +298,7 @@ PassRefPtr<SkImage> DeferredImageDecoder::createFrameImageAtIndex(size_t index, 
     RefPtr<SkROBuffer> roBuffer = adoptRef(m_rwBuffer->newRBufferSnapshot());
     RefPtr<SegmentReader> segmentReader = SegmentReader::createFromSkROBuffer(roBuffer.release());
     DecodingImageGenerator* generator = new DecodingImageGenerator(m_frameGenerator, imageInfoFrom(decodedSize, knownToBeOpaque), segmentReader.release(), m_allDataReceived, index, m_frameData[index].m_uniqueID);
-    RefPtr<SkImage> image = adoptRef(SkImage::NewFromGenerator(generator)); // SkImage takes ownership of the generator.
+    RefPtr<SkImage> image = fromSkSp(SkImage::MakeFromGenerator(generator)); // SkImage takes ownership of the generator.
     if (!image)
         return nullptr;
 
@@ -327,8 +317,11 @@ PassRefPtr<SkImage> DeferredImageDecoder::createFrameImageAtIndex(size_t index, 
 
 bool DeferredImageDecoder::hotSpot(IntPoint& hotSpot) const
 {
-    // TODO: Implement.
-    return m_actualDecoder ? m_actualDecoder->hotSpot(hotSpot) : false;
+    if (m_actualDecoder)
+        return m_actualDecoder->hotSpot(hotSpot);
+    if (m_hasHotSpot)
+        hotSpot = m_hotSpot;
+    return m_hasHotSpot;
 }
 
 } // namespace blink

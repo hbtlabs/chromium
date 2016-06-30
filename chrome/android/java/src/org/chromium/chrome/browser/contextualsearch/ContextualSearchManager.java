@@ -190,6 +190,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
                 if (!mIsPromotingToTab && tab.getId() != lastId
                         || mActivity.getTabModelSelector().isIncognitoSelected()) {
                     hideContextualSearch(StateChangeReason.UNKNOWN);
+                    mSelectionController.onTabSelected();
                 }
             }
 
@@ -744,12 +745,17 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      */
     @CalledByNative
     private void onSetCaption(String caption, boolean doesAnswer) {
+        if (TextUtils.isEmpty(caption)) return;
+
         // Notify the UI of the caption.
         mSearchPanel.setCaption(caption);
         if (mQuickAnswersHeuristic != null) {
             mQuickAnswersHeuristic.setConditionSatisfied(true);
             mQuickAnswersHeuristic.setDoesAnswer(doesAnswer);
         }
+
+        // Update Tap counters to account for a possible answer.
+        mPolicy.updateCountersForQuickAnswer(mWasActivatedByTap, doesAnswer);
     }
 
     /**

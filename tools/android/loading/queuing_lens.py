@@ -12,12 +12,12 @@ import collections
 import itertools
 import logging
 
-import tracing
+import clovis_constants
 
 
 class QueuingLens(object):
   """Attaches queuing related trace events to request objects."""
-  QUEUING_CATEGORY = tracing.QUEUING_CATEGORY
+  QUEUING_CATEGORY = clovis_constants.QUEUING_CATEGORY
   ASYNC_NAME = 'ScheduledResourceRequest'
   READY_NAME = 'ScheduledResourceRequest.Ready'
   SET_PRIORITY_NAME = 'ScheduledResourceRequest.SetPriority'
@@ -55,8 +55,8 @@ class QueuingLens(object):
          (start_msec: throttle start, end_msec: throttle end,
           ready_msec: ready,
           blocking: [blocking requests],
-          source_ids: [source ids of the request])}, which the map values are
-      anonymous objects with the specified fields.
+          source_ids: [source ids of the request])}, where the map values are
+      a named tuple with the specified fields.
     """
     url_to_requests = collections.defaultdict(list)
     for rq in self._request_track.GetEvents():
@@ -83,23 +83,23 @@ class QueuingLens(object):
       matching_source_ids = set(
           source_id for source_id, url in self._source_id_to_url.iteritems()
           if url == request_url)
-      # TODO(mattcary): I think this assert will fail exactly when there is more
-      # than one request for the same URL.
-      assert len(matching_source_ids) <= 1, requests
+      if len(matching_source_ids) > 1:
+        logging.warning('Multiple matching source ids, probably duplicated'
+                        'urls: %s', [rq.url for rq in requests])
       # Get first source id.
       sid = next(s for s in matching_source_ids) \
           if matching_source_ids else None
       (throttle_start_msec, throttle_end_msec, ready_msec) = \
          timing_by_source_id[sid] if matching_source_ids else (-1, -1, -1)
 
-      blocking_requests = itertools.chain.from_iterable(
-          url_to_requests[self._source_id_to_url[sid]]
-          for sid, (flight_start_msec,
-                    flight_end_msec, _) in timing_by_source_id.iteritems()
-          if (flight_start_msec < throttle_start_msec and
-              flight_end_msec > throttle_start_msec and
-              flight_end_msec < throttle_end_msec))
-      blocking_requests = [b for b in blocking_requests]
+      blocking_requests = []
+      for sid, (flight_start_msec,
+                flight_end_msec, _)  in timing_by_source_id.iteritems():
+        if (flight_start_msec < throttle_start_msec and
+            flight_end_msec > throttle_start_msec and
+            flight_end_msec < throttle_end_msec):
+          blocking_requests.extend(
+              url_to_requests.get(self._source_id_to_url[sid], []))
 
       info = collections.namedtuple(
           'QueueInfo', ['start_msec', 'end_msec', 'ready_msec', 'blocking'
@@ -129,7 +129,7 @@ class QueuingLens(object):
     for e in events:
       if 'request_url' in e.args['data']:
         urls.add(e.args['data']['request_url'])
-    assert len(urls) == 1
+    assert len(urls) == 1, urls
     return urls.pop()
 
   def _GetEventsForRequest(self, request):

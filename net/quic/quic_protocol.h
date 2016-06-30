@@ -81,7 +81,7 @@ const QuicPacketCount kMinCongestionWindowForBandwidthResumption = 10;
 const QuicPacketCount kMaxTrackedPackets = 10000;
 
 // Default size of the socket receive buffer in bytes.
-const QuicByteCount kDefaultSocketReceiveBuffer = 256 * 1024;
+const QuicByteCount kDefaultSocketReceiveBuffer = 1024 * 1024;
 // Minimum size of the socket receive buffer in bytes.
 // Smaller values are ignored.
 const QuicByteCount kMinSocketReceiveBuffer = 16 * 1024;
@@ -371,6 +371,7 @@ enum QuicVersion {
   QUIC_VERSION_33 = 33,  // Adds diversification nonces.
   QUIC_VERSION_34 = 34,  // Deprecates entropy, removes private flag from packet
                          // header, uses new ack and stop waiting wire format.
+  QUIC_VERSION_35 = 35,  // Allows endpoints to independently set stream limit.
 };
 
 // This vector contains QUIC versions which we currently support.
@@ -381,14 +382,19 @@ enum QuicVersion {
 // IMPORTANT: if you are adding to this list, follow the instructions at
 // http://sites/quic/adding-and-removing-versions
 static const QuicVersion kSupportedQuicVersions[] = {
-    QUIC_VERSION_34, QUIC_VERSION_33, QUIC_VERSION_32, QUIC_VERSION_31,
-    QUIC_VERSION_30, QUIC_VERSION_29, QUIC_VERSION_28, QUIC_VERSION_27,
-    QUIC_VERSION_26, QUIC_VERSION_25};
+    QUIC_VERSION_35, QUIC_VERSION_34, QUIC_VERSION_33, QUIC_VERSION_32,
+    QUIC_VERSION_31, QUIC_VERSION_30, QUIC_VERSION_29, QUIC_VERSION_28,
+    QUIC_VERSION_27, QUIC_VERSION_26, QUIC_VERSION_25};
 
 typedef std::vector<QuicVersion> QuicVersionVector;
 
 // Returns a vector of QUIC versions in kSupportedQuicVersions.
 NET_EXPORT_PRIVATE QuicVersionVector QuicSupportedVersions();
+
+// Returns a vector of QUIC versions from |versions| which exclude any versions
+// which are disabled by flags.
+NET_EXPORT_PRIVATE QuicVersionVector
+FilterSupportedVersions(QuicVersionVector versions);
 
 // QuicTag is written to and read from the wire, but we prefer to use
 // the more readable QuicVersion at other levels.
@@ -865,10 +871,6 @@ struct NET_EXPORT_PRIVATE QuicStreamFrame {
 };
 static_assert(sizeof(QuicStreamFrame) <= 64,
               "Keep the QuicStreamFrame size to a cacheline.");
-// TODO(ianswett): Re-evaluate the trade-offs of hash_set vs set when framing
-// is finalized.
-typedef std::set<QuicPacketNumber> PacketNumberSet;
-typedef std::list<QuicPacketNumber> PacketNumberList;
 
 typedef std::vector<std::pair<QuicPacketNumber, QuicTime>> PacketTimeVector;
 
@@ -902,7 +904,6 @@ class NET_EXPORT_PRIVATE PacketNumberQueue {
                              const QuicPacketNumber*,
                              const QuicPacketNumber&> {
    public:
-    explicit const_iterator(PacketNumberSet::const_iterator set_iter);
     const_iterator(
         IntervalSet<QuicPacketNumber>::const_iterator interval_set_iter,
         QuicPacketNumber first,
@@ -1355,6 +1356,17 @@ class NET_EXPORT_PRIVATE QuicAckListenerInterface
 
   // Delegates are ref counted.
   virtual ~QuicAckListenerInterface() {}
+};
+
+// Pure virtual class to close connection on unrecoverable errors.
+class NET_EXPORT_PRIVATE QuicConnectionCloseDelegateInterface {
+ public:
+  virtual ~QuicConnectionCloseDelegateInterface() {}
+
+  // Called when an unrecoverable error is encountered.
+  virtual void OnUnrecoverableError(QuicErrorCode error,
+                                    const std::string& error_details,
+                                    ConnectionCloseSource source) = 0;
 };
 
 struct NET_EXPORT_PRIVATE AckListenerWrapper {

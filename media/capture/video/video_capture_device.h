@@ -19,18 +19,19 @@
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "media/base/media_export.h"
 #include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
+#include "media/capture/capture_export.h"
 #include "media/capture/video/scoped_result_callback.h"
+#include "media/mojo/interfaces/image_capture.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
 namespace tracked_objects {
@@ -39,7 +40,7 @@ class Location;
 
 namespace media {
 
-class MEDIA_EXPORT VideoCaptureDevice {
+class CAPTURE_EXPORT VideoCaptureDevice {
  public:
   // Represents a capture device name and ID.
   // You should not create an instance of this class directly by e.g. setting
@@ -49,7 +50,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
   // The reason for this is that a device name might contain platform specific
   // settings that are relevant only to the platform specific implementation of
   // VideoCaptureDevice::Create.
-  class MEDIA_EXPORT Name {
+  class CAPTURE_EXPORT Name {
    public:
     Name();
     Name(const std::string& name, const std::string& id);
@@ -179,10 +180,10 @@ class MEDIA_EXPORT VideoCaptureDevice {
   // is actually two-in-one: clients may implement OnIncomingCapturedData() or
   // ReserveOutputBuffer() + OnIncomingCapturedVideoFrame(), or all of them.
   // All clients must implement OnError().
-  class MEDIA_EXPORT Client {
+  class CAPTURE_EXPORT Client {
    public:
     // Memory buffer returned by Client::ReserveOutputBuffer().
-    class MEDIA_EXPORT Buffer {
+    class CAPTURE_EXPORT Buffer {
      public:
       virtual ~Buffer() = 0;
       virtual int id() const = 0;
@@ -247,8 +248,7 @@ class MEDIA_EXPORT VideoCaptureDevice {
         base::TimeDelta timestamp) = 0;
     virtual void OnIncomingCapturedVideoFrame(
         std::unique_ptr<Buffer> buffer,
-        const scoped_refptr<VideoFrame>& frame,
-        base::TimeTicks reference_time) = 0;
+        const scoped_refptr<VideoFrame>& frame) = 0;
 
     // Attempts to reserve the same Buffer provided in the last call to one of
     // the OnIncomingCapturedXXX() methods. This will fail if the content of the
@@ -312,11 +312,17 @@ class MEDIA_EXPORT VideoCaptureDevice {
   // happens first.
   virtual void StopAndDeAllocate() = 0;
 
+  // Retrieve the photo capabilities of the device (e.g. zoom levels etc).
+  using GetPhotoCapabilitiesCallback =
+      base::Callback<void(mojom::PhotoCapabilitiesPtr)>;
+  virtual void GetPhotoCapabilities(
+      ScopedResultCallback<GetPhotoCapabilitiesCallback> callback);
+
   // Asynchronously takes a photo, possibly reconfiguring the capture objects
   // and/or interrupting the capture flow. Runs |callback| on the thread
   // where TakePhoto() is called, if the photo was successfully taken.
   using TakePhotoCallback =
-      mojo::Callback<void(mojo::String, mojo::Array<uint8_t>)>;
+      base::Callback<void(mojo::String, mojo::Array<uint8_t>)>;
   virtual void TakePhoto(ScopedResultCallback<TakePhotoCallback> callback);
 
   // Gets the power line frequency, either from the params if specified by the

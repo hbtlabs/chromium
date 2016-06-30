@@ -6,7 +6,6 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
-#include "core/layout/ClipPathOperation.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGResourceClipper.h"
@@ -20,6 +19,7 @@
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ScrollableAreaPainter.h"
 #include "core/paint/Transform3DRecorder.h"
+#include "core/style/ClipPathOperation.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -160,8 +160,13 @@ public:
                 }
 
                 m_resourceClipper = toLayoutSVGResourceClipper(toLayoutSVGResourceContainer(element->layoutObject()));
+                // When SVG applies the clip and the coordinate system is "user space on use", we must explicitly pass in
+                // the layer offset to have the clip paint in the correct location. When the coordinate system is
+                // "object bounding box" the offset is already accounted for in the rootRelativeBounds.
+                FloatPoint layerPositionOffset = m_resourceClipper->clipPathUnits() == SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE ?
+                    FloatPoint(offsetFromRoot) : FloatPoint();
                 if (!SVGClipPainter(*m_resourceClipper).prepareEffect(*paintLayer.layoutObject(), FloatRect(rootRelativeBounds),
-                    FloatRect(rootRelativeBounds), context, m_clipperState)) {
+                    FloatRect(rootRelativeBounds), layerPositionOffset, context, m_clipperState)) {
                     // No need to post-apply the clipper if this failed.
                     m_resourceClipper = 0;
                 }
@@ -280,7 +285,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
     if (m_paintLayer.layoutObject()->view()->frame() && m_paintLayer.layoutObject()->view()->frame()->shouldThrottleRendering())
         return result;
 
-    // Ensure our lists are up-to-date.
+    // Ensure our lists are up to date.
     m_paintLayer.stackingNode()->updateLayerListsIfNeeded();
 
     LayoutSize subpixelAccumulation = m_paintLayer.compositingState() == PaintsIntoOwnBacking ? m_paintLayer.subpixelAccumulation() : paintingInfoArg.subPixelAccumulation;
@@ -482,13 +487,14 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(Graphi
     bool isFixedPosObjectInPagedMedia = object->style()->position() == FixedPosition && object->container() == view && view->pageLogicalHeight();
     PaintLayer* paginationLayer = m_paintLayer.enclosingPaginationLayer();
     PaintLayerFragments fragments;
-    if (isFixedPosObjectInPagedMedia) {
+    // TODO(crbug.com/619094): Figure out the correct behaviour for fixed position objects
+    // in paged media with vertical writing modes.
+    if (isFixedPosObjectInPagedMedia && view->isHorizontalWritingMode()) {
         // "For paged media, boxes with fixed positions are repeated on every page."
         // - https://www.w3.org/TR/2011/REC-CSS2-20110607/visuren.html#fixed-positioning
-        ASSERT(view->firstChild() && view->firstChild()->isLayoutBlock());
-        int pages = toLayoutBlock(view->firstChild())->logicalHeight() / view->pageLogicalHeight();
+        unsigned pages = ceilf(view->documentRect().height() / view->pageLogicalHeight());
         LayoutPoint paginationOffset;
-        for (int i = 0; i <= pages; i++) {
+        for (unsigned i = 0; i < pages; i++) {
             PaintLayerFragment fragment;
             fragment.backgroundRect = paintingInfo.paintDirtyRect;
             fragment.paginationOffset = paginationOffset;

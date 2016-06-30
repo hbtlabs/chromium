@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "ash/ash_export.h"
-#include "ash/system/audio/tray_audio.h"
+#include "ash/common/system/audio/tray_audio.h"
 #include "base/macros.h"
 #include "chromeos/dbus/power_manager_client.h"
 
@@ -30,7 +30,7 @@ class ASH_EXPORT TrayAudioChromeOs
 
  private:
   // Overridden from SystemTrayItem.
-  views::View* CreateDetailedView(user::LoginStatus status) override;
+  views::View* CreateDetailedView(LoginStatus status) override;
   void DestroyDetailedView() override;
 
   // Overridden from display::DisplayObserver.

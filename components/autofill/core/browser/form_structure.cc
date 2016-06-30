@@ -60,13 +60,6 @@ const int kMinCommonNamePrefixLength = 16;
 // Maximum number of characters in the field label to be encoded in a proto.
 const int kMaxFieldLabelNumChars = 200;
 
-// Returns whether sending autofill field metadata to the server is enabled.
-bool IsAutofillFieldMetadataEnabled() {
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("AutofillFieldMetadata");
-  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
-}
-
 // Helper for |EncodeUploadRequest()| that creates a bit field corresponding to
 // |available_field_types| and returns the hex representation as a string.
 std::string EncodeFieldTypes(const ServerFieldTypeSet& available_field_types) {
@@ -570,6 +563,13 @@ std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
     forms.push_back(form);
   }
   return forms;
+}
+
+// static
+bool FormStructure::IsAutofillFieldMetadataEnabled() {
+  const std::string group_name =
+      base::FieldTrialList::FindFullName("AutofillFieldMetadata");
+  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
 }
 
 std::string FormStructure::FormSignature() const {
@@ -1145,7 +1145,7 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
 
   for (const AutofillField* field : fields_) {
     // Don't upload checkable fields.
-    if (field->is_checkable)
+    if (IsCheckable(field->check_status))
       continue;
 
     const ServerFieldTypeSet& types = field->possible_types();
@@ -1181,6 +1181,9 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
 
         if (!field->autocomplete_attribute.empty())
           added_field->set_autocomplete(field->autocomplete_attribute);
+
+        if (!field->css_classes.empty())
+          added_field->set_css_classes(base::UTF16ToUTF8(field->css_classes));
       }
     }
   }
@@ -1310,7 +1313,7 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
 }
 
 bool FormStructure::ShouldSkipField(const FormFieldData& field) const {
-  return field.is_checkable;
+  return IsCheckable(field.check_status);
 }
 
 void FormStructure::ProcessExtractedFields() {

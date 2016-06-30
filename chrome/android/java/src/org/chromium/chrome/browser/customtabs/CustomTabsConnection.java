@@ -29,7 +29,6 @@ import android.view.WindowManager;
 import android.widget.RemoteViews;
 
 import org.chromium.base.CommandLine;
-import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.SysUtils;
 import org.chromium.base.ThreadUtils;
@@ -49,8 +48,8 @@ import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.ChildProcessLauncher;
-import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 
@@ -176,10 +175,11 @@ public class CustomTabsConnection {
         }
         final Context context = app.getApplicationContext();
         final ChromeApplication chrome = (ChromeApplication) context;
+        ChildProcessCreationParams.set(chrome.getChildProcessCreationParams());
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... params) {
-                ChildProcessLauncher.warmUp(context, chrome.getChildProcessCreationParams());
+                ChildProcessLauncher.warmUp(context);
                 return null;
             }
         }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
@@ -226,22 +226,11 @@ public class CustomTabsConnection {
         return true;
     }
 
-    /**
-     * Creates a spare {@link WebContents}, if none exists.
-     *
-     * Navigating to "about:blank" forces a lot of initialization to take place
-     * here. This improves PLT. This navigation is never registered in the history, as
-     * "about:blank" is filtered by CanAddURLToHistory.
-     *
-     * TODO(lizeb): Replace this with a cleaner method. See crbug.com/521729.
-     */
+    /** Creates a spare {@link WebContents}, if none exists. */
     private void createSpareWebContents() {
         ThreadUtils.assertOnUiThread();
         if (mSpareWebContents != null) return;
-        mSpareWebContents = WebContentsFactory.createWebContents(false, false);
-        if (mSpareWebContents != null) {
-            mSpareWebContents.getNavigationController().loadUrl(new LoadUrlParams("about:blank"));
-        }
+        mSpareWebContents = WebContentsFactory.createWebContentsWithWarmRenderer(false, false);
     }
 
     /** @return the URL converted to string, or null if it's invalid. */
@@ -359,15 +348,7 @@ public class CustomTabsConnection {
         return null;
     }
 
-    /**
-     * @return a spare WebContents, or null.
-     *
-     * This WebContents has already navigated to "about:blank". You have to call
-     * {@link LoadUrlParams.setShouldReplaceCurrentEntry(true)} for the next
-     * navigation to ensure that a back navigation doesn't lead to about:blank.
-     *
-     * TODO(lizeb): Update this when crbug.com/521729 is fixed.
-     */
+    /** @return a spare WebContents, or null. */
     WebContents takeSpareWebContents() {
         ThreadUtils.assertOnUiThread();
         WebContents result = mSpareWebContents;
@@ -527,6 +508,11 @@ public class CustomTabsConnection {
         return mClientManager.getIgnoreFragmentsForSession(session);
     }
 
+    @VisibleForTesting
+    void setShouldPrerenderOnCellularForSession(CustomTabsSessionToken session, boolean value) {
+        mClientManager.setPrerenderCellularForSession(session, value);
+    }
+
     /**
      * Extracts the creator package name from the intent.
      * @param intent The intent to get the package name from.
@@ -674,7 +660,6 @@ public class CustomTabsConnection {
     }
 
     private boolean mayPrerender(CustomTabsSessionToken session) {
-        if (FieldTrialList.findFullName("CustomTabs").equals("DisablePrerender")) return false;
         if (!DeviceClassManager.enablePrerendering()) return false;
         // TODO(yusufo): The check for prerender in PrivacyManager now checks for the network
         // connection type as well, we should either change that or add another check for custom
@@ -709,17 +694,14 @@ public class CustomTabsConnection {
     private boolean prerenderUrl(
             CustomTabsSessionToken session, String url, Bundle extras, int uid) {
         ThreadUtils.assertOnUiThread();
-        // TODO(lizeb): Prerendering through ChromePrerenderService is
-        // incompatible with prerendering through this service. Remove this
-        // limitation, or remove ChromePrerenderService.
-        WarmupManager.getInstance().disallowPrerendering();
         // Ignores mayPrerender() for an empty URL, since it cancels an existing prerender.
         if (!mayPrerender(session) && !TextUtils.isEmpty(url)) return false;
         if (!mWarmupHasBeenCalled.get()) return false;
         // Last one wins and cancels the previous prerender.
         cancelPrerender(null);
         if (TextUtils.isEmpty(url)) return false;
-        if (!mClientManager.isPrerenderingAllowed(uid)) return false;
+        boolean throttle = !shouldPrerenderOnCellularForSession(session);
+        if (throttle && !mClientManager.isPrerenderingAllowed(uid)) return false;
 
         // A prerender will be requested. Time to destroy the spare WebContents.
         destroySpareWebContents();
@@ -741,7 +723,7 @@ public class CustomTabsConnection {
                 Profile.getLastUsedProfile(), url, referrer, contentSize.x, contentSize.y,
                 shouldPrerenderOnCellularForSession(session));
         if (webContents == null) return false;
-        mClientManager.registerPrerenderRequest(uid, url);
+        if (throttle) mClientManager.registerPrerenderRequest(uid, url);
         mPrerender = new PrerenderedUrlParams(session, webContents, url, referrer, extras);
         return true;
     }
@@ -778,5 +760,10 @@ public class CustomTabsConnection {
     @VisibleForTesting
     void resetThrottling(Context context, int uid) {
         mClientManager.resetThrottling(uid);
+    }
+
+    @VisibleForTesting
+    void ban(Context context, int uid) {
+        mClientManager.ban(uid);
     }
 }

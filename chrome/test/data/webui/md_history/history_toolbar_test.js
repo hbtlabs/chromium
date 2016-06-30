@@ -49,23 +49,7 @@ cr.define('md_history.history_toolbar_test', function() {
           done();
         });
 
-        toolbar.onSearch('Test');
-      });
-
-      test('more from this site sends and sets correct data', function(done) {
-        app.queryingDisabled_ = false;
-        registerMessageCallback('queryHistory', this, function (info) {
-          assertEquals('example.com', info[0]);
-          flush().then(function() {
-            assertEquals(
-                'example.com',
-                toolbar.$['main-toolbar'].getSearchField().getValue());
-            done();
-          });
-        });
-
-        element.$.sharedMenu.itemData = {domain: 'example.com'};
-        MockInteractions.tap(element.$.menuMoreButton);
+        toolbar.$$('cr-toolbar').fire('search-changed', 'Test');
       });
 
       teardown(function() {

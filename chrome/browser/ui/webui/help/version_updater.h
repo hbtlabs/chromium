@@ -42,6 +42,7 @@ class VersionUpdater {
   // types.
 #if defined(OS_CHROMEOS)
   typedef base::Callback<void(const std::string&)> ChannelCallback;
+  typedef base::Callback<void(int status)> EolStatusCallback;
 #endif
 
   // Used to update the client of status changes. int parameter is the progress
@@ -73,14 +74,12 @@ class VersionUpdater {
   virtual void PromoteUpdater() const = 0;
 #endif
 
-  // Relaunches the browser, generally after being updated.
-  virtual void RelaunchBrowser() const = 0;
-
 #if defined(OS_CHROMEOS)
   virtual void SetChannel(const std::string& channel,
                           bool is_powerwash_allowed) = 0;
   virtual void GetChannel(bool get_current_channel,
                           const ChannelCallback& callback) = 0;
+  virtual void GetEolStatus(const EolStatusCallback& callback) = 0;
 #endif
 };
 
