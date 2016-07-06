@@ -12,25 +12,22 @@
 #include "ash/common/wm_shell.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "components/mus/public/cpp/window_tree_client_observer.h"
+#include "services/ui/public/cpp/window_tree_client_observer.h"
 
-namespace mus {
+namespace ui {
 class WindowTreeClient;
 }
 
 namespace ash {
-
-class WmShellCommon;
-
 namespace mus {
 
 class WmRootWindowControllerMus;
 class WmWindowMus;
 
 // WmShell implementation for mus.
-class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
+class WmShellMus : public WmShell, public ::ui::WindowTreeClientObserver {
  public:
-  explicit WmShellMus(::mus::WindowTreeClient* client);
+  explicit WmShellMus(::ui::WindowTreeClient* client);
   ~WmShellMus() override;
 
   static WmShellMus* Get();
@@ -40,12 +37,11 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
 
   // Returns the ancestor of |window| (including |window|) that is considered
   // toplevel. |window| may be null.
-  static WmWindowMus* GetToplevelAncestor(::mus::Window* window);
+  static WmWindowMus* GetToplevelAncestor(::ui::Window* window);
 
   WmRootWindowControllerMus* GetRootWindowControllerWithDisplayId(int64_t id);
 
   // WmShell:
-  MruWindowTracker* GetMruWindowTracker() override;
   WmWindow* NewContainerWindow() override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
@@ -53,6 +49,7 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
   WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
   WmWindow* GetRootWindowForNewWindows() override;
   const DisplayInfo& GetDisplayInfo(int64_t display_id) const override;
+  bool IsActiveDisplayId(int64_t display_id) const override;
   bool IsForceMaximizeOnFirstRun() override;
   bool IsPinned() override;
   void SetPinnedWindow(WmWindow* window) override;
@@ -66,6 +63,8 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
       wm::WindowState* window_state) override;
   std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
       override;
+  std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
+  CreateScopedDisableInternalMouseAndKeyboard() override;
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
   AccessibilityDelegate* GetAccessibilityDelegate() override;
@@ -74,8 +73,6 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
   void RemoveActivationObserver(WmActivationObserver* observer) override;
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
-  void AddShellObserver(ShellObserver* observer) override;
-  void RemoveShellObserver(ShellObserver* observer) override;
   void AddPointerWatcher(views::PointerWatcher* watcher) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
 #if defined(OS_CHROMEOS)
@@ -84,18 +81,16 @@ class WmShellMus : public WmShell, public ::mus::WindowTreeClientObserver {
 
  private:
   // Returns true if |window| is a window that can have active children.
-  static bool IsActivationParent(::mus::Window* window);
+  static bool IsActivationParent(::ui::Window* window);
 
   void RemoveClientObserver();
 
-  // ::mus::WindowTreeClientObserver:
-  void OnWindowTreeFocusChanged(::mus::Window* gained_focus,
-                                ::mus::Window* lost_focus) override;
-  void OnWillDestroyClient(::mus::WindowTreeClient* client) override;
+  // ::ui::WindowTreeClientObserver:
+  void OnWindowTreeFocusChanged(::ui::Window* gained_focus,
+                                ::ui::Window* lost_focus) override;
+  void OnDidDestroyClient(::ui::WindowTreeClient* client) override;
 
-  ::mus::WindowTreeClient* client_;
-
-  std::unique_ptr<WmShellCommon> wm_shell_common_;
+  ::ui::WindowTreeClient* client_;
 
   std::vector<WmRootWindowControllerMus*> root_window_controllers_;
 

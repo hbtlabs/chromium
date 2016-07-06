@@ -7,11 +7,11 @@
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_observer.h"
+#include "ash/common/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_activation_observer.h"
 #include "ash/common/wm_display_observer.h"
-#include "ash/common/wm_shell_common.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/shell.h"
@@ -28,10 +28,17 @@
 #include "ash/virtual_keyboard_controller.h"
 #endif
 
+#if defined(USE_X11)
+#include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_x11.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h"
+#endif
+
 namespace ash {
 
-WmShellAura::WmShellAura(WmShellCommon* wm_shell_common)
-    : wm_shell_common_(wm_shell_common) {
+WmShellAura::WmShellAura() {
   WmShell::Set(this);
 }
 
@@ -45,10 +52,6 @@ void WmShellAura::PrepareForShutdown() {
 
   if (added_display_observer_)
     Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
-}
-
-MruWindowTracker* WmShellAura::GetMruWindowTracker() {
-  return wm_shell_common_->mru_window_tracker();
 }
 
 WmWindow* WmShellAura::NewContainerWindow() {
@@ -83,6 +86,10 @@ WmWindow* WmShellAura::GetRootWindowForNewWindows() {
 
 const DisplayInfo& WmShellAura::GetDisplayInfo(int64_t display_id) const {
   return Shell::GetInstance()->display_manager()->GetDisplayInfo(display_id);
+}
+
+bool WmShellAura::IsActiveDisplayId(int64_t display_id) const {
+  return Shell::GetInstance()->display_manager()->IsActiveDisplayId(display_id);
 }
 
 bool WmShellAura::IsForceMaximizeOnFirstRun() {
@@ -134,14 +141,23 @@ WmShellAura::CreateMaximizeModeEventHandler() {
   return base::WrapUnique(new wm::MaximizeModeEventHandlerAura);
 }
 
+std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
+WmShellAura::CreateScopedDisableInternalMouseAndKeyboard() {
+#if defined(USE_X11)
+  return base::WrapUnique(new ScopedDisableInternalMouseAndKeyboardX11);
+#elif defined(USE_OZONE)
+  return base::WrapUnique(new ScopedDisableInternalMouseAndKeyboardOzone);
+#endif
+  return nullptr;
+}
+
 void WmShellAura::OnOverviewModeStarting() {
-  FOR_EACH_OBSERVER(ShellObserver, *wm_shell_common_->shell_observers(),
+  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(),
                     OnOverviewModeStarting());
 }
 
 void WmShellAura::OnOverviewModeEnded() {
-  FOR_EACH_OBSERVER(ShellObserver, *wm_shell_common_->shell_observers(),
-                    OnOverviewModeEnded());
+  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
 }
 
 AccessibilityDelegate* WmShellAura::GetAccessibilityDelegate() {
@@ -174,14 +190,6 @@ void WmShellAura::AddDisplayObserver(WmDisplayObserver* observer) {
 
 void WmShellAura::RemoveDisplayObserver(WmDisplayObserver* observer) {
   display_observers_.RemoveObserver(observer);
-}
-
-void WmShellAura::AddShellObserver(ShellObserver* observer) {
-  wm_shell_common_->AddShellObserver(observer);
-}
-
-void WmShellAura::RemoveShellObserver(ShellObserver* observer) {
-  wm_shell_common_->RemoveShellObserver(observer);
 }
 
 void WmShellAura::AddPointerWatcher(views::PointerWatcher* watcher) {

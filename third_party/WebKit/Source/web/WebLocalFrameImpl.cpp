@@ -832,7 +832,7 @@ v8::Local<v8::Value> WebLocalFrameImpl::callFunctionEvenIfScriptDisabled(v8::Loc
 {
     DCHECK(frame());
     v8::Local<v8::Value> result;
-    if (!frame()->script().callFunction(function, receiver, argc, static_cast<v8::Local<v8::Value>*>(argv)).ToLocal(&result))
+    if (!V8ScriptRunner::callFunction(function, frame()->document(), receiver, argc, static_cast<v8::Local<v8::Value>*>(argv), toIsolate(frame())).ToLocal(&result))
         return v8::Local<v8::Value>();
     return result;
 }
@@ -1815,22 +1815,6 @@ WebLocalFrameImpl* WebLocalFrameImpl::localRoot()
     while (localRoot->parent() && localRoot->parent()->isWebLocalFrame())
         localRoot = toWebLocalFrameImpl(localRoot->parent());
     return localRoot;
-}
-
-WebLocalFrame* WebLocalFrameImpl::traversePreviousLocal(bool wrap) const
-{
-    WebFrame* previousLocalFrame = this->traversePrevious(wrap);
-    while (previousLocalFrame && !previousLocalFrame->isWebLocalFrame())
-        previousLocalFrame = previousLocalFrame->traversePrevious(wrap);
-    return previousLocalFrame ? previousLocalFrame->toWebLocalFrame() : nullptr;
-}
-
-WebLocalFrame* WebLocalFrameImpl::traverseNextLocal(bool wrap) const
-{
-    WebFrame* nextLocalFrame = this->traverseNext(wrap);
-    while (nextLocalFrame && !nextLocalFrame->isWebLocalFrame())
-        nextLocalFrame = nextLocalFrame->traverseNext(wrap);
-    return nextLocalFrame ? nextLocalFrame->toWebLocalFrame() : nullptr;
 }
 
 void WebLocalFrameImpl::sendPings(const WebURL& destinationURL)

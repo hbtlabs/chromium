@@ -14,5 +14,5 @@ layer at (0,0) size 800x92
               text run at (21,0) width 8: "x"
           LayoutText {#text} at (0,0) size 0x0
       LayoutBlockFlow (anonymous) at (0,58) size 784x18
-        LayoutText {#text} at (0,0) size 0x17
-          text run at (0,0) width 0: "\x{19}"
+        LayoutText {#text} at (0,0) size 12x17
+          text run at (0,0) width 12: "\x{19}"

@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "components/mus/public/cpp/window_tree_client_delegate.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "services/ui/public/cpp/window_tree_client_delegate.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/views/mus/aura_init.h"
 #include "ui/views/views_delegate.h"
 
@@ -23,13 +23,13 @@ class AuraInit;
 
 // Does the necessary setup to use mus, views and the example wm.
 class MUSViewsInit : public views::ViewsDelegate,
-                     public mus::WindowTreeClientDelegate {
+                     public ui::WindowTreeClientDelegate {
  public:
   explicit MUSViewsInit(shell::ShellConnection* app);
   ~MUSViewsInit() override;
 
  private:
-  mus::Window* NewWindow();
+  ui::Window* NewWindow();
 
   // views::ViewsDelegate:
   views::NativeWidget* CreateNativeWidget(
@@ -38,16 +38,16 @@ class MUSViewsInit : public views::ViewsDelegate,
       views::Widget::InitParams* params,
       views::internal::NativeWidgetDelegate* delegate) override;
 
-  // mus::WindowTreeClientDelegate:
-  void OnEmbed(mus::Window* root) override;
-  void OnWindowTreeClientDestroyed(mus::WindowTreeClient* client) override;
+  // ui::WindowTreeClientDelegate:
+  void OnEmbed(ui::Window* root) override;
+  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
 #if defined(OS_WIN)
   HICON GetSmallWindowIcon() const override;
 #endif
 
   shell::ShellConnection* app_;
   std::unique_ptr<views::AuraInit> aura_init_;
-  mus::mojom::WindowManagerPtr window_manager_;
+  ui::mojom::WindowManagerPtr window_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(MUSViewsInit);
 };

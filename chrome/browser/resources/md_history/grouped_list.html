@@ -15,16 +15,17 @@
       }
 
       #main-container {
+        @apply(--card-sizing);
         align-items: center;
         display: flex;
         flex-direction: column;
-        padding: var(--first-card-padding-top) var(--card-padding-side);
+        padding-top: var(--first-card-padding-top);
       }
 
       .domain-heading {
         align-items: center;
         display: flex;
-        height: 40px;
+        height: var(--item-height);
         padding: 0 20px;
       }
 
@@ -41,6 +42,7 @@
         background: #fff;
         border: 1px solid var(--card-border-color);
         border-bottom-width: 2px;
+        border-radius: 2px;
         margin-bottom: var(--card-padding-between);
         max-width: var(--card-max-width);
         min-width: var(--card-min-width);
@@ -60,7 +62,6 @@
       }
 
       history-item {
-        --border-style: none;
         padding-left: 20px;
       }
     </style>
@@ -100,7 +101,8 @@
                         has-time-gap="[[needsTimeGap_(
                             groupIndex, domainIndex, itemIndex)]]"
                         search-term="[[searchedTerm]]"
-                        number-of-items="[[historyData.length]]">
+                        number-of-items="[[historyData.length]]"
+                        embedded>
                     </history-item>
                   </template>
                 </template>

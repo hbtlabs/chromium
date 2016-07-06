@@ -30,8 +30,6 @@ namespace mash {
 namespace catalog_viewer {
 namespace {
 
-using shell::mojom::InstanceInfoPtr;
-
 class CatalogViewerContents : public views::WidgetDelegateView,
                               public ui::TableModel {
  public:
@@ -175,9 +173,9 @@ void CatalogViewer::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void CatalogViewer::Initialize(shell::Connector* connector,
-                               const shell::Identity& identity,
-                               uint32_t id) {
+void CatalogViewer::OnStart(shell::Connector* connector,
+                            const shell::Identity& identity,
+                            uint32_t id) {
   connector_ = connector;
   tracing_.Initialize(connector, identity.name());
 
@@ -186,7 +184,7 @@ void CatalogViewer::Initialize(shell::Connector* connector,
       views::WindowManagerConnection::Create(connector, identity);
 }
 
-bool CatalogViewer::AcceptConnection(shell::Connection* connection) {
+bool CatalogViewer::OnConnect(shell::Connection* connection) {
   connection->AddInterface<mojom::Launchable>(this);
   return true;
 }

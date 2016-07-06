@@ -187,10 +187,13 @@ _BANNED_CPP_FUNCTIONS = (
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
         r"^remoting[\\\/]host[\\\/]security_key[\\\/]"
             "gnubby_auth_handler_linux\.cc$",
-        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager\.cc$",
         r"^ui[\\\/]base[\\\/]material_design[\\\/]"
             "material_design_controller\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_mac\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_win\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_x11\.cc$",
+        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
+            "drm_display_host_manager\.cc$",
       ),
     ),
     (
@@ -1097,13 +1100,13 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
 
   if unapproved_dependencies:
     output_list = [
-      output('Missing LGTM from OWNERS of dependencies added to DEPS:\n    %s' %
-             '\n    '.join(sorted(unapproved_dependencies)))]
-    if not input_api.is_committing:
-      suggested_owners = owners_db.reviewers_for(missing_files, owner_email)
-      output_list.append(output(
-          'Suggested missing target path OWNERS:\n    %s' %
-          '\n    '.join(suggested_owners or [])))
+      output('You need LGTM from owners of depends-on paths in DEPS that were '
+             'modified in this CL:\n    %s' %
+                 '\n    '.join(sorted(unapproved_dependencies)))]
+    suggested_owners = owners_db.reviewers_for(missing_files, owner_email)
+    output_list.append(output(
+        'Suggested missing target path OWNERS:\n    %s' %
+            '\n    '.join(suggested_owners or [])))
     return output_list
 
   return []

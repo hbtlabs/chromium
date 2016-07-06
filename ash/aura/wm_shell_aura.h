@@ -15,14 +15,11 @@
 
 namespace ash {
 
-class WmShellCommon;
-
 class ASH_EXPORT WmShellAura : public WmShell,
                                public aura::client::ActivationChangeObserver,
                                public WindowTreeHostManager::Observer {
  public:
-  // |shell_common| is not owned by this class and must outlive this class.
-  explicit WmShellAura(WmShellCommon* wm_shell_common);
+  WmShellAura();
   ~WmShellAura() override;
 
   static WmShellAura* Get();
@@ -31,7 +28,6 @@ class ASH_EXPORT WmShellAura : public WmShell,
   void PrepareForShutdown();
 
   // WmShell:
-  MruWindowTracker* GetMruWindowTracker() override;
   WmWindow* NewContainerWindow() override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
@@ -39,6 +35,7 @@ class ASH_EXPORT WmShellAura : public WmShell,
   WmWindow* GetRootWindowForDisplayId(int64_t display_id) override;
   WmWindow* GetRootWindowForNewWindows() override;
   const DisplayInfo& GetDisplayInfo(int64_t display_id) const override;
+  bool IsActiveDisplayId(int64_t display_id) const override;
   bool IsForceMaximizeOnFirstRun() override;
   bool IsPinned() override;
   void SetPinnedWindow(WmWindow* window) override;
@@ -52,6 +49,8 @@ class ASH_EXPORT WmShellAura : public WmShell,
       wm::WindowState* window_state) override;
   std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
       override;
+  std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
+  CreateScopedDisableInternalMouseAndKeyboard() override;
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
   AccessibilityDelegate* GetAccessibilityDelegate() override;
@@ -60,8 +59,6 @@ class ASH_EXPORT WmShellAura : public WmShell,
   void RemoveActivationObserver(WmActivationObserver* observer) override;
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
-  void AddShellObserver(ShellObserver* observer) override;
-  void RemoveShellObserver(ShellObserver* observer) override;
   void AddPointerWatcher(views::PointerWatcher* watcher) override;
   void RemovePointerWatcher(views::PointerWatcher* watcher) override;
 #if defined(OS_CHROMEOS)
@@ -79,9 +76,6 @@ class ASH_EXPORT WmShellAura : public WmShell,
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanging() override;
   void OnDisplayConfigurationChanged() override;
-
-  // Owned by Shell.
-  WmShellCommon* wm_shell_common_;
 
   WmLookupAura wm_lookup_;
   bool added_activation_observer_ = false;

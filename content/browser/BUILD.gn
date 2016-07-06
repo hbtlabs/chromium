@@ -42,6 +42,7 @@ source_set("browser") {
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/url_formatter",
+    "//components/webmessaging",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -389,9 +390,9 @@ source_set("browser") {
   if (use_aura) {
     deps += [
       "//components/bitmap_uploader",
-      "//components/mus/common:mus_common",
-      "//components/mus/public/cpp",
-      "//components/mus/public/interfaces",
+      "//services/ui/common:mus_common",
+      "//services/ui/public/cpp",
+      "//services/ui/public/interfaces",
       "//ui/aura",
       "//ui/aura_extra",
       "//ui/strings",

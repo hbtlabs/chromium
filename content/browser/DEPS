@@ -5,19 +5,18 @@ include_rules = [
   "+components/leveldb",
   "+components/link_header_util",
   "+components/mime_util",
-  "+components/mus/common",
-  "+components/mus/public/interfaces",
-  "+components/mus/public",
   "+components/network_session_configurator/switches.h",
   "+components/profile_service",
   "+components/scheduler/common",
   "+components/tracing",
   "+components/url_formatter",
+  "+components/webmessaging",
 
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
   "+device/battery",  # For battery status service.
   "+device/power_save_blocker",
+  "+device/sensors/public",
   "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
   "+gin/v8_initializer.h",

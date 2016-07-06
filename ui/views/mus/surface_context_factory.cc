@@ -8,8 +8,8 @@
 #include "cc/output/output_surface.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "cc/surfaces/surface_id_allocator.h"
-#include "components/mus/public/cpp/window.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/compositor/reflector.h"
 #include "ui/gl/gl_bindings.h"
 
@@ -29,8 +29,8 @@ class FakeReflector : public ui::Reflector {
 
 SurfaceContextFactory::SurfaceContextFactory(
     shell::Connector* connector,
-    mus::Window* window,
-    mus::mojom::SurfaceType surface_type)
+    ui::Window* window,
+    ui::mojom::SurfaceType surface_type)
     : surface_binding_(connector, window, surface_type),
       next_surface_id_namespace_(1u) {}
 

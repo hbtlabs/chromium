@@ -132,7 +132,6 @@ PassRefPtr<Image> createTransparentImage(const IntSize& size)
 {
     DCHECK(canCreateImageBuffer(size));
     sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(size.width(), size.height());
-    surface->getCanvas()->clear(SK_ColorTRANSPARENT);
     return StaticBitmapImage::create(fromSkSp(surface->makeImageSnapshot()));
 }
 
@@ -316,6 +315,13 @@ void HTMLCanvasElement::didFinalizeFrame()
         ro->invalidatePaintRectangle(mappedDirtyRect);
     }
     m_dirtyRect = FloatRect();
+}
+
+void HTMLCanvasElement::didDisableAcceleration()
+{
+    // We must force a paint invalidation on the canvas even if it's
+    // content did not change because it layer was destroyed.
+    didDraw(FloatRect(0, 0, size().width(), size().height()));
 }
 
 void HTMLCanvasElement::restoreCanvasMatrixClipStack(SkCanvas* canvas) const
@@ -678,6 +684,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
         return;
     }
 
+    double startTime = WTF::monotonicallyIncreasingTime();
     double quality = UndefinedQualityValue;
     if (!qualityArgument.isEmpty()) {
         v8::Local<v8::Value> v8Value = qualityArgument.v8Value();
@@ -690,7 +697,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
 
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
 
-    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback);
+    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback, startTime);
 
     bool useIdlePeriodScheduling = (encodingMimeType != "image/webp");
     asyncCreator->scheduleAsyncBlobCreation(useIdlePeriodScheduling, quality);

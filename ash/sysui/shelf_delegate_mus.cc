@@ -16,11 +16,11 @@
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "base/strings/string_util.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
 #include "mojo/common/common_type_converters.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_property.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
@@ -464,17 +464,17 @@ void ShelfDelegateMus::OnUserWindowFocusChanged(uint32_t window_id,
 void ShelfDelegateMus::SetShelfPreferredSizes(Shelf* shelf) {
   ShelfWidget* widget = shelf->shelf_widget();
   ShelfLayoutManager* layout_manager = widget->shelf_layout_manager();
-  mus::Window* window = aura::GetMusWindow(widget->GetNativeWindow());
+  ui::Window* window = aura::GetMusWindow(widget->GetNativeWindow());
   gfx::Size size = layout_manager->GetPreferredSize();
   window->SetSharedProperty<gfx::Size>(
-      mus::mojom::WindowManager::kPreferredSize_Property, size);
+      ui::mojom::WindowManager::kPreferredSize_Property, size);
 
   StatusAreaWidget* status_widget = widget->status_area_widget();
-  mus::Window* status_window =
+  ui::Window* status_window =
       aura::GetMusWindow(status_widget->GetNativeWindow());
   gfx::Size status_size = status_widget->GetWindowBoundsInScreen().size();
   status_window->SetSharedProperty<gfx::Size>(
-      mus::mojom::WindowManager::kPreferredSize_Property, status_size);
+      ui::mojom::WindowManager::kPreferredSize_Property, status_size);
 }
 
 }  // namespace sysui

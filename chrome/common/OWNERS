@@ -22,11 +22,6 @@ per-file spellcheck_marker.h=rouslan@chromium.org
 per-file spellcheck_result.h=groby@chromium.org
 per-file spellcheck_result.h=rouslan@chromium.org
 
-# Instant/Search files.
-per-file instant_types*=file://chrome/browser/search/OWNERS
-per-file search_types.*=file://chrome/browser/search/OWNERS
-per-file search_urls*=file://chrome/browser/search/OWNERS
-
 #Content settings
 per-file content_settings*=markusheintz@chromium.org
 
@@ -44,3 +39,7 @@ per-file crash_keys*=rsesek@chromium.org
 per-file trace_event_args_whitelist*=nduca@chromium.org
 per-file trace_event_args_whitelist*=dsinclair@chromium.org
 per-file trace_event_args_whitelist*=oysteine@chromium.org
+
+# IPC
+per-file *.mojom=set noparent
+per-file *.mojom=file://ipc/SECURITY_OWNERS

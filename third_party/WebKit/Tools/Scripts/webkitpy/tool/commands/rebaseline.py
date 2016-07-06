@@ -69,8 +69,8 @@ class AbstractRebaseliningCommand(Command):
         self._baseline_suffix_list = BASELINE_SUFFIX_LIST
         self._scm_changes = {'add': [], 'delete': [], 'remove-lines': []}
 
-    def _results_url(self, builder_name, master_name, build_number=None):
-        builder = self._tool.buildbot.builder_with_name(builder_name, master_name)
+    def _results_url(self, builder_name, build_number=None):
+        builder = self._tool.buildbot.builder_with_name(builder_name)
         if build_number:
             build = builder.build(build_number)
             return build.results_url()
@@ -98,8 +98,6 @@ class BaseInternalRebaselineCommand(AbstractRebaseliningCommand):
             optparse.make_option("--test", help="Test to rebaseline."),
             optparse.make_option("--build-number", default=None, type="int",
                                  help="Optional build number; if not given, the latest build is used."),
-            optparse.make_option("--master-name", default='chromium.webkit', type="str",
-                                 help="Optional master name; if not given, a default master will be used."),
         ])
 
     def _baseline_directory(self, builder_name):
@@ -227,7 +225,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
         if options.results_directory:
             results_url = 'file://' + options.results_directory
         else:
-            results_url = self._results_url(options.builder, options.master_name, build_number=options.build_number)
+            results_url = self._results_url(options.builder, build_number=options.build_number)
 
         for suffix in self._baseline_suffix_list:
             self._rebaseline_test(options.builder, options.test, suffix, results_url)
@@ -494,6 +492,22 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         return lines_to_remove
 
     def _rebaseline(self, options, test_prefix_list):
+        """Downloads new baselines in parallel, then updates expectations files
+        and optimizes baselines.
+
+        Args:
+            options: An object with the options passed to the current command.
+            test_prefix_list: A map of test names to builder names to baseline
+                suffixes to rebaseline. For example:
+                {
+                    "some/test.html": {"builder-1": ["txt"], "builder-2": ["txt"]},
+                    "some/other.html": {"builder-1": ["txt"]}
+                }
+                This would mean that new text baselines should be downloaded for
+                "some/test.html" on both builder-1 and builder-2, and new text
+                baselines should be downloaded for "some/other.html" but only
+                from builder-1.
+        """
         for test, builders_to_check in sorted(test_prefix_list.items()):
             _log.info("Rebaselining %s" % test)
             for builder, suffixes in sorted(builders_to_check.items()):

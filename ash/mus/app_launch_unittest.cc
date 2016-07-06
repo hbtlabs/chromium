@@ -5,8 +5,8 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
-#include "components/mus/public/interfaces/window_server_test.mojom.h"
 #include "services/shell/public/cpp/shell_test.h"
+#include "services/ui/public/interfaces/window_server_test.mojom.h"
 
 namespace ash {
 namespace mus {
@@ -34,8 +34,8 @@ TEST_F(AppLaunchTest, TestQuickLaunch) {
   connector()->Connect("mojo:ash");
   connector()->Connect("mojo:quick_launch");
 
-  ::mus::mojom::WindowServerTestPtr test_interface;
-  connector()->ConnectToInterface("mojo:mus", &test_interface);
+  ::ui::mojom::WindowServerTestPtr test_interface;
+  connector()->ConnectToInterface("mojo:ui", &test_interface);
 
   base::RunLoop run_loop;
   bool success = false;

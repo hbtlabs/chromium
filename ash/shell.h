@@ -11,7 +11,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/common/shelf/shelf_types.h"
-#include "ash/common/wm_shell_common.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/wm/cursor_manager_chromeos.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
@@ -108,10 +107,7 @@ class LocaleNotificationController;
 class LockStateController;
 enum class LoginStatus;
 class MagnificationController;
-class MaximizeModeController;
-class MaximizeModeWindowManager;
 class MouseCursorEventFilter;
-class MruWindowTracker;
 class NewWindowDelegate;
 class OverlayEventFilter;
 class PartialMagnificationController;
@@ -247,6 +243,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Shows the app list if it's not visible. Dismisses it otherwise.
   void ToggleAppList(aura::Window* anchor);
 
+  // Returns app list actual visibility. This might differ from
+  // GetAppListTargetVisibility() when hiding animation is still in flight.
+  bool IsApplistVisible() const;
+
   // Returns app list target visibility.
   bool GetAppListTargetVisibility() const;
 
@@ -281,13 +281,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   // Called when a casting session is started or stopped.
   void OnCastingSessionStartedOrStopped(bool started);
-
-  // Called after maximize mode has started, windows might still animate though.
-  void OnMaximizeModeStarted();
-
-  // Called after maximize mode has ended, windows might still be returning to
-  // their original position.
-  void OnMaximizeModeEnded();
 
   // Called when a root window is created.
   void OnRootWindowAdded(WmWindow* root_window);
@@ -347,9 +340,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   }
   LockStateController* lock_state_controller() {
     return lock_state_controller_.get();
-  }
-  MruWindowTracker* mru_window_tracker() {
-    return wm_shell_common_->mru_window_tracker();
   }
   VideoDetector* video_detector() { return video_detector_.get(); }
   WindowCycleController* window_cycle_controller() {
@@ -472,10 +462,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Starts the animation that occurs on first login.
   void DoInitialWorkspaceAnimation();
 
-  MaximizeModeController* maximize_mode_controller() {
-    return maximize_mode_controller_.get();
-  }
-
 #if defined(OS_CHROMEOS)
   // TODO(oshima): Move these objects to WindowTreeHostManager.
   ui::DisplayConfigurator* display_configurator() {
@@ -593,7 +579,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   std::unique_ptr<ScopedOverviewAnimationSettingsFactoryAura>
       scoped_overview_animation_settings_factory_;
-  std::unique_ptr<WmShellCommon> wm_shell_common_;
   std::unique_ptr<WmShellAura> wm_shell_;
 
   // When no explicit target display/RootWindow is given, new windows are
@@ -707,7 +692,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 #endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<ToastManager> toast_manager_;
-  std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
 
   // |native_cursor_manager_| is owned by |cursor_manager_|, but we keep a
   // pointer to vend to test code.

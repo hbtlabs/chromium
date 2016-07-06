@@ -7,10 +7,10 @@
 #include "ash/common/ash_switches.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/wm/lock_state_controller.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "base/command_line.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -68,7 +68,7 @@ void PowerButtonController::OnPowerButtonEvent(
     return;
 
   if (volume_down_pressed_ && down &&
-      Shell::GetInstance()
+      WmShell::Get()
           ->maximize_mode_controller()
           ->IsMaximizeModeWindowManagerEnabled()) {
     Shell::GetInstance()->accelerator_controller()->PerformActionIfEnabled(
@@ -99,7 +99,7 @@ void PowerButtonController::OnPowerButtonEvent(
 
       if (session_state_delegate->CanLockScreen() &&
           !session_state_delegate->IsUserSessionBlocked()) {
-        if (Shell::GetInstance()
+        if (WmShell::Get()
                 ->maximize_mode_controller()
                 ->IsMaximizeModeWindowManagerEnabled() &&
             enable_quick_lock_)

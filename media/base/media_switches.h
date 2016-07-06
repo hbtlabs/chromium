@@ -65,12 +65,19 @@ MEDIA_EXPORT extern const char kDisableRTCSmoothnessAlgorithm[];
 
 MEDIA_EXPORT extern const char kEnableVp9InMp4[];
 
+MEDIA_EXPORT extern const char kCastEncoderUtilHeuristic[];
+
 }  // namespace switches
 
 namespace media {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+
+#if defined(ENABLE_PLUGINS)
+MEDIA_EXPORT extern const base::Feature kFlashJoinsMediaSession;
+#endif  // defined(ENABLE_PLUGINS)
+
 MEDIA_EXPORT extern const base::Feature kNewAudioRenderingMixingStrategy;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 

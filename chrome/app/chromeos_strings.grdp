@@ -755,14 +755,71 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_MANY_ENTRIES_SELECTED" desc="Many items (both files and directories) selected.">
     <ph name="SELCTED_FILES_COUNT">$1<ex>21</ex></ph> items selected
   </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_ALBUM_TITLE" desc="Label for audio album title.">
+    Album
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_AUDIO_INFO" desc="Category label for audio file info.">
+    Audio Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CODEC" desc="Label for video codec.">
+    Codec
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CREATED_BY" desc="Label for who created the file.">
+    Created By
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CREATION_TIME" desc="Label for file creation time.">
+    Created Time
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_DURATION" desc="Label for audio/video duration.">
+    Duration
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_FILE_PATH" desc="Label for file path.">
+    Path
+  </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_FILE_SIZE" desc="Label fo file size.">
     Size
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_FRAME_RATE" desc="Label for video frame rate.">
+    Frame Rate
   </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_GENERAL_INFO" desc="Category label for general file info.">
     General Info
   </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_GENRE" desc="Label for audio genre.">
+    Genre
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_IMAGE_INFO" desc="Category label for image file info.">
+    Image Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_ARTIST" desc="Label for media artist.">
+    Artist
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_MIME_TYPE" desc="Label for media mime type.">
+    Type
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_TITLE" desc="Label for media title.">
+    Title
+  </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_MODIFICATION_TIME" desc="Label for file modification time.">
     Modified Time
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MODIFIED_BY" desc="Label for who modified the file.">
+    Modified By
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_PAGE_COUNT" desc="Label for pdf page count.">
+    Page Count
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_RESOLUTION" desc="Label for image resolution.">
+    Resolution
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_SOURCE" desc="Label for the device used to capture the image.">
+    Source
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_VIDEO_INFO" desc="Category label for video file info.">
+    Video Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_YEAR_RECORDED" desc="Label for audio recorded year.">
+    Year Recorded
   </message>
   <message name="IDS_FILE_BROWSER_CALCULATING_SIZE" desc="Message informing the user that total items size is being calculated.">
     Calculating size
@@ -777,10 +834,10 @@ Press any key to continue exploring.
     To save these files for offline use, get back online, right-click the files, and select the <ph name="OFFLINE_CHECKBOX_NAME">'$1'<ex>'Available offline'</ex></ph> option.
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_NO_PLAYBACK_AVAILABLE" desc="Massage for user to notify no playback is available.">
-    No playback available.
+    No playback available
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_NO_PREVIEW_AVAILABLE" desc="Massage for user to notify no preview is available.">
-    No preview available.
+    No preview available
   </message>
   <message name="IDS_FILE_BROWSER_HOSTED_OFFLINE_MESSAGE" desc="Message informing the user that the selected file is only available online.">
     You must be online to access this file.
@@ -980,6 +1037,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_FILE_BROWSER_GMAP_DOCUMENT_FILE_TYPE" desc="Google map file type">
     Google map
+  </message>
+  <message name="IDS_FILE_BROWSER_GSITE_DOCUMENT_FILE_TYPE" desc="Google site file type">
+    Google site
   </message>
   <message name="IDS_FILE_BROWSER_GLINK_DOCUMENT_FILE_TYPE" desc="Google Drive link file type">
     Google Drive link
@@ -1416,6 +1476,15 @@ Press any key to continue exploring.
   <message name="IDS_EULA_SCREEN_TITLE" desc="Title of the OOBE EULA screen">
     The small print
   </message>
+  <message name="IDS_PROXY_SETTINGS_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens proxy settings dialog">
+    Proxy settings
+  </message>
+  <message name="IDS_ADD_WI_FI_NETWORK_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens 'Add New WiFi Network' dialog">
+    Add other WiFi network
+  </message>
+  <message name="IDS_ADD_MOBILE_NETWORK_MENU_NAME" desc="OOBE 'Available Networks' list menu entry that opens 'Add New Mobile Network' dialog">
+    Add other mobile network
+  </message>
   <message name="IDS_AUTOSTART_WARNING_TITLE" desc="Title of the kiosk autostart screen">
     Auto-launch permission requested
   </message>
@@ -1550,6 +1619,12 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_NETWORK_ENABLE_DEV_FEATURES_LINK" desc="Text shown on continue button" meaning="Link shown on OOBE screens that opens enable debugging features dialog">
     Enable debugging features
+  </message>
+  <message name="IDS_NETWORK_SECTION_TITE" desc="Tile of newtork selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
+    Connect to network
+  </message>
+  <message name="IDS_NETWORK_SECTION_HINT" desc="Under-title line on the network selection screen" meaning="A hint to the user why device should be connected to the network">
+    To restore your data, you need an Internet connection.
   </message>
   <message name="IDS_NETWORK_SELECTION_ERROR" desc="Error shown when connection to network failed or timed out.">
     <ph name="PRODUCT_NAME">$1<ex>Chrome OS</ex></ph> was unable to connect to <ph name="NETWORK_ID">$2<ex>Public Wifi</ex></ph>. Please select another network or try again.
@@ -2573,22 +2648,40 @@ Press any key to continue exploring.
     To free up space, delete files from device storage.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SPACE_LOW_MESSAGE_LINE_2" desc="The second paragraph of a warning message indicating device's available disk space is low.">
-    If space isn't made available, users and data may be automatically deleted.
+    If space isn’t made available, users and data may be automatically removed.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_TITLE" desc="Title of a warning message indicating device's available disk space is critically low.">
-    Device space criticaly low
+    Device space critically low
   </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_LINE_1" desc="The first paragraph of a warning message indicating device's available disk space is critically low.">
-    Free up at least 512 MB of space or your device will become unresponsible. To free up space, delete files from device storage.
+    Free up at least 512 MB of space or your device will become unresponsive. To free up space, delete files from device storage.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SPACE_CRITICALLY_LOW_MESSAGE_LINE_2" desc="The second paragraph of a warning message indicating device's available disk space is critically low.">
-    Users and data may be automatically removed until at least 512 MB of space is available.
+    If you don’t free up space, users and data may be automatically removed.
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_TAB_TITLE" desc="Title for the storage manager confirmation dialog tab to remove Google Drive offline files.">
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_TAB_TITLE" desc="Tab title for the storage manager confirmation dialog tab to remove Google Drive offline files.">
     Offline files
   </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_DIALOG_TITLE" desc="Title for the storage manager confirmation dialog tab to remove Google Drive offline files.">
+    Delete offline files?
+  </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_CLEAR_DRIVE_CACHE_DESCRIPTION" desc="Description in the storage manager confirmation dialog to remove Google Drive offline files.">
-    You can free up space by deleting Google Drive offline files. Files marked as "Available offline" or in use will not be deleted.
+    Temporary Google Drive offline files will be deleted. Files that you’ve set as available offline won’t be deleted from this device.
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_USER_LIST_TITLE" desc="Title for the storage manager's user list dialog.">
+    Users
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_REMOVE_USER_DIALOG_TITLE" desc="Title for the storage manager confirmation dialog to remove a user from the device.">
+    Remove User
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_REMOVE_USER_DIALOG_DESCRIPTION" desc="Description in the storage manager confirmation dialog to remove a user from the device.">
+    This action will permanently delete this user’s downloads, offline files, browsing data, and Android storage. This cannot be undone.
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_REMOVE_USER_DIALOG_DESCRIPTION_WITHOUT_ANDROID" desc="Description in the storage manager confirmation dialog to remove a user from the device. This description doesn't mention Android.">
+    This action will permanently delete this user’s downloads, offline files, and browsing data. This cannot be undone.
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_REMOVE_USER_DIALOG_REMOVE_BUTTON_LABEL" desc="In storage manager confirmation dialog, label for the button to delete offline files.">
+    Remove
   </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SIZE_CALCULATING" desc="In storage manager overlay, label for storage item's size indicating the size is being calculated.">
     Calculating...
@@ -2614,11 +2707,14 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SUBITEM_LABEL_BROWSING_DATA" desc="In storage manager overlay, label for the size of browsing data.">
     Browsing data
   </message>
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_SUBITEM_LABEL_OTHER_USERS" desc="In storage manager overlay, label for the total size of other users' data directories.">
+    Other users
+  </message>
   <message name="IDS_OPTIONS_SETTINGS_STORAGE_SUBITEM_LABEL_ARC" desc="In storage manager overlay, label for the total size size of Android apps and cache.">
     Android storage
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_STORAGE_DELETE_ALL_BUTTON_TITLE" desc="In storage manager overlay, label for the total size size of Android apps and cache.">
-    Delete all
+  <message name="IDS_OPTIONS_SETTINGS_STORAGE_DELETE_ALL_BUTTON_TITLE" desc="In storage manager confirmation dialog, label for the button to delete offline files.">
+    Delete files
   </message>
   <message name="IDS_OPTIONS_ACCOUNTS_ALLOW_BWSI_DESCRIPTION" desc="In the Accounts settings tab, the text on the checkbox to allow browse without signing in.">
     Enable Guest browsing
@@ -5827,26 +5923,35 @@ Battery full
   </message>
 
   <!-- EOL Notification Strings -->
-  <message name="IDS_ABOUT_PAGE_EOL_SECURITY_ONLY" desc="The message in the about page to inform the user that this device is now receiving security updates only, containing the URLs.">
-     This device is receiving security updates only. <ph name="BEGIN_LINK_EOL">&lt;a target="_blank" href="$1"&gt;</ph>More info<ph name="END_LINK_EOL">&lt;/a&gt;</ph>
+  <message name="IDS_ABOUT_PAGE_EOL_SECURITY_ONLY" desc="The message in the about page to inform the user that software updates for this device are no longer available.">
+    Software updates for this device are no longer available.
   </message>
-  <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that this device will no longer receive regular security updates, containing the URLs.">
-    This device will no longer receive regular security updates. <ph name="BEGIN_LINK_EOL">&lt;a target="_blank" href="$1"&gt;</ph>More info<ph name="END_LINK_EOL">&lt;/a&gt;</ph>
+  <message name="IDS_ABOUT_PAGE_EOL_EOL" desc="The message in the about page to inform the user that security updates for this device are no longer available.">
+    Security updates for this device are no longer available.
+  </message>
+  <message name="IDS_ABOUT_PAGE_EOL_LEARN_MORE" desc="The message in the about page to provide more information of device end of life, containing the URLs.">
+     Please consider upgrading. <ph name="BEGIN_LINK_EOL">&lt;a target="_blank" href="$1"&gt;</ph>Learn more<ph name="END_LINK_EOL">&lt;/a&gt;</ph>
+  </message>
+  <message name="IDS_EOL_NOTIFICATION_TITLE" desc="Notification title shown to inform the user that this device is no longer supported.">
+    This device is no longer supported
   </message>
   <message name="IDS_EOL_NOTIFICATION_SECURITY_ONLY" desc="Notification shown to inform the user that this device will no longer receive software updates.">
-    This device will no longer receive software updates.
+    Software updates for this device are no longer available. Please consider upgrading.
   </message>
   <message name="IDS_EOL_NOTIFICATION_EOL" desc="Notification shown to inform the user that this device will no longer receive regular security updates.">
-    This device will no longer receive regular security updates.
+    Security updates for this device are no longer available. Please consider upgrading.
   </message>
   <message name="IDS_EOL_MORE_INFO_BUTTON" desc="A button label shown in the notification for eol status change to get more information.">
-    More info
+    Learn more
   </message>
-  <message name="IDS_FLAGS_ENABLE_EOL_NOTIFICATION_NAME" desc="Name of the about:flag option to enable eol notification.">
-    Enable Device End of Life notification.
+  <message name="IDS_EOL_DISMISS_BUTTON" desc="A button label shown in the notification for eol status change to dismiss the notification.">
+    Don't remind me again
   </message>
-  <message name="IDS_FLAGS_ENABLE_EOL_NOTIFICATION_DESCRIPTION" desc="Description of the about:flag option to enable eol notification.">
-    Enable Notifcation when Device is End of Life.
+  <message name="IDS_FLAGS_EOL_NOTIFICATION_NAME" desc="Name of the about:flag option to disable eol notification.">
+    Disable Device End of Life notification.
+  </message>
+  <message name="IDS_FLAGS_EOL_NOTIFICATION_DESCRIPTION" desc="Description of the about:flag option to disable eol notification.">
+    Disable Notifcation when Device is End of Life.
   </message>
 
   <!-- Genius App -->
@@ -6700,6 +6805,12 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_BACKUP_RESTORE" desc="Message in the opt-in dialog for users to enable Backup and Restore for Android apps.">
     Automatically back up and restore Play app data to Google Drive. You can change this in Android Settings at any time. <ph name="BEGIN_LINK1">&lt;a href="#" id="learn-more-link-backup-restore"&gt;</ph>Learn More<ph name="END_LINK1">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+  </message>
+  <message name="IDS_ARC_OPT_IN_LOCATION_SETTING" desc="Message in the opt-in dialog for Android apps for the user to turn on Google location services">
+    Let Google’s location service help apps find your location quickly and accurately, which can reduce battery consumption. Anonymous location data will be sent to Google, even when no apps are running.
+  </message>
+  <message name="IDS_ARC_OPT_IN_SCANNING_SETTING" desc="Message in the opt-in dialog for Android apps for the user to enable wifi and bluetooth scanning to improve location">
+    Improve location accuracy by allowing apps and services to scan for Wi-Fi networks and Bluetooth devices.
   </message>
   <message name="IDS_ARC_OPT_OUT_TAB_TITLE" desc="Tab title when viewing opt-out setting dialog for android apps.">
     Settings - Remove Android apps

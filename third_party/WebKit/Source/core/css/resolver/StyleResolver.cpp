@@ -80,6 +80,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -683,6 +684,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document)
     documentFontDescription.setLocale(document.contentLanguage());
     documentStyle->setFontDescription(documentFontDescription);
     documentStyle->setZIndex(0);
+    documentStyle->setIsStackingContext(true);
     documentStyle->setUserModify(document.inDesignMode() ? READ_WRITE : READ_ONLY);
     // These are designed to match the user-agent stylesheet values for the document element
     // so that the common case doesn't need to create a new ComputedStyle in
@@ -697,8 +699,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document)
 
 void StyleResolver::adjustComputedStyle(StyleResolverState& state, Element* element)
 {
-    StyleAdjuster adjuster;
-    adjuster.adjustComputedStyle(state.mutableStyleRef(), *state.parentStyle(), element);
+    StyleAdjuster::adjustComputedStyle(state.mutableStyleRef(), *state.parentStyle(), element);
 }
 
 // Start loading resources referenced by this style.
@@ -792,6 +793,16 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(Element* element, const
 
         matchAllRules(state, collector, matchingBehavior != MatchAllRulesExcludingSMIL);
 
+        // TODO(dominicc): Remove this counter when Issue 590014 is fixed.
+        if (element->hasTagName(HTMLNames::summaryTag)) {
+            MatchedPropertiesRange properties = collector.matchedResult().authorRules();
+            for (auto it = properties.begin(); it != properties.end(); ++it) {
+                CSSValue* value = it->properties->getPropertyCSSValue(CSSPropertyDisplay);
+                if (value && value->isPrimitiveValue() && toCSSPrimitiveValue(*value).getValueID() == CSSValueBlock)
+                    UseCounter::count(element->document(), UseCounter::SummaryElementWithDisplayBlockAuthorRule);
+            }
+        }
+
         if (element->computedStyle() && element->computedStyle()->textAutosizingMultiplier() != state.style()->textAutosizingMultiplier()) {
             // Preserve the text autosizing multiplier on style recalc. Autosizer will update it during layout if needed.
             // NOTE: this must occur before applyMatchedProperties for correct computation of font-relative lengths.
@@ -839,17 +850,12 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(Element* element, const
     return state.takeStyle();
 }
 
-// This function is used by the WebAnimations JavaScript API method animate().
-// FIXME: Remove this when animate() switches away from resolution-dependent parsing.
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle* baseStyle, CSSPropertyID property, const CSSValue* value)
+// TODO(alancutter): Create compositor keyframe values directly instead of intermediate AnimatableValues.
+PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle& baseStyle, const ComputedStyle* parentStyle, CSSPropertyID property, const CSSValue* value)
 {
-    StyleResolverState state(element.document(), &element);
-    state.setStyle(baseStyle ? ComputedStyle::clone(*baseStyle) : ComputedStyle::create());
-    return createAnimatableValueSnapshot(state, property, value);
-}
-
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, const CSSValue* value)
-{
+    // TODO(alancutter): Avoid creating a StyleResolverState just to apply a single value on a ComputedStyle.
+    StyleResolverState state(element.document(), &element, parentStyle);
+    state.setStyle(ComputedStyle::clone(baseStyle));
     if (value) {
         StyleBuilder::applyProperty(property, state, *value);
         state.fontBuilder().createFont(state.document().styleEngine().fontSelector(), state.mutableStyleRef());
@@ -1119,6 +1125,8 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, const Ele
     CSSAnimations::calculateUpdate(animatingElement, *element, *state.style(), state.parentStyle(), state.animationUpdate(), this);
     if (state.animationUpdate().isEmpty())
         return false;
+
+    CSSAnimations::snapshotCompositorKeyframes(*element, state.animationUpdate(), *state.style(), state.parentStyle());
 
     if (state.style()->insideLink() != NotInsideLink) {
         ASSERT(state.applyPropertyToRegularStyle());

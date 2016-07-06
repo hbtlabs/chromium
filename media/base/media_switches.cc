@@ -123,9 +123,24 @@ const char kDisableRTCSmoothnessAlgorithm[] =
 // if MP4 demuxing is not enabled in the build.
 const char kEnableVp9InMp4[] = "enable-vp9-in-mp4";
 
+// Switches which method is used to compute the encoder utilization metric
+// (e.g., --cast-encoder-util-heuristic=backlog).
+//
+// TODO(miu): This is temporary, for lab performance testing, until a
+// good "works for all" solution is confirmed.
+// https://code.google.com/p/chrome-os-partner/issues/detail?id=54806
+const char kCastEncoderUtilHeuristic[] = "cast-encoder-util-heuristic";
+
 }  // namespace switches
 
 namespace media {
+
+#if defined(ENABLE_PLUGINS)
+// Let flash join and be controlled by media session, only valid when
+// |kEnableDefaultMediaSession| is on.
+const base::Feature kFlashJoinsMediaSession{"flash-join-media-session",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(ENABLE_PLUGINS)
 
 // Use new audio rendering mixer.
 const base::Feature kNewAudioRenderingMixingStrategy{

@@ -22,9 +22,9 @@
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/instant_types.h"
-#include "chrome/common/ntp_logging_events.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/search/instant_types.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
@@ -56,9 +56,9 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
   MOCK_METHOD2(OnLogEvent, void(NTPLoggingEventType event,
                                 base::TimeDelta time));
   MOCK_METHOD2(OnLogMostVisitedImpression,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD2(OnLogMostVisitedNavigation,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD1(PasteIntoOmnibox, void(const base::string16&));
   MOCK_METHOD1(OnChromeIdentityCheck, void(const base::string16& identity));
   MOCK_METHOD0(OnHistorySyncCheck, void());
@@ -309,14 +309,14 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedImpressionMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
   EXPECT_CALL(*mock_delegate(),
-      OnLogMostVisitedImpression(3, base::ASCIIToUTF16("Server"))).Times(1);
+      OnLogMostVisitedImpression(3, NTPLoggingTileSource::SERVER)).Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(true));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogMostVisitedImpression(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(), 3,
-      base::ASCIIToUTF16("Server")));
+      NTPLoggingTileSource::SERVER));
 }
 
 TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedNavigationMsg) {
@@ -324,14 +324,14 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedNavigationMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
   EXPECT_CALL(*mock_delegate(),
-      OnLogMostVisitedNavigation(3, base::ASCIIToUTF16("Server"))).Times(1);
+      OnLogMostVisitedNavigation(3, NTPLoggingTileSource::SERVER)).Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(true));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogMostVisitedNavigation(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(), 3,
-      base::ASCIIToUTF16("Server")));
+      NTPLoggingTileSource::SERVER));
 }
 
 TEST_F(SearchIPCRouterTest, ProcessChromeIdentityCheckMsg) {

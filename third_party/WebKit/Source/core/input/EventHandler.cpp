@@ -436,13 +436,6 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const MouseEventWithHi
     if (controller && controller->autoscrollInProgress())
         m_scrollManager.stopAutoscroll();
 
-    // Used to prevent mouseMoveEvent from initiating a drag before
-    // the mouse is pressed again.
-    m_mousePressed = false;
-    m_capturesDragging = false;
-    m_mouseDownMayStartDrag = false;
-    m_mouseDownMayStartAutoscroll = false;
-
     return selectionController().handleMouseReleaseEvent(event, m_dragStartPos) ? WebInputEventResult::HandledSystem : WebInputEventResult::NotHandled;
 }
 
@@ -1192,19 +1185,8 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const PlatformMouseEve
             // because the mouseup dispatch above has already updated it
             // correctly. Moreover, clickTargetNode is different from
             // mev.innerNode at drag-release.
-
-            MouseEvent* event = MouseEvent::create(
-                EventTypeNames::click,
-                clickTargetNode->document().domWindow(),
-                mev.event(), m_clickCount, nullptr);
-
-            // This is to suppress sending click events for non-primary buttons.
-            // But still doing default action like opening a new tab for middle
-            // click (crbug.com/255).
-            if (mev.event().button() != MouseButton::LeftButton)
-                event->stopPropagation();
-
-            clickEventResult = toWebInputEventResult(clickTargetNode->dispatchEvent(event));
+            clickEventResult = toWebInputEventResult(clickTargetNode->dispatchMouseEvent(mev.event(),
+                EventTypeNames::click, m_clickCount));
         }
     }
 
@@ -1212,6 +1194,7 @@ WebInputEventResult EventHandler::handleMouseReleaseEvent(const PlatformMouseEve
 
     if (eventResult == WebInputEventResult::NotHandled)
         eventResult = handleMouseReleaseEvent(mev);
+    clearDragHeuristicState();
 
     invalidateClick();
 
@@ -1387,6 +1370,16 @@ WebInputEventResult EventHandler::performDragAndDrop(const PlatformMouseEvent& e
     }
     clearDragState();
     return result;
+}
+
+void EventHandler::clearDragHeuristicState()
+{
+    // Used to prevent mouseMoveEvent from initiating a drag before
+    // the mouse is pressed again.
+    m_mousePressed = false;
+    m_capturesDragging = false;
+    m_mouseDownMayStartDrag = false;
+    m_mouseDownMayStartAutoscroll = false;
 }
 
 void EventHandler::clearDragState()
@@ -1604,6 +1597,14 @@ bool EventHandler::slideFocusOnShadowHostIfNecessary(const Element& element)
 
 WebInputEventResult EventHandler::handleWheelEvent(const PlatformWheelEvent& event)
 {
+#if OS(MACOSX)
+    // Filter Mac OS specific phases, usually with a zero-delta.
+    // https://crbug.com/553732
+    // TODO(chongz): EventSender sends events with |PlatformWheelEventPhaseNone|, but it shouldn't.
+    const int kPlatformWheelEventPhaseNoEventMask = PlatformWheelEventPhaseEnded | PlatformWheelEventPhaseCancelled | PlatformWheelEventPhaseMayBegin;
+    if ((event.phase() & kPlatformWheelEventPhaseNoEventMask) || (event.momentumPhase() & kPlatformWheelEventPhaseNoEventMask))
+        return WebInputEventResult::NotHandled;
+#endif
     Document* doc = m_frame->document();
 
     if (doc->layoutViewItem().isNull())
@@ -1874,6 +1875,7 @@ WebInputEventResult EventHandler::handleGestureTap(const GestureEventWithHitTest
 
     if (mouseUpEventResult == WebInputEventResult::NotHandled)
         mouseUpEventResult = handleMouseReleaseEvent(MouseEventWithHitTestResults(fakeMouseUp, currentHitTest));
+    clearDragHeuristicState();
 
     WebInputEventResult eventResult = mergeEventResult(mergeEventResult(mouseDownEventResult, mouseUpEventResult), clickEventResult);
     if (eventResult == WebInputEventResult::NotHandled && tappedNode && m_frame->page()) {

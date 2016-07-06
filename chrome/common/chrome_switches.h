@@ -115,6 +115,9 @@ extern const char kEnableAllBookmarksView[];
 extern const char kEnableAppLink[];
 #endif
 extern const char kEnableAppsFileAssociations[];
+#if defined(OS_CHROMEOS)
+extern const char kEnableIntentPicker[];
+#endif  // defined(OS_CHROMEOS)
 extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
 extern const char kEnableBookmarkUndo[];
@@ -361,7 +364,9 @@ extern const char kRelauncherProcessDMGDevice[];
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
+extern const char kDisablePerMonitorDpi[];
 extern const char kEnableCloudPrintXps[];
+extern const char kEnablePerMonitorDpi[];
 extern const char kEnableProfileShortcutManager[];
 extern const char kHideIcons[];
 extern const char kNoNetworkProfileWarning[];

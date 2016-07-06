@@ -318,7 +318,6 @@ struct StoragePartitionImpl::DataDeletionHelper {
       DOMStorageContextWrapper* dom_storage_context,
       storage::QuotaManager* quota_manager,
       storage::SpecialStoragePolicy* special_storage_policy,
-      WebRTCIdentityStore* webrtc_identity_store,
       storage::FileSystemContext* filesystem_context,
       const base::Time begin,
       const base::Time end);
@@ -371,11 +370,12 @@ StoragePartitionImpl::StoragePartitionImpl(
     IndexedDBContextImpl* indexed_db_context,
     CacheStorageContextImpl* cache_storage_context,
     ServiceWorkerContextWrapper* service_worker_context,
-    WebRTCIdentityStore* webrtc_identity_store,
     storage::SpecialStoragePolicy* special_storage_policy,
     HostZoomLevelContext* host_zoom_level_context,
     PlatformNotificationContextImpl* platform_notification_context,
-    BackgroundSyncContext* background_sync_context)
+    BackgroundSyncContext* background_sync_context,
+    scoped_refptr<webmessaging::BroadcastChannelProvider>
+        broadcast_channel_provider)
     : partition_path_(partition_path),
       quota_manager_(quota_manager),
       appcache_service_(appcache_service),
@@ -385,13 +385,12 @@ StoragePartitionImpl::StoragePartitionImpl(
       indexed_db_context_(indexed_db_context),
       cache_storage_context_(cache_storage_context),
       service_worker_context_(service_worker_context),
-      webrtc_identity_store_(webrtc_identity_store),
       special_storage_policy_(special_storage_policy),
       host_zoom_level_context_(host_zoom_level_context),
       platform_notification_context_(platform_notification_context),
       background_sync_context_(background_sync_context),
-      browser_context_(browser_context) {
-}
+      broadcast_channel_provider_(std::move(broadcast_channel_provider)),
+      browser_context_(browser_context) {}
 
 StoragePartitionImpl::~StoragePartitionImpl() {
   browser_context_ = nullptr;
@@ -498,9 +497,6 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
   scoped_refptr<ChromeAppCacheService> appcache_service =
       new ChromeAppCacheService(quota_manager->proxy());
 
-  scoped_refptr<WebRTCIdentityStore> webrtc_identity_store(
-      new WebRTCIdentityStore(path, context->GetSpecialStoragePolicy()));
-
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy(
       context->GetSpecialStoragePolicy());
 
@@ -517,14 +513,17 @@ StoragePartitionImpl* StoragePartitionImpl::Create(
       new BackgroundSyncContext();
   background_sync_context->Init(service_worker_context);
 
+  scoped_refptr<webmessaging::BroadcastChannelProvider>
+      broadcast_channel_provider = new webmessaging::BroadcastChannelProvider();
+
   StoragePartitionImpl* storage_partition = new StoragePartitionImpl(
       context, partition_path, quota_manager.get(), appcache_service.get(),
       filesystem_context.get(), database_tracker.get(),
       dom_storage_context.get(), indexed_db_context.get(),
       cache_storage_context.get(), service_worker_context.get(),
-      webrtc_identity_store.get(), special_storage_policy.get(),
-      host_zoom_level_context.get(), platform_notification_context.get(),
-      background_sync_context.get());
+      special_storage_policy.get(), host_zoom_level_context.get(),
+      platform_notification_context.get(), background_sync_context.get(),
+      std::move(broadcast_channel_provider));
 
   service_worker_context->set_storage_partition(storage_partition);
 
@@ -599,6 +598,11 @@ BackgroundSyncContext* StoragePartitionImpl::GetBackgroundSyncContext() {
   return background_sync_context_.get();
 }
 
+webmessaging::BroadcastChannelProvider*
+StoragePartitionImpl::GetBroadcastChannelProvider() {
+  return broadcast_channel_provider_.get();
+}
+
 void StoragePartitionImpl::OpenLocalStorage(
     const url::Origin& origin,
     mojom::LevelDBObserverPtr observer,
@@ -626,8 +630,7 @@ void StoragePartitionImpl::ClearDataImpl(
   helper->ClearDataOnUIThread(
       storage_origin, origin_matcher, cookie_matcher, GetPath(), rq_context,
       dom_storage_context_.get(), quota_manager_.get(),
-      special_storage_policy_.get(), webrtc_identity_store_.get(),
-      filesystem_context_.get(), begin, end);
+      special_storage_policy_.get(), filesystem_context_.get(), begin, end);
 }
 
 void StoragePartitionImpl::
@@ -766,7 +769,6 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
     DOMStorageContextWrapper* dom_storage_context,
     storage::QuotaManager* quota_manager,
     storage::SpecialStoragePolicy* special_storage_policy,
-    WebRTCIdentityStore* webrtc_identity_store,
     storage::FileSystemContext* filesystem_context,
     const base::Time begin,
     const base::Time end) {
@@ -836,18 +838,6 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
                    path, begin, end, decrement_callback));
   }
 
-  if (remove_mask & REMOVE_DATA_MASK_WEBRTC_IDENTITY) {
-    IncrementTaskCountOnUI();
-    BrowserThread::PostTask(
-        BrowserThread::IO,
-        FROM_HERE,
-        base::Bind(&WebRTCIdentityStore::DeleteBetween,
-                   webrtc_identity_store,
-                   begin,
-                   end,
-                   decrement_callback));
-  }
-
 #if defined(ENABLE_PLUGINS)
   if (remove_mask & REMOVE_DATA_MASK_PLUGIN_PRIVATE_DATA) {
     IncrementTaskCountOnUI();
@@ -903,10 +893,6 @@ void StoragePartitionImpl::Flush() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (GetDOMStorageContext())
     GetDOMStorageContext()->Flush();
-}
-
-WebRTCIdentityStore* StoragePartitionImpl::GetWebRTCIdentityStore() {
-  return webrtc_identity_store_.get();
 }
 
 BrowserContext* StoragePartitionImpl::browser_context() const {
