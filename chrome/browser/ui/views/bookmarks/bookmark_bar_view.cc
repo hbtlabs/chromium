@@ -89,6 +89,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_constants.h"
@@ -206,7 +207,7 @@ class BookmarkButtonBase : public views::LabelButton {
       : LabelButton(listener, title) {
     SetElideBehavior(kElideBehavior);
     if (ui::MaterialDesignController::IsModeMaterial()) {
-      SetHasInkDrop(true);
+      SetInkDropMode(InkDropMode::ON);
       set_has_ink_drop_action_on_click(true);
       SetFocusPainter(nullptr);
     }
@@ -335,9 +336,10 @@ class BookmarkMenuButtonBase : public views::MenuButton {
                          views::MenuButtonListener* menu_button_listener,
                          bool show_menu_marker)
       : MenuButton(title, menu_button_listener, show_menu_marker) {
-    SetHasInkDrop(ui::MaterialDesignController::IsModeMaterial());
-    if (ui::MaterialDesignController::IsModeMaterial())
+    if (ui::MaterialDesignController::IsModeMaterial()) {
+      SetInkDropMode(InkDropMode::ON);
       SetFocusPainter(nullptr);
+    }
   }
 
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override {
@@ -1787,10 +1789,21 @@ void BookmarkBarView::ConfigureButton(const BookmarkNode* node,
   button->set_context_menu_controller(this);
   button->set_drag_controller(this);
   if (node->is_url()) {
-    const gfx::Image& favicon = model_->GetFavicon(node);
-    button->SetImage(views::Button::STATE_NORMAL,
-                     favicon.IsEmpty() ? *GetImageSkiaNamed(IDR_DEFAULT_FAVICON)
-                                       : *favicon.ToImageSkia());
+    // Themify chrome:// favicons and the default one. This is similar to
+    // code in the tabstrip.
+    bool themify_icon = node->url().SchemeIs(content::kChromeUIScheme);
+    gfx::ImageSkia favicon = model_->GetFavicon(node).AsImageSkia();
+    if (favicon.isNull()) {
+      favicon = *GetImageSkiaNamed(IDR_DEFAULT_FAVICON);
+      themify_icon = true;
+    }
+
+    if (themify_icon && GetThemeProvider()) {
+      favicon = gfx::ImageSkiaOperations::CreateHSLShiftedImage(
+          favicon, GetThemeProvider()->GetTint(ThemeProperties::TINT_BUTTONS));
+    }
+
+    button->SetImage(views::Button::STATE_NORMAL, favicon);
   }
   button->SetMaxSize(gfx::Size(kMaxButtonWidth, 0));
 }

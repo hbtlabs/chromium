@@ -32,6 +32,8 @@ const char* milestoneString(int milestone)
         return "M54, around October 2016";
     case 55:
         return "M55, around November 2016";
+    case 56:
+        return "M56, around January 2017";
     }
 
     ASSERT_NOT_REACHED();
@@ -304,6 +306,11 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::EncryptedMediaInsecureOrigin:
         return "requestMediaKeySystemAccess() is deprecated on insecure origins in the specification. Support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
 
+    case UseCounter::MediaSourceAbortRemove:
+        return "Using SourceBuffer.abort() to abort remove()'s asynchronous range removal is deprecated due to specification change. Support will be removed in the future. You should instead await 'updateend'. abort() is intended to only abort an asynchronous media append or reset parser state. See https://www.chromestatus.com/features/6107495151960064 for more details.";
+    case UseCounter::MediaSourceDurationTruncatingBuffered:
+        return "Setting MediaSource.duration below the highest presentation timestamp of any buffered coded frames is deprecated due to specification change. Support for implicit removal of truncated buffered media will be removed in the future. You should instead perform explicit remove(newDuration, oldDuration) on all sourceBuffers, where newDuration < oldDuration. See https://www.chromestatus.com/features/6107495151960064 for more details.";
+
     case UseCounter::ApplicationCacheManifestSelectInsecureOrigin:
     case UseCounter::ApplicationCacheAPIInsecureOrigin:
         return "Use of the Application Cache is deprecated on insecure origins. Support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
@@ -358,7 +365,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return String::format("EME requires that contentType strings accepted by requestMediaKeySystemAccess() include codecs. Non-standard support for contentType strings without codecs will be removed in %s. Please specify the desired codec(s) as part of the contentType.", milestoneString(54));
 
     case UseCounter::V8KeyboardEvent_KeyIdentifier_AttributeGetter:
-        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 53, "5316065118650368");
+        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 54, "5316065118650368");
 
     case UseCounter::During_Microtask_SyncXHR:
         return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 54, "5647113010544640");
@@ -380,6 +387,9 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::TouchEndDuringScrollUserGestureUtilized:
         return willBeRemoved("Performing operations that require explicit user interaction on touchend events that occur as part of a scroll", 54, "5649871251963904");
+
+    case UseCounter::MIDIMessageEventReceivedTime:
+        return willBeRemoved("MIDIMessageEvent.receivedTime", 56, "5665772797952000");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

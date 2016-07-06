@@ -97,6 +97,8 @@ source_set("browser") {
     "browsing_data/ios_chrome_browsing_data_remover.mm",
     "chrome_constants.cc",
     "chrome_constants.h",
+    "chrome_coordinator.h",
+    "chrome_coordinator.mm",
     "chrome_paths.h",
     "chrome_paths.mm",
     "chrome_paths_internal.h",
@@ -190,6 +192,7 @@ source_set("browser") {
     "history/top_sites_factory.h",
     "history/web_history_service_factory.cc",
     "history/web_history_service_factory.h",
+    "infobars/confirm_infobar_controller+protected.h",
     "infobars/confirm_infobar_controller.h",
     "infobars/confirm_infobar_controller.mm",
     "infobars/infobar.h",
@@ -292,6 +295,8 @@ source_set("browser") {
     "passwords/ios_chrome_password_store_factory.h",
     "passwords/ios_chrome_save_password_infobar_delegate.h",
     "passwords/ios_chrome_save_password_infobar_delegate.mm",
+    "passwords/ios_chrome_update_password_infobar_delegate.h",
+    "passwords/ios_chrome_update_password_infobar_delegate.mm",
     "passwords/js_credential_manager.h",
     "passwords/js_credential_manager.mm",
     "passwords/js_password_manager.h",
@@ -308,6 +313,8 @@ source_set("browser") {
     "passwords/password_generation_utils.h",
     "passwords/password_generation_utils.mm",
     "passwords/passwords_ui_delegate.h",
+    "passwords/update_password_infobar_controller.h",
+    "passwords/update_password_infobar_controller.mm",
     "pref_names.cc",
     "pref_names.h",
     "prefs/browser_prefs.h",
@@ -332,6 +339,8 @@ source_set("browser") {
     "reading_list/reading_list_model_storage.h",
     "reading_list/reading_list_model_storage_defaults.h",
     "reading_list/reading_list_model_storage_defaults.mm",
+    "root_coordinator.h",
+    "root_coordinator.mm",
     "search/search_util.h",
     "search/search_util.mm",
     "search_engines/search_engines_util.cc",
@@ -381,6 +390,8 @@ source_set("browser") {
     "signin/ios_chrome_signin_status_metrics_provider_delegate.h",
     "signin/oauth2_token_service_factory.h",
     "signin/oauth2_token_service_factory.mm",
+    "signin/profile_oauth2_token_service_ios_provider_impl.h",
+    "signin/profile_oauth2_token_service_ios_provider_impl.mm",
     "signin/signin_client_factory.cc",
     "signin/signin_client_factory.h",
     "signin/signin_client_impl.h",
@@ -477,6 +488,13 @@ source_set("browser") {
     "ui/commands/show_signin_command.mm",
     "ui/context_menu/context_menu_coordinator.h",
     "ui/context_menu/context_menu_coordinator.mm",
+    "ui/elements/selector_coordinator.h",
+    "ui/elements/selector_coordinator.mm",
+    "ui/elements/selector_picker_presentation_controller.h",
+    "ui/elements/selector_picker_presentation_controller.mm",
+    "ui/elements/selector_picker_view_controller.h",
+    "ui/elements/selector_picker_view_controller.mm",
+    "ui/elements/selector_view_controller_delegate.h",
     "ui/file_locations.h",
     "ui/file_locations.mm",
     "ui/image_util.h",
@@ -581,7 +599,6 @@ source_set("browser") {
     "//components/cookie_config",
     "//components/crash/core/browser",
     "//components/crash/core/common",
-    "//components/data_reduction_proxy/core/common",
     "//components/dom_distiller/core",
     "//components/dom_distiller/ios",
     "//components/favicon/core",
@@ -740,20 +757,6 @@ source_set("about_flags") {
     "GOOGLE_TEST_OAUTH_CLIENT_SECRET=\"$google_test_oauth_client_secret\"",
     "GOOGLE_TEST_OAUTH_URL=\"$google_test_oauth_url\"",
     "GOOGLE_TEST_SYNC_URL=\"$google_test_sync_url\"",
-  ]
-}
-
-# Temporary target while moving coordinator classes upstream.
-source_set("chrome_coordinators") {
-  sources = [
-    "chrome_coordinator.h",
-    "chrome_coordinator.mm",
-    "root_coordinator.h",
-    "root_coordinator.mm",
-  ]
-
-  deps = [
-    "//base",
   ]
 }
 

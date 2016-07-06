@@ -32,15 +32,15 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
-#include "components/mus/common/switches.h"
-#include "components/mus/common/util.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/cpp/window_tree_host_factory.h"
 #include "mojo/public/cpp/bindings/type_converter.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/common/switches.h"
+#include "services/ui/common/util.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/cpp/window_tree_host_factory.h"
 #include "ui/display/mojo/display_type_converters.h"
 
 using ash::mojom::Container;
@@ -75,7 +75,7 @@ class WorkspaceLayoutManagerDelegateImpl
 }  // namespace
 
 RootWindowController::RootWindowController(WindowManager* window_manager,
-                                           ::mus::Window* root,
+                                           ::ui::Window* root,
                                            const display::Display& display)
     : window_manager_(window_manager),
       root_(root),
@@ -113,20 +113,20 @@ shell::Connector* RootWindowController::GetConnector() {
   return window_manager_->connector();
 }
 
-::mus::Window* RootWindowController::NewTopLevelWindow(
+::ui::Window* RootWindowController::NewTopLevelWindow(
     std::map<std::string, std::vector<uint8_t>>* properties) {
   // TODO(sky): panels need a different frame, http:://crbug.com/614362.
   const bool provide_non_client_frame =
-      GetWindowType(*properties) == ::mus::mojom::WindowType::WINDOW ||
-      GetWindowType(*properties) == ::mus::mojom::WindowType::PANEL;
+      GetWindowType(*properties) == ::ui::mojom::WindowType::WINDOW ||
+      GetWindowType(*properties) == ::ui::mojom::WindowType::PANEL;
   if (provide_non_client_frame)
-    (*properties)[::mus::mojom::kWaitForUnderlay_Property].clear();
+    (*properties)[::ui::mojom::kWaitForUnderlay_Property].clear();
 
   // TODO(sky): constrain and validate properties before passing to server.
-  ::mus::Window* window = root_->window_tree()->NewWindow(properties);
+  ::ui::Window* window = root_->window_tree()->NewWindow(properties);
   window->SetBounds(CalculateDefaultBounds(window));
 
-  ::mus::Window* container_window = nullptr;
+  ::ui::Window* container_window = nullptr;
   mojom::Container container;
   if (GetRequestedContainer(window, &container)) {
     container_window = GetWindowForContainer(container);
@@ -149,8 +149,7 @@ shell::Connector* RootWindowController::GetConnector() {
   return window;
 }
 
-::mus::Window* RootWindowController::GetWindowForContainer(
-    Container container) {
+::ui::Window* RootWindowController::GetWindowForContainer(Container container) {
   WmWindowMus* wm_window =
       GetWindowByShellWindowId(MashContainerToAshShellWindowId(container));
   DCHECK(wm_window);
@@ -174,11 +173,11 @@ StatusLayoutManager* RootWindowController::GetStatusLayoutManager() {
 }
 
 gfx::Rect RootWindowController::CalculateDefaultBounds(
-    ::mus::Window* window) const {
+    ::ui::Window* window) const {
   if (window->HasSharedProperty(
-          ::mus::mojom::WindowManager::kInitialBounds_Property)) {
+          ::ui::mojom::WindowManager::kInitialBounds_Property)) {
     return window->GetSharedProperty<gfx::Rect>(
-        ::mus::mojom::WindowManager::kInitialBounds_Property);
+        ::ui::mojom::WindowManager::kInitialBounds_Property);
   }
 
   int width, height;
@@ -197,8 +196,17 @@ gfx::Rect RootWindowController::CalculateDefaultBounds(
 }
 
 void RootWindowController::OnShelfWindowAvailable() {
-  DockedWindowLayoutManager::Get(WmWindowMus::Get(root_))
-      ->SetShelf(wm_shelf_.get());
+  DockedWindowLayoutManager* docked_window_layout_manager =
+      DockedWindowLayoutManager::Get(WmWindowMus::Get(root_));
+
+  // Following code expects the shelf to be called only once.
+  // TODO(sky): this check is only necessary while we have shelf hosted in
+  // sysui (as sysui can restart). Once that is fixed there should be a DCHECK
+  // that the shelf hasn't been set.
+  if (docked_window_layout_manager->shelf())
+    return;
+
+  docked_window_layout_manager->SetShelf(wm_shelf_.get());
 
   PanelLayoutManager::Get(WmWindowMus::Get(root_))->SetShelf(wm_shelf_.get());
 

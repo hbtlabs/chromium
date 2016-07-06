@@ -100,6 +100,17 @@ void LayerTreeImpl::Shutdown() {
 }
 
 void LayerTreeImpl::ReleaseResources() {
+#if DCHECK_IS_ON()
+  // These DCHECKs catch tests that add layers to the tree but fail to build the
+  // layer list afterward.
+  LayerListIterator<LayerImpl> it(root_layer_for_testing_);
+  size_t i = 0;
+  for (; it != LayerListIterator<LayerImpl>(nullptr); ++it, ++i) {
+    DCHECK_LT(i, layer_list_.size());
+    DCHECK_EQ(layer_list_[i], *it);
+  }
+#endif
+
   if (!LayerListIsEmpty()) {
     LayerTreeHostCommon::CallFunctionForEveryLayer(
         this, [](LayerImpl* layer) { layer->ReleaseResources(); });
@@ -265,14 +276,12 @@ void LayerTreeImpl::SetRootLayerForTesting(std::unique_ptr<LayerImpl> layer) {
   if (root_layer_for_testing_ && layer.get() != root_layer_for_testing_)
     RemoveLayer(root_layer_for_testing_->id());
   root_layer_for_testing_ = layer.get();
-  if (layer)
+  ClearLayerList();
+  if (layer) {
     AddLayer(std::move(layer));
-  BuildLayerListForTesting();
+    BuildLayerListForTesting();
+  }
   layer_tree_host_impl_->OnCanDrawStateChangedForTree();
-}
-
-void LayerTreeImpl::SetRootLayerFromLayerListForTesting() {
-  root_layer_for_testing_ = layer_list_.empty() ? nullptr : layer_list_[0];
 }
 
 void LayerTreeImpl::OnCanDrawStateChangedForTree() {
@@ -893,8 +902,9 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
         OverscrollElasticityLayer(), resource_provider()->max_texture_size(),
         can_render_to_separate_surface,
         settings().layer_transforms_should_scale_layer_contents,
-        settings().verify_clip_tree_calculations, &render_surface_layer_list_,
-        &property_trees_);
+        settings().verify_clip_tree_calculations,
+        settings().verify_transform_tree_calculations,
+        &render_surface_layer_list_, &property_trees_);
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
     if (const char* client_name = GetClientNameForMetrics()) {
       UMA_HISTOGRAM_COUNTS(
@@ -1022,11 +1032,15 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
 
 void LayerTreeImpl::BuildLayerListAndPropertyTreesForTesting() {
   BuildLayerListForTesting();
-  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(
-      root_layer_for_testing_);
+  BuildPropertyTreesForTesting();
+}
+
+void LayerTreeImpl::BuildPropertyTreesForTesting() {
+  PropertyTreeBuilder::PreCalculateMetaInformationForTesting(layer_list_[0]);
+  property_trees_.needs_rebuild = true;
   property_trees_.transform_tree.set_source_to_parent_updates_allowed(true);
   PropertyTreeBuilder::BuildPropertyTrees(
-      root_layer_for_testing_, PageScaleLayer(), InnerViewportScrollLayer(),
+      layer_list_[0], PageScaleLayer(), InnerViewportScrollLayer(),
       OuterViewportScrollLayer(), OverscrollElasticityLayer(),
       elastic_overscroll()->Current(IsActiveTree()),
       current_page_scale_factor(), device_scale_factor(),

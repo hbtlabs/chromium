@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 
 #include <math.h>
 #include <utility>
@@ -90,7 +90,7 @@ class MaximizeModeControllerTest : public test::AshTestBase {
   }
 
   MaximizeModeController* maximize_mode_controller() {
-    return Shell::GetInstance()->maximize_mode_controller();
+    return WmShell::Get()->maximize_mode_controller();
   }
 
   void TriggerLidUpdate(const gfx::Vector3dF& lid) {

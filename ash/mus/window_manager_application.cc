@@ -13,13 +13,13 @@
 #include "ash/mus/window_manager.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
-#include "components/mus/common/event_matcher_util.h"
-#include "components/mus/common/gpu_service.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/ui/common/event_matcher_util.h"
+#include "services/ui/common/gpu_service.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/events/event.h"
 #include "ui/views/mus/aura_init.h"
 
@@ -48,33 +48,33 @@ void WindowManagerApplication::OnAcceleratorRegistrarDestroyed(
 }
 
 void WindowManagerApplication::InitWindowManager(
-    ::mus::WindowTreeClient* window_tree_client) {
+    ::ui::WindowTreeClient* window_tree_client) {
   window_manager_->Init(window_tree_client);
   window_manager_->AddObserver(this);
 }
 
-void WindowManagerApplication::Initialize(shell::Connector* connector,
-                                          const shell::Identity& identity,
-                                          uint32_t id) {
+void WindowManagerApplication::OnStart(shell::Connector* connector,
+                                       const shell::Identity& identity,
+                                       uint32_t id) {
   connector_ = connector;
-  ::mus::GpuService::Initialize(connector);
+  ::ui::GpuService::Initialize(connector);
   window_manager_.reset(new WindowManager(connector_));
 
   aura_init_.reset(new views::AuraInit(connector_, "ash_mus_resources.pak"));
 
   tracing_.Initialize(connector, identity.name());
 
-  ::mus::WindowTreeClient* window_tree_client = new ::mus::WindowTreeClient(
+  ::ui::WindowTreeClient* window_tree_client = new ::ui::WindowTreeClient(
       window_manager_.get(), window_manager_.get(), nullptr);
   window_tree_client->ConnectAsWindowManager(connector);
 
   InitWindowManager(window_tree_client);
 }
 
-bool WindowManagerApplication::AcceptConnection(shell::Connection* connection) {
+bool WindowManagerApplication::OnConnect(shell::Connection* connection) {
   connection->AddInterface<mojom::ShelfLayout>(this);
   connection->AddInterface<mojom::UserWindowController>(this);
-  connection->AddInterface<::mus::mojom::AcceleratorRegistrar>(this);
+  connection->AddInterface<::ui::mojom::AcceleratorRegistrar>(this);
   if (connection->GetRemoteIdentity().name() == "mojo:mash_session") {
     connection->GetInterface(&session_);
     session_->AddScreenlockStateListener(
@@ -107,7 +107,7 @@ void WindowManagerApplication::Create(
 
 void WindowManagerApplication::Create(
     shell::Connection* connection,
-    mojo::InterfaceRequest<::mus::mojom::AcceleratorRegistrar> request) {
+    mojo::InterfaceRequest<::ui::mojom::AcceleratorRegistrar> request) {
   if (!window_manager_->window_manager_client())
     return;  // Can happen during shutdown.
 

@@ -68,10 +68,12 @@
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/overlay_transform.h"
 #include "ui/gfx/transform.h"
+#include "ui/gl/ca_renderer_layer_params.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
 #include "ui/gl/gl_fence.h"
@@ -2186,8 +2188,6 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   bool supports_commit_overlay_planes_;
   bool supports_async_swap_;
 
-  ContextType context_type_;
-
   // These flags are used to override the state of the shared feature_info_
   // member.  Because the same FeatureInfo instance may be shared among many
   // contexts, the assumptions on the availablity of extensions in WebGL
@@ -2298,6 +2298,7 @@ ScopedGLErrorSuppressor::~ScopedGLErrorSuppressor() {
 }
 
 static void RestoreCurrentTextureBindings(ContextState* state, GLenum target) {
+  DCHECK(!state->texture_units.empty());
   TextureUnit& info = state->texture_units[0];
   GLuint last_id;
   scoped_refptr<TextureRef>& texture_ref = info.GetInfoForTarget(target);
@@ -2881,7 +2882,6 @@ GLES2DecoderImpl::GLES2DecoderImpl(ContextGroup* group)
       supports_post_sub_buffer_(false),
       supports_commit_overlay_planes_(false),
       supports_async_swap_(false),
-      context_type_(CONTEXT_TYPE_OPENGLES2),
       derivatives_explicitly_enabled_(false),
       frag_depth_explicitly_enabled_(false),
       draw_buffers_explicitly_enabled_(false),
@@ -4120,33 +4120,13 @@ bool GLES2DecoderImpl::CheckFramebufferValid(
     return true;
   }
 
-  if (framebuffer_manager()->IsComplete(framebuffer)) {
-    return true;
-  }
-
-  GLenum completeness = framebuffer->IsPossiblyComplete(feature_info_.get());
-  if (completeness != GL_FRAMEBUFFER_COMPLETE) {
-    LOCAL_SET_GL_ERROR(gl_error, func_name, "framebuffer incomplete");
-    return false;
-  }
-
-  // Are all the attachments cleared?
-  if (clear_uncleared_images &&
-      (renderbuffer_manager()->HaveUnclearedRenderbuffers() ||
-       texture_manager()->HaveUnclearedMips())) {
-    if (!framebuffer->IsCleared()) {
-      // Can we clear them?
-      if (framebuffer->GetStatus(texture_manager(), target) !=
-          GL_FRAMEBUFFER_COMPLETE) {
-        LOCAL_SET_GL_ERROR(
-            gl_error, func_name, "framebuffer incomplete (clear)");
-        return false;
-      }
-      ClearUnclearedAttachments(target, framebuffer);
-    }
-  }
-
   if (!framebuffer_manager()->IsComplete(framebuffer)) {
+    GLenum completeness = framebuffer->IsPossiblyComplete(feature_info_.get());
+    if (completeness != GL_FRAMEBUFFER_COMPLETE) {
+      LOCAL_SET_GL_ERROR(gl_error, func_name, "framebuffer incomplete");
+      return false;
+    }
+
     if (framebuffer->GetStatus(texture_manager(), target) !=
         GL_FRAMEBUFFER_COMPLETE) {
       LOCAL_SET_GL_ERROR(
@@ -4154,6 +4134,15 @@ bool GLES2DecoderImpl::CheckFramebufferValid(
       return false;
     }
     framebuffer_manager()->MarkAsComplete(framebuffer);
+  }
+
+  // Are all the attachments cleared?
+  if (clear_uncleared_images &&
+      (renderbuffer_manager()->HaveUnclearedRenderbuffers() ||
+       texture_manager()->HaveUnclearedMips())) {
+    if (!framebuffer->IsCleared()) {
+      ClearUnclearedAttachments(target, framebuffer);
+    }
   }
   return true;
 }
@@ -4391,10 +4380,10 @@ void GLES2DecoderImpl::MarkDrawBufferAsCleared(
       attachment = static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + drawbuffer_i);
       break;
     case GL_DEPTH:
-      attachment = GL_DEPTH;
+      attachment = GL_DEPTH_ATTACHMENT;
       break;
     case GL_STENCIL:
-      attachment = GL_STENCIL;
+      attachment = GL_STENCIL_ATTACHMENT;
       break;
     default:
       // Caller is responsible for breaking GL_DEPTH_STENCIL into GL_DEPTH and
@@ -6067,9 +6056,14 @@ bool GLES2DecoderImpl::GetHelper(
           if (framebuffer->HasAlphaMRT() &&
               framebuffer->HasSameInternalFormatsMRT()) {
             if (feature_info_->gl_version_info().is_desktop_core_profile) {
-              glGetFramebufferAttachmentParameterivEXT(
-                  GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                  GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &v);
+              for (uint32_t i = 0; i < group_->max_draw_buffers(); i++) {
+                if (framebuffer->HasColorAttachment(i)) {
+                  glGetFramebufferAttachmentParameterivEXT(
+                      GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
+                      GL_FRAMEBUFFER_ATTACHMENT_ALPHA_SIZE, &v);
+                  break;
+                }
+              }
             } else {
               glGetIntegerv(GL_ALPHA_BITS, &v);
             }
@@ -6088,9 +6082,11 @@ bool GLES2DecoderImpl::GetHelper(
           Framebuffer* framebuffer =
               GetFramebufferInfoForTarget(GL_DRAW_FRAMEBUFFER_EXT);
           if (framebuffer) {
-            glGetFramebufferAttachmentParameterivEXT(
-                GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
-                GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE, &v);
+            if (framebuffer->HasDepthAttachment()) {
+              glGetFramebufferAttachmentParameterivEXT(
+                  GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
+                  GL_FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE, &v);
+            }
           } else {
             v = (back_buffer_has_depth_ ? 24 : 0);
           }
@@ -6110,20 +6106,28 @@ bool GLES2DecoderImpl::GetHelper(
           Framebuffer* framebuffer =
               GetFramebufferInfoForTarget(GL_DRAW_FRAMEBUFFER_EXT);
           if (framebuffer) {
-            GLenum framebuffer_enum = 0;
-            switch (pname) {
-              case GL_RED_BITS:
-                framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE;
-                break;
-              case GL_GREEN_BITS:
-                framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE;
-                break;
-              case GL_BLUE_BITS:
-                framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE;
-                break;
+            if (framebuffer->HasSameInternalFormatsMRT()) {
+              GLenum framebuffer_enum = 0;
+              switch (pname) {
+                case GL_RED_BITS:
+                  framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE;
+                  break;
+                case GL_GREEN_BITS:
+                  framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE;
+                  break;
+                case GL_BLUE_BITS:
+                  framebuffer_enum = GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE;
+                  break;
+              }
+              for (uint32_t i = 0; i < group_->max_draw_buffers(); i++) {
+                if (framebuffer->HasColorAttachment(i)) {
+                  glGetFramebufferAttachmentParameterivEXT(
+                      GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
+                      framebuffer_enum, &v);
+                  break;
+                }
+              }
             }
-            glGetFramebufferAttachmentParameterivEXT(
-                GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, framebuffer_enum, &v);
           } else {
             v = 8;
           }
@@ -6141,9 +6145,11 @@ bool GLES2DecoderImpl::GetHelper(
           Framebuffer* framebuffer =
               GetFramebufferInfoForTarget(GL_DRAW_FRAMEBUFFER_EXT);
           if (framebuffer) {
-            glGetFramebufferAttachmentParameterivEXT(
-                GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
-                GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, &v);
+            if (framebuffer->HasStencilAttachment()) {
+              glGetFramebufferAttachmentParameterivEXT(
+                  GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT,
+                  GL_FRAMEBUFFER_ATTACHMENT_STENCIL_SIZE, &v);
+            }
           } else {
             v = (back_buffer_has_stencil_ ? 8 : 0);
           }
@@ -10706,10 +10712,13 @@ error::Error GLES2DecoderImpl::HandleScheduleCALayerCHROMIUM(
                            mem[13], mem[17], mem[21], mem[25],
                            mem[14], mem[18], mem[22], mem[26],
                            mem[15], mem[19], mem[23], mem[27]);
-  if (!surface_->ScheduleCALayer(
-          image, contents_rect, c.opacity, c.background_color, c.edge_aa_mask,
-          bounds_rect, c.is_clipped ? true : false, clip_rect, transform,
-          c.sorting_context_id, filter)) {
+
+  ui::CARendererLayerParams params = ui::CARendererLayerParams(
+      c.is_clipped ? true : false, gfx::ToEnclosingRect(clip_rect),
+      c.sorting_context_id, transform, image, contents_rect,
+      gfx::ToEnclosingRect(bounds_rect), c.background_color, c.edge_aa_mask,
+      c.opacity, filter);
+  if (!surface_->ScheduleCALayer(params)) {
     LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glScheduleCALayerCHROMIUM",
                        "failed to schedule CALayer");
   }

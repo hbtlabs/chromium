@@ -1645,7 +1645,7 @@ void FrameView::didScrollTimerFired(Timer<FrameView>*)
         m_frame->document()->fetcher()->updateAllImageResourcePriorities();
 }
 
-void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
+void FrameView::updateLayersAndCompositingAfterScrollIfNeeded(const DoubleSize& scrollDelta)
 {
     // Nothing to do after scrolling if there are no fixed position elements.
     if (!hasViewportConstrainedObjects())
@@ -1655,8 +1655,12 @@ void FrameView::updateLayersAndCompositingAfterScrollIfNeeded()
     for (const auto& viewportConstrainedObject : *m_viewportConstrainedObjects) {
         LayoutObject* layoutObject = viewportConstrainedObject;
         PaintLayer* layer = toLayoutBoxModelObject(layoutObject)->layer();
-        if (layoutObject->style()->position() == StickyPosition)
-            layer->updateLayerPosition();
+        if (layoutObject->style()->position() == StickyPosition) {
+            // TODO(skobes): Resolve circular dependency between scroll offset and
+            // compositing state, and remove this disabler. https://crbug.com/420741
+            DisableCompositingQueryAsserts disabler;
+            layer->updateLayerPositionsAfterOverflowScroll(scrollDelta);
+        }
     }
 
     // If there fixed position elements, scrolling may cause compositing layers to change.
@@ -3347,7 +3351,7 @@ void FrameView::setScrollOffset(const DoublePoint& offset, ScrollType scrollType
         m_pendingScrollDelta += scrollDelta;
 
     clearFragmentAnchor();
-    updateLayersAndCompositingAfterScrollIfNeeded();
+    updateLayersAndCompositingAfterScrollIfNeeded(scrollDelta);
 
     Document* document = m_frame->document();
     document->enqueueScrollEventForNode(document);
@@ -4130,7 +4134,7 @@ void FrameView::updateViewportIntersectionsForSubtree(DocumentLifecycle::Lifecyc
     // Adjust render throttling for iframes based on visibility
     bool shouldNotify = !hadValidIntersection || hadEmptyIntersection != m_viewportIntersection.isEmpty();
     if (shouldNotify && !m_renderThrottlingObserverNotificationFactory->isPending())
-        m_frame->frameScheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, m_renderThrottlingObserverNotificationFactory->cancelAndCreate());
+        m_frame->frameScheduler()->unthrottledTaskRunner()->postTask(BLINK_FROM_HERE, m_renderThrottlingObserverNotificationFactory->cancelAndCreate());
 
     if (!m_needsUpdateViewportIntersectionInSubtree)
         return;

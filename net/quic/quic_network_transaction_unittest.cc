@@ -54,10 +54,15 @@
 #include "net/spdy/spdy_framer.h"
 #include "net/ssl/ssl_config_service_defaults.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "url/gurl.h"
+
+using net::test::IsError;
+using net::test::IsOk;
 
 namespace net {
 namespace test {
@@ -589,15 +594,15 @@ class QuicNetworkTransactionTest
   void CheckResponseData(const std::unique_ptr<HttpNetworkTransaction>& trans,
                          const std::string& expected) {
     std::string response_data;
-    ASSERT_EQ(OK, ReadTransaction(trans.get(), &response_data));
+    ASSERT_THAT(ReadTransaction(trans.get(), &response_data), IsOk());
     EXPECT_EQ(expected, response_data);
   }
 
   void RunTransaction(const std::unique_ptr<HttpNetworkTransaction>& trans) {
     TestCompletionCallback callback;
     int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-    EXPECT_EQ(ERR_IO_PENDING, rv);
-    EXPECT_EQ(OK, callback.WaitForResult());
+    EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+    EXPECT_THAT(callback.WaitForResult(), IsOk());
   }
 
   void SendRequestAndExpectHttpResponse(const std::string& expected) {
@@ -731,10 +736,6 @@ TEST_P(QuicNetworkTransactionTest, ForceQuic) {
 
   mock_quic_data.AddSocketDataToFactory(&socket_factory_);
 
-  // The non-alternate protocol job needs to hang in order to guarantee that
-  // the alternate-protocol job will "win".
-  AddHangingNonAlternateProtocolSocketData();
-
   CreateSession();
 
   EXPECT_FALSE(
@@ -780,6 +781,31 @@ TEST_P(QuicNetworkTransactionTest, ForceQuic) {
   int log_stream_id;
   ASSERT_TRUE(entries[pos].GetIntegerValue("stream_id", &log_stream_id));
   EXPECT_EQ(3, log_stream_id);
+}
+
+TEST_P(QuicNetworkTransactionTest, ForceQuicForAll) {
+  params_.origins_to_force_quic_on.insert(HostPortPair());
+
+  AddQuicAlternateProtocolMapping(MockCryptoClientStream::CONFIRM_HANDSHAKE);
+
+  MockQuicData mock_quic_data;
+  mock_quic_data.AddWrite(ConstructClientRequestHeadersPacket(
+      1, kClientDataStreamId1, true, true,
+      GetRequestHeaders("GET", "https", "/")));
+  mock_quic_data.AddRead(ConstructServerResponseHeadersPacket(
+      1, kClientDataStreamId1, false, false, GetResponseHeaders("200 OK")));
+  mock_quic_data.AddRead(ConstructServerDataPacket(2, kClientDataStreamId1,
+                                                   false, true, 0, "hello!"));
+  mock_quic_data.AddWrite(ConstructClientAckPacket(2, 1));
+  mock_quic_data.AddRead(SYNCHRONOUS, ERR_IO_PENDING);  // No more data to read
+
+  mock_quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  CreateSession();
+
+  SendRequestAndExpectQuicResponse("hello!");
+  EXPECT_TRUE(
+      test_socket_performance_watcher_factory_.rtt_notification_received());
 }
 
 TEST_P(QuicNetworkTransactionTest, QuicProxy) {
@@ -924,8 +950,8 @@ TEST_P(QuicNetworkTransactionTest, ForceQuicWithErrorConnecting) {
         new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
     TestCompletionCallback callback;
     int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-    EXPECT_EQ(ERR_IO_PENDING, rv);
-    EXPECT_EQ(ERR_CONNECTION_CLOSED, callback.WaitForResult());
+    EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+    EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_CLOSED));
     EXPECT_EQ(1 + i, test_socket_performance_watcher_factory_.watcher_count());
   }
 }
@@ -1167,11 +1193,11 @@ TEST_P(QuicNetworkTransactionTest, GoAwayWithConnectionMigrationOnPortsOnly) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
-  EXPECT_EQ(OK, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsOk());
 
   // Check whether this transaction is correctly marked as received a go-away
   // because of migrating port.
@@ -1784,11 +1810,11 @@ TEST_P(QuicNetworkTransactionTest, ZeroRTTWithConfirmationRequired) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
-  EXPECT_EQ(OK, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsOk());
 
   CheckWasQuicResponse(trans);
   CheckResponseData(trans, "hello!");
@@ -1830,11 +1856,11 @@ TEST_P(QuicNetworkTransactionTest,
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
-  EXPECT_EQ(ERR_QUIC_PROTOCOL_ERROR, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
 
   NetErrorDetails details;
   EXPECT_EQ(QUIC_NO_ERROR, details.quic_connection_error);
@@ -1885,11 +1911,11 @@ TEST_P(QuicNetworkTransactionTest,
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
-  EXPECT_EQ(ERR_QUIC_PROTOCOL_ERROR, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
   NetErrorDetails details;
   EXPECT_EQ(QUIC_NO_ERROR, details.quic_connection_error);
 
@@ -1936,12 +1962,12 @@ TEST_P(QuicNetworkTransactionTest, RstSteamErrorHandling) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
   // Read the headers.
-  EXPECT_EQ(OK, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsOk());
 
   const HttpResponseInfo* response = trans->GetResponseInfo();
   ASSERT_TRUE(response != nullptr);
@@ -1992,12 +2018,12 @@ TEST_P(QuicNetworkTransactionTest, RstSteamBeforeHeaders) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
       QuicSession::HANDSHAKE_CONFIRMED);
   // Read the headers.
-  EXPECT_EQ(ERR_QUIC_PROTOCOL_ERROR, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_QUIC_PROTOCOL_ERROR));
 }
 
 TEST_P(QuicNetworkTransactionTest, BrokenAlternateProtocol) {
@@ -2085,8 +2111,8 @@ TEST_P(QuicNetworkTransactionTest, NoBrokenAlternateProtocolIfTcpFails) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
-  EXPECT_EQ(ERR_SOCKET_NOT_CONNECTED, callback.WaitForResult());
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_SOCKET_NOT_CONNECTED));
   ExpectQuicAlternateProtocolMapping();
 }
 
@@ -2267,7 +2293,7 @@ TEST_P(QuicNetworkTransactionTest, QuicUpload) {
       new HttpNetworkTransaction(DEFAULT_PRIORITY, session_.get()));
   TestCompletionCallback callback;
   int rv = trans->Start(&request_, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_IO_PENDING, rv);
+  EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   EXPECT_NE(OK, callback.WaitForResult());
 }
 
@@ -2509,10 +2535,10 @@ class QuicNetworkTransactionWithDestinationTest
     request.method = "GET";
     TestCompletionCallback callback;
     int rv = trans.Start(&request, callback.callback(), net_log_.bound());
-    EXPECT_EQ(OK, callback.GetResult(rv));
+    EXPECT_THAT(callback.GetResult(rv), IsOk());
 
     std::string response_data;
-    ASSERT_EQ(OK, ReadTransaction(&trans, &response_data));
+    ASSERT_THAT(ReadTransaction(&trans, &response_data), IsOk());
     EXPECT_EQ("hello", response_data);
 
     const HttpResponseInfo* response = trans.GetResponseInfo();
@@ -2595,7 +2621,7 @@ TEST_P(QuicNetworkTransactionWithDestinationTest, InvalidCertificate) {
   HttpNetworkTransaction trans(DEFAULT_PRIORITY, session_.get());
   TestCompletionCallback callback;
   int rv = trans.Start(&request, callback.callback(), net_log_.bound());
-  EXPECT_EQ(ERR_CONNECTION_REFUSED, callback.GetResult(rv));
+  EXPECT_THAT(callback.GetResult(rv), IsError(ERR_CONNECTION_REFUSED));
 
   EXPECT_TRUE(AllDataConsumed());
 }

@@ -462,8 +462,6 @@ class Serializer {
    * @param {!HTMLDocument} document
    */
   serialize(document) {
-    if (this.selection_.isNone)
-      return document.body.firstChild.outerHTML;
     this.serializeChildren(document.body);
     return this.strings_.join('');
   }
@@ -517,6 +515,8 @@ class Sample {
     /** @const @type {!Selection} */
     this.selection_ = this.iframe_.contentWindow.getSelection();
     this.selection_.document = this.document_;
+    this.selection_.document.offsetLeft = this.iframe_.offsetLeft;
+    this.selection_.document.offsetTop = this.iframe_.offsetTop;
 
     this.load(sampleText);
   }
@@ -534,7 +534,7 @@ class Sample {
   load(sampleText) {
     const anchorMarker = sampleText.indexOf('^');
     const focusMarker = sampleText.indexOf('|');
-    if (focusMarker < 0) {
+    if (focusMarker < 0 && anchorMarker >= 0) {
       throw new Error(`You should specify caret position in "${sampleText}".`);
     }
     if (focusMarker != sampleText.lastIndexOf('|')) {

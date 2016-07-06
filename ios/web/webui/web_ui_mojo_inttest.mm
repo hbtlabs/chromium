@@ -6,10 +6,10 @@
 
 #include "base/run_loop.h"
 #import "base/test/ios/wait_util.h"
-#include "ios/public/provider/web/web_ui_ios_controller.h"
-#include "ios/public/provider/web/web_ui_ios_controller_factory.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
+#include "ios/web/public/webui/web_ui_ios_controller.h"
+#include "ios/web/public/webui/web_ui_ios_controller_factory.h"
 #include "ios/web/test/grit/test_resources.h"
 #include "ios/web/test/mojo_test.mojom.h"
 #include "ios/web/test/test_url_constants.h"
@@ -151,7 +151,6 @@ class WebUIMojoTest : public WebIntTest {
 // |TestUIHandler| sucessfully receives "ack" message from WebUI page.
 TEST_F(WebUIMojoTest, MessageExchange) {
   web_state()->SetWebUsageEnabled(true);
-  web_state()->GetWebController().useMojoForWebUI = YES;
   web_state()->GetView();  // WebState won't load URL without view.
   NavigationManager::WebLoadParams load_params(GURL(
       url::SchemeHostPort(kTestWebUIScheme, kTestWebUIURLHost, 0).Serialize()));

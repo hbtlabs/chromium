@@ -11,10 +11,10 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
-#include "components/mus/public/cpp/property_type_converters.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
@@ -57,14 +57,13 @@ class WindowDelegateView : public views::WidgetDelegateView {
 
   // Creates and shows a window with the specified traits.
   static void Create(uint32_t traits) {
-    // Widget destroys itself when closed or mus::Window destroyed.
+    // Widget destroys itself when closed or ui::Window destroyed.
     views::Widget* widget = new views::Widget;
     views::Widget::InitParams params(
         (traits & PANEL) != 0 ? views::Widget::InitParams::TYPE_PANEL
                               : views::Widget::InitParams::TYPE_WINDOW);
     if ((traits & PANEL) != 0) {
-      params
-          .mus_properties[mus::mojom::WindowManager::kInitialBounds_Property] =
+      params.mus_properties[ui::mojom::WindowManager::kInitialBounds_Property] =
           mojo::TypeConverter<std::vector<uint8_t>, gfx::Rect>::Convert(
               gfx::Rect(100, 100, 300, 300));
     }
@@ -487,9 +486,9 @@ void WindowTypeLauncher::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void WindowTypeLauncher::Initialize(shell::Connector* connector,
-                                    const shell::Identity& identity,
-                                    uint32_t id) {
+void WindowTypeLauncher::OnStart(shell::Connector* connector,
+                                 const shell::Identity& identity,
+                                 uint32_t id) {
   connector_ = connector;
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
 
@@ -497,7 +496,7 @@ void WindowTypeLauncher::Initialize(shell::Connector* connector,
       views::WindowManagerConnection::Create(connector, identity);
 }
 
-bool WindowTypeLauncher::AcceptConnection(shell::Connection* connection) {
+bool WindowTypeLauncher::OnConnect(shell::Connection* connection) {
   connection->AddInterface<mash::mojom::Launchable>(this);
   return true;
 }

@@ -27,8 +27,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/ntp/ntp_user_data_logger.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/ntp_logging_events.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -69,9 +69,9 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
   MOCK_METHOD2(OnLogEvent, void(NTPLoggingEventType event,
                                 base::TimeDelta time));
   MOCK_METHOD2(OnLogMostVisitedImpression,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD2(OnLogMostVisitedNavigation,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD1(PasteIntoOmnibox, void(const base::string16&));
   MOCK_METHOD1(OnChromeIdentityCheck, void(const base::string16& identity));
   MOCK_METHOD0(OnHistorySyncCheck, void());

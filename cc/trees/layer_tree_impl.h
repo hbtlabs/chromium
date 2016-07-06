@@ -137,7 +137,6 @@ class CC_EXPORT LayerTreeImpl {
   RenderSurfaceImpl* RootRenderSurface() const;
   bool LayerListIsEmpty() const;
   void SetRootLayerForTesting(std::unique_ptr<LayerImpl>);
-  void SetRootLayerFromLayerListForTesting();
   void OnCanDrawStateChangedForTree();
   bool IsRootLayer(const LayerImpl* layer) const;
   std::unique_ptr<OwnedLayerImplList> DetachLayers();
@@ -262,6 +261,7 @@ class CC_EXPORT LayerTreeImpl {
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
   bool UpdateDrawProperties(bool update_lcd_text);
+  void BuildPropertyTreesForTesting();
   void BuildLayerListAndPropertyTreesForTesting();
 
   void set_needs_update_draw_properties() {

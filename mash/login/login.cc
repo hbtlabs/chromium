@@ -12,14 +12,14 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/interfaces/user_access_manager.mojom.h"
 #include "mash/init/public/interfaces/init.mojom.h"
 #include "mash/login/public/interfaces/login.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/user_access_manager.mojom.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/mus/aura_init.h"
@@ -51,10 +51,10 @@ class UI : public views::WidgetDelegateView,
     properties[ash::mojom::kWindowContainer_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
             static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
-    mus::Window* window =
+    ui::Window* window =
         views::WindowManagerConnection::Get()->NewWindow(properties);
     params.native_widget = new views::NativeWidgetMus(
-        widget, connector, window, mus::mojom::SurfaceType::DEFAULT);
+        widget, connector, window, ui::mojom::SurfaceType::DEFAULT);
     widget->Init(params);
     widget->Show();
   }
@@ -132,7 +132,7 @@ class UI : public views::WidgetDelegateView,
   DISALLOW_COPY_AND_ASSIGN(UI);
 };
 
-class Login : public shell::ShellClient,
+class Login : public shell::Service,
               public shell::InterfaceFactory<mojom::Login>,
               public mojom::Login {
  public:
@@ -147,20 +147,20 @@ class Login : public shell::ShellClient,
   }
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override {
+  // shell::Service:
+  void OnStart(shell::Connector* connector,
+               const shell::Identity& identity,
+               uint32_t id) override {
     connector_ = connector;
     identity_ = identity;
     tracing_.Initialize(connector, identity.name());
 
     aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
 
-    connector_->ConnectToInterface("mojo:mus", &user_access_manager_);
+    connector_->ConnectToInterface("mojo:ui", &user_access_manager_);
     user_access_manager_->SetActiveUser(identity.user_id());
   }
-  bool AcceptConnection(shell::Connection* connection) override {
+  bool OnConnect(shell::Connection* connection) override {
     connection->AddInterface<mojom::Login>(this);
     return true;
   }
@@ -182,7 +182,7 @@ class Login : public shell::ShellClient,
   mojo::TracingImpl tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
   mojo::BindingSet<mojom::Login> bindings_;
-  mus::mojom::UserAccessManagerPtr user_access_manager_;
+  ui::mojom::UserAccessManagerPtr user_access_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(Login);
 };
@@ -201,7 +201,7 @@ void UI::ButtonPressed(views::Button* sender, const ui::Event& event) {
 
 }  // namespace
 
-shell::ShellClient* CreateLogin() {
+shell::Service* CreateLogin() {
   return new Login;
 }
 

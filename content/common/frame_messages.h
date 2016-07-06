@@ -373,6 +373,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(page_id)
   IPC_STRUCT_TRAITS_MEMBER(nav_entry_id)
   IPC_STRUCT_TRAITS_MEMBER(is_same_document_history_load)
+  IPC_STRUCT_TRAITS_MEMBER(is_history_navigation_in_new_child)
   IPC_STRUCT_TRAITS_MEMBER(has_committed_real_load)
   IPC_STRUCT_TRAITS_MEMBER(intended_as_new_entry)
   IPC_STRUCT_TRAITS_MEMBER(pending_history_list_offset)
@@ -1191,11 +1192,13 @@ IPC_SYNC_MESSAGE_CONTROL3_1(FrameHostMsg_Are3DAPIsBlocked,
 #if defined(ENABLE_PLUGINS)
 // Notification sent from a renderer to the browser that a Pepper plugin
 // instance is created in the DOM.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_PepperInstanceCreated)
+IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperInstanceCreated,
+                    int32_t /* pp_instance */)
 
 // Notification sent from a renderer to the browser that a Pepper plugin
 // instance is deleted from the DOM.
-IPC_MESSAGE_ROUTED0(FrameHostMsg_PepperInstanceDeleted)
+IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperInstanceDeleted,
+                    int32_t /* pp_instance */)
 
 // Sent to the browser when the renderer detects it is blocked on a pepper
 // plugin message for too long. This is also sent when it becomes unhung
@@ -1214,6 +1217,16 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_PepperPluginHung,
 IPC_MESSAGE_ROUTED2(FrameHostMsg_PluginCrashed,
                     base::FilePath /* plugin_path */,
                     base::ProcessId /* plugin_pid */)
+
+// Notification sent from a renderer to the browser that a Pepper plugin
+// instance has started playback.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperStartsPlayback,
+                    int32_t /* pp_instance */)
+
+// Notification sent from a renderer to the browser that a Pepper plugin
+// instance has stopped playback.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_PepperStopsPlayback,
+                    int32_t /* pp_instance */)
 
 // Used to get the list of plugins
 IPC_SYNC_MESSAGE_CONTROL1_1(FrameHostMsg_GetPlugins,

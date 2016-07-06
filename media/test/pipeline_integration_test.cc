@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -789,7 +790,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
           base::Bind(&FakeEncryptedMedia::OnEncryptedMediaInitData,
                      base::Unretained(encrypted_media)));
     }
-    message_loop_.Run();
+    base::RunLoop().Run();
     return pipeline_status_;
   }
 
@@ -942,6 +943,83 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHashed) {
   EXPECT_HASH_EQ("f0be120a90a811506777c99a2cdf7cc1", GetVideoHash());
   EXPECT_HASH_EQ("-3.59,-2.06,-0.43,2.15,0.77,-0.95,", GetAudioHash());
   EXPECT_TRUE(demuxer_->GetTimelineOffset().is_null());
+}
+
+TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+
+  // Disable audio.
+  std::vector<MediaTrack::Id> empty;
+  pipeline_->OnEnabledAudioTracksChanged(empty);
+  message_loop_.RunUntilIdle();
+
+  // Seek to flush the pipeline and ensure there's no prerolled audio data.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+
+  Play();
+  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
+  Pause();
+
+  // Verify that no audio has been played, since we disabled audio tracks.
+  EXPECT_HASH_EQ(kNullAudioHash, GetAudioHash());
+
+  // Re-enable audio.
+  std::vector<MediaTrack::Id> audioTrackId;
+  audioTrackId.push_back("2");
+  pipeline_->OnEnabledAudioTracksChanged(audioTrackId);
+  message_loop_.RunUntilIdle();
+
+  // Restart playback from 500ms position.
+  ASSERT_TRUE(Seek(k500ms));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+
+  // Verify that audio has been playing after being enabled.
+  EXPECT_HASH_EQ("-1.53,0.21,1.23,1.56,-0.34,-0.94,", GetAudioHash());
+}
+
+TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+
+  // Disable video.
+  std::vector<MediaTrack::Id> empty;
+  pipeline_->OnSelectedVideoTrackChanged(empty);
+  message_loop_.RunUntilIdle();
+
+  // Seek to flush the pipeline and ensure there's no prerolled video data.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+
+  // Reset the video hash in case some of the prerolled video frames have been
+  // hashed already.
+  ResetVideoHash();
+
+  Play();
+  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
+  Pause();
+
+  // Verify that no video has been rendered, since we disabled video tracks.
+  EXPECT_HASH_EQ(kNullVideoHash, GetVideoHash());
+
+  // Re-enable video.
+  std::vector<MediaTrack::Id> videoTrackId;
+  videoTrackId.push_back("1");
+  pipeline_->OnSelectedVideoTrackChanged(videoTrackId);
+  message_loop_.RunUntilIdle();
+
+  // Seek to flush video pipeline and reset the video hash again to clear state
+  // if some prerolled frames got hashed after enabling video.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+  ResetVideoHash();
+
+  // Restart playback from 500ms position.
+  ASSERT_TRUE(Seek(k500ms));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+
+  // Verify that video has been rendered after being enabled.
+  EXPECT_HASH_EQ("fd59357dfd9c144ab4fb8181b2de32c3", GetVideoHash());
 }
 
 TEST_F(PipelineIntegrationTest,
@@ -1250,7 +1328,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_Remove_Updates_BufferedRanges) {
 
   source.RemoveRange(base::TimeDelta::FromMilliseconds(1000),
                      base::TimeDelta::FromMilliseconds(k320WebMFileDurationMs));
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   buffered_ranges = pipeline_->GetBufferedTimeRanges();
   EXPECT_EQ(1u, buffered_ranges.size());
@@ -1286,7 +1364,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_FillUp_Buffer) {
     source.EvictCodedFrames(media_time, file->data_size());
     ASSERT_TRUE(
         source.AppendAtTime(media_time, file->data(), file->data_size()));
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
     buffered_ranges = pipeline_->GetBufferedTimeRanges();
   } while (buffered_ranges.size() == 1 &&
@@ -1343,7 +1421,7 @@ TEST_F(PipelineIntegrationTest,
 
   source.EndOfStream();
 
-  message_loop_.Run();
+  base::RunLoop().Run();
   EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());

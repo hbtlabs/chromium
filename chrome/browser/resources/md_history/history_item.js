@@ -25,6 +25,10 @@ cr.define('md_history', function() {
 
       isCardEnd: {type: Boolean, reflectToAttribute: true},
 
+      // True if the item is being displayed embedded in another element and
+      // should not manage its own borders or size.
+      embedded: {type: Boolean, reflectToAttribute: true},
+
       hasTimeGap: {type: Boolean},
 
       numberOfItems: {type: Number}
@@ -39,6 +43,16 @@ cr.define('md_history', function() {
       this.fire('history-checkbox-select', {
         countAddition: this.$.checkbox.checked ? 1 : -1
       });
+    },
+
+    /**
+     * Remove bookmark of current item when bookmark-star is clicked.
+     * @private
+     */
+    onRemoveBookmarkTap_: function() {
+      md_history.BrowserService.getInstance()
+        .removeBookmark(this.item.url);
+      this.fire('remove-bookmark-stars', this.item.url);
     },
 
     /**
@@ -81,6 +95,18 @@ cr.define('md_history', function() {
       var resultId = numberOfItems == 1 ? 'searchResult' : 'searchResults';
       return loadTimeData.getStringF('foundSearchResults', numberOfItems,
           loadTimeData.getString(resultId), search);
+    },
+
+    /**
+     * Crop long item titles to reduce their effect on layout performance. See
+     * crbug.com/621347.
+     * @param {string} title
+     * @return {string}
+     */
+    cropItemTitle_: function(title) {
+      return (title.length > TITLE_MAX_LENGTH) ?
+          title.substr(0, TITLE_MAX_LENGTH) :
+          title;
     }
   });
 

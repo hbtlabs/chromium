@@ -289,6 +289,7 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
+  host_impl.pending_tree()->BuildLayerListForTesting();
   FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
       host_impl.pending_tree()->root_layer_for_testing());
   layer->PushPropertiesTo(layer_impl);
@@ -331,6 +332,7 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
+  host_impl.pending_tree()->BuildLayerListForTesting();
   FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
       host_impl.pending_tree()->root_layer_for_testing());
   layer->PushPropertiesTo(layer_impl);
@@ -389,13 +391,11 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   EXPECT_EQ(2, host->source_frame_number());
 
   host_impl.ActivateSyncTree();
-  host_impl.active_tree()->SetRootLayerFromLayerListForTesting();
 
   // By updating the draw proprties on the active tree, we will set the viewport
   // rect for tile priorities to something non-empty.
   const bool can_use_lcd_text = false;
-  host_impl.active_tree()->property_trees()->needs_rebuild = true;
-  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
+  host_impl.active_tree()->BuildPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties(can_use_lcd_text);
 
   layer->SetBounds(gfx::Size(11, 11));
@@ -462,6 +462,7 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   settings.single_thread_proxy_scheduler = false;
   settings.use_zero_copy = true;
   settings.verify_clip_tree_calculations = true;
+  settings.verify_transform_tree_calculations = true;
 
   FakeLayerTreeHostClient host_client1(FakeLayerTreeHostClient::DIRECT_3D);
   FakeLayerTreeHostClient host_client2(FakeLayerTreeHostClient::DIRECT_3D);

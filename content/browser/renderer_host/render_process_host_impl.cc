@@ -46,6 +46,7 @@
 #include "cc/base/switches.h"
 #include "components/scheduler/common/scheduler_switches.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "components/webmessaging/broadcast_channel_provider.h"
 #include "content/browser/appcache/appcache_dispatcher_host.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_service_impl.h"
@@ -59,10 +60,7 @@
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_dispatcher_host.h"
 #include "content/browser/child_process_security_policy_impl.h"
-#include "content/browser/device_sensors/device_light_message_filter.h"
-#include "content/browser/device_sensors/device_motion_message_filter.h"
-#include "content/browser/device_sensors/device_orientation_absolute_message_filter.h"
-#include "content/browser/device_sensors/device_orientation_message_filter.h"
+#include "content/browser/device_sensors/device_sensor_host.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/dom_storage/dom_storage_message_filter.h"
 #include "content/browser/fileapi/fileapi_message_filter.h"
@@ -226,14 +224,13 @@
 #if defined(ENABLE_WEBRTC)
 #include "content/browser/media/webrtc/webrtc_internals.h"
 #include "content/browser/renderer_host/media/media_stream_track_metrics_host.h"
-#include "content/browser/renderer_host/media/webrtc_identity_service_host.h"
 #include "content/browser/renderer_host/p2p/socket_dispatcher_host.h"
 #include "content/common/media/aec_dump_messages.h"
 #include "content/common/media/media_stream_messages.h"
 #endif
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "components/mus/common/switches.h"  // nogncheck
+#include "services/ui/common/switches.h"  // nogncheck
 #endif
 
 #if defined(OS_WIN)
@@ -611,8 +608,7 @@ RenderProcessHostImpl::RenderProcessHostImpl(
     // MojoShellConnection prior to this point. This class of test code doesn't
     // care about render processes so we can initialize a dummy one.
     if (!MojoShellConnection::GetForProcess()) {
-      shell::mojom::ShellClientRequest request =
-          mojo::GetProxy(&test_shell_client_);
+      shell::mojom::ServiceRequest request = mojo::GetProxy(&test_service_);
       MojoShellConnection::SetForProcess(MojoShellConnection::Create(
           std::move(request)));
     }
@@ -750,7 +746,7 @@ bool RenderProcessHostImpl::Init() {
             BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
                 ->task_runner(),
             mojo_channel_token_,
-            mojo_child_connection_->shell_client_token())));
+            mojo_child_connection_->service_token())));
 
     base::Thread::Options options;
 #if defined(OS_WIN) && !defined(OS_MACOSX)
@@ -920,9 +916,6 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       blob_storage_context.get()));
 
 #if defined(ENABLE_WEBRTC)
-  AddFilter(new WebRTCIdentityServiceHost(
-      GetID(), storage_partition_impl_->GetWebRTCIdentityStore(),
-      resource_context));
   peer_connection_tracker_host_ = new PeerConnectionTrackerHost(GetID());
   AddFilter(peer_connection_tracker_host_.get());
   AddFilter(new MediaStreamDispatcherHost(
@@ -1018,10 +1011,6 @@ void RenderProcessHostImpl::CreateMessageFilters() {
   AddFilter(notification_message_filter_.get());
 
   AddFilter(new GamepadBrowserMessageFilter());
-  AddFilter(new DeviceLightMessageFilter());
-  AddFilter(new DeviceMotionMessageFilter());
-  AddFilter(new DeviceOrientationMessageFilter());
-  AddFilter(new DeviceOrientationAbsoluteMessageFilter());
   AddFilter(new ProfilerMessageFilter(PROCESS_TYPE_RENDERER));
   AddFilter(new HistogramMessageFilter());
   AddFilter(new MemoryMessageFilter(this));
@@ -1063,8 +1052,24 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                  base::Unretained(this)));
 
   GetInterfaceRegistry()->AddInterface(
+      base::Bind(&webmessaging::BroadcastChannelProvider::Connect,
+                 base::Unretained(
+                     storage_partition_impl_->GetBroadcastChannelProvider())));
+
+  GetInterfaceRegistry()->AddInterface(
       base::Bind(&MimeRegistryImpl::Create),
       BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+
+  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+  GetInterfaceRegistry()->AddInterface(base::Bind(&DeviceLightHost::Create),
+                                       io_task_runner);
+  GetInterfaceRegistry()->AddInterface(base::Bind(&DeviceMotionHost::Create),
+                                       io_task_runner);
+  GetInterfaceRegistry()->AddInterface(
+      base::Bind(&DeviceOrientationHost::Create), io_task_runner);
+  GetInterfaceRegistry()->AddInterface(
+      base::Bind(&DeviceOrientationAbsoluteHost::Create), io_task_runner);
 
 #if defined(OS_ANDROID)
   ServiceRegistrarAndroid::RegisterProcessHostServices(
@@ -1343,7 +1348,7 @@ void RenderProcessHostImpl::AppendRendererCommandLine(
                                     mojo_channel_token_);
   }
   command_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
-                                  mojo_child_connection_->shell_client_token());
+                                  mojo_child_connection_->service_token());
 }
 
 void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
@@ -1359,6 +1364,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kAudioBufferSize,
     switches::kBlinkPlatformLogChannels,
     switches::kBlinkSettings,
+    switches::kCastEncoderUtilHeuristic,
     switches::kDefaultTileWidth,
     switches::kDefaultTileHeight,
     switches::kDisable2dCanvasImageChromium,
@@ -1553,7 +1559,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
 #endif
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
     switches::kUseMusInRenderer,
-    mus::switches::kUseMojoGpuCommandBufferInMus,
+    ui::switches::kUseMojoGpuCommandBufferInMus,
 #endif
   };
   renderer_cmd->CopySwitchesFrom(browser_cmd, kSwitchNames,
@@ -1600,7 +1606,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
 
   DCHECK(mojo_child_connection_);
   renderer_cmd->AppendSwitchASCII(switches::kPrimordialPipeToken,
-                                  mojo_child_connection_->shell_client_token());
+                                  mojo_child_connection_->service_token());
 
 #if defined(OS_WIN) && !defined(OFFICIAL_BUILD)
   // Needed because we can't show the dialog from the sandbox. Don't pass

@@ -8,10 +8,10 @@
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "cc/output/output_surface.h"
-#include "components/mus/public/cpp/window_surface.h"
 #include "content/common/content_export.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
+#include "services/ui/public/cpp/window_surface.h"
 
 namespace content {
 
@@ -22,7 +22,7 @@ class CONTENT_EXPORT RenderWidgetMusConnection
     : public RenderWidgetInputHandlerDelegate {
  public:
   // Bind to a WindowTreeClient request.
-  void Bind(mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request);
+  void Bind(mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request);
 
   // Create a cc output surface.
   std::unique_ptr<cc::OutputSurface> CreateOutputSurface();
@@ -60,14 +60,14 @@ class CONTENT_EXPORT RenderWidgetMusConnection
   void OnConnectionLost();
   void OnWindowInputEvent(
       std::unique_ptr<blink::WebInputEvent> input_event,
-      const base::Callback<void(mus::mojom::EventResult)>& ack);
+      const base::Callback<void(ui::mojom::EventResult)>& ack);
 
   const int routing_id_;
   RenderWidgetInputHandler* input_handler_;
-  std::unique_ptr<mus::WindowSurfaceBinding> window_surface_binding_;
+  std::unique_ptr<ui::WindowSurfaceBinding> window_surface_binding_;
   scoped_refptr<CompositorMusConnection> compositor_mus_connection_;
 
-  base::Callback<void(mus::mojom::EventResult)> pending_ack_;
+  base::Callback<void(ui::mojom::EventResult)> pending_ack_;
 
   // Used to verify single threaded access.
   base::ThreadChecker thread_checker_;

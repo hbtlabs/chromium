@@ -44,8 +44,8 @@
 #endif
 
 #if defined(MOJO_SHELL_CLIENT)
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #endif
 
 // The alpha and color of the bubble's shadow.
@@ -609,7 +609,7 @@ void StatusBubbleViews::Init() {
     params.context = frame->GetNativeWindow();
 #if defined(MOJO_SHELL_CLIENT)
     params.mus_properties
-        [mus::mojom::WindowManager::kWindowIgnoredByShelf_Property] =
+        [ui::mojom::WindowManager::kWindowIgnoredByShelf_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(true);
 #endif
     popup_->Init(params);

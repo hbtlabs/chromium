@@ -11,20 +11,20 @@
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/default_system_tray_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_event_handler.h"
+#include "ash/common/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm_activation_observer.h"
-#include "ash/common/wm_shell_common.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/container_ids.h"
 #include "ash/mus/drag_window_resizer.h"
 #include "ash/mus/root_window_controller.h"
 #include "base/memory/ptr_util.h"
-#include "components/mus/common/util.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "components/user_manager/user_info_impl.h"
+#include "services/ui/common/util.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 
 namespace ash {
 namespace mus {
@@ -92,22 +92,23 @@ class SessionStateDelegateStub : public SessionStateDelegate {
 
 }  // namespace
 
-WmShellMus::WmShellMus(::mus::WindowTreeClient* client)
+WmShellMus::WmShellMus(::ui::WindowTreeClient* client)
     : client_(client), session_state_delegate_(new SessionStateDelegateStub) {
   client_->AddObserver(this);
   WmShell::Set(this);
 
-  wm_shell_common_.reset(new WmShellCommon);
-  wm_shell_common_->CreateMruWindowTracker();
+  CreateMruWindowTracker();
 
   accessibility_delegate_.reset(new DefaultAccessibilityDelegate);
   SetSystemTrayDelegate(base::WrapUnique(new DefaultSystemTrayDelegate));
 }
 
 WmShellMus::~WmShellMus() {
+  // This order mirrors that of Shell.
+
   DeleteSystemTrayDelegate();
   DeleteWindowSelectorController();
-  wm_shell_common_->DeleteMruWindowTracker();
+  DeleteMruWindowTracker();
   RemoveClientObserver();
   WmShell::Set(nullptr);
 }
@@ -131,7 +132,7 @@ void WmShellMus::RemoveRootWindowController(
 }
 
 // static
-WmWindowMus* WmShellMus::GetToplevelAncestor(::mus::Window* window) {
+WmWindowMus* WmShellMus::GetToplevelAncestor(::ui::Window* window) {
   while (window) {
     if (IsActivationParent(window->parent()))
       return WmWindowMus::Get(window);
@@ -149,10 +150,6 @@ WmRootWindowControllerMus* WmShellMus::GetRootWindowControllerWithDisplayId(
   }
   NOTREACHED();
   return nullptr;
-}
-
-MruWindowTracker* WmShellMus::GetMruWindowTracker() {
-  return wm_shell_common_->mru_window_tracker();
 }
 
 WmWindow* WmShellMus::NewContainerWindow() {
@@ -184,6 +181,12 @@ const DisplayInfo& WmShellMus::GetDisplayInfo(int64_t display_id) const {
   NOTIMPLEMENTED();
   static DisplayInfo fake_info;
   return fake_info;
+}
+
+bool WmShellMus::IsActiveDisplayId(int64_t display_id) const {
+  // TODO: implement http://crbug.com/622480.
+  NOTIMPLEMENTED();
+  return true;
 }
 
 bool WmShellMus::IsForceMaximizeOnFirstRun() {
@@ -239,14 +242,20 @@ WmShellMus::CreateMaximizeModeEventHandler() {
   return nullptr;
 }
 
+std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
+WmShellMus::CreateScopedDisableInternalMouseAndKeyboard() {
+  // TODO: needs implementation for mus, http://crbug.com/624967.
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
 void WmShellMus::OnOverviewModeStarting() {
-  FOR_EACH_OBSERVER(ShellObserver, *wm_shell_common_->shell_observers(),
+  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(),
                     OnOverviewModeStarting());
 }
 
 void WmShellMus::OnOverviewModeEnded() {
-  FOR_EACH_OBSERVER(ShellObserver, *wm_shell_common_->shell_observers(),
-                    OnOverviewModeEnded());
+  FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
 }
 
 AccessibilityDelegate* WmShellMus::GetAccessibilityDelegate() {
@@ -273,14 +282,6 @@ void WmShellMus::RemoveDisplayObserver(WmDisplayObserver* observer) {
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::AddShellObserver(ShellObserver* observer) {
-  wm_shell_common_->AddShellObserver(observer);
-}
-
-void WmShellMus::RemoveShellObserver(ShellObserver* observer) {
-  wm_shell_common_->RemoveShellObserver(observer);
-}
-
 void WmShellMus::AddPointerWatcher(views::PointerWatcher* watcher) {
   // TODO(jamescook): Move PointerWatcherDelegateMus to //ash/mus and use here.
   NOTIMPLEMENTED();
@@ -297,7 +298,7 @@ void WmShellMus::ToggleIgnoreExternalKeyboard() {
 #endif  // defined(OS_CHROMEOS)
 
 // static
-bool WmShellMus::IsActivationParent(::mus::Window* window) {
+bool WmShellMus::IsActivationParent(::ui::Window* window) {
   return window && IsActivatableShellWindowId(
                        WmWindowMus::Get(window)->GetShellWindowId());
 }
@@ -311,8 +312,8 @@ void WmShellMus::RemoveClientObserver() {
 }
 
 // TODO: support OnAttemptToReactivateWindow, http://crbug.com/615114.
-void WmShellMus::OnWindowTreeFocusChanged(::mus::Window* gained_focus,
-                                          ::mus::Window* lost_focus) {
+void WmShellMus::OnWindowTreeFocusChanged(::ui::Window* gained_focus,
+                                          ::ui::Window* lost_focus) {
   WmWindowMus* gained_active = GetToplevelAncestor(gained_focus);
   WmWindowMus* lost_active = GetToplevelAncestor(gained_focus);
   if (gained_active == lost_active)
@@ -322,7 +323,7 @@ void WmShellMus::OnWindowTreeFocusChanged(::mus::Window* gained_focus,
                     OnWindowActivated(gained_active, lost_active));
 }
 
-void WmShellMus::OnWillDestroyClient(::mus::WindowTreeClient* client) {
+void WmShellMus::OnDidDestroyClient(::ui::WindowTreeClient* client) {
   DCHECK_EQ(client, client_);
   RemoveClientObserver();
 }

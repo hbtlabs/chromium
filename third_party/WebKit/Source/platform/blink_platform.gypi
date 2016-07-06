@@ -1222,6 +1222,7 @@
       'graphics/paint/PaintArtifactToSkCanvasTest.cpp',
       'graphics/paint/PaintChunkerTest.cpp',
       'graphics/paint/PaintControllerTest.cpp',
+      'graphics/paint/PropertyTreeStateTest.cpp',
       'image-decoders/FastSharedBufferReaderTest.cpp',
       'image-decoders/ImageDecoderTest.cpp',
       'image-decoders/ImageDecoderTestHelpers.cpp',
@@ -1278,6 +1279,7 @@
       'graphics/ImageFrameGeneratorTest.cpp',
       'graphics/ImageLayerChromiumTest.cpp',
       'graphics/test/FakeGLES2Interface.h',
+      'graphics/test/FakeWebGraphicsContext3DProvider.h',
       'graphics/test/MockImageDecoder.h',
     ],
     'platform_test_support_files': [

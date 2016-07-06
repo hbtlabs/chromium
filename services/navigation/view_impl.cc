@@ -5,7 +5,6 @@
 #include "services/navigation/view_impl.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -16,6 +15,7 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget.h"
@@ -110,9 +110,8 @@ void ViewImpl::Stop() {
   web_view_->GetWebContents()->Stop();
 }
 
-void ViewImpl::GetWindowTreeClient(
-    mus::mojom::WindowTreeClientRequest request) {
-  new mus::WindowTreeClient(this, nullptr, std::move(request));
+void ViewImpl::GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) {
+  new ui::WindowTreeClient(this, nullptr, std::move(request));
 }
 
 void ViewImpl::ShowInterstitial(const mojo::String& html) {
@@ -265,7 +264,7 @@ void ViewImpl::Observe(int type,
   }
 }
 
-void ViewImpl::OnEmbed(mus::Window* root) {
+void ViewImpl::OnEmbed(ui::Window* root) {
   DCHECK(!widget_.get());
   widget_.reset(new views::Widget);
   views::Widget::InitParams params(
@@ -273,13 +272,13 @@ void ViewImpl::OnEmbed(mus::Window* root) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = this;
   params.native_widget = new views::NativeWidgetMus(
-      widget_.get(), connector_, root, mus::mojom::SurfaceType::DEFAULT);
+      widget_.get(), connector_, root, ui::mojom::SurfaceType::DEFAULT);
   widget_->Init(params);
   widget_->Show();
 }
 
-void ViewImpl::OnWindowTreeClientDestroyed(mus::WindowTreeClient* client) {}
-void ViewImpl::OnEventObserved(const ui::Event& event, mus::Window* target) {}
+void ViewImpl::OnDidDestroyClient(ui::WindowTreeClient* client) {}
+void ViewImpl::OnEventObserved(const ui::Event& event, ui::Window* target) {}
 
 views::View* ViewImpl::GetContentsView() {
   return web_view_;

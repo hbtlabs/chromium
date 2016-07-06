@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/fileapi/mock_url_request_delegate.h"
@@ -104,6 +105,7 @@ class MockHttpProtocolHandler
     job_->ForwardToServiceWorker();
     return job_;
   }
+  ServiceWorkerURLRequestJob* job() { return job_; }
 
  private:
   base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
@@ -306,7 +308,7 @@ class ServiceWorkerURLRequestJobTest
     // Simulate another worker kicking out the incumbent worker.  PostTask since
     // it might respond synchronously, and the MockURLRequestDelegate would
     // complain that the message loop isn't being run.
-    base::MessageLoop::current()->PostTask(
+    base::MessageLoop::current()->task_runner()->PostTask(
         FROM_HERE, base::Bind(&ServiceWorkerVersion::SetStatus, version_,
                               ServiceWorkerVersion::REDUNDANT));
     base::RunLoop().RunUntilIdle();
@@ -1003,6 +1005,73 @@ TEST_F(ServiceWorkerURLRequestJobTest, EarlyResponse) {
 
   EXPECT_TRUE(version_->HasInflightRequests());
   helper->FinishWaitUntil();
+  EXPECT_FALSE(version_->HasInflightRequests());
+}
+
+// Helper for controlling when to respond to a fetch event.
+class DelayedResponseHelper : public EmbeddedWorkerTestHelper {
+ public:
+  DelayedResponseHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
+  ~DelayedResponseHelper() override {}
+
+  void Respond() {
+    SimulateSend(new ServiceWorkerHostMsg_FetchEventResponse(
+        embedded_worker_id_, response_id_,
+        SERVICE_WORKER_FETCH_EVENT_RESULT_RESPONSE,
+        ServiceWorkerResponse(
+            GURL(), 200, "OK", blink::WebServiceWorkerResponseTypeDefault,
+            ServiceWorkerHeaderMap(), std::string(), 0, GURL(),
+            blink::WebServiceWorkerResponseErrorUnknown, base::Time(),
+            false /* response_is_in_cache_storage */,
+            std::string() /* response_cache_storage_cache_name */,
+            ServiceWorkerHeaderList() /* cors_exposed_header_names */)));
+    SimulateSend(new ServiceWorkerHostMsg_FetchEventFinished(
+        embedded_worker_id_, event_finish_id_,
+        blink::WebServiceWorkerEventResultCompleted));
+  }
+
+ protected:
+  void OnFetchEvent(int embedded_worker_id,
+                    int response_id,
+                    int event_finish_id,
+                    const ServiceWorkerFetchRequest& request) override {
+    embedded_worker_id_ = embedded_worker_id;
+    response_id_ = response_id;
+    event_finish_id_ = event_finish_id;
+  }
+
+ private:
+  int embedded_worker_id_ = 0;
+  int response_id_ = 0;
+  int event_finish_id_ = 0;
+  DISALLOW_COPY_AND_ASSIGN(DelayedResponseHelper);
+};
+
+// Test cancelling the URLRequest while the fetch event is in flight.
+TEST_F(ServiceWorkerURLRequestJobTest, CancelRequest) {
+  DelayedResponseHelper* helper = new DelayedResponseHelper;
+  SetUpWithHelper(helper);
+
+  // Start the URL request. The job will be waiting for the
+  // worker to respond to the fetch event.
+  version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
+  request_ = url_request_context_.CreateRequest(
+      GURL("https://example.com/foo.html"), net::DEFAULT_PRIORITY,
+      &url_request_delegate_);
+  request_->set_method("GET");
+  request_->Start();
+  base::RunLoop().RunUntilIdle();
+
+  // Cancel the URL request.
+  request_->Cancel();
+  base::RunLoop().RunUntilIdle();
+
+  // Respond to the fetch event.
+  EXPECT_TRUE(version_->HasInflightRequests());
+  helper->Respond();
+  base::RunLoop().RunUntilIdle();
+
+  // The fetch event request should no longer be in-flight.
   EXPECT_FALSE(version_->HasInflightRequests());
 }
 

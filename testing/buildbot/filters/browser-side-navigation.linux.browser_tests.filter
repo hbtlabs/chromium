@@ -39,6 +39,7 @@
 -ChromeServiceWorker*
 -ClickModifierTest.WindowOpenBasicClickTest
 -ClickModifierTest.WindowOpenControlShiftClickTest
+-ClickModifierTest.WindowOpenShiftMiddleClickTest
 -CommonNameMismatchBrowserTest.CheckWWWSubdomainMismatchInverse
 -CommonNameMismatchBrowserTest.ShouldShowWWWSubdomainMismatchInterstitial
 -ContentSettingsExceptionsAreaBrowserTest.OpenIncognitoWindow
@@ -98,6 +99,7 @@
 -FindInPageControllerTest.SearchWithinSpecialURL
 -FirstRunMasterPrefsImportNothing.ImportNothingAndShowNewTabPage
 -InlineLoginUISafeIframeBrowserTest.ConfirmationRequiredForNonsecureSignin
+-InputImeApiTest.SendKeyEvntsOnNormalPage
 -IsolatedAppTest.CookieIsolation
 -LoadTimingBrowserTest.Basic
 -LoadTimingBrowserTest.EverythingAtOnce

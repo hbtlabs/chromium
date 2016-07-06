@@ -7,10 +7,10 @@
 #include "ash/public/interfaces/container.mojom.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/mus/public/cpp/property_type_converters.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/mus/aura_init.h"
@@ -75,9 +75,9 @@ class ScreenlockView : public views::WidgetDelegateView,
 Screenlock::Screenlock() {}
 Screenlock::~Screenlock() {}
 
-void Screenlock::Initialize(shell::Connector* connector,
-                            const shell::Identity& identity,
-                            uint32_t id) {
+void Screenlock::OnStart(shell::Connector* connector,
+                         const shell::Identity& identity,
+                         uint32_t id) {
   tracing_.Initialize(connector, identity.name());
 
   mash::session::mojom::SessionPtr session;
@@ -98,10 +98,10 @@ void Screenlock::Initialize(shell::Connector* connector,
   properties[ash::mojom::kWindowContainer_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(
           static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
-  mus::Window* window =
+  ui::Window* window =
       views::WindowManagerConnection::Get()->NewWindow(properties);
   params.native_widget = new views::NativeWidgetMus(
-      widget, connector, window, mus::mojom::SurfaceType::DEFAULT);
+      widget, connector, window, ui::mojom::SurfaceType::DEFAULT);
   widget->Init(params);
   widget->Show();
 }

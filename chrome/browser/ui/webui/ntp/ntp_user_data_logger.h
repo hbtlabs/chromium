@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "chrome/common/ntp_logging_events.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -31,16 +31,6 @@ class NTPUserDataLogger
   static NTPUserDataLogger* GetOrCreateFromWebContents(
       content::WebContents* content);
 
-  // Returns the name of the histogram that should be logged for an impression
-  // of a specified Most Visited |provider|.
-  static std::string GetMostVisitedImpressionHistogramNameForProvider(
-      const std::string& provider);
-
-  // Returns the name of the histogram that should be logged for a navigation
-  // to a specified Most Visited |provider|.
-  static std::string GetMostVisitedNavigationHistogramNameForProvider(
-      const std::string& provider);
-
   // Logs a number of statistics regarding the NTP. Called when an NTP tab is
   // about to be deactivated (be it by switching tabs, losing focus or closing
   // the tab/shutting down Chrome), or when the user navigates to a URL.
@@ -51,11 +41,11 @@ class NTPUserDataLogger
   // this event happened.
   void LogEvent(NTPLoggingEventType event, base::TimeDelta time);
 
-  // Logs an impression on one of the Most Visited tiles by a given provider.
-  void LogMostVisitedImpression(int position, const base::string16& provider);
+  // Logs an impression on one of the NTP tiles by a given source.
+  void LogMostVisitedImpression(int position, NTPLoggingTileSource tile_source);
 
-  // Logs a navigation on one of the Most Visited tiles by a given provider.
-  void LogMostVisitedNavigation(int position, const base::string16& provider);
+  // Logs a navigation on one of the NTP tiles by a given source.
+  void LogMostVisitedNavigation(int position, NTPLoggingTileSource tile_source);
 
   // content::WebContentsObserver override
   void NavigationEntryCommitted(

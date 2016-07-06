@@ -71,8 +71,6 @@
       'browser/browsing_data/browsing_data_channel_id_helper.h',
       'browser/browsing_data/browsing_data_cookie_helper.cc',
       'browser/browsing_data/browsing_data_cookie_helper.h',
-      'browser/browsing_data/browsing_data_counter.cc',
-      'browser/browsing_data/browsing_data_counter.h',
       'browser/browsing_data/browsing_data_counter_utils.cc',
       'browser/browsing_data/browsing_data_counter_utils.h',
       'browser/browsing_data/browsing_data_database_helper.cc',
@@ -942,6 +940,8 @@
       'browser/android/safe_browsing/safe_browsing_api_handler_bridge.h',
       'browser/android/seccomp_support_detector.cc',
       'browser/android/seccomp_support_detector.h',
+      'browser/android/service_tab_launcher.cc',
+      'browser/android/service_tab_launcher.h',
       'browser/android/sessions/session_tab_helper_android.cc',
       'browser/android/sessions/session_tab_helper_android.h',
       'browser/android/shortcut_helper.cc',
@@ -1384,6 +1384,8 @@
       'browser/memory/tab_manager.h',
       'browser/memory/tab_manager_delegate_chromeos.cc',
       'browser/memory/tab_manager_delegate_chromeos.h',
+      'browser/memory/tab_manager_observer.cc',
+      'browser/memory/tab_manager_observer.h',
       'browser/memory/tab_manager_web_contents_data.cc',
       'browser/memory/tab_manager_web_contents_data.h',
       'browser/memory/tab_stats.cc',
@@ -2041,6 +2043,7 @@
       'android/java/src/org/chromium/chrome/browser/SSLClientCertificateRequest.java',
       'android/java/src/org/chromium/chrome/browser/search_engines/TemplateUrlService.java',
       'android/java/src/org/chromium/chrome/browser/sessions/SessionTabHelper.java',
+      'android/java/src/org/chromium/chrome/browser/ServiceTabLauncher.java',
       'android/java/src/org/chromium/chrome/browser/signin/AccountManagementScreenHelper.java',
       'android/java/src/org/chromium/chrome/browser/signin/AccountTrackerService.java',
       'android/java/src/org/chromium/chrome/browser/signin/OAuth2TokenService.java',
@@ -3838,7 +3841,6 @@
                 '../components/components.gyp:precache_content',
                 '../components/components.gyp:precache_core',
                 '../components/components.gyp:security_state',
-                '../components/components.gyp:service_tab_launcher',
                 '../components/components.gyp:toolbar',
                 '../components/components.gyp:web_contents_delegate_android',
                 'chrome_browser_jni_headers',
@@ -4133,24 +4135,6 @@
           'type': 'none',
           'variables': {
             'source_file': 'browser/android/activity_type_ids.h',
-          },
-          'includes': [ '../build/android/java_cpp_enum.gypi' ],
-        },
-        {
-          # GN: //chrome/android:chrome_android_java_enums_srcjar
-          'target_name': 'browsing_data_type_java',
-          'type': 'none',
-          'variables': {
-            'source_file': 'browser/browsing_data/browsing_data_counter_utils.h',
-          },
-          'includes': [ '../build/android/java_cpp_enum.gypi' ],
-        },
-        {
-          # GN: //chrome/android:chrome_android_java_enums_srcjar
-          'target_name': 'browsing_data_time_period_java',
-          'type': 'none',
-          'variables': {
-            'source_file': 'browser/browsing_data/browsing_data_remover.h',
           },
           'includes': [ '../build/android/java_cpp_enum.gypi' ],
         },

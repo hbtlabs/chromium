@@ -425,11 +425,8 @@ public:
     }
 
     GraphicsLayer* rootGraphicsLayer();
-    void setRootGraphicsLayer(GraphicsLayer*);
     PaintLayerCompositor* compositor() const;
     void scheduleAnimation();
-    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
-    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
     CompositorAnimationTimeline* linkHighlightsTimeline() const { return m_linkHighlightsTimeline.get(); }
 
     WebViewScheduler* scheduler() const override;
@@ -621,6 +618,10 @@ private:
     void updatePageOverlays();
 
     float deviceScaleFactor() const;
+
+    void setRootGraphicsLayer(GraphicsLayer*);
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
 
     WebViewClient* m_client; // Can be 0 (e.g. unittests, shared workers, etc.)
     WebSpellCheckClient* m_spellCheckClient;

@@ -9,6 +9,7 @@
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
 #include "ash/multi_profile_uma.h"
@@ -16,7 +17,6 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/auto_reset.h"
 #include "base/macros.h"
@@ -741,7 +741,7 @@ void MultiUserWindowManagerChromeOS::SetWindowVisible(
   // we tell it to maximize / track this window now before it gets shown, to
   // reduce animation jank from multiple resizes.
   if (visible) {
-    ash::Shell::GetInstance()->maximize_mode_controller()->AddWindow(
+    ash::WmShell::Get()->maximize_mode_controller()->AddWindow(
         ash::WmWindowAura::Get(window));
   }
 

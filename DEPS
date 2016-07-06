@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'df4f47b8ff6378c4d8f775dcb3169ac7c64f2510',
+  'skia_revision': '52fa668dc589501f5e48a7c5b1958882b86ff496',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '820a23aade5e74a92d794e05a0c2b3597f0da4b5',
+  'v8_revision': '9c59da502d42da9bf07a595873d0024efe15a448',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,15 +51,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '3c754194a62c0ed8a3101ff1da88f77b35c7f69a',
+  'angle_revision': '5695fc990fae1897f31bd418f9278e931776abdf',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '454e53abae6e4d68ee992b0a93a4174b75519393',
+  'buildtools_revision': '067577af4bc567f27d8481e02a7c7e8c5fa80aad',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '017052a077d8f900e3098b8f9115078a037ee805',
+  'pdfium_revision': 'cfb31d67a40310ed64d942ba346cf0cd3a01cadf',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -83,7 +83,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '41bda598ad1ef18a9c5fde96aa4be24268fc0994',
+  'nacl_revision': '0949e1bef9d6b25ee44eb69a54e0cc6f8a677375',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype-android
   # and whatever else without interference from each other.
@@ -91,7 +91,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '44fb68ed1d6d0106ce340c9799171437e848ed76',
+  'catapult_revision': '9f8a0a8c0d4522f4014fbdba199222d44d638730',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -151,7 +151,7 @@ deps = {
     Var('chromium_git') + '/external/snappy.git' + '@' + '762bb32f0c9d2f31ba4958c7c0933d22e80c20bf',
 
   'src/tools/gyp':
-    Var('chromium_git') + '/external/gyp.git' + '@' + 'c61b0b35c8396bfd59efc6cfc11401d912b0f510',
+    Var('chromium_git') + '/external/gyp.git' + '@' + 'bac4680ec9a5c55ab692490b6732999648ecf1e9',
 
   'src/tools/swarming_client':
    Var('chromium_git') + '/external/swarming.client.git' + '@' +  Var('swarming_revision'),
@@ -181,7 +181,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '53f132deb0974fd93c8d4620fe08ae00d8b112c3',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '214fe8f93103621c5103eecfbe547f8a10a423f2',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -217,7 +217,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '7f4673c4e7d5803f0c62a8fbc3628cf8d78d890e', # commit position 13341
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'd0d6cf9a9a302f1af62d0fd188fade3d205525a4', # commit position 13393
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -253,7 +253,7 @@ deps = {
    Var('chromium_git') + '/chromium/deps/mesa.git' + '@' + 'ef811c6bd4de74e13e7035ca882cc77f85793fef',
 
   'src/third_party/ced/src':
-    Var('chromium_git') + '/external/github.com/google/compact_enc_det.git' + '@' + '8ed7d41a5dc6539af30dc05449d10829a51ed183',
+    Var('chromium_git') + '/external/github.com/google/compact_enc_det.git' + '@' + '45c3d4a3d7ee40adf271748f3c4177fa293800e1',
 
   'src/third_party/cld_2/src':
     Var('chromium_git') + '/external/github.com/CLD2Owners/cld2.git' + '@' + '84b58a5d7690ebf05a91406f371ce00c3daf31c0',
@@ -576,6 +576,16 @@ hooks = [
     ],
   },
   {
+    'name': 'intellij',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chromium-intellij',
+               '-l', 'third_party/intellij'
+    ],
+  },
+  {
     'name': 'javax_inject',
     'pattern': '.',
     'action': ['python',
@@ -653,6 +663,36 @@ hooks = [
                'download',
                '-b', 'chromium-icu4j',
                '-l', 'third_party/icu4j'
+    ],
+  },
+  {
+    'name': 'accessibility_test_framework',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chromium-accessibility-test-framework',
+               '-l', 'third_party/accessibility_test_framework'
+    ],
+  },
+  {
+    'name': 'bouncycastle',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chromium-bouncycastle',
+               '-l', 'third_party/bouncycastle'
+    ],
+  },
+  {
+    'name': 'sqlite4java',
+    'pattern': '.',
+    'action': ['python',
+               'src/build/android/update_deps/update_third_party_deps.py',
+               'download',
+               '-b', 'chromium-sqlite4java',
+               '-l', 'third_party/sqlite4java'
     ],
   },
   {

@@ -372,6 +372,11 @@ const char kEnableAppLink[] = "enable-app-link";
 // Enable OS integration for Chrome app file associations.
 const char kEnableAppsFileAssociations[]    = "enable-apps-file-associations";
 
+#if defined(OS_CHROMEOS)
+// Enables the intent picker so the user can handle URL links with ARC apps.
+const char kEnableIntentPicker[] = "enable-intent-picker";
+#endif  // defined(OS_CHROMEOS)
+
 // If the WebRTC logging private API is active, enables audio debug recordings.
 const char kEnableAudioDebugRecordingsFromExtension[] =
     "enable-audio-debug-recordings-from-extension";
@@ -1206,8 +1211,15 @@ const char kRelauncherProcessDMGDevice[]    = "dmg-device";
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_WIN)
+// Disables per monitor DPI for supported Windows versions.
+// This flag overrides kEnablePerMonitorDpi.
+const char kDisablePerMonitorDpi[]          = "disable-per-monitor-dpi";
+
 // Fallback to XPS. By default connector uses CDD.
 const char kEnableCloudPrintXps[]           = "enable-cloud-print-xps";
+
+// Enables per monitor DPI for supported Windows versions.
+const char kEnablePerMonitorDpi[]           = "enable-per-monitor-dpi";
 
 // Force-enables the profile shortcut manager. This is needed for tests since
 // they use a custom-user-data-dir which disables this.
