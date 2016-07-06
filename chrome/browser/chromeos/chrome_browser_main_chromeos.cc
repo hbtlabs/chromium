@@ -77,6 +77,7 @@
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/status/data_promo_notification.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
+#include "chrome/browser/chromeos/ui/low_disk_notification.h"
 #include "chrome/browser/chromeos/upgrade_detector_chromeos.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -685,6 +686,9 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
     arc::ArcServiceManager::Get()->OnAshStarted();
   }
 
+  // Start watching for low disk space events to notify the user.
+  low_disk_notification_.reset(new LowDiskNotification());
+
   ChromeBrowserMainPartsLinux::PostProfileInit();
 }
 
@@ -707,13 +711,15 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
     SystemKeyEventListener::Initialize();
   }
 
-  // Listen for XI_HierarchyChanged events. Note: if this is moved to
-  // PreMainMessageLoopRun() then desktopui_PageCyclerTests fail for unknown
-  // reasons, see http://crosbug.com/24833.
-  XInputHierarchyChangedEventListener::GetInstance();
+  if (!chrome::IsRunningInMash()) {
+    // Listen for XI_HierarchyChanged events. Note: if this is moved to
+    // PreMainMessageLoopRun() then desktopui_PageCyclerTests fail for unknown
+    // reasons, see http://crosbug.com/24833.
+    XInputHierarchyChangedEventListener::GetInstance();
 
-  // Start the CrOS input device UMA watcher
-  DeviceUMA::GetInstance();
+    // Start the CrOS input device UMA watcher
+    DeviceUMA::GetInstance();
+  }
 #endif
 
   // -- This used to be in ChromeBrowserMainParts::PreMainMessageLoopRun()
@@ -729,9 +735,9 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 }
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
-  system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
-
   if (!chrome::IsRunningInMash()) {
+    system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
+
     // These are dependent on the ash::Shell singleton already having been
     // initialized. Consequently, these cannot be used when running as a mus
     // client.
@@ -793,12 +799,15 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   wake_on_wifi_manager_.reset();
   ScreenLocker::ShutDownClass();
   keyboard_event_rewriters_.reset();
+  low_disk_notification_.reset();
 #if defined(USE_X11)
-  // The XInput2 event listener needs to be shut down earlier than when
-  // Singletons are finally destroyed in AtExitManager.
-  XInputHierarchyChangedEventListener::GetInstance()->Stop();
+  if (!chrome::IsRunningInMash()) {
+    // The XInput2 event listener needs to be shut down earlier than when
+    // Singletons are finally destroyed in AtExitManager.
+    XInputHierarchyChangedEventListener::GetInstance()->Stop();
 
-  DeviceUMA::GetInstance()->Stop();
+    DeviceUMA::GetInstance()->Stop();
+  }
 
   // SystemKeyEventListener::Shutdown() is always safe to call,
   // even if Initialize() wasn't called.

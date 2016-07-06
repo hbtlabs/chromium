@@ -12,9 +12,9 @@
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/container_ids.h"
 #include "ash/mus/root_window_controller.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/display/display.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget.h"
@@ -47,7 +47,7 @@ WmRootWindowControllerMus::~WmRootWindowControllerMus() {
 
 // static
 const WmRootWindowControllerMus* WmRootWindowControllerMus::Get(
-    const ::mus::Window* window) {
+    const ::ui::Window* window) {
   if (!window)
     return nullptr;
 
@@ -120,13 +120,13 @@ void WmRootWindowControllerMus::ConfigureWidgetInitParamsForContainer(
       WmWindowMus::Get(root_window_controller_->root())
           ->GetChildByShellWindowId(shell_container_id));
   DCHECK(init_params->parent_mus);
-  ::mus::Window* new_window =
+  ::ui::Window* new_window =
       root_window_controller_->root()->window_tree()->NewWindow();
   WmWindowMus::Get(new_window)
       ->set_widget(widget, WmWindowMus::WidgetCreationType::INTERNAL);
   init_params->native_widget = new views::NativeWidgetMus(
       widget, root_window_controller_->GetConnector(), new_window,
-      ::mus::mojom::SurfaceType::DEFAULT);
+      ::ui::mojom::SurfaceType::DEFAULT);
 }
 
 WmWindow* WmRootWindowControllerMus::FindEventTarget(

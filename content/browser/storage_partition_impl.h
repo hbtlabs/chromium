@@ -12,13 +12,13 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "components/webmessaging/broadcast_channel_provider.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_context.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/dom_storage/dom_storage_context_wrapper.h"
 #include "content/browser/host_zoom_level_context.h"
 #include "content/browser/indexed_db/indexed_db_context_impl.h"
-#include "content/browser/media/webrtc/webrtc_identity_store.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/content_export.h"
@@ -69,6 +69,7 @@ class CONTENT_EXPORT  StoragePartitionImpl
   PlatformNotificationContextImpl* GetPlatformNotificationContext() override;
 
   BackgroundSyncContext* GetBackgroundSyncContext();
+  webmessaging::BroadcastChannelProvider* GetBroadcastChannelProvider();
 
   // mojom::StoragePartitionService interface.
   void OpenLocalStorage(
@@ -98,8 +99,6 @@ class CONTENT_EXPORT  StoragePartitionImpl
                  const base::Closure& callback) override;
 
   void Flush() override;
-
-  WebRTCIdentityStore* GetWebRTCIdentityStore();
 
   // Can return nullptr while |this| is being destroyed.
   BrowserContext* browser_context() const;
@@ -169,11 +168,12 @@ class CONTENT_EXPORT  StoragePartitionImpl
       IndexedDBContextImpl* indexed_db_context,
       CacheStorageContextImpl* cache_storage_context,
       ServiceWorkerContextWrapper* service_worker_context,
-      WebRTCIdentityStore* webrtc_identity_store,
       storage::SpecialStoragePolicy* special_storage_policy,
       HostZoomLevelContext* host_zoom_level_context,
       PlatformNotificationContextImpl* platform_notification_context,
-      BackgroundSyncContext* background_sync_context);
+      BackgroundSyncContext* background_sync_context,
+      scoped_refptr<webmessaging::BroadcastChannelProvider>
+          broadcast_channel_provider);
 
   // We will never have both remove_origin be populated and a cookie_matcher.
   void ClearDataImpl(uint32_t remove_mask,
@@ -214,11 +214,12 @@ class CONTENT_EXPORT  StoragePartitionImpl
   scoped_refptr<IndexedDBContextImpl> indexed_db_context_;
   scoped_refptr<CacheStorageContextImpl> cache_storage_context_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;
-  scoped_refptr<WebRTCIdentityStore> webrtc_identity_store_;
   scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy_;
   scoped_refptr<HostZoomLevelContext> host_zoom_level_context_;
   scoped_refptr<PlatformNotificationContextImpl> platform_notification_context_;
   scoped_refptr<BackgroundSyncContext> background_sync_context_;
+  scoped_refptr<webmessaging::BroadcastChannelProvider>
+      broadcast_channel_provider_;
 
   mojo::BindingSet<mojom::StoragePartitionService> bindings_;
 

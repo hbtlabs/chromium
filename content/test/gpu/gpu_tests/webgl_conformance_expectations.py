@@ -535,16 +535,25 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/textures/misc/tex-sub-image-2d-bad-args.html',
         bug=570453)
 
+    self.Fail('conformance/extensions/webgl-draw-buffers.html',
+        bug=625365)
+    # self.Fail('conformance/extensions/webgl-draw-buffers.html',
+    #     ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
+    # self.Fail('conformance/extensions/webgl-draw-buffers.html',
+    #     ['mavericks', ('nvidia', 0xfe9)], bug=586536)
+    # self.Fail('conformance/extensions/webgl-draw-buffers.html',
+    #     ['linux', ('intel', 0x412), 'opengl'], bug=586536)
+
+
+    self.Skip('conformance/glsl/bugs/' +
+        'global-invariant-does-not-leak-across-shaders.html',
+        bug=625363)
+
     # Fails on multiple platforms
 
     # OpenGL / NVIDIA failures
     self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
         ['win', 'linux', 'nvidia', 'opengl'], bug=1007) # angle bug ID
-    # Starts failing in between the 364.19 and 367.27 drivers
-    self.Fail('conformance/ogles/GL/build/build_001_to_008.html',
-        ['win', 'linux', 'nvidia', 'opengl'], bug=622492)
-    self.Fail('conformance/ogles/GL/build/build_001_to_008.html',
-        ['linux', 'nvidia', 'no_angle'], bug=622492)
 
     # Win failures
     self.Fail('conformance/extensions/oes-texture-half-float.html',
@@ -621,8 +630,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'amd', 'opengl'], bug=478572)
 
     # Win / OpenGL / Intel failures
-    self.Fail('conformance/extensions/webgl-draw-buffers.html',
-        ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
     self.Fail('conformance/glsl/functions/glsl-function-normalize.html',
         ['win', 'intel', 'opengl'], bug=1007) # angle bug ID
     self.Fail('conformance/glsl/misc/shader-struct-scope.html',
@@ -642,8 +649,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail(
         'conformance/glsl/bugs/array-of-struct-with-int-first-position.html',
         ['mac', ('nvidia', 0xfd5), ('nvidia', 0xfe9)], bug=368912)
-    self.Fail('conformance/extensions/webgl-draw-buffers.html',
-        ['mavericks', ('nvidia', 0xfe9)], bug=586536)
 
     # Mac Retina AMD failures
     self.Flaky('conformance/extensions/oes-texture-float-with-video.html',
@@ -722,8 +727,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['linux', 'intel', 'opengl'], bug=598924)
     self.Skip('conformance/uniforms/gl-uniform-arrays.html',
         ['linux', 'debug', ('intel', 0x412)], bug=604140)
-    self.Fail('conformance/extensions/webgl-draw-buffers.html',
-        ['linux', ('intel', 0x412), 'opengl'], bug=586536)
 
     # Android failures
     self.Fail('deqp/data/gles2/shaders/constants.html',

@@ -211,6 +211,13 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AboutFlags_enable-web-bluetooth">
+  <owner>jyasskin@chromium.org</owner>
+  <owner>ortuno@chromium.org</owner>
+  <owner>scheib@chromium.org</owner>
+  <description>User enabled Web Bluetooth via chrome://flags.</description>
+</action>
+
 <action name="AboutFlags_enable-website-settings">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -897,6 +904,14 @@ should be able to be added at any place in this file.
   <owner>miu@chromium.org</owner>
   <description>
     User clicked the tab alert indicator button to unmute the tab.
+  </description>
+</action>
+
+<action name="Android.ManageSpace">
+  <owner>dmurph@chromium.org</owner>
+  <description>
+    User navigated to 'Manage Space' for Chrome from the 'Apps' category in
+    Android settings.
   </description>
 </action>
 
@@ -2388,6 +2403,11 @@ should be able to be added at any place in this file.
 <action name="ClearBrowsingData_Cookies">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="ClearBrowsingData_DialogCreated">
+  <owner>dmurph@chromium.org</owner>
+  <description>Clear browsing data screen is shown to the user.</description>
 </action>
 
 <action name="ClearBrowsingData_Downloads">
@@ -9249,6 +9269,14 @@ should be able to be added at any place in this file.
 <action name="MobileRendererCrashed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileSettingsStorageClearAll">
+  <owner>dmurph@chromium.org</owner>
+  <description>
+    User clicked on the 'Clear All' button in the Storage section of sites
+    settings.
+  </description>
 </action>
 
 <action name="MobileShortcutAllBookmarks">

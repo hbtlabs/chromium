@@ -26,7 +26,9 @@
 
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleSheetList.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/VisualViewport.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -60,7 +62,8 @@ public:
         // OSX attaches main frame scrollbars to the VisualViewport so the VisualViewport layers need
         // to be initialized.
         webViewImpl()->updateAllLifecyclePhases();
-        webViewImpl()->setRootGraphicsLayer(
+        WebFrameWidget* mainFrameWidget = static_cast<WebFrameWidget*>(webViewImpl()->mainFrame()->toWebLocalFrame()->frameWidget());
+        mainFrameWidget->setRootGraphicsLayer(
             webViewImpl()->mainFrameImpl()->frame()->view()->layoutViewItem().compositor()->rootGraphicsLayer());
     }
 
@@ -132,6 +135,10 @@ TEST_F(ScrollingCoordinatorTest, fastScrollingByDefault)
     ASSERT_FALSE(rootScrollLayer->shouldScrollOnMainThread());
     ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
     ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::MouseWheel));
+
+    WebLayer* innerViewportScrollLayer = page->frameHost().visualViewport().scrollLayer()->platformLayer();
+    ASSERT_TRUE(innerViewportScrollLayer->scrollable());
+    ASSERT_FALSE(innerViewportScrollLayer->shouldScrollOnMainThread());
 }
 
 TEST_F(ScrollingCoordinatorTest, fastScrollingCanBeDisabledWithSetting)
@@ -150,6 +157,11 @@ TEST_F(ScrollingCoordinatorTest, fastScrollingCanBeDisabledWithSetting)
     WebLayer* rootScrollLayer = getRootScrollLayer();
     ASSERT_TRUE(rootScrollLayer->scrollable());
     ASSERT_TRUE(rootScrollLayer->shouldScrollOnMainThread());
+
+    // Main scrolling should also propagate to inner viewport layer.
+    WebLayer* innerViewportScrollLayer = page->frameHost().visualViewport().scrollLayer()->platformLayer();
+    ASSERT_TRUE(innerViewportScrollLayer->scrollable());
+    ASSERT_TRUE(innerViewportScrollLayer->shouldScrollOnMainThread());
 }
 
 

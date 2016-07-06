@@ -8,9 +8,9 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "components/mus/common/mojo_gpu_memory_buffer_manager.h"
-#include "components/mus/gles2/raster_thread_helper.h"
-#include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "services/ui/common/mojo_gpu_memory_buffer_manager.h"
+#include "services/ui/gles2/raster_thread_helper.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/compositor/compositor.h"
 #include "ui/views/mus/mus_export.h"
 #include "ui/views/mus/surface_binding.h"
@@ -19,7 +19,7 @@ namespace mojo {
 class Connector;
 }
 
-namespace mus {
+namespace ui {
 class Window;
 }
 
@@ -28,8 +28,8 @@ namespace views {
 class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
  public:
   SurfaceContextFactory(shell::Connector* connector,
-                        mus::Window* window,
-                        mus::mojom::SurfaceType surface_type);
+                        ui::Window* window,
+                        ui::mojom::SurfaceType surface_type);
   ~SurfaceContextFactory() override;
 
  private:
@@ -62,7 +62,7 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   SurfaceBinding surface_binding_;
   uint32_t next_surface_id_namespace_;
   gles2::RasterThreadHelper raster_thread_helper_;
-  mus::MojoGpuMemoryBufferManager gpu_memory_buffer_manager_;
+  ui::MojoGpuMemoryBufferManager gpu_memory_buffer_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceContextFactory);
 };

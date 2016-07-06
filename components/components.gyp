@@ -110,7 +110,6 @@
     ['OS == "android"', {
       'includes': [
         'external_video_surface.gypi',
-        'service_tab_launcher.gypi',
       ],
     }],
     ['OS != "ios"', {
@@ -140,6 +139,7 @@
         'web_cache.gypi',
         'web_contents_delegate_android.gypi',
         'web_modal.gypi',
+        'webmessaging.gypi',
         'webusb.gypi',
         'zoom.gypi',
       ],

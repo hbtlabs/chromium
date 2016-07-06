@@ -11,15 +11,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/c/system/main.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/application_runner.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_throbber.h"
@@ -88,11 +88,11 @@ class UI : public views::WidgetDelegateView,
   void ViewHierarchyChanged(
       const views::View::ViewHierarchyChangedDetails& details) override {
     if (details.is_add && GetWidget() && !content_area_) {
-      mus::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
+      ui::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
       content_area_ = window->window_tree()->NewWindow(nullptr);
       window->AddChild(content_area_);
 
-      mus::mojom::WindowTreeClientPtr client;
+      ui::mojom::WindowTreeClientPtr client;
       view_->GetWindowTreeClient(GetProxy(&client));
       content_area_->Embed(std::move(client));
     }
@@ -134,7 +134,7 @@ class UI : public views::WidgetDelegateView,
   void NavigationListPruned(bool from_front, int count) override {}
 
   Webtest* webtest_;
-  mus::Window* content_area_ = nullptr;
+  ui::Window* content_area_ = nullptr;
   navigation::mojom::ViewPtr view_;
   mojo::Binding<navigation::mojom::ViewClient> view_client_binding_;
   base::string16 current_title_;
@@ -157,9 +157,9 @@ void Webtest::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void Webtest::Initialize(shell::Connector* connector,
-                         const shell::Identity& identity,
-                         uint32_t id) {
+void Webtest::OnStart(shell::Connector* connector,
+                      const shell::Identity& identity,
+                      uint32_t id) {
   connector_ = connector;
   tracing_.Initialize(connector, identity.name());
 
@@ -168,7 +168,7 @@ void Webtest::Initialize(shell::Connector* connector,
       views::WindowManagerConnection::Create(connector, identity);
 }
 
-bool Webtest::AcceptConnection(shell::Connection* connection) {
+bool Webtest::OnConnect(shell::Connection* connection) {
   connection->AddInterface<mojom::Launchable>(this);
   return true;
 }

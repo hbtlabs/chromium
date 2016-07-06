@@ -97,7 +97,26 @@ struct ConditionalClip {
   gfx::RectF clip_rect;
 };
 
-static ConditionalClip ComputeRectInTargetSpace(
+static ConditionalClip ComputeTargetRectInLocalSpace(
+    gfx::RectF rect,
+    const TransformTree& transform_tree,
+    int current_transform_id,
+    int target_transform_id) {
+  gfx::Transform current_to_target;
+  if (!transform_tree.ComputeTransformWithSourceSublayerScale(
+          current_transform_id, target_transform_id, &current_to_target))
+    // If transform is not invertible, cannot apply clip.
+    return ConditionalClip{false, gfx::RectF()};
+
+  if (current_transform_id > target_transform_id)
+    return ConditionalClip{true,  // is_clipped.
+                           MathUtil::MapClippedRect(current_to_target, rect)};
+
+  return ConditionalClip{true,  // is_clipped.
+                         MathUtil::ProjectClippedRect(current_to_target, rect)};
+}
+
+static ConditionalClip ComputeLocalRectInTargetSpace(
     gfx::RectF rect,
     const TransformTree& transform_tree,
     int current_transform_id,
@@ -107,6 +126,7 @@ static ConditionalClip ComputeRectInTargetSpace(
           current_transform_id, target_transform_id, &current_to_target))
     // If transform is not invertible, cannot apply clip.
     return ConditionalClip{false, gfx::RectF()};
+
   if (current_transform_id > target_transform_id)
     return ConditionalClip{true,  // is_clipped.
                            MathUtil::MapClippedRect(current_to_target, rect)};
@@ -119,9 +139,9 @@ static ConditionalClip ComputeCurrentClip(const ClipNode* clip_node,
                                           const TransformTree& transform_tree,
                                           int target_transform_id) {
   if (clip_node->data.transform_id != target_transform_id)
-    return ComputeRectInTargetSpace(clip_node->data.clip, transform_tree,
-                                    clip_node->data.transform_id,
-                                    target_transform_id);
+    return ComputeLocalRectInTargetSpace(clip_node->data.clip, transform_tree,
+                                         clip_node->data.transform_id,
+                                         target_transform_id);
 
   gfx::RectF current_clip = clip_node->data.clip;
   gfx::Vector2dF sublayer_scale =
@@ -215,13 +235,6 @@ void CalculateClipRects(
     bool non_root_surfaces_enabled) {
   for (auto& layer : visible_layer_list) {
     const ClipNode* clip_node = clip_tree.Node(layer->clip_tree_index());
-    // The entire layer is visible if it has copy requests.
-    const EffectNode* effect_node =
-        effect_tree.Node(layer->effect_tree_index());
-    if (effect_node->data.has_copy_request &&
-        effect_node->owner_id == layer->id())
-      continue;
-
     if (!non_root_surfaces_enabled) {
       layer->set_clip_rect(
           gfx::ToEnclosingRect(clip_node->data.clip_in_target_space));
@@ -315,10 +328,11 @@ void CalculateVisibleRects(
 
       const EffectNode* copy_request_effect_node =
           effect_tree.Node(effect_ancestor_with_copy_request);
-      ConditionalClip clip_in_layer_space = ComputeRectInTargetSpace(
+      ConditionalClip clip_in_layer_space = ComputeTargetRectInLocalSpace(
           accumulated_clip_in_copy_request_space, transform_tree,
           copy_request_effect_node->data.transform_id,
           layer->transform_tree_index());
+
       if (clip_in_layer_space.is_clipped) {
         gfx::RectF clip_rect = clip_in_layer_space.clip_rect;
         clip_rect.Offset(-layer->offset_to_transform_parent());
@@ -888,6 +902,45 @@ static void ComputeLayerClipRect(const PropertyTrees* property_trees,
   }
 }
 
+static int FindTargetTransformTreeIndexFromEffectTree(
+    const EffectTree& effect_tree,
+    const int effect_tree_index) {
+  const EffectNode* node = effect_tree.Node(effect_tree_index);
+  if (node->data.has_render_surface)
+    return node->data.transform_id;
+  node = effect_tree.Node(node->data.target_id);
+  return node->data.transform_id;
+}
+
+static void VerifyDrawTransformsMatch(LayerImpl* layer,
+                                      PropertyTrees* property_trees) {
+  const int source_id = layer->transform_tree_index();
+  int destination_id = FindTargetTransformTreeIndexFromEffectTree(
+      property_trees->effect_tree, layer->effect_tree_index());
+  // TODO(jaydasika) : Remove this after sorting out how sublayer scale works
+  // for these ids.
+  if (destination_id == 0 || destination_id == 1)
+    return;
+  gfx::Transform draw_transform;
+  property_trees->transform_tree.ComputeTransform(source_id, destination_id,
+                                                  &draw_transform);
+  TransformNode* target_node =
+      property_trees->transform_tree.Node(destination_id);
+  draw_transform.matrix().postScale(target_node->data.sublayer_scale.x(),
+                                    target_node->data.sublayer_scale.y(), 1.f);
+  if (layer->should_flatten_transform_from_property_tree())
+    draw_transform.FlattenTo2d();
+  draw_transform.Translate(layer->offset_to_transform_parent().x(),
+                           layer->offset_to_transform_parent().y());
+  DCHECK(draw_transform.ApproximatelyEqual(
+      DrawTransform(layer, property_trees->transform_tree)))
+      << " layer: " << layer->id() << " source transform id: " << source_id
+      << " destination transform id: " << destination_id
+      << " draw transform from transform tree: "
+      << DrawTransform(layer, property_trees->transform_tree).ToString()
+      << " v.s." << draw_transform.ToString();
+}
+
 static void ComputeVisibleRectsInternal(
     LayerImpl* root_layer,
     PropertyTrees* property_trees,
@@ -978,6 +1031,12 @@ void VerifyClipTreeCalculations(const LayerImplList& layer_list,
   }
   for (auto layer : layer_list)
     ComputeLayerClipRect(property_trees, layer);
+}
+
+void VerifyTransformTreeCalculations(const LayerImplList& layer_list,
+                                     PropertyTrees* property_trees) {
+  for (auto layer : layer_list)
+    VerifyDrawTransformsMatch(layer, property_trees);
 }
 
 void ComputeVisibleRects(LayerImpl* root_layer,
@@ -1209,17 +1268,6 @@ void ComputeLayerDrawProperties(LayerImpl* layer,
   }
   layer->draw_properties().screen_space_transform_is_animating =
       transform_node->data.to_screen_is_potentially_animated;
-  if (layer->layer_tree_impl()
-          ->settings()
-          .layer_transforms_should_scale_layer_contents) {
-    layer->draw_properties().maximum_animation_contents_scale =
-        transform_node->data.combined_maximum_animation_target_scale;
-    layer->draw_properties().starting_animation_contents_scale =
-        transform_node->data.combined_starting_animation_scale;
-  } else {
-    layer->draw_properties().maximum_animation_contents_scale = 0.f;
-    layer->draw_properties().starting_animation_contents_scale = 0.f;
-  }
 
   layer->draw_properties().opacity =
       LayerDrawOpacity(layer, property_trees->effect_tree);

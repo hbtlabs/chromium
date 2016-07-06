@@ -10,7 +10,7 @@
 #include "ash/mus/root_window_controller.h"
 #include "ash/mus/window_manager.h"
 #include "base/bind.h"
-#include "components/mus/public/cpp/window_manager_delegate.h"
+#include "services/ui/public/cpp/window_manager_delegate.h"
 
 namespace ash {
 namespace mus {
@@ -19,7 +19,7 @@ namespace {
 const int kAcceleratorIdMask = 0xffff;
 
 void CallAddAcceleratorCallback(
-    const ::mus::mojom::AcceleratorRegistrar::AddAcceleratorCallback& callback,
+    const ::ui::mojom::AcceleratorRegistrar::AddAcceleratorCallback& callback,
     bool result) {
   callback.Run(result);
 }
@@ -97,7 +97,7 @@ void AcceleratorRegistrarImpl::RemoveAllAccelerators() {
 }
 
 void AcceleratorRegistrarImpl::SetHandler(
-    ::mus::mojom::AcceleratorHandlerPtr handler) {
+    ::ui::mojom::AcceleratorHandlerPtr handler) {
   accelerator_handler_ = std::move(handler);
   accelerator_handler_.set_connection_error_handler(base::Bind(
       &AcceleratorRegistrarImpl::OnHandlerGone, base::Unretained(this)));
@@ -105,7 +105,7 @@ void AcceleratorRegistrarImpl::SetHandler(
 
 void AcceleratorRegistrarImpl::AddAccelerator(
     uint32_t accelerator_id,
-    ::mus::mojom::EventMatcherPtr matcher,
+    ::ui::mojom::EventMatcherPtr matcher,
     const AddAcceleratorCallback& callback) {
   if (!accelerator_handler_ ||
       (accelerator_id & kAcceleratorIdMask) != accelerator_id) {

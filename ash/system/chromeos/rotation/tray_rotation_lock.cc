@@ -5,11 +5,11 @@
 #include "ash/system/chromeos/rotation/tray_rotation_lock.h"
 
 #include "ash/common/system/tray/tray_item_more.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -45,7 +45,7 @@ class RotationLockDefaultView : public TrayItemMore, public ShellObserver {
 RotationLockDefaultView::RotationLockDefaultView(SystemTrayItem* owner)
     : TrayItemMore(owner, false) {
   UpdateImage();
-  SetVisible(Shell::GetInstance()
+  SetVisible(WmShell::Get()
                  ->maximize_mode_controller()
                  ->IsMaximizeModeWindowManagerEnabled());
   WmShell::Get()->AddShellObserver(this);
@@ -140,7 +140,7 @@ bool TrayRotationLock::GetInitialVisibility() {
 
 bool TrayRotationLock::ShouldBeVisible() {
   return OnPrimaryDisplay() &&
-         Shell::GetInstance()
+         WmShell::Get()
              ->maximize_mode_controller()
              ->IsMaximizeModeWindowManagerEnabled() &&
          Shell::GetInstance()

@@ -7,6 +7,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/html/util.html">
+<link rel="import" href="chrome://history/browser_service.html">
 <link rel="import" href="chrome://history/constants.html">
 <link rel="import" href="chrome://history/searched_label.html">
 <link rel="import" href="chrome://history/shared_style.html">
@@ -15,19 +16,19 @@
   <template>
     <style include="shared-style">
       :host {
-        @apply(--layout-center);
-        @apply(--layout-vertical);
-        padding: 0 var(--history-item-padding-side, 0);
+        display: block;
       }
 
-      #main-container {
+      :host(:not([embedded])) #main-container {
         background: #fff;
         border-color: var(--card-border-color);
-        border-style: var(--border-style, solid);
+        border-radius: 2px;
+        border-style: solid;
         border-width: 0 1px;
-        max-width: var(--card-max-width);
-        min-width: var(--card-min-width);
-        width: 100%;
+      }
+
+      :host(:not([embedded])) #sizing-container {
+        @apply(--card-sizing);
       }
 
       :host([is-first-item]) #main-container {
@@ -54,7 +55,7 @@
       #item-container {
         @apply(--layout-center);
         @apply(--layout-horizontal);
-        min-height: 40px;
+        min-height: var(--item-height);
       }
 
       :host([is-card-start]) #item-container {
@@ -69,14 +70,13 @@
         @apply(--layout-center);
         @apply(--layout-flex);
         @apply(--layout-horizontal);
-        min-height: 40px;
         overflow: hidden;
       }
 
       paper-checkbox {
         --paper-checkbox-checked-color: rgb(68, 136, 255);
         --paper-checkbox-size: 16px;
-        --paper-checkbox-unchecked-color: #969696;
+        --paper-checkbox-unchecked-color: var(--secondary-text-color);
         height: 16px;
         margin: 0 16px 0 20px;
         padding: 2px;
@@ -90,14 +90,14 @@
 
       #domain {
         -webkit-margin-start: 16px;
-        color: #969696;
+        color: var(--secondary-text-color);
         flex-shrink: 0;
       }
 
       #menu-button {
         -webkit-margin-end: 12px;
         -webkit-margin-start: 2px;
-        color: #969696;
+        color: var(--secondary-text-color);
         height: 36px;
         width: 36px;
       }
@@ -111,8 +111,13 @@
         -webkit-margin-end: 10px;
         -webkit-margin-start: 20px;
         color: rgb(68, 136, 255);
-        height: 16px;
+        height: 20px;
         visibility: hidden;
+        width: 20px;
+      }
+
+      #bookmark-star iron-icon {
+        height: 16px;
         width: 16px;
       }
 
@@ -126,32 +131,38 @@
         height: 15px;
       }
     </style>
-    <div id="main-container">
-      <div id="date-accessed" class="card-title">
-        [[cardTitle_(numberOfItems, item.dateRelativeDay, searchTerm)]]
-      </div>
-      <div id="item-container">
-        <paper-checkbox id="checkbox" on-tap="onCheckboxSelected_"
-            checked="{{selected}}" disabled="[[selectionNotAllowed_()]]">
-        </paper-checkbox>
-        <span id="time-accessed">[[item.readableTimestamp]]</span>
-        <div class="website-icon" id="icon"></div>
-        <div id="title-and-domain">
-          <a href="[[item.url]]" id="title" class="website-title">
-            <history-searched-label title="[[item.title]]"
-                search-term="[[searchTerm]]"></history-searched-label>
-          </a>
-          <span id="domain">[[item.domain]]</span>
+
+    <div id="sizing-container">
+      <div id="main-container">
+        <div id="date-accessed" class="card-title">
+          [[cardTitle_(numberOfItems, item.dateRelativeDay, searchTerm)]]
         </div>
-        <iron-icon icon="cr:star" id="bookmark-star"></iron-icon>
-        <button is="paper-icon-button-light" id="menu-button"
-            on-tap="onMenuButtonTap_">
-          <iron-icon icon="cr:more-vert"></iron-icon>
-        </button>
+        <div id="item-container">
+          <paper-checkbox id="checkbox" on-tap="onCheckboxSelected_"
+              checked="{{selected}}" disabled="[[selectionNotAllowed_()]]">
+          </paper-checkbox>
+          <span id="time-accessed">[[item.readableTimestamp]]</span>
+          <div class="website-icon" id="icon"></div>
+          <div id="title-and-domain">
+            <a href="[[item.url]]" id="title" class="website-title">
+              <history-searched-label title="[[cropItemTitle_(item.title)]]"
+                  search-term="[[searchTerm]]"></history-searched-label>
+            </a>
+            <span id="domain">[[item.domain]]</span>
+          </div>
+          <button is="paper-icon-button-light" id="bookmark-star"
+              title="$i18n{removeBookmark}" on-tap="onRemoveBookmarkTap_">
+            <iron-icon icon="cr:star"></iron-icon>
+          </button>
+          <button is="paper-icon-button-light" id="menu-button"
+              on-tap="onMenuButtonTap_" title="$i18n{moreActionsButton}">
+            <iron-icon icon="cr:more-vert"></iron-icon>
+          </button>
+        </div>
+        <template is="dom-if" if="[[hasTimeGap]]">
+          <div id="time-gap-separator"></div>
+        </template>
       </div>
-      <template is="dom-if" if="[[hasTimeGap]]">
-        <div id="time-gap-separator"></div>
-      </template>
     </div>
   </template>
   <script src="chrome://history/history_item.js"></script>

@@ -50,6 +50,8 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
                              IDS_MD_HISTORY_HISTORY_MENU_ITEM);
   source->AddLocalizedString("itemsSelected", IDS_MD_HISTORY_ITEMS_SELECTED);
   source->AddLocalizedString("loading", IDS_HISTORY_LOADING);
+  source->AddLocalizedString("moreActionsButton",
+                             IDS_HISTORY_ACTION_MENU_DESCRIPTION);
   source->AddLocalizedString("moreFromSite", IDS_HISTORY_MORE_FROM_SITE);
   source->AddLocalizedString("openAll", IDS_HISTORY_OTHER_SESSIONS_OPEN_ALL);
   source->AddLocalizedString("openTabsMenuItem",
@@ -64,6 +66,7 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
   source->AddLocalizedString("rangeToday", IDS_HISTORY_RANGE_TODAY);
   source->AddLocalizedString("rangeNext", IDS_HISTORY_RANGE_NEXT);
   source->AddLocalizedString("rangePrevious", IDS_HISTORY_RANGE_PREVIOUS);
+  source->AddLocalizedString("removeBookmark", IDS_HISTORY_REMOVE_BOOKMARK);
   source->AddLocalizedString("removeFromHistory", IDS_HISTORY_REMOVE_PAGE);
   source->AddLocalizedString("searchPrompt", IDS_MD_HISTORY_SEARCH_PROMPT);
   source->AddLocalizedString("searchResult", IDS_HISTORY_SEARCH_RESULT);
@@ -115,6 +118,10 @@ content::WebUIDataSource* CreateMdHistoryUIHTMLSource(Profile* profile) {
                           IDR_MD_HISTORY_IMAGES_100_SIGN_IN_PROMO_PNG);
   source->AddResourcePath("images/200/sign_in_promo.png",
                           IDR_MD_HISTORY_IMAGES_200_SIGN_IN_PROMO_PNG);
+  source->AddResourcePath("list_container.html",
+                          IDR_MD_HISTORY_LIST_CONTAINER_HTML);
+  source->AddResourcePath("list_container.js",
+                          IDR_MD_HISTORY_LIST_CONTAINER_JS);
   source->AddResourcePath("searched_label.html",
                           IDR_MD_HISTORY_SEARCHED_LABEL_HTML);
   source->AddResourcePath("searched_label.js",

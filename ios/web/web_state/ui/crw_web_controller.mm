@@ -40,7 +40,6 @@
 #include "components/url_formatter/url_formatter.h"
 #import "ios/net/http_response_headers_util.h"
 #import "ios/net/nsurlrequest_util.h"
-#include "ios/public/provider/web/web_ui_ios.h"
 #import "ios/web/crw_network_activity_indicator_manager.h"
 #import "ios/web/history_state_util.h"
 #include "ios/web/interstitials/web_interstitial_impl.h"
@@ -81,6 +80,7 @@
 #import "ios/web/public/web_state/ui/crw_web_view_content_view.h"
 #include "ios/web/public/web_state/url_verification_constants.h"
 #include "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/webui/web_ui_ios.h"
 #include "ios/web/web_state/blocked_popup_info.h"
 #import "ios/web/web_state/crw_pass_kit_downloader.h"
 #import "ios/web/web_state/crw_web_view_proxy_impl.h"
@@ -1024,7 +1024,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 @synthesize usePlaceholderOverlay = _usePlaceholderOverlay;
 @synthesize loadPhase = _loadPhase;
 @synthesize shouldSuppressDialogs = _shouldSuppressDialogs;
-@synthesize useMojoForWebUI = _useMojoForWebUI;
 
 - (instancetype)initWithWebState:(WebStateImpl*)webState {
   self = [super init];
@@ -1935,7 +1934,18 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
   const GURL currentUrl = [self currentNavigationURL];
 
-  error = web::NetErrorFromError(error);
+  if (web::IsWKWebViewSSLCertError(error)) {
+    // This could happen only if certificate is absent or could not be parsed.
+    error = web::NetErrorFromError(error, net::ERR_SSL_SERVER_CERT_BAD_FORMAT);
+#if defined(DEBUG)
+    net::SSLInfo info;
+    web::GetSSLInfoFromWKWebViewSSLCertError(error, &info);
+    CHECK(!error.cert);
+#endif
+  } else {
+    error = web::NetErrorFromError(error);
+  }
+
   BOOL isPost = [self isCurrentNavigationItemPOST];
   [self setNativeController:[_nativeProvider controllerForURL:currentUrl
                                                     withError:error
@@ -4501,12 +4511,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   web::SSLStatus status;
   status.security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
   status.cert_status = info.cert_status;
-  // |info.cert| can be null if certChain in NSError is empty or can not be
-  // parsed.
-  if (info.cert) {
-    status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
-                                                              self.certGroupID);
+  if (!info.cert) {
+    // |info.cert| can be null if certChain in NSError is empty or can not be
+    // parsed, in this case do not ask delegate if error should be allowed, it
+    // should not be.
+    [self handleLoadError:error inMainFrame:YES];
+    return;
   }
+
+  status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
+                                                            self.certGroupID);
 
   // Retrieve verification results from _certVerificationErrors cache to avoid
   // unnecessary recalculations. Verification results are cached for the leaf
@@ -4924,8 +4938,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                         completionHandler:
                             (void (^)(NSString* result))completionHandler {
   GURL origin(web::GURLOriginWithWKSecurityOrigin(frame.securityOrigin));
-  if (self.useMojoForWebUI && web::GetWebClient()->IsAppSpecificURL(origin) &&
-      _webUIManager) {
+  if (web::GetWebClient()->IsAppSpecificURL(origin) && _webUIManager) {
     std::string mojoResponse =
         self.mojoFacade->HandleMojoMessage(base::SysNSStringToUTF8(prompt));
     completionHandler(base::SysUTF8ToNSString(mojoResponse));

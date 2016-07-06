@@ -6,10 +6,12 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_window_manager.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
+#include "ash/common/wm_shell.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
@@ -18,7 +20,6 @@
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -245,14 +246,15 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
   // Create a maximize mode window manager.
   MaximizeModeWindowManager* CreateMaximizeModeWindowManager() {
     EXPECT_FALSE(maximize_mode_window_manager());
-    Shell::GetInstance()->maximize_mode_controller()->
-        EnableMaximizeModeWindowManager(true);
+    WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+        true);
     return maximize_mode_window_manager();
   }
 
   MaximizeModeWindowManager* maximize_mode_window_manager() {
-    return Shell::GetInstance()->maximize_mode_controller()->
-        maximize_mode_window_manager_.get();
+    return WmShell::Get()
+        ->maximize_mode_controller()
+        ->maximize_mode_window_manager_.get();
   }
 
  private:
@@ -1497,7 +1499,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
   aura::Window::Windows mru_list = WmWindowAura::ToAuraWindows(
-      Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList());
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));
@@ -1513,7 +1515,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
   mru_list = WmWindowAura::ToAuraWindows(
-      Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList());
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));

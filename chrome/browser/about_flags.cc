@@ -776,7 +776,8 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_EXPERIMENTAL_WEB_PLATFORM_FEATURES_NAME,
      IDS_FLAGS_EXPERIMENTAL_WEB_PLATFORM_FEATURES_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableExperimentalWebPlatformFeatures)},
-    {"enable-web-bluetooth", IDS_FLAGS_WEB_BLUETOOTH_NAME,
+    {"enable-web-bluetooth", // FLAGS:RECORD_UMA
+     IDS_FLAGS_WEB_BLUETOOTH_NAME,
      IDS_FLAGS_WEB_BLUETOOTH_DESCRIPTION,
      kOsCrOS | kOsMac | kOsAndroid | kOsLinux,
      SINGLE_VALUE_TYPE(switches::kEnableWebBluetooth)},
@@ -1913,9 +1914,6 @@ const FeatureEntry kFeatureEntries[] = {
      SINGLE_VALUE_TYPE(switches::kEnableFullscreenToolbarReveal)},
 #endif
 #if defined(OS_ANDROID)
-    {"media-style-notification", IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_NAME,
-     IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION, kOsAndroid,
-     FEATURE_VALUE_TYPE(chrome::android::kMediaStyleNotification)},
     {"important-sites-in-cbd", IDS_FLAGS_IMPORTANT_SITES_IN_CBD_NAME,
      IDS_FLAGS_IMPORTANT_SITES_IN_CBD_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kImportantSitesInCBD)},
@@ -1953,9 +1951,9 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_WEAK_MEMORYCACHE_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(features::kWeakMemoryCache)},
 #if defined(OS_CHROMEOS)
-    {"enable-eol-notification", IDS_FLAGS_ENABLE_EOL_NOTIFICATION_NAME,
-     IDS_FLAGS_ENABLE_EOL_NOTIFICATION_DESCRIPTION, kOsCrOS,
-     SINGLE_VALUE_TYPE(chromeos::switches::kEnableEolNotification)},
+    {"disable-eol-notification", IDS_FLAGS_EOL_NOTIFICATION_NAME,
+     IDS_FLAGS_EOL_NOTIFICATION_DESCRIPTION, kOsCrOS,
+     SINGLE_DISABLE_VALUE_TYPE(chromeos::switches::kDisableEolNotification)},
 #endif  // defined(OS_CHROMEOS)
     {"fill-on-account-select", IDS_FILL_ON_ACCOUNT_SELECT_NAME,
      IDS_FILL_ON_ACCOUNT_SELECT_DESCRIPTION, kOsAll,
@@ -1965,6 +1963,11 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_NEW_AUDIO_RENDERING_MIXING_STRATEGY_DESCRIPTION,
      kOsWin | kOsMac | kOsLinux | kOsAndroid,
      FEATURE_VALUE_TYPE(media::kNewAudioRenderingMixingStrategy)},
+#if defined(OS_CHROMEOS)
+    {"enable-intent-picker", IDS_ENABLE_INTENT_PICKER,
+     IDS_ENABLE_INTENT_PICKER_DESCRIPTION, kOsCrOS,
+     SINGLE_VALUE_TYPE(switches::kEnableIntentPicker)},
+#endif  // defined(OS_CHROMEOS)
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.

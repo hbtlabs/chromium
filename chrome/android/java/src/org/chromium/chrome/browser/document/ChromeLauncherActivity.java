@@ -188,6 +188,14 @@ public class ChromeLauncherActivity extends Activity
 
         // Check if we should launch the ChromeTabbedActivity.
         if (!mIsCustomTabIntent && !FeatureUtilities.isDocumentMode(this)) {
+            // Launch the First Run Experience for VIEW Intents with URLs before launching
+            // ChromeTabbedActivity if necessary.
+            if (getIntent() != null && getIntent().getAction() == Intent.ACTION_VIEW
+                    && IntentHandler.getUrlFromIntent(getIntent()) != null) {
+                if (launchFirstRunExperience()) {
+                    return;
+                }
+            }
             launchTabbedMode();
             finish();
             return;
@@ -405,7 +413,7 @@ public class ChromeLauncherActivity extends Activity
         // Create and fire a launch intent.
         startActivity(createCustomTabActivityIntent(
                 this, getIntent(), !isCustomTabIntent(getIntent()) && mIsHerbIntent));
-        if (mIsHerbIntent) overridePendingTransition(R.anim.slide_in_up, R.anim.no_anim);
+        if (mIsHerbIntent) overridePendingTransition(R.anim.activity_open_enter, R.anim.no_anim);
     }
 
     @SuppressLint("InlinedApi")
@@ -461,10 +469,8 @@ public class ChromeLauncherActivity extends Activity
      * @return Whether or not the First Run Experience needed to be shown.
      */
     private boolean launchFirstRunExperience() {
-        final boolean isIntentActionMain = getIntent() != null
-                && TextUtils.equals(getIntent().getAction(), Intent.ACTION_MAIN);
-        final Intent freIntent = FirstRunFlowSequencer.checkIfFirstRunIsNecessary(
-                this, isIntentActionMain);
+        final Intent freIntent =
+                FirstRunFlowSequencer.checkIfFirstRunIsNecessary(this, getIntent());
         if (freIntent == null) return false;
 
         if ((getIntent().getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0) {

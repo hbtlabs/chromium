@@ -14,17 +14,13 @@
 #include "ash/public/interfaces/shelf_layout.mojom.h"
 #include "ash/public/interfaces/user_window_controller.mojom.h"
 #include "base/macros.h"
-#include "components/mus/common/types.h"
-#include "components/mus/public/interfaces/accelerator_registrar.mojom.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
-
-namespace mus {
-class WindowTreeClient;
-}
+#include "services/ui/common/types.h"
+#include "services/ui/public/interfaces/accelerator_registrar.mojom.h"
 
 namespace views {
 class AuraInit;
@@ -32,6 +28,7 @@ class AuraInit;
 
 namespace ui {
 class Event;
+class WindowTreeClient;
 }
 
 namespace ash {
@@ -44,10 +41,10 @@ class UserWindowControllerImpl;
 class WindowManager;
 
 class WindowManagerApplication
-    : public shell::ShellClient,
+    : public shell::Service,
       public shell::InterfaceFactory<mojom::ShelfLayout>,
       public shell::InterfaceFactory<mojom::UserWindowController>,
-      public shell::InterfaceFactory<::mus::mojom::AcceleratorRegistrar>,
+      public shell::InterfaceFactory<::ui::mojom::AcceleratorRegistrar>,
       public mash::session::mojom::ScreenlockStateListener,
       public WindowManagerObserver {
  public:
@@ -66,13 +63,13 @@ class WindowManagerApplication
 
   void OnAcceleratorRegistrarDestroyed(AcceleratorRegistrarImpl* registrar);
 
-  void InitWindowManager(::mus::WindowTreeClient* window_tree_client);
+  void InitWindowManager(::ui::WindowTreeClient* window_tree_client);
 
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
+  // shell::Service:
+  void OnStart(shell::Connector* connector,
+               const shell::Identity& identity,
+               uint32_t id) override;
+  bool OnConnect(shell::Connection* connection) override;
 
   // shell::InterfaceFactory<mojom::ShelfLayout>:
   void Create(shell::Connection* connection,
@@ -83,10 +80,10 @@ class WindowManagerApplication
       shell::Connection* connection,
       mojo::InterfaceRequest<mojom::UserWindowController> request) override;
 
-  // shell::InterfaceFactory<mus::mojom::AcceleratorRegistrar>:
+  // shell::InterfaceFactory<ui::mojom::AcceleratorRegistrar>:
   void Create(shell::Connection* connection,
-              mojo::InterfaceRequest<::mus::mojom::AcceleratorRegistrar>
-                  request) override;
+              mojo::InterfaceRequest<::ui::mojom::AcceleratorRegistrar> request)
+      override;
 
   // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;

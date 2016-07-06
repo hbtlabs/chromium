@@ -23,11 +23,11 @@
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "components/mus/public/cpp/window.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
 #include "grit/theme_resources.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -349,7 +349,7 @@ void BrowserNonClientFrameViewMus::UpdateProfileIcons() {
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMus, private:
 
-mus::Window* BrowserNonClientFrameViewMus::mus_window() {
+ui::Window* BrowserNonClientFrameViewMus::mus_window() {
   return static_cast<BrowserFrameMus*>(frame()->native_widget())->window();
 }
 

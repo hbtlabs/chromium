@@ -191,7 +191,6 @@
 #include "content/renderer/media/peer_connection_tracker.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
-#include "content/renderer/media/webrtc_identity_service.h"
 #endif
 
 #ifdef ENABLE_VTUNE_JIT_INTERFACE
@@ -199,10 +198,10 @@
 #endif
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "components/mus/common/gpu_service.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #include "content/renderer/mus/render_widget_window_tree_client_factory.h"
+#include "services/ui/common/gpu_service.h"
 #endif
 
 #if defined(ENABLE_IPC_FUZZER)
@@ -688,8 +687,6 @@ void RenderThreadImpl::Init(
   p2p_socket_dispatcher_ =
       new P2PSocketDispatcher(GetIOMessageLoopProxy().get());
   AddFilter(p2p_socket_dispatcher_.get());
-
-  webrtc_identity_service_.reset(new WebRTCIdentityService());
 
   peer_connection_factory_.reset(
       new PeerConnectionDependencyFactory(p2p_socket_dispatcher_.get()));
@@ -1826,7 +1823,7 @@ RenderThreadImpl::CreateCompositorOutputSurface(
   auto shell_connection = MojoShellConnection::GetForProcess();
   if (shell_connection && !use_software &&
       command_line.HasSwitch(switches::kUseMusInRenderer)) {
-    mus::GpuService::Initialize(shell_connection->GetConnector());
+    ui::GpuService::Initialize(shell_connection->GetConnector());
     RenderWidgetMusConnection* connection =
         RenderWidgetMusConnection::GetOrCreate(routing_id);
     return connection->CreateOutputSurface();

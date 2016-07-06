@@ -9,14 +9,14 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/mus/common/gpu_service.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/c/system/main.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/shell/public/cpp/application_runner.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/ui/common/gpu_service.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -164,11 +164,11 @@ void QuickLaunchApplication::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void QuickLaunchApplication::Initialize(shell::Connector* connector,
-                                        const shell::Identity& identity,
-                                        uint32_t id) {
+void QuickLaunchApplication::OnStart(shell::Connector* connector,
+                                     const shell::Identity& identity,
+                                     uint32_t id) {
   connector_ = connector;
-  mus::GpuService::Initialize(connector);
+  ui::GpuService::Initialize(connector);
   tracing_.Initialize(connector, identity.name());
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
@@ -178,7 +178,7 @@ void QuickLaunchApplication::Initialize(shell::Connector* connector,
   Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
 
-bool QuickLaunchApplication::AcceptConnection(shell::Connection* connection) {
+bool QuickLaunchApplication::OnConnect(shell::Connection* connection) {
   connection->AddInterface<mojom::Launchable>(this);
   return true;
 }

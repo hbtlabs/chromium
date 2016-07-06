@@ -24,6 +24,7 @@
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/volume_control_delegate.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm/window_state.h"
@@ -53,7 +54,6 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/utility/screenshot_controller.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/window_cycle_controller.h"
 #include "ash/wm/window_state_aura.h"
@@ -1430,7 +1430,7 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
     // cycling through its window elements.
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
-  if (shell->mru_window_tracker()->BuildMruWindowList().empty() &&
+  if (wm_shell->mru_window_tracker()->BuildMruWindowList().empty() &&
       actions_needing_window_.find(action) != actions_needing_window_.end()) {
     wm_shell->GetAccessibilityDelegate()->TriggerAccessibilityAlert(
         A11Y_ALERT_WINDOW_NEEDED);

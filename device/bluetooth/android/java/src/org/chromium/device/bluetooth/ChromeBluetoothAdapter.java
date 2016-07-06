@@ -17,6 +17,7 @@ import android.os.ParcelUuid;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.components.location.LocationUtils;
 
 import java.util.List;
 
@@ -204,12 +205,17 @@ final class ChromeBluetoothAdapter extends BroadcastReceiver {
     // Implementation details:
 
     /**
-     * @return true if Chromium has permission to scan for Bluetooth devices.
+     * @return true if Chromium has permission to scan for Bluetooth devices and location services
+     * are on.
      */
     private boolean canScan() {
-        Wrappers.ContextWrapper context = mAdapter.getContext();
+        Context context = mAdapter.getContext();
 
-        return context.hasAndroidLocationPermission();
+        boolean havePermission = LocationUtils.getInstance().hasAndroidLocationPermission(context);
+        boolean locationServicesOn =
+                LocationUtils.getInstance().isSystemLocationSettingEnabled(context);
+
+        return havePermission && locationServicesOn;
     }
 
     private void registerBroadcastReceiver() {

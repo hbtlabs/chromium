@@ -193,7 +193,7 @@
 #endif
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "components/mus/common/gpu_service.h"  // nogncheck
+#include "services/ui/common/gpu_service.h"  // nogncheck
 #endif
 
 
@@ -1180,7 +1180,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
     auto connection = MojoShellConnection::GetForProcess();
     if (connection) {
       WaitForMojoShellInitialize();
-      mus::GpuService::Initialize(connection->GetConnector());
+      ui::GpuService::Initialize(connection->GetConnector());
     }
 #endif
   }

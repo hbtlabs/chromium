@@ -369,6 +369,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Android.ManageSpace.ActionTaken"
+    enum="AndroidManageSpaceButton">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Recorded when the user presses a button in the 'Manage Space' screen for
+    Chrome. Note: the 'Clear App Data' option is likely incorrect, as the result
+    of that button disables UMA recording (as we factory reset the app).
+  </summary>
+</histogram>
+
 <histogram name="Android.ModerateBindingCount" units="bindings">
   <owner>jaekyun@chromium.org</owner>
   <summary>
@@ -3579,6 +3589,51 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Time spent on 2D canvas putImageData API call.</summary>
 </histogram>
 
+<histogram name="Blink.Canvas.ToBlob.IdleEncodeDuration" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <owner>xlai@chromium.org</owner>
+  <summary>
+    This metric measures the total time spent on encoding all the rows of an
+    image (jpeg or png), as part of a canvas.toBlob API call. Encoding occurs
+    during one or more idle periods on the main thread.
+
+    This metric is useful in helping us adjust the IdleTaskCompleteTimeoutDelay
+    in canvas.toBlob. When the encoding idle task is delayed for longer than
+    IdleTaskCompleteTimeoutDelay, the browser will switch to a non-idle task to
+    force encoding to happen on the main thread.
+  </summary>
+</histogram>
+
+<histogram name="Blink.Canvas.ToBlob.IdleTaskStatus" enum="IdleTaskStatus">
+  <owner>junov@chromium.org</owner>
+  <owner>xlai@chromium.org</owner>
+  <summary>
+    Records the status of the idle task when finishing a toBlob call.
+  </summary>
+</histogram>
+
+<histogram name="Blink.Canvas.ToBlob.InitiateEncodingDelay"
+    units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <owner>xlai@chromium.org</owner>
+  <summary>
+    This metric measures the time spent from initiating image encoding (jpeg or
+    png) on idle task to the actual execution time of initiation, as part of a
+    canvas.toBlob API call.
+
+    This metric is useful in helping us adjust the IdleTaskStartTimeoutDelay in
+    canvas.toBlob. When the initialization idle task is delayed for longer than
+    IdleTaskStartTimeoutDelay, the browser will switch to a non-idle task to
+    force initialization and encoding to occur on the main thread.
+  </summary>
+</histogram>
+
+<histogram name="Blink.Canvas.ToBlobDuration" units="microseconds">
+  <owner>junov@chromium.org</owner>
+  <owner>xlai@chromium.org</owner>
+  <summary>Time spent on 2D canvas toBlob API call.</summary>
+</histogram>
+
 <histogram name="Blink.Canvas.ToDataURL" units="microseconds">
   <owner>junov@chromium.org</owner>
   <summary>Time spent on 2D canvas toDataURL API call.</summary>
@@ -6239,6 +6294,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Connectivity Diagnostics App: Amount of time taken to run each of the
     connectivity tests.
   </summary>
+</histogram>
+
+<histogram name="ContentSettings.DefaultAutoplaySetting" enum="ContentSetting">
+  <owner>mlamouri@chromium.org</owner>
+  <summary>The default autoplay setting at profile open.</summary>
 </histogram>
 
 <histogram name="ContentSettings.DefaultCookiesSetting" enum="ContentSetting">
@@ -17665,6 +17725,46 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="History.ClearBrowsingData.ImportantDeselectedNum">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Recorded when the user presses the 'clear' button when presented with the
+    list of important sites they might want to exclude from clearing browsing
+    data. We record the number of sites the user deselected, or protected, from
+    clearing. The default has all sites selected.
+  </summary>
+</histogram>
+
+<histogram name="History.ClearBrowsingData.ImportantDeselectedPercent"
+    units="%/5">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Recorded when the user presses the 'clear' button when presented with the
+    list of important sites they might want to exclude from clearing browsing
+    data. We record the percent of sites the user deselected, or protected, from
+    clearing. The default has all sites selected, which is 0%. Note: To reduce
+    the number of empty buckets, the percent is divided by 5.
+  </summary>
+</histogram>
+
+<histogram name="History.ClearBrowsingData.ImportantDialogShown"
+    enum="BooleanShown">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Recorded when the user presses the 'clear' button in the clear browsing
+    dialog. We record 'true' if the important sites dialog is shown.
+  </summary>
+</histogram>
+
+<histogram name="History.ClearBrowsingData.NumImportant">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    Recorded when we successfuly fetched important sites in the clear browsing
+    data screen. This is the number of sites that we think are important to the
+    user.
+  </summary>
+</histogram>
+
 <histogram
     name="History.ClearBrowsingData.PasswordsDeletion.AdditionalDatatypesCount">
   <owner>msramek@chromium.org</owner>
@@ -22309,6 +22409,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>zqzhang@chromium.org</owner>
   <summary>
     The type of media notification the user clicked to go back to Chrome.
+  </summary>
+</histogram>
+
+<histogram name="Media.Pepper.PlayedSound" enum="Boolean">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    Whether Pepper players have played sound through its lifetime.
   </summary>
 </histogram>
 
@@ -35298,6 +35407,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NQE.CellularSignalStrengthAvailable" enum="BooleanAvailable">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Whether the signal strength for the cellular network was available or not.
+    Recorded right before a connection change event. Recorded only on cellular
+    connections on Android platform.
+  </summary>
+</histogram>
+
 <histogram name="NQE.DifferenceRTTActualAndEstimated" units="ms">
   <obsolete>
     Replaced in June 2016 by NQE.Accuracy.HttpRTT.* metrics.
@@ -45148,6 +45267,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Renderer4.Browser.PartialRasterPercentageSaved" units="%">
+  <owner>ericrk@chromium.org</owner>
+  <summary>
+    Percentage of pixels which would have been rastered, but were skipped due to
+    the partial raster optimization. Logged for each raster task run in a
+    Browser process. The histogram is suffixed by the RasterBufferProvider which
+    is in use.
+  </summary>
+</histogram>
+
 <histogram name="Renderer4.CommitToFinish" units="ms">
   <owner>wiltzius@chromium.org</owner>
   <summary>
@@ -45424,15 +45553,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Renderer4.PartialRasterPercentageSaved" units="%">
-  <owner>ericrk@chromium.org</owner>
-  <summary>
-    Percentage of pixels which would have been rastered, but were skipped due to
-    the partial raster optimization. Logged for each raster task. The histogram
-    is suffixed by the RasterBufferProvider which is in use.
-  </summary>
-</histogram>
-
 <histogram name="Renderer4.pixelCountCulled_Draw" units="NormalizedPixels">
   <owner>wiltzius@chromium.org</owner>
   <summary>
@@ -45473,6 +45593,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     For each tile that was ready to draw at some point, logs whether the tile
     was actually used in a draw. This is logged at tile destruction time.
+  </summary>
+</histogram>
+
+<histogram name="Renderer4.Renderer.PartialRasterPercentageSaved" units="%">
+  <owner>ericrk@chromium.org</owner>
+  <summary>
+    Percentage of pixels which would have been rastered, but were skipped due to
+    the partial raster optimization. Logged for each raster task run in a
+    Renderer process. The histogram is suffixed by the RasterBufferProvider
+    which is in use.
   </summary>
 </histogram>
 
@@ -54465,8 +54595,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>shess@chromium.org</owner>
   <summary>
     Records specific failure and success cases in sql::Recovery implementation,
-    to determine which cases (if any) might be worth writing additional
-    automated recovery code for, versus which should lead to clearing databases.
+    to determine which cases warrant further development.  This histogram tracks
+    detected errors, some of which may cause multiple results.  See recovery.cc
+    for details.
   </summary>
 </histogram>
 
@@ -64866,6 +64997,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Windows.IsPinnedToTaskbar" enum="IsPinnedToTaskbarResult">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Indicates whether Chrome is pinned to the Windows taskbar for the current
+    user. Recorded shortly after startup.
+  </summary>
+</histogram>
+
+<histogram name="Windows.IsPinnedToTaskbar.ProcessError" enum="BooleanError">
+  <owner>pmonette@chromium.org</owner>
+  <summary>
+    Indicates whether a connection error occured between the browser and the
+    shell handler process. This is usually caused by a crash in the utility
+    process. This is logged every time the pinned state is queried.
+  </summary>
+</histogram>
+
 <histogram name="Windows.Kernel32Version" enum="WindowsVersion">
   <owner>scottmg@chromium.org</owner>
   <summary>
@@ -65317,6 +65465,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="262154" label="4.10"/>
 </enum>
 
+<enum name="AndroidManageSpaceButton" type="int">
+  <int value="0" label="Clear Unimportant Storage"/>
+  <int value="1" label="Manage Site Storage"/>
+  <int value="2" label="Clear App Data"/>
+</enum>
+
 <enum name="AndroidMemoryNotificationBackground" type="int">
   <int value="0" label="TrimMemoryUiHidden"/>
   <int value="1" label="TrimMemoryBackground"/>
@@ -65382,6 +65536,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="8" label="RESULT_PRODUCT_STATE_INVALID"/>
   <int value="9" label="RESULT_FAILED_TO_GET_PRODUCT_NAME"/>
   <int value="10" label="RESULT_FAILED_TO_GET_REMEDIATION_PATH"/>
+  <int value="11" label="RESULT_FAILED_TO_CONNECT_TO_WMI"/>
+  <int value="12" label="RESULT_FAILED_TO_SET_SECURITY_BLANKET"/>
+  <int value="13" label="RESULT_FAILED_TO_EXEC_WMI_QUERY"/>
+  <int value="14" label="RESULT_FAILED_TO_ITERATE_RESULTS"/>
+  <int value="15" label="RESULT_WSC_NOT_AVAILABLE"/>
 </enum>
 
 <enum name="AppBannersDismissEvent" type="int">
@@ -66426,7 +66585,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="61" label="SWDH_PROVIDER_CREATED_NO_HOST"/>
   <int value="62" label="SWDH_PROVIDER_DESTROYED_NO_HOST"/>
   <int value="63" label="SWDH_SET_HOSTED_VERSION_NO_HOST"/>
-  <int value="64" label="SWDH_SET_HOSTED_VERSION"/>
+  <int value="64" label="OBSOLETE_SWDH_SET_HOSTED_VERSION"/>
   <int value="65" label="SWDH_WORKER_SCRIPT_LOAD_NO_HOST"/>
   <int value="66" label="SWDH_INCREMENT_WORKER_BAD_HANDLE"/>
   <int value="67" label="SWDH_DECREMENT_WORKER_BAD_HANDLE"/>
@@ -66490,6 +66649,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="125" label="DBMF_INVALID_ORIGIN_ON_MODIFIED"/>
   <int value="126" label="DBMF_INVALID_ORIGIN_ON_CLOSED"/>
   <int value="127" label="WSH_INVALID_HEADER_VALUE"/>
+  <int value="128" label="SWDH_SET_HOSTED_VERSION_INVALID_HOST"/>
+  <int value="129" label="SWDH_SET_HOSTED_VERSION_PROCESS_MISMATCH"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions" type="int">
@@ -72184,6 +72345,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="334" label="Whether DHE cipher suites in TLS are enabled"/>
   <int value="335"
       label="Disable Certificate Transparency enforcement for these sites"/>
+  <int value="336"
+      label="Configure the list of installed apps on the login screen"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -74146,6 +74309,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1140" label="QUICKUNLOCKPRIVATE_SETMODES"/>
   <int value="1141" label="QUICKUNLOCKPRIVATE_GETACTIVEMODES"/>
   <int value="1142" label="QUICKUNLOCKPRIVATE_GETAVAILABLEMODES"/>
+  <int value="1143" label="WEBSTOREPRIVATE_ISEXTENSIONPENDINGAPPROVAL"/>
 </enum>
 
 <enum name="ExtensionIconState" type="int">
@@ -76210,6 +76374,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1425" label="TextAreaMinLength"/>
   <int value="1426" label="TopNavigationFromSubFrame"/>
   <int value="1427" label="PrefixedElementRequestFullscreenInShadow"/>
+  <int value="1428" label="MediaSourceAbortRemove"/>
+  <int value="1429" label="MediaSourceDurationTruncatingBuffered"/>
+  <int value="1430" label="AudioContextCrossOriginIframe"/>
+  <int value="1431" label="PointerEventSetCapture"/>
+  <int value="1432" label="PointerEventDispatch"/>
+  <int value="1433" label="MIDIMessageEventReceivedTime"/>
+  <int value="1434" label="SummaryElementWithDisplayBlockAuthorRule"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -78794,6 +78965,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </int>
 </enum>
 
+<enum name="IdleTaskStatus" type="int">
+  <int value="0" label="IdleTaskNotStarted"/>
+  <int value="1" label="IdleTaskStarted"/>
+  <int value="2" label="IdleTaskCompleted"/>
+  <int value="3" label="IdleTaskFailed"/>
+  <int value="4" label="IdleTaskSwitchedToMainThreadTask"/>
+  <int value="5" label="IdleTaskNotSupported"/>
+</enum>
+
 <enum name="IMECommitType" type="int">
   <obsolete>
     Deprecated 03/2015, and replaced by IMECommitType2.
@@ -79712,6 +79892,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="3" label="IPV6_GLOBAL_ADDRESS_MISSING"/>
   <int value="4" label="IPV6_GLOBAL_ADDRESS_PRESENT"/>
   <int value="5" label="IPV6_INTERFACE_ARRAY_TOO_SHORT"/>
+</enum>
+
+<enum name="IsPinnedToTaskbarResult" type="int">
+  <int value="0" label="Not pinned"/>
+  <int value="1" label="Pinned"/>
+  <int value="2" label="Failed to determine"/>
 </enum>
 
 <enum name="JavaScriptAPIName" type="int">
@@ -80817,6 +81003,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1663410466" label="top-document-isolation"/>
   <int value="-1662447331" label="wake-on-packets"/>
   <int value="-1660972490" label="gpu-rasterization-msaa-sample-count"/>
+  <int value="-1655535052" label="enable-pointer-events"/>
   <int value="-1654344175" label="disable-extension-info-dialog"/>
   <int value="-1649778035" label="disable-clear-browsing-data-counters"/>
   <int value="-1630419335" label="enable-download-notification"/>
@@ -80918,6 +81105,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-979057409" label="enable-seccomp-filter-sandbox"/>
   <int value="-979034258" label="disable-ntp-other-sessions-menu"/>
   <int value="-978700508" label="disable-simplified-fullscreen-ui"/>
+  <int value="-977476498" label="disable-eol-notification"/>
   <int value="-972425050" label="gesture-editing"/>
   <int value="-964676765" label="enable-accelerated-mjpeg-decode"/>
   <int value="-951394314" label="top-chrome-md"/>
@@ -81172,6 +81360,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="929462705" label="disable-link-disambiguation-popup"/>
   <int value="936919953" label="bypass-app-banner-engagement-checks"/>
   <int value="939554480" label="enable-credit-card-scan"/>
+  <int value="943319566" label="enable-intent-picker"/>
   <int value="952558794" label="enable-remote-assistance"/>
   <int value="980396200" label="enable-new-korean-ime"/>
   <int value="983311394" label="tab-management-experiment-type"/>
@@ -90316,6 +90505,30 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="19" label="RECOVERY_FAILED_META_NO_VERSION">
     GetMetaVersionNumber() found no version row in meta table.
   </int>
+  <int value="20" label="RECOVERY_SUCCESS_AUTORECOVERDB">
+    sql::Recovery::RecoverDatabaseOrRaze() completed successfully.
+  </int>
+  <int value="21" label="RECOVERY_FAILED_AUTORECOVERDB_BEGIN">
+    Autorecover could not setup the database for recovery attempt.
+  </int>
+  <int value="22" label="RECOVERY_FAILED_AUTORECOVERDB_SCHEMASELECT">
+    Autorecover could not read corrupt db schema.
+  </int>
+  <int value="23" label="RECOVERY_FAILED_AUTORECOVERDB_SCHEMACREATE">
+    Autorecover could not create new db schema.
+  </int>
+  <int value="24" label="RECOVERY_FAILED_AUTORECOVERDB_NAMESELECT">
+    Autorecover could not read table names from corrupt db.
+  </int>
+  <int value="25" label="RECOVERY_FAILED_AUTORECOVERDB_TABLE">
+    Autorecover failed when recovering a table.
+  </int>
+  <int value="26" label="RECOVERY_FAILED_AUTORECOVERDB_SEQUENCE">
+    Autorecover failed when recovering sequence table.
+  </int>
+  <int value="27" label="RECOVERY_FAILED_AUTORECOVERDB_AUX">
+    Autorecover failed when recovering triggers, views, or virtual tables.
+  </int>
 </enum>
 
 <enum name="SqliteStatsEnum" type="int">
@@ -93989,6 +94202,20 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Blink.Canvas.DrawImage.Video"/>
   <affected-histogram name="Blink.Canvas.GetImageData"/>
   <affected-histogram name="Blink.Canvas.PutImageData"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="BlinkCanvasToBlobIdleEncodAndDelayType" separator=".">
+  <suffix name="JPEG"/>
+  <suffix name="PNG"/>
+  <affected-histogram name="Blink.Canvas.ToBlob.IdleEncodeDuration"/>
+  <affected-histogram name="Blink.Canvas.ToBlob.InitiateEncodingDelay"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="BlinkCanvasToBlobType" separator=".">
+  <suffix name="JPEG"/>
+  <suffix name="PNG"/>
+  <suffix name="WEBP"/>
+  <affected-histogram name="Blink.Canvas.ToBlobDuration"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="BlinkCanvasToDataURLTime" separator=".">
@@ -98886,7 +99113,8 @@ To add a new entry, add it with any value and run test to compute valid value.
 <histogram_suffixes name="RasterBufferProvider" separator=".">
   <suffix name="Gpu" label="The GpuRasterBufferProvider was in use."/>
   <suffix name="OneCopy" label="The OneCopyRasterBufferProvider was in use."/>
-  <affected-histogram name="Renderer4.PartialRasterPercentageSaved"/>
+  <affected-histogram name="Renderer4.Browser.PartialRasterPercentageSaved"/>
+  <affected-histogram name="Renderer4.Renderer.PartialRasterPercentageSaved"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="RemoteProcessWarmStartFast" separator="">
@@ -99854,6 +100082,9 @@ To add a new entry, add it with any value and run test to compute valid value.
 </histogram_suffixes>
 
 <histogram_suffixes name="SyzygyStartupTime">
+  <obsolete>
+    No longer logged.
+  </obsolete>
   <suffix name="PreReadEnabled"/>
   <suffix name="PreReadDisabled"/>
   <suffix name="XP_PreReadEnabled"/>

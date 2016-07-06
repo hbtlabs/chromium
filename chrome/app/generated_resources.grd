@@ -5675,9 +5675,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Forces touchstart, touchmove, mousewheel and wheel event listeners (which haven't requested otherwise) to be treated as passive. This will break touch/wheel behavior on some websites but is useful for demonstrating the potential performance benefits of adopting passive event listeners.
       </message>
       <if expr="is_android">
-          <message name="IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_NAME" desc="Title for the flag for using Android MediaStyle notification">
-              Android MediaStyle notification
-          </message>
           <message name="IDS_FLAGS_MEDIA_STYLE_NOTIFICATION_DESCRIPTION" desc="Description for the flag for using Android MediaStyle notification">
               Use Android MediaStyle notifications for Chrome media notifications.
           </message>
@@ -5868,7 +5865,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Pointer Events
       </message>
       <message name="IDS_FLAGS_EXPERIMENTAL_POINTER_EVENT_DESCRIPTION" desc="Description for the flag to enable the experimental pointer events.">
-        Enables partial experimental support for the Pointer Events API.  This is intended only for testing by web developers, it will cause some websites to be subtly broken.
+        Enables experimental support for the Pointer Events API.  This is intended only for testing by web developers, may cause some websites to be subtly broken.
       </message>
       <message name="IDS_FLAGS_ORIGIN_TRIALS_NAME" desc="Name for the flag to enable origin trials.">
         Origin Trials
@@ -7672,7 +7669,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
             Send <ph name="BEGIN_LINK1">&lt;a href="#" id="sys-info-url"&gt;</ph>system information<ph name="END_LINK1">&lt;/a&gt;</ph> and <ph name="BEGIN_LINK2">&lt;a href="#" id="histograms-url"&gt;</ph>metrics<ph name="END_LINK2">&lt;/a&gt;</ph>
           </message>
           <message name="IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC" desc="Checkbox for including system, metrics and app information on the bug report dialog box on an ARC enabled device">
-            Send <ph name="BEGIN_LINK1">&lt;a href="#" id="sys-info-url"&gt;</ph>system<ph name="END_LINK1">&lt;/a&gt;</ph>, <ph name="BEGIN_LINK2">&lt;a href="#" id="histograms-url"&gt;</ph>metrics<ph name="END_LINK2">&lt;/a&gt;</ph> and app information
+            Send <ph name="BEGIN_LINK1">&lt;a href="#" id="sys-info-url"&gt;</ph>system and app information<ph name="END_LINK1">&lt;/a&gt;</ph>, and <ph name="BEGIN_LINK2">&lt;a href="#" id="histograms-url"&gt;</ph>metrics<ph name="END_LINK2">&lt;/a&gt;</ph>
           </message>
         </if>
         <message name="IDS_FEEDBACK_ATTACH_FILE_NOTE" desc="Text for describing the maximum size for an attached file">
@@ -14909,6 +14906,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no devices were found in the chooser popup.">
         No devices found.
       </message>
+      <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
+        <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
+      </message>
       <message name="IDS_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT" desc="The text that is shown on the connect button in the chooser popup.">
         Connect
       </message>
@@ -15172,6 +15172,12 @@ read aloud to screenreader users to announce that a completion is available.">
     <message name="IDS_NEW_AUDIO_RENDERING_MIXING_STRATEGY_DESCRIPTION" desc="Description of the flag for enabling the new audio rendering mixing strategy.">
       Use the new audio rendering mixing strategy.
     </message>
+
+    <if expr="is_win">
+      <message name="IDS_UTILITY_PROCESS_SHELL_HANDLER_NAME" desc="The name of the utility process used to handle shell operations.">
+        Shell Handler
+      </message>
+    </if>
    </messages>
  </release>
 </grit>
