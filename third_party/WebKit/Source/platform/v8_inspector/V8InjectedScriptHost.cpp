@@ -19,7 +19,7 @@ void setFunctionProperty(v8::Local<v8::Context> context, v8::Local<v8::Object> o
 {
     v8::Local<v8::String> funcName = toV8StringInternalized(context->GetIsolate(), name);
     v8::Local<v8::Function> func;
-    if (!v8::Function::New(context, callback, external).ToLocal(&func))
+    if (!v8::Function::New(context, callback, external, 0, v8::ConstructorBehavior::kThrow).ToLocal(&func))
         return;
     func->SetName(funcName);
     if (!obj->Set(context, funcName, func).FromMaybe(false))
@@ -57,6 +57,11 @@ v8::Local<v8::Object> V8InjectedScriptHost::create(v8::Local<v8::Context> contex
 v8::Local<v8::Private> V8InjectedScriptHost::internalEntryPrivate(v8::Isolate* isolate)
 {
     return v8::Private::ForApi(isolate, toV8StringInternalized(isolate, "V8InjectedScriptHost#internalEntry"));
+}
+
+v8::Local<v8::Private> V8InjectedScriptHost::internalLocationPrivate(v8::Isolate* isolate)
+{
+    return v8::Private::ForApi(isolate, toV8StringInternalized(isolate, "V8InjectedScriptHost#internalLocation"));
 }
 
 void V8InjectedScriptHost::internalConstructorNameCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -135,6 +140,10 @@ void V8InjectedScriptHost::subtypeCallback(const v8::FunctionCallbackInfo<v8::Va
         v8::Local<v8::Object> obj = value.As<v8::Object>();
         if (obj->HasPrivate(isolate->GetCurrentContext(), internalEntryPrivate(isolate)).FromMaybe(false)) {
             info.GetReturnValue().Set(toV8StringInternalized(isolate, "internal#entry"));
+            return;
+        }
+        if (obj->HasPrivate(isolate->GetCurrentContext(), internalLocationPrivate(isolate)).FromMaybe(false)) {
+            info.GetReturnValue().Set(toV8StringInternalized(isolate, "internal#location"));
             return;
         }
     }

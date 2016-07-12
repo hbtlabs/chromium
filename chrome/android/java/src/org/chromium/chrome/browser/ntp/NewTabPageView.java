@@ -113,6 +113,8 @@ public class NewTabPageView extends FrameLayout
     private float mUrlFocusChangePercent;
     private boolean mDisableUrlFocusChangeAnimations;
 
+    /** Flag used to request some layout changes after the next layout pass is completed. */
+    private boolean mTileCountChanged;
     private boolean mSnapshotMostVisitedChanged;
     private int mSnapshotWidth;
     private int mSnapshotHeight;
@@ -127,9 +129,6 @@ public class NewTabPageView extends FrameLayout
 
         /** @return Whether voice search is enabled and the microphone should be shown. */
         boolean isVoiceSearchEnabled();
-
-        /** @return Whether the NTP Interests tab is enabled and its button should be shown. */
-        boolean isInterestsEnabled();
 
         /** @return Whether the toolbar at the bottom of the NTP is enabled and should be shown. */
         boolean isToolbarEnabled();
@@ -151,9 +150,6 @@ public class NewTabPageView extends FrameLayout
 
         /** Opens a url in the current tab. */
         void openUrl(String url);
-
-        /** Opens the interests dialog. */
-        void navigateToInterests();
 
         /**
          * Animates the search box up into the omnibox and bring up the keyboard.
@@ -351,24 +347,13 @@ public class NewTabPageView extends FrameLayout
                     mManager.navigateToBookmarks();
                 }
             });
-            toolbar.getInterestsButton().setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    mManager.navigateToInterests();
-                }
-            });
-
-            // Set up interests
-            if (manager.isInterestsEnabled()) {
-                toolbar.getInterestsButton().setVisibility(View.VISIBLE);
-            }
         } else {
             ((ViewGroup) toolbar.getParent()).removeView(toolbar);
             MarginLayoutParams params = (MarginLayoutParams) getWrapperView().getLayoutParams();
             params.bottomMargin = 0;
         }
 
-        addOnLayoutChangeListener(this);
+        mNewTabPageLayout.addOnLayoutChangeListener(this);
         setSearchProviderHasLogo(searchProviderHasLogo);
 
         mPendingLoadTasks++;
@@ -807,9 +792,11 @@ public class NewTabPageView extends FrameLayout
     @Override
     public void onLayoutChange(View v, int left, int top, int right, int bottom,
             int oldLeft, int oldTop, int oldRight, int oldBottom) {
-        int oldWidth = oldRight - oldLeft;
-        int newWidth = right - left;
-        if (oldWidth == newWidth) return;
+        int oldHeight = oldBottom - oldTop;
+        int newHeight = bottom - top;
+
+        if (oldHeight == newHeight && !mTileCountChanged) return;
+        mTileCountChanged = false;
 
         // Re-apply the url focus change amount after a rotation to ensure the views are correctly
         // placed with their new layout configurations.
@@ -891,6 +878,12 @@ public class NewTabPageView extends FrameLayout
 
         mHasReceivedMostVisitedSites = true;
         updateMostVisitedPlaceholderVisibility();
+
+        if (mUrlFocusChangePercent == 1f && oldItemCount != mMostVisitedItems.length) {
+            // If the number of NTP Tile rows change while the URL bar is focused, the icons'
+            // position will be wrong. Schedule the translation to be updated.
+            mTileCountChanged = true;
+        }
 
         if (isInitialLoad) {
             loadTaskCompleted();

@@ -39,7 +39,7 @@ class ArcAndroidManagementChecker;
 class ArcAuthContext;
 
 // This class proxies the request from the client to fetch an auth code from
-// LSO.
+// LSO. It lives on the UI thread.
 class ArcAuthService : public ArcService,
                        public mojom::AuthHost,
                        public ArcBridgeService::Observer,
@@ -57,7 +57,8 @@ class ArcAuthService : public ArcService,
 
   enum class UIPage {
     NO_PAGE,              // Hide everything.
-    START,                // Initial start page.
+    TERMS_PROGRESS,       // Terms loading progress page.
+    TERMS,                // Terms content page.
     LSO_PROGRESS,         // LSO loading progress page.
     LSO,                  // LSO page to enter user's credentials.
     START_PROGRESS,       // Arc starting progress page.

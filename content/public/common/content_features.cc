@@ -65,8 +65,7 @@ const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
 // Non-validating reload for desktop.
 // See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnNormalReload{
-    "NonValidatingReloadOnNormalReload",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
 // See https://crbug.com/591245
@@ -92,9 +91,18 @@ const base::Feature kPaintOptimizations{"PaintOptimizations",
 const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Whether document level event listeners should default 'passive' to true.
+const base::Feature kPassiveDocumentEventListeners{
+    "PassiveDocumentEventListeners", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Pointer events support.
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If Pepper 3D Image Chromium is allowed, this feature controls whether it is
+// enabled.
+const base::Feature kPepper3DImageChromium{"Pepper3DImageChromium",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{

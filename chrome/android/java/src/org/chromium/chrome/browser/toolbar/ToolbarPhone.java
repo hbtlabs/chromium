@@ -76,6 +76,9 @@ public class ToolbarPhone extends ToolbarLayout
         implements Invalidator.Client, OnClickListener, OnLongClickListener,
                 NewTabPage.OnSearchBoxScrollListener {
 
+    /** The amount of time transitioning from one theme color to another should take in ms. */
+    public static final long THEME_COLOR_TRANSITION_DURATION = 250;
+
     public static final int URL_FOCUS_CHANGE_ANIMATION_DURATION_MS = 250;
     private static final int URL_FOCUS_TOOLBAR_BUTTONS_TRANSLATION_X_DP = 10;
     private static final int URL_FOCUS_TOOLBAR_BUTTONS_DURATION_MS = 100;
@@ -88,8 +91,6 @@ public class ToolbarPhone extends ToolbarLayout
     private static final int TAB_SWITCHER_MODE_POST_EXIT_ANIMATION_DURATION_MS = 100;
 
     private static final float UNINITIALIZED_PERCENT = -1f;
-
-    private static final int BRAND_COLOR_TRANSITION_DURATION_MS = 250;
 
     private static final String TAG = "ToolbarPhone";
 
@@ -903,12 +904,7 @@ public class ToolbarPhone extends ToolbarLayout
                 (mNtpSearchBoxTransformedBounds.top - mPhoneLocationBar.getTop()
                         + halfHeightDifference)));
         if (!mUrlFocusChangeInProgress) {
-            float searchBoxTranslationY =
-                    mNtpSearchBoxTransformedBounds.top - mNtpSearchBoxOriginalBounds.top;
-            searchBoxTranslationY = Math.min(searchBoxTranslationY, 0);
-            mToolbarButtonsContainer.setTranslationY(searchBoxTranslationY);
-            mReturnButton.setTranslationY(searchBoxTranslationY);
-            mHomeButton.setTranslationY(searchBoxTranslationY);
+            setButtonsTranslationY();
         }
 
         mLocationBarBackgroundOffset.set(
@@ -936,6 +932,15 @@ public class ToolbarPhone extends ToolbarLayout
                 mUrlExpansionPercent >= 0.4f ? 255 : (int) ((mUrlExpansionPercent * 2.5f) * 255);
         if (mUrlExpansionPercent == 1f) mUrlBackgroundAlpha = 255;
         mForceDrawLocationBarBackground = mUrlExpansionPercent != 0f;
+    }
+
+    private void setButtonsTranslationY() {
+        float searchBoxTranslationY =
+                mNtpSearchBoxTransformedBounds.top - mNtpSearchBoxOriginalBounds.top;
+        searchBoxTranslationY = Math.min(searchBoxTranslationY, 0);
+        mToolbarButtonsContainer.setTranslationY(searchBoxTranslationY);
+        mReturnButton.setTranslationY(searchBoxTranslationY);
+        mHomeButton.setTranslationY(searchBoxTranslationY);
     }
 
     private void setAncestorsShouldClipChildren(boolean clip) {
@@ -1714,6 +1719,16 @@ public class ToolbarPhone extends ToolbarLayout
     public void onUrlFocusChange(final boolean hasFocus) {
         super.onUrlFocusChange(hasFocus);
 
+        // https://crbug.com/623885: The mToolbarButtonsContainer has its translationY modified
+        // during scroll so when the user scrolls on the NTP, it appears to scroll too. However
+        // during the URL focus and defocus animations it should not be touched. Unfortunately
+        // updateNtpTransitionAnimation() is called a few times after the URL focus animation has
+        // been completed while mUrlFocusChangeInProgress is set to false, causing translationY to
+        // incorrect at the end.
+        // We reset the translationY here so the mToolbarButtonsContainer is on screen for the
+        // defocusing animation.
+        setButtonsTranslationY();
+
         triggerUrlFocusAnimation(hasFocus);
 
         TransitionDrawable shadowDrawable = (TransitionDrawable) mToolbarShadow.getDrawable();
@@ -1859,7 +1874,7 @@ public class ToolbarPhone extends ToolbarLayout
                 shouldUseOpaque ? 255 : LOCATION_BAR_TRANSPARENT_BACKGROUND_ALPHA;
         final boolean shouldAnimateAlpha = initialAlpha != finalAlpha;
         mBrandColorTransitionAnimation = ValueAnimator.ofFloat(0, 1)
-                .setDuration(BRAND_COLOR_TRANSITION_DURATION_MS);
+                .setDuration(THEME_COLOR_TRANSITION_DURATION);
         mBrandColorTransitionAnimation.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         mBrandColorTransitionAnimation.addUpdateListener(new AnimatorUpdateListener() {
             @Override

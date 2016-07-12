@@ -431,11 +431,16 @@ void WindowTree::OnChangeCompleted(uint32_t change_id, bool success) {
 }
 
 void WindowTree::OnAccelerator(uint32_t accelerator_id,
-                               const ui::Event& event) {
+                               const ui::Event& event,
+                               bool needs_ack) {
   DCHECK(window_manager_internal_);
+  if (needs_ack)
+    GenerateEventAckId();
+  else
+    DCHECK_EQ(0u, event_ack_id_);
   // TODO(moshayedi): crbug.com/617167. Don't clone even once we map
   // mojom::Event directly to ui::Event.
-  window_manager_internal_->OnAccelerator(accelerator_id,
+  window_manager_internal_->OnAccelerator(event_ack_id_, accelerator_id,
                                           ui::Event::Clone(event));
 }
 
@@ -756,7 +761,7 @@ bool WindowTree::CanReorderWindow(const ServerWindow* window,
   if (!access_policy_->CanReorderWindow(window, relative_window, direction))
     return false;
 
-  std::vector<const ServerWindow*> children = window->parent()->GetChildren();
+  const ServerWindow::Windows& children = window->parent()->children();
   const size_t child_i =
       std::find(children.begin(), children.end(), window) - children.begin();
   const size_t target_i =
@@ -797,9 +802,9 @@ void WindowTree::GetUnknownWindowsFrom(
   window_id_to_client_id_map_[window->id()] = client_window_id;
   if (!access_policy_->CanDescendIntoWindowForWindowTree(window))
     return;
-  std::vector<const ServerWindow*> children(window->GetChildren());
-  for (size_t i = 0; i < children.size(); ++i)
-    GetUnknownWindowsFrom(children[i], windows);
+  const ServerWindow::Windows& children = window->children();
+  for (ServerWindow* child : children)
+    GetUnknownWindowsFrom(child, windows);
 }
 
 bool WindowTree::RemoveFromMaps(const ServerWindow* window) {
@@ -822,9 +827,9 @@ void WindowTree::RemoveFromKnown(const ServerWindow* window,
 
   RemoveFromMaps(window);
 
-  std::vector<const ServerWindow*> children = window->GetChildren();
-  for (size_t i = 0; i < children.size(); ++i)
-    RemoveFromKnown(children[i], local_windows);
+  const ServerWindow::Windows& children = window->children();
+  for (ServerWindow* child : children)
+    RemoveFromKnown(child, local_windows);
 }
 
 void WindowTree::RemoveRoot(const ServerWindow* window,
@@ -893,9 +898,9 @@ void WindowTree::GetWindowTreeImpl(
   if (!access_policy_->CanDescendIntoWindowForWindowTree(window))
     return;
 
-  std::vector<const ServerWindow*> children(window->GetChildren());
-  for (size_t i = 0; i < children.size(); ++i)
-    GetWindowTreeImpl(children[i], windows);
+  const ServerWindow::Windows& children = window->children();
+  for (ServerWindow* child : children)
+    GetWindowTreeImpl(child, windows);
 }
 
 void WindowTree::NotifyDrawnStateChanged(const ServerWindow* window,
@@ -955,19 +960,22 @@ void WindowTree::PrepareForEmbed(ServerWindow* window) {
 
 void WindowTree::RemoveChildrenAsPartOfEmbed(ServerWindow* window) {
   CHECK(window);
-  std::vector<ServerWindow*> children = window->GetChildren();
-  for (size_t i = 0; i < children.size(); ++i)
-    window->Remove(children[i]);
+  while (!window->children().empty())
+    window->Remove(window->children().front());
 }
 
-void WindowTree::DispatchInputEventImpl(ServerWindow* target,
-                                        const ui::Event& event) {
+uint32_t WindowTree::GenerateEventAckId() {
   DCHECK(!event_ack_id_);
   // We do not want to create a sequential id for each event, because that can
   // leak some information to the client. So instead, manufacture the id
   // randomly.
-  // TODO(moshayedi): Find a faster way to generate ids.
   event_ack_id_ = 0x1000000 | (rand() & 0xffffff);
+  return event_ack_id_;
+}
+
+void WindowTree::DispatchInputEventImpl(ServerWindow* target,
+                                        const ui::Event& event) {
+  GenerateEventAckId();
   WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(target);
   DCHECK(display_root);
   event_source_wms_ = display_root->window_manager_state();
@@ -1296,7 +1304,9 @@ void WindowTree::OnWindowInputEventAck(uint32_t event_id,
                                        mojom::EventResult result) {
   if (event_ack_id_ == 0 || event_id != event_ack_id_) {
     // TODO(sad): Something bad happened. Kill the client?
-    NOTIMPLEMENTED() << "Wrong event acked.";
+    NOTIMPLEMENTED() << ": Wrong event acked. event_id=" << event_id
+                     << ", event_ack_id_=" << event_ack_id_;
+    DVLOG(1) << "OnWindowInputEventAck supplied unexpected event_id";
   }
   event_ack_id_ = 0;
 
@@ -1408,6 +1418,70 @@ void WindowTree::GetCursorLocationMemory(
       GetCursorLocationMemory());
 }
 
+void WindowTree::PerformWindowMove(uint32_t change_id,
+                                   Id window_id,
+                                   ui::mojom::MoveLoopSource source,
+                                   const gfx::Point& cursor) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+  bool success = window && access_policy_->CanInitiateMoveLoop(window);
+  if (!success || !ShouldRouteToWindowManager(window)) {
+    // We need to fail this move loop change, otherwise the client will just be
+    // waiting for |change_id|.
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root) {
+    // The window isn't parented. There's nothing to do.
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  if (window_server_->in_move_loop()) {
+    // A window manager is already servicing a move loop; we can't start a
+    // second one.
+    OnChangeCompleted(change_id, false);
+    return;
+  }
+
+  // When we perform a window move loop, we give the window manager non client
+  // capture. Because of how the capture public interface currently works,
+  // SetCapture() will check whether the mouse cursor is currently in the
+  // non-client area and if so, will redirect messages to the window
+  // manager. (And normal window movement relies on this behaviour.)
+  WindowManagerState* wms = display_root->window_manager_state();
+  wms->SetCapture(window, wms->window_tree()->id());
+
+  const uint32_t wm_change_id =
+      window_server_->GenerateWindowManagerChangeId(this, change_id);
+  window_server_->StartMoveLoop(wm_change_id, window, this, window->bounds());
+  wms->window_tree()->window_manager_internal_->WmPerformMoveLoop(
+      wm_change_id, wms->window_tree()->ClientWindowIdForWindow(window).id,
+      source, cursor);
+}
+
+void WindowTree::CancelWindowMove(Id window_id) {
+  ServerWindow* window = GetWindowByClientId(ClientWindowId(window_id));
+  bool success = window && access_policy_->CanInitiateMoveLoop(window);
+  if (!success)
+    return;
+
+  if (window != window_server_->GetCurrentMoveLoopWindow())
+    return;
+
+  if (window_server_->GetCurrentMoveLoopInitiator() != this)
+    return;
+
+  WindowManagerDisplayRoot* display_root = GetWindowManagerDisplayRoot(window);
+  if (!display_root)
+    return;
+
+  WindowManagerState* wms = display_root->window_manager_state();
+  wms->window_tree()->window_manager_internal_->WmCancelMoveLoop(
+      window_server_->GetCurrentMoveLoopChangeId());
+}
+
 void WindowTree::AddAccelerator(uint32_t id,
                                 mojom::EventMatcherPtr event_matcher,
                                 const AddAcceleratorCallback& callback) {
@@ -1478,6 +1552,32 @@ void WindowTree::SetUnderlaySurfaceOffsetAndExtendedHitArea(
 }
 
 void WindowTree::WmResponse(uint32_t change_id, bool response) {
+  if (window_server_->in_move_loop() &&
+      window_server_->GetCurrentMoveLoopChangeId() == change_id) {
+    ServerWindow* window = window_server_->GetCurrentMoveLoopWindow();
+
+    if (window->id().client_id != id_) {
+      window_server_->WindowManagerSentBogusMessage();
+      window = nullptr;
+    } else {
+      WindowManagerDisplayRoot* display_root =
+          GetWindowManagerDisplayRoot(window);
+      if (display_root) {
+        WindowManagerState* wms = display_root->window_manager_state();
+        // Clear the implicit capture.
+        wms->SetCapture(nullptr, false);
+      }
+    }
+
+    if (!response && window) {
+      // Our move loop didn't succeed, which means that we must restore the
+      // original bounds of the window.
+      window->SetBounds(window_server_->GetCurrentMoveLoopRevertBounds());
+    }
+
+    window_server_->EndMoveLoop();
+  }
+
   window_server_->WindowManagerChangeCompleted(change_id, response);
 }
 
@@ -1518,6 +1618,18 @@ void WindowTree::OnWmCreatedTopLevelWindow(uint32_t change_id,
     window = nullptr;
   }
   window_server_->WindowManagerCreatedTopLevelWindow(this, change_id, window);
+}
+
+void WindowTree::OnAcceleratorAck(uint32_t event_id,
+                                  mojom::EventResult result) {
+  if (event_ack_id_ == 0 || event_id != event_ack_id_) {
+    DVLOG(1) << "OnAcceleratorAck supplied invalid event_id";
+    window_server_->WindowManagerSentBogusMessage();
+    return;
+  }
+  event_ack_id_ = 0;
+  DCHECK(window_manager_state_);
+  window_manager_state_->OnAcceleratorAck(result);
 }
 
 bool WindowTree::HasRootForAccessPolicy(const ServerWindow* window) const {

@@ -12,6 +12,7 @@
 #include "ash/mus/bridge/wm_lookup_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
+#include "ash/mus/frame/move_event_handler.h"
 #include "ash/mus/non_client_frame_controller.h"
 #include "ash/mus/property_util.h"
 #include "ash/mus/root_window_controller.h"
@@ -26,6 +27,7 @@
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/interfaces/mus_constants.mojom.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "ui/base/hit_test.h"
 #include "ui/events/mojo/event.mojom.h"
 #include "ui/views/mus/screen_mus.h"
 
@@ -68,7 +70,8 @@ void WindowManager::Init(::ui::WindowTreeClient* window_tree_client) {
   window_manager_client_->SetFrameDecorationValues(
       std::move(frame_decoration_values));
 
-  shell_.reset(new WmShellMus(window_tree_client_));
+  // TODO(msw): Provide a valid ShellDelegate here; maybe port ShellDelegateMus?
+  shell_.reset(new WmShellMus(nullptr, window_tree_client_));
   lookup_.reset(new WmLookupMus);
 }
 
@@ -229,7 +232,35 @@ void WindowManager::OnWmNewDisplay(::ui::Window* window,
   CreateRootWindowController(window, display);
 }
 
-void WindowManager::OnAccelerator(uint32_t id, const ui::Event& event) {
+void WindowManager::OnWmPerformMoveLoop(
+    ::ui::Window* window,
+    ::ui::mojom::MoveLoopSource source,
+    const gfx::Point& cursor_location,
+    const base::Callback<void(bool)>& on_done) {
+  WmWindowMus* child_window = WmWindowMus::Get(window);
+  MoveEventHandler* handler = MoveEventHandler::GetForWindow(child_window);
+  if (!handler) {
+    on_done.Run(false);
+    return;
+  }
+
+  DCHECK(!handler->IsDragInProgress());
+  aura::client::WindowMoveSource aura_source =
+      source == ::ui::mojom::MoveLoopSource::MOUSE
+          ? aura::client::WINDOW_MOVE_SOURCE_MOUSE
+          : aura::client::WINDOW_MOVE_SOURCE_TOUCH;
+  handler->AttemptToStartDrag(cursor_location, HTCAPTION, aura_source, on_done);
+}
+
+void WindowManager::OnWmCancelMoveLoop(::ui::Window* window) {
+  WmWindowMus* child_window = WmWindowMus::Get(window);
+  MoveEventHandler* handler = MoveEventHandler::GetForWindow(child_window);
+  if (handler)
+    handler->RevertDrag();
+}
+
+ui::mojom::EventResult WindowManager::OnAccelerator(uint32_t id,
+                                                    const ui::Event& event) {
   switch (id) {
     case kWindowSwitchAccelerator:
       window_manager_client()->ActivateNextWindow();
@@ -239,6 +270,8 @@ void WindowManager::OnAccelerator(uint32_t id, const ui::Event& event) {
                         OnAccelerator(id, event));
       break;
   }
+
+  return ui::mojom::EventResult::HANDLED;
 }
 
 }  // namespace mus

@@ -352,7 +352,9 @@ extern const char kDefaultBrowserSettingEnabled[];
 #if defined(OS_MACOSX)
 extern const char kShowUpdatePromotionInfoBar[];
 #endif
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const char kUseCustomChromeFrame[];
+#endif
 extern const char kBackShortcutBubbleShownCount[];
 #if defined(ENABLE_PLUGINS)
 extern const char kContentSettingsPluginWhitelist[];
@@ -425,8 +427,6 @@ extern const char kEasyUnlockPairing[];
 extern const char kEasyUnlockProximityRequired[];
 
 #if defined(ENABLE_EXTENSIONS)
-extern const char kCopresenceAuthenticatedDeviceId[];
-extern const char kCopresenceAnonymousDeviceId[];
 extern const char kToolbarIconSurfacingBubbleAcknowledged[];
 extern const char kToolbarIconSurfacingBubbleLastShowTime[];
 extern const char kToolbarMigratedComponentActionStatus[];

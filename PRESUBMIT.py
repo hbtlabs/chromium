@@ -278,18 +278,6 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
-      '\<MessageLoopProxy\>',
-      (
-        'MessageLoopProxy is deprecated. ',
-        'Please use SingleThreadTaskRunner or ThreadTaskRunnerHandle instead.'
-      ),
-      True,
-      (
-        # Internal message_loop related code may still use it.
-        r'^base[\\\/]message_loop[\\\/].*',
-      ),
-    ),
-    (
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
@@ -1497,7 +1485,11 @@ def _CheckIpcOwners(input_api, output_api):
 
   results = []
   if errors:
-    results.append(output_api.PresubmitError(
+    if input_api.is_committing:
+      output = output_api.PresubmitError
+    else:
+      output = output_api.PresubmitPromptWarning
+    results.append(output(
         'Found changes to IPC files without a security OWNER!',
         long_text='\n\n'.join(errors)))
 

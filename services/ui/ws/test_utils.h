@@ -102,6 +102,9 @@ class WindowTreeTestApi {
   void AckLastEvent(mojom::EventResult result) {
     tree_->OnWindowInputEventAck(tree_->event_ack_id_, result);
   }
+  void AckLastAccelerator(mojom::EventResult result) {
+    tree_->OnAcceleratorAck(tree_->event_ack_id_, result);
+  }
 
   void SetEventObserver(mojom::EventMatcherPtr matcher,
                         uint32_t event_observer_id);
@@ -244,6 +247,26 @@ class TestPlatformDisplayFactory : public PlatformDisplayFactory {
 
 // -----------------------------------------------------------------------------
 
+// A stub implementation of FrameGeneratorDelegate.
+class TestFrameGeneratorDelegate : public FrameGeneratorDelegate {
+ public:
+  explicit TestFrameGeneratorDelegate(std::unique_ptr<ServerWindow> root);
+  ~TestFrameGeneratorDelegate() override;
+
+  // FrameGeneratorDelegate:
+  ServerWindow* GetRootWindow() override;
+  void OnCompositorFrameDrawn() override {}
+  const ViewportMetrics& GetViewportMetrics() override;
+
+ private:
+  std::unique_ptr<ServerWindow> root_;
+  ViewportMetrics metrics_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestFrameGeneratorDelegate);
+};
+
+// -----------------------------------------------------------------------------
+
 class TestWindowManager : public mojom::WindowManager {
  public:
   TestWindowManager()
@@ -262,6 +285,12 @@ class TestWindowManager : public mojom::WindowManager {
     return true;
   }
 
+  void ClearAcceleratorCalled() {
+    on_accelerator_id_ = 0u;
+    on_accelerator_called_ = false;
+  }
+
+  bool on_perform_move_loop_called() { return on_perform_move_loop_called_; }
   bool on_accelerator_called() { return on_accelerator_called_; }
   uint32_t on_accelerator_id() { return on_accelerator_id_; }
 
@@ -284,7 +313,16 @@ class TestWindowManager : public mojom::WindowManager {
       mojo::Map<mojo::String, mojo::Array<uint8_t>> properties) override;
   void WmClientJankinessChanged(ClientSpecificId client_id,
                                 bool janky) override;
-  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override;
+  void WmPerformMoveLoop(uint32_t change_id,
+                         uint32_t window_id,
+                         mojom::MoveLoopSource source,
+                         const gfx::Point& cursor_location) override;
+  void WmCancelMoveLoop(uint32_t window_id) override;
+  void OnAccelerator(uint32_t ack_id,
+                     uint32_t accelerator_id,
+                     std::unique_ptr<ui::Event> event) override;
+
+  bool on_perform_move_loop_called_ = false;
 
   bool got_create_top_level_window_;
   uint32_t change_id_;

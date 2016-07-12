@@ -66,7 +66,6 @@ import org.chromium.content.browser.accessibility.captioning.SystemCaptioningBri
 import org.chromium.content.browser.accessibility.captioning.TextTrackSettings;
 import org.chromium.content.browser.input.AnimationIntervalProvider;
 import org.chromium.content.browser.input.FloatingPastePopupMenu;
-import org.chromium.content.browser.input.GamepadList;
 import org.chromium.content.browser.input.ImeAdapter;
 import org.chromium.content.browser.input.InputMethodManagerWrapper;
 import org.chromium.content.browser.input.JoystickScrollProvider;
@@ -84,6 +83,7 @@ import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.device.gamepad.GamepadList;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
@@ -1793,12 +1793,13 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     }
 
     /**
-     * Sets the current amount to offset incoming touch events by.  This is used to handle content
-     * moving and not lining up properly with the android input system.
+     * Sets the current amount to offset incoming touch events by (including MotionEvent and
+     * DragEvent). This is used to handle content moving and not lining up properly with the
+     * android input system.
      * @param dx The X offset in pixels to shift touch events.
      * @param dy The Y offset in pixels to shift touch events.
      */
-    public void setCurrentMotionEventOffsets(float dx, float dy) {
+    public void setCurrentTouchEventOffsets(float dx, float dy) {
         mCurrentTouchOffsetX = dx;
         mCurrentTouchOffsetY = dy;
     }
@@ -3284,6 +3285,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     public boolean onDragEvent(DragEvent event) {
         if (mNativeContentViewCore == 0) return false;
 
+
         ClipDescription clipDescription = event.getClipDescription();
         if (clipDescription == null && event.getAction() != DragEvent.ACTION_DRAG_ENDED) {
             Log.e(TAG, "Null clipDescription when the drag is not ended.");
@@ -3296,7 +3298,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
 
         if (event.getAction() == DragEvent.ACTION_DRAG_STARTED) {
             // TODO(hush): support dragging more than just text.
-            return mimeTypes.length > 0;
+            return mimeTypes.length > 0 && nativeIsTouchDragDropEnabled(mNativeContentViewCore);
         }
 
         StringBuilder content = new StringBuilder("");
@@ -3312,17 +3314,19 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
             }
         }
 
-        float scale = (float) DeviceDisplayInfo.create(mContainerView.getContext()).getDIPScale();
         int[] locationOnScreen = new int[2];
         mContainerView.getLocationOnScreen(locationOnScreen);
 
-        int x = (int) (event.getX() / scale);
-        int y = (int) (event.getY() / scale);
-        int screenX = (int) ((event.getX() + locationOnScreen[0]) / scale);
-        int screenY = (int) ((event.getY() + locationOnScreen[1]) / scale);
+        float xPix = event.getX() + mRenderCoordinates.getScrollXPixInt() + mCurrentTouchOffsetX;
+        float yPix = event.getY() + mRenderCoordinates.getScrollYPixInt() + mCurrentTouchOffsetY;
 
-        nativeOnDragEvent(mNativeContentViewCore, event.getAction(), x, y, screenX, screenY,
-                mimeTypes, content.toString());
+        int xCss = (int) mRenderCoordinates.fromPixToLocalCss(xPix);
+        int yCss = (int) mRenderCoordinates.fromPixToLocalCss(yPix);
+        int screenXCss = (int) mRenderCoordinates.fromPixToLocalCss(xPix + locationOnScreen[0]);
+        int screenYCss = (int) mRenderCoordinates.fromPixToLocalCss(yPix + locationOnScreen[1]);
+
+        nativeOnDragEvent(mNativeContentViewCore, event.getAction(), xCss, yCss, screenXCss,
+                screenYCss, mimeTypes, content.toString());
         return true;
     }
 
@@ -3565,6 +3569,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
             int x, int y, int w, int h);
 
     private native void nativeSetBackgroundOpaque(long nativeContentViewCoreImpl, boolean opaque);
+    private native boolean nativeIsTouchDragDropEnabled(long nativeContentViewCoreImpl);
     private native void nativeOnDragEvent(long nativeContentViewCoreImpl, int action, int x, int y,
             int screenX, int screenY, String[] mimeTypes, String content);
 }

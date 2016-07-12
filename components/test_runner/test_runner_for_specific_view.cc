@@ -454,10 +454,12 @@ bool TestRunnerForSpecificView::IsCommandEnabled(const std::string& command) {
 }
 
 bool TestRunnerForSpecificView::HasCustomPageSizeStyle(int page_index) {
+  // TODO(dcheng): This class has many implicit assumptions that the frames it
+  // operates on are always local.
   WebFrame* frame = web_view()->mainFrame();
-  if (!frame)
+  if (!frame || frame->isWebRemoteFrame())
     return false;
-  return frame->hasCustomPageSizeStyle(page_index);
+  return frame->toWebLocalFrame()->hasCustomPageSizeStyle(page_index);
 }
 
 void TestRunnerForSpecificView::ForceRedSelectionColors() {
@@ -671,7 +673,11 @@ bool TestRunnerForSpecificView::FindString(
 }
 
 std::string TestRunnerForSpecificView::SelectionAsMarkup() {
-  return web_view()->mainFrame()->selectionAsMarkup().utf8();
+  if (!web_view()->mainFrame()->toWebLocalFrame()) {
+    CHECK(false) << "This function cannot be called if the main frame is not a "
+                    "local frame.";
+  }
+  return web_view()->mainFrame()->toWebLocalFrame()->selectionAsMarkup().utf8();
 }
 
 void TestRunnerForSpecificView::SetViewSourceForFrame(const std::string& name,

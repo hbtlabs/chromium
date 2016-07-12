@@ -125,6 +125,10 @@ class CONTENT_EXPORT IndexedDBDatabase
   // Called by transactions to report failure committing to the backing store.
   void TransactionCommitFailed(const leveldb::Status& status);
 
+  void AddPendingObserver(int64_t transaction_id, int32_t observer_id);
+  void RemovePendingObservers(IndexedDBConnection* connection,
+                              const std::vector<int32_t>& pending_observer_ids);
+
   void Get(int64_t transaction_id,
            int64_t object_store_id,
            int64_t index_id,
@@ -260,8 +264,8 @@ class CONTENT_EXPORT IndexedDBDatabase
   class PendingSuccessCall;
   class PendingUpgradeCall;
 
-  typedef std::map<int64_t, IndexedDBTransaction*> TransactionMap;
-  typedef list_set<IndexedDBConnection*> ConnectionSet;
+  bool IsUpgradeRunning() const;
+  bool IsUpgradePendingOrRunning() const;
 
   bool IsOpenConnectionBlocked() const;
   leveldb::Status OpenInternal();
@@ -302,14 +306,41 @@ class CONTENT_EXPORT IndexedDBDatabase
 
   IndexedDBTransactionCoordinator transaction_coordinator_;
 
-  TransactionMap transactions_;
+  std::map<int64_t, IndexedDBTransaction*> transactions_;
+
+  // An open request ends up here if:
+  //  * There is a running or pending upgrade.
+  //  * There are pending deletes.
+  // Requests here have *not* broadcast OnVersionChange if necessary.
+  // When no longer blocked, the OpenConnection() calls are remade.
   std::queue<IndexedDBPendingConnection> pending_open_calls_;
+
+  // This owns the connection for the first upgrade request (open with higher
+  // version) that could not be immediately processed. The request has already
+  // broadcast OnVersionChange if necessary.
   std::unique_ptr<PendingUpgradeCall>
       pending_run_version_change_transaction_call_;
-  std::unique_ptr<PendingSuccessCall> pending_second_half_open_;
-  std::list<PendingDeleteCall*> pending_delete_calls_;
 
-  ConnectionSet connections_;
+  // This references a connection for an upgrade request while the upgrade
+  // transaction is running, so that the success/error result can be sent. It
+  // is not set until the upgrade transaction actually starts executing
+  // operations, so do not rely on it to determine if an upgrade is in
+  // progress.
+  std::unique_ptr<PendingSuccessCall> pending_second_half_open_;
+
+  // A delete request ends up here if:
+  //  * There is a running upgrade.
+  // Requests here have *not* broadcast OnVersionChange if necessary.
+  // When no longer blocked, DeleteDatabase() calls are remade.
+  std::list<std::unique_ptr<PendingDeleteCall>> pending_delete_calls_;
+
+  // A delete request ends up here if:
+  //  * There are open connections.
+  // Requests here have already broadcast OnVersionChange if necessary.
+  // When no longer blocked, DeleteDatabaseFinal() calls are made.
+  std::list<std::unique_ptr<PendingDeleteCall>> blocked_delete_calls_;
+
+  list_set<IndexedDBConnection*> connections_;
   bool experimental_web_platform_features_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBDatabase);

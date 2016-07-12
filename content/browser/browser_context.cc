@@ -152,7 +152,9 @@ class BrowserContextShellConnectionHolder
       std::unique_ptr<shell::Connection> connection,
       shell::mojom::ServiceRequest request)
       : root_connection_(std::move(connection)),
-        shell_connection_(MojoShellConnection::Create(std::move(request))) {}
+        shell_connection_(MojoShellConnection::Create(
+            std::move(request),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO))) {}
   ~BrowserContextShellConnectionHolder() override {}
 
   MojoShellConnection* shell_connection() { return shell_connection_.get(); }
@@ -433,16 +435,17 @@ void BrowserContext::Initialize(
     browser_context->SetUserData(kMojoShellConnection, connection_holder);
 
     MojoShellConnection* connection = connection_holder->shell_connection();
+    connection->Start();
 
     // New embedded service factories should be added to |connection| here.
 
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kMojoLocalStorage)) {
       MojoApplicationInfo info;
-      info.application_factory = base::Bind(
-          &user_service::CreateUserService,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB));
+      info.application_factory =
+          base::Bind(&user_service::CreateUserService,
+                     BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+                     BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
       connection->AddEmbeddedService(user_service::kUserServiceName, info);
     }
   }

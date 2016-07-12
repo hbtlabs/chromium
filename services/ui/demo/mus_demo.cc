@@ -126,9 +126,14 @@ void MusDemo::OnWmNewDisplay(ui::Window* window,
                base::Bind(&MusDemo::DrawFrame, base::Unretained(this)));
 }
 
-void MusDemo::OnAccelerator(uint32_t id, const ui::Event& event) {
+void MusDemo::OnWmPerformMoveLoop(ui::Window* window,
+                                  ui::mojom::MoveLoopSource source,
+                                  const gfx::Point& cursor_location,
+                                  const base::Callback<void(bool)>& on_done) {
   // Don't care
 }
+
+void MusDemo::OnWmCancelMoveLoop(ui::Window* window) {}
 
 void MusDemo::AllocBitmap() {
   const gfx::Rect bounds = window_->GetBoundsInRoot();

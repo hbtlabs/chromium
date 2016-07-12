@@ -131,7 +131,9 @@ static WTF::String drawingTypeAsDebugString(DisplayItem::Type type)
 static String foreignLayerTypeAsDebugString(DisplayItem::Type type)
 {
     switch (type) {
+        DEBUG_STRING_CASE(ForeignLayerCanvas);
         DEBUG_STRING_CASE(ForeignLayerPlugin);
+        DEBUG_STRING_CASE(ForeignLayerVideo);
         DEFAULT_CASE;
     }
 }

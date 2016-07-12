@@ -46,6 +46,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
 
+    self.Fail('conformance2/rendering/attrib-type-match.html', bug=627193)
+
+    self.Fail('conformance2/transform_feedback/' +
+        'unwritten-output-defaults-to-zero.html', bug=1441) # ANGLE bug
+
     # Avoid a conflict with a Mac expectation by setting
     self.Fail('conformance2/textures/misc/tex-input-validation.html',
         ['d3d9', 'd3d11', 'opengl'], bug=483282)
@@ -100,8 +105,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Windows 8 only.
 
-    self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
-        ['win8'], bug=483282)
     self.Flaky('deqp/functional/gles3/buffercopy.html', ['win8'], bug=587601)
 
     # Win / NVidia
@@ -156,14 +159,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/shaderstruct.html',
         ['win', 'intel'], bug=483282)
+    self.Flaky('deqp/functional/gles3/lifetime.html',
+        ['win', 'intel'], bug=620379)
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'teximage3d_depth.html',
         ['win', 'intel'], bug=614418)
     self.Skip('deqp/functional/gles3/texturespecification/' +
         'teximage3d_depth_pbo.html',
         ['win', 'intel'], bug=617449)
-    self.Flaky('deqp/functional/gles3/lifetime.html',
-        ['win', 'intel'], bug=620379)
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'texsubimage3d_depth.html',
         ['win', 'intel'], bug=614418)
@@ -172,6 +175,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_00.html',
         ['win', 'intel'], bug=614418)
+    self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_01.html',
+        ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_02.html',
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/sized_color_3d_pot_03.html',
@@ -179,6 +184,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/textureformat/sized_depth_stencil.html',
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/textureformat/compressed_cube.html',
+        ['win', 'intel'], bug=614418)
+    self.Flaky('deqp/functional/gles3/textureformat/unsized_3d.html',
         ['win', 'intel'], bug=614418)
     self.Fail('deqp/functional/gles3/shadertexturefunction/texture.html',
         ['win', 'intel'], bug=483282)
@@ -193,6 +200,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/textureshadow/2d_array_*.html',
         ['win', 'intel'], bug=483282)
+    self.Flaky('deqp/functional/gles3/transformfeedback/*.html',
+        ['win', 'intel'], bug=626068)
 
     # Mac only.
     self.Flaky('deqp/functional/gles3/shaderindexing/varying.html',
@@ -490,34 +499,32 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac', 'intel'], bug=483282)
 
     # Linux only.
-    self.Fail('deqp/data/gles3/shaders/functions.html',
-        ['linux'], bug=483282)
     self.Fail('conformance2/glsl3/vector-dynamic-indexing.html',
         ['linux'], bug=483282)
+
     self.Fail('deqp/functional/gles3/fbodepthbuffer.html',
         ['linux'], bug=483282)
 
     # Behavior difference between GL compatibility profile and ES3.
     self.Fail('conformance2/rendering/draw-buffers.html',
         ['linux'], bug=617410)
-
-    self.Skip('deqp/data/gles3/shaders/qualification_order.html',
-        ['linux', 'amd', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/clipping.html',
-        ['linux', 'amd', 'intel'], bug=483282)
-
-    self.Flaky('deqp/functional/gles3/texturespecification/' +
-        'random_teximage2d_2d.html',
-        ['linux'], bug=618447)
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'random_teximage2d_cube.html',
         ['linux'], bug=483282)
     self.Fail('deqp/functional/gles3/fboinvalidate/whole.html',
         ['linux'], bug=624506)
 
+    self.Fail('deqp/data/gles3/shaders/functions.html',
+        ['linux', 'amd', 'intel'], bug=483282)
+    self.Skip('deqp/data/gles3/shaders/qualification_order.html',
+        ['linux', 'amd', 'intel'], bug=483282)
+    self.Fail('deqp/functional/gles3/clipping.html',
+        ['linux', 'amd', 'intel'], bug=483282)
+    self.Flaky('deqp/functional/gles3/texturespecification/' +
+        'random_teximage2d_2d.html',
+        ['linux', 'amd', 'intel'], bug=618447)
+
     # Linux NVIDIA only.
-    self.Fail('conformance2/glsl3/array-complex-indexing.html',
-        ['linux', 'nvidia', 'no_angle'], bug=606498)
     self.Fail('deqp/functional/gles3/uniformapi/random.html',
         ['linux', 'nvidia'], bug=621178)
 

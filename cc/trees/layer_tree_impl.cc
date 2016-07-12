@@ -33,12 +33,16 @@
 #include "cc/layers/render_surface_impl.h"
 #include "cc/layers/scrollbar_layer_impl_base.h"
 #include "cc/resources/ui_resource_request.h"
+#include "cc/trees/clip_node.h"
 #include "cc/trees/draw_property_utils.h"
+#include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/occlusion_tracker.h"
 #include "cc/trees/property_tree.h"
 #include "cc/trees/property_tree_builder.h"
+#include "cc/trees/scroll_node.h"
+#include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -158,13 +162,12 @@ void LayerTreeImpl::DidUpdateScrollOffset(int layer_id, int transform_id) {
 
   if (transform_id != -1) {
     TransformNode* node = transform_tree.Node(transform_id);
-    if (node->data.scroll_offset !=
-        scroll_tree.current_scroll_offset(layer_id)) {
-      node->data.scroll_offset = scroll_tree.current_scroll_offset(layer_id);
-      node->data.needs_local_transform_update = true;
+    if (node->scroll_offset != scroll_tree.current_scroll_offset(layer_id)) {
+      node->scroll_offset = scroll_tree.current_scroll_offset(layer_id);
+      node->needs_local_transform_update = true;
       transform_tree.set_needs_update(true);
     }
-    node->data.transform_changed = true;
+    node->transform_changed = true;
     property_trees()->changed = true;
     set_needs_update_draw_properties();
   }
@@ -357,8 +360,8 @@ static void UpdateClipTreeForBoundsDeltaOnLayer(LayerImpl* layer,
     if (clip_node) {
       DCHECK_EQ(layer->id(), clip_node->owner_id);
       gfx::SizeF bounds = gfx::SizeF(layer->bounds());
-      if (clip_node->data.clip.size() != bounds) {
-        clip_node->data.clip.set_size(bounds);
+      if (clip_node->clip.size() != bounds) {
+        clip_node->clip.set_size(bounds);
         clip_tree->set_needs_update(true);
       }
     }
@@ -619,10 +622,10 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
     if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
       EffectNode* node = property_trees_.effect_tree.Node(
           property_trees_.effect_id_to_index_map[id]);
-      if (!node->data.is_currently_animating_opacity ||
-          node->data.opacity == layer_id_to_opacity.second)
+      if (!node->is_currently_animating_opacity ||
+          node->opacity == layer_id_to_opacity.second)
         continue;
-      node->data.opacity = layer_id_to_opacity.second;
+      node->opacity = layer_id_to_opacity.second;
       property_trees_.effect_tree.set_needs_update(true);
     }
   }
@@ -634,11 +637,11 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
                                          id)) {
       TransformNode* node = property_trees_.transform_tree.Node(
           property_trees_.transform_id_to_index_map[id]);
-      if (!node->data.is_currently_animating ||
-          node->data.local == layer_id_to_transform.second)
+      if (!node->is_currently_animating ||
+          node->local == layer_id_to_transform.second)
         continue;
-      node->data.local = layer_id_to_transform.second;
-      node->data.needs_local_transform_update = true;
+      node->local = layer_id_to_transform.second;
+      node->needs_local_transform_update = true;
       property_trees_.transform_tree.set_needs_update(true);
     }
   }
@@ -1660,18 +1663,18 @@ static bool PointIsClippedByAncestorClipNode(
   // We first check if the point is clipped by viewport.
   const ClipNode* clip_node = clip_tree.Node(1);
   gfx::Rect combined_clip_in_target_space =
-      gfx::ToEnclosingRect(clip_node->data.combined_clip_in_target_space);
+      gfx::ToEnclosingRect(clip_node->combined_clip_in_target_space);
   if (!PointHitsRect(screen_space_point, gfx::Transform(),
                      combined_clip_in_target_space, NULL))
     return true;
 
   for (const ClipNode* clip_node = clip_tree.Node(layer->clip_tree_index());
        clip_node->id > 1; clip_node = clip_tree.parent(clip_node)) {
-    if (clip_node->data.applies_local_clip) {
+    if (clip_node->applies_local_clip) {
       const TransformNode* transform_node =
-          transform_tree.Node(clip_node->data.target_id);
+          transform_tree.Node(clip_node->target_transform_id);
       gfx::Rect combined_clip_in_target_space =
-          gfx::ToEnclosingRect(clip_node->data.combined_clip_in_target_space);
+          gfx::ToEnclosingRect(clip_node->combined_clip_in_target_space);
 
       const LayerImpl* target_layer =
           layer->layer_tree_impl()->LayerById(transform_node->owner_id);
@@ -1980,122 +1983,6 @@ void LayerTreeImpl::SetPendingPageScaleAnimation(
 std::unique_ptr<PendingPageScaleAnimation>
 LayerTreeImpl::TakePendingPageScaleAnimation() {
   return std::move(pending_page_scale_animation_);
-}
-
-bool LayerTreeImpl::IsAnimatingFilterProperty(const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->IsAnimatingFilterProperty(
-      layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::IsAnimatingOpacityProperty(const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->IsAnimatingOpacityProperty(
-      layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::IsAnimatingTransformProperty(const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->IsAnimatingTransformProperty(
-      layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::HasPotentiallyRunningFilterAnimation(
-    const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningFilterAnimation(layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::HasPotentiallyRunningOpacityAnimation(
-    const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningOpacityAnimation(layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::HasPotentiallyRunningTransformAnimation(
-    const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()
-      ->HasPotentiallyRunningTransformAnimation(layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::HasAnyAnimationTargetingProperty(
-    const LayerImpl* layer,
-    TargetProperty::Type property) const {
-  return layer_tree_host_impl_->animation_host()
-      ->HasAnyAnimationTargetingProperty(layer->element_id(), property);
-}
-
-bool LayerTreeImpl::AnimationsPreserveAxisAlignment(
-    const LayerImpl* layer) const {
-  return layer_tree_host_impl_->animation_host()
-      ->AnimationsPreserveAxisAlignment(layer->element_id());
-}
-
-bool LayerTreeImpl::HasOnlyTranslationTransforms(const LayerImpl* layer) const {
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->HasOnlyTranslationTransforms(
-      layer->element_id(), list_type);
-}
-
-bool LayerTreeImpl::MaximumTargetScale(const LayerImpl* layer,
-                                       float* max_scale) const {
-  *max_scale = 0.f;
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->MaximumTargetScale(
-      layer->element_id(), list_type, max_scale);
-}
-
-bool LayerTreeImpl::AnimationStartScale(const LayerImpl* layer,
-                                        float* start_scale) const {
-  *start_scale = 0.f;
-  ElementListType list_type =
-      IsActiveTree() ? ElementListType::ACTIVE : ElementListType::PENDING;
-  return layer_tree_host_impl_->animation_host()->AnimationStartScale(
-      layer->element_id(), list_type, start_scale);
-}
-
-bool LayerTreeImpl::HasFilterAnimationThatInflatesBounds(
-    const LayerImpl* layer) const {
-  return layer_tree_host_impl_->animation_host()
-      ->HasFilterAnimationThatInflatesBounds(layer->element_id());
-}
-
-bool LayerTreeImpl::HasTransformAnimationThatInflatesBounds(
-    const LayerImpl* layer) const {
-  return layer_tree_host_impl_->animation_host()
-      ->HasTransformAnimationThatInflatesBounds(layer->element_id());
-}
-
-bool LayerTreeImpl::HasAnimationThatInflatesBounds(
-    const LayerImpl* layer) const {
-  return layer_tree_host_impl_->animation_host()
-      ->HasAnimationThatInflatesBounds(layer->element_id());
-}
-
-bool LayerTreeImpl::FilterAnimationBoundsForBox(const LayerImpl* layer,
-                                                const gfx::BoxF& box,
-                                                gfx::BoxF* bounds) const {
-  return layer_tree_host_impl_->animation_host()->FilterAnimationBoundsForBox(
-      layer->element_id(), box, bounds);
-}
-
-bool LayerTreeImpl::TransformAnimationBoundsForBox(const LayerImpl* layer,
-                                                   const gfx::BoxF& box,
-                                                   gfx::BoxF* bounds) const {
-  *bounds = gfx::BoxF();
-  return layer_tree_host_impl_->animation_host()
-      ->TransformAnimationBoundsForBox(layer->element_id(), box, bounds);
 }
 
 void LayerTreeImpl::ScrollAnimationAbort(bool needs_completion) {

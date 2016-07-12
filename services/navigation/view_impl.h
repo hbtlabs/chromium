@@ -5,6 +5,8 @@
 #ifndef SERVICES_NAVIGATION_VIEW_IMPL_H_
 #define SERVICES_NAVIGATION_VIEW_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -14,7 +16,7 @@
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/interface_factory.h"
 #include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/shell_connection_ref.h"
+#include "services/shell/public/cpp/service_context_ref.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -32,11 +34,11 @@ class ViewImpl : public mojom::View,
                  public ui::WindowTreeClientDelegate,
                  public views::WidgetDelegate {
  public:
-  ViewImpl(shell::Connector* connector,
+  ViewImpl(std::unique_ptr<shell::Connector> connector,
            const std::string& client_user_id,
            mojom::ViewClientPtr client,
            mojom::ViewRequest request,
-           std::unique_ptr<shell::ShellConnectionRef> ref);
+           std::unique_ptr<shell::ServiceContextRef> ref);
   ~ViewImpl() override;
 
  private:
@@ -87,10 +89,10 @@ class ViewImpl : public mojom::View,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
 
-  shell::Connector* connector_;
+  std::unique_ptr<shell::Connector> connector_;
   mojo::StrongBinding<mojom::View> binding_;
   mojom::ViewClientPtr client_;
-  std::unique_ptr<shell::ShellConnectionRef> ref_;
+  std::unique_ptr<shell::ServiceContextRef> ref_;
 
   views::WebView* web_view_;
 

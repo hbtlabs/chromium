@@ -40,16 +40,6 @@ bool CreateAndMapSharedBuffer(size_t size,
   return true;
 }
 
-void MakeProgressCallback(gpu::CommandBuffer::State* output,
-                          const gpu::CommandBuffer::State& input) {
-  *output = input;
-}
-
-void InitializeCallback(ui::mojom::CommandBufferInitializeResultPtr* output,
-                        ui::mojom::CommandBufferInitializeResultPtr input) {
-  *output = std::move(input);
-}
-
 }  // namespace
 
 CommandBufferClientImpl::CommandBufferClientImpl(
@@ -87,13 +77,11 @@ bool CommandBufferClientImpl::Initialize() {
   client_binding_.Bind(GetProxy(&client_ptr));
 
   ui::mojom::CommandBufferInitializeResultPtr initialize_result;
-  command_buffer_->Initialize(
-      std::move(client_ptr), std::move(handle),
-      mojo::Array<int32_t>::From(attribs_),
-      base::Bind(&InitializeCallback, &initialize_result));
+  result = command_buffer_->Initialize(std::move(client_ptr), std::move(handle),
+                                       mojo::Array<int32_t>::From(attribs_),
+                                       &initialize_result);
 
-  base::ThreadRestrictions::ScopedAllowWait wait;
-  if (!command_buffer_.WaitForIncomingResponse()) {
+  if (!result) {
     VLOG(1) << "Channel encountered error while creating command buffer.";
     return false;
   }
@@ -255,14 +243,6 @@ int32_t CommandBufferClientImpl::CreateGpuMemoryBufferImage(
   return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
 }
 
-int32_t CommandBufferClientImpl::GetImageGpuMemoryBufferId(unsigned image_id) {
-  // TODO(erikchen): Once this class supports IOSurface GpuMemoryBuffer backed
-  // images, it will also need to keep a local cache from image id to
-  // GpuMemoryBuffer id.
-  NOTIMPLEMENTED();
-  return -1;
-}
-
 void CommandBufferClientImpl::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {
   // TODO(piman)
@@ -297,11 +277,9 @@ void CommandBufferClientImpl::TryUpdateState() {
 
 void CommandBufferClientImpl::MakeProgressAndUpdateState() {
   gpu::CommandBuffer::State state;
-  command_buffer_->MakeProgress(last_state_.get_offset,
-                                base::Bind(&MakeProgressCallback, &state));
+  bool result = command_buffer_->MakeProgress(last_state_.get_offset, &state);
 
-  base::ThreadRestrictions::ScopedAllowWait wait;
-  if (!command_buffer_.WaitForIncomingResponse()) {
+  if (!result) {
     VLOG(1) << "Channel encountered error while waiting for command buffer.";
     // TODO(piman): is it ok for this to re-enter?
     Destroyed(gpu::error::kUnknown, gpu::error::kLostContext);

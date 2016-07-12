@@ -1039,9 +1039,11 @@ const char kShowUpdatePromotionInfoBar[] =
     "browser.show_update_promotion_info_bar";
 #endif
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Boolean that is false if we should show window manager decorations.  If
 // true, we draw a custom chrome frame (thicker title bar and blue border).
 const char kUseCustomChromeFrame[] = "browser.custom_chrome_frame";
+#endif
 
 const char kBackShortcutBubbleShownCount[] =
     "browser.back_shortcut_bubble_shown_count";
@@ -1239,13 +1241,6 @@ const char kEasyUnlockPairing[] = "easy_unlock.pairing";
 const char kEasyUnlockProximityRequired[] = "easy_unlock.proximity_required";
 
 #if defined(ENABLE_EXTENSIONS)
-// These device IDs are used by the copresence component, to uniquely identify
-// this device to the server. For privacy, authenticated and unauthenticated
-// calls are made using different device IDs.
-const char kCopresenceAuthenticatedDeviceId[] =
-    "apps.copresence.auth_device_id";
-const char kCopresenceAnonymousDeviceId[] = "apps.copresence.unauth_device_id";
-
 // Used to indicate whether or not the toolbar redesign bubble has been shown
 // and acknowledged, and the last time the bubble was shown.
 const char kToolbarIconSurfacingBubbleAcknowledged[] =

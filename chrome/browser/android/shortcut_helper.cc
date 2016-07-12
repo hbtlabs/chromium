@@ -72,6 +72,8 @@ void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
       base::android::ConvertUTF8ToJavaString(env, webapp_id);
   ScopedJavaLocalRef<jstring> java_url =
       base::android::ConvertUTF8ToJavaString(env, info.url.spec());
+  ScopedJavaLocalRef<jstring> java_scope_url =
+      base::android::ConvertUTF8ToJavaString(env, info.scope.spec());
   ScopedJavaLocalRef<jstring> java_user_title =
       base::android::ConvertUTF16ToJavaString(env, info.user_title);
   ScopedJavaLocalRef<jstring> java_name =
@@ -102,6 +104,7 @@ void ShortcutHelper::AddShortcutInBackgroundWithSkBitmap(
       env,
       java_webapp_id.obj(),
       java_url.obj(),
+      java_scope_url.obj(),
       java_user_title.obj(),
       java_name.obj(),
       java_short_name.obj(),
@@ -210,6 +213,14 @@ SkBitmap ShortcutHelper::FinalizeLauncherIcon(const SkBitmap& bitmap,
   }
 
   return gfx::CreateSkBitmapFromJavaBitmap(gfx::JavaBitmap(result.obj()));
+}
+
+// static
+bool ShortcutHelper::IsWebApkInstalled(const GURL& url) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> java_url =
+      base::android::ConvertUTF8ToJavaString(env, url.spec());
+  return Java_ShortcutHelper_isWebApkInstalled(env, java_url.obj());
 }
 
 // Callback used by Java when the shortcut has been created.

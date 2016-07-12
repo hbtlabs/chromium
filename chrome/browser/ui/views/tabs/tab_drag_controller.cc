@@ -54,6 +54,12 @@
 #include "ui/wm/core/window_modality_controller.h"
 #endif
 
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/browser/ui/views/tabs/window_finder_mus.h"
+#include "content/public/common/mojo_shell_connection.h"
+#include "services/shell/runner/common/client_util.h"
+#endif
+
 using base::UserMetricsAction;
 using content::OpenURLParams;
 using content::WebContents;
@@ -222,9 +228,17 @@ TabDragController::TabDragController()
       is_mutating_(false),
       attach_x_(-1),
       attach_index_(-1),
-      window_finder_(new WindowFinder),
       weak_factory_(this) {
   instance_ = this;
+
+#if defined(MOJO_SHELL_CLIENT)
+  content::MojoShellConnection* mojo_shell_connection =
+      content::MojoShellConnection::GetForProcess();
+  if (mojo_shell_connection && shell::ShellIsRemote())
+    window_finder_.reset(new WindowFinderMus);
+  else
+#endif
+    window_finder_.reset(new WindowFinder);
 }
 
 TabDragController::~TabDragController() {
@@ -734,7 +748,7 @@ void TabDragController::MoveAttached(const gfx::Point& point_in_screen) {
         do_move = false;
     }
     if (do_move) {
-      WebContents* last_contents = drag_data_[drag_data_.size() - 1].contents;
+      WebContents* last_contents = drag_data_.back().contents;
       int index_of_last_item =
           attached_model->GetIndexOfWebContents(last_contents);
       if (initial_move_) {

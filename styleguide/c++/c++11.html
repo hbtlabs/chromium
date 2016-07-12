@@ -29,12 +29,15 @@ allowed in Chromium and contains pointers to more detailed information. The
 Guide applies to Chromium and its subprojects. Subprojects can choose to be
 more restrictive if they need to compile on more toolchains than Chromium.</p>
 
+<p>This page comprises part of the more general
+<a href="https://chromium.googlesource.com/chromium/src/+/master/styleguide/c++/c++.md">Chromium C++ style guide</a>.</p>
+
 <p>You can propose to make a feature available or to ban a
 feature by sending an email to <a
 href="https://groups.google.com/a/chromium.org/forum/#!forum/cxx">cxx@chromium.org</a>.
 Ideally include a short blurb on what the feature is, and why you think it
 should or should not be allowed. Ideally, the list will arrive at some
-consensus and the wiki page will be updated to mention that consensus. If
+consensus and you can request review for a change to this file. If
 there's no consensus, <code>src/styleguide/c++/OWNERS</code> get to decide --
 for divisive features, we expect the decision to be to not use the feature yet
 and possibly discuss it again a few months later, when we have more experience
@@ -184,7 +187,7 @@ enum <i>enumname</i> : <i>base-type</i></code></td>
 <td><code>[<i>captures</i>](<i>params</i>) -&gt; <i>ret</i> { <i>body</i> }</code></td>
 <td>Anonymous functions</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/lambda">Lambda functions</a></td>
-<td>Do not bind or store lambdas outside the lifetime of the stack frame they are defined in; use <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
+<td>Do not bind or store capturing lambdas outside the lifetime of the stack frame they are defined in; use captureless lambda with <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
 </tr>
 
 <tr>

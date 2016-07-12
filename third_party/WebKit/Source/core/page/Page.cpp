@@ -19,6 +19,7 @@
 
 #include "core/page/Page.h"
 
+#include "bindings/core/v8/ScriptController.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/ClientRectList.h"
 #include "core/dom/StyleChangeReason.h"
@@ -421,6 +422,20 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType)
             }
         }
         break;
+    case SettingsDelegate::DOMWorldsChange:
+        {
+            if (!settings().forceMainWorldInitialization())
+                break;
+            if (!mainFrame() || !mainFrame()->isLocalFrame())
+                break;
+            if (!toLocalFrame(mainFrame())->loader().stateMachine()->committedFirstRealDocumentLoad())
+                break;
+            for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
+                if (frame->isLocalFrame())
+                    toLocalFrame(frame)->script().initializeMainWorld();
+            }
+        }
+        break;
     }
 }
 
@@ -436,7 +451,6 @@ void Page::updateAcceleratedCompositingSettings()
 
 void Page::didCommitLoad(LocalFrame* frame)
 {
-    notifyDidCommitLoad(frame);
     if (m_mainFrame == frame) {
         useCounter().didCommitLoad();
         deprecation().clearSuppression();
@@ -476,7 +490,7 @@ DEFINE_TRACE(Page)
     visitor->trace(m_validationMessageClient);
     visitor->trace(m_frameHost);
     Supplementable<Page>::trace(visitor);
-    PageLifecycleNotifier::trace(visitor);
+    PageVisibilityNotifier::trace(visitor);
 }
 
 void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView)
@@ -514,7 +528,7 @@ void Page::willBeDestroyed()
         m_validationMessageClient->willBeDestroyed();
     m_mainFrame = nullptr;
 
-    PageLifecycleNotifier::notifyContextDestroyed();
+    PageVisibilityNotifier::notifyContextDestroyed();
 }
 
 void Page::compressStrings(Timer<Page>* timer)

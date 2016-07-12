@@ -12,6 +12,7 @@
 #include "remoting/client/jni/chromoting_jni_runtime.h"
 #include "remoting/client/jni/display_updater_factory.h"
 #include "remoting/client/jni/jni_display_handler.h"
+#include "remoting/client/jni/jni_gl_display_handler.h"
 #include "remoting/client/jni/jni_pairing_secret_fetcher.h"
 #include "remoting/client/jni/jni_touch_event_data.h"
 #include "remoting/client/jni/jni_video_renderer.h"
@@ -161,12 +162,13 @@ void JniClient::Connect(
     const base::android::JavaParamRef<jstring>& capabilities,
     const base::android::JavaParamRef<jstring>& flags) {
 #if defined(REMOTING_ANDROID_ENABLE_OPENGL_RENDERER)
-#error Feature not implemented.
+  JniGlDisplayHandler* raw_display_handler = new JniGlDisplayHandler(runtime_);
 #else
   JniDisplayHandler* raw_display_handler = new JniDisplayHandler(runtime_);
 #endif  // defined(REMOTING_ANDROID_ENABLE_OPENGL_RENDERER)
-  Java_Client_setDisplay(env, java_client_.obj(),
-                         raw_display_handler->GetJavaDisplay().obj());
+  Java_Client_setDesktopViewFactory(
+      env, java_client_.obj(),
+      raw_display_handler->CreateDesktopViewFactory().obj());
   display_handler_.reset(raw_display_handler);
   ConnectToHost(raw_display_handler,
                 ConvertJavaStringToUTF8(env, username),

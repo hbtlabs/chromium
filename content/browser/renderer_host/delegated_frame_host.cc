@@ -120,6 +120,12 @@ void DelegatedFrameHost::MaybeCreateResizeLock() {
 }
 
 bool DelegatedFrameHost::ShouldCreateResizeLock() {
+  static const bool is_disabled =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableResizeLock);
+  if (is_disabled)
+    return false;
+
   if (!client_->DelegatedFrameCanCreateResizeLock())
     return false;
 
@@ -461,8 +467,6 @@ void DelegatedFrameHost::SwapDelegatedFrame(uint32_t output_surface_id,
         surface_factory_->Destroy(surface_id_);
       surface_id_ = id_allocator_->GenerateId();
       surface_factory_->Create(surface_id_);
-      surface_factory_->SetSurfaceGpuMemoryBufferClientId(
-          surface_id_, client_->DelegatedFrameHostGetGpuMemoryBufferClientId());
       // manager must outlive compositors using it.
       client_->DelegatedFrameHostGetLayer()->SetShowSurface(
           surface_id_, base::Bind(&SatisfyCallback, base::Unretained(manager)),

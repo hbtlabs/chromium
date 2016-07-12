@@ -64,6 +64,7 @@
 #include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebTaskRunner.h"
@@ -536,8 +537,8 @@ void BlinkTestRunner::SetFocus(blink::WebView* web_view, bool focus) {
     SetFocusAndActivate(render_view, focus);
 }
 
-void BlinkTestRunner::SetAcceptAllCookies(bool accept) {
-  Send(new LayoutTestHostMsg_AcceptAllCookies(routing_id(), accept));
+void BlinkTestRunner::SetBlockThirdPartyCookies(bool block) {
+  Send(new LayoutTestHostMsg_BlockThirdPartyCookies(routing_id(), block));
 }
 
 std::string BlinkTestRunner::PathToLocalResource(const std::string& resource) {
@@ -709,8 +710,8 @@ blink::WebPlugin* BlinkTestRunner::CreatePluginPlaceholder(
   return placeholder->plugin();
 }
 
-float BlinkTestRunner::GetDeviceScaleFactorForTest() const {
-  return render_view()->GetDeviceScaleFactorForTest();
+float BlinkTestRunner::GetDeviceScaleFactor() const {
+  return render_view()->GetDeviceScaleFactor();
 }
 
 void BlinkTestRunner::RunIdleTasks(const base::Closure& callback) {
@@ -982,8 +983,9 @@ void BlinkTestRunner::OnReset() {
   Reset(true /* for_new_test */);
   // Navigating to about:blank will make sure that no new loads are initiated
   // by the renderer.
-  render_view()->GetWebView()->mainFrame()->loadRequest(
-      WebURLRequest(GURL(url::kAboutBlankURL)));
+  WebURLRequest request = WebURLRequest(GURL(url::kAboutBlankURL));
+  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
+  render_view()->GetWebView()->mainFrame()->loadRequest(request);
   Send(new ShellViewHostMsg_ResetDone(routing_id()));
 }
 

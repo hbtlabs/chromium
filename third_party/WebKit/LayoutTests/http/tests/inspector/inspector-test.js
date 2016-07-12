@@ -523,16 +523,7 @@ InspectorTest.deprecatedRunAfterPendingDispatches = function(callback)
 
 InspectorTest.createKeyEvent = function(key, ctrlKey, altKey, shiftKey, metaKey)
 {
-    var keyIdentifier = key;
-    if (key === "Tab")
-        keyIdentifier = "U+0009";
-    else if (key == "Escape")
-        keyIdentifier = "U+001B";
-    else if (key == "ArrowUp")
-        keyIdentifier = "Up";
-    else if (key == "ArrowDown")
-        keyIdentifier = "Down";
-    return new KeyboardEvent("keydown", {key: key, keyIdentifier: keyIdentifier, bubbles: true, cancelable: true, ctrlKey: ctrlKey, altKey: altKey, shiftKey: shiftKey, metaKey: metaKey});
+    return new KeyboardEvent("keydown", {key: key, bubbles: true, cancelable: true, ctrlKey: ctrlKey, altKey: altKey, shiftKey: shiftKey, metaKey: metaKey});
 }
 
 InspectorTest.runTestSuite = function(testSuite)
@@ -971,9 +962,9 @@ WebInspector.targetManager.observeTargets({
         InspectorTest.WorkerAgent = target.workerAgent();
 
         InspectorTest.consoleModel = target.consoleModel;
-        InspectorTest.networkManager = target.networkManager;
+        InspectorTest.networkManager = WebInspector.NetworkManager.fromTarget(target);
         InspectorTest.resourceTreeModel = target.resourceTreeModel;
-        InspectorTest.networkLog = target.networkLog;
+        InspectorTest.networkLog = WebInspector.NetworkLog.fromTarget(target);
         InspectorTest.debuggerModel = WebInspector.DebuggerModel.fromTarget(target);
         InspectorTest.runtimeModel = target.runtimeModel;
         InspectorTest.domModel = WebInspector.DOMModel.fromTarget(target);

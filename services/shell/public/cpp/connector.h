@@ -19,8 +19,8 @@ namespace shell {
 // connections between applications are established. Once Connect() is called,
 // this class is bound to the thread the call was made on and it cannot be
 // passed to another thread without calling Clone().
-// An instance of this class is created internally by ShellConnection for use
-// on the thread ShellConnection is instantiated on, and this interface is
+// An instance of this class is created internally by ServiceContext for use
+// on the thread ServiceContext is instantiated on, and this interface is
 // wrapped by the Shell interface.
 // To use this interface on other threads, call Shell::CloneConnector() and
 // pass the result to another thread. To pass to subsequent threads, call
@@ -71,6 +71,10 @@ class Connector {
 
     DISALLOW_COPY_AND_ASSIGN(ConnectParams);
   };
+
+  // Creates a new Connector instance and fills in |*request| with a request
+  // for the other end the Connector's interface.
+  static std::unique_ptr<Connector> Create(mojom::ConnectorRequest* request);
 
   // Requests a new connection to an application. Returns a pointer to the
   // connection if the connection is permitted by this application's delegate,

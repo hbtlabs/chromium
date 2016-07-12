@@ -34,6 +34,8 @@ source_set("lib") {
     "focus_controller.h",
     "focus_controller_delegate.h",
     "focus_controller_observer.h",
+    "frame_generator.cc",
+    "frame_generator.h",
     "modal_window_controller.cc",
     "modal_window_controller.h",
     "operation.cc",
@@ -44,9 +46,6 @@ source_set("lib") {
     "platform_display_factory.h",
     "platform_display_init_params.cc",
     "platform_display_init_params.h",
-    "platform_screen.h",
-    "platform_screen_impl.cc",
-    "platform_screen_impl.h",
     "scheduled_animation_group.cc",
     "scheduled_animation_group.h",
     "server_window.cc",
@@ -112,6 +111,7 @@ source_set("lib") {
     "//services/shell/public/interfaces",
     "//services/tracing/public/cpp",
     "//services/ui/common:mus_common",
+    "//services/ui/display",
     "//services/ui/gles2",
     "//services/ui/public/interfaces",
     "//services/ui/surfaces",
@@ -130,14 +130,6 @@ source_set("lib") {
   ]
 
   if (use_ozone) {
-    sources -= [
-      "platform_screen_impl.cc",
-      "platform_screen_impl.h",
-    ]
-    sources += [
-      "platform_screen_impl_ozone.cc",
-      "platform_screen_impl_ozone.h",
-    ]
     public_deps += [ "//ui/ozone:ozone" ]
   }
 }
@@ -193,6 +185,7 @@ test("mus_ws_unittests") {
     "event_dispatcher_unittest.cc",
     "event_matcher_unittest.cc",
     "focus_controller_unittest.cc",
+    "frame_generator_unittest.cc",
     "scheduled_animation_group_unittest.cc",
     "server_window_drawn_tracker_unittest.cc",
     "server_window_surface_manager_test_api.cc",
@@ -220,7 +213,7 @@ test("mus_ws_unittests") {
     "//base/test:test_support",
     "//cc:cc",
     "//mojo/public/cpp/bindings:bindings",
-    "//services/shell/public/cpp:shell_test_support",
+    "//services/shell/public/cpp:service_test_support",
     "//services/shell/public/cpp:sources",
     "//services/shell/public/cpp/test:run_all_shelltests",
     "//services/shell/public/interfaces",

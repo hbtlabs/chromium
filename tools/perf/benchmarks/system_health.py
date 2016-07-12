@@ -28,7 +28,7 @@ class _SystemHealthBenchmark(perf_benchmark.PerfBenchmark):
     options.config.chrome_trace_config.SetCategoryFilter(
         chrome_trace_category_filter.ChromeTraceCategoryFilter(','.join(
             self.TRACING_CATEGORIES)))
-    options.SetTimelineBasedMetric('systemHealthMetrics')
+    options.SetTimelineBasedMetrics(['systemHealthMetrics'])
     return options
 
   @classmethod
@@ -64,9 +64,6 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """
 
   def SetExtraBrowserOptions(self, options):
-    # TODO(petrcermak): Remove this and switch to log-on-retry
-    # (http://crbug.com/623058).
-    options.logging_verbosity = options.NON_VERBOSE_LOGGING
     options.AppendExtraBrowserArgs([
         # TODO(perezju): Temporary workaround to disable periodic memory dumps.
         # See: http://crbug.com/513692
@@ -78,7 +75,7 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
         chrome_trace_category_filter.ChromeTraceCategoryFilter(
             '-*,disabled-by-default-memory-infra'))
     options.config.enable_android_graphics_memtrack = True
-    options.SetTimelineBasedMetric('memoryMetric')
+    options.SetTimelineBasedMetrics(['memoryMetric'])
     return options
 
   @classmethod
@@ -114,7 +111,6 @@ class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
         possible_browser.browser_type == 'reference' and
         possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
 
-
 @benchmark.Enabled('android-webview')
 class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """Webview startup time benchmark
@@ -128,7 +124,7 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
 
   def CreateTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options()
-    options.SetTimelineBasedMetric('webviewStartupMetric')
+    options.SetTimelineBasedMetrics(['webviewStartupMetric'])
     options.config.enable_atrace_trace = True
     options.config.enable_chrome_trace = False
     options.config.atrace_config.app_name = 'org.chromium.webview_shell'

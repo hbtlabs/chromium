@@ -243,6 +243,8 @@
       'test/fake_video_frame_provider.h',
       'test/geometry_test_utils.cc',
       'test/geometry_test_utils.h',
+      'test/layer_internals_for_test.cc',
+      'test/layer_internals_for_test.h',
       'test/layer_test_common.cc',
       'test/layer_test_common.h',
       'test/layer_tree_host_common_test.cc',
@@ -403,7 +405,6 @@
       'sources': [
         # Note: sources list duplicated in GN build.
         'animation/animation_host_perftest.cc',
-        'ipc/cc_param_traits_perftest.cc',
         'layers/layer_perftest.cc',
         'layers/picture_layer_impl_perftest.cc',
         'quads/draw_quad_perftest.cc',

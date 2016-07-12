@@ -259,8 +259,8 @@ DownloadFile* DownloadFileWithDelayFactory::CreateFile(
   std::unique_ptr<device::PowerSaveBlocker> psb(new device::PowerSaveBlocker(
       device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
       device::PowerSaveBlocker::kReasonOther, "Download in progress",
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
   return new DownloadFileWithDelay(std::move(save_info),
                                    default_download_directory,
                                    std::move(stream),
@@ -358,8 +358,8 @@ class CountingDownloadFileFactory : public DownloadFileFactory {
     std::unique_ptr<device::PowerSaveBlocker> psb(new device::PowerSaveBlocker(
         device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
         device::PowerSaveBlocker::kReasonOther, "Download in progress",
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
     return new CountingDownloadFile(std::move(save_info),
                                     default_downloads_directory,
                                     std::move(stream),
@@ -2238,7 +2238,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CookiePolicy) {
   ASSERT_TRUE(origin_two.Start());
 
   // Block third-party cookies.
-  ShellNetworkDelegate::SetAcceptAllCookies(false);
+  ShellNetworkDelegate::SetBlockThirdPartyCookies(true);
 
   // |url| redirects to a different origin |download| which tries to set a
   // cookie.

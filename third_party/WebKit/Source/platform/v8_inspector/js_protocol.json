@@ -133,13 +133,14 @@
             {
                 "id": "ExceptionDetails",
                 "type": "object",
+                "hidden": true,
                 "description": "Detailed information on exception (or error) that was thrown during script compilation or execution.",
                 "properties": [
                     { "name": "text", "type": "string", "description": "Exception text." },
                     { "name": "url", "type": "string", "optional": true, "description": "URL of the message origin." },
                     { "name": "scriptId", "type": "string", "optional": true, "description": "Script ID of the message origin." },
-                    { "name": "line", "type": "integer", "optional": true, "description": "Line number in the resource that generated this message." },
-                    { "name": "column", "type": "integer", "optional": true, "description": "Column number in the resource that generated this message." },
+                    { "name": "lineNumber", "type": "integer", "optional": true, "description": "Line number in the resource that generated this message. (0-based)." },
+                    { "name": "columnNumber", "type": "integer", "optional": true, "description": "Column number in the resource that generated this message. (0-based)." },
                     { "name": "stack", "$ref": "StackTrace", "optional": true, "description": "JavaScript stack trace for assertions and error messages." }
                 ]
             },
@@ -162,7 +163,7 @@
                 "properties": [
                     { "name": "description", "type": "string", "optional": true, "description": "String label of this stack trace. For async traces this may be a name of the function that initiated the async call." },
                     { "name": "callFrames", "type": "array", "items": { "$ref": "CallFrame" }, "description": "JavaScript function name." },
-                    { "name": "parent", "$ref": "StackTrace", "optional": true, "hidden": true, "hidden": true, "description": "Asynchronous JavaScript stack trace that preceded this stack, if available." }
+                    { "name": "parent", "$ref": "StackTrace", "optional": true, "hidden": true, "description": "Asynchronous JavaScript stack trace that preceded this stack, if available." }
                 ]
             }
         ],
@@ -308,6 +309,28 @@
                 "description": "Issued when all executionContexts were cleared in browser"
             },
             {
+                "name": "exceptionThrown",
+                "description": "Issued when exception was thrown and unhandled.",
+                "parameters": [
+                    { "name": "exceptionId", "type": "integer", "description": "Exception id." },
+                    { "name": "timestamp", "type": "number", "description": "Number of milliseconds since epoch. TODO(dgozman): unify with Console.Timestamp" },
+                    { "name": "details", "$ref": "ExceptionDetails" },
+                    { "name": "exception", "$ref": "RemoteObject", "optional": true, "description": "Exception object." },
+                    { "name": "executionContextId", "$ref": "ExecutionContextId", "optional": true, "description": "Identifier of the context where exception happened." }
+                ],
+                "hidden": true
+            },
+            {
+                "name": "exceptionRevoked",
+                "description": "Issued when unhandled exception was revoked.",
+                "parameters": [
+                    { "name": "timestamp", "type": "number", "description": "Number of milliseconds since epoch. TODO(dgozman): unify with Console.Timestamp" },
+                    { "name": "message", "type": "string", "description": "Message describing why exception was revoked." },
+                    { "name": "exceptionId", "type": "integer", "description": "The id of revoked exception, as reported in <code>exceptionUnhandled</code>." }
+                ],
+                "hidden": true
+            },
+            {
                 "name": "inspectRequested",
                 "parameters": [
                     { "name": "object", "$ref": "RemoteObject" },
@@ -347,8 +370,8 @@
                 "hidden": true,
                 "type": "object",
                 "properties": [
-                    { "name": "line", "type": "integer" },
-                    { "name": "column", "type": "integer" }
+                    { "name": "lineNumber", "type": "integer" },
+                    { "name": "columnNumber", "type": "integer" }
                 ],
                 "description": "Location in the source code."
             },
@@ -363,18 +386,6 @@
                     { "name": "scopeChain", "type": "array", "optional": true, "items": { "$ref": "Scope" }, "description": "Scope chain for this closure." }
                 ],
                 "description": "Information about the function."
-            },
-            {
-                "id": "GeneratorObjectDetails",
-                "hidden": true,
-                "type": "object",
-                "properties": [
-                    { "name": "function", "$ref": "Runtime.RemoteObject", "description": "Generator function." },
-                    { "name": "functionName", "type": "string", "description": "Name of the generator function." },
-                    { "name": "status", "type": "string", "enum": ["running", "suspended", "closed"], "description": "Current generator object status." },
-                    { "name": "location", "$ref": "Location", "optional": true, "description": "If suspended, location where generator function was suspended (e.g. location of the last 'yield'). Otherwise, location of the generator function." }
-                ],
-                "description": "Information about the generator object."
             },
             {
                 "id": "CallFrame",
@@ -579,17 +590,6 @@
                 "description": "Returns detailed information on given function."
             },
             {
-                "name": "getGeneratorObjectDetails",
-                "hidden": true,
-                "parameters": [
-                    { "name": "objectId", "$ref": "Runtime.RemoteObjectId", "description": "Id of the generator object to get details for." }
-                ],
-                "returns": [
-                    { "name": "details", "$ref": "GeneratorObjectDetails", "description": "Information about the generator object." }
-                ],
-                "description": "Returns detailed information on given generator object."
-            },
-            {
                 "name": "setPauseOnExceptions",
                 "parameters": [
                     { "name": "state", "type": "string", "enum": ["none", "uncaught", "all"], "description": "Pause on exceptions mode." }
@@ -712,7 +712,7 @@
                 "name": "paused",
                 "parameters": [
                     { "name": "callFrames", "type": "array", "items": { "$ref": "CallFrame" }, "description": "Call stack the virtual machine stopped on." },
-                    { "name": "reason", "type": "string", "enum": [ "XHR", "DOM", "EventListener", "exception", "assert", "CSPViolation", "debugCommand", "promiseRejection", "other" ], "description": "Pause reason." },
+                    { "name": "reason", "type": "string", "enum": [ "XHR", "DOM", "EventListener", "exception", "assert", "debugCommand", "promiseRejection", "other" ], "description": "Pause reason." },
                     { "name": "data", "type": "object", "optional": true, "description": "Object containing break-specific auxiliary properties." },
                     { "name": "hitBreakpoints", "type": "array", "optional": true, "items": { "type": "string" }, "description": "Hit breakpoints IDs", "hidden": true },
                     { "name": "asyncStackTrace", "$ref": "Runtime.StackTrace", "optional": true, "description": "Async stack trace, if any.", "hidden": true }
@@ -742,7 +742,7 @@
                 "description": "Console message.",
                 "properties": [
                     { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "console-api", "storage", "appcache", "rendering", "security", "other", "deprecation"], "description": "Message source." },
-                    { "name": "level", "type": "string", "enum": ["log", "warning", "error", "debug", "info", "revokedError"], "description": "Message severity." },
+                    { "name": "level", "type": "string", "enum": ["log", "warning", "error", "debug", "info"], "description": "Message severity." },
                     { "name": "text", "type": "string", "description": "Message text." },
                     { "name": "type", "type": "string", "optional": true, "enum": ["log", "dir", "dirxml", "table", "trace", "clear", "startGroup", "startGroupCollapsed", "endGroup", "assert", "profile", "profileEnd"], "description": "Console message type." },
                     { "name": "scriptId", "type": "string", "optional": true, "description": "Script ID of the message origin." },
@@ -754,9 +754,7 @@
                     { "name": "stack", "$ref": "Runtime.StackTrace", "optional": true, "description": "JavaScript stack trace for assertions and error messages." },
                     { "name": "networkRequestId", "type": "string", "optional": true, "description": "Identifier of the network request associated with this message." },
                     { "name": "timestamp", "$ref": "Timestamp", "description": "Timestamp, when this message was fired.", "hidden": true },
-                    { "name": "executionContextId", "$ref": "Runtime.ExecutionContextId", "optional": true, "description": "Identifier of the context where this message was created", "hidden": true },
-                    { "name": "messageId", "type": "integer", "hidden": true, "optional": true, "description": "Message id." },
-                    { "name": "relatedMessageId", "type": "integer", "hidden": true, "optional": true, "description": "Related message id." }
+                    { "name": "executionContextId", "$ref": "Runtime.ExecutionContextId", "optional": true, "description": "Identifier of the context where this message was created", "hidden": true }
                 ]
             }
         ],
@@ -873,7 +871,6 @@
                     { "name": "id", "type": "string" },
                     { "name": "location", "$ref": "Debugger.Location", "description": "Location of console.profile()." },
                     { "name": "title", "type": "string", "optional": true, "description": "Profile title passed as argument to console.profile()." }
-
                 ],
                 "description": "Sent when new profile recodring is started using console.profile() call."
             },
@@ -939,7 +936,6 @@
                 "parameters": [
                     { "name": "reportProgress", "type": "boolean", "optional": true, "description": "If true 'reportHeapSnapshotProgress' events will be generated while snapshot is being taken when the tracking is stopped." }
                 ]
-
             },
             {
                 "name": "takeHeapSnapshot",

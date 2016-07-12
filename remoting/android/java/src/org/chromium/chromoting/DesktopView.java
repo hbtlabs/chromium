@@ -13,10 +13,8 @@ import android.graphics.Point;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
-import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
-import android.view.SurfaceView;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
@@ -31,8 +29,7 @@ import org.chromium.chromoting.jni.Display;
  * multitouch pan and zoom gestures, and collects and forwards input events.
  */
 /** GUI element that holds the drawing canvas. */
-public class DesktopView extends SurfaceView implements DesktopViewInterface,
-        SurfaceHolder.Callback {
+public class DesktopView extends AbstractDesktopView implements SurfaceHolder.Callback {
     /** Used to define the animation feedback shown when a user touches the screen. */
     public enum InputFeedbackType { NONE, SMALL_ANIMATION, LARGE_ANIMATION }
 
@@ -75,8 +72,11 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     /** Whether the TouchInputHandler has requested animation to be performed. */
     private boolean mInputAnimationRunning = false;
 
-    public DesktopView(Context context, AttributeSet attributes) {
-        super(context, attributes);
+    public DesktopView(Context context, Display display) {
+        super(context);
+
+        Preconditions.notNull(display);
+        mDisplay = display;
 
         // Give this view keyboard focus, allowing us to customize the soft keyboard's settings.
         setFocusableInTouchMode(true);
@@ -87,20 +87,18 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         mRepaintPending = false;
 
         getHolder().addCallback(this);
+
+        attachRedrawCallback();
     }
 
     @Override
     public void init(Desktop desktop, Client client) {
         Preconditions.isNull(mDesktop);
         Preconditions.isNull(mClient);
-        Preconditions.isNull(mDisplay);
         Preconditions.notNull(desktop);
         Preconditions.notNull(client);
-        Preconditions.notNull(client.getDisplay());
-        Preconditions.isTrue(client.getDisplay() instanceof Display);
         mDesktop = desktop;
         mClient = client;
-        mDisplay = (Display) client.getDisplay();
         mInputHandler.init(desktop, new InputEventSender(client));
     }
 
@@ -144,6 +142,9 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         }
 
         Bitmap image = mDisplay.getVideoFrame();
+        synchronized (mRenderData) {
+            mRepaintPending = false;
+        }
         if (image == null) {
             // This can happen if the client is connected, but a complete video frame has not yet
             // been decoded.
@@ -171,7 +172,6 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         Point cursorPosition;
         boolean drawCursor;
         synchronized (mRenderData) {
-            mRepaintPending = false;
             // Don't try to lock the canvas before it is ready, as the implementation of
             // lockCanvas() may throttle these calls to a slow rate in order to avoid consuming CPU.
             // Note that a successful call to lockCanvas() will prevent the framework from
@@ -244,7 +244,6 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             mRenderData.screenHeight = height;
         }
 
-        attachRedrawCallback();
         mOnClientSizeChanged.raise(new SizeChangedEventParameter(width, height));
         requestRepaint();
     }

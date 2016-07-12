@@ -57,6 +57,10 @@ Polymer({
   /** @override */
   ready: function() {
     this.grouped_ = loadTimeData.getBoolean('groupByDomain');
+
+    cr.ui.decorate('command', cr.ui.Command);
+    document.addEventListener('canExecute', this.onCanExecute_.bind(this));
+    document.addEventListener('command', this.onCommand_.bind(this));
   },
 
   /** @private */
@@ -85,18 +89,8 @@ Polymer({
     toolbar.count = 0;
   },
 
-  /**
-   * Listens for call to delete all selected items and loops through all items
-   * to determine which ones are selected and deletes these.
-   */
   deleteSelected: function() {
-    if (!loadTimeData.getBoolean('allowDeletingHistory'))
-      return;
-
-    // TODO(hsampson): add a popup to check whether the user definitely
-    // wants to delete the selected items.
-    /** @type {HistoryListContainerElement} */ (this.$['history'])
-        .deleteSelected();
+    this.$.history.deleteSelectedWithPrompt();
   },
 
   /**
@@ -118,6 +112,23 @@ Polymer({
    * @param {{detail: {domain: string}}} e
    */
   searchDomain_: function(e) { this.$.toolbar.setSearchTerm(e.detail.domain); },
+
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onCanExecute_: function(e) {
+    e.canExecute = true;
+  },
+
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onCommand_: function(e) {
+    if (e.command.id == 'find-command')
+      this.$.toolbar.showSearchField();
+  },
 
   /**
    * @param {!Array<!ForeignSession>} sessionList Array of objects describing

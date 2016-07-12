@@ -208,7 +208,6 @@ protected:
     void registerMockedHttpURLLoadWithCSP(const std::string& fileName, const std::string& csp, bool reportOnly = false)
     {
         WebURLResponse response;
-        response.initialize();
         response.setMIMEType("text/html");
         response.addHTTPHeaderField(reportOnly ? WebString("Content-Security-Policy-Report-Only") : WebString("Content-Security-Policy"), WebString::fromUTF8(csp));
         std::string fullString = m_baseURL + fileName;
@@ -3199,7 +3198,7 @@ TEST_P(ParameterizedWebFrameTest, CharacterIndexAtPointWithPinchZoom)
     WebRect baseRect;
     WebRect extentRect;
 
-    WebFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame();
+    WebLocalFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame()->toWebLocalFrame();
     size_t ix = mainFrame->characterIndexForPoint(WebPoint(320, 388));
 
     EXPECT_EQ(2ul, ix);
@@ -3213,7 +3212,7 @@ TEST_P(ParameterizedWebFrameTest, FirstRectForCharacterRangeWithPinchZoom)
     webViewHelper.initializeAndLoad(m_baseURL + "textbox.html", true);
     webViewHelper.resize(WebSize(640, 480));
 
-    WebFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame();
+    WebLocalFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame()->toWebLocalFrame();
     mainFrame->executeScript(WebScriptSource("selectRange();"));
 
     WebRect oldRect;
@@ -3323,6 +3322,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional)
     WebURLRequest request;
     request.initialize();
     request.setURL(toKURL(m_baseURL + "fixed_layout.html"));
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     webViewHelper.webView()->mainFrame()->loadRequest(request);
     // start reload before first request is delivered.
     FrameTestHelpers::reloadFrameIgnoringCache(webViewHelper.webView()->mainFrame());
@@ -3667,7 +3667,7 @@ TEST_P(ParameterizedWebFrameTest, GetFullHtmlOfPage)
 {
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad("about:blank", true);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
 
     // Generate a simple test case.
     const char simpleSource[] = "<p>Hello</p><p>World</p>";
@@ -3677,12 +3677,12 @@ TEST_P(ParameterizedWebFrameTest, GetFullHtmlOfPage)
     WebString text = WebFrameContentDumper::dumpWebViewAsText(webViewHelper.webView(), std::numeric_limits<size_t>::max());
     EXPECT_EQ("Hello\n\nWorld", text.utf8());
 
-    const std::string html = WebFrameContentDumper::dumpAsMarkup(frame->toWebLocalFrame()).utf8();
+    const std::string html = WebFrameContentDumper::dumpAsMarkup(frame).utf8();
 
     // Load again with the output html.
     FrameTestHelpers::loadHTMLString(frame, html, testURL);
 
-    EXPECT_EQ(html, WebFrameContentDumper::dumpAsMarkup(frame->toWebLocalFrame()).utf8());
+    EXPECT_EQ(html, WebFrameContentDumper::dumpAsMarkup(frame).utf8());
 
     text = WebFrameContentDumper::dumpWebViewAsText(webViewHelper.webView(), std::numeric_limits<size_t>::max());
     EXPECT_EQ("Hello\n\nWorld", text.utf8());
@@ -4130,12 +4130,12 @@ static WebRect elementBounds(WebFrame* frame, const WebString& id)
 
 static std::string selectionAsString(WebFrame* frame)
 {
-    return frame->selectionAsText().utf8();
+    return frame->toWebLocalFrame()->selectionAsText().utf8();
 }
 
 TEST_P(ParameterizedWebFrameTest, SelectRange)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4144,7 +4144,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRange)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_basic.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     EXPECT_EQ("Some test text for testing.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4156,7 +4156,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRange)
         || selectionString == "Some test text for testing");
 
     initializeTextSelectionWebView(m_baseURL + "select_range_scroll.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     EXPECT_EQ("Some offscreen test text for testing.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4180,7 +4180,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeInIframe)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_iframe.html", &webViewHelper);
     frame = webViewHelper.webView()->mainFrame();
-    WebFrame* subframe = frame->firstChild();
+    WebLocalFrame* subframe = frame->firstChild()->toWebLocalFrame();
     EXPECT_EQ("Some test text for testing.", selectionAsString(subframe));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     subframe->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4194,7 +4194,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeInIframe)
 
 TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4204,7 +4204,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
     // The selection range should be clipped to the bounds of the editable element.
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_div_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4213,7 +4213,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 
     // As above, but extending the selection to the bottom of the document.
     initializeTextSelectionWebView(m_baseURL + "select_range_div_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
 
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->selectRange(topLeft(startWebRect), bottomRightMinusOne(endWebRect));
@@ -4229,7 +4229,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 // http://crbug.com/238334.
 TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4239,7 +4239,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
     // The selection range should be clipped to the bounds of the editable element.
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_span_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4248,7 +4248,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
 
     // As above, but extending the selection to the bottom of the document.
     initializeTextSelectionWebView(m_baseURL + "select_range_span_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
 
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->selectRange(topLeft(startWebRect), bottomRightMinusOne(endWebRect));
@@ -4266,7 +4266,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeCanMoveSelectionStart)
     registerMockedHttpURLLoad("text_selection.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "text_selection.html", &webViewHelper);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
 
     // Select second span. We can move the start to include the first span.
     frame->executeScript(WebScriptSource("selectElement('header_2');"));
@@ -4314,7 +4314,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeCanMoveSelectionEnd)
     registerMockedHttpURLLoad("text_selection.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "text_selection.html", &webViewHelper);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
 
     // Select first span. We can move the end to include the second span.
     frame->executeScript(WebScriptSource("selectElement('header_1');"));
@@ -4716,7 +4716,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "select_range_basic.html");
 
     // The frame starts with no selection.
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     ASSERT_TRUE(frame->hasSelection());
     EXPECT_TRUE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
 
@@ -4747,7 +4747,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     ASSERT_TRUE(frame->hasSelection());
     EXPECT_FALSE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
 
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     frame->executeCommand(WebString::fromUTF8("Unselect"));
     webViewHelper.webView()->updateAllLifecyclePhases();
     ASSERT_FALSE(frame->hasSelection());
@@ -5074,7 +5074,6 @@ TEST_P(ParameterizedWebFrameTest, ReplaceNavigationAfterHistoryNavigation)
     error.domain = "WebFrameTest";
     std::string errorURL = "http://0.0.0.0";
     WebURLResponse response;
-    response.initialize();
     response.setURL(URLTestHelpers::toKURL(errorURL));
     response.setMIMEType("text/html");
     response.setHTTPStatusCode(500);
@@ -5145,7 +5144,7 @@ TEST_P(ParameterizedWebFrameTest, MoveCaretSelectionTowardsWindowPointWithNoSele
     WebFrame* frame = webViewHelper.webView()->mainFrame();
 
     // This test passes if this doesn't crash.
-    frame->moveCaretSelection(WebPoint(0, 0));
+    frame->toWebLocalFrame()->moveCaretSelection(WebPoint(0, 0));
 }
 
 class SpellCheckClient : public WebSpellCheckClient {
@@ -5720,14 +5719,12 @@ TEST_P(ParameterizedWebFrameTest, FirstPartyForCookiesForRedirect)
     char redirect[] = "http://internal.test/first_party.html";
     WebURL redirectURL(toKURL(redirect));
     WebURLResponse redirectResponse;
-    redirectResponse.initialize();
     redirectResponse.setMIMEType("text/html");
     redirectResponse.setHTTPStatusCode(302);
     redirectResponse.setHTTPHeaderField("Location", redirect);
     Platform::current()->getURLLoaderMockFactory()->registerURL(testURL, redirectResponse, filePath);
 
     WebURLResponse finalResponse;
-    finalResponse.initialize();
     finalResponse.setMIMEType("text/html");
     Platform::current()->getURLLoaderMockFactory()->registerURL(redirectURL, finalResponse, filePath);
 
@@ -6293,6 +6290,7 @@ TEST_P(ParameterizedWebFrameTest, CurrentHistoryItem)
     WebURLRequest request;
     request.initialize();
     request.setURL(toKURL(url));
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     frame->loadRequest(request);
 
     // Before commit, there is no history item.
@@ -8812,6 +8810,7 @@ TEST_F(WebFrameTest, LoadJavascriptURLInNewFrame)
     URLTestHelpers::registerMockedURLLoad(toKURL(redirectURL), "foo.html");
     request.initialize();
     request.setURL(toKURL("javascript:location='" + redirectURL + "'"));
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     helper.webViewImpl()->mainFrame()->toWebLocalFrame()->loadRequest(request);
 
     // Normally, the result of the JS url replaces the existing contents on the

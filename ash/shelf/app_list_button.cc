@@ -56,11 +56,17 @@ AppListButton::AppListButton(InkDropButtonListener* listener,
 AppListButton::~AppListButton() {}
 
 void AppListButton::OnAppListShown() {
-  AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
+  if (ash::MaterialDesignController::IsShelfMaterial())
+    AnimateInkDrop(views::InkDropState::ACTIVATED, nullptr);
+  else
+    SchedulePaint();
 }
 
 void AppListButton::OnAppListDismissed() {
-  AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
+  if (ash::MaterialDesignController::IsShelfMaterial())
+    AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
+  else
+    SchedulePaint();
 }
 
 bool AppListButton::OnMousePressed(const ui::MouseEvent& event) {
@@ -267,7 +273,11 @@ void AppListButton::NotifyClick(const ui::Event& event) {
 }
 
 bool AppListButton::ShouldEnterPushedState(const ui::Event& event) {
-  return !Shell::GetInstance()->IsApplistVisible();
+  if (!shelf_view_->ShouldEventActivateButton(this, event))
+    return false;
+  if (Shell::GetInstance()->IsApplistVisible())
+    return false;
+  return views::ImageButton::ShouldEnterPushedState(event);
 }
 
 bool AppListButton::ShouldShowInkDropHighlight() const {

@@ -1396,7 +1396,7 @@ static leveldb::Status DeleteBlobsInRange(
     StringPiece key_piece(it->Key());
     std::string user_key =
         BlobEntryKey::ReencodeToObjectStoreDataKey(&key_piece);
-    if (!user_key.size()) {
+    if (user_key.empty()) {
       INTERNAL_CONSISTENCY_ERROR_UNTESTED(GET_IDBDATABASE_METADATA);
       return InternalInconsistencyStatus();
     }
@@ -1506,7 +1506,7 @@ static bool CheckObjectStoreAndMetaDataType(const LevelDBIterator* it,
 // plowing ahead when bad data is encountered.
 leveldb::Status IndexedDBBackingStore::GetObjectStores(
     int64_t database_id,
-    IndexedDBDatabaseMetadata::ObjectStoreMap* object_stores) {
+    std::map<int64_t, IndexedDBObjectStoreMetadata>* object_stores) {
   IDB_TRACE("IndexedDBBackingStore::GetObjectStores");
   if (!KeyPrefix::IsValidDatabaseId(database_id))
     return InvalidDBKeyStatus();
@@ -1936,7 +1936,7 @@ leveldb::Status IndexedDBBackingStore::PutRecord(
                                        handles);
   if (!s.ok())
     return s;
-  DCHECK(!handles->size());
+  DCHECK(handles->empty());
 
   const std::string exists_entry_key =
       ExistsEntryKey::Encode(database_id, object_store_id, key);
@@ -2180,7 +2180,7 @@ leveldb::Status IndexedDBBackingStore::KeyExistsInObjectStore(
   }
   if (!*found)
     return leveldb::Status::OK();
-  if (!data.size()) {
+  if (data.empty()) {
     INTERNAL_READ_ERROR_UNTESTED(KEY_EXISTS_IN_OBJECT_STORE);
     return InternalInconsistencyStatus();
   }
@@ -2558,7 +2558,7 @@ static bool CheckIndexAndMetaDataKey(const LevelDBIterator* it,
 leveldb::Status IndexedDBBackingStore::GetIndexes(
     int64_t database_id,
     int64_t object_store_id,
-    IndexedDBObjectStoreMetadata::IndexMap* indexes) {
+    std::map<int64_t, IndexedDBIndexMetadata>* indexes) {
   IDB_TRACE("IndexedDBBackingStore::GetIndexes");
   if (!KeyPrefix::ValidIds(database_id, object_store_id))
     return InvalidDBKeyStatus();
@@ -2709,8 +2709,7 @@ leveldb::Status IndexedDBBackingStore::Transaction::GetBlobInfoForRecord(
     const std::string& object_store_data_key,
     IndexedDBValue* value) {
   BlobChangeRecord* change_record = NULL;
-  BlobChangeMap::const_iterator blob_iter =
-      blob_change_map_.find(object_store_data_key);
+  auto blob_iter = blob_change_map_.find(object_store_data_key);
   if (blob_iter != blob_change_map_.end()) {
     change_record = blob_iter->second;
   } else {
@@ -3044,7 +3043,7 @@ leveldb::Status IndexedDBBackingStore::GetPrimaryKeyViaIndex(
   }
   if (!found)
     return s;
-  if (!found_encoded_primary_key.size()) {
+  if (found_encoded_primary_key.empty()) {
     INTERNAL_READ_ERROR_UNTESTED(GET_PRIMARY_KEY_VIA_INDEX);
     return InvalidDBKeyStatus();
   }
@@ -3606,7 +3605,7 @@ bool IndexKeyCursorImpl::LoadCurrentRow(leveldb::Status* s) {
     transaction_->transaction()->Remove(iterator_->Key());
     return false;
   }
-  if (!result.size()) {
+  if (result.empty()) {
     INTERNAL_READ_ERROR_UNTESTED(LOAD_CURRENT_ROW);
     return false;
   }
@@ -3723,7 +3722,7 @@ bool IndexCursorImpl::LoadCurrentRow(leveldb::Status* s) {
     transaction_->transaction()->Remove(iterator_->Key());
     return false;
   }
-  if (!result.size()) {
+  if (result.empty()) {
     INTERNAL_READ_ERROR_UNTESTED(LOAD_CURRENT_ROW);
     return false;
   }
@@ -4165,7 +4164,7 @@ leveldb::Status IndexedDBBackingStore::Transaction::CommitPhaseOne(
     return s;
   }
 
-  DCHECK(!new_files_to_write.size() ||
+  DCHECK(new_files_to_write.empty() ||
          KeyPrefix::IsValidDatabaseId(database_id_));
   if (!CollectBlobFilesToRemove()) {
     INTERNAL_WRITE_ERROR_UNTESTED(TRANSACTION_COMMIT_METHOD);
@@ -4248,9 +4247,9 @@ leveldb::Status IndexedDBBackingStore::Transaction::CommitPhaseTwo() {
 
   if (backing_store_->is_incognito()) {
     if (!blob_change_map_.empty()) {
-      BlobChangeMap& target_map = backing_store_->incognito_blob_map_;
+      auto& target_map = backing_store_->incognito_blob_map_;
       for (auto& iter : blob_change_map_) {
-        BlobChangeMap::iterator target_record = target_map.find(iter.first);
+        auto target_record = target_map.find(iter.first);
         if (target_record != target_map.end()) {
           delete target_record->second;
           target_map.erase(target_record);
@@ -4433,7 +4432,7 @@ void IndexedDBBackingStore::Transaction::PutBlobInfo(
     database_id_ = database_id;
   DCHECK_EQ(database_id_, database_id);
 
-  BlobChangeMap::iterator it = blob_change_map_.find(object_store_data_key);
+  const auto& it = blob_change_map_.find(object_store_data_key);
   BlobChangeRecord* record = NULL;
   if (it == blob_change_map_.end()) {
     record = new BlobChangeRecord(object_store_data_key, object_store_id);
@@ -4444,7 +4443,7 @@ void IndexedDBBackingStore::Transaction::PutBlobInfo(
   DCHECK_EQ(record->object_store_id(), object_store_id);
   record->SetBlobInfo(blob_info);
   record->SetHandles(handles);
-  DCHECK(!handles || !handles->size());
+  DCHECK(!handles || handles->empty());
 }
 
 IndexedDBBackingStore::Transaction::WriteDescriptor::WriteDescriptor(

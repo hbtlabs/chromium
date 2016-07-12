@@ -22,6 +22,7 @@
 #include "ash/common/shelf/shelf_item_delegate.h"
 #include "ash/common/shelf/shelf_item_delegate_manager.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/locale/locale_notification_controller.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -59,7 +60,6 @@
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shelf/shelf_window_watcher.h"
-#include "ash/shell_delegate.h"
 #include "ash/shell_factory.h"
 #include "ash/shell_init_params.h"
 #include "ash/system/status_area_widget.h"
@@ -134,7 +134,6 @@
 #include "ash/display/resolution_notification_controller.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/system/chromeos/brightness/brightness_controller_chromeos.h"
 #include "ash/system/chromeos/power/power_event_observer.h"
 #include "ash/system/chromeos/power/video_activity_notifier.h"
 #include "ash/touch/touch_transformer_controller.h"
@@ -320,25 +319,26 @@ void Shell::ShowContextMenu(const gfx::Point& location_in_screen,
 
 void Shell::ShowAppList(aura::Window* window) {
   // If the context window is not given, show it on the target root window.
-  delegate_->GetAppListPresenter()->Show(GetDisplayIdForWindow(window));
+  wm_shell_->delegate()->GetAppListPresenter()->Show(
+      GetDisplayIdForWindow(window));
 }
 
 void Shell::DismissAppList() {
-  delegate_->GetAppListPresenter()->Dismiss();
+  wm_shell_->delegate()->GetAppListPresenter()->Dismiss();
 }
 
 void Shell::ToggleAppList(aura::Window* window) {
   // If the context window is not given, show it on the target root window.
-  delegate_->GetAppListPresenter()->ToggleAppList(
+  wm_shell_->delegate()->GetAppListPresenter()->ToggleAppList(
       GetDisplayIdForWindow(window));
 }
 
 bool Shell::IsApplistVisible() const {
-  return delegate_->GetAppListPresenter()->IsVisible();
+  return wm_shell_->delegate()->GetAppListPresenter()->IsVisible();
 }
 
 bool Shell::GetAppListTargetVisibility() const {
-  return delegate_->GetAppListPresenter()->GetTargetVisibility();
+  return wm_shell_->delegate()->GetAppListPresenter()->GetTargetVisibility();
 }
 
 views::NonClientFrameView* Shell::CreateDefaultNonClientFrameView(
@@ -551,7 +551,8 @@ ShelfDelegate* Shell::GetShelfDelegate() {
     shelf_item_delegate_manager_.reset(
         new ShelfItemDelegateManager(shelf_model_.get()));
 
-    shelf_delegate_.reset(delegate_->CreateShelfDelegate(shelf_model_.get()));
+    shelf_delegate_.reset(
+        wm_shell_->delegate()->CreateShelfDelegate(shelf_model_.get()));
     std::unique_ptr<ShelfItemDelegate> controller(new AppListShelfItemDelegate);
 
     // Finding the shelf model's location of the app list and setting its
@@ -599,9 +600,9 @@ void Shell::DoInitialWorkspaceAnimation() {
 // Shell, private:
 
 Shell::Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool)
-    : target_root_window_(nullptr),
+    : wm_shell_(new WmShellAura(delegate)),
+      target_root_window_(nullptr),
       scoped_target_root_window_(nullptr),
-      delegate_(delegate),
       shelf_model_(new ShelfModel),
       link_handler_model_factory_(nullptr),
       activation_client_(nullptr),
@@ -612,9 +613,8 @@ Shell::Shell(ShellDelegate* delegate, base::SequencedWorkerPool* blocking_pool)
       simulate_modal_window_open_for_testing_(false),
       is_touch_hud_projection_enabled_(false),
       blocking_pool_(blocking_pool) {
-  DCHECK(delegate_.get());
   DCHECK(aura::Env::GetInstanceDontCreate());
-  gpu_support_.reset(delegate_->CreateGPUSupport());
+  gpu_support_.reset(wm_shell_->delegate()->CreateGPUSupport());
   display_manager_.reset(new DisplayManager);
   window_tree_host_manager_.reset(new WindowTreeHostManager);
   user_metrics_recorder_.reset(new UserMetricsRecorder);
@@ -629,7 +629,7 @@ Shell::~Shell() {
 
   user_metrics_recorder_->OnShellShuttingDown();
 
-  delegate_->PreShutdown();
+  wm_shell_->delegate()->PreShutdown();
 
   views::FocusManagerFactory::Install(nullptr);
 
@@ -700,7 +700,7 @@ Shell::~Shell() {
 #if defined(OS_CHROMEOS)
   // VideoActivityNotifier must be deleted before |video_detector_| is
   // deleted because it's observing video activity through
-  // VideoDetectorObserver interface.
+  // VideoDetector::Observer interface.
   video_activity_notifier_.reset();
 #endif  // defined(OS_CHROMEOS)
   video_detector_.reset();
@@ -812,7 +812,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   DCHECK(in_mus_) << "linux desktop does not support ash.";
 #endif
 
-  wm_shell_.reset(new WmShellAura);
   scoped_overview_animation_settings_factory_.reset(
       new ScopedOverviewAnimationSettingsFactoryAura);
   window_positioner_.reset(new WindowPositioner(wm_shell_.get()));
@@ -828,7 +827,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 #endif
   }
 
-  delegate_->PreInit();
+  wm_shell_->delegate()->PreInit();
   bool display_initialized = display_manager_->InitFromCommandLine();
 
   display_configuration_controller_.reset(new DisplayConfigurationController(
@@ -870,7 +869,7 @@ void Shell::Init(const ShellInitParams& init_params) {
     display_configurator_->set_state_controller(display_change_observer_.get());
     display_configurator_->set_mirroring_controller(display_manager_.get());
     display_configurator_->ForceInitialConfigure(
-        delegate_->IsFirstRunAfterBoot() ? kChromeOsBootColor : 0);
+        wm_shell_->delegate()->IsFirstRunAfterBoot() ? kChromeOsBootColor : 0);
     display_initialized = true;
   }
   display_color_manager_.reset(
@@ -1010,20 +1009,24 @@ void Shell::Init(const ShellInitParams& init_params) {
   // This controller needs to be set before SetupManagedWindowMode.
   desktop_background_controller_.reset(
       new DesktopBackgroundController(blocking_pool_));
-  user_wallpaper_delegate_.reset(delegate_->CreateUserWallpaperDelegate());
+  user_wallpaper_delegate_.reset(
+      wm_shell_->delegate()->CreateUserWallpaperDelegate());
 
-  session_state_delegate_.reset(delegate_->CreateSessionStateDelegate());
-  accessibility_delegate_.reset(delegate_->CreateAccessibilityDelegate());
-  new_window_delegate_.reset(delegate_->CreateNewWindowDelegate());
+  session_state_delegate_.reset(
+      wm_shell_->delegate()->CreateSessionStateDelegate());
+  accessibility_delegate_.reset(
+      wm_shell_->delegate()->CreateAccessibilityDelegate());
+  new_window_delegate_.reset(wm_shell_->delegate()->CreateNewWindowDelegate());
   wm_shell_->SetMediaDelegate(
-      base::WrapUnique(delegate_->CreateMediaDelegate()));
-  pointer_watcher_delegate_ = delegate_->CreatePointerWatcherDelegate();
+      base::WrapUnique(wm_shell_->delegate()->CreateMediaDelegate()));
+  pointer_watcher_delegate_ =
+      wm_shell_->delegate()->CreatePointerWatcherDelegate();
 
   resize_shadow_controller_.reset(new ResizeShadowController());
   shadow_controller_.reset(new ::wm::ShadowController(activation_client_));
 
   wm_shell_->SetSystemTrayDelegate(
-      base::WrapUnique(delegate()->CreateSystemTrayDelegate()));
+      base::WrapUnique(wm_shell_->delegate()->CreateSystemTrayDelegate()));
 
   locale_notification_controller_.reset(new LocaleNotificationController);
 
@@ -1069,11 +1072,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   }
 
 #if defined(OS_CHROMEOS)
-  // Set accelerator controller delegates.
-  accelerator_controller_->SetBrightnessControlDelegate(
-      std::unique_ptr<BrightnessControlDelegate>(
-          new system::BrightnessControllerChromeos));
-
   power_event_observer_.reset(new PowerEventObserver());
   user_activity_notifier_.reset(
       new ui::UserActivityPowerManagerNotifier(user_activity_detector_.get()));
@@ -1107,7 +1105,8 @@ void Shell::InitKeyboard() {
       }
     }
     keyboard::KeyboardController::ResetInstance(
-        new keyboard::KeyboardController(delegate_->CreateKeyboardUI()));
+        new keyboard::KeyboardController(
+            wm_shell_->delegate()->CreateKeyboardUI()));
   }
 }
 

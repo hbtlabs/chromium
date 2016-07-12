@@ -8,6 +8,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/layer.h"
 #include "cc/test/fake_output_surface.h"
+#include "cc/trees/clip_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -518,6 +519,171 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TransformCombining)
         contentLayerAt(1)->transform_tree_index());
 }
 
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneClip)
+{
+    RefPtr<ClipPaintPropertyNode> clip = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(100, 100, 300, 200));
+
+    TestPaintArtifact artifact;
+    artifact.chunk(nullptr, clip, nullptr)
+        .rectDrawing(FloatRect(220, 80, 300, 200), Color::black);
+    update(artifact.build());
+
+    ASSERT_EQ(1u, contentLayerCount());
+    const cc::Layer* layer = contentLayerAt(0);
+    EXPECT_THAT(layer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 300, 200), Color::black)));
+    EXPECT_EQ(translation(220, 80), layer->screen_space_transform());
+
+    const cc::ClipNode* clipNode = propertyTrees().clip_tree.Node(layer->clip_tree_index());
+    EXPECT_TRUE(clipNode->applies_local_clip);
+    EXPECT_TRUE(clipNode->layers_are_clipped);
+    EXPECT_EQ(gfx::RectF(100, 100, 300, 200), clipNode->clip);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedClips)
+{
+    RefPtr<ClipPaintPropertyNode> clip1 = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(100, 100, 700, 700));
+    RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(200, 200, 700, 100), clip1);
+
+    TestPaintArtifact artifact;
+    artifact.chunk(nullptr, clip1, nullptr)
+        .rectDrawing(FloatRect(300, 350, 100, 100), Color::white);
+    artifact.chunk(nullptr, clip2, nullptr)
+        .rectDrawing(FloatRect(300, 350, 100, 100), Color::lightGray);
+    artifact.chunk(nullptr, clip1, nullptr)
+        .rectDrawing(FloatRect(300, 350, 100, 100), Color::darkGray);
+    artifact.chunk(nullptr, clip2, nullptr)
+        .rectDrawing(FloatRect(300, 350, 100, 100), Color::black);
+    update(artifact.build());
+
+    ASSERT_EQ(4u, contentLayerCount());
+
+    const cc::Layer* whiteLayer = contentLayerAt(0);
+    EXPECT_THAT(whiteLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 100, 100), Color::white)));
+    EXPECT_EQ(translation(300, 350), whiteLayer->screen_space_transform());
+
+    const cc::Layer* lightGrayLayer = contentLayerAt(1);
+    EXPECT_THAT(lightGrayLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 100, 100), Color::lightGray)));
+    EXPECT_EQ(translation(300, 350), lightGrayLayer->screen_space_transform());
+
+    const cc::Layer* darkGrayLayer = contentLayerAt(2);
+    EXPECT_THAT(darkGrayLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 100, 100), Color::darkGray)));
+    EXPECT_EQ(translation(300, 350), darkGrayLayer->screen_space_transform());
+
+    const cc::Layer* blackLayer = contentLayerAt(3);
+    EXPECT_THAT(blackLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 100, 100), Color::black)));
+    EXPECT_EQ(translation(300, 350), blackLayer->screen_space_transform());
+
+    EXPECT_EQ(whiteLayer->clip_tree_index(), darkGrayLayer->clip_tree_index());
+    const cc::ClipNode* outerClip = propertyTrees().clip_tree.Node(whiteLayer->clip_tree_index());
+    EXPECT_TRUE(outerClip->applies_local_clip);
+    EXPECT_TRUE(outerClip->layers_are_clipped);
+    EXPECT_EQ(gfx::RectF(100, 100, 700, 700), outerClip->clip);
+
+    EXPECT_EQ(lightGrayLayer->clip_tree_index(), blackLayer->clip_tree_index());
+    const cc::ClipNode* innerClip = propertyTrees().clip_tree.Node(blackLayer->clip_tree_index());
+    EXPECT_TRUE(innerClip->applies_local_clip);
+    EXPECT_TRUE(innerClip->layers_are_clipped);
+    EXPECT_EQ(gfx::RectF(200, 200, 700, 100), innerClip->clip);
+    EXPECT_EQ(outerClip->id, innerClip->parent_id);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, DeeplyNestedClips)
+{
+    Vector<RefPtr<ClipPaintPropertyNode>> clips;
+    for (unsigned i = 1; i <= 10; i++) {
+        clips.append(ClipPaintPropertyNode::create(
+            nullptr, FloatRoundedRect(5 * i, 0, 100, 200 - 10 * i),
+            clips.isEmpty() ? nullptr : clips.last()));
+    }
+
+    TestPaintArtifact artifact;
+    artifact.chunk(nullptr, clips.last(), nullptr)
+        .rectDrawing(FloatRect(0, 0, 200, 200), Color::white);
+    update(artifact.build());
+
+    // Check the drawing layer.
+    ASSERT_EQ(1u, contentLayerCount());
+    const cc::Layer* drawingLayer = contentLayerAt(0);
+    EXPECT_THAT(drawingLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 200, 200), Color::white)));
+    EXPECT_EQ(gfx::Transform(), drawingLayer->screen_space_transform());
+
+    // Check the clip nodes.
+    const cc::ClipNode* clipNode = propertyTrees().clip_tree.Node(drawingLayer->clip_tree_index());
+    for (auto it = clips.rbegin(); it != clips.rend(); ++it) {
+        const ClipPaintPropertyNode* paintClipNode = it->get();
+        EXPECT_TRUE(clipNode->applies_local_clip);
+        EXPECT_TRUE(clipNode->layers_are_clipped);
+        EXPECT_EQ(paintClipNode->clipRect().rect(), clipNode->clip);
+        clipNode = propertyTrees().clip_tree.Node(clipNode->parent_id);
+    }
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, SiblingClips)
+{
+    RefPtr<ClipPaintPropertyNode> commonClip = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(0, 0, 800, 600));
+    RefPtr<ClipPaintPropertyNode> clip1 = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(0, 0, 400, 600), commonClip);
+    RefPtr<ClipPaintPropertyNode> clip2 = ClipPaintPropertyNode::create(
+        nullptr, FloatRoundedRect(400, 0, 400, 600), commonClip);
+
+    TestPaintArtifact artifact;
+    artifact.chunk(nullptr, clip1, nullptr)
+        .rectDrawing(FloatRect(0, 0, 640, 480), Color::white);
+    artifact.chunk(nullptr, clip2, nullptr)
+        .rectDrawing(FloatRect(0, 0, 640, 480), Color::black);
+    update(artifact.build());
+
+    ASSERT_EQ(2u, contentLayerCount());
+
+    const cc::Layer* whiteLayer = contentLayerAt(0);
+    EXPECT_THAT(whiteLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 640, 480), Color::white)));
+    EXPECT_EQ(gfx::Transform(), whiteLayer->screen_space_transform());
+    const cc::ClipNode* whiteClip = propertyTrees().clip_tree.Node(whiteLayer->clip_tree_index());
+    EXPECT_TRUE(whiteClip->applies_local_clip);
+    EXPECT_TRUE(whiteClip->layers_are_clipped);
+    ASSERT_EQ(gfx::RectF(0, 0, 400, 600), whiteClip->clip);
+
+    const cc::Layer* blackLayer = contentLayerAt(1);
+    EXPECT_THAT(blackLayer->GetPicture(),
+        Pointee(drawsRectangle(FloatRect(0, 0, 640, 480), Color::black)));
+    EXPECT_EQ(gfx::Transform(), blackLayer->screen_space_transform());
+    const cc::ClipNode* blackClip = propertyTrees().clip_tree.Node(blackLayer->clip_tree_index());
+    EXPECT_TRUE(blackClip->applies_local_clip);
+    EXPECT_TRUE(blackClip->layers_are_clipped);
+    ASSERT_EQ(gfx::RectF(400, 0, 400, 600), blackClip->clip);
+
+    EXPECT_EQ(whiteClip->parent_id, blackClip->parent_id);
+    const cc::ClipNode* commonClipNode = propertyTrees().clip_tree.Node(whiteClip->parent_id);
+    EXPECT_TRUE(commonClipNode->applies_local_clip);
+    EXPECT_TRUE(commonClipNode->layers_are_clipped);
+    ASSERT_EQ(gfx::RectF(0, 0, 800, 600), commonClipNode->clip);
+}
+
+TEST_F(PaintArtifactCompositorTestWithPropertyTrees, ForeignLayerPassesThrough)
+{
+    scoped_refptr<cc::Layer> layer = cc::Layer::Create();
+
+    TestPaintArtifact artifact;
+    artifact.chunk(PaintChunkProperties())
+        .foreignLayer(FloatPoint(50, 100), IntSize(400, 300), layer);
+    update(artifact.build());
+
+    ASSERT_EQ(1u, contentLayerCount());
+    EXPECT_EQ(layer, contentLayerAt(0));
+    EXPECT_EQ(gfx::Size(400, 300), layer->bounds());
+    EXPECT_EQ(translation(50, 100), layer->screen_space_transform());
+}
 
 } // namespace
 } // namespace blink

@@ -60,11 +60,6 @@ void WebRuntimeFeatures::enableTestOnlyFeatures(bool enable)
     RuntimeEnabledFeatures::setTestFeaturesEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableApplicationCache(bool enable)
-{
-    RuntimeEnabledFeatures::setApplicationCacheEnabled(enable);
-}
-
 void WebRuntimeFeatures::enableAudioOutputDevices(bool enable)
 {
     RuntimeEnabledFeatures::setAudioOutputDevicesEnabled(enable);
@@ -198,6 +193,11 @@ void WebRuntimeFeatures::enablePagePopup(bool enable)
 void WebRuntimeFeatures::enableParseHTMLOnMainThread(bool enable)
 {
     RuntimeEnabledFeatures::setParseHTMLOnMainThreadEnabled(enable);
+}
+
+void WebRuntimeFeatures::enablePassiveDocumentEventListeners(bool enable)
+{
+    RuntimeEnabledFeatures::setPassiveDocumentEventListenersEnabled(enable);
 }
 
 void WebRuntimeFeatures::enablePermissionsAPI(bool enable)
