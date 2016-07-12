@@ -79,7 +79,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
-#include "wtf/debug/CrashLogging.h"
 #include <memory>
 
 namespace blink {
@@ -499,7 +498,6 @@ MediaQueryList* LocalDOMWindow::matchMedia(const String& media)
 void LocalDOMWindow::willDetachFrameHost()
 {
     frame()->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
-    LocalDOMWindow::notifyContextDestroyed();
 }
 
 void LocalDOMWindow::frameDestroyed()
@@ -532,6 +530,11 @@ void LocalDOMWindow::unregisterProperty(DOMWindowProperty* property)
     m_properties.remove(property);
 }
 
+void LocalDOMWindow::registerEventListenerObserver(EventListenerObserver* eventListenerObserver)
+{
+    m_eventListenerObservers.add(eventListenerObserver);
+}
+
 void LocalDOMWindow::reset()
 {
     m_frameObserver->contextDestroyed();
@@ -548,8 +551,6 @@ void LocalDOMWindow::reset()
     m_media = nullptr;
     m_customElements = nullptr;
     m_applicationCache = nullptr;
-
-    LocalDOMWindow::notifyContextDestroyed();
 }
 
 void LocalDOMWindow::sendOrientationChangeEvent()
@@ -687,11 +688,6 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
     UserGestureIndicator gestureIndicator(timer->userGestureToken());
 
     event->entangleMessagePorts(document());
-
-    // Temporary instrumentation for http://crbug.com/621730.
-    WTF::debug::ScopedCrashKey("postmessage_src_origin", event->origin().utf8().data());
-    WTF::debug::ScopedCrashKey("postmessage_dst_origin", document()->getSecurityOrigin()->toRawString().utf8().data());
-    WTF::debug::ScopedCrashKey("postmessage_dst_url", document()->url().getString().utf8().data());
 
     dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->takeLocation());
 }
@@ -1367,7 +1363,9 @@ void LocalDOMWindow::addedEventListener(const AtomicString& eventType, Registere
     if (Document* document = this->document())
         document->addListenerTypeIfNeeded(eventType);
 
-    notifyAddEventListener(this, eventType);
+    for (auto& it : m_eventListenerObservers) {
+        it->didAddEventListener(this, eventType);
+    }
 
     if (eventType == EventTypeNames::unload) {
         UseCounter::count(document(), UseCounter::DocumentUnloadRegistered);
@@ -1392,7 +1390,9 @@ void LocalDOMWindow::removedEventListener(const AtomicString& eventType, const R
     if (frame() && frame()->host())
         frame()->host()->eventHandlerRegistry().didRemoveEventHandler(*this, eventType, registeredListener.options());
 
-    notifyRemoveEventListener(this, eventType);
+    for (auto& it : m_eventListenerObservers) {
+        it->didRemoveEventListener(this, eventType);
+    }
 
     if (eventType == EventTypeNames::unload) {
         removeUnloadEventListener(this);
@@ -1442,7 +1442,10 @@ void LocalDOMWindow::removeAllEventListeners()
 {
     EventTarget::removeAllEventListeners();
 
-    notifyRemoveAllEventListeners(this);
+    for (auto& it : m_eventListenerObservers) {
+        it->didRemoveAllEventListeners(this);
+    }
+
     if (frame() && frame()->host())
         frame()->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
 
@@ -1547,9 +1550,9 @@ DEFINE_TRACE(LocalDOMWindow)
     visitor->trace(m_eventQueue);
     visitor->trace(m_postMessageTimers);
     visitor->trace(m_visualViewport);
+    visitor->trace(m_eventListenerObservers);
     DOMWindow::trace(visitor);
     Supplementable<LocalDOMWindow>::trace(visitor);
-    DOMWindowLifecycleNotifier::trace(visitor);
 }
 
 LocalFrame* LocalDOMWindow::frame() const

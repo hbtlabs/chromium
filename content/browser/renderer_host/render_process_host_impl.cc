@@ -169,6 +169,8 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "services/shell/runner/common/switches.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -186,6 +188,7 @@
 #include "content/browser/mojo/service_registrar_android.h"
 #include "content/browser/screen_orientation/screen_orientation_message_filter_android.h"
 #include "ipc/ipc_sync_channel.h"
+#include "media/audio/android/audio_manager_android.h"
 #endif
 
 #if defined(OS_WIN)
@@ -247,8 +250,6 @@ const char kSiteProcessMapKeyName[] = "content_site_process_map";
 #ifdef ENABLE_WEBRTC
 const base::FilePath::CharType kAecDumpFileNameAddition[] =
     FILE_PATH_LITERAL("aec_dump");
-const base::FilePath::CharType kEventLogFileNameAddition[] =
-    FILE_PATH_LITERAL("event_log");
 #endif
 
 void CacheShaderInfo(int32_t id, base::FilePath path) {
@@ -552,6 +553,9 @@ RenderProcessHostImpl::RenderProcessHostImpl(
       delayed_cleanup_needed_(false),
       within_process_died_observer_(false),
       power_monitor_broadcaster_(this),
+#if defined(ENABLE_WEBRTC)
+      webrtc_eventlog_host_(id_),
+#endif
       worker_ref_count_(0),
       max_worker_count_(0),
       permission_service_context_(new PermissionServiceContext(this)),
@@ -598,6 +602,8 @@ RenderProcessHostImpl::RenderProcessHostImpl(
 #endif  // defined(OS_MACOSX)
 #endif  // USE_ATTACHMENT_BROKER
 
+  scoped_refptr<base::SequencedTaskRunner> io_task_runner =
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   shell::Connector* connector =
       BrowserContext::GetShellConnectorFor(browser_context_);
   // Some embedders may not initialize Mojo or the shell connector for a browser
@@ -610,15 +616,14 @@ RenderProcessHostImpl::RenderProcessHostImpl(
     if (!MojoShellConnection::GetForProcess()) {
       shell::mojom::ServiceRequest request = mojo::GetProxy(&test_service_);
       MojoShellConnection::SetForProcess(MojoShellConnection::Create(
-          std::move(request)));
+          std::move(request), io_task_runner));
     }
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   }
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++),
-      child_token_,
-      connector));
+      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
+      io_task_runner));
 }
 
 // static
@@ -729,6 +734,21 @@ bool RenderProcessHostImpl::Init() {
   // Call the embedder first so that their IPC filters have priority.
   GetContentClient()->browser()->RenderProcessWillLaunch(this);
 
+#if !defined(OS_MACOSX)
+  // Intentionally delay the hang monitor creation after the first renderer
+  // is created. On Mac audio thread is the UI thread, a hang monitor is not
+  // necessary or recommended.
+  media::AudioManager::StartHangMonitorIfNeeded(
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+#endif  // !defined(OS_MACOSX)
+
+#if defined(OS_ANDROID)
+  // Initialize the java audio manager so that media session tests will pass.
+  // See internal b/29872494.
+  static_cast<media::AudioManagerAndroid*>(media::AudioManager::Get())->
+      InitializeIfNeeded();
+#endif  // defined(OS_ANDROID)
+
   CreateMessageFilters();
   RegisterMojoInterfaces();
 
@@ -743,8 +763,7 @@ bool RenderProcessHostImpl::Init() {
     in_process_renderer_.reset(
         g_renderer_main_thread_factory(InProcessChildThreadParams(
             channel_id,
-            BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
-                ->task_runner(),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
             mojo_channel_token_,
             mojo_child_connection_->service_token())));
 
@@ -805,7 +824,7 @@ bool RenderProcessHostImpl::Init() {
 std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
     const std::string& channel_id) {
   scoped_refptr<base::SingleThreadTaskRunner> runner =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   mojo_channel_token_ = mojo::edk::GenerateRandomToken();
   mojo::ScopedMessagePipeHandle handle =
       mojo::edk::CreateParentMessagePipe(mojo_channel_token_, child_token_);
@@ -826,8 +845,8 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
       new IPC::ChannelProxy(this, runner.get()));
 #if USE_ATTACHMENT_BROKER
   IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
-      channel.get(), content::BrowserThread::GetMessageLoopProxyForThread(
-      content::BrowserThread::IO));
+      channel.get(), content::BrowserThread::GetTaskRunnerForThread(
+                         content::BrowserThread::IO));
 #endif
   channel->Init(IPC::ChannelMojo::CreateServerFactory(std::move(handle)), true);
   return channel;
@@ -916,7 +935,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       blob_storage_context.get()));
 
 #if defined(ENABLE_WEBRTC)
-  peer_connection_tracker_host_ = new PeerConnectionTrackerHost(GetID());
+  peer_connection_tracker_host_ =
+      new PeerConnectionTrackerHost(GetID(), &webrtc_eventlog_host_);
   AddFilter(peer_connection_tracker_host_.get());
   AddFilter(new MediaStreamDispatcherHost(
       GetID(), browser_context->GetResourceContext()->GetMediaDeviceIDSalt(),
@@ -1058,10 +1078,10 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
 
   GetInterfaceRegistry()->AddInterface(
       base::Bind(&MimeRegistryImpl::Create),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   GetInterfaceRegistry()->AddInterface(base::Bind(&DeviceLightHost::Create),
                                        io_task_runner);
   GetInterfaceRegistry()->AddInterface(base::Bind(&DeviceMotionHost::Create),
@@ -1103,16 +1123,11 @@ void RenderProcessHostImpl::NotifyTimezoneChange(const std::string& zone_id) {
 }
 
 shell::InterfaceRegistry* RenderProcessHostImpl::GetInterfaceRegistry() {
-  return GetChildConnection()->GetInterfaceRegistry();
+  return mojo_child_connection_->GetInterfaceRegistry();
 }
 
 shell::InterfaceProvider* RenderProcessHostImpl::GetRemoteInterfaces() {
-  return GetChildConnection()->GetRemoteInterfaces();
-}
-
-shell::Connection* RenderProcessHostImpl::GetChildConnection() {
-  DCHECK(mojo_child_connection_);
-  return mojo_child_connection_->connection();
+  return mojo_child_connection_->GetRemoteInterfaces();
 }
 
 std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -1392,6 +1407,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kDisableMediaSuspend,
     switches::kDisableNotifications,
     switches::kDisableOverlayScrollbar,
+    switches::kDisablePepper3DImageChromium,
     switches::kDisablePermissionsAPI,
     switches::kDisablePresentationAPI,
     switches::kDisablePinch,
@@ -1457,6 +1473,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kFullMemoryCrashReport,
     switches::kInertVisualViewport,
     switches::kIPCConnectionTimeout,
+    switches::kIsRunningInMash,
     switches::kJavaScriptFlags,
     switches::kLoggingLevel,
     switches::kMainFrameResizesAreOrientationChanges,
@@ -1741,12 +1758,8 @@ bool RenderProcessHostImpl::OnMessageReceived(const IPC::Message& msg) {
 #if defined(ENABLE_WEBRTC)
       IPC_MESSAGE_HANDLER(AecDumpMsg_RegisterAecDumpConsumer,
                           OnRegisterAecDumpConsumer)
-      IPC_MESSAGE_HANDLER(WebRTCEventLogMsg_RegisterEventLogConsumer,
-                          OnRegisterEventLogConsumer)
       IPC_MESSAGE_HANDLER(AecDumpMsg_UnregisterAecDumpConsumer,
                           OnUnregisterAecDumpConsumer)
-      IPC_MESSAGE_HANDLER(WebRTCEventLogMsg_UnregisterEventLogConsumer,
-                          OnUnregisterEventLogConsumer)
 #endif
     // Adding single handlers for your service here is fine, but once your
     // service needs more than one handler, please extract them into a new
@@ -2005,26 +2018,13 @@ void RenderProcessHostImpl::DisableAudioDebugRecordings() {
   }
 }
 
-void RenderProcessHostImpl::EnableEventLogRecordings(
-    const base::FilePath& file) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // Enable Event log for each registered consumer.
-  base::FilePath file_with_extensions = GetEventLogFilePathWithExtensions(file);
-  for (int id : aec_dump_consumers_)
-    EnableEventLogForId(file_with_extensions, id);
+bool RenderProcessHostImpl::StartWebRTCEventLog(
+    const base::FilePath& file_path) {
+  return webrtc_eventlog_host_.StartWebRTCEventLog(file_path);
 }
 
-void RenderProcessHostImpl::DisableEventLogRecordings() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  // Posting on the FILE thread and then replying back on the UI thread is only
-  // for avoiding races between enable and disable. Nothing is done on the FILE
-  // thread.
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::FILE, FROM_HERE, base::Bind(&base::DoNothing),
-      base::Bind(&RenderProcessHostImpl::SendDisableEventLogToRenderer,
-                 weak_factory_.GetWeakPtr()));
+bool RenderProcessHostImpl::StopWebRTCEventLog() {
+  return webrtc_eventlog_host_.StopWebRTCEventLog();
 }
 
 void RenderProcessHostImpl::SetWebRtcLogMessageCallback(
@@ -2431,9 +2431,8 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++),
-      child_token_,
-      connector));
+      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   within_process_died_observer_ = true;
   NotificationService::current()->Notify(
@@ -2666,24 +2665,10 @@ void RenderProcessHostImpl::OnRegisterAecDumpConsumer(int id) {
                  weak_factory_.GetWeakPtr(), id));
 }
 
-void RenderProcessHostImpl::OnRegisterEventLogConsumer(int id) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&RenderProcessHostImpl::RegisterEventLogConsumerOnUIThread,
-                 weak_factory_.GetWeakPtr(), id));
-}
-
 void RenderProcessHostImpl::OnUnregisterAecDumpConsumer(int id) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&RenderProcessHostImpl::UnregisterAecDumpConsumerOnUIThread,
-                 weak_factory_.GetWeakPtr(), id));
-}
-
-void RenderProcessHostImpl::OnUnregisterEventLogConsumer(int id) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&RenderProcessHostImpl::UnregisterEventLogConsumerOnUIThread,
                  weak_factory_.GetWeakPtr(), id));
 }
 
@@ -2698,29 +2683,7 @@ void RenderProcessHostImpl::RegisterAecDumpConsumerOnUIThread(int id) {
   }
 }
 
-void RenderProcessHostImpl::RegisterEventLogConsumerOnUIThread(int id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  aec_dump_consumers_.push_back(id);
-
-  if (WebRTCInternals::GetInstance()->IsEventLogRecordingsEnabled()) {
-    base::FilePath file_with_extensions = GetEventLogFilePathWithExtensions(
-        WebRTCInternals::GetInstance()->GetEventLogRecordingsFilePath());
-    EnableEventLogForId(file_with_extensions, id);
-  }
-}
-
 void RenderProcessHostImpl::UnregisterAecDumpConsumerOnUIThread(int id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  for (std::vector<int>::iterator it = aec_dump_consumers_.begin();
-       it != aec_dump_consumers_.end(); ++it) {
-    if (*it == id) {
-      aec_dump_consumers_.erase(it);
-      break;
-    }
-  }
-}
-
-void RenderProcessHostImpl::UnregisterEventLogConsumerOnUIThread(int id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   for (std::vector<int>::iterator it = aec_dump_consumers_.begin();
        it != aec_dump_consumers_.end(); ++it) {
@@ -2741,16 +2704,6 @@ void RenderProcessHostImpl::EnableAecDumpForId(const base::FilePath& file,
                  weak_factory_.GetWeakPtr(), id));
 }
 
-void RenderProcessHostImpl::EnableEventLogForId(const base::FilePath& file,
-                                                int id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&CreateFileForProcess, file.AddExtension(IntToStringType(id))),
-      base::Bind(&RenderProcessHostImpl::SendEventLogFileToRenderer,
-                 weak_factory_.GetWeakPtr(), id));
-}
-
 void RenderProcessHostImpl::SendAecDumpFileToRenderer(
     int id,
     IPC::PlatformFileForTransit file_for_transit) {
@@ -2759,20 +2712,8 @@ void RenderProcessHostImpl::SendAecDumpFileToRenderer(
   Send(new AecDumpMsg_EnableAecDump(id, file_for_transit));
 }
 
-void RenderProcessHostImpl::SendEventLogFileToRenderer(
-    int id,
-    IPC::PlatformFileForTransit file_for_transit) {
-  if (file_for_transit == IPC::InvalidPlatformFileForTransit())
-    return;
-  Send(new WebRTCEventLogMsg_EnableEventLog(id, file_for_transit));
-}
-
 void RenderProcessHostImpl::SendDisableAecDumpToRenderer() {
   Send(new AecDumpMsg_DisableAecDump());
-}
-
-void RenderProcessHostImpl::SendDisableEventLogToRenderer() {
-  Send(new WebRTCEventLogMsg_DisableEventLog());
 }
 
 base::FilePath RenderProcessHostImpl::GetAecDumpFilePathWithExtensions(
@@ -2780,22 +2721,11 @@ base::FilePath RenderProcessHostImpl::GetAecDumpFilePathWithExtensions(
   return file.AddExtension(IntToStringType(base::GetProcId(GetHandle())))
       .AddExtension(kAecDumpFileNameAddition);
 }
-
-base::FilePath RenderProcessHostImpl::GetEventLogFilePathWithExtensions(
-    const base::FilePath& file) {
-  return file.AddExtension(IntToStringType(base::GetProcId(GetHandle())))
-      .AddExtension(kEventLogFileNameAddition);
-}
 #endif  // defined(ENABLE_WEBRTC)
 
 void RenderProcessHostImpl::GetAudioOutputControllers(
     const GetAudioOutputControllersCallback& callback) const {
   audio_renderer_host()->GetOutputControllers(callback);
-}
-
-BluetoothAdapterFactoryWrapper*
-RenderProcessHostImpl::GetBluetoothAdapterFactoryWrapper() {
-  return &bluetooth_adapter_factory_wrapper_;
 }
 
 void RenderProcessHostImpl::RecomputeAndUpdateWebKitPreferences() {

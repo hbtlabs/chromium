@@ -7,8 +7,10 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/bitmap_uploader/bitmap_uploader.h"
+#include "services/ui/common/gpu_service.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_observer.h"
@@ -28,6 +30,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/view_prop.h"
 #include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -327,7 +330,7 @@ SkBitmap AppIconFromDelegate(WidgetDelegate* delegate) {
   return app_icon.GetRepresentation(1.f).sk_bitmap();
 }
 
-// Handles acknowledgement of an input event, either immediately when a nested
+// Handles acknowledgment of an input event, either immediately when a nested
 // message loop starts, or upon destruction.
 class EventAckHandler : public base::MessageLoop::NestingObserver {
  public:
@@ -364,6 +367,13 @@ class EventAckHandler : public base::MessageLoop::NestingObserver {
 
   DISALLOW_COPY_AND_ASSIGN(EventAckHandler);
 };
+
+void OnMoveLoopEnd(bool* out_success,
+                   base::Closure quit_closure,
+                   bool in_success) {
+  *out_success = in_success;
+  quit_closure.Run();
+}
 
 }  // namespace
 
@@ -528,7 +538,8 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
     context_factory_.reset(
         new SurfaceContextFactory(connector, window_, surface_type_));
     aura::Env::GetInstance()->set_context_factory(context_factory_.get());
-  } else {
+  } else if (!ui::GpuService::UseChromeGpuCommandBuffer()) {
+    // Only use the BitmapUploader when the mojo command buffer is being used.
     needs_bitmap_uploader = true;
   }
 
@@ -536,10 +547,10 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
   if (needs_bitmap_uploader) {
     bitmap_uploader_.reset(new bitmap_uploader::BitmapUploader(window));
     bitmap_uploader_->Init(connector);
-    prop_.reset(
-        new ui::ViewProp(window_tree_host_->GetAcceleratedWidget(),
-                         bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
-                         bitmap_uploader_.get()));
+    prop_ = base::MakeUnique<ui::ViewProp>(
+        window_tree_host_->GetAcceleratedWidget(),
+        bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
+        bitmap_uploader_.get());
   }
 
   aura::Env::GetInstance()->set_context_factory(default_context_factory);
@@ -805,14 +816,14 @@ void NativeWidgetMus::ViewRemoved(View* view) {
 // used safely in a world where we separate things with mojo. They should be
 // removed; not ported.
 void NativeWidgetMus::SetNativeWindowProperty(const char* name, void* value) {
-  // TODO(beng): push properties to ui::Window.
-  // NOTIMPLEMENTED();
+  native_window_properties_[name] = value;
 }
 
 void* NativeWidgetMus::GetNativeWindowProperty(const char* name) const {
-  // TODO(beng): pull properties to ui::Window.
-  // NOTIMPLEMENTED();
-  return nullptr;
+  auto it = native_window_properties_.find(name);
+  if (it == native_window_properties_.end())
+    return nullptr;
+  return it->second;
 }
 
 TooltipManager* NativeWidgetMus::GetTooltipManager() const {
@@ -1167,12 +1178,31 @@ Widget::MoveLoopResult NativeWidgetMus::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  // NOTIMPLEMENTED();
-  return Widget::MOVE_LOOP_CANCELED;
+  ReleaseCapture();
+
+  base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
+  base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
+  base::RunLoop run_loop;
+
+  ui::mojom::MoveLoopSource mus_source =
+      source == Widget::MOVE_LOOP_SOURCE_MOUSE
+          ? ui::mojom::MoveLoopSource::MOUSE
+          : ui::mojom::MoveLoopSource::TOUCH;
+
+  bool success = false;
+  gfx::Point cursor_location =
+      display::Screen::GetScreen()->GetCursorScreenPoint();
+  window_->PerformWindowMove(
+      mus_source, cursor_location,
+      base::Bind(OnMoveLoopEnd, &success, run_loop.QuitClosure()));
+
+  run_loop.Run();
+
+  return success ? Widget::MOVE_LOOP_SUCCESSFUL : Widget::MOVE_LOOP_CANCELED;
 }
 
 void NativeWidgetMus::EndMoveLoop() {
-  // NOTIMPLEMENTED();
+  window_->CancelWindowMove();
 }
 
 void NativeWidgetMus::SetVisibilityChangedAnimationsEnabled(bool value) {
@@ -1232,18 +1262,8 @@ gfx::Size NativeWidgetMus::GetMaximumSize() const {
 
 void NativeWidgetMus::OnBoundsChanged(const gfx::Rect& old_bounds,
                                       const gfx::Rect& new_bounds) {
-  // Assume that if the old bounds was completely empty a move happened. This
-  // handles the case of a maximize animation acquiring the layer (acquiring a
-  // layer results in clearing the bounds).
-  if (old_bounds.origin() != new_bounds.origin() ||
-      (old_bounds == gfx::Rect(0, 0, 0, 0) && !new_bounds.IsEmpty())) {
-    native_widget_delegate_->OnNativeWidgetMove();
-  }
-  if (old_bounds.size() != new_bounds.size()) {
-    native_widget_delegate_->OnNativeWidgetSizeChanged(new_bounds.size());
-    UpdateClientArea();
-    UpdateHitTestMask();
-  }
+  // This is handled in OnHost{Resized,Moved}() like DesktopNativeWidgetAura
+  // instead of here like in NativeWidgetAura.
 }
 
 gfx::NativeCursor NativeWidgetMus::GetCursor(const gfx::Point& point) {
@@ -1344,6 +1364,18 @@ void NativeWidgetMus::OnScrollEvent(ui::ScrollEvent* event) {
 
 void NativeWidgetMus::OnGestureEvent(ui::GestureEvent* event) {
   native_widget_delegate_->OnGestureEvent(event);
+}
+
+void NativeWidgetMus::OnHostResized(const aura::WindowTreeHost* host) {
+  native_widget_delegate_->OnNativeWidgetSizeChanged(
+      host->window()->bounds().size());
+  UpdateClientArea();
+  UpdateHitTestMask();
+}
+
+void NativeWidgetMus::OnHostMoved(const aura::WindowTreeHost* host,
+                                  const gfx::Point& new_origin) {
+  native_widget_delegate_->OnNativeWidgetMove();
 }
 
 void NativeWidgetMus::OnHostCloseRequested(const aura::WindowTreeHost* host) {

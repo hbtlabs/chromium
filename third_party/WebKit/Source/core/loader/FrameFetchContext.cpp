@@ -73,6 +73,7 @@
 #include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
+#include "public/platform/WebViewScheduler.h"
 #include <algorithm>
 #include <memory>
 
@@ -319,6 +320,8 @@ void FrameFetchContext::dispatchWillSendRequest(unsigned long identifier, Resour
         prepareRequest(identifier, request, redirectResponse);
     TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceSendRequest", TRACE_EVENT_SCOPE_THREAD, "data", InspectorSendRequestEvent::data(identifier, frame(), request));
     InspectorInstrumentation::willSendRequest(frame(), identifier, masterDocumentLoader(), request, redirectResponse, initiatorInfo);
+    if (frame()->frameScheduler())
+        frame()->frameScheduler()->didStartLoading(identifier);
 }
 
 void FrameFetchContext::dispatchDidReceiveResponse(unsigned long identifier, const ResourceResponse& response, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, Resource* resource)
@@ -368,6 +371,8 @@ void FrameFetchContext::dispatchDidFinishLoading(unsigned long identifier, doubl
 
     TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceFinish", TRACE_EVENT_SCOPE_THREAD, "data", InspectorResourceFinishEvent::data(identifier, finishTime, false));
     InspectorInstrumentation::didFinishLoading(frame(), identifier, finishTime, encodedDataLength);
+    if (frame()->frameScheduler())
+        frame()->frameScheduler()->didStopLoading(identifier);
 }
 
 void FrameFetchContext::dispatchDidFail(unsigned long identifier, const ResourceError& error, bool isInternalRequest)
@@ -379,6 +384,8 @@ void FrameFetchContext::dispatchDidFail(unsigned long identifier, const Resource
     // Notification to FrameConsole should come AFTER InspectorInstrumentation call, DevTools front-end relies on this.
     if (!isInternalRequest)
         frame()->console().didFailLoading(identifier, error);
+    if (frame()->frameScheduler())
+        frame()->frameScheduler()->didStopLoading(identifier);
 }
 
 void FrameFetchContext::dispatchDidLoadResourceFromMemoryCache(unsigned long identifier, Resource* resource, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext)
@@ -669,14 +676,20 @@ SecurityOrigin* FrameFetchContext::getSecurityOrigin() const
     return m_document ? m_document->getSecurityOrigin() : nullptr;
 }
 
-void FrameFetchContext::upgradeInsecureRequest(FetchRequest& fetchRequest)
+void FrameFetchContext::upgradeInsecureRequest(ResourceRequest& resourceRequest)
 {
-    KURL url = fetchRequest.resourceRequest().url();
-
     // Tack an 'Upgrade-Insecure-Requests' header to outgoing navigational requests, as described in
     // https://w3c.github.io/webappsec/specs/upgrade/#feature-detect
-    if (fetchRequest.resourceRequest().frameType() != WebURLRequest::FrameTypeNone)
-        fetchRequest.mutableResourceRequest().addHTTPHeaderField("Upgrade-Insecure-Requests", "1");
+    if (resourceRequest.frameType() != WebURLRequest::FrameTypeNone) {
+
+        // Early return if the request has already been upgraded.
+        if (resourceRequest.httpHeaderField("Upgrade-Insecure-Requests") == AtomicString("1"))
+            return;
+
+        resourceRequest.addHTTPHeaderField("Upgrade-Insecure-Requests", "1");
+    }
+
+    KURL url = resourceRequest.url();
 
     // If we don't yet have an |m_document| (because we're loading an iframe, for instance), check the FrameLoader's policy.
     WebInsecureRequestPolicy relevantPolicy = m_document ? m_document->getInsecureRequestPolicy() : frame()->loader().getInsecureRequestPolicy();
@@ -688,17 +701,15 @@ void FrameFetchContext::upgradeInsecureRequest(FetchRequest& fetchRequest)
         // 1. Are for subresources (including nested frames).
         // 2. Are form submissions.
         // 3. Whose hosts are contained in the document's InsecureNavigationSet.
-        const ResourceRequest& request = fetchRequest.resourceRequest();
-        if (request.frameType() == WebURLRequest::FrameTypeNone
-            || request.frameType() == WebURLRequest::FrameTypeNested
-            || request.requestContext() == WebURLRequest::RequestContextForm
-            || (!url.host().isNull() && relevantNavigationSet->contains(url.host().impl()->hash())))
-        {
+        if (resourceRequest.frameType() == WebURLRequest::FrameTypeNone
+            || resourceRequest.frameType() == WebURLRequest::FrameTypeNested
+            || resourceRequest.requestContext() == WebURLRequest::RequestContextForm
+            || (!url.host().isNull() && relevantNavigationSet->contains(url.host().impl()->hash()))) {
             UseCounter::count(m_document, UseCounter::UpgradeInsecureRequestsUpgradedRequest);
             url.setProtocol("https");
             if (url.port() == 80)
                 url.setPort(443);
-            fetchRequest.mutableResourceRequest().setURL(url);
+            resourceRequest.setURL(url);
         }
     }
 }

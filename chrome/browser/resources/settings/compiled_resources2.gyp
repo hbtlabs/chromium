@@ -10,6 +10,7 @@
         'a11y_page/compiled_resources2.gyp:*',
         'about_page/compiled_resources2.gyp:*',
         'advanced_page/compiled_resources2.gyp:*',
+        'animation/compiled_resources2.gyp:*',
         'appearance_page/compiled_resources2.gyp:*',
         'basic_page/compiled_resources2.gyp:*',
         'bluetooth_page/compiled_resources2.gyp:*',
@@ -53,6 +54,13 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(EXTERNS_GYP):chrome_send',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'search_settings',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

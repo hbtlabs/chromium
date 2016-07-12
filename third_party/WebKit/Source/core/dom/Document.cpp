@@ -175,6 +175,7 @@
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/InstanceCounters.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
@@ -195,11 +196,12 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
+#include "core/page/scrolling/ChildViewportScrollCallback.h"
 #include "core/page/scrolling/RootScrollerController.h"
+#include "core/page/scrolling/RootViewportScrollCallback.h"
 #include "core/page/scrolling/ScrollStateCallback.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/SnapCoordinator.h"
-#include "core/page/scrolling/ViewportScrollCallback.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGScriptElement.h"
 #include "core/svg/SVGTitleElement.h"
@@ -460,17 +462,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
         m_fetcher = ResourceFetcher::create(nullptr);
     }
 
-    ViewportScrollCallback* applyScroll = nullptr;
-    if (isInMainFrame()) {
-        applyScroll = RootScrollerController::createViewportApplyScroll(
-            &frameHost()->topControls(), &frameHost()->overscrollController());
-    } else {
-        applyScroll =
-            RootScrollerController::createViewportApplyScroll(nullptr, nullptr);
-    }
-
-    m_rootScrollerController =
-        RootScrollerController::create(*this, applyScroll);
+    m_rootScrollerController = RootScrollerController::create(*this);
 
     // We depend on the url getting immediately set in subframes, but we
     // also depend on the url NOT getting immediately set in opened windows.
@@ -598,6 +590,11 @@ void Document::childrenChanged(const ChildrenChange& change)
 void Document::setRootScroller(Element* newScroller, ExceptionState& exceptionState)
 {
     m_rootScrollerController->set(newScroller);
+}
+
+void Document::initializeRootScroller(ViewportScrollCallback* callback)
+{
+    m_rootScrollerController->setViewportScrollCallback(callback);
 }
 
 Element* Document::rootScroller() const
@@ -1116,7 +1113,7 @@ AtomicString Document::contentType() const
 
 Element* Document::elementFromPoint(int x, int y) const
 {
-    if (!layoutView())
+    if (layoutViewItem().isNull())
         return 0;
 
     return TreeScope::elementFromPoint(x, y);
@@ -1124,14 +1121,14 @@ Element* Document::elementFromPoint(int x, int y) const
 
 HeapVector<Member<Element>> Document::elementsFromPoint(int x, int y) const
 {
-    if (!layoutView())
+    if (layoutViewItem().isNull())
         return HeapVector<Member<Element>>();
     return TreeScope::elementsFromPoint(x, y);
 }
 
 Range* Document::caretRangeFromPoint(int x, int y)
 {
-    if (!layoutView())
+    if (layoutViewItem().isNull())
         return nullptr;
 
     HitTestResult result = hitTestInDocument(this, x, y);
@@ -1427,7 +1424,7 @@ bool Document::needsLayoutTreeUpdate() const
         return true;
     if (childNeedsStyleInvalidation())
         return true;
-    if (layoutView()->wasNotifiedOfSubtreeChange())
+    if (layoutViewItem().wasNotifiedOfSubtreeChange())
         return true;
     return false;
 }
@@ -1604,7 +1601,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
     ScrollSnapType snapType = overflowStyle->getScrollSnapType();
     const LengthPoint& snapDestination = overflowStyle->scrollSnapDestination();
 
-    RefPtr<ComputedStyle> documentStyle = layoutView()->mutableStyle();
+    RefPtr<ComputedStyle> documentStyle = layoutViewItem().mutableStyle();
     if (documentStyle->getWritingMode() != rootWritingMode
         || documentStyle->direction() != rootDirection
         || documentStyle->visitedDependentColor(CSSPropertyBackgroundColor) != backgroundColor
@@ -1626,7 +1623,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         newStyle->setColumnGap(columnGap);
         newStyle->setScrollSnapType(snapType);
         newStyle->setScrollSnapDestination(snapDestination);
-        layoutView()->setStyle(newStyle);
+        layoutViewItem().setStyle(newStyle);
         setupFontBuilder(*newStyle);
     }
 
@@ -1734,7 +1731,7 @@ void Document::updateStyleAndLayoutTree()
 
     if (m_focusedElement && !m_focusedElement->isFocusable())
         clearFocusedElementSoon();
-    layoutView()->clearHitTestCache();
+    layoutViewItem().clearHitTestCache();
 
     DCHECK(!DocumentAnimations::needsAnimationTimingUpdate(*this));
 
@@ -1770,9 +1767,9 @@ void Document::updateStyle()
     if (change == Force) {
         m_hasNodesWithPlaceholderStyle = false;
         RefPtr<ComputedStyle> documentStyle = StyleResolver::styleForDocument(*this);
-        StyleRecalcChange localChange = ComputedStyle::stylePropagationDiff(documentStyle.get(), layoutView()->style());
+        StyleRecalcChange localChange = ComputedStyle::stylePropagationDiff(documentStyle.get(), layoutViewItem().style());
         if (localChange != NoChange)
-            layoutView()->setStyle(documentStyle.release());
+            layoutViewItem().setStyle(documentStyle.release());
     }
 
     clearNeedsStyleRecalc();
@@ -1817,13 +1814,13 @@ void Document::updateStyle()
 
 void Document::notifyLayoutTreeOfSubtreeChanges()
 {
-    if (!layoutView()->wasNotifiedOfSubtreeChange())
+    if (!layoutViewItem().wasNotifiedOfSubtreeChange())
         return;
 
     m_lifecycle.advanceTo(DocumentLifecycle::InLayoutSubtreeChange);
 
-    layoutView()->handleSubtreeModifications();
-    DCHECK(!layoutView()->wasNotifiedOfSubtreeChange());
+    layoutViewItem().handleSubtreeModifications();
+    DCHECK(!layoutViewItem().wasNotifiedOfSubtreeChange());
 
     m_lifecycle.advanceTo(DocumentLifecycle::LayoutSubtreeChangeClean);
 }
@@ -2121,6 +2118,9 @@ void Document::attach(const AttachContext& context)
 
     m_frame->selection().documentAttached(this);
     m_lifecycle.advanceTo(DocumentLifecycle::StyleClean);
+
+    if (view())
+        view()->didAttachDocument();
 }
 
 void Document::detach(const AttachContext& context)
@@ -2637,13 +2637,13 @@ void Document::implicitClose()
         updateStyleAndLayoutTree();
 
         // Always do a layout after loading if needed.
-        if (view() && layoutView() && (!layoutView()->firstChild() || layoutView()->needsLayout()))
+        if (view() && !layoutViewItem().isNull() && (!layoutViewItem().firstChild() || layoutViewItem().needsLayout()))
             view()->layout();
     }
 
     m_loadEventProgress = LoadEventCompleted;
 
-    if (frame() && layoutView() && settings()->accessibilityEnabled()) {
+    if (frame() && !layoutViewItem().isNull() && settings()->accessibilityEnabled()) {
         if (AXObjectCache* cache = axObjectCache()) {
             if (this == &axObjectCacheOwner())
                 cache->handleLoadComplete(this);
@@ -2891,10 +2891,9 @@ EventTarget* Document::errorEventTarget()
     return domWindow();
 }
 
-void Document::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void Document::exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
-    addConsoleMessage(consoleMessage);
+    MainThreadDebugger::instance()->exceptionThrown(m_frame.get(), errorMessage, std::move(location));
 }
 
 void Document::setURL(const KURL& url)
@@ -2907,6 +2906,14 @@ void Document::setURL(const KURL& url)
     m_accessEntryFromURL = nullptr;
     updateBaseURL();
     contextFeatures().urlDidChange(this);
+}
+
+KURL Document::validBaseElementURL() const
+{
+    if (m_baseElementURL.isValid())
+        return m_baseElementURL;
+
+    return KURL();
 }
 
 void Document::updateBaseURL()
@@ -3153,11 +3160,11 @@ MouseEventWithHitTestResults Document::prepareMouseEvent(const HitTestRequest& r
     // mousemove events before the first layout should not lead to a premature layout()
     // happening, which could show a flash of white.
     // See also the similar code in EventHandler::hitTestResultAtPoint.
-    if (!layoutView() || !view() || !view()->didFirstLayout())
+    if (layoutViewItem().isNull() || !view() || !view()->didFirstLayout())
         return MouseEventWithHitTestResults(event, HitTestResult(request, LayoutPoint()));
 
     HitTestResult result(request, documentPoint);
-    layoutView()->hitTest(result);
+    layoutViewItem().hitTest(result);
 
     if (!request.readOnly())
         updateHoverActiveState(request, result.innerElement());
@@ -3414,9 +3421,9 @@ void Document::styleResolverMayHaveChanged()
         // recalc while sheets are still loading to avoid FOUC.
         m_pendingSheetLayout = IgnoreLayoutWithPendingSheets;
 
-        DCHECK(layoutView() || importsController());
-        if (layoutView())
-            layoutView()->invalidatePaintForViewAndCompositedLayers();
+        DCHECK(!layoutViewItem().isNull() || importsController());
+        if (!layoutViewItem().isNull())
+            layoutViewItem().invalidatePaintForViewAndCompositedLayers();
     }
 }
 
@@ -4399,8 +4406,8 @@ void Document::setEncodingData(const DocumentEncodingData& newData)
     if (shouldUseVisualOrdering != m_visuallyOrdered) {
         m_visuallyOrdered = shouldUseVisualOrdering;
         // FIXME: How is possible to not have a layoutObject here?
-        if (layoutView())
-            layoutView()->mutableStyleRef().setRTLOrdering(m_visuallyOrdered ? VisualOrder : LogicalOrder);
+        if (!layoutViewItem().isNull())
+            layoutViewItem().mutableStyleRef().setRTLOrdering(m_visuallyOrdered ? VisualOrder : LogicalOrder);
         setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::VisuallyOrdered));
     }
 }
@@ -5186,11 +5193,6 @@ NodeIntersectionObserverData& Document::ensureIntersectionObserverData()
     return *m_intersectionObserverData;
 }
 
-void Document::reportBlockedScriptExecutionToInspector(const String& directiveText)
-{
-    InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
-}
-
 static void runAddConsoleMessageTask(MessageSource source, MessageLevel level, const String& message, ExecutionContext* context)
 {
     context->addConsoleMessage(ConsoleMessage::create(source, level, message));
@@ -5723,8 +5725,9 @@ void Document::didAssociateFormControl(Element* element)
     if (!frame() || !frame()->page())
         return;
     m_associatedFormControls.add(element);
+    // We add a slight delay because this could be called rapidly.
     if (!m_didAssociateFormControlsTimer.isActive())
-        m_didAssociateFormControlsTimer.startOneShot(0, BLINK_FROM_HERE);
+        m_didAssociateFormControlsTimer.startOneShot(0.3, BLINK_FROM_HERE);
 }
 
 void Document::removeFormAssociation(Element* element)
@@ -5893,6 +5896,17 @@ WebTaskRunner* Document::timerTaskRunner() const
     if (m_contextDocument)
         return m_contextDocument->timerTaskRunner();
     return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
+}
+
+WebTaskRunner* Document::unthrottledTaskRunner() const
+{
+    if (frame())
+        return m_frame->frameScheduler()->unthrottledTaskRunner();
+    if (m_importsController)
+        return m_importsController->master()->unthrottledTaskRunner();
+    if (m_contextDocument)
+        return m_contextDocument->unthrottledTaskRunner();
+    return Platform::current()->currentThread()->getWebTaskRunner();
 }
 
 void Document::enforceInsecureRequestPolicy(WebInsecureRequestPolicy policy)

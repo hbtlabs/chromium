@@ -616,6 +616,19 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="AppBanners.BeforeInstallEvent"
+    enum="AppBannersBeforeInstallEvent">
+  <owner>dominickn@chromium.org</owner>
+  <summary>
+    App banners promote an application related to the current website, and are
+    requested specifically through the current page's HTML.  This stat tracks
+    usage of the BeforeInstallPromptEvent, which allows developers to control
+    when an app banner appears. The events in this histogram are not mutually
+    exclusive - for example, preventDefault() must be called if prompt() is
+    called.
+  </summary>
+</histogram>
+
 <histogram name="AppBanners.DismissEvent" enum="AppBannersDismissEvent">
   <owner>dfalcantara@chromium.org</owner>
   <summary>
@@ -8984,6 +8997,36 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="DirectWrite.Fonts.Proxy.FamilyCount" units="families">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    The number of font families as seen by the font proxy in the renderer.
+  </summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.FontProxyError"
+    enum="DirectWriteFontProxyError">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    The errors encountered by the DirectWrite font proxy while loading fonts.
+  </summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.LastResortFontCount" units="fonts">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    The number of last resort fallback fonts found on the system as seen by the
+    browser.
+  </summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.LastResortFontFileCount" units="files">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    The number of font files found for a last resort fallback font.
+  </summary>
+</histogram>
+
 <histogram name="DirectWrite.Fonts.Proxy.LoaderType"
     enum="DirectWriteFontLoaderType">
   <owner>kulshin@chromium.org</owner>
@@ -9009,6 +9052,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The time taken to load a font family, excluding glyph data. This is logged
     in the renderer once per family that is loaded.
+  </summary>
+</histogram>
+
+<histogram name="DirectWrite.Fonts.Proxy.MessageFilterError"
+    enum="DirectWriteMessageFilterError">
+  <owner>kulshin@chromium.org</owner>
+  <summary>
+    Errors, if any, encountered by the DirectWrite font proxy message filter.
   </summary>
 </histogram>
 
@@ -22649,6 +22700,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Records the autoplay source of muted videos.</summary>
 </histogram>
 
+<histogram name="Media.Video.Autoplay.Muted.PlayMethod.BecomesVisible"
+    enum="Boolean">
+  <owner>avayvod@chromium.org</owner>
+  <owner>mlamouri@chromium.org</owner>
+  <owner>zqzhang@chromium.org</owner>
+  <summary>
+    Records muted video started playing with play() become visible at some
+    point. The UMA for false is not complete since it is recorded in a
+    destructor which is garbage-collected. Please subtract
+    Media.Video.Autoplay.Muted &quot;play() method&quot; count with the true
+    count of this histogram to obtain the real false count.
+  </summary>
+</histogram>
+
 <histogram name="Media.Video.Autoplay.Muted.UnmuteAction" enum="BooleanSuccess">
   <owner>avayvod@chromium.org</owner>
   <owner>mlamouri@chromium.org</owner>
@@ -28278,10 +28343,32 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.HttpResponseInfo.ConnectionInfo" enum="ConnectionInfo">
+  <obsolete>
+    Deprecated as of 06/2016.
+  </obsolete>
   <owner>bnc@chromium.org</owner>
   <summary>
     Application protocol used in HTTP response.  Recorded every time a
     URLRequest completes.
+  </summary>
+</histogram>
+
+<histogram name="Net.HttpResponseInfo.ConnectionInfo.MainFrame"
+    enum="ConnectionInfo">
+  <owner>mmenke@chromium.org</owner>
+  <summary>
+    Application protocol used in HTTP responses to requests for main frames.
+    Only includes requests that went over the network.
+  </summary>
+</histogram>
+
+<histogram name="Net.HttpResponseInfo.ConnectionInfo.SubResource"
+    enum="ConnectionInfo">
+  <owner>mmenke@chromium.org</owner>
+  <summary>
+    Application protocol used in HTTP responses to requests for resources other
+    than main frames. Does not include internal Chrome requests.  Only includes
+    requests that went over the network.
   </summary>
 </histogram>
 
@@ -31367,6 +31454,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.SSLServerKeyExchangeHash" enum="SSLHashAlgorithm">
+  <obsolete>
+    Replaced by Net.SSLSignatureAlgorithm.
+  </obsolete>
   <owner>davidben@chromium.org</owner>
   <summary>
     For each SSL connection with a full handshake using a DHE- or ECDHE-based
@@ -31383,6 +31473,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     For each SSL connection that resumed a session, whether the session was
     resumed at the same version it was established at. This is only recorded in
     BoringSSL ports.
+  </summary>
+</histogram>
+
+<histogram name="Net.SSLSignatureAlgorithm" enum="SSLSignatureAlgorithm">
+  <summary>
+    For each SSL connection with a full handshake using a DHE- or ECDHE-based
+    key exchange, the signature algorithm used to authenticate the peer. In TLS
+    1.2, this is the signature on the ServerKeyExchange message. (Note: Although
+    the ECDSA values specify a curve, the curve is only enforced in TLS 1.3.)
   </summary>
 </histogram>
 
@@ -33853,6 +33952,48 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Network.Shill.WiFi.SuspendDurationWoWOffConnected"
+    units="seconds">
+  <owner>semenzato@chromium.org</owner>
+  <owner>kirtika@chromium.org</owner>
+  <summary>
+    Time spent in suspended state, on a resume, for the case when wake on wifi
+    is  disabled (WoWOff), and after resume, the NIC is found to be already
+    connected.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.WiFi.SuspendDurationWoWOffDisconnected"
+    units="seconds">
+  <owner>semenzato@chromium.org</owner>
+  <owner>kirtika@chromium.org</owner>
+  <summary>
+    Time spent in suspended state, on a resume, for the case when wake on wifi
+    is  enabled (WoWOff), and after resume, the NIC is found to be disconnected.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.WiFi.SuspendDurationWoWOnConnected"
+    units="seconds">
+  <owner>semenzato@chromium.org</owner>
+  <owner>kirtika@chromium.org</owner>
+  <summary>
+    Time spent in suspended state, on a resume, for the case when wake on wifi
+    is  enabled (WoWOn), and after resume, the NIC is found to be already
+    connected.
+  </summary>
+</histogram>
+
+<histogram name="Network.Shill.WiFi.SuspendDurationWoWOnDisconnected"
+    units="seconds">
+  <owner>semenzato@chromium.org</owner>
+  <owner>kirtika@chromium.org</owner>
+  <summary>
+    Time spent in suspended state, on a resume, for the case when wake on wifi
+    is  enabled (WoWOn), and after resume, the NIC is found to be disconnected.
+  </summary>
+</histogram>
+
 <histogram name="Network.Shill.Wifi.TimeOnline" units="seconds">
   <owner>quiche@chromium.org</owner>
   <summary>
@@ -34551,6 +34692,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfExternalTileFallbacks">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of tiles for which we relied on external tiles as a fallback
@@ -34563,6 +34707,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfExternalTiles">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of external tiles that are displayed on the NTP. External tiles
@@ -34574,6 +34721,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfGrayTileFallbacks">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of tiles for which we displayed a gray tile with the domain name
@@ -34585,6 +34735,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfGrayTiles">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of tiles for which no thumbnail was specified, but a domain was
@@ -34595,6 +34748,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfMouseOvers">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The total number of times the user hovered the mouse over Most Visited tile
@@ -34618,6 +34774,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfThumbnailErrors">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of thumbnails for which a local screenshot was not available so
@@ -34628,6 +34787,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.NumberOfThumbnailTiles">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     The number of tiles for which we attempted to use a local screenshot as a
@@ -35027,6 +35189,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="NewTabPage.SuggestionsType" enum="NtpSuggestionsType">
+  <obsolete>
+    Deprecated 2016-07.
+  </obsolete>
   <owner>beaudoin@chromium.org</owner>
   <summary>
     Indicate, for each impression of the New Tab Page, whether the suggestions
@@ -45782,6 +45947,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="RendererScheduler.ExpectedTaskQueueingDuration" units="ms">
+  <owner>tdresser@chromium.org</owner>
+  <summary>
+    The estimated queueing duration which would be observed for additional high
+    priority tasks posted to the RendererScheduler. Recorded for each 1000 ms
+    window.
+  </summary>
+</histogram>
+
 <histogram name="RendererScheduler.TaskQueueManager.DelayedTaskLateness"
     units="ms">
   <owner>alexclarke@chromium.org</owner>
@@ -55607,6 +55781,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Time duration measured from the time the startup timebomb was started and
     when it went off.
+  </summary>
+</histogram>
+
+<histogram name="Storage.BlacklistedImportantSites.Reason"
+    enum="ClearDataSiteBlacklistReason">
+  <owner>dmurph@chromium.org</owner>
+  <summary>
+    This is recorded for every site that the user blacklists when they when they
+    clear browsing data. It indicates which signals were used to show the given
+    site to the user that the user then chose to exclude from clearing.
   </summary>
 </histogram>
 
@@ -65543,6 +65727,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="15" label="RESULT_WSC_NOT_AVAILABLE"/>
 </enum>
 
+<enum name="AppBannersBeforeInstallEvent" type="int">
+  <int value="1" label="Event created and dispatched"/>
+  <int value="2" label="Showing the banner"/>
+  <int value="3" label="preventDefault() not called"/>
+  <int value="4" label="preventDefault() called"/>
+  <int value="5" label="prompt() called after preventDefault()"/>
+  <int value="6" label="prompt() not called after preventDefault()"/>
+</enum>
+
 <enum name="AppBannersDismissEvent" type="int">
   <int value="41" label="Error/unknown reason for dismissal"/>
   <int value="42" label="User opened the application after installing it"/>
@@ -67696,6 +67889,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="OK"/>
   <int value="2" label="Failed to create stream"/>
   <int value="3" label="Failed to open stream"/>
+  <int value="4" label="Never recieved any data"/>
 </enum>
 
 <enum name="CastOverlayEvents" type="int">
@@ -68526,6 +68720,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="613" label="X_Takri"/>
 </enum>
 
+<enum name="ClearDataSiteBlacklistReason" type="int">
+  <int value="0" label="Durable"/>
+  <int value="1" label="Notifications"/>
+  <int value="2" label="Engagement"/>
+  <int value="3" label="Notifications and Engagement"/>
+  <int value="4" label="Durable and Engagement"/>
+  <int value="5" label="Notifications and Durable"/>
+  <int value="6" label="Notifications, Durable, and Engagement"/>
+  <int value="7" label="Unknown"/>
+</enum>
+
 <enum name="ClientAppId" type="int">
   <int value="0" label="Other"/>
   <int value="1" label="Gmail"/>
@@ -68981,13 +69186,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     net::HttpResponseInfo::ConnectionInfo.
   </summary>
   <int value="0" label="unknown"/>
-  <int value="1" label="HTTP/0.9, HTTP/1.0, or HTTP/1.1"/>
+  <int value="1" label="HTTP/1.1"/>
   <int value="2" label="SPDY/2 (deprecated)"/>
   <int value="3" label="SPDY/3"/>
   <int value="4" label="HTTP/2"/>
   <int value="5" label="QUIC"/>
   <int value="6" label="HTTP/2 draft-14"/>
   <int value="7" label="HTTP/2 draft-15"/>
+  <int value="8" label="HTTP/0.9"/>
+  <int value="9" label="HTTP/1.0"/>
 </enum>
 
 <enum name="ConnectionResult" type="int">
@@ -70606,12 +70813,29 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="2" label="Non-file loader"/>
 </enum>
 
+<enum name="DirectWriteFontProxyError" type="int">
+  <int value="0" label="FindFamily: send failed"/>
+  <int value="1" label="GetFamilyCount: send failed"/>
+  <int value="2" label="CreateEnumeratorFromKey: invalid key"/>
+  <int value="3" label="CreateEnumeratorFromKey: family index out of range"/>
+  <int value="4" label="GetFontFiles: send failed"/>
+  <int value="5" label="FontfileStream: failed to created mapped file"/>
+</enum>
+
 <enum name="DirectWriteLoadFamilyResult" type="int">
   <int value="0" label="Success: single family"/>
   <int value="1" label="Success: matched from collection"/>
   <int value="2" label="Error: multiple families"/>
   <int value="3" label="Error: no families"/>
-  <int value="4" label="Error: failed to create colleciton"/>
+  <int value="4" label="Error: failed to create collection"/>
+</enum>
+
+<enum name="DirectWriteMessageFilterError" type="int">
+  <int value="0" label="OnGetFontFiles: GetFont failed"/>
+  <int value="1" label="OnGetFontFiles: AddFilesForFont failed"/>
+  <int value="2" label="OnGetFontFiles: GetFontFamily failed"/>
+  <int value="3" label="InitializeDirectWrite: GetSystemFontCollection failed"/>
+  <int value="4" label="MapCharacters: could not find family"/>
 </enum>
 
 <enum name="DistillableType" type="int">
@@ -72775,8 +72999,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="64" label="CONTEXT_MENUS_INTERNAL_ON_CLICKED"/>
   <int value="65" label="CONTEXT_MENUS_ON_CLICKED"/>
   <int value="66" label="COOKIES_ON_CHANGED"/>
-  <int value="67" label="COPRESENCE_ON_MESSAGES_RECEIVED"/>
-  <int value="68" label="COPRESENCE_ON_STATUS_UPDATED"/>
+  <int value="67" label="DELETED_COPRESENCE_ON_MESSAGES_RECEIVED"/>
+  <int value="68" label="DELETED_COPRESENCE_ON_STATUS_UPDATED"/>
   <int value="69" label="COPRESENCE_PRIVATE_ON_CONFIG_AUDIO"/>
   <int value="70" label="COPRESENCE_PRIVATE_ON_DECODE_SAMPLES_REQUEST"/>
   <int value="71" label="COPRESENCE_PRIVATE_ON_ENCODE_TOKEN_REQUEST"/>
@@ -74024,8 +74248,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="865" label="COPRESENCEPRIVATE_SENDSAMPLES"/>
   <int value="866" label="COPRESENCEPRIVATE_SENDDETECT"/>
   <int value="867" label="COPRESENCEPRIVATE_SENDINITIALIZED"/>
-  <int value="868" label="COPRESENCE_EXECUTE"/>
-  <int value="869" label="COPRESENCE_SETAPIKEY"/>
+  <int value="868" label="DELETED_COPRESENCE_EXECUTE"/>
+  <int value="869" label="DELETED_COPRESENCE_SETAPIKEY"/>
   <int value="870" label="FILESYSTEM_OBSERVEDIRECTORY"/>
   <int value="871" label="FILESYSTEM_UNOBSERVEENTRY"/>
   <int value="872" label="FILESYSTEM_GETOBSERVEDENTRIES"/>
@@ -74067,7 +74291,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="907" label="USB_GETUSERSELECTEDDEVICES"/>
   <int value="908" label="INPUTMETHODPRIVATE_GETINPUTMETHODCONFIG"/>
   <int value="909" label="WALLPAPERPRIVATE_GETSYNCSETTING"/>
-  <int value="910" label="COPRESENCE_SETAUTHTOKEN"/>
+  <int value="910" label="DELETED_COPRESENCE_SETAUTHTOKEN"/>
   <int value="911" label="CAST_CHANNEL_SETAUTHORITYKEYS"/>
   <int value="912" label="HOTWORDPRIVATE_STARTTRAINING"/>
   <int value="913" label="HOTWORDPRIVATE_FINALIZESPEAKERMODEL"/>
@@ -74309,7 +74533,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1140" label="QUICKUNLOCKPRIVATE_SETMODES"/>
   <int value="1141" label="QUICKUNLOCKPRIVATE_GETACTIVEMODES"/>
   <int value="1142" label="QUICKUNLOCKPRIVATE_GETAVAILABLEMODES"/>
-  <int value="1143" label="WEBSTOREPRIVATE_ISEXTENSIONPENDINGAPPROVAL"/>
+  <int value="1143" label="WEBSTOREPRIVATE_ISPENDINGCUSTODIANAPPROVAL"/>
 </enum>
 
 <enum name="ExtensionIconState" type="int">
@@ -76381,6 +76605,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1432" label="PointerEventDispatch"/>
   <int value="1433" label="MIDIMessageEventReceivedTime"/>
   <int value="1434" label="SummaryElementWithDisplayBlockAuthorRule"/>
+  <int value="1435" label="V8MediaStream_Active_AttributeGetter"/>
+  <int value="1436" label="BeforeInstallPromptEvent"/>
+  <int value="1437" label="BeforeInstallPromptEventUserChoice"/>
+  <int value="1438" label="BeforeInstallPromptEventPreventDefault"/>
+  <int value="1439" label="BeforeInstallPromptEventPrompt"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -81185,6 +81414,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-384589459" label="disable-supervised-user-safesites"/>
   <int value="-378180863" label="disable-panels"/>
   <int value="-378033324" label="disable-win32k-renderer-lockdown"/>
+  <int value="-364325011" label="enable-files-quick-view"/>
   <int value="-362022976" label="disable-quirks-client"/>
   <int value="-360038744" label="invert-viewport-scroll-order"/>
   <int value="-351552989" label="disable-hosted-apps-in-windows"/>
@@ -81195,7 +81425,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-344343842" label="disable-experimental-app-list"/>
   <int value="-340622848" label="disable-javascript-harmony-shipping"/>
   <int value="-340255045" label="allow-nacl-socket-api"/>
+  <int value="-329727402" label="disable-files-quick-view"/>
   <int value="-328361990" label="enable-experimental-extension-apis"/>
+  <int value="-322937746" label="disable-desktop-capture-picker-new-ui"/>
   <int value="-322827131" label="tab-management-experiment-type-basil"/>
   <int value="-320820051" label="enable-zero-copy"/>
   <int value="-314910380" label="disable-distance-field-text"/>
@@ -81491,6 +81723,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1777059507" label="trust-autofill-server-name-types"/>
   <int value="1783293530" label="disallow-autofill-sync-credential"/>
   <int value="1783837132" label="enable-threaded-gpu-rasterization"/>
+  <int value="1785093465" label="enable-document-passive-event-listeners"/>
   <int value="1786229999" label="disable-md-downloads"/>
   <int value="1791904609" label="disable-autofill-keyboard-accessory-view"/>
   <int value="1803465156" label="enable-zero-suggest-most-visited"/>
@@ -87936,6 +88169,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="85" label="IDC_CONTENT_CONTEXT_OPEN_WITH12"/>
   <int value="86" label="IDC_CONTENT_CONTEXT_OPEN_WITH13"/>
   <int value="87" label="IDC_CONTENT_CONTEXT_OPEN_WITH14"/>
+  <int value="88" label="IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN"/>
 </enum>
 
 <enum name="ReportProcessingResult" type="int">
@@ -88459,6 +88693,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="24" label="LOCAL_FILE"/>
   <int value="25" label="REMOTE_FILE"/>
   <int value="26" label="SAMPLED_UNSUPPORTED_FILE"/>
+  <int value="27" label="VERDICT_UNKNOWN"/>
 </enum>
 
 <enum name="SBClientDownloadCheckResult" type="int">
@@ -89621,6 +89856,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="16" label="Recent tabs"/>
   <int value="17" label="Typed URL with unknown access point"/>
   <int value="18" label="Password bubble"/>
+  <int value="19" label="Autofill dropdown"/>
 </enum>
 
 <enum name="SigninAccountEquality" type="int">
@@ -91110,6 +91346,9 @@ To add a new entry, add it with any value and run test to compute valid value.
 </enum>
 
 <enum name="SSLHashAlgorithm" type="int">
+  <obsolete>
+    Removed June 2016.
+  </obsolete>
   <int value="0" label="None (unused)"/>
   <int value="1" label="MD5"/>
   <int value="2" label="SHA-1"/>
@@ -91213,6 +91452,17 @@ To add a new entry, add it with any value and run test to compute valid value.
              (DEPRECATED_CAPTIVE_PORTAL_DETECTED_OVERRIDABLE)"/>
   <int value="25"
       label="Displayed clock interstitial. (DISPLAYED_CLOCK_INTERSTITIAL)"/>
+</enum>
+
+<enum name="SSLSignatureAlgorithm" type="int">
+  <int value="513" label="rsa_pkcs1_sha1"/>
+  <int value="515" label="ecdsa_sha1"/>
+  <int value="1025" label="rsa_pkcs1_sha256"/>
+  <int value="1027" label="ecdsa_secp256r1_sha256"/>
+  <int value="1281" label="rsa_pkcs1_sha384"/>
+  <int value="1283" label="ecdsa_secp384r1_sha384"/>
+  <int value="1537" label="rsa_pkcs1_sha512"/>
+  <int value="1539" label="ecdsa_secp521r1_sha512"/>
 </enum>
 
 <enum name="StarsLaunchLocation" type="int">
@@ -98263,9 +98513,6 @@ To add a new entry, add it with any value and run test to compute valid value.
 
 <histogram_suffixes name="PageLoadMetricsClients.Reload" separator="."
     ordering="prefix">
-  <obsolete>
-    Deprecated in favor of LoadType.Reload.
-  </obsolete>
   <suffix name="Clients.Reload"
       label="PageLoadMetrics from a page that is reloaded"/>
   <affected-histogram

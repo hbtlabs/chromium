@@ -203,6 +203,14 @@
             "group_name": "Enabled"
         }
     ],
+    "NonValidatingReloadOnNormalReload": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnNormalReload"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -215,6 +223,14 @@
     ],
     "PageRevisitInstrumentation": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
             "group_name": "Enabled"
         }
     ],

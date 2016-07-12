@@ -65,7 +65,7 @@ bool WindowServerTestBase::QuitRunLoop() {
 }
 
 void WindowServerTestBase::SetUp() {
-  WindowServerShellTestBase::SetUp();
+  WindowServerServiceTestBase::SetUp();
 
   CreateWindowTreeHost(connector(), this, &host_, this);
 
@@ -131,9 +131,27 @@ void WindowServerTestBase::OnWmNewDisplay(Window* window,
     window_manager_delegate_->OnWmNewDisplay(window, display);
 }
 
-void WindowServerTestBase::OnAccelerator(uint32_t id, const ui::Event& event) {
+void WindowServerTestBase::OnWmPerformMoveLoop(
+    Window* window,
+    mojom::MoveLoopSource source,
+    const gfx::Point& cursor_location,
+    const base::Callback<void(bool)>& on_done) {
+  if (window_manager_delegate_) {
+    window_manager_delegate_->OnWmPerformMoveLoop(window, source,
+                                                  cursor_location, on_done);
+  }
+}
+
+void WindowServerTestBase::OnWmCancelMoveLoop(Window* window) {
   if (window_manager_delegate_)
-    window_manager_delegate_->OnAccelerator(id, event);
+    window_manager_delegate_->OnWmCancelMoveLoop(window);
+}
+
+mojom::EventResult WindowServerTestBase::OnAccelerator(uint32_t accelerator_id,
+                                                       const ui::Event& event) {
+  return window_manager_delegate_
+             ? window_manager_delegate_->OnAccelerator(accelerator_id, event)
+             : mojom::EventResult::UNHANDLED;
 }
 
 void WindowServerTestBase::Create(shell::Connection* connection,

@@ -32,6 +32,14 @@ Polymer({
     'remove-bookmark-stars': 'removeBookmarkStars_',
   },
 
+  /** @override */
+  attached: function() {
+    // It is possible (eg, when middle clicking the reload button) for all other
+    // resize events to fire before the list is attached and can be measured.
+    // Adding another resize here ensures it will get sized correctly.
+    /** @type {IronListElement} */(this.$['infinite-list']).notifyResize();
+  },
+
   /**
    * Closes the overflow menu.
    * @private
@@ -181,7 +189,9 @@ Polymer({
 
   /**
    * Performs a request to the backend to delete all selected items. If
-   * successful, removes them from the view.
+   * successful, removes them from the view. Does not prompt the user before
+   * deleting -- see <history-list-container> for a version of this method which
+   * does prompt.
    */
   deleteSelected: function() {
     var toBeRemoved = this.historyData_.filter(function(item) {

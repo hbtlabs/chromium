@@ -31,6 +31,7 @@
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLFormControlElementWithState.h"
 #include "core/html/HTMLOptionsCollection.h"
+#include "core/html/forms/OptionList.h"
 #include "core/html/forms/TypeAhead.h"
 #include "wtf/Vector.h"
 
@@ -83,14 +84,23 @@ public:
     String suggestedValue() const;
     void setSuggestedValue(const String&);
 
+    // |options| and |selectedOptions| are not safe to be used in in
+    // HTMLOptionElement::removedFrom() and insertedInto() because their cache
+    // is inconsistent in these functions.
     HTMLOptionsCollection* options();
     HTMLCollection* selectedOptions();
+
+    // This is similar to |options| HTMLCollection.  But this is safe in
+    // HTMLOptionElement::removedFrom() and insertedInto().
+    // OptionList supports only forward iteration.
+    OptionList optionList() const { return OptionList(*this); }
 
     void optionElementChildrenChanged(const HTMLOptionElement&);
 
     void invalidateSelectedItems();
 
     using ListItems = HeapVector<Member<HTMLElement>>;
+    // We prefer |optionList()| to |listItems()|.
     const ListItems& listItems() const;
 
     void accessKeyAction(bool sendMouseEvents) override;
@@ -150,7 +160,7 @@ public:
     void provisionalSelectionChanged(unsigned);
     void popupDidHide();
     bool popupIsVisible() const { return m_popupIsVisible; }
-    int optionIndexToBeShown() const;
+    HTMLOptionElement* optionToBeShown() const;
     void showPopup();
     void hidePopup();
     PopupMenu* popup() const { return m_popup.get(); }
@@ -194,8 +204,7 @@ private:
 
     void dispatchInputAndChangeEventForMenuList();
 
-    // |subject| is an element which was inserted or removed.
-    void setRecalcListItems(HTMLElement& subject);
+    void setRecalcListItems();
     void recalcListItems() const;
     enum ResetReason {
         ResetReasonSelectedOptionRemoved,
@@ -219,10 +228,8 @@ private:
         MakeOptionDirty = 1 << 2,
     };
     typedef unsigned SelectOptionFlags;
-    void selectOption(int optionIndex, SelectOptionFlags);
     void selectOption(HTMLOptionElement*, SelectOptionFlags);
-    void selectOption(HTMLOptionElement*, int optionIndex, SelectOptionFlags);
-    void deselectItemsWithoutValidation(HTMLElement* elementToExclude = 0);
+    void deselectItemsWithoutValidation(HTMLOptionElement* elementToExclude = nullptr);
     void parseMultipleAttribute(const AtomicString&);
     HTMLOptionElement* lastSelectedOption() const;
     void updateSelectedState(HTMLOptionElement*, bool multi, bool shift);

@@ -63,6 +63,7 @@ namespace blink {
 static const char webglErrorFiredEventName[] = "webglErrorFired";
 static const char webglWarningFiredEventName[] = "webglWarningFired";
 static const char webglErrorNameProperty[] = "webglErrorName";
+static const char scriptBlockedByCSPEventName[] = "scriptBlockedByCSP";
 
 namespace DOMDebuggerAgentState {
 static const char eventListenerBreakpoints[] = "eventListenerBreakpoints";
@@ -141,9 +142,9 @@ static v8::MaybeLocal<v8::Function> createRemoveFunction(v8::Local<v8::Context> 
         return v8::MaybeLocal<v8::Function>();
     if (!data->Set(context, v8String(isolate, "useCapture"), v8Boolean(useCapture, isolate)).FromMaybe(false))
         return v8::MaybeLocal<v8::Function>();
-    v8::Local<v8::Function> removeFunction = v8::Function::New(isolate, removeEventListenerCallback, data);
+    v8::Local<v8::Function> removeFunction = v8::Function::New(context, removeEventListenerCallback, data, 0, v8::ConstructorBehavior::kThrow).ToLocalChecked();
     v8::Local<v8::Function> toStringFunction;
-    if (v8::Function::New(context, returnDataCallback, v8String(isolate, "function remove() { [Command Line API] }")).ToLocal(&toStringFunction))
+    if (v8::Function::New(context, returnDataCallback, v8String(isolate, "function remove() { [Command Line API] }"), 0, v8::ConstructorBehavior::kThrow).ToLocal(&toStringFunction))
         removeFunction->Set(v8String(context->GetIsolate(), "toString"), toStringFunction);
     return removeFunction;
 }
@@ -629,6 +630,15 @@ void InspectorDOMDebuggerAgent::didFireWebGLErrorOrWarning(const String& message
 void InspectorDOMDebuggerAgent::cancelNativeBreakpoint()
 {
     m_v8Session->cancelPauseOnNextStatement();
+}
+
+void InspectorDOMDebuggerAgent::scriptExecutionBlockedByCSP(const String& directiveText)
+{
+    std::unique_ptr<protocol::DictionaryValue> eventData = preparePauseOnNativeEventData(scriptBlockedByCSPEventName, 0);
+    if (!eventData)
+        return;
+    eventData->setString("directiveText", directiveText);
+    pauseOnNativeEventIfNeeded(std::move(eventData), true);
 }
 
 void InspectorDOMDebuggerAgent::setXHRBreakpoint(ErrorString* errorString, const String& url)

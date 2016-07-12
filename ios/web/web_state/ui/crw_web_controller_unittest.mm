@@ -688,6 +688,12 @@ TEST_F(CRWWebControllerPageDialogOpenPolicyTest, AllowPrompt) {
 
 // Tests that geolocation dialog is suppressed for DIALOG_POLICY_SUPPRESS.
 TEST_F(CRWWebControllerPageDialogOpenPolicyTest, SuppressGeolocation) {
+  // TODO(crbug.com/626688): The geolocation APIs require HTTPS on iOS 10.  Find
+  // a way to trigger a geolocation prompt from this test.
+  if (base::ios::IsRunningOnIOS10OrLater()) {
+    return;
+  }
+
   [[web_delegate_mock() expect]
       webControllerDidSuppressDialog:web_controller()];
   [web_controller() setShouldSuppressDialogs:YES];
@@ -757,7 +763,8 @@ TEST_F(CRWWebControllerPageScrollStateTest,
 // TODO(iOS): Flaky on the bots. crbug/493427
 TEST_F(CRWWebControllerPageScrollStateTest,
        FLAKY_SetPageDisplayStateWithUserScalableEnabled) {
-  web::PageZoomState zoom_state(1.0, 10.0, 1.0);
+  web::PageZoomState zoom_state(1.0, 5.0, 1.0);
+
   LoadHtml(GetHTMLForZoomState(zoom_state, PAGE_SCALABILITY_ENABLED));
   WaitForZoomRendering(web_controller(), zoom_state);
 
@@ -767,7 +774,7 @@ TEST_F(CRWWebControllerPageScrollStateTest,
       CreateTestPageDisplayState(CGPointMake(1.0, 1.0),  // scroll offset
                                  3.0,                    // relative zoom scale
                                  1.0,    // original minimum zoom scale
-                                 10.0,   // original maximum zoom scale
+                                 5.0,    // original maximum zoom scale
                                  1.0));  // original zoom scale
   [web_controller() restoreStateFromHistory];
 

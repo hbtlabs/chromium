@@ -746,9 +746,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
   if (!passiveListenersDefault.empty()) {
     WebSettings::PassiveEventListenerDefault passiveDefault =
         WebSettings::PassiveEventListenerDefault::False;
-    if (passiveListenersDefault == "documentonlytrue")
-      passiveDefault = WebSettings::PassiveEventListenerDefault::DocumentTrue;
-    else if (passiveListenersDefault == "true")
+    if (passiveListenersDefault == "true")
       passiveDefault = WebSettings::PassiveEventListenerDefault::True;
     else if (passiveListenersDefault == "forcealltrue")
       passiveDefault = WebSettings::PassiveEventListenerDefault::ForceAllTrue;
@@ -1663,9 +1661,7 @@ bool RenderViewImpl::handleCurrentKeyboardEvent() {
   if (edit_commands_.empty())
     return false;
 
-  WebFrame* frame = webview()->focusedFrame();
-  if (!frame)
-    return false;
+  WebLocalFrame* frame = webview()->focusedFrame();
 
   EditCommands::iterator it = edit_commands_.begin();
   EditCommands::iterator end = edit_commands_.end();
@@ -2032,11 +2028,6 @@ void RenderViewImpl::didInvalidateRect(const blink::WebRect& rect) {
   RenderWidget::didInvalidateRect(rect);
 }
 
-void RenderViewImpl::didMeaningfulLayout(
-    blink::WebMeaningfulLayout layout_type) {
-  RenderWidget::didMeaningfulLayout(layout_type);
-}
-
 void RenderViewImpl::didOverscroll(
     const blink::WebFloatSize& overscrollDelta,
     const blink::WebFloatSize& accumulatedOverscroll,
@@ -2147,10 +2138,6 @@ gfx::RectF RenderViewImpl::ElementBoundsInWindow(
   blink::WebRect bounding_box_in_window = element.boundsInViewport();
   ConvertViewportToWindowViaWidget(&bounding_box_in_window);
   return gfx::RectF(bounding_box_in_window);
-}
-
-float RenderViewImpl::GetDeviceScaleFactorForTest() const {
-  return device_scale_factor_;
 }
 
 bool RenderViewImpl::HasAddedInputHandler() const {
@@ -2757,12 +2744,11 @@ void RenderViewImpl::OnImeSetComposition(
   if (replacement_range.IsValid() && webview()) {
     // Select the text in |replacement_range|, it will then be replaced by
     // text added by the call to RenderWidget::OnImeSetComposition().
-    if (WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame()) {
-      WebRange webrange = WebRange::fromDocumentRange(
-          frame, replacement_range.start(), replacement_range.length());
-      if (!webrange.isNull())
-        frame->selectRange(webrange);
-    }
+    WebLocalFrame* frame = webview()->focusedFrame();
+    WebRange webrange = WebRange::fromDocumentRange(
+        frame, replacement_range.start(), replacement_range.length());
+    if (!webrange.isNull())
+      frame->selectRange(webrange);
   }
   RenderWidget::OnImeSetComposition(text,
                                     underlines,
@@ -2786,12 +2772,11 @@ void RenderViewImpl::OnImeConfirmComposition(
   if (replacement_range.IsValid() && webview()) {
     // Select the text in |replacement_range|, it will then be replaced by
     // text added by the call to RenderWidget::OnImeConfirmComposition().
-    if (WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame()) {
-      WebRange webrange = WebRange::fromDocumentRange(
-          frame, replacement_range.start(), replacement_range.length());
-      if (!webrange.isNull())
-        frame->selectRange(webrange);
-    }
+    WebLocalFrame* frame = webview()->focusedFrame();
+    WebRange webrange = WebRange::fromDocumentRange(
+        frame, replacement_range.start(), replacement_range.length());
+    if (!webrange.isNull())
+      frame->selectRange(webrange);
   }
   RenderWidget::OnImeConfirmComposition(text,
                                         replacement_range,
@@ -2859,9 +2844,7 @@ void RenderViewImpl::GetCompositionCharacterBounds(
   if (character_count == 0)
     return;
 
-  blink::WebFrame* frame = webview()->focusedFrame();
-  if (!frame)
-    return;
+  blink::WebLocalFrame* frame = webview()->focusedFrame();
 
   bounds_in_window->reserve(character_count);
   blink::WebRect webrect;

@@ -140,7 +140,7 @@ PassRefPtr<Image> createTransparentImage(const IntSize& size)
 inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
     : HTMLElement(canvasTag, document)
     , ContextLifecycleObserver(&document)
-    , PageLifecycleObserver(document.page())
+    , PageVisibilityObserver(document.page())
     , m_size(DefaultWidth, DefaultHeight)
     , m_ignoreReset(false)
     , m_externallyAllocatedMemory(0)
@@ -680,7 +680,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
 
     if (!isPaintable()) {
         // If the canvas element's bitmap has no pixels
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(callback), nullptr));
+        document().unthrottledTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(callback), nullptr));
         return;
     }
 
@@ -900,7 +900,7 @@ DEFINE_TRACE(HTMLCanvasElement)
     visitor->trace(m_listeners);
     visitor->trace(m_context);
     ContextLifecycleObserver::trace(visitor);
-    PageLifecycleObserver::trace(visitor);
+    PageVisibilityObserver::trace(visitor);
     HTMLElement::trace(visitor);
 }
 
@@ -1055,7 +1055,7 @@ void HTMLCanvasElement::styleDidChange(const ComputedStyle* oldStyle, const Comp
 void HTMLCanvasElement::didMoveToNewDocument(Document& oldDocument)
 {
     ContextLifecycleObserver::setContext(&document());
-    PageLifecycleObserver::setContext(document().page());
+    PageVisibilityObserver::setContext(document().page());
     HTMLElement::didMoveToNewDocument(oldDocument);
 }
 

@@ -16,9 +16,13 @@
 #include "ash/common/ash_switches.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/media_delegate.h"
+#include "ash/common/multi_profile_uma.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/brightness_control_delegate.h"
+#include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/system_notifier.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
@@ -36,7 +40,6 @@
 #include "ash/ime_control_delegate.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
-#include "ash/multi_profile_uma.h"
 #include "ash/new_window_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
@@ -47,9 +50,6 @@
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
-#include "ash/system/brightness_control_delegate.h"
-#include "ash/system/keyboard_brightness/keyboard_brightness_control_delegate.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/touch/touch_hud_debug.h"
@@ -81,7 +81,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/display/display_configuration_controller.h"
-#include "ash/system/chromeos/keyboard_brightness_controller.h"
 #include "base/sys_info.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -106,7 +105,7 @@ class DeprecatedAcceleratorNotificationDelegate
 
   void Click() override {
     if (!WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked())
-      Shell::GetInstance()->delegate()->OpenKeyboardShortcutHelpPage();
+      WmShell::Get()->delegate()->OpenKeyboardShortcutHelpPage();
   }
 
  private:
@@ -145,7 +144,7 @@ void EnsureNoWordBreaks(base::string16* shortcut_text) {
     *shortcut_text += non_breaking_plus;
   }
 
-  *shortcut_text += keys[keys.size() - 1];
+  *shortcut_text += keys.back();
 }
 
 // Gets the notification message after it formats it in such a way that there
@@ -171,7 +170,7 @@ void ShowDeprecatedAcceleratorNotification(const char* const notification_id,
       new message_center::Notification(
           message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
           base::string16(), message,
-          Shell::GetInstance()->delegate()->GetDeprecatedAcceleratorImage(),
+          WmShell::Get()->delegate()->GetDeprecatedAcceleratorImage(),
           base::string16(), GURL(),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
@@ -277,7 +276,7 @@ void HandleMediaPrevTrack() {
 }
 
 bool CanHandleNewIncognitoWindow() {
-  return Shell::GetInstance()->delegate()->IsIncognitoAllowed();
+  return WmShell::Get()->delegate()->IsIncognitoAllowed();
 }
 
 void HandleNewIncognitoWindow() {
@@ -554,18 +553,6 @@ void HandleUnpin() {
 }
 
 #if defined(OS_CHROMEOS)
-void HandleBrightnessDown(BrightnessControlDelegate* delegate,
-                          const ui::Accelerator& accelerator) {
-  if (delegate)
-    delegate->HandleBrightnessDown(accelerator);
-}
-
-void HandleBrightnessUp(BrightnessControlDelegate* delegate,
-                        const ui::Accelerator& accelerator) {
-  if (delegate)
-    delegate->HandleBrightnessUp(accelerator);
-}
-
 bool CanHandleDisableCapsLock(const ui::Accelerator& previous_accelerator) {
   ui::KeyboardCode previous_key_code = previous_accelerator.key_code();
   if (previous_accelerator.type() == ui::ET_KEY_RELEASED ||
@@ -588,18 +575,6 @@ void HandleDisableCapsLock() {
   chromeos::input_method::InputMethodManager* ime =
       chromeos::input_method::InputMethodManager::Get();
   ime->GetImeKeyboard()->SetCapsLockEnabled(false);
-}
-
-void HandleKeyboardBrightnessDown(KeyboardBrightnessControlDelegate* delegate,
-                                  const ui::Accelerator& accelerator) {
-  if (delegate)
-    delegate->HandleKeyboardBrightnessDown(accelerator);
-}
-
-void HandleKeyboardBrightnessUp(KeyboardBrightnessControlDelegate* delegate,
-                                const ui::Accelerator& accelerator) {
-  if (delegate)
-    delegate->HandleKeyboardBrightnessUp(accelerator);
 }
 
 bool CanHandleLock() {
@@ -639,8 +614,7 @@ void HandleSwapPrimaryDisplay() {
 }
 
 bool CanHandleCycleUser() {
-  Shell* shell = Shell::GetInstance();
-  return shell->delegate()->IsMultiProfilesEnabled() &&
+  return WmShell::Get()->delegate()->IsMultiProfilesEnabled() &&
          WmShell::Get()->GetSessionStateDelegate()->NumberOfLoggedInUsers() > 1;
 }
 
@@ -808,11 +782,6 @@ AcceleratorController::GetCurrentAcceleratorRestriction() {
   return GetAcceleratorProcessingRestriction(-1);
 }
 
-void AcceleratorController::SetBrightnessControlDelegate(
-    std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate) {
-  brightness_control_delegate_ = std::move(brightness_control_delegate);
-}
-
 void AcceleratorController::SetImeControlDelegate(
     std::unique_ptr<ImeControlDelegate> ime_control_delegate) {
   ime_control_delegate_ = std::move(ime_control_delegate);
@@ -904,8 +873,8 @@ void AcceleratorController::Init() {
     preferred_actions_.insert(kPreferredActions[i]);
   for (size_t i = 0; i < kReservedActionsLength; ++i)
     reserved_actions_.insert(kReservedActions[i]);
-  for (size_t i = 0; i < kNonrepeatableActionsLength; ++i)
-    nonrepeatable_actions_.insert(kNonrepeatableActions[i]);
+  for (size_t i = 0; i < kRepeatableActionsLength; ++i)
+    repeatable_actions_.insert(kRepeatableActions[i]);
   for (size_t i = 0; i < kActionsAllowedInAppModeOrPinnedModeLength; ++i) {
     actions_allowed_in_app_mode_.insert(
         kActionsAllowedInAppModeOrPinnedMode[i]);
@@ -929,11 +898,6 @@ void AcceleratorController::Init() {
     for (size_t i = 0; i < kDebugAcceleratorDataLength; ++i)
       reserved_actions_.insert(kDebugAcceleratorData[i].action);
   }
-
-#if defined(OS_CHROMEOS)
-  keyboard_brightness_control_delegate_.reset(
-      new KeyboardBrightnessController());
-#endif
 }
 
 void AcceleratorController::RegisterAccelerators(
@@ -971,10 +935,8 @@ void AcceleratorController::RegisterDeprecatedAccelerators() {
 bool AcceleratorController::CanPerformAction(
     AcceleratorAction action,
     const ui::Accelerator& accelerator) {
-  if (nonrepeatable_actions_.find(action) != nonrepeatable_actions_.end() &&
-      accelerator.IsRepeat()) {
+  if (accelerator.IsRepeat() && !repeatable_actions_.count(action))
     return false;
-  }
 
   AcceleratorProcessingRestriction restriction =
       GetAcceleratorProcessingRestriction(action);
@@ -1283,12 +1245,20 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
       HandleUnpin();
       break;
 #if defined(OS_CHROMEOS)
-    case BRIGHTNESS_DOWN:
-      HandleBrightnessDown(brightness_control_delegate_.get(), accelerator);
+    case BRIGHTNESS_DOWN: {
+      BrightnessControlDelegate* delegate =
+          WmShell::Get()->brightness_control_delegate();
+      if (delegate)
+        delegate->HandleBrightnessDown(accelerator);
       break;
-    case BRIGHTNESS_UP:
-      HandleBrightnessUp(brightness_control_delegate_.get(), accelerator);
+    }
+    case BRIGHTNESS_UP: {
+      BrightnessControlDelegate* delegate =
+          WmShell::Get()->brightness_control_delegate();
+      if (delegate)
+        delegate->HandleBrightnessUp(accelerator);
       break;
+    }
     case DEBUG_ADD_REMOVE_DISPLAY:
     case DEBUG_SHOW_TOAST:
     case DEBUG_TOGGLE_TOUCH_PAD:
@@ -1303,14 +1273,20 @@ void AcceleratorController::PerformAction(AcceleratorAction action,
     case DISABLE_GPU_WATCHDOG:
       Shell::GetInstance()->gpu_support()->DisableGpuWatchdog();
       break;
-    case KEYBOARD_BRIGHTNESS_DOWN:
-      HandleKeyboardBrightnessDown(keyboard_brightness_control_delegate_.get(),
-                                   accelerator);
+    case KEYBOARD_BRIGHTNESS_DOWN: {
+      KeyboardBrightnessControlDelegate* delegate =
+          WmShell::Get()->keyboard_brightness_control_delegate();
+      if (delegate)
+        delegate->HandleKeyboardBrightnessDown(accelerator);
       break;
-    case KEYBOARD_BRIGHTNESS_UP:
-      HandleKeyboardBrightnessUp(keyboard_brightness_control_delegate_.get(),
-                                 accelerator);
+    }
+    case KEYBOARD_BRIGHTNESS_UP: {
+      KeyboardBrightnessControlDelegate* delegate =
+          WmShell::Get()->keyboard_brightness_control_delegate();
+      if (delegate)
+        delegate->HandleKeyboardBrightnessUp(accelerator);
       break;
+    }
     case LOCK_PRESSED:
     case LOCK_RELEASED:
       Shell::GetInstance()->power_button_controller()->OnLockButtonEvent(
@@ -1404,7 +1380,6 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
           actions_allowed_in_pinned_mode_.end()) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
-  Shell* shell = Shell::GetInstance();
   WmShell* wm_shell = WmShell::Get();
   if (!wm_shell->GetSessionStateDelegate()->IsActiveUserSessionStarted() &&
       actions_allowed_at_login_screen_.find(action) ==
@@ -1416,7 +1391,7 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
           actions_allowed_at_lock_screen_.end()) {
     return RESTRICTION_PREVENT_PROCESSING;
   }
-  if (shell->delegate()->IsRunningInForcedAppMode() &&
+  if (wm_shell->delegate()->IsRunningInForcedAppMode() &&
       actions_allowed_in_app_mode_.find(action) ==
           actions_allowed_in_app_mode_.end()) {
     return RESTRICTION_PREVENT_PROCESSING;
@@ -1437,13 +1412,6 @@ AcceleratorController::GetAcceleratorProcessingRestriction(int action) {
     return RESTRICTION_PREVENT_PROCESSING_AND_PROPAGATION;
   }
   return RESTRICTION_NONE;
-}
-
-void AcceleratorController::SetKeyboardBrightnessControlDelegate(
-    std::unique_ptr<KeyboardBrightnessControlDelegate>
-        keyboard_brightness_control_delegate) {
-  keyboard_brightness_control_delegate_ =
-      std::move(keyboard_brightness_control_delegate);
 }
 
 }  // namespace ash

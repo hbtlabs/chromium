@@ -67,7 +67,6 @@ public:
     BLINK_EXPORT static void enableOriginTrials(bool);
     BLINK_EXPORT static bool isOriginTrialsEnabled();
 
-    BLINK_EXPORT static void enableApplicationCache(bool);
     BLINK_EXPORT static void enableAudioOutputDevices(bool);
     BLINK_EXPORT static void enableCanvas2dImageChromium(bool);
     BLINK_EXPORT static void enableCredentialManagerAPI(bool);
@@ -91,6 +90,7 @@ public:
     BLINK_EXPORT static void enableOverlayScrollbars(bool);
     BLINK_EXPORT static void enablePagePopup(bool);
     BLINK_EXPORT static void enableParseHTMLOnMainThread(bool);
+    BLINK_EXPORT static void enablePassiveDocumentEventListeners(bool);
     BLINK_EXPORT static void enablePermissionsAPI(bool);
     BLINK_EXPORT static void enablePointerEvent(bool);
     BLINK_EXPORT static void enablePreciseMemoryInfo(bool);

@@ -3474,6 +3474,7 @@ interface IDBObserver
     attribute @@toStringTag
     method constructor
     method observe
+    method unobserve
 interface IDBObserverChanges
     attribute @@toStringTag
     getter database
@@ -3604,7 +3605,6 @@ interface KeyboardEvent : UIEvent
     getter ctrlKey
     getter key
     getter keyCode
-    getter keyIdentifier
     getter location
     getter metaKey
     getter repeat
@@ -4018,6 +4018,7 @@ interface Navigator
     method requestMIDIAccess
     method requestMediaKeySystemAccess
     method sendBeacon
+    method share
     method unregisterProtocolHandler
     method vibrate
     method webkitGetUserMedia

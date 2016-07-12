@@ -2371,13 +2371,28 @@ ScopedResolvedFrameBufferBinder::ScopedResolvedFrameBufferBinder(
        enforce_internal_framebuffer));
   if (!resolve_and_bind_)
     return;
-
-  // TODO(erikchen): On old AMD GPUs on macOS, glColorMask doesn't work
-  // correctly for multisampled renderbuffers and the alpha channel can be
-  // overwritten. Add a workaround to clear the alpha channel before resolving.
-  // https://crbug.com/602484.
   ScopedGLErrorSuppressor suppressor(
       "ScopedResolvedFrameBufferBinder::ctor", decoder_->GetErrorState());
+
+  // On old AMD GPUs on macOS, glColorMask doesn't work correctly for
+  // multisampled renderbuffers and the alpha channel can be overwritten. This
+  // workaround clears the alpha channel before resolving.
+  bool alpha_channel_needs_clear =
+      decoder_->should_use_native_gmb_for_backbuffer_ &&
+      !decoder_->offscreen_buffer_should_have_alpha_ &&
+      decoder_->ChromiumImageNeedsRGBEmulation() &&
+      decoder_->feature_info_->workarounds()
+          .disable_multisampling_color_mask_usage;
+  if (alpha_channel_needs_clear) {
+    glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER_EXT,
+                         decoder_->offscreen_target_frame_buffer_->id());
+    decoder_->state_.SetDeviceColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+    decoder->state_.SetDeviceCapabilityState(GL_SCISSOR_TEST, false);
+    glClearColor(0, 0, 0, 1);
+    glClear(GL_COLOR_BUFFER_BIT);
+    decoder_->RestoreClearState();
+  }
+
   glBindFramebufferEXT(GL_READ_FRAMEBUFFER_EXT,
                        decoder_->offscreen_target_frame_buffer_->id());
   GLuint targetid;
@@ -2952,6 +2967,23 @@ bool GLES2DecoderImpl::Initialize(
   lose_context_when_out_of_memory_ =
       attrib_helper.lose_context_when_out_of_memory;
 
+  // If the failIfMajorPerformanceCaveat context creation attribute was true
+  // and we are using a software renderer, fail.
+  if (attrib_helper.fail_if_major_perf_caveat &&
+      feature_info_->feature_flags().is_swiftshader) {
+    group_ = NULL;  // Must not destroy ContextGroup if it is not initialized.
+    Destroy(true);
+    return false;
+  }
+
+  if (!group_->Initialize(this, attrib_helper.context_type,
+                          disallowed_features)) {
+    group_ = NULL;  // Must not destroy ContextGroup if it is not initialized.
+    Destroy(true);
+    return false;
+  }
+  CHECK_GL_ERROR();
+
   should_use_native_gmb_for_backbuffer_ =
       attrib_helper.should_use_native_gmb_for_backbuffer;
   if (should_use_native_gmb_for_backbuffer_) {
@@ -2971,28 +3003,10 @@ bool GLES2DecoderImpl::Initialize(
     }
 
     if (!supported) {
-      group_ = NULL;  // Must not destroy ContextGroup if it is not initialized.
       Destroy(true);
       return false;
     }
   }
-
-  // If the failIfMajorPerformanceCaveat context creation attribute was true
-  // and we are using a software renderer, fail.
-  if (attrib_helper.fail_if_major_perf_caveat &&
-      feature_info_->feature_flags().is_swiftshader) {
-    group_ = NULL;  // Must not destroy ContextGroup if it is not initialized.
-    Destroy(true);
-    return false;
-  }
-
-  if (!group_->Initialize(this, attrib_helper.context_type,
-                          disallowed_features)) {
-    group_ = NULL;  // Must not destroy ContextGroup if it is not initialized.
-    Destroy(true);
-    return false;
-  }
-  CHECK_GL_ERROR();
 
   bool needs_emulation = feature_info_->gl_version_info().IsLowerThanGL(4, 2);
   transform_feedback_manager_.reset(new TransformFeedbackManager(
@@ -3354,7 +3368,7 @@ bool GLES2DecoderImpl::Initialize(
   DoBindFramebuffer(GL_FRAMEBUFFER, 0);
   DoBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-  bool call_gl_clear = !surfaceless_;
+  bool call_gl_clear = !surfaceless_ && !offscreen;
 #if defined(OS_ANDROID)
   // Temporary workaround for Android WebView because this clear ignores the
   // clip and corrupts that external UI of the App. Not calling glClear is ok
@@ -3401,8 +3415,7 @@ bool GLES2DecoderImpl::Initialize(
   if (workarounds().gl_clear_broken) {
     DCHECK(!clear_framebuffer_blit_.get());
     LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("glClearWorkaroundInit");
-    clear_framebuffer_blit_.reset(
-        new ClearFramebufferResourceManager(this, features()));
+    clear_framebuffer_blit_.reset(new ClearFramebufferResourceManager(this));
     if (LOCAL_PEEK_GL_ERROR("glClearWorkaroundInit") != GL_NO_ERROR)
       return false;
   }
@@ -3559,8 +3572,8 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
       feature_info_->feature_flags().occlusion_query_boolean;
   caps.timer_queries =
       query_manager_->GPUTimingAvailable();
-  caps.disable_webgl_multisampling_color_mask_usage =
-      feature_info_->workarounds().disable_webgl_multisampling_color_mask_usage;
+  caps.disable_multisampling_color_mask_usage =
+      feature_info_->workarounds().disable_multisampling_color_mask_usage;
   caps.disable_webgl_rgb_multisampling_usage =
       feature_info_->workarounds().disable_webgl_rgb_multisampling_usage;
   caps.emulate_rgb_buffer_with_rgba =
@@ -14398,15 +14411,19 @@ bool GLES2DecoderImpl::ValidateCopyTextureCHROMIUMInternalFormats(
   // The destination format should be GL_RGB, or GL_RGBA. GL_ALPHA,
   // GL_LUMINANCE, and GL_LUMINANCE_ALPHA are not supported because they are not
   // renderable on some platforms.
-  bool valid_dest_format = dest_internal_format == GL_RGB ||
-                           dest_internal_format == GL_RGBA ||
-                           dest_internal_format == GL_BGRA_EXT;
+  bool valid_dest_format =
+      dest_internal_format == GL_RGB || dest_internal_format == GL_RGBA ||
+      dest_internal_format == GL_RGB8 || dest_internal_format == GL_RGBA8 ||
+      dest_internal_format == GL_BGRA_EXT ||
+      dest_internal_format == GL_BGRA8_EXT;
   bool valid_source_format =
       source_internal_format == GL_RED || source_internal_format == GL_ALPHA ||
       source_internal_format == GL_RGB || source_internal_format == GL_RGBA ||
+      source_internal_format == GL_RGB8 || source_internal_format == GL_RGBA8 ||
       source_internal_format == GL_LUMINANCE ||
       source_internal_format == GL_LUMINANCE_ALPHA ||
       source_internal_format == GL_BGRA_EXT ||
+      source_internal_format == GL_BGRA8_EXT ||
       source_internal_format == GL_RGB_YCBCR_420V_CHROMIUM ||
       source_internal_format == GL_RGB_YCBCR_422_CHROMIUM;
   if (!valid_source_format || !valid_dest_format) {

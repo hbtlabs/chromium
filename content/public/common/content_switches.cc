@@ -243,6 +243,9 @@ const char kDisablePepper3d[]               = "disable-pepper-3d";
 // Disables the Permissions API.
 const char kDisablePermissionsAPI[]         = "disable-permissions-api";
 
+// Disable Image Chromium for Pepper 3d.
+const char kDisablePepper3DImageChromium[] = "disable-pepper-3d-image-chromium";
+
 // Disables compositor-accelerated touch-screen pinch gestures.
 const char kDisablePinch[]                  = "disable-pinch";
 
@@ -268,6 +271,10 @@ const char kDisableRendererAccessibility[]  = "disable-renderer-accessibility";
 
 // Prevent renderer process backgrounding when set.
 const char kDisableRendererBackgrounding[]  = "disable-renderer-backgrounding";
+
+// Whether the resize lock is disabled. Default is false. This is generally only
+// useful for tests that want to force disabling.
+const char kDisableResizeLock[] = "disable-resize-lock";
 
 // Disable the seccomp filter sandbox (seccomp-bpf) (Linux only).
 const char kDisableSeccompFilterSandbox[]   = "disable-seccomp-filter-sandbox";
@@ -600,6 +607,9 @@ const char kInProcessGPU[]                  = "in-process-gpu";
 // Overrides the timeout, in seconds, that a child process waits for a
 // connection from the browser before killing itself.
 const char kIPCConnectionTimeout[]          = "ipc-connection-timeout";
+
+// Chrome is running in Mash.
+const char kIsRunningInMash[] = "is-running-in-mash";
 
 // Disable latest shipping ECMAScript 6 features.
 const char kDisableJavaScriptHarmonyShipping[] =

@@ -154,6 +154,13 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AboutFlags_document-passive-event-listeners">
+  <owner>dtapuska@chromium.org</owner>
+  <description>
+    User enabled the PassiveDocumentEventListeners via chrome://flags.
+  </description>
+</action>
+
 <action name="AboutFlags_downloads-new-ui">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13412,6 +13419,14 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Signin_FromAutofillDropdown">
+  <owner>mathp@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN.
+  </description>
+</action>
+
 <action name="Signin_Signin_FromAvatarBubbleSignin">
   <owner>gogerald@chromium.org</owner>
   <description>
@@ -13900,6 +13915,62 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="StatusArea_OS_Update_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the update row in the system
+    menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Detailed">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has opened the &quot;SMS messages &quot;
+    detailed view in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Detailed_DismissMsg">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has dismissed an SMS message from the
+    SMS message detailed view in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Notification_DismissMsg">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has dismissed an SMS message
+    notification. Note these notifications are managed by the system menu and
+    not the general notification center.
+  </description>
+</action>
+
+<action name="StatusArea_ScreenCapture_Default_Stop">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user stops screen capturing via the screen
+    capture row in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_ScreenCapture_Notification_Stop">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user stops screen capturing via the Screen
+    Capture notification. Note these notifications are managed by the system
+    menu and not the general notification center.
+  </description>
+</action>
+
 <action name="StatusArea_SignOut">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13913,6 +13984,15 @@ should be able to be added at any place in this file.
 <action name="StatusArea_SpokenFeedbackEnabled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="StatusArea_Tracing_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the tracing row in the system
+    menu.
+  </description>
 </action>
 
 <action name="StatusArea_VPN_AddBuiltIn">
@@ -14817,6 +14897,22 @@ should be able to be added at any place in this file.
   <owner>tdanderson@chromium.org</owner>
   <owner>flackr@chromium.org</owner>
   <description>Starting the window overview mode.</description>
+</action>
+
+<action name="WindowSelector_OverviewCloseButton">
+  <owner>tdanderson@chromium.org</owner>
+  <owner>varkha@chromium.org</owner>
+  <description>
+    Using the 'X' button to close a window in the overview.
+  </description>
+</action>
+
+<action name="WindowSelector_OverviewCloseKey">
+  <owner>tdanderson@chromium.org</owner>
+  <owner>varkha@chromium.org</owner>
+  <description>
+    Using Ctrl+W shortcut to close a window in the overview.
+  </description>
 </action>
 
 <action name="WindowSelector_OverviewEnterKey">

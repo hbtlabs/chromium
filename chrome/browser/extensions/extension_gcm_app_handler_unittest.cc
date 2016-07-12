@@ -168,7 +168,7 @@ class FakeExtensionGCMAppHandler : public ExtensionGCMAppHandler {
 
   void RemoveAppHandler(const std::string& app_id) override {
     ExtensionGCMAppHandler::RemoveAppHandler(app_id);
-    if (!GetGCMDriver()->app_handlers().size())
+    if (GetGCMDriver()->app_handlers().empty())
       app_handler_count_drop_to_zero_ = true;
   }
 
@@ -197,10 +197,10 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
       content::BrowserContext* context) {
     Profile* profile = Profile::FromBrowserContext(context);
     scoped_refptr<base::SequencedTaskRunner> ui_thread =
-        content::BrowserThread::GetMessageLoopProxyForThread(
+        content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::UI);
     scoped_refptr<base::SequencedTaskRunner> io_thread =
-        content::BrowserThread::GetMessageLoopProxyForThread(
+        content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::IO);
     base::SequencedWorkerPool* worker_pool =
         content::BrowserThread::GetBlockingPool();

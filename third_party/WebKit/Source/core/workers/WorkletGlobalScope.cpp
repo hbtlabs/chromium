@@ -64,17 +64,6 @@ bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureConte
     return false;
 }
 
-void WorkletGlobalScope::reportBlockedScriptExecutionToInspector(const String& directiveText)
-{
-    InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
-}
-
-void WorkletGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
-{
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
-    addConsoleMessage(consoleMessage);
-}
-
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const
 {
     // Always return a null URL when passed a null string.

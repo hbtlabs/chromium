@@ -409,6 +409,9 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       base::RecordAction(
           base::UserMetricsAction("StatusArea_Network_Detailed"));
       break;
+    case UMA_STATUS_AREA_DETAILED_SMS_VIEW:
+      base::RecordAction(base::UserMetricsAction("StatusArea_SMS_Detailed"));
+      break;
     case UMA_STATUS_AREA_DETAILED_VPN_VIEW:
       base::RecordAction(base::UserMetricsAction("StatusArea_VPN_Detailed"));
       break;
@@ -491,6 +494,17 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_STATUS_AREA_NETWORK_SETTINGS_CLICKED:
       base::RecordAction(
           base::UserMetricsAction("StatusArea_Network_Settings"));
+    case UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED:
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_OS_Update_Default_Selected"));
+      break;
+    case UMA_STATUS_AREA_SCREEN_CAPTURE_DEFAULT_STOP:
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_ScreenCapture_Default_Stop"));
+      break;
+    case UMA_STATUS_AREA_SCREEN_CAPTURE_NOTIFICATION_STOP:
+      base::RecordAction(base::UserMetricsAction(
+          "StatusArea_ScreenCapture_Notification_Stop"));
       break;
     case UMA_STATUS_AREA_SHOW_NETWORK_CONNECTION_DETAILS:
       base::RecordAction(
@@ -502,6 +516,18 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_STATUS_AREA_SIGN_OUT:
       base::RecordAction(base::UserMetricsAction("StatusArea_SignOut"));
+      break;
+    case UMA_STATUS_AREA_SMS_DETAILED_DISMISS_MSG:
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_SMS_Detailed_DismissMsg"));
+      break;
+    case UMA_STATUS_AREA_SMS_NOTIFICATION_DISMISS_MSG:
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_SMS_Notification_DismissMsg"));
+      break;
+    case UMA_STATUS_AREA_TRACING_DEFAULT_SELECTED:
+      base::RecordAction(
+          base::UserMetricsAction("StatusArea_Tracing_Default_Selected"));
       break;
     case UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED:
       base::RecordAction(base::UserMetricsAction("StatusArea_VPN_AddBuiltIn"));
@@ -586,6 +612,14 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_WINDOW_OVERVIEW_ENTER_KEY:
       base::RecordAction(
           base::UserMetricsAction("WindowSelector_OverviewEnterKey"));
+      break;
+    case UMA_WINDOW_OVERVIEW_CLOSE_BUTTON:
+      base::RecordAction(
+          base::UserMetricsAction("WindowSelector_OverviewCloseButton"));
+      break;
+    case UMA_WINDOW_OVERVIEW_CLOSE_KEY:
+      base::RecordAction(
+          base::UserMetricsAction("WindowSelector_OverviewCloseKey"));
       break;
   }
 }

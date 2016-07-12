@@ -46,7 +46,7 @@ declare_args() {
   # WebSockets and socket stream code are not used on iOS and are optional in
   # cronet.
   enable_websockets = !is_ios
-  disable_ftp_support = is_ios
+  disable_ftp_support = is_ios || is_chromecast
 
   # Enable Kerberos authentication. It is disabled by default on ChromeOS, iOS,
   # Chromecast, at least for now. This feature needs configuration (krb5.conf
@@ -263,10 +263,6 @@ component("net") {
         "dns/mdns_client.h",
         "dns/mdns_client_impl.cc",
         "dns/mdns_client_impl.h",
-        "dns/record_parsed.cc",
-        "dns/record_parsed.h",
-        "dns/record_rdata.cc",
-        "dns/record_rdata.h",
       ]
     }
 
@@ -1597,8 +1593,6 @@ test("net_unittests") {
     sources -= [
       "dns/mdns_cache_unittest.cc",
       "dns/mdns_client_unittest.cc",
-      "dns/record_parsed_unittest.cc",
-      "dns/record_rdata_unittest.cc",
     ]
   }
 
@@ -1795,6 +1789,7 @@ fuzzer_test("net_mime_sniffer_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_mime_sniffer_fuzzer.dict"
 }
 
 fuzzer_test("net_parse_proxy_list_pac_fuzzer") {
@@ -1846,6 +1841,7 @@ fuzzer_test("net_parse_data_url_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_parse_data_url_fuzzer.dict"
 }
 
 fuzzer_test("net_parse_ip_pattern_fuzzer") {
@@ -1867,6 +1863,7 @@ fuzzer_test("net_get_domain_and_registry_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_get_domain_and_registry_fuzzer.dict"
 }
 
 fuzzer_test("net_cert_verify_name_match_fuzzer") {
@@ -1930,6 +1927,7 @@ fuzzer_test("net_dns_record_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
 }
 
 fuzzer_test("net_dns_hosts_parse_fuzzer") {
@@ -1941,6 +1939,7 @@ fuzzer_test("net_dns_hosts_parse_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_dns_hosts_parse_fuzzer.dict"
 }
 
 fuzzer_test("net_host_resolver_impl_fuzzer") {
@@ -1955,7 +1954,7 @@ fuzzer_test("net_host_resolver_impl_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/dns/dns.dict"
+  dict = "data/fuzzer_dictionaries/net_host_resolver_impl_fuzzer.dict"
 }
 
 fuzzer_test("net_http_stream_parser_fuzzer") {
@@ -1968,7 +1967,7 @@ fuzzer_test("net_http_stream_parser_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_http_stream_parser_fuzzer.dict"
 }
 
 fuzzer_test("net_ftp_ctrl_response_fuzzer") {
@@ -2014,6 +2013,7 @@ fuzzer_test("net_websocket_frame_parser_fuzzer") {
     ":net_fuzzer_test_support",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_websocket_frame_parser_fuzzer.dict"
 }
 
 fuzzer_test("net_http_chunked_decoder_fuzzer") {
@@ -2024,7 +2024,6 @@ fuzzer_test("net_http_chunked_decoder_fuzzer") {
     ":net_fuzzer_test_support",
     "//net",
   ]
-  dict = "http/http_chunked_decoder_fuzzer.dict"
 }
 
 fuzzer_test("net_http_proxy_client_socket_fuzzer") {
@@ -2037,7 +2036,7 @@ fuzzer_test("net_http_proxy_client_socket_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_http_proxy_client_socket_fuzzer.dict"
 }
 
 fuzzer_test("net_quic_crypto_framer_parse_message_fuzzer") {
@@ -2085,5 +2084,5 @@ fuzzer_test("net_url_request_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_url_request_fuzzer.dict"
 }

@@ -97,8 +97,6 @@ public:
     // not be used after the ExecutionContext is destroyed.
     virtual DOMTimerCoordinator* timers() = 0;
 
-    virtual void reportBlockedScriptExecutionToInspector(const String& directiveText) = 0;
-
     virtual SecurityContext& securityContext() = 0;
     KURL contextURL() const { return virtualURL(); }
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
@@ -107,7 +105,7 @@ public:
     void reportException(ErrorEvent*, AccessControlStatus);
 
     virtual void addConsoleMessage(ConsoleMessage*) = 0;
-    virtual void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) = 0;
+    virtual void exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation>) = 0;
 
     PublicURLManager& publicURLManager();
 

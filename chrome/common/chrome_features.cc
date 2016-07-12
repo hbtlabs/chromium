@@ -78,6 +78,10 @@ const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
 const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables or disables the STH component-updater component.
+const base::Feature kSTHSetComponent{"STHSetComponent",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
 #if defined(SYZYASAN)
 // Enable the deferred free mechanism in the syzyasan module, which helps the
 // performance by deferring some work on the critical path to a background
@@ -89,7 +93,7 @@ const base::Feature kSyzyasanDeferredFree{"SyzyasanDeferredFree",
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.
 const base::Feature kOptInImeMenu{"OptInImeMenu",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace features

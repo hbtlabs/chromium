@@ -670,6 +670,8 @@ test("content_unittests") {
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
+    "//device/gamepad",
+    "//device/gamepad:test_helpers",
     "//gin",
     "//gpu",
     "//gpu:test_support",
@@ -926,4 +928,5 @@ fuzzer_test("renderer_fuzzer") {
     ":test_support",
     "//content/shell:content_shell_lib",
   ]
+  dict = "data/fuzzer_dictionaries/renderer_fuzzer.dict"
 }

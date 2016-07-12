@@ -92,10 +92,14 @@ class SessionStateDelegateStub : public SessionStateDelegate {
 
 }  // namespace
 
-WmShellMus::WmShellMus(::ui::WindowTreeClient* client)
-    : client_(client), session_state_delegate_(new SessionStateDelegateStub) {
+WmShellMus::WmShellMus(ShellDelegate* delegate, ::ui::WindowTreeClient* client)
+    : WmShell(delegate),
+      client_(client),
+      session_state_delegate_(new SessionStateDelegateStub) {
   client_->AddObserver(this);
   WmShell::Set(this);
+
+  CreateMaximizeModeController();
 
   CreateMruWindowTracker();
 
@@ -106,6 +110,9 @@ WmShellMus::WmShellMus(::ui::WindowTreeClient* client)
 WmShellMus::~WmShellMus() {
   // This order mirrors that of Shell.
 
+  // Destroy maximize mode controller early on since it has some observers which
+  // need to be removed.
+  DeleteMaximizeModeController();
   DeleteSystemTrayDelegate();
   DeleteWindowSelectorController();
   DeleteMruWindowTracker();

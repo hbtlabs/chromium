@@ -184,8 +184,6 @@ const FeatureEntry::Choice kNaClDebugMaskChoices[] = {
 
 const FeatureEntry::Choice kPassiveListenersChoices[] = {
     {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
-    {IDS_FLAGS_PASSIVE_EVENT_LISTENER_DOCUMENT_TRUE,
-     switches::kPassiveListenersDefault, "documentonlytrue"},
     {IDS_FLAGS_PASSIVE_EVENT_LISTENER_TRUE, switches::kPassiveListenersDefault,
      "true"},
     {IDS_FLAGS_PASSIVE_EVENT_LISTENER_FORCE_ALL_TRUE,
@@ -1825,14 +1823,13 @@ const FeatureEntry kFeatureEntries[] = {
 #if defined(ENABLE_EXTENSIONS)
     {"tab-for-desktop-share", IDS_FLAG_DISABLE_TAB_FOR_DESKTOP_SHARE,
      IDS_FLAG_DISABLE_TAB_FOR_DESKTOP_SHARE_DESCRIPTION, kOsAll,
-     ENABLE_DISABLE_VALUE_TYPE(
-         extensions::switches::kEnableTabForDesktopShare,
-         extensions::switches::kDisableTabForDesktopShare)},
-    {"disable-desktop-capture-picker-old-ui",
-     IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_OLD_UI,
-     IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_OLD_UI_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(
-         extensions::switches::kDisableDesktopCapturePickerOldUI)},
+         extensions::switches::kDisableTabForDesktopShare)},
+    {"disable-desktop-capture-picker-new-ui",
+     IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_NEW_UI,
+     IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_NEW_UI_DESCRIPTION, kOsAll,
+     SINGLE_VALUE_TYPE(
+         extensions::switches::kDisableDesktopCapturePickerNewUI)},
 #endif
 #if defined(OS_ANDROID)
     {"enable-ntp-snippets", IDS_FLAGS_ENABLE_NTP_SNIPPETS_NAME,
@@ -1930,6 +1927,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_PASSIVE_EVENT_LISTENER_DEFAULT_NAME,
      IDS_FLAGS_PASSIVE_EVENT_LISTENER_DEFAULT_DESCRIPTION, kOsAll,
      MULTI_VALUE_TYPE(kPassiveListenersChoices)},
+    {"document-passive-event-listeners",  // FLAGS:RECORD_UMA
+     IDS_FLAGS_PASSIVE_DOCUMENT_EVENT_LISTENERS_NAME,
+     IDS_FLAGS_PASSIVE_DOCUMENT_EVENT_LISTENERS_DESCRIPTION, kOsAll,
+     FEATURE_VALUE_TYPE(features::kPassiveDocumentEventListeners)},
     {"enable-loading-ipc-optimization-for-small-resources",
      IDS_FLAGS_OPTIMIZE_LOADING_IPC_FOR_SMALL_RESOURCES_NAME,
      IDS_FLAGS_OPTIMIZE_LOADING_IPC_FOR_SMALL_RESOURCES_DESCRIPTION, kOsAll,
@@ -1967,6 +1968,10 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-intent-picker", IDS_ENABLE_INTENT_PICKER,
      IDS_ENABLE_INTENT_PICKER_DESCRIPTION, kOsCrOS,
      SINGLE_VALUE_TYPE(switches::kEnableIntentPicker)},
+    {"files-quick-view", IDS_FLAGS_FILES_QUICK_VIEW_NAME,
+     IDS_FLAGS_FILES_QUICK_VIEW_DESCRIPTION, kOsCrOS,
+     ENABLE_DISABLE_VALUE_TYPE(chromeos::switches::kEnableFilesQuickView,
+                               chromeos::switches::kDisableFilesQuickView)},
 #endif  // defined(OS_CHROMEOS)
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in

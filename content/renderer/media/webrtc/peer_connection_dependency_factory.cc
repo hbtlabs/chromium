@@ -386,14 +386,6 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
     FilteringNetworkManager* filtering_network_manager =
         new FilteringNetworkManager(network_manager_, requesting_origin,
                                     media_permission);
-    if (media_permission) {
-      // Start permission check earlier to reduce any impact to call set up
-      // time. It's safe to use Unretained here since both destructor and
-      // Initialize can only be called on the worker thread.
-      chrome_worker_thread_.task_runner()->PostTask(
-          FROM_HERE, base::Bind(&FilteringNetworkManager::CheckPermission,
-                                base::Unretained(filtering_network_manager)));
-    }
     network_manager.reset(filtering_network_manager);
   } else {
     network_manager.reset(new EmptyNetworkManager(network_manager_));
@@ -451,15 +443,6 @@ PeerConnectionDependencyFactory::CreateIceCandidate(
     int sdp_mline_index,
     const std::string& sdp) {
   return webrtc::CreateIceCandidate(sdp_mid, sdp_mline_index, sdp, nullptr);
-}
-
-bool PeerConnectionDependencyFactory::StartRtcEventLog(
-    base::PlatformFile file) {
-  return GetPcFactory()->StartRtcEventLog(file);
-}
-
-void PeerConnectionDependencyFactory::StopRtcEventLog() {
-  GetPcFactory()->StopRtcEventLog();
 }
 
 WebRtcAudioDeviceImpl*

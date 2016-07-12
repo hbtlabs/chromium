@@ -766,7 +766,6 @@ void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
         break;
     // Unsupported values.
     case WebConsoleMessage::LevelInfo:
-    case WebConsoleMessage::LevelRevokedError:
         break;
     }
 
@@ -1488,8 +1487,6 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
         PermissionController::provideTo(*m_frame, m_client ? m_client->permissionClient() : nullptr);
     if (RuntimeEnabledFeatures::webVREnabled())
         VRController::provideTo(*m_frame, m_client ? m_client->serviceRegistry() : nullptr);
-    if (RuntimeEnabledFeatures::wakeLockEnabled())
-        ScreenWakeLock::provideTo(*m_frame, m_client ? m_client->serviceRegistry(): nullptr);
     if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
         provideAudioOutputDeviceClientTo(*m_frame, AudioOutputDeviceClientImpl::create());
     if (RuntimeEnabledFeatures::installedAppEnabled())

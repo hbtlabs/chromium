@@ -863,8 +863,6 @@ void LayoutFlexibleBox::layoutFlexItems(bool relayoutChildren, SubtreeLayoutScop
 
     PaintLayerScrollableArea::PreventRelayoutScope preventRelayoutScope(layoutScope);
 
-    dirtyForLayoutFromPercentageHeightDescendants(layoutScope);
-
     m_orderIterator.first();
     LayoutUnit crossAxisOffset = flowAwareBorderBefore() + flowAwarePaddingBefore();
     while (computeNextFlexLine(orderedChildren, sumFlexBaseSize, totalFlexGrow, totalFlexShrink, totalWeightedFlexShrink, sumHypotheticalMainSize, relayoutChildren)) {
@@ -1205,6 +1203,8 @@ bool LayoutFlexibleBox::computeNextFlexLine(OrderedFlexItemList& orderedChildren
             continue;
         }
 
+        ChildLayoutType layoutType = relayoutChildren ? ForceLayout : LayoutIfNeeded;
+
         // If this condition is true, then computeMainAxisExtentForChild will call child.intrinsicContentLogicalHeight()
         // and child.scrollbarLogicalHeight(), so if the child has intrinsic min/max/preferred size,
         // run layout on it now to make sure its logical height and scroll bars are up to date.
@@ -1212,9 +1212,10 @@ bool LayoutFlexibleBox::computeNextFlexLine(OrderedFlexItemList& orderedChildren
             child->clearOverrideSize();
             child->layoutIfNeeded();
             cacheChildMainSize(*child);
+            layoutType = LayoutIfNeeded;
         }
 
-        LayoutUnit childInnerFlexBaseSize = computeInnerFlexBaseSizeForChild(*child, relayoutChildren ? ForceLayout : LayoutIfNeeded);
+        LayoutUnit childInnerFlexBaseSize = computeInnerFlexBaseSizeForChild(*child, layoutType);
         LayoutUnit childMainAxisMarginBorderPadding = mainAxisBorderAndPaddingExtentForChild(*child)
             + (isHorizontalFlow() ? child->marginWidth() : child->marginHeight());
         LayoutUnit childOuterFlexBaseSize = childInnerFlexBaseSize + childMainAxisMarginBorderPadding;
@@ -1603,8 +1604,8 @@ void LayoutFlexibleBox::layoutAndPlaceChildren(LayoutUnit& crossAxisOffset, cons
             resetAutoMarginsAndLogicalTopInCrossAxis(*child);
         }
         // We may have already forced relayout for orthogonal flowing children in computeInnerFlexBaseSizeForChild.
-        bool forceChildRelayout = relayoutChildren && !childFlexBaseSizeRequiresLayout(*child);
-        if (child->isLayoutBlock() && toLayoutBlock(*child).hasPercentHeightDescendants() && m_relaidOutChildren.contains(child)) {
+        bool forceChildRelayout = relayoutChildren && !m_relaidOutChildren.contains(child);
+        if (child->isLayoutBlock() && toLayoutBlock(*child).hasPercentHeightDescendants()) {
             // Have to force another relayout even though the child is sized correctly, because
             // its descendants are not sized correctly yet. Our previous layout of the child was
             // done without an override height set. So, redo it here.

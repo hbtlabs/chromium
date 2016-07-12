@@ -106,8 +106,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void SelectionChanged(const base::string16& text,
                         size_t offset,
                         const gfx::Range& range) override;
-  void SelectionBoundsChanged(
-      const ViewHostMsg_SelectionBounds_Params& params) override;
   void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
@@ -119,8 +117,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
-  void WheelEventAck(const blink::WebMouseWheelEvent& event,
-                     InputEventAckState ack_result) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
   void OnSwapCompositorFrame(uint32_t output_surface_id,
