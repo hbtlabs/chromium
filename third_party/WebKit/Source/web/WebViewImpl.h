@@ -183,7 +183,7 @@ public:
     WebFrame* mainFrame() override;
     WebFrame* findFrameByName(
         const WebString& name, WebFrame* relativeToFrame) override;
-    WebFrame* focusedFrame() override;
+    WebLocalFrame* focusedFrame() override;
     void setFocusedFrame(WebFrame*) override;
     void focusDocumentView(WebFrame*) override;
     void setInitialFocus(bool reverse) override;
@@ -425,6 +425,7 @@ public:
     }
 
     GraphicsLayer* rootGraphicsLayer();
+    void registerViewportLayersWithCompositor();
     PaintLayerCompositor* compositor() const;
     void scheduleAnimation();
     CompositorAnimationTimeline* linkHighlightsTimeline() const { return m_linkHighlightsTimeline.get(); }

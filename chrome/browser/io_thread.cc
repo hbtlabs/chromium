@@ -264,8 +264,7 @@ SystemURLRequestContextGetter::SystemURLRequestContextGetter(
     IOThread* io_thread)
     : io_thread_(io_thread),
       network_task_runner_(
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)) {
-}
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)) {}
 
 SystemURLRequestContextGetter::~SystemURLRequestContextGetter() {}
 
@@ -311,12 +310,11 @@ IOThread::IOThread(
       extension_event_router_forwarder_(extension_event_router_forwarder),
 #endif
       globals_(NULL),
-      is_spdy_allowed_by_policy_(true),
       is_quic_allowed_by_policy_(true),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   auth_schemes_ = local_state->GetString(prefs::kAuthSchemes);
   negotiate_disable_cname_lookup_.Init(
       prefs::kDisableAuthNegotiateCnameLookup, local_state,
@@ -358,7 +356,7 @@ IOThread::IOThread(
   ssl_config_service_manager_.reset(
       ssl_config::SSLConfigServiceManager::CreateDefaultManager(
           local_state,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)));
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   base::Value* dns_client_enabled_default = new base::FundamentalValue(
       chrome_browser_net::ConfigureAsyncDnsFieldTrial());
@@ -380,12 +378,6 @@ IOThread::IOThread(
   pac_https_url_stripping_enabled_.Init(prefs::kPacHttpsUrlStrippingEnabled,
                                         local_state);
   pac_https_url_stripping_enabled_.MoveToThread(io_thread_proxy);
-
-  is_spdy_allowed_by_policy_ =
-      policy_service
-          ->GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
-                                                std::string()))
-          .Get(policy::key::kDisableSpdy) == nullptr;
 
   const base::Value* value = policy_service->GetPolicies(
       policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
@@ -468,7 +460,7 @@ void IOThread::Init() {
   if (!ssl_keylog_file.empty()) {
     net::SSLClientSocket::SetSSLKeyLogFile(
         ssl_keylog_file,
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
   }
 
   DCHECK(!globals_);
@@ -511,8 +503,8 @@ void IOThread::Init() {
   globals_->external_data_use_observer.reset(
       new chrome::android::ExternalDataUseObserver(
           globals_->data_use_aggregator.get(),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)));
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
 #endif
 
   globals_->system_network_delegate = std::move(chrome_network_delegate);
@@ -635,8 +627,7 @@ void IOThread::Init() {
   quic_user_agent_id.push_back(' ');
   quic_user_agent_id.append(content::BuildOSCpuInfo());
   network_session_configurator::ParseFieldTrialsAndCommandLine(
-      is_spdy_allowed_by_policy_, is_quic_allowed_by_policy_,
-      quic_user_agent_id, &params_);
+      is_quic_allowed_by_policy_, quic_user_agent_id, &params_);
 
   bool always_enable_tfo_if_supported =
       command_line.HasSwitch(switches::kEnableTcpFastOpen);

@@ -860,7 +860,7 @@ static bool shouldOpenInNewWindow(Frame* targetFrame, const FrameLoadRequest& re
 
 static NavigationType determineNavigationType(FrameLoadType frameLoadType, bool isFormSubmission, bool haveEvent)
 {
-    bool isReload = frameLoadType == FrameLoadTypeReload || frameLoadType == FrameLoadTypeReloadBypassingCache;
+    bool isReload = frameLoadType == FrameLoadTypeReload || frameLoadType == FrameLoadTypeReloadMainResource || frameLoadType == FrameLoadTypeReloadBypassingCache;
     bool isBackForward = isBackForwardLoadType(frameLoadType);
     if (isFormSubmission)
         return (isReload || isBackForward) ? NavigationTypeFormResubmitted : NavigationTypeFormSubmitted;
@@ -1437,8 +1437,6 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
     m_provisionalDocumentLoader->setReplacesCurrentHistoryItem(type == FrameLoadTypeReplaceCurrentItem);
     m_provisionalDocumentLoader->setIsClientRedirect(frameLoadRequest.clientRedirect() == ClientRedirectPolicy::ClientRedirect);
 
-    InspectorInstrumentation::didStartProvisionalLoad(m_frame);
-
     m_frame->navigationScheduler().cancel();
     m_checkTimer.stop();
 
@@ -1451,6 +1449,7 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
     if (m_provisionalDocumentLoader->isClientRedirect())
         m_provisionalDocumentLoader->appendRedirect(m_frame->document()->url());
     m_provisionalDocumentLoader->appendRedirect(m_provisionalDocumentLoader->request().url());
+    m_provisionalDocumentLoader->upgradeInsecureRequest();
     double triggeringEventTime = frameLoadRequest.triggeringEvent() ? frameLoadRequest.triggeringEvent()->platformTimeStamp() : 0;
     client()->dispatchDidStartProvisionalLoad(triggeringEventTime);
     ASSERT(m_provisionalDocumentLoader);

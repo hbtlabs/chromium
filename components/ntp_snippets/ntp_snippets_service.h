@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -250,8 +251,6 @@ class NTPSnippetsService : public KeyedService,
   // Applies the effects of the transition to the SHUT_DOWN state. Do not call
   // directly, use |EnterState| instead.
   void EnterStateShutdown();
-
-  void ClearDeprecatedPrefs();
 
   State state_;
 

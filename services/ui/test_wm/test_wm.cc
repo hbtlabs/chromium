@@ -86,9 +86,13 @@ class TestWM : public shell::Service,
     window_manager_client_->SetFrameDecorationValues(
         std::move(frame_decoration_values));
   }
-  void OnAccelerator(uint32_t id, const ui::Event& event) override {
+  void OnWmPerformMoveLoop(Window* window,
+                           mojom::MoveLoopSource source,
+                           const gfx::Point& cursor_location,
+                           const base::Callback<void(bool)>& on_done) override {
     // Don't care.
   }
+  void OnWmCancelMoveLoop(Window* window) override {}
 
   ui::Window* root_ = nullptr;
   ui::WindowManagerClient* window_manager_client_ = nullptr;

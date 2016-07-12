@@ -220,8 +220,15 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void EnableAudioDebugRecordings(const base::FilePath& file) = 0;
   virtual void DisableAudioDebugRecordings() = 0;
 
-  virtual void EnableEventLogRecordings(const base::FilePath& file) = 0;
-  virtual void DisableEventLogRecordings() = 0;
+  // Starts a WebRTC event log for each peerconnection on the render process.
+  // A base file_path can be supplied, which will be extended to include several
+  // identifiers to ensure uniqueness. If a recording was already in progress,
+  // this call will return false and have no other effect.
+  virtual bool StartWebRTCEventLog(const base::FilePath& file_path) = 0;
+
+  // Stops recording a WebRTC event log for each peerconnection on the render
+  // process. If no recording was in progress, this call will return false.
+  virtual bool StopWebRTCEventLog() = 0;
 
   // When set, |callback| receives log messages regarding, for example, media
   // devices (webcams, mics, etc) that were initially requested in the render
@@ -262,9 +269,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Returns the shell::InterfaceProvider the browser process can use to bind
   // interfaces exposed to it from the renderer.
   virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
-
-  // Returns the shell connection for this process.
-  virtual shell::Connection* GetChildConnection() = 0;
 
   // Extracts any persistent-memory-allocator used for renderer metrics.
   // Ownership is passed to the caller. To support sharing of histogram data

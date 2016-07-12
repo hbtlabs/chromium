@@ -838,7 +838,7 @@ WebInputEventResult WebFrameWidgetImpl::handleKeyEvent(const WebKeyboardEvent& e
 #endif
 
     bool isUnmodifiedMenuKey = !(event.modifiers & WebInputEvent::InputModifiers) && event.windowsKeyCode == VKEY_APPS;
-    bool isShiftF10 = event.modifiers == WebInputEvent::ShiftKey && event.windowsKeyCode == VKEY_F10;
+    bool isShiftF10 = (event.modifiers & WebInputEvent::InputModifiers) == WebInputEvent::ShiftKey && event.windowsKeyCode == VKEY_F10;
     if ((isUnmodifiedMenuKey || isShiftF10) && event.type == contextMenuTriggeringEventType) {
         view()->sendContextMenuEvent(event);
         return WebInputEventResult::HandledSystem;
@@ -911,11 +911,11 @@ WebInputEventResult WebFrameWidgetImpl::keyEventDefault(const WebKeyboardEvent& 
             switch (event.windowsKeyCode) {
 #if !OS(MACOSX)
             case 'A':
-                WebFrame::fromFrame(focusedCoreFrame())->executeCommand(WebString::fromUTF8("SelectAll"));
+                WebFrame::fromFrame(focusedCoreFrame())->toWebLocalFrame()->executeCommand(WebString::fromUTF8("SelectAll"));
                 return WebInputEventResult::HandledSystem;
             case VKEY_INSERT:
             case 'C':
-                WebFrame::fromFrame(focusedCoreFrame())->executeCommand(WebString::fromUTF8("Copy"));
+                WebFrame::fromFrame(focusedCoreFrame())->toWebLocalFrame()->executeCommand(WebString::fromUTF8("Copy"));
                 return WebInputEventResult::HandledSystem;
 #endif
             // Match FF behavior in the sense that Ctrl+home/end are the only Ctrl

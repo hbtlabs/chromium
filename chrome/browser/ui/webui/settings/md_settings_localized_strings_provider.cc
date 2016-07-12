@@ -7,6 +7,8 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/i18n/number_formatting.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -218,6 +220,9 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
 #if defined(OS_CHROMEOS)
     {"openWallpaperApp", IDS_SETTINGS_OPEN_WALLPAPER_APP},
     {"setWallpaper", IDS_SETTINGS_SET_WALLPAPER},
+#endif
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    {"showWindowDecorations", IDS_SHOW_WINDOW_DECORATIONS},
 #endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
@@ -753,6 +758,10 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
     {"manageSupervisedUsers", IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS},
 #if defined(OS_CHROMEOS)
     {"enableScreenlock", IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK},
+    {"pinKeyboardPlaceholderPin", IDS_PIN_KEYBOARD_HINT_TEXT_PIN},
+    {"pinKeyboardPlaceholderPinPassword",
+      IDS_PIN_KEYBOARD_HINT_TEXT_PIN_PASSWORD},
+    {"pinKeyboardClear", IDS_PIN_KEYBOARD_CLEAR},
     {"quickUnlockTitle", IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_TITLE},
     {"quickUnlockConfirmLogin", IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIRM_LOGIN},
     {"quickUnlockPasswordLabel",
@@ -857,6 +866,12 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+
+  // Format numbers to be used on the pin keyboard.
+  for (int j = 0; j <= 9; j++) {
+    html_source->AddString("pinKeyboard" + base::IntToString(j),
+                           base::FormatNumber(int64_t{j}));
+  }
 
   html_source->AddString("autofillHelpURL", autofill::kHelpURL);
   html_source->AddString("supervisedUsersUrl",
@@ -971,7 +986,57 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"addSiteHeader", IDS_SETTINGS_ADD_SITE_HEADER},
       {"addSiteLink", IDS_SETTINGS_ADD_SITE_LINK},
       {"addSite", IDS_SETTINGS_ADD_SITE},
+      {"cookieAppCache", IDS_COOKIES_APPLICATION_CACHE},
+      {"cookieCacheStorage", IDS_COOKIES_CACHE_STORAGE},
+      {"cookieChannelId", IDS_COOKIES_CHANNEL_ID},
+      {"cookieDatabaseStorage", IDS_COOKIES_DATABASE_STORAGE},
+      {"cookieFileSystem", IDS_COOKIES_FILE_SYSTEM},
+      {"cookieFlashLso", IDS_COOKIES_FLASH_LSO},
+      {"cookieLocalStorage", IDS_COOKIES_LOCAL_STORAGE},
+      {"cookiePlural", IDS_COOKIES_PLURAL_COOKIES},
+      {"cookieServiceWorker", IDS_COOKIES_SERVICE_WORKER},
+      {"cookieSingular", IDS_COOKIES_SINGLE_COOKIE},
       {"embeddedOnHost", IDS_EXCEPTIONS_GEOLOCATION_EMBEDDED_ON_HOST},
+      {"appCacheManifest",
+       IDS_COOKIES_APPLICATION_CACHE_MANIFEST_LABEL},
+      {"cacheStorageLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"cacheStorageOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"cacheStorageSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"channelIdServerId", IDS_COOKIES_CHANNEL_ID_ORIGIN_LABEL},
+      {"channelIdType", IDS_COOKIES_CHANNEL_ID_TYPE_LABEL},
+      {"channelIdCreated", IDS_COOKIES_CHANNEL_ID_CREATED_LABEL},
+      {"channelIdExpires", IDS_COOKIES_CHANNEL_ID_EXPIRES_LABEL},
+      {"cookieAccessibleToScript",
+       IDS_COOKIES_COOKIE_ACCESSIBLE_TO_SCRIPT_LABEL},
+      {"cookieLastAccessed", IDS_COOKIES_LAST_ACCESSED_LABEL},
+      {"cookieContent", IDS_COOKIES_COOKIE_CONTENT_LABEL},
+      {"cookieCreated", IDS_COOKIES_COOKIE_CREATED_LABEL},
+      {"cookieDomain", IDS_COOKIES_COOKIE_DOMAIN_LABEL},
+      {"cookieExpires", IDS_COOKIES_COOKIE_EXPIRES_LABEL},
+      {"cookieName", IDS_COOKIES_COOKIE_NAME_LABEL},
+      {"cookiePath", IDS_COOKIES_COOKIE_PATH_LABEL},
+      {"cookieSendFor", IDS_COOKIES_COOKIE_SENDFOR_LABEL},
+      {"fileSystemOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"fileSystemPersistentUsage",
+       IDS_COOKIES_FILE_SYSTEM_PERSISTENT_USAGE_LABEL},
+      {"fileSystemTemporaryUsage",
+       IDS_COOKIES_FILE_SYSTEM_TEMPORARY_USAGE_LABEL},
+      {"indexedDbSize", IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"indexedDbLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"indexedDbOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"localStorageLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"localStorageOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"localStorageSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"serviceWorkerOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"serviceWorkerScopes", IDS_COOKIES_SERVICE_WORKER_SCOPES_LABEL},
+      {"serviceWorkerSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"webdbDesc", IDS_COOKIES_WEB_DATABASE_DESCRIPTION_LABEL},
       {"siteSettingsCategoryPageTitle", IDS_SETTINGS_SITE_SETTINGS_CATEGORY},
       {"siteSettingsCategoryAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
       {"siteSettingsCategoryCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
@@ -1080,6 +1145,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsPermissions", IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS},
       {"siteSettingsClearAndReset", IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON},
       {"siteSettingsDelete", IDS_SETTINGS_SITE_SETTINGS_DELETE},
+      {"siteSettingsCookieHeader", IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER},
+      {"siteSettingsCookieDialog", IDS_SETTINGS_SITE_SETTINGS_COOKIE_DIALOG},
+      {"siteSettingsCookieRemove", IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE},
+      {"siteSettingsCookieRemoveAll",
+       IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL},
       {"thirdPartyCookie", IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE},
       {"thirdPartyCookieSublabel",
        IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL},

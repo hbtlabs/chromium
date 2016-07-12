@@ -17,7 +17,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/interface_factory.h"
 #include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/shell_test.h"
+#include "services/shell/public/cpp/service_test.h"
 #include "services/shell/public/interfaces/service_manager.mojom.h"
 #include "services/shell/tests/shell/shell_unittest.mojom.h"
 
@@ -26,12 +26,12 @@ namespace shell {
 namespace {
 
 class ShellTestClient
-    : public test::ShellTestClient,
+    : public test::ServiceTestClient,
       public InterfaceFactory<test::mojom::CreateInstanceTest>,
       public test::mojom::CreateInstanceTest {
  public:
-  explicit ShellTestClient(test::ShellTest* test)
-      : test::ShellTestClient(test),
+  explicit ShellTestClient(test::ServiceTest* test)
+      : test::ServiceTestClient(test),
         target_id_(shell::mojom::kInvalidInstanceID),
         binding_(this) {}
   ~ShellTestClient() override {}
@@ -39,7 +39,7 @@ class ShellTestClient
   uint32_t target_id() const { return target_id_; }
 
  private:
-  // test::ShellTestClient:
+  // test::ServiceTestClient:
   bool OnConnect(Connection* connection) override {
     connection->AddInterface<test::mojom::CreateInstanceTest>(this);
     return true;
@@ -67,11 +67,11 @@ class ShellTestClient
 
 }  // namespace
 
-class ShellTest : public test::ShellTest,
+class ShellTest : public test::ServiceTest,
                   public mojom::ServiceManagerListener {
  public:
   ShellTest()
-      : test::ShellTest("mojo:shell_unittest"),
+      : test::ServiceTest("mojo:shell_unittest"),
         service_(nullptr),
         binding_(this) {}
   ~ShellTest() override {}
@@ -122,7 +122,7 @@ class ShellTest : public test::ShellTest,
   }
 
  private:
-  // test::ShellTest:
+  // test::ServiceTest:
   std::unique_ptr<Service> CreateService() override {
     service_ = new ShellTestClient(this);
     return base::WrapUnique(service_);

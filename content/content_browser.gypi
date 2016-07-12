@@ -18,6 +18,7 @@
     '../device/battery/battery.gyp:device_battery',
     '../device/battery/battery.gyp:device_battery_mojo_bindings',
     '../device/bluetooth/bluetooth.gyp:device_bluetooth',
+    '../device/gamepad/gamepad.gyp:device_gamepad',
     '../device/usb/usb.gyp:device_usb',
     '../device/power_save_blocker/power_save_blocker.gyp:device_power_save_blocker',
     '../device/vibration/vibration.gyp:device_vibration',
@@ -487,8 +488,6 @@
       'browser/blob_storage/blob_dispatcher_host.h',
       'browser/blob_storage/chrome_blob_storage_context.cc',
       'browser/blob_storage/chrome_blob_storage_context.h',
-      'browser/bluetooth/bluetooth_adapter_factory_wrapper.cc',
-      'browser/bluetooth/bluetooth_adapter_factory_wrapper.h',
       'browser/bluetooth/bluetooth_allowed_devices_map.cc',
       'browser/bluetooth/bluetooth_allowed_devices_map.h',
       'browser/bluetooth/bluetooth_blacklist.cc',
@@ -802,31 +801,10 @@
       'browser/frame_host/render_widget_host_view_child_frame.h',
       'browser/frame_host/render_widget_host_view_guest.cc',
       'browser/frame_host/render_widget_host_view_guest.h',
-      'browser/gamepad/gamepad_consumer.h',
-      'browser/gamepad/gamepad_data_fetcher.cc',
-      'browser/gamepad/gamepad_data_fetcher.h',
-      'browser/gamepad/gamepad_platform_data_fetcher.h',
-      'browser/gamepad/gamepad_platform_data_fetcher_android.cc',
-      'browser/gamepad/gamepad_platform_data_fetcher_android.h',
-      'browser/gamepad/gamepad_platform_data_fetcher_linux.cc',
-      'browser/gamepad/gamepad_platform_data_fetcher_linux.h',
-      'browser/gamepad/gamepad_platform_data_fetcher_mac.h',
-      'browser/gamepad/gamepad_platform_data_fetcher_mac.mm',
-      'browser/gamepad/gamepad_platform_data_fetcher_win.cc',
-      'browser/gamepad/gamepad_platform_data_fetcher_win.h',
-      'browser/gamepad/gamepad_provider.cc',
-      'browser/gamepad/gamepad_provider.h',
       'browser/gamepad/gamepad_service.cc',
       'browser/gamepad/gamepad_service.h',
-      'browser/gamepad/gamepad_standard_mappings.cc',
-      'browser/gamepad/gamepad_standard_mappings.h',
-      'browser/gamepad/gamepad_standard_mappings_linux.cc',
-      'browser/gamepad/gamepad_standard_mappings_mac.mm',
-      'browser/gamepad/gamepad_standard_mappings_win.cc',
-      'browser/gamepad/raw_input_data_fetcher_win.cc',
-      'browser/gamepad/raw_input_data_fetcher_win.h',
-      'browser/gamepad/xbox_data_fetcher_mac.cc',
-      'browser/gamepad/xbox_data_fetcher_mac.h',
+      'browser/gamepad/gamepad_shared_buffer_impl.cc',
+      'browser/gamepad/gamepad_shared_buffer_impl.h',
       'browser/geolocation/empty_wifi_data_provider.cc',
       'browser/geolocation/empty_wifi_data_provider.h',
       'browser/geolocation/geolocation_provider_impl.cc',
@@ -937,6 +915,8 @@
       'browser/indexed_db/indexed_db_leveldb_coding.h',
       'browser/indexed_db/indexed_db_metadata.cc',
       'browser/indexed_db/indexed_db_metadata.h',
+      'browser/indexed_db/indexed_db_observer.cc',
+      'browser/indexed_db/indexed_db_observer.h',
       'browser/indexed_db/indexed_db_pending_connection.cc',
       'browser/indexed_db/indexed_db_pending_connection.h',
       'browser/indexed_db/indexed_db_quota_client.cc',
@@ -1685,6 +1665,8 @@
       'browser/android/tracing_controller_android.h',
       'browser/android/web_contents_observer_proxy.cc',
       'browser/android/web_contents_observer_proxy.h',
+      'browser/media/capture/screen_capture_device_android.cc',
+      'browser/media/capture/screen_capture_device_android.h',
       'browser/renderer_host/compositor_impl_android.cc',
       'browser/renderer_host/compositor_impl_android.h',
       'browser/renderer_host/ime_adapter_android.cc',
@@ -1711,6 +1693,8 @@
       'browser/accessibility/browser_accessibility_manager_auralinux.h',
     ],
     'webrtc_browser_sources': [
+      'browser/media/webrtc/webrtc_eventlog_host.cc',
+      'browser/media/webrtc/webrtc_eventlog_host.h',
       'browser/media/webrtc/webrtc_internals.cc',
       'browser/media/webrtc/webrtc_internals.h',
       'browser/media/webrtc/webrtc_internals_message_handler.cc',
@@ -1849,6 +1833,8 @@
       'browser/renderer_host/pepper/pepper_truetype_font_win.cc',
       'browser/renderer_host/pepper/pepper_udp_socket_message_filter.cc',
       'browser/renderer_host/pepper/pepper_udp_socket_message_filter.h',
+      'browser/renderer_host/pepper/pepper_vpn_provider_message_filter_chromeos.cc',
+      'browser/renderer_host/pepper/pepper_vpn_provider_message_filter_chromeos.h',
       'browser/renderer_host/pepper/quota_reservation.cc',
       'browser/renderer_host/pepper/quota_reservation.h',
       'browser/renderer_host/pepper/ssl_context_helper.cc',
@@ -1865,11 +1851,6 @@
       'sources': [
         'browser/file_descriptor_info_impl.cc',
         'browser/file_descriptor_info_impl.h',
-      ]
-    }],
-    ['OS!="win" and OS!="mac" and OS!="android" and (OS!="linux" or use_udev==0)', {
-      'sources': [
-        'browser/gamepad/gamepad_platform_data_fetcher.cc',
       ]
     }],
     ['debug_devtools==1', {
@@ -1997,10 +1978,6 @@
         '../device/udev_linux/udev.gyp:udev_linux',
         '../media/capture/capture.gyp:capture',
       ],
-    }, {
-      'sources!': [
-        'browser/gamepad/gamepad_platform_data_fetcher_linux.cc',
-      ],
     }],
     ['OS=="linux" and use_aura==1', {
       'dependencies': [
@@ -2087,11 +2064,6 @@
       'sources!': [
         'browser/device_sensors/data_fetcher_shared_memory_default.cc',
         'browser/geolocation/wifi_data_provider_linux.cc',
-      ],
-    }],
-    ['os_bsd==1', {
-      'sources/': [
-        ['exclude', '^browser/gamepad/gamepad_platform_data_fetcher_linux\\.cc$'],
       ],
     }],
     ['use_aura==1', {

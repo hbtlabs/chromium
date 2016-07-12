@@ -2355,7 +2355,8 @@ const char kDownloadPathPrefix[] = "/download_cookie_isolation_test";
 std::unique_ptr<net::test_server::HttpResponse> HandleDownloadRequestWithCookie(
     std::queue<net::HttpStatusCode>* status_codes,
     const net::test_server::HttpRequest& request) {
-  if (request.relative_url.find(kDownloadPathPrefix) != 0) {
+  if (!base::StartsWith(request.relative_url, kDownloadPathPrefix,
+                        base::CompareCase::SENSITIVE)) {
     return std::unique_ptr<net::test_server::HttpResponse>();
   }
 
@@ -3339,6 +3340,95 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
 INSTANTIATE_TEST_CASE_P(WebViewScrollBubbling,
                         WebViewGuestScrollTouchTest,
                         testing::Combine(testing::Bool(), testing::Bool()));
+
+#if defined(USE_AURA)
+class WebViewGuestTouchFocusTest : public WebViewTestBase {
+ public:
+  WebViewGuestTouchFocusTest() {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    WebViewTestBase::SetUpCommandLine(command_line);
+
+    command_line->AppendSwitchASCII(switches::kTouchEvents,
+                                    switches::kTouchEventsEnabled);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WebViewGuestTouchFocusTest);
+};
+
+class FocusChangeWaiter {
+ public:
+  explicit FocusChangeWaiter(content::WebContents* web_contents,
+                             bool expected_focus)
+      : web_contents_(web_contents), expected_focus_(expected_focus) {}
+  ~FocusChangeWaiter() {}
+
+  void WaitForFocusChange() {
+    while (expected_focus_ !=
+           IsWebContentsBrowserPluginFocused(web_contents_)) {
+      base::RunLoop().RunUntilIdle();
+    }
+  }
+
+ private:
+  content::WebContents* web_contents_;
+  bool expected_focus_;
+};
+
+IN_PROC_BROWSER_TEST_F(WebViewGuestTouchFocusTest,
+                       TouchFocusesBrowserPluginInEmbedder) {
+  // This test is only relevant for non-OOPIF WebView.
+  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+    return;
+
+  LoadAppWithGuest("web_view/guest_focus_test");
+
+  // Lookup relevant information about guest and embedder.
+  content::WebContents* embedder_contents = GetEmbedderWebContents();
+
+  std::vector<content::WebContents*> guest_web_contents_list;
+  GetGuestViewManager()->WaitForNumGuestsCreated(1u);
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_web_contents_list);
+  ASSERT_EQ(1u, guest_web_contents_list.size());
+
+  content::WebContents* guest_contents = guest_web_contents_list[0];
+
+  gfx::Rect embedder_rect = embedder_contents->GetContainerBounds();
+  gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+
+  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
+  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
+  embedder_rect.set_x(0);
+  embedder_rect.set_y(0);
+
+  // Don't send events that need to be routed until we know the child's surface
+  // is ready for hit testing.
+  WaitForGuestSurfaceReady(guest_contents);
+
+  // 1) BrowserPlugin should not be focused at start.
+  EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
+
+  // 2) Send touch event to guest, now BrowserPlugin should get focus.
+  {
+    gfx::Point point = guest_rect.CenterPoint();
+    FocusChangeWaiter focus_waiter(guest_contents, true);
+    SendRoutedTouchTapSequence(embedder_contents, point);
+    SendRoutedGestureTapSequence(embedder_contents, point);
+    focus_waiter.WaitForFocusChange();
+    EXPECT_TRUE(IsWebContentsBrowserPluginFocused(guest_contents));
+  }
+
+  // 3) Send touch start to embedder, now BrowserPlugin should lose focus.
+  {
+    gfx::Point point(10, 10);
+    FocusChangeWaiter focus_waiter(guest_contents, false);
+    SendRoutedTouchTapSequence(embedder_contents, point);
+    SendRoutedGestureTapSequence(embedder_contents,point);
+    focus_waiter.WaitForFocusChange();
+    EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
+  }
+}
+#endif
 
 IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
                        TestGuestGestureScrollsBubble) {

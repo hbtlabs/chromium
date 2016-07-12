@@ -833,6 +833,12 @@ TELEMETRY_TESTS = {
       },
     ],
   },
+}
+
+# These tests use Telemetry's new, simpler, browser_test_runner.
+# Eventually all of the Telemetry based tests above will be ported to
+# this harness, and the old harness will be deleted.
+TELEMETRY_GPU_INTEGRATION_TESTS = {
   'webgl_conformance': {
     'tester_configs': [
       {
@@ -898,12 +904,6 @@ TELEMETRY_TESTS = {
       '--use-gl=angle',
     ],
   },
-}
-
-# These tests use Telemetry's new, simpler, browser_test_runner.
-# Eventually all of the Telemetry based tests above will be ported to
-# this harness, and the old harness will be deleted.
-TELEMETRY_GPU_INTEGRATION_TESTS = {
   'webgl2_conformance_tests': {
     'tester_configs': [
       {
@@ -931,6 +931,11 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'args': [
       '--webgl-conformance-version=2.0.0',
       '--webgl2-only=true',
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
       # These tests currently take about an hour to run. Split them
@@ -966,6 +971,11 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'args': [
       '--webgl-conformance-version=2.0.0',
       '--webgl2-only=true',
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
       # These tests currently take about an hour to run. Split them

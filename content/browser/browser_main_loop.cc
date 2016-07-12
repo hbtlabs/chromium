@@ -192,11 +192,6 @@
 #include "gpu/vulkan/vulkan_implementation.h"
 #endif
 
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "services/ui/common/gpu_service.h"  // nogncheck
-#endif
-
-
 // One of the linux specific headers defines this as a macro.
 #ifdef DestroyAll
 #undef DestroyAll
@@ -283,8 +278,8 @@ static void SetUpGLibLogHandler() {
 void WaitForMojoShellInitialize() {
   // TODO(rockot): Remove this. http://crbug.com/594852.
   base::RunLoop wait_loop;
-  MojoShellConnection::GetForProcess()->GetShellConnection()->
-      set_initialize_handler(wait_loop.QuitClosure());
+  MojoShellConnection::GetForProcess()->SetInitializeHandler(
+      wait_loop.QuitClosure());
   wait_loop.Run();
 }
 #endif  // defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
@@ -587,7 +582,7 @@ void BrowserMainLoop::PostMainMessageLoopStart() {
 
   {
     base::SetRecordActionTaskRunner(
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
   }
 
 #if defined(OS_WIN)
@@ -1111,7 +1106,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   }
   // Must happen after the IO thread is shutdown since this may be accessed from
   // it.
-  {
+  if (!shell::ShellIsRemote()) {
     TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:GPUChannelFactory");
     if (BrowserGpuChannelHostFactory::instance())
       BrowserGpuChannelHostFactory::Terminate();
@@ -1162,28 +1157,30 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 
   // Bring up Mojo IPC and shell as early as possible.
 
-  // Disallow mojo sync call in the browser process.
-  bool sync_call_allowed = false;
-  MojoResult result = mojo::edk::SetProperty(
-      MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED, &sync_call_allowed);
-  DCHECK_EQ(MOJO_RESULT_OK, result);
+  if (!parsed_command_line_.HasSwitch(switches::kSingleProcess)) {
+    // Disallow mojo sync calls in the browser process. Note that we allow sync
+    // calls in single-process mode since renderer IPCs are made from a browser
+    // thread.
+    bool sync_call_allowed = false;
+    MojoResult result = mojo::edk::SetProperty(
+        MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED, &sync_call_allowed);
+    DCHECK_EQ(MOJO_RESULT_OK, result);
+  }
 
   mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
       BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
           ->task_runner()));
 
   mojo_shell_context_.reset(new MojoShellContext);
-  if (shell::ShellIsRemote()) {
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-    // TODO(rockot): Remove the blocking wait for init.
-    // http://crbug.com/594852.
-    auto connection = MojoShellConnection::GetForProcess();
-    if (connection) {
-      WaitForMojoShellInitialize();
-      ui::GpuService::Initialize(connection->GetConnector());
-    }
-#endif
+  // TODO(rockot): Remove the blocking wait for init.
+  // http://crbug.com/594852.
+  if (shell::ShellIsRemote() && MojoShellConnection::GetForProcess()) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kIsRunningInMash);
+    WaitForMojoShellInitialize();
   }
+#endif
 
 #if defined(OS_MACOSX)
   mojo::edk::SetMachPortProvider(MachBroker::GetInstance());
@@ -1215,7 +1212,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #elif defined(USE_AURA) || defined(OS_MACOSX)
   established_gpu_channel = true;
   if (!GpuDataManagerImpl::GetInstance()->CanUseGpuBrowserCompositor() ||
-      parsed_command_line_.HasSwitch(switches::kDisableGpuEarlyInit)) {
+      parsed_command_line_.HasSwitch(switches::kDisableGpuEarlyInit) ||
+      shell::ShellIsRemote()) {
     established_gpu_channel = always_uses_gpu = false;
   }
   BrowserGpuChannelHostFactory::Initialize(established_gpu_channel);
@@ -1322,9 +1320,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   // since creating the GPU thread races against creation of the one-and-only
   // ChildProcess instance which is created by the renderer thread.
   if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(NULL) &&
-      !established_gpu_channel &&
-      always_uses_gpu &&
-      !UsingInProcessGpu()) {
+      !established_gpu_channel && always_uses_gpu && !UsingInProcessGpu() &&
+      !shell::ShellIsRemote()) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
                          TRACE_EVENT_SCOPE_THREAD);
     BrowserThread::PostTask(
@@ -1490,7 +1487,6 @@ void BrowserMainLoop::CreateAudioManager() {
   DCHECK(!audio_thread_);
   DCHECK(!audio_manager_);
 
-  bool use_hang_monitor = true;
   audio_manager_ = GetContentClient()->browser()->CreateAudioManager(
       MediaInternals::GetInstance());
   if (!audio_manager_) {
@@ -1502,9 +1498,6 @@ void BrowserMainLoop::CreateAudioManager() {
 #if defined(OS_MACOSX)
     // On Mac audio task runner must belong to the main thread.
     // See http://crbug.com/158170.
-    // Since the audio thread is the UI thread, a hang monitor is not
-    // necessary or recommended.
-    use_hang_monitor = false;
     scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner =
         base::ThreadTaskRunnerHandle::Get();
 #else
@@ -1518,9 +1511,6 @@ void BrowserMainLoop::CreateAudioManager() {
                                                  MediaInternals::GetInstance());
   }
   CHECK(audio_manager_);
-
-  if (use_hang_monitor)
-    media::AudioManager::StartHangMonitor(io_thread_->task_runner());
 }
 
 }  // namespace content

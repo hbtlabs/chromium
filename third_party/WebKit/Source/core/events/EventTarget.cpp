@@ -67,10 +67,15 @@ Settings* windowSettings(LocalDOMWindow* executingWindow)
     return nullptr;
 }
 
-bool isScrollBlockingEvent(const AtomicString& eventType)
+bool isTouchScrollBlockingEvent(const AtomicString& eventType)
 {
     return eventType == EventTypeNames::touchstart
-        || eventType == EventTypeNames::touchmove
+        || eventType == EventTypeNames::touchmove;
+}
+
+bool isScrollBlockingEvent(const AtomicString& eventType)
+{
+    return isTouchScrollBlockingEvent(eventType)
         || eventType == EventTypeNames::mousewheel
         || eventType == EventTypeNames::wheel;
 }
@@ -105,7 +110,7 @@ void reportBlockedEvent(ExecutionContext* context, const Event* event, Registere
 
     String messageText = String::format(
         "Handling of '%s' input event was delayed for %ld ms due to main thread being busy. "
-        "Consider marking event handler as 'passive' to make the page more responive.",
+        "Consider marking event handler as 'passive' to make the page more responsive.",
         event->type().getString().utf8().data(), lround(delayedSeconds * 1000));
 
     v8::Local<v8::Function> function = eventListenerEffectiveFunction(v8Listener->isolate(), handler);
@@ -199,6 +204,20 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
         }
     }
 
+    if (RuntimeEnabledFeatures::passiveDocumentEventListenersEnabled() && isTouchScrollBlockingEvent(eventType)) {
+        if (!options.hasPassive()) {
+            if (Node* node = toNode()) {
+                if (node->isDocumentNode() || node->document().documentElement() == node || node->document().body() == node) {
+                    options.setPassive(true);
+                    return;
+                }
+            } else if (toLocalDOMWindow()) {
+                options.setPassive(true);
+                return;
+            }
+        }
+    }
+
     if (Settings* settings = windowSettings(executingWindow())) {
         switch (settings->passiveListenerDefault()) {
         case PassiveListenerDefault::False:
@@ -211,17 +230,6 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
             break;
         case PassiveListenerDefault::ForceAllTrue:
             options.setPassive(true);
-            break;
-        case PassiveListenerDefault::DocumentTrue:
-            if (!options.hasPassive()) {
-                if (Node* node = toNode()) {
-                    if (node->isDocumentNode() || node->document().documentElement() == node || node->document().body() == node) {
-                        options.setPassive(true);
-                    }
-                } else if (toLocalDOMWindow()) {
-                    options.setPassive(true);
-                }
-            }
             break;
         }
     } else {

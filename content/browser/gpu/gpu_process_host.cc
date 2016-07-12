@@ -91,6 +91,10 @@
 #include "content/browser/gpu/gpu_surface_tracker.h"
 #endif
 
+#if defined(MOJO_SHELL_CLIENT)
+#include "services/shell/runner/common/client_util.h"
+#endif
+
 namespace content {
 
 bool GpuProcessHost::gpu_enabled_ = true;
@@ -313,6 +317,9 @@ bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
 // static
 GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind,
                                     CauseForGpuLaunch cause) {
+#if defined(MOJO_SHELL_CLIENT)
+  DCHECK(!shell::ShellIsRemote());
+#endif
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // Don't grant further access to GPU if it is not allowed.
@@ -558,10 +565,9 @@ bool GpuProcessHost::Init() {
 
   DCHECK(!mojo_child_connection_);
   mojo_child_connection_.reset(new MojoChildConnection(
-      kGpuMojoApplicationName,
-      "",
-      child_token_,
-      MojoShellContext::GetConnectorForIOThread()));
+      kGpuMojoApplicationName, "", child_token_,
+      MojoShellContext::GetConnectorForIOThread(),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
@@ -932,11 +938,11 @@ void GpuProcessHost::OnProcessCrashed(int exit_code) {
 }
 
 shell::InterfaceRegistry* GpuProcessHost::GetInterfaceRegistry() {
-  return mojo_child_connection_->connection()->GetInterfaceRegistry();
+  return mojo_child_connection_->GetInterfaceRegistry();
 }
 
 shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
-  return mojo_child_connection_->connection()->GetRemoteInterfaces();
+  return mojo_child_connection_->GetRemoteInterfaces();
 }
 
 GpuProcessHost::GpuProcessKind GpuProcessHost::kind() {

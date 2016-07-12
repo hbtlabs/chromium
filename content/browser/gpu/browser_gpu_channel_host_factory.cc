@@ -29,6 +29,10 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/message_filter.h"
 
+#if defined(MOJO_RUNNER_CLIENT)
+#include "services/shell/runner/common/client_util.h"
+#endif
+
 namespace content {
 
 BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = NULL;
@@ -81,7 +85,7 @@ BrowserGpuChannelHostFactory::EstablishRequest::Create(
   scoped_refptr<EstablishRequest> establish_request = new EstablishRequest(
       cause, gpu_client_id, gpu_client_tracing_id, gpu_host_id);
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   // PostTask outside the constructor to ensure at least one reference exists.
   task_runner->PostTask(
       FROM_HERE,
@@ -267,7 +271,7 @@ bool BrowserGpuChannelHostFactory::IsMainThread() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 BrowserGpuChannelHostFactory::GetIOThreadTaskRunner() {
-  return BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+  return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 }
 
 std::unique_ptr<base::SharedMemory>
@@ -297,6 +301,9 @@ BrowserGpuChannelHostFactory::EstablishGpuChannelSync(
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     CauseForGpuLaunch cause_for_gpu_launch,
     const base::Closure& callback) {
+#if defined(MOJO_RUNNER_CLIENT)
+  DCHECK(!shell::ShellIsRemote());
+#endif
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());
     // Recreate the channel if it has been lost.

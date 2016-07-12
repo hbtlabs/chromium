@@ -39,7 +39,6 @@ WebInspector.DebuggerModel = function(target)
 
     target.registerDebuggerDispatcher(new WebInspector.DebuggerDispatcher(this));
     this._agent = target.debuggerAgent();
-    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.TargetDisposed, this._targetDisposed, this);
 
     /** @type {?WebInspector.DebuggerPausedDetails} */
     this._debuggerPausedDetails = null;
@@ -61,9 +60,6 @@ WebInspector.DebuggerModel = function(target)
 
 /** @typedef {{location: ?WebInspector.DebuggerModel.Location, sourceURL: ?string, functionName: string, scopeChain: (Array.<!DebuggerAgent.Scope>|null)}} */
 WebInspector.DebuggerModel.FunctionDetails;
-
-/** @typedef {{location: ?WebInspector.DebuggerModel.Location, sourceURL: ?string, functionName: string, status: string}} */
-WebInspector.DebuggerModel.GeneratorObjectDetails;
 
 /**
  * Keep these in sync with WebCore::V8Debugger
@@ -98,7 +94,6 @@ WebInspector.DebuggerModel.BreakReason = {
     Exception: "exception",
     PromiseRejection: "promiseRejection",
     Assert: "assert",
-    CSPViolation: "CSPViolation",
     DebugCommand: "debugCommand",
     Other: "other"
 }
@@ -717,34 +712,6 @@ WebInspector.DebuggerModel.prototype = {
     },
 
     /**
-     * @param {!WebInspector.RemoteObject} remoteObject
-     * @param {function(?WebInspector.DebuggerModel.GeneratorObjectDetails)} callback
-     */
-    generatorObjectDetails: function(remoteObject, callback)
-    {
-        this._agent.getGeneratorObjectDetails(remoteObject.objectId, didGetDetails.bind(this));
-
-        /**
-         * @param {?Protocol.Error} error
-         * @param {!DebuggerAgent.GeneratorObjectDetails} response
-         * @this {WebInspector.DebuggerModel}
-         */
-        function didGetDetails(error, response)
-        {
-            if (error) {
-                console.error(error);
-                callback(null);
-                return;
-            }
-            var location = response.location;
-            var script = location && this.scriptForId(location.scriptId);
-            var rawLocation = script ? this.createRawLocation(script, location.lineNumber, location.columnNumber || 0) : null;
-            var sourceURL = script ? script.contentURL() : null;
-            callback({location: rawLocation, sourceURL: sourceURL, functionName: response.functionName, status: response.status});
-        }
-    },
-
-    /**
      * @param {!DebuggerAgent.BreakpointId} breakpointId
      * @param {function(!WebInspector.Event)} listener
      * @param {!Object=} thisObject
@@ -786,14 +753,8 @@ WebInspector.DebuggerModel.prototype = {
         }
     },
 
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _targetDisposed: function(event)
+    dispose: function()
     {
-        var target = /** @type {!WebInspector.Target} */ (event.data);
-        if (target !== this.target())
-            return;
         WebInspector.moduleSetting("pauseOnExceptionEnabled").removeChangeListener(this._pauseOnExceptionStateChanged, this);
         WebInspector.moduleSetting("pauseOnCaughtException").removeChangeListener(this._pauseOnExceptionStateChanged, this);
         WebInspector.moduleSetting("enableAsyncStackTraces").removeChangeListener(this.asyncStackTracesStateChanged, this);

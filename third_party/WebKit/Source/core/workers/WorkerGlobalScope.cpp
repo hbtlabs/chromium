@@ -267,14 +267,9 @@ EventTarget* WorkerGlobalScope::errorEventTarget()
     return this;
 }
 
-void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void WorkerGlobalScope::exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
     thread()->workerReportingProxy().reportException(errorMessage, std::move(location));
-}
-
-void WorkerGlobalScope::reportBlockedScriptExecutionToInspector(const String& directiveText)
-{
-    InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
 void WorkerGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage)
@@ -355,7 +350,8 @@ void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) const
 
 void WorkerGlobalScope::exceptionUnhandled(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location)));
+    if (WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(thread()->isolate()))
+        debugger->exceptionThrown(errorMessage, std::move(location));
 }
 
 bool WorkerGlobalScope::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const

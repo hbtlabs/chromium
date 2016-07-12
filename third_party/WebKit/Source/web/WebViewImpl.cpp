@@ -1134,7 +1134,7 @@ WebInputEventResult WebViewImpl::handleKeyEvent(const WebKeyboardEvent& event)
 #endif
 
     bool isUnmodifiedMenuKey = !(event.modifiers & WebInputEvent::InputModifiers) && event.windowsKeyCode == VKEY_APPS;
-    bool isShiftF10 = event.modifiers == WebInputEvent::ShiftKey && event.windowsKeyCode == VKEY_F10;
+    bool isShiftF10 = (event.modifiers & WebInputEvent::InputModifiers) == WebInputEvent::ShiftKey && event.windowsKeyCode == VKEY_F10;
     if ((isUnmodifiedMenuKey || isShiftF10) && event.type == contextMenuTriggeringEventType) {
         sendContextMenuEvent(event);
         return WebInputEventResult::HandledSystem;
@@ -2026,22 +2026,23 @@ void WebViewImpl::updateAllLifecyclePhases()
 
     if (FrameView* view = mainFrameImpl()->frameView()) {
         LocalFrame* frame = mainFrameImpl()->frame();
+        WebWidgetClient* client = WebLocalFrameImpl::fromFrame(frame)->frameWidget()->client();
 
         if (m_shouldDispatchFirstVisuallyNonEmptyLayout && view->isVisuallyNonEmpty()) {
             m_shouldDispatchFirstVisuallyNonEmptyLayout = false;
             // TODO(esprehn): Move users of this callback to something
             // better, the heuristic for "visually non-empty" is bad.
-            client()->didMeaningfulLayout(WebMeaningfulLayout::VisuallyNonEmpty);
+            client->didMeaningfulLayout(WebMeaningfulLayout::VisuallyNonEmpty);
         }
 
         if (m_shouldDispatchFirstLayoutAfterFinishedParsing && frame->document()->hasFinishedParsing())  {
             m_shouldDispatchFirstLayoutAfterFinishedParsing = false;
-            client()->didMeaningfulLayout(WebMeaningfulLayout::FinishedParsing);
+            client->didMeaningfulLayout(WebMeaningfulLayout::FinishedParsing);
         }
 
         if (m_shouldDispatchFirstLayoutAfterFinishedLoading && frame->document()->isLoadCompleted()) {
             m_shouldDispatchFirstLayoutAfterFinishedLoading = false;
-            client()->didMeaningfulLayout(WebMeaningfulLayout::FinishedLoading);
+            client->didMeaningfulLayout(WebMeaningfulLayout::FinishedLoading);
         }
     }
 }
@@ -2896,9 +2897,15 @@ WebFrame* WebViewImpl::findFrameByName(
     return WebLocalFrameImpl::fromFrame(toLocalFrame(frame));
 }
 
-WebFrame* WebViewImpl::focusedFrame()
+WebLocalFrame* WebViewImpl::focusedFrame()
 {
-    return WebFrame::fromFrame(focusedCoreFrame());
+    Frame* frame = focusedCoreFrame();
+    // TODO(yabinh): focusedCoreFrame() should always return a local frame, and
+    // the following check should be unnecessary.
+    // See crbug.com/625068
+    if (!frame || !frame->isLocalFrame())
+        return nullptr;
+    return WebLocalFrameImpl::fromFrame(toLocalFrame(frame));
 }
 
 void WebViewImpl::setFocusedFrame(WebFrame* frame)
@@ -4182,6 +4189,36 @@ bool WebViewImpl::tabsToLinks() const
     return m_tabsToLinks;
 }
 
+void WebViewImpl::registerViewportLayersWithCompositor()
+{
+    DCHECK(m_layerTreeView);
+    DCHECK(!page()->deprecatedLocalMainFrame()->contentLayoutItem().isNull());
+
+    PaintLayerCompositor* compositor =
+        page()->deprecatedLocalMainFrame()->contentLayoutItem().compositor();
+
+    DCHECK(compositor);
+
+    // Get the outer viewport scroll layer.
+    WebLayer* scrollLayer =
+        compositor->scrollLayer()
+            ? compositor->scrollLayer()->platformLayer()
+            : nullptr;
+
+    VisualViewport& visualViewport = page()->frameHost().visualViewport();
+
+    // TODO(bokan): This was moved here from when registerViewportLayers was a
+    // part of VisualViewport and maybe doesn't belong here. See comment inside
+    // the mehtod.
+    visualViewport.setScrollLayerOnScrollbars(scrollLayer);
+
+    m_layerTreeView->registerViewportLayers(
+        visualViewport.overscrollElasticityLayer()->platformLayer(),
+        visualViewport.pageScaleLayer()->platformLayer(),
+        visualViewport.scrollLayer()->platformLayer(),
+        scrollLayer);
+}
+
 void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
 {
     if (!m_layerTreeView)
@@ -4201,7 +4238,7 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
         m_layerTreeView->setRootLayer(*m_rootLayer);
         // We register viewport layers here since there may not be a layer
         // tree view prior to this point.
-        visualViewport.registerLayersWithTreeView(m_layerTreeView);
+        registerViewportLayersWithCompositor();
         updatePageOverlays();
         // TODO(enne): Work around page visibility changes not being
         // propagated to the WebView in some circumstances.  This needs to
@@ -4217,7 +4254,7 @@ void WebViewImpl::setRootGraphicsLayer(GraphicsLayer* layer)
         // attempt to paint too early in the next page load.
         m_layerTreeView->setDeferCommits(true);
         m_layerTreeView->clearRootLayer();
-        visualViewport.clearLayersForTreeView(m_layerTreeView);
+        m_layerTreeView->clearViewportLayers();
     }
 }
 

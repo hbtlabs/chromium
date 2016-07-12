@@ -15,10 +15,19 @@
 
 namespace media {
 
+namespace {
+
+void LogDXVAError(int line) {
+  LOG(ERROR) << "Error in dxva_picture_buffer_win.cc on line " << line;
+}
+
+}  // namespace
+
 #define RETURN_ON_FAILURE(result, log, ret) \
   do {                                      \
     if (!(result)) {                        \
       DLOG(ERROR) << log;                   \
+      LogDXVAError(__LINE__);               \
       return ret;                           \
     }                                       \
   } while (0)
@@ -534,6 +543,9 @@ bool EGLStreamCopyPictureBuffer::CopyOutputSampleDataToPictureBuffer(
   decoder->CopyTexture(dx11_texture, decoder_copy_texture_.get(),
                        dx11_keyed_mutex_, keyed_mutex_value_, id(),
                        input_buffer_id);
+  // The texture copy will acquire the current keyed mutex value and release
+  // with the value + 1.
+  keyed_mutex_value_++;
   return true;
 }
 
@@ -546,7 +558,6 @@ bool EGLStreamCopyPictureBuffer::CopySurfaceComplete(
 
   dx11_decoding_texture_.Release();
 
-  keyed_mutex_value_++;
   HRESULT hr =
       egl_keyed_mutex_->AcquireSync(keyed_mutex_value_, kAcquireSyncWaitMs);
   RETURN_ON_FAILURE(hr == S_OK, "Could not acquire sync mutex", false);
@@ -563,6 +574,7 @@ bool EGLStreamCopyPictureBuffer::CopySurfaceComplete(
   RETURN_ON_FAILURE(result, "Could not post stream", false);
   result = eglStreamConsumerAcquireKHR(egl_display, stream_);
   RETURN_ON_FAILURE(result, "Could not post acquire stream", false);
+  frame_in_consumer_ = true;
 
   return true;
 }
@@ -570,8 +582,11 @@ bool EGLStreamCopyPictureBuffer::CopySurfaceComplete(
 bool EGLStreamCopyPictureBuffer::ReusePictureBuffer() {
   EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
-  HRESULT hr = egl_keyed_mutex_->ReleaseSync(++keyed_mutex_value_);
-  RETURN_ON_FAILURE(hr == S_OK, "Could not release sync mutex", false);
+  if (frame_in_consumer_) {
+    HRESULT hr = egl_keyed_mutex_->ReleaseSync(++keyed_mutex_value_);
+    RETURN_ON_FAILURE(hr == S_OK, "Could not release sync mutex", false);
+  }
+  frame_in_consumer_ = false;
 
   if (stream_) {
     EGLBoolean result = eglStreamConsumerReleaseKHR(egl_display, stream_);

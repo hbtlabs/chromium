@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/process/launch.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/test/base/chrome_test_launcher.h"
 #include "chrome/test/base/chrome_test_suite.h"
 #include "chrome/test/base/mojo_test_connector.h"
@@ -17,7 +18,7 @@
 #include "content/public/test/test_launcher.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/public/cpp/service_context.h"
 #include "services/shell/runner/common/switches.h"
 #include "services/shell/runner/host/child_process.h"
 #include "services/shell/runner/init.h"
@@ -81,7 +82,7 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
     if (!mojo_test_connector_) {
       mojo_test_connector_.reset(new MojoTestConnector);
       service_.reset(new shell::Service);
-      shell_connection_.reset(new shell::ShellConnection(
+      shell_connection_.reset(new shell::ServiceContext(
           service_.get(), mojo_test_connector_->Init()));
       ConnectToDefaultApps(shell_connection_->connector());
     }
@@ -99,7 +100,7 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
   std::unique_ptr<MashTestSuite> test_suite_;
   std::unique_ptr<MojoTestConnector> mojo_test_connector_;
   std::unique_ptr<shell::Service> service_;
-  std::unique_ptr<shell::ShellConnection> shell_connection_;
+  std::unique_ptr<shell::ServiceContext> shell_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(MashTestLauncherDelegate);
 };
@@ -108,7 +109,9 @@ std::unique_ptr<content::MojoShellConnection> CreateMojoShellConnection(
     MashTestLauncherDelegate* delegate) {
   std::unique_ptr<content::MojoShellConnection> connection(
       content::MojoShellConnection::Create(
-          delegate->GetMojoTestConnectorForSingleProcess()->Init()));
+          delegate->GetMojoTestConnectorForSingleProcess()->Init(),
+          base::ThreadTaskRunnerHandle::Get()));
+  connection->Start();
   ConnectToDefaultApps(connection->GetConnector());
   return connection;
 }

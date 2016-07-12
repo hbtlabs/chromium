@@ -13,6 +13,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/non_thread_safe.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/frame_messages.h"
@@ -23,6 +24,7 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
 #include "ipc/ipc_channel.h"
+#include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebDevToolsAgent.h"
@@ -43,20 +45,34 @@ namespace {
 const size_t kMaxMessageChunkSize = IPC::Channel::kMaximumMessageSize / 4;
 const char kPageGetAppManifest[] = "Page.getAppManifest";
 
-
 class WebKitClientMessageLoopImpl
-    : public WebDevToolsAgentClient::WebKitClientMessageLoop {
+    : public WebDevToolsAgentClient::WebKitClientMessageLoop,
+      public base::NonThreadSafe {
  public:
-  WebKitClientMessageLoopImpl() : message_loop_(base::MessageLoop::current()) {}
-  ~WebKitClientMessageLoopImpl() override { message_loop_ = NULL; }
+  WebKitClientMessageLoopImpl() = default;
+  ~WebKitClientMessageLoopImpl() override { DCHECK(CalledOnValidThread()); }
   void run() override {
-    base::MessageLoop::ScopedNestableTaskAllower allow(message_loop_);
-    base::RunLoop().Run();
+    DCHECK(CalledOnValidThread());
+
+    base::RunLoop* const previous_run_loop = run_loop_;
+    base::RunLoop run_loop;
+    run_loop_ = &run_loop;
+
+    base::MessageLoop::ScopedNestableTaskAllower allow(
+        base::MessageLoop::current());
+    run_loop.Run();
+
+    run_loop_ = previous_run_loop;
   }
-  void quitNow() override { message_loop_->QuitNow(); }
+  void quitNow() override {
+    DCHECK(CalledOnValidThread());
+    DCHECK(run_loop_);
+
+    run_loop_->Quit();
+  }
 
  private:
-  base::MessageLoop* message_loop_;
+  base::RunLoop* run_loop_ = nullptr;
 };
 
 typedef std::map<int, DevToolsAgent*> IdToAgentMap;
@@ -263,7 +279,9 @@ void DevToolsAgent::OnDispatchOnInspectorBackend(int session_id,
 }
 
 void DevToolsAgent::OnInspectElement(int x, int y) {
-  GetWebAgent()->inspectElementAt(WebPoint(x, y));
+  blink::WebFloatRect point_rect(x, y, 0, 0);
+  frame_->GetRenderWidget()->convertWindowToViewport(&point_rect);
+  GetWebAgent()->inspectElementAt(WebPoint(point_rect.x, point_rect.y));
 }
 
 void DevToolsAgent::OnRequestNewWindowACK(bool success) {

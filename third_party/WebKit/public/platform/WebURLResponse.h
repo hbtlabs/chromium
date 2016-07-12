@@ -37,6 +37,7 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
+#include <memory>
 
 namespace blink {
 
@@ -45,7 +46,6 @@ class WebHTTPHeaderVisitor;
 class WebHTTPLoadInfo;
 class WebURL;
 class WebURLLoadTiming;
-class WebURLResponsePrivate;
 
 class WebURLResponse {
 public:
@@ -135,25 +135,12 @@ public:
         virtual ~ExtraData() { }
     };
 
-    ~WebURLResponse() { reset(); }
+    BLINK_PLATFORM_EXPORT ~WebURLResponse();
 
-    WebURLResponse() : m_private(0) { }
-    WebURLResponse(const WebURLResponse& r) : m_private(0) { assign(r); }
-    WebURLResponse& operator=(const WebURLResponse& r)
-    {
-        assign(r);
-        return *this;
-    }
-
-    explicit WebURLResponse(const WebURL& url) : m_private(0)
-    {
-        initialize();
-        setURL(url);
-    }
-
-    BLINK_PLATFORM_EXPORT void initialize();
-    BLINK_PLATFORM_EXPORT void reset();
-    BLINK_PLATFORM_EXPORT void assign(const WebURLResponse&);
+    BLINK_PLATFORM_EXPORT WebURLResponse();
+    BLINK_PLATFORM_EXPORT WebURLResponse(const WebURLResponse&);
+    BLINK_PLATFORM_EXPORT explicit WebURLResponse(const WebURL&);
+    BLINK_PLATFORM_EXPORT WebURLResponse& operator=(const WebURLResponse&);
 
     BLINK_PLATFORM_EXPORT bool isNull() const;
 
@@ -304,11 +291,24 @@ public:
     BLINK_PLATFORM_EXPORT ExtraData* getExtraData() const;
     BLINK_PLATFORM_EXPORT void setExtraData(ExtraData*);
 
+#if INSIDE_BLINK
 protected:
-    BLINK_PLATFORM_EXPORT void assign(WebURLResponsePrivate*);
+    // Permit subclasses to set arbitrary ResourceResponse pointer as
+    // |m_resourceResponse|. Parameter must be non-null.
+    // |m_ownedResourceResponse| is not set in this case.
+    BLINK_PLATFORM_EXPORT explicit WebURLResponse(ResourceResponse*);
+#endif
 
 private:
-    WebURLResponsePrivate* m_private;
+    struct ResourceResponseContainer;
+
+    // If this instance owns a ResourceResponse then |m_ownedResourceResponse|
+    // is non-null and |m_resourceResponse| points to the ResourceResponse
+    // instance it contains.
+    std::unique_ptr<ResourceResponseContainer> m_ownedResourceResponse;
+
+    // Should never be null.
+    ResourceResponse* m_resourceResponse;
 };
 
 } // namespace blink

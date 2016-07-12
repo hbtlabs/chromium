@@ -9,6 +9,7 @@
 
 #include "ash/audio/sounds.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
 #include "ash/shell.h"
@@ -299,12 +300,10 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
     is_observing_keyboard_ = true;
   }
 
-  if (!chrome::IsRunningInMash()) {
-    ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(
-        this);
-  } else {
+  if (!chrome::IsRunningInMash())
+    ash::WmShell::Get()->AddShellObserver(this);
+  else
     NOTIMPLEMENTED();
-  }
   display::Screen::GetScreen()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
@@ -420,12 +419,10 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
     is_observing_keyboard_ = false;
   }
 
-  if (!chrome::IsRunningInMash()) {
-    ash::Shell::GetInstance()->delegate()->RemoveVirtualKeyboardStateObserver(
-        this);
-  } else {
+  if (!chrome::IsRunningInMash())
+    ash::WmShell::Get()->RemoveShellObserver(this);
+  else
     NOTIMPLEMENTED();
-  }
   display::Screen::GetScreen()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
@@ -455,7 +452,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, LoginDisplayHost implementation:
+// LoginDisplayHostImpl, LoginDisplayHost:
 
 LoginDisplay* LoginDisplayHostImpl::CreateLoginDisplay(
     LoginDisplay::Delegate* delegate) {
@@ -815,7 +812,7 @@ OobeUI* LoginDisplayHostImpl::GetOobeUI() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, content:NotificationObserver implementation:
+// LoginDisplayHostImpl, content:NotificationObserver:
 
 void LoginDisplayHostImpl::Observe(
     int type,
@@ -891,7 +888,7 @@ void LoginDisplayHostImpl::Observe(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, WebContentsObserver implementation:
+// LoginDisplayHostImpl, WebContentsObserver:
 
 void LoginDisplayHostImpl::RenderProcessGone(base::TerminationStatus status) {
   // Do not try to restore on shutdown
@@ -912,24 +909,21 @@ void LoginDisplayHostImpl::RenderProcessGone(base::TerminationStatus status) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chromeos::SessionManagerClient::Observer
-// implementation:
+// LoginDisplayHostImpl, chromeos::SessionManagerClient::Observer:
 
 void LoginDisplayHostImpl::EmitLoginPromptVisibleCalled() {
   OnLoginPromptVisible();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chromeos::CrasAudioHandler::AudioObserver
-// implementation:
+// LoginDisplayHostImpl, chromeos::CrasAudioHandler::AudioObserver:
 
 void LoginDisplayHostImpl::OnActiveOutputNodeChanged() {
   TryToPlayStartupSound();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, ash::KeyboardStateObserver:
-// implementation:
+// LoginDisplayHostImpl, ash::ShellObserver:
 
 void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(bool activated) {
   if (keyboard::KeyboardController::GetInstance()) {
@@ -947,7 +941,6 @@ void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(bool activated) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, keyboard::KeyboardControllerObserver:
-// implementation:
 
 void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
     const gfx::Rect& new_bounds) {
@@ -963,7 +956,7 @@ void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, display::DisplayObserver implementation:
+// LoginDisplayHostImpl, display::DisplayObserver:
 
 void LoginDisplayHostImpl::OnDisplayAdded(const display::Display& new_display) {
 }
@@ -989,7 +982,7 @@ void LoginDisplayHostImpl::OnDisplayMetricsChanged(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, views::WidgetRemovalsObserver implementation:
+// LoginDisplayHostImpl, views::WidgetRemovalsObserver:
 void LoginDisplayHostImpl::OnWillRemoveView(views::Widget* widget,
                                             views::View* view) {
   if (view != static_cast<views::View*>(login_view_))
@@ -999,8 +992,7 @@ void LoginDisplayHostImpl::OnWillRemoveView(views::Widget* widget,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chrome::MultiUserWindowManager::Observer
-// implementation:
+// LoginDisplayHostImpl, chrome::MultiUserWindowManager::Observer:
 void LoginDisplayHostImpl::OnUserSwitchAnimationFinished() {
   ShutdownDisplayHost(false);
 }

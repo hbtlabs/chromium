@@ -72,6 +72,10 @@ public:
         Preserve,
         Discard
     };
+    enum WebGLVersion {
+        WebGL1,
+        WebGL2,
+    };
 
     static PassRefPtr<DrawingBuffer> create(
         std::unique_ptr<WebGraphicsContext3DProvider>,
@@ -81,7 +85,8 @@ public:
         bool wantDepthBuffer,
         bool wantStencilBuffer,
         bool wantAntialiasing,
-        PreserveDrawingBuffer);
+        PreserveDrawingBuffer,
+        WebGLVersion);
     static void forceNextDrawingBufferCreationToFail();
 
     ~DrawingBuffer() override;
@@ -227,6 +232,7 @@ protected: // For unittests
         bool wantAlphaChannel,
         bool premultipliedAlpha,
         PreserveDrawingBuffer,
+        WebGLVersion,
         bool wantsDepth,
         bool wantsStencil);
 
@@ -253,11 +259,7 @@ private:
         DISALLOW_NEW();
         GLuint textureId = 0;
         GLuint imageId = 0;
-
-        // A GpuMemoryBuffer is a concept that the compositor understands. and
-        // is able to operate on. The id is scoped to renderer process.
-        GLint gpuMemoryBufferId = -1;
-
+        bool immutable = false;
         TextureParameters parameters;
     };
 
@@ -321,9 +323,8 @@ private:
     // Helper function to flip a bitmap vertically.
     void flipVertically(uint8_t* data, int width, int height);
 
-    // Helper to texImage2D with pixel==0 case: pixels are initialized to 0.
-    // By default, alignment is 4, the OpenGL default setting.
-    void texImage2DResourceSafe(GLenum target, GLint level, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, GLint alignment = 4);
+    // Allocate a storage texture if possible. Otherwise, allocate a regular texture.
+    void allocateConditionallyImmutableTexture(GLenum target, GLenum internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type);
     // Allocate buffer storage to be sent to compositor using either texImage2D or CHROMIUM_image based on available support.
     void deleteChromiumImageForTexture(TextureInfo*);
 
@@ -358,6 +359,7 @@ private:
     GLenum getMultisampledRenderbufferFormat();
 
     const PreserveDrawingBuffer m_preserveDrawingBuffer;
+    const WebGLVersion m_webGLVersion;
     bool m_scissorEnabled = false;
     GLuint m_texture2DBinding = 0;
     GLuint m_drawFramebufferBinding = 0;
@@ -376,6 +378,7 @@ private:
     const bool m_wantAlphaChannel;
     const bool m_premultipliedAlpha;
     bool m_hasImplicitStencilBuffer = false;
+    bool m_storageTextureSupported = false;
     struct FrontBufferInfo {
         TextureInfo texInfo;
         WebExternalTextureMailbox mailbox;

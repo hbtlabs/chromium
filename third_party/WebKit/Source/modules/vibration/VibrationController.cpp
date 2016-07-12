@@ -74,7 +74,7 @@ VibrationController::VibrationPattern VibrationController::sanitizeVibrationPatt
 
 VibrationController::VibrationController(Document& document)
     : ContextLifecycleObserver(&document)
-    , PageLifecycleObserver(document.page())
+    , PageVisibilityObserver(document.page())
     , m_timerDoVibrate(this, &VibrationController::doVibrate)
     , m_isRunning(false)
     , m_isCallingCancel(false)
@@ -125,7 +125,7 @@ void VibrationController::doVibrate(Timer<VibrationController>* timer)
 
     if (m_service) {
         m_isCallingVibrate = true;
-        m_service->Vibrate(m_pattern[0], createBaseCallback(WTF::bind(&VibrationController::didVibrate, wrapPersistent(this))));
+        m_service->Vibrate(m_pattern[0], convertToBaseCallback(WTF::bind(&VibrationController::didVibrate, wrapPersistent(this))));
     }
 }
 
@@ -160,7 +160,7 @@ void VibrationController::cancel()
 
     if (m_isRunning && !m_isCallingCancel && m_service) {
         m_isCallingCancel = true;
-        m_service->Cancel(createBaseCallback(WTF::bind(&VibrationController::didCancel, wrapPersistent(this))));
+        m_service->Cancel(convertToBaseCallback(WTF::bind(&VibrationController::didCancel, wrapPersistent(this))));
     }
 
     m_isRunning = false;
@@ -188,7 +188,7 @@ void VibrationController::contextDestroyed()
 
     // Page outlives ExecutionContext so stop observing it to avoid having
     // |pageVisibilityChanged| or |contextDestroyed| called again.
-    PageLifecycleObserver::clearContext();
+    PageVisibilityObserver::clearContext();
 }
 
 void VibrationController::pageVisibilityChanged()
@@ -200,7 +200,7 @@ void VibrationController::pageVisibilityChanged()
 DEFINE_TRACE(VibrationController)
 {
     ContextLifecycleObserver::trace(visitor);
-    PageLifecycleObserver::trace(visitor);
+    PageVisibilityObserver::trace(visitor);
 }
 
 } // namespace blink

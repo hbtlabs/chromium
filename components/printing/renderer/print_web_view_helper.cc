@@ -32,6 +32,7 @@
 #include "printing/metafile_skia_wrapper.h"
 #include "printing/pdf_metafile_skia.h"
 #include "printing/units.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -39,6 +40,7 @@
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginDocument.h"
@@ -120,7 +122,7 @@ bool PrintMsg_Print_Params_IsValid(const PrintMsg_Print_Params& params) {
 }
 
 PrintMsg_Print_Params GetCssPrintParams(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params) {
   PrintMsg_Print_Params page_css_params = page_params;
@@ -318,7 +320,7 @@ bool IsPrintToPdfRequested(const base::DictionaryValue& job_settings) {
   return print_to_pdf;
 }
 
-bool PrintingFrameHasPageSizeStyle(blink::WebFrame* frame,
+bool PrintingFrameHasPageSizeStyle(blink::WebLocalFrame* frame,
                                    int total_page_count) {
   if (!frame)
     return false;
@@ -423,7 +425,7 @@ blink::WebPrintScalingOption GetPrintScalingOption(
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 
 PrintMsg_Print_Params CalculatePrintParamsForCss(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params,
     bool ignore_css_margins,
@@ -529,6 +531,8 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
   blink::WebLocalFrame* frame =
       blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, NULL);
   web_view->setMainFrame(frame);
+  blink::WebFrameWidget* widget =
+      blink::WebFrameWidget::create(nullptr, web_view, frame);
 
   base::StringValue html(ResourceBundle::GetSharedInstance().GetLocalizedString(
       IDR_PRINT_PREVIEW_PAGE));
@@ -558,6 +562,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
   frame->printPage(0, canvas);
   frame->printEnd();
 
+  widget->close();
   web_view->close();
   frame->close();
 }
@@ -744,14 +749,18 @@ void PrepareFrameAndViewForPrint::CopySelection(
       blink::WebView::create(this, blink::WebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
-  web_view->setMainFrame(
-      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this));
+  blink::WebLocalFrame* main_frame =
+      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
+  web_view->setMainFrame(main_frame);
+  blink::WebFrameWidget::create(this, web_view, main_frame);
   frame_.Reset(web_view->mainFrame()->toWebLocalFrame());
   node_to_print_.reset();
 
   // When loading is done this will call didStopLoading() and that will do the
   // actual printing.
-  frame()->loadRequest(blink::WebURLRequest(GURL(url_str)));
+  blink::WebURLRequest request = blink::WebURLRequest(GURL(url_str));
+  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
+  frame()->loadRequest(request);
 }
 
 bool PrepareFrameAndViewForPrint::allowsBrokenNullLayerTreeView() const {
@@ -815,6 +824,7 @@ void PrepareFrameAndViewForPrint::FinishPrinting() {
     if (owns_web_view_) {
       DCHECK(!frame->isLoading());
       owns_web_view_ = false;
+      frame->frameWidget()->close();
       web_view->close();
     }
   }
@@ -957,8 +967,7 @@ bool PrintWebViewHelper::GetPrintFrame(blink::WebLocalFrame** frame) {
 
   // If the user has selected text in the currently focused frame we print
   // only that frame (this makes print selection work for multiple frames).
-  blink::WebLocalFrame* focusedFrame =
-      webView->focusedFrame()->toWebLocalFrame();
+  blink::WebLocalFrame* focusedFrame = webView->focusedFrame();
   *frame = focusedFrame->hasSelection()
                ? focusedFrame
                : webView->mainFrame()->toWebLocalFrame();
@@ -1498,7 +1507,7 @@ void PrintWebViewHelper::FinishFramePrinting() {
 
 // static - Not anonymous so that platform implementations can use it.
 void PrintWebViewHelper::ComputePageLayoutInPointsForCss(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params,
     bool ignore_css_margins,
@@ -1744,7 +1753,7 @@ bool PrintWebViewHelper::RenderPagesForPrint(blink::WebLocalFrame* frame,
 #if !defined(OS_MACOSX)
 void PrintWebViewHelper::PrintPageInternal(
     const PrintMsg_PrintPage_Params& params,
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     PdfMetafileSkia* metafile,
     gfx::Size* page_size_in_dpi,
     gfx::Rect* content_area_in_dpi) {

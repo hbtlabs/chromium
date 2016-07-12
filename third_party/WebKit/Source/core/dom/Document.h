@@ -167,6 +167,7 @@ class Touch;
 class TouchList;
 class TransformSource;
 class TreeWalker;
+class ViewportScrollCallback;
 class VisitedLinkState;
 class VisualViewport;
 class WebGLRenderingContext;
@@ -527,7 +528,7 @@ public:
     const KURL& baseURL() const { return m_baseURL; }
     void setBaseURLOverride(const KURL&);
     const KURL& baseURLOverride() const { return m_baseURLOverride; }
-    const KURL& baseElementURL() const { return m_baseElementURL; }
+    KURL validBaseElementURL() const;
     const AtomicString& baseTarget() const { return m_baseTarget; }
     void processBaseElement();
 
@@ -950,7 +951,7 @@ public:
     void cancelIdleCallback(int id);
 
     EventTarget* errorEventTarget() final;
-    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) final;
+    void exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation>) final;
 
     void initDNSPrefetch();
 
@@ -1073,6 +1074,7 @@ public:
 
     WebTaskRunner* loadingTaskRunner() const;
     WebTaskRunner* timerTaskRunner() const;
+    WebTaskRunner* unthrottledTaskRunner() const;
 
     void enforceInsecureRequestPolicy(WebInsecureRequestPolicy);
 
@@ -1083,6 +1085,7 @@ public:
 
     bool containsV1ShadowTree() const { return m_shadowCascadeOrder == ShadowCascadeOrder::ShadowCascadeV1; }
 
+    void initializeRootScroller(ViewportScrollCallback*);
     Element* rootScroller() const;
     void setRootScroller(Element*, ExceptionState&);
     const Element* effectiveRootScroller() const;
@@ -1156,8 +1159,6 @@ private:
 
     const KURL& virtualURL() const final; // Same as url(), but needed for ExecutionContext to implement it without a performance loss for direct calls.
     KURL virtualCompleteURL(const String&) const final; // Same as completeURL() for the same reason as above.
-
-    void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
 
     void updateTitle(const String&);
     void updateFocusAppearanceTimerFired(Timer<Document>*);

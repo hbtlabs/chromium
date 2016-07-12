@@ -88,7 +88,6 @@ class NET_EXPORT HttpNetworkSession
     // Use SPDY ping frames to test for connection health after idle.
     bool enable_spdy_ping_based_connection_checking;
     NextProto spdy_default_protocol;
-    bool enable_spdy31;
     bool enable_http2;
     size_t spdy_session_max_recv_window_size;
     size_t spdy_stream_max_recv_window_size;
@@ -100,9 +99,6 @@ class NET_EXPORT HttpNetworkSession
     // Whether to enable QUIC Alt-Svc entries with hostname different than that
     // of the origin.
     bool enable_quic_alternative_service_with_different_host;
-
-    // Enables NPN support.  Note that ALPN is always enabled.
-    bool enable_npn;
 
     // Enable setting of HTTP/2 dependencies based on priority.
     bool enable_priority_dependencies;
@@ -182,6 +178,8 @@ class NET_EXPORT HttpNetworkSession
     bool quic_migrate_sessions_early;
     // If true, bidirectional streams over QUIC will be disabled.
     bool quic_disable_bidirectional_streams;
+    // If true, enable force HOL blocking.  For measurement purposes.
+    bool quic_force_hol_blocking;
 
     ProxyDelegate* proxy_delegate;
     // Enable support for Token Binding.

@@ -92,7 +92,7 @@ Geolocation* Geolocation::create(ExecutionContext* context)
 
 Geolocation::Geolocation(ExecutionContext* context)
     : ContextLifecycleObserver(context)
-    , PageLifecycleObserver(document()->page())
+    , PageVisibilityObserver(document()->page())
     , m_geolocationPermission(PermissionUnknown)
 {
 }
@@ -109,7 +109,7 @@ DEFINE_TRACE(Geolocation)
     visitor->trace(m_pendingForPermissionNotifiers);
     visitor->trace(m_lastPosition);
     ContextLifecycleObserver::trace(visitor);
-    PageLifecycleObserver::trace(visitor);
+    PageVisibilityObserver::trace(visitor);
 }
 
 Document* Geolocation::document() const
@@ -131,7 +131,7 @@ void Geolocation::contextDestroyed()
     m_pendingForPermissionNotifiers.clear();
     m_lastPosition = nullptr;
     ContextLifecycleObserver::clearContext();
-    PageLifecycleObserver::clearContext();
+    PageVisibilityObserver::clearContext();
 }
 
 void Geolocation::recordOriginTypeAccess() const
@@ -423,14 +423,14 @@ void Geolocation::requestPermission()
     m_geolocationPermission = PermissionRequested;
     frame->serviceRegistry()->connectToRemoteService(
         mojo::GetProxy(&m_permissionService));
-    m_permissionService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onPermissionConnectionError, wrapWeakPersistent(this))));
+    m_permissionService.set_connection_error_handler(convertToBaseCallback(WTF::bind(&Geolocation::onPermissionConnectionError, wrapWeakPersistent(this))));
 
     // Ask the embedder: it maintains the geolocation challenge policy itself.
     m_permissionService->RequestPermission(
         mojom::blink::PermissionName::GEOLOCATION,
         getExecutionContext()->getSecurityOrigin()->toString(),
         UserGestureIndicator::processingUserGesture(),
-        createBaseCallback(WTF::bind(&Geolocation::onGeolocationPermissionUpdated, wrapPersistent(this))));
+        convertToBaseCallback(WTF::bind(&Geolocation::onGeolocationPermissionUpdated, wrapPersistent(this))));
 }
 
 void Geolocation::makeSuccessCallbacks()
@@ -495,7 +495,7 @@ void Geolocation::updateGeolocationServiceConnection()
         return;
 
     frame()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_geolocationService));
-    m_geolocationService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onGeolocationConnectionError, wrapWeakPersistent(this))));
+    m_geolocationService.set_connection_error_handler(convertToBaseCallback(WTF::bind(&Geolocation::onGeolocationConnectionError, wrapWeakPersistent(this))));
     if (m_enableHighAccuracy)
         m_geolocationService->SetHighAccuracy(true);
     queryNextPosition();
@@ -503,7 +503,7 @@ void Geolocation::updateGeolocationServiceConnection()
 
 void Geolocation::queryNextPosition()
 {
-    m_geolocationService->QueryNextPosition(createBaseCallback(WTF::bind(&Geolocation::onPositionUpdated, wrapPersistent(this))));
+    m_geolocationService->QueryNextPosition(convertToBaseCallback(WTF::bind(&Geolocation::onPositionUpdated, wrapPersistent(this))));
 }
 
 void Geolocation::onPositionUpdated(mojom::blink::GeopositionPtr position)

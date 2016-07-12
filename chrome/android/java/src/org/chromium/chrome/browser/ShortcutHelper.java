@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.content_public.common.ScreenOrientationConstants;
 import org.chromium.net.GURLUtils;
 import org.chromium.ui.widget.Toast;
+import org.chromium.webapk.lib.client.WebApkValidator;
 
 import java.io.ByteArrayOutputStream;
 import java.util.List;
@@ -140,10 +141,10 @@ public class ShortcutHelper {
      */
     @SuppressWarnings("unused")
     @CalledByNative
-    private static void addShortcut(String id, String url, final String userTitle, String name,
-            String shortName, String iconUrl, Bitmap icon, int displayMode, int orientation,
-            int source, long themeColor, long backgroundColor, String manifestUrl,
-            final long callbackPointer) {
+    private static void addShortcut(String id, String url, String scopeUrl,
+            final String userTitle, String name, String shortName, String iconUrl, Bitmap icon,
+            int displayMode, int orientation, int source, long themeColor, long backgroundColor,
+            String manifestUrl, final long callbackPointer) {
         assert !ThreadUtils.runningOnUiThread();
 
         Context context = ContextUtils.getApplicationContext();
@@ -154,15 +155,20 @@ public class ShortcutHelper {
             if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_WEBAPK)) {
                 WebApkBuilder apkBuilder = ((ChromeApplication) context).createWebApkBuilder();
                 if (apkBuilder != null) {
-                    apkBuilder.buildWebApkAsync(url, GURLUtils.getOrigin(url), name, shortName,
-                            iconUrl, icon, displayMode, orientation, themeColor, backgroundColor,
-                            manifestUrl);
+                    if (TextUtils.isEmpty(scopeUrl)) {
+                        scopeUrl = GURLUtils.getOrigin(url);
+                    }
+                    apkBuilder.buildWebApkAsync(url, scopeUrl, name, shortName, iconUrl, icon,
+                            displayMode, orientation, themeColor, backgroundColor, manifestUrl);
                     return;
                 }
             }
+            if (TextUtils.isEmpty(scopeUrl)) {
+                scopeUrl = getScopeFromUrl(url);
+            }
             shortcutIntent = createWebappShortcutIntent(id, sDelegate.getFullscreenAction(), url,
-                    getScopeFromUrl(url), name, shortName, icon, WEBAPP_SHORTCUT_VERSION,
-                    displayMode, orientation, themeColor, backgroundColor, iconUrl.isEmpty());
+                    scopeUrl, name, shortName, icon, WEBAPP_SHORTCUT_VERSION, displayMode,
+                    orientation, themeColor, backgroundColor, iconUrl.isEmpty());
             shortcutIntent.putExtra(EXTRA_MAC, getEncodedMac(context, url));
         } else {
             // Add the shortcut as a launcher icon to open in the browser Activity.
@@ -240,18 +246,6 @@ public class ShortcutHelper {
         i.putExtra(Intent.EXTRA_SHORTCUT_NAME, title);
         i.putExtra(Intent.EXTRA_SHORTCUT_ICON, icon);
         return i;
-    }
-
-    /**
-     * Creates an intent that will add a shortcut to the home screen.
-     * @param url Url of the shortcut.
-     * @param title Title of the shortcut.
-     * @param icon Image that represents the shortcut.
-     * @return Intent for the shortcut.
-     */
-    public static Intent createAddToHomeIntent(String url, String title, Bitmap icon) {
-        Intent shortcutIntent = createShortcutIntent(url);
-        return createAddToHomeIntent(url, title, icon, shortcutIntent);
     }
 
     /**
@@ -432,6 +426,19 @@ public class ShortcutHelper {
     }
 
     /**
+     * Returns true if WebAPKs are enabled and there is a WebAPK installed which can handle
+     * {@link url}.
+     */
+    @CalledByNative
+    public static boolean isWebApkInstalled(String url) {
+        if (!CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_WEBAPK)) {
+            return false;
+        }
+        return WebApkValidator.queryWebApkPackage(ContextUtils.getApplicationContext(), url)
+                != null;
+    }
+
+    /**
      * Compresses a bitmap into a PNG and converts into a Base64 encoded string.
      * The encoded string can be decoded using {@link decodeBitmapFromString(String)}.
      * @param bitmap The Bitmap to compress and encode.
@@ -511,9 +518,9 @@ public class ShortcutHelper {
     }
 
     /**
-     * Returns the URL with all but the last component of its path removed. This serves as a proxy
-     * for scope until the scope manifest member is available. This method assumes that the URL
-     * passed in is a valid URL with a path that contains at least one "/".
+     * Returns the URL with all but the last component of its path removed. This is used if the
+     * Web Manifest does not specify a scope. This method assumes that the URL passed in is a
+     * valid URL with a path that contains at least one "/".
      * @param url The url to convert to a scope.
      * @return The scope.
      */

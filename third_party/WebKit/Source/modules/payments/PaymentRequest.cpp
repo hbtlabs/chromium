@@ -25,6 +25,7 @@
 #include "mojo/public/cpp/bindings/wtf_array.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/ServiceRegistry.h"
+#include "wtf/HashSet.h"
 #include <utility>
 
 namespace mojo {
@@ -224,10 +225,18 @@ void validatePaymentDetailsModifiers(const HeapVector<PaymentDetailsModifier>& m
         return;
     }
 
+    HashSet<String> uniqueMethods;
     for (const auto& modifier : modifiers) {
         if (modifier.supportedMethods().isEmpty()) {
             exceptionState.throwTypeError("Must specify at least one payment method identifier");
             return;
+        }
+        for (const auto& method : modifier.supportedMethods()) {
+            if (uniqueMethods.contains(method)) {
+                exceptionState.throwTypeError("Duplicate payment method identifiers are not allowed");
+                return;
+            }
+            uniqueMethods.add(method);
         }
 
         if (modifier.hasTotal()) {
@@ -289,10 +298,18 @@ void validateAndConvertPaymentMethodData(const HeapVector<PaymentMethodData>& pa
         return;
     }
 
+    HashSet<String> uniqueMethods;
     for (const auto& pmd : paymentMethodData) {
         if (pmd.supportedMethods().isEmpty()) {
             exceptionState.throwTypeError("Must specify at least one payment method identifier");
             return;
+        }
+        for (const auto& method : pmd.supportedMethods()) {
+            if (uniqueMethods.contains(method)) {
+                exceptionState.throwTypeError("Duplicate payment method identifiers are not allowed");
+                return;
+            }
+            uniqueMethods.add(method);
         }
 
         String stringifiedData = "";
@@ -320,9 +337,9 @@ String getSelectedShippingOption(const PaymentDetails& details)
     if (!details.hasShippingOptions())
         return result;
 
-    for (size_t i = 0; i < details.shippingOptions().size(); ++i) {
+    for (int i = details.shippingOptions().size() - 1; i >= 0; --i) {
         if (details.shippingOptions()[i].hasSelected() && details.shippingOptions()[i].selected()) {
-            result = details.shippingOptions()[i].id();
+            return details.shippingOptions()[i].id();
         }
     }
 
@@ -355,7 +372,7 @@ ScriptPromise PaymentRequest::show(ScriptState* scriptState)
 
     DCHECK(!m_paymentProvider.is_bound());
     scriptState->domWindow()->frame()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_paymentProvider));
-    m_paymentProvider.set_connection_error_handler(createBaseCallback(WTF::bind(&PaymentRequest::OnError, wrapWeakPersistent(this))));
+    m_paymentProvider.set_connection_error_handler(convertToBaseCallback(WTF::bind(&PaymentRequest::OnError, wrapWeakPersistent(this))));
     m_paymentProvider->SetClient(m_clientBinding.CreateInterfacePtrAndBind());
     m_paymentProvider->Show(mojo::WTFArray<mojom::blink::PaymentMethodDataPtr>::From(m_methodData), mojom::blink::PaymentDetails::From(m_details), mojom::blink::PaymentOptions::From(m_options));
 

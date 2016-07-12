@@ -233,6 +233,7 @@ IndexedDBDatabase::~IndexedDBDatabase() {
   DCHECK(transactions_.empty());
   DCHECK(pending_open_calls_.empty());
   DCHECK(pending_delete_calls_.empty());
+  DCHECK(blocked_delete_calls_.empty());
 }
 
 size_t IndexedDBDatabase::GetMaxMessageSizeInBytes() const {
@@ -251,8 +252,7 @@ std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
 
 IndexedDBTransaction* IndexedDBDatabase::GetTransaction(
     int64_t transaction_id) const {
-  TransactionMap::const_iterator trans_iterator =
-      transactions_.find(transaction_id);
+  const auto& trans_iterator = transactions_.find(transaction_id);
   if (trans_iterator == transactions_.end())
     return NULL;
   return trans_iterator->second;
@@ -539,6 +539,25 @@ void IndexedDBDatabase::Abort(int64_t transaction_id,
   IndexedDBTransaction* transaction = GetTransaction(transaction_id);
   if (transaction)
     transaction->Abort(error);
+}
+
+void IndexedDBDatabase::AddPendingObserver(int64_t transaction_id,
+                                           int32_t observer_id) {
+  IndexedDBTransaction* transaction = GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+  transaction->AddPendingObserver(observer_id);
+}
+
+void IndexedDBDatabase::RemovePendingObservers(
+    IndexedDBConnection* connection,
+    const std::vector<int32_t>& pending_observer_ids) {
+  for (const auto& it : transactions_) {
+    // Avoid call to RemovePendingObservers for transactions on other
+    // connections.
+    if (it.second->connection() == connection)
+      it.second->RemovePendingObservers(pending_observer_ids);
+  }
 }
 
 void IndexedDBDatabase::GetAll(int64_t transaction_id,
@@ -1616,31 +1635,58 @@ void IndexedDBDatabase::ProcessPendingCalls() {
     DCHECK_EQ(1u, ConnectionCount());
     // Fall through would be a no-op, since transaction must complete
     // asynchronously.
+    DCHECK(IsUpgradeRunning());
     DCHECK(IsDeleteDatabaseBlocked());
     DCHECK(IsOpenConnectionBlocked());
     return;
   }
 
-  if (!IsDeleteDatabaseBlocked()) {
-    std::list<PendingDeleteCall*> pending_delete_calls;
+  if (IsUpgradeRunning()) {
+    DCHECK_EQ(ConnectionCount(), 1UL);
+    return;
+  }
+
+  // These delete calls were blocked by a running upgrade, and did not even
+  // get as far as broadcasting OnVersionChange (if needed).
+  {
+    std::list<std::unique_ptr<PendingDeleteCall>> pending_delete_calls;
     pending_delete_calls_.swap(pending_delete_calls);
     while (!pending_delete_calls.empty()) {
+      std::unique_ptr<PendingDeleteCall> pending_delete_call(
+          std::move(pending_delete_calls.front()));
+      pending_delete_calls.pop_front();
+      DeleteDatabase(pending_delete_call->callbacks());
+    }
+    // DeleteDatabase should never re-queue these calls.
+    DCHECK(pending_delete_calls_.empty());
+    // Fall through when complete, as pending deletes/opens may be unblocked.
+  }
+
+  // These delete calls broadcast OnVersionChange (if needed) but were blocked
+  // by open connections.
+  if (!IsDeleteDatabaseBlocked()) {
+    std::list<std::unique_ptr<PendingDeleteCall>> blocked_delete_calls;
+    blocked_delete_calls_.swap(blocked_delete_calls);
+    while (!blocked_delete_calls.empty()) {
       // Only the first delete call will delete the database, but each must fire
       // callbacks.
       std::unique_ptr<PendingDeleteCall> pending_delete_call(
-          pending_delete_calls.front());
-      pending_delete_calls.pop_front();
+          std::move(blocked_delete_calls.front()));
+      blocked_delete_calls.pop_front();
       DeleteDatabaseFinal(pending_delete_call->callbacks());
     }
-    // delete_database_final should never re-queue calls.
-    DCHECK(pending_delete_calls_.empty());
+    // DeleteDatabaseFinal should never re-queue these calls.
+    DCHECK(blocked_delete_calls_.empty());
     // Fall through when complete, as pending opens may be unblocked.
   }
 
+  // These open calls were blocked by a pending/running upgrade or a pending
+  // delete.
   if (!IsOpenConnectionBlocked()) {
     std::queue<IndexedDBPendingConnection> pending_open_calls;
     pending_open_calls_.swap(pending_open_calls);
     while (!pending_open_calls.empty()) {
+      // This may re-queue open calls if an upgrade is necessary.
       OpenConnection(pending_open_calls.front());
       pending_open_calls.pop();
     }
@@ -1665,27 +1711,31 @@ void IndexedDBDatabase::CreateTransaction(
   // The transaction will add itself to this database's coordinator, which
   // manages the lifetime of the object.
   TransactionCreated(IndexedDBClassFactory::Get()->CreateIndexedDBTransaction(
-      transaction_id, connection->callbacks(),
+      transaction_id, connection->GetWeakPtr(),
       std::set<int64_t>(object_store_ids.begin(), object_store_ids.end()), mode,
-      this, new IndexedDBBackingStore::Transaction(backing_store_.get())));
+      new IndexedDBBackingStore::Transaction(backing_store_.get())));
 }
 
 void IndexedDBDatabase::TransactionCreated(IndexedDBTransaction* transaction) {
   transactions_[transaction->id()] = transaction;
 }
 
+bool IndexedDBDatabase::IsUpgradeRunning() const {
+  return transaction_coordinator_.IsRunningVersionChangeTransaction();
+}
+
+bool IndexedDBDatabase::IsUpgradePendingOrRunning() const {
+  return pending_run_version_change_transaction_call_ || IsUpgradeRunning();
+}
+
 bool IndexedDBDatabase::IsOpenConnectionBlocked() const {
-  return !pending_delete_calls_.empty() ||
-         transaction_coordinator_.IsRunningVersionChangeTransaction() ||
-         pending_run_version_change_transaction_call_;
+  return IsUpgradePendingOrRunning() || !blocked_delete_calls_.empty();
 }
 
 void IndexedDBDatabase::OpenConnection(
     const IndexedDBPendingConnection& connection) {
   DCHECK(backing_store_.get());
 
-  // TODO(jsbell): Should have a priority queue so that higher version
-  // requests are processed first. http://crbug.com/225850
   if (IsOpenConnectionBlocked()) {
     // The backing store only detects data loss when it is first opened. The
     // presence of existing connections means we didn't even check for data loss
@@ -1812,6 +1862,7 @@ void IndexedDBDatabase::RunVersionChangeTransactionFinal(
                     object_store_ids,
                     blink::WebIDBTransactionModeVersionChange);
 
+  DCHECK(transaction_coordinator_.IsRunningVersionChangeTransaction());
   transactions_[transaction_id]->ScheduleTask(
       base::Bind(&IndexedDBDatabase::VersionChangeOperation,
                  this,
@@ -1823,6 +1874,13 @@ void IndexedDBDatabase::RunVersionChangeTransactionFinal(
 
 void IndexedDBDatabase::DeleteDatabase(
     scoped_refptr<IndexedDBCallbacks> callbacks) {
+  // If there's a running upgrade, the delete calls should be deferred so that
+  // "versionchange" is seen after "success" fires.
+  if (IsUpgradeRunning()) {
+    pending_delete_calls_.push_back(
+        std::unique_ptr<PendingDeleteCall>(new PendingDeleteCall(callbacks)));
+    return;
+  }
 
   if (IsDeleteDatabaseBlocked()) {
     for (const auto* connection : connections_) {
@@ -1834,14 +1892,15 @@ void IndexedDBDatabase::DeleteDatabase(
     // OnBlocked will be fired at the request when one of the other
     // connections acks that the OnVersionChange was ignored.
 
-    pending_delete_calls_.push_back(new PendingDeleteCall(callbacks));
+    blocked_delete_calls_.push_back(
+        std::unique_ptr<PendingDeleteCall>(new PendingDeleteCall(callbacks)));
     return;
   }
   DeleteDatabaseFinal(callbacks);
 }
 
 bool IndexedDBDatabase::IsDeleteDatabaseBlocked() const {
-  return !!ConnectionCount();
+  return IsUpgradePendingOrRunning() || !!ConnectionCount();
 }
 
 void IndexedDBDatabase::DeleteDatabaseFinal(
@@ -1871,7 +1930,7 @@ void IndexedDBDatabase::DeleteDatabaseFinal(
 void IndexedDBDatabase::ForceClose() {
   // IndexedDBConnection::ForceClose() may delete this database, so hold ref.
   scoped_refptr<IndexedDBDatabase> protect(this);
-  ConnectionSet::const_iterator it = connections_.begin();
+  auto it = connections_.begin();
   while (it != connections_.end()) {
     IndexedDBConnection* connection = *it++;
     connection->ForceClose();
@@ -1880,14 +1939,14 @@ void IndexedDBDatabase::ForceClose() {
 }
 
 void IndexedDBDatabase::VersionChangeIgnored() {
-  if (pending_run_version_change_transaction_call_)
+  if (pending_run_version_change_transaction_call_) {
     pending_run_version_change_transaction_call_->callbacks()->OnBlocked(
         metadata_.version);
+  }
 
-  for (const auto& pending_delete_call : pending_delete_calls_)
+  for (const auto& pending_delete_call : blocked_delete_calls_)
     pending_delete_call->callbacks()->OnBlocked(metadata_.version);
 }
-
 
 void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
   DCHECK(connections_.count(connection));
@@ -1903,9 +1962,9 @@ void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
   // as the front-end defers the close until all transactions are
   // complete, but can occur on process termination or forced close.
   {
-    TransactionMap transactions(transactions_);
+    auto transactions(transactions_);
     for (const auto& it : transactions) {
-      if (it.second->connection() == connection->callbacks())
+      if (it.second->callbacks() == connection->callbacks())
         it.second->Abort(
             IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionUnknownError,
                                    "Connection is closing."));
@@ -1924,7 +1983,7 @@ void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
 
   // TODO(jsbell): Add a test for the pending_open_calls_ cases below.
   if (!ConnectionCount() && pending_open_calls_.empty() &&
-      !pending_delete_calls_.size()) {
+      blocked_delete_calls_.empty()) {
     DCHECK(transactions_.empty());
     backing_store_ = NULL;
     factory_->ReleaseDatabase(identifier_, forced);

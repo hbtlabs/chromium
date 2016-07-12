@@ -31,7 +31,10 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
+    void setLayoutViewport(ScrollableArea&);
+
     // ScrollableArea Implementation
+    bool isRootFrameViewport() const override { return true; }
     void setScrollPosition(const DoublePoint&, ScrollType, ScrollBehavior = ScrollBehaviorInstant) override;
     LayoutRect scrollIntoView(
         const LayoutRect& rectInContent,
@@ -71,13 +74,19 @@ public:
     ScrollBehavior scrollBehaviorStyle() const override;
     Widget* getWidget() override;
     void clearScrollAnimators() override;
+    LayoutBox* layoutBox() const override;
 
 private:
     RootFrameViewport(ScrollableArea& visualViewport, ScrollableArea& layoutViewport);
 
+    enum ViewportToScrollFirst {
+        VisualViewport,
+        LayoutViewport
+    };
+
     DoublePoint scrollOffsetFromScrollAnimators() const;
 
-    void distributeScrollBetweenViewports(const DoublePoint&, ScrollType, ScrollBehavior);
+    void distributeScrollBetweenViewports(const DoublePoint&, ScrollType, ScrollBehavior, ViewportToScrollFirst);
 
     // If either of the layout or visual viewports are scrolled explicitly (i.e. not
     // through this class), their updated offset will not be reflected in this class'
@@ -90,6 +99,8 @@ private:
     Member<ScrollableArea> m_visualViewport;
     Member<ScrollableArea> m_layoutViewport;
 };
+
+DEFINE_TYPE_CASTS(RootFrameViewport, ScrollableArea, scrollableArea, scrollableArea->isRootFrameViewport(), scrollableArea.isRootFrameViewport());
 
 } // namespace blink
 

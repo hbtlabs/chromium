@@ -15,8 +15,7 @@
 #include "services/shell/background/background_shell.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/service.h"
-#include "services/shell/public/cpp/shell_connection.h"
-#include "services/ui/common/gpu_service.h"
+#include "services/shell/public/cpp/service_context.h"
 #include "services/ui/common/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/mus/window_manager_connection.h"
@@ -45,12 +44,11 @@ class PlatformTestHelperMus : public PlatformTestHelper {
  public:
   PlatformTestHelperMus(shell::Connector* connector,
                         const shell::Identity& identity) {
-    ui::GpuService::Initialize(connector);
     // It is necessary to recreate the WindowManagerConnection for each test,
     // since a new MessageLoop is created for each test.
     connection_ = WindowManagerConnection::Create(connector, identity);
   }
-  ~PlatformTestHelperMus() override { ui::GpuService::Terminate(); }
+  ~PlatformTestHelperMus() override {}
 
  private:
   std::unique_ptr<WindowManagerConnection> connection_;
@@ -119,7 +117,7 @@ class ShellConnection {
     background_shell_.reset(new shell::BackgroundShell);
     background_shell_->Init(nullptr);
     service_.reset(new DefaultService);
-    shell_connection_.reset(new shell::ShellConnection(
+    shell_connection_.reset(new shell::ServiceContext(
         service_.get(),
         background_shell_->CreateServiceRequest(GetTestName())));
 
@@ -147,7 +145,7 @@ class ShellConnection {
 
   base::Thread thread_;
   std::unique_ptr<shell::BackgroundShell> background_shell_;
-  std::unique_ptr<shell::ShellConnection> shell_connection_;
+  std::unique_ptr<shell::ServiceContext> shell_connection_;
   std::unique_ptr<DefaultService> service_;
   std::unique_ptr<shell::Connector> shell_connector_;
   shell::Identity shell_identity_;

@@ -10,6 +10,7 @@
 #include "services/ui/surfaces/surfaces_state.h"
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_manager.h"
+#include "services/ui/ws/platform_display_init_params.h"
 #include "services/ui/ws/server_window_surface_manager_test_api.h"
 #include "services/ui/ws/window_manager_access_policy.h"
 #include "services/ui/ws/window_manager_window_tree_factory.h"
@@ -107,6 +108,22 @@ PlatformDisplay* TestPlatformDisplayFactory::CreatePlatformDisplay() {
   return new TestPlatformDisplay(cursor_id_storage_);
 }
 
+// TestFrameGeneratorDelegate -------------------------------------------------
+
+TestFrameGeneratorDelegate::TestFrameGeneratorDelegate(
+    std::unique_ptr<ServerWindow> root)
+    : root_(std::move(root)) {}
+
+TestFrameGeneratorDelegate::~TestFrameGeneratorDelegate() {}
+
+ServerWindow* TestFrameGeneratorDelegate::GetRootWindow() {
+  return root_.get();
+}
+
+const ViewportMetrics& TestFrameGeneratorDelegate::GetViewportMetrics() {
+  return metrics_;
+}
+
 // WindowTreeTestApi  ---------------------------------------------------------
 
 WindowTreeTestApi::WindowTreeTestApi(WindowTree* tree) : tree_(tree) {}
@@ -166,10 +183,20 @@ void TestWindowManager::WmCreateTopLevelWindow(
 void TestWindowManager::WmClientJankinessChanged(ClientSpecificId client_id,
                                                  bool janky) {}
 
-void TestWindowManager::OnAccelerator(uint32_t id,
+void TestWindowManager::WmPerformMoveLoop(uint32_t change_id,
+                                          uint32_t window_id,
+                                          mojom::MoveLoopSource source,
+                                          const gfx::Point& cursor_location) {
+  on_perform_move_loop_called_ = true;
+}
+
+void TestWindowManager::WmCancelMoveLoop(uint32_t window_id) {}
+
+void TestWindowManager::OnAccelerator(uint32_t ack_id,
+                                      uint32_t accelerator_id,
                                       std::unique_ptr<ui::Event> event) {
   on_accelerator_called_ = true;
-  on_accelerator_id_ = id;
+  on_accelerator_id_ = accelerator_id;
 }
 
 // TestWindowTreeClient -------------------------------------------------------

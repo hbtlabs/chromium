@@ -142,6 +142,8 @@
 #include "net/base/port_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/WebKit/public/platform/WebImageGenerator.h"
@@ -454,6 +456,11 @@ scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
       automatic_flushes, support_locking, limits, attributes, nullptr, type));
 }
 
+bool IsRunningInMash() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(switches::kIsRunningInMash);
+}
+
 }  // namespace
 
 // For measuring memory usage after each task. Behind a command line flag.
@@ -641,6 +648,13 @@ void RenderThreadImpl::Init(
   // Register this object as the main thread.
   ChildProcess::current()->set_main_thread(this);
 
+#if defined(MOJO_SHELL_CLIENT)
+  if (IsRunningInMash()) {
+    auto* shell_connection = ChildThread::Get()->GetMojoShellConnection();
+    ui::GpuService::Initialize(shell_connection->GetConnector());
+  }
+#endif
+
   InitializeWebKit(resource_task_queue);
 
   // In single process the single process is all there is.
@@ -667,9 +681,9 @@ void RenderThreadImpl::Init(
       kMaxResourceRequestsPerFlushWhenThrottled));
   resource_dispatcher()->set_message_sender(resource_dispatch_throttler_.get());
 
-  media_stream_center_ = NULL;
+  media_stream_center_ = nullptr;
 
-  blob_message_filter_ = new BlobMessageFilter(GetFileThreadMessageLoopProxy());
+  blob_message_filter_ = new BlobMessageFilter(GetFileThreadTaskRunner());
   AddFilter(blob_message_filter_.get());
   db_message_filter_ = new DBMessageFilter();
   AddFilter(db_message_filter_.get());
@@ -684,29 +698,26 @@ void RenderThreadImpl::Init(
   peer_connection_tracker_.reset(new PeerConnectionTracker());
   AddObserver(peer_connection_tracker_.get());
 
-  p2p_socket_dispatcher_ =
-      new P2PSocketDispatcher(GetIOMessageLoopProxy().get());
+  p2p_socket_dispatcher_ = new P2PSocketDispatcher(GetIOTaskRunner().get());
   AddFilter(p2p_socket_dispatcher_.get());
 
   peer_connection_factory_.reset(
       new PeerConnectionDependencyFactory(p2p_socket_dispatcher_.get()));
 
   aec_dump_message_filter_ = new AecDumpMessageFilter(
-      GetIOMessageLoopProxy(), message_loop()->task_runner(),
-      peer_connection_factory_.get());
+      GetIOTaskRunner(), message_loop()->task_runner());
 
   AddFilter(aec_dump_message_filter_.get());
 
 #endif  // defined(ENABLE_WEBRTC)
 
-  audio_input_message_filter_ =
-      new AudioInputMessageFilter(GetIOMessageLoopProxy());
+  audio_input_message_filter_ = new AudioInputMessageFilter(GetIOTaskRunner());
   AddFilter(audio_input_message_filter_.get());
 
-  audio_message_filter_ = new AudioMessageFilter(GetIOMessageLoopProxy());
+  audio_message_filter_ = new AudioMessageFilter(GetIOTaskRunner());
   AddFilter(audio_message_filter_.get());
 
-  midi_message_filter_ = new MidiMessageFilter(GetIOMessageLoopProxy());
+  midi_message_filter_ = new MidiMessageFilter(GetIOTaskRunner());
   AddFilter(midi_message_filter_.get());
 
   AddFilter((new IndexedDBMessageFilter(thread_safe_sender()))->GetFilter());
@@ -840,15 +851,6 @@ void RenderThreadImpl::Init(
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateFrameFactory));
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateEmbeddedWorkerSetup));
 
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  // We may not have a MojoShellConnection object in tests that directly
-  // instantiate a RenderThreadImpl.
-  if (MojoShellConnection::GetForProcess() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseMusInRenderer))
-    CreateRenderWidgetWindowTreeClientFactory();
-#endif
-
   GetRemoteInterfaces()->GetInterface(
       mojo::GetProxy(&storage_partition_service_));
 
@@ -878,11 +880,11 @@ void RenderThreadImpl::Shutdown() {
   // Shutdown in reverse of the initialization order.
   if (devtools_agent_message_filter_.get()) {
     RemoveFilter(devtools_agent_message_filter_.get());
-    devtools_agent_message_filter_ = NULL;
+    devtools_agent_message_filter_ = nullptr;
   }
 
   RemoveFilter(audio_input_message_filter_.get());
-  audio_input_message_filter_ = NULL;
+  audio_input_message_filter_ = nullptr;
 
 #if defined(ENABLE_WEBRTC)
   RTCPeerConnectionHandler::DestructAllHandlers();
@@ -896,7 +898,7 @@ void RenderThreadImpl::Shutdown() {
   vc_manager_.reset();
 
   RemoveFilter(db_message_filter_.get());
-  db_message_filter_ = NULL;
+  db_message_filter_ = nullptr;
 
   // Shutdown the file thread if it's running.
   if (file_thread_)
@@ -904,7 +906,7 @@ void RenderThreadImpl::Shutdown() {
 
   if (compositor_message_filter_.get()) {
     RemoveFilter(compositor_message_filter_.get());
-    compositor_message_filter_ = NULL;
+    compositor_message_filter_ = nullptr;
   }
 
 #if defined(OS_ANDROID)
@@ -923,7 +925,7 @@ void RenderThreadImpl::Shutdown() {
 
   // AudioMessageFilter may be accessed on |media_thread_|, so shutdown after.
   RemoveFilter(audio_message_filter_.get());
-  audio_message_filter_ = NULL;
+  audio_message_filter_ = nullptr;
 
   categorized_worker_pool_->Shutdown();
 
@@ -931,7 +933,7 @@ void RenderThreadImpl::Shutdown() {
   input_handler_manager_.reset();
   if (input_event_filter_.get()) {
     RemoveFilter(input_event_filter_.get());
-    input_event_filter_ = NULL;
+    input_event_filter_ = nullptr;
   }
 
   // RemoveEmbeddedWorkerRoute may be called while deleting
@@ -943,7 +945,7 @@ void RenderThreadImpl::Shutdown() {
   // hold pointers to V8 objects (e.g., via pending requests).
   main_thread_indexed_db_dispatcher_.reset();
 
-  main_thread_compositor_task_runner_ = NULL;
+  main_thread_compositor_task_runner_ = nullptr;
 
   gpu_factories_.clear();
 
@@ -982,7 +984,16 @@ void RenderThreadImpl::Shutdown() {
   // to the browser process.
   main_message_loop_.reset();
 
-  lazy_tls.Pointer()->Set(NULL);
+  lazy_tls.Pointer()->Set(nullptr);
+}
+
+void RenderThreadImpl::AddConnectionFilters(MojoShellConnection* connection) {
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMusInRenderer)) {
+    CreateRenderWidgetWindowTreeClientFactory(connection);
+  }
+#endif
 }
 
 bool RenderThreadImpl::Send(IPC::Message* msg) {
@@ -1033,7 +1044,7 @@ IPC::SyncMessageFilter* RenderThreadImpl::GetSyncMessageFilter() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetIOMessageLoopProxy() {
+RenderThreadImpl::GetIOTaskRunner() {
   return ChildProcess::current()->io_task_runner();
 }
 
@@ -1505,8 +1516,8 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
     scoped_refptr<ContextProviderCommandBuffer> shared_context_provider =
         SharedMainThreadContextProvider();
     if (!shared_context_provider) {
-      stream_texture_factory_ = NULL;
-      return NULL;
+      stream_texture_factory_ = nullptr;
+      return nullptr;
     }
     DCHECK(shared_context_provider->GetCommandBufferProxy());
     DCHECK(shared_context_provider->GetCommandBufferProxy()->channel());
@@ -1673,7 +1684,7 @@ void RenderThreadImpl::OnChannelError() {
 bool RenderThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
   base::ObserverListBase<RenderThreadObserver>::Iterator it(&observers_);
   RenderThreadObserver* observer;
-  while ((observer = it.GetNext()) != NULL) {
+  while ((observer = it.GetNext()) != nullptr) {
     if (observer->OnControlMessageReceived(msg))
       return true;
   }
@@ -1779,32 +1790,40 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync(
 
     // Recreate the channel if it has been lost.
     gpu_channel_->DestroyChannel();
-    gpu_channel_ = NULL;
+    gpu_channel_ = nullptr;
   }
 
-  // Ask the browser for the channel name.
-  int client_id = 0;
-  IPC::ChannelHandle channel_handle;
-  gpu::GPUInfo gpu_info;
-  if (!Send(new ChildProcessHostMsg_EstablishGpuChannel(
-          cause_for_gpu_launch, &client_id, &channel_handle, &gpu_info)) ||
+  if (!IsRunningInMash()) {
+    int client_id = 0;
+    IPC::ChannelHandle channel_handle;
+    gpu::GPUInfo gpu_info;
+    // Ask the browser for the channel name.
+    if (!Send(new ChildProcessHostMsg_EstablishGpuChannel(
+            cause_for_gpu_launch, &client_id, &channel_handle, &gpu_info)) ||
 #if defined(OS_POSIX)
-      channel_handle.socket.fd == -1 ||
+        channel_handle.socket.fd == -1 ||
 #endif
-      channel_handle.name.empty()) {
-    // Otherwise cancel the connection.
-    return NULL;
+        channel_handle.name.empty()) {
+      // Otherwise cancel the connection.
+      return nullptr;
+    }
+    GetContentClient()->SetGpuInfo(gpu_info);
+
+    // Cache some variables that are needed on the compositor thread for our
+    // implementation of GpuChannelHostFactory.
+    io_thread_task_runner_ = ChildProcess::current()->io_task_runner();
+
+    gpu_channel_ =
+        gpu::GpuChannelHost::Create(this, client_id, gpu_info, channel_handle,
+                                    ChildProcess::current()->GetShutDownEvent(),
+                                    gpu_memory_buffer_manager());
+  } else {
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+    gpu_channel_ = ui::GpuService::GetInstance()->EstablishGpuChannelSync();
+#else
+    NOTREACHED();
+#endif
   }
-
-  GetContentClient()->SetGpuInfo(gpu_info);
-
-  // Cache some variables that are needed on the compositor thread for our
-  // implementation of GpuChannelHostFactory.
-  io_thread_task_runner_ = ChildProcess::current()->io_task_runner();
-
-  gpu_channel_ = gpu::GpuChannelHost::Create(
-      this, client_id, gpu_info, channel_handle,
-      ChildProcess::current()->GetShutDownEvent(), gpu_memory_buffer_manager());
   return gpu_channel_;
 }
 
@@ -1820,10 +1839,9 @@ RenderThreadImpl::CreateCompositorOutputSurface(
     use_software = true;
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  auto shell_connection = MojoShellConnection::GetForProcess();
+  auto* shell_connection = MojoShellConnection::GetForProcess();
   if (shell_connection && !use_software &&
       command_line.HasSwitch(switches::kUseMusInRenderer)) {
-    ui::GpuService::Initialize(shell_connection->GetConnector());
     RenderWidgetMusConnection* connection =
         RenderWidgetMusConnection::GetOrCreate(routing_id);
     return connection->CreateOutputSurface();
@@ -2056,8 +2074,8 @@ void RenderThreadImpl::OnMemoryPressure(
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetFileThreadMessageLoopProxy() {
-  DCHECK(message_loop() == base::MessageLoop::current());
+RenderThreadImpl::GetFileThreadTaskRunner() {
+  DCHECK(message_loop()->task_runner()->BelongsToCurrentThread());
   if (!file_thread_) {
     file_thread_.reset(new base::Thread("Renderer::FILE"));
     file_thread_->Start();
@@ -2067,7 +2085,7 @@ RenderThreadImpl::GetFileThreadMessageLoopProxy() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 RenderThreadImpl::GetMediaThreadTaskRunner() {
-  DCHECK(message_loop() == base::MessageLoop::current());
+  DCHECK(message_loop()->task_runner()->BelongsToCurrentThread());
   if (!media_thread_) {
     media_thread_.reset(new base::Thread("Media"));
     media_thread_->Start();

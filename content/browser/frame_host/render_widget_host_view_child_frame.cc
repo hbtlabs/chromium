@@ -297,10 +297,6 @@ void RenderWidgetHostViewChildFrame::SelectionChanged(
     const gfx::Range& range) {
 }
 
-void RenderWidgetHostViewChildFrame::SelectionBoundsChanged(
-    const ViewHostMsg_SelectionBounds_Params& params) {
-}
-
 void RenderWidgetHostViewChildFrame::LockCompositingSurface() {
   NOTIMPLEMENTED();
 }
@@ -327,24 +323,22 @@ void RenderWidgetHostViewChildFrame::UnregisterSurfaceNamespaceId() {
   }
 }
 
-void RenderWidgetHostViewChildFrame::WheelEventAck(
-    const blink::WebMouseWheelEvent& event,
-    InputEventAckState ack_result) {
-  if (frame_connector_ &&
-      (ack_result == INPUT_EVENT_ACK_STATE_NOT_CONSUMED ||
-       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS))
-    frame_connector_->BubbleScrollEvent(event);
-}
-
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
     InputEventAckState ack_result) {
   bool not_consumed = ack_result == INPUT_EVENT_ACK_STATE_NOT_CONSUMED ||
                       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
-  // GestureScrollBegin/End are always consumed by the target frame, so we only
-  // forward GestureScrollUpdate.
-  if (frame_connector_ &&
-      event.type == blink::WebInputEvent::GestureScrollUpdate && not_consumed)
+  // GestureScrollBegin is consumed by the target frame and not forwarded,
+  // because we don't know whether we will need to bubble scroll until we
+  // receive a GestureScrollUpdate ACK. GestureScrollUpdate with unused
+  // scroll extent is forwarded for bubbling, while GestureScrollEnd is
+  // always forwarded and handled according to current scroll state in the
+  // RenderWidgetHostInputEventRouter.
+  if (!frame_connector_)
+    return;
+  if ((event.type == blink::WebInputEvent::GestureScrollUpdate &&
+       not_consumed) ||
+      event.type == blink::WebInputEvent::GestureScrollEnd)
     frame_connector_->BubbleScrollEvent(event);
 }
 
@@ -352,6 +346,7 @@ void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
                                                   cc::SurfaceDrawStatus drawn) {
   cc::CompositorFrameAck ack;
   DCHECK_GT(ack_pending_count_, 0U);
+
   if (!surface_returned_resources_.empty())
     ack.resources.swap(surface_returned_resources_);
   if (host_) {

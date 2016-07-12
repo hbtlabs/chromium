@@ -194,14 +194,12 @@ size_t RegisterChromeCrashKeys() {
     // Temporary for https://crbug.com/612711.
     { "aci_wrong_sp_extension_id", kSmallSize },
 
-    // Temporary for http://crbug.com/621730
-    { "postmessage_src_origin", kMediumSize },
-    { "postmessage_dst_origin", kMediumSize },
-    { "postmessage_dst_url", kLargeSize },
-    { "postmessage_script_info", kLargeSize },
-
     // Temporary for https://crbug.com/616149.
     { "existing_extension_pref_value_type", crash_keys::kSmallSize },
+
+    // Temporary for https://crbug.com/625040
+    { "swdh_not_handled_message_type", crash_keys::kMediumSize },
+    { "swdh_not_handled_worker_status", crash_keys::kMediumSize },
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

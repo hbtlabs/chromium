@@ -28,9 +28,6 @@
 
 
 vars = {
-  # Use this googlecode_url variable only if there is an internal mirror for it.
-  # If you do not know, use the full path while defining your new deps entry.
-  'googlecode_url': 'http://%s.googlecode.com/svn',
   'chromium_git': 'https://chromium.googlesource.com',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling sfntly
@@ -39,11 +36,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '52fa668dc589501f5e48a7c5b1958882b86ff496',
+  'skia_revision': 'c90bc40fdd7f0e8908df81766891e5c62fe77932',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '9c59da502d42da9bf07a595873d0024efe15a448',
+  'v8_revision': '57599f4bf5731be57cbc51f82ee81465d063750b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,15 +48,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '5695fc990fae1897f31bd418f9278e931776abdf',
+  'angle_revision': '9585a784bff9752bed369d8247a918495bcdf3ab',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '067577af4bc567f27d8481e02a7c7e8c5fa80aad',
+  'buildtools_revision': 'aa47d9773d8f4d6254a587a1240b3dc023d54f06',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': 'cfb31d67a40310ed64d942ba346cf0cd3a01cadf',
+  'pdfium_revision': '3c27a84d15c06f85cc7f455f96dc124673f9f9d2',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -67,7 +64,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '3cab5572b1fcf5a8f6018529dc30dc8d21b2a4bd',
+  'boringssl_revision': '95c69563dc5422c3b3cd3a0bf435944a7530a12d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -83,7 +80,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '0949e1bef9d6b25ee44eb69a54e0cc6f8a677375',
+  'nacl_revision': '4623c4f8a10b85cc3c97f7ecb2f7cb48a1da665e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype-android
   # and whatever else without interference from each other.
@@ -91,11 +88,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '9f8a0a8c0d4522f4014fbdba199222d44d638730',
+  'catapult_revision': '4160831d2082e3e07cc9b2a957dca49391ba7edf',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
-  'libfuzzer_revision': '7ee243229b1df318115b71b656c14879e8c16a71', # from svn revision 272061
+  'libfuzzer_revision': '3ae6b1d1102488f26d25d045fd82208ce00a8c66', # from svn revision 272061
 }
 
 # Only these hosts are allowed for dependencies in this DEPS file.
@@ -139,7 +136,7 @@ deps = {
    Var('chromium_git') + '/external/colorama.git' + '@' + '799604a1041e9b3bc5d2789ecbd7e8db2e18e6b8',
 
   'src/third_party/icu':
-   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + 'ffa4b6704cf5cc9fec9485731f24a05b2ba94bca',
+   Var('chromium_git') + '/chromium/deps/icu.git' + '@' + 'b5ecbb29a26532f72ef482569b223d5a51fd50bf',
 
   'src/third_party/hunspell_dictionaries':
    Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
@@ -181,7 +178,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '214fe8f93103621c5103eecfbe547f8a10a423f2',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '443264a6dadf61e92a6569b5ec90777009160b94',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -217,7 +214,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'd0d6cf9a9a302f1af62d0fd188fade3d205525a4', # commit position 13393
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '05929e21d437bc5f80309455f168a9e4bb2bc94b', # commit position 13407
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -330,7 +327,7 @@ deps_os = {
   },
   'ios': {
     'src/ios/third_party/earl_grey/src':
-     Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '6b23028b634974fb72dc960f2c063949076cf78f',
+     Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '090aa5fa68d4c422af4ee84912d30bc89a3e8820',
 
     'src/ios/third_party/fishhook/src':
      Var('chromium_git') + '/external/github.com/facebook/fishhook.git' + '@' + 'd172d5247aa590c25d0b1885448bae76036ea22c',
@@ -547,6 +544,7 @@ hooks = [
         'src/printing',
         'src/third_party/catapult',
         'src/third_party/closure_compiler/build',
+        'src/third_party/WebKit/Tools/Scripts',  # See http://crbug.com/625877.
         'src/tools',
     ],
   },
