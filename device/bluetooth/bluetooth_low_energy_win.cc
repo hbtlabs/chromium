@@ -467,8 +467,8 @@ bool CollectBluetoothLowEnergyDeviceInfo(
           device_info_handle, &device_info_data, result, error)) {
     return false;
   }
-  CollectBluetoothLowEnergyDeviceFriendlyName(
-          device_info_handle, &device_info_data, result, error);
+  CollectBluetoothLowEnergyDeviceFriendlyName(device_info_handle,
+                                              &device_info_data, result, error);
   if (!CollectBluetoothLowEnergyDeviceAddress(
           device_info_handle, &device_info_data, result, error)) {
     return false;
