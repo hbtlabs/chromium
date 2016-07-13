@@ -127,7 +127,7 @@ TEST_F(BluetoothTest, GetName_NullName) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
-  EXPECT_EQ("", device->GetName());
+  EXPECT_FALSE(device->GetName());
 }
 #endif  // defined(OS_ANDROID)
 
