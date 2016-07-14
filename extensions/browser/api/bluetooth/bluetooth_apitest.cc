@@ -412,7 +412,7 @@ IN_PROC_BROWSER_TEST_F(BluetoothApiTest, DeviceInfo) {
   BluetoothAdapter::ConstDeviceList devices;
 
   EXPECT_CALL(*device1_, GetAddress())
-    .WillRepeatedly(testing::Return("A4:17:31:00:00:00"));
+      .WillRepeatedly(testing::Return("A4:17:31:00:00:00"));
   EXPECT_CALL(*device1_, GetName())
       .WillRepeatedly(
           testing::Return(base::Optional<std::string>("Chromebook Pixel")));
