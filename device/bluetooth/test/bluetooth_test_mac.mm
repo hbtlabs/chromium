@@ -190,7 +190,7 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       scoped_nsobject<MockCBPeripheral> mock_peripheral(
           [[MockCBPeripheral alloc]
               initWithUTF8StringIdentifier:kTestPeripheralUUID2.c_str()
-                                      name:@(kTestDeviceNameEmpty.c_str())]);
+                                      name:nil]);
       mock_peripheral.get().bluetoothTestMac = this;
       scoped_nsobject<NSDictionary> advertisement_data =
           CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()),
@@ -205,7 +205,7 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       scoped_nsobject<MockCBPeripheral> mock_peripheral(
           [[MockCBPeripheral alloc]
               initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()
-                                           /* name */ nil]);
+                                      name:nil]);
       mock_peripheral.get().bluetoothTestMac = this;
       scoped_nsobject<NSDictionary> advertisement_data =
           CreateAdvertisementData(/* name */ nil, /* uuids */ nil);
