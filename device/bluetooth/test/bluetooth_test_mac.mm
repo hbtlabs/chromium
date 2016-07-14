@@ -140,13 +140,14 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
   NSArray* uuids;
 
   switch (device_ordinal) {
-    identifier = kTestPeripheralUUID1.c_str();
-    name = @(kTestDeviceName.c_str());
-    uuids = @[
-      [CBUUID UUIDWithString:@(kTestUUIDGenericAccess.c_str())],
-      [CBUUID UUIDWithString:@(kTestUUIDGenericAttribute.c_str())]
-    ];
-    break;
+    case 1:
+      identifier = kTestPeripheralUUID1.c_str();
+      name = @(kTestDeviceName.c_str());
+      uuids = @[
+        [CBUUID UUIDWithString:@(kTestUUIDGenericAccess.c_str())],
+        [CBUUID UUIDWithString:@(kTestUUIDGenericAttribute.c_str())]
+      ];
+      break;
     case 2:
       identifier = kTestPeripheralUUID1.c_str();
       name = @(kTestDeviceName.c_str());
@@ -171,7 +172,8 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       uuids = nil;
       break;
     default:
-      NOTREACHED();
+      NOTREACHED() << "SimulateLowEnergyDevice not implemented for "
+                   << device_ordinal;
       identifier = nil;
       name = nil;
       uuids = nil;
