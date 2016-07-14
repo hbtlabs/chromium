@@ -172,9 +172,9 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       break;
     default:
       NOTREACHED();
-      //      identifier = nil;
-      //      name = nil;
-      //      uuids = nil;
+      identifier = nil;
+      name = nil;
+      uuids = nil;
   }
   scoped_nsobject<MockCBPeripheral> mock_peripheral([[MockCBPeripheral alloc]
       initWithUTF8StringIdentifier:identifier
