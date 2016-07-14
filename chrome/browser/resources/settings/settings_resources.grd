@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<grit latest_public_release="0" current_release="1">
+<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
   <outputs>
     <output filename="grit/settings_resources.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -548,6 +548,12 @@
       <structure name="IDR_SETTINGS_AUTOFILL_SECTION_JS"
                  file="passwords_and_forms_page/autofill_section.js"
                  type="chrome_html" />
+      <structure name="IDR_SETTINGS_ADDRESS_EDIT_DIALOG_HTML"
+                 file="passwords_and_forms_page/address_edit_dialog.html"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_ADDRESS_EDIT_DIALOG_JS"
+                 file="passwords_and_forms_page/address_edit_dialog.js"
+                 type="chrome_html" />
       <structure name="IDR_SETTINGS_PASSWORDS_SECTION_HTML"
                  file="passwords_and_forms_page/passwords_section.html"
                  type="chrome_html" />
@@ -647,6 +653,18 @@
                    file="privacy_page/privacy_page_browser_proxy.js"
                    type="chrome_html" />
       </if>
+      <structure name="IDR_SETTINGS_PROTOCOL_HANDLERS_HTML"
+                 file="site_settings/protocol_handlers.html"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_PROTOCOL_HANDLERS_JS"
+                 file="site_settings/protocol_handlers.js"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_ROUTE_HTML"
+                 file="route.html"
+                 type="chrome_html" />
+      <structure name="IDR_SETTINGS_ROUTE_JS"
+                 file="route.js"
+                 type="chrome_html" />
       <structure name="IDR_SETTINGS_CR_SETTINGS_ROUTER_HTML"
                  file="settings_page/settings_router.html"
                  type="chrome_html" />
@@ -965,11 +983,35 @@
                    type="chrome_html"
                    flattenhtml="true"
                    allowexternalscript="true" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_CHOOSE_METHOD_JS"
+                   file="people_page/quick_unlock_choose_method.js"
+                   type="chrome_html" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_CHOOSE_METHOD_HTML"
+                   file="people_page/quick_unlock_choose_method.html"
+                   type="chrome_html"
+                   flattenhtml="true"
+                   allowexternalscript="true" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_SETUP_PIN_JS"
+                   file="people_page/quick_unlock_setup_pin.js"
+                   type="chrome_html" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_SETUP_PIN_HTML"
+                   file="people_page/quick_unlock_setup_pin.html"
+                   type="chrome_html"
+                   flattenhtml="true"
+                   allowexternalscript="true" />
         <structure name="IDR_SETTINGS_QUICK_UNLOCK_ROUTING_BEHAVIOR_JS"
                    file="people_page/quick_unlock_routing_behavior.js"
                    type="chrome_html" />
         <structure name="IDR_SETTINGS_QUICK_UNLOCK_ROUTING_BEHAVIOR_HTML"
                    file="people_page/quick_unlock_routing_behavior.html"
+                   type="chrome_html"
+                   flattenhtml="true"
+                   allowexternalscript="true" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_PASSWORD_DETECT_BEHAVIOR_JS"
+                   file="people_page/quick_unlock_password_detect_behavior.js"
+                   type="chrome_html" />
+        <structure name="IDR_SETTINGS_QUICK_UNLOCK_PASSWORD_DETECT_BEHAVIOR_HTML"
+                   file="people_page/quick_unlock_password_detect_behavior.html"
                    type="chrome_html"
                    flattenhtml="true"
                    allowexternalscript="true" />

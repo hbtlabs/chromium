@@ -8,7 +8,7 @@ are declared in build/common.gypi.
 -->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="grit/generated_resources.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -3596,7 +3596,7 @@ Even if you have downloaded files from this website before, the website might ha
         Google has flagged "<ph name="EXTENSION_NAME">$1<ex>Google Talk</ex></ph>" as malicious and installation has been prevented.
       </message>
       <message name="IDS_EXTENSION_DISABLED_REMOTE_INSTALL_ERROR_TITLE" desc="Title of the notification that an extension or app was disabled due to it being installed server side, requiring an explicit permission check from the user.">
-        <ph name="EXTENSION_NAME">$1<ex>Adblock</ex></ph> was installed remotely
+        <ph name="EXTENSION_NAME">$1<ex>Adblock</ex></ph> was added remotely
       </message>
 
       <if expr="enable_extensions">
@@ -4964,19 +4964,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_EXTENSION_CONTROLLED_KEEP_CHANGES" desc="The button in the extension controlled bubbles that cancels the bubble without action.">
         Keep changes
       </message>
-
-      <!-- chrome://settings-frame/options_settings_app.html for the App Launcher Settings App -->
-      <if expr="enable_settings_app">
-        <message name="IDS_SETTINGS_APP_LAUNCHER_PRODUCT_NAME" desc="Product name to use when referring to applications running in the App Launcher inside the non-browser Settings App">
-          App Launcher
-        </message>
-        <message name="IDS_SETTINGS_APP_PROFILES_SWITCH_BUTTON_LABEL" desc="The label that appears on the profile switch user button in the Settings App to allow a user to switch the app launcher profile to the current selection.">
-          Switch user
-        </message>
-        <message name="IDS_SETTINGS_APP_SYNC_OVERVIEW" desc="The message that appears in the non-browser Settings App when sync has not been set up by the user.">
-          Sign in with your Google Account to allow apps to synchronize settings and provide other customized services.
-        </message>
-      </if>
 
       <!-- Material Design version of chrome://policy -->
       <message name="IDS_FLAGS_ENABLE_MATERIAL_DESIGN_POLICY_PAGE_NAME" desc="Name for the flag to enable the material design policy page.">
@@ -6405,12 +6392,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_CENTERED_APP_LIST_DESCRIPTION" desc="Description of the flag to center the app launcher and make it wide instead of tall.">
           Positions the App Launcher in the center of the screen with a landscape aspect.
-        </message>
-        <message name="IDS_FLAGS_NEW_APP_LIST_MIXER_NAME" desc="Name of the flag to enable the new mixing algorithm in the app launcher.">
-          New App Launcher mixer algorithm
-        </message>
-        <message name="IDS_FLAGS_NEW_APP_LIST_MIXER_DESCRIPTION" desc="Description of the flag to enable the new mixing algorithm in the app launcher.">
-          This enables a new search result selecting and ranking algorithm in the App Launcher.
         </message>
       </if>
       <if expr="chromeos">
@@ -14863,8 +14844,17 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
 
     <if expr="not is_android and not is_ios">
       <!-- Device Chooser Prompt -->
-      <message name="IDS_DEVICE_CHOOSER_PROMPT" desc="The label that is used to introduce chooser details to the user in a popup.">
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce Bluetooth chooser details to the user in a popup when it is from a website.">
+        <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to pair with:
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce Bluetooth chooser details to the user in a popup when it is from a Chrome extension.">
+        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to pair with:
+      </message>
+      <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a website.">
         <ph name="Origin">$1<ex>www.google.com</ex></ph> wants to connect to:
+      </message>
+      <message name="IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME" desc="The label that is used to introduce USB chooser details to the user in a popup when it is from a Chrome extension.">
+        "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to connect to:
       </message>
       <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no devices were found in the chooser popup.">
         No devices found.
@@ -14872,10 +14862,13 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
       </message>
-      <message name="IDS_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT" desc="The text that is shown on the connect button in the chooser popup.">
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT" desc="Label on the button that closes the Bluetooth chooser popup and pairs the selected device.">
+        Pair
+      </message>
+      <message name="IDS_USB_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT" desc="Label on the button that closes the USB chooser popup and connects the selected device.">
         Connect
       </message>
-      <message name="IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT" desc="The text that is shown on the cancel button in the chooser popup.">
+      <message name="IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT" desc="Label on the button that closes the chooser popup without selecting an option.">
         Cancel
       </message>
       <message name="IDS_DEVICE_CHOOSER_FOOTNOTE_TEXT" desc="This text is shown at the bottom of the chooser popup with a link to part of its text.">

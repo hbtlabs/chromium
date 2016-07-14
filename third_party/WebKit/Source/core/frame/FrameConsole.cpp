@@ -31,7 +31,6 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/frame/FrameHost.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
@@ -58,18 +57,7 @@ bool FrameConsole::addMessageToStorage(ConsoleMessage* consoleMessage)
     // TODO(dgozman): drop this check, it's left here to preserve tests output.
     if (!m_frame->document())
         return false;
-    MainThreadDebugger* debugger = MainThreadDebugger::instance();
-    return debugger->debugger()->addConsoleMessage(
-        debugger->contextGroupId(m_frame),
-        consoleMessage->source(),
-        consoleMessage->level(),
-        consoleMessage->message(),
-        consoleMessage->location()->url(),
-        consoleMessage->location()->lineNumber(),
-        consoleMessage->location()->columnNumber(),
-        consoleMessage->location()->cloneStackTrace(),
-        consoleMessage->location()->scriptId(),
-        IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
+    return MainThreadDebugger::instance()->addConsoleMessage(m_frame, consoleMessage);
 }
 
 void FrameConsole::reportMessageToClient(ConsoleMessage* consoleMessage)
@@ -95,14 +83,10 @@ void FrameConsole::reportMessageToClient(ConsoleMessage* consoleMessage)
     frame().chromeClient().addMessageToConsole(m_frame, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->location()->lineNumber(), url, stackTrace);
 }
 
-void FrameConsole::reportWorkerMessage(ConsoleMessage* consoleMessage)
+void FrameConsole::addMessageFromWorker(ConsoleMessage* consoleMessage, const String& workerId)
 {
     reportMessageToClient(consoleMessage);
-}
-
-void FrameConsole::adoptWorkerMessage(ConsoleMessage* consoleMessage)
-{
-    addMessageToStorage(consoleMessage);
+    addMessageToStorage(ConsoleMessage::createFromWorker(consoleMessage->level(), consoleMessage->message(), consoleMessage->location() ? consoleMessage->location()->clone() : nullptr, workerId));
 }
 
 void FrameConsole::reportResourceResponseReceived(DocumentLoader* loader, unsigned long requestIdentifier, const ResourceResponse& response)

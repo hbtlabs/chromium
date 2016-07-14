@@ -23,24 +23,15 @@ class V8StackTrace;
 
 enum class V8MessageOrigin { kConsole, kException, kRevokedException };
 
+enum class ConsoleAPIType { kLog, kDir, kDirXML, kTable, kTrace, kStartGroup, kStartGroupCollapsed, kEndGroup, kClear, kAssert, kTimeEnd, kCount };
+
 class V8ConsoleMessage {
 public:
-    V8ConsoleMessage(
-        double timestamp,
-        MessageSource,
-        MessageLevel,
-        const String16& message,
-        const String16& url,
-        unsigned lineNumber,
-        unsigned columnNumber,
-        std::unique_ptr<V8StackTrace>,
-        int scriptId,
-        const String16& requestIdentifier);
     ~V8ConsoleMessage();
 
     static std::unique_ptr<V8ConsoleMessage> createForConsoleAPI(
         double timestamp,
-        MessageType,
+        ConsoleAPIType,
         MessageLevel,
         const String16& message,
         std::vector<v8::Local<v8::Value>>* arguments,
@@ -65,17 +56,33 @@ public:
         const String16& message,
         unsigned revokedExceptionId);
 
+    static std::unique_ptr<V8ConsoleMessage> createExternal(
+        double timestamp,
+        MessageSource,
+        MessageLevel,
+        const String16& message,
+        const String16& url,
+        unsigned lineNumber,
+        unsigned columnNumber,
+        std::unique_ptr<V8StackTrace>,
+        int scriptId,
+        const String16& requestIdentifier,
+        const String16& workerId);
+
     V8MessageOrigin origin() const;
     void reportToFrontend(protocol::Console::Frontend*, V8InspectorSessionImpl*, bool generatePreview) const;
     void reportToFrontend(protocol::Runtime::Frontend*, V8InspectorSessionImpl*, bool generatePreview) const;
     unsigned argumentCount() const;
-    MessageType type() const;
+    ConsoleAPIType type() const;
     void contextDestroyed(int contextId);
 
 private:
+    V8ConsoleMessage(V8MessageOrigin, double timestamp, MessageSource, MessageLevel, const String16& message);
+
     using Arguments = std::vector<std::unique_ptr<v8::Global<v8::Value>>>;
     std::unique_ptr<protocol::Array<protocol::Runtime::RemoteObject>> wrapArguments(V8InspectorSessionImpl*, bool generatePreview) const;
     std::unique_ptr<protocol::Runtime::RemoteObject> wrapException(V8InspectorSessionImpl*, bool generatePreview) const;
+    void setLocation(const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId);
 
     V8MessageOrigin m_origin;
     double m_timestamp;
@@ -88,8 +95,9 @@ private:
     std::unique_ptr<V8StackTrace> m_stackTrace;
     int m_scriptId;
     String16 m_requestIdentifier;
+    String16 m_workerId;
     int m_contextId;
-    MessageType m_type;
+    ConsoleAPIType m_type;
     unsigned m_exceptionId;
     unsigned m_revokedExceptionId;
     Arguments m_arguments;

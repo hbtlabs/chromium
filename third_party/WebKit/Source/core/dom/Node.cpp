@@ -557,10 +557,6 @@ bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment 
 
     for (const Node& node : NodeTraversal::inclusiveAncestorsOf(*this)) {
         if ((node.isHTMLElement() || node.isDocumentNode()) && node.layoutObject()) {
-            // Elements with user-select: all style are considered atomic
-            // therefore non editable.
-            if (nodeIsUserSelectAll(&node) && treatment == UserSelectAllIsAlwaysNonEditable)
-                return false;
             switch (node.layoutObject()->style()->userModify()) {
             case READ_ONLY:
                 return false;
@@ -1107,29 +1103,32 @@ ContainerNode* Node::parentOrShadowHostOrTemplateHostNode() const
     return parentOrShadowHostNode();
 }
 
-bool Node::isRootEditableElement() const
+// TODO(yoichio): Move to core/editing
+bool isRootEditableElement(const Node& node)
 {
-    return hasEditableStyle() && isElementNode() && (!parentNode() || !parentNode()->hasEditableStyle()
-        || !parentNode()->isElementNode() || this == document().body());
+    return node.hasEditableStyle() && node.isElementNode() && (!node.parentNode() || !node.parentNode()->hasEditableStyle()
+        || !node.parentNode()->isElementNode() || &node == node.document().body());
 }
 
-Element* Node::rootEditableElement(EditableType editableType) const
+// TODO(yoichio): Move to core/editing
+Element* rootEditableElement(const Node& node, EditableType editableType)
 {
     if (editableType == HasEditableAXRole) {
-        if (AXObjectCache* cache = document().existingAXObjectCache())
-            return const_cast<Element*>(cache->rootAXEditableElement(this));
+        if (AXObjectCache* cache = node.document().existingAXObjectCache())
+            return const_cast<Element*>(cache->rootAXEditableElement(&node));
     }
 
-    return rootEditableElement();
+    return rootEditableElement(node);
 }
 
-Element* Node::rootEditableElement() const
+// TODO(yoichio): Move to core/editing
+Element* rootEditableElement(const Node& node)
 {
     const Node* result = nullptr;
-    for (const Node* n = this; n && n->hasEditableStyle(); n = n->parentNode()) {
+    for (const Node* n = &node; n && n->hasEditableStyle(); n = n->parentNode()) {
         if (n->isElementNode())
             result = n;
-        if (document().body() == n)
+        if (node.document().body() == n)
             break;
     }
     return toElement(const_cast<Node*>(result));

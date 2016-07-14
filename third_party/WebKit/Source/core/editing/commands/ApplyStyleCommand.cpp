@@ -302,6 +302,11 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editi
         nextParagraphStart = nextPositionOf(endOfParagraph(paragraphStart));
     }
 
+    // Update style and layout again, since added or removed styles could have
+    // affected the layout. We need clean layout in order to compute
+    // plain-text ranges below.
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+
     EphemeralRange startEphemeralRange = PlainTextRange(startIndex).createRangeForSelection(toContainerNode(scope));
     if (startEphemeralRange.isNull())
         return;
@@ -763,7 +768,7 @@ void ApplyStyleCommand::fixRangeAndApplyInlineStyle(EditingStyle* style, const P
     // e.g. When applying font-size: large on <font color="blue">hello</font>, we need to include the font element in our run
     // to generate <font color="blue" size="4">hello</font> instead of <font color="blue"><font size="4">hello</font></font>
     Range* range = Range::create(startNode->document(), start, end);
-    Element* editableRoot = startNode->rootEditableElement();
+    Element* editableRoot = rootEditableElement(*startNode);
     if (startNode != editableRoot) {
         while (editableRoot && startNode->parentNode() != editableRoot && isNodeVisiblyContainedWithin(*startNode->parentNode(), *range))
             startNode = startNode->parentNode();

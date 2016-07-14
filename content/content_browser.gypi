@@ -2136,6 +2136,12 @@
         '../third_party/boringssl/boringssl.gyp:boringssl',
       ],
     }],
+    ['use_minikin_hyphenation==1', {
+      'private_browser_sources': [
+        'browser/hyphenation/hyphenation_impl.cc',
+        'browser/hyphenation/hyphenation_impl.h',
+      ],
+    }],
     ['enable_webvr==1', {
       'sources': [
         'browser/vr/vr_device.cc',

@@ -113,7 +113,7 @@ String nameToUniqueName(const String& name)
     static int uniqueNameCounter = 0;
     StringBuilder uniqueName;
     uniqueName.append(name);
-    uniqueName.append(" ");
+    uniqueName.append(' ');
     uniqueName.appendNumber(uniqueNameCounter++);
     return uniqueName.toString();
 }
@@ -123,7 +123,6 @@ String nameToUniqueName(const String& name)
 void loadFrame(WebFrame* frame, const std::string& url)
 {
     WebURLRequest urlRequest;
-    urlRequest.initialize();
     urlRequest.setURL(URLTestHelpers::toKURL(url));
     urlRequest.setRequestorOrigin(WebSecurityOrigin::createUnique());
     frame->loadRequest(urlRequest);

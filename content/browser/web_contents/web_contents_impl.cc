@@ -1707,8 +1707,7 @@ void WebContentsImpl::RenderWidgetDeleted(
       view_->RestoreFocus();
   }
 
-  if (mouse_lock_widget_ == render_widget_host)
-    mouse_lock_widget_ = nullptr;
+  CHECK(mouse_lock_widget_ != render_widget_host);
 }
 
 void WebContentsImpl::RenderWidgetGotFocus(
@@ -1897,9 +1896,16 @@ blink::WebDisplayMode WebContentsImpl::GetDisplayMode(
 void WebContentsImpl::RequestToLockMouse(
     RenderWidgetHostImpl* render_widget_host,
     bool user_gesture,
-    bool last_unlocked_by_target) {
+    bool last_unlocked_by_target,
+    bool privileged) {
   if (mouse_lock_widget_) {
     render_widget_host->GotResponseToLockMouseRequest(false);
+    return;
+  }
+
+  if (privileged) {
+    mouse_lock_widget_ = render_widget_host;
+    render_widget_host->GotResponseToLockMouseRequest(true);
     return;
   }
 
@@ -1927,6 +1933,14 @@ void WebContentsImpl::LostMouseLock(RenderWidgetHostImpl* render_widget_host) {
 
   if (delegate_)
     delegate_->LostMouseLock();
+}
+
+bool WebContentsImpl::HasMouseLock(RenderWidgetHostImpl* render_widget_host) {
+  // To verify if the mouse is locked, the mouse_lock_widget_ needs to be
+  // assigned to the widget that requested the mouse lock, and the top-level
+  // platform RenderWidgetHostView needs to hold the mouse lock from the OS.
+  return mouse_lock_widget_ == render_widget_host &&
+         GetTopLevelRenderWidgetHostView()->IsMouseLocked();
 }
 
 void WebContentsImpl::ForwardCompositorProto(
@@ -2986,8 +3000,11 @@ bool WebContentsImpl::GotResponseToLockMouseRequest(bool allowed) {
   if (GetBrowserPluginGuest())
     return GetBrowserPluginGuest()->LockMouse(allowed);
 
-  if (mouse_lock_widget_)
-    return mouse_lock_widget_->GotResponseToLockMouseRequest(allowed);
+  if (mouse_lock_widget_ &&
+      mouse_lock_widget_->GotResponseToLockMouseRequest(allowed))
+    return true;
+
+  mouse_lock_widget_ = nullptr;
   return false;
 }
 
@@ -3105,10 +3122,6 @@ bool WebContentsImpl::WasRecentlyAudible() {
 
 void WebContentsImpl::GetManifest(const GetManifestCallback& callback) {
   manifest_manager_host_->GetManifest(GetMainFrame(), callback);
-}
-
-void WebContentsImpl::HasManifest(const HasManifestCallback& callback) {
-  manifest_manager_host_->HasManifest(GetMainFrame(), callback);
 }
 
 void WebContentsImpl::ExitFullscreen(bool will_cause_resize) {
@@ -3880,7 +3893,7 @@ void WebContentsImpl::UpdateMaxPageIDIfNecessary(RenderViewHost* rvh) {
                                    max_restored_page_id);
 }
 
-bool WebContentsImpl::UpdateTitleForEntry(NavigationEntryImpl* entry,
+void WebContentsImpl::UpdateTitleForEntry(NavigationEntry* entry,
                                           const base::string16& title) {
   // For file URLs without a title, use the pathname instead. In the case of a
   // synthesized title, we don't want the update to count toward the "one set
@@ -3900,12 +3913,12 @@ bool WebContentsImpl::UpdateTitleForEntry(NavigationEntryImpl* entry,
   // |page_title_when_no_navigation_entry_| will be used for page title.
   if (entry) {
     if (final_title == entry->GetTitle())
-      return false;  // Nothing changed, don't bother.
+      return;  // Nothing changed, don't bother.
 
     entry->SetTitle(final_title);
   } else {
     if (page_title_when_no_navigation_entry_ == final_title)
-      return false;  // Nothing changed, don't bother.
+      return;  // Nothing changed, don't bother.
 
     page_title_when_no_navigation_entry_ = final_title;
   }
@@ -3916,7 +3929,9 @@ bool WebContentsImpl::UpdateTitleForEntry(NavigationEntryImpl* entry,
   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
                     TitleWasSet(entry, explicit_set));
 
-  return true;
+  // Broadcast notifications when the UI should be updated.
+  if (entry == controller_.GetEntryAtOffset(0))
+    NotifyNavigationStateChanged(INVALIDATE_TYPE_TITLE);
 }
 
 void WebContentsImpl::SendChangeLoadProgress() {
@@ -4522,12 +4537,7 @@ void WebContentsImpl::UpdateTitle(RenderFrameHost* render_frame_host,
 
   // TODO(evan): make use of title_direction.
   // http://code.google.com/p/chromium/issues/detail?id=27094
-  if (!UpdateTitleForEntry(entry, title))
-    return;
-
-  // Broadcast notifications when the UI should be updated.
-  if (entry == controller_.GetEntryAtOffset(0))
-    NotifyNavigationStateChanged(INVALIDATE_TYPE_TITLE);
+  UpdateTitleForEntry(entry, title);
 }
 
 void WebContentsImpl::UpdateEncoding(RenderFrameHost* render_frame_host,

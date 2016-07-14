@@ -81,6 +81,7 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) = 0;
   virtual void SetBeginFrameSource(cc::BeginFrameSource* source) = 0;
+  virtual bool IsAutoResizeEnabled() const = 0;
 };
 
 // The DelegatedFrameHost is used to host all of the RenderWidgetHostView state
@@ -158,7 +159,7 @@ class CONTENT_EXPORT DelegatedFrameHost
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber);
   void EndFrameSubscription();
   bool HasFrameSubscriber() const { return !!frame_subscriber_; }
-  uint32_t GetSurfaceIdNamespace();
+  uint32_t GetSurfaceClientId();
   // Returns a null SurfaceId if this DelegatedFrameHost has not yet created
   // a compositor Surface.
   cc::SurfaceId SurfaceIdAtPoint(cc::SurfaceHittestDelegate* delegate,
@@ -170,7 +171,7 @@ class CONTENT_EXPORT DelegatedFrameHost
   // to a point. If a Surface has not yet been created this returns the
   // same point with no transform applied.
   void TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       cc::SurfaceId original_surface,
+                                       const cc::SurfaceId& original_surface,
                                        gfx::Point* transformed_point);
 
   // Exposed for tests.

@@ -29,13 +29,13 @@ const int kMaxTimesHistoryNoticeShown = 1;
 
 // TODO(msramek): Get the list of deletion preferences from the JS side.
 const char* kCounterPrefs[] = {
-  prefs::kDeleteBrowsingHistory,
-  prefs::kDeleteCache,
-  prefs::kDeleteDownloadHistory,
-  prefs::kDeleteFormData,
-  prefs::kDeleteHostedAppsData,
-  prefs::kDeleteMediaLicenses,
-  prefs::kDeletePasswords,
+  browsing_data::prefs::kDeleteBrowsingHistory,
+  browsing_data::prefs::kDeleteCache,
+  browsing_data::prefs::kDeleteDownloadHistory,
+  browsing_data::prefs::kDeleteFormData,
+  browsing_data::prefs::kDeleteHostedAppsData,
+  browsing_data::prefs::kDeleteMediaLicenses,
+  browsing_data::prefs::kDeletePasswords,
 };
 
 } // namespace
@@ -47,13 +47,12 @@ ClearBrowsingDataHandler::ClearBrowsingDataHandler(content::WebUI* webui)
       sync_service_(ProfileSyncServiceFactory::GetForProfile(profile_)),
       sync_service_observer_(this),
       remover_(nullptr),
+      remover_observer_(this),
       show_history_footer_(false),
       show_history_deletion_dialog_(false),
       weak_ptr_factory_(this) {}
 
 ClearBrowsingDataHandler::~ClearBrowsingDataHandler() {
-  if (remover_)
-    remover_->RemoveObserver(this);
 }
 
 void ClearBrowsingDataHandler::RegisterMessages() {
@@ -78,9 +77,15 @@ void ClearBrowsingDataHandler::OnJavascriptAllowed() {
 
   if (sync_service_)
     sync_service_observer_.Add(sync_service_);
+
+  if (!remover_)
+    remover_ = BrowsingDataRemoverFactory::GetForBrowserContext(profile_);
+
+  remover_observer_.Add(remover_);
 }
 
 void ClearBrowsingDataHandler::OnJavascriptDisallowed() {
+  remover_observer_.RemoveAll();
   profile_pref_registrar_.RemoveAll();
   sync_service_observer_.RemoveAll();
 }
@@ -88,7 +93,7 @@ void ClearBrowsingDataHandler::OnJavascriptDisallowed() {
 void ClearBrowsingDataHandler::HandleClearBrowsingData(
     const base::ListValue* args) {
   // We should never be called when the previous clearing has not yet finished.
-  CHECK(!remover_);
+  CHECK(!remover_->is_removing());
   CHECK_EQ(1U, args->GetSize());
   CHECK(webui_callback_id_.empty());
   CHECK(args->GetString(0, &webui_callback_id_));
@@ -102,31 +107,31 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
 
   int remove_mask = 0;
   if (prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory)) {
-    if (prefs->GetBoolean(prefs::kDeleteBrowsingHistory))
+    if (prefs->GetBoolean(browsing_data::prefs::kDeleteBrowsingHistory))
       remove_mask |= BrowsingDataRemover::REMOVE_HISTORY;
-    if (prefs->GetBoolean(prefs::kDeleteDownloadHistory))
+    if (prefs->GetBoolean(browsing_data::prefs::kDeleteDownloadHistory))
       remove_mask |= BrowsingDataRemover::REMOVE_DOWNLOADS;
   }
 
-  if (prefs->GetBoolean(prefs::kDeleteCache))
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteCache))
     remove_mask |= BrowsingDataRemover::REMOVE_CACHE;
 
   int origin_mask = 0;
-  if (prefs->GetBoolean(prefs::kDeleteCookies)) {
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteCookies)) {
     remove_mask |= site_data_mask;
     origin_mask |= BrowsingDataHelper::UNPROTECTED_WEB;
   }
 
-  if (prefs->GetBoolean(prefs::kDeletePasswords))
+  if (prefs->GetBoolean(browsing_data::prefs::kDeletePasswords))
     remove_mask |= BrowsingDataRemover::REMOVE_PASSWORDS;
 
-  if (prefs->GetBoolean(prefs::kDeleteFormData))
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteFormData))
     remove_mask |= BrowsingDataRemover::REMOVE_FORM_DATA;
 
-  if (prefs->GetBoolean(prefs::kDeleteMediaLicenses))
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteMediaLicenses))
     remove_mask |= BrowsingDataRemover::REMOVE_MEDIA_LICENSES;
 
-  if (prefs->GetBoolean(prefs::kDeleteHostedAppsData)) {
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteHostedAppsData)) {
     remove_mask |= site_data_mask;
     origin_mask |= BrowsingDataHelper::PROTECTED_WEB;
   }
@@ -134,11 +139,11 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
   // Record the deletion of cookies and cache.
   BrowsingDataRemover::CookieOrCacheDeletionChoice choice =
       BrowsingDataRemover::NEITHER_COOKIES_NOR_CACHE;
-  if (prefs->GetBoolean(prefs::kDeleteCookies)) {
-    choice = prefs->GetBoolean(prefs::kDeleteCache)
+  if (prefs->GetBoolean(browsing_data::prefs::kDeleteCookies)) {
+    choice = prefs->GetBoolean(browsing_data::prefs::kDeleteCache)
                  ? BrowsingDataRemover::BOTH_COOKIES_AND_CACHE
                  : BrowsingDataRemover::ONLY_COOKIES;
-  } else if (prefs->GetBoolean(prefs::kDeleteCache)) {
+  } else if (prefs->GetBoolean(browsing_data::prefs::kDeleteCache)) {
     choice = BrowsingDataRemover::ONLY_CACHE;
   }
 
@@ -147,15 +152,15 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
       BrowsingDataRemover::MAX_CHOICE_VALUE);
 
   // Record the circumstances under which passwords are deleted.
-  if (prefs->GetBoolean(prefs::kDeletePasswords)) {
+  if (prefs->GetBoolean(browsing_data::prefs::kDeletePasswords)) {
     static const char* other_types[] = {
-        prefs::kDeleteBrowsingHistory,
-        prefs::kDeleteDownloadHistory,
-        prefs::kDeleteCache,
-        prefs::kDeleteCookies,
-        prefs::kDeleteFormData,
-        prefs::kDeleteHostedAppsData,
-        prefs::kDeleteMediaLicenses,
+        browsing_data::prefs::kDeleteBrowsingHistory,
+        browsing_data::prefs::kDeleteDownloadHistory,
+        browsing_data::prefs::kDeleteCache,
+        browsing_data::prefs::kDeleteCookies,
+        browsing_data::prefs::kDeleteFormData,
+        browsing_data::prefs::kDeleteHostedAppsData,
+        browsing_data::prefs::kDeleteMediaLicenses,
     };
     static size_t num_other_types = arraysize(other_types);
     int checked_other_types = std::count_if(
@@ -168,16 +173,18 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
 
   int period_selected =
       prefs->GetInteger(browsing_data::prefs::kDeleteTimePeriod);
-  remover_ = BrowsingDataRemoverFactory::GetForBrowserContext(profile_);
-  remover_->AddObserver(this);
   remover_->Remove(BrowsingDataRemover::Period(
                        static_cast<browsing_data::TimePeriod>(period_selected)),
                    remove_mask, origin_mask);
 }
 
-void ClearBrowsingDataHandler::OnBrowsingDataRemoverDone() {
-  remover_->RemoveObserver(this);
-  remover_ = nullptr;
+void ClearBrowsingDataHandler::OnBrowsingDataRemoving(bool is_removing) {
+  CallJavascriptFunction("cr.webUIListenerCallback",
+                         base::StringValue("browsing-data-removing"),
+                         base::FundamentalValue(is_removing));
+
+  if (is_removing || webui_callback_id_.empty())
+    return;
 
   PrefService* prefs = profile_->GetPrefs();
   int notice_shown_times =
@@ -191,7 +198,7 @@ void ClearBrowsingDataHandler::OnBrowsingDataRemoverDone() {
       // 2. The notice has been shown less than |kMaxTimesHistoryNoticeShown|.
       notice_shown_times < kMaxTimesHistoryNoticeShown &&
       // 3. The selected data types contained browsing history.
-      prefs->GetBoolean(prefs::kDeleteBrowsingHistory);
+      prefs->GetBoolean(browsing_data::prefs::kDeleteBrowsingHistory);
 
   if (show_notice) {
     // Increment the preference.
@@ -219,6 +226,10 @@ void ClearBrowsingDataHandler::OnBrowsingHistoryPrefChanged() {
 
 void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
   AllowJavascript();
+  const base::Value* callback_id;
+  CHECK(args->Get(0, &callback_id));
+
+  counters_.clear();
 
   for (const std::string& pref : kCounterPrefs) {
     AddCounter(
@@ -227,6 +238,9 @@ void ClearBrowsingDataHandler::HandleInitialize(const base::ListValue* args) {
 
   OnStateChanged();
   RefreshHistoryNotice();
+
+  ResolveJavascriptCallback(*callback_id,
+                            base::FundamentalValue(remover_->is_removing()));
 }
 
 void ClearBrowsingDataHandler::OnStateChanged() {
@@ -270,7 +284,7 @@ void ClearBrowsingDataHandler::UpdateHistoryNotice(bool show) {
 }
 
 void ClearBrowsingDataHandler::UpdateHistoryDeletionDialog(bool show) {
-  // This is used by OnBrowsingDataRemoverDone (when the deletion finishes).
+  // This is used by OnBrowsingDataRemoving (when the deletion finishes).
   show_history_deletion_dialog_ = show;
 }
 

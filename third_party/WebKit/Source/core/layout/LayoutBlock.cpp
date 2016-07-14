@@ -258,10 +258,7 @@ void LayoutBlock::addChildBeforeDescendant(LayoutObject* newChild, LayoutObject*
 
     // If the requested insertion point is not one of our children, then this is because
     // there is an anonymous container within this object that contains the beforeDescendant.
-    if (beforeDescendantContainer->isAnonymousBlock()
-        // Full screen layoutObjects and full screen placeholders act as anonymous blocks, not tables:
-        || beforeDescendantContainer->isLayoutFullScreen()
-        || beforeDescendantContainer->isLayoutFullScreenPlaceholder()) {
+    if (beforeDescendantContainer->isAnonymousBlock()) {
         // Insert the child into the anonymous block box instead of here.
         if (newChild->isInline() || newChild->isFloatingOrOutOfFlowPositioned() || beforeDescendant->parent()->slowFirstChild() != beforeDescendant)
             beforeDescendant->parent()->addChild(newChild, beforeDescendant);
@@ -364,7 +361,8 @@ void LayoutBlock::layout()
 {
     LayoutAnalyzer::Scope analyzer(*this);
 
-    bool needsScrollAnchoring = RuntimeEnabledFeatures::scrollAnchoringEnabled() && hasOverflowClip();
+    bool needsScrollAnchoring = hasOverflowClip()
+        && getScrollableArea()->shouldPerformScrollAnchoring();
     if (needsScrollAnchoring)
         getScrollableArea()->scrollAnchor().save();
 
@@ -790,7 +788,7 @@ bool LayoutBlock::isSelectionRoot() const
 
     if (view() && view()->selectionStart()) {
         Node* startElement = view()->selectionStart()->node();
-        if (startElement && startElement->rootEditableElement() == node())
+        if (startElement && rootEditableElement(*startElement) == node())
             return true;
     }
 
@@ -1409,7 +1407,7 @@ bool LayoutBlock::hasLineIfEmpty() const
     if (!node())
         return false;
 
-    if (node()->isRootEditableElement())
+    if (isRootEditableElement(*node()))
         return true;
 
     if (node()->isShadowRoot() && isHTMLInputElement(toShadowRoot(node())->host()))

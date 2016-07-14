@@ -13,12 +13,13 @@
 
 namespace blink {
 
+class V8StackTrace;
+
 class PLATFORM_EXPORT V8DebuggerClient {
 public:
     virtual ~V8DebuggerClient() { }
     virtual void runMessageLoopOnPause(int contextGroupId) = 0;
     virtual void quitMessageLoopOnPause() = 0;
-    // TODO(dgozman): we don't really need to mute warnings and deprecations.
     virtual void muteWarningsAndDeprecations() = 0;
     virtual void unmuteWarningsAndDeprecations() = 0;
     virtual void beginUserGesture() = 0;

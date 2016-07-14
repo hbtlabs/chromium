@@ -50,6 +50,7 @@ WebInspector.StylesSidebarPane = function()
 
      /** @type {!Array<!WebInspector.SectionBlock>} */
     this._sectionBlocks = [];
+    WebInspector.StylesSidebarPane._instance = this;
 
     WebInspector.targetManager.addModelListener(WebInspector.CSSModel, WebInspector.CSSModel.Events.LayoutEditorChange, this._onLayoutEditorChange, this);
 }
@@ -206,7 +207,7 @@ WebInspector.StylesSidebarPane.prototype = {
     setNode: function(node)
     {
         this._stylesPopoverHelper.hide();
-        node = WebInspector.SharedSidebarModel.elementNode(node);
+        node = node ? node.enclosingElementOrSelf() : null;
 
         this._resetCache();
         WebInspector.ElementsSidebarPane.prototype.setNode.call(this, node);
@@ -241,26 +242,26 @@ WebInspector.StylesSidebarPane.prototype = {
     {
         this._discardElementUnderMouse();
 
-        return this.fetchMatchedCascade()
+        return this._fetchMatchedCascade()
             .then(this._innerRebuildUpdate.bind(this));
     },
 
     _resetCache: function()
     {
-        delete this._matchedCascadePromise;
+        if (this.cssModel())
+            this.cssModel().discardCachedMatchedCascade();
     },
 
     /**
      * @return {!Promise.<?WebInspector.CSSMatchedStyles>}
      */
-    fetchMatchedCascade: function()
+    _fetchMatchedCascade: function()
     {
         var node = this.node();
-        if (!node)
+        if (!node || !this.cssModel())
             return Promise.resolve(/** @type {?WebInspector.CSSMatchedStyles} */(null));
-        if (!this._matchedCascadePromise)
-            this._matchedCascadePromise = this._matchedStylesForNode(node).then(validateStyles.bind(this));
-        return this._matchedCascadePromise;
+
+        return this.cssModel().cachedMatchedCascadeForNode(node).then(validateStyles.bind(this));
 
         /**
          * @param {?WebInspector.CSSMatchedStyles} matchedStyles
@@ -271,18 +272,6 @@ WebInspector.StylesSidebarPane.prototype = {
         {
             return matchedStyles && matchedStyles.node() === this.node() ? matchedStyles : null;
         }
-    },
-
-    /**
-     * @param {!WebInspector.DOMNode} node
-     * @return {!Promise.<?WebInspector.CSSMatchedStyles>}
-     */
-    _matchedStylesForNode: function(node)
-    {
-        var cssModel = this.cssModel();
-        if (!cssModel)
-            return Promise.resolve(/** @type {?WebInspector.CSSMatchedStyles} */(null));
-        return cssModel.matchedStylesPromise(node.id)
     },
 
     /**
@@ -3124,23 +3113,50 @@ WebInspector.StylesSidebarPropertyRenderer.prototype = {
     }
 }
 
-
 /**
- * @return {!WebInspector.ToolbarItem}
+ * @constructor
+ * @implements {WebInspector.ToolbarItem.Provider}
  */
-WebInspector.StylesSidebarPane.createAddNewRuleButton = function(stylesSidebarPane)
+WebInspector.StylesSidebarPane.ButtonProvider = function()
 {
-    var button = new WebInspector.ToolbarButton(WebInspector.UIString("New Style Rule"), "add-toolbar-item");
-    button.addEventListener("click", stylesSidebarPane._createNewRuleInViaInspectorStyleSheet, stylesSidebarPane);
-    button.element.createChild("div", "long-click-glyph toolbar-button-theme");
-    new WebInspector.LongClickController(button.element, stylesSidebarPane._onAddButtonLongClick.bind(stylesSidebarPane));
-    WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, onNodeChanged);
-    onNodeChanged();
-    return button;
+    this._button = new WebInspector.ToolbarButton(WebInspector.UIString("New Style Rule"), "add-toolbar-item");
+    this._button.addEventListener("click", this._clicked, this);
+    this._button.element.createChild("div", "long-click-glyph toolbar-button-theme");
+    new WebInspector.LongClickController(this._button.element, this._longClicked.bind(this));
+    WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, onNodeChanged.bind(this));
+    onNodeChanged.call(this);
 
+    /**
+     * @this {WebInspector.StylesSidebarPane.ButtonProvider}
+     */
     function onNodeChanged()
     {
         var node = WebInspector.context.flavor(WebInspector.DOMNode);
-        button.setEnabled(!!node);
+        node = node ? node.enclosingElementOrSelf() : null;
+        this._button.setEnabled(!!node);
+    }
+}
+
+WebInspector.StylesSidebarPane.ButtonProvider.prototype = {
+    _clicked: function()
+    {
+        WebInspector.StylesSidebarPane._instance._createNewRuleInViaInspectorStyleSheet();
+    },
+
+    /**
+     * @param {!Event} e
+     */
+    _longClicked: function(e)
+    {
+        WebInspector.StylesSidebarPane._instance._onAddButtonLongClick(e);
+    },
+
+    /**
+     * @override
+     * @return {!WebInspector.ToolbarItem}
+     */
+    item: function()
+    {
+        return this._button;
     }
 }

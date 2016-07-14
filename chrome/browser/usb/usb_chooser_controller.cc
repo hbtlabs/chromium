@@ -46,7 +46,9 @@ UsbChooserController::UsbChooserController(
     mojo::Array<device::usb::DeviceFilterPtr> device_filters,
     content::RenderFrameHost* render_frame_host,
     const device::usb::ChooserService::GetPermissionCallback& callback)
-    : ChooserController(owner),
+    : ChooserController(owner,
+                        IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN,
+                        IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME),
       render_frame_host_(render_frame_host),
       callback_(callback),
       usb_service_observer_(this),
@@ -69,6 +71,10 @@ UsbChooserController::UsbChooserController(
 UsbChooserController::~UsbChooserController() {
   if (!callback_.is_null())
     callback_.Run(nullptr);
+}
+
+base::string16 UsbChooserController::GetOkButtonLabel() const {
+  return l10n_util::GetStringUTF16(IDS_USB_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT);
 }
 
 size_t UsbChooserController::NumOptions() const {

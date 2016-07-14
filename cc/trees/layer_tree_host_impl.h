@@ -102,7 +102,6 @@ class LayerTreeHostImplClient {
                                      base::TimeDelta interval) = 0;
   virtual void SetBeginFrameSource(BeginFrameSource* source) = 0;
   virtual void SetEstimatedParentDrawTime(base::TimeDelta draw_time) = 0;
-  virtual void DidSwapBuffersOnImplThread() = 0;
   virtual void DidSwapBuffersCompleteOnImplThread() = 0;
   virtual void OnCanDrawStateChanged(bool can_draw) = 0;
   virtual void NotifyReadyToActivate() = 0;
@@ -367,7 +366,6 @@ class CC_EXPORT LayerTreeHostImpl
       const gfx::Rect& viewport_rect,
       const gfx::Transform& transform) override;
   void DidLoseOutputSurface() override;
-  void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
   void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) override;
@@ -426,7 +424,7 @@ class CC_EXPORT LayerTreeHostImpl
   }
   const RendererCapabilitiesImpl& GetRendererCapabilities() const;
 
-  virtual bool SwapBuffers(const FrameData& frame);
+  bool SwapBuffers(const FrameData& frame);
   virtual void WillBeginImplFrame(const BeginFrameArgs& args);
   virtual void DidFinishImplFrame();
   void DidModifyTilePriorities();

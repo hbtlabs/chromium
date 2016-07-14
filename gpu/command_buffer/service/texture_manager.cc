@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/bits.h"
+#include "base/format_macros.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
@@ -3068,9 +3069,9 @@ void TextureManager::DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,
   if (size == 0)
     return;
 
-  std::string dump_name =
-      base::StringPrintf("gpu/gl/textures/client_%d/texture_%d",
-                         memory_tracker_->ClientId(), ref->client_id());
+  std::string dump_name = base::StringPrintf(
+      "gpu/gl/textures/share_group_%" PRIu64 "/texture_%d",
+      memory_tracker_->ShareGroupTracingGUID(), ref->client_id());
 
   base::trace_event::MemoryAllocatorDump* dump =
       pmd->CreateAllocatorDump(dump_name);
@@ -3109,6 +3110,7 @@ void TextureManager::DumpTextureRef(base::trace_event::ProcessMemoryDump* pmd,
 
 GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
   switch (internalformat) {
+    case GL_RED:
     case GL_R8:
     case GL_R8_SNORM:
     case GL_R16F:
@@ -3121,6 +3123,7 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_R32UI:
     case GL_R32I:
       return GL_RED_INTEGER;
+    case GL_RG:
     case GL_RG8:
     case GL_RG8_SNORM:
     case GL_RG16F:
@@ -3155,6 +3158,8 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_RGB32UI:
     case GL_RGB32I:
       return GL_RGB_INTEGER;
+    case GL_SRGB:
+      return GL_SRGB;
     case GL_ATC_RGBA_EXPLICIT_ALPHA_AMD:
     case GL_ATC_RGBA_INTERPOLATED_ALPHA_AMD:
     case GL_COMPRESSED_RGBA_PVRTC_2BPPV1_IMG:
@@ -3172,6 +3177,8 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_RGBA16F:
     case GL_RGBA32F:
       return GL_RGBA;
+    case GL_SRGB_ALPHA:
+      return GL_SRGB_ALPHA;
     case GL_RGBA8UI:
     case GL_RGBA8I:
     case GL_RGB10_A2UI:
@@ -3180,6 +3187,8 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_RGBA32UI:
     case GL_RGBA32I:
       return GL_RGBA_INTEGER;
+    case GL_BGRA_EXT:
+      return GL_BGRA_EXT;
     case GL_DEPTH_COMPONENT16:
     case GL_DEPTH_COMPONENT24:
     case GL_DEPTH_COMPONENT32F:
@@ -3217,8 +3226,13 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
 
 GLenum TextureManager::ExtractTypeFromStorageFormat(GLenum internalformat) {
   switch (internalformat) {
+    case GL_RED:
+    case GL_RG:
     case GL_RGB:
+    case GL_SRGB:
     case GL_RGBA:
+    case GL_BGRA_EXT:
+    case GL_SRGB_ALPHA:
     case GL_LUMINANCE_ALPHA:
     case GL_LUMINANCE:
     case GL_ALPHA:
@@ -3355,7 +3369,7 @@ GLenum TextureManager::ExtractTypeFromStorageFormat(GLenum internalformat) {
 }
 
 void Texture::IncrementManagerServiceIdGeneration() {
-  for (auto ref : refs_) {
+  for (auto* ref : refs_) {
     TextureManager* manager = ref->manager();
     manager->IncrementServiceIdGeneration();
   }

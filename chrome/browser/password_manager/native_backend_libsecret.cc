@@ -50,7 +50,6 @@ const SecretSchema kLibsecretSchema = {
      {"password_element", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"submit_element", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"signon_realm", SECRET_SCHEMA_ATTRIBUTE_STRING},
-     {"ssl_valid", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
      {"preferred", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
      {"date_created", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"blacklisted_by_user", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
@@ -103,7 +102,6 @@ std::unique_ptr<PasswordForm> FormOutOfAttributes(GHashTable* attrs) {
   form->submit_element =
       UTF8ToUTF16(GetStringFromAttributes(attrs, "submit_element"));
   form->signon_realm = GetStringFromAttributes(attrs, "signon_realm");
-  form->ssl_valid = GetUintFromAttributes(attrs, "ssl_valid");
   form->preferred = GetUintFromAttributes(attrs, "preferred");
   int64_t date_created = 0;
   bool date_ok = base::StringToInt64(
@@ -281,14 +279,15 @@ bool NativeBackendLibsecret::RemoveLoginsSyncedBetween(
   return RemoveLoginsBetween(delete_begin, delete_end, SYNC_TIMESTAMP, changes);
 }
 
-bool NativeBackendLibsecret::DisableAutoSignInForAllLogins(
+bool NativeBackendLibsecret::DisableAutoSignInForOrigins(
+    const base::Callback<bool(const GURL&)>& origin_filter,
     password_manager::PasswordStoreChangeList* changes) {
   ScopedVector<autofill::PasswordForm> all_forms;
   if (!GetLoginsList(nullptr, ALL_LOGINS, &all_forms))
     return false;
 
   for (auto& form : all_forms) {
-    if (!form->skip_zero_click) {
+    if (origin_filter.Run(form->origin) && !form->skip_zero_click) {
       form->skip_zero_click = true;
       if (!UpdateLogin(*form, changes))
         return false;
@@ -358,7 +357,6 @@ bool NativeBackendLibsecret::RawAddLogin(const PasswordForm& form) {
       "password_element", UTF16ToUTF8(form.password_element).c_str(),
       "submit_element", UTF16ToUTF8(form.submit_element).c_str(),
       "signon_realm", form.signon_realm.c_str(),
-      "ssl_valid", form.ssl_valid,
       "preferred", form.preferred,
       "date_created", base::Int64ToString(date_created).c_str(),
       "blacklisted_by_user", form.blacklisted_by_user,

@@ -536,10 +536,11 @@ WebURLRequest CreateURLRequestForNavigation(
   }
 
   request.setHTTPMethod(WebString::fromUTF8(common_params.method));
+  request.setLoFiState(
+      static_cast<WebURLRequest::LoFiState>(common_params.lofi_state));
 
   RequestExtraData* extra_data = new RequestExtraData();
   extra_data->set_stream_override(std::move(stream_override));
-  extra_data->set_lofi_state(common_params.lofi_state);
   request.setExtraData(extra_data);
 
   // Set the ui timestamp for this navigation. Currently the timestamp here is
@@ -587,11 +588,11 @@ base::TimeTicks SanitizeNavigationTiming(
 
 // PlzNavigate
 CommonNavigationParams MakeCommonNavigationParams(
-    blink::WebURLRequest* request,
-    bool should_replace_current_entry) {
+    const blink::WebFrameClient::NavigationPolicyInfo& info) {
   Referrer referrer(
-      GURL(request->httpHeaderField(WebString::fromUTF8("Referer")).latin1()),
-      request->referrerPolicy());
+      GURL(info.urlRequest.httpHeaderField(
+          WebString::fromUTF8("Referer")).latin1()),
+      info.urlRequest.referrerPolicy());
 
   // Set the ui timestamp for this navigation. Currently the timestamp here is
   // only non empty when the navigation was triggered by an Android intent, or
@@ -600,20 +601,27 @@ CommonNavigationParams MakeCommonNavigationParams(
   // CommitNavigation IPC, and then back to the browser again in the
   // DidCommitProvisionalLoad and the DocumentLoadComplete IPCs.
   base::TimeTicks ui_timestamp =
-      base::TimeTicks() + base::TimeDelta::FromSecondsD(request->uiStartTime());
+      base::TimeTicks() +
+      base::TimeDelta::FromSecondsD(info.urlRequest.uiStartTime());
   FrameMsg_UILoadMetricsReportType::Value report_type =
       static_cast<FrameMsg_UILoadMetricsReportType::Value>(
-          request->inputPerfMetricReportPolicy());
+          info.urlRequest.inputPerfMetricReportPolicy());
+
+  FrameMsg_Navigate_Type::Value navigation_type =
+      info.navigationType == blink::WebNavigationTypeReload
+      ? FrameMsg_Navigate_Type::RELOAD
+      : FrameMsg_Navigate_Type::NORMAL;
 
   const RequestExtraData* extra_data =
-      static_cast<RequestExtraData*>(request->getExtraData());
+      static_cast<RequestExtraData*>(info.urlRequest.getExtraData());
   DCHECK(extra_data);
   return CommonNavigationParams(
-      request->url(), referrer, extra_data->transition_type(),
-      FrameMsg_Navigate_Type::NORMAL, true, should_replace_current_entry,
-      ui_timestamp, report_type, GURL(), GURL(), extra_data->lofi_state(),
-      base::TimeTicks::Now(), request->httpMethod().latin1(),
-      GetRequestBodyForWebURLRequest(*request));
+      info.urlRequest.url(), referrer, extra_data->transition_type(),
+      navigation_type, true, info.replacesCurrentHistoryItem, ui_timestamp,
+      report_type, GURL(), GURL(),
+      static_cast<LoFiState>(info.urlRequest.getLoFiState()),
+      base::TimeTicks::Now(), info.urlRequest.httpMethod().latin1(),
+      GetRequestBodyForWebURLRequest(info.urlRequest));
 }
 
 media::Context3D GetSharedMainThreadContext3D(
@@ -3932,7 +3940,7 @@ void RenderFrameImpl::willSendRequest(
   //
   // TODO(mkwst): It would be cleaner to adjust blink::ResourceRequest to
   // initialize itself with a `nullptr` initiator so that this can be a simple
-  // `isNull()` check.
+  // `isNull()` check. https://crbug.com/625969
   if (request.requestorOrigin().isUnique() &&
       !frame->document().getSecurityOrigin().isUnique()) {
     request.setRequestorOrigin(frame->document().getSecurityOrigin());
@@ -4058,16 +4066,20 @@ void RenderFrameImpl::willSendRequest(
       navigation_state->start_params().transferred_request_request_id);
   extra_data->set_service_worker_provider_id(provider_id);
   extra_data->set_stream_override(std::move(stream_override));
-  if (request.getLoFiState() != WebURLRequest::LoFiUnspecified)
-    extra_data->set_lofi_state(static_cast<LoFiState>(request.getLoFiState()));
-  else if (is_main_frame_ && !navigation_state->request_committed())
-    extra_data->set_lofi_state(navigation_state->common_params().lofi_state);
-  else
-    extra_data->set_lofi_state(is_using_lofi_ ? LOFI_ON : LOFI_OFF);
   WebString error;
   extra_data->set_initiated_in_secure_context(
       frame->document().isSecureContext(error));
   request.setExtraData(extra_data);
+
+  if (request.getLoFiState() == WebURLRequest::LoFiUnspecified) {
+    if (is_main_frame_ && !navigation_state->request_committed()) {
+      request.setLoFiState(static_cast<WebURLRequest::LoFiState>(
+          navigation_state->common_params().lofi_state));
+    } else {
+      request.setLoFiState(
+          is_using_lofi_ ? WebURLRequest::LoFiOn : WebURLRequest::LoFiOff);
+    }
+  }
 
   // TODO(creis): Update prefetching to work with out-of-process iframes.
   WebFrame* top_frame = frame->top();
@@ -4428,14 +4440,12 @@ void RenderFrameImpl::didChangeManifest() {
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, DidChangeManifest());
 }
 
-bool RenderFrameImpl::enterFullscreen() {
+void RenderFrameImpl::enterFullscreen() {
   Send(new FrameHostMsg_ToggleFullscreen(routing_id_, true));
-  return true;
 }
 
-bool RenderFrameImpl::exitFullscreen() {
+void RenderFrameImpl::exitFullscreen() {
   Send(new FrameHostMsg_ToggleFullscreen(routing_id_, false));
-  return true;
 }
 
 blink::WebPermissionClient* RenderFrameImpl::permissionClient() {
@@ -5064,8 +5074,7 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
   if (IsBrowserSideNavigationEnabled() &&
       info.urlRequest.checkForBrowserSideNavigation() &&
       ShouldMakeNetworkRequestForURL(url)) {
-    BeginNavigation(&info.urlRequest, info.replacesCurrentHistoryItem,
-                    info.isClientRedirect);
+    BeginNavigation(info);
     return blink::WebNavigationPolicyHandledByClient;
   }
 
@@ -5778,11 +5787,8 @@ void RenderFrameImpl::PrepareRenderViewForNavigation(
   }
 }
 
-void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request,
-                                      bool should_replace_current_entry,
-                                      bool is_client_redirect) {
+void RenderFrameImpl::BeginNavigation(const NavigationPolicyInfo& info) {
   CHECK(IsBrowserSideNavigationEnabled());
-  DCHECK(request);
 
   // Note: At this stage, the goal is to apply all the modifications the
   // renderer wants to make to the request, and then send it to the browser, so
@@ -5794,14 +5800,14 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request,
   // TODO(clamy): Apply devtools override.
   // TODO(clamy): Make sure that navigation requests are not modified somewhere
   // else in blink.
-  willSendRequest(frame_, 0, *request, blink::WebURLResponse());
+  willSendRequest(frame_, 0, info.urlRequest, blink::WebURLResponse());
 
   // Update the transition type of the request for client side redirects.
-  if (!request->getExtraData())
-    request->setExtraData(new RequestExtraData());
-  if (is_client_redirect) {
+  if (!info.urlRequest.getExtraData())
+    info.urlRequest.setExtraData(new RequestExtraData());
+  if (info.isClientRedirect) {
     RequestExtraData* extra_data =
-        static_cast<RequestExtraData*>(request->getExtraData());
+        static_cast<RequestExtraData*>(info.urlRequest.getExtraData());
     extra_data->set_transition_type(ui::PageTransitionFromInt(
         extra_data->transition_type() | ui::PAGE_TRANSITION_CLIENT_REDIRECT));
   }
@@ -5812,27 +5818,28 @@ void RenderFrameImpl::BeginNavigation(blink::WebURLRequest* request,
   // These values are assumed on the browser side for navigations. These checks
   // ensure the renderer has the correct values.
   DCHECK_EQ(FETCH_REQUEST_MODE_NAVIGATE,
-            GetFetchRequestModeForWebURLRequest(*request));
+            GetFetchRequestModeForWebURLRequest(info.urlRequest));
   DCHECK_EQ(FETCH_CREDENTIALS_MODE_INCLUDE,
-            GetFetchCredentialsModeForWebURLRequest(*request));
-  DCHECK(GetFetchRedirectModeForWebURLRequest(*request) ==
+            GetFetchCredentialsModeForWebURLRequest(info.urlRequest));
+  DCHECK(GetFetchRedirectModeForWebURLRequest(info.urlRequest) ==
          FetchRedirectMode::MANUAL_MODE);
   DCHECK(frame_->parent() ||
-         GetRequestContextFrameTypeForWebURLRequest(*request) ==
+         GetRequestContextFrameTypeForWebURLRequest(info.urlRequest) ==
              REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL);
   DCHECK(!frame_->parent() ||
-         GetRequestContextFrameTypeForWebURLRequest(*request) ==
+         GetRequestContextFrameTypeForWebURLRequest(info.urlRequest) ==
              REQUEST_CONTEXT_FRAME_TYPE_NESTED);
 
   Send(new FrameHostMsg_BeginNavigation(
       routing_id_,
-      MakeCommonNavigationParams(request, should_replace_current_entry),
-      BeginNavigationParams(GetWebURLRequestHeaders(*request),
-                            GetLoadFlagsForWebURLRequest(*request),
-                            request->hasUserGesture(),
-                            request->skipServiceWorker() !=
-                                blink::WebURLRequest::SkipServiceWorker::None,
-                            GetRequestContextTypeForWebURLRequest(*request))));
+      MakeCommonNavigationParams(info),
+      BeginNavigationParams(
+          GetWebURLRequestHeaders(info.urlRequest),
+          GetLoadFlagsForWebURLRequest(info.urlRequest),
+          info.urlRequest.hasUserGesture(),
+          info.urlRequest.skipServiceWorker() !=
+              blink::WebURLRequest::SkipServiceWorker::None,
+          GetRequestContextTypeForWebURLRequest(info.urlRequest))));
 }
 
 void RenderFrameImpl::LoadDataURL(

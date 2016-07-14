@@ -72,13 +72,13 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   // device_scale_factor is used to communicate to the external window system
   // what scale this was rendered at.
-  void SetSurfaceId(SurfaceId id, float device_scale_factor);
+  void SetSurfaceId(const SurfaceId& id, float device_scale_factor);
   void Resize(const gfx::Size& new_size);
   void SetColorSpace(const gfx::ColorSpace& color_space);
   void SetExternalClip(const gfx::Rect& clip);
   void SetOutputIsSecure(bool secure);
 
-  SurfaceId CurrentSurfaceId();
+  const SurfaceId& CurrentSurfaceId();
 
   // DisplaySchedulerClient implementation.
   bool DrawAndSwap() override;
@@ -88,7 +88,6 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
                              base::TimeDelta interval) override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;
-  void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
   void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) override;
@@ -108,7 +107,7 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   void SetFullRootLayerDamage() override;
 
   // SurfaceDamageObserver implementation.
-  void OnSurfaceDamaged(SurfaceId surface, bool* changed) override;
+  void OnSurfaceDamaged(const SurfaceId& surface, bool* changed) override;
 
   void SetEnlargePassTextureAmountForTesting(
       const gfx::Size& enlarge_texture_amount) {

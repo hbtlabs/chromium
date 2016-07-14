@@ -128,7 +128,7 @@ bool EnsureFileIsGeneratedByDependency(const Target* target,
         return true;  // Found a path.
     }
     if (target->output_type() == Target::CREATE_BUNDLE) {
-      for (const auto& dep : target->bundle_data().bundle_deps()) {
+      for (auto* dep : target->bundle_data().bundle_deps()) {
         if (EnsureFileIsGeneratedByDependency(dep, file, false,
                                               consider_object_files,
                                               check_data_deps, seen_targets))
@@ -424,14 +424,11 @@ bool Target::GetOutputFilesForSource(const SourceFile& source,
   return !outputs->empty();
 }
 
-void Target::PullDependentTargetConfigsFrom(const Target* dep) {
-  MergeAllDependentConfigsFrom(dep, &configs_, &all_dependent_configs_);
-  MergePublicConfigsFrom(dep, &configs_);
-}
-
 void Target::PullDependentTargetConfigs() {
   for (const auto& pair : GetDeps(DEPS_LINKED))
-    PullDependentTargetConfigsFrom(pair.ptr);
+    MergeAllDependentConfigsFrom(pair.ptr, &configs_, &all_dependent_configs_);
+  for (const auto& pair : GetDeps(DEPS_LINKED))
+    MergePublicConfigsFrom(pair.ptr, &configs_);
 }
 
 void Target::PullDependentTargetLibsFrom(const Target* dep, bool is_public) {
@@ -524,7 +521,7 @@ void Target::PullRecursiveBundleData() {
       bundle_data_.AddBundleData(pair.ptr);
 
     // Recursive bundle_data informations from all dependencies.
-    for (const auto& target : pair.ptr->bundle_data().bundle_deps())
+    for (auto* target : pair.ptr->bundle_data().bundle_deps())
       bundle_data_.AddBundleData(target);
   }
 

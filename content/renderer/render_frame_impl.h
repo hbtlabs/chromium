@@ -623,8 +623,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebAXObject& end_object,
       int end_offset) override;
   void didChangeManifest() override;
-  bool enterFullscreen() override;
-  bool exitFullscreen() override;
+  void enterFullscreen() override;
+  void exitFullscreen() override;
   blink::WebPermissionClient* permissionClient() override;
   blink::WebAppBannerClient* appBannerClient() override;
   void registerProtocolHandler(const blink::WebString& scheme,
@@ -960,18 +960,8 @@ class CONTENT_EXPORT RenderFrameImpl
       const RequestNavigationParams& request_params);
 
   // PlzNavigate
-  // Sends a FrameHostMsg_BeginNavigation to the browser based on the contents
-  // of the WebURLRequest.
-  // |should_replace_current_entry| indicates that the current history entry
-  // will be replaced when the navigation commits.  |is_client_redirect|
-  // indicates that the navigation originated as a client redirect.
-  // Note: those two concepts are separate. For example, a location.assign is a
-  // client redirect but it only replaces the current entry if called before
-  // load stop. location.replace on the other hand is a client redirect and
-  // always replaces the current entry.
-  void BeginNavigation(blink::WebURLRequest* request,
-                       bool should_replace_current_entry,
-                       bool is_client_redirect);
+  // Sends a FrameHostMsg_BeginNavigation to the browser
+  void BeginNavigation(const NavigationPolicyInfo& info);
 
   // Loads a data url.
   void LoadDataURL(const CommonNavigationParams& params,

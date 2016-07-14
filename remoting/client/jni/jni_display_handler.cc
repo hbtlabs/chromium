@@ -55,6 +55,7 @@ void DisplayCursorShapeStub::SetCursorShape(
 JniDisplayHandler::JniDisplayHandler(ChromotingJniRuntime* runtime)
     : runtime_(runtime),
       weak_factory_(this) {
+  weak_ptr_ = weak_factory_.GetWeakPtr();
   JNIEnv* env = base::android::AttachCurrentThread();
   java_display_.Reset(Java_Display_createJavaDisplayObject(
       env, reinterpret_cast<intptr_t>(this)));
@@ -66,10 +67,10 @@ JniDisplayHandler::~JniDisplayHandler() {
                           java_display_.obj());
 }
 
-base::android::ScopedJavaLocalRef<jobject>
-JniDisplayHandler::CreateDesktopViewFactory() {
-  return Java_Display_createDesktopViewFactory(
-      base::android::AttachCurrentThread(), java_display_.obj());
+void JniDisplayHandler::InitializeClient(
+    const base::android::JavaRef<jobject>& java_client) {
+  return Java_Display_initializeClient(base::android::AttachCurrentThread(),
+                                       java_display_.obj(), java_client.obj());
 }
 
 void JniDisplayHandler::UpdateCursorShape(
@@ -95,14 +96,13 @@ void JniDisplayHandler::UpdateCursorShape(
 std::unique_ptr<protocol::CursorShapeStub>
 JniDisplayHandler::CreateCursorShapeStub() {
   return base::WrapUnique(
-      new DisplayCursorShapeStub(weak_factory_.GetWeakPtr(),
-                                 runtime_->display_task_runner()));
+      new DisplayCursorShapeStub(weak_ptr_, runtime_->display_task_runner()));
 }
 
 std::unique_ptr<protocol::VideoRenderer>
 JniDisplayHandler::CreateVideoRenderer() {
   return base::WrapUnique(
-      new JniVideoRenderer(runtime_, weak_factory_.GetWeakPtr()));
+      new JniVideoRenderer(runtime_, weak_ptr_));
 }
 
 // static
@@ -137,8 +137,7 @@ void JniDisplayHandler::ScheduleRedraw(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& caller) {
   runtime_->display_task_runner()->PostTask(
-      FROM_HERE, base::Bind(&JniDisplayHandler::RedrawCanvas,
-                            weak_factory_.GetWeakPtr()));
+      FROM_HERE, base::Bind(&JniDisplayHandler::RedrawCanvas, weak_ptr_));
 }
 
 }  // namespace remoting

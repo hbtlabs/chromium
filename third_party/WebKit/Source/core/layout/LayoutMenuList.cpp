@@ -56,7 +56,7 @@ LayoutMenuList::~LayoutMenuList()
 // to prevent children from rendering.
 bool LayoutMenuList::isChildAllowed(LayoutObject* object, const ComputedStyle&) const
 {
-    return object->isAnonymous() && !object->isLayoutFullScreen();
+    return object->isAnonymous();
 }
 
 void LayoutMenuList::createInnerBlock()
@@ -263,7 +263,8 @@ void LayoutMenuList::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, 
 void LayoutMenuList::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop,
     LogicalExtentComputedValues& computedValues) const
 {
-    logicalHeight = m_innerBlockHeight + borderAndPaddingHeight();
+    if (style()->hasAppearance())
+        logicalHeight = m_innerBlockHeight + borderAndPaddingHeight();
     LayoutBox::computeLogicalHeight(logicalHeight, logicalTop, computedValues);
 }
 

@@ -20,25 +20,24 @@ namespace arc {
 
 namespace {
 
+class DummyObserver : public ArcBridgeService::Observer {};
+
+}  // namespace
+
 class ArcBridgeTest : public testing::Test, public ArcBridgeService::Observer {
  public:
   ArcBridgeTest() : ready_(false) {}
   ~ArcBridgeTest() override {}
 
-  void OnStateChanged(ArcBridgeService::State state) override {
-    state_ = state;
-    switch (state) {
-      case ArcBridgeService::State::READY:
-        ready_ = true;
-        break;
+  void OnBridgeReady() override {
+    state_ = ArcBridgeService::State::READY;
+    ready_ = true;
+  }
 
-      case ArcBridgeService::State::STOPPED:
-        message_loop_.PostTask(FROM_HERE, message_loop_.QuitWhenIdleClosure());
-        break;
-
-      default:
-        break;
-    }
+  void OnBridgeStopped(ArcBridgeService::StopReason stop_reason) override {
+    state_ = ArcBridgeService::State::STOPPED;
+    stop_reason_ = stop_reason;
+    message_loop_.PostTask(FROM_HERE, message_loop_.QuitWhenIdleClosure());
   }
 
   bool ready() const { return ready_; }
@@ -47,6 +46,7 @@ class ArcBridgeTest : public testing::Test, public ArcBridgeService::Observer {
  protected:
   std::unique_ptr<ArcBridgeServiceImpl> service_;
   std::unique_ptr<FakeArcBridgeInstance> instance_;
+  ArcBridgeService::StopReason stop_reason_;
 
  private:
   void SetUp() override {
@@ -54,6 +54,7 @@ class ArcBridgeTest : public testing::Test, public ArcBridgeService::Observer {
 
     ready_ = false;
     state_ = ArcBridgeService::State::STOPPED;
+    stop_reason_ = ArcBridgeService::StopReason::SHUTDOWN;
 
     instance_.reset(new FakeArcBridgeInstance());
     service_.reset(new ArcBridgeServiceImpl(
@@ -76,10 +77,6 @@ class ArcBridgeTest : public testing::Test, public ArcBridgeService::Observer {
 
   DISALLOW_COPY_AND_ASSIGN(ArcBridgeTest);
 };
-
-class DummyObserver : public ArcBridgeService::Observer {};
-
-}  // namespace
 
 // Exercises the basic functionality of the ARC Bridge Service.  A message from
 // within the instance should cause the observer to be notified.
@@ -135,12 +132,42 @@ TEST_F(ArcBridgeTest, Restart) {
   // Simulate a connection loss.
   service_->DisableReconnectDelayForTesting();
   service_->OnChannelClosed();
-  instance_->SimulateCrash();
+  instance_->Stop(ArcBridgeService::StopReason::CRASH);
   instance_->WaitForInitCall();
   ASSERT_EQ(ArcBridgeService::State::READY, state());
   ASSERT_EQ(2, instance_->init_calls());
 
   service_->Shutdown();
+  ASSERT_EQ(ArcBridgeService::State::STOPPED, state());
+}
+
+// Makes sure OnBridgeStopped is called on stop.
+TEST_F(ArcBridgeTest, OnBridgeStopped) {
+  ASSERT_FALSE(ready());
+
+  service_->DisableReconnectDelayForTesting();
+  service_->SetAvailable(true);
+  service_->HandleStartup();
+  instance_->WaitForInitCall();
+  ASSERT_EQ(ArcBridgeService::State::READY, state());
+
+  // Simulate boot failure.
+  service_->OnChannelClosed();
+  instance_->Stop(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
+  instance_->WaitForInitCall();
+  ASSERT_EQ(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE, stop_reason_);
+  ASSERT_EQ(ArcBridgeService::State::READY, state());
+
+  // Simulate crash.
+  service_->OnChannelClosed();
+  instance_->Stop(ArcBridgeService::StopReason::CRASH);
+  instance_->WaitForInitCall();
+  ASSERT_EQ(ArcBridgeService::StopReason::CRASH, stop_reason_);
+  ASSERT_EQ(ArcBridgeService::State::READY, state());
+
+  // Graceful shutdown.
+  service_->Shutdown();
+  ASSERT_EQ(ArcBridgeService::StopReason::SHUTDOWN, stop_reason_);
   ASSERT_EQ(ArcBridgeService::State::STOPPED, state());
 }
 

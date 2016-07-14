@@ -513,7 +513,6 @@ const FeatureEntry::Choice kNtpSwitchToExistingTabChoices[] = {
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID)
-const FeatureEntry::FeatureParam kNTPSnippetsFeatureVariationDefault[] = {};
 const FeatureEntry::FeatureParam kNTPSnippetsFeatureVariationOnlyPersonal[] = {
     {"fetching_personalization", "personal"},
     {"fetching_host_restrict", "off"},
@@ -529,10 +528,7 @@ const FeatureEntry::FeatureParam
         {"fetching_host_restrict", "on"},
 };
 
-// TODO(jkrcal) allow for nullptr instead of the empty array.
 const FeatureEntry::FeatureVariation kNTPSnippetsFeatureVariations[] = {
-    {"", kNTPSnippetsFeatureVariationDefault,
-     0},
     {"only personalized", kNTPSnippetsFeatureVariationOnlyPersonal,
      arraysize(kNTPSnippetsFeatureVariationOnlyPersonal)},
     {"only from most visited sites",
@@ -1330,11 +1326,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-centered-app-list", IDS_FLAGS_CENTERED_APP_LIST_NAME,
      IDS_FLAGS_CENTERED_APP_LIST_DESCRIPTION, kOsWin | kOsLinux | kOsCrOS,
      SINGLE_VALUE_TYPE(app_list::switches::kEnableCenteredAppList)},
-    {"enable-new-app-list-mixer", IDS_FLAGS_NEW_APP_LIST_MIXER_NAME,
-     IDS_FLAGS_NEW_APP_LIST_MIXER_DESCRIPTION,
-     kOsWin | kOsLinux | kOsCrOS | kOsMac,
-     ENABLE_DISABLE_VALUE_TYPE(app_list::switches::kEnableNewAppListMixer,
-                               app_list::switches::kDisableNewAppListMixer)},
 #endif
     {"disable-threaded-scrolling", IDS_FLAGS_THREADED_SCROLLING_NAME,
      IDS_FLAGS_THREADED_SCROLLING_DESCRIPTION, kOsAll,
@@ -1725,10 +1716,6 @@ const FeatureEntry kFeatureEntries[] = {
     {"tab-management-experiment-type", IDS_FLAGS_HERB_PROTOTYPE_CHOICES_NAME,
      IDS_FLAGS_HERB_PROTOTYPE_CHOICES_DESCRIPTION, kOsAndroid,
      MULTI_VALUE_TYPE(kHerbPrototypeChoices)},
-    {"enable-tab-switcher-in-document-mode",
-     IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_NAME,
-     IDS_FLAGS_TAB_SWITCHER_IN_DOCUMENT_MODE_DESCRIPTION, kOsAndroid,
-     SINGLE_VALUE_TYPE(switches::kEnableTabSwitcherInDocumentMode)},
     {"app-link", IDS_FLAGS_ENABLE_APP_LINK_NAME,
      IDS_FLAGS_ENABLE_APP_LINK_DESCRIPTION, kOsAndroid,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableAppLink,
@@ -2021,14 +2008,6 @@ bool SkipConditionalFeatureEntry(const FeatureEntry& entry) {
       channel != version_info::Channel::UNKNOWN) {
     return true;
   }
-  // enable-tab-switcher-in-document-mode is only available for Chromium
-  // builds and the Canary channel.
-  if (!strcmp("enable-tab-switcher-in-document-mode",
-              entry.internal_name) &&
-      channel != version_info::Channel::CANARY &&
-      channel != version_info::Channel::UNKNOWN) {
-    return true;
-  }
 #endif
 
   // data-reduction-proxy-lo-fi and enable-data-reduction-proxy-lo-fi-preview
@@ -2060,9 +2039,10 @@ void ConvertFlagsToSwitches(flags_ui::FlagsStorage* flags_storage,
 }
 
 void RegisterAllFeatureVariationParameters(
-    flags_ui::FlagsStorage* flags_storage) {
+    flags_ui::FlagsStorage* flags_storage,
+    base::FeatureList* feature_list) {
   FlagsStateSingleton::GetFlagsState()->RegisterAllFeatureVariationParameters(
-      flags_storage);
+      flags_storage, feature_list);
 }
 
 bool AreSwitchesIdenticalToCurrentCommandLine(

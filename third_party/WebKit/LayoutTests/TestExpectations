@@ -114,7 +114,6 @@ crbug.com/520614 http/tests/w3c/webperf/submission/Intel/resource-timing/test_re
 crbug.com/520619 [ Android Mac Linux Win7 ] webexposed/global-interface-listing.html [ Pass Timeout ]
 crbug.com/520194 http/tests/xmlhttprequest/timeout/xmlhttprequest-timeout-worker-overridesexpires.html [ Failure Pass ]
 crbug.com/518967 [ Win7 ] http/tests/htmlimports/csp-import-block-but-nonce-nested.html [ Failure Pass Timeout ]
-crbug.com/448461 http/tests/loading/simple-subframe.html [ Failure Pass Timeout ]
 crbug.com/339597 http/tests/navigation/back-to-redirect-with-frame.php [ Pass Timeout ]
 crbug.com/473718 http/tests/navigation/beacon-cross-origin-redirect.html [ Failure Pass ]
 
@@ -196,14 +195,6 @@ crbug.com/542541 [ Debug ] fast/events/click-count.html [ Pass Failure ]
 # TODO(oshima): Mac Android are currently not supported.
 crbug.com/567837 [ Mac Android ] virtual/scalefactor200withzoom/fast/hidpi/static [ Skip ]
 
-# TODO(oshima): Debug build generates slightly different image for these tests due to different background color.
-#crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
-crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/data-suggestion-picker-appearance.html [ Skip ]
-crbug.com/593567 virtual/scalefactor150/fast/hidpi/static/popup-menu-appearance.html [ Skip ]
-crbug.com/593567 [ Debug ] virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
-crbug.com/593567 [ Debug ] virtual/scalefactor200/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
-crbug.com/593567 [ Debug ] virtual/scalefactor200withzoom/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
-
 # Mac does not support fractional scale factor.
 crbug.com/567837 [ Mac ] virtual/scalefactor150/fast/hidpi/static [ Skip ]
 
@@ -226,13 +217,13 @@ crbug.com/597221 fast/dom/Window/window-postmessage-clone-deep-array.html [ Fail
 crbug.com/498539 http/tests/inspector/elements/styles/selector-line.html [ Pass Timeout ]
 crbug.com/498539 http/tests/inspector/network/network-datareceived.html [ Pass Timeout ]
 crbug.com/498539 [ Win ] inspector/tracing/decode-resize.html [ Failure Timeout ]
-crbug.com/498539 [ Win ] inspector/tracing/timeline-event-dispatch.html [ Failure Pass ]
+crbug.com/498539 [ Win ] inspector/tracing/timeline-misc/timeline-event-dispatch.html [ Failure Pass ]
 crbug.com/498539 inspector/console/console-log-syntax-error.html [ Pass Timeout ]
-crbug.com/498539 inspector/tracing/timeline-bound-function.html [ Pass Failure ]
-crbug.com/498539 virtual/threaded/inspector/tracing/timeline-bound-function.html [ Pass Failure ]
-crbug.com/498539 inspector/tracing/timeline-injected-script-eval.html [ Pass Failure ]
-crbug.com/498539 inspector/tracing/timeline-time.html [ Pass Failure Timeout ]
-crbug.com/498539 inspector/tracing/timeline-timer.html [ Pass Failure ]
+crbug.com/498539 inspector/tracing/timeline-misc/timeline-bound-function.html [ Pass Failure ]
+crbug.com/498539 virtual/threaded/inspector/tracing/timeline-misc/timeline-bound-function.html [ Pass Failure ]
+crbug.com/498539 inspector/tracing/timeline-js/timeline-injected-script-eval.html [ Pass Failure ]
+crbug.com/498539 inspector/tracing/timeline-time/timeline-time.html [ Pass Failure Timeout ]
+crbug.com/498539 inspector/tracing/timeline-time/timeline-timer.html [ Pass Failure ]
 crbug.com/498539 inspector/elements/styles-3/styles-change-node-while-editing.html [ Failure Pass ]
 crbug.com/498539 [ Mac ] inspector/sources/debugger/live-edit-no-reveal.html [ Crash Pass Timeout ]
 crbug.com/498539 [ Mac10.10 ] inspector/sources/debugger/debug-inlined-scripts-fragment-id.html [ Pass Timeout ]
@@ -455,6 +446,7 @@ crbug.com/490511 imported/wpt/html/rendering/non-replaced-elements/the-hr-elemen
 crbug.com/490511 imported/wpt/html/rendering/replaced-elements/embedded-content-rendering-rules/canvas-fallback.html [ Failure ]
 crbug.com/490511 imported/wpt/html/semantics/document-metadata/styling/LinkStyle.html [ Failure Pass ]
 crbug.com/490511 imported/wpt/html/semantics/embedded-content/media-elements/interfaces/HTMLElement/HTMLTrackElement/src.html [ Failure ]
+crbug.com/627706 imported/wpt/html/semantics/embedded-content/the-img-element/invalid-src.html [ Skip ]
 crbug.com/525889 imported/wpt/html/webappapis/scripting/processing-model-2/compile-error-in-setInterval.html [ Failure ]
 crbug.com/525889 imported/wpt/html/webappapis/scripting/processing-model-2/compile-error-in-setTimeout.html [ Failure ]
 crbug.com/525889 imported/wpt/html/webappapis/scripting/processing-model-2/runtime-error-in-setInterval.html [ Failure ]
@@ -497,9 +489,6 @@ crbug.com/404597 [ Win ] fast/selectors/007a.html [ Pass Failure ]
 
 # Web Components related tests (Shadow DOM, Custom Elements) failures.
 crbug.com/505364 imported/wpt/shadow-dom/untriaged/styles/test-003.html [ Failure ]
-crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-002.html [ Failure ]
-crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-003.html [ Failure ]
-crbug.com/505364 imported/wpt/shadow-dom/untriaged/user-interaction/focus-navigation/test-004.html [ Failure ]
 crbug.com/505364 imported/wpt/shadow-dom/untriaged/elements-and-dom-objects/extensions-to-event-interface/event-path-001.html [ Failure ]
 crbug.com/505364 imported/wpt/custom-elements/v0/instantiating/extensions-to-document-interface/create-element-interface-type-is-a-type-extension.html [ Failure ]
 crbug.com/505364 imported/csswg-test/css-scoping-1/css-scoping-shadow-slot-display-override.html [ Failure ]
@@ -736,6 +725,8 @@ crbug.com/396940 ietestcenter/css3/multicolumn/column-containing-block-002.htm [
 crbug.com/378610 [ Win ] svg/custom/focus-ring-text.svg [ Failure ]
 crbug.com/378610 [ Mac ] svg/custom/focus-ring-text.svg [ Failure Pass ]
 
+crbug.com/624285 inspector/console/console-stack-overflow.html [ NeedsManualRebaseline ]
+
 crbug.com/474987 [ Win Mac ] css3/flexbox/auto-margins.html [ Failure ]
 
 crbug.com/267206 [ Mac ] fast/scrolling/scrollbar-tickmarks-hittest.html [ Timeout ]
@@ -767,7 +758,6 @@ crbug.com/613887 http/tests/preload/meta-viewport-link-headers.html [ Failure Pa
 crbug.com/564403 http/tests/inspector/service-workers/service-worker-manager.html [ Failure Pass ]
 
 crbug.com/613728 fast/table/border-collapsing/cached-cell-append.html [ Failure ]
-crbug.com/613728 fast/table/border-collapsing/cached-change-tbody-border-width.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-change-col-border-width.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-cell-remove.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-69296.html [ Failure ]
@@ -789,7 +779,6 @@ crbug.com/400829 virtual/stable/media/stable/video-object-fit-stable.html [ Fail
 
 # We only want to run one of the web-animations-api tests in stable mode.
 crbug.com/441553 virtual/stable/web-animations-api [ Skip ]
-crbug.com/368946 virtual/stable/web-animations-api/eased-keyframes.html [ Pass ]
 # These tests *only* run in stable, to verify that these features are unsupported and throw exceptions.
 crbug.com/441559 virtual/stable/web-animations-api/partial-keyframes-unsupported.html [ Pass ]
 crbug.com/437696 virtual/stable/web-animations-api/additive-animations-unsupported.html [ Pass ]
@@ -934,10 +923,10 @@ crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerenter_nohover-ma
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_after_pointercancel_touch-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_after_pointerup_nohover-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_properties_mouse-manual.html [ Skip ]
 crbug.com/620236 imported/wpt/pointerevents/pointerevent_releasepointercapture_onpointercancel_touch-manual.html  [ Skip ]
+crbug.com/620236 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_click.html [ Skip ]
+crbug.com/620236 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_drag_mouse.html [ Skip ]
 crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-auto-css_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-button-test_touch-manual.html  [ Skip ]
 crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-auto-child-none_touch-manual.html  [ Skip ]
 crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-none_touch-manual.html  [ Skip ]
 crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch-manual.html  [ Skip ]
@@ -956,6 +945,7 @@ crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-table-test
 
 crbug.com/583413 imported/wpt/pointerevents/pointerevent_pointerleave_pen-manual.html  [ Failure ]
 
+crbug.com/627716 imported/wpt/pointerevents/pointerevent_touch-action-button-test_touch-manual.html [ Skip ]
 
 # These testcases are incorrect, mark them as failing until they're fixed in the testsuite.
 # https://lists.w3.org/Archives/Public/www-style/2016Jan/0275.html
@@ -1232,7 +1222,7 @@ crbug.com/579493 http/tests/security/xss-DENIED-xsl-document-securityOrigin.xml 
 crbug.com/572723 [ Linux Mac10.9 ] inspector/sources/debugger/debugger-disable-enable.html [ Pass Failure Timeout ]
 crbug.com/572723 inspector/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]
 
-crbug.com/572726 inspector/tracing/timeline-node-reference.html [ Timeout Pass Crash ]
+crbug.com/572726 inspector/tracing/timeline-misc/timeline-node-reference.html [ Timeout Pass Crash ]
 
 crbug.com/155836 fast/text/emphasis-ellipsis-complextext.html [ Failure Pass ]
 
@@ -1366,3 +1356,40 @@ crbug.com/624709 [ Win ] virtual/gpu-rasterization/fast/images/webp-color-profil
 crbug.com/625020 [ Debug ] compositing/repaint/page-scale-repaint.html [ Timeout ]
 
 crbug.com/620432 accessibility/aria-activedescendant.html [ Failure ]
+
+crbug.com/593567 [ Linux Debug ] virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
+crbug.com/593567 [ Linux Debug ] virtual/scalefactor150/fast/hidpi/static/data-suggestion-picker-appearance.html [ Skip ]
+
+crbug.com/627782 [ Win ] svg/filters/filter-source-position.svg [ Pass Failure ]
+
+crbug.com/627798 editing/spelling/inline-spelling-markers-hidpi-composited.html [ Pass Failure ]
+crbug.com/627798 fast/repaint/line-flow-with-floats-9.html [ Pass Failure ]
+crbug.com/627798 fast/repaint/nested-fixed-iframe-scrolled.html [ Pass Failure ]
+crbug.com/627798 fast/repaint/repaint-during-scroll-with-zoom.html [ Pass Failure ]
+crbug.com/627798 fast/repaint/resize-scrollable-iframe.html [ Pass Failure ]
+crbug.com/627798 fast/repaint/text-match-document-change.html [ Pass Failure ]
+
+# Very slight rendering changes caused by Skia rect clipping change.
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-space.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/png-with-color-profile.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-profile-match.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/exif-orientation-height-image-document.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-reflection.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cross-fade-png.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-repeat.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cross-fade.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-border-image-source.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-munsell-srgb-to-srgb.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-canvas-pattern.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-border-image.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-munsell-adobe-to-srgb.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-mask-image-svg.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-group.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-canvas.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/jpeg-with-color-profile.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-svg.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cover.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-object.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu-rasterization/fast/images/ycbcr-with-cmyk-color-profile.html [ NeedsManualRebaseline ]
+crbug.com/627844 virtual/gpu/fast/canvas/canvas-createImageBitmap-colorClamping.html [ Pass Failure ]

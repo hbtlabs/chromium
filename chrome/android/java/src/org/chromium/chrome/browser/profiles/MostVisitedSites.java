@@ -27,8 +27,8 @@ public class MostVisitedSites {
          *             visited URLs).
          */
         @CalledByNative("MostVisitedURLsObserver")
-        public void onMostVisitedURLsAvailable(
-                String[] titles, String[] urls, String[] whitelistIconPaths);
+        public void onMostVisitedURLsAvailable(String[] titles, String[] urls,
+                String[] whitelistIconPaths, int[] sources);
 
         /**
          * This is called when the list of popular URLs is initially available or updated.
@@ -72,11 +72,11 @@ public class MostVisitedSites {
     public void setMostVisitedURLsObserver(final MostVisitedURLsObserver observer, int numSites) {
         MostVisitedURLsObserver wrappedObserver = new MostVisitedURLsObserver() {
             @Override
-            public void onMostVisitedURLsAvailable(
-                    String[] titles, String[] urls, String[] whitelistIconPaths) {
+            public void onMostVisitedURLsAvailable(String[] titles, String[] urls,
+                    String[] whitelistIconPaths, int[] sources) {
                 // Don't notify observer if we've already been destroyed.
                 if (mNativeMostVisitedSitesBridge != 0) {
-                    observer.onMostVisitedURLsAvailable(titles, urls, whitelistIconPaths);
+                    observer.onMostVisitedURLsAvailable(titles, urls, whitelistIconPaths, sources);
                 }
             }
             @Override
@@ -111,8 +111,8 @@ public class MostVisitedSites {
      * @param tileTypes An array of values from MostVisitedTileType indicating the type of each
      *                  tile that's currently showing.
      */
-    public void recordTileTypeMetrics(int[] tileTypes) {
-        nativeRecordTileTypeMetrics(mNativeMostVisitedSitesBridge, tileTypes);
+    public void recordTileTypeMetrics(int[] tileTypes, int[] sources) {
+        nativeRecordTileTypeMetrics(mNativeMostVisitedSitesBridge, tileTypes, sources);
     }
 
     /**
@@ -120,8 +120,8 @@ public class MostVisitedSites {
      * @param index The index of the item that was opened.
      * @param tileType The visual type of the item. Valid values are listed in MostVisitedTileType.
      */
-    public void recordOpenedMostVisitedItem(int index, int tileType) {
-        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSitesBridge, index, tileType);
+    public void recordOpenedMostVisitedItem(int index, int tileType, int source) {
+        nativeRecordOpenedMostVisitedItem(mNativeMostVisitedSitesBridge, index, tileType, source);
     }
 
     private native long nativeInit(Profile profile);
@@ -131,9 +131,8 @@ public class MostVisitedSites {
     private native void nativeAddOrRemoveBlacklistedUrl(
             long nativeMostVisitedSitesBridge, String url,
             boolean addUrl);
-    private native void nativeRecordTileTypeMetrics(
-            long nativeMostVisitedSitesBridge, int[] tileTypes);
+    private native void nativeRecordTileTypeMetrics(long nativeMostVisitedSitesBridge,
+            int[] tileTypes, int[] sources);
     private native void nativeRecordOpenedMostVisitedItem(
-            long nativeMostVisitedSitesBridge, int index, int tileType);
-
+            long nativeMostVisitedSitesBridge, int index, int tileType, int source);
 }

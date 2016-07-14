@@ -8,37 +8,30 @@
 #include <utility>
 
 #include "base/location.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/search/instant_tab.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
-#include "chrome/common/chrome_switches.h"
-#include "chrome/common/search/search_urls.h"
-#include "chrome/common/url_constants.h"
-#include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
-#include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "net/base/escape.h"
-#include "net/base/network_change_notifier.h"
 #include "url/gurl.h"
+
+// Macro used for logging debug events. |message| should be a std::string.
+#define LOG_INSTANT_DEBUG_EVENT(controller, message) \
+    controller->LogDebugEvent(message)
 
 namespace {
 
-bool IsContentsFrom(const InstantPage* page,
+bool IsContentsFrom(const InstantTab* page,
                     const content::WebContents* contents) {
   return page && (page->web_contents() == contents);
 }
@@ -107,12 +100,6 @@ void InstantController::ActiveTabChanged() {
   ResetInstantTab();
 }
 
-void InstantController::TabDeactivated(content::WebContents* contents) {
-  // If user is deactivating an NTP tab, give it a change to log stats.
-  if (search::IsInstantNTP(contents))
-    InstantTab::TabDeactivated(contents);
-}
-
 void InstantController::LogDebugEvent(const std::string& info) const {
   DVLOG(1) << info;
 
@@ -137,8 +124,8 @@ InstantTab* InstantController::instant_tab() const {
 
 void InstantController::InstantSupportChanged(
     InstantSupportState instant_support) {
-  // Handle INSTANT_SUPPORT_YES here because InstantPage is not hooked up to the
-  // active tab. Search model changed listener in InstantPage will handle other
+  // Handle INSTANT_SUPPORT_YES here because InstantTab is not hooked up to the
+  // active tab. Search model changed listener in InstantTab will handle other
   // cases.
   if (instant_support != INSTANT_SUPPORT_YES)
     return;
@@ -161,7 +148,7 @@ void InstantController::InstantSupportDetermined(
       content::NotificationService::NoDetails());
 }
 
-void InstantController::InstantPageAboutToNavigateMainFrame(
+void InstantController::InstantTabAboutToNavigateMainFrame(
     const content::WebContents* contents,
     const GURL& url) {
   DCHECK(IsContentsFrom(instant_tab(), contents));
@@ -175,7 +162,7 @@ void InstantController::ResetInstantTab() {
   if (!search_mode_.is_origin_default()) {
     content::WebContents* active_tab = browser_->GetActiveWebContents();
     if (!instant_tab_ || active_tab != instant_tab_->web_contents()) {
-      instant_tab_.reset(new InstantTab(this, browser_->profile()));
+      instant_tab_.reset(new InstantTab(this));
       instant_tab_->Init(active_tab);
       UpdateInfoForInstantTab();
     }

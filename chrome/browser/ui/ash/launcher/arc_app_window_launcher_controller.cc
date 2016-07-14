@@ -3,9 +3,13 @@
 // found in the LICENSE file.
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
 
+#include <string>
+
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
+#include "ash/display/display_manager.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_util.h"
@@ -28,6 +32,7 @@
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
 #include "ui/base/base_window.h"
+#include "ui/display/display.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -38,8 +43,29 @@ enum class FullScreenMode {
   NON_ACTIVE,   // Fullscreen was not activated for an app.
 };
 
+arc::mojom::OrientationLock GetCurrentOrientation() {
+  if (!display::Display::HasInternalDisplay())
+    return arc::mojom::OrientationLock::NONE;
+  display::Display internal_display =
+      ash::Shell::GetInstance()->display_manager()->GetDisplayForId(
+          display::Display::InternalDisplayId());
+
+  // ChromeOS currently assumes that the internal panel is always
+  // landscape (ROTATE_0 == landscape).
+  switch (internal_display.rotation()) {
+    case display::Display::ROTATE_0:
+    case display::Display::ROTATE_180:
+      return arc::mojom::OrientationLock::LANDSCAPE;
+    case display::Display::ROTATE_90:
+    case display::Display::ROTATE_270:
+      return arc::mojom::OrientationLock::PORTRAIT;
+  }
+  return arc::mojom::OrientationLock::NONE;
+}
+
 blink::WebScreenOrientationLockType BlinkOrientationLockFromMojom(
     arc::mojom::OrientationLock orientation_lock) {
+  DCHECK_NE(arc::mojom::OrientationLock::CURRENT, orientation_lock);
   if (orientation_lock == arc::mojom::OrientationLock::PORTRAIT) {
     return blink::WebScreenOrientationLockPortrait;
   } else if (orientation_lock == arc::mojom::OrientationLock::LANDSCAPE) {
@@ -188,15 +214,15 @@ class ArcAppWindowLauncherController::AppWindow : public ui::BaseWindow {
   arc::mojom::AppInstance* GetAppInstance() {
     arc::ArcBridgeService* bridge_service = arc::ArcBridgeService::Get();
     arc::mojom::AppInstance* app_instance =
-        bridge_service ? bridge_service->app_instance() : nullptr;
+        bridge_service ? bridge_service->app()->instance() : nullptr;
     if (!app_instance) {
       VLOG(2) << "Arc Bridge is not available.";
       return nullptr;
     }
 
-    if (bridge_service->app_version() < 3) {
+    if (bridge_service->app()->version() < 3) {
       VLOG(2) << "Arc Bridge has old version for apps."
-              << bridge_service->app_version();
+              << bridge_service->app()->version();
       return nullptr;
     }
     return app_instance;
@@ -331,8 +357,6 @@ void ArcAppWindowLauncherController::CheckForAppWindowWidget(
     if (app_window) {
       app_window->set_widget(views::Widget::GetWidgetForNativeWindow(window));
       ash::SetShelfIDForWindow(app_window->shelf_id(), window);
-      if (app_window->controller())
-        window->SetTitle(app_window->controller()->GetTitle());
       chrome::MultiUserWindowManager::GetInstance()->SetWindowOwner(
           window,
           user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId());
@@ -557,8 +581,8 @@ void ArcAppWindowLauncherController::UnregisterApp(AppWindow* app_window) {
 
 void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
     AppWindow* app_window) {
-  ash::Shell* shell = ash::Shell::GetInstance();
-  aura::Window* window = app_window->widget()->GetNativeWindow();
+  ash::WmWindow* window =
+      ash::WmLookup::Get()->GetWindowForWidget(app_window->widget());
   if (!window)
     return;
   arc::mojom::OrientationLock orientation_lock;
@@ -572,6 +596,14 @@ void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
       return;
     orientation_lock = app_info->orientation_lock;
   }
+
+  if (orientation_lock == arc::mojom::OrientationLock::CURRENT) {
+    // Resolve the orientation when it first resolved.
+    orientation_lock = GetCurrentOrientation();
+    app_window->set_requested_orientation_lock(orientation_lock);
+  }
+
+  ash::Shell* shell = ash::Shell::GetInstance();
   shell->screen_orientation_controller()->LockOrientationForWindow(
       window, BlinkOrientationLockFromMojom(orientation_lock));
 }

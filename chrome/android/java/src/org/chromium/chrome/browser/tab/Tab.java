@@ -5,11 +5,13 @@
 package org.chromium.chrome.browser.tab;
 
 import android.app.Activity;
+import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -68,6 +70,7 @@ import org.chromium.chrome.browser.ntp.NativePageAssassin;
 import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
+import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.rlz.RevenueStats;
@@ -179,9 +182,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     /** InfoBar container to show InfoBars for this tab. */
     private InfoBarContainer mInfoBarContainer;
-
-    /** Manages app banners shown for this tab. */
-    private AppBannerManager mAppBannerManager;
 
     /** Controls overscroll pull-to-refresh behavior for this tab. */
     private SwipeRefreshHandler mSwipeRefreshHandler;
@@ -1435,11 +1435,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
             RevenueStats.getInstance().tabCreated(this);
 
-            if (AppBannerManager.isEnabled()) {
-                mAppBannerManager = mDelegateFactory.createAppBannerManager(this);
-                if (mAppBannerManager != null) addObserver(mAppBannerManager);
-            }
-
             mTopControlsVisibilityDelegate =
                     mDelegateFactory.createTopControlsVisibilityDelegate(this);
 
@@ -1471,6 +1466,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             if (!creatingWebContents && webContents.isLoadingToDifferentDocument()) {
                 didStartPageLoad(webContents.getUrl(), false);
             }
+
+            getAppBannerManager().setIsEnabledForTab(mDelegateFactory.canShowAppBanners(this));
         } finally {
             if (mTimestampMillis == INVALID_TIMESTAMP) {
                 mTimestampMillis = System.currentTimeMillis();
@@ -1561,7 +1558,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
                 mWebContentsDelegate, mDelegateFactory.createContextMenuPopulator(this));
         mTopControlsVisibilityDelegate = mDelegateFactory.createTopControlsVisibilityDelegate(this);
         setInterceptNavigationDelegate(mDelegateFactory.createInterceptNavigationDelegate(this));
-        mAppBannerManager = mDelegateFactory.createAppBannerManager(this);
+        getAppBannerManager().setIsEnabledForTab(mDelegateFactory.canShowAppBanners(this));
 
         // Reload the NativePage (if any), since the old NativePage has a reference to the old
         // activity.
@@ -2031,13 +2028,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mInfoBarContainer = null;
         }
 
-        // Destroy the AppBannerManager after the InfoBarContainer because it monitors for infobar
-        // removals.
-        if (mAppBannerManager != null) {
-            mAppBannerManager.destroy();
-            mAppBannerManager = null;
-        }
-
         mPreviousFullscreenTopControlsOffsetY = Float.NaN;
         mPreviousFullscreenContentOffsetY = Float.NaN;
 
@@ -2501,17 +2491,26 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             originalHeight = mContentViewCore.getViewportHeightPix();
             mContentViewCore.onHide();
         }
+
+        if (originalWidth == 0 && originalHeight == 0) {
+            Point size = ExternalPrerenderHandler.estimateContentSize(
+                    (Application) getApplicationContext(), false);
+            originalWidth = size.x;
+            originalHeight = size.y;
+        }
+
         destroyContentViewCore(deleteOldNativeWebContents);
         NativePage previousNativePage = mNativePage;
         mNativePage = null;
-        setContentViewCore(newContentViewCore);
         // Size of the new ContentViewCore is zero at this point. If we don't call onSizeChanged(),
         // next onShow() call would send a resize message with the current ContentViewCore size
         // (zero) to the renderer process, although the new size will be set soon.
         // However, this size fluttering may confuse Blink and rendered result can be broken
         // (see http://crbug.com/340987).
-        mContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
-        mContentViewCore.onShow();
+        newContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
+        newContentViewCore.onShow();
+        setContentViewCore(newContentViewCore);
+
         mContentViewCore.attachImeAdapter();
 
         // If the URL has already committed (e.g. prerendering), tell process management logic that
@@ -2526,13 +2525,6 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         for (TabObserver observer : mObservers) {
             observer.onWebContentsSwapped(this, didStartLoad, didFinishLoad);
         }
-    }
-
-    /** Requests the app banner. This method is called from the DevTools. */
-    protected boolean requestAppBanner() {
-        if (mAppBannerManager == null) return false;
-        mAppBannerManager.requestAppBanner();
-        return true;
     }
 
     @CalledByNative
@@ -3003,9 +2995,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     /**
      * @return the AppBannerManager.
      */
-    @VisibleForTesting
-    public AppBannerManager getAppBannerManagerForTesting() {
-        return mAppBannerManager;
+    public AppBannerManager getAppBannerManager() {
+        return AppBannerManager.getAppBannerManagerForWebContents(getWebContents());
     }
 
     @VisibleForTesting

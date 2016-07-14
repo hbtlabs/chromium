@@ -51,7 +51,6 @@
 
 using blink::protocol::Array;
 using blink::protocol::Debugger::CallFrame;
-using blink::protocol::Debugger::FunctionDetails;
 using blink::protocol::Runtime::PropertyDescriptor;
 using blink::protocol::Runtime::InternalPropertyDescriptor;
 using blink::protocol::Runtime::RemoteObject;
@@ -400,7 +399,7 @@ void InjectedScript::Scope::ignoreExceptionsAndMuteConsole()
 {
     DCHECK(!m_ignoreExceptionsAndMuteConsole);
     m_ignoreExceptionsAndMuteConsole = true;
-    m_debugger->muteConsole();
+    m_debugger->client()->muteWarningsAndDeprecations();
     m_previousPauseOnExceptionsState = setPauseOnExceptionsState(V8DebuggerImpl::DontPauseOnExceptions);
 }
 
@@ -434,7 +433,7 @@ InjectedScript::Scope::~Scope()
 {
     if (m_ignoreExceptionsAndMuteConsole) {
         setPauseOnExceptionsState(m_previousPauseOnExceptionsState);
-        m_debugger->unmuteConsole();
+        m_debugger->client()->unmuteWarningsAndDeprecations();
     }
     if (m_userGesture)
         m_debugger->client()->endUserGesture();

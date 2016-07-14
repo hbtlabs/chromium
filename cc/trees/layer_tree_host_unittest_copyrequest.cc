@@ -126,7 +126,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
 
   void AfterTest() override { EXPECT_EQ(4u, callbacks_.size()); }
 
-  std::unique_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
     if (!use_gl_renderer_) {
       return FakeOutputSurface::CreateSoftware(
           base::WrapUnique(new SoftwareOutputDevice));
@@ -136,7 +136,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
     TestContextSupport* context_support = static_cast<TestContextSupport*>(
         output_surface->context_provider()->ContextSupport());
     context_support->set_out_of_order_callbacks(out_of_order_callbacks_);
-    return output_surface;
+    return std::move(output_surface);
   }
 
   bool use_gl_renderer_;
@@ -708,7 +708,7 @@ SINGLE_AND_MULTI_THREAD_DIRECT_RENDERER_TEST_F(
 class LayerTreeHostCopyRequestTestLostOutputSurface
     : public LayerTreeHostCopyRequestTest {
  protected:
-  std::unique_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
     if (!first_context_provider_) {
       first_context_provider_ = TestContextProvider::Create();
       return FakeOutputSurface::Create3d(first_context_provider_);
@@ -774,8 +774,8 @@ class LayerTreeHostCopyRequestTestLostOutputSurface
     EndTest();
   }
 
-  void SwapBuffersOnThread(LayerTreeHostImpl* impl, bool result) override {
-    switch (impl->active_tree()->source_frame_number()) {
+  void SwapBuffersCompleteOnThread() override {
+    switch (num_swaps_++) {
       case 0:
         // The layers have been drawn, so their textures have been allocated.
         EXPECT_FALSE(result_);
@@ -829,6 +829,7 @@ class LayerTreeHostCopyRequestTestLostOutputSurface
 
   scoped_refptr<TestContextProvider> first_context_provider_;
   scoped_refptr<TestContextProvider> second_context_provider_;
+  int num_swaps_ = 0;
   size_t num_textures_without_readback_ = 0;
   size_t num_textures_after_loss_ = 0;
   FakeContentLayerClient client_;
@@ -843,7 +844,7 @@ SINGLE_AND_MULTI_THREAD_DIRECT_RENDERER_TEST_F(
 class LayerTreeHostCopyRequestTestCountTextures
     : public LayerTreeHostCopyRequestTest {
  protected:
-  std::unique_ptr<FakeOutputSurface> CreateFakeOutputSurface() override {
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
     context_provider_ = TestContextProvider::Create();
     return FakeOutputSurface::Create3d(context_provider_);
   }
@@ -864,8 +865,6 @@ class LayerTreeHostCopyRequestTestCountTextures
   }
 
   void BeginTest() override {
-    num_textures_without_readback_ = 0;
-    num_textures_with_readback_ = 0;
     waited_sync_token_after_readback_.Clear();
     PostSetNeedsCommitToMainThread();
   }
@@ -882,8 +881,8 @@ class LayerTreeHostCopyRequestTestCountTextures
     }
   }
 
-  void SwapBuffersOnThread(LayerTreeHostImpl* impl, bool result) override {
-    switch (impl->active_tree()->source_frame_number()) {
+  void SwapBuffersCompleteOnThread() override {
+    switch (num_swaps_++) {
       case 0:
         // The layers have been drawn, so their textures have been allocated.
         num_textures_without_readback_ =
@@ -907,8 +906,9 @@ class LayerTreeHostCopyRequestTestCountTextures
   virtual void DoEndTest() { EndTest(); }
 
   scoped_refptr<TestContextProvider> context_provider_;
-  size_t num_textures_without_readback_;
-  size_t num_textures_with_readback_;
+  int num_swaps_ = 0;
+  size_t num_textures_without_readback_ = 0;
+  size_t num_textures_with_readback_ = 0;
   gpu::SyncToken waited_sync_token_after_readback_;
   FakeContentLayerClient client_;
   scoped_refptr<FakePictureLayer> root_;
@@ -931,19 +931,20 @@ class LayerTreeHostCopyRequestTestCreatesTexture
     EXPECT_TRUE(result->HasTexture());
 
     TextureMailbox mailbox;
-    std::unique_ptr<SingleReleaseCallback> release;
-    result->TakeTexture(&mailbox, &release);
-    EXPECT_TRUE(release);
-
-    release->Run(gpu::SyncToken(), false);
+    result->TakeTexture(&mailbox, &release_);
+    EXPECT_TRUE(release_);
   }
 
   void AfterTest() override {
+    release_->Run(gpu::SyncToken(), false);
+
     // No sync point was needed.
     EXPECT_FALSE(waited_sync_token_after_readback_.HasData());
     // Except the copy to have made another texture.
     EXPECT_EQ(num_textures_without_readback_ + 1, num_textures_with_readback_);
   }
+
+  std::unique_ptr<SingleReleaseCallback> release_;
 };
 
 SINGLE_AND_MULTI_THREAD_DIRECT_RENDERER_TEST_F(

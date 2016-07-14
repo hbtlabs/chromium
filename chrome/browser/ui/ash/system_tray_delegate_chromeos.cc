@@ -24,6 +24,7 @@
 #include "ash/common/system/chromeos/shutdown_policy_observer.h"
 #include "ash/common/system/date/clock_observer.h"
 #include "ash/common/system/ime/ime_observer.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray_accessibility.h"
@@ -33,7 +34,8 @@
 #include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
+#include "ash/system/chromeos/rotation/tray_rotation_lock.h"
+#include "ash/system/chromeos/tray_display.h"
 #include "ash/wm/lock_state_controller.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -848,6 +850,16 @@ void SystemTrayDelegateChromeOS::ShouldRebootOnShutdown(
 
 ash::VPNDelegate* SystemTrayDelegateChromeOS::GetVPNDelegate() const {
   return vpn_delegate_.get();
+}
+
+std::unique_ptr<ash::SystemTrayItem>
+SystemTrayDelegateChromeOS::CreateDisplayTrayItem(ash::SystemTray* tray) {
+  return base::MakeUnique<ash::TrayDisplay>(tray);
+}
+
+std::unique_ptr<ash::SystemTrayItem>
+SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
+  return base::MakeUnique<ash::TrayRotationLock>(tray);
 }
 
 void SystemTrayDelegateChromeOS::UserAddedToSession(

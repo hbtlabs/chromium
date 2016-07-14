@@ -348,7 +348,6 @@ blink::WebURLLoader* CreateWebURLLoader(const blink::WebDocument& document,
 blink::WebURLRequest CreateWebURLRequest(const blink::WebDocument& document,
                                          const GURL& gurl) {
   blink::WebURLRequest request;
-  request.initialize();
   request.setURL(gurl);
   request.setFirstPartyForCookies(document.firstPartyForCookies());
   return request;
@@ -1469,7 +1468,8 @@ void DownloadFile(PP_Instance instance,
 
   // Handle special PNaCl support files which are installed on the user's
   // machine.
-  if (url.find(kPNaClTranslatorBaseUrl, 0) == 0) {
+  if (base::StartsWith(url, kPNaClTranslatorBaseUrl,
+                       base::CompareCase::SENSITIVE)) {
     PP_NaClFileInfo file_info = kInvalidNaClFileInfo;
     PP_FileHandle handle = GetReadonlyPnaclFd(url.c_str(),
                                               false /* is_executable */,

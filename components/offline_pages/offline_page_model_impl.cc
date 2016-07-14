@@ -450,16 +450,26 @@ void OfflinePageModelImpl::CheckPagesExistOfflineAfterLoadDone(
 void OfflinePageModelImpl::GetAllPages(
     const MultipleOfflinePageItemCallback& callback) {
   RunWhenLoaded(base::Bind(&OfflinePageModelImpl::GetAllPagesAfterLoadDone,
-                           weak_ptr_factory_.GetWeakPtr(), callback));
+                           weak_ptr_factory_.GetWeakPtr(), GetAllPageMode::ALL,
+                           callback));
+}
+
+void OfflinePageModelImpl::GetAllPagesWithExpired(
+    const MultipleOfflinePageItemCallback& callback) {
+  RunWhenLoaded(base::Bind(&OfflinePageModelImpl::GetAllPagesAfterLoadDone,
+                           weak_ptr_factory_.GetWeakPtr(),
+                           GetAllPageMode::ALL_WITH_EXPIRED, callback));
 }
 
 void OfflinePageModelImpl::GetAllPagesAfterLoadDone(
+    GetAllPageMode mode,
     const MultipleOfflinePageItemCallback& callback) const {
   DCHECK(is_loaded_);
 
   MultipleOfflinePageItemResult offline_pages;
   for (const auto& id_page_pair : offline_pages_) {
-    if (!id_page_pair.second.IsExpired())
+    if (mode == GetAllPageMode::ALL_WITH_EXPIRED ||
+        !id_page_pair.second.IsExpired())
       offline_pages.push_back(id_page_pair.second);
   }
 
@@ -654,17 +664,18 @@ void OfflinePageModelImpl::OnExpirePageDone(int64_t offline_id,
   if (iter != offline_pages_.end()) {
     iter->second.expiration_time = expiration_time;
     ClientId client_id = iter->second.client_id;
-    UMA_HISTOGRAM_CUSTOM_COUNTS(
-        AddHistogramSuffix(client_id, "OfflinePages.ExpirePage.PageLifetime")
-            .c_str(),
-        (expiration_time - iter->second.creation_time).InMinutes(), 1,
-        base::TimeDelta::FromDays(30).InMinutes(), 50);
-    UMA_HISTOGRAM_CUSTOM_COUNTS(
+    base::HistogramBase* histogram = base::Histogram::FactoryGet(
+        AddHistogramSuffix(client_id, "OfflinePages.ExpirePage.PageLifetime"),
+        1, base::TimeDelta::FromDays(30).InMinutes(), 50,
+        base::HistogramBase::kUmaTargetedHistogramFlag);
+    histogram->Add((expiration_time - iter->second.creation_time).InMinutes());
+    histogram = base::Histogram::FactoryGet(
         AddHistogramSuffix(client_id,
-                           "OfflinePages.ExpirePage.TimeSinceLastAccess")
-            .c_str(),
-        (expiration_time - iter->second.last_access_time).InMinutes(), 1,
-        base::TimeDelta::FromDays(30).InMinutes(), 50);
+                           "OfflinePages.ExpirePage.TimeSinceLastAccess"),
+        1, base::TimeDelta::FromDays(30).InMinutes(), 50,
+        base::HistogramBase::kUmaTargetedHistogramFlag);
+    histogram->Add(
+        (expiration_time - iter->second.last_access_time).InMinutes());
   }
 }
 

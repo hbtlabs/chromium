@@ -311,7 +311,7 @@ bool Editor::canDeleteRange(const EphemeralRange& range) const
         VisiblePosition start = createVisiblePosition(range.startPosition());
         VisiblePosition previous = previousPositionOf(start);
         // FIXME: We sometimes allow deletions at the start of editable roots, like when the caret is in an empty list item.
-        if (previous.isNull() || previous.deepEquivalent().anchorNode()->rootEditableElement() != startContainer->rootEditableElement())
+        if (previous.isNull() || rootEditableElement(*previous.deepEquivalent().anchorNode()) != rootEditableElement(*startContainer))
             return false;
     }
     return true;
@@ -1378,6 +1378,9 @@ void Editor::toggleOverwriteModeEnabled()
     frame().selection().setShouldShowBlockCursor(m_overwriteModeEnabled);
 }
 
+// TODO(tkent): This is a workaround of some crash bugs in the editing code,
+// which assumes a document has a valid HTML structure. We should make the
+// editing code more robust, and should remove this hack. crbug.com/580941.
 void Editor::tidyUpHTMLStructure(Document& document)
 {
     // hasEditableStyle() needs up-to-date ComputedStyle.
@@ -1403,6 +1406,7 @@ void Editor::tidyUpHTMLStructure(Document& document)
     // non-<html> root elements under <body>, and the <body> works as
     // rootEditableElement.
     document.addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "document.execCommand() doesn't work with an invalid HTML structure. It is corrected automatically."));
+    UseCounter::count(document, UseCounter::ExecCommandAltersHTMLStructure);
 
     Element* root = HTMLHtmlElement::create(document);
     if (existingHead)

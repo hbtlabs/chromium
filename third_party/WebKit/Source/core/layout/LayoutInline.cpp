@@ -26,7 +26,6 @@
 #include "core/dom/StyleEngine.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutBlock.h"
-#include "core/layout/LayoutFullScreen.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
@@ -349,17 +348,6 @@ void LayoutInline::splitInlines(LayoutBlockFlow* fromBlock, LayoutBlockFlow* toB
     LayoutBlockFlow* middleBlock, LayoutObject* beforeChild, LayoutBoxModelObject* oldCont)
 {
     ASSERT(isDescendantOf(fromBlock));
-
-    // If we're splitting the inline containing the fullscreened element,
-    // |beforeChild| may be the layoutObject for the fullscreened element. However,
-    // that layoutObject is wrapped in a LayoutFullScreen, so |this| is not its
-    // parent. Since the splitting logic expects |this| to be the parent, set
-    // |beforeChild| to be the LayoutFullScreen.
-    if (Fullscreen* fullscreen = Fullscreen::fromIfExists(document())) {
-        const Element* fullScreenElement = fullscreen->webkitCurrentFullScreenElement();
-        if (fullScreenElement && beforeChild && beforeChild->node() == fullScreenElement)
-            beforeChild = fullscreen->fullScreenLayoutObject();
-    }
 
     // FIXME: Because splitting is O(n^2) as tags nest pathologically, we cap the depth at which we're willing to clone.
     // There will eventually be a better approach to this problem that will let us nest to a much
@@ -1062,9 +1050,15 @@ LayoutRect LayoutInline::visualOverflowRect() const
     LayoutUnit outlineOutset(style()->outlineOutsetExtent());
     if (outlineOutset) {
         Vector<LayoutRect> rects;
-        // We have already included outline extents of line boxes in linesVisualOverflowBoundingBox(),
-        // so the following just add outline rects for children and continuations.
-        addOutlineRectsForChildrenAndContinuations(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        if (document().inNoQuirksMode()) {
+            // We have already included outline extents of line boxes in linesVisualOverflowBoundingBox(),
+            // so the following just add outline rects for children and continuations.
+            addOutlineRectsForChildrenAndContinuations(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        } else {
+            // In non-standard mode, because the difference in LayoutBlock::minLineHeightForReplacedObject(),
+            // linesVisualOverflowBoundingBox() may not cover outline rects of lines containing replaced objects.
+            addOutlineRects(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        }
         if (!rects.isEmpty()) {
             LayoutRect outlineRect = unionRectEvenIfEmpty(rects);
             outlineRect.inflate(outlineOutset);
@@ -1098,9 +1092,12 @@ bool LayoutInline::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* an
     // its controlClipRect will be wrong. For overflow clip we use the values cached by the layer.
     rect.setLocation(topLeft);
 
-    if (container->isBox() && !toLayoutBox(container)->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
+    LayoutBox* containerBox = container->isBox() ? toLayoutBox(container) : nullptr;
+    if (containerBox && !containerBox->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
         return false;
 
+    if (containerBox)
+        containerBox->flipForWritingMode(rect);
     return container->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
 }
 

@@ -10,11 +10,14 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "ipc/ipc.mojom.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_listener.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
 namespace IPC {
@@ -50,6 +53,11 @@ class IPC_EXPORT MojoBootstrap {
 
   // Start the handshake over the underlying message pipe.
   virtual void Connect() = 0;
+
+  virtual mojo::AssociatedGroup* GetAssociatedGroup() = 0;
+
+  virtual void SetProxyTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) = 0;
 
   // GetSelfPID returns our PID.
   base::ProcessId GetSelfPID() const;

@@ -35,19 +35,19 @@ InspectorTest.createWorkspace = function(ignoreEvents)
 
 InspectorTest._mockTargetId = 1;
 
-InspectorTest.createMockTarget = function(id, debuggerModelConstructor, targetType)
+InspectorTest.createMockTarget = function(id, debuggerModelConstructor, capabilities)
 {
+    capabilities = capabilities || (WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker);
     var MockTarget = function(name, connection, callback)
     {
-        var type = typeof targetType === "undefined" ? WebInspector.Target.Type.Page : targetType;
-        WebInspector.Target.call(this, InspectorTest.testTargetManager, name, type, connection, null, callback);
+        WebInspector.Target.call(this, InspectorTest.testTargetManager, name, capabilities, connection, null, callback);
         this.consoleModel = new WebInspector.ConsoleModel(this);
         this.networkManager = new WebInspector.NetworkManager(this);
+        this.runtimeModel = new WebInspector.RuntimeModel(this);
         this.resourceTreeModel = new WebInspector.ResourceTreeModel(this);
         this.resourceTreeModel._inspectedPageURL = InspectorTest.resourceTreeModel._inspectedPageURL;
         this.resourceTreeModel._cachedResourcesProcessed = true;
         this.resourceTreeModel._frameAttached("42", 0);
-        this.runtimeModel = new WebInspector.RuntimeModel(this);
         this.debuggerModel = debuggerModelConstructor ? new debuggerModelConstructor(this) : new WebInspector.DebuggerModel(this);
         this._modelByConstructor.set(WebInspector.DebuggerModel, this.debuggerModel);
         this.domModel = new WebInspector.DOMModel(this);

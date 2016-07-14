@@ -422,8 +422,8 @@ public:
 
     // IE extensions. Used to calculate offsetWidth/Height.  Overridden by inlines (LayoutFlow)
     // to return the remaining width on a given line (and the height of a single line).
-    LayoutUnit offsetWidth() const override { return m_frameRect.width(); }
-    LayoutUnit offsetHeight() const override { return m_frameRect.height(); }
+    LayoutUnit offsetWidth() const final { return m_frameRect.width(); }
+    LayoutUnit offsetHeight() const final { return m_frameRect.height(); }
 
     int pixelSnappedOffsetWidth(const Element*) const final;
     int pixelSnappedOffsetHeight(const Element*) const final;
@@ -836,8 +836,8 @@ public:
     LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
     int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
 
-    LayoutUnit offsetLeft(const Element*) const override;
-    LayoutUnit offsetTop(const Element*) const override;
+    LayoutUnit offsetLeft(const Element*) const final;
+    LayoutUnit offsetTop(const Element*) const final;
 
     LayoutPoint flipForWritingModeForChild(const LayoutBox* child, const LayoutPoint&) const;
     LayoutUnit flipForWritingMode(LayoutUnit position) const WARN_UNUSED_RETURN {
@@ -873,9 +873,11 @@ public:
             return;
         rect.setX(m_frameRect.width() - rect.maxX());
     }
-    // These represent your location relative to your container as a physical offset.
-    // In layout related methods you almost always want the logical location (e.g. x() and y()).
-    LayoutPoint topLeftLocation() const;
+    // These represent your location relative to your container as a physical
+    // offset. In layout related methods you almost always want the logical
+    // location (e.g. x() and y()). Passing |container| causes flipped-block
+    // flipping w.r.t. that container, or containingBlock() otherwise.
+    LayoutPoint topLeftLocation(const LayoutBox* flippedBlocksContainer = nullptr) const;
     LayoutSize topLeftLocationOffset() const { return toLayoutSize(topLeftLocation()); }
 
     LayoutRect logicalVisualOverflowRectForPropagation(const ComputedStyle&) const;

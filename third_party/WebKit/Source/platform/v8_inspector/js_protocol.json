@@ -152,8 +152,8 @@
                     { "name": "functionName", "type": "string", "description": "JavaScript function name." },
                     { "name": "scriptId", "$ref": "ScriptId", "description": "JavaScript script id." },
                     { "name": "url", "type": "string", "description": "JavaScript script name or url." },
-                    { "name": "lineNumber", "type": "integer", "description": "JavaScript script line number." },
-                    { "name": "columnNumber", "type": "integer", "description": "JavaScript script column number." }
+                    { "name": "lineNumber", "type": "integer", "description": "JavaScript script line number (0-based)." },
+                    { "name": "columnNumber", "type": "integer", "description": "JavaScript script column number (0-based)." }
                 ]
             },
             {
@@ -376,18 +376,6 @@
                 "description": "Location in the source code."
             },
             {
-                "id": "FunctionDetails",
-                "hidden": true,
-                "type": "object",
-                "properties": [
-                    { "name": "location", "$ref": "Location", "optional": true, "description": "Location of the function, none for native functions." },
-                    { "name": "functionName", "type": "string", "description": "Name of the function." },
-                    { "name": "isGenerator", "type": "boolean", "description": "Whether this is a generator function." },
-                    { "name": "scopeChain", "type": "array", "optional": true, "items": { "$ref": "Scope" }, "description": "Scope chain for this closure." }
-                ],
-                "description": "Information about the function."
-            },
-            {
                 "id": "CallFrame",
                 "type": "object",
                 "properties": [
@@ -579,17 +567,6 @@
                 "description": "Returns source for the script with given id."
             },
             {
-                "name": "getFunctionDetails",
-                "hidden": true,
-                "parameters": [
-                    { "name": "functionId", "$ref": "Runtime.RemoteObjectId", "description": "Id of the function to get details for." }
-                ],
-                "returns": [
-                    { "name": "details", "$ref": "FunctionDetails", "description": "Information about the function." }
-                ],
-                "description": "Returns detailed information on given function."
-            },
-            {
                 "name": "setPauseOnExceptions",
                 "parameters": [
                     { "name": "state", "type": "string", "enum": ["none", "uncaught", "all"], "description": "Pause on exceptions mode." }
@@ -741,7 +718,7 @@
                 "type": "object",
                 "description": "Console message.",
                 "properties": [
-                    { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "console-api", "storage", "appcache", "rendering", "security", "other", "deprecation"], "description": "Message source." },
+                    { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "console-api", "storage", "appcache", "rendering", "security", "other", "deprecation", "worker"], "description": "Message source." },
                     { "name": "level", "type": "string", "enum": ["log", "warning", "error", "debug", "info"], "description": "Message severity." },
                     { "name": "text", "type": "string", "description": "Message text." },
                     { "name": "type", "type": "string", "optional": true, "enum": ["log", "dir", "dirxml", "table", "trace", "clear", "startGroup", "startGroupCollapsed", "endGroup", "assert", "profile", "profileEnd"], "description": "Console message type." },
@@ -754,7 +731,8 @@
                     { "name": "stack", "$ref": "Runtime.StackTrace", "optional": true, "description": "JavaScript stack trace for assertions and error messages." },
                     { "name": "networkRequestId", "type": "string", "optional": true, "description": "Identifier of the network request associated with this message." },
                     { "name": "timestamp", "$ref": "Timestamp", "description": "Timestamp, when this message was fired.", "hidden": true },
-                    { "name": "executionContextId", "$ref": "Runtime.ExecutionContextId", "optional": true, "description": "Identifier of the context where this message was created", "hidden": true }
+                    { "name": "executionContextId", "$ref": "Runtime.ExecutionContextId", "optional": true, "description": "Identifier of the context where this message was created", "hidden": true },
+                    { "name": "workerId", "type": "string", "optional": true, "description": "Identifier of the worker this message came from.", "hidden": true }
                 ]
             }
         ],

@@ -31,7 +31,7 @@ ArcUserDataService::~ArcUserDataService() {
   arc_bridge_service()->RemoveObserver(this);
 }
 
-void ArcUserDataService::OnBridgeStopped() {
+void ArcUserDataService::OnBridgeStopped(ArcBridgeService::StopReason reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const AccountId& account_id =
       user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
@@ -47,7 +47,7 @@ void ArcUserDataService::OnBridgeStopped() {
 
 void ArcUserDataService::ClearIfDisabled() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (arc_bridge_service()->state() != ArcBridgeService::State::STOPPED) {
+  if (!arc_bridge_service()->stopped()) {
     LOG(ERROR) << "ARC instance not stopped, user data can't be cleared";
     return;
   }

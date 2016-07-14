@@ -27,6 +27,7 @@
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
+#include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/metrics/time_ticks_experiment_win.h"
@@ -200,7 +201,8 @@ void CleanUpGlobalPersistentHistogramStorage() {
 
   // Open (with delete) and then immediately close the file by going out of
   // scope. This is the only cross-platform safe way to delete a file that may
-  // be open elsewhere.
+  // be open elsewhere. Open handles will continue to operate normally but
+  // new opens will not be possible.
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
                         base::File::FLAG_DELETE_ON_CLOSE);
 }
@@ -522,6 +524,10 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new sync_driver::DeviceCountMetricsProvider(base::Bind(
               &browser_sync::ChromeSyncClient::GetDeviceInfoTrackers))));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new HttpsEngagementMetricsProvider()));
 
   // Clear stability metrics if it is the first time cellular upload logic
   // should apply to avoid sudden bulk uploads. It needs to be done after all

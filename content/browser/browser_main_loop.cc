@@ -278,8 +278,8 @@ static void SetUpGLibLogHandler() {
 void WaitForMojoShellInitialize() {
   // TODO(rockot): Remove this. http://crbug.com/594852.
   base::RunLoop wait_loop;
-  MojoShellConnection::GetForProcess()->SetInitializeHandler(
-      wait_loop.QuitClosure());
+  MojoShellConnection::GetForProcess()->GetShellConnection()->
+      set_initialize_handler(wait_loop.QuitClosure());
   wait_loop.Run();
 }
 #endif  // defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
@@ -1079,6 +1079,11 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
       }
       case BrowserThread::IO: {
         TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:IOThread");
+        // At this point we should have removed all tabs which will lead to all
+        // RenderProcessHostImpl instances getting terminated.
+        // It is suspected that this is not happening: crbug.com/608049.
+        // TODO(alokp): Remove this after fixing the issue.
+        RenderProcessHostImpl::CheckAllTerminated();
         ResetThread_IO(std::move(io_thread_));
         break;
       }
