@@ -23,13 +23,6 @@ from telemetry.testing import progress_reporter
 from benchmarks import system_health
 
 
-# We only cover memory system health
-_SH_BENCHMARKS_TO_SMOKE_TEST = [
-  system_health.DesktopMemorySystemHealth,
-  system_health.MobileMemorySystemHealth,
-]
-
-
 def GetSystemHealthBenchmarksToSmokeTest():
   sh_benchmark_classes = discover.DiscoverClassesInModule(
       system_health, perf_benchmark.PerfBenchmark,
@@ -41,12 +34,6 @@ def GetSystemHealthBenchmarksToSmokeTest():
 _DISABLED_TESTS = frozenset({
   # crbug.com/624474
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:dropbox',  # pylint: disable=line-too-long
-  # crbug.com/624701
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:games:bubbles',  # pylint: disable=line-too-long
-  # crbug.com/624840
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:drive',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:gmail',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:dropbox',  # pylint: disable=line-too-long
 })
 
 

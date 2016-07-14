@@ -56,6 +56,32 @@ if (is_win) {
   }
 }
 
+# This target exists above chrome and it's main components in the dependency
+# tree as a central place to put assert_no_deps annotations. Since this depends
+# on Chrome and the main DLLs it uses, it will transitively assert that those
+# targets also have no deps on disallowed things.
+group("assert_no_deps") {
+  deps = []
+
+  if (is_android) {
+    deps += [ "//chrome/android:chrome_public_apk" ]
+  } else {
+    deps += [ ":chrome" ]
+  }
+
+  if (is_win) {
+    deps += [
+      ":chrome_dll",
+      ":main_dll",
+    ]
+  }
+
+  # This should not pull in installer strings. This is will bloat the binary
+  # for no reason and is easy to mess up. See the comment at the top of
+  # //chrome/installer/util/BUILD.gn.
+  assert_no_deps = [ "//chrome/installer/util:strings" ]
+}
+
 if (!is_android && !is_mac) {
   group("chrome") {
     public_deps = [
@@ -736,32 +762,37 @@ if (is_win) {
   # framework in the app bundle, rather than the framework bundle in
   # root_out_dir, since copy_bundle_data copies the contents of the link
   # rather than the link itself.
-  action("devtools_debug_resources") {
-    _stamp = "$target_out_dir/run_${target_name}.stamp"
+  if (debug_devtools) {
+    action("devtools_debug_resources") {
+      _stamp = "$target_out_dir/run_${target_name}.stamp"
 
-    outputs = [
-      _stamp,
-    ]
+      outputs = [
+        _stamp,
+      ]
 
-    script = "//build/symlink.py"
-    args = [
-      "-f",
-      "--touch",
-      rebase_path(_stamp, root_out_dir),
+      script = "//build/symlink.py"
+      args = [
+        "-f",
+        "--touch",
+        rebase_path(_stamp, root_out_dir),
 
-      # Convert the symlink source and destination to an absolute paths, which
-      # makes symlinking easier (now pwd manipulation).
-      rebase_path("$root_out_dir/resources/inspector"),
-      rebase_path(
-          "$root_out_dir/$chrome_product_full_name.app/Contents/Versions/$chrome_version_full/$chrome_framework_name.framework/Resources/inspector"),
-    ]
+        # Convert the symlink source and destination to an absolute paths, which
+        # makes symlinking easier (now pwd manipulation).
+        rebase_path("$root_out_dir/resources/inspector"),
+        rebase_path(
+            "$root_out_dir/$chrome_product_full_name.app/Contents/Versions/$chrome_version_full/$chrome_framework_name.framework/Resources/inspector"),
+      ]
 
-    deps = [
-      # Depend on :chrome_app to ensure that the bundle is produced before
-      # creating or destroying the symlink.
-      ":chrome_app",
-      "//third_party/WebKit/public:blink_devtools_frontend_resources",
-    ]
+      deps = [
+        # Depend on :chrome_app to ensure that the bundle is produced before
+        # creating or destroying the symlink.
+        ":chrome_app",
+        "//third_party/WebKit/public:blink_devtools_frontend_resources",
+      ]
+    }
+  } else {
+    group("devtools_debug_resources") {
+    }
   }
 
   if (enable_nacl) {
@@ -1094,7 +1125,7 @@ if (is_win) {
   } else {
     group("chrome_dump_syms") {
     }
-    group("chrome_symbol_archive") {
+    group("chrome_dsym_archive") {
     }
   }
 }

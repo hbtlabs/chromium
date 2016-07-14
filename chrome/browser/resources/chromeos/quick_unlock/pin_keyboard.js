@@ -48,15 +48,42 @@ Polymer({
     }
   },
 
+  /**
+   * Gets the container holding the password field.
+   * @type {!HTMLInputElement}
+   */
+  get inputElement() {
+    return this.$$('#pin-input');
+  },
+
+  /**
+   * Gets the submit button.
+   * @type {!HTMLElement}
+   */
+  get submitButton() {
+    return this.$$('.submit-button');
+  },
+
   /** Transfers focus to the input element. */
   focus: function() {
     this.$$('#pin-input').focus();
   },
 
-  /** Called when a keypad number has been tapped. */
+  /**
+   * Called when a keypad number has been tapped.
+   * @param {!{target: !PaperButtonElement}} event
+   * @private
+   */
   onNumberTap_: function(event, detail) {
     var numberValue = event.target.getAttribute('value');
     this.value += numberValue;
+
+    // If a number button is clicked, we do not want to switch focus to the
+    // button, therefore we transfer focus back to the input, but if a number
+    // button is tabbed into, it should keep focus, so users can use tab and
+    // spacebar/return to enter their PIN.
+    if (!event.target.receivedFocusFromKeyboard)
+      this.focus();
   },
 
   /** Fires a submit event with the current PIN value. */

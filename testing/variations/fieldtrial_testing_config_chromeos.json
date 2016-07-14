@@ -64,6 +64,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
+        }
+    ],
     "ExtensionActionRedesign": [
         {
             "group_name": "Enabled"
@@ -72,11 +80,6 @@
     "GoogleBrandedContextMenu": [
         {
             "group_name": "branded"
-        }
-    ],
-    "LocalNTPSuggestionsService": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "MainFrameBeforeActivation": [
@@ -117,14 +120,6 @@
     ],
     "PageRevisitInstrumentation": [
         {
-            "group_name": "Enabled"
-        }
-    ],
-    "PassiveDocumentEventListeners": [
-        {
-            "enable_features": [
-                "PassiveDocumentEventListeners"
-            ],
             "group_name": "Enabled"
         }
     ],

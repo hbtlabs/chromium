@@ -78,7 +78,9 @@ class SpellChecker;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
 
-class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
+extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
+
+class CORE_EXPORT LocalFrame final : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 public:
     static LocalFrame* create(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry* = nullptr);
@@ -104,7 +106,7 @@ public:
     bool prepareForCommit() override;
     void didChangeVisibilityState() override;
 
-    void willDetachFrameHost();
+    void detachChildren();
 
     LocalDOMWindow* localDOMWindow() const;
     void setDOMWindow(LocalDOMWindow*);

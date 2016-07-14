@@ -245,12 +245,6 @@
       'undo/bookmark_undo_service_test.cc',
       'undo/undo_manager_test.cc',
     ],
-
-    'audio_modem_unittest_sources': [
-      'audio_modem/audio_player_unittest.cc',
-      'audio_modem/audio_recorder_unittest.cc',
-      'audio_modem/modem_unittest.cc',
-    ],
     'data_use_measurement_unittest_sources': [
       'data_use_measurement/content/data_use_measurement_unittest.cc',
     ],
@@ -540,6 +534,7 @@
       'password_manager/core/browser/password_syncable_service_unittest.cc',
       'password_manager/core/browser/password_ui_utils_unittest.cc',
       'password_manager/core/browser/psl_matching_helper_unittest.cc',
+      'password_manager/core/browser/sql_table_builder_unittest.cc',
       'password_manager/core/browser/statistics_table_unittest.cc',
       'password_manager/core/common/credential_manager_types_unittest.cc',
       'password_manager/sync/browser/password_manager_setting_migrator_service_unittest.cc',
@@ -810,9 +805,11 @@
     'subresource_filter_core_common_unittest_sources': [
       'subresource_filter/core/common/closed_hash_map_unittest.cc',
       'subresource_filter/core/common/fuzzy_pattern_matching_unittest.cc',
+      'subresource_filter/core/common/indexed_ruleset_unittest.cc',
       'subresource_filter/core/common/knuth_morris_pratt_unittest.cc',
       'subresource_filter/core/common/ngram_extractor_unittest.cc',
       'subresource_filter/core/common/string_splitter_unittest.cc',
+      'subresource_filter/core/common/url_pattern_matching_unittest.cc',
     ],
     'suggestions_unittest_sources': [
       'suggestions/blacklist_store_unittest.cc',
@@ -878,8 +875,11 @@
       'tracing/common/graphics_memory_dump_provider_android_unittest.cc',
       'tracing/common/process_metrics_memory_dump_provider_unittest.cc',
       'tracing/core/proto_utils_unittest.cc',
+      'tracing/core/proto_zero_message_unittest.cc',
       'tracing/core/trace_ring_buffer_unittest.cc',
       'tracing/core/scattered_stream_writer_unittest.cc',
+      'tracing/test/fake_scattered_buffer.cc',
+      'tracing/test/proto_zero_generation_unittest.cc',
     ],
     'translate_unittest_sources': [
       'translate/core/browser/language_state_unittest.cc',
@@ -1385,6 +1385,7 @@
             'components.gyp:zoom',
             'scheduler/scheduler.gyp:scheduler',
             'test_runner/test_runner.gyp:test_runner',
+            'tracing.gyp:proto_zero_testing_messages',
             'tracing.gyp:tracing',
             'webcrypto/webcrypto.gyp:webcrypto',
             '../third_party/boringssl/boringssl.gyp:boringssl',
@@ -1522,7 +1523,6 @@
         }],
         ['OS != "ios" and OS != "android"', {
           'sources': [
-            '<@(audio_modem_unittest_sources)',
             '<@(feedback_unittest_sources)',
             '<@(proximity_auth_unittest_sources)',
             '<@(webusb_detector_unittest_sources)',
@@ -1540,8 +1540,6 @@
             '../device/usb/usb.gyp:device_usb_mocks',
             '../google_apis/google_apis.gyp:google_apis_test_support',
             '../third_party/protobuf/protobuf.gyp:protobuf_lite',
-            'components.gyp:audio_modem',
-            'components.gyp:audio_modem_test_support',
             'components.gyp:cryptauth',
             'components.gyp:cryptauth_proto',
             'components.gyp:cryptauth_test_support',

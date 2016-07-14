@@ -66,7 +66,6 @@
 #include "url/gurl.h"
 
 #if defined(OS_IOS)
-#include "components/autofill/core/browser/autofill_field_trial_ios.h"
 #include "components/autofill/core/browser/keyboard_accessory_metrics_logger.h"
 #endif
 
@@ -515,11 +514,15 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
           GetProfileSuggestions(*form_structure, field, *autofill_field);
     }
     if (!suggestions.empty()) {
+      bool is_context_secure =
+          client_->IsContextSecure(form_structure->source_url());
+      if (is_filling_credit_card)
+        AutofillMetrics::LogIsQueriedCreditCardFormSecure(is_context_secure);
+
       // Don't provide credit card suggestions for non-secure pages, but do
       // provide them for secure pages with passive mixed content (see impl. of
       // IsContextSecure).
-      if (is_filling_credit_card &&
-          !client_->IsContextSecure(form_structure->source_url())) {
+      if (is_filling_credit_card && !is_context_secure) {
         Suggestion warning_suggestion(l10n_util::GetStringUTF16(
             IDS_AUTOFILL_WARNING_INSECURE_CONNECTION));
         warning_suggestion.frontend_id = POPUP_ITEM_ID_WARNING_MESSAGE;
@@ -590,13 +593,6 @@ bool AutofillManager::WillFillCreditCardNumber(const FormData& form,
 
   if (autofill_field->Type().GetStorableType() == CREDIT_CARD_NUMBER)
     return true;
-
-#if defined(OS_IOS)
-  // On iOS, we only fill out one field at a time (assuming the new full-form
-  // feature isn't enabled). So we only need to check the current field.
-  if (!AutofillFieldTrialIOS::IsFullFormAutofillEnabled())
-    return false;
-#endif
 
   // If the relevant section is already autofilled, the new fill operation will
   // only fill |autofill_field|.

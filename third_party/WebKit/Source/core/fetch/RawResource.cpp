@@ -96,7 +96,7 @@ void RawResource::appendData(const char* data, size_t length)
 {
     Resource::appendData(data, length);
 
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->dataReceived(this, data, length);
 }
@@ -131,14 +131,14 @@ void RawResource::willFollowRedirect(ResourceRequest& newRequest, const Resource
     Resource::willFollowRedirect(newRequest, redirectResponse);
 
     ASSERT(!redirectResponse.isNull());
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->redirectReceived(this, newRequest, redirectResponse);
 }
 
 void RawResource::willNotFollowRedirect()
 {
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->redirectBlocked();
 }
@@ -148,7 +148,7 @@ void RawResource::responseReceived(const ResourceResponse& response, std::unique
     bool isSuccessfulRevalidation = isCacheValidator() && response.httpStatusCode() == 304;
     Resource::responseReceived(response, nullptr);
 
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     ASSERT(count() <= 1 || !handle);
     while (RawResourceClient* c = w.next()) {
         // |handle| is cleared when passed, but it's not a problem because
@@ -161,7 +161,7 @@ void RawResource::responseReceived(const ResourceResponse& response, std::unique
     // Note: |m_data| can be null when no data is appended to the original
     // resource.
     if (isSuccessfulRevalidation && m_data) {
-        ResourceClientWalker<RawResourceClient> w(m_clients);
+        ResourceClientWalker<RawResourceClient> w(clients());
         while (RawResourceClient* c = w.next())
             c->dataReceived(this, m_data->data(), m_data->size());
     }
@@ -170,28 +170,28 @@ void RawResource::responseReceived(const ResourceResponse& response, std::unique
 void RawResource::setSerializedCachedMetadata(const char* data, size_t size)
 {
     Resource::setSerializedCachedMetadata(data, size);
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->setSerializedCachedMetadata(this, data, size);
 }
 
 void RawResource::didSendData(unsigned long long bytesSent, unsigned long long totalBytesToBeSent)
 {
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->dataSent(this, bytesSent, totalBytesToBeSent);
 }
 
 void RawResource::didDownloadData(int dataLength)
 {
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->dataDownloaded(this, dataLength);
 }
 
 void RawResource::reportResourceTimingToClients(const ResourceTimingInfo& info)
 {
-    ResourceClientWalker<RawResourceClient> w(m_clients);
+    ResourceClientWalker<RawResourceClient> w(clients());
     while (RawResourceClient* c = w.next())
         c->didReceiveResourceTiming(this, info);
 }
@@ -205,19 +205,18 @@ void RawResource::setDefersLoading(bool defers)
 static bool shouldIgnoreHeaderForCacheReuse(AtomicString headerName)
 {
     // FIXME: This list of headers that don't affect cache policy almost certainly isn't complete.
-    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, m_headers, ());
-    if (m_headers.isEmpty()) {
-        m_headers.add("Cache-Control");
-        m_headers.add("If-Modified-Since");
-        m_headers.add("If-None-Match");
-        m_headers.add("Origin");
-        m_headers.add("Pragma");
-        m_headers.add("Purpose");
-        m_headers.add("Referer");
-        m_headers.add("User-Agent");
-        m_headers.add(HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id);
-    }
-    return m_headers.contains(headerName);
+    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, headers, ({
+        "Cache-Control",
+        "If-Modified-Since",
+        "If-None-Match",
+        "Origin",
+        "Pragma",
+        "Purpose",
+        "Referer",
+        "User-Agent",
+        HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id,
+    }));
+    return headers.contains(headerName);
 }
 
 static bool isCacheableHTTPMethod(const AtomicString& method)
@@ -229,7 +228,7 @@ static bool isCacheableHTTPMethod(const AtomicString& method)
 
 bool RawResource::canReuse(const ResourceRequest& newRequest) const
 {
-    if (m_options.dataBufferingPolicy == DoNotBufferData)
+    if (dataBufferingPolicy() == DoNotBufferData)
         return false;
 
     if (!isCacheableHTTPMethod(m_resourceRequest.httpMethod()))

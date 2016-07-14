@@ -229,7 +229,7 @@ std::unique_ptr<GraphicsLayer> CompositedLayerMapping::createGraphicsLayer(Compo
 
     graphicsLayer->setCompositingReasons(reasons);
     graphicsLayer->setSquashingDisallowedReasons(squashingDisallowedReasons);
-    if (Node* owningNode = m_owningLayer.layoutObject()->generatingNode())
+    if (Node* owningNode = m_owningLayer.layoutObject()->node())
         graphicsLayer->setOwnerNodeId(DOMNodeIds::idForNode(owningNode));
 
     return graphicsLayer;
@@ -1547,7 +1547,7 @@ void CompositedLayerMapping::updateElementIdAndCompositorMutableProperties()
     uint32_t primaryMutableProperties = CompositorMutableProperty::kNone;
     uint32_t scrollMutableProperties = CompositorMutableProperty::kNone;
 
-    Node* owningNode = m_owningLayer.layoutObject()->generatingNode();
+    Node* owningNode = m_owningLayer.layoutObject()->node();
     Element* owningElement = nullptr;
     if (owningNode && owningNode->isElementNode())
         owningElement = toElement(owningNode);
@@ -1661,7 +1661,7 @@ bool CompositedLayerMapping::updateScrollingLayers(bool needsScrollingLayers)
             // Inner layer which renders the content that scrolls.
             m_scrollingContentsLayer = createGraphicsLayer(CompositingReasonLayerForScrollingContents);
 
-            if (Node* owningNode = m_owningLayer.layoutObject()->generatingNode()) {
+            if (Node* owningNode = m_owningLayer.layoutObject()->node()) {
                 m_scrollingContentsLayer->setElementId(createCompositorElementId(DOMNodeIds::idForNode(owningNode), CompositorSubElementId::Scroll));
                 m_scrollingContentsLayer->setCompositorMutableProperties(CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop);
             }
@@ -2298,9 +2298,6 @@ IntRect CompositedLayerMapping::recomputeInterestRect(const GraphicsLayer* graph
     // Start with the bounds of the graphics layer in the space of the anchor LayoutObject.
     FloatRect graphicsLayerBoundsInObjectSpace(graphicsLayerBounds);
     graphicsLayerBoundsInObjectSpace.move(offsetFromAnchorLayoutObject);
-    // The object space means including writing mode flip.
-    if (anchorLayoutObject->isBox())
-        toLayoutBox(anchorLayoutObject)->flipForWritingMode(graphicsLayerBoundsInObjectSpace);
 
     // Now map the bounds to its visible content rect in screen space, including applying clips along the way.
     LayoutRect visibleContentRect(graphicsLayerBoundsInObjectSpace);

@@ -3,11 +3,18 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/chooser_controller/mock_chooser_controller.h"
+#include "chrome/grit/generated_resources.h"
 
 MockChooserController::MockChooserController(content::RenderFrameHost* owner)
-    : ChooserController(owner) {}
+    : ChooserController(owner,
+                        IDS_USB_DEVICE_CHOOSER_PROMPT_ORIGIN,
+                        IDS_USB_DEVICE_CHOOSER_PROMPT_EXTENSION_NAME) {}
 
 MockChooserController::~MockChooserController() {}
+
+base::string16 MockChooserController::GetOkButtonLabel() const {
+  return base::string16();
+}
 
 size_t MockChooserController::NumOptions() const {
   return option_names_.size();

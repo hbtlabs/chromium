@@ -837,7 +837,7 @@ void XMLHttpRequest::throwForLoadFailureIfNeeded(ExceptionState& exceptionState,
 
     String message = "Failed to load '" + m_url.elidedString() + "'";
     if (reason.isNull()) {
-        message.append(".");
+        message.append('.');
     } else {
         message.append(": ");
         message.append(reason);
@@ -1714,6 +1714,14 @@ DEFINE_TRACE(XMLHttpRequest)
     XMLHttpRequestEventTarget::trace(visitor);
     DocumentParserClient::trace(visitor);
     ActiveDOMObject::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(XMLHttpRequest)
+{
+    visitor->traceWrappers(m_responseBlob);
+    visitor->traceWrappers(m_responseLegacyStream);
+    visitor->traceWrappers(m_responseDocument);
+    visitor->traceWrappers(m_responseArrayBuffer);
 }
 
 } // namespace blink

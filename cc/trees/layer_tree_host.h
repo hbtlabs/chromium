@@ -339,7 +339,7 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
 
   size_t num_queued_swap_promises() const { return swap_promise_list_.size(); }
 
-  void set_surface_id_namespace(uint32_t id_namespace);
+  void set_surface_client_id(uint32_t client_id);
   SurfaceSequence CreateSurfaceSequence();
 
   PropertyTrees* property_trees() { return &property_trees_; }
@@ -474,6 +474,10 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
  private:
   friend class LayerTreeHostSerializationTest;
 
+  // This is the number of consecutive frames in which we want the content to be
+  // suitable for GPU rasterization before re-enabling it.
+  enum { kNumFramesToConsiderBeforeGpuRasterization = 60 };
+
   void InitializeProxy(
       std::unique_ptr<Proxy> proxy,
       std::unique_ptr<BeginFrameSource> external_begin_frame_source);
@@ -598,8 +602,9 @@ class CC_EXPORT LayerTreeHost : public MutatorHostClient {
   // Set of layers that need to push properties.
   std::unordered_set<Layer*> layers_that_should_push_properties_;
 
-  uint32_t surface_id_namespace_;
+  uint32_t surface_client_id_;
   uint32_t next_surface_sequence_;
+  uint32_t num_consecutive_frames_suitable_for_gpu_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHost);
 };

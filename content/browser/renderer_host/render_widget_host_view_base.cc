@@ -377,11 +377,11 @@ RenderWidgetHostViewBase::GetOrientationTypeForDesktop(
 void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {
 }
 
-uint32_t RenderWidgetHostViewBase::GetSurfaceIdNamespace() {
+uint32_t RenderWidgetHostViewBase::GetSurfaceClientId() {
   return 0;
 }
 
-uint32_t RenderWidgetHostViewBase::SurfaceIdNamespaceAtPoint(
+uint32_t RenderWidgetHostViewBase::SurfaceClientIdAtPoint(
     cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
@@ -402,7 +402,7 @@ gfx::PointF RenderWidgetHostViewBase::TransformPointToRootCoordSpaceF(
 
 void RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    cc::SurfaceId original_surface,
+    const cc::SurfaceId& original_surface,
     gfx::Point* transformed_point) {
   *transformed_point = point;
 }
@@ -421,6 +421,18 @@ void RenderWidgetHostViewBase::ImeCancelComposition() {
 #if defined(USE_AURA)
   if (GetTextInputManager())
     GetTextInputManager()->ImeCancelComposition(this);
+#endif
+}
+
+void RenderWidgetHostViewBase::ImeCompositionRangeChanged(
+    const gfx::Range& range,
+    const std::vector<gfx::Rect>& character_bounds) {
+// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
+#if defined(USE_AURA)
+  if (GetTextInputManager()) {
+    GetTextInputManager()->ImeCompositionRangeChanged(this, range,
+                                                      character_bounds);
+  }
 #endif
 }
 

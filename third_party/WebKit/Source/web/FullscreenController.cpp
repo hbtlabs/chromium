@@ -37,7 +37,6 @@
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
-#include "core/layout/LayoutFullScreen.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/WebLayerTreeView.h"
 #include "public/web/WebFrameClient.h"
@@ -60,7 +59,7 @@ FullscreenController::FullscreenController(WebViewImpl* webViewImpl)
 {
 }
 
-void FullscreenController::didEnterFullScreen()
+void FullscreenController::didEnterFullscreen()
 {
     if (!m_provisionalFullScreenElement)
         return;
@@ -81,7 +80,7 @@ void FullscreenController::didEnterFullScreen()
         m_haveEnteredFullscreen = true;
     }
 
-    Fullscreen::from(document).didEnterFullScreenForElement(element);
+    Fullscreen::from(document).didEnterFullscreenForElement(element);
     DCHECK_EQ(Fullscreen::currentFullScreenElementFrom(document), element);
 
     if (isHTMLVideoElement(element)) {
@@ -91,7 +90,7 @@ void FullscreenController::didEnterFullScreen()
     }
 }
 
-void FullscreenController::didExitFullScreen()
+void FullscreenController::didExitFullscreen()
 {
     if (!m_fullScreenFrame)
         return;
@@ -120,7 +119,7 @@ void FullscreenController::didExitFullScreen()
                     m_webViewImpl->setVisualViewportOffset(m_exitFullscreenVisualViewportOffset);
                 }
 
-                fullscreen->didExitFullScreenForElement();
+                fullscreen->didExitFullscreen();
             }
         }
     }
@@ -131,6 +130,13 @@ void FullscreenController::didExitFullScreen()
 
 void FullscreenController::enterFullScreenForElement(Element* element)
 {
+    // TODO(dsinclair): This should not be needed because we addToTopLayer
+    // in Fullscreen::pushFullscreenElementStack but, the WebView code doesn't
+    // call Fullscreen::requestFullscreen() and, instead, just enters and
+    // exists itself. This should be unified so there is one way to go
+    // fullscreen.  crbug.com/538158
+    element->document().addToTopLayer(element);
+
     // We are already transitioning to fullscreen for a different element.
     if (m_provisionalFullScreenElement) {
         m_provisionalFullScreenElement = element;
@@ -140,11 +146,11 @@ void FullscreenController::enterFullScreenForElement(Element* element)
     // We are already in fullscreen mode.
     if (m_fullScreenFrame) {
         m_provisionalFullScreenElement = element;
-        didEnterFullScreen();
+        didEnterFullscreen();
         return;
     }
 
-    // We need to store these values here rather than didEnterFullScreen since
+    // We need to store these values here rather than didEnterFullscreen since
     // by the time the latter is called, a Resize has already occured, clamping
     // the scroll offset.
     if (!m_haveEnteredFullscreen) {
@@ -156,7 +162,7 @@ void FullscreenController::enterFullScreenForElement(Element* element)
     // We need to transition to fullscreen mode.
     WebLocalFrameImpl* frame = WebLocalFrameImpl::fromFrame(element->document().frame());
     if (frame && frame->client()) {
-        if (!Fullscreen::from(element->document()).forCrossProcessAncestor())
+        if (!Fullscreen::from(element->document()).forCrossProcessDescendant())
             frame->client()->enterFullscreen();
         m_provisionalFullScreenElement = element;
     }
@@ -165,6 +171,13 @@ void FullscreenController::enterFullScreenForElement(Element* element)
 void FullscreenController::exitFullScreenForElement(Element* element)
 {
     DCHECK(element);
+
+    // TODO(dsinclair): This should not be needed because we addToTopLayer
+    // in Fullscreen::popFullscreenElementStack but, the WebView code doesn't
+    // call Fullscreen::requestFullscreen() and, instead, just enters and
+    // exists itself. This should be unified so there is one way to go
+    // fullscreen.  crbug.com/538158
+    element->document().removeFromTopLayer(element);
 
     // The client is exiting full screen, so don't send a notification.
     if (m_isCancelingFullScreen)
@@ -182,9 +195,9 @@ void FullscreenController::updateSize()
 
     updatePageScaleConstraints(false);
 
-    LayoutFullScreen* layoutObject = Fullscreen::from(*m_fullScreenFrame->document()).fullScreenLayoutObject();
-    if (layoutObject)
-        layoutObject->updateStyle();
+    Document* document = m_fullScreenFrame->document();
+    if (Element* fullscreenElement = Fullscreen::currentFullScreenElementFrom(*document))
+        Fullscreen::from(fullscreenElement->document()).didUpdateSize(*fullscreenElement);
 }
 
 void FullscreenController::updatePageScaleConstraints(bool removeConstraints)
@@ -216,4 +229,3 @@ DEFINE_TRACE(FullscreenController)
 }
 
 } // namespace blink
-

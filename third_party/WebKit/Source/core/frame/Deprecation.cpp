@@ -180,7 +180,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return replacedBy("'console.markTimeline'", "'console.timeStamp'");
 
     case UseCounter::FileError:
-        return "FileError is deprecated. Please use the 'name' or 'message' attributes of DOMError rather than 'code'.";
+        return String::format("'FileError is deprecated and will be removed in %s. Please use the 'name' or 'message' attributes of the error rather than 'code'. See https://www.chromestatus.com/features/6687420359639040 for more details.", milestoneString(54));
 
     case UseCounter::CSSStyleSheetInsertRuleOptionalArg:
         return "Calling CSSStyleSheet.insertRule() with one argument is deprecated. Please pass the index argument as well: insertRule(x, 0).";
@@ -255,7 +255,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return "'getMatchedCSSRules()' is deprecated. For more help, check https://code.google.com/p/chromium/issues/detail?id=437569#c2";
 
     case UseCounter::PrefixedImageSmoothingEnabled:
-        return replacedBy("'CanvasRenderingContext2D.webkitImageSmoothingEnabled'", "'CanvasRenderingContext2D.imageSmoothingEnabled'");
+        return replacedWillBeRemoved("'CanvasRenderingContext2D.webkitImageSmoothingEnabled'", "'CanvasRenderingContext2D.imageSmoothingEnabled'", 55, "5639849247768576");
 
     case UseCounter::AudioListenerDopplerFactor:
         return dopplerWillBeRemoved("'AudioListener.dopplerFactor'", 55, "5238926818148352");
@@ -342,12 +342,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::V8TouchEvent_InitTouchEvent_Method:
         return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 53, "5730982598541312");
-
-    case UseCounter::ObjectObserve:
-        return willBeRemoved("'Object.observe'", 50, "6147094632988672");
-
-    case UseCounter::SVGZoomEvent:
-        return willBeRemoved("'SVGZoomEvent'", 52, "5760883808534528");
 
     case UseCounter::WebAnimationHyphenatedProperty:
         return "Hyphenated property names in Web Animations keyframes are invalid and therefore ignored. Please use camelCase instead.";

@@ -61,8 +61,6 @@ const char kUseSearchPathForInstant[] = "use_search_path_for_instant";
 const char kAltInstantURLPath[] = "search";
 const char kAltInstantURLQueryParams[] = "&qbp=1";
 
-const char kShouldShowGoogleLocalNTPFlagName[] = "google_local_ntp";
-
 // Status of the New Tab URL for the default Search provider. NOTE: Used in a
 // UMA histogram so values should only be added at the end and not reordered.
 enum NewTabURLState {
@@ -502,20 +500,12 @@ bool ShouldPrerenderInstantUrlOnOmniboxFocus() {
       kPrerenderInstantUrlOnOmniboxFocus, false, flags);
 }
 
-bool ShouldShowGoogleLocalNTP() {
-  FieldTrialFlags flags;
-  return !GetFieldTrialInfo(&flags) || GetBoolValueForFlagWithDefault(
-      kShouldShowGoogleLocalNTPFlagName, true, flags);
-}
-
 GURL GetEffectiveURLForInstant(const GURL& url, Profile* profile) {
   CHECK(ShouldAssignURLToInstantRenderer(url, profile))
       << "Error granting Instant access.";
 
   if (url.SchemeIs(chrome::kChromeSearchScheme))
     return url;
-
-  GURL effective_url(url);
 
   // Replace the scheme with "chrome-search:", and clear the port, since
   // chrome-search is a scheme without port.
@@ -535,8 +525,7 @@ GURL GetEffectiveURLForInstant(const GURL& url, Profile* profile) {
                          url::Component(0, remote_ntp_host.length()));
   }
 
-  effective_url = effective_url.ReplaceComponents(replacements);
-  return effective_url;
+  return url.ReplaceComponents(replacements);
 }
 
 bool HandleNewTabURLRewrite(GURL* url,

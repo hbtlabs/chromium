@@ -36,6 +36,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/File.h"
 #include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
@@ -680,7 +681,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
 
     if (!isPaintable()) {
         // If the canvas element's bitmap has no pixels
-        document().unthrottledTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(callback), nullptr));
+        TaskRunnerHelper::getUnthrottledTaskRunner(&document())->postTask(BLINK_FROM_HERE, WTF::bind(&BlobCallback::handleEvent, wrapPersistent(callback), nullptr));
         return;
     }
 
@@ -697,7 +698,7 @@ void HTMLCanvasElement::toBlob(BlobCallback* callback, const String& mimeType, c
 
     ImageData* imageData = toImageData(BackBuffer, SnapshotReasonToBlob);
 
-    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback, startTime);
+    CanvasAsyncBlobCreator* asyncCreator = CanvasAsyncBlobCreator::create(imageData->data(), encodingMimeType, imageData->size(), callback, startTime, &document());
 
     bool useIdlePeriodScheduling = (encodingMimeType != "image/webp");
     asyncCreator->scheduleAsyncBlobCreation(useIdlePeriodScheduling, quality);
@@ -1105,14 +1106,15 @@ IntSize HTMLCanvasElement::bitmapSourceSize() const
     return IntSize(width(), height());
 }
 
-ScriptPromise HTMLCanvasElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
+ScriptPromise HTMLCanvasElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, Optional<IntRect> cropRect, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     DCHECK(eventTarget.toLocalDOMWindow());
-    if (!sw || !sh) {
-        exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
+    if ((cropRect && !ImageBitmap::isSourceSizeValid(cropRect->width(), cropRect->height(), exceptionState))
+        || !ImageBitmap::isSourceSizeValid(bitmapSourceSize().width(), bitmapSourceSize().height(), exceptionState))
         return ScriptPromise();
-    }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, isPaintable() ? ImageBitmap::create(this, IntRect(sx, sy, sw, sh), options) : nullptr);
+    if (!ImageBitmap::isResizeOptionValid(options, exceptionState))
+        return ScriptPromise();
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, isPaintable() ? ImageBitmap::create(this, cropRect, options) : nullptr);
 }
 
 bool HTMLCanvasElement::isOpaque() const

@@ -888,6 +888,11 @@ const char kAllowScreenLock[] = "allow_screen_lock";
 // or dismissed HaTS (happiness-tracking) survey.
 const char kHatsLastInteractionTimestamp[] = "hats_last_interaction_timestamp";
 
+// A boolean pref. Indicates if we've already shown a notification to inform the
+// current user about the quick unlock feature.
+const char kQuickUnlockFeatureNotificationShown[] =
+    "quick_unlock_feature_notification_shown";
+
 // The salt and hash for the pin quick unlock mechanism.
 const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
 const char kQuickUnlockPinSecret[] = "quick_unlock.pin.secret";
@@ -913,14 +918,6 @@ const char kShowHomeButton[] = "browser.show_home_button";
 const char kRecentlySelectedEncoding[] = "profile.recently_selected_encodings";
 
 // Clear Browsing Data dialog preferences.
-const char kDeleteBrowsingHistory[] = "browser.clear_data.browsing_history";
-const char kDeleteDownloadHistory[] = "browser.clear_data.download_history";
-const char kDeleteCache[] = "browser.clear_data.cache";
-const char kDeleteCookies[] = "browser.clear_data.cookies";
-const char kDeletePasswords[] = "browser.clear_data.passwords";
-const char kDeleteFormData[] = "browser.clear_data.form_data";
-const char kDeleteHostedAppsData[] = "browser.clear_data.hosted_apps_data";
-const char kDeleteMediaLicenses[] = "browser.clear_data.media_licenses";
 const char kLastClearBrowsingDataTime[] =
     "browser.last_clear_browsing_data_time";
 const char kClearBrowsingDataHistoryNoticeShownTimes[] =

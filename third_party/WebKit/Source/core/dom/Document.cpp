@@ -100,6 +100,7 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/TouchList.h"
 #include "core/dom/TransformSource.h"
 #include "core/dom/TreeWalker.h"
@@ -361,7 +362,7 @@ static bool acceptsEditingFocus(const Element& element)
 {
     DCHECK(element.hasEditableStyle());
 
-    return element.document().frame() && element.rootEditableElement();
+    return element.document().frame() && rootEditableElement(element);
 }
 
 uint64_t Document::s_globalTreeVersion = 0;
@@ -445,7 +446,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_compositorPendingAnimations(new CompositorPendingAnimations())
     , m_templateDocumentHost(nullptr)
     , m_didAssociateFormControlsTimer(this, &Document::didAssociateFormControlsTimerFired)
-    , m_timers(timerTaskRunner()->adoptClone())
+    , m_timers(TaskRunnerHelper::getTimerTaskRunner(this)->adoptClone())
     , m_hasViewportUnits(false)
     , m_parserSyncPolicy(AllowAsynchronousParsing)
     , m_nodeCount(0)
@@ -600,11 +601,6 @@ void Document::initializeRootScroller(ViewportScrollCallback* callback)
 Element* Document::rootScroller() const
 {
     return m_rootScrollerController->get();
-}
-
-const Element* Document::effectiveRootScroller() const
-{
-    return m_rootScrollerController->effectiveRootScroller();
 }
 
 bool Document::isViewportScrollCallback(const ScrollStateCallback* callback)
@@ -1582,10 +1578,12 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         documentElement()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FontSizeChange));
     }
 
+    EOverflowAnchor overflowAnchor = AnchorAuto;
     EOverflow overflowX = OverflowAuto;
     EOverflow overflowY = OverflowAuto;
     float columnGap = 0;
     if (overflowStyle) {
+        overflowAnchor = overflowStyle->overflowAnchor();
         overflowX = overflowStyle->overflowX();
         overflowY = overflowStyle->overflowY();
         // Visible overflow on the viewport is meaningless, and the spec says to treat it as 'auto':
@@ -1593,6 +1591,8 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
             overflowX = OverflowAuto;
         if (overflowY == OverflowVisible)
             overflowY = OverflowAuto;
+        if (overflowAnchor == AnchorVisible)
+            overflowAnchor = AnchorAuto;
         // Column-gap is (ab)used by the current paged overflow implementation (in lack of other
         // ways to specify gaps between pages), so we have to propagate it too.
         columnGap = overflowStyle->columnGap();
@@ -1607,6 +1607,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         || documentStyle->visitedDependentColor(CSSPropertyBackgroundColor) != backgroundColor
         || documentStyle->backgroundLayers() != backgroundLayers
         || documentStyle->imageRendering() != imageRendering
+        || documentStyle->overflowAnchor() != overflowAnchor
         || documentStyle->overflowX() != overflowX
         || documentStyle->overflowY() != overflowY
         || documentStyle->columnGap() != columnGap
@@ -1618,6 +1619,7 @@ void Document::inheritHtmlAndBodyElementStyles(StyleRecalcChange change)
         newStyle->setBackgroundColor(backgroundColor);
         newStyle->accessBackgroundLayers() = backgroundLayers;
         newStyle->setImageRendering(imageRendering);
+        newStyle->setOverflowAnchor(overflowAnchor);
         newStyle->setOverflowX(overflowX);
         newStyle->setOverflowY(overflowY);
         newStyle->setColumnGap(columnGap);
@@ -2144,8 +2146,6 @@ void Document::detach(const AttachContext& context)
     ScriptForbiddenScope forbidScript;
     view()->dispose();
     m_markers->prepareForDestruction();
-    if (LocalDOMWindow* window = this->domWindow())
-        window->willDetachDocumentFromFrame();
 
     m_lifecycle.advanceTo(DocumentLifecycle::Stopping);
 
@@ -3026,7 +3026,7 @@ void Document::didRemoveAllPendingStylesheet()
 
 void Document::didLoadAllScriptBlockingResources()
 {
-    loadingTaskRunner()->postTask(BLINK_FROM_HERE, m_executeScriptsWaitingForResourcesTask->cancelAndCreate());
+    TaskRunnerHelper::getLoadingTaskRunner(this)->postTask(BLINK_FROM_HERE, m_executeScriptsWaitingForResourcesTask->cancelAndCreate());
 
     if (isHTMLDocument() && body()) {
         // For HTML if we have no more stylesheets to load and we're past the body
@@ -3565,7 +3565,7 @@ bool Document::setFocusedElement(Element* prpNewFocusedElement, const FocusParam
     if (newFocusedElement)
         updateStyleAndLayoutTreeForNode(newFocusedElement);
     if (newFocusedElement && newFocusedElement->isFocusable()) {
-        if (newFocusedElement->isRootEditableElement() && !acceptsEditingFocus(*newFocusedElement)) {
+        if (isRootEditableElement(*newFocusedElement) && !acceptsEditingFocus(*newFocusedElement)) {
             // delegate blocks focus change
             focusChangeBlocked = true;
             goto SetFocusedElementDone;
@@ -3613,7 +3613,7 @@ bool Document::setFocusedElement(Element* prpNewFocusedElement, const FocusParam
             }
         }
 
-        if (m_focusedElement->isRootEditableElement())
+        if (isRootEditableElement(*m_focusedElement))
             frame()->spellChecker().didBeginEditing(m_focusedElement.get());
 
         // eww, I suck. set the qt focus correctly
@@ -4170,9 +4170,14 @@ String Document::lastModified() const
 
 const KURL Document::firstPartyForCookies() const
 {
+    // TODO(mkwst): This doesn't properly handle HTML Import documents.
+
     // If this is an imported document, grab its master document's first-party:
     if (importsController() && importsController()->master() && importsController()->master() != this)
         return importsController()->master()->firstPartyForCookies();
+
+    if (!frame())
+        return SecurityOrigin::urlWithUniqueSecurityOrigin();
 
     // TODO(mkwst): This doesn't correctly handle sandboxed documents; we want to look at their URL,
     // but we can't because we don't know what it is.
@@ -5304,9 +5309,12 @@ void Document::removeFromTopLayer(Element* element)
 
 HTMLDialogElement* Document::activeModalDialog() const
 {
-    if (m_topLayerElements.isEmpty())
-        return 0;
-    return toHTMLDialogElement(m_topLayerElements.last().get());
+    for (auto it = m_topLayerElements.rbegin(); it != m_topLayerElements.rend(); ++it) {
+        if (isHTMLDialogElement(*it))
+            return toHTMLDialogElement((*it).get());
+    }
+
+    return nullptr;
 }
 
 void Document::exitPointerLock()
@@ -5874,39 +5882,6 @@ bool Document::isSecureContext(String& errorMessage, const SecureContextCheck pr
 bool Document::isSecureContext(const SecureContextCheck privilegeContextCheck) const
 {
     return isSecureContextImpl(privilegeContextCheck);
-}
-
-WebTaskRunner* Document::loadingTaskRunner() const
-{
-    if (frame())
-        return frame()->frameScheduler()->loadingTaskRunner();
-    if (m_importsController)
-        return m_importsController->master()->loadingTaskRunner();
-    if (m_contextDocument)
-        return m_contextDocument->loadingTaskRunner();
-    return Platform::current()->currentThread()->scheduler()->loadingTaskRunner();
-}
-
-WebTaskRunner* Document::timerTaskRunner() const
-{
-    if (frame())
-        return m_frame->frameScheduler()->timerTaskRunner();
-    if (m_importsController)
-        return m_importsController->master()->timerTaskRunner();
-    if (m_contextDocument)
-        return m_contextDocument->timerTaskRunner();
-    return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
-}
-
-WebTaskRunner* Document::unthrottledTaskRunner() const
-{
-    if (frame())
-        return m_frame->frameScheduler()->unthrottledTaskRunner();
-    if (m_importsController)
-        return m_importsController->master()->unthrottledTaskRunner();
-    if (m_contextDocument)
-        return m_contextDocument->unthrottledTaskRunner();
-    return Platform::current()->currentThread()->getWebTaskRunner();
 }
 
 void Document::enforceInsecureRequestPolicy(WebInsecureRequestPolicy policy)

@@ -310,6 +310,7 @@ void NodeController::MergePortIntoParent(const std::string& token,
   }
 
   scoped_refptr<NodeChannel> parent;
+  bool reject_merge = false;
   {
     // Hold |pending_port_merges_lock_| while getting |parent|. Otherwise,
     // there is a race where the parent can be set, and |pending_port_merges_|
@@ -317,11 +318,21 @@ void NodeController::MergePortIntoParent(const std::string& token,
     // |pending_port_merges_|.
     base::AutoLock lock(pending_port_merges_lock_);
     parent = GetParentChannel();
-    if (!parent) {
+    if (reject_pending_merges_) {
+      reject_merge = true;
+    } else if (!parent) {
       pending_port_merges_.push_back(std::make_pair(token, port));
       return;
     }
   }
+  if (reject_merge) {
+    node_->ClosePort(port);
+    DVLOG(2) << "Rejecting port merge for token " << token
+             << " due to closed parent channel.";
+    AcceptIncomingMessages();
+    return;
+  }
+
   parent->RequestPortMerge(port.name(), token);
 }
 
@@ -495,7 +506,8 @@ void NodeController::AddPeer(const ports::NodeName& name,
   }
 }
 
-void NodeController::DropPeer(const ports::NodeName& name) {
+void NodeController::DropPeer(const ports::NodeName& name,
+                              NodeChannel* channel) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
 
   {
@@ -540,6 +552,23 @@ void NodeController::DropPeer(const ports::NodeName& name) {
 
       pending_child_tokens_.erase(it);
     }
+  }
+
+  bool is_parent;
+  {
+    base::AutoLock lock(parent_lock_);
+    is_parent = (name == parent_name_ || channel == bootstrap_parent_channel_);
+  }
+  // If the error comes from the parent channel, we also need to cancel any
+  // port merge requests, so that errors can be propagated to the message
+  // pipes.
+  if (is_parent) {
+    base::AutoLock lock(pending_port_merges_lock_);
+    reject_pending_merges_ = true;
+
+    for (const auto& port : pending_port_merges_)
+      ports_to_close.push_back(port.second);
+    pending_port_merges_.clear();
   }
 
   for (const auto& port : ports_to_close)
@@ -651,6 +680,16 @@ void NodeController::AcceptIncomingMessages() {
 
 void NodeController::ProcessIncomingMessages() {
   RequestContext request_context(RequestContext::Source::SYSTEM);
+
+  {
+    base::AutoLock lock(messages_lock_);
+    // Allow a new incoming messages processing task to be posted. This can't be
+    // done after AcceptIncomingMessages() otherwise a message might be missed.
+    // Doing it here may result in at most two tasks existing at the same time;
+    // this running one, and one pending in the task runner.
+    incoming_messages_task_posted_ = false;
+  }
+
   AcceptIncomingMessages();
 }
 
@@ -708,16 +747,18 @@ void NodeController::ForwardMessage(const ports::NodeName& node,
     // (synchronously) in response to Node's ClosePort, SendMessage, or
     // AcceptMessage, we flush the queue after calling any of those methods.
     base::AutoLock lock(messages_lock_);
-    schedule_pump_task = incoming_messages_.empty();
+    // |io_task_runner_| may be null in tests or processes that don't require
+    // multi-process Mojo.
+    schedule_pump_task = incoming_messages_.empty() && io_task_runner_ &&
+        !incoming_messages_task_posted_;
+    incoming_messages_task_posted_ |= schedule_pump_task;
     incoming_messages_.emplace(std::move(message));
     incoming_messages_flag_.Set(true);
   } else {
     SendPeerMessage(node, std::move(message));
   }
 
-  // |io_task_runner_| may be null in tests or processes that don't require
-  // multi-process Mojo.
-  if (schedule_pump_task && io_task_runner_) {
+  if (schedule_pump_task) {
     // Normally, the queue is processed after the action that added the local
     // message is done (i.e. SendMessage, ClosePort, etc). However, it's also
     // possible for a local message to be added as a result of a remote message,
@@ -778,7 +819,7 @@ void NodeController::OnAcceptChild(const ports::NodeName& from_node,
 
   if (!parent) {
     DLOG(ERROR) << "Unexpected AcceptChild message from " << from_node;
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -801,7 +842,7 @@ void NodeController::OnAcceptParent(const ports::NodeName& from_node,
   if (it == pending_children_.end() || token != from_node) {
     DLOG(ERROR) << "Received unexpected AcceptParent message from "
                 << from_node;
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -858,7 +899,7 @@ void NodeController::OnAddBrokerClient(const ports::NodeName& from_node,
 
   if (GetPeerChannel(client_name)) {
     DLOG(ERROR) << "Ignoring AddBrokerClient for known client.";
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -989,7 +1030,7 @@ void NodeController::OnPortsMessage(const ports::NodeName& from_node,
   if (!ParsePortsMessage(channel_message.get(), &data, &num_data_bytes,
                          &num_header_bytes, &num_payload_bytes,
                          &num_ports_bytes)) {
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -1040,7 +1081,7 @@ void NodeController::OnRequestIntroduction(const ports::NodeName& from_node,
   if (from_node == name || name == ports::kInvalidNodeName || !requestor) {
     DLOG(ERROR) << "Rejecting invalid OnRequestIntroduction message from "
                 << from_node;
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -1086,13 +1127,13 @@ void NodeController::OnBroadcast(const ports::NodeName& from_node,
   if (!ParsePortsMessage(message.get(), &data, &num_data_bytes,
                          &num_header_bytes, &num_payload_bytes,
                          &num_ports_bytes)) {
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
   // Broadcast messages must not contain ports.
   if (num_ports_bytes > 0) {
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -1117,7 +1158,7 @@ void NodeController::OnRelayPortsMessage(const ports::NodeName& from_node,
   if (GetBrokerChannel()) {
     // Only the broker should be asked to relay a message.
     LOG(ERROR) << "Non-broker refusing to relay message.";
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -1178,7 +1219,7 @@ void NodeController::OnPortsMessageFromRelay(const ports::NodeName& from_node,
                                              Channel::MessagePtr message) {
   if (GetPeerChannel(from_node) != GetBrokerChannel()) {
     LOG(ERROR) << "Refusing relayed message from non-broker node.";
-    DropPeer(from_node);
+    DropPeer(from_node, nullptr);
     return;
   }
 
@@ -1186,9 +1227,10 @@ void NodeController::OnPortsMessageFromRelay(const ports::NodeName& from_node,
 }
 #endif
 
-void NodeController::OnChannelError(const ports::NodeName& from_node) {
+void NodeController::OnChannelError(const ports::NodeName& from_node,
+                                    NodeChannel* channel) {
   if (io_task_runner_->RunsTasksOnCurrentThread()) {
-    DropPeer(from_node);
+    DropPeer(from_node, channel);
     // DropPeer may have caused local port closures, so be sure to process any
     // pending local messages.
     AcceptIncomingMessages();
@@ -1196,7 +1238,7 @@ void NodeController::OnChannelError(const ports::NodeName& from_node) {
     io_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&NodeController::OnChannelError, base::Unretained(this),
-                   from_node));
+                   from_node, channel));
   }
 }
 

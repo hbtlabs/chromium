@@ -278,6 +278,8 @@ class CONTENT_EXPORT WebContentsImpl
   bool IsFullAccessibilityModeForTesting() const override;
   const PageImportanceSignals& GetPageImportanceSignals() const override;
   const base::string16& GetTitle() const override;
+  void UpdateTitleForEntry(NavigationEntry* entry,
+                           const base::string16& title) override;
   int32_t GetMaxPageID() override;
   int32_t GetMaxPageIDForSiteInstance(SiteInstance* site_instance) override;
   SiteInstanceImpl* GetSiteInstance() const override;
@@ -391,7 +393,6 @@ class CONTENT_EXPORT WebContentsImpl
   void InsertCSS(const std::string& css) override;
   bool WasRecentlyAudible() override;
   void GetManifest(const GetManifestCallback& callback) override;
-  void HasManifest(const HasManifestCallback& callback) override;
   void ExitFullscreen(bool will_cause_resize) override;
   void ResumeLoadingCreatedWebContents() override;
   void OnMediaSessionStateChanged();
@@ -619,7 +620,8 @@ class CONTENT_EXPORT WebContentsImpl
   void RendererResponsive(RenderWidgetHostImpl* render_widget_host) override;
   void RequestToLockMouse(RenderWidgetHostImpl* render_widget_host,
                           bool user_gesture,
-                          bool last_unlocked_by_target) override;
+                          bool last_unlocked_by_target,
+                          bool privileged) override;
   gfx::Rect GetRootWindowResizerRect(
       RenderWidgetHostImpl* render_widget_host) const override;
   bool IsFullscreenForCurrentTab() const override;
@@ -627,6 +629,7 @@ class CONTENT_EXPORT WebContentsImpl
       RenderWidgetHostImpl* render_widget_host) const override;
   void LostCapture(RenderWidgetHostImpl* render_widget_host) override;
   void LostMouseLock(RenderWidgetHostImpl* render_widget_host) override;
+  bool HasMouseLock(RenderWidgetHostImpl* render_widget_host) override;
   void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
                               const std::vector<uint8_t>& proto) override;
   void OnRenderFrameProxyVisibilityChanged(bool visible) override;
@@ -801,9 +804,6 @@ class CONTENT_EXPORT WebContentsImpl
 
   // So |find_request_manager_| can be accessed for testing.
   friend class FindRequestManagerTest;
-
-  // So InterstitialPageImpl can access SetIsLoading.
-  friend class InterstitialPageImpl;
 
   // TODO(brettw) TestWebContents shouldn't exist!
   friend class TestWebContents;
@@ -995,17 +995,6 @@ class CONTENT_EXPORT WebContentsImpl
   // This is called in CreateRenderView before any navigations in the RenderView
   // have begun, to prevent any races in updating RenderView::next_page_id.
   void UpdateMaxPageIDIfNecessary(RenderViewHost* rvh);
-
-  // Saves the given title to the navigation entry and does associated work. It
-  // will update history and the view for the new title, and also synthesize
-  // titles for file URLs that have none (so we require that the URL of the
-  // entry already be set).
-  //
-  // This is used as the backend for state updates, which include a new title,
-  // or the dedicated set title message. It returns true if the new title is
-  // different and was therefore updated.
-  bool UpdateTitleForEntry(NavigationEntryImpl* entry,
-                           const base::string16& title);
 
   // Helper for CreateNewWidget/CreateNewFullscreenWidget.
   void CreateNewWidget(int32_t render_process_id,

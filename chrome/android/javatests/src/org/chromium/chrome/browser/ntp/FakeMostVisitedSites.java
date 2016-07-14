@@ -19,6 +19,7 @@ public class FakeMostVisitedSites extends MostVisitedSites {
     private final String[] mMostVisitedTitles;
     private final String[] mMostVisitedUrls;
     private final String[] mMostVisitedWhitelistIconPaths;
+    private final int[] mMostVisitedSources;
 
     private final List<String> mBlacklistedUrls = new ArrayList<String>();
 
@@ -28,12 +29,13 @@ public class FakeMostVisitedSites extends MostVisitedSites {
      * @param mostVisitedUrls The URLs of the fixed list of most visited sites.
      */
     public FakeMostVisitedSites(Profile p, String[] mostVisitedTitles, String[] mostVisitedUrls,
-            String[] mostVisitedWhitelistIconPaths) {
+            String[] mostVisitedWhitelistIconPaths, int[] mostVisitedSources) {
         super(p);
         assert mostVisitedTitles.length == mostVisitedUrls.length;
         mMostVisitedTitles = mostVisitedTitles.clone();
         mMostVisitedUrls = mostVisitedUrls.clone();
         mMostVisitedWhitelistIconPaths = mostVisitedWhitelistIconPaths.clone();
+        mMostVisitedSources = mostVisitedSources.clone();
     }
 
     @Override
@@ -42,7 +44,8 @@ public class FakeMostVisitedSites extends MostVisitedSites {
             @Override
             public void run() {
                 observer.onMostVisitedURLsAvailable(mMostVisitedTitles.clone(),
-                        mMostVisitedUrls.clone(), mMostVisitedWhitelistIconPaths.clone());
+                        mMostVisitedUrls.clone(), mMostVisitedWhitelistIconPaths.clone(),
+                        mMostVisitedSources.clone());
             }
         });
     }
@@ -65,12 +68,12 @@ public class FakeMostVisitedSites extends MostVisitedSites {
     }
 
     @Override
-    public void recordTileTypeMetrics(int[] tileTypes) {
+    public void recordTileTypeMetrics(int[] tileTypes, int[] sources) {
         // Metrics are stubbed out.
     }
 
     @Override
-    public void recordOpenedMostVisitedItem(int index, int tileType) {
+    public void recordOpenedMostVisitedItem(int index, int tileType, int source) {
         //  Metrics are stubbed out.
     }
 }

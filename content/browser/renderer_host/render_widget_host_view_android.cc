@@ -79,6 +79,7 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
+#include "ui/base/layout.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/blink/blink_event_util.h"
@@ -99,7 +100,7 @@ void SatisfyCallback(cc::SurfaceManager* manager,
                      const cc::SurfaceSequence& sequence) {
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
-  manager->DidSatisfySequences(sequence.id_namespace, &sequences);
+  manager->DidSatisfySequences(sequence.client_id, &sequences);
 }
 
 void RequireCallback(cc::SurfaceManager* manager,
@@ -270,8 +271,10 @@ std::unique_ptr<ui::TouchSelectionController> CreateSelectionController(
 }
 
 std::unique_ptr<OverscrollControllerAndroid> CreateOverscrollController(
-    ContentViewCoreImpl* content_view_core) {
-  return base::WrapUnique(new OverscrollControllerAndroid(content_view_core));
+    ContentViewCoreImpl* content_view_core,
+    float dpi_scale) {
+  return base::WrapUnique(
+      new OverscrollControllerAndroid(content_view_core, dpi_scale));
 }
 
 gfx::RectF GetSelectionRect(const ui::TouchSelectionController& controller) {
@@ -1184,11 +1187,13 @@ std::unique_ptr<ui::TouchHandleDrawable>
 RenderWidgetHostViewAndroid::CreateDrawable() {
   DCHECK(content_view_core_);
   if (!using_browser_compositor_)
-    return PopupTouchHandleDrawable::Create(content_view_core_);
+    return PopupTouchHandleDrawable::Create(
+        content_view_core_, ui::GetScaleFactorForNativeView(GetNativeView()));
 
   return std::unique_ptr<
       ui::TouchHandleDrawable>(new CompositedTouchHandleDrawable(
-      content_view_core_->GetLayer(), content_view_core_->GetDpiScale(),
+      content_view_core_->GetLayer(),
+      ui::GetScaleFactorForNativeView(GetNativeView()),
       // Use the activity context (instead of the application context) to ensure
       // proper handle theming.
       content_view_core_->GetContext().obj()));
@@ -1678,9 +1683,9 @@ void RenderWidgetHostViewAndroid::DidStopFlinging() {
     content_view_core_->DidStopFlinging();
 }
 
-uint32_t RenderWidgetHostViewAndroid::GetSurfaceIdNamespace() {
+uint32_t RenderWidgetHostViewAndroid::GetSurfaceClientId() {
   if (id_allocator_)
-    return id_allocator_->id_namespace();
+    return id_allocator_->client_id();
   return 0;
 }
 
@@ -1696,7 +1701,13 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
     overscroll_controller_.reset();
     selection_controller_.reset();
     ReleaseLocksOnSurface();
-    resize = true;
+    // TODO(yusufo) : Get rid of the below conditions and have a better handling
+    // for resizing after crbug.com/628302 is handled.
+    bool is_size_initialized = !content_view_core
+        || content_view_core->GetViewportSizeDip().width() != 0
+        || content_view_core->GetViewportSizeDip().height() != 0;
+    if (content_view_core_ || is_size_initialized)
+      resize = true;
     if (content_view_core_) {
       content_view_core_->RemoveObserver(this);
       content_view_core_->GetViewAndroid()->RemoveChild(&view_);
@@ -1735,7 +1746,8 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
 
   if (!overscroll_controller_ &&
       content_view_core_->GetWindowAndroid()->GetCompositor()) {
-    overscroll_controller_ = CreateOverscrollController(content_view_core_);
+    overscroll_controller_ = CreateOverscrollController(
+        content_view_core_, ui::GetScaleFactorForNativeView(GetNativeView()));
   }
 
   if (!sync_compositor_) {
@@ -1807,7 +1819,8 @@ void RenderWidgetHostViewAndroid::OnDetachedFromWindow() {
 void RenderWidgetHostViewAndroid::OnAttachCompositor() {
   DCHECK(content_view_core_);
   if (!overscroll_controller_)
-    overscroll_controller_ = CreateOverscrollController(content_view_core_);
+    overscroll_controller_ = CreateOverscrollController(
+        content_view_core_, ui::GetScaleFactorForNativeView(GetNativeView()));
 }
 
 void RenderWidgetHostViewAndroid::OnDetachCompositor() {

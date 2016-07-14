@@ -59,9 +59,8 @@ static sk_sp<SkPicture> PlaybackToPicture(
 
   // Play back raster_source into temp SkPicture.
   SkPictureRecorder recorder;
-  const int flags = SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
-  sk_sp<SkCanvas> canvas = sk_ref_sp(recorder.beginRecording(
-      resource_size.width(), resource_size.height(), NULL, flags));
+  sk_sp<SkCanvas> canvas = sk_ref_sp(
+      recorder.beginRecording(resource_size.width(), resource_size.height()));
   canvas->save();
   raster_source->PlaybackToCanvas(canvas.get(), raster_full_rect, playback_rect,
                                   scale, playback_settings);
@@ -194,7 +193,7 @@ bool GpuRasterBufferProvider::IsResourceSwizzleRequired(
   return false;
 }
 
-bool GpuRasterBufferProvider::IsPartialRasterSupported() const {
+bool GpuRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
   return true;
 }
 

@@ -625,7 +625,6 @@ public:
         CSSKeyframesRuleAnonymousIndexedGetter = 785,
         V8Screen_AvailLeft_AttributeGetter = 786,
         V8Screen_AvailTop_AttributeGetter = 787,
-        ObjectObserve = 788,
         V8SVGFEConvolveMatrixElement_PreserveAlpha_AttributeGetter = 791,
         V8SVGStyleElement_Disabled_AttributeGetter = 798,
         V8SVGStyleElement_Disabled_AttributeSetter = 799,
@@ -1034,7 +1033,6 @@ public:
         HTMLMediaElement = 1229,
         HTMLMediaElementInDocument = 1230,
         HTMLMediaElementControlsAttribute = 1231,
-        SVGZoomEvent = 1232,
         V8Animation_Oncancel_AttributeGetter = 1233,
         V8Animation_Oncancel_AttributeSetter = 1234,
         V8HTMLCommentInExternalScript = 1235,
@@ -1245,6 +1243,7 @@ public:
         BeforeInstallPromptEventUserChoice = 1437,
         BeforeInstallPromptEventPreventDefault = 1438,
         BeforeInstallPromptEventPrompt = 1439,
+        ExecCommandAltersHTMLStructure = 1440,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

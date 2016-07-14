@@ -513,7 +513,9 @@ def _CheckNoNewWStrings(input_api, output_api):
   for f in input_api.AffectedFiles():
     if (not f.LocalPath().endswith(('.cc', '.h')) or
         f.LocalPath().endswith(('test.cc', '_win.cc', '_win.h')) or
-        '/win/' in f.LocalPath()):
+        '/win/' in f.LocalPath() or
+        'chrome_elf' in f.LocalPath() or
+        'install_static' in f.LocalPath()):
       continue
 
     allowWString = False
@@ -2182,19 +2184,19 @@ def GetTryServerMasterForBot(bot):
   """
   # Potentially ambiguous bot names are listed explicitly.
   master_map = {
-      'chromium_presubmit': 'tryserver.chromium.linux',
-      'tools_build_presubmit': 'tryserver.chromium.linux',
+      'chromium_presubmit': 'master.tryserver.chromium.linux',
+      'tools_build_presubmit': 'master.tryserver.chromium.linux',
   }
   master = master_map.get(bot)
   if not master:
     if 'android' in bot:
-      master = 'tryserver.chromium.android'
+      master = 'master.tryserver.chromium.android'
     elif 'linux' in bot or 'presubmit' in bot:
-      master = 'tryserver.chromium.linux'
+      master = 'master.tryserver.chromium.linux'
     elif 'win' in bot:
-      master = 'tryserver.chromium.win'
+      master = 'master.tryserver.chromium.win'
     elif 'mac' in bot or 'ios' in bot:
-      master = 'tryserver.chromium.mac'
+      master = 'master.tryserver.chromium.mac'
   return master
 
 

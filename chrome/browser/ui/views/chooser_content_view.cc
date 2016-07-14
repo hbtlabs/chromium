@@ -143,11 +143,15 @@ gfx::Size ChooserContentView::GetPreferredSize() const {
   return gfx::Size(kChooserWidth, kChooserHeight);
 }
 
+base::string16 ChooserContentView::GetWindowTitle() const {
+  return chooser_controller_->GetTitle();
+}
+
 base::string16 ChooserContentView::GetDialogButtonLabel(
     ui::DialogButton button) const {
-  return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK
-                                       ? IDS_DEVICE_CHOOSER_CONNECT_BUTTON_TEXT
-                                       : IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT);
+  return button == ui::DIALOG_BUTTON_OK
+             ? chooser_controller_->GetOkButtonLabel()
+             : l10n_util::GetStringUTF16(IDS_DEVICE_CHOOSER_CANCEL_BUTTON_TEXT);
 }
 
 bool ChooserContentView::IsDialogButtonEnabled(ui::DialogButton button) const {

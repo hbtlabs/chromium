@@ -232,7 +232,6 @@ class CONTENT_EXPORT RenderWidget
                       const gfx::Rect& window_screen_rect) override;
 
   // blink::WebWidgetClient
-  void didAutoResize(const blink::WebSize& new_size) override;
   void initializeLayerTreeView() override;
   blink::WebLayerTreeView* layerTreeView() override;
   void didMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
@@ -358,6 +357,9 @@ class CONTENT_EXPORT RenderWidget
   void SetDeviceColorProfileForTesting(const std::vector<char>& color_profile);
   void ResetDeviceColorProfileForTesting();
 
+  // Called when the Widget has changed size as a result of an auto-resize.
+  void DidAutoResize(const gfx::Size& new_size);
+
   // Indicates whether this widget has focus.
   bool has_focus() const { return has_focus_; }
 
@@ -469,7 +471,7 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Rect& window_screen_rect);
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnShowImeIfNeeded();
-  void OnSetSurfaceIdNamespace(uint32_t surface_id_namespace);
+  void OnSetSurfaceClientId(uint32_t surface_id_namespace);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
 
 #if defined(OS_ANDROID)

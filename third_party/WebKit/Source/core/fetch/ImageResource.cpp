@@ -115,6 +115,20 @@ void ImageResource::markClientsAndObserversFinished()
     Resource::markClientsAndObserversFinished();
 }
 
+void ImageResource::ensureImage()
+{
+    if (m_data && !m_image && !errorOccurred()) {
+        createImage();
+        m_image->setData(m_data, true);
+    }
+}
+
+void ImageResource::didAddClient(ResourceClient* client)
+{
+    ensureImage();
+    Resource::didAddClient(client);
+}
+
 void ImageResource::addObserver(ImageResourceObserver* observer)
 {
     willAddClientOrObserver();
@@ -124,10 +138,7 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
     if (isCacheValidator())
         return;
 
-    if (m_data && !m_image && !errorOccurred()) {
-        createImage();
-        m_image->setData(m_data, true);
-    }
+    ensureImage();
 
     if (m_image && !m_image->isNull()) {
         observer->imageChanged(this);
@@ -511,14 +522,17 @@ void ImageResource::updateImageAnimationPolicy()
 
 void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
 {
-    if (!m_response.httpHeaderField("chrome-proxy").contains("q=low"))
+    if (m_resourceRequest.loFiState() != WebURLRequest::LoFiOn)
+        return;
+    if (isLoaded() && !m_response.httpHeaderField("chrome-proxy").contains("q=low"))
         return;
     m_resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
     m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
     if (isLoading())
         m_loader->cancel();
-    else
-        updateImageAndClearBuffer();
+    clear();
+    m_data.clear();
+    notifyObservers();
     setStatus(NotStarted);
     fetcher->startLoad(this);
 }

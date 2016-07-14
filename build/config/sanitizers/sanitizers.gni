@@ -49,6 +49,11 @@ declare_args() {
   # TODO(pcc): Remove this flag if/when CFI is enabled in official builds.
   is_cfi = false
 
+  # Enable checks for bad casts: derived cast and unrelated cast.
+  # TODO(krasin): remove this, when we're ready to add these checks by default.
+  # https://crbug.com/626794
+  use_cfi_cast = false
+
   # By default, Control Flow Integrity will crash the program if it detects a
   # violation. Set this to true to print detailed diagnostics instead.
   use_cfi_diag = false
@@ -78,7 +83,6 @@ declare_args() {
   # trace-pc
   # Default value when unset and use_sanitizer_coverage=true:
   #     edge,indirect-calls,8bit-counters
-
   sanitizer_coverage_flags = ""
 }
 
@@ -96,6 +100,16 @@ declare_args() {
   # Enable -fsanitize-coverage.
   use_sanitizer_coverage =
       use_libfuzzer || use_afl || sanitizer_coverage_flags != ""
+
+  # Detect overflow/underflow for global objects.
+  #
+  # Android build relies on -Wl,--gc-sections removing unreachable code.
+  # ASan instrumentation for globals inhibits this and results in a
+  # library with unresolvable relocations.
+  # TODO(eugenis): find a way to reenable this.
+  #
+  # Mac: http://crbug.com/352073
+  asan_globals = !is_android && !is_mac
 }
 
 if (use_afl && sanitizer_coverage_flags == "") {
@@ -128,3 +142,6 @@ prebuilt_instrumented_libraries_available =
 # For one-off testing, just comment this assertion out.
 assert(!is_debug || !(is_msan || is_ubsan || is_ubsan_null || is_ubsan_vptr),
        "Sanitizers should generally be used in release (set is_debug=false).")
+
+assert(!is_msan || (is_linux && current_cpu == "x64"),
+       "MSan currently only works on 64-bit Linux and ChromeOS builds.")

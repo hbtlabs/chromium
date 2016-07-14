@@ -48,7 +48,7 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       frame_connector_(nullptr),
       begin_frame_source_(nullptr),
       observing_begin_frame_source_(false),
-      parent_surface_id_namespace_(0),
+      parent_surface_client_id_(0),
       weak_factory_(this) {
   id_allocator_ = CreateSurfaceIdAllocator();
   RegisterSurfaceNamespaceId();
@@ -67,28 +67,35 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
     return;
 
   if (frame_connector_) {
-    if (parent_surface_id_namespace_) {
+    if (parent_surface_client_id_) {
       GetSurfaceManager()->UnregisterSurfaceNamespaceHierarchy(
-          parent_surface_id_namespace_, GetSurfaceIdNamespace());
+          parent_surface_client_id_, GetSurfaceClientId());
     }
     // Unregister the client here, as it is not guaranteed in tests that the
     // destructor will be called.
     GetSurfaceManager()->UnregisterSurfaceFactoryClient(
-        id_allocator_->id_namespace());
+        id_allocator_->client_id());
 
-    parent_surface_id_namespace_ = 0;
+    parent_surface_client_id_ = 0;
+
+    // After the RenderWidgetHostViewChildFrame loses the frame_connector, it
+    // won't be able to walk up the frame tree anymore. Clean up anything that
+    // needs to be done through the CrossProcessFrameConnector before it's gone.
+
+    // Unlocks the mouse if this RenderWidgetHostView holds the lock.
+    UnlockMouse();
   }
   frame_connector_ = frame_connector;
   if (frame_connector_) {
     GetSurfaceManager()->RegisterSurfaceFactoryClient(
-        id_allocator_->id_namespace(), this);
+        id_allocator_->client_id(), this);
     RenderWidgetHostViewBase* parent_view =
         frame_connector_->GetParentRenderWidgetHostView();
     if (parent_view) {
-      parent_surface_id_namespace_ = parent_view->GetSurfaceIdNamespace();
-      DCHECK_NE(parent_surface_id_namespace_, 0u);
+      parent_surface_client_id_ = parent_view->GetSurfaceClientId();
+      DCHECK_NE(parent_surface_client_id_, 0u);
       GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
-          parent_surface_id_namespace_, GetSurfaceIdNamespace());
+          parent_surface_client_id_, GetSurfaceClientId());
     }
   }
 }
@@ -233,12 +240,6 @@ void RenderWidgetHostViewChildFrame::InitAsFullscreen(
   NOTREACHED();
 }
 
-void RenderWidgetHostViewChildFrame::ImeCompositionRangeChanged(
-    const gfx::Range& range,
-    const std::vector<gfx::Rect>& character_bounds) {
-  // TODO(kenrb): Fix OOPIF Ime.
-}
-
 void RenderWidgetHostViewChildFrame::UpdateCursor(const WebCursor& cursor) {
   if (frame_connector_)
     frame_connector_->UpdateCursor(cursor);
@@ -268,7 +269,7 @@ void RenderWidgetHostViewChildFrame::RenderProcessGone(
 }
 
 void RenderWidgetHostViewChildFrame::Destroy() {
-  // SurfaceIdNamespaces registered with RenderWidgetHostInputEventRouter
+  // SurfaceClientIds registered with RenderWidgetHostInputEventRouter
   // have already been cleared when RenderWidgetHostViewBase notified its
   // observers of our impending destruction.
   if (frame_connector_) {
@@ -310,16 +311,16 @@ void RenderWidgetHostViewChildFrame::RegisterSurfaceNamespaceId() {
   if (host_ && host_->delegate() && host_->delegate()->GetInputEventRouter()) {
     RenderWidgetHostInputEventRouter* router =
         host_->delegate()->GetInputEventRouter();
-    if (!router->is_registered(GetSurfaceIdNamespace()))
-      router->AddSurfaceIdNamespaceOwner(GetSurfaceIdNamespace(), this);
+    if (!router->is_registered(GetSurfaceClientId()))
+      router->AddSurfaceClientIdOwner(GetSurfaceClientId(), this);
   }
 }
 
 void RenderWidgetHostViewChildFrame::UnregisterSurfaceNamespaceId() {
   DCHECK(host_);
   if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->RemoveSurfaceIdNamespaceOwner(
-        GetSurfaceIdNamespace());
+    host_->delegate()->GetInputEventRouter()->RemoveSurfaceClientIdOwner(
+        GetSurfaceClientId());
   }
 }
 
@@ -398,7 +399,7 @@ void RenderWidgetHostViewChildFrame::OnSwapCompositorFrame(
     surface_factory_->Create(surface_id_);
 
     cc::SurfaceSequence sequence = cc::SurfaceSequence(
-        id_allocator_->id_namespace(), next_surface_sequence_++);
+        id_allocator_->client_id(), next_surface_sequence_++);
     // The renderer process will satisfy this dependency when it creates a
     // SurfaceLayer.
     cc::SurfaceManager* manager = GetSurfaceManager();
@@ -464,23 +465,20 @@ bool RenderWidgetHostViewChildFrame::LockMouse() {
 }
 
 void RenderWidgetHostViewChildFrame::UnlockMouse() {
+  if (host_->delegate() && host_->delegate()->HasMouseLock(host_) &&
+      frame_connector_)
+    frame_connector_->UnlockMouse();
 }
 
 bool RenderWidgetHostViewChildFrame::IsMouseLocked() {
-  if (!frame_connector_)
+  if (!host_->delegate())
     return false;
 
-  RenderWidgetHostViewBase* root_view =
-      frame_connector_->GetRootRenderWidgetHostView();
-
-  if (root_view)
-    return root_view->IsMouseLocked();
-
-  return false;
+  return host_->delegate()->HasMouseLock(host_);
 }
 
-uint32_t RenderWidgetHostViewChildFrame::GetSurfaceIdNamespace() {
-  return id_allocator_->id_namespace();
+uint32_t RenderWidgetHostViewChildFrame::GetSurfaceClientId() {
+  return id_allocator_->client_id();
 }
 
 void RenderWidgetHostViewChildFrame::ProcessKeyboardEvent(

@@ -534,7 +534,7 @@ static String extractWebGLContextCreationError(const Platform::GraphicsInfo& inf
     formatWebGLStatusString("Reset notification strategy", String::format("0x%04x", info.resetNotificationStrategy).utf8().data(), statusMessage);
     formatWebGLStatusString("GPU process crash count", String::number(info.processCrashCount).utf8().data(), statusMessage);
     formatWebGLStatusString("ErrorMessage", info.errorMessage.utf8().data(), statusMessage);
-    statusMessage.append(".");
+    statusMessage.append('.');
     return statusMessage;
 }
 
@@ -642,7 +642,15 @@ ImageBitmap* WebGLRenderingContextBase::transferToImageBitmapBase()
         return nullptr;
     WebExternalTextureMailbox mailbox;
     drawingBuffer()->prepareMailbox(&mailbox, 0);
-    ImageBitmap* imageBitmap = ImageBitmap::create(mailbox);
+    ImageBitmap* imageBitmap;
+    // If the mailbox is invalid, return an transparent black ImageBitmap.
+    // The only situation this could happen is when two or more calls to transferToImageBitmap are made back-to-back.
+    if (mailbox.textureSize.width == 0 && mailbox.textureSize.height == 0) {
+        sk_sp<SkSurface>surface = SkSurface::MakeRasterN32Premul(drawingBuffer()->size().width(), drawingBuffer()->size().height());
+        imageBitmap = ImageBitmap::create(StaticBitmapImage::create(fromSkSp(surface->makeImageSnapshot())));
+    } else {
+        imageBitmap = ImageBitmap::create(mailbox);
+    }
     // TODO(xidachen): Create a small pool of recycled textures from ImageBitmapRenderingContext's
     // transferFromImageBitmap, and try to use them in DrawingBuffer.
     return imageBitmap;
@@ -6152,7 +6160,7 @@ void WebGLRenderingContextBase::maybeRestoreContext(Timer<WebGLRenderingContextB
     std::unique_ptr<WebGraphicsContext3DProvider> contextProvider = wrapUnique(Platform::current()->createOffscreenGraphicsContext3DProvider(
         attributes, canvas()->document().topDocument().url(), 0, &glInfo));
     RefPtr<DrawingBuffer> buffer;
-    if (contextProvider->bindToCurrentThread()) {
+    if (contextProvider && contextProvider->bindToCurrentThread()) {
         // Construct a new drawing buffer with the new GL context.
         buffer = createDrawingBuffer(std::move(contextProvider));
         // If DrawingBuffer::create() fails to allocate a fbo, |drawingBuffer| is set to null.

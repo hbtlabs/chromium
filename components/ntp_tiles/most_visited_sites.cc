@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <set>
+#include <string>
 #include <utility>
 
 #include "base/callback.h"
@@ -25,8 +26,6 @@
 #include "components/ntp_tiles/switches.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "ui/gfx/codec/jpeg_codec.h"
-#include "url/gurl.h"
 
 using history::TopSites;
 using suggestions::ChromeSuggestion;
@@ -40,31 +39,11 @@ namespace {
 // Identifiers for the various tile sources.
 const char kHistogramClientName[] = "client";
 const char kHistogramServerName[] = "server";
-const char kHistogramServerFormat[] = "server%d";
 const char kHistogramPopularName[] = "popular";
 const char kHistogramWhitelistName[] = "whitelist";
 
 const base::Feature kDisplaySuggestionsServiceTiles{
     "DisplaySuggestionsServiceTiles", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// The visual type of a most visited tile.
-//
-// These values must stay in sync with the MostVisitedTileType enum
-// in histograms.xml.
-//
-// A Java counterpart will be generated for this enum.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.ntp
-enum MostVisitedTileType {
-    // The icon or thumbnail hasn't loaded yet.
-    NONE,
-    // The item displays a site's actual favicon or touch icon.
-    ICON_REAL,
-    // The item displays a color derived from the site's favicon or touch icon.
-    ICON_COLOR,
-    // The item displays a default gray box in place of an icon.
-    ICON_DEFAULT,
-    NUM_TILE_TYPES,
-};
 
 // Log an event for a given |histogram| at a given element |position|. This
 // routine exists because regular histogram macros are cached thus can't be used
@@ -88,9 +67,9 @@ bool ShouldShowPopularSites() {
   const std::string group_name =
       base::FieldTrialList::FindFullName(kPopularSitesFieldTrialName);
   base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (cmd_line->HasSwitch(ntp_tiles::switches::kDisableNTPPopularSites))
+  if (cmd_line->HasSwitch(switches::kDisableNTPPopularSites))
     return false;
-  if (cmd_line->HasSwitch(ntp_tiles::switches::kEnableNTPPopularSites))
+  if (cmd_line->HasSwitch(switches::kEnableNTPPopularSites))
     return true;
   return base::StartsWith(group_name, "Enabled",
                           base::CompareCase::INSENSITIVE_ASCII);
@@ -98,16 +77,20 @@ bool ShouldShowPopularSites() {
 
 // Determine whether we need any popular suggestions to fill up a grid of
 // |num_tiles| tiles.
-bool NeedPopularSites(const PrefService* prefs, size_t num_tiles) {
+bool NeedPopularSites(const PrefService* prefs, int num_tiles) {
+  if (num_tiles <= prefs->GetInteger(prefs::kNumPersonalSuggestions))
+    return false;
+
+  // TODO(treib): Remove after M55.
   const base::ListValue* source_list =
-      prefs->GetList(ntp_tiles::prefs::kNTPSuggestionsIsPersonal);
+      prefs->GetList(prefs::kDeprecatedNTPSuggestionsIsPersonal);
   // If there aren't enough previous suggestions to fill the grid, we need
   // popular suggestions.
-  if (source_list->GetSize() < num_tiles)
+  if (static_cast<int>(source_list->GetSize()) < num_tiles)
     return true;
   // Otherwise, if any of the previous suggestions is not personal, then also
   // get popular suggestions.
-  for (size_t i = 0; i < num_tiles; ++i) {
+  for (int i = 0; i < num_tiles; ++i) {
     bool is_personal = false;
     if (source_list->GetBoolean(i, &is_personal) && !is_personal)
       return true;
@@ -121,9 +104,8 @@ bool AreURLsEquivalent(const GURL& url1, const GURL& url2) {
   return url1.host() == url2.host() && url1.path() == url2.path();
 }
 
-std::string GetSourceHistogramName(
-        const MostVisitedSites::Suggestion& suggestion) {
-  switch (suggestion.source) {
+std::string GetSourceHistogramName(int source) {
+  switch (source) {
     case MostVisitedSites::TOP_SITES:
       return kHistogramClientName;
     case MostVisitedSites::POPULAR:
@@ -131,25 +113,15 @@ std::string GetSourceHistogramName(
     case MostVisitedSites::WHITELIST:
       return kHistogramWhitelistName;
     case MostVisitedSites::SUGGESTIONS_SERVICE:
-      return suggestion.provider_index >= 0
-                 ? base::StringPrintf(kHistogramServerFormat,
-                                      suggestion.provider_index)
-                 : kHistogramServerName;
+      return kHistogramServerName;
   }
   NOTREACHED();
   return std::string();
 }
 
-void AppendSuggestions(MostVisitedSites::SuggestionsVector src,
-                       MostVisitedSites::SuggestionsVector* dst) {
-  dst->insert(dst->end(),
-              std::make_move_iterator(src.begin()),
-              std::make_move_iterator(src.end()));
-}
-
 }  // namespace
 
-MostVisitedSites::Suggestion::Suggestion() : provider_index(-1) {}
+MostVisitedSites::Suggestion::Suggestion() : source(TOP_SITES) {}
 
 MostVisitedSites::Suggestion::~Suggestion() {}
 
@@ -200,8 +172,7 @@ void MostVisitedSites::SetMostVisitedURLsObserver(Observer* observer,
   observer_ = observer;
   num_sites_ = num_sites;
 
-  if (ShouldShowPopularSites() &&
-      NeedPopularSites(prefs_, num_sites_)) {
+  if (ShouldShowPopularSites() && NeedPopularSites(prefs_, num_sites_)) {
     popular_sites_.reset(new PopularSites(
         blocking_pool_, prefs_, template_url_service_, variations_service_,
         download_context_, popular_sites_directory_, false,
@@ -252,15 +223,18 @@ void MostVisitedSites::AddOrRemoveBlacklistedUrl(const GURL& url,
 }
 
 void MostVisitedSites::RecordTileTypeMetrics(
-    const std::vector<int>& tile_types) {
-  DCHECK_EQ(current_suggestions_.size(), tile_types.size());
+    const std::vector<int>& tile_types,
+    const std::vector<int>& sources) {
   int counts_per_type[NUM_TILE_TYPES] = {0};
   for (size_t i = 0; i < tile_types.size(); ++i) {
     int tile_type = tile_types[i];
     ++counts_per_type[tile_type];
+
+    UMA_HISTOGRAM_ENUMERATION("NewTabPage.TileType", tile_type, NUM_TILE_TYPES);
+
     std::string histogram = base::StringPrintf(
         "NewTabPage.TileType.%s",
-        GetSourceHistogramName(current_suggestions_[i]).c_str());
+        GetSourceHistogramName(sources[i]).c_str());
     LogHistogramEvent(histogram, tile_type, NUM_TILE_TYPES);
   }
 
@@ -272,17 +246,20 @@ void MostVisitedSites::RecordTileTypeMetrics(
                               counts_per_type[ICON_DEFAULT]);
 }
 
-void MostVisitedSites::RecordOpenedMostVisitedItem(int index, int tile_type) {
-  DCHECK_GE(index, 0);
-  DCHECK_LT(index, static_cast<int>(current_suggestions_.size()));
+void MostVisitedSites::RecordOpenedMostVisitedItem(int index,
+                                                   int tile_type,
+                                                   int source) {
+  UMA_HISTOGRAM_ENUMERATION("NewTabPage.MostVisited", index, num_sites_);
+
   std::string histogram = base::StringPrintf(
-      "NewTabPage.MostVisited.%s",
-      GetSourceHistogramName(current_suggestions_[index]).c_str());
+      "NewTabPage.MostVisited.%s", GetSourceHistogramName(source).c_str());
   LogHistogramEvent(histogram, index, num_sites_);
 
-  histogram = base::StringPrintf(
-      "NewTabPage.TileTypeClicked.%s",
-      GetSourceHistogramName(current_suggestions_[index]).c_str());
+  UMA_HISTOGRAM_ENUMERATION(
+      "NewTabPage.TileTypeClicked", tile_type, NUM_TILE_TYPES);
+
+  histogram = base::StringPrintf("NewTabPage.TileTypeClicked.%s",
+                                 GetSourceHistogramName(source).c_str());
   LogHistogramEvent(histogram, tile_type, NUM_TILE_TYPES);
 }
 
@@ -293,13 +270,10 @@ void MostVisitedSites::OnBlockedSitesChanged() {
 // static
 void MostVisitedSites::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  // TODO(treib): Remove this, it's unused. Do we need migration code to clean
-  // up existing entries?
-  registry->RegisterListPref(ntp_tiles::prefs::kNTPSuggestionsURL);
-  // TODO(treib): Remove this. It's only used to determine if we need
-  // PopularSites at all. Find a way to do that without prefs, or failing that,
-  // replace this list pref by a simple bool.
-  registry->RegisterListPref(ntp_tiles::prefs::kNTPSuggestionsIsPersonal);
+  registry->RegisterIntegerPref(prefs::kNumPersonalSuggestions, 0);
+  // TODO(treib): Remove after M55.
+  registry->RegisterListPref(prefs::kDeprecatedNTPSuggestionsURL);
+  registry->RegisterListPref(prefs::kDeprecatedNTPSuggestionsIsPersonal);
 }
 
 void MostVisitedSites::BuildCurrentSuggestions() {
@@ -369,20 +343,18 @@ void MostVisitedSites::OnSuggestionsProfileAvailable(
 
   SuggestionsVector suggestions;
   for (int i = 0; i < num_tiles; ++i) {
-    const ChromeSuggestion& suggestion = suggestions_profile.suggestions(i);
-    if (supervisor_->IsBlocked(GURL(suggestion.url())))
+    const ChromeSuggestion& suggestion_pb = suggestions_profile.suggestions(i);
+    GURL url(suggestion_pb.url());
+    if (supervisor_->IsBlocked(url))
       continue;
 
-    Suggestion generated_suggestion;
-    generated_suggestion.title = base::UTF8ToUTF16(suggestion.title());
-    generated_suggestion.url = GURL(suggestion.url());
-    generated_suggestion.source = SUGGESTIONS_SERVICE;
-    generated_suggestion.whitelist_icon_path =
-        GetWhitelistLargeIconPath(GURL(suggestion.url()));
-    if (suggestion.providers_size() > 0)
-      generated_suggestion.provider_index = suggestion.providers(0);
+    Suggestion suggestion;
+    suggestion.title = base::UTF8ToUTF16(suggestion_pb.title());
+    suggestion.url = url;
+    suggestion.source = SUGGESTIONS_SERVICE;
+    suggestion.whitelist_icon_path = GetWhitelistLargeIconPath(url);
 
-    suggestions.push_back(std::move(generated_suggestion));
+    suggestions.push_back(std::move(suggestion));
   }
 
   received_most_visited_sites_ = true;
@@ -495,8 +467,15 @@ void MostVisitedSites::SaveNewSuggestions(
                                           std::move(popular_sites_suggestions));
   DCHECK_EQ(num_actual_tiles, current_suggestions_.size());
 
-  if (received_popular_sites_)
-    SaveCurrentSuggestionsToPrefs();
+  int num_personal_suggestions = 0;
+  for (const auto& suggestion : current_suggestions_) {
+    if (suggestion.source != POPULAR)
+      num_personal_suggestions++;
+  }
+  prefs_->SetInteger(prefs::kNumPersonalSuggestions, num_personal_suggestions);
+  // TODO(treib): Remove after M55.
+  prefs_->ClearPref(prefs::kDeprecatedNTPSuggestionsIsPersonal);
+  prefs_->ClearPref(prefs::kDeprecatedNTPSuggestionsURL);
 }
 
 // static
@@ -505,29 +484,19 @@ MostVisitedSites::SuggestionsVector MostVisitedSites::MergeSuggestions(
     SuggestionsVector whitelist_suggestions,
     SuggestionsVector popular_suggestions) {
   SuggestionsVector merged_suggestions;
-  AppendSuggestions(std::move(personal_suggestions), &merged_suggestions);
-  AppendSuggestions(std::move(whitelist_suggestions), &merged_suggestions);
-  AppendSuggestions(std::move(popular_suggestions), &merged_suggestions);
+  std::move(personal_suggestions.begin(), personal_suggestions.end(),
+            std::back_inserter(merged_suggestions));
+  std::move(whitelist_suggestions.begin(), whitelist_suggestions.end(),
+            std::back_inserter(merged_suggestions));
+  std::move(popular_suggestions.begin(), popular_suggestions.end(),
+            std::back_inserter(merged_suggestions));
   return merged_suggestions;
-}
-
-void MostVisitedSites::SaveCurrentSuggestionsToPrefs() {
-  base::ListValue url_list;
-  base::ListValue source_list;
-  for (const auto& suggestion : current_suggestions_) {
-    url_list.AppendString(suggestion.url.spec());
-    source_list.AppendBoolean(suggestion.source != POPULAR);
-  }
-  prefs_->Set(ntp_tiles::prefs::kNTPSuggestionsIsPersonal, source_list);
-  prefs_->Set(ntp_tiles::prefs::kNTPSuggestionsURL, url_list);
 }
 
 void MostVisitedSites::NotifyMostVisitedURLsObserver() {
   if (received_most_visited_sites_ && received_popular_sites_ &&
       !recorded_uma_) {
     RecordImpressionUMAMetrics();
-    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.NumberOfTiles",
-                                current_suggestions_.size());
     recorded_uma_ = true;
   }
 
@@ -554,10 +523,16 @@ void MostVisitedSites::OnPopularSitesAvailable(bool success) {
 }
 
 void MostVisitedSites::RecordImpressionUMAMetrics() {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.NumberOfTiles",
+                              current_suggestions_.size());
+
   for (size_t i = 0; i < current_suggestions_.size(); i++) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "NewTabPage.SuggestionsImpression", static_cast<int>(i), num_sites_);
+
     std::string histogram = base::StringPrintf(
         "NewTabPage.SuggestionsImpression.%s",
-        GetSourceHistogramName(current_suggestions_[i]).c_str());
+        GetSourceHistogramName(current_suggestions_[i].source).c_str());
     LogHistogramEvent(histogram, static_cast<int>(i), num_sites_);
   }
 }

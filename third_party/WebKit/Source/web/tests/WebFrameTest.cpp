@@ -64,8 +64,6 @@
 #include "core/html/ImageDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/LayoutFullScreen.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/DocumentThreadableLoader.h"
@@ -3320,7 +3318,6 @@ TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initialize();
     WebURLRequest request;
-    request.initialize();
     request.setURL(toKURL(m_baseURL + "fixed_layout.html"));
     request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     webViewHelper.webView()->mainFrame()->loadRequest(request);
@@ -6288,7 +6285,6 @@ TEST_P(ParameterizedWebFrameTest, CurrentHistoryItem)
     WebFrame* frame = webViewHelper.webView()->mainFrame();
     const FrameLoader& mainFrameLoader = webViewHelper.webViewImpl()->mainFrameImpl()->frame()->loader();
     WebURLRequest request;
-    request.initialize();
     request.setURL(toKURL(url));
     request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     frame->loadRequest(request);
@@ -6453,6 +6449,40 @@ TEST_F(WebFrameTest, MaximumScrollPositionCanBeNegative)
     EXPECT_LT(frameView->maximumScrollPosition().x(), 0);
 }
 
+TEST_F(WebFrameTest, FullscreenCleanTopLayerAndFullscreenStack)
+{
+    FakeCompositingWebViewClient client;
+    registerMockedHttpURLLoad("fullscreen_div.html");
+    FrameTestHelpers::WebViewHelper webViewHelper;
+    int viewportWidth = 640;
+    int viewportHeight = 480;
+    client.m_screenInfo.rect.width = viewportWidth;
+    client.m_screenInfo.rect.height = viewportHeight;
+    WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad(
+        m_baseURL + "fullscreen_div.html", true, 0, &client, nullptr, configureAndroid);
+    webViewImpl->resize(WebSize(viewportWidth, viewportHeight));
+    webViewImpl->updateAllLifecyclePhases();
+
+    UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
+    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    Fullscreen& fullscreen = Fullscreen::from(*document);
+
+    Element* divFullscreen = document->getElementById("div1");
+    fullscreen.requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
+    webViewImpl->didEnterFullscreen();
+    ASSERT_TRUE(Fullscreen::isFullScreen(*document));
+
+    // Sanity check. We should have both in our stack.
+    ASSERT_EQ(fullscreen.fullScreenElementStack().size(), 1UL);
+    ASSERT_EQ(document->topLayerElements().size(), 2UL);
+
+    fullscreen.exitFullscreen();
+    webViewImpl->didExitFullscreen();
+
+    ASSERT_EQ(fullscreen.fullScreenElementStack().size(), 0UL);
+    ASSERT_EQ(document->topLayerElements().size(), 0UL);
+}
+
 TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize)
 {
     FakeCompositingWebViewClient client;
@@ -6470,12 +6500,13 @@ TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize)
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     ASSERT_TRUE(Fullscreen::isFullScreen(*document));
 
     // Verify that the element is sized to the viewport.
-    LayoutFullScreen* fullscreenLayoutObject = Fullscreen::from(*document).fullScreenLayoutObject();
+    Element* fullscreenElement = Fullscreen::currentFullScreenElementFrom(*document);
+    LayoutBox* fullscreenLayoutObject = toLayoutBox(fullscreenElement->layoutObject());
     EXPECT_EQ(viewportWidth, fullscreenLayoutObject->logicalWidth().toInt());
     EXPECT_EQ(viewportHeight, fullscreenLayoutObject->logicalHeight().toInt());
 
@@ -6503,7 +6534,7 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the viewports are nonscrollable.
@@ -6517,7 +6548,7 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     ASSERT_FALSE(visualViewportScrollLayer->userScrollableVertical());
 
     // Verify that the viewports are scrollable upon exiting fullscreen.
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     ASSERT_FALSE(Fullscreen::isFullScreen(*document));
     ASSERT_TRUE(layoutViewportScrollLayer->userScrollableHorizontal());
@@ -6540,7 +6571,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenMainFrame)
     Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the main frame is still scrollable.
@@ -6575,11 +6606,12 @@ TEST_P(ParameterizedWebFrameTest, FullscreenSubframe)
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the element is sized to the viewport.
-    LayoutFullScreen* fullscreenLayoutObject = Fullscreen::from(*document).fullScreenLayoutObject();
+    Element* fullscreenElement = Fullscreen::currentFullScreenElementFrom(*document);
+    LayoutBox* fullscreenLayoutObject = toLayoutBox(fullscreenElement->layoutObject());
     EXPECT_EQ(viewportWidth, fullscreenLayoutObject->logicalWidth().toInt());
     EXPECT_EQ(viewportHeight, fullscreenLayoutObject->logicalHeight().toInt());
 
@@ -6615,7 +6647,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenWithTinyViewport)
     Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(384, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(640, layoutViewItem.logicalHeight().floor());
@@ -6623,7 +6655,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenWithTinyViewport)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(320, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(533, layoutViewItem.logicalHeight().floor());
@@ -6649,7 +6681,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenResizeWithTinyViewport)
     Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(384, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(640, layoutViewItem.logicalHeight().floor());
@@ -6669,7 +6701,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenResizeWithTinyViewport)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(320, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(192, layoutViewItem.logicalHeight().floor());
@@ -6708,7 +6740,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting)
         Fullscreen::from(*document).requestFullscreen(*document->body(), Fullscreen::PrefixedRequest);
     }
 
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     client.m_screenInfo.rect.width = screenSizeMinusStatusBars.width;
     client.m_screenInfo.rect.height = screenSizeMinusStatusBars.height;
@@ -6722,7 +6754,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     client.m_screenInfo.rect.width = screenSizeMinusStatusBars.width;
     client.m_screenInfo.rect.height = screenSizeMinusStatusBars.height;
@@ -6772,7 +6804,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFullscreenConstraintsOnNavigation)
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(
         *document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Entering fullscreen causes layout size and page scale limits to be
@@ -6789,7 +6821,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFullscreenConstraintsOnNavigation)
     KURL testURL = toKURL("about:blank");
     WebFrame* frame = webViewHelper.webView()->mainFrame();
     FrameTestHelpers::loadHTMLString(frame, source, testURL);
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Make sure the new page's layout size and scale factor limits aren't
@@ -8808,7 +8840,6 @@ TEST_F(WebFrameTest, LoadJavascriptURLInNewFrame)
     WebURLRequest request;
     std::string redirectURL = m_baseURL + "foo.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(redirectURL), "foo.html");
-    request.initialize();
     request.setURL(toKURL("javascript:location='" + redirectURL + "'"));
     request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     helper.webViewImpl()->mainFrame()->toWebLocalFrame()->loadRequest(request);

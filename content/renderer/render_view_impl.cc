@@ -2017,11 +2017,7 @@ void RenderViewImpl::convertWindowToViewport(blink::WebFloatRect* rect) {
 }
 
 void RenderViewImpl::didAutoResize(const blink::WebSize& newSize) {
-  RenderWidget::didAutoResize(newSize);
-}
-
-void RenderViewImpl::didChangeCursor(const blink::WebCursorInfo& info) {
-  RenderWidget::didChangeCursor(info);
+  RenderWidget::DidAutoResize(newSize);
 }
 
 void RenderViewImpl::didInvalidateRect(const blink::WebRect& rect) {

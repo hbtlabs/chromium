@@ -379,12 +379,13 @@
       'browser/net/sdch_browsertest.cc',
       'browser/net/websocket_browsertest.cc',
       'browser/page_load_metrics/page_load_metrics_browsertest.cc',
-      'browser/page_load_metrics/observers/https_engagement_page_load_metrics_observer_browsertest.cc',
+      'browser/page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer_browsertest.cc',
       'browser/password_manager/credential_manager_browsertest.cc',
       'browser/password_manager/password_manager_browsertest.cc',
       'browser/pdf/pdf_extension_test.cc',
       'browser/pdf/pdf_extension_test_util.cc',
       'browser/pdf/pdf_extension_test_util.h',
+      'browser/permissions/permission_request_manager_browsertest.cc',
       'browser/plugins/plugin_power_saver_browsertest.cc',
       'browser/policy/cloud/cloud_policy_browsertest.cc',
       'browser/policy/cloud/cloud_policy_manager_browsertest.cc',
@@ -522,7 +523,6 @@
       'browser/ui/website_settings/mock_permission_bubble_view.h',
       'browser/ui/website_settings/permission_bubble_browser_test_util.cc',
       'browser/ui/website_settings/permission_bubble_browser_test_util.h',
-      'browser/ui/website_settings/permission_bubble_manager_browsertest.cc',
       'browser/ui/webui/bidi_checker_web_ui_test.cc',
       'browser/ui/webui/bidi_checker_web_ui_test.h',
       'browser/ui/webui/bookmarks_ui_browsertest.cc',
@@ -988,7 +988,6 @@
       'browser/ui/webui/options/password_manager_browsertest.js',
       'browser/ui/webui/options/profile_settings_reset_browsertest.js',
       'browser/ui/webui/options/search_engine_manager_browsertest.js',
-      'browser/ui/webui/options/settings_app_browsertest.js',
       'browser/ui/webui/options/settings_format_browsertest.js',
       'browser/ui/webui/options/startup_page_list_browsertest.js',
       'browser/ui/webui/sync_internals_browsertest.js',
@@ -2659,16 +2658,6 @@
           'sources!': [
             # TODO(dbeam): log webui URLs on iOS and test them.
             'browser/ui/webui/log_web_ui_url_browsertest.cc',
-          ],
-        }],
-        ['OS!="android" and OS!="ios"', {
-          'sources': [
-            'browser/copresence/chrome_whispernet_client_browsertest.cc',
-          ],
-          'dependencies': [
-            '../components/components.gyp:audio_modem',
-            # build time dependency.
-            '../v8/samples/samples.gyp:v8_shell#host',
           ],
         }],
         ['enable_app_list==1', {

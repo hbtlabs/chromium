@@ -1065,7 +1065,7 @@ void CompositeEditCommand::cloneParagraphUnderNewElement(const Position& start, 
     Node* lastNode = nullptr;
     Node* outerNode = passedOuterNode;
 
-    if (outerNode->isRootEditableElement()) {
+    if (isRootEditableElement(*outerNode)) {
         lastNode = blockElement;
     } else {
         lastNode = outerNode->cloneNode(isDisplayInsideTable(outerNode));
@@ -1365,6 +1365,10 @@ void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagrap
     Element* documentElement = document().documentElement();
     if (!documentElement)
         return;
+
+    // We need clean layout in order to compute plain-text ranges below.
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+
     // Fragment creation (using createMarkup) incorrectly uses regular spaces
     // instead of nbsps for some spaces that were rendered (11475), which causes
     // spaces to be collapsed during the move operation. This results in a call
@@ -1394,7 +1398,7 @@ bool CompositeEditCommand::breakOutOfEmptyListItem(EditingState* editingState)
     if (!listNode
         || (!isHTMLUListElement(*listNode) && !isHTMLOListElement(*listNode))
         || !listNode->hasEditableStyle()
-        || listNode == emptyListItem->rootEditableElement())
+        || listNode == rootEditableElement(*emptyListItem))
         return false;
 
     HTMLElement* newBlock = nullptr;

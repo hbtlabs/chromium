@@ -13304,6 +13304,13 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Impression_FromAutofillDropdown">
+  <owner>mathp@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the Autofill dropdown.
+  </description>
+</action>
+
 <action name="Signin_Impression_FromAvatarBubbleSignin">
   <owner>gogerald@chromium.org</owner>
   <description>
@@ -13355,6 +13362,13 @@ should be able to be added at any place in this file.
   <owner>gogerald@chromium.org</owner>
   <description>
     Recorded when showing sign in entry in the new tab page.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromPasswordBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the saving password bubble.
   </description>
 </action>
 
@@ -13807,6 +13821,59 @@ should be able to be added at any place in this file.
   <owner>jdufault@chromium.org</owner>
   <description>
     Counts the number of times the user has stopped a cast from the system tray.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the display row in the system
+    menu. This action does not always open the display settings, e.g. if the row
+    is slected from the lock screen. Use the
+    StatusArea_Display_Default_ShowSettings metric to see how often the settings
+    are actually launched.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Default_ShowSettings">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the display settings are opened as a result of
+    the user selecting the display row in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Created">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times a new display notification is added to the
+    notification center.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the display notification. This
+    action does not always open the display settings, e.g. if the notification
+    is selected from the lock screen. Use the
+    StatusArea_Display_Notification_Show_Settings metric to see how often the
+    settings are actually launched. Note these notifications are managed by the
+    notification center.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Show_Settings">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the display settings are opened as a result of
+    the user selecting the display notification. Note these notifications are
+    managed by the notification center.
   </description>
 </action>
 

@@ -154,6 +154,7 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
 
     @SmallTest
     @Feature({"Cronet"})
+    @SuppressWarnings("deprecation")
     public void testConfigUserAgent() throws Exception {
         String userAgentName = "User-Agent";
         String userAgentValue = "User-Agent-Value";
@@ -180,8 +181,6 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunNativeCronet
-    // TODO(xunjieli): Remove annotation after crbug.com/539519 is fixed.
-    @SuppressWarnings("deprecation")
     public void testDataReductionProxyEnabled() throws Exception {
         mTestFramework = startCronetTestFrameworkAndSkipLibraryInit();
 
@@ -244,31 +243,14 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         } catch (IllegalStateException e) {
         }
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
+        UrlRequest.Builder builder = new UrlRequest.Builder(
+                mUrl, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest urlRequest = builder.build();
+
         urlRequest.start();
         callback.blockForDone();
         assertEquals(0, rttListener.rttObservationCount());
         assertEquals(0, throughputListener.throughputObservationCount());
-        mTestFramework.mCronetEngine.shutdown();
-    }
-
-    @SmallTest
-    @Feature({"Cronet"})
-    public void testRealTimeNetworkQualityObservationsNotEnabled_LegacyAPI() throws Exception {
-        mTestFramework = startCronetTestFramework();
-        TestNetworkQualityRttListener rttListener = new TestNetworkQualityRttListener();
-        try {
-            mTestFramework.mCronetEngine.addRttListener(rttListener);
-            fail("Should throw an exception.");
-        } catch (IllegalStateException e) {
-        }
-        TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
-        urlRequest.start();
-        callback.blockForDone();
-        assertEquals(0, rttListener.rttObservationCount());
         mTestFramework.mCronetEngine.shutdown();
     }
 
@@ -287,31 +269,12 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         mTestFramework.mCronetEngine.addRttListener(rttListener);
         mTestFramework.mCronetEngine.removeRttListener(rttListener);
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
+        UrlRequest.Builder builder = new UrlRequest.Builder(
+                mUrl, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest urlRequest = builder.build();
         urlRequest.start();
         callback.blockForDone();
         networkQualityExecutor.runAllTasks();
-        assertEquals(0, rttListener.rttObservationCount());
-        mTestFramework.mCronetEngine.shutdown();
-    }
-
-    @SmallTest
-    @Feature({"Cronet"})
-    public void testRealTimeNetworkQualityObservationsListenerRemoved_LegacyAPI() throws Exception {
-        mTestFramework = startCronetTestFramework();
-        TestExecutor testExecutor = new TestExecutor();
-        TestNetworkQualityRttListener rttListener = new TestNetworkQualityRttListener();
-        mTestFramework.mCronetEngine.enableNetworkQualityEstimator(testExecutor);
-        mTestFramework.mCronetEngine.configureNetworkQualityEstimatorForTesting(true, true);
-        mTestFramework.mCronetEngine.addRttListener(rttListener);
-        mTestFramework.mCronetEngine.removeRttListener(rttListener);
-        TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
-        urlRequest.start();
-        callback.blockForDone();
-        testExecutor.runAllTasks();
         assertEquals(0, rttListener.rttObservationCount());
         mTestFramework.mCronetEngine.shutdown();
     }
@@ -342,8 +305,9 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         mTestFramework.mCronetEngine.addThroughputListener(throughputListener);
 
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
+        UrlRequest.Builder builder = new UrlRequest.Builder(
+                mUrl, callback, callback.getExecutor(), mTestFramework.mCronetEngine);
+        UrlRequest urlRequest = builder.build();
         urlRequest.start();
         callback.blockForDone();
 
@@ -369,38 +333,6 @@ public class CronetUrlRequestContextTest extends CronetTestBase {
         // Verify that the listeners were notified on the expected thread.
         assertEquals(mNetworkQualityThread, rttListener.getThread());
         assertEquals(mNetworkQualityThread, throughputListener.getThread());
-
-        mTestFramework.mCronetEngine.shutdown();
-    }
-
-    @SmallTest
-    @Feature({"Cronet"})
-    public void testRealTimeNetworkQualityObservations_LegacyAPI() throws Exception {
-        mTestFramework = startCronetTestFramework();
-        Executor executor = Executors.newSingleThreadExecutor();
-        ConditionVariable waitForThroughput = new ConditionVariable();
-        TestNetworkQualityRttListener rttListener = new TestNetworkQualityRttListener();
-        TestNetworkQualityThroughputListener throughputListener =
-                new TestNetworkQualityThroughputListener(executor, waitForThroughput);
-        mTestFramework.mCronetEngine.enableNetworkQualityEstimator(executor);
-        mTestFramework.mCronetEngine.configureNetworkQualityEstimatorForTesting(true, true);
-        mTestFramework.mCronetEngine.addRttListener(rttListener);
-        mTestFramework.mCronetEngine.addThroughputListener(throughputListener);
-        TestUrlRequestCallback callback = new TestUrlRequestCallback();
-        UrlRequest urlRequest =
-                mTestFramework.mCronetEngine.createRequest(mUrl, callback, callback.getExecutor());
-        urlRequest.start();
-        callback.blockForDone();
-
-        // Throughput observation is posted to the network quality estimator on the network thread
-        // after the UrlRequest is completed. The observations are then eventually posted to
-        // throughput listeners on the executor provided to network quality.
-        waitForThroughput.block();
-        assertTrue(throughputListener.throughputObservationCount() > 0);
-
-        // Check RTT observation count after throughput observation has been received. This ensures
-        // that executor has finished posting the RTT observation to the RTT listeners.
-        assertTrue(rttListener.rttObservationCount() > 0);
 
         mTestFramework.mCronetEngine.shutdown();
     }

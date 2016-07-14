@@ -7,8 +7,8 @@
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/pattern.h"
@@ -567,7 +567,13 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxNavigateAndSelect) {
   EXPECT_EQ("Title", speech_monitor_.GetNextUtterance());
 }
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, ChromeVoxStickyMode) {
+#if defined(MEMORY_SANITIZER)
+// Fails under MemorySanitizer: http://crbug.com/628060
+#define MAYBE_ChromeVoxStickyMode DISABLED_ChromeVoxStickyMode
+#else
+#define MAYBE_ChromeVoxStickyMode ChromeVoxStickyMode
+#endif
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_ChromeVoxStickyMode) {
   LoadChromeVoxAndThenNavigateToURL(
       GURL("data:text/html;charset=utf-8,"
            "<label>Enter your name <input autofocus></label>"

@@ -11,6 +11,7 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -20,7 +21,6 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -139,7 +139,7 @@ class WebNotificationButton : public views::CustomButton {
     unread_label_.set_owned_by_client();
     SetupLabelForTray(&unread_label_);
 
-    AddChildView(&unread_label_);
+    AddChildView(&no_unread_icon_);
   }
 
   void SetBubbleVisible(bool visible) {
@@ -450,7 +450,7 @@ bool WebNotificationTray::IsCommandIdEnabled(int command_id) const {
 
 bool WebNotificationTray::GetAcceleratorForCommandId(
     int command_id,
-    ui::Accelerator* accelerator) {
+    ui::Accelerator* accelerator) const {
   return false;
 }
 
@@ -516,9 +516,8 @@ message_center::MessageCenter* WebNotificationTray::message_center() const {
 
 bool WebNotificationTray::IsLoggedIn() const {
   WmShell* shell = WmShell::Get();
-  LoginStatus status = shell->system_tray_delegate()->GetUserLoginStatus();
-  return status != LoginStatus::NOT_LOGGED_IN &&
-         status != LoginStatus::LOCKED &&
+  return shell->system_tray_delegate()->GetUserLoginStatus() !=
+             LoginStatus::NOT_LOGGED_IN &&
          !shell->GetSessionStateDelegate()->IsInSecondaryLoginScreen();
 }
 

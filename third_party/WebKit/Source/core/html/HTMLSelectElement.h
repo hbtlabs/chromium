@@ -55,8 +55,8 @@ public:
 
     int selectedIndex() const;
     void setSelectedIndex(int);
-
-    void optionSelectedByUser(int index, bool dispatchChangeEvent, bool allowMultipleSelection = false);
+    // `listIndex' version of |selectedIndex|.
+    int selectedListIndex() const;
 
     // For ValidityState
     String validationMessage() const override;
@@ -104,7 +104,7 @@ public:
     const ListItems& listItems() const;
 
     void accessKeyAction(bool sendMouseEvents) override;
-    void accessKeySetSelectedIndex(int);
+    void selectOptionByAccessKey(HTMLOptionElement*);
 
     void setOption(unsigned index, HTMLOptionElement*, ExceptionState&);
 
@@ -114,11 +114,8 @@ public:
     void scrollToSelection();
     void scrollToOption(HTMLOptionElement*);
 
-    void listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow = true);
-
     bool canSelectAll() const;
     void selectAll();
-    int listToOptionIndex(int listIndex) const;
     void listBoxOnChange();
     int optionToListIndex(int optionIndex) const;
     int activeSelectionEndListIndex() const;
@@ -153,7 +150,8 @@ public:
     LayoutUnit clientPaddingLeft() const;
     // Text starting offset in RTL.
     LayoutUnit clientPaddingRight() const;
-    void valueChanged(unsigned listIndex);
+    void selectOptionByPopup(int listIndex);
+    void selectMultipleOptionsByPopup(const Vector<int>& listIndices);
     // A popup is canceled when the popup was hidden without selecting an item.
     void popupDidCancel();
     // Provisional selection is a selection made using arrow keys or type ahead.
@@ -244,6 +242,9 @@ private:
     void setIndexToSelectOnCancel(int listIndex);
     void setSuggestedOption(HTMLOptionElement*);
 
+    // Returns nullptr if listIndex is out of bounds, or it doesn't point an
+    // HTMLOptionElement.
+    HTMLOptionElement* optionAtListIndex(int listIndex) const;
     enum SkipDirection {
         SkipBackwards = -1,
         SkipForwards = 1

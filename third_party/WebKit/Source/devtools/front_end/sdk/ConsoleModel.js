@@ -79,6 +79,9 @@ WebInspector.ConsoleModel.prototype = {
         if (this._isBlacklisted(msg))
             return;
 
+        if (msg.source === WebInspector.ConsoleMessage.MessageSource.Worker && msg.target().workerManager && msg.target().workerManager.targetByWorkerId(msg.workerId))
+            return;
+
         if (msg.level === WebInspector.ConsoleMessage.MessageLevel.RevokedError && msg._revokedExceptionId) {
             var exceptionMessage = this._messageByExceptionId.get(msg._revokedExceptionId);
             if (!exceptionMessage)
@@ -213,10 +216,35 @@ WebInspector.ConsoleModel.evaluateCommandInConsole = function(executionContext, 
             target.consoleModel.dispatchEventToListeners(WebInspector.ConsoleModel.Events.CommandEvaluated, {result: result, wasThrown: wasThrown, text: requestedText, commandMessage: commandMessage, exceptionDetails: exceptionDetails});
         }
     }
-    if (/^\s*\{/.test(text) && /\}\s*$/.test(text))
-        text = "(" + text + ")";
-    executionContext.evaluate(text, "console", !!useCommandLineAPI, false, false, true, true, printResult);
 
+    /**
+     * @param {string} code
+     * @suppress {uselessCode}
+     * @return {boolean}
+     */
+    function looksLikeAnObjectLiteral(code)
+    {
+        // Only parenthesize what appears to be an object literal.
+        if (!(/^\s*\{/.test(code) && /\}\s*$/.test(code)))
+            return false;
+
+        try {
+            // Check if the code can be interpreted as an expression.
+            Function("return " + code + ";");
+
+            // No syntax error! Does it work parenthesized?
+            Function("(" + code + ")");
+
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    if (looksLikeAnObjectLiteral(text))
+        text = "(" + text + ")";
+
+    executionContext.evaluate(text, "console", !!useCommandLineAPI, false, false, true, true, printResult);
     WebInspector.userMetrics.actionTaken(WebInspector.UserMetrics.Action.ConsoleEvaluated);
 }
 
@@ -244,8 +272,9 @@ WebInspector.ConsoleModel.clearConsole = function()
  * @param {number=} timestamp
  * @param {!RuntimeAgent.ExecutionContextId=} executionContextId
  * @param {?string=} scriptId
+ * @param {?string=} workerId
  */
-WebInspector.ConsoleMessage = function(target, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp, executionContextId, scriptId)
+WebInspector.ConsoleMessage = function(target, source, level, messageText, type, url, line, column, requestId, parameters, stackTrace, timestamp, executionContextId, scriptId, workerId)
 {
     this._target = target;
     this.source = source;
@@ -264,6 +293,7 @@ WebInspector.ConsoleMessage = function(target, source, level, messageText, type,
     this.timestamp = timestamp || Date.now();
     this.executionContextId = executionContextId || 0;
     this.scriptId = scriptId || null;
+    this.workerId = workerId || null;
 
     var networkLog = target && WebInspector.NetworkLog.fromTarget(target);
     this.request = (requestId && networkLog) ? networkLog.requestForId(requestId) : null;
@@ -438,7 +468,8 @@ WebInspector.ConsoleMessage.MessageSource = {
     CSS: "css",
     Security: "security",
     Other: "other",
-    Deprecation: "deprecation"
+    Deprecation: "deprecation",
+    Worker: "worker"
 }
 
 /**
@@ -514,7 +545,8 @@ WebInspector.ConsoleDispatcher.prototype = {
             payload.stack,
             payload.timestamp * 1000, // Convert to ms.
             payload.executionContextId,
-            payload.scriptId);
+            payload.scriptId,
+            payload.workerId);
         this._console.addMessage(consoleMessage);
     },
 

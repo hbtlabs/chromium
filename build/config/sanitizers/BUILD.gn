@@ -155,11 +155,13 @@ config("default_sanitizer_ldflags") {
     }
 
     if (is_cfi && !is_nacl) {
-      ldflags += [
-        "-fsanitize=cfi-vcall",
-        "-fsanitize=cfi-derived-cast",
-        "-fsanitize=cfi-unrelated-cast",
-      ]
+      ldflags += [ "-fsanitize=cfi-vcall" ]
+      if (use_cfi_cast) {
+        ldflags += [
+          "-fsanitize=cfi-derived-cast",
+          "-fsanitize=cfi-unrelated-cast",
+        ]
+      }
       if (use_cfi_diag) {
         ldflags += [
           "-fno-sanitize-trap=cfi",
@@ -206,6 +208,12 @@ config("asan_flags") {
   cflags = []
   if (is_asan) {
     cflags += [ "-fsanitize=address" ]
+    if (!asan_globals) {
+      cflags += [
+        "-mllvm",
+        "-asan-globals=0",
+      ]
+    }
     if (is_win) {
       cflags += [ "-fsanitize-blacklist=" +
                   rebase_path("//tools/memory/asan/blacklist_win.txt",
@@ -216,23 +224,8 @@ config("asan_flags") {
           [ "-fsanitize-blacklist=" +
             rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir) ]
     }
-    if (is_android) {
-      # Android build relies on -Wl,--gc-sections removing unreachable code.
-      # ASan instrumentation for globals inhibits this and results in a
-      # library with unresolvable relocations.
-      # TODO(eugenis): find a way to reenable this.
-      cflags += [
-        "-mllvm",
-        "-asan-globals=0",
-      ]
-    } else if (is_mac) {
-      # http://crbug.com/352073
-      cflags += [
-        "-mllvm",
-        "-asan-globals=0",
-      ]
-      # TODO(GYP): deal with mac_bundles.
-    } else if (is_win) {
+
+    if (is_win) {
       assert(current_cpu == "x86", "WinASan is 32-bit only currently")
       if (is_component_build) {
         libs = [
@@ -255,10 +248,15 @@ config("cfi_flags") {
         rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
     cflags += [
       "-fsanitize=cfi-vcall",
-      "-fsanitize=cfi-derived-cast",
-      "-fsanitize=cfi-unrelated-cast",
       "-fsanitize-blacklist=$cfi_blacklist_path",
     ]
+
+    if (use_cfi_cast) {
+      cflags += [
+        "-fsanitize=cfi-derived-cast",
+        "-fsanitize=cfi-unrelated-cast",
+      ]
+    }
 
     if (use_cfi_diag) {
       cflags += [

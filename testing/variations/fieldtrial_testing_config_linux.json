@@ -74,6 +74,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
+        }
+    ],
     "ExtensionActionRedesign": [
         {
             "group_name": "Enabled"
@@ -85,11 +93,6 @@
         }
     ],
     "InstanceID": [
-        {
-            "group_name": "Enabled"
-        }
-    ],
-    "LocalNTPSuggestionsService": [
         {
             "group_name": "Enabled"
         }
@@ -148,14 +151,6 @@
     ],
     "PageRevisitInstrumentation": [
         {
-            "group_name": "Enabled"
-        }
-    ],
-    "PassiveDocumentEventListeners": [
-        {
-            "enable_features": [
-                "PassiveDocumentEventListeners"
-            ],
             "group_name": "Enabled"
         }
     ],

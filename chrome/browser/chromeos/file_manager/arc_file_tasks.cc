@@ -4,6 +4,7 @@
 
 #include "chrome/browser/chromeos/file_manager/arc_file_tasks.h"
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -52,7 +53,7 @@ constexpr char kPngDataUrlPrefix[] = "data:image/png;base64,";
 // Returns the Mojo interface for ARC Intent Helper, with version |minVersion|
 // or above. If the ARC bridge is not established, returns null.
 arc::mojom::IntentHelperInstance* GetArcIntentHelper(Profile* profile,
-                                                     int min_version) {
+                                                     uint32_t min_version) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // File manager in secondary profile cannot access ARC.
@@ -64,11 +65,11 @@ arc::mojom::IntentHelperInstance* GetArcIntentHelper(Profile* profile,
     return nullptr;
 
   arc::mojom::IntentHelperInstance* intent_helper_instance =
-      arc_service->intent_helper_instance();
+      arc_service->intent_helper()->instance();
   if (!intent_helper_instance)
     return nullptr;
 
-  if (arc_service->intent_helper_version() < min_version) {
+  if (arc_service->intent_helper()->version() < min_version) {
     DLOG(WARNING) << "ARC intent helper instance is too old.";
     return nullptr;
   }
@@ -296,6 +297,11 @@ void FindArcTasks(Profile* profile,
 
   mojo::Array<arc::mojom::UrlWithMimeTypePtr> urls;
   for (const extensions::EntryInfo& entry : entries) {
+    if (entry.is_directory) {  // ARC apps don't support directories.
+      callback.Run(std::move(result_list));
+      return;
+    }
+
     GURL url;
     if (!ConvertToArcUrl(entry.path, &url)) {
       callback.Run(std::move(result_list));

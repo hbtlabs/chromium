@@ -129,6 +129,7 @@ source_set("base") {
     "eme_constants.h",
     "encryption_scheme.cc",
     "encryption_scheme.h",
+    "feedback_signal_accumulator.h",
     "key_system_names.cc",
     "key_system_names.h",
     "key_system_properties.cc",
@@ -403,14 +404,6 @@ source_set("test_support") {
     "//testing/gmock",
     "//ui/gfx:test_support",
   ]
-  if (is_android) {
-    deps += [
-      # Needed to register capture Java/Jni objects. TODO(mcasas): Remove when
-      # the dependency to capture is not needed, see https://crbug.com/618718.
-      "//media/capture",
-      "//media/capture/video/android",
-    ]
-  }
 }
 
 source_set("unittests") {
@@ -449,6 +442,7 @@ source_set("unittests") {
     "decoder_buffer_unittest.cc",
     "djb2_unittest.cc",
     "fake_demuxer_stream_unittest.cc",
+    "feedback_signal_accumulator_unittest.cc",
     "gmock_callback_support_unittest.cc",
     "key_systems_unittest.cc",
     "mime_util_unittest.cc",

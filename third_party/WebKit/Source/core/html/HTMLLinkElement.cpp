@@ -683,11 +683,17 @@ void LinkStyle::process()
         // When the link element is created by scripts, load the stylesheets asynchronously but in high priority.
         bool lowPriority = !mediaQueryMatches || m_owner->isAlternate();
         FetchRequest request = builder.build(lowPriority);
-        request.setContentSecurityPolicyNonce(m_owner->fastGetAttribute(HTMLNames::nonceAttr));
         CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(m_owner->fastGetAttribute(HTMLNames::crossoriginAttr));
         if (crossOrigin != CrossOriginAttributeNotSet) {
             request.setCrossOriginAccessControl(document().getSecurityOrigin(), crossOrigin);
             setFetchFollowingCORS();
+        }
+
+        String integrityAttr = m_owner->fastGetAttribute(HTMLNames::integrityAttr);
+        if (!integrityAttr.isEmpty()) {
+            IntegrityMetadataSet metadataSet;
+            SubresourceIntegrity::parseIntegrityAttribute(integrityAttr, metadataSet);
+            request.setIntegrityMetadata(metadataSet);
         }
         setResource(CSSStyleSheetResource::fetch(request, document().fetcher()));
 

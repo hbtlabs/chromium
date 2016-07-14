@@ -219,17 +219,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Returns the compositing surface ID namespace, or 0 if Surfaces are not
   // enabled.
-  virtual uint32_t GetSurfaceIdNamespace();
+  virtual uint32_t GetSurfaceClientId();
 
   // When there are multiple RenderWidgetHostViews for a single page, input
   // events need to be targeted to the correct one for handling. The following
   // methods are invoked on the RenderWidgetHostView that should be able to
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
-  virtual uint32_t SurfaceIdNamespaceAtPoint(
-      cc::SurfaceHittestDelegate* delegate,
-      const gfx::Point& point,
-      gfx::Point* transformed_point);
+  virtual uint32_t SurfaceClientIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                          const gfx::Point& point,
+                                          gfx::Point* transformed_point);
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event,
                                  const ui::LatencyInfo& latency) {}
@@ -247,9 +246,10 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // to be translated to viewport coordinates for the root RWHV, in which case
   // this method is called on the root RWHV with the out-of-process iframe's
   // SurfaceId.
-  virtual void TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                               cc::SurfaceId original_surface,
-                                               gfx::Point* transformed_point);
+  virtual void TransformPointToLocalCoordSpace(
+      const gfx::Point& point,
+      const cc::SurfaceId& original_surface,
+      gfx::Point* transformed_point);
 
   //----------------------------------------------------------------------------
   // The following methods are related to IME.
@@ -271,6 +271,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // gfx::Rect.
   virtual void SelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
+
+  // Updates the range of the marked text in an IME composition.
+  virtual void ImeCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds);
 
   //----------------------------------------------------------------------------
   // The following static methods are implemented by each platform.
@@ -381,11 +386,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Instructs the view to not drop the surface even when the view is hidden.
   virtual void LockCompositingSurface() = 0;
   virtual void UnlockCompositingSurface() = 0;
-
-  // Updates the range of the marked text in an IME composition.
-  virtual void ImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) = 0;
 
   // Add and remove observers for lifetime event notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be

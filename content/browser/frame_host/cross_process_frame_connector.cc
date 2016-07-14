@@ -97,7 +97,7 @@ void CrossProcessFrameConnector::OnSatisfySequence(
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.id_namespace, &sequences);
+  manager->DidSatisfySequences(sequence.client_id, &sequences);
 }
 
 void CrossProcessFrameConnector::OnRequireSequence(
@@ -201,6 +201,12 @@ bool CrossProcessFrameConnector::LockMouse() {
   if (root_view)
     return root_view->LockMouse();
   return false;
+}
+
+void CrossProcessFrameConnector::UnlockMouse() {
+  RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
+  if (root_view)
+    root_view->UnlockMouse();
 }
 
 void CrossProcessFrameConnector::OnForwardInputEvent(

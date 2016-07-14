@@ -36,6 +36,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaArrayOfStrings;
+using base::android::ToJavaIntArray;
 using content::BrowserThread;
 using ntp_tiles::MostVisitedSites;
 using ntp_tiles::MostVisitedSitesSupervisor;
@@ -118,18 +119,23 @@ void MostVisitedSitesBridge::JavaObserver::OnMostVisitedURLsAvailable(
   std::vector<base::string16> titles;
   std::vector<std::string> urls;
   std::vector<std::string> whitelist_icon_paths;
+  std::vector<int> sources;
+
   titles.reserve(suggestions.size());
   urls.reserve(suggestions.size());
   whitelist_icon_paths.reserve(suggestions.size());
+  sources.reserve(suggestions.size());
   for (const auto& suggestion : suggestions) {
     titles.emplace_back(suggestion.title);
     urls.emplace_back(suggestion.url.spec());
     whitelist_icon_paths.emplace_back(suggestion.whitelist_icon_path.value());
+    sources.emplace_back(suggestion.source);
   }
   Java_MostVisitedURLsObserver_onMostVisitedURLsAvailable(
       env, observer_.obj(), ToJavaArrayOfStrings(env, titles).obj(),
       ToJavaArrayOfStrings(env, urls).obj(),
-      ToJavaArrayOfStrings(env, whitelist_icon_paths).obj());
+      ToJavaArrayOfStrings(env, whitelist_icon_paths).obj(),
+      ToJavaIntArray(env, sources).obj());
 }
 
 void MostVisitedSitesBridge::JavaObserver::OnPopularURLsAvailable(
@@ -193,18 +199,24 @@ void MostVisitedSitesBridge::AddOrRemoveBlacklistedUrl(
 void MostVisitedSitesBridge::RecordTileTypeMetrics(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jintArray>& jtile_types) {
+    const JavaParamRef<jintArray>& jtile_types,
+    const JavaParamRef<jintArray>& jsources) {
   std::vector<int> tile_types;
+  std::vector<int> sources;
+
   base::android::JavaIntArrayToIntVector(env, jtile_types, &tile_types);
-  most_visited_.RecordTileTypeMetrics(tile_types);
+  base::android::JavaIntArrayToIntVector(env, jsources, &sources);
+
+  most_visited_.RecordTileTypeMetrics(tile_types, sources);
 }
 
 void MostVisitedSitesBridge::RecordOpenedMostVisitedItem(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint index,
-    jint tile_type) {
-  most_visited_.RecordOpenedMostVisitedItem(index, tile_type);
+    jint tile_type,
+    jint source) {
+  most_visited_.RecordOpenedMostVisitedItem(index, tile_type, source);
 }
 
 // static

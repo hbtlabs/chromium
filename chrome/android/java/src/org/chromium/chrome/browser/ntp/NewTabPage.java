@@ -236,7 +236,8 @@ public class NewTabPage
                     item.getUrl(), NewTabPageUma.RAPPOR_ACTION_VISITED_SUGGESTED_TILE);
             RecordHistogram.recordMediumTimesHistogram("NewTabPage.MostVisitedTime",
                     System.nanoTime() - mLastShownTimeNs, TimeUnit.NANOSECONDS);
-            mMostVisitedSites.recordOpenedMostVisitedItem(item.getIndex(), item.getTileType());
+            mMostVisitedSites.recordOpenedMostVisitedItem(
+                    item.getIndex(), item.getTileType(), item.getSource());
         }
 
         @Override
@@ -502,10 +503,14 @@ public class NewTabPage
             if (!mTab.isHidden()) recordNTPShown();
 
             int tileTypes[] = new int[items.length];
+            int sources[] = new int[items.length];
+
             for (int i = 0; i < items.length; i++) {
                 tileTypes[i] = items[i].getTileType();
+                sources[i] = items[i].getSource();
             }
-            mMostVisitedSites.recordTileTypeMetrics(tileTypes);
+
+            mMostVisitedSites.recordTileTypeMetrics(tileTypes, sources);
 
             if (isNtpOfflinePagesEnabled()) {
                 final int maxNumTiles = 12;

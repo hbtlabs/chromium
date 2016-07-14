@@ -72,7 +72,8 @@ bool IsArcWindow(aura::Window* window) {
   if (!window || window->name() != kExoShellSurfaceWindowName)
     return false;
   std::string application_id = exo::ShellSurface::GetApplicationId(window);
-  return application_id.find(kArcProcessNamePrefix) == 0;
+  return base::StartsWith(application_id, kArcProcessNamePrefix,
+                          base::CompareCase::SENSITIVE);
 }
 
 bool IsArcWindowInForeground() {
@@ -284,15 +285,15 @@ int TabManagerDelegate::MemoryStat::EstimatedMemoryFreedKB(
 }
 
 class TabManagerDelegate::UmaReporter {
-  public:
-   UmaReporter()
-       : last_kill_time_(), total_kills_(0) {}
-   ~UmaReporter() {}
-   void ReportKill(const int memory_freed);
+ public:
+  UmaReporter() : total_kills_(0) {}
+  ~UmaReporter() {}
 
-  private:
-   base::Time last_kill_time_;
-   int total_kills_;
+  void ReportKill(const int memory_freed);
+
+ private:
+  base::Time last_kill_time_;
+  int total_kills_;
 };
 
 void TabManagerDelegate::UmaReporter::ReportKill(const int memory_freed) {
@@ -336,7 +337,7 @@ TabManagerDelegate::TabManagerDelegate(
                  content::NotificationService::AllBrowserContextsAndSources());
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   if (arc_bridge_service)
-    arc_bridge_service->AddObserver(this);
+    arc_bridge_service->process()->AddObserver(this);
   auto activation_client = GetActivationClient();
   if (activation_client)
     activation_client->AddObserver(this);
@@ -350,7 +351,7 @@ TabManagerDelegate::~TabManagerDelegate() {
     activation_client->RemoveObserver(this);
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   if (arc_bridge_service)
-    arc_bridge_service->RemoveObserver(this);
+    arc_bridge_service->process()->RemoveObserver(this);
 }
 
 void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
@@ -369,12 +370,12 @@ void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
   AdjustFocusedTabScore(pid);
 }
 
-void TabManagerDelegate::OnProcessInstanceReady() {
+void TabManagerDelegate::OnInstanceReady() {
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   DCHECK(arc_bridge_service);
 
-  arc_process_instance_ = arc_bridge_service->process_instance();
-  arc_process_instance_version_ = arc_bridge_service->process_version();
+  arc_process_instance_ = arc_bridge_service->process()->instance();
+  arc_process_instance_version_ = arc_bridge_service->process()->version();
 
   DCHECK(arc_process_instance_);
 
@@ -399,7 +400,7 @@ void TabManagerDelegate::OnProcessInstanceReady() {
   arc_process_instance_->DisableLowMemoryKiller();
 }
 
-void TabManagerDelegate::OnProcessInstanceClosed() {
+void TabManagerDelegate::OnInstanceClosed() {
   arc_process_instance_ = nullptr;
   arc_process_instance_version_ = 0;
 }

@@ -16,6 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/tracing/background_tracing_rule.h"
+#include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/tracing_delegate.h"
@@ -478,8 +479,7 @@ void BackgroundTracingManagerImpl::OnFinalizeComplete() {
   RecordBackgroundTracingMetric(FINALIZATION_COMPLETE);
 }
 
-void BackgroundTracingManagerImpl::AddCustomMetadata(
-    TracingControllerImpl::TraceDataSink* trace_data_sink) {
+void BackgroundTracingManagerImpl::AddCustomMetadata() {
   base::DictionaryValue metadata_dict;
 
   std::unique_ptr<base::DictionaryValue> config_dict(
@@ -489,7 +489,7 @@ void BackgroundTracingManagerImpl::AddCustomMetadata(
   if (last_triggered_rule_)
     metadata_dict.Set("last_triggered_rule", std::move(last_triggered_rule_));
 
-  trace_data_sink->AddMetadata(metadata_dict);
+  TracingController::GetInstance()->AddMetadata(metadata_dict);
 }
 
 void BackgroundTracingManagerImpl::BeginFinalizing(
@@ -506,12 +506,12 @@ void BackgroundTracingManagerImpl::BeginFinalizing(
 
   scoped_refptr<TracingControllerImpl::TraceDataSink> trace_data_sink;
   if (is_allowed_finalization) {
-    trace_data_sink = content::TracingController::CreateCompressedStringSink(
-        content::TracingController::CreateCallbackEndpoint(
+    trace_data_sink = TracingControllerImpl::CreateCompressedStringSink(
+        TracingControllerImpl::CreateCallbackEndpoint(
             base::Bind(&BackgroundTracingManagerImpl::OnFinalizeStarted,
                        base::Unretained(this))));
     RecordBackgroundTracingMetric(FINALIZATION_ALLOWED);
-    AddCustomMetadata(trace_data_sink.get());
+    AddCustomMetadata();
   } else {
     RecordBackgroundTracingMetric(FINALIZATION_DISALLOWED);
   }

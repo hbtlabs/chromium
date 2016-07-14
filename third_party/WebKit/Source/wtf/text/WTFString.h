@@ -30,6 +30,7 @@
 #include "wtf/WTFExport.h"
 #include "wtf/text/ASCIIFastPath.h"
 #include "wtf/text/StringImpl.h"
+#include "wtf/text/StringView.h"
 #include <algorithm>
 #include <iosfwd>
 
@@ -191,9 +192,6 @@ public:
     size_t find(const LChar* str, unsigned start = 0) const
         { return m_impl ? m_impl->find(str, start) : kNotFound; }
 
-    size_t findNextLineStart(unsigned start = 0) const
-        { return m_impl ? m_impl->findNextLineStart(start) : kNotFound; }
-
     // Find the last instance of a single character or string.
     size_t reverseFind(UChar c, unsigned start = UINT_MAX) const
         { return m_impl ? m_impl->reverseFind(c, start) : kNotFound; }
@@ -234,21 +232,15 @@ public:
     bool contains(const LChar* str, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const { return find(str, 0, caseSensitivity) != kNotFound; }
     bool contains(const String& str, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const { return find(str, 0, caseSensitivity) != kNotFound; }
 
-    bool startsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->startsWith, (s.impl())) : s.isEmpty(); }
+    bool startsWith(const StringView& prefix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->startsWith, (prefix)) : prefix.isEmpty(); }
     bool startsWith(UChar character) const
         { return m_impl ? m_impl->startsWith(character) : false; }
-    template<unsigned matchLength>
-    bool startsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->startsWith, (prefix, matchLength - 1)) : !matchLength; }
 
-    bool endsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->endsWith, (s.impl())) : s.isEmpty(); }
+    bool endsWith(const StringView& suffix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->endsWith, (suffix)) : suffix.isEmpty(); }
     bool endsWith(UChar character) const
         { return m_impl ? m_impl->endsWith(character) : false; }
-    template<unsigned matchLength>
-    bool endsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_impl ? DISPATCH_CASE_OP(caseSensitivity, m_impl->endsWith, (prefix, matchLength - 1)) : !matchLength; }
 
     void append(const String&);
     void append(LChar);
@@ -457,10 +449,6 @@ inline bool equalIgnoringCase(const String& a, const char* b) { return equalIgno
 inline bool equalIgnoringCase(const LChar* a, const String& b) { return equalIgnoringCase(a, b.impl()); }
 inline bool equalIgnoringCase(const char* a, const String& b) { return equalIgnoringCase(reinterpret_cast<const LChar*>(a), b.impl()); }
 
-inline bool equalIgnoringASCIICase(const String& a, const String& b) { return equalIgnoringASCIICase(a.impl(), b.impl()); }
-inline bool equalIgnoringASCIICase(const String& a, const LChar* b) { return equalIgnoringASCIICase(a.impl(), b); }
-inline bool equalIgnoringASCIICase(const String& a, const char* b) { return equalIgnoringASCIICase(a.impl(), b); }
-
 inline bool equalPossiblyIgnoringCase(const String& a, const String& b, bool ignoreCase)
 {
     return ignoreCase ? equalIgnoringCase(a, b) : (a == b);
@@ -638,6 +626,13 @@ WTF_EXPORT extern const String& xmlnsWithColon;
 // Pretty printer for gtest and base/logging.*.  It prepends and appends
 // double-quotes, and escapes chracters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const String&);
+
+inline StringView::StringView(const String& string, unsigned offset, unsigned length)
+    : StringView(string.impl(), offset, length) {}
+inline StringView::StringView(const String& string, unsigned offset)
+    : StringView(string.impl(), offset) {}
+inline StringView::StringView(const String& string)
+    : StringView(string.impl()) {}
 
 } // namespace WTF
 

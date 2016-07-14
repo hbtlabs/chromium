@@ -42,7 +42,6 @@
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/PaintInvalidationReason.h"
 #include "platform/graphics/filters/FilterOperations.h"
-#include "platform/graphics/paint/CachedDisplayItem.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/heap/Handle.h"
@@ -241,6 +240,7 @@ public:
 
     // cc::LayerClient implementation.
     std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(cc::Layer*) override;
+    void didUpdateMainThreadScrollingReasons() override;
 
     PaintController& getPaintController();
 
