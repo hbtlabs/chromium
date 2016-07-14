@@ -29,8 +29,7 @@ class BluetoothTestMac;
 - (instancetype)init NS_UNAVAILABLE;
 - (instancetype)initWithUTF8StringIdentifier:(const char*)identifier;
 - (instancetype)initWithUTF8StringIdentifier:(const char*)identifier
-                                        name:(NSString*)name
-    NS_DESIGNATED_INITIALIZER;
+                                        name:(NSString*)name;
 - (instancetype)initWithIdentifier:(NSUUID*)identifier
                               name:(NSString*)name NS_DESIGNATED_INITIALIZER;
 
