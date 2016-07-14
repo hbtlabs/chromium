@@ -65,9 +65,8 @@ scoped_nsobject<NSDictionary> CreateAdvertisementData(NSString* name,
         CBAdvertisementDataIsConnectable : @(YES),
       }]);
   if (name) {
-    [advertisement_data setObject:name
-                           forKey:CBAdvertisementDataLocalNameKey];
-}
+    [advertisement_data setObject:name forKey:CBAdvertisementDataLocalNameKey];
+  }
   if (uuids) {
     [advertisement_data setObject:uuids
                            forKey:CBAdvertisementDataServiceUUIDsKey];
@@ -137,9 +136,10 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       adapter_mac_->low_energy_central_manager_delegate_;
   switch (device_ordinal) {
     case 1: {
-      scoped_nsobject<MockCBPeripheral> mock_peripheral(
-          [[MockCBPeripheral alloc]
-              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral([
+          [MockCBPeripheral alloc]
+          initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str(),
+                                  name:@(kTestDeviceName.c_str())]);
       mock_peripheral.get().bluetoothTestMac = this;
       NSArray* uuids = @[
         [CBUUID UUIDWithString:@(kTestUUIDGenericAccess.c_str())],
@@ -154,9 +154,10 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       break;
     }
     case 2: {
-      scoped_nsobject<MockCBPeripheral> mock_peripheral(
-          [[MockCBPeripheral alloc]
-              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral([
+          [MockCBPeripheral alloc]
+          initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str(),
+                                  name:@(kTestDeviceName.c_str())]);
       mock_peripheral.get().bluetoothTestMac = this;
       NSArray* uuids = @[
         [CBUUID UUIDWithString:@(kTestUUIDImmediateAlert.c_str())],
@@ -171,12 +172,14 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       break;
     }
     case 3: {
-      scoped_nsobject<MockCBPeripheral> mock_peripheral(
-          [[MockCBPeripheral alloc]
-              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral([
+          [MockCBPeripheral alloc]
+          initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str(),
+                                  name:@(kTestDeviceNameEmpty.c_str())]);
       mock_peripheral.get().bluetoothTestMac = this;
       scoped_nsobject<NSDictionary> advertisement_data =
-          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()), /* uuids */ nil);
+          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()),
+                                  /* uuids */ nil);
       [central_manager_delegate centralManager:central_manager
                          didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
@@ -184,12 +187,14 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       break;
     }
     case 4: {
-      scoped_nsobject<MockCBPeripheral> mock_peripheral(
-          [[MockCBPeripheral alloc]
-              initWithUTF8StringIdentifier:kTestPeripheralUUID2.c_str()]);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral([
+          [MockCBPeripheral alloc]
+          initWithUTF8StringIdentifier:kTestPeripheralUUID2.c_str(),
+                                  name:@(kTestDeviceNameEmpty.c_str())]);
       mock_peripheral.get().bluetoothTestMac = this;
       scoped_nsobject<NSDictionary> advertisement_data =
-          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()), /* uuids */ nil);
+          CreateAdvertisementData(@(kTestDeviceNameEmpty.c_str()),
+                                  /* uuids */ nil);
       [central_manager_delegate centralManager:central_manager
                          didDiscoverPeripheral:mock_peripheral.get().peripheral
                              advertisementData:advertisement_data
@@ -197,9 +202,10 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       break;
     }
     case 5: {
-      scoped_nsobject<MockCBPeripheral> mock_peripheral(
-          [[MockCBPeripheral alloc]
-              initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str()]);
+      scoped_nsobject<MockCBPeripheral> mock_peripheral([
+          [MockCBPeripheral alloc]
+          initWithUTF8StringIdentifier:kTestPeripheralUUID1.c_str(),
+                                       /* name */ nil]);
       mock_peripheral.get().bluetoothTestMac = this;
       scoped_nsobject<NSDictionary> advertisement_data =
           CreateAdvertisementData(/* name */ nil, /* uuids */ nil);
