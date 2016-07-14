@@ -147,7 +147,7 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
       [CBUUID UUIDWithString:@(kTestUUIDGenericAttribute.c_str())]
     ];
     break;
-    case 2: {
+    case 2:
       identifier = kTestPeripheralUUID1.c_str();
       name = @(kTestDeviceName.c_str());
       uuids = @[
@@ -155,37 +155,36 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
         [CBUUID UUIDWithString:@(kTestUUIDLinkLoss.c_str())]
       ];
       break;
-      case 3:
-        identifier = kTestPeripheralUUID1.c_str();
-        name = @(kTestDeviceNameEmpty.c_str());
-        uuids = nil;
-        break;
-      case 4:
-        identifier = kTestPeripheralUUID2.c_str();
-        name = @(kTestDeviceNameEmpty.c_str());
-        uuids = nil;
-        break;
-      case 5:
-        identifier = kTestPeripheralUUID1.c_str();
-        name = nil;
-        uuids = nil;
-        break;
-      default:
-        NOTREACHED();
-        //      identifier = nil;
-        //      name = nil;
-        //      uuids = nil;
+    case 3:
+      identifier = kTestPeripheralUUID1.c_str();
+      name = @(kTestDeviceNameEmpty.c_str());
+      uuids = nil;
+      break;
+    case 4:
+      identifier = kTestPeripheralUUID2.c_str();
+      name = @(kTestDeviceNameEmpty.c_str());
+      uuids = nil;
+      break;
+    case 5:
+      identifier = kTestPeripheralUUID1.c_str();
+      name = nil;
+      uuids = nil;
+      break;
+    default:
+      NOTREACHED();
+      //      identifier = nil;
+      //      name = nil;
+      //      uuids = nil;
   }
-    scoped_nsobject<MockCBPeripheral> mock_peripheral([[MockCBPeripheral alloc]
-        initWithUTF8StringIdentifier:identifier
-                                name:name]);
-    mock_peripheral.get().bluetoothTestMac = this;
-    [central_manager_delegate
-               centralManager:central_manager
-        didDiscoverPeripheral:mock_peripheral.get().peripheral
-            advertisementData:CreateAdvertisementData(name, uuids)
-                         RSSI:@(0)];
-    return observer.last_device();
+  scoped_nsobject<MockCBPeripheral> mock_peripheral([[MockCBPeripheral alloc]
+      initWithUTF8StringIdentifier:identifier
+                              name:name]);
+  mock_peripheral.get().bluetoothTestMac = this;
+  [central_manager_delegate centralManager:central_manager
+                     didDiscoverPeripheral:mock_peripheral.get().peripheral
+                         advertisementData:CreateAdvertisementData(name, uuids)
+                                      RSSI:@(0)];
+  return observer.last_device();
 }
 
 void BluetoothTestMac::SimulateGattConnection(BluetoothDevice* device) {
