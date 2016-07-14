@@ -131,7 +131,7 @@ TEST_F(BluetoothTest, GetName_NullName) {
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
 
-// TODO(scheib): Test with a device with no name. http://crbug.com/506415
+// TODO(506415): Test GetNameForDisplay with a device with no name.
 // BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() will run, which
 // requires string resources to be loaded. For that, something like
 // InitSharedInstance must be run. See unittest files that call that. It will
