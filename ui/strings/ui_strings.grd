@@ -5,7 +5,7 @@ each locale. Specifically, these are UI strings that are used by app/ that
 need to be translated for each locale.-->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <!-- TODO add each of your output files.  Modify the three below, and add
     your own for your various languages.  See the user's guide
@@ -591,14 +591,14 @@ need to be translated for each locale.-->
         <message name="IDS_MESSAGE_CENTER_NOTIFIER_HATS_NAME" desc="The name of hats notifier that is a system component">
           Hats
         </message>
+        <message name="IDS_MESSAGE_CENTER_NOTIFIER_QUICK_UNLOCK_FEATURE_NAME" desc="The name of quick unlock feature notifier that is a system component">
+          Quick Unlock Feature
+        </message>
       </if>
 
       <!-- App list -->
       <message name="IDS_APP_LIST_HELP" desc="The menu entry to show the app list help UI.">
         Help
-      </message>
-      <message name="IDS_APP_LIST_OPEN_SETTINGS" desc="The menu entry to show the settings UI.">
-        Settings
       </message>
       <message name="IDS_APP_LIST_OPEN_FEEDBACK" desc="The menu entry to show the feedback UI.">
         Send feedback

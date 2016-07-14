@@ -475,8 +475,8 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
   // Let the page-level input event router know about our surface ID
   // namespace for surface-based hit testing.
   if (host_->delegate() && host_->delegate()->GetInputEventRouter()) {
-    host_->delegate()->GetInputEventRouter()->AddSurfaceIdNamespaceOwner(
-        GetSurfaceIdNamespace(), this);
+    host_->delegate()->GetInputEventRouter()->AddSurfaceClientIdOwner(
+        GetSurfaceClientId(), this);
   }
 
   // We should start observing the TextInputManager for IME-related events as
@@ -974,12 +974,6 @@ void RenderWidgetHostViewAura::UpdateCursor(const WebCursor& cursor) {
 void RenderWidgetHostViewAura::SetIsLoading(bool is_loading) {
   is_loading_ = is_loading;
   UpdateCursorIfOverSelf();
-}
-
-void RenderWidgetHostViewAura::ImeCompositionRangeChanged(
-    const gfx::Range& range,
-    const std::vector<gfx::Rect>& character_bounds) {
-  composition_character_bounds_ = character_bounds;
 }
 
 void RenderWidgetHostViewAura::RenderProcessGone(base::TerminationStatus status,
@@ -1533,9 +1527,15 @@ bool RenderWidgetHostViewAura::GetCompositionCharacterBounds(
     uint32_t index,
     gfx::Rect* rect) const {
   DCHECK(rect);
-  if (index >= composition_character_bounds_.size())
+
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
     return false;
-  *rect = ConvertRectToScreen(composition_character_bounds_[index]);
+
+  const std::vector<gfx::Rect>* composition_character_bounds =
+      text_input_manager_->GetCompositionCharacterBounds();
+  if (index >= composition_character_bounds->size())
+    return false;
+  *rect = ConvertRectToScreen(composition_character_bounds->at(index));
   return true;
 }
 
@@ -1994,7 +1994,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
     event->SetHandled();
 }
 
-uint32_t RenderWidgetHostViewAura::SurfaceIdNamespaceAtPoint(
+uint32_t RenderWidgetHostViewAura::SurfaceClientIdAtPoint(
     cc::SurfaceHittestDelegate* delegate,
     const gfx::Point& point,
     gfx::Point* transformed_point) {
@@ -2012,8 +2012,8 @@ uint32_t RenderWidgetHostViewAura::SurfaceIdNamespaceAtPoint(
   // It is possible that the renderer has not yet produced a surface, in which
   // case we return our current namespace.
   if (id.is_null())
-    return GetSurfaceIdNamespace();
-  return id.id_namespace();
+    return GetSurfaceClientId();
+  return id.client_id();
 }
 
 void RenderWidgetHostViewAura::ProcessMouseEvent(
@@ -2042,7 +2042,7 @@ void RenderWidgetHostViewAura::ProcessGestureEvent(
 
 void RenderWidgetHostViewAura::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    cc::SurfaceId original_surface,
+    const cc::SurfaceId& original_surface,
     gfx::Point* transformed_point) {
   // Transformations use physical pixels rather than DIP, so conversion
   // is necessary.
@@ -2941,6 +2941,10 @@ void RenderWidgetHostViewAura::SetBeginFrameSource(
     begin_frame_source_->AddObserver(this);
 }
 
+bool RenderWidgetHostViewAura::IsAutoResizeEnabled() const {
+  return host_->auto_resize_enabled();
+}
+
 void RenderWidgetHostViewAura::OnDidNavigateMainFrameToNewPage() {
   ui::GestureRecognizer::Get()->CancelActiveTouches(window_);
 }
@@ -2953,8 +2957,8 @@ void RenderWidgetHostViewAura::UnlockCompositingSurface() {
   NOTIMPLEMENTED();
 }
 
-uint32_t RenderWidgetHostViewAura::GetSurfaceIdNamespace() {
-  return delegated_frame_host_->GetSurfaceIdNamespace();
+uint32_t RenderWidgetHostViewAura::GetSurfaceClientId() {
+  return delegated_frame_host_->GetSurfaceClientId();
 }
 
 cc::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {

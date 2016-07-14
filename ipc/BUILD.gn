@@ -142,12 +142,12 @@ component("ipc") {
 
   public_deps = [
     ":param_traits",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
   ]
   deps = [
     ":mojom",
     "//base",
-    "//mojo/public/cpp/bindings",
   ]
 
   if (is_win || is_mac) {
@@ -164,6 +164,13 @@ component("ipc") {
 mojom("mojom") {
   sources = [
     "ipc.mojom",
+  ]
+}
+
+mojom("test_interfaces") {
+  testonly = true
+  sources = [
+    "ipc_test.mojom",
   ]
 }
 
@@ -235,6 +242,7 @@ if (!is_ios) {
       ":ipc",
       ":mojom",
       ":run_all_unittests",
+      ":test_interfaces",
       ":test_support",
       "//base",
       "//base:i18n",

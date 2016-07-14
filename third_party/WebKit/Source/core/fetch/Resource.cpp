@@ -295,9 +295,6 @@ void Resource::ResourceCallback::runTask()
 
 Resource::Resource(const ResourceRequest& request, Type type, const ResourceLoaderOptions& options)
     : m_resourceRequest(request)
-    , m_options(options)
-    , m_responseTimestamp(currentTime())
-    , m_cancelTimer(this, &Resource::cancelTimerFired)
     , m_loadFinishTime(0)
     , m_identifier(0)
     , m_encodedSize(0)
@@ -312,6 +309,9 @@ Resource::Resource(const ResourceRequest& request, Type type, const ResourceLoad
     , m_needsSynchronousCacheHit(false)
     , m_linkPreload(false)
     , m_isRevalidating(false)
+    , m_options(options)
+    , m_responseTimestamp(currentTime())
+    , m_cancelTimer(this, &Resource::cancelTimerFired)
 {
     ASSERT(m_type == unsigned(type)); // m_type is a bitfield, so this tests careless updates of the enum.
     InstanceCounters::incrementCounter(InstanceCounters::ResourceCounter);
@@ -618,7 +618,7 @@ String Resource::reasonNotDeletable() const
             builder.append(", Finished=");
             builder.appendNumber(m_finishedClients.size());
         }
-        builder.append(")");
+        builder.append(')');
     }
     if (m_loader) {
         if (!builder.isEmpty())
@@ -630,7 +630,7 @@ String Resource::reasonNotDeletable() const
             builder.append(' ');
         builder.append("m_preloadCount(");
         builder.appendNumber(m_preloadCount);
-        builder.append(")");
+        builder.append(')');
     }
     if (memoryCache()->contains(this)) {
         if (!builder.isEmpty())

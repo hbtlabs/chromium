@@ -123,31 +123,6 @@ const AtomicString& HTMLSelectElement::formControlType() const
     return m_multiple ? selectMultiple : selectOne;
 }
 
-void HTMLSelectElement::optionSelectedByUser(int optionIndex, bool fireOnChangeNow, bool allowMultipleSelection)
-{
-    // User interaction such as mousedown events can cause list box select
-    // elements to send change events.  This produces that same behavior for
-    // changes triggered by other code running on behalf of the user.
-    if (!usesMenuList()) {
-        updateSelectedState(item(optionIndex), allowMultipleSelection, false);
-        setNeedsValidityCheck();
-        if (fireOnChangeNow)
-            listBoxOnChange();
-        return;
-    }
-
-    // Bail out if this index is already the selected one, to avoid running
-    // unnecessary JavaScript that can mess up autofill when there is no actual
-    // change (see https://bugs.webkit.org/show_bug.cgi?id=35256 and
-    // <rdar://7467917>).  The selectOption function does not behave this way,
-    // possibly because other callers need a change event even in cases where
-    // the selected option is not change.
-    if (optionIndex == selectedIndex())
-        return;
-
-    selectOption(item(optionIndex), DeselectOtherOptions | MakeOptionDirty | (fireOnChangeNow ? DispatchInputAndChangeEvent : 0));
-}
-
 bool HTMLSelectElement::hasPlaceholderLabelOption() const
 {
     // The select element has no placeholder label option if it has an attribute
@@ -208,18 +183,18 @@ String HTMLSelectElement::defaultToolTip() const
     return validationMessage();
 }
 
-void HTMLSelectElement::listBoxSelectItem(int listIndex, bool allowMultiplySelections, bool shift, bool fireOnChangeNow)
+void HTMLSelectElement::selectMultipleOptionsByPopup(const Vector<int>& listIndices)
 {
-    if (!multiple()) {
-        optionSelectedByUser(listToOptionIndex(listIndex), fireOnChangeNow, false);
-    } else {
-        HTMLElement* element = listItems()[listIndex];
-        if (isHTMLOptionElement(element))
-            updateSelectedState(toHTMLOptionElement(element), allowMultiplySelections, shift);
-        setNeedsValidityCheck();
-        if (fireOnChangeNow)
-            listBoxOnChange();
+    DCHECK(usesMenuList());
+    DCHECK(!multiple());
+    for (size_t i = 0; i < listIndices.size(); ++i) {
+        bool addSelectionIfNotFirst = i > 0;
+        if (HTMLOptionElement* option = optionAtListIndex(listIndices[i]))
+            updateSelectedState(option, addSelectionIfNotFirst, false);
     }
+    setNeedsValidityCheck();
+    // TODO(tkent): Using listBoxOnChange() is very confusing.
+    listBoxOnChange();
 }
 
 bool HTMLSelectElement::usesMenuList() const
@@ -503,6 +478,16 @@ void HTMLSelectElement::setLength(unsigned newLen, ExceptionState& exceptionStat
 bool HTMLSelectElement::isRequiredFormControl() const
 {
     return isRequired();
+}
+
+HTMLOptionElement* HTMLSelectElement::optionAtListIndex(int listIndex) const
+{
+    if (listIndex < 0)
+        return nullptr;
+    const ListItems& items = listItems();
+    if (static_cast<size_t>(listIndex) >= items.size() || !isHTMLOptionElement(items[listIndex]))
+        return nullptr;
+    return toHTMLOptionElement(items[listIndex]);
 }
 
 // Returns the 1st valid OPTION |skip| items from |listIndex| in direction
@@ -888,6 +873,17 @@ void HTMLSelectElement::setSelectedIndex(int index)
     selectOption(item(index), DeselectOtherOptions | MakeOptionDirty);
 }
 
+int HTMLSelectElement::selectedListIndex() const
+{
+    int index = 0;
+    for (const auto& item : listItems()) {
+        if (isHTMLOptionElement(item) && toHTMLOptionElement(item)->selected())
+            return index;
+        ++index;
+    }
+    return -1;
+}
+
 void HTMLSelectElement::setSuggestedOption(HTMLOptionElement* option)
 {
     if (m_suggestedOption == option)
@@ -1079,22 +1075,6 @@ int HTMLSelectElement::optionToListIndex(int optionIndex) const
     return -1;
 }
 
-int HTMLSelectElement::listToOptionIndex(int listIndex) const
-{
-    const ListItems& items = listItems();
-    if (listIndex < 0 || listIndex >= static_cast<int>(items.size()) || !isHTMLOptionElement(*items[listIndex]))
-        return -1;
-
-    // Actual index of option not counting OPTGROUP entries that may be in list.
-    int optionIndex = 0;
-    for (int i = 0; i < listIndex; ++i) {
-        if (isHTMLOptionElement(*items[i]))
-            ++optionIndex;
-    }
-
-    return optionIndex;
-}
-
 void HTMLSelectElement::dispatchFocusEvent(Element* oldFocusedElement, WebFocusType type, InputDeviceCapabilities* sourceCapabilities)
 {
     // Save the selection so it can be compared to the new selection when
@@ -1169,10 +1149,7 @@ void HTMLSelectElement::restoreFormControlState(const FormControlState& state)
     if (itemsSize == 0)
         return;
 
-    for (auto& item : items) {
-        if (isHTMLOptionElement(item))
-            toHTMLOptionElement(item)->setSelectedState(false);
-    }
+    selectOption(nullptr, DeselectOtherOptions);
 
     // The saved state should have at least one value and an index.
     ASSERT(state.valueSize() >= 2);
@@ -1267,8 +1244,8 @@ void HTMLSelectElement::handlePopupOpenKeyboardEvent(Event* event)
         return;
     // Save the selection so it can be compared to the new selection when
     // dispatching change events during selectOption, which gets called from
-    // valueChanged, which gets called after the user makes a selection from the
-    // menu.
+    // selectOptionByPopup, which gets called after the user makes a selection
+    // from the menu.
     saveLastSelection();
     showPopup();
     event->setDefaultHandled();
@@ -1386,8 +1363,8 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
             } else {
                 // Save the selection so it can be compared to the new selection
                 // when we call onChange during selectOption, which gets called
-                // from valueChanged, which gets called after the user makes a
-                // selection from the menu.
+                // from selectOptionByPopup, which gets called after the user
+                // makes a selection from the menu.
                 saveLastSelection();
                 // TODO(lanwei): Will check if we need to add
                 // InputDeviceCapabilities here when select menu list gets
@@ -1698,16 +1675,17 @@ HTMLOptionElement* HTMLSelectElement::lastSelectedOption() const
 {
     const ListItems& items = listItems();
     for (size_t i = items.size(); i;) {
-        HTMLElement* element = items[--i];
-        if (isHTMLOptionElement(*element) && toHTMLOptionElement(element)->selected())
-            return toHTMLOptionElement(element);
+        if (HTMLOptionElement* option = optionAtListIndex(--i)) {
+            if (option->selected())
+                return option;
+        }
     }
     return nullptr;
 }
 
 int HTMLSelectElement::indexOfSelectedOption() const
 {
-    return optionToListIndex(selectedIndex());
+    return selectedListIndex();
 }
 
 int HTMLSelectElement::optionCount() const
@@ -1717,11 +1695,11 @@ int HTMLSelectElement::optionCount() const
 
 String HTMLSelectElement::optionAtIndex(int index) const
 {
-    const ListItems& items = listItems();
-    HTMLElement* element = items[index];
-    if (!isHTMLOptionElement(*element) || toHTMLOptionElement(element)->isDisabledFormControl())
-        return String();
-    return toHTMLOptionElement(element)->displayLabel();
+    if (HTMLOptionElement* option = optionAtListIndex(index)) {
+        if (!option->isDisabledFormControl())
+            return option->displayLabel();
+    }
+    return String();
 }
 
 void HTMLSelectElement::typeAheadFind(KeyboardEvent* event)
@@ -1729,22 +1707,18 @@ void HTMLSelectElement::typeAheadFind(KeyboardEvent* event)
     int index = m_typeAhead.handleEvent(event, TypeAhead::MatchPrefix | TypeAhead::CycleFirstChar);
     if (index < 0)
         return;
-    HTMLOptionElement* option = nullptr;
-    if (static_cast<size_t>(index) < listItems().size() && isHTMLOptionElement(listItems()[index]))
-        option = toHTMLOptionElement(listItems()[index]);
-    selectOption(option, DeselectOtherOptions | MakeOptionDirty | DispatchInputAndChangeEvent);
+    selectOption(optionAtListIndex(index), DeselectOtherOptions | MakeOptionDirty | DispatchInputAndChangeEvent);
     if (!usesMenuList())
         listBoxOnChange();
 }
 
-void HTMLSelectElement::accessKeySetSelectedIndex(int index)
+void HTMLSelectElement::selectOptionByAccessKey(HTMLOptionElement* option)
 {
     // First bring into focus the list box.
     if (!focused())
         accessKeyAction(false);
 
-    HTMLOptionElement* option = item(index);
-    if (!option)
+    if (!option || option->ownerSelectElement() != this)
         return;
     EventQueueScope scope;
     // If this index is already selected, unselect. otherwise update the
@@ -1912,8 +1886,8 @@ void HTMLSelectElement::setIndexToSelectOnCancel(int listIndex)
 
 HTMLOptionElement* HTMLSelectElement::optionToBeShown() const
 {
-    if (m_indexToSelectOnCancel >= 0 && static_cast<size_t>(m_indexToSelectOnCancel) < listItems().size() && isHTMLOptionElement(listItems()[m_indexToSelectOnCancel]))
-        return toHTMLOptionElement(listItems()[m_indexToSelectOnCancel]);
+    if (HTMLOptionElement* option = optionAtListIndex(m_indexToSelectOnCancel))
+        return option;
     if (m_suggestedOption)
         return m_suggestedOption;
     // TODO(tkent): We should not call optionToBeShown() in multiple() case.
@@ -1923,8 +1897,9 @@ HTMLOptionElement* HTMLSelectElement::optionToBeShown() const
     return m_lastOnChangeOption;
 }
 
-void HTMLSelectElement::valueChanged(unsigned listIndex)
+void HTMLSelectElement::selectOptionByPopup(int listIndex)
 {
+    DCHECK(usesMenuList());
     // Check to ensure a page navigation has not occurred while the popup was
     // up.
     Document& doc = document();
@@ -1932,13 +1907,23 @@ void HTMLSelectElement::valueChanged(unsigned listIndex)
         return;
 
     setIndexToSelectOnCancel(-1);
-    optionSelectedByUser(listToOptionIndex(listIndex), true);
+
+    HTMLOptionElement* option = optionAtListIndex(listIndex);
+    // Bail out if this index is already the selected one, to avoid running
+    // unnecessary JavaScript that can mess up autofill when there is no actual
+    // change (see https://bugs.webkit.org/show_bug.cgi?id=35256 and
+    // <rdar://7467917>).  The selectOption function does not behave this way,
+    // possibly because other callers need a change event even in cases where
+    // the selected option is not change.
+    if (option == selectedOption())
+        return;
+    selectOption(option, DeselectOtherOptions | MakeOptionDirty | DispatchInputAndChangeEvent);
 }
 
 void HTMLSelectElement::popupDidCancel()
 {
     if (m_indexToSelectOnCancel >= 0)
-        valueChanged(m_indexToSelectOnCancel);
+        selectOptionByPopup(m_indexToSelectOnCancel);
 }
 
 void HTMLSelectElement::provisionalSelectionChanged(unsigned listIndex)

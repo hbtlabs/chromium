@@ -559,15 +559,17 @@ bool GpuProcessHost::Init() {
 
   TRACE_EVENT_INSTANT0("gpu", "LaunchGpuProcess", TRACE_EVENT_SCOPE_THREAD);
 
-  std::string channel_id = process_->GetHost()->CreateChannel();
-  if (channel_id.empty())
+  const std::string mojo_channel_token =
+      process_->GetHost()->CreateChannelMojo(child_token_);
+  if (mojo_channel_token.empty())
     return false;
 
   DCHECK(!mojo_child_connection_);
   mojo_child_connection_.reset(new MojoChildConnection(
-      kGpuMojoApplicationName, "", child_token_,
-      MojoShellContext::GetConnectorForIOThread(),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+      kGpuMojoApplicationName,
+      "",
+      child_token_,
+      MojoShellContext::GetConnectorForIOThread()));
 
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
@@ -575,8 +577,8 @@ bool GpuProcessHost::Init() {
     DCHECK(g_gpu_main_thread_factory);
     in_process_gpu_thread_.reset(g_gpu_main_thread_factory(
         InProcessChildThreadParams(
-            channel_id, base::ThreadTaskRunnerHandle::Get(), std::string(),
-            mojo_child_connection_->service_token()),
+            std::string(), base::ThreadTaskRunnerHandle::Get(),
+            mojo_channel_token, mojo_child_connection_->service_token()),
         gpu_preferences));
     base::Thread::Options options;
 #if defined(OS_WIN)
@@ -589,7 +591,7 @@ bool GpuProcessHost::Init() {
     in_process_gpu_thread_->StartWithOptions(options);
 
     OnProcessLaunched();  // Fake a callback that the process is ready.
-  } else if (!LaunchGpuProcess(channel_id, &gpu_preferences)) {
+  } else if (!LaunchGpuProcess(mojo_channel_token, &gpu_preferences)) {
     return false;
   }
 
@@ -938,11 +940,11 @@ void GpuProcessHost::OnProcessCrashed(int exit_code) {
 }
 
 shell::InterfaceRegistry* GpuProcessHost::GetInterfaceRegistry() {
-  return mojo_child_connection_->GetInterfaceRegistry();
+  return mojo_child_connection_->connection()->GetInterfaceRegistry();
 }
 
 shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
-  return mojo_child_connection_->GetRemoteInterfaces();
+  return mojo_child_connection_->connection()->GetRemoteInterfaces();
 }
 
 GpuProcessHost::GpuProcessKind GpuProcessHost::kind() {
@@ -962,7 +964,7 @@ void GpuProcessHost::StopGpuProcess() {
   Send(new GpuMsg_Finalize());
 }
 
-bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
+bool GpuProcessHost::LaunchGpuProcess(const std::string& mojo_channel_token,
                                       gpu::GpuPreferences* gpu_preferences) {
   if (!(gpu_enabled_ &&
       GpuDataManagerImpl::GetInstance()->ShouldUseSwiftShader()) &&
@@ -998,7 +1000,7 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
   base::CommandLine* cmd_line = new base::CommandLine(exe_path);
 #endif
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
-  cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
+  cmd_line->AppendSwitchASCII(switches::kMojoChannelToken, mojo_channel_token);
   cmd_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
                               mojo_child_connection_->service_token());
   BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);

@@ -169,8 +169,6 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
-#include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/public/cpp/interface_registry.h"
 #include "services/shell/runner/common/switches.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -234,6 +232,10 @@
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
 #include "services/ui/common/switches.h"  // nogncheck
+#endif
+
+#if defined(USE_MINIKIN_HYPHENATION)
+#include "content/browser/hyphenation/hyphenation_impl.h"
 #endif
 
 #if defined(OS_WIN)
@@ -602,8 +604,6 @@ RenderProcessHostImpl::RenderProcessHostImpl(
 #endif  // defined(OS_MACOSX)
 #endif  // USE_ATTACHMENT_BROKER
 
-  scoped_refptr<base::SequencedTaskRunner> io_task_runner =
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   shell::Connector* connector =
       BrowserContext::GetShellConnectorFor(browser_context_);
   // Some embedders may not initialize Mojo or the shell connector for a browser
@@ -616,14 +616,15 @@ RenderProcessHostImpl::RenderProcessHostImpl(
     if (!MojoShellConnection::GetForProcess()) {
       shell::mojom::ServiceRequest request = mojo::GetProxy(&test_service_);
       MojoShellConnection::SetForProcess(MojoShellConnection::Create(
-          std::move(request), io_task_runner));
+          std::move(request)));
     }
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   }
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
-      io_task_runner));
+      base::StringPrintf("%d_%d", id_, instance_id_++),
+      child_token_,
+      connector));
 }
 
 // static
@@ -763,7 +764,8 @@ bool RenderProcessHostImpl::Init() {
     in_process_renderer_.reset(
         g_renderer_main_thread_factory(InProcessChildThreadParams(
             channel_id,
-            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+            BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
+                ->task_runner(),
             mojo_channel_token_,
             mojo_child_connection_->service_token())));
 
@@ -1076,9 +1078,15 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                  base::Unretained(
                      storage_partition_impl_->GetBroadcastChannelProvider())));
 
+  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner =
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE);
   GetInterfaceRegistry()->AddInterface(
-      base::Bind(&MimeRegistryImpl::Create),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
+      base::Bind(&MimeRegistryImpl::Create), file_task_runner);
+
+#if defined(USE_MINIKIN_HYPHENATION)
+  GetInterfaceRegistry()->AddInterface(
+      base::Bind(&hyphenation::HyphenationImpl::Create), file_task_runner);
+#endif
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
@@ -1123,11 +1131,16 @@ void RenderProcessHostImpl::NotifyTimezoneChange(const std::string& zone_id) {
 }
 
 shell::InterfaceRegistry* RenderProcessHostImpl::GetInterfaceRegistry() {
-  return mojo_child_connection_->GetInterfaceRegistry();
+  return GetChildConnection()->GetInterfaceRegistry();
 }
 
 shell::InterfaceProvider* RenderProcessHostImpl::GetRemoteInterfaces() {
-  return mojo_child_connection_->GetRemoteInterfaces();
+  return GetChildConnection()->GetRemoteInterfaces();
+}
+
+shell::Connection* RenderProcessHostImpl::GetChildConnection() {
+  DCHECK(mojo_child_connection_);
+  return mojo_child_connection_->connection();
 }
 
 std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -2105,6 +2118,20 @@ void RenderProcessHostImpl::UnregisterHost(int host_id) {
 }
 
 // static
+void RenderProcessHostImpl::CheckAllTerminated() {
+  iterator iter(AllHostsIterator());
+  while (!iter.IsAtEnd()) {
+    // The leftover hosts must have reset IPC channel and getting deleted soon.
+    RenderProcessHostImpl* host =
+        static_cast<RenderProcessHostImpl*>(iter.GetCurrentValue());
+    CHECK(host->listeners_.IsEmpty());
+    CHECK_EQ(0, host->worker_ref_count_);
+    CHECK(!host->channel_);
+    CHECK(host->deleting_soon_);
+  }
+}
+
+// static
 void RenderProcessHostImpl::FilterURL(RenderProcessHost* rph,
                                       bool empty_allowed,
                                       GURL* url) {
@@ -2431,8 +2458,9 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
+      base::StringPrintf("%d_%d", id_, instance_id_++),
+      child_token_,
+      connector));
 
   within_process_died_observer_ = true;
   NotificationService::current()->Notify(

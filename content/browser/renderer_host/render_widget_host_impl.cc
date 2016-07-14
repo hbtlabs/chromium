@@ -330,8 +330,8 @@ void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
   // If the renderer has not yet been initialized, then the surface ID
   // namespace will be sent during initialization.
   if (view_ && renderer_initialized_) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(routing_id_,
-                                           view_->GetSurfaceIdNamespace()));
+    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
+                                        view_->GetSurfaceClientId()));
   }
 
   synthetic_gesture_controller_.reset();
@@ -403,8 +403,8 @@ void RenderWidgetHostImpl::Init() {
   // If the RWHV has not yet been set, the surface ID namespace will get
   // passed down by the call to SetView().
   if (view_) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(routing_id_,
-                                           view_->GetSurfaceIdNamespace()));
+    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
+                                        view_->GetSurfaceClientId()));
   }
 
   SendScreenRects();
@@ -1568,9 +1568,7 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
     view_->DidReceiveRendererFrame();
   } else {
     cc::CompositorFrameAck ack;
-    if (frame.gl_frame_data) {
-      ack.gl_frame_data = std::move(frame.gl_frame_data);
-    } else if (frame.delegated_frame_data) {
+    if (frame.delegated_frame_data) {
       cc::TransferableResource::ReturnResources(
           frame.delegated_frame_data->resource_list, &ack.resources);
     }
@@ -1733,16 +1731,17 @@ void RenderWidgetHostImpl::OnLockMouse(bool user_gesture,
   }
 
   pending_mouse_lock_request_ = true;
+  if (delegate_) {
+    delegate_->RequestToLockMouse(this, user_gesture, last_unlocked_by_target,
+                                  privileged && allow_privileged_mouse_lock_);
+    return;
+  }
+
   if (privileged && allow_privileged_mouse_lock_) {
     // Directly approve to lock the mouse.
     GotResponseToLockMouseRequest(true);
   } else {
-    if (delegate_) {
-      delegate_->RequestToLockMouse(this, user_gesture,
-                                    last_unlocked_by_target);
-      return;
-    }
-    // If there's no delegate, just reject it.
+    // Otherwise, just reject it.
     GotResponseToLockMouseRequest(false);
   }
 }

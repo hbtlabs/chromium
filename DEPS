@@ -36,27 +36,27 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': 'c90bc40fdd7f0e8908df81766891e5c62fe77932',
+  'skia_revision': '7cf36ccb441956e9e35bc4c9b08bdf8bafd9d4bb',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '57599f4bf5731be57cbc51f82ee81465d063750b',
+  'v8_revision': '74306c2f75c80895e34f18fe3688a8ef8650b35f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': 'df6e95e7669883c8fe9ef956c69a544154701a49',
+  'swarming_revision': '7f63a272f7d9785ce41b6d10bb3106c49a968e57',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '9585a784bff9752bed369d8247a918495bcdf3ab',
+  'angle_revision': '84954988ad266c11cacdfd716bf09e3d7910ec7b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': 'aa47d9773d8f4d6254a587a1240b3dc023d54f06',
+  'buildtools_revision': '031420bbafaaa8c33e2bc0623c22fb6181a57f47',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '3c27a84d15c06f85cc7f455f96dc124673f9f9d2',
+  'pdfium_revision': 'dbc7716e1b8d67a5ca422ef0bbfe87ff8c5cf4ea',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -64,7 +64,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '95c69563dc5422c3b3cd3a0bf435944a7530a12d',
+  'boringssl_revision': '10f97f3bfcecc3fbe8e9f02e7c426f7e340f7f54',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -80,7 +80,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '4623c4f8a10b85cc3c97f7ecb2f7cb48a1da665e',
+  'nacl_revision': '0ea1fef9391b6084be99b9238542b4782365e23c',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype-android
   # and whatever else without interference from each other.
@@ -88,7 +88,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '4160831d2082e3e07cc9b2a957dca49391ba7edf',
+  'catapult_revision': '627023176cd4c589124c8699685138c7df71135a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -148,7 +148,7 @@ deps = {
     Var('chromium_git') + '/external/snappy.git' + '@' + '762bb32f0c9d2f31ba4958c7c0933d22e80c20bf',
 
   'src/tools/gyp':
-    Var('chromium_git') + '/external/gyp.git' + '@' + 'bac4680ec9a5c55ab692490b6732999648ecf1e9',
+    Var('chromium_git') + '/external/gyp.git' + '@' + 'e7079f0e0e14108ab0dba58728ff219637458563',
 
   'src/tools/swarming_client':
    Var('chromium_git') + '/external/swarming.client.git' + '@' +  Var('swarming_revision'),
@@ -178,7 +178,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '443264a6dadf61e92a6569b5ec90777009160b94',
+   Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '50c670170b1a7c9566e389962ec0e2bfb70a7eec',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -214,7 +214,7 @@ deps = {
    Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '05929e21d437bc5f80309455f168a9e4bb2bc94b', # commit position 13407
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '87fd07bce3c04d0555a3fbbb486024dce8302b40', # commit position 13457
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -366,7 +366,7 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '2cf87623ebe64dbff665490900713695ba7c5113',
+     Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + 'c74bf51d2bc256adf09b6cfb2e353262fa43a736',
 
     # Note that this is different from Android's freetype repo.
     'src/third_party/freetype2/src':

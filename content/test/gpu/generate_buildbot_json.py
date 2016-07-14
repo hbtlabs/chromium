@@ -920,17 +920,12 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
           # http://crbug.com/599451: this test is currently too slow
           # to run on x64 in Debug mode. Need to shard the tests.
           'Win7 x64 Debug (NVIDIA)',
-          # http://crbug.com/540543: Linux Intel driver is GL 3.0 and
-          # doesn't support features needed for ES3
-          'Linux Release (New Intel)',
-          'Linux Debug (New Intel)',
         ],
       },
     ],
     'target_name': 'webgl_conformance',
     'args': [
       '--webgl-conformance-version=2.0.0',
-      '--webgl2-only=true',
       # The current working directory when run via isolate is
       # out/Debug or out/Release. Reference this file relatively to
       # it.
@@ -938,9 +933,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
-      # These tests currently take about an hour to run. Split them
-      # into roughly 5-minute shards.
-      'shards': 12,
+      # These tests currently take about an hour and fifteen minutes
+      # to run. Split them into roughly 5-minute shards.
+      'shards': 15,
     },
   },
   'webgl2_conformance_angle_tests': {
@@ -970,7 +965,6 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
     'args': [
       '--webgl-conformance-version=2.0.0',
-      '--webgl2-only=true',
       # The current working directory when run via isolate is
       # out/Debug or out/Release. Reference this file relatively to
       # it.
@@ -978,9 +972,9 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
-      # These tests currently take about an hour to run. Split them
-      # into roughly 5-minute shards.
-      'shards': 12,
+      # These tests currently take about an hour and fifteen minutes
+      # to run. Split them into roughly 5-minute shards.
+      'shards': 15,
     },
   },
 }

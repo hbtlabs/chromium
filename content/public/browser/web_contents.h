@@ -317,6 +317,12 @@ class WebContents : public PageNavigator,
   // download, in which case the URL would revert to what it was previously).
   virtual const base::string16& GetTitle() const = 0;
 
+  // Saves the given title to the navigation entry and does associated work. It
+  // will update history and the view with the new title, and also synthesize
+  // titles for file URLs that have none. Thus |entry| must have a URL set.
+  virtual void UpdateTitleForEntry(NavigationEntry* entry,
+                                   const base::string16& title) = 0;
+
   // The max page ID for any page that the current SiteInstance has loaded in
   // this WebContents.  Page IDs are specific to a given SiteInstance and
   // WebContents, corresponding to a specific RenderView in the renderer.
@@ -691,18 +697,14 @@ class WebContents : public PageNavigator,
   // Returns true if audio has recently been audible from the WebContents.
   virtual bool WasRecentlyAudible() = 0;
 
+  // The callback invoked when the renderer responds to a request for the main
+  // frame document's manifest. The url will be empty if the document specifies
+  // no manifest, and the manifest will be empty if any other failures occurred.
   typedef base::Callback<void(const GURL&, const Manifest&)>
       GetManifestCallback;
 
   // Requests the manifest URL and the Manifest of the main frame's document.
   virtual void GetManifest(const GetManifestCallback& callback) = 0;
-
-  typedef base::Callback<void(bool)> HasManifestCallback;
-
-  // Returns true if the main frame has a <link> to a web manifest, otherwise
-  // false. This method does not guarantee that the manifest exists at the
-  // specified location or is valid.
-  virtual void HasManifest(const HasManifestCallback& callback) = 0;
 
   // Requests the renderer to exit fullscreen.
   // |will_cause_resize| indicates whether the fullscreen change causes a

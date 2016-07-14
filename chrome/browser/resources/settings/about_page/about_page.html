@@ -24,6 +24,10 @@
 <dom-module id="settings-about-page">
   <template>
     <style include="settings-shared settings-page-styles">
+      .copyable {
+        -webkit-user-select: text;
+      }
+
       .product-title {
         font-size: 20px;
         margin-bottom: auto;
@@ -98,7 +102,7 @@
                     $i18n{learnMore}
                   </a>
                 </span>
-                <div class="secondary">$i18n{aboutBrowserVersion}</div>
+                <div class="secondary copyable">$i18n{aboutBrowserVersion}</div>
               </div>
               <span class="secondary-action">
                 <paper-button id="relaunch" class="secondary-button"
@@ -140,11 +144,10 @@
 <if expr="chromeos">
             <div class="settings-box" on-tap="onDetailedBuildInfoTap_"
                 actionable>
-              <!-- TODO(dpapad): Localize string. -->
-              Detailed build info
+              $i18n{aboutDetailedBuildInfo}
             </div>
 </if>
-            <div class="settings-box product-info">
+            <div class="settings-box product-info copyable">
               <div class="info-section">
                 <div class="secondary">$i18n{aboutProductTitle}</div>
                 <div class="secondary">$i18n{aboutProductCopyright}</div>
@@ -169,7 +172,7 @@
           </neon-animatable>
 <if expr="chromeos">
           <template is="dom-if" name="detailed-build-info">
-            <settings-subpage page-title="Detailed build information">
+            <settings-subpage page-title="$i18n{aboutDetailedBuildInfo}">
               <settings-detailed-build-info></settings-detailed-build-info>
             </settings-subpage>
           </template>

@@ -157,6 +157,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void NotifyTimezoneChange(const std::string& timezone) override;
   shell::InterfaceRegistry* GetInterfaceRegistry() override;
   shell::InterfaceProvider* GetRemoteInterfaces() override;
+  shell::Connection* GetChildConnection() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
@@ -202,6 +203,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // list.
   static void RegisterHost(int host_id, RenderProcessHost* host);
   static void UnregisterHost(int host_id);
+
+  // CHECKs that all hosts have terminated.
+  // Added temporarily to diagnose crbug.com/608049.
+  static void CheckAllTerminated();
 
   // Implementation of FilterURL below that can be shared with the mock class.
   static void FilterURL(RenderProcessHost* rph, bool empty_allowed, GURL* url);
@@ -440,10 +445,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // RenderFrames.
   bool is_for_guests_only_;
 
-  // Forwards messages between WebRTCInternals in the browser process
-  // and PeerConnectionTracker in the renderer process.
-  scoped_refptr<PeerConnectionTrackerHost> peer_connection_tracker_host_;
-
   // Prevents the class from being added as a GpuDataManagerImpl observer more
   // than once.
   bool gpu_observer_registered_;
@@ -477,6 +478,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   WebRTCEventLogHost webrtc_eventlog_host_;
 #endif
+
+  // Forwards messages between WebRTCInternals in the browser process
+  // and PeerConnectionTracker in the renderer process.
+  // It holds a raw pointer to webrtc_eventlog_host_, and therefore should be
+  // defined below it so it is destructed first.
+  scoped_refptr<PeerConnectionTrackerHost> peer_connection_tracker_host_;
 
   int worker_ref_count_;
 

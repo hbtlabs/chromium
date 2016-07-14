@@ -108,8 +108,10 @@ if (is_nacl) {
   }
 }
 
-config("android_system_libs") {
-  libs = [ "log" ]  # Used by logging.cc.
+if (is_android) {
+  config("android_system_libs") {
+    libs = [ "log" ]  # Used by logging.cc.
+  }
 }
 
 # Base and everything it depends on should be a static library rather than
@@ -161,6 +163,8 @@ component("base") {
     "android/context_utils.h",
     "android/cpu_features.cc",
     "android/cxa_demangle_stub.cc",
+    "android/early_trace_event_binding.cc",
+    "android/early_trace_event_binding.h",
     "android/event_log.cc",
     "android/event_log.h",
     "android/field_trial_list.cc",
@@ -1979,6 +1983,8 @@ test("base_unittests") {
     "win/wrapped_window_proc_unittest.cc",
   ]
 
+  defines = []
+
   deps = [
     ":base",
     ":i18n",
@@ -2009,7 +2015,7 @@ test("base_unittests") {
   # Allow more direct string conversions on platforms with native utf8
   # strings
   if (is_mac || is_ios || is_chromeos || is_chromecast) {
-    defines = [ "SYSTEM_NATIVE_UTF8" ]
+    defines += [ "SYSTEM_NATIVE_UTF8" ]
   }
 
   if (is_android) {
@@ -2114,6 +2120,11 @@ test("base_unittests") {
       # data += [ "$root_out_dir/base_unittests.dSYM/" ]
     }
   }
+
+  if (use_cfi_cast) {
+    # TODO(krasin): remove CFI_CAST_CHECK, see https://crbug.com/626794.
+    defines += [ "CFI_CAST_CHECK" ]
+  }
 }
 
 action("build_date") {
@@ -2171,6 +2182,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ContentUriUtils.java",
       "android/java/src/org/chromium/base/ContextUtils.java",
       "android/java/src/org/chromium/base/CpuFeatures.java",
+      "android/java/src/org/chromium/base/EarlyTraceEvent.java",
       "android/java/src/org/chromium/base/EventLog.java",
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/ImportantFileWriterAndroid.java",
@@ -2232,6 +2244,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ContentUriUtils.java",
       "android/java/src/org/chromium/base/ContextUtils.java",
       "android/java/src/org/chromium/base/CpuFeatures.java",
+      "android/java/src/org/chromium/base/EarlyTraceEvent.java",
       "android/java/src/org/chromium/base/EventLog.java",
       "android/java/src/org/chromium/base/FieldTrialList.java",
       "android/java/src/org/chromium/base/FileUtils.java",

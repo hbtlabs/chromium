@@ -25,6 +25,7 @@
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/WTFExport.h"
 #include "wtf/text/CString.h"
+#include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 #include <cstring>
 #include <iosfwd>
@@ -86,21 +87,15 @@ public:
     size_t find(const String& s, size_t start = 0, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
         { return m_string.find(s, start, caseSensitivity); }
 
-    bool startsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.startsWith(s, caseSensitivity); }
+    bool startsWith(const StringView& prefix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_string.startsWith(prefix, caseSensitivity); }
     bool startsWith(UChar character) const
         { return m_string.startsWith(character); }
-    template<unsigned matchLength>
-    bool startsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.startsWith<matchLength>(prefix, caseSensitivity); }
 
-    bool endsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.endsWith(s, caseSensitivity); }
+    bool endsWith(const StringView& suffix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_string.endsWith(suffix, caseSensitivity); }
     bool endsWith(UChar character) const
         { return m_string.endsWith(character); }
-    template<unsigned matchLength>
-    bool endsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.endsWith<matchLength>(prefix, caseSensitivity); }
 
     AtomicString lower() const;
     AtomicString lowerASCII() const;
@@ -183,9 +178,6 @@ inline bool equalIgnoringCase(const LChar* a, const AtomicString& b) { return eq
 inline bool equalIgnoringCase(const char* a, const AtomicString& b) { return equalIgnoringCase(reinterpret_cast<const LChar*>(a), b.impl()); }
 inline bool equalIgnoringCase(const String& a, const AtomicString& b) { return equalIgnoringCase(a.impl(), b.impl()); }
 
-inline bool equalIgnoringASCIICase(const AtomicString& a, const AtomicString& b) { return equalIgnoringASCIICase(a.impl(), b.impl()); }
-inline bool equalIgnoringASCIICase(const AtomicString& a, const char* b) { return equalIgnoringASCIICase(a.impl(), reinterpret_cast<const LChar*>(b)); }
-
 // Define external global variables for the commonly used atomic strings.
 // These are only usable from the main thread.
 WTF_EXPORT extern const AtomicString& nullAtom;
@@ -205,6 +197,13 @@ template<> struct DefaultHash<AtomicString> {
 // Pretty printer for gtest and base/logging.*.  It prepends and appends
 // double-quotes, and escapes chracters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const AtomicString&);
+
+inline StringView::StringView(const AtomicString& string, unsigned offset, unsigned length)
+    : StringView(string.impl(), offset, length) {}
+inline StringView::StringView(const AtomicString& string, unsigned offset)
+    : StringView(string.impl(), offset) {}
+inline StringView::StringView(const AtomicString& string)
+    : StringView(string.impl()) {}
 
 } // namespace WTF
 

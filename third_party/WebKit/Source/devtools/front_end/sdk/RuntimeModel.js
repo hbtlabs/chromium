@@ -39,12 +39,13 @@ WebInspector.RuntimeModel = function(target)
 
     this._agent = target.runtimeAgent();
     this.target().registerRuntimeDispatcher(new WebInspector.RuntimeDispatcher(this));
-    if (target.hasJSContext())
+    if (target.hasJSCapability())
         this._agent.enable();
     /**
      * @type {!Object.<number, !WebInspector.ExecutionContext>}
      */
     this._executionContextById = {};
+    this._executionContextComparator = WebInspector.ExecutionContext.comparator;
 
     if (WebInspector.moduleSetting("customFormatters").get())
         this._agent.setCustomObjectFormatterEnabled(true);
@@ -67,7 +68,23 @@ WebInspector.RuntimeModel.prototype = {
      */
     executionContexts: function()
     {
-        return Object.values(this._executionContextById);
+        return Object.values(this._executionContextById).sort(this.executionContextComparator());
+    },
+
+    /**
+     * @param {function(!WebInspector.ExecutionContext,!WebInspector.ExecutionContext)} comparator
+     */
+    setExecutionContextComparator: function(comparator)
+    {
+        this._executionContextComparator = comparator;
+    },
+
+    /**
+     * @return {function(!WebInspector.ExecutionContext,!WebInspector.ExecutionContext)} comparator
+     */
+    executionContextComparator: function()
+    {
+        return this._executionContextComparator;
     },
 
     /**
@@ -442,9 +459,9 @@ WebInspector.ExecutionContext.comparator = function(a, b)
      */
     function targetWeight(target)
     {
-        if (target.isPage())
+        if (target.hasBrowserCapability())
             return 3;
-        if (target.isDedicatedWorker())
+        if (target.hasJSCapability())
             return 2;
         return 1;
     }
@@ -452,10 +469,6 @@ WebInspector.ExecutionContext.comparator = function(a, b)
     var weightDiff = targetWeight(a.target()) - targetWeight(b.target());
     if (weightDiff)
         return -weightDiff;
-
-    var frameIdDiff = String.hashCode(a.frameId) - String.hashCode(b.frameId);
-    if (frameIdDiff)
-        return frameIdDiff;
 
     // Main world context should always go first.
     if (a.isDefault)
@@ -869,11 +882,11 @@ WebInspector.EventListener.prototype = {
         if (!this._removeFunction)
             return Promise.resolve();
         return this._removeFunction.callFunctionPromise(callCustomRemove, [
-                WebInspector.RemoteObject.toCallArgument(this._type),
-                WebInspector.RemoteObject.toCallArgument(this._originalHandler),
-                WebInspector.RemoteObject.toCallArgument(this._useCapture),
-                WebInspector.RemoteObject.toCallArgument(this._passive),
-            ]).then(() => undefined);
+            WebInspector.RemoteObject.toCallArgument(this._type),
+            WebInspector.RemoteObject.toCallArgument(this._originalHandler),
+            WebInspector.RemoteObject.toCallArgument(this._useCapture),
+            WebInspector.RemoteObject.toCallArgument(this._passive),
+        ]).then(() => undefined);
 
         /**
          * @param {string} type

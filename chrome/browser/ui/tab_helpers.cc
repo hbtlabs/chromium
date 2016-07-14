@@ -53,6 +53,7 @@
 #include "content/public/browser/web_contents.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
+#include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/data_usage/data_use_tab_helper.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/android/offline_pages/recent_tab_helper.h"
@@ -63,6 +64,7 @@
 #include "components/offline_pages/offline_page_feature.h"
 #else
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/plugins/plugin_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_tab_observer.h"
 #include "chrome/browser/thumbnails/thumbnail_tab_helper.h"
@@ -71,7 +73,6 @@
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 #include "chrome/browser/ui/sync/tab_contents_synced_tab_delegate.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
@@ -182,6 +183,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // --- Platform-specific tab helpers ---
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
+  banners::AppBannerManagerAndroid::CreateForWebContents(web_contents);
   ContextMenuHelper::CreateForWebContents(web_contents);
   DataUseTabHelper::CreateForWebContents(web_contents);
 
@@ -202,7 +204,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(
                         new ChromePDFWebContentsHelperClient()));
-  PermissionBubbleManager::CreateForWebContents(web_contents);
+  PermissionRequestManager::CreateForWebContents(web_contents);
   PluginObserver::CreateForWebContents(web_contents);
   SadTabHelper::CreateForWebContents(web_contents);
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(web_contents);
@@ -212,9 +214,8 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   ThumbnailTabHelper::CreateForWebContents(web_contents);
   web_modal::WebContentsModalDialogManager::CreateForWebContents(web_contents);
 
-  if (banners::AppBannerManagerDesktop::IsEnabled()) {
+  if (banners::AppBannerManagerDesktop::IsEnabled())
     banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
-  }
 #endif
 
   // --- Feature tab helpers behind flags ---

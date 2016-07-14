@@ -3863,20 +3863,20 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
 
 // Tests the RenderWidgetHostImpl sends the correct surface ID namespace to
 // the renderer process.
-TEST_F(RenderWidgetHostViewAuraTest, SurfaceIdNamespaceInitialized) {
+TEST_F(RenderWidgetHostViewAuraTest, SurfaceClientIdInitialized) {
   gfx::Size size(5, 5);
 
   const IPC::Message* msg =
-      sink_->GetUniqueMessageMatching(ViewMsg_SetSurfaceIdNamespace::ID);
+      sink_->GetUniqueMessageMatching(ViewMsg_SetSurfaceClientId::ID);
   EXPECT_TRUE(msg);
-  ViewMsg_SetSurfaceIdNamespace::Param params;
-  ViewMsg_SetSurfaceIdNamespace::Read(msg, &params);
+  ViewMsg_SetSurfaceClientId::Param params;
+  ViewMsg_SetSurfaceClientId::Read(msg, &params);
   view_->InitAsChild(NULL);
   view_->Show();
   view_->SetSize(size);
   view_->OnSwapCompositorFrame(0,
                                MakeDelegatedFrame(1.f, size, gfx::Rect(size)));
-  EXPECT_EQ(view_->GetSurfaceIdNamespace(), std::get<0>(params));
+  EXPECT_EQ(view_->GetSurfaceClientId(), std::get<0>(params));
 }
 
 // This class provides functionality to test a RenderWidgetHostViewAura
@@ -4297,6 +4297,28 @@ TEST_F(InputMethodStateAuraTest, GetCaretBounds) {
         gfx::RectBetweenSelectionBounds(anchor_bound, focus_bound);
 
     EXPECT_EQ(measured_rect, text_input_client()->GetCaretBounds());
+  }
+}
+
+// This test activates child frames in a specific sequence and changes their
+// composition range. Then it verifies that the ui::TextInputClient returns the
+// correct character bound at the given indices.
+TEST_F(InputMethodStateAuraTest, GetCompositionCharacterBounds) {
+  gfx::Rect bound;
+  // Initially, there should be no bounds.
+  EXPECT_FALSE(text_input_client()->GetCompositionCharacterBounds(0, &bound));
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    // Simulate an IPC to set character bounds for the view.
+    views_[index]->ImeCompositionRangeChanged(gfx::Range(),
+                                              {gfx::Rect(1, 2, 3, 4 + index)});
+
+    // No bounds at index 1.
+    EXPECT_FALSE(text_input_client()->GetCompositionCharacterBounds(1, &bound));
+
+    // Valid bound at index 0.
+    EXPECT_TRUE(text_input_client()->GetCompositionCharacterBounds(0, &bound));
+    EXPECT_EQ(4 + (int)index, bound.height());
   }
 }
 

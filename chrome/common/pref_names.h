@@ -299,17 +299,10 @@ extern const char kQuickUnlockPinSalt[];
 extern const char kQuickUnlockPinSecret[];
 extern const char kEolStatus[];
 extern const char kEolNotificationDismissed[];
+extern const char kQuickUnlockFeatureNotificationShown[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kRecentlySelectedEncoding[];
-extern const char kDeleteBrowsingHistory[];
-extern const char kDeleteDownloadHistory[];
-extern const char kDeleteCache[];
-extern const char kDeleteCookies[];
-extern const char kDeletePasswords[];
-extern const char kDeleteFormData[];
-extern const char kDeleteHostedAppsData[];
-extern const char kDeleteMediaLicenses[];
 extern const char kEnableContinuousSpellcheck[];
 extern const char kSpeechRecognitionFilterProfanities[];
 extern const char kSavingBrowserHistoryDisabled[];

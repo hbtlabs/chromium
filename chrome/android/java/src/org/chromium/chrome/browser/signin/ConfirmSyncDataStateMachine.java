@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.signin;
 
+import android.app.DialogFragment;
+import android.app.Fragment;
 import android.app.FragmentManager;
 import android.content.Context;
 import android.support.annotation.IntDef;
@@ -65,7 +67,7 @@ public class ConfirmSyncDataStateMachine
     private final String mOldAccountName;
     private final String mNewAccountName;
     private final boolean mCurrentlyManaged;
-    private final Promise<Boolean> mNewAccountManaged = new Promise<Boolean>();
+    private final Promise<Boolean> mNewAccountManaged = new Promise<>();
     private final FragmentManager mFragmentManager;
     private final Context mContext;
     private final ImportSyncType mImportSyncType;
@@ -78,9 +80,34 @@ public class ConfirmSyncDataStateMachine
     public static void run(String oldAccountName, String newAccountName,
             ImportSyncType importSyncType, FragmentManager fragmentManager, Context context,
             ConfirmImportSyncDataDialog.Listener callback) {
+        // Includes implicit not-null assertion.
+        assert !newAccountName.equals("") : "New account name must be provided.";
+
         ConfirmSyncDataStateMachine stateMachine = new ConfirmSyncDataStateMachine(oldAccountName,
                 newAccountName, importSyncType, fragmentManager, context, callback);
         stateMachine.progress();
+    }
+
+    /**
+     * If any of the dialogs used by this state machine are shown, cancel them. If this state
+     * machine is running and a dialog is being shown, the given
+     * {@link ConfirmImportSyncDataDialog.Listener#onCancel())} is called.
+     */
+    public static void cancelAllDialogs(FragmentManager fragmentManager) {
+        cancelDialog(fragmentManager,
+                ConfirmImportSyncDataDialog.CONFIRM_IMPORT_SYNC_DATA_DIALOG_TAG);
+        cancelDialog(fragmentManager,
+                ConfirmManagedSyncDataDialog.CONFIRM_IMPORT_SYNC_DATA_DIALOG_TAG);
+    }
+
+    private static void cancelDialog(FragmentManager fragmentManager, String tag) {
+        Fragment fragment = fragmentManager.findFragmentByTag(tag);
+
+        if (fragment == null) return;
+        DialogFragment dialogFragment = (DialogFragment) fragment;
+
+        if (dialogFragment.getDialog() == null) return;
+        dialogFragment.getDialog().cancel();
     }
 
     private ConfirmSyncDataStateMachine(String oldAccountName, String newAccountName,
@@ -110,7 +137,7 @@ public class ConfirmSyncDataStateMachine
             case BEFORE_OLD_ACCOUNT_DIALOG:
                 mState = BEFORE_NEW_ACCOUNT_DIALOG;
 
-                if (TextUtils.isEmpty(mOldAccountName) || mOldAccountName == mNewAccountName) {
+                if (TextUtils.isEmpty(mOldAccountName) || mNewAccountName.equals(mOldAccountName)) {
                     // If there is no old account or the user is just logging back into whatever
                     // they were previously logged in as, progress past the old account checks.
                     progress();

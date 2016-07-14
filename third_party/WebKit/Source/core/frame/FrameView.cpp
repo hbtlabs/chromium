@@ -79,6 +79,7 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ChildViewportScrollCallback.h"
+#include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/RootViewportScrollCallback.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FramePainter.h"
@@ -822,7 +823,7 @@ void FrameView::performPreLayoutTasks()
     if (!m_scrollAnchor.hasScroller())
         m_scrollAnchor.setScroller(m_viewportScrollableArea ? m_viewportScrollableArea : this);
 
-    if (RuntimeEnabledFeatures::scrollAnchoringEnabled())
+    if (shouldPerformScrollAnchoring())
         m_scrollAnchor.save();
 }
 
@@ -1796,8 +1797,7 @@ void FrameView::clearLayoutSubtreeRootsAndMarkContainingBlocks()
 
 void FrameView::addOrthogonalWritingModeRoot(LayoutBox& root)
 {
-    ASSERT(!root.isLayoutFullScreen() && !root.isLayoutFullScreenPlaceholder()
-        && !root.isLayoutScrollbarPart());
+    DCHECK(!root.isLayoutScrollbarPart());
     m_orthogonalWritingModeRootList.add(root);
 }
 
@@ -2121,7 +2121,7 @@ void FrameView::performPostLayoutTasks()
 
     scrollToFragmentAnchor();
     // TODO(skobes): Figure out interactions between scroll anchor, fragment anchor, and history restoration.
-    if (RuntimeEnabledFeatures::scrollAnchoringEnabled())
+    if (shouldPerformScrollAnchoring())
         m_scrollAnchor.restore();
 
     sendResizeEventIfNeeded();
@@ -2518,6 +2518,9 @@ void FrameView::updateLifecyclePhasesInternal(DocumentLifecycle::LifecycleState 
         || targetState == DocumentLifecycle::PrePaintClean
         || targetState == DocumentLifecycle::PaintClean);
 
+    if (!m_frame->document()->isActive())
+        return;
+
     TemporaryChange<DocumentLifecycle::LifecycleState> targetStateScope(m_currentUpdateLifecyclePhasesTargetState, targetState);
 
     if (shouldThrottleRendering()) {
@@ -2556,6 +2559,7 @@ void FrameView::updateLifecyclePhasesInternal(DocumentLifecycle::LifecycleState 
                 if (view.compositor()->inCompositingMode())
                     scrollingCoordinator()->updateAfterCompositingChangeIfNeeded();
 
+                m_frame->document()->rootScrollerController()->didUpdateCompositing();
                 updateCompositedSelectionIfNeeded();
             }
         }
@@ -2634,8 +2638,21 @@ void FrameView::synchronizedPaint()
 
 void FrameView::synchronizedPaintRecursively(GraphicsLayer* graphicsLayer)
 {
-    if (graphicsLayer->drawsContent())
+    if (graphicsLayer->drawsContent()) {
+        // Usually this is not needed because the PaintLayer will setup the chunk properties
+        // altogether. However in debug builds the GraphicsLayer could paint debug background before
+        // we ever reach the PaintLayer.
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+            PaintChunkProperties properties;
+            properties.transform = m_rootTransform;
+            properties.clip = m_rootClip;
+            properties.effect = m_rootEffect;
+            graphicsLayer->getPaintController().updateCurrentPaintChunkProperties(properties);
+        }
         graphicsLayer->paint(nullptr);
+        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+            graphicsLayer->getPaintController().updateCurrentPaintChunkProperties(PaintChunkProperties());
+    }
 
     if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
         if (GraphicsLayer* maskLayer = graphicsLayer->maskLayer())
@@ -2683,7 +2700,7 @@ void FrameView::updateStyleAndLayoutIfNeededRecursive()
 
 void FrameView::updateStyleAndLayoutIfNeededRecursiveInternal()
 {
-    if (shouldThrottleRendering())
+    if (shouldThrottleRendering() || !m_frame->document()->isActive())
         return;
 
     ScopedFrameBlamer frameBlamer(m_frame);
@@ -3155,7 +3172,7 @@ void FrameView::setCursor(const Cursor& cursor)
     Page* page = frame().page();
     if (!page || !page->settings().deviceSupportsMouse())
         return;
-    page->chromeClient().setCursor(cursor, m_frame->localFrameRoot());
+    page->chromeClient().setCursor(cursor, m_frame);
 }
 
 void FrameView::frameRectsChanged()
@@ -4082,7 +4099,7 @@ ScrollableArea* FrameView::layoutViewportScrollableArea()
     return layoutViewItem.isNull() ? nullptr : layoutViewItem.getScrollableArea();
 }
 
-LayoutObject* FrameView::viewportLayoutObject()
+LayoutObject* FrameView::viewportLayoutObject() const
 {
     if (Document* document = frame().document()) {
         if (Element* element = document->viewportDefiningElement())
@@ -4262,12 +4279,6 @@ bool FrameView::canThrottleRendering() const
     if (!RuntimeEnabledFeatures::renderingPipelineThrottlingEnabled())
         return false;
     return m_subtreeThrottled || (m_hiddenForThrottling && m_crossOriginForThrottling);
-}
-
-LayoutBox& FrameView::boxForScrollControlPaintInvalidation() const
-{
-    ASSERT(!layoutViewItem().isNull());
-    return *layoutView();
 }
 
 } // namespace blink

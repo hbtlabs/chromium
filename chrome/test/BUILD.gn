@@ -375,6 +375,10 @@ if (!is_android) {
       "//third_party/zlib/google/test/data/",
       "//tools/metrics/histograms/histograms.xml",
       "$root_out_dir/pyproto/google/",
+      "$root_out_dir/test_case.html",
+      "$root_out_dir/test_case.html.mock-http-headers",
+      "$root_out_dir/test_page.css",
+      "$root_out_dir/test_page.css.mock-http-headers",
       "$root_out_dir/ui_test.pak",
     ]
     if (is_linux || is_win) {
@@ -662,7 +666,7 @@ if (!is_android) {
   }
 
   if (enable_app_list && use_ash) {
-    source_set("test_support_applist_ash") {
+    static_library("test_support_applist_ash") {
       defines = []
       testonly = true
 
@@ -678,7 +682,7 @@ if (!is_android) {
     }
   }
 
-  source_set("sync_integration_test_support") {
+  static_library("sync_integration_test_support") {
     testonly = true
     sources = rebase_path(
             chrome_tests_gypi_values.test_support_sync_integration_sources,
@@ -1384,14 +1388,6 @@ test("browser_tests") {
     if (is_android || is_ios || is_chromeos) {
       sources -= [ "../browser/profiles/profile_statistics_browsertest.cc" ]
     }
-    if (!is_android && !is_ios) {
-      sources +=
-          [ "../browser/copresence/chrome_whispernet_client_browsertest.cc" ]
-      deps += [
-        "//components/audio_modem",
-        "//third_party/libaddressinput",
-      ]
-    }
     if (enable_app_list) {
       sources += rebase_path(
               chrome_tests_gypi_values.chrome_browser_tests_app_list_sources,
@@ -1941,7 +1937,6 @@ test("unit_tests") {
             "//chrome")
     deps += [
       "//chrome/common/extensions/api",
-      "//components/audio_modem:test_support",
       "//extensions:extensions_resources",
       "//extensions/strings",
     ]
@@ -2297,6 +2292,9 @@ test("unit_tests") {
             ".",
             "//chrome")
   }
+  if (enable_supervised_users && !is_android && !is_chromeos) {
+    sources += [ "../browser/ui/webui/signin/signin_supervised_user_import_handler_unittest.cc" ]
+  }
   if (safe_browsing_mode == 1 && enable_extensions) {
     sources += [ "../browser/extensions/blacklist_unittest.cc" ]
   }
@@ -2440,7 +2438,7 @@ if (!is_android && !is_ios && !is_chromecast) {
   }
 }
 
-source_set("test_support_unit") {
+static_library("test_support_unit") {
   testonly = true
   sources = [
     "../browser/sync/glue/session_sync_test_helper.cc",

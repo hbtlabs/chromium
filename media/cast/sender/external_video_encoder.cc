@@ -18,6 +18,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
@@ -64,17 +65,19 @@ int GetConfiguredBacklogRedline() {
   const std::string& switch_value =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kCastEncoderUtilHeuristic);
-  if (switch_value.find(kBacklogSwitchValue) == 0) {
-    int redline = kBacklogDefaultRedline;
-    if (!base::StringToInt(switch_value.substr(sizeof(kBacklogSwitchValue) - 1),
-                           &redline)) {
-      redline = kBacklogDefaultRedline;
-    }
-    VLOG(1) << "Using 'backlog' heuristic with a redline of " << redline
-            << " to compute encoder utilization.";
-    return redline;
+  if (!base::StartsWith(switch_value, kBacklogSwitchValue,
+                        base::CompareCase::SENSITIVE)) {
+    return 0;
   }
-  return 0;
+
+  int redline = kBacklogDefaultRedline;
+  if (!base::StringToInt(switch_value.substr(sizeof(kBacklogSwitchValue) - 1),
+                         &redline)) {
+    redline = kBacklogDefaultRedline;
+  }
+  VLOG(1) << "Using 'backlog' heuristic with a redline of " << redline
+          << " to compute encoder utilization.";
+  return redline;
 }
 
 }  // namespace
@@ -124,7 +127,7 @@ class ExternalVideoEncoder::VEAClientImpl
       const scoped_refptr<CastEnvironment>& cast_environment,
       const scoped_refptr<base::SingleThreadTaskRunner>& encoder_task_runner,
       std::unique_ptr<media::VideoEncodeAccelerator> vea,
-      int max_frame_rate,
+      double max_frame_rate,
       const StatusChangeCallback& status_change_cb,
       const CreateVideoEncodeMemoryCallback& create_video_encode_memory_cb)
       : cast_environment_(cast_environment),
@@ -176,8 +179,8 @@ class ExternalVideoEncoder::VEAClientImpl
     DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
     requested_bit_rate_ = bit_rate;
-    video_encode_accelerator_->RequestEncodingParametersChange(bit_rate,
-                                                               max_frame_rate_);
+    video_encode_accelerator_->RequestEncodingParametersChange(
+        bit_rate, static_cast<uint32_t>(max_frame_rate_ + 0.5));
   }
 
   // The destruction call back of the copied video frame to free its use of
@@ -592,7 +595,7 @@ class ExternalVideoEncoder::VEAClientImpl
 
   const scoped_refptr<CastEnvironment> cast_environment_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  const int max_frame_rate_;
+  const double max_frame_rate_;
   const StatusChangeCallback status_change_cb_;  // Must be run on MAIN thread.
   const CreateVideoEncodeMemoryCallback create_video_encode_memory_cb_;
   std::unique_ptr<media::VideoEncodeAccelerator> video_encode_accelerator_;
@@ -647,7 +650,7 @@ class ExternalVideoEncoder::VEAClientImpl
 };
 
 // static
-bool ExternalVideoEncoder::IsSupported(const VideoSenderConfig& video_config) {
+bool ExternalVideoEncoder::IsSupported(const FrameSenderConfig& video_config) {
   if (video_config.codec != CODEC_VIDEO_VP8 &&
       video_config.codec != CODEC_VIDEO_H264)
     return false;
@@ -661,7 +664,7 @@ bool ExternalVideoEncoder::IsSupported(const VideoSenderConfig& video_config) {
 
 ExternalVideoEncoder::ExternalVideoEncoder(
     const scoped_refptr<CastEnvironment>& cast_environment,
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     const gfx::Size& frame_size,
     FrameId first_frame_id,
     const StatusChangeCallback& status_change_cb,
@@ -730,7 +733,7 @@ void ExternalVideoEncoder::GenerateKeyFrame() {
 }
 
 void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     FrameId first_frame_id,
     const StatusChangeCallback& status_change_cb,
     scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner,
@@ -782,7 +785,7 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
 
 SizeAdaptableExternalVideoEncoder::SizeAdaptableExternalVideoEncoder(
     const scoped_refptr<CastEnvironment>& cast_environment,
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     const StatusChangeCallback& status_change_cb,
     const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
     const CreateVideoEncodeMemoryCallback& create_video_encode_memory_cb)

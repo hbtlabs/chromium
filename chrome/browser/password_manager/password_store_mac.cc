@@ -363,6 +363,7 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
   std::string server;
   std::string security_domain;
   std::string path;
+  bool is_secure = false;
   for (unsigned int i = 0; i < attrList->count; i++) {
     SecKeychainAttribute attr = attrList->attr[i];
     if (!attr.data) {
@@ -386,7 +387,7 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
       {
         SecProtocolType protocol = *(static_cast<SecProtocolType*>(attr.data));
         // TODO(stuartmorgan): Handle proxy types
-        form->ssl_valid = (protocol == kSecProtocolTypeHTTPS);
+        is_secure = (protocol == kSecProtocolTypeHTTPS);
         break;
       }
       case kSecAuthenticationTypeItemAttr:
@@ -429,9 +430,8 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
   if (password_manager::IsValidAndroidFacetURI(server)) {
     form->signon_realm = server;
     form->origin = GURL();
-    form->ssl_valid = true;
   } else {
-    form->origin = URLFromComponents(form->ssl_valid, server, port, path);
+    form->origin = URLFromComponents(is_secure, server, port, path);
     // TODO(stuartmorgan): Handle proxies, which need a different signon_realm
     // format.
     form->signon_realm = form->origin.GetOrigin().spec();
@@ -1196,16 +1196,35 @@ PasswordStoreChangeList PasswordStoreMac::RemoveLoginsSyncedBetweenImpl(
   return changes;
 }
 
-PasswordStoreChangeList PasswordStoreMac::DisableAutoSignInForAllLoginsImpl() {
-  ScopedVector<PasswordForm> forms;
-  PasswordStoreChangeList list;
-  if (login_metadata_db_ && login_metadata_db_->GetAutoSignInLogins(&forms) &&
-      login_metadata_db_->DisableAutoSignInForAllLogins()) {
-    for (const auto& form : forms)
-      list.push_back(PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+PasswordStoreChangeList PasswordStoreMac::DisableAutoSignInForOriginsImpl(
+    const base::Callback<bool(const GURL&)>& origin_filter) {
+  ScopedVector<autofill::PasswordForm> forms;
+  PasswordStoreChangeList changes;
+  if (!login_metadata_db_ ||
+      !login_metadata_db_->GetAutoSignInLogins(&forms)) {
+    return changes;
   }
 
-  return list;
+  std::set<GURL> origins_to_update;
+  for (const auto* form : forms) {
+    if (origin_filter.Run(form->origin))
+      origins_to_update.insert(form->origin);
+  }
+
+  std::set<GURL> origins_updated;
+  for (const GURL& origin : origins_to_update) {
+    if (login_metadata_db_->DisableAutoSignInForOrigin(origin))
+      origins_updated.insert(origin);
+  }
+
+  for (const auto* form : forms) {
+    if (origins_updated.count(form->origin)) {
+      changes.push_back(
+          PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+    }
+  }
+
+  return changes;
 }
 
 bool PasswordStoreMac::RemoveStatisticsCreatedBetweenImpl(

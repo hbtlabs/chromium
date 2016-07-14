@@ -995,6 +995,11 @@ bool WebLocalFrameImpl::firstRectForCharacterRange(unsigned location, unsigned l
     Element* editable = frame()->selection().rootEditableElementOrDocumentElement();
     if (!editable)
         return false;
+
+    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+    // see http://crbug.com/590369 for more details.
+    editable->document().updateStyleAndLayoutIgnorePendingStylesheets();
+
     const EphemeralRange range = PlainTextRange(location, location + length).createRange(*editable);
     if (range.isNull())
         return false;
@@ -1935,7 +1940,7 @@ void WebLocalFrameImpl::sendOrientationChangeEvent()
 
 void WebLocalFrameImpl::willShowInstallBannerPrompt(int requestId, const WebVector<WebString>& platforms, WebAppBannerPromptReply* reply)
 {
-    if (!RuntimeEnabledFeatures::appBannerEnabled() || !frame())
+    if (!frame())
         return;
 
     AppBannerController::willShowInstallBannerPrompt(requestId, client()->appBannerClient(), frame(), platforms, reply);

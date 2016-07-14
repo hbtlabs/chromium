@@ -27,6 +27,10 @@
         background-color: var(--paper-grey-300);
       }
 
+      paper-toggle-button {
+        @apply(--settings-actionable);
+      }
+
       paper-dropdown-menu {
         --iron-icon-fill-color: var(--paper-grey-600);
         --paper-font-subhead: {
@@ -39,11 +43,14 @@
 
       paper-dropdown-menu .dropdown-item {
         align-items: center;
+        background: none;
+        border: none;
         color: var(--paper-grey-800);
         display: flex;
-        font-size: inherit;
+        font: inherit;
         min-height: 48px;
         padding: 0 16px;
+        width: 100%;
       }
 
       paper-dropdown-menu .dropdown-item.iron-selected {

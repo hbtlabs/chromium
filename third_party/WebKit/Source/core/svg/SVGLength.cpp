@@ -77,11 +77,6 @@ float SVGLength::value(const SVGLengthContext& context) const
         m_value->getFloatValue(), unitMode(), m_value->typeWithCalcResolved());
 }
 
-void SVGLength::setValueAsNumber(float value)
-{
-    m_value = CSSPrimitiveValue::create(value, CSSPrimitiveValue::UnitType::UserUnits);
-}
-
 void SVGLength::setValue(float value, const SVGLengthContext& context)
 {
     m_value = CSSPrimitiveValue::create(
@@ -212,21 +207,18 @@ SVGLengthMode SVGLength::lengthModeForAnimatedLengthAttribute(const QualifiedNam
 
 bool SVGLength::negativeValuesForbiddenForAnimatedLengthAttribute(const QualifiedName& attrName)
 {
-    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, s_noNegativeValuesSet, ());
-
-    if (s_noNegativeValuesSet.isEmpty()) {
-        s_noNegativeValuesSet.add(SVGNames::frAttr);
-        s_noNegativeValuesSet.add(SVGNames::rAttr);
-        s_noNegativeValuesSet.add(SVGNames::rxAttr);
-        s_noNegativeValuesSet.add(SVGNames::ryAttr);
-        s_noNegativeValuesSet.add(SVGNames::widthAttr);
-        s_noNegativeValuesSet.add(SVGNames::heightAttr);
-        s_noNegativeValuesSet.add(SVGNames::markerWidthAttr);
-        s_noNegativeValuesSet.add(SVGNames::markerHeightAttr);
-        s_noNegativeValuesSet.add(SVGNames::textLengthAttr);
-    }
-
-    return s_noNegativeValuesSet.contains(attrName);
+    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, noNegativeValuesSet, ({
+        SVGNames::frAttr,
+        SVGNames::rAttr,
+        SVGNames::rxAttr,
+        SVGNames::ryAttr,
+        SVGNames::widthAttr,
+        SVGNames::heightAttr,
+        SVGNames::markerWidthAttr,
+        SVGNames::markerHeightAttr,
+        SVGNames::textLengthAttr,
+    }));
+    return noNegativeValuesSet.contains(attrName);
 }
 
 void SVGLength::add(SVGPropertyBase* other, SVGElement* contextElement)

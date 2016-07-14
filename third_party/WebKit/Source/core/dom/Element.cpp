@@ -121,6 +121,7 @@
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
 #include "core/page/SpatialNavigation.h"
+#include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/ScrollCustomizationCallbacks.h"
 #include "core/page/scrolling/ScrollState.h"
 #include "core/page/scrolling/ScrollStateCallback.h"
@@ -565,7 +566,7 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
     // We should only ever scroll the effective root scroller this way when the
     // page removes the default applyScroll (ViewportScrollCallback).
-    if (document().effectiveRootScroller() == this)
+    if (document().rootScrollerController()->effectiveRootScroller() == this)
         boxToScroll = document().layoutView();
     else if (layoutObject())
         boxToScroll = toLayoutBox(layoutObject());
@@ -598,6 +599,10 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
 void Element::callApplyScroll(ScrollState& scrollState)
 {
+    // Hits ASSERTs when trying to determine whether we need to scroll on main
+    // or CC. http://crbug.com/625676.
+    DisableCompositingQueryAsserts disabler;
+
     ScrollStateCallback* callback = scrollCustomizationCallbacks().getApplyScroll(this);
 
     // TODO(bokan): Need to add tests before we allow calling custom callbacks
@@ -2425,7 +2430,7 @@ void Element::updateFocusAppearance(SelectionBehaviorOnFocus selectionBehavior)
 {
     if (selectionBehavior == SelectionBehaviorOnFocus::None)
         return;
-    if (isRootEditableElement()) {
+    if (isRootEditableElement(*this)) {
         LocalFrame* frame = document().frame();
         if (!frame)
             return;
@@ -2465,7 +2470,7 @@ bool Element::supportsFocus() const
     // it won't be focusable. Furthermore, supportsFocus cannot just return true
     // always or else tabIndex() will change for all HTML elements.
     return hasElementFlag(TabIndexWasSetExplicitly)
-        || isRootEditableElement()
+        || isRootEditableElement(*this)
         || (isShadowHost(this) && authorShadowRoot() && authorShadowRoot()->delegatesFocus())
         || supportsSpatialNavigationFocus();
 }
@@ -3631,7 +3636,7 @@ void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* s
     style->setProperty(propertyID, value, false);
 }
 
-void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet*  style, CSSPropertyID propertyID, CSSValue* value)
+void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, const CSSValue* value)
 {
     DCHECK(isStyledElement());
     style->setProperty(propertyID, value);

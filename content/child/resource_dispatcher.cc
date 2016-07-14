@@ -226,7 +226,8 @@ void ResourceDispatcher::OnSetDataBuffer(int request_id,
 void ResourceDispatcher::OnReceivedInlinedDataChunk(
     int request_id,
     const std::vector<char>& data,
-    int encoded_data_length) {
+    int encoded_data_length,
+    int encoded_body_length) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedInlinedDataChunk");
   DCHECK(!data.empty());
   DCHECK(base::FeatureList::IsEnabled(
@@ -254,7 +255,8 @@ void ResourceDispatcher::OnReceivedInlinedDataChunk(
 void ResourceDispatcher::OnReceivedData(int request_id,
                                         int data_offset,
                                         int data_length,
-                                        int encoded_data_length) {
+                                        int encoded_data_length,
+                                        int encoded_body_length) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedData");
   DCHECK_GT(data_length, 0);
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
@@ -764,6 +766,7 @@ std::unique_ptr<ResourceRequest> ResourceDispatcher::CreateRequest(
   request->enable_upload_progress = request_info.enable_upload_progress;
   request->do_not_prompt_for_login = request_info.do_not_prompt_for_login;
   request->report_raw_headers = request_info.report_raw_headers;
+  request->lofi_state = request_info.lofi_state;
 
   if ((request_info.referrer.policy == blink::WebReferrerPolicyDefault ||
        request_info.referrer.policy ==
@@ -799,7 +802,6 @@ std::unique_ptr<ResourceRequest> ResourceDispatcher::CreateRequest(
       extra_data->service_worker_provider_id();
   request->originated_from_service_worker =
       extra_data->originated_from_service_worker();
-  request->lofi_state = extra_data->lofi_state();
   request->request_body = request_body;
   request->resource_body_stream_url = request_info.resource_body_stream_url;
   request->initiated_in_secure_context =

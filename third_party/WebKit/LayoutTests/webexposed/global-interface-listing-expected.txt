@@ -642,6 +642,10 @@ interface CSSTranslation : CSSTransformComponent
     getter y
     getter z
     method constructor
+interface CSSVariableReferenceValue
+    attribute @@toStringTag
+    getter variable
+    method constructor
 interface CSSViewportRule : CSSRule
     attribute @@toStringTag
     getter style
@@ -4440,9 +4444,9 @@ interface Permissions
     method revoke
 interface PhotoCapabilities
     attribute @@toStringTag
+    getter focusMode
     getter zoom
     method constructor
-    setter zoom
 interface Plugin
     attribute @@toStringTag
     getter description
@@ -5794,14 +5798,6 @@ interface SVGViewSpec
     getter zoomAndPan
     method constructor
     setter zoomAndPan
-interface SVGZoomEvent : UIEvent
-    attribute @@toStringTag
-    getter newScale
-    getter newTranslate
-    getter previousScale
-    getter previousTranslate
-    getter zoomRectScreen
-    method constructor
 interface Screen
     attribute @@toStringTag
     getter availHeight

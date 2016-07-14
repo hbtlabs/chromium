@@ -1072,10 +1072,6 @@ public:
 
     SnapCoordinator* snapCoordinator();
 
-    WebTaskRunner* loadingTaskRunner() const;
-    WebTaskRunner* timerTaskRunner() const;
-    WebTaskRunner* unthrottledTaskRunner() const;
-
     void enforceInsecureRequestPolicy(WebInsecureRequestPolicy);
 
     bool mayContainV0Shadow() const { return m_mayContainV0Shadow; }
@@ -1088,7 +1084,7 @@ public:
     void initializeRootScroller(ViewportScrollCallback*);
     Element* rootScroller() const;
     void setRootScroller(Element*, ExceptionState&);
-    const Element* effectiveRootScroller() const;
+    RootScrollerController* rootScrollerController() const { return m_rootScrollerController.get(); }
 
     // TODO(bokan): Temporarily added to allow ScrollCustomization to properly
     // opt out for wheel scrolls. crbug.com/623079.
@@ -1353,6 +1349,8 @@ private:
 
     bool m_hasFullscreenSupplement; // For early return in Fullscreen::fromIfExists()
 
+    // The last element in |m_topLayerElements| is topmost in the top layer
+    // stack and is thus the one that will be visually on top.
     HeapVector<Member<Element>> m_topLayerElements;
 
     int m_loadEventDelayCount;

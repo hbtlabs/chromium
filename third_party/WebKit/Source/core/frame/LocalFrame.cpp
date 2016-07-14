@@ -31,6 +31,7 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/InstrumentingAgents.h"
+#include "core/dom/ChildFrameDisconnector.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/editing/EditingUtilities.h"
@@ -239,6 +240,8 @@ inline float parentTextZoomFactor(LocalFrame* frame)
 
 } // namespace
 
+template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
+
 LocalFrame* LocalFrame::create(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner, ServiceRegistry* serviceRegistry)
 {
     LocalFrame* frame = new LocalFrame(client, host, owner, serviceRegistry ? serviceRegistry : ServiceRegistry::getEmptyServiceRegistry());
@@ -404,13 +407,25 @@ void LocalFrame::detach(FrameDetachType type)
     // back to FrameLoaderClient via WindowProxy.
     script().clearForClose();
     setView(nullptr);
-    willDetachFrameHost();
-    InspectorInstrumentation::frameDetachedFromParent(this);
-    Frame::detach(type);
+
+    m_host->eventHandlerRegistry().didRemoveAllEventHandlers(*localDOMWindow());
 
     // Signal frame destruction here rather than in the destructor.
     // Main motivation is to avoid being dependent on its exact timing (Oilpan.)
     LocalFrameLifecycleNotifier::notifyContextDestroyed();
+
+    // TODO: Page should take care of updating focus/scrolling instead of Frame.
+    // TODO: It's unclear as to why this is called more than once, but it is,
+    // so page() could be null.
+    if (page() && page()->focusController().focusedFrame() == this)
+        page()->focusController().setFocusedFrame(nullptr);
+
+    if (page() && page()->scrollingCoordinator() && m_view)
+        page()->scrollingCoordinator()->willDestroyScrollableArea(m_view.get());
+
+    InspectorInstrumentation::frameDetachedFromParent(this);
+    Frame::detach(type);
+
     m_supplements.clear();
     WeakIdentifierMap<LocalFrame>::notifyObjectDestroyed(this);
 }
@@ -447,18 +462,12 @@ bool LocalFrame::shouldClose()
     return m_loader.shouldClose();
 }
 
-void LocalFrame::willDetachFrameHost()
+void LocalFrame::detachChildren()
 {
-    LocalFrameLifecycleNotifier::notifyWillDetachFrameHost();
+    DCHECK(m_loader.stateMachine()->creatingInitialEmptyDocument() || document());
 
-    // FIXME: Page should take care of updating focus/scrolling instead of Frame.
-    // FIXME: It's unclear as to why this is called more than once, but it is,
-    // so page() could be null.
-    if (page() && page()->focusController().focusedFrame() == this)
-        page()->focusController().setFocusedFrame(nullptr);
-
-    if (page() && page()->scrollingCoordinator() && m_view)
-        page()->scrollingCoordinator()->willDestroyScrollableArea(m_view.get());
+    if (Document* document = this->document())
+        ChildFrameDisconnector(*document).disconnect();
 }
 
 void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow)

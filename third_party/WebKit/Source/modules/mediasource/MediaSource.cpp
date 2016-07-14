@@ -58,12 +58,21 @@ using blink::WebSourceBuffer;
 
 namespace blink {
 
-static bool throwExceptionIfClosedOrUpdating(bool isOpen, bool isUpdating, ExceptionState& exceptionState)
+static bool throwExceptionIfClosed(bool isOpen, ExceptionState& exceptionState)
 {
     if (!isOpen) {
         MediaSource::logAndThrowDOMException(exceptionState, InvalidStateError, "The MediaSource's readyState is not 'open'.");
         return true;
     }
+
+    return false;
+}
+
+static bool throwExceptionIfClosedOrUpdating(bool isOpen, bool isUpdating, ExceptionState& exceptionState)
+{
+    if (throwExceptionIfClosed(isOpen, exceptionState))
+        return true;
+
     if (isUpdating) {
         MediaSource::logAndThrowDOMException(exceptionState, InvalidStateError, "The 'updating' attribute is true on one or more of this MediaSource's SourceBuffers.");
         return true;
@@ -106,7 +115,7 @@ MediaSource::MediaSource(ExecutionContext* context)
     , m_sourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
     , m_activeSourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
     , m_liveSeekableRange(TimeRanges::create())
-    , m_isAddedToRegistry(false)
+    , m_addedToRegistryCounter(0)
 {
     MSLOG << __FUNCTION__ << " this=" << this;
 }
@@ -302,14 +311,15 @@ void MediaSource::setWebMediaSourceAndOpen(std::unique_ptr<WebMediaSource> webMe
 
 void MediaSource::addedToRegistry()
 {
-    DCHECK(!m_isAddedToRegistry);
-    m_isAddedToRegistry = true;
+    ++m_addedToRegistryCounter;
+    // Ensure there's no counter overflow.
+    CHECK_GT(m_addedToRegistryCounter, 0);
 }
 
 void MediaSource::removedFromRegistry()
 {
-    DCHECK(m_isAddedToRegistry);
-    m_isAddedToRegistry = false;
+    DCHECK_GT(m_addedToRegistryCounter, 0);
+    --m_addedToRegistryCounter;
 }
 
 double MediaSource::duration() const
@@ -529,7 +539,9 @@ void MediaSource::setLiveSeekableRange(double start, double end, ExceptionState&
     // 2. If the updating attribute equals true on any SourceBuffer in
     //    SourceBuffers, then throw an InvalidStateError exception and abort
     //    these steps.
-    if (throwExceptionIfClosedOrUpdating(isOpen(), isUpdating(), exceptionState))
+    //    Note: https://github.com/w3c/media-source/issues/118, once fixed, will
+    //    remove the updating check (step 2). We skip that check here already.
+    if (throwExceptionIfClosed(isOpen(), exceptionState))
         return;
 
     // 3. If start is negative or greater than end, then throw a TypeError
@@ -553,7 +565,9 @@ void MediaSource::clearLiveSeekableRange(ExceptionState& exceptionState)
     // 2. If the updating attribute equals true on any SourceBuffer in
     //    SourceBuffers, then throw an InvalidStateError exception and abort
     //    these steps.
-    if (throwExceptionIfClosedOrUpdating(isOpen(), isUpdating(), exceptionState))
+    //    Note: https://github.com/w3c/media-source/issues/118, once fixed, will
+    //    remove the updating check (step 2). We skip that check here already.
+    if (throwExceptionIfClosed(isOpen(), exceptionState))
         return;
 
     // 3. If live seekable range contains a range, then set live seekable range
@@ -648,7 +662,7 @@ bool MediaSource::hasPendingActivity() const
 {
     return m_attachedElement || m_webMediaSource
         || m_asyncEventQueue->hasPendingEvents()
-        || m_isAddedToRegistry;
+        || m_addedToRegistryCounter > 0;
 }
 
 void MediaSource::stop()

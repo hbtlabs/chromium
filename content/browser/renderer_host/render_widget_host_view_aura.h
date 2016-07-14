@@ -142,9 +142,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void ImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) override;
   void RenderProcessGone(base::TerminationStatus status,
                          int error_code) override;
   void Destroy() override;
@@ -192,10 +189,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnDidNavigateMainFrameToNewPage() override;
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-  uint32_t GetSurfaceIdNamespace() override;
-  uint32_t SurfaceIdNamespaceAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                     const gfx::Point& point,
-                                     gfx::Point* transformed_point) override;
+  uint32_t GetSurfaceClientId() override;
+  uint32_t SurfaceClientIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                  const gfx::Point& point,
+                                  gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -205,7 +202,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
   void TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       cc::SurfaceId original_surface,
+                                       const cc::SurfaceId& original_surface,
                                        gfx::Point* transformed_point) override;
   void FocusedNodeChanged(bool is_editable_node) override;
 
@@ -466,6 +463,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) override;
   void SetBeginFrameSource(cc::BeginFrameSource* source) override;
+  bool IsAutoResizeEnabled() const override;
 
   // TextInputManager::Observer implementation.
   void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
@@ -586,8 +584,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // object.
   ui::MotionEventAura pointer_state_;
 
-  // The current composition character bounds.
-  std::vector<gfx::Rect> composition_character_bounds_;
 
   // Indicates if there is onging composition text.
   bool has_composition_text_;

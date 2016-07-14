@@ -33,7 +33,6 @@
 
 #include "public/platform/WebCString.h"
 #include "public/platform/WebCommon.h"
-#include "public/platform/WebPrivateOwnPtr.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
@@ -294,9 +293,8 @@ public:
 #if INSIDE_BLINK
 protected:
     // Permit subclasses to set arbitrary ResourceResponse pointer as
-    // |m_resourceResponse|. Parameter must be non-null.
-    // |m_ownedResourceResponse| is not set in this case.
-    BLINK_PLATFORM_EXPORT explicit WebURLResponse(ResourceResponse*);
+    // |m_resourceResponse|. |m_ownedResourceResponse| is not set in this case.
+    BLINK_PLATFORM_EXPORT explicit WebURLResponse(ResourceResponse&);
 #endif
 
 private:

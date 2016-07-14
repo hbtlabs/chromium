@@ -18,6 +18,7 @@ enum MessageSource {
     SecurityMessageSource,
     OtherMessageSource,
     DeprecationMessageSource,
+    WorkerMessageSource
 };
 
 enum MessageLevel {
@@ -26,22 +27,6 @@ enum MessageLevel {
     InfoMessageLevel = 5,
     WarningMessageLevel = 2,
     ErrorMessageLevel = 3
-};
-
-// TODO(dgozman): move from public to private.
-enum MessageType {
-    LogMessageType = 1,
-    DirMessageType,
-    DirXMLMessageType,
-    TableMessageType,
-    TraceMessageType,
-    StartGroupMessageType,
-    StartGroupCollapsedMessageType,
-    EndGroupMessageType,
-    ClearMessageType,
-    AssertMessageType,
-    TimeEndMessageType,
-    CountMessageType
 };
 
 }

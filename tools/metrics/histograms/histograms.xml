@@ -3074,6 +3074,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Autofill.QueriedCreditCardFormIsSecure" enum="BooleanSecure">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    For credit card forms that are queried for Autofill, a ratio of how many are
+    within secure contexts (which includes mixed passive content).
+  </summary>
+</histogram>
+
 <histogram name="Autofill.SaveCreditCardPrompt"
     enum="AutofillSaveCreditCardPrompt">
   <owner>jdonnelly@chromium.org</owner>
@@ -18574,6 +18582,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>The type of Vary header for a given GET response.</summary>
 </histogram>
 
+<histogram name="Hyphenation.Open" units="ms">
+  <owner>kojii@chromium.org</owner>
+  <summary>The time it takes to open a hyphenation dictionary.</summary>
+</histogram>
+
 <histogram name="Import.ImporterType.AutoImport" enum="ImporterType">
   <owner>gab@chromium.org</owner>
   <summary>The importer used on first run Auto Import.</summary>
@@ -21231,6 +21244,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.Audio.OutputDeviceAuthorizationTime" units="ms">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Time delta between the moment output device authorization request is
+    received by the browser and the moment its processessing is finished (and
+    reply is to be sent back to the renderer if IPC is not closed yet).
+  </summary>
+</histogram>
+
 <histogram name="Media.Audio.PhysicalProcessorsMac">
   <owner>henrika@chromium.org</owner>
   <summary>
@@ -21345,6 +21367,35 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Whether audio output device timed out waiting for authorization reply from
     the browser side.
+  </summary>
+</histogram>
+
+<histogram
+    name="Media.Audio.Render.SinkCache.GetOutputDeviceInfoCacheUtilization"
+    enum="GetOutputDeviceInfoCacheHit">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Whether a cached sink was used to get audio output device information, or a
+    new sink was created for that.
+  </summary>
+</histogram>
+
+<histogram name="Media.Audio.Render.SinkCache.InfoSinkReusedForOutput"
+    enum="BooleanReused">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    When a new sink is created to get output device information, it is cached.
+    This metric shows if such a sink is later reused for audio output (can
+    happen no more than once) or deleted unused after timeout expires. Logged
+    when one of the abovementioned events takes place.
+  </summary>
+</histogram>
+
+<histogram name="Media.Audio.Render.SinkCache.UsedForSinkCreation"
+    enum="BooleanUsage">
+  <owner>olka@chromium.org</owner>
+  <summary>
+    Whether a sink was created through the sink cache or directly.
   </summary>
 </histogram>
 
@@ -22698,20 +22749,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>mlamouri@chromium.org</owner>
   <owner>zqzhang@chromium.org</owner>
   <summary>Records the autoplay source of muted videos.</summary>
-</histogram>
-
-<histogram name="Media.Video.Autoplay.Muted.PlayMethod.BecomesVisible"
-    enum="Boolean">
-  <owner>avayvod@chromium.org</owner>
-  <owner>mlamouri@chromium.org</owner>
-  <owner>zqzhang@chromium.org</owner>
-  <summary>
-    Records muted video started playing with play() become visible at some
-    point. The UMA for false is not complete since it is recorded in a
-    destructor which is garbage-collected. Please subtract
-    Media.Video.Autoplay.Muted &quot;play() method&quot; count with the true
-    count of this histogram to obtain the real false count.
-  </summary>
 </histogram>
 
 <histogram name="Media.Video.Autoplay.Muted.UnmuteAction" enum="BooleanSuccess">
@@ -25247,6 +25284,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The amount of time that an HTTPS page was in the foreground. Recorded on
     every page close/transition.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.EngagementTime.Ratio" units="%">
+  <owner>felt@chromium.org</owner>
+  <summary>
+    The percentage of time that HTTPS pages were in the foreground, as compared
+    to total foreground time. Recorded whenever user metrics are uploaded.
   </summary>
 </histogram>
 
@@ -28107,6 +28152,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Per-authentication-scheme counts of authentication attempts and rejections.
   </summary>
+</histogram>
+
+<histogram name="Net.HttpAuthPromptType" enum="HttpAuthPromptType">
+  <owner>meacer@chromium.org</owner>
+  <summary>Type of the HTTP auth prompt displayed.</summary>
 </histogram>
 
 <histogram name="Net.HttpAuthResource" enum="HttpAuthResource">
@@ -31002,6 +31052,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Net.SpdySettingsCwndSent" units="packets">
+  <obsolete>
+    Deprecated 2016 July with removal of SPDY/3.1.
+  </obsolete>
   <owner>rch@chromium.org</owner>
   <summary>
     The congestion window (in pkts) sent at the beginning of a SpdySession.
@@ -31119,6 +31172,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Net.SpdyVersion3" enum="SpdyProtocolVersion">
   <owner>bnc@chromium.org</owner>
+  <obsolete>
+    Deprecated 2016 July with removal of SPDY/3.1.
+  </obsolete>
   <summary>
     The SPDY protocol version that is used to talk to SPDY servers.  Logged
     every time a SPDY session is initialized.
@@ -35950,6 +36006,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="OfflinePages.Background.OfflinerRequestStatus"
+    enum="OfflinePagesBackgroundOfflinerRequestStatus">
+  <owner>dougarnett@chromium.org</owner>
+  <summary>
+    Status code of background offlining (loading and saving) requests.
+  </summary>
+</histogram>
+
 <histogram name="OfflinePages.BatchDelete.Count">
   <owner>jianli@chromium.org</owner>
   <summary>Number of offline pages that are deleted in a batch.</summary>
@@ -38683,6 +38747,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="PasswordManager.UserStoredPasswordWithInvalidSSLCert"
     enum="Boolean">
+  <obsolete>
+    Deprecated 07/2016 because this information is no longer stored in
+    PasswordForm. See also http://crbug.com/413020.
+  </obsolete>
   <owner>xunlu@chromium.org</owner>
   <owner>gcasto@chromium.org</owner>
   <summary>
@@ -43928,6 +43996,26 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Process.Sandbox.Launch.Warning" units="GetLastError">
+  <owner>forshaw@chromium.org</owner>
+  <summary>
+    Warnings returned while launching sandboxed process on Windows. For decoding
+    error code please refer to http://goo.gl/fJJiAv. This will only be logged
+    when SpawnTarget succeeds with SBOX_ALL_OK but the last warning result does
+    not equal SBOX_ALL_OK.
+  </summary>
+</histogram>
+
+<histogram name="Process.Sandbox.Launch.WarningResultCode"
+    units="LaunchErrorCodes">
+  <owner>forshaw@chromium.org</owner>
+  <summary>
+    The warning launch error returned while launching sandboxed process on
+    Windows. This will only be logged when SpawnTarget succeeds with SBOX_ALL_OK
+    but the last warning result does not equal SBOX_ALL_OK.
+  </summary>
+</histogram>
+
 <histogram name="Process.Sandbox.Lowbox.Launch.Error" units="GetLastError">
   <owner>shrikant@chromium.org</owner>
   <summary>
@@ -47141,6 +47229,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     File types that were blocked from downloaded without verifying their content
     nor their source URLs with Safe Browsing.
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.V4ApplyUpdateResult"
+    enum="SafeBrowsingV4ApplyUpdateResult">
+  <owner>vakh@chromium.org</owner>
+  <summary>
+    Track the result of applying the update fetched from the PVer4 service for a
+    particular store.
   </summary>
 </histogram>
 
@@ -59972,6 +60069,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="UMA.PersistentHistograms.InitResult"
+    enum="PersistentHistogramsInitResult">
+  <owner>bcwhite@chromium.org</owner>
+  <summary>
+    A count of successes and failures for the creation of various forms of
+    persistent memory used to store histograms.
+  </summary>
+</histogram>
+
 <histogram name="UMA.ProfilesCount.AfterErase">
   <obsolete>
     Deprecated as of Jun 2016. The histogram was added for debugging purpose and
@@ -63183,6 +63289,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="WebFont.InterventionResult.MissedCache"
+    enum="WebFontInterventionResult">
+  <owner>toyoshim@chromium.org</owner>
+  <owner>kenjibaheux@chromium.org</owner>
+  <summary>
+    Like InterventionResult, this records whether User Agent Intervention was
+    triggered, and whether the request (would have) timed out or not. But this
+    version records only when data actually comes from network, not from disk or
+    memory cache, and is not provided in a data URL format.
+  </summary>
+</histogram>
+
 <histogram name="WebFont.LayoutLatency" units="ms">
   <obsolete>
     Renamed to WebFont.StyleRecalcToDownloadLatency for clarity.
@@ -63805,6 +63923,22 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>jiayl@chromium.org</owner>
   <summary>
     Counters on creation of DesktopCaptureDevice and the first capture call.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.ICE.TcpSocketWriteErrorCode" enum="SocketErrorCode">
+  <owner>zhihuang@chromium.org</owner>
+  <summary>
+    Counters on different types of TCP socket error code. Collected when we hit
+    the error code when writing.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.ICE.UdpSocketWriteErrorCode" enum="SocketErrorCode">
+  <owner>zhihuang@chromium.org</owner>
+  <summary>
+    Counters on different types of UDP socket error code. Collected when we hit
+    the error code when writing.
   </summary>
 </histogram>
 
@@ -70587,6 +70721,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="2" label="Ignore">
     The user did not interact with the info bar.
   </int>
+  <int value="3" label="Dismiss">The user explicitly closed the infobar.</int>
 </enum>
 
 <enum name="DefaultBrowserState" type="int">
@@ -72954,8 +73089,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="19" label="APP_WINDOW_ON_MAXIMIZED"/>
   <int value="20" label="APP_WINDOW_ON_MINIMIZED"/>
   <int value="21" label="APP_WINDOW_ON_RESTORED"/>
-  <int value="22" label="AUDIO_MODEM_ON_RECEIVED"/>
-  <int value="23" label="AUDIO_MODEM_ON_TRANSMIT_FAIL"/>
+  <int value="22" label="DELETED_AUDIO_MODEM_ON_RECEIVED"/>
+  <int value="23" label="DELETED_AUDIO_MODEM_ON_TRANSMIT_FAIL"/>
   <int value="24" label="AUDIO_ON_DEVICE_CHANGED"/>
   <int value="25" label="AUDIO_ON_DEVICES_CHANGED"/>
   <int value="26" label="AUDIO_ON_LEVEL_CHANGED"/>
@@ -73001,9 +73136,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="66" label="COOKIES_ON_CHANGED"/>
   <int value="67" label="DELETED_COPRESENCE_ON_MESSAGES_RECEIVED"/>
   <int value="68" label="DELETED_COPRESENCE_ON_STATUS_UPDATED"/>
-  <int value="69" label="COPRESENCE_PRIVATE_ON_CONFIG_AUDIO"/>
-  <int value="70" label="COPRESENCE_PRIVATE_ON_DECODE_SAMPLES_REQUEST"/>
-  <int value="71" label="COPRESENCE_PRIVATE_ON_ENCODE_TOKEN_REQUEST"/>
+  <int value="69" label="DELETED_COPRESENCE_PRIVATE_ON_CONFIG_AUDIO"/>
+  <int value="70" label="DELETED_COPRESENCE_PRIVATE_ON_DECODE_SAMPLES_REQUEST"/>
+  <int value="71" label="DELETED_COPRESENCE_PRIVATE_ON_ENCODE_TOKEN_REQUEST"/>
   <int value="72" label="DEBUGGER_ON_DETACH"/>
   <int value="73" label="DEBUGGER_ON_EVENT"/>
   <int value="74" label="DECLARATIVE_CONTENT_ON_PAGE_CHANGED"/>
@@ -74244,10 +74379,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="861" label="NOTIFICATIONPROVIDER_GETALLNOTIFIERS"/>
   <int value="862" label="GCDPRIVATE_GETPREFETCHEDWIFINAMELIST"/>
   <int value="863" label="GUESTVIEWINTERNAL_SETAUTOSIZE"/>
-  <int value="864" label="COPRESENCEPRIVATE_SENDFOUND"/>
-  <int value="865" label="COPRESENCEPRIVATE_SENDSAMPLES"/>
-  <int value="866" label="COPRESENCEPRIVATE_SENDDETECT"/>
-  <int value="867" label="COPRESENCEPRIVATE_SENDINITIALIZED"/>
+  <int value="864" label="DELETED_COPRESENCEPRIVATE_SENDFOUND"/>
+  <int value="865" label="DELETED_COPRESENCEPRIVATE_SENDSAMPLES"/>
+  <int value="866" label="DELETED_COPRESENCEPRIVATE_SENDDETECT"/>
+  <int value="867" label="DELETED_COPRESENCEPRIVATE_SENDINITIALIZED"/>
   <int value="868" label="DELETED_COPRESENCE_EXECUTE"/>
   <int value="869" label="DELETED_COPRESENCE_SETAPIKEY"/>
   <int value="870" label="FILESYSTEM_OBSERVEDIRECTORY"/>
@@ -74346,10 +74481,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="961" label="WEBVIEWINTERNAL_SETALLOWSCALING"/>
   <int value="962" label="PLATFORMKEYSINTERNAL_GETPUBLICKEY"/>
   <int value="963" label="RUNTIME_OPENOPTIONSPAGE"/>
-  <int value="964" label="AUDIOMODEM_TRANSMIT"/>
-  <int value="965" label="AUDIOMODEM_STOPTRANSMIT"/>
-  <int value="966" label="AUDIOMODEM_RECEIVE"/>
-  <int value="967" label="AUDIOMODEM_STOPRECEIVE"/>
+  <int value="964" label="DELETED_AUDIOMODEM_TRANSMIT"/>
+  <int value="965" label="DELETED_AUDIOMODEM_STOPTRANSMIT"/>
+  <int value="966" label="DELETED_AUDIOMODEM_RECEIVE"/>
+  <int value="967" label="DELETED_AUDIOMODEM_STOPRECEIVE"/>
   <int value="968" label="WEBRTCLOGGINGPRIVATE_STORE"/>
   <int value="969" label="WEBRTCLOGGINGPRIVATE_UPLOADSTORED"/>
   <int value="970" label="FILEMANAGERPRIVATEINTERNAL_SETENTRYTAG"/>
@@ -76610,6 +76745,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1437" label="BeforeInstallPromptEventUserChoice"/>
   <int value="1438" label="BeforeInstallPromptEventPreventDefault"/>
   <int value="1439" label="BeforeInstallPromptEventPrompt"/>
+  <int value="1440" label="ExecCommandAltersHTMLStructure"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -78365,6 +78501,21 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="2" label="Gesture predicted but didn't occur"/>
 </enum>
 
+<enum name="GetOutputDeviceInfoCacheHit" type="int">
+  <int value="0" label="Miss: no cached sink found">
+    Output parmeters for a device are requested, and there is no corresponding
+    sink cached; new sink is created and cached.
+  </int>
+  <int value="1" label="Miss: cannot lookup by session id">
+    If session id is used to specify a device, we always have to create and
+    cache a new sink.
+  </int>
+  <int value="2" label="Hit">
+    Output parmeters for a device are requested, and there is a corresponding
+    sink cached.
+  </int>
+</enum>
+
 <enum name="GetPerfDataOutcome" type="int">
   <int value="0" label="Success.">
     Perf data was collected, parsed and attached to the UMA protobuf
@@ -78877,6 +79028,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="5" label="NTLM Reject"/>
   <int value="6" label="Negotiate Start"/>
   <int value="7" label="Negotiate Reject"/>
+</enum>
+
+<enum name="HttpAuthPromptType" type="int">
+  <int value="0" label="Main frame with interstitial">
+    Auth prompt displayed over a blank interstitial
+  </int>
+  <int value="1" label="Main frame without interstitial">
+    Auth prompt displayed for the main frame, without a blank interstitial
+  </int>
+  <int value="2" label="Subresource">
+    Auth prompt displayed for a subresource
+  </int>
 </enum>
 
 <enum name="HttpAuthResource" type="int">
@@ -82455,7 +82618,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="410" label="webkit-dashboard-region"/>
   <int value="411" label="webkit-overflow-scrolling"/>
   <int value="412" label="webkit-app-region"/>
-  <int value="413" label="webkit-filter"/>
+  <int value="413" label="alias-webkit-filter"/>
   <int value="414" label="webkit-box-decoration-break"/>
   <int value="415" label="webkit-tap-highlight-color"/>
   <int value="416" label="buffered-rendering"/>
@@ -82578,6 +82741,9 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="533" label="font-variant-caps"/>
   <int value="534" label="hyphens"/>
   <int value="535" label="font-variant-numeric"/>
+  <int value="536" label="text-size-adjust"/>
+  <int value="537" label="alias-webkit-text-size-adjust"/>
+  <int value="538" label="overflow-anchor"/>
 </enum>
 
 <enum name="MappedEditingCommands" type="int">
@@ -84485,6 +84651,18 @@ To add a new entry, add it with any value and run test to compute valid value.
       label="Account was not seeded before FireRefreshTokenAvailable"/>
 </enum>
 
+<enum name="OfflinePagesBackgroundOfflinerRequestStatus" type="int">
+<!-- Generated from components/offline_pages/background/offliner.h -->
+
+  <int value="0" label="Unknown (not expected to be recorded)"/>
+  <int value="1" label="Loaded (not expected to be recorded)"/>
+  <int value="2" label="Saved"/>
+  <int value="3" label="RequestCoordinator canceled"/>
+  <int value="4" label="Prerendering canceled"/>
+  <int value="5" label="Prerendering failed"/>
+  <int value="6" label="Save failed"/>
+</enum>
+
 <enum name="OfflinePagesClearAllStatus" type="int">
   <int value="0" label="Success"/>
   <int value="1" label="Store reset failed"/>
@@ -86140,6 +86318,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="8" label="PERMISSION_AUDIO_CAPTURE"/>
   <int value="9" label="PERMISSION_VIDEO_CAPTURE"/>
   <int value="10" label="PERMISSION_BACKGROUND_SYNC"/>
+</enum>
+
+<enum name="PersistentHistogramsInitResult" type="int">
+  <int value="0" label="Local-Memory Success"/>
+  <int value="1" label="Local-Memory Failure"/>
+  <int value="2" label="Mapped-File Success"/>
+  <int value="3" label="Mapped-File Failure"/>
 </enum>
 
 <enum name="PhotoEditorFileType" type="int">
@@ -88411,6 +88596,16 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="4" label="UNABLE_TO_RENAME_FAILURE"/>
 </enum>
 
+<enum name="SafeBrowsingV4ApplyUpdateResult" type="int">
+  <int value="0" label="APPLY_UPDATE_SUCCESS"/>
+  <int value="1" label="UNEXPECTED_APPLY_UPDATE_FAILURE"/>
+  <int value="2" label="PREFIX_SIZE_TOO_SMALL_FAILURE"/>
+  <int value="3" label="PREFIX_SIZE_TOO_LARGE_FAILURE"/>
+  <int value="4" label="ADDITIONS_SIZE_UNEXPECTED_FAILURE"/>
+  <int value="5" label="ADDITIONS_HAS_EXISTING_PREFIX_FAILURE"/>
+  <int value="6" label="UNEXPECTED_RESPONSE_TYPE_FAILURE"/>
+</enum>
+
 <enum name="SafeBrowsingV4OperationResult" type="int">
   <int value="0" label="STATUS_200"/>
   <int value="1" label="PARSE_ERROR (subset of STATUS_200)"/>
@@ -90260,6 +90455,17 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="5" label="User swiped a snippet away without visiting"/>
   <int value="6"
       label="User scrolled below the fold (max once per NTP load). Obsolete."/>
+</enum>
+
+<enum name="SocketErrorCode" type="int">
+  <int value="0" label="ERR_MSG_TOO_BIG"/>
+  <int value="1" label="ERR_ADDRESS_UNREACHABLE"/>
+  <int value="2" label="ERR_ADDRESS_INVALID"/>
+  <int value="3" label="ERR_INTERNET_DISCONNECTED"/>
+  <int value="4" label="ERR_TIMED_OUT"/>
+  <int value="5" label="ERR_INSUFFICIENT_RESOURCES"/>
+  <int value="6" label="ERR_OUT_OF_MEMORY"/>
+  <int value="7" label="ERR_OTHER"/>
 </enum>
 
 <enum name="SocketStreamConnectionType" type="int">
@@ -95484,6 +95690,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="Autofill"/>
   <suffix name="Policy"/>
   <suffix name="SpellChecker"/>
+  <suffix name="NTPSnippets"/>
   <affected-histogram name="DataUse.MessageSize"/>
 </histogram_suffixes>
 
@@ -97987,19 +98194,40 @@ To add a new entry, add it with any value and run test to compute valid value.
 
 <histogram_suffixes name="NewTabPageProviders" separator=".">
   <suffix name="client" label="Suggestions coming from the client."/>
-  <suffix name="client0"
-      label="deprecated - Suggestions coming from the client source 0."/>
+  <suffix name="server" label="Suggestions coming from the server."/>
   <suffix name="popular" label="Non-personalized, popular suggestions."/>
   <suffix name="whitelist"
       label="Installed whitelist entry point suggestions."/>
-<!-- Server providers 1 through 8 have never been logged. -->
-
-  <suffix name="server" label="Suggestions coming from the server."/>
-  <suffix name="server0" label="Suggestions coming from server source 0."/>
-  <suffix name="server8" label="Suggestions coming from server source 8."/>
-  <suffix name="server9" label="Suggestions coming from server source 9."/>
-  <suffix name="server10" label="Suggestions coming from server source 10."/>
-  <suffix name="server11" label="Suggestions coming from server source 11."/>
+  <suffix name="client0">
+    <obsolete>
+      Hasn't been used for a while, as of 2016-07.
+    </obsolete>
+  </suffix>
+  <suffix name="server0">
+    <obsolete>
+      Hasn't been used for a while, as of 2016-07.
+    </obsolete>
+  </suffix>
+  <suffix name="server8">
+    <obsolete>
+      Not used anymore as of 2016-07.
+    </obsolete>
+  </suffix>
+  <suffix name="server9">
+    <obsolete>
+      Has never been used.
+    </obsolete>
+  </suffix>
+  <suffix name="server10">
+    <obsolete>
+      Has never been used.
+    </obsolete>
+  </suffix>
+  <suffix name="server11">
+    <obsolete>
+      Has never been used.
+    </obsolete>
+  </suffix>
   <affected-histogram name="NewTabPage.MostVisited"/>
   <affected-histogram name="NewTabPage.SuggestionsImpression"/>
   <affected-histogram name="NewTabPage.TileType"/>
@@ -98224,6 +98452,7 @@ To add a new entry, add it with any value and run test to compute valid value.
 <histogram_suffixes name="OfflinePagesNamespace" separator=".">
   <suffix name="bookmark" label="Offline bookmark cache"/>
   <suffix name="last_n" label="Offline recent pages"/>
+  <suffix name="async_loading" label="Offline async loaded pages"/>
   <affected-histogram name="OfflinePages.DeletePage.AccessCount"/>
   <affected-histogram name="OfflinePages.DeletePage.LastOpenToCreated"/>
   <affected-histogram name="OfflinePages.DeletePage.PageSize"/>
@@ -98478,7 +98707,8 @@ To add a new entry, add it with any value and run test to compute valid value.
              data reduction proxy."/>
   <suffix name="Clients.DataReductionProxy.LoFiOn"
       label="PageLoadMetrics that are a result of a navigation through the
-             data reduction proxy with LoFi requested."/>
+             data reduction proxy with session in LoFi enabled or control
+             field trial, and when the connection was slow."/>
   <suffix name="Clients.DocWrite.Evaluator"
       label="PageLoadMetrics from a page that could have been evaluated by
              the DocumentWriteEvaluator"/>

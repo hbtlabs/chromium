@@ -94,6 +94,9 @@ class WindowTreeTestApi {
   void set_window_manager_internal(mojom::WindowManager* wm_internal) {
     tree_->window_manager_internal_ = wm_internal;
   }
+  void SetCanAcceptEvents(Id transport_window_id, bool can_accept_events) {
+    tree_->SetCanAcceptEvents(transport_window_id, can_accept_events);
+  }
   void AckOldestEvent() {
     tree_->OnWindowInputEventAck(tree_->event_ack_id_,
                                  mojom::EventResult::UNHANDLED);
@@ -256,6 +259,7 @@ class TestFrameGeneratorDelegate : public FrameGeneratorDelegate {
   // FrameGeneratorDelegate:
   ServerWindow* GetRootWindow() override;
   void OnCompositorFrameDrawn() override {}
+  bool IsInHighContrastMode() override;
   const ViewportMetrics& GetViewportMetrics() override;
 
  private:
