@@ -467,7 +467,8 @@ bool CollectBluetoothLowEnergyDeviceInfo(
           device_info_handle, &device_info_data, result, error)) {
     return false;
   }
-  // Get the friendly name. If it fails it is OK to leave the device_info_data.friendly_name as nullopt indicating the name not read.
+  // Get the friendly name. If it fails it is OK to leave the
+  // device_info_data.friendly_name as nullopt indicating the name not read.
   CollectBluetoothLowEnergyDeviceFriendlyName(device_info_handle,
                                               &device_info_data, result, error);
   if (!CollectBluetoothLowEnergyDeviceAddress(
