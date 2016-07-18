@@ -2152,7 +2152,7 @@ TEST_F(BluetoothBlueZTest, DeviceProperties) {
 
   // Verify the other device properties.
   EXPECT_EQ(
-      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
+      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceAlias),
       devices[idx]->GetNameForDisplay());
   EXPECT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
   EXPECT_TRUE(devices[idx]->IsPaired());
@@ -2327,7 +2327,7 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
   ASSERT_EQ(bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress,
             devices[idx]->GetAddress());
   ASSERT_EQ(
-      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
+      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceAlias),
       devices[idx]->GetNameForDisplay());
 
   // Install an observer; expect the DeviceChanged method to be called when
@@ -2339,7 +2339,6 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
           bluez::FakeBluetoothDeviceClient::kPairedDevicePath));
 
   static const std::string new_name("New Device Name");
-  properties->name.ReplaceValue(new_name);
   properties->alias.ReplaceValue(new_name);
 
   EXPECT_EQ(1, observer.device_changed_count());
@@ -2361,7 +2360,7 @@ TEST_F(BluetoothBlueZTest, DeviceAddressChanged) {
   ASSERT_EQ(bluez::FakeBluetoothDeviceClient::kPairedDeviceAddress,
             devices[idx]->GetAddress());
   ASSERT_EQ(
-      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
+      base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceAlias),
       devices[idx]->GetNameForDisplay());
 
   // Install an observer; expect the DeviceAddressChanged method to be called
