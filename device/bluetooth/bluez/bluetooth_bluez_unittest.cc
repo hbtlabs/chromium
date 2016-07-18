@@ -2339,6 +2339,7 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
           bluez::FakeBluetoothDeviceClient::kPairedDevicePath));
 
   static const std::string new_name("New Device Name");
+  properties->name.ReplaceValue(new_name);
   properties->alias.ReplaceValue(new_name);
 
   EXPECT_EQ(1, observer.device_changed_count());
