@@ -327,6 +327,7 @@ TEST_F(PropertyTest, Invalidate) {
   EXPECT_TRUE(properties_->name.is_valid());
 }
 
+
 TEST(PropertyTestStatic, ReadWriteStringMap) {
   std::unique_ptr<Response> message(Response::CreateEmpty());
   MessageWriter writer(message.get());
@@ -430,5 +431,16 @@ TEST(PropertyTestStatic, SerializeNetAddressArray) {
   EXPECT_TRUE(ip_list.PopValueFromReader(&reader));
   EXPECT_EQ(test_list, ip_list.value());
 }
+
+TEST(PropertyTestStatic, ReplaceValueSetsIsValid) {
+  Property<bool> property;
+  EXPECT_FALSE(property.is_valid());
+
+   // Set the value of the property to false, but the property is now a valid 
+   // set property. 
+//  property.ReplaceValue(false);
+//  EXPECT_TRUE(property.is_valid());
+}
+
 
 }  // namespace dbus
