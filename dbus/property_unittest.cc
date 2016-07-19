@@ -438,8 +438,8 @@ TEST(PropertyTestStatic, ReplaceValueSetsIsValid) {
 
    // Set the value of the property to false, but the property is now a valid 
    // set property. 
-//  property.ReplaceValue(false);
-//  EXPECT_TRUE(property.is_valid());
+  property.ReplaceValue(false);
+  EXPECT_TRUE(property.is_valid());
 }
 
 
