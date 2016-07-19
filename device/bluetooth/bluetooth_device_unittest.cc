@@ -117,9 +117,9 @@ TEST_F(BluetoothTest, LowEnergyDeviceNoUUIDs) {
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX) || defined(OS_WIN)
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
-// GetName for Device with no name.
-TEST_F(BluetoothTest, GetName_NullName) {
+#if defined(OS_ANDROID)
+// GetDeviceName for Device with no name.
+TEST_F(BluetoothTest, GetDeviceName_NullName) {
   if (!PlatformSupportsLowEnergy()) {
     LOG(WARNING) << "Low Energy Bluetooth unavailable, skipping unit test.";
     return;
@@ -127,11 +127,11 @@ TEST_F(BluetoothTest, GetName_NullName) {
   InitWithFakeAdapter();
   StartLowEnergyDiscoverySession();
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
-  EXPECT_FALSE(device->GetName());
+  EXPECT_EQ("", device->GetDeviceName());
 }
-#endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
+#endif  // defined(OS_ANDROID)
 
-// TODO(506415): Test GetNameForDisplay with a device with no name.
+// TODO(scheib): Test with a device with no name. http://crbug.com/506415
 // BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() will run, which
 // requires string resources to be loaded. For that, something like
 // InitSharedInstance must be run. See unittest files that call that. It will

@@ -87,10 +87,6 @@ uint16_t BluetoothDeviceWin::GetAppearance() const {
   return 0;
 }
 
-base::Optional<std::string> BluetoothDeviceWin::GetName() const {
-  return name_;
-}
-
 bool BluetoothDeviceWin::IsPaired() const {
   return paired_;
 }
@@ -287,6 +283,10 @@ void BluetoothDeviceWin::Update(
   connected_ = device_state.connected;
   paired_ = device_state.authenticated;
   UpdateServices(device_state);
+}
+
+std::string BluetoothDeviceWin::GetDeviceName() const {
+  return name_;
 }
 
 void BluetoothDeviceWin::CreateGattConnectionImpl() {

@@ -16,7 +16,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
-#include "base/optional.h"
 #include "base/win/scoped_handle.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_export.h"
@@ -75,7 +74,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothTaskManagerWin
 
     // Properties common to Bluetooth Classic and LE devices.
     std::string address;  // This uniquely identifies the device.
-    base::Optional<std::string> name;  // Friendly name
+    std::string name;     // Friendly name
     bool visible;
     bool connected;
     bool authenticated;

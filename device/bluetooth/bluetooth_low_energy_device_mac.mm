@@ -111,12 +111,6 @@ uint16_t BluetoothLowEnergyDeviceMac::GetAppearance() const {
   return 0;
 }
 
-base::Optional<std::string> BluetoothLowEnergyDeviceMac::GetName() const {
-  if ([peripheral_ name])
-    return base::SysNSStringToUTF8([peripheral_ name]);
-  return base::nullopt;
-}
-
 int BluetoothLowEnergyDeviceMac::GetRSSI() const {
   return rssi_;
 }
@@ -222,6 +216,10 @@ void BluetoothLowEnergyDeviceMac::ConnectToServiceInsecurely(
     const ConnectToServiceCallback& callback,
     const ConnectToServiceErrorCallback& error_callback) {
   NOTIMPLEMENTED();
+}
+
+std::string BluetoothLowEnergyDeviceMac::GetDeviceName() const {
+  return base::SysNSStringToUTF8([peripheral_ name]);
 }
 
 void BluetoothLowEnergyDeviceMac::CreateGattConnectionImpl() {

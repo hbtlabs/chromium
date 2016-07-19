@@ -13,7 +13,6 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
-#include "base/optional.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_low_energy_defs_win.h"
 
@@ -89,7 +88,7 @@ struct DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceInfo {
 
   base::FilePath path;
   std::string id;
-  base::Optional<std::string> friendly_name;
+  std::string friendly_name;
   BLUETOOTH_ADDRESS address;
   bool visible;
   bool authenticated;

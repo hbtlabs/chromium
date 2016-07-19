@@ -214,6 +214,15 @@ device::BluetoothTransport BluetoothDeviceBlueZ::GetType() const {
   return device::BLUETOOTH_TRANSPORT_INVALID;
 }
 
+std::string BluetoothDeviceBlueZ::GetDeviceName() const {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+
+  return properties->alias.value();
+}
+
 void BluetoothDeviceBlueZ::CreateGattConnectionImpl() {
   // BlueZ implementation does not use the default CreateGattConnection
   // implementation.
@@ -282,17 +291,6 @@ uint16_t BluetoothDeviceBlueZ::GetAppearance() const {
     return kAppearanceNotPresent;
 
   return properties->appearance.value();
-}
-
-base::Optional<std::string> BluetoothDeviceBlueZ::GetName() const {
-  bluez::BluetoothDeviceClient::Properties* properties =
-      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
-          object_path_);
-  DCHECK(properties);
-
-  if (properties->alias.is_valid())
-    return properties->alias.value();
-  return base::nullopt;
 }
 
 bool BluetoothDeviceBlueZ::IsPaired() const {
