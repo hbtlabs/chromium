@@ -431,10 +431,9 @@ class CHROME_DBUS_EXPORT Property : public PropertyBase {
   }
 
   // Method used by test and stub implementations to directly set the
-  // value of a property. |is_valid()| also becomes true.
+  // value of a property.
   void ReplaceValue(const T& value) {
     value_ = value;
-    set_valid(true);
     property_set()->NotifyPropertyChanged(name());
   }
 
