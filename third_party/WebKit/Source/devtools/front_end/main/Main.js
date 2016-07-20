@@ -106,7 +106,7 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("applyCustomStylesheet", "Allow custom UI themes");
         Runtime.experiments.register("blackboxJSFramesOnTimeline", "Blackbox JavaScript frames on Timeline", true);
         Runtime.experiments.register("colorContrastRatio", "Contrast ratio line in color picker", true);
-        Runtime.experiments.register("continueToFirstInvocation", "Continue to first invocation");
+        Runtime.experiments.register("continueToFirstInvocation", "Continue to first invocation", true);
         Runtime.experiments.register("cpuThrottling", "CPU throttling");
         Runtime.experiments.register("emptySourceMapAutoStepping", "Empty sourcemap auto-stepping");
         Runtime.experiments.register("inputEventsOnTimelineOverview", "Input events on Timeline overview", true);
@@ -310,9 +310,9 @@ WebInspector.Main.prototype = {
             WebInspector.RemoteDebuggingTerminatedScreen.show(event.data.reason);
         }
 
-        var capabilities = WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
+        var capabilities = WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker | WebInspector.Target.Capability.DOM;
         if (Runtime.queryParam("isSharedWorker"))
-            capabilities = WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
+            capabilities = WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
         else if (Runtime.queryParam("v8only"))
             capabilities = WebInspector.Target.Capability.JS;
 
@@ -326,7 +326,8 @@ WebInspector.Main.prototype = {
 
         this._mainTarget.runtimeAgent().run();
 
-        this._mainTarget.inspectorAgent().enable();
+        if (this._mainTarget.hasBrowserCapability())
+            this._mainTarget.inspectorAgent().enable();
         InspectorFrontendHost.readyForTest();
 
         // Asynchronously run the extensions.
@@ -949,6 +950,23 @@ WebInspector.Main.InspectedNodeRevealer.prototype = {
 }
 
 /**
+ * @param {string} method
+ * @param {?Object} params
+ * @return {!Promise}
+ */
+WebInspector.sendOverProtocol = function(method, params)
+{
+    var connection = WebInspector.targetManager.mainTarget().connection();
+    return new Promise((resolve, reject) => {
+        connection.sendRawMessageForTesting(method, params, (err, result) => {
+            if (err)
+                return reject(err);
+            return resolve(result);
+        });
+    });
+}
+
+/**
  * @constructor
  * @extends {WebInspector.VBox}
  * @param {string} reason
@@ -961,6 +979,8 @@ WebInspector.RemoteDebuggingTerminatedScreen = function(reason)
     message.createChild("span").textContent = WebInspector.UIString("Debugging connection was closed. Reason: ");
     message.createChild("span", "reason").textContent = reason;
     this.contentElement.createChild("div", "message").textContent = WebInspector.UIString("Reconnect when ready by reopening DevTools.");
+    var button = createTextButton(WebInspector.UIString("Reconnect DevTools"), () => window.location.reload());
+    this.contentElement.createChild("div", "button").appendChild(button);
 }
 
 /**

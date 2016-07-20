@@ -31,7 +31,6 @@
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/api/LayoutTextFragmentItem.h"
-#include "wtf/TemporaryChange.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/text/icu/UnicodeIcu.h"
 
@@ -212,9 +211,9 @@ void FirstLetterPseudoElement::setRemainingTextLayoutObject(LayoutTextFragment* 
     m_remainingTextLayoutObject = fragment;
 }
 
-void FirstLetterPseudoElement::attach(const AttachContext& context)
+void FirstLetterPseudoElement::attachLayoutTree(const AttachContext& context)
 {
-    PseudoElement::attach(context);
+    PseudoElement::attachLayoutTree(context);
     attachFirstLetterTextLayoutObjects();
 }
 

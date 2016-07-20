@@ -53,6 +53,7 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_security_policy_header.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/input_messages.h"
@@ -176,6 +177,7 @@
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebFrameSerializer.h"
 #include "third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
@@ -397,6 +399,13 @@ bool IsBrowserInitiated(NavigationParams* pending) {
          !pending->common_params.url.SchemeIs(url::kJavaScriptScheme);
 }
 
+NOINLINE void ExhaustMemory() {
+  volatile void* ptr = nullptr;
+  do {
+    ptr = malloc(0x10000000);
+  } while (ptr);
+}
+
 NOINLINE void CrashIntentionally() {
   // NOTE(shess): Crash directly rather than using NOTREACHED() so
   // that the signature is easier to triage in crash reports.
@@ -506,6 +515,11 @@ void MaybeHandleDebugURL(const GURL& url) {
     LOG(ERROR) << "Intentionally sleeping renderer for 20 seconds"
                << " because user navigated to " << url.spec();
     base::PlatformThread::Sleep(base::TimeDelta::FromSeconds(20));
+  } else if (url == GURL(kChromeUIMemoryExhaustURL)) {
+    LOG(ERROR)
+        << "Intentionally exhausting renderer memory because user navigated to "
+        << url.spec();
+    ExhaustMemory();
   }
 
 #if defined(ADDRESS_SANITIZER) || defined(SYZYASAN)
@@ -945,7 +959,7 @@ void RenderFrameImpl::CreateFrame(
     const FrameReplicationState& replicated_state,
     CompositorDependencies* compositor_deps,
     const FrameMsg_NewFrame_WidgetParams& widget_params,
-    const blink::WebFrameOwnerProperties& frame_owner_properties) {
+    const FrameOwnerProperties& frame_owner_properties) {
   blink::WebLocalFrame* web_frame;
   RenderFrameImpl* render_frame;
   if (proxy_routing_id == MSG_ROUTING_NONE) {
@@ -970,7 +984,8 @@ void RenderFrameImpl::CreateFrame(
         replicated_state.scope, WebString::fromUTF8(replicated_state.name),
         WebString::fromUTF8(replicated_state.unique_name),
         replicated_state.sandbox_flags, render_frame,
-        previous_sibling_web_frame, frame_owner_properties,
+        previous_sibling_web_frame,
+        frame_owner_properties.ToWebFrameOwnerProperties(),
         ResolveOpener(opener_routing_id, nullptr));
 
     // The RenderFrame is created and inserted into the frame tree in the above
@@ -1523,7 +1538,6 @@ bool RenderFrameImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnSetEditableSelectionOffsets)
     IPC_MESSAGE_HANDLER(InputMsg_ExecuteNoValueEditCommand,
                         OnExecuteNoValueEditCommand)
-    IPC_MESSAGE_HANDLER(FrameMsg_CSSInsertRequest, OnCSSInsertRequest)
     IPC_MESSAGE_HANDLER(FrameMsg_AddMessageToConsole, OnAddMessageToConsole)
     IPC_MESSAGE_HANDLER(FrameMsg_JavaScriptExecuteRequest,
                         OnJavaScriptExecuteRequest)
@@ -1915,10 +1929,6 @@ void RenderFrameImpl::OnSaveImageAt(int x, int y) {
   frame_->saveImageAt(WebPoint(x, y));
 }
 
-void RenderFrameImpl::OnCSSInsertRequest(const std::string& css) {
-  frame_->document().insertStyleSheet(WebString::fromUTF8(css));
-}
-
 void RenderFrameImpl::OnAddMessageToConsole(ConsoleMessageLevel level,
                                             const std::string& message) {
   AddMessageToConsole(level, message);
@@ -2104,11 +2114,12 @@ void RenderFrameImpl::OnSetAccessibilityMode(AccessibilityMode new_mode) {
     delete render_accessibility_;
     render_accessibility_ = NULL;
   }
-  if (accessibility_mode_ == AccessibilityModeOff)
-    return;
 
   if (accessibility_mode_ & AccessibilityModeFlagFullTree)
     render_accessibility_ = new RenderAccessibilityImpl(this);
+
+  FOR_EACH_OBSERVER(RenderFrameObserver, observers_,
+                    AccessibilityModeChanged());
 }
 
 void RenderFrameImpl::OnSnapshotAccessibilityTree(int callback_id) {
@@ -2128,9 +2139,10 @@ void RenderFrameImpl::OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags) {
 }
 
 void RenderFrameImpl::OnSetFrameOwnerProperties(
-    const blink::WebFrameOwnerProperties& frame_owner_properties) {
+    const FrameOwnerProperties& frame_owner_properties) {
   DCHECK(frame_);
-  frame_->setFrameOwnerProperties(frame_owner_properties);
+  frame_->setFrameOwnerProperties(
+      frame_owner_properties.ToWebFrameOwnerProperties());
 }
 
 void RenderFrameImpl::OnAdvanceFocus(blink::WebFocusType type,
@@ -2796,7 +2808,7 @@ blink::WebFrame* RenderFrameImpl::createChildFrame(
   params.frame_unique_name =
       base::UTF16ToUTF8(base::StringPiece16(unique_name));
   params.sandbox_flags = sandbox_flags;
-  params.frame_owner_properties = frame_owner_properties;
+  params.frame_owner_properties = FrameOwnerProperties(frame_owner_properties);
   Send(new FrameHostMsg_CreateChildFrame(params, &child_routing_id));
 
   // Allocation of routing id failed, so we can't create a child frame. This can
@@ -2850,6 +2862,10 @@ void RenderFrameImpl::frameDetached(blink::WebLocalFrame* frame,
   FOR_EACH_OBSERVER(RenderFrameObserver, observers_, FrameDetached());
   FOR_EACH_OBSERVER(RenderViewObserver, render_view_->observers(),
                     FrameDetached(frame));
+
+  // Send a state update before the frame is detached.
+  if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+    SendUpdateState();
 
   // We only notify the browser process when the frame is being detached for
   // removal and it was initiated from the renderer process.
@@ -2955,8 +2971,8 @@ void RenderFrameImpl::didChangeFrameOwnerProperties(
     blink::WebFrame* child_frame,
     const blink::WebFrameOwnerProperties& frame_owner_properties) {
   Send(new FrameHostMsg_DidChangeFrameOwnerProperties(
-           routing_id_, GetRoutingIdForFrameOrProxy(child_frame),
-           frame_owner_properties));
+      routing_id_, GetRoutingIdForFrameOrProxy(child_frame),
+      FrameOwnerProperties(frame_owner_properties)));
 }
 
 void RenderFrameImpl::didMatchCSS(
@@ -4528,8 +4544,7 @@ void RenderFrameImpl::WasHidden() {
 #endif  // ENABLE_PLUGINS
 
   if (GetWebFrame()->frameWidget()) {
-    static_cast<blink::WebFrameWidget*>(GetWebFrame()->frameWidget())
-        ->setVisibilityState(visibilityState());
+    GetWebFrame()->frameWidget()->setVisibilityState(visibilityState());
   }
 }
 
@@ -4542,8 +4557,7 @@ void RenderFrameImpl::WasShown() {
 #endif  // ENABLE_PLUGINS
 
   if (GetWebFrame()->frameWidget()) {
-    static_cast<blink::WebFrameWidget*>(GetWebFrame()->frameWidget())
-        ->setVisibilityState(visibilityState());
+    GetWebFrame()->frameWidget()->setVisibilityState(visibilityState());
   }
 }
 
@@ -4772,6 +4786,20 @@ void RenderFrameImpl::SendDidCommitProvisionalLoad(
     render_view_->SetZoomLevel(render_view_->page_zoom_level());
   }
 
+  // Standard URLs must match the reported origin, when it is not unique.
+  // This check is very similar to RenderFrameHostImpl::CanCommitOrigin, but
+  // adapted to the renderer process side.
+  if (!params.origin.unique() && params.url.IsStandard() &&
+      render_view_->GetWebkitPreferences().web_security_enabled) {
+    // Exclude file: URLs when settings allow them access any origin.
+    if (params.origin.scheme() != url::kFileScheme ||
+        !render_view_->GetWebkitPreferences()
+             .allow_universal_access_from_file_urls) {
+      CHECK(params.origin.IsSameOriginWith(url::Origin(params.url)))
+          << " url:" << params.url << " origin:" << params.origin;
+    }
+  }
+
   // This message needs to be sent before any of allowScripts(),
   // allowImages(), allowPlugins() is called for the new page, so that when
   // these functions send a ViewHostMsg_ContentBlocked message, it arrives
@@ -4990,7 +5018,6 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
       GURL source_url(old_url);
       if (is_initial_navigation && source_url.is_empty() && frame_->opener())
         source_url = frame_->opener()->top()->document().url();
-      DCHECK(!source_url.is_empty());
       should_fork = !source_url.SchemeIs(url::kFileScheme);
     }
 
@@ -5205,8 +5232,10 @@ void RenderFrameImpl::OnFind(int request_id,
   // increment the current match ordinal; we need to re-generate it.
   WebRange current_selection = frame_->selectionRange();
 
-  if (frame_->find(request_id, search_text, options,
-                   false /* wrapWithinFrame */, &selection_rect, &active_now)) {
+  bool result = frame_->find(request_id, search_text, options,
+                             false /* wrapWithinFrame */, &selection_rect,
+                             &active_now);
+  if (result && !options.findNext) {
     // Indicate that at least one match has been found. 1 here means possibly
     // more matches could be coming. -1 here means that the exact active match
     // ordinal is not yet known.
@@ -6286,6 +6315,8 @@ void RenderFrameImpl::PepperFocusChanged(PepperPluginInstanceImpl* instance,
     focused_pepper_plugin_ = instance;
   else if (focused_pepper_plugin_ == instance)
     focused_pepper_plugin_ = nullptr;
+
+  GetRenderWidget()->set_focused_pepper_plugin(focused_pepper_plugin_);
 
   GetRenderWidget()->UpdateTextInputState(ShowIme::HIDE_IME,
                                           ChangeSource::FROM_NON_IME);

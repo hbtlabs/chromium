@@ -1092,28 +1092,33 @@ LayoutUnit LayoutBox::overrideLogicalContentHeight() const
     return m_rareData->m_overrideLogicalContentHeight;
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 LayoutUnit LayoutBox::overrideContainingBlockContentLogicalWidth() const
 {
     ASSERT(hasOverrideContainingBlockLogicalWidth());
     return gOverrideContainingBlockLogicalWidthMap->get(this);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 LayoutUnit LayoutBox::overrideContainingBlockContentLogicalHeight() const
 {
     ASSERT(hasOverrideContainingBlockLogicalHeight());
     return gOverrideContainingBlockLogicalHeightMap->get(this);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 bool LayoutBox::hasOverrideContainingBlockLogicalWidth() const
 {
     return gOverrideContainingBlockLogicalWidthMap && gOverrideContainingBlockLogicalWidthMap->contains(this);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 bool LayoutBox::hasOverrideContainingBlockLogicalHeight() const
 {
     return gOverrideContainingBlockLogicalHeightMap && gOverrideContainingBlockLogicalHeightMap->contains(this);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 void LayoutBox::setOverrideContainingBlockContentLogicalWidth(LayoutUnit logicalWidth)
 {
     if (!gOverrideContainingBlockLogicalWidthMap)
@@ -1121,6 +1126,7 @@ void LayoutBox::setOverrideContainingBlockContentLogicalWidth(LayoutUnit logical
     gOverrideContainingBlockLogicalWidthMap->set(this, logicalWidth);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 void LayoutBox::setOverrideContainingBlockContentLogicalHeight(LayoutUnit logicalHeight)
 {
     if (!gOverrideContainingBlockLogicalHeightMap)
@@ -1128,6 +1134,7 @@ void LayoutBox::setOverrideContainingBlockContentLogicalHeight(LayoutUnit logica
     gOverrideContainingBlockLogicalHeightMap->set(this, logicalHeight);
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 void LayoutBox::clearContainingBlockOverrideSize()
 {
     if (gOverrideContainingBlockLogicalWidthMap)
@@ -1135,10 +1142,31 @@ void LayoutBox::clearContainingBlockOverrideSize()
     clearOverrideContainingBlockContentLogicalHeight();
 }
 
+// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
 void LayoutBox::clearOverrideContainingBlockContentLogicalHeight()
 {
     if (gOverrideContainingBlockLogicalHeightMap)
         gOverrideContainingBlockLogicalHeightMap->remove(this);
+}
+
+LayoutUnit LayoutBox::overrideContainingBlockContentWidth() const
+{
+    return containingBlock()->isHorizontalWritingMode() ? overrideContainingBlockContentLogicalWidth() : overrideContainingBlockContentLogicalHeight();
+}
+
+LayoutUnit LayoutBox::overrideContainingBlockContentHeight() const
+{
+    return containingBlock()->isHorizontalWritingMode() ? overrideContainingBlockContentLogicalHeight() : overrideContainingBlockContentLogicalWidth();
+}
+
+bool LayoutBox::hasOverrideContainingBlockWidth() const
+{
+    return containingBlock()->isHorizontalWritingMode() ? hasOverrideContainingBlockLogicalWidth() : hasOverrideContainingBlockLogicalHeight();
+}
+
+bool LayoutBox::hasOverrideContainingBlockHeight() const
+{
+    return containingBlock()->isHorizontalWritingMode() ? hasOverrideContainingBlockLogicalHeight() : hasOverrideContainingBlockLogicalWidth();
 }
 
 LayoutUnit LayoutBox::extraInlineOffset() const
@@ -2043,12 +2071,15 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ances
     bool ancestorSkipped;
     bool filterOrReflectionSkipped;
     LayoutObject* container = this->container(ancestor, &ancestorSkipped, &filterOrReflectionSkipped);
-    LayoutBox* localContainingBlock = containingBlock();
-    // Skip table row because cells and rows are in the same coordinate space.
+    LayoutBox* tableRowContainer = nullptr;
+    // Skip table row because cells and rows are in the same coordinate space
+    // (see below, however for more comments about when |ancestor| is the table row).
     if (container->isTableRow()) {
-        DCHECK(isTableCell());
-        localContainingBlock = toLayoutBox(container->parent());
-        container = container->parent();
+        DCHECK(isTableCell() && parentBox() == container);
+        if (container != ancestor)
+            container = container->parent();
+        else
+            tableRowContainer = toLayoutBox(container);
     }
     if (!container)
         return true;
@@ -2065,10 +2096,15 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ances
         rect = LayoutRect(layer()->transform()->mapRect(enclosingIntRect(rect)));
     }
     LayoutPoint topLeft = rect.location();
-    // TODO(wkorman): Look into and document why this conditional is needed.
-    // Currently present following logic in PaintLayer::updateLayerPosition.
-    if (!(isInline() && isLayoutInline()))
-        topLeft.moveBy(topLeftLocation(localContainingBlock));
+    if (container->isBox()) {
+        topLeft.moveBy(topLeftLocation(toLayoutBox(container)));
+        // If the row is the ancestor, however, add its offset back in. In effect, this passes from the joint <td> / <tr>
+        // coordinate space to the parent space, then back to <tr> / <td>.
+        if (tableRowContainer)
+            topLeft.moveBy(-tableRowContainer->topLeftLocation(toLayoutBox(container)));
+    } else {
+        topLeft.moveBy(location());
+    }
 
     const ComputedStyle& styleToUse = styleRef();
     EPosition position = styleToUse.position();

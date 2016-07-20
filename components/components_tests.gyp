@@ -418,6 +418,7 @@
       'network_time/network_time_tracker_unittest.cc',
     ],
     'ntp_snippets_unittest_sources': [
+      'ntp_snippets/content_suggestions_service_unittest.cc',
       'ntp_snippets/ntp_snippet_unittest.cc',
       'ntp_snippets/ntp_snippets_database_unittest.cc',
       'ntp_snippets/ntp_snippets_fetcher_unittest.cc',
@@ -607,7 +608,6 @@
       'user_prefs/tracked/pref_hash_calculator_unittest.cc',
       'user_prefs/tracked/pref_hash_filter_unittest.cc',
       'user_prefs/tracked/pref_hash_store_impl_unittest.cc',
-      'user_prefs/tracked/pref_service_hash_store_contents_unittest.cc',
       'user_prefs/tracked/segregated_pref_store_unittest.cc',
       'user_prefs/tracked/tracked_preferences_migration_unittest.cc',
     ],
@@ -703,6 +703,7 @@
       'safe_json/testing_json_parser_unittest.cc',
     ],
     'scheduler_unittest_sources': [
+      'scheduler/base/long_task_tracker_unittest.cc',
       'scheduler/base/queueing_time_estimator_unittest.cc',
       'scheduler/base/task_queue_manager_delegate_for_test.cc',
       'scheduler/base/task_queue_manager_delegate_for_test.h',
@@ -761,6 +762,7 @@
       'sessions/core/serialized_navigation_entry_unittest.cc',
       'sessions/core/session_backend_unittest.cc',
       'sessions/core/session_types_unittest.cc',
+      'sessions/core/tab_restore_service_unittest.cc',
       'sessions/ios/ios_serialized_navigation_builder_unittest.mm',
       'sessions/ios/ios_serialized_navigation_driver_unittest.cc',
     ],
@@ -798,7 +800,11 @@
       'subresource_filter/content/browser/content_ruleset_distributor_unittest.cc',
       'subresource_filter/content/browser/content_subresource_filter_driver_factory_unittest.cc',
     ],
-    'subresource_filter_core_browser_unittest_sources': [
+    'subresource_filter_content_renderer_unittest_sources': [
+      'subresource_filter/content/renderer/document_subresource_filter_unittest.cc',
+      'subresource_filter/content/renderer/subresource_filter_agent_unittest.cc',
+    ],
+     'subresource_filter_core_browser_unittest_sources': [
       'subresource_filter/core/browser/ruleset_service_unittest.cc',
       'subresource_filter/core/browser/subresource_filter_features_unittest.cc',
     ],
@@ -987,9 +993,6 @@
     'webdata_unittest_sources': [
       'webdata/common/web_database_migration_unittest.cc',
     ],
-    'webusb_detector_unittest_sources': [
-      'webusb/webusb_detector_unittest.cc',
-    ],
   },
   'targets': [
     {
@@ -1036,7 +1039,6 @@
         '<@(bubble_unittest_sources)',
         '<@(captive_portal_unittest_sources)',
         '<@(cast_certificate_unittest_sources)',
-        '<@(certificate_reporting_unittest_sources)',
         '<@(client_update_protocol_unittest_sources)',
         '<@(cloud_devices_unittest_sources)',
         '<@(component_updater_unittest_sources)',
@@ -1055,7 +1057,7 @@
         '<@(gcm_driver_unittest_sources)',
         '<@(google_unittest_sources)',
         '<@(history_unittest_sources)',
-	'<@(image_fetcher_unittest_sources)',
+        '<@(image_fetcher_unittest_sources)',
         '<@(instance_id_unittest_sources)',
         '<@(json_schema_unittest_sources)',
         '<@(keyed_service_unittest_sources)',
@@ -1228,6 +1230,7 @@
         'components.gyp:subresource_filter_core_browser_test_support',
         'components.gyp:subresource_filter_core_browser',
         'components.gyp:subresource_filter_core_common',
+        'components.gyp:subresource_filter_core_common_test_support',
         'components.gyp:suggestions',
         'components.gyp:supervised_user_error_page',
         'components.gyp:sync_bookmarks',
@@ -1305,6 +1308,7 @@
         }],
         ['OS != "ios"', {
           'sources': [
+            '<@(certificate_reporting_unittest_sources)',
             '<@(certificate_transparency_unittest_sources)',
             '<@(child_trace_message_filter_unittest_sources)',
             '<@(devtools_http_handler_unittest_sources)',
@@ -1324,6 +1328,7 @@
             '<@(scheduler_unittest_sources)',
             '<@(storage_monitor_unittest_sources)',
             '<@(subresource_filter_content_browser_unittest_sources)',
+            '<@(subresource_filter_content_renderer_unittest_sources)',
             '<@(tracing_unittest_sources)',
             '<@(visitedlink_unittest_sources)',
             '<@(wallpaper_unittest_sources)',
@@ -1374,6 +1379,7 @@
             'components.gyp:storage_monitor_test_support',
             'components.gyp:subresource_filter_content_browser',
             'components.gyp:subresource_filter_content_common',
+            'components.gyp:subresource_filter_content_renderer',
             'components.gyp:test_database_manager',
             'components.gyp:url_matcher',
             'components.gyp:visitedlink_browser',
@@ -1422,9 +1428,6 @@
             }],
           ],
         }, { # 'OS == "ios"'
-          'sources': [
-            'webp_transcode/webp_decoder_unittest.mm',
-          ],
           'sources/': [
             # Exclude all tests that depends on //content (based on layered-
             # component directory structure).
@@ -1441,7 +1444,6 @@
             'components.gyp:signin_ios_browser',
             'components.gyp:signin_ios_browser_test_support',
             'components.gyp:translate_ios_browser',
-            'components.gyp:webp_transcode',
           ],
           'actions': [
             {
@@ -1525,7 +1527,6 @@
           'sources': [
             '<@(feedback_unittest_sources)',
             '<@(proximity_auth_unittest_sources)',
-            '<@(webusb_detector_unittest_sources)',
           ],
           'sources!': [
             'variations/variations_request_scheduler_mobile_unittest.cc',
@@ -1547,7 +1548,6 @@
             'components.gyp:pref_registry_test_support',
             'components.gyp:proximity_auth',
             'components.gyp:proximity_auth_test_support',
-            'components.gyp:webusb',
           ],
         }],
         ['chromeos==1', {
@@ -1557,6 +1557,7 @@
             'arc/intent_helper/activity_icon_loader_unittest.cc',
             'arc/intent_helper/arc_intent_helper_bridge_unittest.cc',
             'arc/intent_helper/font_size_util_unittest.cc',
+            'arc/intent_helper/intent_filter_unittest.cc',
             'arc/intent_helper/link_handler_model_impl_unittest.cc',
             'pairing/message_buffer_unittest.cc',
             'timers/alarm_timer_unittest.cc',
@@ -1602,6 +1603,7 @@
             'os_crypt/os_crypt_util_linux_unittest.cc',
           ],
           'defines': [
+            'USE_KWALLET',
             'USE_LIBSECRET',
           ],
           'include_dirs': [

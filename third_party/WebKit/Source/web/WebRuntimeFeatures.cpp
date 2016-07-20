@@ -105,6 +105,11 @@ void WebRuntimeFeatures::enableDisplayList2dCanvas(bool enable)
     RuntimeEnabledFeatures::setDisplayList2dCanvasEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableCanvas2dDynamicRenderingModeSwitching(bool enable)
+{
+    RuntimeEnabledFeatures::setEnableCanvas2dDynamicRenderingModeSwitchingEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableDoNotUnlockSharedBuffer(bool enable)
 {
     RuntimeEnabledFeatures::setDoNotUnlockSharedBufferEnabled(enable);
@@ -198,6 +203,11 @@ void WebRuntimeFeatures::enableParseHTMLOnMainThread(bool enable)
 void WebRuntimeFeatures::enablePassiveDocumentEventListeners(bool enable)
 {
     RuntimeEnabledFeatures::setPassiveDocumentEventListenersEnabled(enable);
+}
+
+void WebRuntimeFeatures::enablePaymentRequest(bool enable)
+{
+    RuntimeEnabledFeatures::setPaymentRequestEnabled(enable);
 }
 
 void WebRuntimeFeatures::enablePermissionsAPI(bool enable)

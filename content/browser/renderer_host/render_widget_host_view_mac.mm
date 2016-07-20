@@ -21,7 +21,6 @@
 #import "base/mac/scoped_nsobject.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_util.h"
@@ -29,6 +28,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #import "content/browser/accessibility/browser_accessibility_cocoa.h"
 #import "content/browser/accessibility/browser_accessibility_mac.h"
@@ -420,19 +420,14 @@ SkColor RenderWidgetHostViewMac::BrowserCompositorMacGetGutterColor(
   return color;
 }
 
-void RenderWidgetHostViewMac::BrowserCompositorMacSendCompositorSwapAck(
-    int output_surface_id,
-    const cc::CompositorFrameAck& ack) {
-  render_widget_host_->Send(new ViewMsg_SwapCompositorFrameAck(
-      render_widget_host_->GetRoutingID(), output_surface_id, ack));
-}
-
 void RenderWidgetHostViewMac::
     BrowserCompositorMacSendReclaimCompositorResources(
         int output_surface_id,
-        const cc::CompositorFrameAck& ack) {
+        bool is_swap_ack,
+        const cc::ReturnedResourceArray& resources) {
   render_widget_host_->Send(new ViewMsg_ReclaimCompositorResources(
-      render_widget_host_->GetRoutingID(), output_surface_id, ack));
+      render_widget_host_->GetRoutingID(), output_surface_id, is_swap_ack,
+      resources));
 }
 
 void RenderWidgetHostViewMac::BrowserCompositorMacOnLostCompositorResources() {
@@ -1136,9 +1131,9 @@ void RenderWidgetHostViewMac::OnSetNeedsBeginFrames(bool needs_begin_frames) {
 void RenderWidgetHostViewMac::KillSelf() {
   if (!weak_factory_.HasWeakPtrs()) {
     [cocoa_view_ setHidden:YES];
-    base::MessageLoop::current()->PostTask(FROM_HERE,
-        base::Bind(&RenderWidgetHostViewMac::ShutdownHost,
-                   weak_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&RenderWidgetHostViewMac::ShutdownHost,
+                              weak_factory_.GetWeakPtr()));
   }
 }
 

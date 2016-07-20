@@ -58,6 +58,7 @@
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/AutoReset.h"
 #include <memory>
 #include <v8.h>
 
@@ -229,7 +230,7 @@ void InspectorOverlay::updateAllLifecyclePhases()
     if (isEmpty())
         return;
 
-    TemporaryChange<bool> scoped(m_inLayout, true);
+    AutoReset<bool> scoped(&m_inLayout, true);
     if (m_needsUpdate) {
         m_needsUpdate = false;
         rebuildOverlayPage();
@@ -404,8 +405,8 @@ void InspectorOverlay::rebuildOverlayPage()
 static std::unique_ptr<protocol::DictionaryValue> buildObjectForSize(const IntSize& size)
 {
     std::unique_ptr<protocol::DictionaryValue> result = protocol::DictionaryValue::create();
-    result->setNumber("width", size.width());
-    result->setNumber("height", size.height());
+    result->setInteger("width", size.width());
+    result->setInteger("height", size.height());
     return result;
 }
 
@@ -539,8 +540,8 @@ LocalFrame* InspectorOverlay::overlayMainFrame()
 void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset)
 {
     std::unique_ptr<protocol::DictionaryValue> resetData = protocol::DictionaryValue::create();
-    resetData->setNumber("deviceScaleFactor", m_webViewImpl->page()->deviceScaleFactor());
-    resetData->setNumber("pageScaleFactor", m_webViewImpl->page()->pageScaleFactor());
+    resetData->setDouble("deviceScaleFactor", m_webViewImpl->page()->deviceScaleFactor());
+    resetData->setDouble("pageScaleFactor", m_webViewImpl->page()->pageScaleFactor());
 
     IntRect viewportInScreen = m_webViewImpl->chromeClient().viewportToScreen(
         IntRect(IntPoint(), viewportSize), m_webViewImpl->mainFrameImpl()->frame()->view());
@@ -548,10 +549,10 @@ void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& docume
 
     // The zoom factor in the overlay frame already has been multiplied by the window to viewport scale
     // (aka device scale factor), so cancel it.
-    resetData->setNumber("pageZoomFactor", m_webViewImpl->mainFrameImpl()->frame()->pageZoomFactor() / windowToViewportScale());
+    resetData->setDouble("pageZoomFactor", m_webViewImpl->mainFrameImpl()->frame()->pageZoomFactor() / windowToViewportScale());
 
-    resetData->setNumber("scrollX", documentScrollOffset.x());
-    resetData->setNumber("scrollY", documentScrollOffset.y());
+    resetData->setInteger("scrollX", documentScrollOffset.x());
+    resetData->setInteger("scrollY", documentScrollOffset.y());
     evaluateInOverlay("reset", std::move(resetData));
 }
 

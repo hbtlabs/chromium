@@ -154,7 +154,7 @@ WebInspector.ConsoleViewMessage.prototype = {
             if (consoleMessage.source === WebInspector.ConsoleMessage.MessageSource.ConsoleAPI) {
                 switch (consoleMessage.type) {
                 case WebInspector.ConsoleMessage.MessageType.Trace:
-                    this._messageElement = this._format(consoleMessage.parameters || ["console.trace()"]);
+                    this._messageElement = this._format(consoleMessage.parameters || ["console.trace"]);
                     break;
                 case WebInspector.ConsoleMessage.MessageType.Clear:
                     this._messageElement = createTextNode(WebInspector.UIString("Console was cleared"));
@@ -267,9 +267,6 @@ WebInspector.ConsoleViewMessage.prototype = {
         var target = this._target();
         if (!target)
             return null;
-        // FIXME(62725): stack trace line/column numbers are one-based.
-        lineNumber = lineNumber ? lineNumber - 1 : 0;
-        columnNumber = columnNumber ? columnNumber - 1 : 0;
         return this._linkifier.linkifyScriptLocation(target, null, url, lineNumber, columnNumber, "console-message-url");
     },
 
@@ -297,9 +294,6 @@ WebInspector.ConsoleViewMessage.prototype = {
         var target = this._target();
         if (!target)
             return null;
-        // FIXME(62725): stack trace line/column numbers are one-based.
-        lineNumber = lineNumber ? lineNumber - 1 : 0;
-        columnNumber = columnNumber ? columnNumber - 1 : 0;
         return this._linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber, columnNumber, "console-message-url");
     },
 
@@ -1113,6 +1107,18 @@ WebInspector.ConsoleViewMessage.prototype = {
         switch (this._message.type) {
         case WebInspector.ConsoleMessage.MessageType.Log:
             typeString = "Log";
+            break;
+        case WebInspector.ConsoleMessage.MessageType.Debug:
+            typeString = "Debug";
+            break;
+        case WebInspector.ConsoleMessage.MessageType.Info:
+            typeString = "Info";
+            break;
+        case WebInspector.ConsoleMessage.MessageType.Error:
+            typeString = "Error";
+            break;
+        case WebInspector.ConsoleMessage.MessageType.Warning:
+            typeString = "Warning";
             break;
         case WebInspector.ConsoleMessage.MessageType.Dir:
             typeString = "Dir";

@@ -39,7 +39,7 @@ MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
   ON_CALL(*this, GetDeviceID())
       .WillByDefault(testing::Return(0));
   ON_CALL(*this, GetName())
-      .WillByDefault(testing::Return(base::Optional<std::string>(name_)));
+      .WillByDefault(testing::Return(base::make_optional(name_)));
   ON_CALL(*this, GetNameForDisplay())
       .WillByDefault(testing::Return(base::UTF8ToUTF16(name_)));
   ON_CALL(*this, GetDeviceType())

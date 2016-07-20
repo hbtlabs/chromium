@@ -54,6 +54,7 @@
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/accessibility_messages.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/input_messages.h"
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
@@ -808,7 +809,8 @@ bool RenderFrameHostImpl::CreateRenderFrame(int proxy_routing_id,
   params.replication_state.sandbox_flags =
       frame_tree_node()->pending_sandbox_flags();
 
-  params.frame_owner_properties = frame_tree_node()->frame_owner_properties();
+  params.frame_owner_properties =
+      FrameOwnerProperties(frame_tree_node()->frame_owner_properties());
 
   if (render_widget_host_) {
     params.widget_params.routing_id = render_widget_host_->GetRoutingID();
@@ -903,7 +905,7 @@ void RenderFrameHostImpl::OnCreateChildFrame(
     const std::string& frame_name,
     const std::string& frame_unique_name,
     blink::WebSandboxFlags sandbox_flags,
-    const blink::WebFrameOwnerProperties& frame_owner_properties) {
+    const FrameOwnerProperties& frame_owner_properties) {
   // TODO(lukasza): Call ReceivedBadMessage when |frame_unique_name| is empty.
   DCHECK(!frame_unique_name.empty());
 
@@ -1658,7 +1660,7 @@ void RenderFrameHostImpl::OnDidChangeSandboxFlags(
 
 void RenderFrameHostImpl::OnDidChangeFrameOwnerProperties(
     int32_t frame_routing_id,
-    const blink::WebFrameOwnerProperties& properties) {
+    const FrameOwnerProperties& properties) {
   FrameTreeNode* child = FindAndVerifyChild(
       frame_routing_id, bad_message::RFH_OWNER_PROPERTY);
   if (!child)
@@ -2250,7 +2252,8 @@ void RenderFrameHostImpl::DispatchBeforeUnload(bool for_navigation,
     // cancel the timeout timer.
     render_view_host_->GetWidget()->increment_in_flight_event_count();
     render_view_host_->GetWidget()->StartHangMonitorTimeout(
-        TimeDelta::FromMilliseconds(RenderViewHostImpl::kUnloadTimeoutMS));
+        TimeDelta::FromMilliseconds(RenderViewHostImpl::kUnloadTimeoutMS),
+        RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_BEFORE_UNLOAD);
     send_before_unload_start_time_ = base::TimeTicks::Now();
     Send(new FrameMsg_BeforeUnload(routing_id_, is_reload));
   }
@@ -2303,10 +2306,18 @@ void RenderFrameHostImpl::JavaScriptDialogClosed(
   // leave the current page. In this case, use the regular timeout value used
   // during the (before)unload handling.
   if (is_waiting) {
+    RenderWidgetHostDelegate::RendererUnresponsiveType type =
+        RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_DIALOG_CLOSED;
+    if (success) {
+      type = is_waiting_for_beforeunload_ack_
+                 ? RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_BEFORE_UNLOAD
+                 : RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNLOAD;
+    }
     render_view_host_->GetWidget()->StartHangMonitorTimeout(
         success
             ? TimeDelta::FromMilliseconds(RenderViewHostImpl::kUnloadTimeoutMS)
-            : render_view_host_->GetWidget()->hung_renderer_delay());
+            : render_view_host_->GetWidget()->hung_renderer_delay(),
+        type);
   }
 
   FrameHostMsg_RunJavaScriptMessage::WriteReplyParams(reply_msg,
@@ -2321,7 +2332,8 @@ void RenderFrameHostImpl::JavaScriptDialogClosed(
   // correctly while waiting for a response.
   if (is_waiting && dialog_was_suppressed) {
     render_view_host_->GetWidget()->delegate()->RendererUnresponsive(
-        render_view_host_->GetWidget());
+        render_view_host_->GetWidget(),
+        RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_DIALOG_SUPPRESSED);
   }
 }
 

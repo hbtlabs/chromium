@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import sys
-
 from page_sets.system_health import platforms
 from page_sets.system_health import system_health_story
 
@@ -13,12 +11,7 @@ from page_sets.login_helpers import google_login
 
 class _LoadingStory(system_health_story.SystemHealthStory):
   """Abstract base class for single-page System Health user stories."""
-  pass
-
-
-def IterAllStoryClasses():
-  return system_health_story.IterAllStoryClasses(
-      sys.modules[__name__], _LoadingStory)
+  ABSTRACT_STORY = True
 
 
 ################################################################################
@@ -83,7 +76,7 @@ class LoadFacebookStory(_LoadingStory):
 
 class LoadTwitterStory(_LoadingStory):
   NAME = 'load:social:twitter'
-  URL = 'https://www.twitter.com/justinbieber?skip_interstitial=true'
+  URL = 'https://www.twitter.com/nasa'
 
 
 class LoadVkStory(_LoadingStory):
@@ -127,6 +120,11 @@ class LoadCnnStory(_LoadingStory):
   NAME = 'load:news:cnn'
   # Using "https://" shows "Your connection is not private".
   URL = 'http://edition.cnn.com'
+
+
+class LoadFacebookStory(_LoadingStory):
+  NAME = 'load:news:flipboard'
+  URL = 'https://flipboard.com/explore'
 
 
 class LoadHackerNewsStory(_LoadingStory):
@@ -179,10 +177,17 @@ class LoadWashingtonPostMobileStory(_LoadingStory):
   NAME = 'load:news:washingtonpost'
   URL = 'https://www.washingtonpost.com/pwa'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  _CLOSE_BUTTON_SELECTOR = '.close'
 
   def _DidLoadDocument(self, action_runner):
-    # Close the popup window.
-    action_runner.ClickElement(selector='.close')
+    # Close the popup window. On Nexus 9 (and probably other tables) the popup
+    # window does not have a "Close" button, instead it has only a "Send link
+    # to phone" button. So on tablets we run with the popup window open. The
+    # popup is transparent, so this is mostly an aesthetical issue.
+    has_button = action_runner.EvaluateJavaScript(
+        '!!document.querySelector("%s")' % self._CLOSE_BUTTON_SELECTOR)
+    if has_button:
+      action_runner.ClickElement(selector=self._CLOSE_BUTTON_SELECTOR)
 
 
 class LoadWikipediaStory(_LoadingStory):

@@ -212,10 +212,16 @@ WebInspector.TabbedEditorContainer.prototype = {
         if (userGesture)
             this._editorSelectedByUserAction();
 
+        var previousView = this._currentView;
         this._currentView = this.visibleView;
         this._addViewListeners();
 
-        var eventData = { currentFile: this._currentFile, userGesture: userGesture };
+        var eventData = {
+            currentFile: this._currentFile,
+            currentView: this._currentView,
+            previousView: previousView,
+            userGesture: userGesture
+        };
         this.dispatchEventToListeners(WebInspector.TabbedEditorContainer.Events.EditorSelected, eventData);
     },
 
@@ -509,11 +515,11 @@ WebInspector.TabbedEditorContainer.prototype = {
     },
 
     /**
-     * @return {!WebInspector.UISourceCode} uiSourceCode
+     * @return {?WebInspector.UISourceCode} uiSourceCode
      */
     currentFile: function()
     {
-        return this._currentFile;
+        return this._currentFile || null;
     },
 
     __proto__: WebInspector.Object.prototype

@@ -21,6 +21,7 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_ui_util.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -36,12 +37,14 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/sync_driver/sync_error_controller.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
 #include "grit/theme_resources.h"
@@ -184,7 +187,9 @@ class BackgroundColorHoverButton : public views::LabelButton {
   BackgroundColorHoverButton(views::ButtonListener* listener,
                              const base::string16& text)
       : views::LabelButton(listener, text) {
-    SetImageLabelSpacing(views::kItemLabelSpacing);
+    SetImageLabelSpacing(switches::IsMaterialDesignUserMenu()
+                             ? (kMaterialMenuEdgeMargin - 2)
+                             : views::kItemLabelSpacing);
     const int button_margin = switches::IsMaterialDesignUserMenu()
                                   ? kMaterialMenuEdgeMargin
                                   : views::kButtonHEdgeMarginNew;
@@ -764,6 +769,17 @@ void ProfileChooserView::ResetView() {
   open_other_profile_indexes_map_.clear();
   delete_account_button_map_.clear();
   reauth_account_button_map_.clear();
+  tutorial_sync_settings_ok_button_ = nullptr;
+  tutorial_close_button_ = nullptr;
+  tutorial_sync_settings_link_ = nullptr;
+  tutorial_see_whats_new_button_ = nullptr;
+  tutorial_not_you_link_ = nullptr;
+  tutorial_learn_more_link_ = nullptr;
+  sync_error_signin_button_ = nullptr;
+  sync_error_passphrase_button_ = nullptr;
+  sync_error_upgrade_button_ = nullptr;
+  sync_error_signin_again_button_ = nullptr;
+  sync_error_signout_button_ = nullptr;
   manage_accounts_link_ = nullptr;
   manage_accounts_button_ = nullptr;
   signin_current_profile_button_ = nullptr;
@@ -783,12 +799,6 @@ void ProfileChooserView::ResetView() {
   add_person_button_ = nullptr;
   disconnect_button_ = nullptr;
   switch_user_cancel_button_ = nullptr;
-  tutorial_sync_settings_ok_button_ = nullptr;
-  tutorial_close_button_ = nullptr;
-  tutorial_sync_settings_link_ = nullptr;
-  tutorial_see_whats_new_button_ = nullptr;
-  tutorial_not_you_link_ = nullptr;
-  tutorial_learn_more_link_ = nullptr;
 }
 
 void ProfileChooserView::Init() {
@@ -873,7 +883,12 @@ void ProfileChooserView::ShowView(profiles::BubbleViewMode view_to_display,
     DCHECK(switches::IsEnableAccountConsistency());
     const AvatarMenu::Item& active_item = avatar_menu->GetItemAt(
         avatar_menu->GetActiveProfileIndex());
-    DCHECK(active_item.signed_in);
+    if (!active_item.signed_in) {
+      // This is the case when the user selects the sign out option in the user
+      // menu upon encountering unrecoverable errors. Afterwards, the profile
+      // chooser view is shown instead of the account management view.
+      view_to_display = profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
+    }
   }
 
   if (browser_->profile()->IsSupervised() &&
@@ -1001,8 +1016,22 @@ void ProfileChooserView::ButtonPressed(views::Button* sender,
     PostActionPerformed(ProfileMetrics::PROFILE_DESKTOP_MENU_LOCK);
   } else if (sender == close_all_windows_button_) {
     profiles::CloseProfileWindows(browser_->profile());
-  } else if (sender == auth_error_email_button_) {
+  } else if (sender == auth_error_email_button_ ||
+             sender == sync_error_signin_button_) {
     ShowViewFromMode(profiles::BUBBLE_VIEW_MODE_GAIA_REAUTH);
+  } else if (sender == sync_error_passphrase_button_) {
+    chrome::ShowSettingsSubPage(browser_, chrome::kSyncSetupSubPage);
+  } else if (sender == sync_error_upgrade_button_) {
+    chrome::OpenUpdateChromeDialog(browser_);
+  } else if (sender == sync_error_signin_again_button_) {
+    if (ProfileSyncServiceFactory::GetForProfile(browser_->profile()))
+      ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
+    SigninManagerFactory::GetForProfile(browser_->profile())
+        ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
+                  signin_metrics::SignoutDelete::IGNORE_METRIC);
+    ShowViewFromMode(profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN);
+  } else if (sender == sync_error_signout_button_) {
+    chrome::ShowSettingsSubPage(browser_, chrome::kSignOutSubPage);
   } else if (sender == tutorial_sync_settings_ok_button_) {
     LoginUIServiceFactory::GetForProfile(browser_->profile())->
         SyncConfirmationUIClosed(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
@@ -1176,6 +1205,7 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
   // Separate items into active and alternatives.
   Indexes other_profiles;
   views::View* tutorial_view = NULL;
+  views::View* sync_error_view = NULL;
   views::View* current_profile_view = NULL;
   views::View* current_profile_accounts = NULL;
   views::View* option_buttons_view = NULL;
@@ -1190,10 +1220,13 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
               ? CreateMaterialDesignCurrentProfileView(item, false)
               : CreateCurrentProfileView(item, false);
       if (IsProfileChooser(view_mode_)) {
-        tutorial_view = CreateTutorialViewIfNeeded(item);
+        if (!switches::IsMaterialDesignUserMenu())
+          tutorial_view = CreateTutorialViewIfNeeded(item);
       } else {
         current_profile_accounts = CreateCurrentProfileAccountsView(item);
       }
+      if (switches::IsMaterialDesignUserMenu())
+        sync_error_view = CreateSyncErrorViewIfNeeded();
     } else {
       other_profiles.push_back(i);
     }
@@ -1205,6 +1238,13 @@ void ProfileChooserView::PopulateCompleteProfileChooserView(
     layout->AddView(tutorial_view);
   } else {
     tutorial_mode_ = profiles::TUTORIAL_MODE_NONE;
+  }
+
+  if (sync_error_view) {
+    layout->StartRow(1, 0);
+    layout->AddView(sync_error_view);
+    layout->StartRow(0, 0);
+    layout->AddView(new views::Separator(views::Separator::HORIZONTAL));
   }
 
   if (!current_profile_view) {
@@ -1431,6 +1471,127 @@ views::View* ProfileChooserView::CreateTutorialView(
     else
       layout->SkipColumns(1);
   }
+
+  return view;
+}
+
+views::View* ProfileChooserView::CreateSyncErrorViewIfNeeded() {
+  ProfileSyncService* service =
+      ProfileSyncServiceFactory::GetForProfile(browser_->profile());
+
+  // The order or priority is going to be: 1. Unrecoverable errors.
+  // 2. Auth errors. 3. Protocol errors. 4. Passphrase errors.
+  if (service && service->HasUnrecoverableError()) {
+    // An unrecoverable error is sometimes accompanied by an actionable error.
+    // If an actionable error is not set to be UPGRADE_CLIENT, then show a
+    // generic unrecoverable error message.
+    ProfileSyncService::Status status;
+    service->QueryDetailedSyncStatus(&status);
+    if (status.sync_protocol_error.action != syncer::UPGRADE_CLIENT) {
+      // Display different messages and buttons for managed accounts.
+      if (SigninManagerFactory::GetForProfile(browser_->profile())
+              ->IsSignoutProhibited()) {
+        // For a managed user, the user is directed to the signout
+        // confirmation dialogue in the settings page.
+        return CreateSyncErrorView(IDS_SYNC_ERROR_USER_MENU_SIGNOUT_MESSAGE,
+                                   IDS_SYNC_ERROR_USER_MENU_SIGNOUT_BUTTON,
+                                   &sync_error_signout_button_);
+      }
+      // For a non-managed user, we sign out on the user's behalf and prompt
+      // the user to sign in again.
+      return CreateSyncErrorView(IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_MESSAGE,
+                                 IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_BUTTON,
+                                 &sync_error_signin_again_button_);
+    }
+  }
+
+  // Check for an auth error.
+  if (HasAuthError(browser_->profile())) {
+    return CreateSyncErrorView(IDS_SYNC_ERROR_USER_MENU_SIGNIN_MESSAGE,
+                               IDS_SYNC_ERROR_USER_MENU_SIGNIN_BUTTON,
+                               &sync_error_signin_button_);
+  }
+
+  // Check for sync errors if the sync service is enabled.
+  if (service) {
+    // Check for an actionable UPGRADE_CLIENT error.
+    ProfileSyncService::Status status;
+    service->QueryDetailedSyncStatus(&status);
+    if (status.sync_protocol_error.action == syncer::UPGRADE_CLIENT) {
+      return CreateSyncErrorView(IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE,
+                                 IDS_SYNC_ERROR_USER_MENU_UPGRADE_BUTTON,
+                                 &sync_error_upgrade_button_);
+    }
+
+    // Check for a sync passphrase error.
+    SyncErrorController* sync_error_controller =
+        service->sync_error_controller();
+    if (sync_error_controller && sync_error_controller->HasError()) {
+      return CreateSyncErrorView(IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_MESSAGE,
+                                 IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_BUTTON,
+                                 &sync_error_passphrase_button_);
+    }
+  }
+
+  // There is no error.
+  return nullptr;
+}
+
+views::View* ProfileChooserView::CreateSyncErrorView(
+    const int content_string_id,
+    const int button_string_id,
+    views::LabelButton** button_out) {
+  // Sets an overall horizontal layout.
+  views::View* view = new views::View();
+  views::BoxLayout* layout = new views::BoxLayout(
+      views::BoxLayout::kHorizontal, kMaterialMenuEdgeMargin,
+      kMaterialMenuEdgeMargin, views::kUnrelatedControlHorizontalSpacing);
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  view->SetLayoutManager(layout);
+
+  // Adds the sync problem icon.
+  views::ImageView* sync_problem_icon = new views::ImageView();
+  sync_problem_icon->SetImage(gfx::CreateVectorIcon(
+      gfx::VectorIconId::SYNC_PROBLEM, 20, gfx::kGoogleRed700));
+  view->AddChildView(sync_problem_icon);
+
+  // Adds a vertical view to organize the error title, message, and button.
+  views::View* vertical_view = new views::View();
+  views::BoxLayout* vertical_layout =
+      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0,
+                           views::kRelatedControlSmallVerticalSpacing);
+  vertical_layout->set_cross_axis_alignment(
+      views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
+  vertical_view->SetLayoutManager(vertical_layout);
+
+  // Adds the title.
+  views::Label* title_label = new views::Label(
+      l10n_util::GetStringUTF16(IDS_SYNC_ERROR_USER_MENU_TITLE));
+  title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title_label->SetEnabledColor(gfx::kGoogleRed700);
+  vertical_view->AddChildView(title_label);
+
+  // Adds body content.
+  views::Label* content_label =
+      new views::Label(l10n_util::GetStringUTF16(content_string_id));
+  content_label->SetMultiLine(true);
+  content_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  vertical_view->AddChildView(content_label);
+
+  // Adds a padding row between error title/content and the button.
+  SizedContainer* padding =
+      new SizedContainer(gfx::Size(0, views::kRelatedControlVerticalSpacing));
+  vertical_view->AddChildView(padding);
+
+  // Adds an action button.
+  *button_out = views::MdTextButton::CreateSecondaryUiBlueButton(
+      this, l10n_util::GetStringUTF16(button_string_id));
+  vertical_view->AddChildView(*button_out);
+
+  view->AddChildView(vertical_view);
+  view->SetBorder(views::Border::CreateEmptyBorder(
+      0, 0, views::kRelatedControlSmallVerticalSpacing, 0));
 
   return view;
 }
@@ -1699,6 +1860,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
   views::GridLayout* layout =
       CreateSingleColumnLayout(view, GetFixedMenuWidth());
 
+  const bool is_guest = browser_->profile()->IsGuestSession();
   const int kIconSize = switches::IsMaterialDesignUserMenu() ? 20 : 16;
   if (switches::IsMaterialDesignUserMenu()) {
     // Add the user switching buttons
@@ -1713,6 +1875,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
         views::LabelButton* button = new BackgroundColorHoverButton(
             this, profiles::GetProfileSwitcherTextForItem(item),
             *image.ToImageSkia());
+        button->SetImageLabelSpacing(kMaterialMenuEdgeMargin);
         open_other_profile_indexes_map_[button] = i;
 
         layout->StartRow(1, 0);
@@ -1721,7 +1884,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
     }
 
     // Add the "Guest" button for browsing as guest
-    if (!browser_->profile()->IsGuestSession()) {
+    if (!is_guest) {
       PrefService* service = g_browser_process->local_state();
       DCHECK(service);
       if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
@@ -1735,14 +1898,19 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
     }
   }
 
-  base::string16 text = browser_->profile()->IsGuestSession() ?
-      l10n_util::GetStringUTF16(IDS_PROFILES_EXIT_GUEST) :
-      l10n_util::GetStringUTF16(IDS_PROFILES_SWITCH_USERS_BUTTON);
-  gfx::VectorIconId settings_icon = gfx::VectorIconId::ACCOUNT_BOX;
-  if (!browser_->profile()->IsGuestSession()
-      && switches::IsMaterialDesignUserMenu()) {
-    text = l10n_util::GetStringUTF16(IDS_PROFILES_MANAGE_USERS_BUTTON);
-    settings_icon = gfx::VectorIconId::SETTINGS;
+  base::string16 text;
+  gfx::VectorIconId settings_icon;
+  if (switches::IsMaterialDesignUserMenu()) {
+    text = is_guest
+               ? l10n_util::GetStringUTF16(IDS_PROFILES_EXIT_GUEST)
+               : l10n_util::GetStringUTF16(IDS_PROFILES_MANAGE_USERS_BUTTON);
+    settings_icon =
+        is_guest ? gfx::VectorIconId::CLOSE_ALL : gfx::VectorIconId::SETTINGS;
+  } else {
+    text = is_guest
+               ? l10n_util::GetStringUTF16(IDS_PROFILES_EXIT_GUEST)
+               : l10n_util::GetStringUTF16(IDS_PROFILES_SWITCH_USERS_BUTTON);
+    settings_icon = gfx::VectorIconId::ACCOUNT_BOX;
   }
   users_button_ = new BackgroundColorHoverButton(
       this, text, gfx::CreateVectorIcon(settings_icon, kIconSize,
@@ -1776,8 +1944,7 @@ views::View* ProfileChooserView::CreateOptionsView(bool display_lock,
                               gfx::kChromeIconGrey));
     layout->StartRow(1, 0);
     layout->AddView(lock_button_);
-  } else if (switches::IsMaterialDesignUserMenu() &&
-             !browser_->profile()->IsGuestSession()) {
+  } else if (switches::IsMaterialDesignUserMenu() && !is_guest) {
     int num_browsers = 0;
     for (auto* browser : *BrowserList::GetInstance()) {
       if (browser->profile()->GetOriginalProfile() ==

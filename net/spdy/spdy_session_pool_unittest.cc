@@ -518,15 +518,14 @@ TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   // can ignore issues of how dependencies are set.  We default to
   // setting them (when doing the appropriate protocol) since that's
   // where we're eventually headed for all HTTP/2 connections.
-  session_deps_.enable_priority_dependencies = true;
-  SpdyTestUtil spdy_util(/*enable_priority_dependencies*/ true);
+  SpdyTestUtil spdy_util;
 
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
   };
-  std::unique_ptr<SpdySerializedFrame> req(
+  SpdySerializedFrame req(
       spdy_util.ConstructSpdyGet("http://www.a.com", 1, MEDIUM));
-  MockWrite writes[] = {CreateMockWrite(*req, 1)};
+  MockWrite writes[] = {CreateMockWrite(req, 1)};
 
   StaticSocketDataProvider dataA(reads, arraysize(reads), writes,
                                  arraysize(writes));
@@ -552,8 +551,7 @@ TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   test::StreamDelegateDoNothing delegateA(spdy_streamA);
   spdy_streamA->SetDelegate(&delegateA);
 
-  std::unique_ptr<SpdyHeaderBlock> headers(
-      new SpdyHeaderBlock(spdy_util.ConstructGetHeaderBlock(urlA.spec())));
+  SpdyHeaderBlock headers(spdy_util.ConstructGetHeaderBlock(urlA.spec()));
   spdy_streamA->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   EXPECT_TRUE(spdy_streamA->HasUrlFromHeaders());
 

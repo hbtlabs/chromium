@@ -27,7 +27,7 @@ static_library("lib") {
 }
 
 # GYP version: components/crash.gypi:crash_component
-source_set("app") {
+static_library("app") {
   sources = [
     "crash_switches.cc",
     "crash_switches.h",
@@ -161,8 +161,10 @@ source_set("app_breakpad_mac_win_to_be_deleted") {
 
     defines = [ "CRASH_IMPLEMENTATION" ]
 
-    deps += [
+    public_deps = [
       ":lib",
+    ]
+    deps += [
       "//base",
       "//base:base_static",
       "//breakpad:client",

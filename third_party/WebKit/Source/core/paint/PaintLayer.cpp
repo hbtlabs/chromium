@@ -1601,7 +1601,7 @@ bool PaintLayer::hitTest(HitTestResult& result)
 
     // LayoutView should make sure to update layout before entering hit testing
     ASSERT(!layoutObject()->frame()->view()->layoutPending());
-    ASSERT(!layoutObject()->document().layoutView()->needsLayout());
+    ASSERT(!layoutObject()->document().layoutViewItem().needsLayout());
 
     const HitTestRequest& request = result.hitTestRequest();
     const HitTestLocation& hitTestLocation = result.hitTestLocation();
@@ -2457,23 +2457,13 @@ bool PaintLayer::childBackgroundIsKnownToBeOpaqueInRect(const LayoutRect& localR
     return false;
 }
 
-bool PaintLayer::isSelfPaintingLayerForIntrinsicOrScrollingReasons() const
-{
-    return layoutObject()->layerTypeRequired() == NormalPaintLayer
-        || (m_scrollableArea && m_scrollableArea->hasOverlayScrollbars())
-        || needsCompositedScrolling();
-}
-
 bool PaintLayer::shouldBeSelfPaintingLayer() const
 {
     if (layoutObject()->isLayoutPart() && toLayoutPart(layoutObject())->requiresAcceleratedCompositing())
         return true;
-    return isSelfPaintingLayerForIntrinsicOrScrollingReasons();
-}
-
-bool PaintLayer::isSelfPaintingOnlyBecauseIsCompositedPart() const
-{
-    return shouldBeSelfPaintingLayer() && !isSelfPaintingLayerForIntrinsicOrScrollingReasons();
+    return layoutObject()->layerTypeRequired() == NormalPaintLayer
+        || (m_scrollableArea && m_scrollableArea->hasOverlayScrollbars())
+        || needsCompositedScrolling();
 }
 
 void PaintLayer::updateSelfPaintingLayer()
@@ -2927,7 +2917,7 @@ void PaintLayer::endShouldKeepAliveAllClientsRecursive()
 #endif
 
 DisableCompositingQueryAsserts::DisableCompositingQueryAsserts()
-    : m_disabler(gCompositingQueryMode, CompositingQueriesAreAllowed) { }
+    : m_disabler(&gCompositingQueryMode, CompositingQueriesAreAllowed) { }
 
 } // namespace blink
 

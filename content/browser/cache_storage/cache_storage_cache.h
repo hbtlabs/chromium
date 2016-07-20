@@ -186,9 +186,6 @@ class CONTENT_EXPORT CacheStorageCache {
       scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context);
 
-  // Returns true if the backend is ready to operate.
-  bool LazyInitialize();
-
   // Returns all entries in this cache.
   void OpenAllEntries(const OpenAllEntriesCallback& callback);
   void DidOpenNextEntry(std::unique_ptr<OpenAllEntriesContext> entries_context,
@@ -333,26 +330,11 @@ class CONTENT_EXPORT CacheStorageCache {
                               int rv);
 
   void InitBackend();
-  void InitDidCreateBackend(CacheStorageError cache_create_error);
-  void InitGotCacheSize(CacheStorageError cache_create_error, int cache_size);
-
-  void PendingClosure(const base::Closure& callback);
-  void PendingErrorCallback(const ErrorCallback& callback,
-                            CacheStorageError error);
-  void PendingResponseCallback(
-      const ResponseCallback& callback,
-      CacheStorageError error,
-      std::unique_ptr<ServiceWorkerResponse> response,
-      std::unique_ptr<storage::BlobDataHandle> blob_data_handle);
-  void PendingResponsesCallback(
-      const ResponsesCallback& callback,
-      CacheStorageError error,
-      std::unique_ptr<Responses> responses,
-      std::unique_ptr<BlobDataHandles> blob_data_handles);
-  void PendingRequestsCallback(const RequestsCallback& callback,
-                               CacheStorageError error,
-                               std::unique_ptr<Requests> requests);
-  void PendingSizeCallback(const SizeCallback& callback, int64_t size);
+  void InitDidCreateBackend(const base::Closure& callback,
+                            CacheStorageError cache_create_error);
+  void InitGotCacheSize(const base::Closure& callback,
+                        CacheStorageError cache_create_error,
+                        int cache_size);
 
   void PopulateResponseMetadata(const CacheMetadata& metadata,
                                 ServiceWorkerResponse* response);

@@ -57,9 +57,6 @@ const int kNumberOfMismatchesThreshold = 3;
 const int kCommonNamePrefixRemovalFieldThreshold = 3;
 const int kMinCommonNamePrefixLength = 16;
 
-// Maximum number of characters in the field label to be encoded in a proto.
-const int kMaxFieldLabelNumChars = 200;
-
 // Helper for |EncodeUploadRequest()| that creates a bit field corresponding to
 // |available_field_types| and returns the hex representation as a string.
 std::string EncodeFieldTypes(const ServerFieldTypeSet& available_field_types) {
@@ -1127,12 +1124,6 @@ void FormStructure::EncodeFormForQuery(
       if (!field->name.empty())
         added_field->set_name(base::UTF16ToUTF8(field->name));
 
-      if (!field->label.empty()) {
-        std::string truncated;
-        base::TruncateUTF8ToByteSize(base::UTF16ToUTF8(field->label),
-                                     kMaxFieldLabelNumChars, &truncated);
-        added_field->set_label(truncated);
-      }
     }
   }
 }
@@ -1156,6 +1147,11 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
       if (field->generation_type())
         added_field->set_generation_type(field->generation_type());
 
+      if (field->form_classifier_outcome()) {
+        added_field->set_form_classifier_outcome(
+            field->form_classifier_outcome());
+      }
+
       unsigned sig = 0;
       // The signature is a required field. If it can't be parsed, the proto
       // would not serialize.
@@ -1168,13 +1164,6 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
 
         if (!field->name.empty())
           added_field->set_name(base::UTF16ToUTF8(field->name));
-
-        if (!field->label.empty()) {
-          std::string truncated;
-          base::TruncateUTF8ToByteSize(base::UTF16ToUTF8(field->label),
-                                       kMaxFieldLabelNumChars, &truncated);
-          added_field->set_label(truncated);
-        }
 
         if (!field->autocomplete_attribute.empty())
           added_field->set_autocomplete(field->autocomplete_attribute);

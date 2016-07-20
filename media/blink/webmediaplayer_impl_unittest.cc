@@ -132,7 +132,10 @@ class WebMediaPlayerImplTest : public testing::Test {
   void SetPaused(bool is_paused) { wmpi_->paused_ = is_paused; }
   void SetSeeking(bool is_seeking) { wmpi_->seeking_ = is_seeking; }
   void SetEnded(bool is_ended) { wmpi_->ended_ = is_ended; }
-  void SetFullscreen(bool is_fullscreen) { wmpi_->fullscreen_ = is_fullscreen; }
+
+  void SetFullscreen(bool is_fullscreen) {
+    wmpi_->overlay_enabled_ = is_fullscreen;
+  }
 
   void SetMetadata(bool has_audio, bool has_video) {
     wmpi_->SetNetworkState(blink::WebMediaPlayer::NetworkStateLoaded);
@@ -305,6 +308,33 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Playing) {
   EXPECT_FALSE(state.is_memory_reporting_enabled);
   EXPECT_TRUE(state.is_suspended);
 
+  state = ComputeMustSuspendPlayState();
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
+  EXPECT_FALSE(state.is_memory_reporting_enabled);
+  EXPECT_TRUE(state.is_suspended);
+}
+
+TEST_F(WebMediaPlayerImplTest, ComputePlayState_PlayingThenUnderflow) {
+  WebMediaPlayerImpl::PlayState state;
+  SetMetadata(true, true);
+  SetReadyState(blink::WebMediaPlayer::ReadyStateHaveFutureData);
+  SetPaused(false);
+  SetReadyState(blink::WebMediaPlayer::ReadyStateHaveCurrentData);
+
+  // Underflow should not trigger idle suspend. The user is still playing the
+  // the video, just waiting on the network.
+  state = ComputePlayState();
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::PLAYING, state.delegate_state);
+  EXPECT_TRUE(state.is_memory_reporting_enabled);
+  EXPECT_FALSE(state.is_suspended);
+
+  // Background suspend should still be possible during underflow.
+  state = ComputeBackgroundedPlayState();
+  EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
+  EXPECT_FALSE(state.is_memory_reporting_enabled);
+  EXPECT_TRUE(state.is_suspended);
+
+  // Forced suspend should still be possible during underflow.
   state = ComputeMustSuspendPlayState();
   EXPECT_EQ(WebMediaPlayerImpl::DelegateState::GONE, state.delegate_state);
   EXPECT_FALSE(state.is_memory_reporting_enabled);

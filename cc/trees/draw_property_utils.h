@@ -25,9 +25,15 @@ class RenderSurfaceImpl;
 class EffectTree;
 class TransformTree;
 class PropertyTrees;
+struct EffectNode;
 
 namespace draw_property_utils {
 
+void CC_EXPORT PostConcatSurfaceContentsScale(const EffectNode* effect_node,
+                                              gfx::Transform* transform);
+
+void CC_EXPORT ConcatInverseSurfaceContentsScale(const EffectNode* effect_node,
+                                                 gfx::Transform* transform);
 // Computes combined clips for every node in |clip_tree|. This function requires
 // that |transform_tree| has been updated via |ComputeTransforms|.
 void CC_EXPORT ComputeClips(ClipTree* clip_tree,
@@ -103,7 +109,8 @@ void CC_EXPORT VerifyTransformTreeCalculations(const LayerImplList& layer_list,
                                                PropertyTrees* property_trees);
 
 gfx::Transform CC_EXPORT DrawTransform(const LayerImpl* layer,
-                                       const TransformTree& tree);
+                                       const TransformTree& transform_tree,
+                                       const EffectTree& effect_tree);
 
 gfx::Transform CC_EXPORT ScreenSpaceTransform(const Layer* layer,
                                               const TransformTree& tree);

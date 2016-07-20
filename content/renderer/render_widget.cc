@@ -257,7 +257,8 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       frame_swap_message_queue_(new FrameSwapMessageQueue()),
       resizing_mode_selector_(new ResizingModeSelector()),
       has_host_context_menu_location_(false),
-      has_focus_(false) {
+      has_focus_(false),
+      focused_pepper_plugin_(nullptr) {
   if (!swapped_out)
     RenderProcess::current()->AddRefProcess();
   DCHECK(RenderThread::Get());
@@ -1219,9 +1220,6 @@ void RenderWidget::show(WebNavigationPolicy) {
   SetPendingWindowRect(initial_rect_);
 }
 
-void RenderWidget::didFocus() {
-}
-
 void RenderWidget::DoDeferredClose() {
   WillCloseLayerTreeView();
   Send(new ViewHostMsg_Close(routing_id_));
@@ -1315,7 +1313,7 @@ void RenderWidget::SetPendingWindowRect(const WebRect& rect) {
   pending_window_rect_count_++;
 }
 
-WebRect RenderWidget::rootWindowRect() {
+gfx::Rect RenderWidget::RootWindowRect() {
   if (pending_window_rect_count_) {
     // NOTE(mbelshe): If there is a pending_window_rect_, then getting
     // the RootWindowRect is probably going to return wrong results since the
@@ -1337,6 +1335,18 @@ void RenderWidget::OnImeSetComposition(
     const std::vector<WebCompositionUnderline>& underlines,
     const gfx::Range& replacement_range,
     int selection_start, int selection_end) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    focused_pepper_plugin_->render_frame()->OnImeSetComposition(
+        text, underlines, selection_start, selection_end);
+    return;
+  }
+#endif
+  if (replacement_range.IsValid()) {
+    webwidget_->applyReplacementRange(replacement_range.start(),
+                                      replacement_range.length());
+  }
+
   if (!ShouldHandleImeEvent())
     return;
   ImeEventGuard guard(this);
@@ -1354,6 +1364,18 @@ void RenderWidget::OnImeSetComposition(
 void RenderWidget::OnImeConfirmComposition(const base::string16& text,
                                            const gfx::Range& replacement_range,
                                            bool keep_selection) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    focused_pepper_plugin_->render_frame()->OnImeConfirmComposition(
+        text, replacement_range, keep_selection);
+    return;
+  }
+#endif
+  if (replacement_range.IsValid()) {
+    webwidget_->applyReplacementRange(replacement_range.start(),
+                                      replacement_range.length());
+  }
+
   if (!ShouldHandleImeEvent())
     return;
   ImeEventGuard guard(this);
@@ -1441,6 +1463,10 @@ void RenderWidget::showImeIfNeeded() {
 }
 
 ui::TextInputType RenderWidget::GetTextInputType() {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return focused_pepper_plugin_->text_input_type();
+#endif
   if (webwidget_)
     return WebKitToUiTextInputType(webwidget_->textInputType());
   return ui::TEXT_INPUT_TYPE_NONE;
@@ -1653,6 +1679,19 @@ void RenderWidget::OnImeEventGuardFinish(ImeEventGuard* guard) {
 }
 
 void RenderWidget::GetSelectionBounds(gfx::Rect* focus, gfx::Rect* anchor) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    // TODO(kinaba) http://crbug.com/101101
+    // Current Pepper IME API does not handle selection bounds. So we simply
+    // use the caret position as an empty range for now. It will be updated
+    // after Pepper API equips features related to surrounding text retrieval.
+    blink::WebRect caret(focused_pepper_plugin_->GetCaretBounds());
+    convertViewportToWindow(&caret);
+    *focus = caret;
+    *anchor = caret;
+    return;
+  }
+#endif
   WebRect focus_webrect;
   WebRect anchor_webrect;
   webwidget_->selectionBounds(focus_webrect, anchor_webrect);
@@ -1717,8 +1756,8 @@ void RenderWidget::DidAutoResize(const gfx::Size& new_size) {
     size_ = gfx::Size(new_size_in_window.width, new_size_in_window.height);
 
     if (resizing_mode_selector_->is_synchronous_mode()) {
-      gfx::Rect new_pos(rootWindowRect().x, rootWindowRect().y, size_.width(),
-                        size_.height());
+      gfx::Rect new_pos(RootWindowRect().x(), RootWindowRect().y(),
+                        size_.width(), size_.height());
       view_screen_rect_ = new_pos;
       window_screen_rect_ = new_pos;
     }
@@ -1768,9 +1807,29 @@ void RenderWidget::GetCompositionCharacterBounds(
     std::vector<gfx::Rect>* bounds) {
   DCHECK(bounds);
   bounds->clear();
+
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return;
+#endif
+
+  if (!webwidget_)
+    return;
+  blink::WebVector<blink::WebRect> bounds_from_blink;
+  if (!webwidget_->getCompositionCharacterBounds(bounds_from_blink))
+    return;
+
+  for (size_t i = 0; i < bounds_from_blink.size(); ++i) {
+    convertViewportToWindow(&bounds_from_blink[i]);
+    bounds->push_back(bounds_from_blink[i]);
+  }
 }
 
 void RenderWidget::GetCompositionRange(gfx::Range* range) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return;
+#endif
   size_t location, length;
   if (webwidget_->compositionRange(&location, &length)) {
     range->set_start(location);
@@ -1798,6 +1857,10 @@ bool RenderWidget::ShouldUpdateCompositionInfo(
 }
 
 bool RenderWidget::CanComposeInline() {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return focused_pepper_plugin_->IsPluginAcceptingCompositionEvents();
+#endif
   return true;
 }
 

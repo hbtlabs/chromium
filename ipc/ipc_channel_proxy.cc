@@ -74,6 +74,7 @@ void ChannelProxy::Context::CreateChannel(
     std::unique_ptr<ChannelFactory> factory) {
   base::AutoLock l(channel_lifetime_lock_);
   DCHECK(!channel_);
+  DCHECK_EQ(factory->GetIPCTaskRunner(), ipc_task_runner_);
   channel_id_ = factory->GetName();
   channel_ = factory->BuildChannel(this);
   channel_send_thread_safe_ = channel_->IsSendThreadSafe();
@@ -120,7 +121,10 @@ bool ChannelProxy::Context::OnMessageReceivedNoFilter(const Message& message) {
 // Called on the IPC::Channel thread
 void ChannelProxy::Context::OnChannelConnected(int32_t peer_pid) {
   // We cache off the peer_pid so it can be safely accessed from both threads.
-  peer_pid_ = channel_->GetPeerPID();
+  {
+    base::AutoLock l(peer_pid_lock_);
+    peer_pid_ = channel_->GetPeerPID();
+  }
 
   // Add any pending filters.  This avoids a race condition where someone
   // creates a ChannelProxy, calls AddFilter, and then right after starts the
@@ -232,6 +236,8 @@ void ChannelProxy::Context::OnAddFilter() {
   // sure that channel_ is valid yet. When OnChannelConnected *is* called,
   // it invokes OnAddFilter, so any pending filter(s) will be added at that
   // time.
+  // No lock necessary for |peer_pid_| because it is only modified on this
+  // thread.
   if (peer_pid_ == base::kNullProcessId)
     return;
 
@@ -255,6 +261,8 @@ void ChannelProxy::Context::OnAddFilter() {
 
 // Called on the IPC::Channel thread
 void ChannelProxy::Context::OnRemoveFilter(MessageFilter* filter) {
+  // No lock necessary for |peer_pid_| because it is only modified on this
+  // thread.
   if (peer_pid_ == base::kNullProcessId) {
     // The channel is not yet connected, so any filters are still pending.
     base::AutoLock auto_lock(pending_filters_lock_);
@@ -324,18 +332,26 @@ void ChannelProxy::Context::OnDispatchConnected() {
   if (channel_connected_called_)
     return;
 
-  if (channel_) {
-    Channel::AssociatedInterfaceSupport* associated_interface_support =
-        channel_->GetAssociatedInterfaceSupport();
-    if (associated_interface_support) {
-      channel_associated_group_.reset(new mojo::AssociatedGroup(
-          *associated_interface_support->GetAssociatedGroup()));
+  {
+    base::AutoLock l(channel_lifetime_lock_);
+    if (channel_) {
+      Channel::AssociatedInterfaceSupport* associated_interface_support =
+          channel_->GetAssociatedInterfaceSupport();
+      if (associated_interface_support) {
+        channel_associated_group_.reset(new mojo::AssociatedGroup(
+            *associated_interface_support->GetAssociatedGroup()));
+      }
     }
   }
 
+  base::ProcessId peer_pid;
+  {
+    base::AutoLock l(peer_pid_lock_);
+    peer_pid = peer_pid_;
+  }
   channel_connected_called_ = true;
   if (listener_)
-    listener_->OnChannelConnected(peer_pid_);
+    listener_->OnChannelConnected(peer_pid);
 }
 
 // Called on the listener's thread
@@ -417,8 +433,7 @@ std::unique_ptr<ChannelProxy> ChannelProxy::Create(
 }
 
 ChannelProxy::ChannelProxy(Context* context)
-    : context_(context),
-      did_init_(false) {
+    : context_(context), did_init_(false) {
 #if defined(ENABLE_IPC_FUZZER)
   outgoing_message_filter_ = NULL;
 #endif
@@ -451,7 +466,9 @@ void ChannelProxy::Init(const IPC::ChannelHandle& channel_handle,
     create_pipe_now = true;
   }
 #endif  // defined(OS_POSIX)
-  Init(ChannelFactory::Create(channel_handle, mode), create_pipe_now);
+  Init(
+      ChannelFactory::Create(channel_handle, mode, context_->ipc_task_runner()),
+      create_pipe_now);
 }
 
 void ChannelProxy::Init(std::unique_ptr<ChannelFactory> factory,
@@ -564,6 +581,7 @@ void ChannelProxy::ClearIPCTaskRunner() {
 }
 
 base::ProcessId ChannelProxy::GetPeerPID() const {
+  base::AutoLock l(context_->peer_pid_lock_);
   return context_->peer_pid_;
 }
 

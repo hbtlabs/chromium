@@ -179,9 +179,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::ConsoleMarkTimeline:
         return replacedBy("'console.markTimeline'", "'console.timeStamp'");
 
-    case UseCounter::FileError:
-        return String::format("'FileError is deprecated and will be removed in %s. Please use the 'name' or 'message' attributes of the error rather than 'code'. See https://www.chromestatus.com/features/6687420359639040 for more details.", milestoneString(54));
-
     case UseCounter::CSSStyleSheetInsertRuleOptionalArg:
         return "Calling CSSStyleSheet.insertRule() with one argument is deprecated. Please pass the index argument as well: insertRule(x, 0).";
 
@@ -341,7 +338,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return "MediaStreamTrack.getSources is deprecated. See https://www.chromestatus.com/feature/4765305641369600 for more details.";
 
     case UseCounter::V8TouchEvent_InitTouchEvent_Method:
-        return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 53, "5730982598541312");
+        return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 54, "5730982598541312");
 
     case UseCounter::WebAnimationHyphenatedProperty:
         return "Hyphenated property names in Web Animations keyframes are invalid and therefore ignored. Please use camelCase instead.";
@@ -360,9 +357,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::During_Microtask_SyncXHR:
         return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 54, "5647113010544640");
-
-    case UseCounter::MediaStreamOnEnded:
-        return willBeRemoved("The MediaStream 'ended' event", 54, "5730404371791872");
 
     case UseCounter::UntrustedEventDefaultHandled:
         return String::format("A DOM event generated from JavaScript has triggered a default action inside the browser. This behavior is non-standard and will be removed in %s. See https://www.chromestatus.com/features/5718803933560832 for more details.", milestoneString(53));

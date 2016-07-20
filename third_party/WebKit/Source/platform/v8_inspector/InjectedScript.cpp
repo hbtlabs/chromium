@@ -47,7 +47,6 @@
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8Debugger.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
-#include "platform/v8_inspector/public/V8ToProtocolValue.h"
 
 using blink::protocol::Array;
 using blink::protocol::Debugger::CallFrame;
@@ -146,7 +145,7 @@ void InjectedScript::releaseObject(const String16& objectId)
     if (!object)
         return;
     int boundId = 0;
-    if (!object->getNumber("id", &boundId))
+    if (!object->getInteger("id", &boundId))
         return;
     m_native->unbind(boundId);
 }
@@ -307,20 +306,16 @@ v8::MaybeLocal<v8::Value> InjectedScript::resolveCallArgument(ErrorString* error
 
 std::unique_ptr<protocol::Runtime::ExceptionDetails> InjectedScript::createExceptionDetails(v8::Local<v8::Message> message)
 {
-    std::unique_ptr<protocol::Runtime::ExceptionDetails> exceptionDetailsObject = protocol::Runtime::ExceptionDetails::create().setText(toProtocolString(message->Get())).build();
-    exceptionDetailsObject->setUrl(toProtocolStringWithTypeCheck(message->GetScriptResourceName()));
-    exceptionDetailsObject->setScriptId(String16::number(message->GetScriptOrigin().ScriptID()->Value()));
-
-    v8::Maybe<int> lineNumber = message->GetLineNumber(m_context->context());
-    if (lineNumber.IsJust())
-        exceptionDetailsObject->setLineNumber(lineNumber.FromJust() - 1);
-    v8::Maybe<int> columnNumber = message->GetStartColumn(m_context->context());
-    if (columnNumber.IsJust())
-        exceptionDetailsObject->setColumnNumber(columnNumber.FromJust());
+    std::unique_ptr<protocol::Runtime::ExceptionDetails> exceptionDetailsObject = protocol::Runtime::ExceptionDetails::create()
+        .setText(toProtocolString(message->Get()))
+        .setScriptId(String16::fromInteger(message->GetScriptOrigin().ScriptID()->Value()))
+        .setLineNumber(message->GetLineNumber(m_context->context()).FromMaybe(1) - 1)
+        .setColumnNumber(message->GetStartColumn(m_context->context()).FromMaybe(0))
+        .build();
 
     v8::Local<v8::StackTrace> stackTrace = message->GetStackTrace();
     if (!stackTrace.IsEmpty() && stackTrace->GetFrameCount() > 0)
-        exceptionDetailsObject->setStack(m_context->debugger()->createStackTrace(stackTrace)->buildInspectorObject());
+        exceptionDetailsObject->setStackTrace(m_context->debugger()->createStackTrace(stackTrace)->buildInspectorObject());
     return exceptionDetailsObject;
 }
 
@@ -399,7 +394,7 @@ void InjectedScript::Scope::ignoreExceptionsAndMuteConsole()
 {
     DCHECK(!m_ignoreExceptionsAndMuteConsole);
     m_ignoreExceptionsAndMuteConsole = true;
-    m_debugger->client()->muteWarningsAndDeprecations();
+    m_debugger->client()->muteWarningsAndDeprecations(m_contextGroupId);
     m_previousPauseOnExceptionsState = setPauseOnExceptionsState(V8DebuggerImpl::DontPauseOnExceptions);
 }
 
@@ -433,7 +428,7 @@ InjectedScript::Scope::~Scope()
 {
     if (m_ignoreExceptionsAndMuteConsole) {
         setPauseOnExceptionsState(m_previousPauseOnExceptionsState);
-        m_debugger->client()->unmuteWarningsAndDeprecations();
+        m_debugger->client()->unmuteWarningsAndDeprecations(m_contextGroupId);
     }
     if (m_userGesture)
         m_debugger->client()->endUserGesture();

@@ -703,7 +703,7 @@ void ContainerNode::notifyNodeInserted(Node& root, ChildrenChangeSource source)
     childrenChanged(ChildrenChange::forInsertion(root, source));
 
     for (const auto& targetNode : postInsertionNotificationTargets) {
-        if (targetNode->inShadowIncludingDocument())
+        if (targetNode->isConnected())
             targetNode->didNotifySubtreeInsertionsToDocument();
     }
 }
@@ -716,7 +716,7 @@ void ContainerNode::notifyNodeInsertedInternal(Node& root, NodeVector& postInser
     for (Node& node : NodeTraversal::inclusiveDescendantsOf(root)) {
         // As an optimization we don't notify leaf nodes when when inserting
         // into detached subtrees that are not in a shadow tree.
-        if (!inShadowIncludingDocument() && !isInShadowTree() && !node.isContainerNode())
+        if (!isConnected() && !isInShadowTree() && !node.isContainerNode())
             continue;
         if (Node::InsertionShouldCallDidNotifySubtreeInsertions == node.insertedInto(this))
             postInsertionNotificationTargets.append(&node);
@@ -742,7 +742,7 @@ void ContainerNode::notifyNodeRemoved(Node& root)
     }
 }
 
-void ContainerNode::attach(const AttachContext& context)
+void ContainerNode::attachLayoutTree(const AttachContext& context)
 {
     AttachContext childrenContext(context);
     childrenContext.resolvedStyle = nullptr;
@@ -752,11 +752,11 @@ void ContainerNode::attach(const AttachContext& context)
         DCHECK(child->needsAttach() || childAttachedAllowedWhenAttachingChildren(this));
 #endif
         if (child->needsAttach())
-            child->attach(childrenContext);
+            child->attachLayoutTree(childrenContext);
     }
 
     clearChildNeedsStyleRecalc();
-    Node::attach(context);
+    Node::attachLayoutTree(context);
 }
 
 void ContainerNode::detach(const AttachContext& context)
@@ -1132,7 +1132,7 @@ static void dispatchChildInsertionEvents(Node& child)
         c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeInserted, true, c->parentNode()));
 
     // dispatch the DOMNodeInsertedIntoDocument event to all descendants
-    if (c->inShadowIncludingDocument() && document->hasListenerType(Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER)) {
+    if (c->isConnected() && document->hasListenerType(Document::DOMNODEINSERTEDINTODOCUMENT_LISTENER)) {
         for (; c; c = NodeTraversal::next(*c, &child))
             c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeInsertedIntoDocument, false));
     }
@@ -1161,7 +1161,7 @@ static void dispatchChildRemovalEvents(Node& child)
     }
 
     // Dispatch the DOMNodeRemovedFromDocument event to all descendants.
-    if (c->inShadowIncludingDocument() && document->hasListenerType(Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER)) {
+    if (c->isConnected() && document->hasListenerType(Document::DOMNODEREMOVEDFROMDOCUMENT_LISTENER)) {
         NodeChildRemovalTracker scope(child);
         for (; c; c = NodeTraversal::next(*c, &child))
             c->dispatchScopedEvent(MutationEvent::create(EventTypeNames::DOMNodeRemovedFromDocument, false));

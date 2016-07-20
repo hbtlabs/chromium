@@ -121,6 +121,7 @@ bool V8DebuggerImpl::enabled() const
     return !m_debuggerScript.IsEmpty();
 }
 
+// static
 int V8DebuggerImpl::contextId(v8::Local<v8::Context> context)
 {
     v8::Local<v8::Value> data = context->GetEmbedderData(static_cast<int>(v8::Context::kDebugIdIndex));
@@ -138,7 +139,8 @@ int V8DebuggerImpl::contextId(v8::Local<v8::Context> context)
     return dataString.substring(commaPos + 1, commaPos2 - commaPos - 1).toInt();
 }
 
-static int getGroupId(v8::Local<v8::Context> context)
+// static
+int V8DebuggerImpl::getGroupId(v8::Local<v8::Context> context)
 {
     v8::Local<v8::Value> data = context->GetEmbedderData(static_cast<int>(v8::Context::kDebugIdIndex));
     if (data.IsEmpty() || !data->IsString())
@@ -367,7 +369,7 @@ void V8DebuggerImpl::clearStepping()
     callDebuggerMethod("clearStepping", 0, argv);
 }
 
-bool V8DebuggerImpl::setScriptSource(const String16& sourceID, v8::Local<v8::String> newSource, bool preview, ErrorString* error, Maybe<protocol::Debugger::SetScriptSourceError>* errorData, JavaScriptCallFrames* newCallFrames, Maybe<bool>* stackChanged)
+bool V8DebuggerImpl::setScriptSource(const String16& sourceID, v8::Local<v8::String> newSource, bool preview, ErrorString* error, Maybe<protocol::Runtime::ExceptionDetails>* exceptionDetails, JavaScriptCallFrames* newCallFrames, Maybe<bool>* stackChanged)
 {
     class EnableLiveEditScope {
     public:
@@ -427,10 +429,11 @@ bool V8DebuggerImpl::setScriptSource(const String16& sourceID, v8::Local<v8::Str
     // Compile error.
     case 1:
         {
-            *errorData = protocol::Debugger::SetScriptSourceError::create()
-                .setMessage(toProtocolStringWithTypeCheck(resultTuple->Get(2)))
-                .setLineNumber(resultTuple->Get(3)->ToInteger(m_isolate)->Value())
-                .setColumnNumber(resultTuple->Get(4)->ToInteger(m_isolate)->Value()).build();
+            *exceptionDetails = protocol::Runtime::ExceptionDetails::create()
+                .setText(toProtocolStringWithTypeCheck(resultTuple->Get(2)))
+                .setScriptId(String16("0"))
+                .setLineNumber(resultTuple->Get(3)->ToInteger(m_isolate)->Value() - 1)
+                .setColumnNumber(resultTuple->Get(4)->ToInteger(m_isolate)->Value() - 1).build();
             return false;
         }
     }
@@ -499,7 +502,7 @@ void V8DebuggerImpl::handleProgramBreak(v8::Local<v8::Context> pausedContext, v8
         for (size_t i = 0; i < hitBreakpointNumbers->Length(); i++) {
             v8::Local<v8::Value> hitBreakpointNumber = hitBreakpointNumbers->Get(i);
             DCHECK(!hitBreakpointNumber.IsEmpty() && hitBreakpointNumber->IsInt32());
-            breakpointIds.push_back(String16::number(hitBreakpointNumber->Int32Value()));
+            breakpointIds.push_back(String16::fromInteger(hitBreakpointNumber->Int32Value()));
         }
     }
 
@@ -754,7 +757,7 @@ v8::Local<v8::Value> V8DebuggerImpl::functionLocation(v8::Local<v8::Context> con
     if (lineNumber == v8::Function::kLineOffsetNotFound || columnNumber == v8::Function::kLineOffsetNotFound)
         return v8::Null(m_isolate);
     v8::Local<v8::Object> location = v8::Object::New(m_isolate);
-    if (!location->Set(context, v8InternalizedString("scriptId"), toV8String(m_isolate, String16::number(scriptId))).FromMaybe(false))
+    if (!location->Set(context, v8InternalizedString("scriptId"), toV8String(m_isolate, String16::fromInteger(scriptId))).FromMaybe(false))
         return v8::Null(m_isolate);
     if (!location->Set(context, v8InternalizedString("lineNumber"), v8::Integer::New(m_isolate, lineNumber)).FromMaybe(false))
         return v8::Null(m_isolate);
@@ -878,7 +881,7 @@ void V8DebuggerImpl::disconnect(V8InspectorSessionImpl* session)
 InspectedContext* V8DebuggerImpl::getContext(int groupId, int contextId) const
 {
     ContextsByGroupMap::const_iterator contextGroupIt = m_contexts.find(groupId);
-    if (contextGroupIt == m_contexts.cend())
+    if (contextGroupIt == m_contexts.end())
         return nullptr;
 
     ContextByIdMap::iterator contextIt = contextGroupIt->second->find(contextId);
@@ -893,7 +896,7 @@ void V8DebuggerImpl::contextCreated(const V8ContextInfo& info)
     DCHECK(info.context->GetIsolate() == m_isolate);
     // TODO(dgozman): make s_lastContextId non-static.
     int contextId = atomicIncrement(&s_lastContextId);
-    String16 debugData = String16::number(info.contextGroupId) + "," + String16::number(contextId) + "," + (info.isDefault ? "default" : "nondefault");
+    String16 debugData = String16::fromInteger(info.contextGroupId) + "," + String16::fromInteger(contextId) + "," + (info.isDefault ? "default" : "nondefault");
     v8::HandleScope scope(m_isolate);
     v8::Context::Scope contextScope(info.context);
     info.context->SetEmbedderData(static_cast<int>(v8::Context::kDebugIdIndex), toV8String(m_isolate, debugData));
@@ -1055,12 +1058,7 @@ void V8DebuggerImpl::idleFinished()
     m_isolate->GetCpuProfiler()->SetIdle(false);
 }
 
-void V8DebuggerImpl::addConsoleMessage(int contextGroupId, MessageSource source, MessageLevel level, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId, const String16& requestIdentifier, const String16& workerId)
-{
-    ensureConsoleMessageStorage(contextGroupId)->addMessage(V8ConsoleMessage::createExternal(m_client->currentTimeMS(), source, level, message, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, requestIdentifier, workerId));
-}
-
-void V8DebuggerImpl::logToConsole(v8::Local<v8::Context> context, const String16& message, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2)
+void V8DebuggerImpl::logToConsole(v8::Local<v8::Context> context, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2)
 {
     int contextGroupId = getGroupId(context);
     InspectedContext* inspectedContext = getContext(contextGroupId, contextId(context));
@@ -1071,12 +1069,11 @@ void V8DebuggerImpl::logToConsole(v8::Local<v8::Context> context, const String16
         arguments.push_back(arg1);
     if (!arg2.IsEmpty())
         arguments.push_back(arg2);
-    ensureConsoleMessageStorage(contextGroupId)->addMessage(V8ConsoleMessage::createForConsoleAPI(m_client->currentTimeMS(), ConsoleAPIType::kLog, LogMessageLevel, message, arguments.size() ? &arguments : nullptr, captureStackTrace(false), inspectedContext));
+    ensureConsoleMessageStorage(contextGroupId)->addMessage(V8ConsoleMessage::createForConsoleAPI(m_client->currentTimeMS(), ConsoleAPIType::kLog, arguments, captureStackTrace(false), inspectedContext));
 }
 
 void V8DebuggerImpl::exceptionThrown(int contextGroupId, const String16& errorMessage, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
 {
-    m_client->messageAddedToConsole(contextGroupId, JSMessageSource, ErrorMessageLevel, errorMessage, url, lineNumber, columnNumber, stackTrace.get());
     unsigned exceptionId = ++m_lastExceptionId;
     std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, m_isolate, 0, v8::Local<v8::Value>(), exceptionId);
     ensureConsoleMessageStorage(contextGroupId)->addMessage(std::move(consoleMessage));
@@ -1087,17 +1084,8 @@ unsigned V8DebuggerImpl::promiseRejected(v8::Local<v8::Context> context, const S
     int contextGroupId = getGroupId(context);
     if (!contextGroupId)
         return 0;
-
-    const String16 defaultMessage = "Uncaught (in promise)";
-    String16 message = errorMessage;
-    if (message.isEmpty())
-        message = defaultMessage;
-    else if (message.startWith("Uncaught "))
-        message = message.substring(0, 8) + " (in promise)" + message.substring(8);
-
-    m_client->messageAddedToConsole(contextGroupId, JSMessageSource, ErrorMessageLevel, message, url, lineNumber, columnNumber, stackTrace.get());
     unsigned exceptionId = ++m_lastExceptionId;
-    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), message, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, m_isolate, contextId(context), exception, exceptionId);
+    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, m_isolate, contextId(context), exception, exceptionId);
     ensureConsoleMessageStorage(contextGroupId)->addMessage(std::move(consoleMessage));
     return exceptionId;
 }
@@ -1112,20 +1100,6 @@ void V8DebuggerImpl::promiseRejectionRevoked(v8::Local<v8::Context> context, uns
     ensureConsoleMessageStorage(contextGroupId)->addMessage(std::move(consoleMessage));
 }
 
-void V8DebuggerImpl::consoleMessagesCount(int contextGroupId, unsigned* total, unsigned* withArguments)
-{
-    *total = 0;
-    *withArguments = 0;
-    ConsoleStorageMap::iterator storageIt = m_consoleStorageMap.find(contextGroupId);
-    if (storageIt == m_consoleStorageMap.end())
-        return;
-    *total = storageIt->second->messages().size();
-    for (const auto& message : storageIt->second->messages()) {
-        if (message->argumentCount())
-            (*withArguments)++;
-    }
-}
-
 std::unique_ptr<V8StackTrace> V8DebuggerImpl::captureStackTrace(bool fullStack)
 {
     if (!m_isolate->InContext())
@@ -1138,7 +1112,7 @@ std::unique_ptr<V8StackTrace> V8DebuggerImpl::captureStackTrace(bool fullStack)
 
     size_t stackSize = fullStack ? V8StackTraceImpl::maxCallStackSizeToCapture : 1;
     SessionMap::iterator sessionIt = m_sessions.find(contextGroupId);
-    if (sessionIt != m_sessions.end() && sessionIt->second->consoleAgent()->enabled())
+    if (sessionIt != m_sessions.end() && sessionIt->second->runtimeAgent()->enabled())
         stackSize = V8StackTraceImpl::maxCallStackSizeToCapture;
 
     return V8StackTraceImpl::capture(this, contextGroupId, stackSize);

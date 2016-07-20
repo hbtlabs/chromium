@@ -6,6 +6,7 @@
 #define WebTaskRunner_h
 
 #include "WebCommon.h"
+#include "public/platform/WebTraceLocation.h"
 
 #ifdef INSIDE_BLINK
 #include "wtf/Functional.h"
@@ -14,8 +15,6 @@
 #endif
 
 namespace blink {
-
-class WebTraceLocation;
 
 // The blink representation of a chromium SingleThreadTaskRunner.
 class BLINK_PLATFORM_EXPORT WebTaskRunner {
@@ -38,6 +37,10 @@ public:
 
     // Returns a clone of the WebTaskRunner.
     virtual WebTaskRunner* clone() = 0;
+
+    // Returns true if the current thread is a thread on which a task may be run.
+    // Can be called from any thread.
+    virtual bool runsTasksOnCurrentThread() = 0;
 
     // ---
 

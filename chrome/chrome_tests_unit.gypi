@@ -19,6 +19,7 @@
       'browser/android/data_usage/data_use_tab_model_unittest.cc',
       'browser/android/data_usage/data_use_ui_tab_model_unittest.cc',
       'browser/android/data_usage/external_data_use_observer_unittest.cc',
+      'browser/android/data_usage/external_data_use_reporter_unittest.cc',
       'browser/android/data_usage/tab_data_use_entry_unittest.cc',
       'browser/android/download/download_manager_service_unittest.cc',
       'browser/android/history_report/delta_file_backend_leveldb_unittest.cc',
@@ -63,6 +64,7 @@
       'browser/browsing_data/registrable_domain_filter_builder_unittest.cc',
       'browser/browsing_data/site_data_size_collector_unittest.cc',
       'browser/budget_service/background_budget_service_unittest.cc',
+      'browser/budget_service/budget_database_unittest.cc',
       'browser/chrome_browser_application_mac_unittest.mm',
       'browser/chrome_content_browser_client_unittest.cc',
       'browser/chrome_process_singleton_win_unittest.cc',
@@ -175,6 +177,7 @@
       'browser/permissions/delegation_tracker_unittest.cc',
       'browser/permissions/permission_context_base_unittest.cc',
       'browser/permissions/permission_manager_unittest.cc',
+      'browser/permissions/permission_uma_util_unittest.cc',
       'browser/permissions/permission_util_unittest.cc',
       'browser/policy/cloud/cloud_policy_invalidator_unittest.cc',
       'browser/policy/cloud/remote_commands_invalidator_unittest.cc',
@@ -401,6 +404,7 @@
       '../components/drive/event_logger_unittest.cc',
       '../components/drive/service/drive_api_service_unittest.cc',
       '../components/drive/service/fake_drive_service_unittest.cc',
+      '../tools/json_schema_compiler/test/features_generation_unittest.cc',
       'browser/apps/app_shim/app_shim_host_mac_unittest.cc',
       'browser/apps/app_shim/extension_app_shim_handler_mac_unittest.cc',
       'browser/autocomplete/keyword_extensions_delegate_impl_unittest.cc',
@@ -484,6 +488,7 @@
       'browser/extensions/bookmark_app_helper_unittest.cc',
       'browser/extensions/chrome_app_sorting_unittest.cc',
       'browser/extensions/chrome_component_extension_resource_manager_unittest.cc',
+      'browser/extensions/chrome_extension_function_unittest.cc',
       'browser/extensions/chrome_info_map_unittest.cc',
       'browser/extensions/component_loader_unittest.cc',
       'browser/extensions/component_migration_helper_unittest.cc',
@@ -717,6 +722,7 @@
       'browser/ui/ash/multi_user/multi_user_window_manager_chromeos_unittest.cc',
       'browser/ui/ash/multi_user/user_switch_util_unittest.cc',
       'browser/ui/ash/session_state_delegate_chromeos_unittest.cc',
+      'browser/ui/ash/system_tray_delegate_chromeos_unittest.cc',
       'browser/ui/ash/window_positioner_unittest.cc',
       'browser/ui/window_sizer/window_sizer_ash_unittest.cc',
     ],
@@ -1470,7 +1476,6 @@
       # ContentProvider.
       'browser/bookmarks/bookmark_html_writer_unittest.cc',
       'browser/browser_commands_unittest.cc',
-      'browser/chrome_webusb_browser_client_unittest.cc',
       'browser/diagnostics/diagnostics_controller_unittest.cc',
       'browser/diagnostics/diagnostics_model_unittest.cc',
       'browser/download/download_commands_unittest.cc',
@@ -1590,6 +1595,7 @@
       'browser/ui/window_sizer/window_sizer_unittest.cc',
       'browser/ui/zoom/zoom_controller_unittest.cc',
       'browser/usb/usb_chooser_context_unittest.cc',
+      'browser/usb/web_usb_detector_unittest.cc',
       # The importer code is not used on Android.
       'common/importer/firefox_importer_utils_unittest.cc',
       # No service process (which also requires multiprocess lock).
@@ -1773,6 +1779,8 @@
         'browser/notifications/notification_test_util.h',
         'browser/notifications/stub_notification_platform_bridge.cc',
         'browser/notifications/stub_notification_platform_bridge.h',
+        'browser/permissions/mock_permission_request.cc',
+        'browser/permissions/mock_permission_request.h',
         'browser/policy/test/local_policy_test_server.cc',
         'browser/policy/test/local_policy_test_server.h',
         'browser/profile_resetter/profile_resetter_test_base.cc',
@@ -1822,8 +1830,6 @@
         'browser/ui/toolbar/test_toolbar_action_view_controller.h',
         'browser/ui/views/find_bar_host_unittest_util_views.cc',
         'browser/ui/views/toolbar/browser_action_test_util_views.cc',
-        'browser/ui/website_settings/mock_permission_bubble_request.cc',
-        'browser/ui/website_settings/mock_permission_bubble_request.h',
         'renderer/chrome_mock_render_thread.cc',
         'renderer/chrome_mock_render_thread.h',
         'renderer/safe_browsing/mock_feature_extractor_clock.cc',
@@ -1926,12 +1932,12 @@
           'sources!': [
             'browser/chooser_controller/mock_chooser_controller.cc',
             'browser/chooser_controller/mock_chooser_controller.h',
+            'browser/permissions/mock_permission_request.cc',
+            'browser/permissions/mock_permission_request.h',
             'browser/ui/passwords/manage_passwords_ui_controller_mock.cc',
             'browser/ui/passwords/manage_passwords_ui_controller_mock.h',
             'browser/ui/passwords/password_dialog_controller_mock.cc',
             'browser/ui/passwords/password_dialog_controller_mock.h',
-            'browser/ui/website_settings/mock_permission_bubble_request.cc',
-            'browser/ui/website_settings/mock_permission_bubble_request.h',
           ]
         }],
         ['OS=="android"', {
@@ -2017,8 +2023,6 @@
             'browser/chromeos/policy/stub_enterprise_install_attributes.h',
             'browser/chromeos/settings/device_settings_test_helper.cc',
             'browser/chromeos/settings/device_settings_test_helper.h',
-            'browser/chromeos/system/fake_input_device_settings.cc',
-            'browser/chromeos/system/fake_input_device_settings.h',
           ],
         }],
         ['use_aura==1', {
@@ -2410,6 +2414,7 @@
             '../device/hid/hid.gyp:device_hid_mocks',
             '../extensions/extensions_resources.gyp:extensions_resources',
             '../extensions/extensions_strings.gyp:extensions_strings',
+            '../tools/json_schema_compiler/test/json_schema_compiler_tests.gyp:feature_compiler_tests',
           ],
           'conditions': [
             ['enable_service_discovery==1', {

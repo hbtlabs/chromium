@@ -110,6 +110,10 @@ public:
     // Called when PageImportanceSignals for the WebView is updated.
     virtual void pageImportanceSignalsChanged() { }
 
+    // Called to get the position of the root window containing the widget
+    // in screen coordinates.
+    virtual WebRect rootWindowRect() { return WebRect(); }
+
     // Editing -------------------------------------------------------------
 
     // These methods allow the client to intercept and overrule editing
@@ -190,6 +194,8 @@ public:
     // Called when the View has changed size as a result of an auto-resize.
     virtual void didAutoResize(const WebSize& newSize) {}
 
+    // Called when the View acquires focus.
+    virtual void didFocus() {}
 
     // Session history -----------------------------------------------------
 
@@ -253,11 +259,9 @@ public:
     // TODO(lfg): These methods are only exposed through WebViewClient while we
     // refactor WebView to not inherit from WebWidget.
     // WebWidgetClient overrides.
-    bool allowsBrokenNullLayerTreeView() const override { return false; }
     void closeWidgetSoon() override {}
     void convertViewportToWindow(WebRect* rect) override {}
     void convertWindowToViewport(WebFloatRect* rect) override {}
-    void didFocus() override {}
     void didHandleGestureEvent(const WebGestureEvent& event, bool eventCancelled) override {}
     void didInvalidateRect(const WebRect&) override {}
     void didOverscroll(const WebFloatSize& overscrollDelta, const WebFloatSize& accumulatedOverscroll, const WebFloatPoint& positionInViewport, const WebFloatSize& velocityInViewport) override {}
@@ -267,8 +271,6 @@ public:
     WebLayerTreeView* layerTreeView() override { return 0; }
     void onMouseDown(const WebNode& mouseDownNode) override {}
     void resetInputMethod() override {}
-    WebRect rootWindowRect() override { return WebRect(); }
-    void scheduleAnimation() override {}
     WebScreenInfo screenInfo() override { return WebScreenInfo(); }
     void setToolTipText(const WebString&, WebTextDirection hint) override {}
     void setTouchAction(WebTouchAction touchAction) override {}
@@ -278,6 +280,7 @@ public:
     void show(WebNavigationPolicy) override {}
     WebRect windowRect() override { return WebRect(); }
     WebRect windowResizerRect() override { return WebRect(); }
+    virtual WebWidgetClient* widgetClient() { return this; }
 
 protected:
     ~WebViewClient() { }

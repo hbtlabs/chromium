@@ -236,15 +236,6 @@ ShellSurface::ShellSurface(Surface* surface)
 
 ShellSurface::~ShellSurface() {
   DCHECK(!scoped_configure_);
-  ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
-  if (surface_) {
-    if (scale_ != 1.0)
-      surface_->window()->SetTransform(gfx::Transform());
-    surface_->SetSurfaceDelegate(nullptr);
-    surface_->RemoveSurfaceObserver(this);
-  }
-  if (parent_)
-    parent_->RemoveObserver(this);
   if (resizer_)
     EndDrag(false /* revert */);
   if (widget_) {
@@ -253,6 +244,15 @@ ShellSurface::~ShellSurface() {
     if (widget_->IsVisible())
       widget_->Hide();
     widget_->CloseNow();
+  }
+  ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
+  if (parent_)
+    parent_->RemoveObserver(this);
+  if (surface_) {
+    if (scale_ != 1.0)
+      surface_->window()->SetTransform(gfx::Transform());
+    surface_->SetSurfaceDelegate(nullptr);
+    surface_->RemoveSurfaceObserver(this);
   }
 }
 
@@ -686,8 +686,10 @@ void ShellSurface::OnPostWindowStateTypeChange(
     Configure();
   }
 
-  if (widget_)
+  if (widget_) {
     UpdateWidgetBounds();
+    UpdateShadow();
+  }
 
   if (old_type != new_type && !state_changed_callback_.is_null())
     state_changed_callback_.Run(old_type, new_type);
@@ -720,7 +722,7 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
         gfx::Rect(GetSurfaceOrigin(), surface_->window()->layer()->size()));
 
     // The shadow size may be updated to match the widget. Change it back
-    // to the opaque content size.
+    // to the shadow content size.
     // TODO(oshima): When the arc window reiszing is enabled, we may want to
     // implement shadow management here instead of using shadow controller.
     UpdateShadow();
@@ -875,6 +877,12 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   window->AddObserver(this);
   ash::wm::WindowState* window_state = ash::wm::GetWindowState(window);
   window_state->AddObserver(this);
+  // Notify client of initial state if different than normal.
+  if (window_state->GetStateType() != ash::wm::WINDOW_STATE_TYPE_NORMAL &&
+      !state_changed_callback_.is_null()) {
+    state_changed_callback_.Run(ash::wm::WINDOW_STATE_TYPE_NORMAL,
+                                window_state->GetStateType());
+  }
 
   // Disable movement if initial bounds were specified.
   widget_->set_movement_disabled(!initial_bounds_.IsEmpty());
@@ -1134,45 +1142,52 @@ void ShellSurface::UpdateShadow() {
   if (!widget_)
     return;
   aura::Window* window = widget_->GetNativeWindow();
-  wm::Shadow* shadow = wm::ShadowController::GetShadowForWindow(window);
-  if (shadow) {
-    if (shadow_content_bounds_.IsEmpty()) {
-      wm::SetShadowType(window, wm::SHADOW_TYPE_NONE);
-      if (shadow_underlay_)
-        shadow_underlay_->Hide();
-    } else {
-      if (!shadow_overlay_) {
-        shadow_overlay_ = new aura::Window(nullptr);
-        DCHECK(shadow_overlay_->owned_by_parent());
-        shadow_overlay_->set_ignore_events(true);
-        shadow_overlay_->Init(ui::LAYER_NOT_DRAWN);
-        shadow_overlay_->layer()->Add(shadow->layer());
-        window->AddChild(shadow_overlay_);
-        shadow_overlay_->Show();
-      }
-      if (!shadow_underlay_) {
-        shadow_underlay_ = new aura::Window(nullptr);
-        DCHECK(shadow_underlay_->owned_by_parent());
-        shadow_underlay_->set_ignore_events(true);
-        // Ensure the background area inside the shadow is solid black.
-        // Clients that provide translucent contents should not be using
-        // rectangular shadows as this method requires opaque contents to
-        // cast a shadow that represent it correctly.
-        shadow_underlay_->Init(ui::LAYER_SOLID_COLOR);
-        shadow_underlay_->layer()->SetColor(SK_ColorBLACK);
-        DCHECK(shadow_underlay_->layer()->fills_bounds_opaquely());
-        window->AddChild(shadow_underlay_);
-        window->StackChildAtBottom(shadow_underlay_);
-      }
-      shadow_underlay_->Show();
-      gfx::Rect shadow_bounds(shadow_content_bounds_);
-      aura::Window::ConvertRectToTarget(window->parent(), window,
-                                        &shadow_bounds);
-      shadow_overlay_->SetBounds(shadow_bounds);
-      shadow_underlay_->SetBounds(shadow_bounds);
-      shadow->SetContentBounds(gfx::Rect(shadow_bounds.size()));
-      wm::SetShadowType(window, wm::SHADOW_TYPE_RECTANGULAR);
+  if (shadow_content_bounds_.IsEmpty()) {
+    wm::SetShadowType(window, wm::SHADOW_TYPE_NONE);
+    if (shadow_underlay_)
+      shadow_underlay_->Hide();
+  } else {
+    wm::SetShadowType(window, wm::SHADOW_TYPE_RECTANGULAR);
+    wm::Shadow* shadow = wm::ShadowController::GetShadowForWindow(window);
+    // Maximized/Fullscreen window does not create a shadow.
+    if (!shadow)
+      return;
+
+    if (!shadow_overlay_) {
+      shadow_overlay_ = new aura::Window(nullptr);
+      DCHECK(shadow_overlay_->owned_by_parent());
+      shadow_overlay_->set_ignore_events(true);
+      shadow_overlay_->Init(ui::LAYER_NOT_DRAWN);
+      shadow_overlay_->layer()->Add(shadow->layer());
+      window->AddChild(shadow_overlay_);
+      shadow_overlay_->Show();
     }
+    if (!shadow_underlay_) {
+      shadow_underlay_ = new aura::Window(nullptr);
+      DCHECK(shadow_underlay_->owned_by_parent());
+      shadow_underlay_->set_ignore_events(true);
+      // Ensure the background area inside the shadow is solid black.
+      // Clients that provide translucent contents should not be using
+      // rectangular shadows as this method requires opaque contents to
+      // cast a shadow that represent it correctly.
+      shadow_underlay_->Init(ui::LAYER_SOLID_COLOR);
+      shadow_underlay_->layer()->SetColor(SK_ColorBLACK);
+      DCHECK(shadow_underlay_->layer()->fills_bounds_opaquely());
+      window->AddChild(shadow_underlay_);
+      window->StackChildAtBottom(shadow_underlay_);
+    }
+    shadow_underlay_->Show();
+
+    // TODO(oshima): Adjust the coordinates from client screen to
+    // chromeos screen when multi displays are support.
+    gfx::Point origin = window->bounds().origin();
+    gfx::Point shadow_origin = shadow_content_bounds_.origin();
+    shadow_origin -= origin.OffsetFromOrigin();
+    gfx::Rect shadow_bounds(shadow_origin, shadow_content_bounds_.size());
+
+    shadow_overlay_->SetBounds(shadow_bounds);
+    shadow_underlay_->SetBounds(shadow_bounds);
+    shadow->SetContentBounds(gfx::Rect(shadow_bounds.size()));
   }
 }
 

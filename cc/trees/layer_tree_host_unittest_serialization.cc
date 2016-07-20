@@ -20,6 +20,7 @@
 #include "cc/test/layer_tree_test.h"
 #include "cc/test/skia_common.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -154,7 +155,7 @@ class LayerTreeHostSerializationTest : public testing::Test {
     EXPECT_EQ(layer_tree_host_src_->id_, layer_tree_host_dst_->id_);
     EXPECT_EQ(layer_tree_host_src_->next_commit_forces_redraw_,
               layer_tree_host_dst_->next_commit_forces_redraw_);
-    for (auto layer : layers_that_should_push_properties_src) {
+    for (auto* layer : layers_that_should_push_properties_src) {
       EXPECT_TRUE(layer_tree_host_dst_->LayerNeedsPushPropertiesForTesting(
           layer_tree_host_dst_->LayerById(layer->id())));
     }

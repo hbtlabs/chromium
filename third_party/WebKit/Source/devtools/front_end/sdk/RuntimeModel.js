@@ -41,10 +41,8 @@ WebInspector.RuntimeModel = function(target)
     this.target().registerRuntimeDispatcher(new WebInspector.RuntimeDispatcher(this));
     if (target.hasJSCapability())
         this._agent.enable();
-    /**
-     * @type {!Object.<number, !WebInspector.ExecutionContext>}
-     */
-    this._executionContextById = {};
+    /** @type {!Map<number, !WebInspector.ExecutionContext>} */
+    this._executionContextById = new Map();
     this._executionContextComparator = WebInspector.ExecutionContext.comparator;
 
     if (WebInspector.moduleSetting("customFormatters").get())
@@ -68,7 +66,7 @@ WebInspector.RuntimeModel.prototype = {
      */
     executionContexts: function()
     {
-        return Object.values(this._executionContextById).sort(this.executionContextComparator());
+        return this._executionContextById.valuesArray().sort(this.executionContextComparator());
     },
 
     /**
@@ -92,7 +90,7 @@ WebInspector.RuntimeModel.prototype = {
      */
     defaultExecutionContext: function()
     {
-        for (var context of Object.values(this._executionContextById)) {
+        for (var context of this._executionContextById.values()) {
             if (context.isDefault)
                 return context;
         }
@@ -105,7 +103,7 @@ WebInspector.RuntimeModel.prototype = {
      */
     executionContext: function(id)
     {
-        return this._executionContextById[id] || null;
+        return this._executionContextById.get(id) || null;
     },
 
     /**
@@ -118,7 +116,7 @@ WebInspector.RuntimeModel.prototype = {
             return;
         }
         var executionContext = new WebInspector.ExecutionContext(this.target(), context.id, context.name, context.origin, context.isDefault, context.frameId);
-        this._executionContextById[executionContext.id] = executionContext;
+        this._executionContextById.set(executionContext.id, executionContext);
         this.dispatchEventToListeners(WebInspector.RuntimeModel.Events.ExecutionContextCreated, executionContext);
     },
 
@@ -127,10 +125,10 @@ WebInspector.RuntimeModel.prototype = {
      */
     _executionContextDestroyed: function(executionContextId)
     {
-        var executionContext = this._executionContextById[executionContextId];
+        var executionContext = this._executionContextById.get(executionContextId);
         if (!executionContext)
             return;
-        delete this._executionContextById[executionContextId];
+        this._executionContextById.delete(executionContextId);
         this.dispatchEventToListeners(WebInspector.RuntimeModel.Events.ExecutionContextDestroyed, executionContext);
     },
 
@@ -140,7 +138,7 @@ WebInspector.RuntimeModel.prototype = {
         if (debuggerModel)
             debuggerModel.globalObjectCleared();
         var contexts = this.executionContexts();
-        this._executionContextById = {};
+        this._executionContextById.clear();
         for (var  i = 0; i < contexts.length; ++i)
             this.dispatchEventToListeners(WebInspector.RuntimeModel.Events.ExecutionContextDestroyed, contexts[i]);
     },
@@ -182,6 +180,11 @@ WebInspector.RuntimeModel.prototype = {
     createRemotePropertyFromPrimitiveValue: function(name, value)
     {
         return new WebInspector.RemoteObjectProperty(name, this.createRemoteObjectFromPrimitiveValue(value));
+    },
+
+    discardConsoleEntries: function()
+    {
+        this._agent.discardConsoleEntries();
     },
 
     /**
@@ -371,11 +374,11 @@ WebInspector.RuntimeDispatcher.prototype = {
             details.text,
             undefined,
             details.url,
-            typeof details.lineNumber === "undefined" ? undefined : details.lineNumber + 1,
-            typeof details.columnNumber === "undefined" ? undefined : details.columnNumber + 1,
+            details.lineNumber,
+            details.columnNumber,
             undefined,
             exception ? ["Uncaught (in promise)", exception] : undefined,
-            details.stack,
+            details.stackTrace,
             timestamp,
             executionContextId,
             details.scriptId);
@@ -385,11 +388,10 @@ WebInspector.RuntimeDispatcher.prototype = {
 
     /**
      * @override
-     * @param {number} timestamp
      * @param {string} message
      * @param {number} exceptionId
      */
-    exceptionRevoked: function(timestamp, message, exceptionId)
+    exceptionRevoked: function(message, exceptionId)
     {
         var consoleMessage = new WebInspector.ConsoleMessage(
             this._runtimeModel.target(),
@@ -403,10 +405,53 @@ WebInspector.RuntimeDispatcher.prototype = {
             undefined,
             undefined,
             undefined,
-            timestamp,
+            undefined,
             undefined,
             undefined);
         consoleMessage.setRevokedExceptionId(exceptionId);
+        this._runtimeModel.target().consoleModel.addMessage(consoleMessage);
+    },
+
+    /**
+     * @override
+     * @param {string} type
+     * @param {!Array.<!RuntimeAgent.RemoteObject>} args
+     * @param {number} executionContextId
+     * @param {number} timestamp
+     * @param {!RuntimeAgent.StackTrace=} stackTrace
+     */
+    consoleAPICalled: function(type, args, executionContextId, timestamp, stackTrace)
+    {
+        var level = WebInspector.ConsoleMessage.MessageLevel.Log;
+        if (type === WebInspector.ConsoleMessage.MessageType.Debug)
+            level = WebInspector.ConsoleMessage.MessageLevel.Debug;
+        if (type === WebInspector.ConsoleMessage.MessageType.Error || type === WebInspector.ConsoleMessage.MessageType.Assert)
+            level = WebInspector.ConsoleMessage.MessageLevel.Error;
+        if (type === WebInspector.ConsoleMessage.MessageType.Warning)
+            level = WebInspector.ConsoleMessage.MessageLevel.Warning;
+        if (type === WebInspector.ConsoleMessage.MessageType.Info)
+            level = WebInspector.ConsoleMessage.MessageLevel.Info;
+        var message = "";
+        if (args.length && typeof args[0].value === "string")
+            message = args[0].value;
+        else if (args.length && args[0].description)
+            message = args[0].description;
+        var callFrame = stackTrace && stackTrace.callFrames.length ? stackTrace.callFrames[0] : null;
+        var consoleMessage = new WebInspector.ConsoleMessage(
+            this._runtimeModel.target(),
+            WebInspector.ConsoleMessage.MessageSource.ConsoleAPI,
+            level,
+            /** @type {string} */ (message),
+            type,
+            callFrame ? callFrame.url : undefined,
+            callFrame ? callFrame.lineNumber : undefined,
+            callFrame ? callFrame.columnNumber : undefined,
+            undefined,
+            args,
+            stackTrace,
+            timestamp,
+            executionContextId,
+            undefined);
         this._runtimeModel.target().consoleModel.addMessage(consoleMessage);
     },
 

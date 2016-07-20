@@ -414,6 +414,11 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   target_tree->SetCurrentlyScrollingLayer(layer);
   target_tree->UpdatePropertyTreeScrollOffset(&property_trees_);
 
+  // This needs to be called early so that we don't clamp with incorrect max
+  // offsets when UpdateViewportContainerSizes is called from e.g.
+  // PushTopControls
+  target_tree->UpdatePropertyTreesForBoundsDelta();
+
   if (next_activation_forces_redraw_) {
     target_tree->ForceRedrawNextActivation();
     next_activation_forces_redraw_ = false;
@@ -617,19 +622,24 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
   // frame to a newly-committed property tree.
   if (layer_list_.empty())
     return;
+  std::vector<int> layer_ids_to_remove;
   for (auto& layer_id_to_opacity : opacity_animations_map_) {
     const int id = layer_id_to_opacity.first;
     if (property_trees_.IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id)) {
       EffectNode* node = property_trees_.effect_tree.Node(
           property_trees_.effect_id_to_index_map[id]);
       if (!node->is_currently_animating_opacity ||
-          node->opacity == layer_id_to_opacity.second)
+          node->opacity == layer_id_to_opacity.second) {
+        layer_ids_to_remove.push_back(id);
         continue;
+      }
       node->opacity = layer_id_to_opacity.second;
       property_trees_.effect_tree.set_needs_update(true);
     }
   }
-  opacity_animations_map_.clear();
+  for (auto id : layer_ids_to_remove)
+    opacity_animations_map_.erase(id);
+  layer_ids_to_remove.clear();
 
   for (auto& layer_id_to_transform : transform_animations_map_) {
     const int id = layer_id_to_transform.first;
@@ -638,14 +648,17 @@ void LayerTreeImpl::UpdatePropertyTreeScrollingAndAnimationFromMainThread() {
       TransformNode* node = property_trees_.transform_tree.Node(
           property_trees_.transform_id_to_index_map[id]);
       if (!node->is_currently_animating ||
-          node->local == layer_id_to_transform.second)
+          node->local == layer_id_to_transform.second) {
+        layer_ids_to_remove.push_back(id);
         continue;
+      }
       node->local = layer_id_to_transform.second;
       node->needs_local_transform_update = true;
       property_trees_.transform_tree.set_needs_update(true);
     }
   }
-  transform_animations_map_.clear();
+  for (auto id : layer_ids_to_remove)
+    transform_animations_map_.erase(id);
 
   LayerTreeHostCommon::CallFunctionForEveryLayer(this, [](LayerImpl* layer) {
     layer->UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
@@ -958,9 +971,33 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
       if (it.represents_contributing_render_surface()) {
         // Surfaces aren't used by the tile raster code, so they can have
         // occlusion regardless of replicas.
+        const RenderSurfaceImpl* occlusion_surface =
+            occlusion_tracker.OcclusionSurfaceForContributingSurface();
+        gfx::Transform draw_transform;
+        if (occlusion_surface) {
+          // We are calculating transform between two render surfaces. So, we
+          // need to apply the surface contents scale at target and remove the
+          // surface contents scale at source.
+          property_trees()->transform_tree.ComputeTransform(
+              it->render_surface()->TransformTreeIndex(),
+              occlusion_surface->TransformTreeIndex(), &draw_transform);
+          // We don't have to apply surface contents scale when target is root.
+          if (occlusion_surface->TransformTreeIndex() != 0) {
+            const EffectNode* occlusion_effect_node =
+                property_trees()->effect_tree.Node(
+                    occlusion_surface->EffectTreeIndex());
+            draw_property_utils::PostConcatSurfaceContentsScale(
+                occlusion_effect_node, &draw_transform);
+          }
+          const EffectNode* effect_node = property_trees()->effect_tree.Node(
+              it->render_surface()->EffectTreeIndex());
+          draw_property_utils::ConcatInverseSurfaceContentsScale(
+              effect_node, &draw_transform);
+        }
+
         Occlusion occlusion =
             occlusion_tracker.GetCurrentOcclusionForContributingSurface(
-                it->render_surface()->draw_transform());
+                draw_transform);
         it->render_surface()->set_occlusion_in_content_space(occlusion);
         // Masks are used to draw the contributing surface, so should have
         // the same occlusion as the surface (nothing inside the surface
@@ -970,8 +1007,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
               inside_replica
                   ? Occlusion()
                   : occlusion_tracker.GetCurrentOcclusionForContributingSurface(
-                        it->render_surface()->draw_transform() *
-                        it->DrawTransform());
+                        draw_transform * it->DrawTransform());
           mask->draw_properties().occlusion_in_content_space = mask_occlusion;
         }
         if (LayerImpl* replica_mask =
@@ -1002,7 +1038,7 @@ bool LayerTreeImpl::UpdateDrawProperties(bool update_lcd_text) {
     // If this is not the sync tree, then it is not safe to update lcd text
     // as it causes invalidations and the tiles may be in use.
     DCHECK_EQ(this, sync_tree);
-    for (const auto& layer : picture_layers_)
+    for (auto* layer : picture_layers_)
       layer->UpdateCanUseLCDTextAfterCommit();
   }
 
@@ -1110,6 +1146,9 @@ void LayerTreeImpl::RegisterLayer(LayerImpl* layer) {
 
 void LayerTreeImpl::UnregisterLayer(LayerImpl* layer) {
   DCHECK(LayerById(layer->id()));
+  layers_that_should_push_properties_.erase(layer);
+  transform_animations_map_.erase(layer->id());
+  opacity_animations_map_.erase(layer->id());
   layer_id_map_.erase(layer->id());
 }
 
@@ -1644,7 +1683,7 @@ static const gfx::Transform SurfaceScreenSpaceTransform(
   DCHECK(layer->render_surface());
   return layer->is_drawn_render_surface_layer_list_member()
              ? layer->render_surface()->screen_space_transform()
-             : transform_tree.ToScreenSpaceTransformWithoutSublayerScale(
+             : transform_tree.ToScreenSpaceTransformWithoutSurfaceContentsScale(
                    layer->render_surface()->TransformTreeIndex());
 }
 

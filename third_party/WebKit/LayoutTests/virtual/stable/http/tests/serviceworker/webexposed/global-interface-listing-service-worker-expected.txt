@@ -3,6 +3,13 @@ interface Blob
     getter type
     method constructor
     method slice
+interface BroadcastChannel : EventTarget
+    getter name
+    getter onmessage
+    method close
+    method constructor
+    method postMessage
+    setter onmessage
 interface ByteLengthQueuingStrategy
     method constructor
     method size
@@ -191,21 +198,6 @@ interface File : Blob
     getter lastModifiedDate
     getter name
     getter webkitRelativePath
-    method constructor
-interface FileError : DOMError
-    attribute ABORT_ERR
-    attribute ENCODING_ERR
-    attribute INVALID_MODIFICATION_ERR
-    attribute INVALID_STATE_ERR
-    attribute NOT_FOUND_ERR
-    attribute NOT_READABLE_ERR
-    attribute NO_MODIFICATION_ALLOWED_ERR
-    attribute PATH_EXISTS_ERR
-    attribute QUOTA_EXCEEDED_ERR
-    attribute SECURITY_ERR
-    attribute SYNTAX_ERR
-    attribute TYPE_MISMATCH_ERR
-    getter code
     method constructor
 interface FileList
     getter length
@@ -476,10 +468,15 @@ interface PushMessageData
     method text
 interface PushSubscription
     getter endpoint
+    getter options
     method constructor
     method getKey
     method toJSON
     method unsubscribe
+interface PushSubscriptionOptions
+    getter applicationServerKey
+    getter userVisibleOnly
+    method constructor
 interface ReadableStream
     getter locked
     method cancel
@@ -523,10 +520,13 @@ interface Response
 interface ServiceWorkerGlobalScope : WorkerGlobalScope
     method constructor
 interface ServiceWorkerRegistration : EventTarget
+    getter active
+    getter installing
     getter onupdatefound
     getter pushManager
     getter scope
     getter sync
+    getter waiting
     method constructor
     method getNotifications
     method showNotification
@@ -633,6 +633,7 @@ interface WindowClient : Client
     method focus
     method navigate
 interface WorkerGlobalScope : EventTarget
+    getter caches
     getter crypto
     getter indexedDB
     getter location
@@ -785,7 +786,6 @@ interface webkitIDBTransaction : EventTarget
 global object
     attribute console
     attribute internals
-    getter caches
     getter clients
     getter onactivate
     getter onfetch

@@ -211,6 +211,10 @@ bool FeatureInfo::InitializeForTesting() {
   return Initialize(CONTEXT_TYPE_OPENGLES2, DisallowedFeatures());
 }
 
+bool FeatureInfo::InitializeForTesting(ContextType context_type) {
+  return Initialize(context_type, DisallowedFeatures());
+}
+
 bool IsGL_REDSupportedOnFBOs() {
   // Skia uses GL_RED with frame buffers, unfortunately, Mesa claims to support
   // GL_EXT_texture_rg, but it doesn't support it on frame buffers.  To fix
@@ -516,6 +520,7 @@ void FeatureInfo::InitializeFeatures() {
       // is ES2 where GL_DEPTH_STENCIL_ATTACHMENT isn't accepted, it is still
       // OK.
       validators_.attachment.AddValue(GL_DEPTH_STENCIL_ATTACHMENT);
+      validators_.attachment_query.AddValue(GL_DEPTH_STENCIL_ATTACHMENT);
     }
   }
 
@@ -1051,8 +1056,9 @@ void FeatureInfo::InitializeFeatures() {
     }
   }
 
-  bool have_es3_occlusion_query =
-      gl_version_info_->IsAtLeastGLES(3, 0);
+  bool have_occlusion_query =
+      gl_version_info_->IsAtLeastGLES(3, 0) ||
+      gl_version_info_->IsAtLeastGL(3, 3);
   bool have_ext_occlusion_query_boolean =
       extensions.Contains("GL_EXT_occlusion_query_boolean");
   bool have_arb_occlusion_query2 =
@@ -1060,7 +1066,7 @@ void FeatureInfo::InitializeFeatures() {
   bool have_arb_occlusion_query =
       extensions.Contains("GL_ARB_occlusion_query");
 
-  if (have_es3_occlusion_query ||
+  if (have_occlusion_query ||
       have_ext_occlusion_query_boolean ||
       have_arb_occlusion_query2 ||
       have_arb_occlusion_query) {
@@ -1069,7 +1075,9 @@ void FeatureInfo::InitializeFeatures() {
     }
     feature_flags_.occlusion_query_boolean = true;
     feature_flags_.use_arb_occlusion_query2_for_occlusion_query_boolean =
-        !have_ext_occlusion_query_boolean && have_arb_occlusion_query2;
+        !have_ext_occlusion_query_boolean && (have_arb_occlusion_query2 ||
+        (gl_version_info_->IsAtLeastGL(3, 3) &&
+         gl_version_info_->IsLowerThanGL(4, 3)));
     feature_flags_.use_arb_occlusion_query_for_occlusion_query_boolean =
         !have_ext_occlusion_query_boolean && have_arb_occlusion_query &&
         !have_arb_occlusion_query2;
@@ -1113,6 +1121,7 @@ void FeatureInfo::InitializeFeatures() {
          i < static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + max_color_attachments);
          ++i) {
       validators_.attachment.AddValue(i);
+      validators_.attachment_query.AddValue(i);
     }
     static_assert(GL_COLOR_ATTACHMENT0_EXT == GL_COLOR_ATTACHMENT0,
                   "GL_COLOR_ATTACHMENT0_EXT should equal GL_COLOR_ATTACHMENT0");
@@ -1360,6 +1369,9 @@ void FeatureInfo::EnableES3Validators() {
   };
   if (max_color_attachments < kTotalColorAttachmentEnums) {
     validators_.attachment.RemoveValues(
+        kColorAttachments + max_color_attachments,
+        kTotalColorAttachmentEnums - max_color_attachments);
+    validators_.attachment_query.RemoveValues(
         kColorAttachments + max_color_attachments,
         kTotalColorAttachmentEnums - max_color_attachments);
     validators_.read_buffer.RemoveValues(

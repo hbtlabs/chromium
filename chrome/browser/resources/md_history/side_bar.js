@@ -10,6 +10,10 @@ Polymer({
       type: String,
       notify: true
     },
+
+    route: Object,
+
+    showFooter: Boolean,
   },
 
   toggle: function() {
@@ -33,9 +37,19 @@ Polymer({
 
   /**
    * Relocates the user to the clear browsing data section of the settings page.
+   * @param {Event} e
    * @private
    */
-  onClearBrowsingDataTap_: function() {
+  onClearBrowsingDataTap_: function(e) {
     md_history.BrowserService.getInstance().openClearBrowsingData();
+    e.preventDefault();
   },
+
+  /**
+   * @param {Object} route
+   * @private
+   */
+  getQueryString_: function(route) {
+    return window.location.search;
+  }
 });

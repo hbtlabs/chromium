@@ -36,12 +36,14 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/memory_coordinator/browser/memory_coordinator.h"
+#include "components/memory_coordinator/common/memory_coordinator_features.h"
 #include "components/tracing/browser/trace_config_file.h"
 #include "components/tracing/common/process_metrics_memory_dump_provider.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/browser/browser_thread_impl.h"
-#include "content/browser/device_sensors/device_inertial_sensor_service.h"
+#include "content/browser/device_sensors/device_sensor_service.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
 #include "content/browser/download/save_file_manager.h"
 #include "content/browser/gamepad/gamepad_service.h"
@@ -178,6 +180,7 @@
 #endif
 
 #if defined(USE_X11)
+#include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "ui/base/x/x11_util_internal.h"  // nogncheck
 #include "ui/gfx/x/x11_connection.h"  // nogncheck
 #include "ui/gfx/x/x11_switches.h"  // nogncheck
@@ -278,8 +281,8 @@ static void SetUpGLibLogHandler() {
 void WaitForMojoShellInitialize() {
   // TODO(rockot): Remove this. http://crbug.com/594852.
   base::RunLoop wait_loop;
-  MojoShellConnection::GetForProcess()->GetShellConnection()->
-      set_initialize_handler(wait_loop.QuitClosure());
+  MojoShellConnection::GetForProcess()->SetInitializeHandler(
+      wait_loop.QuitClosure());
   wait_loop.Run();
 }
 #endif  // defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
@@ -721,6 +724,10 @@ int BrowserMainLoop::PreCreateThreads() {
       parsed_command_line_));
 #endif
 
+  if (memory_coordinator::IsEnabled()) {
+    memory_coordinator_.reset(new memory_coordinator::MemoryCoordinator);
+  }
+
 #if defined(ENABLE_PLUGINS)
   // Prior to any processing happening on the IO thread, we create the
   // plugin service as it is predominantly used from the IO thread,
@@ -751,6 +758,22 @@ int BrowserMainLoop::PreCreateThreads() {
   // CommandLine::ForCurrentProcess object after threads are created.
   // 2) Must be after parts_->PreCreateThreads to pick up chrome://flags.
   GpuDataManagerImpl::GetInstance()->Initialize();
+
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+  // PreCreateThreads is called before CreateStartupTasks which starts the gpu
+  // process.
+  bool enable_transparent_visuals =
+      !GpuDataManagerImpl::GetInstance()->IsDriverBugWorkaroundActive(
+          gpu::DISABLE_TRANSPARENT_VISUALS);
+  Visual* visual = NULL;
+  int depth = 0;
+  ui::ChooseVisualForWindow(enable_transparent_visuals, &visual, &depth);
+  DCHECK(depth > 0);
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kWindowDepth, base::IntToString(depth));
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kX11VisualID, base::UintToString(visual->visualid));
+#endif
 
 #if !defined(GOOGLE_CHROME_BUILD) || defined(OS_ANDROID)
   // Single-process is an unsupported and not fully tested mode, so
@@ -997,6 +1020,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   }
 
   memory_pressure_monitor_.reset();
+  memory_coordinator_.reset();
 
 #if defined(OS_MACOSX)
   BrowserCompositorMac::DisableRecyclingForShutdown();
@@ -1125,7 +1149,7 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
   }
   {
     TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:SensorService");
-    DeviceInertialSensorService::GetInstance()->Shutdown();
+    DeviceSensorService::GetInstance()->Shutdown();
   }
 #if !defined(OS_ANDROID)
   {
@@ -1379,20 +1403,6 @@ bool BrowserMainLoop::InitializeToolkit() {
     LOG(ERROR) << "Unable to open X display.";
     return false;
   }
-
-#if !defined(OS_CHROMEOS)
-  // InitializeToolkit is called before CreateStartupTasks which one starts the
-  // gpu process.
-  Visual* visual = NULL;
-  int depth = 0;
-  ui::ChooseVisualForWindow(&visual, &depth);
-  DCHECK(depth > 0);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kWindowDepth, base::IntToString(depth));
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kX11VisualID, base::UintToString(visual->visualid));
-#endif
-
 #endif
 
   // Env creates the compositor. Aura widgets need the compositor to be created

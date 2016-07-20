@@ -43,6 +43,8 @@
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebMessagePortChannel.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
@@ -594,7 +596,8 @@ ServiceWorkerContextClient::createServiceWorkerNetworkProvider(
   provider_context_ = provider->context();
 
   // Tell the network provider about which version to load.
-  provider->SetServiceWorkerVersionId(service_worker_version_id_);
+  provider->SetServiceWorkerVersionId(service_worker_version_id_,
+                                      embedded_worker_id_);
 
   // The provider is kept around for the lifetime of the DataSource
   // and ownership is transferred to the DataSource.

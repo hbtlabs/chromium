@@ -274,8 +274,8 @@ void InspectorNetworkAgent::restore()
 {
     if (m_state->booleanProperty(NetworkAgentState::networkAgentEnabled, false)) {
         enable(
-            m_state->numberProperty(NetworkAgentState::totalBufferSize, maximumTotalBufferSize),
-            m_state->numberProperty(NetworkAgentState::resourceBufferSize, maximumResourceBufferSize));
+            m_state->integerProperty(NetworkAgentState::totalBufferSize, maximumTotalBufferSize),
+            m_state->integerProperty(NetworkAgentState::resourceBufferSize, maximumResourceBufferSize));
     }
 }
 
@@ -845,9 +845,9 @@ std::unique_ptr<protocol::Network::Initiator> InspectorNetworkAgent::buildInitia
             .setType(protocol::Network::Initiator::TypeEnum::Parser).build();
         initiatorObject->setUrl(urlWithoutFragment(document->url()).getString());
         if (TextPosition::belowRangePosition() != initiatorInfo.position)
-            initiatorObject->setLineNumber(initiatorInfo.position.m_line.oneBasedInt());
+            initiatorObject->setLineNumber(initiatorInfo.position.m_line.zeroBasedInt());
         else
-            initiatorObject->setLineNumber(document->scriptableDocumentParser()->lineNumber().oneBasedInt());
+            initiatorObject->setLineNumber(document->scriptableDocumentParser()->lineNumber().zeroBasedInt());
         return initiatorObject;
     }
 
@@ -937,8 +937,8 @@ void InspectorNetworkAgent::enable(int totalBufferSize, int resourceBufferSize)
         return;
     m_resourcesData->setResourcesDataSizeLimits(totalBufferSize, resourceBufferSize);
     m_state->setBoolean(NetworkAgentState::networkAgentEnabled, true);
-    m_state->setNumber(NetworkAgentState::totalBufferSize, totalBufferSize);
-    m_state->setNumber(NetworkAgentState::resourceBufferSize, resourceBufferSize);
+    m_state->setInteger(NetworkAgentState::totalBufferSize, totalBufferSize);
+    m_state->setInteger(NetworkAgentState::resourceBufferSize, resourceBufferSize);
     m_instrumentingAgents->addInspectorNetworkAgent(this);
 }
 

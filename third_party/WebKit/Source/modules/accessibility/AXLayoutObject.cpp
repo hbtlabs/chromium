@@ -201,21 +201,10 @@ LayoutRect AXLayoutObject::elementRect() const
 {
     if (!m_explicitElementRect.isEmpty())
         return m_explicitElementRect;
-    if (!m_layoutObject)
-        return LayoutRect();
-    if (!m_layoutObject->isBox())
-        return computeElementRect();
 
-    for (const AXObject* obj = this; obj; obj = obj->parentObject()) {
-        if (obj->isAXLayoutObject())
-            toAXLayoutObject(obj)->checkCachedElementRect();
-    }
-    for (const AXObject* obj = this; obj; obj = obj->parentObject()) {
-        if (obj->isAXLayoutObject())
-            toAXLayoutObject(obj)->updateCachedElementRect();
-    }
-
-    return m_cachedElementRect;
+    // FIXME(dmazzoni): use relative bounds instead since this is a bottleneck.
+    // http://crbug.com/618120
+    return computeElementRect();
 }
 
 SkMatrix44 AXLayoutObject::transformFromLocalParentFrame() const
@@ -1403,9 +1392,11 @@ const AtomicString& AXLayoutObject::liveRegionRelevant() const
 
 bool AXLayoutObject::liveRegionAtomic() const
 {
-    // ARIA role status should have implicit aria-atomic value of true.
-    if (getAttribute(aria_atomicAttr).isEmpty() && roleValue() == StatusRole)
+    // ARIA roles "alert" and "status" should have an implicit aria-atomic value of true.
+    if (getAttribute(aria_atomicAttr).isEmpty()
+        && (roleValue() == AlertRole || roleValue() == StatusRole)) {
         return true;
+    }
     return elementAttributeValue(aria_atomicAttr);
 }
 
@@ -1500,27 +1491,30 @@ IntPoint AXLayoutObject::clickPoint()
 AXObject* AXLayoutObject::accessibilityHitTest(const IntPoint& point) const
 {
     if (!m_layoutObject || !m_layoutObject->hasLayer())
-        return 0;
+        return nullptr;
 
     PaintLayer* layer = toLayoutBox(m_layoutObject)->layer();
 
     HitTestRequest request(HitTestRequest::ReadOnly | HitTestRequest::Active);
     HitTestResult hitTestResult = HitTestResult(request, point);
     layer->hitTest(hitTestResult);
-    if (!hitTestResult.innerNode())
-        return 0;
 
     Node* node = hitTestResult.innerNode();
+    if (!node)
+        return nullptr;
 
     if (isHTMLAreaElement(node))
         return accessibilityImageMapHitTest(toHTMLAreaElement(node), point);
 
-    if (isHTMLOptionElement(node))
+    if (isHTMLOptionElement(node)) {
         node = toHTMLOptionElement(*node).ownerSelectElement();
+        if (!node)
+            return nullptr;
+    }
 
     LayoutObject* obj = node->layoutObject();
     if (!obj)
-        return 0;
+        return nullptr;
 
     AXObject* result = axObjectCache().getOrCreate(obj);
     result->updateChildrenIfNecessary();

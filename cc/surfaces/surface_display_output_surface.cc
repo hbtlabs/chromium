@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/surfaces/display.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_id_allocator.h"
@@ -97,7 +96,8 @@ bool SurfaceDisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
 
   // Avoid initializing GL context here, as this should be sharing the
   // Display's context.
-  display_->Initialize(this);
+  display_->Initialize(this, surface_manager_,
+                       surface_id_allocator_->client_id());
   return true;
 }
 
@@ -133,10 +133,8 @@ uint32_t SurfaceDisplayOutputSurface::GetFramebufferCopyTextureFormat() {
 
 void SurfaceDisplayOutputSurface::ReturnResources(
     const ReturnedResourceArray& resources) {
-  CompositorFrameAck ack;
-  ack.resources = resources;
   if (client_)
-    client_->ReclaimResources(&ack);
+    client_->ReclaimResources(resources);
 }
 
 void SurfaceDisplayOutputSurface::SetBeginFrameSource(

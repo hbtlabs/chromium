@@ -236,6 +236,7 @@ class CC_EXPORT LayerTreeHostImpl
   };
 
   virtual void BeginMainFrameAborted(CommitEarlyOutReason reason);
+  virtual void ReadyToCommit() {}  // For tests.
   virtual void BeginCommit();
   virtual void CommitComplete();
   virtual void UpdateAnimationState(bool start_ready_animations);
@@ -369,7 +370,7 @@ class CC_EXPORT LayerTreeHostImpl
   void DidSwapBuffersComplete() override;
   void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) override;
-  void ReclaimResources(const CompositorFrameAck* ack) override;
+  void ReclaimResources(const ReturnedResourceArray& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
   void OnDraw(const gfx::Transform& transform,

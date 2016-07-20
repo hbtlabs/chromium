@@ -386,6 +386,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
                               const gfx::PointF& translation);
 
   // PluginInstance implementation
+  RenderFrame* GetRenderFrame() override;
   RenderView* GetRenderView() override;
   blink::WebPluginContainer* GetContainer() override;
   v8::Isolate* GetIsolate() const override;
@@ -552,6 +553,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
       bool use_shared_memory) override;
 
   // RenderFrameObserver
+  void AccessibilityModeChanged() override;
   void OnDestruct() override;
 
   // PluginInstanceThrottler::Observer
@@ -583,7 +585,8 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
     void didReceiveData(blink::WebURLLoader* loader,
                         const char* data,
                         int data_length,
-                        int encoded_data_length) override;
+                        int encoded_data_length,
+                        int encoded_body_length) override;
     void didFinishLoading(blink::WebURLLoader* loader,
                           double finish_time,
                           int64_t total_encoded_data_length) override;

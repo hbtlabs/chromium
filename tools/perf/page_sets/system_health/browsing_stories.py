@@ -2,12 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import sys
-
 from page_sets.system_health import platforms
 from page_sets.system_health import system_health_story
-
-from telemetry import story
 
 
 class _BrowsingStory(system_health_story.SystemHealthStory):
@@ -21,10 +17,7 @@ class _BrowsingStory(system_health_story.SystemHealthStory):
   IS_SINGLE_PAGE_APP = False
   ITEM_SELECTOR = NotImplemented
   ITEMS_TO_VISIT = 4
-
-  def __init__(self, story_set):
-    super(_BrowsingStory, self).__init__(
-        story_set, take_memory_measurement=False)
+  ABSTRACT_STORY = True
 
   def _WaitForNavigation(self, action_runner):
     if not self.IS_SINGLE_PAGE_APP:
@@ -60,6 +53,7 @@ class _NewsBrowsingStory(_BrowsingStory):
   ITEM_READ_TIME_IN_SECONDS = 3
   ITEM_SCROLL_REPEAT = 2
   MAIN_PAGE_SCROLL_REPEAT = 0
+  ABSTRACT_STORY = True
 
   def _DidLoadDocument(self, action_runner):
     for i in xrange(self.ITEMS_TO_VISIT):
@@ -100,9 +94,34 @@ class FacebookMobileStory(_NewsBrowsingStory):
   NAME = 'browse:social:facebook'
   URL = 'https://www.facebook.com/rihanna'
   ITEM_SELECTOR = 'article ._5msj'
-  # Facebook on desktop is not interesting because it embeds post comments
-  # directly in the main timeline.
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+
+
+class FacebookDesktopStory(_NewsBrowsingStory):
+  NAME = 'browse:social:facebook'
+  URL = 'https://www.facebook.com/rihanna'
+  ITEM_SELECTOR = '._4-eo'
+  IS_SINGLE_PAGE_APP = True
+  # Web-page-replay does not work for this website:
+  # https://github.com/chromium/web-page-replay/issues/79.
+  SUPPORTED_PLATFORMS = platforms.NO_PLATFORMS
+
+
+class FlipboardMobileStory(_NewsBrowsingStory):
+  NAME = 'browse:news:flipboard'
+  URL = 'https://flipboard.com/explore'
+  IS_SINGLE_PAGE_APP = True
+  ITEM_SELECTOR = '.grad-top'
+  ITEM_SCROLL_REPEAT = 4
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+
+
+class FlipboardDesktopStory(_NewsBrowsingStory):
+  NAME = 'browse:news:flipboard'
+  URL = 'https://flipboard.com/explore'
+  IS_SINGLE_PAGE_APP = True
+  ITEM_SELECTOR = '.cover-image'
+  SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
 class HackerNewsStory(_NewsBrowsingStory):
@@ -158,14 +177,14 @@ class RedditMobileStory(_NewsBrowsingStory):
 
 class TwitterMobileStory(_NewsBrowsingStory):
   NAME = 'browse:social:twitter'
-  URL = 'https://www.twitter.com/justinbieber?skip_interstitial=true'
+  URL = 'https://www.twitter.com/nasa'
   ITEM_SELECTOR = '.Tweet-text'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
 class TwitterDesktopStory(_NewsBrowsingStory):
   NAME = 'browse:social:twitter'
-  URL = 'https://www.twitter.com/justinbieber?skip_interstitial=true'
+  URL = 'https://www.twitter.com/nasa'
   IS_SINGLE_PAGE_APP = True
   ITEM_SELECTOR = '.tweet-text'
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
@@ -178,39 +197,15 @@ class WashingtonPostMobileStory(_NewsBrowsingStory):
   IS_SINGLE_PAGE_APP = True
   ITEM_SELECTOR = '.hed > a'
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
+  _CLOSE_BUTTON_SELECTOR = '.close'
 
   def _DidLoadDocument(self, action_runner):
-    # Close the popup window.
-    action_runner.ClickElement(selector='.close')
+    # Close the popup window. On Nexus 9 (and probably other tables) the popup
+    # window does not have a "Close" button, instead it has only a "Send link
+    # to phone" button. So on tablets we run with the popup window open. The
+    # popup is transparent, so this is mostly an aesthetical issue.
+    has_button = action_runner.EvaluateJavaScript(
+        '!!document.querySelector("%s")' % self._CLOSE_BUTTON_SELECTOR)
+    if has_button:
+      action_runner.ClickElement(selector=self._CLOSE_BUTTON_SELECTOR)
     super(WashingtonPostMobileStory, self)._DidLoadDocument(action_runner)
-
-
-##############################################################################
-# Browsing story sets.
-##############################################################################
-
-
-def _IterAllNewsBrowsingStoryClasses():
-  return system_health_story.IterAllStoryClasses(
-      sys.modules[__name__], _NewsBrowsingStory)
-
-
-class _BrowsingSystemHealthStorySet(story.StorySet):
-  PLATFORM = NotImplemented
-
-  def __init__(self):
-    super(_BrowsingSystemHealthStorySet, self).__init__(
-        archive_data_file=('../data/browsing_%s.json' % self.PLATFORM),
-        cloud_storage_bucket=story.PARTNER_BUCKET)
-    for story_class in _IterAllNewsBrowsingStoryClasses():
-      if self.PLATFORM not in story_class.SUPPORTED_PLATFORMS:
-        continue
-      self.AddStory(story_class(self))
-
-
-class DesktopBrowsingSystemHealthStorySet(_BrowsingSystemHealthStorySet):
-  PLATFORM = platforms.DESKTOP
-
-
-class MobileBrowsingSystemHealthStorySet(_BrowsingSystemHealthStorySet):
-  PLATFORM = platforms.MOBILE

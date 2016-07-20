@@ -330,7 +330,6 @@ GLRenderer::GLRenderer(RendererClient* client,
       highp_threshold_min_(highp_threshold_min),
       highp_threshold_cache_(0),
       use_sync_query_(false),
-      on_demand_tile_raster_resource_id_(0),
       bound_geometry_(NO_BINDING) {
   DCHECK(gl_);
   DCHECK(context_support_);
@@ -488,7 +487,7 @@ void GLRenderer::BeginDrawingFrame(DrawingFrame* frame) {
   // so that drawing can proceed without GL context switching interruptions.
   ResourceProvider* resource_provider = resource_provider_;
   for (const auto& pass : *frame->render_passes_in_draw_order) {
-    for (const auto& quad : pass->quad_list) {
+    for (auto* quad : pass->quad_list) {
       for (ResourceId resource_id : quad->resources)
         resource_provider->WaitSyncTokenIfNeeded(resource_id);
     }
@@ -1065,11 +1064,12 @@ void GLRenderer::DrawRenderPassQuadInternal(DrawingFrame* frame,
         // pixels' coordinate space.
         background_image = ApplyBackgroundFilters(
             frame, quad, background_texture.get(), gfx::RectF(background_rect));
-        if (background_image)
+        if (background_image) {
           background_image_id = skia::GrBackendObjectToGrGLTextureInfo(
                                     background_image->getTextureHandle(true))
                                     ->fID;
-        DCHECK(background_image_id);
+          DCHECK(background_image_id);
+        }
       }
     }
 
@@ -3571,9 +3571,6 @@ void GLRenderer::CleanupSharedObjects() {
   if (offscreen_framebuffer_id_)
     gl_->DeleteFramebuffers(1, &offscreen_framebuffer_id_);
 
-  if (on_demand_tile_raster_resource_id_)
-    resource_provider_->DeleteResource(on_demand_tile_raster_resource_id_);
-
   ReleaseRenderPassTextures();
 }
 
@@ -3634,6 +3631,7 @@ bool GLRenderer::IsContextLost() {
 }
 
 void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
+  scoped_refptr<CALayerOverlaySharedState> shared_state;
   for (const CALayerOverlay& ca_layer_overlay : frame->ca_layer_overlay_list) {
     unsigned texture_id = 0;
     if (ca_layer_overlay.contents_resource_id) {
@@ -3652,20 +3650,26 @@ void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
         ca_layer_overlay.bounds_rect.width(),
         ca_layer_overlay.bounds_rect.height(),
     };
-    GLboolean is_clipped = ca_layer_overlay.is_clipped;
-    GLfloat clip_rect[4] = {ca_layer_overlay.clip_rect.x(),
-                            ca_layer_overlay.clip_rect.y(),
-                            ca_layer_overlay.clip_rect.width(),
-                            ca_layer_overlay.clip_rect.height()};
-    GLint sorting_context_id = ca_layer_overlay.sorting_context_id;
+    GLboolean is_clipped = ca_layer_overlay.shared_state->is_clipped;
+    GLfloat clip_rect[4] = {ca_layer_overlay.shared_state->clip_rect.x(),
+                            ca_layer_overlay.shared_state->clip_rect.y(),
+                            ca_layer_overlay.shared_state->clip_rect.width(),
+                            ca_layer_overlay.shared_state->clip_rect.height()};
+    GLint sorting_context_id =
+        ca_layer_overlay.shared_state->sorting_context_id;
     GLfloat transform[16];
-    ca_layer_overlay.transform.asColMajorf(transform);
-    unsigned filter = GL_LINEAR;
+    ca_layer_overlay.shared_state->transform.asColMajorf(transform);
+    unsigned filter = ca_layer_overlay.filter;
+
+    if (ca_layer_overlay.shared_state != shared_state) {
+      shared_state = ca_layer_overlay.shared_state;
+      gl_->ScheduleCALayerSharedStateCHROMIUM(
+          ca_layer_overlay.shared_state->opacity, is_clipped, clip_rect,
+          sorting_context_id, transform);
+    }
     gl_->ScheduleCALayerCHROMIUM(
-        texture_id, contents_rect, ca_layer_overlay.opacity,
-        ca_layer_overlay.background_color, ca_layer_overlay.edge_aa_mask,
-        bounds_rect, is_clipped, clip_rect, sorting_context_id, transform,
-        filter);
+        texture_id, contents_rect, ca_layer_overlay.background_color,
+        ca_layer_overlay.edge_aa_mask, bounds_rect, filter);
   }
 }
 

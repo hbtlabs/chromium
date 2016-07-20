@@ -154,7 +154,7 @@ scoped_refptr<media::AudioRendererSink> AudioRendererSinkCacheImpl::GetSink(
 
   auto cache_iter =
       FindCacheEntry_Locked(source_render_frame_id, device_id, security_origin,
-                            true /* unused_only */);
+                            true /* unused sink only */);
 
   if (cache_iter != cache_.end()) {
     // Found unused sink; mark it as used and return.
@@ -163,7 +163,7 @@ scoped_refptr<media::AudioRendererSink> AudioRendererSinkCacheImpl::GetSink(
 
     cache_iter->used = true;
     UMA_HISTOGRAM_BOOLEAN(
-        "Media.Audio.Renderer.SinkCache.InfoSinkReusedForOutput", true);
+        "Media.Audio.Render.SinkCache.InfoSinkReusedForOutput", true);
     return cache_iter->sink;
   }
 
@@ -242,7 +242,7 @@ void AudioRendererSinkCacheImpl::DeleteSink(
     if (!cache_iter->used) {
       sink_to_stop = cache_iter->sink;
       UMA_HISTOGRAM_BOOLEAN(
-          "Media.Audio.Renderer.SinkCache.InfoSinkReusedForOutput", false);
+          "Media.Audio.Render.SinkCache.InfoSinkReusedForOutput", false);
     }
 
     cache_.erase(cache_iter);

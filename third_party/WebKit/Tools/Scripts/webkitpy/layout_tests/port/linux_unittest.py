@@ -26,13 +26,11 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 from webkitpy.common.system import executive_mock
 from webkitpy.common.system.systemhost_mock import MockSystemHost
-from webkitpy.tool.mock_tool import MockOptions
-
 from webkitpy.layout_tests.port import linux
 from webkitpy.layout_tests.port import port_testcase
+from webkitpy.tool.mock_tool import MockOptions
 
 
 class LinuxPortTest(port_testcase.PortTestCase):
@@ -101,3 +99,20 @@ class LinuxPortTest(port_testcase.PortTestCase):
 
     def test_path_to_image_diff(self):
         self.assertEqual(self.make_port()._path_to_image_diff(), '/mock-checkout/out/Release/image_diff')
+
+    def test_dummy_home_dir_is_created_and_cleaned_up(self):
+        port = self.make_port()
+        port.host.environ['HOME'] = '/home/user'
+        port._filesystem.files['/home/user/.Xauthority'] = ''
+
+        # Set up the test run; the temporary home directory should be set up.
+        port.setup_test_run()
+        temp_home_dir = port.host.environ['HOME']
+        self.assertNotEqual(temp_home_dir, '/home/user')
+        self.assertTrue(port._filesystem.isdir(temp_home_dir))
+        self.assertTrue(port._filesystem.isfile(port._filesystem.join(temp_home_dir, '.Xauthority')))
+
+        # Clean up; HOME should be reset and the temp dir should be cleaned up.
+        port.clean_up_test_run()
+        self.assertEqual(port.host.environ['HOME'], '/home/user')
+        self.assertFalse(port._filesystem.exists(temp_home_dir))

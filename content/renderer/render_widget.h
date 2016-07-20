@@ -85,6 +85,7 @@ class CompositorDependencies;
 class ExternalPopupMenu;
 class FrameSwapMessageQueue;
 class ImeEventGuard;
+class PepperPluginInstanceImpl;
 class RenderFrameImpl;
 class RenderFrameProxy;
 class RenderWidgetCompositor;
@@ -235,7 +236,6 @@ class CONTENT_EXPORT RenderWidget
   void initializeLayerTreeView() override;
   blink::WebLayerTreeView* layerTreeView() override;
   void didMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
-  void didFocus() override;
   void didChangeCursor(const blink::WebCursorInfo&) override;
   void closeWidgetSoon() override;
   void show(blink::WebNavigationPolicy) override;
@@ -244,7 +244,6 @@ class CONTENT_EXPORT RenderWidget
                       blink::WebTextDirection hint) override;
   void setWindowRect(const blink::WebRect&) override;
   blink::WebRect windowResizerRect() override;
-  blink::WebRect rootWindowRect() override;
   blink::WebScreenInfo screenInfo() override;
   void resetInputMethod() override;
   void didHandleGestureEvent(const blink::WebGestureEvent& event,
@@ -360,11 +359,19 @@ class CONTENT_EXPORT RenderWidget
   // Called when the Widget has changed size as a result of an auto-resize.
   void DidAutoResize(const gfx::Size& new_size);
 
+  // Called to get the position of the root window containing the widget in
+  // screen coordinates.
+  gfx::Rect RootWindowRect();
+
   // Indicates whether this widget has focus.
   bool has_focus() const { return has_focus_; }
 
   MouseLockDispatcher* mouse_lock_dispatcher() {
     return mouse_lock_dispatcher_.get();
+  }
+
+  void set_focused_pepper_plugin(PepperPluginInstanceImpl* plugin) {
+    focused_pepper_plugin_ = plugin;
   }
 
  protected:
@@ -690,7 +697,7 @@ class CONTENT_EXPORT RenderWidget
   // While we are waiting for the browser to update window sizes, we track the
   // pending size temporarily.
   int pending_window_rect_count_;
-  blink::WebRect pending_window_rect_;
+  gfx::Rect pending_window_rect_;
 
   // The screen rects of the view and the window that contains it.
   gfx::Rect view_screen_rect_;
@@ -770,6 +777,10 @@ class CONTENT_EXPORT RenderWidget
 
   // Indicates whether this widget has focus.
   bool has_focus_;
+
+  // This reference is set by the RenderFrame and is used to query the IME-
+  // related state from the plugin to later send to the browser.
+  PepperPluginInstanceImpl* focused_pepper_plugin_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidget);
 };

@@ -29,11 +29,11 @@
 
 /**
  * @constructor
- * @extends {WebInspector.ThrottledWidget}
+ * @extends {WebInspector.ThrottledView}
  */
 WebInspector.ComputedStyleWidget = function()
 {
-    WebInspector.ThrottledWidget.call(this);
+    WebInspector.ThrottledView.call(this, WebInspector.UIString("Computed Style"));
     this.element.classList.add("computed-style-sidebar-pane");
 
     this.registerRequiredCSS("elements/computedStyleSidebarPane.css");
@@ -73,15 +73,6 @@ WebInspector.ComputedStyleWidget = function()
 
     var fontsWidget = new WebInspector.PlatformFontsWidget(this._computedStyleModel);
     fontsWidget.show(this.element);
-}
-
-/**
- * @return {!WebInspector.ElementsSidebarViewWrapperPane}
- */
-WebInspector.ComputedStyleWidget.createSidebarWrapper = function()
-{
-    var widget = new WebInspector.ComputedStyleWidget();
-    return new WebInspector.ElementsSidebarViewWrapperPane(WebInspector.UIString("Computed Style"), widget)
 }
 
 WebInspector.ComputedStyleWidget._propertySymbol = Symbol("property");
@@ -149,6 +140,14 @@ WebInspector.ComputedStyleWidget.prototype = {
      */
     _innerRebuildUpdate: function(nodeStyle, matchedStyles)
     {
+        /** @type {!Set<string>} */
+        var expandedProperties = new Set();
+        for (var treeElement of this._propertiesOutline.rootElement().children()) {
+            if (!treeElement.expanded)
+                continue;
+            var propertyName = treeElement[WebInspector.ComputedStyleWidget._propertySymbol].name;
+            expandedProperties.add(propertyName);
+        }
         this._propertiesOutline.removeChildren();
         this._linkifier.reset();
         var cssModel = this._computedStyleModel.cssModel();
@@ -213,6 +212,8 @@ WebInspector.ComputedStyleWidget.prototype = {
                 treeElement.listItemElement.addEventListener("click", handleClick.bind(null, treeElement), false);
                 var gotoSourceElement = propertyValueElement.createChild("div", "goto-source-icon");
                 gotoSourceElement.addEventListener("click", this._navigateToSource.bind(this, activeProperty));
+                if (expandedProperties.has(propertyName))
+                    treeElement.expand();
             }
         }
 
@@ -354,5 +355,5 @@ WebInspector.ComputedStyleWidget.prototype = {
         }
     },
 
-    __proto__: WebInspector.ThrottledWidget.prototype
+    __proto__: WebInspector.ThrottledView.prototype
 }

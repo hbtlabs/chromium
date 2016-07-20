@@ -240,6 +240,9 @@ HttpNetworkSession::HttpNetworkSession(const Params& params)
 
   http_server_properties_->SetMaxServerConfigsStoredInProperties(
       params.quic_max_server_configs_stored_in_properties);
+
+  memory_pressure_listener_.reset(new base::MemoryPressureListener(base::Bind(
+      &HttpNetworkSession::OnMemoryPressure, base::Unretained(this))));
 }
 
 HttpNetworkSession::~HttpNetworkSession() {
@@ -366,7 +369,13 @@ void HttpNetworkSession::GetAlpnProtos(NextProtoVector* alpn_protos) const {
   if (HttpStreamFactory::spdy_enabled()) {
     *alpn_protos = next_protos_;
   } else {
+    // HttpStreamFactory::spdy_enabled() only affects SPDY/3.1,
+    // but not other ALPN protocols.
     alpn_protos->clear();
+    for (auto proto : next_protos_) {
+      if (proto != kProtoSPDY31)
+        alpn_protos->push_back(proto);
+    }
   }
 }
 
@@ -400,6 +409,18 @@ ClientSocketPoolManager* HttpNetworkSession::GetSocketPoolManager(
       break;
   }
   return NULL;
+}
+
+void HttpNetworkSession::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  switch (memory_pressure_level) {
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_NONE:
+      break;
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
+    case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
+      CloseIdleConnections();
+      break;
+  }
 }
 
 }  // namespace net

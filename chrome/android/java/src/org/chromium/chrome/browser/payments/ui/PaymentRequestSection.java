@@ -71,7 +71,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
     public static final String TAG = "PaymentRequestUI";
 
     /** Handles clicks on the widgets and providing data to the PaymentsRequestSection. */
-    public static interface SectionDelegate extends View.OnClickListener {
+    public interface SectionDelegate extends View.OnClickListener {
         /**
          * Called when the user selects a radio button option from an {@link OptionSection}.
          *
@@ -82,6 +82,9 @@ public abstract class PaymentRequestSection extends LinearLayout {
 
         /** Called when the user requests adding a new PaymentOption to a given section. */
         void onAddPaymentOption(OptionSection section);
+
+        /** Checks whether or not the text should be formatted with a bold label. */
+        boolean isBoldLabelNeeded(OptionSection section);
 
         /** Checks whether or not the user should be allowed to click on controls. */
         boolean isAcceptingUserInput();
@@ -246,7 +249,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
      *
      * @param sectionName Title to display for the section.
      */
-    private final LinearLayout prepareMainSection(String sectionName) {
+    private LinearLayout prepareMainSection(String sectionName) {
         // The main section is a vertical linear layout that subclasses can append to.
         LinearLayout mainSectionLayout = new LinearLayout(getContext());
         mainSectionLayout.setOrientation(VERTICAL);
@@ -527,6 +530,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
         private static final int INVALID_OPTION_INDEX = -1;
 
         private final List<TextView> mLabelsForTest = new ArrayList<>();
+        private boolean mCanAddItems = true;
 
         /**
          * Displays a row representing either a selectable option or some flavor text.
@@ -650,7 +654,8 @@ public abstract class PaymentRequestSection extends LinearLayout {
                     ApiCompatibilityUtils.setTextAppearance(labelView, isEnabled
                             ? R.style.PaymentsUiSectionDefaultText
                             : R.style.PaymentsUiSectionDisabledText);
-                    labelView.setText(convertOptionToString(mOption));
+                    labelView.setText(convertOptionToString(
+                            mOption, mDelegate.isBoldLabelNeeded(OptionSection.this)));
                     labelView.setEnabled(isEnabled);
                 } else if (mRowType == OPTION_ROW_TYPE_ADD) {
                     // Shows string saying that the user can add a new option, e.g. credit card no.
@@ -718,7 +723,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
         private final int mVerticalMargin;
 
         /** All the possible PaymentOptions in Layout form, then one row for adding new options. */
-        private final ArrayList<OptionRow> mOptionRows = new ArrayList<OptionRow>();
+        private final ArrayList<OptionRow> mOptionRows = new ArrayList<>();
 
         /** Width that the icon takes. */
         private final int mIconMaxWidth;
@@ -792,6 +797,11 @@ public abstract class PaymentRequestSection extends LinearLayout {
                     LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         }
 
+        /** @param canAddItems If false, this section will not show [+ ADD THING] button. */
+        public void setCanAddItems(boolean canAddItems) {
+            mCanAddItems = canAddItems;
+        }
+
         /** Updates the View to account for the new {@link SectionInformation} being passed in. */
         public void update(SectionInformation information) {
             PaymentOption selectedItem = information.getSelectedItem();
@@ -861,7 +871,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
                 }
             } else {
                 setLogoResource(selectedItem.getDrawableIconId());
-                setSummaryText(convertOptionToString(selectedItem), null);
+                setSummaryText(convertOptionToString(selectedItem, false), null);
             }
         }
 
@@ -904,7 +914,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
             }
 
             // If the user is allowed to add new options, show the button for it.
-            if (information.getAddStringId() != 0) {
+            if (information.getAddStringId() != 0 && mCanAddItems) {
                 OptionRow addRow = new OptionRow(mOptionLayout, mOptionLayout.getChildCount(),
                         OptionRow.OPTION_ROW_TYPE_ADD, null, false);
                 addRow.setLabel(information.getAddStringId());
@@ -913,9 +923,24 @@ public abstract class PaymentRequestSection extends LinearLayout {
             }
         }
 
-        private CharSequence convertOptionToString(PaymentOption item) {
-            if (TextUtils.isEmpty(item.getSublabel())) return item.getLabel();
-            return new StringBuilder(item.getLabel()).append("\n").append(item.getSublabel());
+        private CharSequence convertOptionToString(PaymentOption item, boolean useBoldLabel) {
+            SpannableStringBuilder builder = new SpannableStringBuilder(item.getLabel());
+            if (useBoldLabel) {
+                builder.setSpan(
+                        new StyleSpan(android.graphics.Typeface.BOLD), 0, builder.length(), 0);
+            }
+
+            if (!TextUtils.isEmpty(item.getSublabel())) {
+                if (builder.length() > 0) builder.append("\n");
+                builder.append(item.getSublabel());
+            }
+
+            if (!TextUtils.isEmpty(item.getTertiaryLabel())) {
+                if (builder.length() > 0) builder.append("\n");
+                builder.append(item.getTertiaryLabel());
+            }
+
+            return builder;
         }
 
         /**

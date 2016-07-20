@@ -370,6 +370,8 @@ class Serializer {
    * @param {number} childIndex
    */
   handleSelection(parentNode, childIndex) {
+    if (this.selection_.isNone)
+      return;
     if (parentNode === this.selection_.focusNode &&
         childIndex === this.selection_.focusOffset) {
       this.emit('|');
@@ -388,6 +390,8 @@ class Serializer {
   handleCharacterData(node) {
     /** @type {string} */
     const text = node.nodeValue;
+    if (this.selection_.isNone)
+      return this.emit(text);
     /** @type {number} */
     const anchorOffset = this.selection_.anchorOffset;
     /** @type {number} */
@@ -462,7 +466,10 @@ class Serializer {
    * @param {!HTMLDocument} document
    */
   serialize(document) {
-    this.serializeChildren(document.body);
+    if (document.body)
+        this.serializeChildren(document.body);
+    else
+        this.serializeInternal(document.documentElement);
     return this.strings_.join('');
   }
 
@@ -657,7 +664,7 @@ function assertSelection(
   if (typeof(tester) === 'function') {
     tester.call(window, sample.selection);
   } else if (typeof(tester) === 'string') {
-    const strings = tester.split(' ');
+    const strings = tester.split(/ (.+)/);
     sample.document.execCommand(strings[0], false, strings[1]);
   } else {
     throw new Error(`Invalid tester: ${tester}`);

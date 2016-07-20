@@ -35,7 +35,7 @@ crbug.com/524236 virtual/spv2/compositing/repaint/should-not-repaint-composited-
 crbug.com/524236 virtual/spv2/compositing/repaint/should-not-repaint-composited-opacity.html [ Failure ]
 crbug.com/524236 virtual/spv2/compositing/repaint/should-not-repaint-composited-transform.html [ Failure ]
 crbug.com/524236 virtual/spv2/fast/repaint/clip-path-constant-repaint.html [ Failure ]
-crbug.com/524236 virtual/spv2/fast/repaint/relative-positioned-movement-repaint.html [ Failure ]
+crbug.com/524236 crbug.com/619103 virtual/spv2/fast/repaint/relative-positioned-movement-repaint.html [ Failure Crash Timeout ]
 crbug.com/510908 virtual/spv2/svg/custom/object-sizing-no-width-height-change-content-box-size.xhtml [ Failure ]
 
 crbug.com/504613 crbug.com/524248 paint/images/image-backgrounds-not-antialiased.html [ Skip ]
@@ -469,7 +469,6 @@ crbug.com/387740 imported/wpt/mediacapture-streams/MediaStream-idl.https.html [ 
 crbug.com/387740 imported/wpt/mediacapture-streams/MediaStream-removetrack.https.html [ Skip ]
 
 crbug.com/412381 imported/wpt/mediacapture-streams/GUM-empty-option-param.https.html [ Failure ]
-crbug.com/412381 imported/wpt/mediacapture-streams/GUM-trivial-constraint.https.html [ Failure ]
 crbug.com/412381 imported/wpt/mediacapture-streams/GUM-unknownkey-option-param.https.html [ Failure ]
 crbug.com/412381 imported/wpt/mediacapture-streams/MediaStream-MediaElement-preload-none.https.html [ Pass Timeout Failure ]
 
@@ -506,6 +505,7 @@ crbug.com/380217 [ Linux Win ] fast/shapes/shape-outside-floats/shape-outside-fl
 crbug.com/380217 [ Win ] fast/shapes/shape-outside-floats/shape-outside-floats-inset-rounded-bottom-left.html [ Skip ]
 
 crbug.com/605840 [ Linux Win ] fast/text/hyphens/hyphens-auto.html [ Skip ]
+crbug.com/605840 [ Android ] fast/text/hyphens/hyphens-auto.html [ Pass ]
 
 crbug.com/405389 imported/csswg-test/css-shapes-1/shape-outside/supported-shapes/polygon/shape-outside-polygon-017.html [ Failure ]
 crbug.com/424365 imported/csswg-test/css-shapes-1/shape-outside/shape-image/shape-image-010.html [ Failure ]
@@ -725,8 +725,6 @@ crbug.com/396940 ietestcenter/css3/multicolumn/column-containing-block-002.htm [
 crbug.com/378610 [ Win ] svg/custom/focus-ring-text.svg [ Failure ]
 crbug.com/378610 [ Mac ] svg/custom/focus-ring-text.svg [ Failure Pass ]
 
-crbug.com/624285 inspector/console/console-stack-overflow.html [ NeedsManualRebaseline ]
-
 crbug.com/474987 [ Win Mac ] css3/flexbox/auto-margins.html [ Failure ]
 
 crbug.com/267206 [ Mac ] fast/scrolling/scrollbar-tickmarks-hittest.html [ Timeout ]
@@ -758,11 +756,8 @@ crbug.com/613887 http/tests/preload/meta-viewport-link-headers.html [ Failure Pa
 crbug.com/564403 http/tests/inspector/service-workers/service-worker-manager.html [ Failure Pass ]
 
 crbug.com/613728 fast/table/border-collapsing/cached-cell-append.html [ Failure ]
-crbug.com/613728 fast/table/border-collapsing/cached-change-col-border-width.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-cell-remove.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-69296.html [ Failure ]
-crbug.com/613728 fast/table/border-collapsing/cached-change-colgroup-border-width.html [ Failure ]
-crbug.com/613728 fast/table/border-collapsing/cached-change-cell-border-width.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-change-table-border-width.html [ Failure ]
 
 crbug.com/306222 fast/hidpi/image-srcset-relative-svg-canvas.html [ Skip ]
@@ -809,7 +804,7 @@ crbug.com/425345 [ Mac ] fast/text/line-break-after-question-mark.html [ Failure
 
 crbug.com/574283 [ Mac ] virtual/threaded/fast/scroll-behavior/smooth-scroll/mousewheel-scroll-interrupted.html [ Skip ]
 crbug.com/587165 [ Win7 Debug ] virtual/threaded/fast/scroll-behavior/smooth-scroll/mousewheel-scroll-interrupted.html [ Pass Failure ]
-crbug.com/587165 [ Linux Debug ] virtual/threaded/fast/scroll-behavior/smooth-scroll/mousewheel-scroll-interrupted.html [ Pass Failure ]
+crbug.com/587165 [ Linux ] virtual/threaded/fast/scroll-behavior/smooth-scroll/mousewheel-scroll-interrupted.html [ Pass Failure ]
 
 crbug.com/624247 [ Linux Win7 ] virtual/threaded/fast/scroll-behavior/smooth-scroll/track-scroll.html [ Failure Pass ]
 
@@ -897,6 +892,9 @@ crbug.com/482229 compositing/layer-creation/fixed-position-under-transform.html 
 # These fail in the leak detector: http://crbug.com/612924#c4
 crbug.com/619060 [ Linux ] imported/wpt/pointerevents/pointerevent_change-touch-action-onpointerdown_touch-manual.html [ Skip ]
 crbug.com/619060 [ Linux ] imported/wpt/pointerevents/pointerevent_pointerout_after_pointercancel_touch-manual.html [ Skip ]
+crbug.com/619060 [ Linux ] imported/wpt/pointerevents/pointerevent_touch-action-auto-css_touch-manual.html  [ Skip ]
+crbug.com/619060 [ Linux ] imported/wpt/pointerevents/pointerevent_releasepointercapture_onpointercancel_touch-manual.html [ Skip ]
+crbug.com/619060 [ Linux ] imported/wpt/pointerevents/pointerevent_touch-action-pan-x-pan-y_touch-manual.html  [ Skip ]
 
 # The commented lines here for Mac is due to the fact that there is a more
 # generic skip rule in the next block of rules. However, when they get fixed
@@ -906,16 +904,15 @@ crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_change-touch-ac
 # crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerleave_after_pointerup_nohover-manual.html [ Skip ]
 # crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerleave_after_pointercancel_touch-manual.html [ Skip ]
 # crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointercancel_touch-manual.html [ Skip ]
-# crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerout_after_pointerup_nohover-manual.html [ Skip ]
-# crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointertype_touch-manual.html [ Skip ]
-# crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_releasepointercapture_onpointercancel_touch-manual.html [ Skip ]
+crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerout_after_pointerup_nohover-manual.html [ Skip ]
+crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointertype_touch-manual.html [ Skip ]
+crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_releasepointercapture_onpointercancel_touch-manual.html [ Skip ]
 crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerout_after_pointercancel_touch-manual.html [ Skip ]
 # crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_pointerleave_touch-manual.html [ Skip ]
+crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_touch-action-auto-css_touch-manual.html  [ Skip ]
+crbug.com/613672 [ Mac ] imported/wpt/pointerevents/pointerevent_touch-action-pan-x-pan-y_touch-manual.html  [ Skip ]
 
 # These are crashing on Linux debug builds and timing out on Mac as it doesn't support touch
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_pointertype_touch-manual.html [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_pointerout_after_pointerup_nohover-manual.html [ Skip ]
-
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_lostpointercapture_for_disconnected_node-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_lostpointercapture_is_first-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointercancel_touch-manual.html  [ Skip ]
@@ -923,25 +920,23 @@ crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerenter_nohover-ma
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_after_pointercancel_touch-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_after_pointerup_nohover-manual.html  [ Skip ]
 crbug.com/619060 imported/wpt/pointerevents/pointerevent_pointerleave_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_releasepointercapture_onpointercancel_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_click.html [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_drag_mouse.html [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-auto-css_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-auto-child-none_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-none_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-y_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_highest-parent-none_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-inherit_parent-none_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-keyboard-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-none-css_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-pan-x-css_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-pan-x-pan-y-pan-y_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-pan-x-pan-y_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-pan-y-css_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-span-test_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-svg-test_touch-manual.html  [ Skip ]
-crbug.com/620236 imported/wpt/pointerevents/pointerevent_touch-action-table-test_touch-manual.html  [ Skip ]
+
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_click.html [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_suppress_compat_events_on_drag_mouse.html [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-auto-child-none_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-none_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-x_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_child-pan-x-child-pan-y_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_highest-parent-none_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-inherit_parent-none_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-keyboard-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-none-css_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-pan-x-css_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-pan-x-pan-y-pan-y_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-pan-y-css_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-span-test_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-svg-test_touch-manual.html  [ Skip ]
+crbug.com/627341 imported/wpt/pointerevents/pointerevent_touch-action-table-test_touch-manual.html  [ Skip ]
 
 crbug.com/583413 imported/wpt/pointerevents/pointerevent_pointerleave_pen-manual.html  [ Failure ]
 
@@ -974,8 +969,6 @@ crbug.com/467127 [ Mac Win ] imported/csswg-test/css-flexbox-1/ttwf-reftest-flex
 
 crbug.com/570894 [ Win ] imported/csswg-test/css-flexbox-1/flexbox_flex-natural-mixed-basis-auto.html [ Failure Pass ]
 
-crbug.com/553838 imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-align-content-vert-001a.xhtml [ Failure ]
-crbug.com/553838 imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-align-content-vert-001b.xhtml [ Failure ]
 crbug.com/553838 imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-basic-canvas-vert-001.xhtml [ Failure ]
 crbug.com/553838 imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-basic-iframe-vert-001.xhtml [ Failure ]
 crbug.com/553838 imported/csswg-test/vendor-imports/mozilla/mozilla-central-reftests/flexbox/flexbox-basic-img-vert-001.xhtml [ Failure ]
@@ -1110,6 +1103,7 @@ crbug.com/619103 paint/selection/text-selection-newline-mixed-ltr-rtl.html [ Fai
 crbug.com/619103 paint/selection/text-selection-newline-rtl-double-linebreak.html [ Failure ]
 crbug.com/619103 virtual/rootlayerscrolls/fast/scrolling/background-paint-scrolled-out-and-in.html [ Crash Timeout ]
 crbug.com/619103 virtual/rootlayerscrolls/fast/scrolling/background-paint-scrolled.html [ Crash Timeout ]
+crbug.com/619103 [ Debug ] fast/layers/remove-layer-with-nested-stacking.html [ Crash Timeout ]
 
 crbug.com/443596 media/sources-fallback-codecs.html [ Pass Failure ]
 
@@ -1353,8 +1347,6 @@ crbug.com/624430 [ Win10 ] fast/text/font-features/caps-casemapping.html [ Failu
 # crbug.com/624709 [ Win ] virtual/gpu-rasterization/fast/images/png-with-color-profile.html [ Failure ]
 crbug.com/624709 [ Win ] virtual/gpu-rasterization/fast/images/webp-color-profile-lossy.html [ Failure ]
 
-crbug.com/625020 [ Debug ] compositing/repaint/page-scale-repaint.html [ Timeout ]
-
 crbug.com/620432 accessibility/aria-activedescendant.html [ Failure ]
 
 crbug.com/593567 [ Linux Debug ] virtual/scalefactor150/fast/hidpi/static/calendar-picker-appearance.html [ Skip ]
@@ -1393,3 +1385,6 @@ crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-
 crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-object.html [ NeedsManualRebaseline ]
 crbug.com/627844 virtual/gpu-rasterization/fast/images/ycbcr-with-cmyk-color-profile.html [ NeedsManualRebaseline ]
 crbug.com/627844 virtual/gpu/fast/canvas/canvas-createImageBitmap-colorClamping.html [ Pass Failure ]
+
+crbug.com/629711 [ Linux Debug ] fast/workers/shared-worker-exception.html [ Crash Pass ]
+crbug.com/629711 [ Linux Debug ] virtual/sharedarraybuffer/fast/workers/shared-worker-exception.html [ Crash Pass ]

@@ -7,10 +7,11 @@
 #include <stddef.h>
 
 #include "ash/common/ash_switches.h"
+#include "ash/common/shelf/app_list_button.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/shelf/app_list_button.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_util.h"
@@ -271,7 +272,7 @@ class ShelfAppBrowserTest : public ExtensionBrowserTest {
 
   void RunTestOnMainThreadLoop() override {
     shelf_ = ash::Shelf::ForPrimaryDisplay();
-    model_ = ash::test::ShellTestApi(ash::Shell::GetInstance()).shelf_model();
+    model_ = ash::WmShell::Get()->shelf_model();
     controller_ = GetChromeLauncherControllerImpl();
     return ExtensionBrowserTest::RunTestOnMainThreadLoop();
   }
@@ -1532,6 +1533,117 @@ IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest, WindowAttentionStatus) {
   EXPECT_EQ(ash::STATUS_ACTIVE, item.status);
 }
 
+IN_PROC_BROWSER_TEST_F(LauncherPlatformAppBrowserTest,
+                       ShowInShelfWindowsWithWindowKeySet) {
+  ash::ShelfModel* shelf_model = ash::WmShell::Get()->shelf_model();
+
+  // Add a window with shelf True, close it
+  int item_count = shelf_model->item_count();
+  const Extension* extension = LoadAndLaunchPlatformApp("launch", "Launched");
+  AppWindow::CreateParams params;
+
+  params.show_in_shelf = true;
+  params.window_key = "window1";
+  AppWindow* window1 =
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
+  // There should be only 1 item added to the shelf.
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  CloseAppWindow(window1);
+  EXPECT_EQ(item_count, shelf_model->item_count());
+
+  // Add a window with false, following one with true
+  item_count = shelf_model->item_count();
+  extension = LoadAndLaunchPlatformApp("launch", "Launched");
+
+  params.show_in_shelf = false;
+  params.window_key = "window1";
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  params.show_in_shelf = true;
+  params.window_key = "window2";
+  AppWindow* window2 =
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
+  // There should be 2 items added to the shelf: although window1 has
+  // show_in_shelf set to false, it's the first window created so its icon must
+  // show up in shelf.
+  EXPECT_EQ(item_count + 2, shelf_model->item_count());
+  CloseAppWindow(window1);
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  CloseAppWindow(window2);
+  EXPECT_EQ(item_count, shelf_model->item_count());
+
+  // Open just one window with false
+  item_count = shelf_model->item_count();
+  extension = LoadAndLaunchPlatformApp("launch", "Launched");
+
+  params.show_in_shelf = false;
+  params.window_key = "window1";
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  // There should be 1 item added to the shelf: although show_in_shelf is false,
+  // this is the first window created.
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  CloseAppWindow(window1);
+  EXPECT_EQ(item_count, shelf_model->item_count());
+
+  // Add a window with true, following one with false
+  item_count = shelf_model->item_count();
+  extension = LoadAndLaunchPlatformApp("launch", "Launched");
+
+  params.show_in_shelf = true;
+  params.window_key = "window1";
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());  // main window
+  params.show_in_shelf = false;
+  params.window_key = "window2";
+  window2 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 2, shelf_model->item_count());
+  CloseAppWindow(window1);
+  // There should be 1 item added to the shelf as the second window
+  // is set to show_in_shelf false
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  CloseAppWindow(window2);
+  EXPECT_EQ(item_count, shelf_model->item_count());
+
+  // Test closing windows in different order
+  item_count = shelf_model->item_count();
+  extension = LoadAndLaunchPlatformApp("launch", "Launched");
+
+  params.show_in_shelf = false;
+  params.window_key = "window1";
+  window1 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  params.show_in_shelf = false;
+  params.window_key = "window2";
+  window2 = CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  params.show_in_shelf = true;
+  params.window_key = "window3";
+  AppWindow* window3 =
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
+  EXPECT_EQ(item_count + 2, shelf_model->item_count());
+  params.show_in_shelf = true;
+  params.window_key = "window4";
+  AppWindow* window4 =
+      CreateAppWindowFromParams(browser()->profile(), extension, params);
+  // There should be 3 items added to the shelf.
+  EXPECT_EQ(item_count + 3, shelf_model->item_count());
+  // Any window close order should be valid
+  CloseAppWindow(window4);
+  // Closed window4 that was shown in shelf. item_count would decrease
+  EXPECT_EQ(item_count + 2, shelf_model->item_count());
+  CloseAppWindow(window1);
+  // Closed window1 which was grouped together with window2 so item_count
+  // would not decrease
+  EXPECT_EQ(item_count + 2, shelf_model->item_count());
+  CloseAppWindow(window3);
+  // Closed window3 that was shown in shelf. item_count would decrease
+  EXPECT_EQ(item_count + 1, shelf_model->item_count());
+  CloseAppWindow(window2);
+  // Closed window2 - there is no other window in that group and item_count
+  // would decrease
+  EXPECT_EQ(item_count, shelf_model->item_count());
+}
+
 // Checks that the browser Alt "tabbing" is properly done.
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTestNoDefaultBrowser,
                        AltNumberBrowserTabbing) {
@@ -2158,7 +2270,7 @@ IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, V1AppNavigation) {
 IN_PROC_BROWSER_TEST_F(ShelfAppBrowserTest, SettingsWindow) {
   chrome::SettingsWindowManager* settings_manager =
       chrome::SettingsWindowManager::GetInstance();
-  ash::ShelfModel* shelf_model = ash::Shell::GetInstance()->shelf_model();
+  ash::ShelfModel* shelf_model = ash::WmShell::Get()->shelf_model();
 
   // Get the number of items in the shelf and browser menu.
   int item_count = shelf_model->item_count();

@@ -530,7 +530,7 @@ WebInspector.TimelineUIUtils.buildDetailsTextForTraceEvent = function(event, tar
 WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, target, linkifier)
 {
     var recordType = WebInspector.TimelineModel.RecordType;
-    var details;
+    var details = null;
     var detailsText;
     var eventData = event.args["data"];
     switch (event.name) {
@@ -565,7 +565,7 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
             details = WebInspector.linkifyResourceAsNode(event.url);
         break;
     case recordType.FunctionCall:
-        details = linkifyLocation(eventData["scriptId"], eventData["scriptName"], eventData["scriptLine"], 0);
+        details = linkifyLocation(eventData["scriptId"], eventData["scriptName"], eventData["scriptLine"] - 1, 0);
         break;
     case recordType.JSFrame:
         details = createElement("span");
@@ -580,7 +580,7 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
     case recordType.EvaluateScript:
         var url = eventData["url"];
         if (url)
-            details = linkifyLocation("", url, eventData["lineNumber"], 0);
+            details = linkifyLocation("", url, eventData["lineNumber"] - 1, 0);
         break;
     case recordType.ParseScriptOnBackground:
         var url = eventData["url"];
@@ -604,13 +604,11 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
      * @param {string} url
      * @param {number} lineNumber
      * @param {number=} columnNumber
+     * @return {?Element}
      */
     function linkifyLocation(scriptId, url, lineNumber, columnNumber)
     {
-        // FIXME(62725): stack trace line/column numbers are one-based.
-        if (columnNumber)
-            --columnNumber;
-        return linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber - 1, columnNumber, "timeline-details");
+        return linkifier.linkifyScriptLocation(target, scriptId, url, lineNumber, columnNumber, "timeline-details");
     }
 
     /**
@@ -619,7 +617,7 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
     function linkifyTopCallFrame()
     {
         var frame = WebInspector.TimelineUIUtils.topStackFrame(event);
-        return frame ? linkifier.linkifyConsoleCallFrameForTimeline(target, frame, "timeline-details") : null;
+        return frame ? linkifier.maybeLinkifyConsoleCallFrameForTracing(target, frame, "timeline-details") : null;
     }
 }
 
@@ -632,7 +630,7 @@ WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent = function(event, tar
  */
 WebInspector.TimelineUIUtils.buildTraceEventDetails = function(event, model, linkifier, detailed, callback)
 {
-    var target = model.target();
+    var target = model.targetByEvent(event);
     if (!target) {
         callbackWrapper();
         return;
@@ -695,7 +693,7 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
     // This message may vary per event.name;
     var relatedNodeLabel;
 
-    var contentHelper = new WebInspector.TimelineDetailsContentHelper(model.target(), linkifier);
+    var contentHelper = new WebInspector.TimelineDetailsContentHelper(model.targetByEvent(event), linkifier);
     contentHelper.addSection(WebInspector.TimelineUIUtils.eventTitle(event), WebInspector.TimelineUIUtils.eventStyle(event).category);
 
     var eventData = event.args["data"];
@@ -722,7 +720,7 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
         contentHelper.appendTextRow(WebInspector.UIString("Collected"), Number.bytesToString(delta));
         break;
     case recordTypes.JSFrame:
-        var detailsNode = WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent(event, model.target(), linkifier);
+        var detailsNode = WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent(event, model.targetByEvent(event), linkifier);
         if (detailsNode)
             contentHelper.appendElementRow(WebInspector.UIString("Function"), detailsNode);
         break;
@@ -851,7 +849,7 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
         break;
 
     default:
-        var detailsNode = WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent(event, model.target(), linkifier);
+        var detailsNode = WebInspector.TimelineUIUtils.buildDetailsNodeForTraceEvent(event, model.targetByEvent(event), linkifier);
         if (detailsNode)
             contentHelper.appendElementRow(WebInspector.UIString("Details"), detailsNode);
         break;
@@ -870,7 +868,7 @@ WebInspector.TimelineUIUtils._buildTraceEventDetailsSynchronously = function(eve
     }
 
     if (event.stackTrace || (event.initiator && event.initiator.stackTrace) || event.invalidationTrackingEvents)
-        WebInspector.TimelineUIUtils._generateCauses(event, model.target(), relatedNodesMap, contentHelper);
+        WebInspector.TimelineUIUtils._generateCauses(event, model.targetByEvent(event), relatedNodesMap, contentHelper);
 
     var showPieChart = detailed && WebInspector.TimelineUIUtils._aggregatedStatsForTraceEvent(stats, model, event);
     if (showPieChart) {
@@ -974,7 +972,7 @@ WebInspector.TimelineUIUtils._collectAggregatedStatsForRecord = function(record,
  */
 WebInspector.TimelineUIUtils.buildNetworkRequestDetails = function(request, model, linkifier)
 {
-    var target = model.target();
+    var target = model.targetByEvent(request.children[0]);
     var contentHelper = new WebInspector.TimelineDetailsContentHelper(target, linkifier);
 
     var duration = request.endTime - (request.startTime || -Infinity);
@@ -996,11 +994,16 @@ WebInspector.TimelineUIUtils.buildNetworkRequestDetails = function(request, mode
     var sendRequest = request.children[0];
     var topFrame = WebInspector.TimelineUIUtils.topStackFrame(sendRequest);
     if (topFrame) {
-        contentHelper.appendElementRow(title, linkifier.linkifyConsoleCallFrameForTimeline(target, topFrame));
+        var link = linkifier.maybeLinkifyConsoleCallFrameForTracing(target, topFrame);
+        if (link)
+            contentHelper.appendElementRow(title, link);
     } else if (sendRequest.initiator) {
         var initiatorURL = WebInspector.TimelineUIUtils.eventURL(sendRequest.initiator);
-        if (initiatorURL)
-            contentHelper.appendElementRow(title, linkifier.linkifyScriptLocation(target, null, initiatorURL, 0));
+        if (initiatorURL) {
+            var link = linkifier.maybeLinkifyScriptLocation(target, null, initiatorURL, 0);
+            if (link)
+                contentHelper.appendElementRow(title, link);
+        }
     }
 
     /**
@@ -1153,11 +1156,13 @@ WebInspector.TimelineUIUtils._generateInvalidationsForType = function(type, targ
     contentHelper.appendElementRow(title, invalidationsTreeOutline.element, false, true);
 
     /**
-     * @param {!Array.<!WebInspector.InvalidationTrackingEvent>} invalidations
+     * @param {!Array<!WebInspector.InvalidationTrackingEvent>} invalidations
+     * @return {!Array<!Array<!WebInspector.InvalidationTrackingEvent>>}
      */
     function groupInvalidationsByCause(invalidations)
     {
-        var causeToInvalidationMap = {};
+        /** @type {!Map<string, !Array<!WebInspector.InvalidationTrackingEvent>>} */
+        var causeToInvalidationMap = new Map();
         for (var index = 0; index < invalidations.length; index++) {
             var invalidation = invalidations[index];
             var causeKey = "";
@@ -1173,12 +1178,12 @@ WebInspector.TimelineUIUtils._generateInvalidationsForType = function(type, targ
                 });
             }
 
-            if (causeToInvalidationMap[causeKey])
-                causeToInvalidationMap[causeKey].push(invalidation);
+            if (causeToInvalidationMap.has(causeKey))
+                causeToInvalidationMap.get(causeKey).push(invalidation);
             else
-                causeToInvalidationMap[causeKey] = [ invalidation ];
+                causeToInvalidationMap.set(causeKey, [ invalidation ]);
         }
-        return Object.values(causeToInvalidationMap);
+        return causeToInvalidationMap.valuesArray();
     }
 }
 
@@ -1240,8 +1245,11 @@ WebInspector.TimelineUIUtils.InvalidationsGroupElement.prototype = {
             title.createTextChild(WebInspector.UIString(". "));
             var stack = title.createChild("span", "monospace");
             stack.createChild("span").textContent = WebInspector.beautifyFunctionName(topFrame.functionName);
-            stack.createChild("span").textContent = " @ ";
-            stack.createChild("span").appendChild(this._contentHelper.linkifier().linkifyConsoleCallFrameForTimeline(target, topFrame));
+            var link = this._contentHelper.linkifier().maybeLinkifyConsoleCallFrameForTracing(target, topFrame);
+            if (link) {
+                stack.createChild("span").textContent = " @ ";
+                stack.createChild("span").appendChild(link);
+            }
         }
 
         return title;
@@ -2051,7 +2059,10 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
             return;
         if (startColumn)
             --startColumn;
-        this.appendElementRow(title, this._linkifier.linkifyScriptLocation(this._target, null, url, startLine - 1, startColumn));
+        var link = this._linkifier.maybeLinkifyScriptLocation(this._target, null, url, startLine - 1, startColumn);
+        if (!link)
+            return;
+        this.appendElementRow(title, link);
     },
 
     /**
@@ -2065,7 +2076,10 @@ WebInspector.TimelineDetailsContentHelper.prototype = {
         if (!this._linkifier || !this._target)
             return;
         var locationContent = createElement("span");
-        locationContent.appendChild(this._linkifier.linkifyScriptLocation(this._target, null, url, startLine - 1));
+        var link = this._linkifier.maybeLinkifyScriptLocation(this._target, null, url, startLine - 1);
+        if (!link)
+            return;
+        locationContent.appendChild(link);
         locationContent.createTextChild(String.sprintf(" [%s\u2026%s]", startLine, endLine || ""));
         this.appendElementRow(title, locationContent);
     },

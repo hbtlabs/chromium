@@ -715,6 +715,7 @@ void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
       return;
   }
 
+  workspace_ = base::IntToString(kAllDesktops);
   XEvent xevent;
   memset (&xevent, 0, sizeof (xevent));
   xevent.type = ClientMessage;
@@ -729,6 +730,14 @@ void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
   XSendEvent(xdisplay_, x_root_window_, False,
              SubstructureRedirectMask | SubstructureNotifyMask,
              &xevent);
+}
+
+bool DesktopWindowTreeHostX11::IsVisibleOnAllWorkspaces() const {
+  // We don't need a check for _NET_WM_STATE_STICKY because that would specify
+  // that the window remain in a fixed position even if the viewport scrolls.
+  // This is different from the type of workspace that's associated with
+  // _NET_WM_DESKTOP.
+  return GetWorkspace() == base::IntToString(kAllDesktops);
 }
 
 bool DesktopWindowTreeHostX11::SetWindowTitle(const base::string16& title) {
@@ -1008,6 +1017,8 @@ void DesktopWindowTreeHostX11::SetBounds(
   XWindowChanges changes = {0};
   unsigned value_mask = 0;
 
+  delayed_resize_task_.Cancel();
+
   if (size_changed) {
     // Update the minimum and maximum sizes in case they have changed.
     UpdateMinAndMaxSize();
@@ -1147,7 +1158,7 @@ void DesktopWindowTreeHostX11::InitX11Window(
 
   Visual* visual;
   int depth;
-  ui::ChooseVisualForWindow(&visual, &depth);
+  ui::ChooseVisualForWindow(true, &visual, &depth);
   if (depth == 32) {
     attribute_mask |= CWColormap;
     swa.colormap =

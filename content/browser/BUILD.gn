@@ -37,6 +37,7 @@ source_set("browser") {
     "//components/filesystem:lib",
     "//components/leveldb:lib",
     "//components/link_header_util",
+    "//components/memory_coordinator/browser",
     "//components/mime_util",
     "//components/scheduler:common",
     "//components/tracing",
@@ -383,7 +384,6 @@ source_set("browser") {
 
   if (use_aura) {
     deps += [
-      "//components/bitmap_uploader",
       "//services/ui/common:mus_common",
       "//services/ui/public/cpp",
       "//services/ui/public/interfaces",

@@ -15,6 +15,9 @@
 
 namespace safe_browsing {
 
+using ::google::protobuf::RepeatedField;
+using ::google::protobuf::int32;
+
 class V4StoreTest : public PlatformTest {
  public:
   V4StoreTest() : task_runner_(new base::TestSimpleTaskRunner) {}
@@ -136,9 +139,10 @@ TEST_F(V4StoreTest, TestWriteFullResponseType) {
   EXPECT_EQ(WRITE_SUCCESS, V4Store(task_runner_, store_path_)
                                .WriteToDisk(std::move(list_update_response)));
 
-  std::unique_ptr<V4Store> read_store(new V4Store(task_runner_, store_path_));
-  EXPECT_EQ(READ_SUCCESS, read_store->ReadFromDisk());
-  EXPECT_EQ("test_client_state", read_store->state_);
+  V4Store read_store(task_runner_, store_path_);
+  EXPECT_EQ(READ_SUCCESS, read_store.ReadFromDisk());
+  EXPECT_EQ("test_client_state", read_store.state_);
+  EXPECT_TRUE(read_store.hash_prefix_map_.empty());
 }
 
 TEST_F(V4StoreTest, TestAddUnlumpedHashesWithInvalidAddition) {
@@ -176,46 +180,29 @@ TEST_F(V4StoreTest, TestAddUnlumpedHashes) {
   EXPECT_EQ("abcde5432100000-----", hash_prefixes);
 }
 
-TEST_F(V4StoreTest, TestGetNextSmallestPrefixSizeWithEmptyPrefixMap) {
+TEST_F(V4StoreTest, TestGetNextSmallestUnmergedPrefixWithEmptyPrefixMap) {
   HashPrefixMap prefix_map;
-  CounterMap counter_map;
-  V4Store::InitializeCounterMap(prefix_map, &counter_map);
+  IteratorMap iterator_map;
+  V4Store::InitializeIteratorMap(prefix_map, &iterator_map);
 
-  PrefixSize prefix_size;
-  EXPECT_FALSE(V4Store::GetNextSmallestPrefixSize(prefix_map, counter_map,
-                                                  &prefix_size));
+  HashPrefix prefix;
+  EXPECT_FALSE(V4Store::GetNextSmallestUnmergedPrefix(prefix_map, iterator_map,
+                                                      &prefix));
 }
 
-TEST_F(V4StoreTest, TestGetNextSmallestPrefixSize) {
+TEST_F(V4StoreTest, TestGetNextSmallestUnmergedPrefix) {
   HashPrefixMap prefix_map;
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(5, "-----0000054321abcde", &prefix_map));
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            V4Store::AddUnlumpedHashes(4, "-----0000054321abcde", &prefix_map));
-  CounterMap counter_map;
-  V4Store::InitializeCounterMap(prefix_map, &counter_map);
+            V4Store::AddUnlumpedHashes(4, "*****0000054321abcde", &prefix_map));
+  IteratorMap iterator_map;
+  V4Store::InitializeIteratorMap(prefix_map, &iterator_map);
 
-  PrefixSize prefix_size;
-  EXPECT_TRUE(V4Store::GetNextSmallestPrefixSize(prefix_map, counter_map,
-                                                 &prefix_size));
-  EXPECT_EQ(4u, prefix_size);
-}
-
-TEST_F(V4StoreTest, TestGetNextUnmergedPrefix) {
-  HashPrefixMap prefix_map;
-  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            V4Store::AddUnlumpedHashes(5, "-----0000054321abcde", &prefix_map));
-  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            V4Store::AddUnlumpedHashes(4, "-----0000054321abcde", &prefix_map));
-  CounterMap counter_map;
-  V4Store::InitializeCounterMap(prefix_map, &counter_map);
-
-  PrefixSize prefix_size;
-  EXPECT_TRUE(V4Store::GetNextSmallestPrefixSize(prefix_map, counter_map,
-                                                 &prefix_size));
-  const HashPrefix& prefix = V4Store::GetNextUnmergedPrefixForSize(
-      prefix_size, prefix_map, counter_map);
-  EXPECT_EQ("----", prefix);
+  HashPrefix prefix;
+  EXPECT_TRUE(V4Store::GetNextSmallestUnmergedPrefix(prefix_map, iterator_map,
+                                                     &prefix));
+  EXPECT_EQ("****", prefix);
 }
 
 TEST_F(V4StoreTest, TestMergeUpdatesWithSameSizesInEachMap) {
@@ -231,10 +218,10 @@ TEST_F(V4StoreTest, TestMergeUpdatesWithSameSizesInEachMap) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(5, "22222bcdef", &prefix_map_additions));
 
-  std::unique_ptr<V4Store> store(new V4Store(task_runner_, store_path_));
+  V4Store store(task_runner_, store_path_);
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            store->MergeUpdate(prefix_map_old, prefix_map_additions));
-  const HashPrefixMap& prefix_map = store->hash_prefix_map_;
+            store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
   EXPECT_EQ(2u, prefix_map.size());
 
   PrefixSize prefix_size = 4;
@@ -263,10 +250,10 @@ TEST_F(V4StoreTest, TestMergeUpdatesWithDifferentSizesInEachMap) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(5, "22222bcdef", &prefix_map_additions));
 
-  std::unique_ptr<V4Store> store(new V4Store(task_runner_, store_path_));
+  V4Store store(task_runner_, store_path_);
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            store->MergeUpdate(prefix_map_old, prefix_map_additions));
-  const HashPrefixMap& prefix_map = store->hash_prefix_map_;
+            store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
   EXPECT_EQ(2u, prefix_map.size());
 
   PrefixSize prefix_size = 4;
@@ -288,10 +275,10 @@ TEST_F(V4StoreTest, TestMergeUpdatesOldMapRunsOutFirst) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(4, "2222", &prefix_map_additions));
 
-  std::unique_ptr<V4Store> store(new V4Store(task_runner_, store_path_));
+  V4Store store(task_runner_, store_path_);
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            store->MergeUpdate(prefix_map_old, prefix_map_additions));
-  const HashPrefixMap& prefix_map = store->hash_prefix_map_;
+            store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
   EXPECT_EQ(1u, prefix_map.size());
 
   PrefixSize prefix_size = 4;
@@ -310,10 +297,10 @@ TEST_F(V4StoreTest, TestMergeUpdatesAdditionsMapRunsOutFirst) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(4, "00001111", &prefix_map_additions));
 
-  std::unique_ptr<V4Store> store(new V4Store(task_runner_, store_path_));
+  V4Store store(task_runner_, store_path_);
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
-            store->MergeUpdate(prefix_map_old, prefix_map_additions));
-  const HashPrefixMap& prefix_map = store->hash_prefix_map_;
+            store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
   EXPECT_EQ(1u, prefix_map.size());
 
   PrefixSize prefix_size = 4;
@@ -324,7 +311,7 @@ TEST_F(V4StoreTest, TestMergeUpdatesAdditionsMapRunsOutFirst) {
   EXPECT_EQ("2222", hash_prefixes.substr(2 * prefix_size, prefix_size));
 }
 
-TEST_F(V4StoreTest, TestMergeUpdatesFailsForRepeatedhashPrefix) {
+TEST_F(V4StoreTest, TestMergeUpdatesFailsForRepeatedHashPrefix) {
   HashPrefixMap prefix_map_old;
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(4, "2222", &prefix_map_old));
@@ -332,9 +319,298 @@ TEST_F(V4StoreTest, TestMergeUpdatesFailsForRepeatedhashPrefix) {
   EXPECT_EQ(APPLY_UPDATE_SUCCESS,
             V4Store::AddUnlumpedHashes(4, "2222", &prefix_map_additions));
 
-  std::unique_ptr<V4Store> store(new V4Store(task_runner_, store_path_));
+  V4Store store(task_runner_, store_path_);
   EXPECT_EQ(ADDITIONS_HAS_EXISTING_PREFIX_FAILURE,
-            store->MergeUpdate(prefix_map_old, prefix_map_additions));
+            store.MergeUpdate(prefix_map_old, prefix_map_additions, nullptr));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesFailsWhenRemovalsIndexTooLarge) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "2222", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "11113333", &prefix_map_additions));
+
+  // Even though the merged map could have size 3 without removals, the
+  // removals index should only count the entries in the old map.
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222"]
+  raw_removals.Add(1);
+  EXPECT_EQ(
+      REMOVALS_INDEX_TOO_LARGE,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesOnlyElement) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "2222", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "1111133333", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222"]
+  raw_removals.Add(0);  // Removes "2222"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_TRUE(prefix_map.at(4).empty());
+  EXPECT_EQ("1111133333", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesFirstElement) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "22224444", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "1111133333", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222", "4444"]
+  raw_removals.Add(0);  // Removes "2222"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_EQ("4444", prefix_map.at(4));
+  EXPECT_EQ("1111133333", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesMiddleElement) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "222233334444", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "1111133333", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222", "3333", 4444"]
+  raw_removals.Add(1);  // Removes "3333"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_EQ("22224444", prefix_map.at(4));
+  EXPECT_EQ("1111133333", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesLastElement) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "222233334444", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "1111133333", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222", "3333", 4444"]
+  raw_removals.Add(2);  // Removes "4444"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_EQ("22223333", prefix_map.at(4));
+  EXPECT_EQ("1111133333", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesWhenOldHasDifferentSizes) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "222233334444", &prefix_map_old));
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "aaaaabbbbb", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "1111133333", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222", "3333", 4444", "aaaaa", "bbbbb"]
+  raw_removals.Add(3);  // Removes "aaaaa"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_EQ("222233334444", prefix_map.at(4));
+  EXPECT_EQ("1111133333bbbbb", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestMergeUpdatesRemovesMultipleAcrossDifferentSizes) {
+  HashPrefixMap prefix_map_old;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(4, "22223333aaaa", &prefix_map_old));
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "3333344444bbbbb", &prefix_map_old));
+  HashPrefixMap prefix_map_additions;
+  EXPECT_EQ(APPLY_UPDATE_SUCCESS,
+            V4Store::AddUnlumpedHashes(5, "11111", &prefix_map_additions));
+
+  V4Store store(task_runner_, store_path_);
+  RepeatedField<int32> raw_removals;
+  // old_store: ["2222", "3333", "33333", "44444", "aaaa", "bbbbb"]
+  raw_removals.Add(1);  // Removes "3333"
+  raw_removals.Add(3);  // Removes "44444"
+  EXPECT_EQ(
+      APPLY_UPDATE_SUCCESS,
+      store.MergeUpdate(prefix_map_old, prefix_map_additions, &raw_removals));
+  const HashPrefixMap& prefix_map = store.hash_prefix_map_;
+  // The size is 2 since we reserve space anyway.
+  EXPECT_EQ(2u, prefix_map.size());
+  EXPECT_EQ("2222aaaa", prefix_map.at(4));
+  EXPECT_EQ("1111133333bbbbb", prefix_map.at(5));
+}
+
+TEST_F(V4StoreTest, TestReadFullResponseWithValidHashPrefixMap) {
+  std::unique_ptr<ListUpdateResponse> lur(new ListUpdateResponse);
+  lur->set_response_type(ListUpdateResponse::FULL_UPDATE);
+  lur->set_new_client_state("test_client_state");
+  lur->set_platform_type(WINDOWS_PLATFORM);
+  lur->set_threat_entry_type(URL);
+  lur->set_threat_type(MALWARE_THREAT);
+  ThreatEntrySet* additions = lur->add_additions();
+  additions->set_compression_type(RAW);
+  additions->mutable_raw_hashes()->set_prefix_size(5);
+  additions->mutable_raw_hashes()->set_raw_hashes("00000abcde");
+  additions = lur->add_additions();
+  additions->set_compression_type(RAW);
+  additions->mutable_raw_hashes()->set_prefix_size(4);
+  additions->mutable_raw_hashes()->set_raw_hashes("00000abc");
+  EXPECT_EQ(WRITE_SUCCESS,
+            V4Store(task_runner_, store_path_).WriteToDisk(std::move(lur)));
+
+  V4Store read_store (task_runner_, store_path_);
+  EXPECT_EQ(READ_SUCCESS, read_store.ReadFromDisk());
+  EXPECT_EQ("test_client_state", read_store.state_);
+  ASSERT_EQ(2u, read_store.hash_prefix_map_.size());
+  EXPECT_EQ("00000abc", read_store.hash_prefix_map_[4]);
+  EXPECT_EQ("00000abcde", read_store.hash_prefix_map_[5]);
+}
+
+// This tests fails to read the prefix map from the disk because the file on
+// disk is invalid. The hash prefixes string is 6 bytes long, but the prefix
+// size is 5 so the parser isn't able to split the hash prefixes list
+// completely.
+TEST_F(V4StoreTest, TestReadFullResponseWithInvalidHashPrefixMap) {
+  std::unique_ptr<ListUpdateResponse> lur(new ListUpdateResponse);
+  lur->set_response_type(ListUpdateResponse::FULL_UPDATE);
+  lur->set_new_client_state("test_client_state");
+  lur->set_platform_type(WINDOWS_PLATFORM);
+  lur->set_threat_entry_type(URL);
+  lur->set_threat_type(MALWARE_THREAT);
+  ThreatEntrySet* additions = lur->add_additions();
+  additions->set_compression_type(RAW);
+  additions->mutable_raw_hashes()->set_prefix_size(5);
+  additions->mutable_raw_hashes()->set_raw_hashes("abcdef");
+  EXPECT_EQ(WRITE_SUCCESS,
+            V4Store(task_runner_, store_path_).WriteToDisk(std::move(lur)));
+
+  V4Store read_store(task_runner_, store_path_);
+  EXPECT_EQ(HASH_PREFIX_MAP_GENERATION_FAILURE, read_store.ReadFromDisk());
+  EXPECT_TRUE(read_store.state_.empty());
+  EXPECT_TRUE(read_store.hash_prefix_map_.empty());
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsAtTheBeginning) {
+  HashPrefixes hash_prefixes = "abcdebbbbbccccc";
+  HashPrefix hash_prefix = "abcde";
+  EXPECT_TRUE(V4Store::HashPrefixMatches(hash_prefix, std::begin(hash_prefixes),
+                                         std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsInTheMiddle) {
+  HashPrefixes hash_prefixes = "abcdebbbbbccccc";
+  HashPrefix hash_prefix = "bbbbb";
+  EXPECT_TRUE(V4Store::HashPrefixMatches(hash_prefix, std::begin(hash_prefixes),
+                                         std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsAtTheEnd) {
+  HashPrefixes hash_prefixes = "abcdebbbbbccccc";
+  HashPrefix hash_prefix = "ccccc";
+  EXPECT_TRUE(V4Store::HashPrefixMatches(hash_prefix, std::begin(hash_prefixes),
+                                         std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsAtTheBeginningOfEven) {
+  HashPrefixes hash_prefixes = "abcdebbbbb";
+  HashPrefix hash_prefix = "abcde";
+  EXPECT_TRUE(V4Store::HashPrefixMatches(hash_prefix, std::begin(hash_prefixes),
+                                         std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsAtTheEndOfEven) {
+  HashPrefixes hash_prefixes = "abcdebbbbb";
+  HashPrefix hash_prefix = "bbbbb";
+  EXPECT_TRUE(V4Store::HashPrefixMatches(hash_prefix, std::begin(hash_prefixes),
+                                         std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixDoesNotExistInConcatenatedList) {
+  HashPrefixes hash_prefixes = "abcdebbbbb";
+  HashPrefix hash_prefix = "bbbbc";
+  EXPECT_FALSE(V4Store::HashPrefixMatches(
+      hash_prefix, std::begin(hash_prefixes), std::end(hash_prefixes)));
+}
+
+TEST_F(V4StoreTest, TestFullHashExistsInMapWithSingleSize) {
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[32] =
+      "0111222233334444555566667777888811112222333344445555666677778888";
+  FullHash full_hash = "11112222333344445555666677778888";
+  EXPECT_EQ("11112222333344445555666677778888",
+            store.GetMatchingHashPrefix(full_hash));
+}
+
+TEST_F(V4StoreTest, TestFullHashExistsInMapWithDifferentSizes) {
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[4] = "22223333aaaa";
+  store.hash_prefix_map_[32] = "11112222333344445555666677778888";
+  FullHash full_hash = "11112222333344445555666677778888";
+  EXPECT_EQ("11112222333344445555666677778888",
+            store.GetMatchingHashPrefix(full_hash));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsInMapWithSingleSize) {
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[4] = "22223333aaaa";
+  FullHash full_hash = "22222222222222222222222222222222";
+  EXPECT_EQ("2222", store.GetMatchingHashPrefix(full_hash));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixExistsInMapWithDifferentSizes) {
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[4] = "22223333aaaa";
+  store.hash_prefix_map_[5] = "11111hhhhh";
+  FullHash full_hash = "22222222222222222222222222222222";
+  EXPECT_EQ("2222", store.GetMatchingHashPrefix(full_hash));
+}
+
+TEST_F(V4StoreTest, TestHashPrefixDoesNotExistInMapWithDifferentSizes) {
+  V4Store store(task_runner_, store_path_);
+  store.hash_prefix_map_[4] = "3333aaaa";
+  store.hash_prefix_map_[5] = "11111hhhhh";
+  FullHash full_hash = "22222222222222222222222222222222";
+  EXPECT_TRUE(store.GetMatchingHashPrefix(full_hash).empty());
 }
 
 }  // namespace safe_browsing

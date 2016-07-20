@@ -66,6 +66,18 @@ class FakeAppIconLoaderDelegate : public AppIconLoaderDelegate {
   DISALLOW_COPY_AND_ASSIGN(FakeAppIconLoaderDelegate);
 };
 
+void WaitForIconReady(ArcAppListPrefs* prefs,
+                      const std::string& app_id,
+                      ui::ScaleFactor scale_factor) {
+  const base::FilePath icon_path = prefs->GetIconPath(app_id, scale_factor);
+  // Process pending tasks. This performs multiple thread hops, so we need
+  // to run it continuously until it is resolved.
+  do {
+    content::BrowserThread::GetBlockingPool()->FlushForTesting();
+    base::RunLoop().RunUntilIdle();
+  } while (!base::PathExists(icon_path));
+}
+
 }  // namespace
 
 class ArcAppModelBuilderTest : public AppListTestBase {
@@ -80,6 +92,9 @@ class ArcAppModelBuilderTest : public AppListTestBase {
     AppListTestBase::SetUp();
     arc_test_.SetUp(profile_.get());
     CreateBuilder();
+
+    // Validating decoded content does not fit well for unit tests.
+    ArcAppIcon::DisableSafeDecodingForTesting();
   }
 
   void TearDown() override {
@@ -538,18 +553,15 @@ TEST_F(ArcAppModelBuilderTest, LaunchApps) {
   ASSERT_NE(nullptr, item_first);
   ASSERT_NE(nullptr, item_last);
   item_first->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
   item_last->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
   item_first->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
 
   const ScopedVector<arc::FakeAppInstance::Request>& launch_requests =
       app_instance()->launch_requests();
   ASSERT_EQ(3u, launch_requests.size());
-  EXPECT_EQ(true, launch_requests[0]->IsForApp(app_first));
-  EXPECT_EQ(true, launch_requests[1]->IsForApp(app_last));
-  EXPECT_EQ(true, launch_requests[2]->IsForApp(app_first));
+  EXPECT_TRUE(launch_requests[0]->IsForApp(app_first));
+  EXPECT_TRUE(launch_requests[1]->IsForApp(app_last));
+  EXPECT_TRUE(launch_requests[2]->IsForApp(app_first));
 
   // Test an attempt to launch of a not-ready app.
   bridge_service()->SetStopped();
@@ -578,18 +590,15 @@ TEST_F(ArcAppModelBuilderTest, LaunchShortcuts) {
   ASSERT_NE(nullptr, item_first);
   ASSERT_NE(nullptr, item_last);
   item_first->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
   item_last->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
   item_first->Activate(0);
-  app_instance()->WaitForIncomingMethodCall();
 
   const ScopedVector<mojo::String>& launch_intents =
       app_instance()->launch_intents();
   ASSERT_EQ(3u, launch_intents.size());
-  EXPECT_EQ(true, app_first.intent_uri == *launch_intents[0]);
-  EXPECT_EQ(true, app_last.intent_uri == *launch_intents[1]);
-  EXPECT_EQ(true, app_first.intent_uri == *launch_intents[2]);
+  EXPECT_EQ(app_first.intent_uri, *launch_intents[0]);
+  EXPECT_EQ(app_last.intent_uri, *launch_intents[1]);
+  EXPECT_EQ(app_first.intent_uri, *launch_intents[2]);
 
   // Test an attempt to launch of a not-ready shortcut.
   bridge_service()->SetStopped();
@@ -622,20 +631,15 @@ TEST_F(ArcAppModelBuilderTest, RequestIcons) {
       ASSERT_NE(nullptr, app_item);
       const float scale = ui::GetScaleForScaleFactor(scale_factor);
       app_item->icon().GetRepresentation(scale);
+
+      // This does not result in an icon being loaded, so WaitForIconReady
+      // cannot be used.
+      content::BrowserThread::GetBlockingPool()->FlushForTesting();
+      base::RunLoop().RunUntilIdle();
     }
   }
 
-  // Process pending tasks.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-  // Normally just one call to RunUntilIdle() suffices to make sure
-  // all RequestAppIcon() calls are delivered, but on slower machines
-  // (especially when running under Valgrind), they might not get
-  // delivered on time. Wait for the remaining tasks individually.
   const size_t expected_size = scale_factors.size() * fake_apps().size();
-  while (app_instance()->icon_requests().size() < expected_size) {
-    app_instance()->WaitForIncomingMethodCall();
-  }
 
   // At this moment we should receive all requests for icon loading.
   const ScopedVector<arc::FakeAppInstance::IconRequest>& icon_requests =
@@ -662,8 +666,7 @@ TEST_F(ArcAppModelBuilderTest, RequestIcons) {
   }
 }
 
-// TODO(crbug.com/624446) - reenable once this test is fixed
-TEST_F(ArcAppModelBuilderTest, DISABLED_RequestShortcutIcons) {
+TEST_F(ArcAppModelBuilderTest, RequestShortcutIcons) {
   // Make sure we are on UI thread.
   ASSERT_TRUE(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
@@ -686,14 +689,11 @@ TEST_F(ArcAppModelBuilderTest, DISABLED_RequestShortcutIcons) {
     const float scale = ui::GetScaleForScaleFactor(scale_factor);
     const base::FilePath icon_path =
         prefs->GetIconPath(ArcAppTest::GetAppId(shortcut), scale_factor);
-    EXPECT_EQ(true, !base::PathExists(icon_path));
+    EXPECT_FALSE(base::PathExists(icon_path));
 
     app_item->icon().GetRepresentation(scale);
+    WaitForIconReady(prefs, ArcAppTest::GetAppId(shortcut), scale_factor);
   }
-
-  // Process pending tasks.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
 
   // At this moment we should receive all requests for icon loading.
   const size_t expected_size = scale_factors.size();
@@ -719,7 +719,7 @@ TEST_F(ArcAppModelBuilderTest, DISABLED_RequestShortcutIcons) {
   for (auto& scale_factor : scale_factors) {
     const base::FilePath icon_path =
         prefs->GetIconPath(ArcAppTest::GetAppId(shortcut), scale_factor);
-    EXPECT_EQ(true, base::PathExists(icon_path));
+    EXPECT_TRUE(base::PathExists(icon_path));
   }
 }
 
@@ -740,37 +740,26 @@ TEST_F(ArcAppModelBuilderTest, InstallIcon) {
   const float scale = ui::GetScaleForScaleFactor(scale_factor);
   const base::FilePath icon_path = prefs->GetIconPath(ArcAppTest::GetAppId(app),
                                                       scale_factor);
-  EXPECT_EQ(true, !base::PathExists(icon_path));
+  EXPECT_FALSE(base::PathExists(icon_path));
 
   const ArcAppItem* app_item = FindArcItem(ArcAppTest::GetAppId(app));
   EXPECT_NE(nullptr, app_item);
   // This initiates async loading.
   app_item->icon().GetRepresentation(scale);
 
-  // Process pending tasks.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-
-  // Validating decoded content does not fit well for unit tests.
-  ArcAppIcon::DisableSafeDecodingForTesting();
-
   // Now send generated icon for the app.
   std::string png_data;
-  EXPECT_EQ(true, app_instance()->GenerateAndSendIcon(
-                      app, static_cast<arc::mojom::ScaleFactor>(scale_factor),
-                      &png_data));
-
-  // Process pending tasks.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(app_instance()->GenerateAndSendIcon(
+      app, static_cast<arc::mojom::ScaleFactor>(scale_factor), &png_data));
+  WaitForIconReady(prefs, ArcAppTest::GetAppId(app), scale_factor);
 
   // Validate that icons are installed, have right content and icon is
   // refreshed for ARC app item.
-  EXPECT_EQ(true, base::PathExists(icon_path));
+  EXPECT_TRUE(base::PathExists(icon_path));
 
   std::string icon_data;
   // Read the file from disk and compare with reference data.
-  EXPECT_EQ(true, base::ReadFileToString(icon_path, &icon_data));
+  EXPECT_TRUE(base::ReadFileToString(icon_path, &icon_data));
   ASSERT_EQ(icon_data, png_data);
 }
 
@@ -792,24 +781,29 @@ TEST_F(ArcAppModelBuilderTest, RemoveAppCleanUpFolder) {
   const ui::ScaleFactor scale_factor = ui::GetSupportedScaleFactors()[0];
 
   // No app folder by default.
-  EXPECT_EQ(true, !base::PathExists(app_path));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(base::PathExists(app_path));
 
   // Request icon, this will create app folder.
   prefs->RequestIcon(app_id, scale_factor);
   // Now send generated icon for the app.
   std::string png_data;
-  EXPECT_EQ(true, app_instance()->GenerateAndSendIcon(
-                      app, static_cast<arc::mojom::ScaleFactor>(scale_factor),
-                      &png_data));
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(true, base::PathExists(app_path));
+  EXPECT_TRUE(app_instance()->GenerateAndSendIcon(
+      app, static_cast<arc::mojom::ScaleFactor>(scale_factor), &png_data));
+  WaitForIconReady(prefs, app_id, scale_factor);
+  EXPECT_TRUE(base::PathExists(app_path));
 
   // Send empty app list. This will delete app and its folder.
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>());
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(true, !base::PathExists(app_path));
+  // This cannot be WaitForIconReady since it needs to wait until the icon is
+  // removed, not added.
+  // Process pending tasks. This performs multiple thread hops, so we need
+  // to run it continuously until it is resolved.
+  do {
+    content::BrowserThread::GetBlockingPool()->FlushForTesting();
+    base::RunLoop().RunUntilIdle();
+  } while (base::PathExists(app_path));
+  EXPECT_FALSE(base::PathExists(app_path));
 }
 
 TEST_F(ArcAppModelBuilderTest, LastLaunchTime) {
@@ -856,12 +850,13 @@ TEST_F(ArcAppModelBuilderTest, LastLaunchTime) {
   ASSERT_GE(time_after, app_info->last_launch_time);
 }
 
-TEST_F(ArcAppModelBuilderTest, IconLoader) {
-  // Validating decoded content does not fit well for unit tests.
-  ArcAppIcon::DisableSafeDecodingForTesting();
-
+// TODO(crbug.com/628425) -- reenable once this test is less flaky.
+TEST_F(ArcAppModelBuilderTest, DISABLED_IconLoader) {
   const arc::mojom::AppInfo& app = fake_apps()[0];
   const std::string app_id = ArcAppTest::GetAppId(app);
+
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile_.get());
+  ASSERT_NE(nullptr, prefs);
 
   bridge_service()->SetReady();
   app_instance()->RefreshAppList();
@@ -882,19 +877,16 @@ TEST_F(ArcAppModelBuilderTest, IconLoader) {
 
   const std::vector<ui::ScaleFactor>& scale_factors =
       ui::GetSupportedScaleFactors();
+  ArcAppItem* app_item = FindArcItem(app_id);
   for (auto& scale_factor : scale_factors) {
     std::string png_data;
     EXPECT_TRUE(app_instance()->GenerateAndSendIcon(
         app, static_cast<arc::mojom::ScaleFactor>(scale_factor), &png_data));
+    const float scale = ui::GetScaleForScaleFactor(scale_factor);
+    // Force the icon to be loaded.
+    app_item->icon().GetRepresentation(scale);
+    WaitForIconReady(prefs, app_id, scale_factor);
   }
-
-  // Process pending tasks, this installs icons.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-
-  // Allow one more circle to read and decode installed icons.
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
 
   // Validate loaded image.
   EXPECT_EQ(1 + scale_factors.size(), delegate.update_image_cnt());
@@ -935,7 +927,6 @@ TEST_F(ArcAppModelBuilderTest, AppLauncher) {
   app_instance()->SendRefreshAppList(apps);
 
   EXPECT_TRUE(launcher1.app_launched());
-  app_instance()->WaitForIncomingMethodCall();
   ASSERT_EQ(1u, app_instance()->launch_requests().size());
   EXPECT_TRUE(app_instance()->launch_requests()[0]->IsForApp(app1));
   EXPECT_FALSE(launcher3.app_launched());
@@ -944,7 +935,6 @@ TEST_F(ArcAppModelBuilderTest, AppLauncher) {
 
   ArcAppLauncher launcher2(profile(), id2, true);
   EXPECT_TRUE(launcher2.app_launched());
-  app_instance()->WaitForIncomingMethodCall();
   EXPECT_FALSE(prefs->HasObserver(&launcher2));
   ASSERT_EQ(2u, app_instance()->launch_requests().size());
   EXPECT_TRUE(app_instance()->launch_requests()[1]->IsForApp(app2));

@@ -7,6 +7,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
@@ -29,9 +30,10 @@ class StringTraceDataEndpoint : public TraceDataEndpoint {
       : completion_callback_(callback) {}
 
   void ReceiveTraceFinalContents(
-      std::unique_ptr<const base::DictionaryValue> metadata,
-      const std::string& contents) override {
-    std::string tmp = contents;
+      std::unique_ptr<const base::DictionaryValue> metadata) override {
+    std::string tmp = trace_.str();
+    trace_.str("");
+    trace_.clear();
     scoped_refptr<base::RefCountedString> str =
         base::RefCountedString::TakeString(&tmp);
 
@@ -41,10 +43,15 @@ class StringTraceDataEndpoint : public TraceDataEndpoint {
                    base::RetainedRef(str)));
   }
 
+  void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
+    trace_ << *chunk;
+  }
+
  private:
   ~StringTraceDataEndpoint() override {}
 
   CompletionCallback completion_callback_;
+  std::ostringstream trace_;
 
   DISALLOW_COPY_AND_ASSIGN(StringTraceDataEndpoint);
 };
@@ -57,18 +64,15 @@ class FileTraceDataEndpoint : public TraceDataEndpoint {
         completion_callback_(callback),
         file_(NULL) {}
 
-  void ReceiveTraceChunk(const std::string& chunk) override {
-    std::string tmp = chunk;
-    scoped_refptr<base::RefCountedString> chunk_ptr =
-        base::RefCountedString::TakeString(&tmp);
+  void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
         base::Bind(&FileTraceDataEndpoint::ReceiveTraceChunkOnFileThread, this,
-                   chunk_ptr));
+                   base::Passed(std::move(chunk))));
   }
 
-  void ReceiveTraceFinalContents(std::unique_ptr<const base::DictionaryValue>,
-                                 const std::string& contents) override {
+  void ReceiveTraceFinalContents(
+      std::unique_ptr<const base::DictionaryValue>) override {
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
         base::Bind(&FileTraceDataEndpoint::CloseOnFileThread, this));
@@ -77,12 +81,10 @@ class FileTraceDataEndpoint : public TraceDataEndpoint {
  private:
   ~FileTraceDataEndpoint() override { DCHECK(file_ == NULL); }
 
-  void ReceiveTraceChunkOnFileThread(
-      const scoped_refptr<base::RefCountedString> chunk) {
+  void ReceiveTraceChunkOnFileThread(std::unique_ptr<std::string> chunk) {
     if (!OpenFileIfNeededOnFileThread())
       return;
-    ignore_result(
-        fwrite(chunk->data().c_str(), chunk->data().size(), 1, file_));
+    ignore_result(fwrite(chunk->c_str(), chunk->size(), 1, file_));
   }
 
   bool OpenFileIfNeededOnFileThread() {
@@ -138,81 +140,74 @@ class TraceDataSinkImplBase : public TracingController::TraceDataSink {
   DISALLOW_COPY_AND_ASSIGN(TraceDataSinkImplBase);
 };
 
-class StringTraceDataSink : public TraceDataSinkImplBase {
+class JSONTraceDataSink : public TraceDataSinkImplBase {
  public:
-  explicit StringTraceDataSink(scoped_refptr<TraceDataEndpoint> endpoint)
-      : endpoint_(endpoint) {}
+  explicit JSONTraceDataSink(scoped_refptr<TraceDataEndpoint> endpoint)
+      : endpoint_(endpoint), had_received_first_chunk_(false) {}
 
   void AddTraceChunk(const std::string& chunk) override {
     std::string trace_string;
-    if (trace_.empty())
-      trace_string = "{\"" + std::string(kChromeTraceLabel) + "\":[";
-    else
+    if (had_received_first_chunk_)
       trace_string = ",";
+    else
+      trace_string = "{\"" + std::string(kChromeTraceLabel) + "\":[";
     trace_string += chunk;
+    had_received_first_chunk_ = true;
 
-    AddTraceChunkAndPassToEndpoint(trace_string);
-  }
-
-  void AddTraceChunkAndPassToEndpoint(const std::string& chunk) {
-    trace_ += chunk;
-
-    endpoint_->ReceiveTraceChunk(chunk);
+    endpoint_->ReceiveTraceChunk(base::MakeUnique<std::string>(trace_string));
   }
 
   void Close() override {
-    AddTraceChunkAndPassToEndpoint("]");
+    endpoint_->ReceiveTraceChunk(base::MakeUnique<std::string>("]"));
 
     for (auto const &it : GetAgentTrace())
-      AddTraceChunkAndPassToEndpoint(",\"" + it.first + "\": " + it.second);
+      endpoint_->ReceiveTraceChunk(
+          base::MakeUnique<std::string>(",\"" + it.first + "\": " + it.second));
 
     std::unique_ptr<base::DictionaryValue> metadata(TakeMetadata());
     std::string metadataJSON;
 
     if (base::JSONWriter::Write(*metadata, &metadataJSON) &&
         !metadataJSON.empty()) {
-      AddTraceChunkAndPassToEndpoint(
-          ",\"" + std::string(kMetadataTraceLabel) + "\": " + metadataJSON);
+      endpoint_->ReceiveTraceChunk(base::MakeUnique<std::string>(
+          ",\"" + std::string(kMetadataTraceLabel) + "\": " + metadataJSON));
     }
 
-    AddTraceChunkAndPassToEndpoint("}");
-
-    endpoint_->ReceiveTraceFinalContents(std::move(metadata), trace_);
+    endpoint_->ReceiveTraceChunk(base::MakeUnique<std::string>("}"));
+    endpoint_->ReceiveTraceFinalContents(std::move(metadata));
   }
 
  private:
-  ~StringTraceDataSink() override {}
+  ~JSONTraceDataSink() override {}
 
   scoped_refptr<TraceDataEndpoint> endpoint_;
-  std::string trace_;
-
-  DISALLOW_COPY_AND_ASSIGN(StringTraceDataSink);
+  bool had_received_first_chunk_;
+  DISALLOW_COPY_AND_ASSIGN(JSONTraceDataSink);
 };
 
-class CompressedStringTraceDataSink : public TraceDataSinkImplBase {
+class CompressedTraceDataEndpoint : public TraceDataEndpoint {
  public:
-  explicit CompressedStringTraceDataSink(
+  explicit CompressedTraceDataEndpoint(
       scoped_refptr<TraceDataEndpoint> endpoint)
       : endpoint_(endpoint), already_tried_open_(false) {}
 
-  void AddTraceChunk(const std::string& chunk) override {
-    std::string tmp = chunk;
-    scoped_refptr<base::RefCountedString> chunk_ptr =
-        base::RefCountedString::TakeString(&tmp);
+  void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
-        base::Bind(&CompressedStringTraceDataSink::AddTraceChunkOnFileThread,
-                   this, chunk_ptr));
+        base::Bind(&CompressedTraceDataEndpoint::CompressOnFileThread, this,
+                   base::Passed(std::move(chunk))));
   }
 
-  void Close() override {
+  void ReceiveTraceFinalContents(
+      std::unique_ptr<const base::DictionaryValue> metadata) override {
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
-        base::Bind(&CompressedStringTraceDataSink::CloseOnFileThread, this));
+        base::Bind(&CompressedTraceDataEndpoint::CloseOnFileThread, this,
+                   base::Passed(std::move(metadata))));
   }
 
  private:
-  ~CompressedStringTraceDataSink() override {}
+  ~CompressedTraceDataEndpoint() override {}
 
   bool OpenZStreamOnFileThread() {
     DCHECK_CURRENTLY_ON(BrowserThread::FILE);
@@ -237,30 +232,22 @@ class CompressedStringTraceDataSink : public TraceDataSinkImplBase {
     return result == 0;
   }
 
-  void AddTraceChunkOnFileThread(
-      const scoped_refptr<base::RefCountedString> chunk_ptr) {
-    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-    std::string trace;
-    if (compressed_trace_data_.empty())
-      trace = "{\"" + std::string(kChromeTraceLabel) + "\":[";
-    else
-      trace = ",";
-    trace += chunk_ptr->data();
-    AddTraceChunkAndCompressOnFileThread(trace, false);
-  }
-
-  void AddTraceChunkAndCompressOnFileThread(const std::string& chunk,
-                                            bool finished) {
+  void CompressOnFileThread(std::unique_ptr<std::string> chunk) {
     DCHECK_CURRENTLY_ON(BrowserThread::FILE);
     if (!OpenZStreamOnFileThread())
       return;
 
-    const int kChunkSize = 0x4000;
+    stream_->avail_in = chunk->size();
+    stream_->next_in = reinterpret_cast<unsigned char*>(&*chunk->begin());
+    DrainStreamOnFileThread(false);
+  }
 
-    char buffer[kChunkSize];
+  void DrainStreamOnFileThread(bool finished) {
+    DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
     int err;
-    stream_->avail_in = chunk.size();
-    stream_->next_in = (unsigned char*)chunk.data();
+    const int kChunkSize = 0x4000;
+    char buffer[kChunkSize];
     do {
       stream_->avail_out = kChunkSize;
       stream_->next_out = (unsigned char*)buffer;
@@ -272,52 +259,30 @@ class CompressedStringTraceDataSink : public TraceDataSinkImplBase {
 
       int bytes = kChunkSize - stream_->avail_out;
       if (bytes) {
-        std::string compressed_chunk = std::string(buffer, bytes);
-        compressed_trace_data_ += compressed_chunk;
-        endpoint_->ReceiveTraceChunk(compressed_chunk);
+        std::string compressed(buffer, bytes);
+        endpoint_->ReceiveTraceChunk(base::MakeUnique<std::string>(compressed));
       }
     } while (stream_->avail_out == 0);
   }
 
-  void CloseOnFileThread() {
+  void CloseOnFileThread(
+      std::unique_ptr<const base::DictionaryValue> metadata) {
     DCHECK_CURRENTLY_ON(BrowserThread::FILE);
     if (!OpenZStreamOnFileThread())
       return;
 
-    if (compressed_trace_data_.empty()) {
-      AddTraceChunkAndCompressOnFileThread(
-          "{\"" + std::string(kChromeTraceLabel) + "\":[", false);
-    }
-    AddTraceChunkAndCompressOnFileThread("]", false);
-
-    for (auto const &it : GetAgentTrace()) {
-      AddTraceChunkAndCompressOnFileThread(
-          ",\"" + it.first + "\": " + it.second, false);
-    }
-
-    std::unique_ptr<base::DictionaryValue> metadata(TakeMetadata());
-    std::string metadataJSON;
-    if (base::JSONWriter::Write(*metadata, &metadataJSON) &&
-        !metadataJSON.empty()) {
-      AddTraceChunkAndCompressOnFileThread(
-          ",\"" + std::string(kMetadataTraceLabel) + "\": " + metadataJSON,
-          false);
-    }
-    AddTraceChunkAndCompressOnFileThread("}", true);
-
+    DrainStreamOnFileThread(true);
     deflateEnd(stream_.get());
     stream_.reset();
 
-    endpoint_->ReceiveTraceFinalContents(std::move(metadata),
-                                         compressed_trace_data_);
+    endpoint_->ReceiveTraceFinalContents(std::move(metadata));
   }
 
   scoped_refptr<TraceDataEndpoint> endpoint_;
   std::unique_ptr<z_stream> stream_;
   bool already_tried_open_;
-  std::string compressed_trace_data_;
 
-  DISALLOW_COPY_AND_ASSIGN(CompressedStringTraceDataSink);
+  DISALLOW_COPY_AND_ASSIGN(CompressedTraceDataEndpoint);
 };
 
 }  // namespace
@@ -350,20 +315,19 @@ scoped_refptr<TracingController::TraceDataSink>
 TracingController::CreateStringSink(
     const base::Callback<void(std::unique_ptr<const base::DictionaryValue>,
                               base::RefCountedString*)>& callback) {
-  return new StringTraceDataSink(new StringTraceDataEndpoint(callback));
+  return new JSONTraceDataSink(new StringTraceDataEndpoint(callback));
 }
 
 scoped_refptr<TracingController::TraceDataSink>
 TracingController::CreateFileSink(const base::FilePath& file_path,
                                   const base::Closure& callback) {
-  return new StringTraceDataSink(
-      new FileTraceDataEndpoint(file_path, callback));
+  return new JSONTraceDataSink(new FileTraceDataEndpoint(file_path, callback));
 }
 
 scoped_refptr<TracingController::TraceDataSink>
 TracingControllerImpl::CreateCompressedStringSink(
     scoped_refptr<TraceDataEndpoint> endpoint) {
-  return new CompressedStringTraceDataSink(endpoint);
+  return new JSONTraceDataSink(new CompressedTraceDataEndpoint(endpoint));
 }
 
 scoped_refptr<TraceDataEndpoint> TracingControllerImpl::CreateCallbackEndpoint(

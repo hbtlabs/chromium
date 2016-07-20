@@ -46,6 +46,7 @@
 namespace blink {
 
 class GraphicsLayer;
+class InspectorLogAgent;
 class InspectedFrames;
 class InspectorOverlay;
 class InspectorResourceContainer;
@@ -102,7 +103,7 @@ public:
     void detach() override;
     void continueProgram() override;
     void dispatchOnInspectorBackend(int sessionId, int callId, const WebString& method, const WebString& message) override;
-    void inspectElementAt(const WebPoint&) override;
+    void inspectElementAt(int sessionId, const WebPoint&) override;
     void failedToRequestDevTools() override;
     WebString evaluateInWebInspectorOverlay(const WebString& script) override;
 
@@ -155,6 +156,7 @@ private:
     Member<InspectorNetworkAgent> m_networkAgent;
     Member<InspectorLayerTreeAgent> m_layerTreeAgent;
     Member<InspectorTracingAgent> m_tracingAgent;
+    Member<InspectorLogAgent> m_logAgent;
 
     Member<InspectorSession> m_session;
     bool m_includeViewAgents;

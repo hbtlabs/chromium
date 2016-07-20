@@ -689,7 +689,8 @@ int Element::clientWidth()
     bool inQuirksMode = document().inQuirksMode();
     if ((!inQuirksMode && document().documentElement() == this)
         || (inQuirksMode && isHTMLElement() && document().body() == this)) {
-        if (LayoutViewItem layoutView = LayoutViewItem(document().layoutView())) {
+        LayoutViewItem layoutView = document().layoutViewItem();
+        if (!layoutView.isNull()) {
             if (!RuntimeEnabledFeatures::overlayScrollbarsEnabled() || !document().frame()->isLocalRoot())
                 document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
             if (document().page()->settings().forceZeroLayoutHeight())
@@ -713,7 +714,8 @@ int Element::clientHeight()
 
     if ((!inQuirksMode && document().documentElement() == this)
         || (inQuirksMode && isHTMLElement() && document().body() == this)) {
-        if (LayoutViewItem layoutView = LayoutViewItem(document().layoutView())) {
+        LayoutViewItem layoutView = document().layoutViewItem();
+        if (!layoutView.isNull()) {
             if (!RuntimeEnabledFeatures::overlayScrollbarsEnabled() || !document().frame()->isLocalRoot())
                 document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
             if (document().page()->settings().forceZeroLayoutHeight())
@@ -1194,7 +1196,7 @@ void Element::attributeChanged(const QualifiedName& name, const AtomicString& ol
     if (!document().styleResolver())
         setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::fromAttribute(name));
 
-    if (inShadowIncludingDocument()) {
+    if (isConnected()) {
         if (AXObjectCache* cache = document().existingAXObjectCache())
             cache->handleAttributeChanged(name, this);
     }
@@ -1345,7 +1347,7 @@ void Element::stripScriptingAttributes(Vector<Attribute>& attributeVector) const
 
 void Element::parserSetAttributes(const Vector<Attribute>& attributeVector)
 {
-    DCHECK(!inShadowIncludingDocument());
+    DCHECK(!isConnected());
     DCHECK(!parentNode());
     DCHECK(!m_elementData);
 
@@ -1415,7 +1417,7 @@ LayoutObject* Element::createLayoutObject(const ComputedStyle& style)
 
 Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertionPoint)
 {
-    // need to do superclass processing first so inShadowIncludingDocument() is true
+    // need to do superclass processing first so isConnected() is true
     // by the time we reach updateId
     ContainerNode::insertedInto(insertionPoint);
 
@@ -1434,7 +1436,7 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
             rareData->intersectionObserverData()->activateValidIntersectionObservers(*this);
     }
 
-    if (inShadowIncludingDocument()) {
+    if (isConnected()) {
         if (getCustomElementState() == CustomElementState::Custom)
             CustomElement::enqueueConnectedCallback(this);
         else if (isUpgradedV0CustomElement())
@@ -1463,7 +1465,7 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
 
 void Element::removedFrom(ContainerNode* insertionPoint)
 {
-    bool wasInDocument = insertionPoint->inShadowIncludingDocument();
+    bool wasInDocument = insertionPoint->isConnected();
 
     DCHECK(!hasRareData() || !elementRareData()->hasPseudoElements());
 
@@ -1530,7 +1532,7 @@ void Element::removedFrom(ContainerNode* insertionPoint)
         document().frame()->eventHandler().elementRemoved(this);
 }
 
-void Element::attach(const AttachContext& context)
+void Element::attachLayoutTree(const AttachContext& context)
 {
     DCHECK(document().inStyleRecalc());
 
@@ -1562,7 +1564,7 @@ void Element::attach(const AttachContext& context)
     if (ElementShadow* shadow = this->shadow())
         shadow->attach(context);
 
-    ContainerNode::attach(context);
+    ContainerNode::attachLayoutTree(context);
 
     createPseudoElementIfNeeded(PseudoIdAfter);
     createPseudoElementIfNeeded(PseudoIdBackdrop);
@@ -1776,10 +1778,10 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
     }
 
     if (localChange == Reattach) {
-        // TODO(nainar): Remove the style parameter being passed into buildOwnLayout().
-        // ComputedStyle will now be stored on Node and accessed in buildOwnLayout()
+        // TODO(nainar): Remove the style parameter being passed into buildLayoutTree().
+        // ComputedStyle will now be stored on Node and accessed in buildLayoutTree()
         // using mutableComputedStyle().
-        return buildOwnLayout(*newStyle);
+        return buildLayoutTree(*newStyle);
     }
 
     DCHECK(oldStyle);
@@ -1818,7 +1820,7 @@ StyleRecalcChange Element::recalcOwnStyle(StyleRecalcChange change)
     return localChange;
 }
 
-StyleRecalcChange Element::buildOwnLayout(ComputedStyle& newStyle)
+StyleRecalcChange Element::buildLayoutTree(ComputedStyle& newStyle)
 {
     AttachContext reattachContext;
     reattachContext.resolvedStyle = &newStyle;
@@ -2389,7 +2391,7 @@ bool Element::hasAttributeNS(const AtomicString& namespaceURI, const AtomicStrin
 
 void Element::focus(const FocusParams& params)
 {
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
 
     if (document().focusedElement() == this)
@@ -2502,7 +2504,7 @@ bool Element::isFocusable() const
     // Style cannot be cleared out for non-active documents, so in that case the
     // needsLayoutTreeUpdateForNode check is invalid.
     DCHECK(!document().isActive() || !document().needsLayoutTreeUpdateForNode(*this));
-    return inShadowIncludingDocument() && supportsFocus() && !isInert() && layoutObjectIsFocusable();
+    return isConnected() && supportsFocus() && !isInert() && layoutObjectIsFocusable();
 }
 
 bool Element::isKeyboardFocusable() const
@@ -2694,7 +2696,7 @@ void Element::setPointerCapture(int pointerId, ExceptionState& exceptionState)
     if (document().frame()) {
         if (!document().frame()->eventHandler().isPointerEventActive(pointerId))
             exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
-        else if (!inShadowIncludingDocument())
+        else if (!isConnected())
             exceptionState.throwDOMException(InvalidStateError, "InvalidStateError");
         else
             document().frame()->eventHandler().setPointerCapture(pointerId, this);
@@ -2828,9 +2830,9 @@ const ComputedStyle* Element::ensureComputedStyle(PseudoId pseudoElementSpecifie
     ComputedStyle* elementStyle = mutableComputedStyle();
     if (!elementStyle) {
         ElementRareData& rareData = ensureElementRareData();
-        if (!rareData.ensureComputedStyle())
+        if (!rareData.computedStyle())
             rareData.setComputedStyle(document().styleForElementIgnoringPendingStylesheets(this));
-        elementStyle = rareData.ensureComputedStyle();
+        elementStyle = rareData.computedStyle();
     }
 
     if (!pseudoElementSpecifier)
@@ -2950,7 +2952,7 @@ void Element::createPseudoElementIfNeeded(PseudoId pseudoId)
     if (pseudoId == PseudoIdBackdrop)
         document().addToTopLayer(element, this);
     element->insertedInto(this);
-    element->attach();
+    element->attachLayoutTree();
 
     InspectorInstrumentation::pseudoElementCreated(element);
 
@@ -3170,7 +3172,7 @@ bool Element::hasNamedNodeMap() const
 
 inline void Element::updateName(const AtomicString& oldName, const AtomicString& newName)
 {
-    if (!inShadowIncludingDocument() || isInShadowTree())
+    if (!isInDocumentTree())
         return;
 
     if (oldName == newName)
@@ -3263,7 +3265,7 @@ static bool needsURLResolutionForInlineStyle(const Element& element, const Docum
         return false;
     for (unsigned i = 0; i < style->propertyCount(); ++i) {
         // FIXME: Should handle all URL-based properties: CSSImageSetValue, CSSCursorImageValue, etc.
-        if (style->propertyAt(i).value()->isImageValue())
+        if (style->propertyAt(i).value().isImageValue())
             return true;
     }
     return false;
@@ -3274,8 +3276,8 @@ static void reResolveURLsInInlineStyle(const Document& document, MutableStylePro
     for (unsigned i = 0; i < style.propertyCount(); ++i) {
         StylePropertySet::PropertyReference property = style.propertyAt(i);
         // FIXME: Should handle all URL-based properties: CSSImageSetValue, CSSCursorImageValue, etc.
-        if (property.value()->isImageValue())
-            toCSSImageValue(property.value())->reResolveURL(document);
+        if (property.value().isImageValue())
+            toCSSImageValue(property.value()).reResolveURL(document);
     }
 }
 
@@ -3573,7 +3575,7 @@ void Element::setInlineStyleProperty(CSSPropertyID propertyID, double value, CSS
     setInlineStyleProperty(propertyID, CSSPrimitiveValue::create(value, unit), important);
 }
 
-void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValue* value, bool important)
+void Element::setInlineStyleProperty(CSSPropertyID propertyID, const CSSValue* value, bool important)
 {
     DCHECK(isStyledElement());
     ensureMutableInlineStyle().setProperty(propertyID, value, important);
@@ -3678,7 +3680,7 @@ bool Element::supportsStyleSharing() const
 
 void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1)
 {
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
     V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
     if (!activityLogger)
@@ -3691,7 +3693,7 @@ void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], co
 
 void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2)
 {
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
     V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
     if (!activityLogger)
@@ -3705,7 +3707,7 @@ void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], co
 
 void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2, const QualifiedName& attr3)
 {
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
     V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
     if (!activityLogger)
@@ -3720,7 +3722,7 @@ void Element::logAddElementIfIsolatedWorldAndInDocument(const char element[], co
 
 void Element::logUpdateAttributeIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attributeName, const AtomicString& oldValue, const AtomicString& newValue)
 {
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
     V8DOMActivityLogger* activityLogger = V8DOMActivityLogger::currentActivityLoggerIfIsolatedWorld();
     if (!activityLogger)

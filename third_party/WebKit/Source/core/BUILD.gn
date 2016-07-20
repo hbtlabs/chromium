@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+import("//build/config/chromecast_build.gni")
 import("//build/config/ui.gni")
 import("//third_party/WebKit/Source/bindings/bindings.gni")
 import("//third_party/WebKit/Source/bindings/core/v8/generated.gni")
@@ -50,6 +51,10 @@ config("config") {
   if (is_win) {
     # Suppress __declspec(dllexport)/extern conflict (C4910).
     cflags += [ "/wd4910" ]
+  }
+
+  if (is_chromecast) {
+    defines += [ "BLINK_MEDIA_LOG=DVLOG(2)" ]
   }
 }
 core_config_add += [ ":config" ]
@@ -411,6 +416,7 @@ source_set("core_generated") {
     "$blink_core_output_dir/inspector/protocol/Input.cpp",
     "$blink_core_output_dir/inspector/protocol/Inspector.cpp",
     "$blink_core_output_dir/inspector/protocol/LayerTree.cpp",
+    "$blink_core_output_dir/inspector/protocol/Log.cpp",
     "$blink_core_output_dir/inspector/protocol/Memory.cpp",
     "$blink_core_output_dir/inspector/protocol/Network.cpp",
     "$blink_core_output_dir/inspector/protocol/Page.cpp",

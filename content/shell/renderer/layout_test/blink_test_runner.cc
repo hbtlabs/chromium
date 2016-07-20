@@ -82,6 +82,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLeakDetector.h"
@@ -293,13 +294,13 @@ void BlinkTestRunner::PrintMessage(const std::string& message) {
 
 void BlinkTestRunner::PostTask(blink::WebTaskRunner::Task* task) {
   Platform::current()->currentThread()->getWebTaskRunner()->postTask(
-      WebTraceLocation(__FUNCTION__, __FILE__), task);
+      BLINK_FROM_HERE, task);
 }
 
 void BlinkTestRunner::PostDelayedTask(blink::WebTaskRunner::Task* task,
                                       long long ms) {
   Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(
-      WebTraceLocation(__FUNCTION__, __FILE__), task, ms);
+      BLINK_FROM_HERE, task, ms);
 }
 
 WebString BlinkTestRunner::RegisterIsolatedFileSystem(

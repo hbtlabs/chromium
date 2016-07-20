@@ -105,9 +105,14 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
 
   // Applies the |transform| to the overview window and all of its transient
   // children. With Material Design creates a mask layer with the bottom edge
-  // using rounded corners of |radius|.
+  // using rounded corners of |radius|. When |use_mask| is set, hides the
+  // original window header and uses rounded rectangle mask which may be
+  // resource-intensive. When |use_shape| is set and |use_mask| is not, uses
+  // SetAlphaShape to mask the header.
   void SetTransform(WmWindow* root_window,
                     const gfx::Transform& transform,
+                    bool use_mask,
+                    bool use_shape,
                     float radius);
 
   // Set's the opacity of the managed windows.
@@ -121,6 +126,12 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
  private:
   friend class WindowSelectorTest;
   class OverviewContentMask;
+
+  enum OriginalVisibility {
+    ORIGINALLY_VISIBLE,
+    ORIGINALLY_MINIMIZED,
+    ORIGINALLY_DOCKED_MINIMIZED,
+  };
 
   // Shows the window if it was minimized.
   void ShowWindowIfMinimized();
@@ -144,9 +155,9 @@ class ASH_EXPORT ScopedTransformOverviewWindow {
   // been determined that window shape was not originally set on the |window_|.
   bool determined_original_window_shape_;
 
-  // If true, the window was minimized and should be restored if the window
-  // was not selected.
-  bool minimized_;
+  // Original visibility of |window_| upon entering overview mode that needs to
+  // be restored unless the window gets selected.
+  OriginalVisibility original_visibility_;
 
   // Tracks if this window was ignored by the shelf.
   bool ignored_by_shelf_;

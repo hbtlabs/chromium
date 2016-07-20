@@ -243,6 +243,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.metrics.reportingEnabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["cros.device.allow_bluetooth"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.device.attestation_for_content_protection_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.internet.wake_on_wifi_darkconnect"] =
@@ -261,6 +263,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.touchpad.natural_scroll"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.touchpad.sensitivity2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["settings.mouse.primary_right"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.mouse.sensitivity2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["settings.language.xkb_remap_search_key_to"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["settings.language.xkb_remap_control_key_to"] =
@@ -325,7 +333,7 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
 
 #if defined(OS_CHROMEOS)
   const base::Value* value = CrosSettings::Get()->GetPref(name);
-  DCHECK(value);
+  DCHECK(value) << "Pref not found: " << name;
   pref_object->key = name;
   pref_object->type = GetType(name, value->GetType());
   pref_object->value.reset(value->DeepCopy());

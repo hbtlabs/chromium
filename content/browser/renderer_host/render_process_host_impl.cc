@@ -44,6 +44,8 @@
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "components/memory_coordinator/browser/memory_coordinator.h"
+#include "components/memory_coordinator/common/memory_coordinator_features.h"
 #include "components/scheduler/common/scheduler_switches.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/webmessaging/broadcast_channel_provider.h"
@@ -169,6 +171,8 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "services/shell/runner/common/switches.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -279,7 +283,6 @@ void GetContexts(
     scoped_refptr<net::URLRequestContextGetter> request_context,
     scoped_refptr<net::URLRequestContextGetter> media_request_context,
     ResourceType resource_type,
-    int origin_pid,
     ResourceContext** resource_context_out,
     net::URLRequestContext** request_context_out) {
   *resource_context_out = resource_context;
@@ -450,6 +453,13 @@ std::string UintVectorToString(const std::vector<unsigned>& vector) {
   return str;
 }
 
+void CreateMemoryCoordinatorHandle(
+    int render_process_id,
+    memory_coordinator::mojom::MemoryCoordinatorHandleRequest request) {
+  BrowserMainLoop::GetInstance()->memory_coordinator()->CreateHandle(
+      render_process_id, std::move(request));
+}
+
 }  // namespace
 
 RendererMainThreadFactoryFunction g_renderer_main_thread_factory = NULL;
@@ -604,6 +614,8 @@ RenderProcessHostImpl::RenderProcessHostImpl(
 #endif  // defined(OS_MACOSX)
 #endif  // USE_ATTACHMENT_BROKER
 
+  scoped_refptr<base::SequencedTaskRunner> io_task_runner =
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   shell::Connector* connector =
       BrowserContext::GetShellConnectorFor(browser_context_);
   // Some embedders may not initialize Mojo or the shell connector for a browser
@@ -616,15 +628,14 @@ RenderProcessHostImpl::RenderProcessHostImpl(
     if (!MojoShellConnection::GetForProcess()) {
       shell::mojom::ServiceRequest request = mojo::GetProxy(&test_service_);
       MojoShellConnection::SetForProcess(MojoShellConnection::Create(
-          std::move(request)));
+          std::move(request), io_task_runner));
     }
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   }
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++),
-      child_token_,
-      connector));
+      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
+      io_task_runner));
 }
 
 // static
@@ -764,8 +775,7 @@ bool RenderProcessHostImpl::Init() {
     in_process_renderer_.reset(
         g_renderer_main_thread_factory(InProcessChildThreadParams(
             channel_id,
-            BrowserThread::UnsafeGetMessageLoopForThread(BrowserThread::IO)
-                ->task_runner(),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
             mojo_channel_token_,
             mojo_child_connection_->service_token())));
 
@@ -831,6 +841,9 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
   mojo::ScopedMessagePipeHandle handle =
       mojo::edk::CreateParentMessagePipe(mojo_channel_token_, child_token_);
 
+  std::unique_ptr<IPC::ChannelFactory> channel_factory =
+      IPC::ChannelMojo::CreateServerFactory(std::move(handle), runner);
+
   // Do NOT expand ifdef or run time condition checks here! Synchronous
   // IPCs from browser process are banned. It is only narrowly allowed
   // for Android WebView to maintain backward compatibility.
@@ -838,8 +851,7 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
 #if defined(OS_ANDROID)
   if (GetContentClient()->UsingSynchronousCompositing()) {
     return IPC::SyncChannel::Create(
-        IPC::ChannelMojo::CreateServerFactory(std::move(handle)), this,
-        runner.get(), true, &never_signaled_);
+        std::move(channel_factory), this, runner.get(), true, &never_signaled_);
   }
 #endif  // OS_ANDROID
 
@@ -847,10 +859,9 @@ std::unique_ptr<IPC::ChannelProxy> RenderProcessHostImpl::CreateChannelProxy(
       new IPC::ChannelProxy(this, runner.get()));
 #if USE_ATTACHMENT_BROKER
   IPC::AttachmentBroker::GetGlobal()->RegisterCommunicationChannel(
-      channel.get(), content::BrowserThread::GetTaskRunnerForThread(
-                         content::BrowserThread::IO));
+      channel.get(), runner);
 #endif
-  channel->Init(IPC::ChannelMojo::CreateServerFactory(std::move(handle)), true);
+  channel->Init(std::move(channel_factory), true);
   return channel;
 }
 
@@ -1027,9 +1038,12 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       GetID(), storage_partition_impl_->GetQuotaManager(),
       GetContentClient()->browser()->CreateQuotaPermissionContext()));
 
+  scoped_refptr<ServiceWorkerContextWrapper> service_worker_context(
+      static_cast<ServiceWorkerContextWrapper*>(
+          storage_partition_impl_->GetServiceWorkerContext()));
   notification_message_filter_ = new NotificationMessageFilter(
       GetID(), storage_partition_impl_->GetPlatformNotificationContext(),
-      resource_context, browser_context);
+      resource_context, service_worker_context, browser_context);
   AddFilter(notification_message_filter_.get());
 
   AddFilter(new GamepadBrowserMessageFilter());
@@ -1099,6 +1113,11 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   GetInterfaceRegistry()->AddInterface(
       base::Bind(&DeviceOrientationAbsoluteHost::Create), io_task_runner);
 
+  if (memory_coordinator::IsEnabled()) {
+    GetInterfaceRegistry()->AddInterface(
+        base::Bind(&CreateMemoryCoordinatorHandle, GetID()));
+  }
+
 #if defined(OS_ANDROID)
   ServiceRegistrarAndroid::RegisterProcessHostServices(
       mojo_child_connection_->service_registry_android());
@@ -1131,16 +1150,11 @@ void RenderProcessHostImpl::NotifyTimezoneChange(const std::string& zone_id) {
 }
 
 shell::InterfaceRegistry* RenderProcessHostImpl::GetInterfaceRegistry() {
-  return GetChildConnection()->GetInterfaceRegistry();
+  return mojo_child_connection_->GetInterfaceRegistry();
 }
 
 shell::InterfaceProvider* RenderProcessHostImpl::GetRemoteInterfaces() {
-  return GetChildConnection()->GetRemoteInterfaces();
-}
-
-shell::Connection* RenderProcessHostImpl::GetChildConnection() {
-  DCHECK(mojo_child_connection_);
-  return mojo_child_connection_->connection();
+  return mojo_child_connection_->GetRemoteInterfaces();
 }
 
 std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -1392,7 +1406,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kAudioBufferSize,
     switches::kBlinkPlatformLogChannels,
     switches::kBlinkSettings,
-    switches::kCastEncoderUtilHeuristic,
     switches::kDefaultTileWidth,
     switches::kDefaultTileHeight,
     switches::kDisable2dCanvasImageChromium,
@@ -1482,6 +1495,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kExplicitlyAllowedPorts,
     switches::kForceDeviceScaleFactor,
     switches::kForceDisplayList2dCanvas,
+    switches::kEnableCanvas2dDynamicRenderingModeSwitching,
     switches::kForceOverlayFullscreenVideo,
     switches::kFullMemoryCrashReport,
     switches::kInertVisualViewport,
@@ -2458,9 +2472,8 @@ void RenderProcessHostImpl::ProcessDied(bool already_dead,
     connector = MojoShellConnection::GetForProcess()->GetConnector();
   mojo_child_connection_.reset(new MojoChildConnection(
       kRendererMojoApplicationName,
-      base::StringPrintf("%d_%d", id_, instance_id_++),
-      child_token_,
-      connector));
+      base::StringPrintf("%d_%d", id_, instance_id_++), child_token_, connector,
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   within_process_died_observer_ = true;
   NotificationService::current()->Notify(

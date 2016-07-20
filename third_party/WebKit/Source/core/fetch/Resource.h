@@ -26,6 +26,7 @@
 #include "core/CoreExport.h"
 #include "core/fetch/CachedMetadataHandler.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
@@ -49,7 +50,6 @@ class ResourceClient;
 class ResourceTimingInfo;
 class ResourceLoader;
 class SecurityOrigin;
-class SharedBuffer;
 
 // A resource that is held in the cache. Classes who want to use this object should derive
 // from ResourceClient, to get the function calls in case the requested data has arrived.
@@ -57,6 +57,9 @@ class SharedBuffer;
 class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource> {
     WTF_MAKE_NONCOPYABLE(Resource);
 public:
+    // |Type| enum values are used in UMAs, so do not change the values of
+    // existing |Type|. When adding a new |Type|, append it at the end and
+    // update |kLastResourceType|.
     enum Type {
         MainResource,
         Image,
@@ -73,6 +76,7 @@ public:
         Media, // Audio or video file requested by a HTML5 media element
         Manifest
     };
+    static const int kLastResourceType = Manifest + 1;
 
     enum Status {
         NotStarted,
@@ -139,8 +143,6 @@ public:
     };
     PreloadResult getPreloadResult() const { return static_cast<PreloadResult>(m_preloadResult); }
 
-    unsigned count() const { return m_clients.size(); }
-
     Status getStatus() const { return static_cast<Status>(m_status); }
     void setStatus(Status status) { m_status = status; }
 
@@ -172,7 +174,7 @@ public:
 
     bool isEligibleForIntegrityCheck(SecurityOrigin*) const;
 
-    SharedBuffer* resourceBuffer() const { return m_data.get(); }
+    virtual PassRefPtr<SharedBuffer> resourceBuffer() const { return m_data; }
     void setResourceBuffer(PassRefPtr<SharedBuffer>);
 
     virtual void willFollowRedirect(ResourceRequest&, const ResourceResponse&);
@@ -192,8 +194,6 @@ public:
 
     // This may return nullptr when the resource isn't cacheable.
     CachedMetadataHandler* cacheHandler();
-
-    String reasonNotDeletable() const;
 
     AtomicString httpContentType() const;
 
@@ -232,6 +232,9 @@ public:
 
     double loadFinishTime() const { return m_loadFinishTime; }
 
+    void addToEncodedBodyLength(int value) { m_response.addToEncodedBodyLength(value); }
+    void addToDecodedBodyLength(int value) { m_response.addToDecodedBodyLength(value); }
+
     virtual bool canReuse(const ResourceRequest&) const { return true; }
 
     // Used by the MemoryCache to reduce the memory consumption of the entry.
@@ -240,7 +243,6 @@ public:
     virtual void onMemoryDump(WebMemoryDumpLevelOfDetail, WebProcessMemoryDump*) const;
 
     static const char* resourceTypeToString(Type, const FetchInitiatorInfo&);
-    static const char* resourceTypeName(Type);
 
 protected:
     Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
@@ -309,6 +311,8 @@ private:
     size_t calculateOverheadSize() const;
 
     bool unlock();
+
+    String reasonNotDeletable() const;
 
     Member<CachedMetadataHandlerImpl> m_cacheHandler;
     RefPtr<SecurityOrigin> m_fetcherSecurityOrigin;

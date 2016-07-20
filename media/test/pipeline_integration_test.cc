@@ -10,12 +10,10 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -536,7 +534,7 @@ class MockMediaSource {
     chunk_demuxer_->StartWaitingForSeek(seek_time);
 
     chunk_demuxer_->ResetParserState(kSourceId, base::TimeDelta(),
-                                     kInfiniteDuration(),
+                                     kInfiniteDuration,
                                      &last_timestamp_offset_);
 
     DCHECK_LT(new_position, file_data_->data_size());
@@ -556,7 +554,7 @@ class MockMediaSource {
 
     ASSERT_TRUE(chunk_demuxer_->AppendData(
         kSourceId, file_data_->data() + current_position_, size,
-        base::TimeDelta(), kInfiniteDuration(), &last_timestamp_offset_));
+        base::TimeDelta(), kInfiniteDuration, &last_timestamp_offset_));
     current_position_ += size;
   }
 
@@ -566,7 +564,7 @@ class MockMediaSource {
     CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
     bool success =
         chunk_demuxer_->AppendData(kSourceId, pData, size, base::TimeDelta(),
-                                   kInfiniteDuration(), &timestamp_offset);
+                                   kInfiniteDuration, &timestamp_offset);
     last_timestamp_offset_ = timestamp_offset;
     return success;
   }
@@ -602,7 +600,7 @@ class MockMediaSource {
     if (!chunk_demuxer_)
       return;
     chunk_demuxer_->ResetParserState(kSourceId, base::TimeDelta(),
-                                     kInfiniteDuration(),
+                                     kInfiniteDuration,
                                      &last_timestamp_offset_);
     chunk_demuxer_->Shutdown();
     chunk_demuxer_ = NULL;
@@ -952,7 +950,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
   // Disable audio.
   std::vector<MediaTrack::Id> empty;
   pipeline_->OnEnabledAudioTracksChanged(empty);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Seek to flush the pipeline and ensure there's no prerolled audio data.
   ASSERT_TRUE(Seek(base::TimeDelta()));
@@ -969,7 +967,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
   std::vector<MediaTrack::Id> audioTrackId;
   audioTrackId.push_back("2");
   pipeline_->OnEnabledAudioTracksChanged(audioTrackId);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Restart playback from 500ms position.
   ASSERT_TRUE(Seek(k500ms));
@@ -986,7 +984,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
   // Disable video.
   std::vector<MediaTrack::Id> empty;
   pipeline_->OnSelectedVideoTrackChanged(empty);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Seek to flush the pipeline and ensure there's no prerolled video data.
   ASSERT_TRUE(Seek(base::TimeDelta()));
@@ -1007,7 +1005,7 @@ TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
   std::vector<MediaTrack::Id> videoTrackId;
   videoTrackId.push_back("1");
   pipeline_->OnSelectedVideoTrackChanged(videoTrackId);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Seek to flush video pipeline and reset the video hash again to clear state
   // if some prerolled frames got hashed after enabling video.
@@ -1506,7 +1504,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_ADTS_TimestampOffset) {
 
   scoped_refptr<DecoderBuffer> second_file = ReadTestDataFile("sfx.adts");
   source.AppendAtTimeWithWindow(
-      append_time, append_time + adts_preroll_duration, kInfiniteDuration(),
+      append_time, append_time + adts_preroll_duration, kInfiniteDuration,
       second_file->data(), second_file->data_size());
   source.EndOfStream();
 
@@ -1638,7 +1636,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_MP3_TimestampOffset) {
 
   scoped_refptr<DecoderBuffer> second_file = ReadTestDataFile("sfx.mp3");
   source.AppendAtTimeWithWindow(append_time, append_time + mp3_preroll_duration,
-                                kInfiniteDuration(), second_file->data(),
+                                kInfiniteDuration, second_file->data(),
                                 second_file->data_size());
   source.EndOfStream();
 
@@ -1761,7 +1759,7 @@ TEST_F(PipelineIntegrationTest,
 
   source.EndOfStream();
 
-  message_loop_.Run();
+  base::RunLoop().Run();
   EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());

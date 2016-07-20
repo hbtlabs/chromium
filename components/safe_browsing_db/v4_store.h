@@ -32,10 +32,14 @@ typedef std::string HashPrefixes;
 // For instance: {4: ["abcd", "bcde", "cdef", "gggg"], 5: ["fffff"]}
 typedef base::hash_map<PrefixSize, HashPrefixes> HashPrefixMap;
 
-// Stores the index of the last element merged from the HashPrefixMap for a
-// given prefix size. For instance: {4:3, 5:1} means that we have already merged
+// Stores the iterator to the last element merged from the HashPrefixMap for a
+// given prefix size.
+// For instance: {4:iter(3), 5:iter(1)} means that we have already merged
 // 3 hash prefixes of length 4, and 1 hash prefix of length 5.
-typedef base::hash_map<PrefixSize, size_t> CounterMap;
+typedef base::hash_map<PrefixSize, HashPrefixes::const_iterator> IteratorMap;
+
+// A full SHA256 hash.
+typedef HashPrefix FullHash;
 
 // Enumerate different failure events while parsing the file read from disk for
 // histogramming purposes.  DO NOT CHANGE THE ORDERING OF THESE VALUES.
@@ -57,7 +61,7 @@ enum StoreReadResult {
   PROTO_PARSING_FAILURE = 4,
 
   // The magic number didn't match. We're most likely trying to read a file
-  // that doesn't contain hash-prefixes.
+  // that doesn't contain hash prefixes.
   UNEXPECTED_MAGIC_NUMBER_FAILURE = 5,
 
   // The version of the file is different from expected and Chromium doesn't
@@ -68,6 +72,9 @@ enum StoreReadResult {
   // This can happen if the machine crashed before the file was fully written to
   // disk or if there was disk corruption.
   HASH_PREFIX_INFO_MISSING_FAILURE = 7,
+
+  // Unable to generate the hash prefix map from the updates on disk.
+  HASH_PREFIX_MAP_GENERATION_FAILURE = 8,
 
   // Memory space for histograms is determined by the max.  ALWAYS
   // ADD NEW VALUES BEFORE THIS ONE.
@@ -124,6 +131,10 @@ enum ApplyUpdateResult {
   // The server sent a response_type that the client did not expect.
   UNEXPECTED_RESPONSE_TYPE_FAILURE = 6,
 
+  // One of more index(es) in removals field of the response is greater than
+  // the number of hash prefixes currently in the (old) store.
+  REMOVALS_INDEX_TOO_LARGE = 7,
+
   // Memory space for histograms is determined by the max.  ALWAYS
   // ADD NEW VALUES BEFORE THIS ONE.
   APPLY_UPDATE_RESULT_MAX
@@ -156,6 +167,10 @@ class V4Store {
                    const scoped_refptr<base::SingleThreadTaskRunner>&,
                    UpdatedStoreReadyCallback);
 
+  // If a hash prefix in this store matches |full_hash|, returns that hash
+  // prefix; otherwise returns an empty hash prefix.
+  HashPrefix GetMatchingHashPrefix(const FullHash& full_hash);
+
   std::string DebugString() const;
 
   // Reads the store file from disk and populates the in-memory representation
@@ -182,9 +197,8 @@ class V4Store {
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestAddUnlumpedHashes);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestAddUnlumpedHashesWithEmptyString);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
-                           TestGetNextSmallestPrefixSizeWithEmptyPrefixMap);
-  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestGetNextSmallestPrefixSize);
-  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestGetNextUnmergedPrefix);
+                           TestGetNextSmallestUnmergedPrefixWithEmptyPrefixMap);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestGetNextSmallestUnmergedPrefix);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestMergeUpdatesWithSameSizesInEachMap);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
                            TestMergeUpdatesWithDifferentSizesInEachMap);
@@ -192,7 +206,38 @@ class V4Store {
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
                            TestMergeUpdatesAdditionsMapRunsOutFirst);
   FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
-                           TestMergeUpdatesFailsForRepeatedhashPrefix);
+                           TestMergeUpdatesFailsForRepeatedHashPrefix);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestMergeUpdatesFailsWhenRemovalsIndexTooLarge);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestMergeUpdatesRemovesOnlyElement);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestMergeUpdatesRemovesFirstElement);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestMergeUpdatesRemovesMiddleElement);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestMergeUpdatesRemovesLastElement);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestMergeUpdatesRemovesWhenOldHasDifferentSizes);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestMergeUpdatesRemovesMultipleAcrossDifferentSizes);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestReadFullResponseWithValidHashPrefixMap);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestReadFullResponseWithInvalidHashPrefixMap);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestHashPrefixExistsAtTheBeginning);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestHashPrefixExistsInTheMiddle);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestHashPrefixExistsAtTheEnd);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestHashPrefixExistsAtTheBeginningOfEven);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestHashPrefixExistsAtTheEndOfEven);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestHashPrefixDoesNotExistInConcatenatedList);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest, TestFullHashExistsInMapWithSingleSize);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestFullHashExistsInMapWithDifferentSizes);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestHashPrefixExistsInMapWithSingleSize);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestHashPrefixExistsInMapWithDifferentSizes);
+  FRIEND_TEST_ALL_PREFIXES(V4StoreTest,
+                           TestHashPrefixDoesNotExistInMapWithDifferentSizes);
 
   // If |prefix_size| is within expected range, and |raw_hashes| is not invalid,
   // then it sets |raw_hashes| as the value at key |prefix_size| in
@@ -201,25 +246,24 @@ class V4Store {
                                              const std::string& raw_hashes,
                                              HashPrefixMap* additions_map);
 
-  // Get the size of the next unmerged hash prefix in dictionary order from
-  // |hash_prefix_map|. |counter_map| is used to determine which hash prefixes
+  // Get the next unmerged hash prefix in dictionary order from
+  // |hash_prefix_map|. |iterator_map| is used to determine which hash prefixes
   // have been merged already. Returns true if there are any unmerged hash
   // prefixes in the list.
-  static bool GetNextSmallestPrefixSize(const HashPrefixMap& hash_prefix_map,
-                                        const CounterMap& counter_map,
-                                        PrefixSize* smallest_prefix_size);
-
-  // Returns the next hash prefix of length |prefix_size| from |hash_prefix_map|
-  // that hasn't been merged already. |counter_map| is used to determine the
-  // index of the next prefix of size |prefix_size| to merge.
-  static HashPrefix GetNextUnmergedPrefixForSize(
-      PrefixSize prefix_size,
+  static bool GetNextSmallestUnmergedPrefix(
       const HashPrefixMap& hash_prefix_map,
-      const CounterMap& counter_map);
+      const IteratorMap& iterator_map,
+      HashPrefix* smallest_hash_prefix);
 
-  // Sets a value of 0 in |counter_map| for all keys in |hash_prefix_map|.
-  static void InitializeCounterMap(const HashPrefixMap& hash_prefix_map,
-                                   CounterMap* counter_map);
+  // Returns true if |hash_prefix| exists between |begin| and |end| iterators.
+  static bool HashPrefixMatches(const HashPrefix& hash_prefix,
+                                const HashPrefixes::const_iterator& begin,
+                                const HashPrefixes::const_iterator& end);
+
+  // For each key in |hash_prefix_map|, sets the iterator at that key
+  // |iterator_map| to hash_prefix_map[key].begin().
+  static void InitializeIteratorMap(const HashPrefixMap& hash_prefix_map,
+                                    IteratorMap* iterator_map);
 
   // Reserve the appropriate string size so that the string size of the merged
   // list is exact. This ignores the space that would otherwise be released by
@@ -237,9 +281,11 @@ class V4Store {
 
   // Merges the prefix map from the old store (|old_hash_prefix_map|) and the
   // update (additions_map) to populate the prefix map for the current store.
-  // TODO(vakh): Process removals also.
+  // The indices in the |raw_removals| list, which may be NULL, are not merged.
   ApplyUpdateResult MergeUpdate(const HashPrefixMap& old_hash_prefix_map,
-                                const HashPrefixMap& additions_map);
+                                const HashPrefixMap& additions_map,
+                                const ::google::protobuf::RepeatedField<
+                                    ::google::protobuf::int32>* raw_removals);
 
   // Reads the state of the store from the file on disk and returns the reason
   // for the failure or reports success.

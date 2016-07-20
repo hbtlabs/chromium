@@ -17,12 +17,14 @@ extern const base::Feature kImportantSitesInCBD;
 extern const base::Feature kNTPMaterialDesign;
 extern const base::Feature kNTPOfflinePagesFeature;
 extern const base::Feature kNTPSnippetsFeature;
+extern const base::Feature kNTPOfflinePageSuggestionsFeature;
 extern const base::Feature kNTPToolbarFeature;
 extern const base::Feature kNTPFakeOmniboxTextFeature;
 extern const base::Feature kPhysicalWebFeature;
 extern const base::Feature kPhysicalWebIgnoreOtherClientsFeature;
 extern const base::Feature kReadItLaterInMenu;
 extern const base::Feature kSystemDownloadManager;
+extern const base::Feature kTabReparenting;
 
 bool RegisterChromeFeatureListJni(JNIEnv* env);
 

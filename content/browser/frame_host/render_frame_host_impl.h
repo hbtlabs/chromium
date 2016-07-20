@@ -39,7 +39,6 @@
 #include "net/http/http_response_headers.h"
 #include "services/shell/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
-#include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -95,6 +94,7 @@ class WebBluetoothServiceImpl;
 struct ContentSecurityPolicyHeader;
 struct ContextMenuParams;
 struct FileChooserParams;
+struct FrameOwnerProperties;
 struct GlobalRequestID;
 struct FileChooserParams;
 struct Referrer;
@@ -220,13 +220,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void Init();
 
   int routing_id() const { return routing_id_; }
-  void OnCreateChildFrame(
-      int new_routing_id,
-      blink::WebTreeScopeType scope,
-      const std::string& frame_name,
-      const std::string& frame_unique_name,
-      blink::WebSandboxFlags sandbox_flags,
-      const blink::WebFrameOwnerProperties& frame_owner_properties);
+  void OnCreateChildFrame(int new_routing_id,
+                          blink::WebTreeScopeType scope,
+                          const std::string& frame_name,
+                          const std::string& frame_unique_name,
+                          blink::WebSandboxFlags sandbox_flags,
+                          const FrameOwnerProperties& frame_owner_properties);
 
   RenderViewHostImpl* render_view_host() { return render_view_host_; }
   RenderFrameHostDelegate* delegate() { return delegate_; }
@@ -680,9 +679,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDidAssignPageId(int32_t page_id);
   void OnDidChangeSandboxFlags(int32_t frame_routing_id,
                                blink::WebSandboxFlags flags);
-  void OnDidChangeFrameOwnerProperties(
-      int32_t frame_routing_id,
-      const blink::WebFrameOwnerProperties& properties);
+  void OnDidChangeFrameOwnerProperties(int32_t frame_routing_id,
+                                       const FrameOwnerProperties& properties);
   void OnUpdateTitle(const base::string16& title,
                      blink::WebTextDirection title_direction);
   void OnUpdateEncoding(const std::string& encoding);

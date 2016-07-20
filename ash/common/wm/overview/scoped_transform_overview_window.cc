@@ -180,10 +180,11 @@ TransientDescendantIteratorRange GetTransientTreeIterator(WmWindow* window) {
 class ScopedTransformOverviewWindow::OverviewContentMask
     : public ui::LayerDelegate {
  public:
-  explicit OverviewContentMask(float radius);
+  explicit OverviewContentMask();
   ~OverviewContentMask() override;
 
   void set_radius(float radius) { radius_ = radius; }
+  void set_inset(int inset) { inset_ = inset; }
   ui::Layer* layer() { return &layer_; }
 
   // Overridden from LayerDelegate.
@@ -195,13 +196,13 @@ class ScopedTransformOverviewWindow::OverviewContentMask
  private:
   ui::Layer layer_;
   float radius_;
+  int inset_;
 
   DISALLOW_COPY_AND_ASSIGN(OverviewContentMask);
 };
 
-ScopedTransformOverviewWindow::OverviewContentMask::OverviewContentMask(
-    float radius)
-    : layer_(ui::LAYER_TEXTURED), radius_(radius) {
+ScopedTransformOverviewWindow::OverviewContentMask::OverviewContentMask()
+    : layer_(ui::LAYER_TEXTURED), radius_(0), inset_(0) {
   layer_.set_delegate(this);
 }
 
@@ -213,6 +214,7 @@ void ScopedTransformOverviewWindow::OverviewContentMask::OnPaintLayer(
     const ui::PaintContext& context) {
   ui::PaintRecorder recorder(context, layer()->size());
   gfx::Rect bounds(layer()->bounds().size());
+  bounds.Inset(0, inset_, 0, 0);
 
   // Tile a window into an area, rounding the bottom corners.
   const SkRect rect = gfx::RectToSkRect(bounds);
@@ -249,7 +251,13 @@ base::Closure ScopedTransformOverviewWindow::OverviewContentMask::
 ScopedTransformOverviewWindow::ScopedTransformOverviewWindow(WmWindow* window)
     : window_(window),
       determined_original_window_shape_(false),
-      minimized_(window->GetShowState() == ui::SHOW_STATE_MINIMIZED),
+      original_visibility_(
+          window->GetWindowState()->GetStateType() ==
+                  wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED
+              ? ORIGINALLY_DOCKED_MINIMIZED
+              : (window->GetShowState() == ui::SHOW_STATE_MINIMIZED
+                     ? ORIGINALLY_MINIMIZED
+                     : ORIGINALLY_VISIBLE)),
       ignored_by_shelf_(window->GetWindowState()->ignored_by_shelf()),
       overview_started_(false),
       original_transform_(window->GetTargetTransform()),
@@ -262,14 +270,19 @@ void ScopedTransformOverviewWindow::RestoreWindow() {
   ScopedAnimationSettings animation_settings_list;
   BeginScopedAnimation(OverviewAnimationType::OVERVIEW_ANIMATION_RESTORE_WINDOW,
                        &animation_settings_list);
-  SetTransform(window()->GetRootWindow(), original_transform_, 0);
+  SetTransform(window()->GetRootWindow(), original_transform_,
+               false /* use_mask */, false /* use_shape */, 0);
 
   std::unique_ptr<ScopedOverviewAnimationSettings> animation_settings =
       CreateScopedOverviewAnimationSettings(
           OverviewAnimationType::OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS,
           window_);
   gfx::Transform transform;
-  if (minimized_ && window_->GetShowState() != ui::SHOW_STATE_MINIMIZED) {
+  if ((original_visibility_ == ORIGINALLY_MINIMIZED &&
+       window_->GetShowState() != ui::SHOW_STATE_MINIMIZED) ||
+      (original_visibility_ == ORIGINALLY_DOCKED_MINIMIZED &&
+       window_->GetWindowState()->GetStateType() !=
+           wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED)) {
     // Setting opacity 0 and visible false ensures that the property change
     // to SHOW_STATE_MINIMIZED will not animate the window from its original
     // bounds to the minimized position.
@@ -331,13 +344,18 @@ gfx::Rect ScopedTransformOverviewWindow::GetTargetBoundsInScreen() const {
 }
 
 void ScopedTransformOverviewWindow::ShowWindowIfMinimized() {
-  if (minimized_ && window_->GetShowState() == ui::SHOW_STATE_MINIMIZED)
+  if ((original_visibility_ == ORIGINALLY_MINIMIZED &&
+       window_->GetShowState() == ui::SHOW_STATE_MINIMIZED) ||
+      (original_visibility_ == ORIGINALLY_DOCKED_MINIMIZED &&
+       window_->GetWindowState()->GetStateType() ==
+           wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED)) {
     window_->Show();
+  }
 }
 
 void ScopedTransformOverviewWindow::ShowWindowOnExit() {
-  if (minimized_) {
-    minimized_ = false;
+  if (original_visibility_ != ORIGINALLY_VISIBLE) {
+    original_visibility_ = ORIGINALLY_VISIBLE;
     original_transform_ = gfx::Transform();
     original_opacity_ = kRestoreWindowOpacity;
   }
@@ -402,30 +420,39 @@ gfx::Transform ScopedTransformOverviewWindow::GetTransformForRect(
 void ScopedTransformOverviewWindow::SetTransform(
     WmWindow* root_window,
     const gfx::Transform& transform,
+    bool use_mask,
+    bool use_shape,
     float radius) {
   DCHECK(overview_started_);
 
   if (ash::MaterialDesignController::IsOverviewMaterial() &&
       &transform != &original_transform_) {
-    if (!mask_) {
-      mask_.reset(new OverviewContentMask(radius));
+    if (use_mask && !mask_) {
+      mask_.reset(new OverviewContentMask());
       mask_->layer()->SetFillsBoundsOpaquely(false);
       window()->GetLayer()->SetMaskLayer(mask_->layer());
     }
-    gfx::Rect bounds(GetTargetBoundsInScreen().size());
-    mask_->layer()->SetBounds(bounds);
-    mask_->set_radius(radius);
-    window()->GetLayer()->SchedulePaint(bounds);
-
     if (!determined_original_window_shape_) {
       determined_original_window_shape_ = true;
       SkRegion* window_shape = window()->GetLayer()->alpha_shape();
       if (!original_window_shape_ && window_shape)
         original_window_shape_.reset(new SkRegion(*window_shape));
     }
+    gfx::Rect bounds(GetTargetBoundsInScreen().size());
     const int inset =
-        window()->GetIntProperty(WmWindowProperty::TOP_VIEW_INSET);
-    if (inset > 0) {
+        (use_mask || use_shape)
+            ? window()->GetIntProperty(WmWindowProperty::TOP_VIEW_INSET)
+            : 0;
+    if (mask_) {
+      // Mask layer is used both to hide the window header and to use rounded
+      // corners. Its layout needs to be update when setting a transform.
+      mask_->layer()->SetBounds(bounds);
+      mask_->set_inset(inset);
+      mask_->set_radius(radius);
+      window()->GetLayer()->SchedulePaint(bounds);
+    } else if (inset > 0) {
+      // Alpha shape is only used to to hide the window header and only when
+      // not using a mask layer.
       bounds.Inset(0, inset, 0, 0);
       SkRegion* region = new SkRegion;
       region->setRect(RectToSkIRect(bounds));

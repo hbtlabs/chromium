@@ -165,6 +165,8 @@ mojom("mojom") {
   sources = [
     "ipc.mojom",
   ]
+
+  use_new_wrapper_types = false
 }
 
 mojom("test_interfaces") {
@@ -172,6 +174,8 @@ mojom("test_interfaces") {
   sources = [
     "ipc_test.mojom",
   ]
+
+  use_new_wrapper_types = false
 }
 
 # This is provided as a separate target so other targets can provide param
@@ -282,7 +286,7 @@ if (!is_ios) {
     ]
   }
 
-  source_set("test_support") {
+  static_library("test_support") {
     testonly = true
     sources = [
       "ipc_multiprocess_test.cc",

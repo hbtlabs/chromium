@@ -26,6 +26,7 @@ component("ash") {
     "//ash/strings",
   ]
   deps = [
+    "//ash/touch_hud",
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
@@ -349,6 +350,7 @@ test("ash_unittests") {
     ":test_support_with_content",
     "//ash/resources",
     "//ash/strings",
+    "//ash/touch_hud",
     "//base",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -403,6 +405,9 @@ test("ash_unittests") {
 
       # All tests for multiple displays: not supported on Windows Ash.
       "wm/drag_window_resizer_unittest.cc",
+
+      # Talks to ChromeOS system services.
+      "wm/lock_state_controller_unittest.cc",
 
       # Accelerometer is only available on Chrome OS.
       "wm/maximize_mode/maximize_mode_controller_unittest.cc",

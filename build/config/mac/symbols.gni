@@ -22,3 +22,8 @@ declare_args() {
   # //build/toolchain/mac/linker_driver.py for more information.
   enable_stripping = is_official_build
 }
+
+# Save unstripped copies of targets with a ".unstripped" suffix. This is
+# useful to preserve the original output when enable_stripping=true but
+# we're not actually generating real dSYMs.
+save_unstripped_output = enable_stripping && !enable_dsyms

@@ -10,7 +10,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/output/context_provider.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass.h"
@@ -90,7 +89,7 @@ void DelegatingRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // Collect all resource ids in the render passes into a ResourceIdArray.
   ResourceProvider::ResourceIdArray resources;
   for (const auto& render_pass : out_data.render_pass_list) {
-    for (const auto& quad : render_pass->quad_list) {
+    for (auto* quad : render_pass->quad_list) {
       for (ResourceId resource_id : quad->resources)
         resources.push_back(resource_id);
     }
@@ -106,9 +105,9 @@ void DelegatingRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
   output_surface_->SwapBuffers(std::move(compositor_frame));
 }
 
-void DelegatingRenderer::ReceiveSwapBuffersAck(
-    const CompositorFrameAck& ack) {
-  resource_provider_->ReceiveReturnsFromParent(ack.resources);
+void DelegatingRenderer::ReclaimResources(
+    const ReturnedResourceArray& resources) {
+  resource_provider_->ReceiveReturnsFromParent(resources);
 }
 
 void DelegatingRenderer::DidChangeVisibility() {

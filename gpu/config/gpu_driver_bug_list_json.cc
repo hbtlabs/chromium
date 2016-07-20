@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.75",
+  "version": "8.77",
   "entries": [
     {
       "id": 1,
@@ -552,7 +552,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
         "type": "linux"
       },
       "gl_type": "gl",
-      "driver_vendor": "Mesa",
+      "gl_renderer": ".*Mesa.*",
       "features": [
         "disable_post_sub_buffers_for_onscreen_surfaces"
       ]
@@ -1856,6 +1856,22 @@ LONG_STRING_CONST(
       ],
       "features": [
         "disable_framebuffer_cmaa"
+      ]
+    },
+    {
+      "id": 173,
+      "description": "Limit transparent visuals to drivers known to work",
+      "cr_bugs": [369209],
+      "os": {
+        "type": "linux"
+      },
+      "exceptions" : [
+        {
+          "driver_vendor": "Mesa"
+        }
+      ],
+      "features": [
+        "disable_transparent_visuals"
       ]
     }
   ]
