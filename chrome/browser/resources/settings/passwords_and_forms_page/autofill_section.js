@@ -22,16 +22,27 @@
       addresses: Array,
 
       /**
+       * Assigning a non-null value triggers the add/edit dialog.
+       * @private {?chrome.autofillPrivate.AddressEntry}
+       */
+      activeAddress: Object,
+
+      /**
        * An array of saved addresses.
        * @type {!Array<!chrome.autofillPrivate.CreditCardEntry>}
        */
       creditCards: Array,
-    },
+
+      /**
+       * Assigning a non-null value triggers the add/edit dialog.
+       * @private {?chrome.autofillPrivate.CreditCardEntry}
+       */
+      activeCreditCard: Object,
+   },
 
     listeners: {
       'addressList.scroll': 'closeMenu_',
       'creditCardList.scroll': 'closeMenu_',
-      'tap': 'closeMenu_',
     },
 
     /**
@@ -76,7 +87,7 @@
      */
     onAddAddressTap_: function(e) {
       e.preventDefault();
-      this.$.addressEditDialog.open({});
+      this.activeAddress = {};
     },
 
     /**
@@ -89,11 +100,18 @@
       var address = menu.itemData;
 
       if (address.metadata.isLocal)
-        this.$.addressEditDialog.open(address);
+        this.activeAddress = address;
       else
         window.open(this.i18n('manageAddressesUrl'));
 
       menu.closeMenu();
+    },
+
+    /** @private */
+    unstampAddressEditDialog_: function(e) {
+      var expectedDialog = this.$$('settings-address-edit-dialog').$.dialog;
+      if (Polymer.dom(e).rootTarget == expectedDialog)
+        this.activeAddress = null;
     },
 
     /**
@@ -133,11 +151,10 @@
     onAddCreditCardTap_: function(e) {
       var date = new Date();  // Default to current month/year.
       var expirationMonth = date.getMonth() + 1;  // Months are 0 based.
-      // Pass in a new object to edit.
-      this.$.editCreditCardDialog.open({
+      this.activeCreditCard = {
         expirationMonth: expirationMonth.toString(),
         expirationYear: date.getFullYear().toString(),
-      });
+      };
       e.preventDefault();
     },
 
@@ -151,11 +168,18 @@
       var creditCard = menu.itemData;
 
       if (creditCard.metadata.isLocal)
-        this.$.editCreditCardDialog.open(creditCard);
+        this.activeCreditCard = creditCard;
       else
         window.open(this.i18n('manageCreditCardsUrl'));
 
       menu.closeMenu();
+    },
+
+    /** @private */
+    unstampCreditCardEditDialog_: function(e) {
+      var expectedDialog = this.$$('settings-credit-card-edit-dialog').$.dialog;
+      if (Polymer.dom(e).rootTarget == expectedDialog)
+        this.activeCreditCard = null;
     },
 
     /**

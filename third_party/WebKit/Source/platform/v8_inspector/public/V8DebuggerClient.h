@@ -20,8 +20,8 @@ public:
     virtual ~V8DebuggerClient() { }
     virtual void runMessageLoopOnPause(int contextGroupId) = 0;
     virtual void quitMessageLoopOnPause() = 0;
-    virtual void muteWarningsAndDeprecations() = 0;
-    virtual void unmuteWarningsAndDeprecations() = 0;
+    virtual void muteWarningsAndDeprecations(int contextGroupId) = 0;
+    virtual void unmuteWarningsAndDeprecations(int contextGroupId) = 0;
     virtual void beginUserGesture() = 0;
     virtual void endUserGesture() = 0;
     virtual bool callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target) = 0;
@@ -39,8 +39,7 @@ public:
     virtual void consoleTime(const String16& title) = 0;
     virtual void consoleTimeEnd(const String16& title) = 0;
     virtual void consoleTimeStamp(const String16& title) = 0;
-    // TODO(dgozman: route all messages through here, remove FrameConsole.
-    virtual void messageAddedToConsole(int contextGroupId, MessageSource, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) = 0;
+    virtual void consoleAPIMessage(int contextGroupId, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) = 0;
 
     virtual v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) = 0;
 

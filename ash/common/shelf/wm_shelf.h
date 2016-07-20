@@ -19,6 +19,7 @@ class MouseEvent;
 
 namespace ash {
 
+class ShelfLockingManager;
 class WmShelfObserver;
 class WmWindow;
 
@@ -44,6 +45,16 @@ class ASH_EXPORT WmShelf {
 
   // Shelf items are slightly dimmed (e.g. when a window is maximized).
   virtual bool IsDimmed() const = 0;
+
+  // Whether the shelf item overflow bubble is visible.
+  // TODO(jamescook): Eliminate when ShelfView moves to //ash/common.
+  // http://crbug.com/615155
+  virtual bool IsShowingOverflowBubble() const = 0;
+
+  // Schedules a repaint for all shelf buttons.
+  // TODO(jamescook): Eliminate when ShelfView moves to //ash/common.
+  // http://crbug.com/615155
+  virtual void SchedulePaint() = 0;
 
   // Whether the shelf view is visible.
   // TODO(jamescook): Consolidate this with GetVisibilityState().
@@ -80,6 +91,8 @@ class ASH_EXPORT WmShelf {
 
   // Simulates a virtual keyboard bounds update.
   virtual void SetKeyboardBoundsForTesting(const gfx::Rect& bounds) = 0;
+
+  virtual ShelfLockingManager* GetShelfLockingManagerForTesting() = 0;
 
  protected:
   virtual ~WmShelf() {}

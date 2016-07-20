@@ -133,9 +133,24 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual RenderWidgetHostImpl* GetFocusedRenderWidgetHost(
       RenderWidgetHostImpl* receiving_widget);
 
+  // Used in histograms to differentiate between the different types of
+  // renderer hang reported by RenderWidgetHostDelegate::RendererUnresponsive.
+  // Only add values at the end, do not delete values.
+  enum RendererUnresponsiveType {
+    RENDERER_UNRESPONSIVE_UNKNOWN = 0,
+    RENDERER_UNRESPONSIVE_IN_FLIGHT_EVENTS = 1,
+    RENDERER_UNRESPONSIVE_DIALOG_CLOSED = 2,
+    RENDERER_UNRESPONSIVE_DIALOG_SUPPRESSED = 3,
+    RENDERER_UNRESPONSIVE_BEFORE_UNLOAD = 4,
+    RENDERER_UNRESPONSIVE_UNLOAD = 5,
+    RENDERER_UNRESPONSIVE_CLOSE_PAGE = 6,
+    RENDERER_UNRESPONSIVE_MAX = RENDERER_UNRESPONSIVE_CLOSE_PAGE,
+  };
+
   // Notification that the renderer has become unresponsive. The
   // delegate can use this notification to show a warning to the user.
-  virtual void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host) {}
+  virtual void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host,
+                                    RendererUnresponsiveType type) {}
 
   // Notification that a previously unresponsive renderer has become
   // responsive again. The delegate can use this notification to end the
@@ -177,7 +192,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
                                       const std::vector<uint8_t>& proto) {}
 
-  // Called when the visibility of the RenderFrameProxyHost in outter
+  // Called when the visibility of the RenderFrameProxyHost in outer
   // WebContents changes. This method is only called on an inner WebContents and
   // will eventually notify all the RenderWidgetHostViews belonging to that
   // WebContents.
@@ -193,6 +208,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Returns the TextInputManager tracking text input state.
   virtual TextInputManager* GetTextInputManager();
+
+  // Returns true if this RenderWidgetHost should remain hidden. This is used by
+  // the RenderWidgetHost to ask the delegate if it can be shown in the event of
+  // something other than the WebContents attempting to enable visibility of
+  // this RenderWidgetHost.
+  virtual bool IsHidden();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

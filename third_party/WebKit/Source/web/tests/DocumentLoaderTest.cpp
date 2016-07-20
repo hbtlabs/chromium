@@ -10,7 +10,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 #include <queue>
 
 namespace blink {
@@ -34,7 +34,7 @@ protected:
 
     WebLocalFrameImpl* mainFrame()
     {
-        return m_webViewHelper.webViewImpl()->mainFrameImpl();
+        return m_webViewHelper.webView()->mainFrameImpl();
     }
 
     FrameTestHelpers::WebViewHelper m_webViewHelper;
@@ -47,7 +47,7 @@ TEST_F(DocumentLoaderTest, SingleChunk)
         void didReceiveData(WebURLLoaderClient* originalClient, WebURLLoader* loader, const char* data, int dataLength, int encodedDataLength) override
         {
             EXPECT_EQ(34, dataLength) << "foo.html was not served in a single chunk";
-            originalClient->didReceiveData(loader, data, dataLength, encodedDataLength);
+            originalClient->didReceiveData(loader, data, dataLength, encodedDataLength, dataLength);
         }
     } delegate;
 
@@ -71,7 +71,7 @@ TEST_F(DocumentLoaderTest, MultiChunkNoReentrancy)
             EXPECT_EQ(34, dataLength) << "foo.html was not served in a single chunk";
             // Chunk the reply into one byte chunks.
             for (int i = 0; i < dataLength; ++i)
-                originalClient->didReceiveData(loader, &data[i], 1, 1);
+                originalClient->didReceiveData(loader, &data[i], 1, 1, 1);
         }
     } delegate;
 
@@ -108,7 +108,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
                 // Serve the first byte to the real WebURLLoaderCLient, which
                 // should trigger frameDetach() due to committing a provisional
                 // load.
-                TemporaryChange<bool> dispatching(m_dispatchingDidReceiveData, true);
+                AutoReset<bool> dispatching(&m_dispatchingDidReceiveData, true);
                 dispatchOneByte();
             }
             // Serve the remaining bytes to complete the load.
@@ -138,7 +138,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
         {
             char c = m_data.front();
             m_data.pop();
-            m_loaderClient->didReceiveData(m_loader, &c, 1, 1);
+            m_loaderClient->didReceiveData(m_loader, &c, 1, 1, 1);
         }
 
         bool servedReentrantly() const { return m_servedReentrantly; }

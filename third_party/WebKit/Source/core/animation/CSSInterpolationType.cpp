@@ -32,7 +32,7 @@ private:
     bool isValid(const InterpolationEnvironment& environment, const InterpolationValue& underlying) const final
     {
         // TODO(alancutter): Just check the variables referenced instead of doing a full CSSValue resolve.
-        CSSValue* resolvedValue = CSSVariableResolver::resolveVariableReferences(environment.state().style()->variables(), m_property, *m_variableReference);
+        const CSSValue* resolvedValue = CSSVariableResolver::resolveVariableReferences(environment.state().style()->variables(), m_property, *m_variableReference);
         return m_resolvedValue->equals(*resolvedValue);
     }
 
@@ -43,11 +43,15 @@ private:
 
 InterpolationValue CSSInterpolationType::maybeConvertSingle(const PropertySpecificKeyframe& keyframe, const InterpolationEnvironment& environment, const InterpolationValue& underlying, ConversionCheckers& conversionCheckers) const
 {
-    CSSValue* resolvedCSSValueOwner;
+    const CSSValue* resolvedCSSValueOwner;
     const CSSValue* value = toCSSPropertySpecificKeyframe(keyframe).value();
 
     if (!value)
         return maybeConvertNeutral(underlying, conversionCheckers);
+
+    // TODO(alancutter): Support animation of var() in shorthand properties.
+    if (value->isPendingSubstitutionValue())
+        return nullptr;
 
     if (value->isVariableReferenceValue() && !isShorthandProperty(cssProperty())) {
         resolvedCSSValueOwner = CSSVariableResolver::resolveVariableReferences(environment.state().style()->variables(), cssProperty(), toCSSVariableReferenceValue(*value));

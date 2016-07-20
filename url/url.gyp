@@ -130,6 +130,7 @@
           'mojo/gurl.typemap',
           'mojo/origin.typemap',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
     },
@@ -140,6 +141,10 @@
       'export_dependent_settings': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
       ],
+      # url_interfaces_mojom generates headers and is a hard dependency.
+      # That hard dependency status is not propagated to this target, so
+      # we must set it explicitly.
+      'hard_dependency': 1,
       'dependencies': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         'url_interfaces_mojom',
@@ -158,6 +163,7 @@
           'mojo/gurl.typemap',
           'mojo/origin.typemap',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
       'dependencies': [
@@ -231,6 +237,7 @@
               '../third_party/WebKit/Source/platform/mojo/KURL.typemap',
               '../third_party/WebKit/Source/platform/mojo/SecurityOrigin.typemap',
             ],
+            'use_new_wrapper_types': 'false',
           },
           'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
         },
@@ -260,6 +267,7 @@
               '../third_party/WebKit/Source/platform/mojo/KURL.typemap',
               '../third_party/WebKit/Source/platform/mojo/SecurityOrigin.typemap',
             ],
+            'use_new_wrapper_types': 'false',
           },
           'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
           'dependencies': [

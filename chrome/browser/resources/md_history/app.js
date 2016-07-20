@@ -44,8 +44,26 @@ Polymer({
         };
       }
     },
+
+    // Route data for the current page.
+    routeData_: Object,
+
+    // The query params for the page.
+    queryParams_: Object,
   },
 
+  observers: [
+    // routeData_.page <=> selectedPage
+    'routeDataChanged_(routeData_.page)',
+    'selectedPageChanged_(selectedPage_)',
+
+    // queryParams_.q <=> queryState.searchTerm
+    'searchTermChanged_(queryState_.searchTerm)',
+    'searchQueryParamChanged_(queryParams_.q)',
+
+  ],
+
+  // TODO(calamity): Replace these event listeners with data bound properties.
   listeners: {
     'cr-menu-tap': 'onMenuTap_',
     'history-checkbox-select': 'checkboxSelected',
@@ -61,6 +79,12 @@ Polymer({
     cr.ui.decorate('command', cr.ui.Command);
     document.addEventListener('canExecute', this.onCanExecute_.bind(this));
     document.addEventListener('command', this.onCommand_.bind(this));
+
+    // Redirect legacy search URLs to URLs compatible with material history.
+    if (window.location.hash) {
+      window.location.href = window.location.href.split('#')[0] + '?' +
+          window.location.hash.substr(1);
+    }
   },
 
   /** @private */
@@ -74,6 +98,13 @@ Polymer({
   checkboxSelected: function(e) {
     var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
     toolbar.count += e.detail.countAddition;
+  },
+
+  /**
+   * @return {HistorySideBarElement} The side bar of this history app.
+   */
+  getSideBar: function() {
+    return this.$['side-bar'];
   },
 
   /**
@@ -118,7 +149,34 @@ Polymer({
    * @private
    */
   onCanExecute_: function(e) {
-    e.canExecute = true;
+    e = /** @type {cr.ui.CanExecuteEvent} */(e);
+    switch (e.command.id) {
+      case 'find-command':
+        e.canExecute = true;
+        break;
+      case 'slash-command':
+        e.canExecute =
+            !(this.$.toolbar.searchBar.showingSearch &&
+              this.$.toolbar.searchBar.isSearchFocused());
+        break;
+    }
+  },
+
+  /**
+   * @param {string} searchTerm
+   * @private
+   */
+  searchTermChanged_: function(searchTerm) {
+    this.set('queryParams_.q', searchTerm || null);
+    this.$['history'].queryHistory(false);
+  },
+
+  /**
+   * @param {string} searchQuery
+   * @private
+   */
+  searchQueryParamChanged_: function(searchQuery) {
+    this.$.toolbar.setSearchTerm(searchQuery || '');
   },
 
   /**
@@ -126,7 +184,7 @@ Polymer({
    * @private
    */
   onCommand_: function(e) {
-    if (e.command.id == 'find-command')
+    if (e.command.id == 'find-command' || e.command.id == 'slash-command')
       this.$.toolbar.showSearchField();
   },
 
@@ -159,7 +217,7 @@ Polymer({
    * @private
    */
   syncedTabsSelected_: function(selectedPage) {
-    return selectedPage == 'synced-devices';
+    return selectedPage == 'syncedTabs';
   },
 
   /**
@@ -172,5 +230,35 @@ Polymer({
    */
   shouldShowSpinner_: function(querying, incremental, searchTerm) {
     return querying && !incremental && searchTerm != '';
+  },
+
+  /**
+   * @param {string} page
+   * @private
+   */
+  routeDataChanged_: function(page) {
+    this.selectedPage_ = page;
+  },
+
+  /**
+   * @param {string} selectedPage
+   * @private
+   */
+  selectedPageChanged_: function(selectedPage) {
+    this.set('routeData_.page', selectedPage);
+  },
+
+  /**
+   * This computed binding is needed to make the iron-pages selector update when
+   * the synced-device-manager is instantiated for the first time. Otherwise the
+   * fallback selection will continue to be used after the corresponding item is
+   * added as a child of iron-pages.
+   * @param {string} selectedPage
+   * @param {Array} items
+   * @return {string}
+   * @private
+   */
+  getSelectedPage_(selectedPage, items) {
+    return selectedPage;
   },
 });

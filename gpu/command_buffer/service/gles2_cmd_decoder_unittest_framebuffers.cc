@@ -202,6 +202,28 @@ TEST_P(GLES3DecoderTest, FramebufferTexture2DInvalidArgs0_0) {
   EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
 }
 
+TEST_P(GLES2DecoderTest, FramebufferTexture2DInvalidArgs1_0) {
+  EXPECT_CALL(*gl_, FramebufferTexture2DEXT(_, _, _, _, _)).Times(0);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoBindFramebuffer(
+      GL_FRAMEBUFFER, client_framebuffer_id_, kServiceFramebufferId);
+  cmds::FramebufferTexture2D cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_COLOR, GL_TEXTURE_2D, client_texture_id_, 1);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+}
+
+TEST_P(GLES3DecoderTest, FramebufferTexture2DInvalidArgs1_0) {
+  EXPECT_CALL(*gl_, FramebufferTexture2DEXT(_, _, _, _, _)).Times(0);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoBindFramebuffer(
+      GL_FRAMEBUFFER, client_framebuffer_id_, kServiceFramebufferId);
+  cmds::FramebufferTexture2D cmd;
+  cmd.Init(GL_FRAMEBUFFER, GL_COLOR, GL_TEXTURE_2D, client_texture_id_, 1);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_INVALID_ENUM, GetGLError());
+}
+
 TEST_P(GLES2DecoderTest, FramebufferTexture2DInvalidArgs2_0) {
   EXPECT_CALL(*gl_, FramebufferTexture2DEXT(_, _, _, _, _)).Times(0);
   DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
@@ -1886,6 +1908,13 @@ TEST_P(GLES3DecoderTest, ClearBufferivImmediateValidArgs) {
       GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
       client_renderbuffer_id_, kServiceRenderbufferId, GL_NO_ERROR);
 
+  // TODO(zmo): Set up expectations for the path where the attachment isn't
+  // marked as cleared.
+  Framebuffer* framebuffer =
+      group().framebuffer_manager()->GetFramebuffer(client_framebuffer_id_);
+  framebuffer->MarkAttachmentAsCleared(
+      group().renderbuffer_manager(), nullptr, GL_COLOR_ATTACHMENT0, true);
+
   cmds::ClearBufferivImmediate& cmd =
       *GetImmediateAs<cmds::ClearBufferivImmediate>();
   GLint temp[4] = { 0 };
@@ -1912,6 +1941,13 @@ TEST_P(GLES3DecoderTest, ClearBufferuivImmediateValidArgs) {
   DoFramebufferRenderbuffer(
       GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER,
       client_renderbuffer_id_, kServiceRenderbufferId, GL_NO_ERROR);
+
+  // TODO(zmo): Set up expectations for the path where the attachment isn't
+  // marked as cleared.
+  Framebuffer* framebuffer =
+      group().framebuffer_manager()->GetFramebuffer(client_framebuffer_id_);
+  framebuffer->MarkAttachmentAsCleared(
+      group().renderbuffer_manager(), nullptr, GL_COLOR_ATTACHMENT0, true);
 
   cmds::ClearBufferuivImmediate& cmd =
       *GetImmediateAs<cmds::ClearBufferuivImmediate>();
@@ -1941,6 +1977,13 @@ TEST_P(GLES3DecoderTest, ClearBufferfvImmediateValidArgs) {
   DoFramebufferRenderbuffer(
       GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER,
       client_renderbuffer_id_, kServiceRenderbufferId, GL_NO_ERROR);
+
+  // TODO(zmo): Set up expectations for the path where the attachment isn't
+  // marked as cleared.
+  Framebuffer* framebuffer =
+      group().framebuffer_manager()->GetFramebuffer(client_framebuffer_id_);
+  framebuffer->MarkAttachmentAsCleared(
+      group().renderbuffer_manager(), nullptr, GL_DEPTH_ATTACHMENT, true);
 
   Enable cmd_enable;
   cmd_enable.Init(GL_DEPTH_TEST);
@@ -1975,6 +2018,13 @@ TEST_P(GLES3DecoderTest, ClearBufferfiValidArgs) {
   DoFramebufferRenderbuffer(
       GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER,
       client_renderbuffer_id_, kServiceRenderbufferId, GL_NO_ERROR);
+
+  // TODO(zmo): Set up expectations for the path where the attachment isn't
+  // marked as cleared.
+  Framebuffer* framebuffer =
+      group().framebuffer_manager()->GetFramebuffer(client_framebuffer_id_);
+  framebuffer->MarkAttachmentAsCleared(group().renderbuffer_manager(), nullptr,
+                                       GL_DEPTH_STENCIL_ATTACHMENT, true);
 
   Enable cmd_enable;
   cmd_enable.Init(GL_STENCIL_TEST);
@@ -2974,6 +3024,40 @@ TEST_P(GLES2DecoderTest, DrawBuffersEXTImmediateBackbuffer) {
 
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(bufs)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES2DecoderTest, DrawBuffersEXTMainFramebuffer) {
+  DrawBuffersEXTImmediate& cmd = *GetImmediateAs<DrawBuffersEXTImmediate>();
+  {
+    const GLenum bufs[] = {GL_BACK};
+    const GLsizei count = arraysize(bufs);
+    cmd.Init(count, bufs);
+
+    EXPECT_CALL(*gl_, DrawBuffersARB(count, Pointee(GL_BACK)))
+        .Times(1)
+        .RetiresOnSaturation();
+    EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(bufs)));
+    EXPECT_EQ(GL_NO_ERROR, GetGLError());
+  }
+  {
+    const GLsizei count = 0;
+    cmd.Init(count, nullptr);
+
+    EXPECT_CALL(*gl_, DrawBuffersARB(_, _))
+        .Times(0)
+        .RetiresOnSaturation();
+    EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, 0));
+    EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
+  }
+  {
+    const GLenum bufs[] = {GL_BACK, GL_NONE};
+    const GLsizei count = arraysize(bufs);
+    cmd.Init(count, bufs);
+
+    EXPECT_CALL(*gl_, DrawBuffersARB(_, _)).Times(0).RetiresOnSaturation();
+    EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(bufs)));
+    EXPECT_EQ(GL_INVALID_VALUE, GetGLError());
+  }
 }
 
 TEST_P(GLES2DecoderManualInitTest, InvalidateFramebufferBinding) {

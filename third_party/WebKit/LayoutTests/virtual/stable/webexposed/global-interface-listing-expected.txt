@@ -264,6 +264,14 @@ interface BlobEvent : Event
     attribute @@toStringTag
     getter data
     method constructor
+interface BroadcastChannel : EventTarget
+    attribute @@toStringTag
+    getter name
+    getter onmessage
+    method close
+    method constructor
+    method postMessage
+    setter onmessage
 interface ByteLengthQueuingStrategy
     method constructor
     method size
@@ -1226,22 +1234,6 @@ interface File : Blob
     getter name
     getter webkitRelativePath
     method constructor
-interface FileError : DOMError
-    attribute @@toStringTag
-    attribute ABORT_ERR
-    attribute ENCODING_ERR
-    attribute INVALID_MODIFICATION_ERR
-    attribute INVALID_STATE_ERR
-    attribute NOT_FOUND_ERR
-    attribute NOT_READABLE_ERR
-    attribute NO_MODIFICATION_ALLOWED_ERR
-    attribute PATH_EXISTS_ERR
-    attribute QUOTA_EXCEEDED_ERR
-    attribute SECURITY_ERR
-    attribute SYNTAX_ERR
-    attribute TYPE_MISMATCH_ERR
-    getter code
-    method constructor
 interface FileList
     attribute @@toStringTag
     getter length
@@ -1359,7 +1351,7 @@ interface HTMLAnchorElement : HTMLElement
     getter ping
     getter port
     getter protocol
-    getter referrerpolicy
+    getter referrerPolicy
     getter rel
     getter rev
     getter search
@@ -1384,7 +1376,7 @@ interface HTMLAnchorElement : HTMLElement
     setter ping
     setter port
     setter protocol
-    setter referrerpolicy
+    setter referrerPolicy
     setter rel
     setter rev
     setter search
@@ -1397,6 +1389,7 @@ interface HTMLAreaElement : HTMLElement
     attribute @@toStringTag
     getter alt
     getter coords
+    getter download
     getter hash
     getter host
     getter hostname
@@ -1408,7 +1401,8 @@ interface HTMLAreaElement : HTMLElement
     getter ping
     getter port
     getter protocol
-    getter referrerpolicy
+    getter referrerPolicy
+    getter rel
     getter search
     getter shape
     getter target
@@ -1417,6 +1411,7 @@ interface HTMLAreaElement : HTMLElement
     method toString
     setter alt
     setter coords
+    setter download
     setter hash
     setter host
     setter hostname
@@ -1427,7 +1422,8 @@ interface HTMLAreaElement : HTMLElement
     setter ping
     setter port
     setter protocol
-    setter referrerpolicy
+    setter referrerPolicy
+    setter rel
     setter search
     setter shape
     setter target
@@ -1951,7 +1947,7 @@ interface HTMLIFrameElement : HTMLElement
     getter marginHeight
     getter marginWidth
     getter name
-    getter referrerpolicy
+    getter referrerPolicy
     getter sandbox
     getter scrolling
     getter src
@@ -1967,7 +1963,7 @@ interface HTMLIFrameElement : HTMLElement
     setter marginHeight
     setter marginWidth
     setter name
-    setter referrerpolicy
+    setter referrerPolicy
     setter sandbox
     setter scrolling
     setter src
@@ -1989,7 +1985,7 @@ interface HTMLImageElement : HTMLElement
     getter name
     getter naturalHeight
     getter naturalWidth
-    getter referrerpolicy
+    getter referrerPolicy
     getter sizes
     getter src
     getter srcset
@@ -2009,7 +2005,7 @@ interface HTMLImageElement : HTMLElement
     setter longDesc
     setter lowsrc
     setter name
-    setter referrerpolicy
+    setter referrerPolicy
     setter sizes
     setter src
     setter srcset
@@ -3643,8 +3639,10 @@ interface PerformanceResourceTiming : PerformanceEntry
     attribute @@toStringTag
     getter connectEnd
     getter connectStart
+    getter decodedBodySize
     getter domainLookupEnd
     getter domainLookupStart
+    getter encodedBodySize
     getter fetchStart
     getter initiatorType
     getter redirectEnd
@@ -3653,6 +3651,7 @@ interface PerformanceResourceTiming : PerformanceEntry
     getter responseEnd
     getter responseStart
     getter secureConnectionStart
+    getter transferSize
     getter workerStart
     method constructor
 interface PerformanceTiming
@@ -3786,10 +3785,16 @@ interface PushManager
 interface PushSubscription
     attribute @@toStringTag
     getter endpoint
+    getter options
     method constructor
     method getKey
     method toJSON
     method unsubscribe
+interface PushSubscriptionOptions
+    attribute @@toStringTag
+    getter applicationServerKey
+    getter userVisibleOnly
+    method constructor
 interface RTCCertificate
     attribute @@toStringTag
     getter expires
@@ -5066,6 +5071,7 @@ interface ServiceWorker : EventTarget
     setter onstatechange
 interface ServiceWorkerContainer : EventTarget
     attribute @@toStringTag
+    getter controller
     getter oncontrollerchange
     getter onmessage
     getter ready
@@ -5085,10 +5091,13 @@ interface ServiceWorkerMessageEvent : Event
     method constructor
 interface ServiceWorkerRegistration : EventTarget
     attribute @@toStringTag
+    getter active
+    getter installing
     getter onupdatefound
     getter pushManager
     getter scope
     getter sync
+    getter waiting
     method constructor
     method getNotifications
     method showNotification
@@ -6333,7 +6342,6 @@ interface webkitMediaStream : EventTarget
     getter id
     getter onactive
     getter onaddtrack
-    getter onended
     getter oninactive
     getter onremovetrack
     method addTrack
@@ -6346,7 +6354,6 @@ interface webkitMediaStream : EventTarget
     method removeTrack
     setter onactive
     setter onaddtrack
-    setter onended
     setter oninactive
     setter onremovetrack
 interface webkitOfflineAudioContext : AudioContext

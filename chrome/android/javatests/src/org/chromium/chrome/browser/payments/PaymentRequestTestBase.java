@@ -4,16 +4,17 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskObserverForTest;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestServiceObserverForTest;
@@ -38,7 +39,6 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * A base integration test for payments.
  */
-@CommandLineFlags.Add({ChromeSwitches.EXPERIMENTAL_WEB_PLAFTORM_FEATURES})
 abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeActivity>
         implements PaymentRequestObserverForTest, PaymentRequestServiceObserverForTest,
         CardUnmaskObserverForTest {
@@ -51,13 +51,15 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
     protected final CallbackHelper mReadyToEdit;
     protected final CallbackHelper mEditorValidationError;
     protected final CallbackHelper mEditorTextUpdate;
-    protected final CallbackHelper mEditorDismissed;
     protected final CallbackHelper mDismissed;
     protected final CallbackHelper mUnableToAbort;
+    protected final CallbackHelper mBillingAddressChangeProcessed;
+    protected final CallbackHelper mShowFailed;
+    protected PaymentRequestUI mUI;
+
     private final AtomicReference<ContentViewCore> mViewCoreRef;
     private final AtomicReference<WebContents> mWebContentsRef;
     private final String mTestFilePath;
-    private PaymentRequestUI mUI;
     private CardUnmaskPrompt mCardUnmaskPrompt;
 
     protected PaymentRequestTestBase(String testFileName) {
@@ -71,9 +73,10 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         mReadyToEdit = new CallbackHelper();
         mEditorValidationError = new CallbackHelper();
         mEditorTextUpdate = new CallbackHelper();
-        mEditorDismissed = new CallbackHelper();
         mDismissed = new CallbackHelper();
         mUnableToAbort = new CallbackHelper();
+        mBillingAddressChangeProcessed = new CallbackHelper();
+        mShowFailed = new CallbackHelper();
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
         mTestFilePath = UrlUtils.getIsolatedTestFilePath(
@@ -87,6 +90,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
             throws InterruptedException, ExecutionException, TimeoutException;
 
     protected void triggerUIAndWait(PaymentsCallbackHelper<PaymentRequestUI> helper)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        triggerUIAndWait((CallbackHelper) helper);
+        mUI = helper.getTarget();
+    }
+
+    protected void triggerUIAndWait(CallbackHelper helper)
             throws InterruptedException, ExecutionException, TimeoutException {
         startMainActivityWithURL(mTestFilePath);
         onMainActivityStarted();
@@ -102,7 +111,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         });
         assertWaitForPageScaleFactorMatch(1);
         clickNodeAndWait("buy", helper);
-        mUI = helper.getTarget();
     }
 
     /** Clicks on an HTML node. */
@@ -156,6 +164,19 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         helper.waitForCallback(callCount);
     }
 
+    /** Clicks on an element in the "Payment" section of the payments UI. */
+    protected void clickInPaymentMethodAndWait(final int resourceId, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mUI.getPaymentMethodSectionForTest().findViewById(resourceId).performClick();
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
     /** Clicks on an element in the "Contact Info" section of the payments UI. */
     protected void clickInContactInfoAndWait(final int resourceId, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
@@ -164,6 +185,19 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
             @Override
             public void run() {
                 mUI.getContactDetailsSectionForTest().findViewById(resourceId).performClick();
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /** Clicks on an element in the editor UI for credit cards. */
+    protected void clickInCardEditorAndWait(final int resourceId, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                mUI.getCardEditorView().findViewById(resourceId).performClick();
             }
         });
         helper.waitForCallback(callCount);
@@ -266,14 +300,51 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         });
     }
 
+    /** Selects the spinner value in the editor UI for credit cards. */
+    protected void setSpinnerSelectionsInCardEditorAndWait(final int[] selections,
+            CallbackHelper helper) throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                List<Spinner> fields = mUI.getCardEditorView().getDropdownFieldsForTest();
+                for (int i = 0; i < selections.length && i < fields.size(); i++) {
+                    fields.get(i).setSelection(selections[i]);
+                }
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
     /** Selects the spinner value in the editor UI. */
-    protected void setSpinnerSelectionInEditor(final int selection, CallbackHelper helper)
+    protected void setSpinnerSelectionInEditorAndWait(final int selection, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
         int callCount = helper.getCallCount();
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
                 ((Spinner) mUI.getEditorView().findViewById(R.id.spinner)).setSelection(selection);
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /** Directly sets the text in the editor UI for credit cards. */
+    protected void setTextInCardEditorAndWait(final String[] values, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ViewGroup contents = (ViewGroup)
+                        mUI.getCardEditorView().findViewById(R.id.contents);
+                assertNotNull(contents);
+                for (int i = 0, j = 0; i < contents.getChildCount() && j < values.length; i++) {
+                    View view = contents.getChildAt(i);
+                    if (view instanceof EditorTextField) {
+                        ((EditorTextField) view).getEditText().setText(values[j++]);
+                    }
+                }
             }
         });
         helper.waitForCallback(callCount);
@@ -286,10 +357,23 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                List<EditorTextField> fields = mUI.getEditorView().getEditorTextFields();
+                List<EditText> fields = mUI.getEditorView().getEditableTextFieldsForTest();
                 for (int i = 0; i < values.length; i++) {
-                    fields.get(i).getEditText().setText(values[i]);
+                    fields.get(i).setText(values[i]);
                 }
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /** Directly sets the checkbox selection in the editor UI for credit cards. */
+    protected void selectCheckboxAndWait(final int resourceId, final boolean isChecked,
+            CallbackHelper helper) throws InterruptedException, TimeoutException {
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ((CheckBox) mUI.getCardEditorView().findViewById(resourceId)).setChecked(isChecked);
             }
         });
         helper.waitForCallback(callCount);
@@ -364,12 +448,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
     }
 
     @Override
-    public void onPaymentRequestEditorDismissed() {
-        ThreadUtils.assertOnUiThread();
-        mEditorDismissed.notifyCalled();
-    }
-
-    @Override
     public void onPaymentRequestReadyToPay(PaymentRequestUI ui) {
         ThreadUtils.assertOnUiThread();
         mReadyToPay.notifyCalled(ui);
@@ -397,6 +475,18 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
     public void onPaymentRequestServiceUnableToAbort() {
         ThreadUtils.assertOnUiThread();
         mUnableToAbort.notifyCalled();
+    }
+
+    @Override
+    public void onPaymentRequestServiceBillingAddressChangeProcessed() {
+        ThreadUtils.assertOnUiThread();
+        mBillingAddressChangeProcessed.notifyCalled();
+    }
+
+    @Override
+    public void onPaymentRequestServiceShowFailed() {
+        ThreadUtils.assertOnUiThread();
+        mShowFailed.notifyCalled();
     }
 
     @Override

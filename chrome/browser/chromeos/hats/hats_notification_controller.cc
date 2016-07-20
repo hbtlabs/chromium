@@ -49,6 +49,10 @@ bool IsNewDevice(int threshold_days) {
          base::TimeDelta::FromDays(threshold_days);
 }
 
+bool IsGoogleUser(std::string username) {
+  return username.find("@google.com") != std::string::npos;
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -108,12 +112,11 @@ bool HatsNotificationController::ShouldShowSurveyToProfile(Profile* profile) {
   if (!ProfileHelper::IsOwnerProfile(profile))
     return false;
 
-  // Do not show survey if this is an enterprise managed device.
-  // TODO(malaykeshav): Show survey to google users but not any other enterprise
-  // users.
+  // Do not show survey if this is an non google enterprise managed device.
   if (g_browser_process->platform_part()
           ->browser_policy_connector_chromeos()
-          ->IsEnterpriseManaged()) {
+          ->IsEnterpriseManaged() &&
+      !IsGoogleUser(profile->GetProfileUserName())) {
     return false;
   }
 
@@ -135,8 +138,7 @@ void HatsNotificationController::ButtonClick(int button_index) {
   UpdateLastInteractionTime();
 
   // The dialog deletes itslef on close.
-  HatsDialog* hats_dialog = new HatsDialog();
-  hats_dialog->Show();
+  HatsDialog::CreateAndShow();
 
   // Remove the notification.
   g_browser_process->notification_ui_manager()->CancelById(

@@ -390,7 +390,6 @@ class CONTENT_EXPORT WebContentsImpl
             const base::string16& search_text,
             const blink::WebFindOptions& options) override;
   void StopFinding(StopFindAction action) override;
-  void InsertCSS(const std::string& css) override;
   bool WasRecentlyAudible() override;
   void GetManifest(const GetManifestCallback& callback) override;
   void ExitFullscreen(bool will_cause_resize) override;
@@ -549,10 +548,11 @@ class CONTENT_EXPORT WebContentsImpl
                                const GURL& validated_url,
                                bool is_error_page,
                                bool is_iframe_srcdoc) override;
-  void DidFailProvisionalLoadWithError(
-      RenderFrameHostImpl* render_frame_host,
-      const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params)
-      override;
+  void DidFailProvisionalLoadWithError(RenderFrameHostImpl* render_frame_host,
+                                       const GURL& validated_url,
+                                       int error_code,
+                                       const base::string16& error_description,
+                                       bool was_ignored_by_handler) override;
   void DidFailLoadWithError(RenderFrameHostImpl* render_frame_host,
                             const GURL& url,
                             int error_code,
@@ -616,7 +616,9 @@ class CONTENT_EXPORT WebContentsImpl
   void ReplicatePageFocus(bool is_focused) override;
   RenderWidgetHostImpl* GetFocusedRenderWidgetHost(
       RenderWidgetHostImpl* receiving_widget) override;
-  void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host) override;
+  void RendererUnresponsive(
+      RenderWidgetHostImpl* render_widget_host,
+      RenderWidgetHostDelegate::RendererUnresponsiveType type) override;
   void RendererResponsive(RenderWidgetHostImpl* render_widget_host) override;
   void RequestToLockMouse(RenderWidgetHostImpl* render_widget_host,
                           bool user_gesture,

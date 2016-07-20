@@ -15,7 +15,6 @@
 #include "cc/ipc/cc_param_traits.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/resources/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
@@ -61,6 +60,7 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/ipc/color/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/gfx/range/range.h"
@@ -490,8 +490,8 @@ IPC_STRUCT_BEGIN(ViewMsg_New_Params)
   // The page zoom level.
   IPC_STRUCT_MEMBER(double, page_zoom_level)
 
-  // The color profile to use for image decode.
-  IPC_STRUCT_MEMBER(std::vector<char>, image_decode_color_profile)
+  // The color space to use for image decode.
+  IPC_STRUCT_MEMBER(gfx::ColorSpace, image_decode_color_space)
 IPC_STRUCT_END()
 
 #if defined(OS_MACOSX)
@@ -803,16 +803,13 @@ IPC_MESSAGE_ROUTED1(ViewMsg_ExtractSmartClipData,
                     gfx::Rect /* rect */)
 #endif
 
-// Sent by the browser as a reply to ViewHostMsg_SwapCompositorFrame.
-IPC_MESSAGE_ROUTED2(ViewMsg_SwapCompositorFrameAck,
-                    uint32_t /* output_surface_id */,
-                    cc::CompositorFrameAck /* ack */)
-
 // Sent by browser to tell renderer compositor that some resources that were
 // given to the browser in a swap are not being used anymore.
-IPC_MESSAGE_ROUTED2(ViewMsg_ReclaimCompositorResources,
+// If this message is in response to a swap then is_swap_ack is set.
+IPC_MESSAGE_ROUTED3(ViewMsg_ReclaimCompositorResources,
                     uint32_t /* output_surface_id */,
-                    cc::CompositorFrameAck /* ack */)
+                    bool /* is_swap_ack */,
+                    cc::ReturnedResourceArray /* resources */)
 
 // Sent by browser to give renderer compositor a new namespace ID for any
 // SurfaceSequences it has to create.
@@ -871,11 +868,6 @@ IPC_SYNC_MESSAGE_CONTROL1_1(ViewHostMsg_CreateFullscreenWidget,
 // Asks the browser for a unique routing ID.
 IPC_SYNC_MESSAGE_CONTROL0_1(ViewHostMsg_GenerateRoutingID,
                             int /* routing_id */)
-
-// Asks the browser for the default audio hardware configuration.
-IPC_SYNC_MESSAGE_CONTROL0_2(ViewHostMsg_GetAudioHardwareConfig,
-                            media::AudioParameters /* input parameters */,
-                            media::AudioParameters /* output parameters */)
 
 // These three messages are sent to the parent RenderViewHost to display the
 // page/widget that was created by

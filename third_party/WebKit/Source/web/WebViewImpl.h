@@ -157,6 +157,8 @@ public:
     void didNotAcquirePointerLock() override;
     void didLosePointerLock() override;
     void didChangeWindowResizerRect() override;
+    bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) override;
+    void applyReplacementRange(int start, int length) override;
 
     // WebView methods:
     virtual bool isWebView() const { return true; }
@@ -336,10 +338,6 @@ public:
     // the page is shutting down, but will be valid at all other times.
     WebLocalFrameImpl* mainFrameImpl() const;
 
-    // FIXME: Temporary method to accommodate out-of-process frame ancestors;
-    // will be removed when there can be multiple WebWidgets for a single page.
-    WebLocalFrameImpl* localFrameRootTemporary() const;
-
     // Event related methods:
     void mouseContextMenu(const WebMouseEvent&);
     void mouseDoubleClick(const WebMouseEvent&);
@@ -427,7 +425,6 @@ public:
     GraphicsLayer* rootGraphicsLayer();
     void registerViewportLayersWithCompositor();
     PaintLayerCompositor* compositor() const;
-    void scheduleAnimation();
     CompositorAnimationTimeline* linkHighlightsTimeline() const { return m_linkHighlightsTimeline.get(); }
 
     WebViewScheduler* scheduler() const override;
@@ -541,6 +538,9 @@ private:
     // m_overrideCompositorVisibility for more details.
     void setCompositorVisibility(bool);
 
+    // TODO(lfg): Remove once WebViewFrameWidget is deleted.
+    void scheduleAnimationForWidget();
+
     friend class WebView;  // So WebView::Create can call our constructor
     friend class WebViewFrameWidget;
     friend class WTF::RefCounted<WebViewImpl>;
@@ -623,6 +623,9 @@ private:
     void setRootGraphicsLayer(GraphicsLayer*);
     void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
     void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
+
+    LocalFrame* focusedLocalFrameInWidget() const;
+    LocalFrame* focusedLocalFrameAvailableForIme() const;
 
     WebViewClient* m_client; // Can be 0 (e.g. unittests, shared workers, etc.)
     WebSpellCheckClient* m_spellCheckClient;

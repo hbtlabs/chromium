@@ -64,6 +64,7 @@ public:
     ~V8DebuggerImpl() override;
 
     static int contextId(v8::Local<v8::Context>);
+    static int getGroupId(v8::Local<v8::Context>);
 
     bool enabled() const;
 
@@ -88,7 +89,7 @@ public:
     void stepOutOfFunction();
     void clearStepping();
 
-    bool setScriptSource(const String16& sourceID, v8::Local<v8::String> newSource, bool preview, ErrorString*, Maybe<protocol::Debugger::SetScriptSourceError>*, JavaScriptCallFrames* newCallFrames, Maybe<bool>* stackChanged);
+    bool setScriptSource(const String16& sourceID, v8::Local<v8::String> newSource, bool preview, ErrorString*, Maybe<protocol::Runtime::ExceptionDetails>*, JavaScriptCallFrames* newCallFrames, Maybe<bool>* stackChanged);
     JavaScriptCallFrames currentCallFrames(int limit = 0);
 
     // Each script inherits debug data from v8::Context where it has been compiled.
@@ -129,12 +130,10 @@ public:
     void didExecuteScript(v8::Local<v8::Context>) override;
     void idleStarted() override;
     void idleFinished() override;
-    void addConsoleMessage(int contextGroupId, MessageSource, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId, const String16& requestIdentifier, const String16& workerId) override;
-    void logToConsole(v8::Local<v8::Context>, const String16& message, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2) override;
+    void logToConsole(v8::Local<v8::Context>, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2) override;
     void exceptionThrown(int contextGroupId, const String16& errorMessage, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId) override;
     unsigned promiseRejected(v8::Local<v8::Context>, const String16& errorMessage, v8::Local<v8::Value> exception, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId) override;
     void promiseRejectionRevoked(v8::Local<v8::Context>, unsigned promiseRejectionId) override;
-    void consoleMessagesCount(int contextGroupId, unsigned* total, unsigned* withArguments) override;
     std::unique_ptr<V8StackTrace> createStackTrace(v8::Local<v8::StackTrace>) override;
     std::unique_ptr<V8StackTrace> captureStackTrace(bool fullStack) override;
     void asyncTaskScheduled(const String16& taskName, void* task, bool recurring) override;

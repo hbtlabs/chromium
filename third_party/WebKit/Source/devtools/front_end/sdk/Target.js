@@ -36,6 +36,7 @@ WebInspector.Target.Capability = {
     JS: 2,
     Network: 4,
     Worker: 8,
+    DOM: 16
 }
 
 WebInspector.Target._nextId = 1;
@@ -72,6 +73,15 @@ WebInspector.Target.prototype = {
     hasAllCapabilities: function(capabilitiesMask)
     {
         return (this._capabilitiesMask & capabilitiesMask) === capabilitiesMask;
+    },
+
+    /**
+     *
+     * @return {!InspectorBackendClass.Connection}
+     */
+    connection: function()
+    {
+        return this._connection;
     },
 
     /**
@@ -123,6 +133,14 @@ WebInspector.Target.prototype = {
     hasWorkerCapability: function()
     {
         return this.hasAllCapabilities(WebInspector.Target.Capability.Worker);
+    },
+
+    /**
+     * @return {boolean}
+     */
+    hasDOMCapability: function()
+    {
+        return this.hasAllCapabilities(WebInspector.Target.Capability.DOM);
     },
 
     /**

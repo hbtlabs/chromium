@@ -36,6 +36,7 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
@@ -977,11 +978,11 @@ void RenderFrameHostManager::OnEnforceInsecureRequestPolicy(
 }
 
 void RenderFrameHostManager::OnDidUpdateFrameOwnerProperties(
-    const blink::WebFrameOwnerProperties& properties) {
+    const FrameOwnerProperties& properties) {
   if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
     return;
 
-  // WebFrameOwnerProperties exist only for frames that have a parent.
+  // FrameOwnerProperties exist only for frames that have a parent.
   CHECK(frame_tree_node_->parent());
   SiteInstance* parent_instance =
       frame_tree_node_->parent()->current_frame_host()->GetSiteInstance();

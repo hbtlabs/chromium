@@ -12,7 +12,7 @@
 function buy() {  // eslint-disable-line no-unused-vars
   try {
     new PaymentRequest(
-        [{supportedMethods: ['visa']}],
+        [{supportedMethods: ['visa', 'mastercard']}],
         {total: {label: 'Total', amount: {currency: 'USD', value: '5.00'}}})
         .show()
         .then(function(resp) {
@@ -23,11 +23,11 @@ function buy() {  // eslint-disable-line no-unused-vars
                     JSON.stringify(resp.details, undefined, 2));
               })
               .catch(function(error) {
-                print(error.message);
+                print(error);
               });
         })
         .catch(function(error) {
-          print(error.message);
+          print(error);
         });
   } catch (error) {
     print(error.message);

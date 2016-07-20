@@ -13,6 +13,8 @@ import android.os.Environment;
 import android.os.StatFs;
 import android.support.v4.widget.DrawerLayout;
 import android.support.v7.app.ActionBarDrawerToggle;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.support.v7.widget.Toolbar.OnMenuItemClickListener;
 import android.text.format.Formatter;
@@ -29,12 +31,16 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.ui.base.DeviceFormFactor;
+
+import java.io.File;
 
 /**
  * Displays and manages the UI for the download manager.
@@ -61,19 +67,42 @@ public class DownloadManagerUi extends DrawerLayout implements OnMenuItemClickLi
             mSpaceUsedTextView = (TextView) parent.findViewById(R.id.space_used_display);
             mSpaceTotalTextView = (TextView) parent.findViewById(R.id.space_total_display);
             mSpaceBar = (ProgressBar) parent.findViewById(R.id.space_bar);
+            mFileSystemBytesTask = createStorageSizeTask().execute();
+        }
 
-            mFileSystemBytesTask = new AsyncTask<Void, Void, Long>() {
+        private static AsyncTask<Void, Void, Long> createStorageSizeTask() {
+            return new AsyncTask<Void, Void, Long>() {
                 @Override
                 protected Long doInBackground(Void... params) {
-                    StatFs statFs = new StatFs(Environment.getExternalStoragePublicDirectory(
-                            Environment.DIRECTORY_DOWNLOADS).getPath());
-                    long totalBlocks = ApiCompatibilityUtils.getBlockCount(statFs);
-                    long blockSize = ApiCompatibilityUtils.getBlockSize(statFs);
-                    long fileSystemBytes = totalBlocks * blockSize;
+                    File downloadDirectory = Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS);
+
+                    // Create the downloads directory, if necessary.
+                    if (!downloadDirectory.exists()) {
+                        try {
+                            // mkdirs() can fail, so we still need to check if the directory exists
+                            // later.
+                            downloadDirectory.mkdirs();
+                        } catch (SecurityException e) {
+                            Log.e(TAG, "SecurityException when creating download directory.", e);
+                        }
+                    }
+
+                    // Determine how much space is available on the storage device where downloads
+                    // reside.  If the downloads directory doesn't exist, it is likely that the user
+                    // doesn't have an SD card installed.
+                    long fileSystemBytes = 0;
+                    if (downloadDirectory.exists()) {
+                        StatFs statFs = new StatFs(downloadDirectory.getPath());
+                        long totalBlocks = ApiCompatibilityUtils.getBlockCount(statFs);
+                        long blockSize = ApiCompatibilityUtils.getBlockSize(statFs);
+                        fileSystemBytes = totalBlocks * blockSize;
+                    } else {
+                        Log.e(TAG, "Download directory doesn't exist.");
+                    }
                     return fileSystemBytes;
                 }
             };
-            mFileSystemBytesTask.execute();
         }
 
         private void update(long usedBytes) {
@@ -108,11 +137,11 @@ public class DownloadManagerUi extends DrawerLayout implements OnMenuItemClickLi
         private static final int[][] FILTER_LIST = new int[][] {
             {R.drawable.ic_get_app_white_24dp, R.string.download_manager_ui_all_downloads},
             {R.drawable.ic_drive_site_white_24dp, R.string.download_manager_ui_pages},
-            {R.drawable.ic_music_video_white_24dp, R.string.download_manager_ui_video},
+            {R.drawable.ic_play_arrow_white_24dp, R.string.download_manager_ui_video},
             {R.drawable.ic_music_note_white_24dp, R.string.download_manager_ui_audio},
             {R.drawable.ic_image_white_24dp, R.string.download_manager_ui_images},
-            {R.drawable.ic_drive_file_white_24dp, R.string.download_manager_ui_documents},
-            {R.drawable.ic_folder_white_24dp, R.string.download_manager_ui_other}
+            {R.drawable.ic_drive_text_white_24dp, R.string.download_manager_ui_documents},
+            {R.drawable.ic_drive_file_white_24dp, R.string.download_manager_ui_other}
         };
 
         private final DrawerLayout mRootLayout;
@@ -191,6 +220,7 @@ public class DownloadManagerUi extends DrawerLayout implements OnMenuItemClickLi
     private DownloadManagerToolbar mToolbar;
     private SpaceDisplay mSpaceDisplay;
     private ListView mFilterView;
+    private RecyclerView mRecyclerView;
 
     public DownloadManagerUi(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -208,6 +238,12 @@ public class DownloadManagerUi extends DrawerLayout implements OnMenuItemClickLi
         mFilterView = (ListView) findViewById(R.id.section_list);
         mFilterView.setAdapter(mFilterAdapter);
         mFilterView.setOnItemClickListener(mFilterAdapter);
+
+        mRecyclerView = (RecyclerView) findViewById(R.id.recycler_view);
+        mRecyclerView.setAdapter(getDownloadManagerService().getDownloadHistoryAdapter());
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+
+        getDownloadManagerService().getAllDownloads();
     }
 
     /**
@@ -258,6 +294,11 @@ public class DownloadManagerUi extends DrawerLayout implements OnMenuItemClickLi
             return true;
         }
         return false;
+    }
+
+    private DownloadManagerService getDownloadManagerService() {
+        return DownloadManagerService.getDownloadManagerService(
+                ContextUtils.getApplicationContext());
     }
 
 }

@@ -970,7 +970,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
 
 #if DCHECK_IS_ON()
   for (const auto& render_pass : frame->render_passes) {
-    for (const auto& quad : render_pass->quad_list)
+    for (auto* quad : render_pass->quad_list)
       DCHECK(quad->shared_quad_state);
   }
   DCHECK(frame->render_passes.back()->output_rect.origin().IsOrigin());
@@ -1485,11 +1485,12 @@ void LayerTreeHostImpl::DidReceiveTextureInUseResponses(
   NOTREACHED();
 }
 
-void LayerTreeHostImpl::ReclaimResources(const CompositorFrameAck* ack) {
+void LayerTreeHostImpl::ReclaimResources(
+    const ReturnedResourceArray& resources) {
   // TODO(piman): We may need to do some validation on this ack before
   // processing it.
   if (renderer_)
-    renderer_->ReceiveSwapBuffersAck(*ack);
+    renderer_->ReclaimResources(resources);
 
   // In OOM, we now might be able to release more resources that were held
   // because they were exported.
@@ -1701,7 +1702,7 @@ void LayerTreeHostImpl::DidDrawAllLayers(const FrameData& frame) {
   for (size_t i = 0; i < frame.will_draw_layers.size(); ++i)
     frame.will_draw_layers[i]->DidDraw(resource_provider_.get());
 
-  for (auto& it : video_frame_controllers_)
+  for (auto* it : video_frame_controllers_)
     it->DidDrawFrame();
 }
 
@@ -1854,7 +1855,7 @@ void LayerTreeHostImpl::WillBeginImplFrame(const BeginFrameArgs& args) {
 
   Animate();
 
-  for (auto& it : video_frame_controllers_)
+  for (auto* it : video_frame_controllers_)
     it->OnBeginFrame(args);
 }
 
@@ -2011,10 +2012,6 @@ void LayerTreeHostImpl::ActivateSyncTree() {
     active_tree_->ProcessUIResourceRequestQueue();
   }
 
-  // bounds_delta isn't a pushed property, so the newly-pushed property tree
-  // won't already account for current bounds_delta values. This needs to
-  // happen before calling UpdateViewportContainerSizes().
-  active_tree_->UpdatePropertyTreesForBoundsDelta();
   UpdateViewportContainerSizes();
 
   active_tree_->DidBecomeActive();
@@ -3366,8 +3363,13 @@ static void CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
   if (tree_impl->LayerListIsEmpty())
     return;
 
+  int inner_viewport_layer_id =
+      tree_impl->InnerViewportScrollLayer()
+          ? tree_impl->InnerViewportScrollLayer()->id()
+          : Layer::INVALID_ID;
+
   return tree_impl->property_trees()->scroll_tree.CollectScrollDeltas(
-      scroll_info);
+      scroll_info, inner_viewport_layer_id);
 }
 
 std::unique_ptr<ScrollAndScaleSet> LayerTreeHostImpl::ProcessScrollDeltas() {

@@ -25,7 +25,6 @@
 #include "cc/layers/solid_color_layer.h"
 #include "cc/layers/video_layer.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/output/output_surface.h"
@@ -47,9 +46,11 @@
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_internals_for_test.h"
 #include "cc/test/layer_tree_test.h"
+#include "cc/test/skia_common.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/effect_node.h"
+#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
@@ -59,6 +60,7 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
@@ -146,6 +148,7 @@ class LayerTreeHostTestFrameOrdering : public LayerTreeHostTest {
 
   enum ImplOrder : int {
     IMPL_START = 1,
+    IMPL_READY_TO_COMMIT,
     IMPL_COMMIT,
     IMPL_COMMIT_COMPLETE,
     IMPL_ACTIVATE,
@@ -174,6 +177,10 @@ class LayerTreeHostTestFrameOrdering : public LayerTreeHostTest {
 
   void DidBeginMainFrame() override {
     EXPECT_TRUE(CheckStep(MAIN_DID_BEGIN_FRAME, &main_));
+  }
+
+  void ReadyToCommitOnThread(LayerTreeHostImpl* impl) override {
+    EXPECT_TRUE(CheckStep(IMPL_READY_TO_COMMIT, &impl_));
   }
 
   void BeginCommitOnThread(LayerTreeHostImpl* impl) override {
@@ -238,7 +245,7 @@ class LayerTreeHostTestReadyToActivateEmpty : public LayerTreeHostTest {
     const std::vector<PictureLayerImpl*>& layers =
         impl->sync_tree()->picture_layers();
     required_for_activation_count_ = 0;
-    for (const auto& layer : layers) {
+    for (auto* layer : layers) {
       FakePictureLayerImpl* fake_layer =
           static_cast<FakePictureLayerImpl*>(layer);
       required_for_activation_count_ +=
@@ -315,7 +322,7 @@ class LayerTreeHostTestReadyToDrawEmpty : public LayerTreeHostTest {
         impl->active_tree()->picture_layers();
     all_tiles_required_for_draw_are_ready_to_draw_ =
         impl->tile_manager()->IsReadyToDraw();
-    for (const auto& layer : layers) {
+    for (auto* layer : layers) {
       FakePictureLayerImpl* fake_layer =
           static_cast<FakePictureLayerImpl*>(layer);
       required_for_draw_count_ += fake_layer->CountTilesRequiredForDraw();
@@ -999,8 +1006,14 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
         node->is_currently_animating_opacity = true;
         break;
       case 2:
+        node->is_currently_animating_opacity = true;
+        break;
+      case 3:
         node->is_currently_animating_opacity = false;
         break;
+      case 4:
+        node->opacity = 0.25f;
+        node->is_currently_animating_opacity = true;
     }
   }
 
@@ -1015,11 +1028,19 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
         break;
       case 1:
         EXPECT_EQ(node->opacity, 0.75f);
-        impl->sync_tree()->root_layer_for_testing()->OnOpacityAnimated(0.75f);
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
+        EXPECT_EQ(node->opacity, 0.75f);
+        impl->sync_tree()->root_layer_for_testing()->OnOpacityAnimated(0.75f);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 3:
         EXPECT_EQ(node->opacity, 0.5f);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 4:
+        EXPECT_EQ(node->opacity, 0.25f);
         EndTest();
         break;
     }
@@ -1060,6 +1081,10 @@ class LayerTreeHostTestTransformTreeSync : public LayerTreeHostTest {
       case 3:
         node->is_currently_animating = false;
         break;
+      case 4:
+        node->local = gfx::Transform();
+        node->is_currently_animating = true;
+        break;
     }
   }
 
@@ -1080,8 +1105,6 @@ class LayerTreeHostTestTransformTreeSync : public LayerTreeHostTest {
         break;
       case 1:
         EXPECT_EQ(node->local, rotate20);
-        impl->sync_tree()->root_layer_for_testing()->OnTransformAnimated(
-            rotate20);
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
@@ -1092,6 +1115,10 @@ class LayerTreeHostTestTransformTreeSync : public LayerTreeHostTest {
         break;
       case 3:
         EXPECT_EQ(node->local, rotate10);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 4:
+        EXPECT_EQ(node->local, gfx::Transform());
         EndTest();
     }
   }
@@ -1381,20 +1408,20 @@ class LayerTreeHostTestGpuRasterDeviceSizeChanged : public LayerTreeHostTest {
 
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (num_draws_ == 2) {
-      auto pending_tree = host_impl->pending_tree();
-      auto pending_layer_impl = static_cast<FakePictureLayerImpl*>(
+      auto* pending_tree = host_impl->pending_tree();
+      auto* pending_layer_impl = static_cast<FakePictureLayerImpl*>(
           pending_tree->root_layer_for_testing());
       EXPECT_NE(pending_layer_impl, nullptr);
 
-      auto active_tree = host_impl->pending_tree();
-      auto active_layer_impl = static_cast<FakePictureLayerImpl*>(
+      auto* active_tree = host_impl->pending_tree();
+      auto* active_layer_impl = static_cast<FakePictureLayerImpl*>(
           active_tree->root_layer_for_testing());
       EXPECT_NE(pending_layer_impl, nullptr);
 
-      auto active_tiling_set = active_layer_impl->picture_layer_tiling_set();
-      auto active_tiling = active_tiling_set->tiling_at(0);
-      auto pending_tiling_set = pending_layer_impl->picture_layer_tiling_set();
-      auto pending_tiling = pending_tiling_set->tiling_at(0);
+      auto* active_tiling_set = active_layer_impl->picture_layer_tiling_set();
+      auto* active_tiling = active_tiling_set->tiling_at(0);
+      auto* pending_tiling_set = pending_layer_impl->picture_layer_tiling_set();
+      auto* pending_tiling = pending_tiling_set->tiling_at(0);
       EXPECT_EQ(
           pending_tiling->TilingDataForTesting().max_texture_size().width(),
           active_tiling->TilingDataForTesting().max_texture_size().width());
@@ -2328,11 +2355,11 @@ class LayerTreeHostTestDeferCommits : public LayerTreeHostTest {
     }
   }
 
-  void ScheduledActionSendBeginMainFrame() override {
+  void WillBeginMainFrame() override {
     num_send_begin_main_frame_++;
     switch (num_send_begin_main_frame_) {
       case 1:
-        PostSetDeferCommitsToMainThread(true);
+        layer_tree_host()->SetDeferCommits(true);
         break;
       case 2:
         EndTest();
@@ -2616,6 +2643,38 @@ class LayerTreeHostTestAbortedCommitDoesntStall : public LayerTreeHostTest {
   int commit_complete_count_;
 };
 
+class OnDrawOutputSurface : public OutputSurface {
+ public:
+  explicit OnDrawOutputSurface(base::Closure invalidate_callback)
+      : OutputSurface(TestContextProvider::Create(),
+                      TestContextProvider::CreateWorker(),
+                      nullptr),
+        invalidate_callback_(std::move(invalidate_callback)) {
+    capabilities_.delegated_rendering = true;
+  }
+
+  // OutputSurface implementation.
+  void SwapBuffers(CompositorFrame frame) override { did_swap_ = true; }
+  uint32_t GetFramebufferCopyTextureFormat() override { return 0; }
+  void Invalidate() override { invalidate_callback_.Run(); }
+
+  void OnDraw(bool resourceless_software_draw) {
+    gfx::Transform identity;
+    gfx::Rect empty_rect;
+    // SwapBuffers happens inside of OnDraw.
+    client_->OnDraw(identity, empty_rect, empty_rect,
+                    resourceless_software_draw);
+    if (did_swap_) {
+      did_swap_ = false;
+      client_->DidSwapBuffersComplete();
+    }
+  }
+
+ private:
+  bool did_swap_ = false;
+  base::Closure invalidate_callback_;
+};
+
 class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
     : public LayerTreeHostTestAbortedCommitDoesntStall {
  protected:
@@ -2624,28 +2683,28 @@ class LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor
     settings->using_synchronous_renderer_compositor = true;
   }
 
-  void ScheduledActionInvalidateOutputSurface() override {
-    // Do not call ImplThreadTaskRunner after the test ended because of the
-    // possibility of use-after-free due to a race.
-    if (TestEnded())
-      return;
-    ImplThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(
-            &LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor::
-                CallOnDraw,
-            base::Unretained(this)));
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
+    auto output_surface = base::MakeUnique<OnDrawOutputSurface>(base::Bind(
+        &LayerTreeHostTestAbortedCommitDoesntStallSynchronousCompositor::
+            CallOnDraw,
+        base::Unretained(this)));
+    output_surface_ = output_surface.get();
+    return std::move(output_surface);
   }
 
   void CallOnDraw() {
-    // Synchronous compositor does not draw unless told to do so by the output
-    // surface.
-    gfx::Transform identity;
-    gfx::Rect empty_rect;
-    bool resourceless_software_draw = false;
-    fake_output_surface()->client()->OnDraw(identity, empty_rect, empty_rect,
-                                            resourceless_software_draw);
+    if (!TestEnded()) {
+      // Synchronous compositor does not draw unless told to do so by the output
+      // surface. But it needs to be done on a new stack frame.
+      bool resourceless_software_draw = false;
+      ImplThreadTaskRunner()->PostTask(
+          FROM_HERE, base::Bind(&OnDrawOutputSurface::OnDraw,
+                                base::Unretained(output_surface_),
+                                resourceless_software_draw));
+    }
   }
+
+  OnDrawOutputSurface* output_surface_ = nullptr;
 };
 
 MULTI_THREAD_TEST_F(
@@ -2737,7 +2796,7 @@ class LayerTreeHostTestNumFramesPending : public LayerTreeHostTest {
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestNumFramesPending);
 
 class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
- public:
+ protected:
   void InitializeSettings(LayerTreeSettings* settings) override {
     settings->using_synchronous_renderer_compositor = true;
   }
@@ -2765,36 +2824,27 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
   }
 
   std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    auto output_surface = delegating_renderer()
-                              ? FakeOutputSurface::CreateDelegatingSoftware(
-                                    base::WrapUnique(new SoftwareOutputDevice))
-                              : FakeOutputSurface::CreateSoftware(
-                                    base::WrapUnique(new SoftwareOutputDevice));
-    software_output_surface_ = output_surface.get();
+    auto output_surface = base::MakeUnique<OnDrawOutputSurface>(
+        base::Bind(&LayerTreeHostTestResourcelessSoftwareDraw::CallOnDraw,
+                   base::Unretained(this)));
+    output_surface_ = output_surface.get();
     return std::move(output_surface);
   }
 
   void BeginTest() override {
     PostSetNeedsCommitToMainThread();
-    swap_count_ = 0;
-  }
-
-  void ScheduledActionInvalidateOutputSurface() override {
-    if (TestEnded())
-      return;
-
-    ImplThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&LayerTreeHostTestResourcelessSoftwareDraw::CallOnDraw,
-                   base::Unretained(this)));
   }
 
   void CallOnDraw() {
-    gfx::Transform identity;
-    gfx::Rect empty_rect;
-    bool resourceless_software_draw = true;
-    software_output_surface_->client()->OnDraw(identity, empty_rect, empty_rect,
-                                               resourceless_software_draw);
+    if (!TestEnded()) {
+      // Synchronous compositor does not draw unless told to do so by the output
+      // surface. But it needs to be done on a new stack frame.
+      bool resourceless_software_draw = true;
+      ImplThreadTaskRunner()->PostTask(
+          FROM_HERE, base::Bind(&OnDrawOutputSurface::OnDraw,
+                                base::Unretained(output_surface_),
+                                resourceless_software_draw));
+    }
   }
 
   DrawResult PrepareToDrawOnThread(LayerTreeHostImpl* host_impl,
@@ -2817,8 +2867,8 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
-    swap_count_++;
-    switch (swap_count_) {
+    draw_count_++;
+    switch (draw_count_) {
       case 1:
         host_impl->SetNeedsRedraw();
         break;
@@ -2833,12 +2883,12 @@ class LayerTreeHostTestResourcelessSoftwareDraw : public LayerTreeHostTest {
   void AfterTest() override {}
 
  private:
-  FakeOutputSurface* software_output_surface_ = nullptr;
+  OnDrawOutputSurface* output_surface_ = nullptr;
   FakeContentLayerClient client_;
   scoped_refptr<Layer> root_layer_;
   scoped_refptr<Layer> parent_layer_;
   scoped_refptr<Layer> child_layer_;
-  int swap_count_;
+  int draw_count_ = 0;
 };
 
 // Resourceless is not used for SingleThreadProxy, so it is unimplemented.
@@ -4631,7 +4681,8 @@ class LayerTreeHostTestBreakSwapPromiseForVisibility
     layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
   }
 
-  void ScheduledActionWillSendBeginMainFrame() override {
+  void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
+                                  const BeginFrameArgs& args) override {
     MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::Bind(&LayerTreeHostTestBreakSwapPromiseForVisibility
@@ -4675,7 +4726,8 @@ class LayerTreeHostTestBreakSwapPromiseForContext : public LayerTreeHostTest {
     layer_tree_host()->QueueSwapPromise(std::move(swap_promise));
   }
 
-  void ScheduledActionWillSendBeginMainFrame() override {
+  void WillBeginImplFrameOnThread(LayerTreeHostImpl* impl,
+                                  const BeginFrameArgs& args) override {
     if (output_surface_lost_triggered_)
       return;
     output_surface_lost_triggered_ = true;
@@ -5203,7 +5255,7 @@ class LayerTreeHostTestWillBeginImplFrameHasDidFinishImplFrame
       PostSetNeedsCommitToMainThread();
   }
 
-  void SendBeginMainFrameNotExpectedSoon() override { EndTest(); }
+  void BeginMainFrameNotExpectedSoon() override { EndTest(); }
 
   void AfterTest() override {
     EXPECT_GT(will_begin_impl_frame_count_, 0);
@@ -5276,7 +5328,7 @@ class LayerTreeHostTestBeginMainFrameTimeIsAlsoImplTime
     EXPECT_PRED_FORMAT2(AssertFrameTimeContained, impl_frame_args_, args);
   }
 
-  void SendBeginMainFrameNotExpectedSoon() override { EndTest(); }
+  void BeginMainFrameNotExpectedSoon() override { EndTest(); }
 
   void AfterTest() override {
     EXPECT_GT(impl_frame_args_.size(), 0U);
@@ -5515,7 +5567,7 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
       return 0.f;
     float frame_scale = 0.f;
     RenderPass* root_pass = frame_data->render_passes.back().get();
-    for (const auto& draw_quad : root_pass->quad_list) {
+    for (auto* draw_quad : root_pass->quad_list) {
       // Checkerboards mean an incomplete frame.
       if (draw_quad->material != DrawQuad::TILED_CONTENT)
         return 0.f;
@@ -5818,7 +5870,7 @@ class LayerTreeHostTestContinuousDrawWhenCreatingVisibleTiles
       return 0.f;
     float frame_scale = 0.f;
     RenderPass* root_pass = frame_data->render_passes.back().get();
-    for (const auto& draw_quad : root_pass->quad_list) {
+    for (auto* draw_quad : root_pass->quad_list) {
       const TileDrawQuad* quad = TileDrawQuad::MaterialCast(draw_quad);
       float quad_scale =
           quad->tex_coord_rect.width() / static_cast<float>(quad->rect.width());
@@ -5981,7 +6033,7 @@ class LayerTreeHostTestOneActivatePerPrepareTiles : public LayerTreeHostTest {
     EndTestAfterDelayMs(100);
   }
 
-  void ScheduledActionPrepareTiles() override {
+  void WillPrepareTilesOnThread(LayerTreeHostImpl* impl) override {
     ++scheduled_prepare_tiles_count_;
   }
 
@@ -6036,7 +6088,7 @@ class LayerTreeHostTestActivationCausesPrepareTiles : public LayerTreeHostTest {
     EndTest();
   }
 
-  void ScheduledActionPrepareTiles() override {
+  void WillPrepareTilesOnThread(LayerTreeHostImpl* impl) override {
     ++scheduled_prepare_tiles_count_;
   }
 
@@ -6691,71 +6743,6 @@ class LayerTreeTestPageScaleFlags : public LayerTreeTest {
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeTestPageScaleFlags);
 
-class LayerTreeHostScrollingAndScalingUpdatesLayers : public LayerTreeHostTest {
- public:
-  LayerTreeHostScrollingAndScalingUpdatesLayers()
-      : requested_update_layers_(false), commit_count_(0) {}
-
-  void SetupTree() override {
-    LayerTreeHostTest::SetupTree();
-    Layer* root_layer = layer_tree_host()->root_layer();
-    scoped_refptr<Layer> scroll_layer = Layer::Create();
-    CreateVirtualViewportLayers(root_layer, scroll_layer, root_layer->bounds(),
-                                root_layer->bounds(), layer_tree_host());
-  }
-
-  void BeginTest() override {
-    LayerTreeHostCommon::ScrollUpdateInfo scroll;
-    scroll.layer_id = layer_tree_host()->root_layer()->id();
-    scroll.scroll_delta = gfx::Vector2d(0, 33);
-    scroll_info_.scrolls.push_back(scroll);
-
-    scale_info_.page_scale_delta = 2.71f;
-
-    PostSetNeedsCommitToMainThread();
-  }
-
-  void BeginMainFrame(const BeginFrameArgs& args) override {
-    switch (commit_count_) {
-      case 0:
-        requested_update_layers_ = false;
-        layer_tree_host()->ApplyScrollAndScale(&no_op_info_);
-        EXPECT_FALSE(requested_update_layers_);
-        break;
-      case 1:
-        requested_update_layers_ = false;
-        layer_tree_host()->ApplyScrollAndScale(&scale_info_);
-        EXPECT_TRUE(requested_update_layers_);
-        break;
-      case 2:
-        requested_update_layers_ = false;
-        layer_tree_host()->ApplyScrollAndScale(&scroll_info_);
-        EXPECT_TRUE(requested_update_layers_);
-        EndTest();
-        break;
-      default:
-        NOTREACHED();
-    }
-  }
-
-  void DidSetNeedsUpdateLayers() override { requested_update_layers_ = true; }
-
-  void DidCommit() override {
-    if (++commit_count_ < 3)
-      PostSetNeedsCommitToMainThread();
-  }
-
-  void AfterTest() override {}
-
-  ScrollAndScaleSet scroll_info_;
-  ScrollAndScaleSet scale_info_;
-  ScrollAndScaleSet no_op_info_;
-  bool requested_update_layers_;
-  int commit_count_;
-};
-
-MULTI_THREAD_TEST_F(LayerTreeHostScrollingAndScalingUpdatesLayers);
-
 class LayerTreeHostTestDestroyWhileInitializingOutputSurface
     : public LayerTreeHostTest {
  protected:
@@ -6798,6 +6785,84 @@ class LayerTreeHostTestPaintedDeviceScaleFactor : public LayerTreeHostTest {
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPaintedDeviceScaleFactor);
+
+// The GPU image decode controller hands images off to Skia for rasterization.
+// When used with large images, the images in question could be deleted before
+// Skia was done with them, causing a crash. This test performs an end-to-end
+// check of large image rasterization to ensure we do not hit this crash.
+// Note that this code path won't always hit the crash, even when incorrect
+// behavior occurs, so this is more of a sanity check.
+// TODO(ericrk): We should improve this so that we can reliably detect the
+// crash.
+class GpuRasterizationSucceedsWithLargeImage : public LayerTreeHostTest {
+ protected:
+  GpuRasterizationSucceedsWithLargeImage()
+      : viewport_size_(1024, 2048), large_image_size_(20000, 10) {}
+
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    settings->gpu_rasterization_enabled = true;
+    settings->gpu_rasterization_forced = true;
+
+    /// Set to 0 to force at-raster GPU image decode.
+    settings->gpu_decoded_image_budget_bytes = 0;
+  }
+
+  void SetupTree() override {
+    client_.set_fill_with_nonsolid_color(true);
+
+    std::unique_ptr<FakeRecordingSource> recording =
+        FakeRecordingSource::CreateFilledRecordingSource(
+            gfx::Size(10000, 10000));
+
+    recording->add_draw_image(CreateDiscardableImage(large_image_size_),
+                              gfx::Point(0, 0));
+    recording->SetGenerateDiscardableImagesMetadata(true);
+    recording->Rerecord();
+
+    scoped_refptr<FakePictureLayer> root =
+        FakePictureLayer::CreateWithRecordingSource(&client_,
+                                                    std::move(recording));
+    root->SetBounds(gfx::Size(10000, 10000));
+    client_.set_bounds(root->bounds());
+    root->SetContentsOpaque(true);
+
+    layer_tree_host()->SetRootLayer(root);
+    LayerTreeHostTest::SetupTree();
+    layer_tree_host()->SetViewportSize(viewport_size_);
+    client_.set_bounds(root->bounds());
+  }
+
+  void InitializedRendererOnThread(LayerTreeHostImpl* host_impl,
+                                   bool success) override {
+    // Check that our large_image_size_ is greater than max texture size. We do
+    // this here to ensure that our otuput surface exists.
+
+    // Retrieve max texture size from Skia.
+    ContextProvider* context_provider =
+        host_impl->output_surface()->context_provider();
+    ASSERT_TRUE(context_provider);
+    ContextProvider::ScopedContextLock context_lock(context_provider);
+
+    GrContext* gr_context = context_provider->GrContext();
+    ASSERT_TRUE(gr_context);
+    const uint32_t max_texture_size = gr_context->caps()->maxTextureSize();
+    ASSERT_GT(static_cast<uint32_t>(large_image_size_.width()),
+              max_texture_size);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override { EndTest(); }
+
+  void AfterTest() override {}
+
+ private:
+  FakeContentLayerClient client_;
+  const gfx::Size viewport_size_;
+  const gfx::Size large_image_size_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(GpuRasterizationSucceedsWithLargeImage);
 
 }  // namespace
 }  // namespace cc

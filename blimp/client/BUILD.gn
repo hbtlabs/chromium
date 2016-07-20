@@ -11,22 +11,21 @@ if (is_android) {
 
 source_set("session") {
   sources = [
-    "session/assignment_source.cc",
-    "session/assignment_source.h",
     "session/blimp_client_session.cc",
     "session/blimp_client_session.h",
   ]
 
   public_deps = [
     ":feature",
-    ":switches",
-    "//components/safe_json",
+    "//blimp/client/core:switches",
     "//ui/events",
   ]
 
   deps = [
     ":compositor",
     "//base",
+    "//blimp/client/core/compositor",
+    "//blimp/client/core/session",
     "//blimp/common",
     "//blimp/common/proto",
     "//blimp/net",
@@ -46,7 +45,8 @@ source_set("client") {
 
   public_deps = [
     ":session",
-    ":switches",
+    "//blimp/client/core:switches",
+    "//blimp/client/core/compositor",
     "//components/safe_json",
     "//components/url_formatter",
     "//skia",
@@ -72,49 +72,6 @@ source_set("client") {
   ]
 }
 
-source_set("switches") {
-  sources = [
-    "app/blimp_client_switches.cc",
-    "app/blimp_client_switches.h",
-  ]
-}
-
-source_set("blimp_client_unit_tests") {
-  testonly = true
-
-  sources = []
-
-  deps = [
-    ":client",
-    ":session",
-    ":switches",
-    "//base",
-    "//base/test:run_all_unittests",
-    "//base/test:test_support",
-    "//blimp/common",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-
-  data = []
-
-  # TODO(dtrainor): Fix the test harness to allow this to run on Android.
-  # See crbug.com/588240.
-  if (is_linux) {
-    sources += [ "session/assignment_source_unittest.cc" ]
-    deps += [
-      "//blimp/common",
-      "//blimp/common:test_support",
-      "//components/safe_json:test_support",
-      "//net:test_support",
-    ]
-    data += [
-      "session/test_selfsigned_cert.pem",
-      "//blimp/test/data/test_client_token",
-    ]
-  }
-}
-
 source_set("app_unit_tests") {
   testonly = true
 
@@ -125,7 +82,6 @@ source_set("app_unit_tests") {
   deps = [
     ":client",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
@@ -188,8 +144,6 @@ source_set("test_support") {
 
 source_set("compositor") {
   sources = [
-    "feature/compositor/blimp_client_picture_cache.cc",
-    "feature/compositor/blimp_client_picture_cache.h",
     "feature/compositor/blimp_compositor.cc",
     "feature/compositor/blimp_compositor.h",
     "feature/compositor/blimp_compositor_manager.cc",
@@ -198,8 +152,6 @@ source_set("compositor") {
     "feature/compositor/blimp_context_provider.h",
     "feature/compositor/blimp_gpu_memory_buffer_manager.cc",
     "feature/compositor/blimp_gpu_memory_buffer_manager.h",
-    "feature/compositor/blimp_image_decoder.cc",
-    "feature/compositor/blimp_image_decoder.h",
     "feature/compositor/blimp_input_handler_wrapper.cc",
     "feature/compositor/blimp_input_handler_wrapper.h",
     "feature/compositor/blimp_input_manager.cc",
@@ -208,13 +160,10 @@ source_set("compositor") {
     "feature/compositor/blimp_layer_tree_settings.h",
     "feature/compositor/blimp_output_surface.cc",
     "feature/compositor/blimp_output_surface.h",
-    "feature/compositor/blob_image_serialization_processor.cc",
-    "feature/compositor/blob_image_serialization_processor.h",
-    "feature/compositor/decoding_image_generator.cc",
-    "feature/compositor/decoding_image_generator.h",
   ]
 
   deps = [
+    "//blimp/client/core/compositor",
     "//blimp/common",
     "//blimp/net",
     "//cc",
@@ -247,7 +196,6 @@ source_set("feature_unit_tests") {
   testonly = true
 
   sources = [
-    "feature/compositor/blimp_client_picture_cache_unittest.cc",
     "feature/compositor/blimp_compositor_manager_unittest.cc",
     "feature/navigation_feature_unittest.cc",
     "feature/render_widget_feature_unittest.cc",
@@ -258,8 +206,8 @@ source_set("feature_unit_tests") {
     ":compositor",
     ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//blimp/client/core/compositor",
     "//blimp/common",
     "//blimp/common/proto",
     "//blimp/net",
@@ -295,6 +243,7 @@ if (is_linux && !is_chromeos && use_x11) {
       ":client",
       "//base",
       "//blimp/client:compositor",
+      "//blimp/client/core/session",
       "//blimp/net",
       "//net",
       "//services/shell/public/cpp",
@@ -410,20 +359,12 @@ if (is_android) {
     ]
   }
 
-  java_cpp_enum("blimp_java_enums_srcjar") {
-    sources = [
-      "session/assignment_source.h",
-    ]
-  }
-
   android_library("blimp_java") {
-    srcjar_deps = [ ":blimp_java_enums_srcjar" ]
-
     deps = [
       ":blimp_java_resources",
       "//base:base_java",
       "//blimp/client/core:core_java",
-      "//blimp/client/public:public_java",
+      "//blimp/client/public:public_headers_java",
 
       # TODO(dtrainor): Remove the ui_java target once no more Android Toast
       # notifications are used.
@@ -436,7 +377,6 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/auth/TokenSource.java",
       "app/android/java/src/org/chromium/blimp/auth/TokenSourceImpl.java",
       "app/android/java/src/org/chromium/blimp/BlimpApplication.java",
-      "app/android/java/src/org/chromium/blimp/BlimpClientSwitches.java",
       "app/android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "app/android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
@@ -452,6 +392,8 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/toolbar/ToolbarMenu.java",
       "app/android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
     ]
+
+    srcjar_deps = [ "//blimp/client/core/session:java_enums_srcjar" ]
   }
 
   android_library("blimp_test_java") {
@@ -461,15 +403,15 @@ if (is_android) {
       ":blimp_java",
       "//base:base_java",
       "//base:base_java_test_support",
-      "//blimp/client/core:core_java",
-      "//blimp/client/public:public_java",
+      "//blimp/client/core/contents:contents_java",
+      "//blimp/client/public:public_headers_java",
       google_play_services_library,
     ]
 
     java_files = [
       "app/android/javatests/src/org/chromium/blimp/auth/MockTokenSource.java",
       "app/android/javatests/src/org/chromium/blimp/auth/RetryingTokenSourceTest.java",
-      "app/android/javatests/src/org/chromium/blimp/core/BlimpContentsTest.java",
+      "app/android/javatests/src/org/chromium/blimp/core/contents/BlimpContentsTest.java",
       "app/android/javatests/src/org/chromium/blimp/BlimpNativeInstrumentationTestCase.java",
     ]
   }
@@ -481,6 +423,8 @@ if (is_android) {
       "//base",
       "//blimp/client:compositor",
       "//blimp/client/core",
+      "//blimp/client/core/session:session",
+      "//blimp/client/public:public_headers",
       "//blimp/common",
       "//blimp/common/proto",
       "//blimp/net",
@@ -496,12 +440,12 @@ if (is_android) {
     ]
 
     sources = [
+      "app/android/blimp_app_jni_registrar.cc",
+      "app/android/blimp_app_jni_registrar.h",
       "app/android/blimp_client_session_android.cc",
       "app/android/blimp_client_session_android.h",
       "app/android/blimp_compositor_manager_android.cc",
       "app/android/blimp_compositor_manager_android.h",
-      "app/android/blimp_jni_registrar.cc",
-      "app/android/blimp_jni_registrar.h",
       "app/android/blimp_library_loader.cc",
       "app/android/blimp_library_loader.h",
       "app/android/blimp_view.cc",

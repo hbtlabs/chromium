@@ -34,7 +34,7 @@ class ContentSuggestionsServiceFactory
   ContentSuggestionsServiceFactory();
   ~ContentSuggestionsServiceFactory() override;
 
-  // BrowserStateKeyedServiceFactory implementation.
+  // BrowserContextKeyedServiceFactory implementation.
   KeyedService* BuildServiceInstanceFor(
       content::BrowserContext* context) const override;
 

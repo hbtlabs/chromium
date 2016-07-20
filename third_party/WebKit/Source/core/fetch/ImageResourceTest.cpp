@@ -155,6 +155,7 @@ void receiveResponse(ImageResource* imageResource, const KURL& url, const Atomic
 class MockTaskRunner : public blink::WebTaskRunner {
     void postTask(const WebTraceLocation&, Task*) override { }
     void postDelayedTask(const WebTraceLocation&, Task*, double) override { }
+    bool runsTasksOnCurrentThread() override { return true; }
     WebTaskRunner* clone() override { return nullptr; }
     double virtualTimeSeconds() const override { return 0.0; }
     double monotonicallyIncreasingVirtualTimeSeconds() const override { return 0.0; }
@@ -237,7 +238,7 @@ TEST(ImageResourceTest, MultipartImage)
 
     // This part finishes. The image is created, callbacks are sent, and the data buffer is cleared.
     cachedImage->loader()->didFinishLoading(nullptr, 0.0, 0);
-    ASSERT_FALSE(cachedImage->resourceBuffer());
+    ASSERT_TRUE(cachedImage->resourceBuffer());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
@@ -302,12 +303,14 @@ TEST(ImageResourceTest, DecodedDataRemainsWhileHasClients)
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
 
-    // The ImageResource no longer has clients. The image should be deleted by prune.
+    // The ImageResource no longer has clients. The decoded image data should be
+    // deleted by prune.
     client->removeAsClient();
     cachedImage->prune();
     ASSERT_FALSE(cachedImage->hasClientsOrObservers());
-    ASSERT_FALSE(cachedImage->hasImage());
-    ASSERT_TRUE(cachedImage->getImage()->isNull());
+    ASSERT_TRUE(cachedImage->hasImage());
+    // TODO(hajimehoshi): Should check cachedImage doesn't have decoded image
+    // data.
 }
 
 TEST(ImageResourceTest, UpdateBitmapImages)
@@ -367,7 +370,7 @@ TEST(ImageResourceTest, ReloadIfLoFi)
 
     Vector<unsigned char> jpeg2 = jpegImage2();
     cachedImage->loader()->didReceiveResponse(nullptr, WrappedResourceResponse(resourceResponse), nullptr);
-    cachedImage->loader()->didReceiveData(nullptr, reinterpret_cast<const char*>(jpeg2.data()), jpeg2.size(), jpeg2.size());
+    cachedImage->loader()->didReceiveData(nullptr, reinterpret_cast<const char*>(jpeg2.data()), jpeg2.size(), jpeg2.size(), jpeg2.size());
     cachedImage->loader()->didFinishLoading(nullptr, 0.0, jpeg2.size());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
@@ -606,7 +609,7 @@ TEST(ImageResourceTest, AddClientAfterPrune)
 
     imageResource->prune();
 
-    EXPECT_FALSE(imageResource->hasImage());
+    EXPECT_TRUE(imageResource->hasImage());
 
     // Re-adds a ResourceClient but not ImageResourceObserver.
     Persistent<MockResourceClient> client2 = new MockResourceClient(imageResource);

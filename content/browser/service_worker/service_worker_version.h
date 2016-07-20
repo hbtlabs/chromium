@@ -13,6 +13,7 @@
 #include <queue>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -109,8 +110,8 @@ class CONTENT_EXPORT ServiceWorkerVersion
     virtual void OnControlleeRemoved(ServiceWorkerVersion* version,
                                      ServiceWorkerProviderHost* provider_host) {
     }
-    // Fires when a version transitions from having a controllee to not.
     virtual void OnNoControllees(ServiceWorkerVersion* version) {}
+    virtual void OnNoWork(ServiceWorkerVersion* version) {}
     virtual void OnCachedMetadataUpdated(ServiceWorkerVersion* version) {}
 
    protected:
@@ -274,8 +275,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void DispatchSimpleEvent(int request_id, const IPC::Message& message);
 
   // Adds and removes |provider_host| as a controllee of this ServiceWorker.
-  // A potential controllee is a host having the version as its .installing
-  // or .waiting version.
   void AddControllee(ServiceWorkerProviderHost* provider_host);
   void RemoveControllee(ServiceWorkerProviderHost* provider_host);
 
@@ -344,6 +343,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Simulate ping timeout. Should be used for tests-only.
   void SimulatePingTimeoutForTesting();
 
+  // Returns true if the service worker has work to do: it has pending
+  // requests, in-progress streaming URLRequestJobs, or pending start callbacks.
+  bool HasWork() const;
+
  private:
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerMetrics;
@@ -382,6 +385,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, MixedRequestTimeouts);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, EarlyResponse);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, CancelRequest);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest, SkipWaiting);
+  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerActivationTest,
+                           SkipWaitingWithInflightRequest);
 
   class Metrics;
   class PingController;
@@ -405,21 +411,29 @@ class CONTENT_EXPORT ServiceWorkerVersion
                    ServiceWorkerMetrics::EventType event_type);
     ~PendingRequest();
 
-    // This is the |error_callback| passed to StartRequest.
+    // ------------------------------------------------------------------------
+    // For all requests. Set by StartRequest.
+    // ------------------------------------------------------------------------
     StatusCallback error_callback;
     base::TimeTicks start_time;
     ServiceWorkerMetrics::EventType event_type;
 
+    // -------------------------------------------------------------------------
+    // For Mojo requests.
+    // -------------------------------------------------------------------------
     // Name of the mojo service this request is associated with. Used to call
-    // the callback when a connection closes with outstanding requests.
-    // Compared as pointer, so should only contain static strings. Typically
-    // this would be Interface::Name_ for some mojo interface.
+    // the callback when a connection closes with outstanding requests. Compared
+    // as pointer, so should only contain static strings. Typically this would
+    // be Interface::Name_ for some mojo interface.
     const char* mojo_service = nullptr;
 
-    // This is set by RegisterRequestCallback. It is null for simple requests,
-    // which use only |error_callback| to communicate the service worker's
-    // response.
+    // ------------------------------------------------------------------------
+    // For IPC message requests.
+    // ------------------------------------------------------------------------
+    // Set by RegisterRequestCallback. Receives IPC responses to the request via
+    // OnMessageReceived.
     std::unique_ptr<EmbeddedWorkerInstance::Listener> listener;
+    // True if an IPC message was sent to dispatch the event for this request.
     bool is_dispatched = false;
   };
 
@@ -601,7 +615,6 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Stops the worker if it is idle (has no in-flight requests) or timed out
   // ping.
   void StopWorkerIfIdle();
-  bool HasInflightRequests() const;
 
   // RecordStartWorkerResult is added as a start callback by StartTimeoutTimer
   // and records metrics about startup.

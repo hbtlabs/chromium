@@ -9,22 +9,29 @@
 #include "base/metrics/histogram.h"
 #include "base/timer/elapsed_timer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
+#include "platform/text/hyphenation/HyphenatorAOSP.h"
 #include "public/platform/Platform.h"
 #include "public/platform/ServiceRegistry.h"
 #include "public/platform/modules/hyphenation/hyphenation.mojom-blink.h"
 
 namespace blink {
 
+using Hyphenator = android::Hyphenator;
+
 class HyphenationMinikin : public Hyphenation {
 public:
     bool openDictionary(const AtomicString& locale);
 
     size_t lastHyphenLocation(const StringView& text, size_t beforeIndex) const override;
+    Vector<size_t, 8> hyphenLocations(const StringView&) const override;
 
 private:
     static base::PlatformFile openDictionaryFile(const AtomicString& locale);
 
+    std::vector<uint8_t> hyphenate(const StringView&) const;
+
     base::MemoryMappedFile m_file;
+    std::unique_ptr<Hyphenator> m_hyphenator;
 };
 
 static mojom::blink::HyphenationPtr connectToRemoteService()
@@ -71,23 +78,104 @@ bool HyphenationMinikin::openDictionary(const AtomicString& locale)
         return false;
     }
 
-    // TODO(kojii): Create dictionary from m_file when Minikin is ready.
+    m_hyphenator = wrapUnique(Hyphenator::loadBinary(m_file.data()));
 
     return true;
 }
 
+std::vector<uint8_t> HyphenationMinikin::hyphenate(const StringView& text) const
+{
+    std::vector<uint8_t> result;
+    if (text.is8Bit()) {
+        String text16Bit = text.toString();
+        text16Bit.ensure16Bit();
+        m_hyphenator->hyphenate(&result, text16Bit.characters16(), text16Bit.length());
+    } else {
+        m_hyphenator->hyphenate(&result, text.characters16(), text.length());
+    }
+    return result;
+}
+
 size_t HyphenationMinikin::lastHyphenLocation(const StringView& text, size_t beforeIndex) const
 {
-    // TODO(kojii): Call minikin using the dictionary when Minikin is ready.
+    if (text.length() < minimumPrefixLength + minimumSuffixLength)
+        return 0;
+
+    std::vector<uint8_t> result = hyphenate(text);
+    static_assert(minimumPrefixLength >= 1, "Change the 'if' above if this fails");
+    for (size_t i = text.length() - minimumSuffixLength - 1;
+        i >= minimumPrefixLength; i--) {
+        if (result[i])
+            return i;
+    }
     return 0;
+}
+
+Vector<size_t, 8> HyphenationMinikin::hyphenLocations(const StringView& text) const
+{
+    Vector<size_t, 8> hyphenLocations;
+    if (text.length() < minimumPrefixLength + minimumSuffixLength)
+        return hyphenLocations;
+
+    std::vector<uint8_t> result = hyphenate(text);
+    static_assert(minimumPrefixLength >= 1, "Change the 'if' above if this fails");
+    for (size_t i = text.length() - minimumSuffixLength - 1;
+        i >= minimumPrefixLength; i--) {
+        if (result[i])
+            hyphenLocations.append(i);
+    }
+    return hyphenLocations;
+}
+
+using LocaleMap = HashMap<AtomicString, AtomicString, CaseFoldingHash>;
+
+static LocaleMap createLocaleFallbackMap()
+{
+    // This data is from CLDR, compiled by AOSP.
+    // https://android.googlesource.com/platform/frameworks/base/+/master/core/java/android/text/Hyphenator.java
+    using LocaleFallback = const char*[2];
+    static LocaleFallback localeFallbackData[] = {
+        { "en-AS", "en-us" }, // English (American Samoa)
+        { "en-GU", "en-us" }, // English (Guam)
+        { "en-MH", "en-us" }, // English (Marshall Islands)
+        { "en-MP", "en-us" }, // English (Northern Mariana Islands)
+        { "en-PR", "en-us" }, // English (Puerto Rico)
+        { "en-UM", "en-us" }, // English (United States Minor Outlying Islands)
+        { "en-VI", "en-us" }, // English (Virgin Islands)
+        // All English locales other than those falling back to en-US are mapped to en-GB.
+        { "en", "en-gb" },
+        // For German, we're assuming the 1996 (and later) orthography by default.
+        { "de", "de-1996" },
+        // Liechtenstein uses the Swiss hyphenation rules for the 1901 orthography.
+        { "de-LI-1901", "de-ch-1901" },
+        // Norwegian is very probably Norwegian Bokmål.
+        { "no", "nb" },
+        { "mn", "mn-cyrl" }, // Mongolian
+        { "am", "und-ethi" }, // Amharic
+        { "byn", "und-ethi" }, // Blin
+        { "gez", "und-ethi" }, // Geʻez
+        { "ti", "und-ethi" }, // Tigrinya
+        { "wal", "und-ethi" }, // Wolaytta
+    };
+    LocaleMap map;
+    for (const auto& it : localeFallbackData)
+        map.add(it[0], it[1]);
+    return map;
 }
 
 PassRefPtr<Hyphenation> Hyphenation::platformGetHyphenation(const AtomicString& locale)
 {
     RefPtr<HyphenationMinikin> hyphenation(adoptRef(new HyphenationMinikin));
-    if (!hyphenation->openDictionary(locale))
-        return nullptr;
-    return hyphenation.release();
+    if (hyphenation->openDictionary(locale.lowerASCII()))
+        return hyphenation.release();
+    hyphenation.clear();
+
+    DEFINE_STATIC_LOCAL(LocaleMap, localeFallback, (createLocaleFallbackMap()));
+    const auto& it = localeFallback.find(locale);
+    if (it != localeFallback.end())
+        return get(it->value);
+
+    return nullptr;
 }
 
 } // namespace blink

@@ -65,7 +65,7 @@ MEDIA_EXPORT extern const char kDisableRTCSmoothnessAlgorithm[];
 
 MEDIA_EXPORT extern const char kEnableVp9InMp4[];
 
-MEDIA_EXPORT extern const char kCastEncoderUtilHeuristic[];
+MEDIA_EXPORT extern const char kForceVideoOverlays[];
 
 }  // namespace switches
 

@@ -152,6 +152,7 @@ if (!is_android && !is_mac) {
       deps += [
         ":chrome_dll",
         ":chrome_exe_version",
+        ":copy_first_run",
         ":file_pre_reader",
         ":visual_elements_resources",
         "//base",
@@ -444,6 +445,14 @@ if (is_win) {
         deps += [ "//pdf" ]
       }
     }
+  }
+  copy("copy_first_run") {
+    sources = [
+      "app/firstRun",
+    ]
+    outputs = [
+      "$root_out_dir/First Run",
+    ]
   }
 } else if (is_mac) {
   chrome_helper_name = chrome_product_full_name + " Helper"
@@ -1071,7 +1080,7 @@ if (is_win) {
         "$root_out_dir/{{source_file_part}}-$chrome_version_full.breakpad",
       ]
 
-      # Use an aboslute path to dump_syms in case a user has it in their path.
+      # Use an absolute path to dump_syms in case a user has it in their path.
       args = rebase_path(outputs, root_out_dir) + [
                rebase_path("$root_out_dir/dump_syms"),
                "-g",
@@ -1094,8 +1103,8 @@ if (is_win) {
       script = "//chrome/tools/build/mac/archive_symbols.py"
 
       # These are the dSYMs that will be archived. The sources list must be
-      # are the target outputs that correspond to the dSYMs (since a dSYM is
-      # a directory it cannot be listed as a source file). The targets that
+      # the target outputs that correspond to the dSYMs (since a dSYM is a
+      # directory it cannot be listed as a source file). The targets that
       # generate both the dSYM and binary image are listed in deps.
       _dsyms = [
         "$root_out_dir/$chrome_framework_name.dSYM",
@@ -1645,9 +1654,6 @@ group("strings") {
     "//chrome/app:chromium_strings",
     "//chrome/app:generated_resources",
     "//chrome/app:google_chrome_strings",
-    "//chrome/app:settings_chromium_strings",
-    "//chrome/app:settings_google_chrome_strings",
-    "//chrome/app:settings_strings",
     "//chrome/app/resources:locale_settings",
   ]
 }

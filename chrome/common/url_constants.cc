@@ -351,6 +351,7 @@ const char kResetProfileSettingsSubPage[] = "resetProfileSettings";
 const char kSearchEnginesSubPage[] = "searchEngines";
 const char kSearchSubPage[] = "search";
 const char kSearchUsersSubPage[] = "search#Users";
+const char kSignOutSubPage[] = "signOut";
 const char kSyncSetupSubPage[] = "syncSetup";
 const char kTriggeredResetProfileSettingsSubPage[] =
     "triggeredResetProfileSettings";
@@ -713,6 +714,7 @@ const char* const kChromeDebugURLs[] = {
   content::kChromeUIGpuCleanURL,
   content::kChromeUIGpuCrashURL,
   content::kChromeUIGpuHangURL,
+  content::kChromeUIMemoryExhaustURL,
   content::kChromeUIPpapiFlashCrashURL,
   content::kChromeUIPpapiFlashHangURL,
   chrome::kChromeUIQuitURL,

@@ -234,13 +234,13 @@
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScheduler.h"
+#include "wtf/AutoReset.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/DateMath.h"
 #include "wtf/Functional.h"
 #include "wtf/HashFunctions.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
-#include "wtf/TemporaryChange.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/TextEncodingRegistry.h"
 #include <memory>
@@ -498,7 +498,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
 
 Document::~Document()
 {
-    DCHECK(!layoutView());
+    DCHECK(layoutViewItem().isNull());
     DCHECK(!parentTreeScope());
     // If a top document with a cache, verify that it was comprehensively
     // cleared during detach.
@@ -1833,7 +1833,7 @@ bool Document::needsLayoutTreeUpdateForNode(const Node& node) const
         return false;
     if (!needsLayoutTreeUpdate())
         return false;
-    if (!node.inShadowIncludingDocument())
+    if (!node.isConnected())
         return false;
 
     if (needsFullLayoutTreeUpdate() || node.needsStyleRecalc() || node.needsStyleInvalidation())
@@ -2100,7 +2100,7 @@ StyleResolver& Document::ensureStyleResolver() const
     return m_styleEngine->ensureResolver();
 }
 
-void Document::attach(const AttachContext& context)
+void Document::attachLayoutTree(const AttachContext& context)
 {
     DCHECK_EQ(m_lifecycle.state(), DocumentLifecycle::Inactive);
     DCHECK(!m_axObjectCache || this != &axObjectCacheOwner());
@@ -2112,7 +2112,7 @@ void Document::attach(const AttachContext& context)
     m_layoutView->setStyle(StyleResolver::styleForDocument(*this));
     m_layoutView->compositor()->setNeedsCompositingUpdate(CompositingUpdateAfterCompositingInputChange);
 
-    ContainerNode::attach(context);
+    ContainerNode::attachLayoutTree(context);
 
     // The TextAutosizer can't update layout view info while the Document is detached, so update now in case anything changed.
     if (TextAutosizer* autosizer = textAutosizer())
@@ -3152,7 +3152,7 @@ String Document::outgoingReferrer() const
 
 MouseEventWithHitTestResults Document::prepareMouseEvent(const HitTestRequest& request, const LayoutPoint& documentPoint, const PlatformMouseEvent& event)
 {
-    DCHECK(!layoutView() || layoutView()->isLayoutView());
+    DCHECK(layoutViewItem().isNull() || layoutViewItem().isLayoutView());
 
     // LayoutView::hitTest causes a layout, and we don't want to hit that until the first
     // layout because until then, there is nothing shown on the screen - the user can't
@@ -3448,7 +3448,7 @@ void Document::removeFocusedElementOfSubtree(Node* node, bool amongChildrenOnly)
         return;
 
     // We can't be focused if we're not in the document.
-    if (!node->inShadowIncludingDocument())
+    if (!node->isConnected())
         return;
     bool contains = node->isShadowIncludingInclusiveAncestorOf(m_focusedElement.get());
     if (contains && (m_focusedElement != node || !amongChildrenOnly))
@@ -4485,7 +4485,7 @@ bool Document::execCommand(const String& commandName, bool, const String& value,
         addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
         return false;
     }
-    TemporaryChange<bool> executeScope(m_isRunningExecCommand, true);
+    AutoReset<bool> executeScope(&m_isRunningExecCommand, true);
 
     // Postpone DOM mutation events, which can execute scripts and change
     // DOM tree against implementation assumption.
@@ -5873,15 +5873,35 @@ v8::Local<v8::Object> Document::associateWithWrapper(v8::Isolate* isolate, const
 
 bool Document::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
 {
-    if (isSecureContextImpl(privilegeContextCheck))
+    bool isSecure = isSecureContextImpl(privilegeContextCheck);
+    if (getSandboxFlags() != SandboxNone) {
+        UseCounter::count(*this, isSecure
+            ? UseCounter::SecureContextCheckForSandboxedOriginPassed
+            : UseCounter::SecureContextCheckForSandboxedOriginFailed);
+    }
+    UseCounter::count(*this, isSecure
+        ? UseCounter::SecureContextCheckPassed
+        : UseCounter::SecureContextCheckFailed);
+
+    if (isSecure)
         return true;
+
     errorMessage = SecurityOrigin::isPotentiallyTrustworthyErrorMessage();
     return false;
 }
 
 bool Document::isSecureContext(const SecureContextCheck privilegeContextCheck) const
 {
-    return isSecureContextImpl(privilegeContextCheck);
+    bool isSecure = isSecureContextImpl(privilegeContextCheck);
+    if (getSandboxFlags() != SandboxNone) {
+        UseCounter::count(*this, isSecure
+            ? UseCounter::SecureContextCheckForSandboxedOriginPassed
+            : UseCounter::SecureContextCheckForSandboxedOriginFailed);
+    }
+    UseCounter::count(*this, isSecure
+        ? UseCounter::SecureContextCheckPassed
+        : UseCounter::SecureContextCheckFailed);
+    return isSecure;
 }
 
 void Document::enforceInsecureRequestPolicy(WebInsecureRequestPolicy policy)

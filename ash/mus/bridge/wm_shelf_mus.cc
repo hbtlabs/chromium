@@ -69,6 +69,15 @@ bool WmShelfMus::IsDimmed() const {
   return false;
 }
 
+bool WmShelfMus::IsShowingOverflowBubble() const {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+void WmShelfMus::SchedulePaint() {
+  NOTIMPLEMENTED();
+}
+
 bool WmShelfMus::IsVisible() const {
   NOTIMPLEMENTED();
   return true;
@@ -126,6 +135,11 @@ void WmShelfMus::RemoveObserver(WmShelfObserver* observer) {
 
 void WmShelfMus::SetKeyboardBoundsForTesting(const gfx::Rect& bounds) {
   NOTIMPLEMENTED();
+}
+
+ShelfLockingManager* WmShelfMus::GetShelfLockingManagerForTesting() {
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 }  // namespace mus

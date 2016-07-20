@@ -43,7 +43,7 @@ const AtomicString& pointerEventNameForTouchPointState(PlatformTouchPoint::Touch
 
 bool isInDocument(EventTarget* n)
 {
-    return n && n->toNode() && n->toNode()->inShadowIncludingDocument();
+    return n && n->toNode() && n->toNode()->isConnected();
 }
 
 WebInputEventResult dispatchMouseEvent(
@@ -156,6 +156,9 @@ WebInputEventResult PointerEventManager::dispatchPointerEvent(
         return WebInputEventResult::NotHandled;
     if (!checkForListener || target->hasEventListeners(eventType)) {
         UseCounter::count(m_frame->document(), UseCounter::PointerEventDispatch);
+        if (eventType == EventTypeNames::pointerdown)
+            UseCounter::count(m_frame->document(), UseCounter::PointerEventDispatchPointerDown);
+
         DispatchEventResult dispatchResult = target->dispatchEvent(pointerEvent);
         return EventHandler::toWebInputEventResult(dispatchResult);
     }
@@ -673,7 +676,7 @@ bool PointerEventManager::processPendingPointerCapture(
             // no longer participating in the tree.
             EventTarget* target = pointerCaptureTarget;
             if (target->toNode()
-                && !target->toNode()->inShadowIncludingDocument()) {
+                && !target->toNode()->isConnected()) {
                 target = target->toNode()->ownerDocument();
             }
             dispatchPointerEvent(target,

@@ -14,7 +14,6 @@
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
@@ -23,7 +22,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/single_thread_task_runner.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -46,6 +45,7 @@
 #include "cc/raster/task_graph_runner.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/memory_coordinator/child/child_memory_coordinator_impl.h"
 #include "components/scheduler/child/compositor_worker_scheduler.h"
 #include "components/scheduler/child/webthread_base.h"
 #include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
@@ -73,6 +73,7 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/dom_storage/dom_storage_messages.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu_process_launch_causes.h"
 #include "content/common/render_process_messages.h"
@@ -133,7 +134,6 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_platform_file.h"
-#include "media/base/audio_hardware_config.h"
 #include "media/base/media.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "mojo/common/common_type_converters.h"
@@ -142,6 +142,8 @@
 #include "net/base/port_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/WebKit/public/platform/WebImageGenerator.h"
@@ -609,6 +611,7 @@ RenderThreadImpl::RenderThreadImpl(
     : ChildThreadImpl(Options::Builder()
                           .InBrowserProcess(params)
                           .UseMojoChannel(true)
+                          .AutoStartMojoShellConnection(false)
                           .Build()),
       renderer_scheduler_(std::move(scheduler)),
       categorized_worker_pool_(new CategorizedWorkerPool()) {
@@ -620,7 +623,10 @@ RenderThreadImpl::RenderThreadImpl(
 RenderThreadImpl::RenderThreadImpl(
     std::unique_ptr<base::MessageLoop> main_message_loop,
     std::unique_ptr<scheduler::RendererScheduler> scheduler)
-    : ChildThreadImpl(Options::Builder().UseMojoChannel(true).Build()),
+    : ChildThreadImpl(Options::Builder()
+                          .UseMojoChannel(true)
+                          .AutoStartMojoShellConnection(false)
+                          .Build()),
       renderer_scheduler_(std::move(scheduler)),
       main_message_loop_(std::move(main_message_loop)),
       categorized_worker_pool_(new CategorizedWorkerPool()) {
@@ -647,10 +653,8 @@ void RenderThreadImpl::Init(
   ChildProcess::current()->set_main_thread(this);
 
 #if defined(MOJO_SHELL_CLIENT)
-  if (IsRunningInMash()) {
-    auto* shell_connection = ChildThread::Get()->GetMojoShellConnection();
-    ui::GpuService::Initialize(shell_connection->GetConnector());
-  }
+  if (IsRunningInMash())
+    ui::GpuService::Initialize(GetMojoShellConnection()->GetConnector());
 #endif
 
   InitializeWebKit(resource_task_queue);
@@ -723,6 +727,16 @@ void RenderThreadImpl::Init(
   AddFilter((new CacheStorageMessageFilter(thread_safe_sender()))->GetFilter());
 
   AddFilter((new ServiceWorkerContextMessageFilter())->GetFilter());
+
+#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMusInRenderer)) {
+    CreateRenderWidgetWindowTreeClientFactory(GetMojoShellConnection());
+  }
+#endif
+
+  // Must be called before RenderThreadStarted() below.
+  StartMojoShellConnection();
 
   GetContentClient()->renderer()->RenderThreadStarted();
 
@@ -823,6 +837,17 @@ void RenderThreadImpl::Init(
       base::Bind(&RenderThreadImpl::OnSyncMemoryPressure,
                  base::Unretained(this))));
 
+  if (memory_coordinator::IsEnabled()) {
+    // TODO(bashi): Revisit how to manage the lifetime of
+    // ChildMemoryCoordinatorImpl.
+    // https://codereview.chromium.org/2094583002/#msg52
+    memory_coordinator::mojom::MemoryCoordinatorHandlePtr parent_coordinator;
+    GetRemoteInterfaces()->GetInterface(mojo::GetProxy(&parent_coordinator));
+    memory_coordinator_.reset(
+        new memory_coordinator::ChildMemoryCoordinatorImpl(
+            std::move(parent_coordinator)));
+  }
+
   int num_raster_threads = 0;
   std::string string_value =
       command_line.GetSwitchValueASCII(switches::kNumRasterThreads);
@@ -848,15 +873,6 @@ void RenderThreadImpl::Init(
 
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateFrameFactory));
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateEmbeddedWorkerSetup));
-
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  // We may not have a MojoShellConnection object in tests that directly
-  // instantiate a RenderThreadImpl.
-  if (ChildThread::Get()->GetMojoShellConnection() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseMusInRenderer))
-    CreateRenderWidgetWindowTreeClientFactory();
-#endif
 
   GetRemoteInterfaces()->GetInterface(
       mojo::GetProxy(&storage_partition_service_));
@@ -965,13 +981,14 @@ void RenderThreadImpl::Shutdown() {
 
   ChildThreadImpl::Shutdown();
 
-  // Shut down the message loop and the renderer scheduler before shutting down
-  // Blink. This prevents a scenario where a pending task in the message loop
-  // accesses Blink objects after Blink shuts down.
+  // Shut down the message loop (if provided when the RenderThreadImpl was
+  // constructed) and the renderer scheduler before shutting down Blink. This
+  // prevents a scenario where a pending task in the message loop accesses Blink
+  // objects after Blink shuts down.
   renderer_scheduler_->SetRAILModeObserver(nullptr);
   renderer_scheduler_->Shutdown();
   if (main_message_loop_)
-    main_message_loop_->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
   if (blink_platform_impl_) {
     blink_platform_impl_->Shutdown();
@@ -1539,20 +1556,6 @@ AudioRendererMixerManager* RenderThreadImpl::GetAudioRendererMixerManager() {
   return audio_renderer_mixer_manager_.get();
 }
 
-media::AudioHardwareConfig* RenderThreadImpl::GetAudioHardwareConfig() {
-  if (!audio_hardware_config_) {
-    media::AudioParameters input_params;
-    media::AudioParameters output_params;
-    Send(new ViewHostMsg_GetAudioHardwareConfig(
-        &input_params, &output_params));
-
-    audio_hardware_config_.reset(new media::AudioHardwareConfig(
-        input_params, output_params));
-  }
-
-  return audio_hardware_config_.get();
-}
-
 base::WaitableEvent* RenderThreadImpl::GetShutdownEvent() {
   return ChildProcess::current()->GetShutDownEvent();
 }
@@ -1837,7 +1840,7 @@ RenderThreadImpl::CreateCompositorOutputSurface(
     use_software = true;
 
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  if (ChildThread::Get()->GetMojoShellConnection() && !use_software &&
+  if (GetMojoShellConnection() && !use_software &&
       command_line.HasSwitch(switches::kUseMusInRenderer)) {
     RenderWidgetMusConnection* connection =
         RenderWidgetMusConnection::GetOrCreate(routing_id);

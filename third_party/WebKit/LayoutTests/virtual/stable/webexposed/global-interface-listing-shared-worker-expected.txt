@@ -11,6 +11,14 @@ Starting worker: resources/global-interface-listing.js
 [Worker]     getter type
 [Worker]     method constructor
 [Worker]     method slice
+[Worker] interface BroadcastChannel : EventTarget
+[Worker]     attribute @@toStringTag
+[Worker]     getter name
+[Worker]     getter onmessage
+[Worker]     method close
+[Worker]     method constructor
+[Worker]     method postMessage
+[Worker]     setter onmessage
 [Worker] interface ByteLengthQueuingStrategy
 [Worker]     method constructor
 [Worker]     method size
@@ -183,22 +191,6 @@ Starting worker: resources/global-interface-listing.js
 [Worker]     getter lastModifiedDate
 [Worker]     getter name
 [Worker]     getter webkitRelativePath
-[Worker]     method constructor
-[Worker] interface FileError : DOMError
-[Worker]     attribute @@toStringTag
-[Worker]     attribute ABORT_ERR
-[Worker]     attribute ENCODING_ERR
-[Worker]     attribute INVALID_MODIFICATION_ERR
-[Worker]     attribute INVALID_STATE_ERR
-[Worker]     attribute NOT_FOUND_ERR
-[Worker]     attribute NOT_READABLE_ERR
-[Worker]     attribute NO_MODIFICATION_ALLOWED_ERR
-[Worker]     attribute PATH_EXISTS_ERR
-[Worker]     attribute QUOTA_EXCEEDED_ERR
-[Worker]     attribute SECURITY_ERR
-[Worker]     attribute SYNTAX_ERR
-[Worker]     attribute TYPE_MISMATCH_ERR
-[Worker]     getter code
 [Worker]     method constructor
 [Worker] interface FileList
 [Worker]     attribute @@toStringTag
@@ -528,10 +520,13 @@ Starting worker: resources/global-interface-listing.js
 [Worker]     method text
 [Worker] interface ServiceWorkerRegistration : EventTarget
 [Worker]     attribute @@toStringTag
+[Worker]     getter active
+[Worker]     getter installing
 [Worker]     getter onupdatefound
 [Worker]     getter pushManager
 [Worker]     getter scope
 [Worker]     getter sync
+[Worker]     getter waiting
 [Worker]     method constructor
 [Worker]     method getNotifications
 [Worker]     method showNotification
@@ -639,6 +634,7 @@ Starting worker: resources/global-interface-listing.js
 [Worker]     setter onopen
 [Worker] interface WorkerGlobalScope : EventTarget
 [Worker]     attribute @@toStringTag
+[Worker]     getter caches
 [Worker]     getter crypto
 [Worker]     getter indexedDB
 [Worker]     getter location
@@ -852,7 +848,6 @@ Starting worker: resources/global-interface-listing.js
 [Worker] [GLOBAL OBJECT]
 [Worker]     attribute console
 [Worker]     attribute internals
-[Worker]     getter caches
 [Worker]     getter name
 [Worker]     getter onconnect
 [Worker]     method close

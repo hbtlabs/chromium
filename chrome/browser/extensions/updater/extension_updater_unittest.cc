@@ -436,6 +436,7 @@ void SetupPendingExtensionManagerForTest(
                              should_allow_install,
                              kIsFromSync,
                              Manifest::INTERNAL,
+                             Extension::NO_FLAGS,
                              kMarkAcknowledged,
                              kRemoteInstall));
   }
@@ -818,7 +819,7 @@ class ExtensionUpdaterTest : public testing::Test {
     const std::string& id = extensions[0]->id();
     EXPECT_CALL(delegate, GetPingDataForExtension(id, _));
 
-    downloader.AddExtension(*extensions[0].get(), 0);
+    downloader.AddExtension(*extensions[0], 0);
     downloader.StartAllPending(NULL);
     net::TestURLFetcher* fetcher =
         factory.GetFetcherByID(ExtensionDownloader::kManifestFetcherId);
@@ -1192,6 +1193,7 @@ class ExtensionUpdaterTest : public testing::Test {
                                &ShouldAlwaysInstall,
                                kIsFromSync,
                                Manifest::INTERNAL,
+                               Extension::NO_FLAGS,
                                kMarkAcknowledged,
                                kRemoteInstall));
     }

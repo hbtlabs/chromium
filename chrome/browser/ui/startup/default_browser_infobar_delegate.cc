@@ -69,6 +69,8 @@ DefaultBrowserInfoBarDelegate::DefaultBrowserInfoBarDelegate(Profile* profile)
 
 DefaultBrowserInfoBarDelegate::~DefaultBrowserInfoBarDelegate() {
   if (!action_taken_) {
+    content::RecordAction(
+        base::UserMetricsAction("DefaultBrowserInfoBar_Ignore"));
     UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
                               IGNORE_INFO_BAR,
                               NUM_INFO_BAR_USER_INTERACTION_TYPES);
@@ -135,6 +137,9 @@ bool DefaultBrowserInfoBarDelegate::ShouldExpire(
 
 void DefaultBrowserInfoBarDelegate::InfoBarDismissed() {
   action_taken_ = true;
+  // |profile_| may be null in tests.
+  if (profile_)
+    chrome::DefaultBrowserPromptDeclined(profile_);
   content::RecordAction(
       base::UserMetricsAction("DefaultBrowserInfoBar_Dismiss"));
   UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
@@ -146,22 +151,14 @@ base::string16 DefaultBrowserInfoBarDelegate::GetMessageText() const {
   return l10n_util::GetStringUTF16(IDS_DEFAULT_BROWSER_INFOBAR_SHORT_TEXT);
 }
 
+int DefaultBrowserInfoBarDelegate::GetButtons() const {
+  return BUTTON_OK;
+}
+
 base::string16 DefaultBrowserInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
-#if defined(OS_WIN)
-  // On Windows 10, the "OK" button opens the Windows Settings application,
-  // through which the user must make their default browser choice.
-  const int kSetAsDefaultButtonMessageId =
-      base::win::GetVersion() >= base::win::VERSION_WIN10
-          ? IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL_WIN_10
-          : IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL;
-#else
-  const int kSetAsDefaultButtonMessageId =
-      IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL;
-#endif
-  return l10n_util::GetStringUTF16(
-      button == BUTTON_OK ? kSetAsDefaultButtonMessageId
-                          : IDS_DEFAULT_BROWSER_INFOBAR_CANCEL_BUTTON_LABEL);
+  DCHECK_EQ(BUTTON_OK, button);
+  return l10n_util::GetStringUTF16(IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL);
 }
 
 // Setting an app as the default browser doesn't require elevation directly, but
@@ -196,19 +193,6 @@ bool DefaultBrowserInfoBarDelegate::Accept() {
   // and it will be automatically freed once all its tasks have finished.
   CreateDefaultBrowserWorker(set_as_default_callback)->StartSetAsDefault();
   return close_infobar;
-}
-
-bool DefaultBrowserInfoBarDelegate::Cancel() {
-  action_taken_ = true;
-  // This can get reached in tests where profile_ is null.
-  if (profile_)
-    chrome::DefaultBrowserPromptDeclined(profile_);
-  content::RecordAction(
-      base::UserMetricsAction("DefaultBrowserInfoBar_Cancel"));
-  UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.InfoBar.UserInteraction",
-                            CANCEL_INFO_BAR,
-                            NUM_INFO_BAR_USER_INTERACTION_TYPES);
-  return true;
 }
 
 scoped_refptr<shell_integration::DefaultBrowserWorker>

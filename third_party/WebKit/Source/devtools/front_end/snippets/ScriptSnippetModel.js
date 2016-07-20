@@ -96,9 +96,8 @@ WebInspector.ScriptSnippetModel.prototype = {
 
     _loadSnippets: function()
     {
-        var snippets = this._snippetStorage.snippets();
-        for (var i = 0; i < snippets.length; ++i)
-            this._addScriptSnippet(snippets[i]);
+        for (var snippet of this._snippetStorage.snippets())
+            this._addScriptSnippet(snippet);
     },
 
     /**
@@ -146,6 +145,8 @@ WebInspector.ScriptSnippetModel.prototype = {
             return;
         var snippetId = this._snippetIdForUISourceCode.get(uiSourceCode) || "";
         var snippet = this._snippetStorage.snippetForId(snippetId);
+        if (!snippet)
+            return;
         this._snippetStorage.deleteSnippet(snippet);
         this._removeBreakpoints(uiSourceCode);
         this._releaseSnippetScript(uiSourceCode);
@@ -313,11 +314,11 @@ WebInspector.ScriptSnippetModel.prototype = {
             exceptionDetails.text,
             undefined,
             sourceURL,
-            exceptionDetails.lineNumber + 1,
-            exceptionDetails.columnNumber + 1,
+            exceptionDetails.lineNumber,
+            exceptionDetails.columnNumber,
             undefined,
             undefined,
-            exceptionDetails.stack);
+            exceptionDetails.stackTrace);
         target.consoleModel.addMessage(consoleMessage);
     },
 

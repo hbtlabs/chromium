@@ -86,5 +86,6 @@ Sidebar created
     setObject : <function>
     setPage : <function>
 }
+sidebar height 150
 All tests done.
 

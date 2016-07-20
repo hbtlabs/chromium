@@ -22,7 +22,12 @@ config("base_config") {
   ]
 }
 
-source_set("base") {
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "base") {
   # This is part of the media component.
   visibility = [ "//media/*" ]
   sources = [
@@ -47,8 +52,6 @@ source_set("base") {
     "audio_discard_helper.h",
     "audio_fifo.cc",
     "audio_fifo.h",
-    "audio_hardware_config.cc",
-    "audio_hardware_config.h",
     "audio_hash.cc",
     "audio_hash.h",
     "audio_latency.cc",
@@ -363,7 +366,7 @@ if (is_ios) {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "fake_audio_render_callback.cc",
@@ -417,7 +420,6 @@ source_set("unittests") {
     "audio_converter_unittest.cc",
     "audio_discard_helper_unittest.cc",
     "audio_fifo_unittest.cc",
-    "audio_hardware_config_unittest.cc",
     "audio_hash_unittest.cc",
     "audio_latency_unittest.cc",
     "audio_parameters_unittest.cc",
@@ -461,6 +463,7 @@ source_set("unittests") {
     "time_delta_interpolator_unittest.cc",
     "user_input_monitor_unittest.cc",
     "vector_math_unittest.cc",
+    "video_codecs_unittest.cc",
     "video_decoder_config_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",

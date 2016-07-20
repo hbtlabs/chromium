@@ -51,9 +51,9 @@ namespace blink {
 
 class WebFrame;
 class WebFrameWidget;
-class WebLocalFrame;
-class WebRemoteFrame;
+class WebLocalFrameImpl;
 class WebRemoteFrameImpl;
+class WebSettings;
 enum class WebCachePolicy;
 
 namespace FrameTestHelpers {
@@ -83,9 +83,13 @@ WebMouseEvent createMouseEvent(WebInputEvent::Type, WebMouseEvent::Button, const
 // Calls WebRemoteFrame::createLocalChild, but with some arguments prefilled
 // with default test values (i.e. with a default |client| or |properties| and/or
 // with a precalculated |uniqueName|).
-WebLocalFrame* createLocalChild(WebRemoteFrame* parent, const WebString& name = WebString(), WebFrameClient* = nullptr, WebWidgetClient* = nullptr, WebFrame* previousSibling = nullptr, const WebFrameOwnerProperties& = WebFrameOwnerProperties());
-WebRemoteFrame* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient*, const WebString& name = WebString());
+WebLocalFrameImpl* createLocalChild(WebRemoteFrame* parent, const WebString& name = WebString(), WebFrameClient* = nullptr, WebWidgetClient* = nullptr, WebFrame* previousSibling = nullptr, const WebFrameOwnerProperties& = WebFrameOwnerProperties());
+WebRemoteFrameImpl* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient*, const WebString& name = WebString());
 
+// Helpers for unit tests with parameterized WebSettings overrides.
+typedef void (*SettingOverrideFunction)(WebSettings*);
+void DefaultSettingOverride(WebSettings*);
+void RootLayerScrollsSettingOverride(WebSettings*);
 class SettingOverrider {
 public:
     virtual void overrideSettings(WebSettings*) = 0;
@@ -192,8 +196,7 @@ public:
 
     void reset();
 
-    WebView* webView() const { return m_webView; }
-    WebViewImpl* webViewImpl() const { return m_webView; }
+    WebViewImpl* webView() const { return m_webView; }
 
 private:
     WebViewImpl* m_webView;

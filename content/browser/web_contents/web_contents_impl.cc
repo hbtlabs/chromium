@@ -1951,9 +1951,9 @@ void WebContentsImpl::ForwardCompositorProto(
 }
 
 void WebContentsImpl::OnRenderFrameProxyVisibilityChanged(bool visible) {
-  if (visible)
+  if (visible && !GetOuterWebContents()->IsHidden())
     WasShown();
-  else
+  else if (!visible)
     WasHidden();
 }
 
@@ -3109,11 +3109,6 @@ void WebContentsImpl::StopFinding(StopFindAction action) {
   GetOrCreateFindRequestManager()->StopFinding(action);
 }
 
-void WebContentsImpl::InsertCSS(const std::string& css) {
-  GetMainFrame()->Send(new FrameMsg_CSSInsertRequest(
-      GetMainFrame()->GetRoutingID(), css));
-}
-
 bool WebContentsImpl::WasRecentlyAudible() {
   return audio_stream_monitor_.WasRecentlyAudible() ||
          (browser_plugin_embedder_ &&
@@ -3225,15 +3220,14 @@ void WebContentsImpl::DidStartProvisionalLoad(
 
 void WebContentsImpl::DidFailProvisionalLoadWithError(
     RenderFrameHostImpl* render_frame_host,
-    const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params) {
-  GURL validated_url(params.url);
-  FOR_EACH_OBSERVER(WebContentsObserver,
-                    observers_,
-                    DidFailProvisionalLoad(render_frame_host,
-                                           validated_url,
-                                           params.error_code,
-                                           params.error_description,
-                                           params.was_ignored_by_handler));
+    const GURL& validated_url,
+    int error_code,
+    const base::string16& error_description,
+    bool was_ignored_by_handler) {
+  FOR_EACH_OBSERVER(
+      WebContentsObserver, observers_,
+      DidFailProvisionalLoad(render_frame_host, validated_url, error_code,
+                             error_description, was_ignored_by_handler));
 
   FrameTreeNode* ftn = render_frame_host->frame_tree_node();
   BrowserAccessibilityManager* manager =
@@ -4634,7 +4628,8 @@ void WebContentsImpl::OnIgnoredUIEvent() {
 }
 
 void WebContentsImpl::RendererUnresponsive(
-    RenderWidgetHostImpl* render_widget_host) {
+    RenderWidgetHostImpl* render_widget_host,
+    RenderWidgetHostDelegate::RendererUnresponsiveType type) {
   FOR_EACH_OBSERVER(WebContentsObserver, observers_,
                     OnRendererUnresponsive(render_widget_host));
 
@@ -4650,6 +4645,11 @@ void WebContentsImpl::RendererUnresponsive(
   // See http://crbug.com/65458
   if (DevToolsAgentHost::IsDebuggerAttached(this))
     return;
+
+  // Record histograms about the type of renderer hang.
+  UMA_HISTOGRAM_ENUMERATION(
+      "ChildProcess.HangRendererType", type,
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_MAX);
 
   // We might have been waiting for both beforeunload and unload ACK.
   // Check if tab is to be unloaded first.

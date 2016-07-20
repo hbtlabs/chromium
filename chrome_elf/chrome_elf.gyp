@@ -47,9 +47,9 @@
       'dependencies': [
         '../chrome/chrome.gyp:install_static_util',
         'blacklist',
-        'chrome_elf_breakpad',
         'chrome_elf_hook_util',
         'chrome_elf_resources',
+        'chrome_elf_security',
         'nt_registry/nt_registry.gyp:chrome_elf_nt_registry',
         '../chrome/chrome.gyp:install_static_util',
         '../components/components.gyp:crash_component',
@@ -89,24 +89,6 @@
       ],
     },
     {
-      'target_name': 'chrome_elf_breakpad',
-      'type': 'static_library',
-      'include_dirs': [
-        '..',
-        '<(SHARED_INTERMEDIATE_DIR)',
-      ],
-      'sources': [
-        'breakpad/breakpad.cc',
-        'breakpad/breakpad.h',
-      ],
-      'dependencies': [
-        '../breakpad/breakpad.gyp:breakpad_handler',
-        '../chrome/chrome.gyp:install_static_util',
-        '../chrome/common_constants.gyp:version_header',
-        'nt_registry/nt_registry.gyp:chrome_elf_nt_registry',
-      ],
-    },
-    {
       'target_name': 'chrome_elf_hook_util',
       'type': 'static_library',
       'include_dirs': [
@@ -116,6 +98,21 @@
         'hook_util/thunk_getter.cc',
         'hook_util/thunk_getter.h',
       ],
+    },
+    {
+      'target_name': 'chrome_elf_security',
+      'type': 'static_library',
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'chrome_elf_security.cc',
+        'chrome_elf_security.h',
+      ],
+      'dependencies': [
+        'chrome_elf_constants',
+        'nt_registry/nt_registry.gyp:chrome_elf_nt_registry',
+      ]
     },
     ##--------------------------------------------------------------------------
     ## tests
@@ -147,6 +144,7 @@
         'blacklist_test_dll_3',
         'blacklist_test_main_dll',
         'chrome_elf_hook_util',
+        'chrome_elf_security',
         'nt_registry/nt_registry.gyp:chrome_elf_nt_registry',
       ],
       'msvs_settings': {

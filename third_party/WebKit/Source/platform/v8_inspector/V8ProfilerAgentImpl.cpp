@@ -56,14 +56,16 @@ std::unique_ptr<protocol::Profiler::CPUProfileNode> buildInspectorObjectFor(v8::
 
     std::unique_ptr<protocol::Array<protocol::Profiler::PositionTickInfo>> positionTicks = buildInspectorObjectForPositionTicks(node);
 
-    std::unique_ptr<protocol::Profiler::CPUProfileNode> result = protocol::Profiler::CPUProfileNode::create()
+    std::unique_ptr<protocol::Runtime::CallFrame> callFrame = protocol::Runtime::CallFrame::create()
         .setFunctionName(toProtocolString(node->GetFunctionName()))
-        .setScriptId(String16::number(node->GetScriptId()))
+        .setScriptId(String16::fromInteger(node->GetScriptId()))
         .setUrl(toProtocolString(node->GetScriptResourceName()))
-        .setLineNumber(node->GetLineNumber())
-        .setColumnNumber(node->GetColumnNumber())
+        .setLineNumber(node->GetLineNumber() - 1)
+        .setColumnNumber(node->GetColumnNumber() - 1)
+        .build();
+    std::unique_ptr<protocol::Profiler::CPUProfileNode> result = protocol::Profiler::CPUProfileNode::create()
+        .setCallFrame(std::move(callFrame))
         .setHitCount(node->GetHitCount())
-        .setCallUID(node->GetCallUid())
         .setChildren(std::move(children))
         .setPositionTicks(std::move(positionTicks))
         .setDeoptReason(node->GetBailoutReason())
@@ -205,7 +207,7 @@ void V8ProfilerAgentImpl::setSamplingInterval(ErrorString* error, int interval)
         *error = "Cannot change sampling interval when profiling.";
         return;
     }
-    m_state->setNumber(ProfilerAgentState::samplingInterval, interval);
+    m_state->setInteger(ProfilerAgentState::samplingInterval, interval);
     m_isolate->GetCpuProfiler()->SetSamplingInterval(interval);
 }
 
@@ -216,7 +218,7 @@ void V8ProfilerAgentImpl::restore()
         return;
     m_enabled = true;
     int interval = 0;
-    m_state->getNumber(ProfilerAgentState::samplingInterval, &interval);
+    m_state->getInteger(ProfilerAgentState::samplingInterval, &interval);
     if (interval)
         m_isolate->GetCpuProfiler()->SetSamplingInterval(interval);
     if (m_state->booleanProperty(ProfilerAgentState::userInitiatedProfiling, false)) {
@@ -261,7 +263,7 @@ void V8ProfilerAgentImpl::stop(ErrorString* errorString, std::unique_ptr<protoco
 
 String16 V8ProfilerAgentImpl::nextProfileId()
 {
-    return String16::number(atomicIncrement(&s_lastProfileId));
+    return String16::fromInteger(atomicIncrement(&s_lastProfileId));
 }
 
 void V8ProfilerAgentImpl::startProfiling(const String16& title)

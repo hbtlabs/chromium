@@ -2,17 +2,18 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/shell/public/cpp/application_runner.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_manager_delegate.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/display/display.h"
-#include "ui/display/mojo/display_type_converters.h"
 
 namespace ui {
 namespace test {
@@ -106,6 +107,6 @@ class TestWM : public shell::Service,
 }  // namespace ui
 
 MojoResult MojoMain(MojoHandle shell_handle) {
-  shell::ApplicationRunner runner(new ui::test::TestWM);
+  shell::ServiceRunner runner(new ui::test::TestWM);
   return runner.Run(shell_handle);
 }

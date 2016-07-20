@@ -4,20 +4,28 @@
 
 #include "ash/common/wm_shell.h"
 
+#include <utility>
+
+#include "ash/common/accessibility_delegate.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/keyboard/keyboard_ui.h"
+#include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/brightness_control_delegate.h"
 #include "ash/common/system/keyboard_brightness_control_delegate.h"
+#include "ash/common/system/toast/toast_manager.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
+#include "ash/common/wm/window_cycle_controller.h"
 #include "ash/common/wm_window.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "ui/app_list/presenter/app_list_presenter.h"
+#include "ui/display/display.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/brightness/brightness_controller_chromeos.h"
@@ -38,6 +46,19 @@ void WmShell::Set(WmShell* instance) {
 // static
 WmShell* WmShell::Get() {
   return instance_;
+}
+
+void WmShell::Initialize() {
+  // Some delegates access WmShell during their construction. Create them here
+  // instead of the WmShell constructor.
+  accessibility_delegate_.reset(delegate_->CreateAccessibilityDelegate());
+  media_delegate_.reset(delegate_->CreateMediaDelegate());
+  toast_manager_.reset(new ToastManager);
+}
+
+void WmShell::Shutdown() {
+  // Accesses WmShell in its destructor.
+  accessibility_delegate_.reset();
 }
 
 void WmShell::OnMaximizeModeStarted() {
@@ -66,15 +87,30 @@ void WmShell::RemoveShellObserver(ShellObserver* observer) {
   shell_observers_.RemoveObserver(observer);
 }
 
-WmShell::WmShell(ShellDelegate* delegate)
-    : delegate_(delegate),
+void WmShell::OnLockStateEvent(LockStateObserver::EventType event) {
+  FOR_EACH_OBSERVER(LockStateObserver, lock_state_observers_,
+                    OnLockStateEvent(event));
+}
+
+void WmShell::AddLockStateObserver(LockStateObserver* observer) {
+  lock_state_observers_.AddObserver(observer);
+}
+
+void WmShell::RemoveLockStateObserver(LockStateObserver* observer) {
+  lock_state_observers_.RemoveObserver(observer);
+}
+
+WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
+    : delegate_(std::move(shell_delegate)),
       focus_cycler_(new FocusCycler),
+      shelf_model_(new ShelfModel),
       system_tray_notifier_(new SystemTrayNotifier),
       window_selector_controller_(new WindowSelectorController) {
 #if defined(OS_CHROMEOS)
   brightness_control_delegate_.reset(new system::BrightnessControllerChromeos);
   keyboard_brightness_control_delegate_.reset(new KeyboardBrightnessController);
 #endif
+  window_cycle_controller_.reset(new WindowCycleController());
 }
 
 WmShell::~WmShell() {}
@@ -99,12 +135,34 @@ bool WmShell::IsSystemModalWindowOpen() {
   return false;
 }
 
-void WmShell::SetKeyboardUI(std::unique_ptr<KeyboardUI> keyboard_ui) {
-  keyboard_ui_ = std::move(keyboard_ui);
+void WmShell::ShowAppList() {
+  // Show the app list on the default display for new windows.
+  int64_t display_id =
+      GetRootWindowForNewWindows()->GetDisplayNearestWindow().id();
+  delegate_->GetAppListPresenter()->Show(display_id);
 }
 
-void WmShell::SetMediaDelegate(std::unique_ptr<MediaDelegate> delegate) {
-  media_delegate_ = std::move(delegate);
+void WmShell::DismissAppList() {
+  delegate_->GetAppListPresenter()->Dismiss();
+}
+
+void WmShell::ToggleAppList() {
+  // Show the app list on the default display for new windows.
+  int64_t display_id =
+      GetRootWindowForNewWindows()->GetDisplayNearestWindow().id();
+  delegate_->GetAppListPresenter()->ToggleAppList(display_id);
+}
+
+bool WmShell::IsApplistVisible() const {
+  return delegate_->GetAppListPresenter()->IsVisible();
+}
+
+bool WmShell::GetAppListTargetVisibility() const {
+  return delegate_->GetAppListPresenter()->GetTargetVisibility();
+}
+
+void WmShell::SetKeyboardUI(std::unique_ptr<KeyboardUI> keyboard_ui) {
+  keyboard_ui_ = std::move(keyboard_ui);
 }
 
 void WmShell::SetSystemTrayDelegate(
@@ -129,6 +187,10 @@ void WmShell::DeleteSystemTrayDelegate() {
   system_tray_delegate_.reset();
 }
 
+void WmShell::DeleteWindowCycleController() {
+  window_cycle_controller_.reset();
+}
+
 void WmShell::DeleteWindowSelectorController() {
   window_selector_controller_.reset();
 }
@@ -147,6 +209,10 @@ void WmShell::CreateMruWindowTracker() {
 
 void WmShell::DeleteMruWindowTracker() {
   mru_window_tracker_.reset();
+}
+
+void WmShell::DeleteToastManager() {
+  toast_manager_.reset();
 }
 
 }  // namespace ash

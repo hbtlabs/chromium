@@ -211,7 +211,7 @@
       'browser/compositor/image_transport_factory_browsertest.cc',
       'browser/cross_site_transfer_browsertest.cc',
       'browser/database_browsertest.cc',
-      'browser/device_sensors/device_inertial_sensor_browsertest.cc',
+      'browser/device_sensors/device_sensor_browsertest.cc',
       'browser/devtools/protocol/devtools_protocol_browsertest.cc',
       'browser/devtools/site_per_process_devtools_browsertest.cc',
       'browser/dom_storage/dom_storage_browsertest.cc',
@@ -254,6 +254,7 @@
       'browser/media/session/media_session_visibility_browsertest.cc',
       'browser/media/session/mock_media_session_observer.cc',
       'browser/media/session/mock_media_session_observer.h',
+      'browser/memory/memory_coordinator_browsertest.cc',
       'browser/memory/memory_pressure_controller_impl_browsertest.cc',
       'browser/message_port_provider_browsertest.cc',
       'browser/net_info_browsertest.cc',
@@ -1324,7 +1325,7 @@
       ],
     },
     {
-      # GN version: //content/test:browsertest_base
+      # GN this is merged with //content/test:test_support
       # content_browser_test_base can be used by any browser test target.
       'target_name': 'content_browser_test_base',
       'type': 'static_library',
@@ -1361,6 +1362,9 @@
       'sources': [
         'public/test/test_mojo_service.mojom',
       ],
+      'variables': {
+        'use_new_wrapper_types': 'false',
+      },
       'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
     },
     {
@@ -1373,6 +1377,9 @@
       'sources': [
         'test/data/web_ui_test_mojo_bindings.mojom',
       ],
+      'variables': {
+        'use_new_wrapper_types': 'false',
+      },
       'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
       'export_dependent_settings': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
@@ -1396,6 +1403,7 @@
         'test_support_content',
         'web_ui_test_mojo_bindings',
         '../base/base.gyp:test_support_base',
+        '../components/components.gyp:memory_coordinator_browser',
         '../device/battery/battery.gyp:device_battery',
         '../device/battery/battery.gyp:device_battery_mojo_bindings',
         '../device/power_save_blocker/power_save_blocker.gyp:device_power_save_blocker',

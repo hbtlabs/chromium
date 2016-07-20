@@ -236,7 +236,7 @@
       'browser/extensions/background_xhr_browsertest.cc',
       'browser/extensions/browsertest_util_browsertest.cc',
       'browser/extensions/chrome_app_api_browsertest.cc',
-      'browser/extensions/chrome_ui_overrides_browsertest.cc',
+      'browser/extensions/chrome_ui_overrides_browsertest.cc',      
       'browser/extensions/content_capabilities_browsertest.cc',
       'browser/extensions/content_script_apitest.cc',
       'browser/extensions/content_security_policy_apitest.cc',
@@ -374,6 +374,9 @@
       'browser/net/ftp_browsertest.cc',
       'browser/net/load_timing_browsertest.cc',
       'browser/net/nss_context_chromeos_browsertest.cc',
+      'browser/net/nqe/ui_network_quality_estimator_service_browsertest.cc',
+      'browser/net/nqe/ui_network_quality_estimator_service_test_util.cc',
+      'browser/net/nqe/ui_network_quality_estimator_service_test_util.h',
       'browser/net/predictor_browsertest.cc',
       'browser/net/proxy_browsertest.cc',
       'browser/net/sdch_browsertest.cc',
@@ -883,7 +886,7 @@
       'browser/ui/webui/options/chromeos/guest_mode_options_ui_browsertest.cc',
       'browser/ui/webui/options/chromeos/shared_options_browsertest.cc',
     ],
-    'chrome_browser_tests_views_non_cros_or_mac_sources': [
+    'chrome_browser_tests_views_non_cros_sources': [
       # This should be brought up on OSX Views but not CrOS.
       'browser/ui/views/profiles/profile_chooser_view_browsertest.cc',
     ],
@@ -1064,6 +1067,7 @@
       'browser/extensions/api/extension_action/browser_action_interactive_test.cc',
       'browser/extensions/api/omnibox/omnibox_api_interactive_test.cc',
       'browser/extensions/browsertest_util.cc',
+      'browser/extensions/clipboard_extension_apitest_chromeos.cc',
       'browser/extensions/extension_apitest.cc',
       'browser/extensions/extension_browsertest.cc',
       'browser/extensions/extension_commands_global_registry_apitest.cc',
@@ -2648,8 +2652,8 @@
         ['toolkit_views==1 and OS!="mac"', {
           'sources': [ '<@(chrome_browser_tests_views_non_mac_sources)' ],
         }],
-        ['toolkit_views==1 and OS!="mac" and chromeos == 0', {
-          'sources': [ '<@(chrome_browser_tests_views_non_cros_or_mac_sources)' ],
+        ['toolkit_views==1 and (OS!="mac" or mac_views_browser==1) and chromeos == 0', {
+          'sources': [ '<@(chrome_browser_tests_views_non_cros_sources)' ],
         }],
         ['OS=="linux" or OS=="win"', {
           'sources': [ '<@(chrome_browser_tests_non_mac_desktop_sources)' ],

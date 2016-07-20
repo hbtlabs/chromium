@@ -30,17 +30,20 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kAutoplayMutedVideos,
     &features::kCredentialManagementAPI,
     &features::kSimplifiedFullscreenUI,
+    &features::kWebPayments,
     &kAndroidPayIntegrationV1,
     &kImportantSitesInCBD,
     &kNTPFakeOmniboxTextFeature,
     &kNTPMaterialDesign,
     &kNTPOfflinePagesFeature,
+    &kNTPOfflinePageSuggestionsFeature,
     &kNTPSnippetsFeature,
     &kNTPToolbarFeature,
     &kPhysicalWebFeature,
     &kPhysicalWebIgnoreOtherClientsFeature,
     &kReadItLaterInMenu,
     &kSystemDownloadManager,
+    &kTabReparenting,
     &offline_pages::kOfflinePagesBackgroundLoadingFeature,
     &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
 };
@@ -53,40 +56,38 @@ const base::Feature kImportantSitesInCBD{"ImportantSitesInCBD",
 const base::Feature kNTPMaterialDesign{"NTPMaterialDesign",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kNTPOfflinePagesFeature {
-  "NTPOfflinePages", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature kNTPOfflinePagesFeature{"NTPOfflinePages",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNTPSnippetsFeature {
-  "NTPSnippets", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature kNTPSnippetsFeature{"NTPSnippets",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNTPToolbarFeature {
-  "NTPToolbar", base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kNTPOfflinePageSuggestionsFeature{
+    "NTPOfflinePageSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNTPFakeOmniboxTextFeature {
-  "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature kNTPToolbarFeature{"NTPToolbar",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kAndroidPayIntegrationV1 {
-  "AndroidPayIntegrationV1", base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kNTPFakeOmniboxTextFeature{
+    "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kPhysicalWebFeature {
-  "PhysicalWeb", base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kPhysicalWebIgnoreOtherClientsFeature {
-  "PhysicalWebIgnoreOtherClients", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature kPhysicalWebFeature{"PhysicalWeb",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kReadItLaterInMenu {
-  "ReadItLaterInMenu", base::FEATURE_DISABLED_BY_DEFAULT
-};
+const base::Feature kPhysicalWebIgnoreOtherClientsFeature{
+    "PhysicalWebIgnoreOtherClients", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kSystemDownloadManager {
-  "SystemDownloadManager", base::FEATURE_ENABLED_BY_DEFAULT
+const base::Feature kReadItLaterInMenu{"ReadItLaterInMenu",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSystemDownloadManager{"SystemDownloadManager",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTabReparenting {
+  "TabReparenting", base::FEATURE_ENABLED_BY_DEFAULT
 };
 
 static jboolean IsEnabled(JNIEnv* env,

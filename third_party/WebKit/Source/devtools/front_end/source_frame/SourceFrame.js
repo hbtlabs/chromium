@@ -30,7 +30,7 @@
 
 /**
  * @constructor
- * @extends {WebInspector.VBoxWithToolbarItems}
+ * @extends {WebInspector.View}
  * @implements {WebInspector.Searchable}
  * @implements {WebInspector.Replaceable}
  * @param {string} url
@@ -38,7 +38,7 @@
  */
 WebInspector.SourceFrame = function(url, lazyContent)
 {
-    WebInspector.VBoxWithToolbarItems.call(this);
+    WebInspector.View.call(this, WebInspector.UIString("Source"));
 
     this._url = url;
     this._lazyContent = lazyContent;
@@ -301,10 +301,10 @@ WebInspector.SourceFrame.prototype = {
             this._delayedFindSearchMatches();
             delete this._delayedFindSearchMatches;
         }
-        this.onTextEditorContentLoaded();
+        this.onTextEditorContentSet();
     },
 
-    onTextEditorContentLoaded: function() {},
+    onTextEditorContentSet: function() {},
 
     /**
      * @param {?WebInspector.SearchableView} view
@@ -645,7 +645,7 @@ WebInspector.SourceFrame.prototype = {
             e.consume(true);
     },
 
-    __proto__: WebInspector.VBoxWithToolbarItems.prototype
+    __proto__: WebInspector.View.prototype
 }
 
 /**

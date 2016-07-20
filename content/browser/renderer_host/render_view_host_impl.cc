@@ -370,8 +370,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params.min_size = GetWidget()->min_size_for_auto_resize();
   params.max_size = GetWidget()->max_size_for_auto_resize();
   params.page_zoom_level = delegate_->GetPendingPageZoomLevel();
-  params.image_decode_color_profile =
-      gfx::ColorSpace::FromBestMonitor().GetICCProfile();
+  params.image_decode_color_space = gfx::ColorSpace::FromBestMonitor();
   GetWidget()->GetResizeParams(&params.initial_size);
 
   if (!Send(new ViewMsg_New(params)))
@@ -575,7 +574,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 void RenderViewHostImpl::ClosePage() {
   is_waiting_for_close_ack_ = true;
   GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
+      TimeDelta::FromMilliseconds(kUnloadTimeoutMS),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_CLOSE_PAGE);
 
   if (IsRenderViewLive()) {
     // Since we are sending an IPC message to the renderer, increase the event

@@ -103,6 +103,9 @@ def _AreBenchmarksModified(change):
   for affected_file in change.AffectedFiles():
     affected_file_path = affected_file.LocalPath()
     file_path, _ = os.path.splitext(affected_file_path)
+    # Changes to unittest files should not count.
+    if file_path.endswith('test.py'):
+        continue
     if (os.path.join('tools', 'perf', 'benchmarks') in file_path or
         os.path.join('tools', 'perf', 'measurements') in file_path):
       return True
@@ -127,9 +130,9 @@ def PostUploadHook(cl, change, output_api):
   results = []
   bots = [
     'android_s5_perf_cq',
+    'linux_perf_cq',
     'mac_retina_perf_cq',
-    # TODO(prasadv): Uncomment this once crbug.com/601699 is fixed.
-    # 'linux_perf_cq'
+    'winx64_10_perf_cq'
   ]
   bots = ['master.tryserver.chromium.perf:%s' % s for s in bots]
   bots_string = ';'.join(bots)

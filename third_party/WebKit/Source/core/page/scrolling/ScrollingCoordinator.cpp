@@ -386,8 +386,11 @@ bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* sc
 
     GraphicsLayer* scrollLayer = scrollableArea->layerForScrolling();
 
-    if (scrollLayer)
-        scrollLayer->setScrollableArea(scrollableArea, isForViewport(scrollableArea));
+    if (scrollLayer) {
+        bool isForVisualViewport =
+            scrollableArea == &m_page->frameHost().visualViewport();
+        scrollLayer->setScrollableArea(scrollableArea, isForVisualViewport);
+    }
 
     WebLayer* webLayer = toWebLayer(scrollableArea->layerForScrolling());
     WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
@@ -835,7 +838,7 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
     for (const auto& eventTarget : *targets) {
         EventTarget* target = eventTarget.key;
         Node* node = target->toNode();
-        if (!node || !node->inShadowIncludingDocument())
+        if (!node || !node->isConnected())
             continue;
 
         // If the document belongs to an invisible subframe it does not have a composited layer
@@ -932,15 +935,6 @@ bool ScrollingCoordinator::isForMainFrame(ScrollableArea* scrollableArea) const
 
     // FIXME(305811): Refactor for OOPI.
     return scrollableArea == m_page->deprecatedLocalMainFrame()->view();
-}
-
-bool ScrollingCoordinator::isForViewport(ScrollableArea* scrollableArea) const
-{
-    bool isForOuterViewport = m_page->settings().rootLayerScrolls() ?
-        isForRootLayer(scrollableArea) :
-        isForMainFrame(scrollableArea);
-
-    return isForOuterViewport || scrollableArea == &m_page->frameHost().visualViewport();
 }
 
 void ScrollingCoordinator::frameViewRootLayerDidChange(FrameView* frameView)

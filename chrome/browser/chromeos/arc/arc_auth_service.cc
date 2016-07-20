@@ -342,9 +342,6 @@ void ArcAuthService::OnPrimaryUserProfilePrepared(Profile* profile) {
 
   Shutdown();
 
-  profile_ = profile;
-  SetState(State::STOPPED);
-
   if (!IsAllowedForProfile(profile))
     return;
 
@@ -353,6 +350,9 @@ void ArcAuthService::OnPrimaryUserProfilePrepared(Profile* profile) {
     VLOG(2) << "Enterprise users are not supported in ARC.";
     return;
   }
+
+  profile_ = profile;
+  SetState(State::STOPPED);
 
   PrefServiceSyncableFromProfile(profile_)->AddSyncedPrefObserver(
       prefs::kArcEnabled, this);
@@ -396,7 +396,7 @@ void ArcAuthService::OnIsSyncingChanged() {
 
   if (!g_disable_ui_for_testing && profile_->IsNewProfile() &&
       !profile_->GetPrefs()->HasPrefPath(prefs::kArcEnabled)) {
-    ArcAuthNotification::Show();
+    ArcAuthNotification::Show(profile_);
   }
 }
 
@@ -637,6 +637,9 @@ bool ArcAuthService::IsArcManaged() const {
 
 bool ArcAuthService::IsArcEnabled() const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (!IsAllowed())
+    return false;
+
   DCHECK(profile_);
   return profile_->GetPrefs()->GetBoolean(prefs::kArcEnabled);
 }
@@ -662,6 +665,14 @@ void ArcAuthService::DisableArc() {
 
 void ArcAuthService::StartUI() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  if (!arc_bridge_service()->stopped()) {
+    // If the user attempts to re-enable ARC while the bridge is still running
+    // the user should not be able to continue until the bridge has stopped.
+    ShowUI(UIPage::ERROR, l10n_util::GetStringUTF16(
+                              IDS_ARC_SIGN_IN_SERVICE_UNAVAILABLE_ERROR));
+    return;
+  }
 
   SetState(State::FETCHING_CODE);
 

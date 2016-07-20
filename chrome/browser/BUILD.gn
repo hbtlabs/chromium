@@ -115,6 +115,7 @@ split_static_library("browser") {
     "//chrome:strings",
     "//chrome/app/resources:platform_locale_settings",
     "//chrome/app/theme:theme_resources",
+    "//chrome/browser/budget_service:budget_proto",
     "//chrome/browser/metrics/variations:chrome_ui_string_overrider_factory",
     "//chrome/browser/net:probe_message_proto",
     "//chrome/browser/ui",
@@ -348,7 +349,8 @@ split_static_library("browser") {
       "//components/about_handler",
       "//components/app_modal",
       "//components/autofill/content/browser",
-      "//components/browsing_data",
+      "//components/browsing_data/content",
+      "//components/browsing_data/core",
       "//components/contextual_search:browser",
       "//components/data_reduction_proxy/content/browser",
       "//components/data_use_measurement/content",
@@ -380,7 +382,6 @@ split_static_library("browser") {
       "//components/visitedlink/browser",
       "//components/visitedlink/common",
       "//components/web_cache/browser",
-      "//components/webusb",
       "//content/app/resources",
       "//device/core",
       "//device/usb/mojo",
@@ -770,6 +771,7 @@ split_static_library("browser") {
       ":client_discourse_context_proto",
       ":delta_file_proto",
       ":jni_headers",
+      "//blimp/client/public",
       "//components/data_usage/android",
       "//components/precache/content",
       "//components/precache/core",
@@ -834,7 +836,7 @@ split_static_library("browser") {
       "//chrome/chrome_watcher:client",
       "//chrome/common:metrics_constants_util_win",
       "//chrome/common:version_header",
-      "//chrome_elf",
+      "//chrome_elf:blacklist",
       "//chrome_elf:constants",
       "//chrome_elf:dll_hash",
       "//components/browser_watcher",
@@ -1105,6 +1107,8 @@ static_library("test_support") {
     "notifications/notification_test_util.h",
     "notifications/stub_notification_platform_bridge.cc",
     "notifications/stub_notification_platform_bridge.h",
+    "permissions/mock_permission_request.cc",
+    "permissions/mock_permission_request.h",
     "profile_resetter/profile_resetter_test_base.cc",
     "profile_resetter/profile_resetter_test_base.h",
     "search_engines/template_url_service_factory_test_util.cc",
@@ -1149,7 +1153,6 @@ static_library("test_support") {
     "//components/subresource_filter/core/browser:test_support",
     "//components/syncable_prefs:test_support",
     "//components/user_prefs/tracked:user_prefs_tracked_test_support",
-    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//net:test_support",
     "//skia",
@@ -1182,6 +1185,8 @@ static_library("test_support") {
     sources -= [
       "chooser_controller/mock_chooser_controller.cc",
       "chooser_controller/mock_chooser_controller.h",
+      "permissions/mock_permission_request.cc",
+      "permissions/mock_permission_request.h",
     ]
   }
 
@@ -1241,8 +1246,6 @@ static_library("test_support") {
       "chromeos/policy/stub_enterprise_install_attributes.h",
       "chromeos/settings/device_settings_test_helper.cc",
       "chromeos/settings/device_settings_test_helper.h",
-      "chromeos/system/fake_input_device_settings.cc",
-      "chromeos/system/fake_input_device_settings.h",
     ]
     configs += [ "//build/config/linux/dbus" ]
     deps += [ "//chromeos:test_support" ]

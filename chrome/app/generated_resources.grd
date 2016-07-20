@@ -201,6 +201,11 @@ are declared in build/common.gypi.
         <part file="media_router_strings.grdp" />
       </if>
 
+      <!-- Settings specific strings -->
+      <if expr="not is_android and not is_ios">
+        <part file="settings_strings.grdp" />
+      </if>
+
       <!-- TODO add all of your "string table" messages here.  Remember to
       change nontranslateable parts of the messages into placeholders (using the
       <ph> element).  You can also use the 'grit add' tool to help you identify
@@ -454,7 +459,7 @@ are declared in build/common.gypi.
         <ph name="NUMBER_OF_ITEMS_SELECTED">$1</ph> selected
       </message>
       <message name="IDS_MD_HISTORY_HISTORY_MENU_ITEM" desc="Label displayed in history sidebar button to display history.">
-        History
+        Chrome history
       </message>
       <message name="IDS_MD_HISTORY_NO_SYNCED_RESULTS" desc="Text indicating that there are no synced tabs from other devices.">
         No synced tabs
@@ -5425,6 +5430,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_DISPLAY_LIST_2D_CANVAS_DESCRIPTION" desc="Description of the 'Enable display list 2D canvas' lab.">
         Enables the use of display lists to record 2D canvas commands. This allows 2D canvas rasterization to be performed on separate thread.
       </message>
+      <message name="IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_NAME" desc="Enable canvas 2D dynamic pipeline switching mode.">
+        Enable 2D canvas dynamic rendering mode switching.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_DESCRIPTION" desc="Description of 'Enable canvas 2D dynamic pipeline switching mode'">
+        Enables dynamic graphics rendering pipeline switching in the 2D canvas to optimize performance based on the types of draw operations being invoked.
+      </message>
       <message name="IDS_FLAGS_EXPERIMENTAL_EXTENSION_APIS_NAME" desc="Name of the 'Experimental Extension APIs' lab.">
         Experimental Extension APIs
       </message>
@@ -5628,6 +5639,18 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_QUIC_DESCRIPTION" desc="Description for the flag to enable QUIC.">
         Enable experimental QUIC protocol support.
       </message>
+      <message name="IDS_FLAGS_SSL_VERSION_MAX_NAME" desc="Title for the flag to switch the maximum TLS version.">
+        Maximum TLS version enabled.
+      </message>
+      <message name="IDS_FLAGS_SSL_VERSION_MAX_DESCRIPTION" desc="Description for the flag to switch the maximum TLS version.">
+        Set maximum enabled TLS version.
+      </message>
+      <message name="IDS_FLAGS_SSL_VERSION_MAX_TLS12">
+        TLS 1.2
+      </message>
+      <message name="IDS_FLAGS_SSL_VERSION_MAX_TLS13">
+        TLS 1.3
+      </message>
       <message name="IDS_FLAGS_ENABLE_TOKEN_BINDING_NAME" desc="Title for the flag to enable Token Binding. Please do not translate 'Token Binding'.">
         Token Binding.
       </message>
@@ -5690,6 +5713,48 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_ASH_MD_EXPERIMENTAL" desc="The value of the Material Design in Chrome OS UI flag that controls experimental features.">
           Experimental
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_NAME" desc="Title of the flag which sets a limit for how many preview windows in overview can use masks.">
+          Maximum number of windows in overview that can use masks.
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_DESCRIPTION" desc="Description of the flag which sets a limit for how many preview windows in overview can use masks.">
+          Maximum number of preview windows in overview mode that can use masks to hide window headers and use rounded corners.
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_UNLIMITED" desc="The value that does not set a limit for how many preview windows in overview can use masks to hide headers and use rounded corners.">
+          Unlimited
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_ZERO" desc="The value that sets a limit for how many preview windows in overview can use masks to hide headers and use rounded corners to 0.">
+          0
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_FIVE" desc="The value that sets a limit for how many preview windows in overview can use masks to hide headers and use rounded corners to 5.">
+          5
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_TEN" desc="The value that sets a limit for how many preview windows in overview can use masks to hide headers and use rounded corners to 10.">
+          10
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_FIFTEEN" desc="The value that sets a limit for how many preview windows in overview can use masks to hide headers and use rounded corners to 15.">
+          15
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_NAME" desc="Title of the flag which sets a limit for how many preview windows in overview can use shapes.">
+          Maximum number of windows in overview that can use shapes.
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_DESCRIPTION" desc="Description of the flag which sets a limit for how many preview windows in overview can use shapes.">
+          Maximum number of preview windows in overview mode that can use shapes to hide window headers.
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_UNLIMITED" desc="The value that does not set a limit for how many preview windows in overview can use shapes to hide headers.">
+          Unlimited
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_ZERO" desc="The value that sets a limit for how many preview windows in overview can use shapes to hide headers to 0.">
+          0
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_FIVE" desc="The value that sets a limit for how many preview windows in overview can use shapes to hide headers to 5.">
+          5
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_TEN" desc="The value that sets a limit for how many preview windows in overview can use shapes to hide headers to 10.">
+          10
+        </message>
+        <message name="IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_FIFTEEN" desc="The value that sets a limit for how many preview windows in overview can use shapes to hide headers to 15.">
+          15
         </message>
         <message name="IDS_FLAGS_ASH_MAXIMIZE_MODE_WINDOW_BACKDROP_NAME" desc="Title for the flag which can be used for window backdrops in TouchView.">
           Window backdrops in TouchView
@@ -6567,14 +6632,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_SYNC_SANDBOX_DESCRIPTION" desc="Description for the flag that causes Chrome to use the sandbox (testing) server for Sync.">
         Connects to the testing server for Chrome Sync.
       </message>
-      <if expr="chromeos">
-        <message name="IDS_FLAGS_OZONE_TEST_SINGLE_HARDWARE_OVERLAY" desc="Name of the 'Ozone hardware overlay' lab.">
-          Ozone hardware overlay
-        </message>
-        <message name="IDS_FLAGS_OZONE_TEST_SINGLE_HARDWARE_OVERLAY_DESCRIPTION" desc="Description of the 'Ozone hardware overlay' lab.">
-          Enables compositing with an addition of one hardware overlay when possible.
-        </message>
-      </if>
       <message name="IDS_FLAGS_DATASAVER_PROMPT_NAME" desc="Title for the flag to enable a prompt to install Data Saver when a cellular network is detected." translateable="false">
         Cellular Data Saver Prompt
       </message>
@@ -9338,9 +9395,6 @@ I don't think this site should be blocked!
       </if> <!-- not is_android -->
 
       <if expr="chromeos">
-        <message name="IDS_WEBKIT" desc="The name of the WebKit project; should not require translation.">
-          WebKit
-        </message>
         <message name="IDS_ABOUT_PAGE_FIRMWARE" desc="Label used for Chrome OS bios firmware version.">
           Firmware
         </message>
@@ -11456,14 +11510,6 @@ Some features may be unavailable.  Please check that the profile exists and you 
       <message name="IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL" desc="The label of the 'set as default' button on the default browser infobar.">
         Set as default
       </message>
-      <if expr="is_win">
-        <message name="IDS_DEFAULT_BROWSER_INFOBAR_OK_BUTTON_LABEL_WIN_10" desc="The label of the 'open settings' button on the default browser infobar for Windows 10 and newer. Pressing this button opens the Windows &quot;Settings&quot; application to the &quot;Choose default apps&quot; page.">
-          Set as default
-        </message>
-      </if>
-      <message name="IDS_DEFAULT_BROWSER_INFOBAR_CANCEL_BUTTON_LABEL" desc="The label of the 'don't ask again' button on the default browser infobar.">
-        Don't ask again
-      </message>
 
       <if expr="is_linux and not chromeos">
         <message name="IDS_SHOW_WINDOW_DECORATIONS_MENU" desc="The menu entry text in the tab strip context menu.  This toggles the system title bar and window borders (window decorations) on linux.">
@@ -11491,6 +11537,33 @@ Some features may be unavailable.  Please check that the profile exists and you 
       </message>
       <message name="IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE" desc="Title in the sync error bubble view/notification.">
         Sync Error
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_TITLE" desc="Title of the sync/signin error header of desktop user menu.">
+        Sync isn't working
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_MESSAGE" desc="Message of the out-of-date signin info error in the header of desktop user menu.">
+        Sign-in details are out of date.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_BUTTON" desc="Button in the header of desktop user menu that prompts the user to sign in again to fix the out-of-date signin info error.">
+        Sign in again
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_MESSAGE" desc="Message of the out-of-date sync passphrase error in the header of desktop user menu.">
+        Passphrase required to start sync.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_PASSPHRASE_BUTTON" desc="Button in the header of desktop user menu that prompts the user to enter the sync passphrase to fix the out-of-date passphrase error.">
+        Enter passphrase
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_MESSAGE" desc="Message of the unrecoverable error in the header of desktop user menu.">
+        Try signing in again.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNIN_AGAIN_BUTTON" desc="Button in the header of desktop user menu that signs out and signs back in in an attempt to resolve an unrecoverable error.">
+        Sign in again
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNOUT_MESSAGE" desc="Message of the unrecoverable error in the header of desktop user menu for managed users.">
+        Try signing out and back in again.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_SIGNOUT_BUTTON" desc="Button in the header of desktop user menu for managed users to sign out in an attempt to resolve an unrecoverable error.">
+        Sign out
       </message>
       <if expr="use_ash">
         <message name="IDS_SYNC_NOTIFICATION_ACCEPT" desc="A button label shown in the sync error notification when the passphrase needs to be updated.">
@@ -11635,7 +11708,7 @@ Some features may be unavailable.  Please check that the profile exists and you 
           Disconnect your Google Account...
         </message>
         <message name="IDS_SYNC_STOP_SYNCING_CONFIRM_BUTTON_LABEL" desc="The text to display on the button to confirm the user wishes to stop syncing.">
-          Disconnect account
+          Sign Out
         </message>
         <message name="IDS_SYNC_STOP_SYNCING_DIALOG_TITLE" desc="The title of the dialog that explains what 'stop syncing' means.">
           Disconnect your Google Account
@@ -12914,6 +12987,9 @@ Some features may be unavailable.  Please check that the profile exists and you 
       <!-- Android does not support multiple profiles and supervised users -->
       <if expr="not is_android">
         <!-- Manage Profile Dialog -->
+        <message name="IDS_DISCONNECT_ACCOUNT_TITLE" desc="Title of the disconnect account dialog">
+          Disconnect Account
+        </message>
         <message name="IDS_PROFILES_MANAGE_TITLE" desc="Title of the manage profile dialog">
           Edit
         </message>
@@ -14862,6 +14938,15 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
       </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_ADAPTER_OFF" desc="The label that is used to inform the user that no Bluetooth devices were found because Bluetooth adapter is turned off.">
+        Bluetooth turned off.
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING" desc="The label that is used to indicate the chooser is scanning for Bluetooth devices.">
+        Scanning for devices...
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN" desc="Text of a link the user can click to start a new scan for Bluetooth devices.">
+        Re-scan
+      </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT" desc="Label on the button that closes the Bluetooth chooser popup and pairs the selected device.">
         Pair
       </message>
@@ -14983,6 +15068,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_ENABLE_NTP_SNIPPETS_DESCRIPTION" desc="Description for the flag to enable snippets on the New Tab page." translateable="false">
         If enabled, the New Tab page will show a list of content snippets
       </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_SUGGESTIONS_NAME" desc="Name for the flag to enable offline page suggestions on the New Tab page." translateable="false">
+        Show offline pages on the New Tab page
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_SUGGESTIONS_DESCRIPTION" desc="Description for the flag to enable offline page suggestions on the New Tab page." translateable="false">
+        If enabled, the list of content suggestions on the New Tab page (see #enable-ntp-snippets) will contain pages that were captured offline during browsing (see #offlining-recent-pages) 
+      </message>
     </if>
 
     <if expr="is_android">
@@ -15084,6 +15175,12 @@ read aloud to screenreader users to announce that a completion is available.">
       <message name="IDS_FLAGS_ENABLE_ANDROID_PAY_INTEGRATION_V1_DESCRIPTION" desc="Description for the flag to enable the first version of Android Pay integration">
         Enable integration with Android Pay using the first version of the API
       </message>
+      <message name="IDS_FLAGS_ENABLE_WEB_PAYMENTS_NAME" desc="Title for the flag to enable payments on the web">
+        Enable Web Payments
+      </message>
+      <message name="IDS_FLAGS_ENABLE_WEB_PAYMENTS_DESCRIPTION" desc="Description for the flag to enable payments on the web">
+        Enable the API for payments on the web
+      </message>
     </if>
 
    <!-- Safe Browsing Subresource Filter UI strings. -->
@@ -15132,6 +15229,15 @@ read aloud to screenreader users to announce that a completion is available.">
     <if expr="is_win">
       <message name="IDS_UTILITY_PROCESS_SHELL_HANDLER_NAME" desc="The name of the utility process used to handle shell operations.">
         Shell Handler
+      </message>
+    </if>
+
+    <if expr="is_android">
+      <message name="IDS_FLAGS_MULTI_INSTANCE_MERGE_TABS_NAME" desc="Name of the flag to turn on auto-merging tabs in multi-instance mode." translateable="false">
+        Multi-instance tab model merging
+      </message>
+      <message name="IDS_FLAGS_MULTI_INSTANCE_MERGE_TABS_DESCRIPTION" desc="Description of the flag to turn on auto-merging tabs in multi-instance mode." translateable="false">
+        Enables automatic merging of tabs for Android N+ multi-instance mode. Note that this excludes merging on cold start because native flags aren't loaded in time.
       </message>
     </if>
    </messages>

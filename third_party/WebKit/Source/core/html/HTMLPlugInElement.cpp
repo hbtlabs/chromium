@@ -131,9 +131,9 @@ void HTMLPlugInElement::didMoveToNewDocument(Document& oldDocument)
     HTMLFrameOwnerElement::didMoveToNewDocument(oldDocument);
 }
 
-void HTMLPlugInElement::attach(const AttachContext& context)
+void HTMLPlugInElement::attachLayoutTree(const AttachContext& context)
 {
-    HTMLFrameOwnerElement::attach(context);
+    HTMLFrameOwnerElement::attachLayoutTree(context);
 
     if (!layoutObject() || useFallbackContent()) {
         // If we don't have a layoutObject we have to dispose of any plugins
@@ -271,7 +271,7 @@ void HTMLPlugInElement::finishParsingChildren()
         return;
 
     setNeedsWidgetUpdate(true);
-    if (inShadowIncludingDocument())
+    if (isConnected())
         lazyReattachIfNeeded();
 }
 
@@ -555,7 +555,8 @@ bool HTMLPlugInElement::allowedToLoadObject(const KURL& url, const String& mimeT
         fastGetAttribute(HTMLNames::typeAttr);
     if (!document().contentSecurityPolicy()->allowObjectFromSource(url)
         || !document().contentSecurityPolicy()->allowPluginTypeForDocument(document(), mimeType, declaredMimeType, url)) {
-        layoutEmbeddedItem().setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
+        if (LayoutEmbeddedItem layoutItem = layoutEmbeddedItem())
+            layoutItem.setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
         return false;
     }
     // If the URL is empty, a plugin could still be instantiated if a MIME-type

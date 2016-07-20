@@ -12,6 +12,9 @@ declare_args() {
   # The browser that the WebAPK will be bound to.
   webapk_runtime_host = "com.google.android.apps.chrome"
 
+  # The Url of the Web Manifest file.
+  webapk_web_manifest_url = "https://www.template.com/manifest.json"
+
   # Attributes from Web Manifest.
   webapk_start_url = "https://www.template.com/home_page"
   webapk_name = "Longer Sample WebAPK Name"
@@ -51,6 +54,7 @@ jinja_template("shell_apk_manifest") {
     "background_color=$webapk_background_color",
     "icon_url=$webapk_icon_url",
     "scope_url_host=$webapk_scope_url_host",
+    "web_manifest_url=$webapk_web_manifest_url",
   ]
 }
 
@@ -78,6 +82,7 @@ android_apk("webapk") {
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService1.java",
     "src/org/chromium/webapk/shell_apk/WebApkSandboxedProcessService2.java",
     "src/org/chromium/webapk/shell_apk/WebApkServiceFactory.java",
+    "src/org/chromium/webapk/shell_apk/WebApkUtils.java",
   ]
   deps = [
     ":dex_loader_java",
@@ -86,7 +91,10 @@ android_apk("webapk") {
   ]
   if (!is_java_debug) {
     proguard_enabled = true
-    proguard_configs = [ "//chrome/android/java/proguard.flags" ]
+    proguard_configs = [
+      "//chrome/android/java/proguard.flags",
+      "//base/android/base_proguard_config.flags",
+    ]
   }
 }
 

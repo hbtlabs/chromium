@@ -14,8 +14,8 @@
     'chromium': {
       'Android': 'android_without_codecs_gn_release_bot_minimal_symbols',
       'Linux x64': 'noswarming_gn_release_bot',
-      'Mac': 'noswarming_gyp_release_bot_mac_strip',
-      'Win': 'noswarming_gyp_release_bot_minimal_symbols_x86',
+      'Mac': 'noswarming_gn_release_bot_mac_strip',
+      'Win': 'noswarming_gn_release_bot_minimal_symbols_x86',
       'Win x64': 'noswarming_gn_release_bot_minimal_symbols_x64',
     },
 
@@ -306,7 +306,7 @@
       'Android Builder (dbg)': 'swarming_android_gn_debug_static_bot',
       'Android Builder': 'swarming_android_gn_release_bot_minimal_symbols',
       'Android Clang Builder (dbg)':
-        'android_clang_asan_findbugs_gn_debug_bot_minimal_symbols',
+        'android_clang_asan_errorprone_findbugs_gn_debug_bot_minimal_symbols',
       'Android Tests (dbg)': 'swarming_android_gn_debug_static_bot',
       'Android Tests': 'swarming_android_gn_release_bot_minimal_symbols',
       'Blimp Linux (dbg)':
@@ -365,6 +365,7 @@
       'ios-device': 'ios_gyp',
       'ios-device-gn': 'ios_gn',
       'ios-simulator': 'ios_gyp',
+      'ios-simulator-cronet': 'ios_gyp',
       'ios-simulator-gn': 'ios_gn',
     },
 
@@ -637,6 +638,7 @@
       'win beta': 'gyp_official_six_concurrent_links',
       'win stable': 'gyp_official_six_concurrent_links',
       'win trunk': 'gyp_official_six_concurrent_links',
+      'win64 trunk': 'gyp_official_x64_six_concurrent_links',
     },
 
     'tryserver.blink': {
@@ -670,7 +672,8 @@
       'android_chromium_variable_clang': 'findit',
       'android_chromium_variable_gn': 'findit',
       'android_chromium_variable_nexus4': 'findit',
-      'android_clang_dbg_recipe': 'android_clang_asan_findbugs_gn_debug_trybot',
+      'android_clang_dbg_recipe':
+        'android_clang_asan_errorprone_findbugs_gn_debug_trybot',
       'android_compile_dbg': 'swarming_android_gn_debug_trybot',
       'android_compile_mips_dbg': 'android_gn_debug_trybot_mipsel',
       'android_compile_rel': 'swarming_android_gn_release_trybot',
@@ -785,10 +788,11 @@
       'ios-device': 'ios_gyp',
       'ios-device-gn': 'ios_gn',
       'ios-simulator': 'ios_gyp',
+      'ios-simulator-cronet': 'ios_gyp',
       'ios-simulator-gn': 'ios_gn',
       'mac_chromium_10.10_rel_ng': 'swarming_gpu_tests_gn_release_trybot',
       'mac_chromium_10.10_macviews': 'mac_views_browser_gyp_release_trybot',
-      'mac_chromium_archive_rel_ng': 'noswarming_gyp_release_bot_mac_strip',
+      'mac_chromium_archive_rel_ng': 'noswarming_gn_release_bot_mac_strip',
       'mac_chromium_asan_rel_ng': 'swarming_asan_dcheck_gyp_release_bot',
       'mac_chromium_asan_variable': 'findit',
       'mac_chromium_compile_dbg_ng': 'swarming_gn_debug_trybot',
@@ -913,13 +917,14 @@
       'android', 'cast', 'gn', 'clang', 'debug_static_bot',
     ],
 
-    'android_clang_asan_findbugs_gn_debug_bot_minimal_symbols': [
-      'android', 'clang', 'asan', 'findbugs', 'gn',
+    'android_clang_asan_errorprone_findbugs_gn_debug_bot_minimal_symbols': [
+      'android', 'clang', 'asan', 'errorprone', 'findbugs', 'gn',
       'debug_bot_minimal_symbols',
     ],
 
-    'android_clang_asan_findbugs_gn_debug_trybot': [
-      'android', 'clang', 'asan', 'findbugs', 'gn', 'debug_trybot',
+    'android_clang_asan_errorprone_findbugs_gn_debug_trybot': [
+      'android', 'clang', 'asan', 'errorprone', 'findbugs', 'gn',
+      'debug_trybot',
     ],
 
     'android_clang_tot_asan': [
@@ -1350,6 +1355,10 @@
       'gyp', 'official', 'x64',
     ],
 
+    'gyp_official_x64_six_concurrent_links': [
+      'gyp', 'official', 'x64', 'six_concurrent_links',
+    ],
+
     'gyp_release_bot': [
       'gyp', 'release_bot',
     ],
@@ -1425,16 +1434,12 @@
       'noswarming', 'gn', 'release_bot', 'minimal_symbols', 'x86',
     ],
 
-    'noswarming_gyp_release_bot_minimal_symbols_x86': [
-      'noswarming', 'gyp', 'release_bot', 'minimal_symbols', 'x86',
-    ],
-
     'noswarming_gn_release_bot_x64': [
       'noswarming', 'gn', 'release_bot', 'x64',
     ],
 
-    'noswarming_gyp_release_bot_mac_strip': [
-      'noswarming', 'gyp', 'release_bot', 'mac_strip',
+    'noswarming_gn_release_bot_mac_strip': [
+      'noswarming', 'gn', 'release_bot', 'mac_strip',
     ],
 
     'noswarming_gn_release_trybot_x64': [
@@ -2039,6 +2044,10 @@
     'error': {
       'gn_args': 'error',
       'gyp_defines': 'target_arch=unknown',
+    },
+
+    'errorprone': {
+      'gn_args': 'use_errorprone_java_compiler=true',
     },
 
     'ffmpeg_branding_chromeos': {

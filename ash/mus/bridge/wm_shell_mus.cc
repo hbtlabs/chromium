@@ -4,15 +4,19 @@
 
 #include "ash/mus/bridge/wm_shell_mus.h"
 
-#include "ash/common/default_accessibility_delegate.h"
+#include <utility>
+
 #include "ash/common/display/display_info.h"
+#include "ash/common/keyboard/keyboard_ui.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/default_system_tray_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_event_handler.h"
 #include "ash/common/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/common/wm/mru_window_tracker.h"
+#include "ash/common/wm/window_cycle_event_filter.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm_activation_observer.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
@@ -22,11 +26,9 @@
 #include "ash/mus/root_window_controller.h"
 #include "base/memory/ptr_util.h"
 #include "components/user_manager/user_info_impl.h"
-#include "services/shell/public/cpp/connector.h"
 #include "services/ui/common/util.h"
 #include "services/ui/public/cpp/window.h"
 #include "services/ui/public/cpp/window_tree_client.h"
-#include "services/ui/public/interfaces/accessibility_manager.mojom.h"
 
 namespace ash {
 namespace mus {
@@ -92,39 +94,12 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   DISALLOW_COPY_AND_ASSIGN(SessionStateDelegateStub);
 };
 
-class AccessibilityDelegateMus : public DefaultAccessibilityDelegate {
- public:
-  explicit AccessibilityDelegateMus(shell::Connector* connector)
-      : connector_(connector) {}
-  ~AccessibilityDelegateMus() override {}
-
- private:
-  ui::mojom::AccessibilityManager* GetAccessibilityManager() {
-    if (!accessibility_manager_ptr_.is_bound())
-      connector_->ConnectToInterface("mojo:ui", &accessibility_manager_ptr_);
-    return accessibility_manager_ptr_.get();
-  }
-
-  // DefaultAccessibilityDelegate:
-  void ToggleHighContrast() override {
-    DefaultAccessibilityDelegate::ToggleHighContrast();
-    GetAccessibilityManager()->SetHighContrastMode(IsHighContrastEnabled());
-  }
-
-  ui::mojom::AccessibilityManagerPtr accessibility_manager_ptr_;
-  shell::Connector* connector_;
-
-  DISALLOW_COPY_AND_ASSIGN(AccessibilityDelegateMus);
-};
-
 }  // namespace
 
-WmShellMus::WmShellMus(ShellDelegate* delegate,
-                       ::ui::WindowTreeClient* client,
-                       shell::Connector* connector)
-    : WmShell(delegate),
+WmShellMus::WmShellMus(std::unique_ptr<ShellDelegate> shell_delegate,
+                       ::ui::WindowTreeClient* client)
+    : WmShell(std::move(shell_delegate)),
       client_(client),
-      connector_(connector),
       session_state_delegate_(new SessionStateDelegateStub) {
   client_->AddObserver(this);
   WmShell::Set(this);
@@ -133,8 +108,10 @@ WmShellMus::WmShellMus(ShellDelegate* delegate,
 
   CreateMruWindowTracker();
 
-  accessibility_delegate_.reset(new AccessibilityDelegateMus(connector_));
   SetSystemTrayDelegate(base::WrapUnique(new DefaultSystemTrayDelegate));
+
+  // TODO(jamescook): Port ash::sysui::KeyboardUIMus and use it here.
+  SetKeyboardUI(KeyboardUI::Create());
 }
 
 WmShellMus::~WmShellMus() {
@@ -143,7 +120,10 @@ WmShellMus::~WmShellMus() {
   // Destroy maximize mode controller early on since it has some observers which
   // need to be removed.
   DeleteMaximizeModeController();
+  DeleteToastManager();
   DeleteSystemTrayDelegate();
+  // Has to happen before ~MruWindowTracker.
+  DeleteWindowCycleController();
   DeleteWindowSelectorController();
   DeleteMruWindowTracker();
   RemoveClientObserver();
@@ -261,6 +241,12 @@ std::vector<WmWindow*> WmShellMus::GetAllRootWindows() {
 }
 
 void WmShellMus::RecordUserMetricsAction(UserMetricsAction action) {
+  // TODO: http://crbug.com/616581.
+  NOTIMPLEMENTED();
+}
+
+void WmShellMus::RecordTaskSwitchMetric(TaskSwitchSource source) {
+  // TODO: http://crbug.com/616581.
   NOTIMPLEMENTED();
 }
 
@@ -269,6 +255,12 @@ std::unique_ptr<WindowResizer> WmShellMus::CreateDragWindowResizer(
     wm::WindowState* window_state) {
   return base::WrapUnique(
       new DragWindowResizer(std::move(next_window_resizer), window_state));
+}
+
+std::unique_ptr<WindowCycleEventFilter>
+WmShellMus::CreateWindowCycleEventFilter() {
+  // TODO: implement me, http://crbug.com/629191.
+  return nullptr;
 }
 
 std::unique_ptr<wm::MaximizeModeEventHandler>
@@ -295,10 +287,6 @@ void WmShellMus::OnOverviewModeEnded() {
   FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
 }
 
-AccessibilityDelegate* WmShellMus::GetAccessibilityDelegate() {
-  return accessibility_delegate_.get();
-}
-
 SessionStateDelegate* WmShellMus::GetSessionStateDelegate() {
   return session_state_delegate_.get();
 }
@@ -319,12 +307,13 @@ void WmShellMus::RemoveDisplayObserver(WmDisplayObserver* observer) {
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::AddPointerWatcher(views::PointerWatcher* watcher) {
-  // TODO(jamescook): Move PointerWatcherDelegateMus to //ash/mus and use here.
+void WmShellMus::AddPointerDownWatcher(views::PointerDownWatcher* watcher) {
+  // TODO(jamescook): Move PointerDownWatcherDelegateMus to //ash/mus
+  // and use here.
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::RemovePointerWatcher(views::PointerWatcher* watcher) {
+void WmShellMus::RemovePointerDownWatcher(views::PointerDownWatcher* watcher) {
   NOTIMPLEMENTED();
 }
 

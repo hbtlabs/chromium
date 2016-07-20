@@ -1,8 +1,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/app-layout/app-drawer/app-drawer.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-selector/iron-selector.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/typography.html">
 <link rel="import" href="chrome://history/browser_service.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
@@ -11,6 +12,7 @@
     <style include="shared-style">
       :host {
         display: block;
+        height: 100%;
         padding-top: 5px;
         width: var(--side-bar-width);
       }
@@ -40,14 +42,43 @@
         text-transform: uppercase;
       }
 
-      paper-item {
-        -webkit-padding-start: 25px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
+      iron-selector {
+        -webkit-user-select: none;
+        background-color: transparent;
+        color: #5a5a5a;
       }
 
-      paper-item.iron-selected {
+      iron-selector a {
+        @apply(--paper-font-subhead);
+        -webkit-padding-start: 24px;
+        align-items: center;
+        box-sizing: border-box;
+        color: inherit;
+        cursor: pointer;
+        display: flex;
+        font-size: 14px;
+        font-weight: 500;
+        min-height: 48px;
+        outline: none;
+        position: relative;
+        text-decoration: none;
+      }
+
+      iron-selector a:focus {
+        outline: 0;
+        position: relative;
+      }
+
+      iron-selector a:focus::before {
+        @apply(--layout-fit);
+
+        background: currentColor;
+        content: '';
+        opacity: var(--dark-divider-opacity);
+        pointer-events: none;
+      }
+
+      iron-selector a.iron-selected {
         color: var(--google-blue-500);
         font-weight: 500;
       }
@@ -55,6 +86,26 @@
       iron-selector {
         -webkit-user-select: none;
         color: #5a5a5a;
+      }
+
+      #footer {
+        /* This compensates the 120px by which app-drawer protrudes under
+         * the viewport. */
+        bottom: 120px;
+        color: var(--paper-grey-600);
+        position: absolute;
+        width: var(--side-bar-width);
+      }
+
+      #footer-text {
+        -webkit-padding-end: 16px;
+        -webkit-padding-start: 24px;
+        margin: 24px 0;
+      }
+
+      #footer a {
+        color: var(--google-blue-700);
+        text-decoration: none;
       }
     </style>
 
@@ -64,18 +115,25 @@
         <h1>$i18n{title}</h1>
       </div>
       <iron-selector id="menu" selected="{{selectedPage}}"
-          selectable=".page-item" attr-for-selected="view-id"
+          selectable=".page-item" attr-for-selected="path"
+          fallback-selection="history"
           on-iron-activate="onSelectorActivate_">
-        <paper-item view-id="history" class="page-item">
+        <a href="/[[getQueryString_(route)]]" class="page-item" path="history">
           $i18n{historyMenuItem}
-        </paper-item>
-        <paper-item view-id="synced-devices" class="page-item">
+        </a>
+        <a href="/syncedTabs[[getQueryString_(route)]]" class="page-item"
+            path="syncedTabs">
           $i18n{openTabsMenuItem}
-        </paper-item>
+        </a>
         <div class="separator"></div>
-        <paper-item on-tap="onClearBrowsingDataTap_" id="clear-browsing-data">
+        <a href="chrome://settings/clearBrowserData"
+            on-tap="onClearBrowsingDataTap_" id="clear-browsing-data">
           $i18n{clearBrowsingData}
-        </paper-item>
+        </a>
+        <div id="footer" hidden="[[!showFooter]]">
+          <div class="separator"></div>
+          <div id="footer-text">$i18nRaw{sidebarFooter}</div>
+        </div>
       </iron-selector>
     </app-drawer>
   </template>

@@ -48,6 +48,8 @@ class ASH_EXPORT WmShelfAura : public WmShelf,
   void UpdateAutoHideState() override;
   ShelfBackgroundType GetBackgroundType() const override;
   bool IsDimmed() const override;
+  bool IsShowingOverflowBubble() const override;
+  void SchedulePaint() override;
   bool IsVisible() const override;
   void UpdateVisibilityState() override;
   ShelfVisibilityState GetVisibilityState() const override;
@@ -62,6 +64,7 @@ class ASH_EXPORT WmShelfAura : public WmShelf,
   void AddObserver(WmShelfObserver* observer) override;
   void RemoveObserver(WmShelfObserver* observer) override;
   void SetKeyboardBoundsForTesting(const gfx::Rect& bounds) override;
+  ShelfLockingManager* GetShelfLockingManagerForTesting() override;
 
   // ShelfLayoutManagerObserver:
   void WillDeleteShelfLayoutManager() override;

@@ -33,6 +33,7 @@ MaterialHistoryBrowserTest.prototype = {
     'history_item_test.js',
     'history_list_test.js',
     'history_overflow_menu_test.js',
+    'history_routing_test.js',
     'history_supervised_user_test.js',
     'history_synced_tabs_test.js',
     'history_toolbar_test.js'
@@ -81,6 +82,11 @@ TEST_F('MaterialHistoryBrowserTest', 'HistoryOverflowMenuTest', function() {
   mocha.run();
 });
 
+TEST_F('MaterialHistoryBrowserTest', 'RoutingTest', function() {
+  md_history.history_routing_test.registerTests();
+  mocha.run();
+});
+
 TEST_F('MaterialHistoryBrowserTest', 'SyncedTabsTest', function() {
   md_history.history_synced_tabs_test.registerTests();
   mocha.run();
@@ -102,4 +108,37 @@ TEST_F('MaterialHistoryDeletionDisabledTest', 'HistorySupervisedUserTest',
     function() {
   md_history.history_supervised_user_test.registerTests();
   mocha.run();
+});
+
+function MaterialHistoryWithQueryParamTest() {}
+
+MaterialHistoryWithQueryParamTest.prototype = {
+  __proto__: MaterialHistoryBrowserTest.prototype,
+
+  browsePreload: 'chrome://history?q=query',
+
+  /** @override */
+  setUp: function() {
+    PolymerTest.prototype.setUp.call(this);
+
+    suiteSetup(function() {
+      // This message handler needs to be registered before the test since the
+      // query can happen immediately after the element is upgraded. However,
+      // since there may be a delay as well, the test might check the global var
+      // too early as well. In this case the test will have overtaken the
+      // callback.
+      registerMessageCallback('queryHistory', this, function (info) {
+        window.historyQueryInfo = info;
+      });
+
+      // Wait for the top-level app element to be upgraded.
+      return waitForUpgrade($('history-app'));
+    });
+  },
+};
+
+TEST_F('MaterialHistoryWithQueryParamTest', 'RoutingTestWithQueryParam',
+  function() {
+    md_history.history_routing_test_with_query_param.registerTests();
+    mocha.run();
 });

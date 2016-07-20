@@ -150,7 +150,6 @@ WebInspector.ConsoleView = function()
 
     this._registerWithMessageSink();
     WebInspector.targetManager.observeTargets(this);
-    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._onMainFrameNavigated, this);
 
     this._initConsoleMessages();
 
@@ -177,17 +176,6 @@ WebInspector.ConsoleView.prototype = {
     _consoleHistoryAutocompleteChanged: function()
     {
         this._prompt.setAddCompletionsFromHistory(this._consoleHistoryAutocompleteSetting.get());
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _onMainFrameNavigated: function(event)
-    {
-        if (!WebInspector.moduleSetting("preserveConsoleLog").get())
-            return;
-        var frame = /** @type {!WebInspector.ResourceTreeFrame} */(event.data);
-        WebInspector.console.log(WebInspector.UIString("Navigated to %s", frame.url));
     },
 
     _initConsoleMessages: function()
@@ -808,7 +796,7 @@ WebInspector.ConsoleView.prototype = {
         if (!wasThrown)
             message = new WebInspector.ConsoleMessage(result.target(), WebInspector.ConsoleMessage.MessageSource.JS, level, "", WebInspector.ConsoleMessage.MessageType.Result, undefined, undefined, undefined, undefined, [result]);
         else
-            message = new WebInspector.ConsoleMessage(result.target(), WebInspector.ConsoleMessage.MessageSource.JS, level, exceptionDetails.text, WebInspector.ConsoleMessage.MessageType.Result, exceptionDetails.url, exceptionDetails.lineNumber + 1, exceptionDetails.columnNumber + 1, undefined, [WebInspector.UIString("Uncaught"), result], exceptionDetails.stack, undefined, undefined, exceptionDetails.scriptId);
+            message = new WebInspector.ConsoleMessage(result.target(), WebInspector.ConsoleMessage.MessageSource.JS, level, exceptionDetails.text, WebInspector.ConsoleMessage.MessageType.Result, undefined, exceptionDetails.lineNumber, exceptionDetails.columnNumber, undefined, [WebInspector.UIString("Uncaught"), result], exceptionDetails.stackTrace, undefined, undefined, exceptionDetails.scriptId);
         message.setOriginatingMessage(originatingConsoleMessage);
         result.target().consoleModel.addMessage(message);
     },
@@ -833,7 +821,7 @@ WebInspector.ConsoleView.prototype = {
      */
     _commandEvaluated: function(event)
     {
-        var data = /** @type {{result: ?WebInspector.RemoteObject, wasThrown: boolean, text: string, commandMessage: !WebInspector.ConsoleMessage}} */ (event.data);
+        var data = /** @type {{result: ?WebInspector.RemoteObject, wasThrown: boolean, text: string, commandMessage: !WebInspector.ConsoleMessage, exceptionDetails: (?RuntimeAgent.ExceptionDetails|undefined)}} */ (event.data);
         this._prompt.pushHistoryItem(data.text);
         this._consoleHistorySetting.set(this._prompt.historyData().slice(-WebInspector.ConsoleView.persistedHistorySize));
         this._printResult(data.result, data.wasThrown, data.commandMessage, data.exceptionDetails);
@@ -1313,6 +1301,14 @@ WebInspector.ConsoleView.instance = function()
     return WebInspector.ConsoleView._instance;
 }
 
+WebInspector.ConsoleView.clearConsole = function()
+{
+    for (var target of WebInspector.targetManager.targets()) {
+        target.runtimeModel.discardConsoleEntries();
+        target.consoleModel.requestClearMessages();
+    }
+}
+
 /**
  * @constructor
  * @implements {WebInspector.ActionDelegate}
@@ -1335,7 +1331,7 @@ WebInspector.ConsoleView.ActionDelegate.prototype = {
             WebInspector.console.show();
             return true;
         case "console.clear":
-            WebInspector.ConsoleModel.clearConsole();
+            WebInspector.ConsoleView.clearConsole();
             return true;
         case "console.clear.history":
             WebInspector.ConsoleView.instance()._clearHistory();

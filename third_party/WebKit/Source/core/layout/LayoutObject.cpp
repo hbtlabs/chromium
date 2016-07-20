@@ -1385,6 +1385,7 @@ PaintInvalidationReason LayoutObject::invalidatePaintIfNeeded(const PaintInvalid
 
     // Composited scrolling should not be included in the bounds and position tracking, because the graphics layer backing the scroller
     // does not move on scroll.
+    // TODO(chrishtr): can we just avoid adding in the scroll in the first place in LayoutBox::mapScrollingContentsRectToBoxSpace?
     if (compositedScrollsWithRespectTo(paintInvalidationContainer)) {
         LayoutSize inverseOffset(toLayoutBox(&paintInvalidationContainer)->scrolledContentOffset());
         newLocation.move(inverseOffset);
@@ -1575,11 +1576,13 @@ bool LayoutObject::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* an
     if (LayoutObject* parent = this->parent()) {
         if (parent->isBox()) {
             LayoutBox* parentBox = toLayoutBox(parent);
-            if (!parentBox->mapScrollingContentsRectToBoxSpace(rect, parent == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
-                return false;
+
             // Never flip for SVG as it handles writing modes itself.
             if (!isSVG())
                 parentBox->flipForWritingMode(rect);
+
+            if (!parentBox->mapScrollingContentsRectToBoxSpace(rect, parent == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
+                return false;
         }
         return parent->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
     }
@@ -3468,7 +3471,7 @@ bool LayoutObject::isAllowedToModifyLayoutTreeStructure(Document& document)
 }
 
 DeprecatedDisableModifyLayoutTreeStructureAsserts::DeprecatedDisableModifyLayoutTreeStructureAsserts()
-    : m_disabler(gModifyLayoutTreeStructureAnyState, true)
+    : m_disabler(&gModifyLayoutTreeStructureAnyState, true)
 {
 }
 
@@ -3478,7 +3481,7 @@ bool DeprecatedDisableModifyLayoutTreeStructureAsserts::canModifyLayoutTreeState
 }
 
 DisablePaintInvalidationStateAsserts::DisablePaintInvalidationStateAsserts()
-    : m_disabler(gDisablePaintInvalidationStateAsserts, true)
+    : m_disabler(&gDisablePaintInvalidationStateAsserts, true)
 {
 }
 

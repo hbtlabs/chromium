@@ -439,7 +439,11 @@ component("platform") {
   }
 
   if (use_minikin_hyphenation) {
-    sources += [ "text/hyphenation/HyphenationMinikin.cpp" ]
+    sources += [
+      "text/hyphenation/HyphenationMinikin.cpp",
+      "text/hyphenation/HyphenatorAOSP.cpp",
+      "text/hyphenation/HyphenatorAOSP.h",
+    ]
   }
 
   if (!use_default_render_theme) {
@@ -472,7 +476,7 @@ component("platform") {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   sources = platform_test_support_files
   visibility += [ "//third_party/WebKit/*" ]
   testonly = true
