@@ -258,6 +258,24 @@ void RunApplication(NSString* app_path,
     [@"platform=iOS Simulator,id=" stringByAppendingString:udid],
     @"test-without-building"
   ]] autorelease];
+
+  // The following stderr messages are meaningless on iossim when not running
+  // xctests and can be safely stripped.
+  if (!xctest_path) {
+    NSPipe* stderr_pipe = [NSPipe pipe];
+    stderr_pipe.fileHandleForReading.readabilityHandler =
+        ^(NSFileHandle* handle) {
+          NSString* log = [[[NSString alloc] initWithData:handle.availableData
+                                                 encoding:NSUTF8StringEncoding]
+              autorelease];
+          if ([log containsString:@"IDETestOperationsObserverErrorDomain"] ||
+              [log containsString:@"** TEST EXECUTE FAILED **"]) {
+            return;
+          }
+          printf("%s", [log UTF8String]);
+        };
+    [task setStandardError:stderr_pipe];
+  }
   [task run];
 }
 
@@ -336,6 +354,13 @@ int main(int argc, char* const argv[]) {
     exit(kExitSuccess);
   }
 
+  KillSimulator();
+  if (wants_wipe) {
+    WipeDevice(udid);
+    printf("Device wiped.\n");
+    exit(kExitSuccess);
+  }
+
   // There should be at least one arg left, specifying the app path. Any
   // additional args are passed as arguments to the app.
   if (optind < argc) {
@@ -362,11 +387,6 @@ int main(int argc, char* const argv[]) {
     LogError(@"Unable to parse command line arguments.");
     PrintUsage();
     exit(kExitInvalidArguments);
-  }
-
-  KillSimulator();
-  if (wants_wipe) {
-    WipeDevice(udid);
   }
 
   RunApplication(app_path, xctest_path, udid, app_env, cmd_args);

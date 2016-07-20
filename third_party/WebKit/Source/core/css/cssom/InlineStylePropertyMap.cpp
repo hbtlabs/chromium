@@ -21,7 +21,7 @@ namespace blink {
 
 namespace {
 
-CSSValue* styleValueToCSSValue(CSSPropertyID propertyID, const CSSStyleValue& styleValue)
+const CSSValue* styleValueToCSSValue(CSSPropertyID propertyID, const CSSStyleValue& styleValue)
 {
     if (!CSSOMTypes::propertyCanTake(propertyID, styleValue))
         return nullptr;
@@ -32,7 +32,7 @@ CSSValue* styleValueToCSSValue(CSSPropertyID propertyID, const CSSStyleValue& st
 
 CSSStyleValueVector InlineStylePropertyMap::getAllInternal(CSSPropertyID propertyID)
 {
-    CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(propertyID);
+    const CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(propertyID);
     if (!cssValue)
         return CSSStyleValueVector();
 
@@ -41,7 +41,7 @@ CSSStyleValueVector InlineStylePropertyMap::getAllInternal(CSSPropertyID propert
 
 CSSStyleValueVector InlineStylePropertyMap::getAllInternal(AtomicString customPropertyName)
 {
-    CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(customPropertyName);
+    const CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(customPropertyName);
     if (!cssValue)
         return CSSStyleValueVector();
 
@@ -62,7 +62,7 @@ Vector<String> InlineStylePropertyMap::getProperties()
 void InlineStylePropertyMap::set(CSSPropertyID propertyID, CSSStyleValueOrCSSStyleValueSequenceOrString& item, ExceptionState& exceptionState)
 {
     if (item.isCSSStyleValue()) {
-        CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
+        const CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
         if (!cssValue) {
             exceptionState.throwTypeError("Invalid type for property");
             return;
@@ -78,7 +78,7 @@ void InlineStylePropertyMap::set(CSSPropertyID propertyID, CSSStyleValueOrCSSSty
         CSSValueList* valueList = CSSValueList::createSpaceSeparated();
         CSSStyleValueVector styleValueVector = item.getAsCSSStyleValueSequence();
         for (const Member<CSSStyleValue> value : styleValueVector) {
-            CSSValue* cssValue = styleValueToCSSValue(propertyID, *value);
+            const CSSValue* cssValue = styleValueToCSSValue(propertyID, *value);
             if (!cssValue) {
                 exceptionState.throwTypeError("Invalid type for property");
                 return;
@@ -113,7 +113,7 @@ void InlineStylePropertyMap::append(CSSPropertyID propertyID, CSSStyleValueOrCSS
     }
 
     if (item.isCSSStyleValue()) {
-        CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
+        const CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
         if (!cssValue) {
             exceptionState.throwTypeError("Invalid type for property");
             return;
@@ -121,7 +121,7 @@ void InlineStylePropertyMap::append(CSSPropertyID propertyID, CSSStyleValueOrCSS
         cssValueList->append(*cssValue);
     } else if (item.isCSSStyleValueSequence()) {
         for (CSSStyleValue* styleValue : item.getAsCSSStyleValueSequence()) {
-            CSSValue* cssValue = styleValueToCSSValue(propertyID, *styleValue);
+            const CSSValue* cssValue = styleValueToCSSValue(propertyID, *styleValue);
             if (!cssValue) {
                 exceptionState.throwTypeError("Invalid type for property");
                 return;
@@ -154,16 +154,16 @@ HeapVector<StylePropertyMap::StylePropertyMapEntry> InlineStylePropertyMap::getI
         String name;
         CSSStyleValueOrCSSStyleValueSequence value;
         if (propertyID == CSSPropertyVariable) {
-            const CSSCustomPropertyDeclaration* customDeclaration = toCSSCustomPropertyDeclaration(propertyReference.value());
-            name = customDeclaration->name();
+            const CSSCustomPropertyDeclaration& customDeclaration = toCSSCustomPropertyDeclaration(propertyReference.value());
+            name = customDeclaration.name();
             // TODO(meade): Eventually custom properties will support other types, so actually return them instead of always returning a CSSUnsupportedStyleValue.
-            value.setCSSStyleValue(CSSUnsupportedStyleValue::create(customDeclaration->customCSSText()));
+            value.setCSSStyleValue(CSSUnsupportedStyleValue::create(customDeclaration.customCSSText()));
         } else if (propertyID == CSSPropertyApplyAtRule) {
             name = "@apply";
-            value.setCSSStyleValue(CSSUnsupportedStyleValue::create(toCSSCustomIdentValue(propertyReference.value())->value()));
+            value.setCSSStyleValue(CSSUnsupportedStyleValue::create(toCSSCustomIdentValue(propertyReference.value()).value()));
         } else {
             name = getPropertyNameString(propertyID);
-            CSSStyleValueVector styleValueVector = StyleValueFactory::cssValueToStyleValueVector(propertyID, *propertyReference.value());
+            CSSStyleValueVector styleValueVector = StyleValueFactory::cssValueToStyleValueVector(propertyID, propertyReference.value());
             if (styleValueVector.size() == 1)
                 value.setCSSStyleValue(styleValueVector[0]);
             else

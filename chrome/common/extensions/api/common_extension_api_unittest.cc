@@ -666,46 +666,26 @@ TEST(ExtensionAPITest, DefaultConfigurationFeatures) {
     SimpleFeature* feature = test_data[i].feature;
     ASSERT_TRUE(feature) << i;
 
-    EXPECT_TRUE(feature->whitelist()->empty());
-    EXPECT_TRUE(feature->extension_types()->empty());
+    EXPECT_TRUE(feature->whitelist().empty());
+    EXPECT_TRUE(feature->extension_types().empty());
 
     EXPECT_EQ(SimpleFeature::UNSPECIFIED_LOCATION, feature->location());
-    EXPECT_TRUE(feature->platforms()->empty());
+    EXPECT_TRUE(feature->platforms().empty());
     EXPECT_EQ(0, feature->min_manifest_version());
     EXPECT_EQ(0, feature->max_manifest_version());
   }
 }
 
-TEST(ExtensionAPITest, FeaturesRequireContexts) {
-  // TODO(cduvall): Make this check API featues.
-  std::unique_ptr<base::DictionaryValue> api_features1(
+TEST(ExtensionAPITest, JSONFeatureProviderDoesNotStoreInvalidFeatures) {
+  base::DictionaryValue features;
+  std::unique_ptr<base::DictionaryValue> feature_value(
       new base::DictionaryValue());
-  std::unique_ptr<base::DictionaryValue> api_features2(
-      new base::DictionaryValue());
-  base::DictionaryValue* test1 = new base::DictionaryValue();
-  base::DictionaryValue* test2 = new base::DictionaryValue();
-  base::ListValue* contexts = new base::ListValue();
-  contexts->AppendString("content_script");
-  test1->Set("contexts", contexts);
-  test1->SetString("channel", "stable");
-  test2->SetString("channel", "stable");
-  api_features1->Set("test", test1);
-  api_features2->Set("test", test2);
-
-  struct {
-    base::DictionaryValue* api_features;
-    bool expect_success;
-  } test_data[] = {
-    { api_features1.get(), true },
-    { api_features2.get(), false }
-  };
-
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
-    JSONFeatureProvider api_feature_provider(*test_data[i].api_features,
-                                             CreateAPIFeature);
-    Feature* feature = api_feature_provider.GetFeature("test");
-    EXPECT_EQ(test_data[i].expect_success, feature != NULL) << i;
-  }
+  // This feature is invalid (it needs an extension context), so the
+  // JSONFeatureProvider should not store it.
+  feature_value->SetString("channel", "stable");
+  features.Set("test", std::move(feature_value));
+  JSONFeatureProvider api_feature_provider(features, CreateAPIFeature);
+  EXPECT_FALSE(api_feature_provider.GetFeature("test"));
 }
 
 static void GetDictionaryFromList(const base::DictionaryValue* schema,

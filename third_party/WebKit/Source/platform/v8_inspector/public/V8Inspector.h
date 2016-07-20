@@ -38,8 +38,8 @@ private:
     bool callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target) override;
     String16 valueSubtype(v8::Local<v8::Value>) override;
     bool formatAccessorsAsProperties(v8::Local<v8::Value>) override;
-    void muteWarningsAndDeprecations() override { }
-    void unmuteWarningsAndDeprecations() override { }
+    void muteWarningsAndDeprecations(int) override { }
+    void unmuteWarningsAndDeprecations(int) override { }
     double currentTimeMS() override { return 0; };
 
     bool isExecutionAllowed() override;
@@ -50,7 +50,7 @@ private:
     void consoleTime(const String16& title) override { }
     void consoleTimeEnd(const String16& title) override { }
     void consoleTimeStamp(const String16& title) override { }
-    void messageAddedToConsole(int contextGroupId, MessageSource, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override { }
+    void consoleAPIMessage(int contextGroupId, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override { }
     v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override
     {
         return v8::MaybeLocal<v8::Value>();

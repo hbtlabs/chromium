@@ -18,6 +18,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/numerics/safe_math.h"
 #include "base/single_thread_task_runner.h"
@@ -322,8 +323,8 @@ void LayerTreeHost::InitializeRemoteClient(
   // LayerTreeHost on the client, while the other requests are sent to the
   // RemoteChannelMain on the server which directs them to ProxyMain and the
   // remote server LayerTreeHost.
-  InitializeProxy(RemoteChannelImpl::Create(this, remote_proto_channel,
-                                            task_runner_provider_.get()),
+  InitializeProxy(base::MakeUnique<RemoteChannelImpl>(
+                      this, remote_proto_channel, task_runner_provider_.get()),
                   nullptr);
 }
 
@@ -1069,6 +1070,36 @@ bool LayerTreeHost::DoUpdateLayers(Layer* root_layer) {
   return did_paint_content;
 }
 
+void LayerTreeHost::ApplyViewportDeltas(ScrollAndScaleSet* info) {
+  gfx::Vector2dF inner_viewport_scroll_delta;
+  if (info->inner_viewport_scroll.layer_id != Layer::INVALID_ID)
+    inner_viewport_scroll_delta = info->inner_viewport_scroll.scroll_delta;
+
+  if (inner_viewport_scroll_delta.IsZero() && info->page_scale_delta == 1.f &&
+      info->elastic_overscroll_delta.IsZero() && !info->top_controls_delta)
+    return;
+
+  // Preemptively apply the scroll offset and scale delta here before sending
+  // it to the client.  If the client comes back and sets it to the same
+  // value, then the layer can early out without needing a full commit.
+  if (inner_viewport_scroll_layer_.get()) {
+    inner_viewport_scroll_layer_->SetScrollOffsetFromImplSide(
+        gfx::ScrollOffsetWithDelta(
+            inner_viewport_scroll_layer_->scroll_offset(),
+            inner_viewport_scroll_delta));
+  }
+
+  ApplyPageScaleDeltaFromImplSide(info->page_scale_delta);
+  elastic_overscroll_ += info->elastic_overscroll_delta;
+  // TODO(ccameron): pass the elastic overscroll here so that input events
+  // may be translated appropriately.
+  client_->ApplyViewportDeltas(inner_viewport_scroll_delta, gfx::Vector2dF(),
+                               info->elastic_overscroll_delta,
+                               info->page_scale_delta,
+                               info->top_controls_delta);
+  SetNeedsUpdateLayers();
+}
+
 void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
   for (auto& swap_promise : info->swap_promises) {
     TRACE_EVENT_WITH_FLOW1("input,benchmark",
@@ -1079,57 +1110,21 @@ void LayerTreeHost::ApplyScrollAndScale(ScrollAndScaleSet* info) {
     QueueSwapPromise(std::move(swap_promise));
   }
 
-  gfx::Vector2dF inner_viewport_scroll_delta;
-  gfx::Vector2dF outer_viewport_scroll_delta;
-
   if (root_layer_.get()) {
     for (size_t i = 0; i < info->scrolls.size(); ++i) {
       Layer* layer = LayerById(info->scrolls[i].layer_id);
       if (!layer)
         continue;
-      if (layer == outer_viewport_scroll_layer_.get()) {
-        outer_viewport_scroll_delta += info->scrolls[i].scroll_delta;
-      } else if (layer == inner_viewport_scroll_layer_.get()) {
-        inner_viewport_scroll_delta += info->scrolls[i].scroll_delta;
-      } else {
-        layer->SetScrollOffsetFromImplSide(
-            gfx::ScrollOffsetWithDelta(layer->scroll_offset(),
-                                       info->scrolls[i].scroll_delta));
-      }
+      layer->SetScrollOffsetFromImplSide(gfx::ScrollOffsetWithDelta(
+          layer->scroll_offset(), info->scrolls[i].scroll_delta));
       SetNeedsUpdateLayers();
     }
   }
 
-  if (!inner_viewport_scroll_delta.IsZero() ||
-      !outer_viewport_scroll_delta.IsZero() || info->page_scale_delta != 1.f ||
-      !info->elastic_overscroll_delta.IsZero() || info->top_controls_delta) {
-    // Preemptively apply the scroll offset and scale delta here before sending
-    // it to the client.  If the client comes back and sets it to the same
-    // value, then the layer can early out without needing a full commit.
-    if (inner_viewport_scroll_layer_.get()) {
-      inner_viewport_scroll_layer_->SetScrollOffsetFromImplSide(
-          gfx::ScrollOffsetWithDelta(
-              inner_viewport_scroll_layer_->scroll_offset(),
-              inner_viewport_scroll_delta));
-    }
-
-    if (outer_viewport_scroll_layer_.get()) {
-      outer_viewport_scroll_layer_->SetScrollOffsetFromImplSide(
-          gfx::ScrollOffsetWithDelta(
-              outer_viewport_scroll_layer_->scroll_offset(),
-              outer_viewport_scroll_delta));
-    }
-
-    ApplyPageScaleDeltaFromImplSide(info->page_scale_delta);
-    elastic_overscroll_ += info->elastic_overscroll_delta;
-    // TODO(ccameron): pass the elastic overscroll here so that input events
-    // may be translated appropriately.
-    client_->ApplyViewportDeltas(
-        inner_viewport_scroll_delta, outer_viewport_scroll_delta,
-        info->elastic_overscroll_delta, info->page_scale_delta,
-        info->top_controls_delta);
-    SetNeedsUpdateLayers();
-  }
+  // This needs to happen after scroll deltas have been sent to prevent top
+  // controls from clamping the layout viewport both on the compositor and
+  // on the main thread.
+  ApplyViewportDeltas(info);
 }
 
 void LayerTreeHost::SetDeviceScaleFactor(float device_scale_factor) {
@@ -1540,7 +1535,7 @@ void LayerTreeHost::ToProtobufForCommit(
 
   // layers_that_should_push_properties_ should be serialized before layer
   // properties because it is cleared during the properties serialization.
-  for (auto layer : layers_that_should_push_properties_)
+  for (auto* layer : layers_that_should_push_properties_)
     proto->add_layers_that_should_push_properties(layer->id());
 
   LayerProtoConverter::SerializeLayerProperties(this,

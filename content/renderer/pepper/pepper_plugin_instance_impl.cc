@@ -28,6 +28,7 @@
 #include "content/common/frame_messages.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/pepper/content_decryptor_delegate.h"
 #include "content/renderer/pepper/event_conversion.h"
 #include "content/renderer/pepper/fullscreen_container.h"
@@ -60,7 +61,6 @@
 #include "content/renderer/render_widget.h"
 #include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "content/renderer/sad_plugin.h"
-#include "media/base/audio_hardware_config.h"
 #include "ppapi/c/dev/ppp_text_input_dev.h"
 #include "ppapi/c/pp_rect.h"
 #include "ppapi/c/ppb_audio_config.h"
@@ -408,8 +408,8 @@ void PepperPluginInstanceImpl::ExternalDocumentLoader::ReplayReceivedData(
     WebURLLoaderClient* document_loader) {
   for (std::list<std::string>::iterator it = data_.begin(); it != data_.end();
        ++it) {
-    document_loader->didReceiveData(
-        NULL, it->c_str(), it->length(), 0 /* encoded_data_length */);
+    document_loader->didReceiveData(NULL, it->c_str(), it->length(),
+                                    0 /* encoded_data_length */, it->length());
   }
   if (finished_loading_) {
     document_loader->didFinishLoading(
@@ -426,7 +426,8 @@ void PepperPluginInstanceImpl::ExternalDocumentLoader::didReceiveData(
     WebURLLoader* loader,
     const char* data,
     int data_length,
-    int encoded_data_length) {
+    int encoded_data_length,
+    int encoded_body_length) {
   data_.push_back(std::string(data, data_length));
 }
 
@@ -890,8 +891,12 @@ bool PepperPluginInstanceImpl::Initialize(
       message_channel_->Start();
   }
 
-  if (render_frame_->render_accessibility() && LoadPdfInterface())
+  if (success &&
+      render_frame_ &&
+      render_frame_->render_accessibility() &&
+      LoadPdfInterface()) {
     plugin_pdf_interface_->EnableAccessibility(pp_instance());
+  }
 
   initialized_ = success;
   return success;
@@ -2132,6 +2137,11 @@ bool PepperPluginInstanceImpl::PrepareTextureMailbox(
                                                             release_callback);
 }
 
+void PepperPluginInstanceImpl::AccessibilityModeChanged() {
+  if (render_frame_->render_accessibility() && LoadPdfInterface())
+    plugin_pdf_interface_->EnableAccessibility(pp_instance());
+}
+
 void PepperPluginInstanceImpl::OnDestruct() { render_frame_ = NULL; }
 
 void PepperPluginInstanceImpl::OnThrottleStateChange() {
@@ -2455,14 +2465,24 @@ PP_Var PepperPluginInstanceImpl::ExecuteScript(PP_Instance instance,
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
     PP_Instance instance) {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread->GetAudioHardwareConfig()->GetOutputSampleRate();
+  return render_frame()
+             ? AudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetRoutingID(), 0 /* session_id */,
+                   std::string() /* device_id */, url::Origin(document_url()))
+                   .output_params()
+                   .sample_rate()
+             : 0;
 }
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
     PP_Instance instance) {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread->GetAudioHardwareConfig()->GetOutputBufferSize();
+  return render_frame()
+             ? AudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetRoutingID(), 0 /* session_id */,
+                   std::string() /* device_id */, url::Origin(document_url()))
+                   .output_params()
+                   .frames_per_buffer()
+             : 0;
 }
 
 PP_Var PepperPluginInstanceImpl::GetDefaultCharSet(PP_Instance instance) {
@@ -3007,6 +3027,10 @@ PP_ExternalPluginResult PepperPluginInstanceImpl::ResetAsProxied(
 bool PepperPluginInstanceImpl::IsValidInstanceOf(PluginModule* module) {
   DCHECK(module);
   return module == module_.get() || module == original_module_.get();
+}
+
+RenderFrame* PepperPluginInstanceImpl::GetRenderFrame() {
+  return render_frame_;
 }
 
 RenderView* PepperPluginInstanceImpl::GetRenderView() {

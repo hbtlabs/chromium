@@ -107,8 +107,8 @@ base::Optional<std::string> BluetoothDeviceAndroid::GetName() const {
   auto name = Java_ChromeBluetoothDevice_getName(AttachCurrentThread(),
                                                  j_device_.obj());
   if (name.is_null())
-    return base::Optional<std::string>();
-  return base::Optional<std::string>(ConvertJavaStringToUTF8(name));
+    return base::nullopt;
+  return ConvertJavaStringToUTF8(name);
 }
 
 bool BluetoothDeviceAndroid::IsPaired() const {

@@ -4,6 +4,7 @@
 
 import("//build/config/ios/ios_sdk.gni")
 import("//build/config/mac/base_rules.gni")
+import("//build/config/mac/symbols.gni")
 
 # Generates Info.plist files for Mac apps and frameworks.
 #
@@ -279,7 +280,7 @@ template("ios_app_bundle") {
       action(_lipo_executable) {
         forward_variables_from(invoker, [ "testonly" ])
         visibility = _lipo_executable_visibility
-        script = "//build/config/mac/xcrun.py"
+        script = "//build/toolchain/mac/linker_driver.py"
         outputs = [
           _executable_path,
         ]
@@ -296,11 +297,43 @@ template("ios_app_bundle") {
                                      "root_out_dir") + "/$_output_name" ]
         }
         args = [
+                 "xcrun",
                  "lipo",
                  "-create",
                  "-output",
                  rebase_path(outputs[0], root_build_dir),
                ] + rebase_path(inputs, root_build_dir)
+
+        if (enable_dsyms) {
+          outputs += [ "$root_out_dir/$_output_name.dSYM/" ]
+          args +=
+              [ "-Wcrl,dsym," + rebase_path("$root_out_dir/.", root_build_dir) ]
+        }
+
+        if (enable_stripping) {
+          # Check whether //build/config/mac:strip_all has been removed from
+          # the configs variable (as this is how stripping is disabled for a
+          # single target).
+          _strip_all_in_config = false
+          if (defined(invoker.configs)) {
+            foreach(_config, invoker.configs) {
+              if (_config == "//build/config/mac:strip_all") {
+                _strip_all_in_config = true
+              }
+            }
+          }
+
+          if (_strip_all_in_config) {
+            args += [ "-Wcrl,strip,-x,-S" ]
+
+            if (save_unstripped_output) {
+              outputs += [ outputs[0] + ".unstripped" ]
+              args += [ "-Wcrl,unstripped," +
+                        rebase_path(get_path_info(outputs[0], "dir"),
+                                    root_build_dir) ]
+            }
+          }
+        }
       }
     }
 
@@ -438,6 +471,10 @@ template("ios_app_bundle") {
   }
 }
 
+set_defaults("ios_app_bundle") {
+  configs = default_executable_configs
+}
+
 # Template to build an application extension bundle for iOS.
 #
 # This should be used instead of "executable" built-in target type on iOS.
@@ -488,6 +525,10 @@ template("ios_appex_bundle") {
       "-fapplication-extension",
     ]
   }
+}
+
+set_defaults("ios_appex_bundle") {
+  configs = default_executable_configs
 }
 
 # Compile a xib or storyboard file and add it to a bundle_data so that it is
@@ -633,91 +674,115 @@ template("ios_framework_bundle") {
   }
   _framework_target = _target_name
 
-  if (defined(invoker.public_headers) && invoker.public_headers != []) {
-    _public_headers = invoker.public_headers
-    _framework_name = _output_name + ".framework"
-    _framework_root = "$root_out_dir/$_framework_name"
-    _framework_target = target_name + "_internal"
+  _has_public_headers =
+      defined(invoker.public_headers) && invoker.public_headers != []
 
-    _header_map_filename = "$target_gen_dir/$_output_name.headers.hmap"
-    _framework_headers_target = _target_name + "_framework_headers"
-
-    _compile_headers_map_target = _target_name + "_compile_headers_map"
-    action(_compile_headers_map_target) {
-      visibility = [ ":$_framework_headers_target" ]
-      script = "//build/config/ios/write_framework_hmap.py"
-      outputs = [
-        _header_map_filename,
-      ]
-
-      # The header map generation only wants the list of headers, not all of
-      # sources, so filter any non-header source files from "sources". It is
-      # less error prone that having the developer duplicate the list of all
-      # headers in addition to "sources".
-      set_sources_assignment_filter([
-                                      "*.c",
-                                      "*.cc",
-                                      "*.cpp",
-                                      "*.m",
-                                      "*.mm",
-                                    ])
-      sources = invoker.sources
-      set_sources_assignment_filter([])
-
-      args = [
-               rebase_path(_header_map_filename),
-               rebase_path(_framework_root, root_build_dir),
-             ] + rebase_path(sources, root_build_dir)
-    }
-
-    _create_module_map_target = _target_name + "_module_map"
-    action(_create_module_map_target) {
-      visibility = [ ":$_framework_headers_target" ]
-      script = "//build/config/ios/write_framework_modulemap.py"
-      outputs = [
-        "$_framework_root/Modules/module.modulemap",
-      ]
-      args = [ rebase_path("$_framework_root", root_build_dir) ]
-    }
-
-    _copy_public_headers_target = _target_name + "_copy_public_headers"
-    copy(_copy_public_headers_target) {
-      visibility = [ ":$_framework_headers_target" ]
-      sources = _public_headers
-      outputs = [
-        "$_framework_root/Headers/{{source_file_part}}",
-      ]
-    }
-
-    _headers_map_config = _target_name + "_headers_map"
-    config(_headers_map_config) {
-      visibility = [ ":$_target_name" ]
-      include_dirs = [ _header_map_filename ]
-      ldflags = [
-        "-install_name",
-        "@rpath/$_framework_name/$_output_name",
-      ]
-    }
-
-    group(_framework_headers_target) {
-      deps = [
-        ":$_compile_headers_map_target",
-        ":$_copy_public_headers_target",
-        ":$_create_module_map_target",
-      ]
-    }
+  _is_fat_build = additional_toolchains != []
+  if (_is_fat_build) {
+    _is_fat_build_main_target = current_toolchain == default_toolchain
   }
 
-  _framework_public_config = _target_name + "_ios_public_config"
-  config(_framework_public_config) {
-    visibility = [ ":$_framework_public_config" ]
-    if (defined(_public_headers)) {
-      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_build_dir) ]
-      cflags_objc = common_flags
-      cflags_objcc = common_flags
-    }
+  # This template has a different expansion depending on whether public headers
+  # are defined or not. If no public headers are speficied, then is forwards to
+  # the generic "framework_bundle" target, otherwise if expands to targets that
+  # create header map mapping and corresponding config and configure them as
+  # dependencies of the generic "framework_bundle" target.
+  #
+  # The expansion is a bit different for multi-architecture builds (aka fat
+  # binary builds). Then the targets build for the non-default toolchain uses
+  # the same header map (if available) as the one used by the default toolchain.
 
-    # The link settings are inherited from the framework_bundle config.
+  _toolchain_suffix = ""
+  if (_is_fat_build && !_is_fat_build_main_target) {
+    _toolchain_suffix = "($default_toolchain)"
+  }
+
+  if (_has_public_headers) {
+    _framework_headers_target = _target_name + "_framework_headers"
+    _framework_public_config = _target_name + "_ios_public_config"
+    _framework_target = target_name + "_internal"
+    _headers_map_config = _target_name + "_headers_map"
+
+    if (!_is_fat_build || _is_fat_build_main_target) {
+      _public_headers = invoker.public_headers
+      _framework_name = _output_name + ".framework"
+      _framework_root = "$root_out_dir/$_framework_name"
+
+      _header_map_filename = "$target_gen_dir/$_output_name.headers.hmap"
+
+      _compile_headers_map_target = _target_name + "_compile_headers_map"
+      action(_compile_headers_map_target) {
+        visibility = [ ":$_framework_headers_target" ]
+        script = "//build/config/ios/write_framework_hmap.py"
+        outputs = [
+          _header_map_filename,
+        ]
+
+        # The header map generation only wants the list of headers, not all of
+        # sources, so filter any non-header source files from "sources". It is
+        # less error prone that having the developer duplicate the list of all
+        # headers in addition to "sources".
+        set_sources_assignment_filter([
+                                        "*.c",
+                                        "*.cc",
+                                        "*.cpp",
+                                        "*.m",
+                                        "*.mm",
+                                      ])
+        sources = invoker.sources
+        set_sources_assignment_filter([])
+
+        args = [
+                 rebase_path(_header_map_filename),
+                 rebase_path(_framework_root, root_build_dir),
+               ] + rebase_path(sources, root_build_dir)
+      }
+
+      _create_module_map_target = _target_name + "_module_map"
+      action(_create_module_map_target) {
+        visibility = [ ":$_framework_headers_target" ]
+        script = "//build/config/ios/write_framework_modulemap.py"
+        outputs = [
+          "$_framework_root/Modules/module.modulemap",
+        ]
+        args = [ rebase_path("$_framework_root", root_build_dir) ]
+      }
+
+      _copy_public_headers_target = _target_name + "_copy_public_headers"
+      copy(_copy_public_headers_target) {
+        visibility = [ ":$_framework_headers_target" ]
+        sources = _public_headers
+        outputs = [
+          "$_framework_root/Headers/{{source_file_part}}",
+        ]
+      }
+
+      config(_headers_map_config) {
+        visibility = [ ":$_target_name" ]
+        include_dirs = [ _header_map_filename ]
+        ldflags = [
+          "-install_name",
+          "@rpath/$_framework_name/$_output_name",
+        ]
+      }
+
+      group(_framework_headers_target) {
+        deps = [
+          ":$_compile_headers_map_target",
+          ":$_copy_public_headers_target",
+          ":$_create_module_map_target",
+        ]
+      }
+
+      config(_framework_public_config) {
+        visibility = [ ":$_framework_public_config" ]
+        common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_build_dir) ]
+        cflags_objc = common_flags
+        cflags_objcc = common_flags
+
+        # The link settings are inherited from the framework_bundle config.
+      }
+    }
   }
 
   framework_bundle(_framework_target) {
@@ -730,31 +795,33 @@ template("ios_framework_bundle") {
                            ])
     output_name = _output_name
 
-    if (!defined(public_configs)) {
-      public_configs = []
+    if (_has_public_headers) {
+      if (!defined(public_configs)) {
+        public_configs = []
+      }
+      public_configs += [ ":$_framework_public_config$_toolchain_suffix" ]
     }
-    public_configs += [ ":$_framework_public_config" ]
 
-    if (defined(_public_headers)) {
+    if (_has_public_headers) {
       visibility = [
-        ":$_target_name",
-        ":$_target_name+link",
+        ":$_target_name$_toolchain_suffix",
+        ":$_target_name+link$_toolchain_suffix",
       ]
-      configs += [ ":$_headers_map_config" ]
+      configs += [ ":$_headers_map_config$_toolchain_suffix" ]
 
       if (!defined(deps)) {
         deps = []
       }
-      deps += [ ":$_framework_headers_target" ]
+      deps += [ ":$_framework_headers_target$_toolchain_suffix" ]
     } else {
       if (defined(invoker.visibility)) {
         visibility = invoker.visibility
-        visibility += [ ":$_target_name+link" ]
+        visibility += [ ":$_target_name+link$_toolchain_suffix" ]
       }
     }
   }
 
-  if (defined(_public_headers)) {
+  if (_has_public_headers) {
     group(_target_name) {
       forward_variables_from(invoker,
                              [
@@ -768,7 +835,7 @@ template("ios_framework_bundle") {
       }
 
       public_deps = [
-        ":$_framework_target",
+        ":$_framework_target$_toolchain_suffix",
       ]
     }
 
@@ -779,8 +846,12 @@ template("ios_framework_bundle") {
                                "visibility",
                              ])
       public_deps = [
-        ":$_framework_target+link",
+        ":$_framework_target+link$_toolchain_suffix",
       ]
     }
   }
+}
+
+set_defaults("ios_framework_bundle") {
+  configs = default_shared_library_configs
 }

@@ -8,6 +8,7 @@
 #include "base/android/jni_registrar.h"
 #include "base/macros.h"
 #include "base/trace_event/trace_event.h"
+#include "blimp/client/public/android/blimp_jni_registrar.h"
 #include "chrome/browser/after_startup_task_utils_android.h"
 #include "chrome/browser/android/accessibility/font_size_prefs_android.h"
 #include "chrome/browser/android/accessibility_util.h"
@@ -15,6 +16,8 @@
 #include "chrome/browser/android/background_sync_launcher_android.h"
 #include "chrome/browser/android/banners/app_banner_infobar_delegate_android.h"
 #include "chrome/browser/android/banners/app_banner_manager_android.h"
+#include "chrome/browser/android/blimp/blimp_client_context_factory_android.h"
+#include "chrome/browser/android/blimp/chrome_blimp_client_context_delegate_android.h"
 #include "chrome/browser/android/bookmarks/bookmark_bridge.h"
 #include "chrome/browser/android/bookmarks/partner_bookmarks_reader.h"
 #include "chrome/browser/android/bottombar/overlay_panel_content.h"
@@ -88,6 +91,7 @@
 #include "chrome/browser/android/signin/account_tracker_service_android.h"
 #include "chrome/browser/android/signin/signin_investigator_android.h"
 #include "chrome/browser/android/signin/signin_manager_android.h"
+#include "chrome/browser/android/signin/signin_promo_util_android.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/android/tab_state.h"
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
@@ -225,9 +229,11 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"AutofillProfileBridge", autofill::RegisterAutofillProfileBridge},
     {"AutoSigninSnackbarController", RegisterAutoSigninSnackbarController},
     {"BackgroundSchedulerBridge",
-      offline_pages::android::RegisterBackgroundSchedulerBridge},
+     offline_pages::android::RegisterBackgroundSchedulerBridge},
     {"BackgroundSyncLauncherAndroid",
      BackgroundSyncLauncherAndroid::RegisterLauncher},
+    {"BlimpClientContextFactory", RegisterBlimpClientContextFactoryJni},
+    {"Blimp", blimp::client::RegisterBlimpJni},
     {"BluetoothChooserAndroid", BluetoothChooserAndroid::Register},
     {"BookmarkBridge", BookmarkBridge::RegisterBookmarkBridge},
     {"BrowsingDataCounterBridge", BrowsingDataCounterBridge::Register},
@@ -236,6 +242,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"ChildAccountFeedbackReporter", RegisterChildAccountFeedbackReporter},
     {"ChildAccountService", RegisterChildAccountService},
     {"ChromeApplication", ChromeApplication::RegisterBindings},
+    {"ChromeBlimpClientContextDelegate",
+     ChromeBlimpClientContextDelegateAndroid::RegisterJni},
     {"ChromeBrowserProvider",
      ChromeBrowserProvider::RegisterChromeBrowserProvider},
     {"ChromeFeatureList", RegisterChromeFeatureListJni},
@@ -356,6 +364,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"SessionTabHelper", RegisterSessionTabHelper},
     {"SigninInvestigator", SigninInvestigatorAndroid::Register},
     {"SigninManager", SigninManagerAndroid::Register},
+    {"SigninPromoUtil", SigninPromoUtilAndroid::Register},
     {"SingleTabModel", RegisterSingleTabModel},
     {"SpellCheckerSessionBridge", SpellCheckerSessionBridge::RegisterJNI},
     {"SqliteCursor", SQLiteCursor::RegisterSqliteCursor},

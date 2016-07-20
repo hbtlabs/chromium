@@ -26,6 +26,7 @@
 #include "content/child/service_worker/service_worker_network_provider.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
@@ -897,7 +898,7 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
   RenderFrameImpl::CreateFrame(routing_id, kProxyRoutingId, MSG_ROUTING_NONE,
                                frame()->GetRoutingID(), MSG_ROUTING_NONE,
                                replication_state, nullptr, widget_params,
-                               blink::WebFrameOwnerProperties());
+                               FrameOwnerProperties());
   TestRenderFrame* provisional_frame =
       static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
   EXPECT_TRUE(provisional_frame);
@@ -2435,8 +2436,8 @@ TEST_F(DevToolsAgentTest, RuntimeEnableForcesContextsAfterNavigation) {
 TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("Console.enable",
-                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   DispatchDevToolsMessage("Runtime.evaluate",
                           "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
@@ -2445,14 +2446,14 @@ TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
                           "() => console.log(42));\""
                           "}"
                           "}");
-  EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+  EXPECT_EQ(1, CountNotifications("Runtime.consoleAPICalled"));
 }
 
 TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("Console.enable",
-                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   DispatchDevToolsMessage("Runtime.evaluate",
                           "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
@@ -2479,7 +2480,7 @@ TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
                               "console.log(239))}\""
                               "}"
                               "}");
-  EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+  EXPECT_EQ(1, CountNotifications("Runtime.consoleAPICalled"));
 }
 
 TEST_F(DevToolsAgentTest, CallFramesInIsolatedWorld) {

@@ -1118,13 +1118,13 @@ const AtomicString& AXObject::containerLiveRegionRelevant() const
 bool AXObject::containerLiveRegionAtomic() const
 {
     updateCachedAttributeValuesIfNeeded();
-    return m_cachedLiveRegionRoot ? m_cachedLiveRegionRoot->liveRegionAtomic() : false;
+    return m_cachedLiveRegionRoot && m_cachedLiveRegionRoot->liveRegionAtomic();
 }
 
 bool AXObject::containerLiveRegionBusy() const
 {
     updateCachedAttributeValuesIfNeeded();
-    return m_cachedLiveRegionRoot ? m_cachedLiveRegionRoot->liveRegionBusy() : false;
+    return m_cachedLiveRegionRoot && m_cachedLiveRegionRoot->liveRegionBusy();
 }
 
 void AXObject::markCachedElementRectDirty() const
@@ -1712,6 +1712,7 @@ bool AXObject::nameFromContents() const
     case SwitchRole:
     case TabRole:
     case ToggleButtonRole:
+    case TreeItemRole:
         return true;
     default:
         return false;

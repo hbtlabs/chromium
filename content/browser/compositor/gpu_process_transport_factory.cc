@@ -235,14 +235,12 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
   std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
       validator;
 #if defined(USE_OZONE)
-  std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
-      ui::OzonePlatform::GetInstance()
-          ->GetOverlayManager()
-          ->CreateOverlayCandidates(widget);
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (overlay_candidates &&
-      (command_line->HasSwitch(switches::kEnableHardwareOverlays) ||
-       command_line->HasSwitch(switches::kOzoneTestSingleOverlaySupport))) {
+  if (command_line->HasSwitch(switches::kEnableHardwareOverlays)) {
+    std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
+        ui::OzonePlatform::GetInstance()
+            ->GetOverlayManager()
+            ->CreateOverlayCandidates(widget);
     validator.reset(
         new display_compositor::CompositorOverlayCandidateValidatorOzone(
             std::move(overlay_candidates)));
@@ -578,13 +576,12 @@ void GpuProcessTransportFactory::EstablishedGpuChannel(
 
   // The Display owns and uses the |display_output_surface| created above.
   data->display = base::MakeUnique<cc::Display>(
-      surface_manager_.get(), HostSharedBitmapManager::current(),
+      HostSharedBitmapManager::current(),
       BrowserGpuMemoryBufferManager::current(),
-      compositor->GetRendererSettings(),
-      compositor->surface_id_allocator()->client_id(),
-      std::move(begin_frame_source), std::move(display_output_surface),
-      std::move(scheduler), base::MakeUnique<cc::TextureMailboxDeleter>(
-                                compositor->task_runner().get()));
+      compositor->GetRendererSettings(), std::move(begin_frame_source),
+      std::move(display_output_surface), std::move(scheduler),
+      base::MakeUnique<cc::TextureMailboxDeleter>(
+          compositor->task_runner().get()));
 
   // The |delegated_output_surface| is given back to the compositor, it
   // delegates to the Display as its root surface. Importantly, it shares the

@@ -412,7 +412,7 @@ if (!is_android) {
       "//chrome/renderer",
       "//components/resources",
       "//content/app/resources",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//crypto:platform",
       "//crypto:test_support",
       "//google_apis:test_support",
@@ -696,7 +696,7 @@ if (!is_android) {
       "//base",
       "//components/invalidation/impl",
       "//components/invalidation/impl:test_support",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//net",
       "//skia",
       "//sync",
@@ -969,7 +969,7 @@ test("browser_tests") {
       "//components/strings",
       "//components/translate/core/common",
       "//content/public/common:features",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//crypto:platform",
       "//crypto:test_support",
       "//device/bluetooth:mocks",
@@ -1144,17 +1144,17 @@ test("browser_tests") {
               ".",
               "//chrome")
       deps += [ "//ui/views" ]
+      if (!is_chromeos && (!is_mac || mac_views_browser)) {
+        sources += rebase_path(
+                chrome_tests_gypi_values.chrome_browser_tests_views_non_cros_sources,
+                ".",
+                "//chrome")
+      }
       if (!is_mac) {
         sources += rebase_path(
                 chrome_tests_gypi_values.chrome_browser_tests_views_non_mac_sources,
                 ".",
                 "//chrome")
-        if (!is_chromeos) {
-          sources += rebase_path(
-                  chrome_tests_gypi_values.chrome_browser_tests_views_non_cros_or_mac_sources,
-                  ".",
-                  "//chrome")
-        }
       }
     }
 
@@ -1837,7 +1837,7 @@ test("unit_tests") {
       "//third_party/libjingle",
       "//third_party/libphonenumber",
       "//third_party/webrtc/modules/desktop_capture",
-      "//tools/json_schema_compiler/test",
+      "//tools/json_schema_compiler/test:schema_test",
       "//ui/gl",
       "//v8",
     ]
@@ -1939,6 +1939,7 @@ test("unit_tests") {
       "//chrome/common/extensions/api",
       "//extensions:extensions_resources",
       "//extensions/strings",
+      "//tools/json_schema_compiler/test:features_generation_test",
     ]
     if (enable_service_discovery) {
       sources += rebase_path(
@@ -2412,7 +2413,7 @@ if (!is_android && !is_ios && !is_chromecast) {
       "//chrome/renderer",
       "//components/about_handler",
       "//components/autofill/content/renderer:test_support",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//media/cast:test_support",
       "//testing/gmock",
       "//testing/gtest",

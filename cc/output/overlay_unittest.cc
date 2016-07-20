@@ -40,9 +40,9 @@ namespace cc {
 namespace {
 
 const gfx::Size kDisplaySize(256, 256);
-const gfx::Rect kOverlayRect(0, 0, 128, 128);
-const gfx::Rect kOverlayTopLeftRect(0, 0, 64, 64);
-const gfx::Rect kOverlayBottomRightRect(64, 64, 64, 64);
+const gfx::Rect kOverlayRect(0, 0, 256, 256);
+const gfx::Rect kOverlayTopLeftRect(0, 0, 128, 128);
+const gfx::Rect kOverlayBottomRightRect(128, 128, 128, 128);
 const gfx::Rect kOverlayClipRect(0, 0, 128, 128);
 const gfx::PointF kUVTopLeft(0.1f, 0.2f);
 const gfx::PointF kUVBottomRight(1.0f, 1.0f);
@@ -77,7 +77,7 @@ class SingleOverlayValidator : public OverlayCandidateValidator {
 
     OverlayCandidate& candidate = surfaces->back();
     EXPECT_TRUE(!candidate.use_output_surface_for_resource);
-    if (candidate.display_rect.width() == 64) {
+    if (candidate.display_rect.width() == kOverlayBottomRightRect.width()) {
       EXPECT_EQ(gfx::RectF(kOverlayBottomRightRect), candidate.display_rect);
     } else {
       EXPECT_NEAR(kOverlayRect.x(), candidate.display_rect.x(), 0.01f);
@@ -270,8 +270,8 @@ TextureDrawQuad* CreateFullscreenCandidateQuad(
     ResourceProvider* resource_provider,
     const SharedQuadState* shared_quad_state,
     RenderPass* render_pass) {
-  return CreateCandidateQuadAt(
-      resource_provider, shared_quad_state, render_pass, kOverlayRect);
+  return CreateCandidateQuadAt(resource_provider, shared_quad_state,
+                               render_pass, render_pass->output_rect);
 }
 
 StreamVideoDrawQuad* CreateFullscreenCandidateVideoQuad(
@@ -280,7 +280,8 @@ StreamVideoDrawQuad* CreateFullscreenCandidateVideoQuad(
     RenderPass* render_pass,
     const gfx::Transform& transform) {
   return CreateCandidateVideoQuadAt(resource_provider, shared_quad_state,
-                                    render_pass, kOverlayRect, transform);
+                                    render_pass, render_pass->output_rect,
+                                    transform);
 }
 
 void CreateOpaqueQuadAt(ResourceProvider* resource_provider,
@@ -296,7 +297,7 @@ void CreateFullscreenOpaqueQuad(ResourceProvider* resource_provider,
                                 const SharedQuadState* shared_quad_state,
                                 RenderPass* render_pass) {
   CreateOpaqueQuadAt(resource_provider, shared_quad_state, render_pass,
-                     kOverlayRect);
+                     render_pass->output_rect);
 }
 
 static void CompareRenderPassLists(const RenderPassList& expected_list,
@@ -520,21 +521,6 @@ TEST_F(SingleOverlayOnTopTest, MultipleRenderPasses) {
                                          &candidate_list, nullptr,
                                          &damage_rect_);
   EXPECT_EQ(1U, candidate_list.size());
-}
-
-TEST_F(SingleOverlayOnTopTest, RejectPremultipliedAlpha) {
-  std::unique_ptr<RenderPass> pass = CreateRenderPass();
-  TextureDrawQuad* quad =
-      CreateFullscreenCandidateQuad(resource_provider_.get(),
-                                    pass->shared_quad_state_list.back(),
-                                    pass.get());
-  quad->premultiplied_alpha = true;
-
-  OverlayCandidateList candidate_list;
-  overlay_processor_->ProcessForOverlays(resource_provider_.get(), pass.get(),
-                                         &candidate_list, nullptr,
-                                         &damage_rect_);
-  EXPECT_EQ(0U, candidate_list.size());
 }
 
 TEST_F(SingleOverlayOnTopTest, RejectBlending) {
@@ -1074,7 +1060,7 @@ TEST_F(CALayerOverlayTest, ThreeDTransform) {
   EXPECT_EQ(1U, ca_layer_list.size());
   gfx::Transform expected_transform;
   expected_transform.RotateAboutXAxis(45.f);
-  gfx::Transform actual_transform(ca_layer_list.back().transform);
+  gfx::Transform actual_transform(ca_layer_list.back().shared_state->transform);
   EXPECT_EQ(expected_transform.ToString(), actual_transform.ToString());
   EXPECT_EQ(0U, output_surface_->bind_framebuffer_count());
 }
@@ -1116,8 +1102,9 @@ TEST_F(CALayerOverlayTest, NontrivialClip) {
   EXPECT_EQ(0U, pass->quad_list.size());
   EXPECT_EQ(0U, overlay_list.size());
   EXPECT_EQ(1U, ca_layer_list.size());
-  EXPECT_TRUE(ca_layer_list.back().is_clipped);
-  EXPECT_EQ(gfx::RectF(64, 64, 128, 128), ca_layer_list.back().clip_rect);
+  EXPECT_TRUE(ca_layer_list.back().shared_state->is_clipped);
+  EXPECT_EQ(gfx::RectF(64, 64, 128, 128),
+            ca_layer_list.back().shared_state->clip_rect);
   EXPECT_EQ(0U, output_surface_->bind_framebuffer_count());
 }
 

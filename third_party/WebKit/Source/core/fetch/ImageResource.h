@@ -44,6 +44,10 @@ class ResourceClient;
 class ResourceFetcher;
 class SecurityOrigin;
 
+// ImageResource class represents an image type resource.
+//
+// As for the lifetimes of m_image and m_data, see this document:
+// https://docs.google.com/document/d/1v0yTAZ6wkqX2U_M6BNIGUJpM1s0TIw1VsqpxoL7aciY/edit?usp=sharing
 class CORE_EXPORT ImageResource final : public Resource, public ImageObserver, public MultipartImageResourceParser::Client {
     friend class MemoryCache;
     USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
@@ -101,6 +105,7 @@ public:
 
     void allClientsAndObserversRemoved() override;
 
+    PassRefPtr<SharedBuffer> resourceBuffer() const override;
     void appendData(const char*, size_t) override;
     void error(const ResourceError&) override;
     void responseReceived(const ResourceResponse&, std::unique_ptr<WebDataConsumerHandle>) override;
@@ -124,11 +129,6 @@ public:
     void multipartDataReceived(const char*, size_t) final;
 
     DECLARE_VIRTUAL_TRACE();
-
-protected:
-    bool isSafeToUnlock() const override;
-    void destroyDecodedDataIfPossible() override;
-    void destroyDecodedDataForFailedRevalidation() override;
 
 private:
     explicit ImageResource(blink::Image*, const ResourceLoaderOptions&);
@@ -166,6 +166,10 @@ private:
     void markClientsAndObserversFinished() override;
 
     void doResetAnimation();
+
+    bool isSafeToUnlock() const override;
+    void destroyDecodedDataIfPossible() override;
+    void destroyDecodedDataForFailedRevalidation() override;
 
     float m_devicePixelRatioHeaderValue;
 

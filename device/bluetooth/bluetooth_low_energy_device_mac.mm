@@ -113,9 +113,8 @@ uint16_t BluetoothLowEnergyDeviceMac::GetAppearance() const {
 
 base::Optional<std::string> BluetoothLowEnergyDeviceMac::GetName() const {
   if ([peripheral_ name])
-    return base::Optional<std::string>(
-        base::SysNSStringToUTF8([peripheral_ name]));
-  return base::Optional<std::string>();
+    return base::SysNSStringToUTF8([peripheral_ name]);
+  return base::nullopt;
 }
 
 int BluetoothLowEnergyDeviceMac::GetRSSI() const {

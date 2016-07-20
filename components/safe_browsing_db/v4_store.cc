@@ -40,6 +40,12 @@ void RecordApplyUpdateResult(ApplyUpdateResult result) {
                             APPLY_UPDATE_RESULT_MAX);
 }
 
+void RecordApplyUpdateResultWhenReadingFromDisk(ApplyUpdateResult result) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "SafeBrowsing.V4ApplyUpdateResultWhenReadingFromDisk", result,
+      APPLY_UPDATE_RESULT_MAX);
+}
+
 // Returns the name of the temporary file used to buffer data for
 // |filename|.  Exported for unit tests.
 const base::FilePath TemporaryFileForFilename(const base::FilePath& filename) {
@@ -47,6 +53,10 @@ const base::FilePath TemporaryFileForFilename(const base::FilePath& filename) {
 }
 
 }  // namespace
+
+using ::google::protobuf::RepeatedField;
+using ::google::protobuf::RepeatedPtrField;
+using ::google::protobuf::int32;
 
 std::ostream& operator<<(std::ostream& os, const V4Store& store) {
   os << store.DebugString();
@@ -97,24 +107,29 @@ void V4Store::ApplyUpdate(
       new V4Store(this->task_runner_, this->store_path_));
   new_store->state_ = response->new_client_state();
   // TODO(vakh):
-  // 1. Merge the old store and the new update in new_store.
+  // 1. Done: Merge the old store and the new update in new_store.
   // 2. Create a ListUpdateResponse containing RICE encoded hash-prefixes and
   // response_type as FULL_UPDATE, and write that to disk.
   // 3. Remove this if condition after completing 1. and 2.
   HashPrefixMap hash_prefix_map;
   ApplyUpdateResult apply_update_result;
   if (response->response_type() == ListUpdateResponse::PARTIAL_UPDATE) {
-    for (const auto& removal : response->removals()) {
+    const RepeatedField<int32>* raw_removals = nullptr;
+    size_t removals_size = response->removals_size();
+    DCHECK_LE(removals_size, 1u);
+    if (removals_size == 1) {
+      const ThreatEntrySet& removal = response->removals().Get(0);
       // TODO(vakh): Allow other compression types.
       // See: https://bugs.chromium.org/p/chromium/issues/detail?id=624567
       DCHECK_EQ(RAW, removal.compression_type());
+      raw_removals = &removal.raw_indices().indices();
     }
 
     apply_update_result = UpdateHashPrefixMapFromAdditions(
         response->additions(), &hash_prefix_map);
     if (apply_update_result == APPLY_UPDATE_SUCCESS) {
-      apply_update_result =
-          new_store->MergeUpdate(hash_prefix_map_, hash_prefix_map);
+      apply_update_result = new_store->MergeUpdate(
+          hash_prefix_map_, hash_prefix_map, raw_removals);
     }
     // TODO(vakh): Generate the updated ListUpdateResponse to write to disk.
   } else if (response->response_type() == ListUpdateResponse::FULL_UPDATE) {
@@ -143,7 +158,7 @@ void V4Store::ApplyUpdate(
 
 // static
 ApplyUpdateResult V4Store::UpdateHashPrefixMapFromAdditions(
-    const ::google::protobuf::RepeatedPtrField<ThreatEntrySet>& additions,
+    const RepeatedPtrField<ThreatEntrySet>& additions,
     HashPrefixMap* additions_map) {
   for (const auto& addition : additions) {
     // TODO(vakh): Allow other compression types.
@@ -185,44 +200,35 @@ ApplyUpdateResult V4Store::AddUnlumpedHashes(PrefixSize prefix_size,
 }
 
 // static
-bool V4Store::GetNextSmallestPrefixSize(const HashPrefixMap& hash_prefix_map,
-                                        const CounterMap& counter_map,
-                                        PrefixSize* smallest_prefix_size) {
-  HashPrefix smallest_prefix, current_prefix;
-  for (const auto& counter_pair : counter_map) {
-    PrefixSize prefix_size = counter_pair.first;
-    size_t index = counter_pair.second;
-    size_t sized_index = prefix_size * index;
+bool V4Store::GetNextSmallestUnmergedPrefix(
+    const HashPrefixMap& hash_prefix_map,
+    const IteratorMap& iterator_map,
+    HashPrefix* smallest_hash_prefix) {
+  HashPrefix current_hash_prefix;
+  bool has_unmerged = false;
 
+  for (const auto& iterator_pair : iterator_map) {
+    PrefixSize prefix_size = iterator_pair.first;
+    HashPrefixes::const_iterator start = iterator_pair.second;
     const HashPrefixes& hash_prefixes = hash_prefix_map.at(prefix_size);
-    if (sized_index < hash_prefixes.size()) {
-      current_prefix = hash_prefixes.substr(sized_index, prefix_size);
-      if (smallest_prefix.empty() || smallest_prefix > current_prefix) {
-        smallest_prefix = current_prefix;
-        *smallest_prefix_size = prefix_size;
+    if (prefix_size <=
+        static_cast<PrefixSize>(std::distance(start, hash_prefixes.end()))) {
+      current_hash_prefix = HashPrefix(start, start + prefix_size);
+      if (!has_unmerged || *smallest_hash_prefix > current_hash_prefix) {
+        has_unmerged = true;
+        smallest_hash_prefix->swap(current_hash_prefix);
       }
     }
   }
-  return !smallest_prefix.empty();
+  return has_unmerged;
 }
 
 // static
-void V4Store::InitializeCounterMap(const HashPrefixMap& hash_prefix_map,
-                                   CounterMap* counter_map) {
+void V4Store::InitializeIteratorMap(const HashPrefixMap& hash_prefix_map,
+                                    IteratorMap* iterator_map) {
   for (const auto& map_pair : hash_prefix_map) {
-    (*counter_map)[map_pair.first] = 0;
+    (*iterator_map)[map_pair.first] = map_pair.second.begin();
   }
-}
-
-// static
-HashPrefix V4Store::GetNextUnmergedPrefixForSize(
-    PrefixSize prefix_size,
-    const HashPrefixMap& hash_prefix_map,
-    const CounterMap& counter_map) {
-  const HashPrefixes& hash_prefixes = hash_prefix_map.at(prefix_size);
-  size_t index_within_list = counter_map.at(prefix_size);
-  size_t sized_index = prefix_size * index_within_list;
-  return hash_prefixes.substr(sized_index, prefix_size);
 }
 
 // static
@@ -241,47 +247,39 @@ void V4Store::ReserveSpaceInPrefixMap(const HashPrefixMap& other_prefixes_map,
   }
 }
 
-ApplyUpdateResult V4Store::MergeUpdate(const HashPrefixMap& old_prefixes_map,
-                                       const HashPrefixMap& additions_map) {
+ApplyUpdateResult V4Store::MergeUpdate(
+    const HashPrefixMap& old_prefixes_map,
+    const HashPrefixMap& additions_map,
+    const RepeatedField<int32>* raw_removals) {
   DCHECK(hash_prefix_map_.empty());
   hash_prefix_map_.clear();
   ReserveSpaceInPrefixMap(old_prefixes_map, &hash_prefix_map_);
   ReserveSpaceInPrefixMap(additions_map, &hash_prefix_map_);
 
-  PrefixSize next_size_for_old;
-  CounterMap old_counter_map;
-  InitializeCounterMap(old_prefixes_map, &old_counter_map);
-  bool old_has_unmerged = GetNextSmallestPrefixSize(
-      old_prefixes_map, old_counter_map, &next_size_for_old);
+  IteratorMap old_iterator_map;
+  HashPrefix next_smallest_prefix_old;
+  InitializeIteratorMap(old_prefixes_map, &old_iterator_map);
+  bool old_has_unmerged = GetNextSmallestUnmergedPrefix(
+      old_prefixes_map, old_iterator_map, &next_smallest_prefix_old);
 
-  PrefixSize next_size_for_additions;
-  CounterMap additions_counter_map;
-  InitializeCounterMap(additions_map, &additions_counter_map);
-  bool additions_has_unmerged = GetNextSmallestPrefixSize(
-      additions_map, additions_counter_map, &next_size_for_additions);
+  IteratorMap additions_iterator_map;
+  HashPrefix next_smallest_prefix_additions;
+  InitializeIteratorMap(additions_map, &additions_iterator_map);
+  bool additions_has_unmerged = GetNextSmallestUnmergedPrefix(
+      additions_map, additions_iterator_map, &next_smallest_prefix_additions);
 
   // Classical merge sort.
   // The two constructs to merge are maps: old_prefixes_map, additions_map.
-
-  HashPrefix next_smallest_prefix_old, next_smallest_prefix_additions;
   // At least one of the maps still has elements that need to be merged into the
   // new store.
+
+  // Keep track of the number of elements picked from the old map. This is used
+  // to determine which elements to drop based on the raw_removals. Note that
+  // picked is not the same as merged. A picked element isn't merged if its
+  // index is on the raw_removals list.
+  int total_picked_from_old = 0;
+  const int* removals_iter = raw_removals ? raw_removals->begin() : nullptr;
   while (old_has_unmerged || additions_has_unmerged) {
-    // Old map still has elements that need to be merged.
-    if (old_has_unmerged) {
-      // Get the lexographically smallest hash prefix from the old store.
-      next_smallest_prefix_old = GetNextUnmergedPrefixForSize(
-          next_size_for_old, old_prefixes_map, old_counter_map);
-    }
-
-    // Additions map still has elements that need to be merged.
-    if (additions_has_unmerged) {
-      // Get the lexographically smallest hash prefix from the additions in the
-      // latest update from the server.
-      next_smallest_prefix_additions = GetNextUnmergedPrefixForSize(
-          next_size_for_additions, additions_map, additions_counter_map);
-    }
-
     // If the same hash prefix appears in the existing store and the additions
     // list, something is clearly wrong. Discard the update.
     if (old_has_unmerged && additions_has_unmerged &&
@@ -296,31 +294,50 @@ ApplyUpdateResult V4Store::MergeUpdate(const HashPrefixMap& old_prefixes_map,
         (!additions_has_unmerged ||
          (next_smallest_prefix_old < next_smallest_prefix_additions));
 
+    PrefixSize next_smallest_prefix_size;
     if (pick_from_old) {
-      hash_prefix_map_[next_size_for_old] += next_smallest_prefix_old;
+      next_smallest_prefix_size = next_smallest_prefix_old.size();
 
-      // Update the counter map, which means that we have merged one hash
+      // Update the iterator map, which means that we have merged one hash
       // prefix of size |next_size_for_old| from the old store.
-      old_counter_map[next_size_for_old]++;
+      old_iterator_map[next_smallest_prefix_size] += next_smallest_prefix_size;
+
+      if (!raw_removals || removals_iter == raw_removals->end() ||
+          *removals_iter != total_picked_from_old) {
+        // Append the smallest hash to the appropriate list.
+        hash_prefix_map_[next_smallest_prefix_size] += next_smallest_prefix_old;
+      } else {
+        // Element not added to new map. Move the removals iterator forward.
+        removals_iter++;
+      }
+
+      total_picked_from_old++;
 
       // Find the next smallest unmerged element in the old store's map.
-      old_has_unmerged = GetNextSmallestPrefixSize(
-          old_prefixes_map, old_counter_map, &next_size_for_old);
+      old_has_unmerged = GetNextSmallestUnmergedPrefix(
+          old_prefixes_map, old_iterator_map, &next_smallest_prefix_old);
     } else {
-      hash_prefix_map_[next_size_for_additions] +=
+      next_smallest_prefix_size = next_smallest_prefix_additions.size();
+
+      // Append the smallest hash to the appropriate list.
+      hash_prefix_map_[next_smallest_prefix_size] +=
           next_smallest_prefix_additions;
 
-      // Update the counter map, which means that we have merged one hash
-      // prefix of size |next_size_for_additions| from the update.
-      additions_counter_map[next_size_for_additions]++;
+      // Update the iterator map, which means that we have merged one hash
+      // prefix of size |next_smallest_prefix_size| from the update.
+      additions_iterator_map[next_smallest_prefix_size] +=
+          next_smallest_prefix_size;
 
       // Find the next smallest unmerged element in the additions map.
-      additions_has_unmerged = GetNextSmallestPrefixSize(
-          additions_map, additions_counter_map, &next_size_for_additions);
+      additions_has_unmerged =
+          GetNextSmallestUnmergedPrefix(additions_map, additions_iterator_map,
+                                        &next_smallest_prefix_additions);
     }
   }
 
-  return APPLY_UPDATE_SUCCESS;
+  return (!raw_removals || removals_iter == raw_removals->end())
+             ? APPLY_UPDATE_SUCCESS
+             : REMOVALS_INDEX_TOO_LARGE;
 }
 
 StoreReadResult V4Store::ReadFromDisk() {
@@ -359,10 +376,16 @@ StoreReadResult V4Store::ReadFromDisk() {
     return HASH_PREFIX_INFO_MISSING_FAILURE;
   }
 
-  ListUpdateResponse list_update_response = file_format.list_update_response();
-  state_ = list_update_response.new_client_state();
-  // TODO(vakh): Do more with what's read from the disk.
+  const ListUpdateResponse& response = file_format.list_update_response();
+  ApplyUpdateResult apply_update_result = UpdateHashPrefixMapFromAdditions(
+      response.additions(), &hash_prefix_map_);
+  RecordApplyUpdateResultWhenReadingFromDisk(apply_update_result);
+  if (apply_update_result != APPLY_UPDATE_SUCCESS) {
+    hash_prefix_map_.clear();
+    return HASH_PREFIX_MAP_GENERATION_FAILURE;
+  }
 
+  state_ = response.new_client_state();
   return READ_SUCCESS;
 }
 
@@ -400,6 +423,46 @@ StoreWriteResult V4Store::WriteToDisk(
   }
 
   return WRITE_SUCCESS;
+}
+
+HashPrefix V4Store::GetMatchingHashPrefix(const FullHash& full_hash) {
+  // It should never be the case that more than one hash prefixes match a given
+  // full hash. However, if that happens, this method returns any one of them.
+  // It does not guarantee which one of those will be returned.
+  DCHECK_EQ(32u, full_hash.size());
+  for (const auto& pair : hash_prefix_map_) {
+    const PrefixSize& prefix_size = pair.first;
+    const HashPrefixes& hash_prefixes = pair.second;
+    HashPrefix hash_prefix = full_hash.substr(0, prefix_size);
+    if (HashPrefixMatches(hash_prefix, hash_prefixes.begin(),
+                          hash_prefixes.end())) {
+      return hash_prefix;
+    }
+  }
+  return HashPrefix();
+}
+
+// static
+bool V4Store::HashPrefixMatches(const HashPrefix& hash_prefix,
+                                const HashPrefixes::const_iterator& begin,
+                                const HashPrefixes::const_iterator& end) {
+  if (begin == end) {
+    return false;
+  }
+  size_t distance = std::distance(begin, end);
+  const PrefixSize prefix_size = hash_prefix.length();
+  DCHECK_EQ(0u, distance % prefix_size);
+  size_t mid_prefix_index = ((distance / prefix_size) / 2) * prefix_size;
+  HashPrefixes::const_iterator mid = begin + mid_prefix_index;
+  HashPrefix mid_prefix = HashPrefix(mid, mid + prefix_size);
+  int result = hash_prefix.compare(mid_prefix);
+  if (result == 0) {
+    return true;
+  } else if (result < 0) {
+    return HashPrefixMatches(hash_prefix, begin, mid);
+  } else {
+    return HashPrefixMatches(hash_prefix, mid + prefix_size, end);
+  }
 }
 
 }  // namespace safe_browsing

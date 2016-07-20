@@ -206,21 +206,6 @@ interface File : Blob
     getter name
     getter webkitRelativePath
     method constructor
-interface FileError : DOMError
-    attribute ABORT_ERR
-    attribute ENCODING_ERR
-    attribute INVALID_MODIFICATION_ERR
-    attribute INVALID_STATE_ERR
-    attribute NOT_FOUND_ERR
-    attribute NOT_READABLE_ERR
-    attribute NO_MODIFICATION_ALLOWED_ERR
-    attribute PATH_EXISTS_ERR
-    attribute QUOTA_EXCEEDED_ERR
-    attribute SECURITY_ERR
-    attribute SYNTAX_ERR
-    attribute TYPE_MISMATCH_ERR
-    getter code
-    method constructor
 interface FileList
     getter length
     method constructor
@@ -367,15 +352,15 @@ interface IDBObjectStore
     method openCursor
     method openKeyCursor
     method put
-interface IDBObserver
-    method constructor
-    method observe
-    method unobserve
-interface IDBObserverChangesRecord
+interface IDBObservation
     getter key
     getter type
     getter value
     method constructor
+interface IDBObserver
+    method constructor
+    method observe
+    method unobserve
 interface IDBOpenDBRequest : IDBRequest
     getter onblocked
     getter onupgradeneeded
@@ -598,10 +583,15 @@ interface PushMessageData
     method text
 interface PushSubscription
     getter endpoint
+    getter options
     method constructor
     method getKey
     method toJSON
     method unsubscribe
+interface PushSubscriptionOptions
+    getter applicationServerKey
+    getter userVisibleOnly
+    method constructor
 interface ReadableStream
     getter locked
     method cancel
@@ -645,10 +635,13 @@ interface Response
 interface ServiceWorkerGlobalScope : WorkerGlobalScope
     method constructor
 interface ServiceWorkerRegistration : EventTarget
+    getter active
+    getter installing
     getter onupdatefound
     getter pushManager
     getter scope
     getter sync
+    getter waiting
     method constructor
     method getNotifications
     method showNotification
@@ -1198,6 +1191,7 @@ interface WindowClient : Client
     method navigate
 interface WorkerGlobalScope : EventTarget
     getter addressSpace
+    getter caches
     getter crypto
     getter indexedDB
     getter location
@@ -1353,7 +1347,6 @@ interface webkitIDBTransaction : EventTarget
 global object
     attribute console
     attribute internals
-    getter caches
     getter clients
     getter onactivate
     getter onfetch

@@ -75,6 +75,9 @@ const char kAshEnableSoftwareMirroring[] = "ash-enable-software-mirroring";
 // flag is removed.
 const char kAshEnableTouchViewTesting[] = "ash-enable-touch-view-testing";
 
+// Enables the window cycling UI (more visual feedback for alt-tab).
+const char kAshEnableWindowCycleUi[] = "ash-enable-window-cycle-ui";
+
 // Hides notifications that are irrelevant to Chrome OS device factory testing,
 // such as battery level updates.
 const char kAshHideNotificationsForFactory[] =
@@ -94,6 +97,16 @@ const char kAshMaterialDesign[] = "ash-md";
 const char kAshMaterialDesignDisabled[] = "disabled";
 const char kAshMaterialDesignEnabled[] = "enabled";
 const char kAshMaterialDesignExperimental[] = "experimental";
+
+// Specifies a maximum number of preview windows in overview mode that still
+// allows using mask layers to hide the original window header and use rounded
+// corners.
+const char kAshMaxWindowsToUseMaskInOverview[] = "ash-max-previews-to-use-mask";
+
+// Specifies a maximum number of preview windows in overview mode that still
+// allows using alpha shapes to hide the original window header.
+const char kAshMaxWindowsToUseShapeInOverview[] =
+    "ash-max-previews-to-use-shape";
 
 // Specifies the layout mode and offsets for the secondary display for
 // testing. The format is "<t|r|b|l>,<offset>" where t=TOP, r=RIGHT,

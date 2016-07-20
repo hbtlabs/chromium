@@ -296,10 +296,11 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::GetDisplayLayout(
     }
     case MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED:
     case MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED: {
-      if ((new_display_state == MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED &&
-           states.size() != 2 && num_on_displays != 2) ||
-          (new_display_state == MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED &&
-           num_on_displays <= 2)) {
+      // In docked mode (with internal display + 2 external displays) the state
+      // will be DUAL_EXTENDED with internal display turned off and the 2
+      // external displays turned on.
+      if (new_display_state == MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED &&
+          states.size() != 2 && num_on_displays != 2) {
         LOG(WARNING) << "Ignoring request to enter extended mode with "
                      << states.size() << " connected display(s) and "
                      << num_on_displays << " turned on";
@@ -844,7 +845,13 @@ void DisplayConfigurator::SetDisplayPowerInternal(
     chromeos::DisplayPowerState power_state,
     int flags,
     const ConfigurationCallback& callback) {
+  // Only skip if the current power state is the same and the latest requested
+  // power state is the same. If |pending_power_state_ != current_power_state_|
+  // then there is a current task pending or the last configuration failed. In
+  // either case request a new configuration to make sure the state is
+  // consistent with the expectations.
   if (power_state == current_power_state_ &&
+      power_state == pending_power_state_ &&
       !(flags & kSetDisplayPowerForceProbe)) {
     callback.Run(true);
     return;
@@ -1116,7 +1123,7 @@ void DisplayConfigurator::NotifyPowerStateObservers() {
       Observer, observers_, OnPowerStateChanged(current_power_state_));
 }
 
-int64_t DisplayConfigurator::AddVirtualDisplay(gfx::Size display_size) {
+int64_t DisplayConfigurator::AddVirtualDisplay(const gfx::Size& display_size) {
   if (last_virtual_display_id_ == 0xff) {
     LOG(WARNING) << "Exceeded virtual display id limit";
     return display::Display::kInvalidDisplayID;

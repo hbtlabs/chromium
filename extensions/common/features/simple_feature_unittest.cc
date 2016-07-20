@@ -13,6 +13,7 @@
 #include "base/stl_util.h"
 #include "base/test/scoped_command_line.h"
 #include "base/values.h"
+#include "extensions/common/features/api_feature.h"
 #include "extensions/common/features/complex_feature.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/features/json_feature_provider.h"
@@ -36,9 +37,7 @@ struct IsAvailableTestData {
 
 template <class FeatureClass>
 SimpleFeature* CreateFeature() {
-  SimpleFeature* feature = new FeatureClass();
-  feature->set_check_channel(true);
-  return feature;
+  return new FeatureClass();
 }
 
 Feature::AvailabilityResult IsAvailableInChannel(
@@ -50,7 +49,6 @@ Feature::AvailabilityResult IsAvailableInChannel(
 
   base::DictionaryValue feature_value;
   feature_value.SetString("channel", channel);
-  feature.set_check_channel(true);
   feature.Parse(&feature_value);
 
   return feature
@@ -117,8 +115,8 @@ TEST_F(SimpleFeatureTest, Whitelist) {
   const std::string kIdBar("barabbbbccccddddeeeeffffgggghhhh");
   const std::string kIdBaz("bazabbbbccccddddeeeeffffgggghhhh");
   SimpleFeature feature;
-  feature.whitelist()->push_back(kIdFoo);
-  feature.whitelist()->push_back(kIdBar);
+  feature.whitelist_.push_back(kIdFoo);
+  feature.whitelist_.push_back(kIdBar);
 
   EXPECT_EQ(
       Feature::IS_AVAILABLE,
@@ -150,7 +148,7 @@ TEST_F(SimpleFeatureTest, Whitelist) {
                                     -1,
                                     Feature::UNSPECIFIED_PLATFORM).result());
 
-  feature.extension_types()->push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+  feature.extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
   EXPECT_EQ(
       Feature::NOT_FOUND_IN_WHITELIST,
       feature.IsAvailableToManifest(kIdBaz,
@@ -167,7 +165,7 @@ TEST_F(SimpleFeatureTest, HashedIdWhitelist) {
   const std::string kIdFooHashed("55BC7228A0D502A2A48C9BB16B07062A01E62897");
   SimpleFeature feature;
 
-  feature.whitelist()->push_back(kIdFooHashed);
+  feature.whitelist_.push_back(kIdFooHashed);
 
   EXPECT_EQ(
       Feature::IS_AVAILABLE,
@@ -204,8 +202,8 @@ TEST_F(SimpleFeatureTest, Blacklist) {
   const std::string kIdBar("barabbbbccccddddeeeeffffgggghhhh");
   const std::string kIdBaz("bazabbbbccccddddeeeeffffgggghhhh");
   SimpleFeature feature;
-  feature.blacklist()->push_back(kIdFoo);
-  feature.blacklist()->push_back(kIdBar);
+  feature.blacklist_.push_back(kIdFoo);
+  feature.blacklist_.push_back(kIdBar);
 
   EXPECT_EQ(
       Feature::FOUND_IN_BLACKLIST,
@@ -245,7 +243,7 @@ TEST_F(SimpleFeatureTest, HashedIdBlacklist) {
   const std::string kIdFooHashed("55BC7228A0D502A2A48C9BB16B07062A01E62897");
   SimpleFeature feature;
 
-  feature.blacklist()->push_back(kIdFooHashed);
+  feature.blacklist_.push_back(kIdFooHashed);
 
   EXPECT_EQ(
       Feature::FOUND_IN_BLACKLIST,
@@ -279,8 +277,8 @@ TEST_F(SimpleFeatureTest, HashedIdBlacklist) {
 
 TEST_F(SimpleFeatureTest, PackageType) {
   SimpleFeature feature;
-  feature.extension_types()->push_back(Manifest::TYPE_EXTENSION);
-  feature.extension_types()->push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+  feature.extension_types_.push_back(Manifest::TYPE_EXTENSION);
+  feature.extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
 
   EXPECT_EQ(
       Feature::IS_AVAILABLE,
@@ -316,9 +314,9 @@ TEST_F(SimpleFeatureTest, PackageType) {
 TEST_F(SimpleFeatureTest, Context) {
   SimpleFeature feature;
   feature.set_name("somefeature");
-  feature.contexts()->push_back(Feature::BLESSED_EXTENSION_CONTEXT);
-  feature.extension_types()->push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
-  feature.platforms()->push_back(Feature::CHROMEOS_PLATFORM);
+  feature.contexts_.push_back(Feature::BLESSED_EXTENSION_CONTEXT);
+  feature.extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+  feature.platforms_.push_back(Feature::CHROMEOS_PLATFORM);
   feature.set_min_manifest_version(21);
   feature.set_max_manifest_version(25);
 
@@ -335,14 +333,14 @@ TEST_F(SimpleFeatureTest, Context) {
   EXPECT_EQ("", error);
   ASSERT_TRUE(extension.get());
 
-  feature.whitelist()->push_back("monkey");
+  feature.whitelist_.push_back("monkey");
   EXPECT_EQ(Feature::NOT_FOUND_IN_WHITELIST, feature.IsAvailableToContext(
       extension.get(), Feature::BLESSED_EXTENSION_CONTEXT,
       Feature::CHROMEOS_PLATFORM).result());
-  feature.whitelist()->clear();
+  feature.whitelist_.clear();
 
-  feature.extension_types()->clear();
-  feature.extension_types()->push_back(Manifest::TYPE_THEME);
+  feature.extension_types_.clear();
+  feature.extension_types_.push_back(Manifest::TYPE_THEME);
   {
     Feature::Availability availability = feature.IsAvailableToContext(
         extension.get(), Feature::BLESSED_EXTENSION_CONTEXT,
@@ -353,11 +351,11 @@ TEST_F(SimpleFeatureTest, Context) {
               availability.message());
   }
 
-  feature.extension_types()->clear();
-  feature.extension_types()->push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
-  feature.contexts()->clear();
-  feature.contexts()->push_back(Feature::UNBLESSED_EXTENSION_CONTEXT);
-  feature.contexts()->push_back(Feature::CONTENT_SCRIPT_CONTEXT);
+  feature.extension_types_.clear();
+  feature.extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+  feature.contexts_.clear();
+  feature.contexts_.push_back(Feature::UNBLESSED_EXTENSION_CONTEXT);
+  feature.contexts_.push_back(Feature::CONTENT_SCRIPT_CONTEXT);
   {
     Feature::Availability availability = feature.IsAvailableToContext(
         extension.get(), Feature::BLESSED_EXTENSION_CONTEXT,
@@ -368,7 +366,7 @@ TEST_F(SimpleFeatureTest, Context) {
               availability.message());
   }
 
-  feature.contexts()->push_back(Feature::WEB_PAGE_CONTEXT);
+  feature.contexts_.push_back(Feature::WEB_PAGE_CONTEXT);
   {
     Feature::Availability availability = feature.IsAvailableToContext(
         extension.get(), Feature::BLESSED_EXTENSION_CONTEXT,
@@ -379,8 +377,8 @@ TEST_F(SimpleFeatureTest, Context) {
               availability.message());
   }
 
-  feature.contexts()->clear();
-  feature.contexts()->push_back(Feature::BLESSED_EXTENSION_CONTEXT);
+  feature.contexts_.clear();
+  feature.contexts_.push_back(Feature::BLESSED_EXTENSION_CONTEXT);
   feature.set_location(SimpleFeature::COMPONENT_LOCATION);
   EXPECT_EQ(Feature::INVALID_LOCATION, feature.IsAvailableToContext(
       extension.get(), Feature::BLESSED_EXTENSION_CONTEXT,
@@ -453,7 +451,7 @@ TEST_F(SimpleFeatureTest, Location) {
 
 TEST_F(SimpleFeatureTest, Platform) {
   SimpleFeature feature;
-  feature.platforms()->push_back(Feature::CHROMEOS_PLATFORM);
+  feature.platforms_.push_back(Feature::CHROMEOS_PLATFORM);
   EXPECT_EQ(Feature::IS_AVAILABLE,
             feature.IsAvailableToManifest(std::string(),
                                           Manifest::TYPE_UNKNOWN,
@@ -532,11 +530,11 @@ TEST_F(SimpleFeatureTest, ParseNull) {
   std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
   std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
-  EXPECT_TRUE(feature->whitelist()->empty());
-  EXPECT_TRUE(feature->extension_types()->empty());
-  EXPECT_TRUE(feature->contexts()->empty());
+  EXPECT_TRUE(feature->whitelist().empty());
+  EXPECT_TRUE(feature->extension_types().empty());
+  EXPECT_TRUE(feature->contexts().empty());
   EXPECT_EQ(SimpleFeature::UNSPECIFIED_LOCATION, feature->location());
-  EXPECT_TRUE(feature->platforms()->empty());
+  EXPECT_TRUE(feature->platforms().empty());
   EXPECT_EQ(0, feature->min_manifest_version());
   EXPECT_EQ(0, feature->max_manifest_version());
 }
@@ -549,9 +547,9 @@ TEST_F(SimpleFeatureTest, ParseWhitelist) {
   value->Set("whitelist", whitelist);
   std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
-  EXPECT_EQ(2u, feature->whitelist()->size());
-  EXPECT_TRUE(STLCount(*(feature->whitelist()), "foo"));
-  EXPECT_TRUE(STLCount(*(feature->whitelist()), "bar"));
+  EXPECT_EQ(2u, feature->whitelist().size());
+  EXPECT_TRUE(STLCount(feature->whitelist(), "foo"));
+  EXPECT_TRUE(STLCount(feature->whitelist(), "bar"));
 }
 
 TEST_F(SimpleFeatureTest, ParsePackageTypes) {
@@ -566,25 +564,21 @@ TEST_F(SimpleFeatureTest, ParsePackageTypes) {
   value->Set("extension_types", extension_types);
   std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
-  EXPECT_EQ(6u, feature->extension_types()->size());
+  EXPECT_EQ(6u, feature->extension_types().size());
+  EXPECT_TRUE(STLCount(feature->extension_types(), Manifest::TYPE_EXTENSION));
+  EXPECT_TRUE(STLCount(feature->extension_types(), Manifest::TYPE_THEME));
   EXPECT_TRUE(
-      STLCount(*(feature->extension_types()), Manifest::TYPE_EXTENSION));
+      STLCount(feature->extension_types(), Manifest::TYPE_LEGACY_PACKAGED_APP));
+  EXPECT_TRUE(STLCount(feature->extension_types(), Manifest::TYPE_HOSTED_APP));
   EXPECT_TRUE(
-      STLCount(*(feature->extension_types()), Manifest::TYPE_THEME));
+      STLCount(feature->extension_types(), Manifest::TYPE_PLATFORM_APP));
   EXPECT_TRUE(
-      STLCount(
-          *(feature->extension_types()), Manifest::TYPE_LEGACY_PACKAGED_APP));
-  EXPECT_TRUE(
-      STLCount(*(feature->extension_types()), Manifest::TYPE_HOSTED_APP));
-  EXPECT_TRUE(
-      STLCount(*(feature->extension_types()), Manifest::TYPE_PLATFORM_APP));
-  EXPECT_TRUE(
-      STLCount(*(feature->extension_types()), Manifest::TYPE_SHARED_MODULE));
+      STLCount(feature->extension_types(), Manifest::TYPE_SHARED_MODULE));
 
   value->SetString("extension_types", "all");
   std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
   feature2->Parse(value.get());
-  EXPECT_EQ(*(feature->extension_types()), *(feature2->extension_types()));
+  EXPECT_EQ(feature->extension_types(), feature2->extension_types());
 }
 
 TEST_F(SimpleFeatureTest, ParseContexts) {
@@ -600,22 +594,19 @@ TEST_F(SimpleFeatureTest, ParseContexts) {
   value->Set("contexts", contexts);
   std::unique_ptr<SimpleFeature> feature(new SimpleFeature());
   feature->Parse(value.get());
-  EXPECT_EQ(7u, feature->contexts()->size());
+  EXPECT_EQ(7u, feature->contexts().size());
   EXPECT_TRUE(
-      STLCount(*(feature->contexts()), Feature::BLESSED_EXTENSION_CONTEXT));
+      STLCount(feature->contexts(), Feature::BLESSED_EXTENSION_CONTEXT));
   EXPECT_TRUE(
-      STLCount(*(feature->contexts()), Feature::UNBLESSED_EXTENSION_CONTEXT));
-  EXPECT_TRUE(
-      STLCount(*(feature->contexts()), Feature::CONTENT_SCRIPT_CONTEXT));
-  EXPECT_TRUE(
-      STLCount(*(feature->contexts()), Feature::WEB_PAGE_CONTEXT));
-  EXPECT_TRUE(
-      STLCount(*(feature->contexts()), Feature::BLESSED_WEB_PAGE_CONTEXT));
+      STLCount(feature->contexts(), Feature::UNBLESSED_EXTENSION_CONTEXT));
+  EXPECT_TRUE(STLCount(feature->contexts(), Feature::CONTENT_SCRIPT_CONTEXT));
+  EXPECT_TRUE(STLCount(feature->contexts(), Feature::WEB_PAGE_CONTEXT));
+  EXPECT_TRUE(STLCount(feature->contexts(), Feature::BLESSED_WEB_PAGE_CONTEXT));
 
   value->SetString("contexts", "all");
   std::unique_ptr<SimpleFeature> feature2(new SimpleFeature());
   feature2->Parse(value.get());
-  EXPECT_EQ(*(feature->contexts()), *(feature2->contexts()));
+  EXPECT_EQ(feature->contexts(), feature2->contexts());
 }
 
 TEST_F(SimpleFeatureTest, ParseLocation) {
@@ -632,18 +623,18 @@ TEST_F(SimpleFeatureTest, ParsePlatforms) {
   base::ListValue* platforms = new base::ListValue();
   value->Set("platforms", platforms);
   feature->Parse(value.get());
-  EXPECT_TRUE(feature->platforms()->empty());
+  EXPECT_TRUE(feature->platforms().empty());
 
   platforms->AppendString("chromeos");
   feature->Parse(value.get());
-  EXPECT_FALSE(feature->platforms()->empty());
-  EXPECT_EQ(Feature::CHROMEOS_PLATFORM, *feature->platforms()->begin());
+  EXPECT_FALSE(feature->platforms().empty());
+  EXPECT_EQ(Feature::CHROMEOS_PLATFORM, *feature->platforms().begin());
 
   platforms->Clear();
   platforms->AppendString("win");
   feature->Parse(value.get());
-  EXPECT_FALSE(feature->platforms()->empty());
-  EXPECT_EQ(Feature::WIN_PLATFORM, *feature->platforms()->begin());
+  EXPECT_FALSE(feature->platforms().empty());
+  EXPECT_EQ(Feature::WIN_PLATFORM, *feature->platforms().begin());
 
   platforms->Clear();
   platforms->AppendString("win");
@@ -653,8 +644,8 @@ TEST_F(SimpleFeatureTest, ParsePlatforms) {
   expected_platforms.push_back(Feature::CHROMEOS_PLATFORM);
   expected_platforms.push_back(Feature::WIN_PLATFORM);
 
-  EXPECT_FALSE(feature->platforms()->empty());
-  EXPECT_EQ(expected_platforms, *feature->platforms());
+  EXPECT_FALSE(feature->platforms().empty());
+  EXPECT_EQ(expected_platforms, feature->platforms());
 }
 
 TEST_F(SimpleFeatureTest, ParseManifestVersion) {
@@ -669,11 +660,11 @@ TEST_F(SimpleFeatureTest, ParseManifestVersion) {
 
 TEST_F(SimpleFeatureTest, Inheritance) {
   SimpleFeature feature;
-  feature.whitelist()->push_back("foo");
-  feature.extension_types()->push_back(Manifest::TYPE_THEME);
-  feature.contexts()->push_back(Feature::BLESSED_EXTENSION_CONTEXT);
+  feature.whitelist_.push_back("foo");
+  feature.extension_types_.push_back(Manifest::TYPE_THEME);
+  feature.contexts_.push_back(Feature::BLESSED_EXTENSION_CONTEXT);
   feature.set_location(SimpleFeature::COMPONENT_LOCATION);
-  feature.platforms()->push_back(Feature::CHROMEOS_PLATFORM);
+  feature.platforms_.push_back(Feature::CHROMEOS_PLATFORM);
   feature.set_min_manifest_version(1);
   feature.set_max_manifest_version(2);
 
@@ -681,13 +672,13 @@ TEST_F(SimpleFeatureTest, Inheritance) {
   // changes to a SimpleFeature.
   base::DictionaryValue definition;
   feature.Parse(&definition);
-  EXPECT_EQ(1u, feature.whitelist()->size());
-  EXPECT_EQ(1u, feature.extension_types()->size());
-  EXPECT_EQ(1u, feature.contexts()->size());
-  EXPECT_EQ(1, STLCount(*(feature.whitelist()), "foo"));
+  EXPECT_EQ(1u, feature.whitelist().size());
+  EXPECT_EQ(1u, feature.extension_types().size());
+  EXPECT_EQ(1u, feature.contexts().size());
+  EXPECT_EQ(1, STLCount(feature.whitelist(), "foo"));
   EXPECT_EQ(SimpleFeature::COMPONENT_LOCATION, feature.location());
-  EXPECT_EQ(1u, feature.platforms()->size());
-  EXPECT_EQ(1, STLCount(*(feature.platforms()), Feature::CHROMEOS_PLATFORM));
+  EXPECT_EQ(1u, feature.platforms().size());
+  EXPECT_EQ(1, STLCount(feature.platforms(), Feature::CHROMEOS_PLATFORM));
   EXPECT_EQ(1, feature.min_manifest_version());
   EXPECT_EQ(2, feature.max_manifest_version());
 
@@ -705,15 +696,13 @@ TEST_F(SimpleFeatureTest, Inheritance) {
   definition.Set("max_manifest_version", new base::FundamentalValue(3));
 
   feature.Parse(&definition);
-  EXPECT_EQ(1u, feature.whitelist()->size());
-  EXPECT_EQ(1u, feature.extension_types()->size());
-  EXPECT_EQ(1u, feature.contexts()->size());
-  EXPECT_EQ(1, STLCount(*(feature.whitelist()), "bar"));
+  EXPECT_EQ(1u, feature.whitelist().size());
+  EXPECT_EQ(1u, feature.extension_types().size());
+  EXPECT_EQ(1u, feature.contexts().size());
+  EXPECT_EQ(1, STLCount(feature.whitelist(), "bar"));
+  EXPECT_EQ(1, STLCount(feature.extension_types(), Manifest::TYPE_EXTENSION));
   EXPECT_EQ(1,
-            STLCount(*(feature.extension_types()), Manifest::TYPE_EXTENSION));
-  EXPECT_EQ(1,
-            STLCount(
-                *(feature.contexts()), Feature::UNBLESSED_EXTENSION_CONTEXT));
+            STLCount(feature.contexts(), Feature::UNBLESSED_EXTENSION_CONTEXT));
   EXPECT_EQ(2, feature.min_manifest_version());
   EXPECT_EQ(3, feature.max_manifest_version());
 }
@@ -844,77 +833,62 @@ TEST_F(SimpleFeatureTest, SupportedChannel) {
 
 // Tests the validation of features with channel entries.
 TEST_F(SimpleFeatureTest, FeatureValidation) {
-  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
-
-  base::DictionaryValue* feature1 = new base::DictionaryValue();
-  feature1->SetString("channel", "trunk");
-  value->Set("feature1", feature1);
-
-  base::DictionaryValue* feature2 = new base::DictionaryValue();
-  feature2->SetString("channel", "trunk");
-  base::ListValue* extension_types = new base::ListValue();
-  extension_types->AppendString("extension");
-  feature2->Set("extension_types", extension_types);
-  base::ListValue* contexts = new base::ListValue();
-  contexts->AppendString("blessed_extension");
-  feature2->Set("contexts", contexts);
-  value->Set("feature2", feature2);
-
-  std::unique_ptr<JSONFeatureProvider> provider(
-      new JSONFeatureProvider(*value, CreateFeature<PermissionFeature>));
-
-  // feature1 won't validate because it lacks an extension type.
-  EXPECT_FALSE(provider->GetFeature("feature1"));
-
-  // If we add one, it works.
-  feature1->Set("extension_types", extension_types->DeepCopy());
-  provider.reset(
-      new JSONFeatureProvider(*value, CreateFeature<PermissionFeature>));
-  EXPECT_TRUE(provider->GetFeature("feature1"));
-
-  // Remove the channel, and feature1 won't validate.
-  feature1->Remove("channel", NULL);
-  provider.reset(
-      new JSONFeatureProvider(*value, CreateFeature<PermissionFeature>));
-  EXPECT_FALSE(provider->GetFeature("feature1"));
-
-  // feature2 won't validate because of the presence of "contexts".
-  EXPECT_FALSE(provider->GetFeature("feature2"));
-
-  // If we remove it, it works.
-  feature2->Remove("contexts", NULL);
-  provider.reset(
-      new JSONFeatureProvider(*value, CreateFeature<PermissionFeature>));
-  EXPECT_TRUE(provider->GetFeature("feature2"));
+  std::string error;
+  {
+    PermissionFeature feature;
+    feature.channel_.reset(
+        new version_info::Channel(version_info::Channel::UNKNOWN));
+    // The feature won't validate because it lacks an extension type.
+    EXPECT_FALSE(feature.Validate(&error));
+    // If we add one, it works.
+    feature.extension_types_.push_back(Manifest::TYPE_EXTENSION);
+    EXPECT_TRUE(feature.Validate(&error));
+    // Remove the channel, and feature1 won't validate.
+    feature.channel_.reset();
+    EXPECT_FALSE(feature.Validate(&error));
+  }
+  {
+    PermissionFeature feature;
+    feature.channel_.reset(
+        new version_info::Channel(version_info::Channel::UNKNOWN));
+    feature.extension_types_.push_back(Manifest::TYPE_EXTENSION);
+    feature.contexts_.push_back(Feature::BLESSED_EXTENSION_CONTEXT);
+    // The feature won't validate because of the presence of "contexts".
+    EXPECT_FALSE(feature.Validate(&error));
+    feature.contexts_.clear();
+    EXPECT_TRUE(feature.Validate(&error));
+  }
+  {
+    APIFeature feature;
+    feature.channel_.reset(
+        new version_info::Channel(version_info::Channel::STABLE));
+    // API features require contexts.
+    EXPECT_FALSE(feature.Validate(&error));
+    feature.contexts_.push_back(Feature::CONTENT_SCRIPT_CONTEXT);
+    EXPECT_TRUE(feature.Validate(&error));
+  }
 }
 
 // Tests simple feature availability across channels.
 TEST_F(SimpleFeatureTest, SimpleFeatureAvailability) {
-  std::unique_ptr<base::DictionaryValue> rule(
-      DictionaryBuilder()
-          .Set("feature1",
-               ListBuilder()
-                   .Append(DictionaryBuilder()
-                               .Set("channel", "beta")
-                               .Set("extension_types",
-                                    ListBuilder().Append("extension").Build())
-                               .Build())
-                   .Append(DictionaryBuilder()
-                               .Set("channel", "beta")
-                               .Set("extension_types",
-                                    ListBuilder()
-                                        .Append("legacy_packaged_app")
-                                        .Build())
-                               .Build())
-                   .Build())
-          .Build());
+  std::unique_ptr<ComplexFeature> complex_feature;
+  {
+    std::unique_ptr<SimpleFeature> feature1(CreateFeature<SimpleFeature>());
+    feature1->channel_.reset(
+        new version_info::Channel(version_info::Channel::BETA));
+    feature1->extension_types_.push_back(Manifest::TYPE_EXTENSION);
+    std::unique_ptr<SimpleFeature> feature2(CreateFeature<SimpleFeature>());
+    feature2->channel_.reset(
+        new version_info::Channel(version_info::Channel::BETA));
+    feature2->extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+    std::unique_ptr<ComplexFeature::FeatureList> list(
+        new ComplexFeature::FeatureList());
+    list->push_back(std::move(feature1));
+    list->push_back(std::move(feature2));
+    complex_feature.reset(new ComplexFeature(std::move(list)));
+  }
 
-  std::unique_ptr<JSONFeatureProvider> provider(
-      new JSONFeatureProvider(*rule, CreateFeature<SimpleFeature>));
-
-  Feature* feature = provider->GetFeature("feature1");
-  EXPECT_TRUE(feature);
-
+  Feature* feature = static_cast<Feature*>(complex_feature.get());
   // Make sure both rules are applied correctly.
   {
     ScopedCurrentChannel current_channel(version_info::Channel::BETA);
@@ -950,66 +924,52 @@ TEST_F(SimpleFeatureTest, SimpleFeatureAvailability) {
 
 // Tests complex feature availability across channels.
 TEST_F(SimpleFeatureTest, ComplexFeatureAvailability) {
-  std::unique_ptr<ComplexFeature::FeatureList> features(
-      new ComplexFeature::FeatureList());
+  std::unique_ptr<ComplexFeature> complex_feature;
+  {
+    // Rule: "extension", channel trunk.
+    std::unique_ptr<SimpleFeature> feature1(CreateFeature<SimpleFeature>());
+    feature1->channel_.reset(
+        new version_info::Channel(version_info::Channel::UNKNOWN));
+    feature1->extension_types_.push_back(Manifest::TYPE_EXTENSION);
+    std::unique_ptr<SimpleFeature> feature2(CreateFeature<SimpleFeature>());
+    // Rule: "legacy_packaged_app", channel stable.
+    feature2->channel_.reset(
+        new version_info::Channel(version_info::Channel::STABLE));
+    feature2->extension_types_.push_back(Manifest::TYPE_LEGACY_PACKAGED_APP);
+    std::unique_ptr<ComplexFeature::FeatureList> list(
+        new ComplexFeature::FeatureList());
+    list->push_back(std::move(feature1));
+    list->push_back(std::move(feature2));
+    complex_feature.reset(new ComplexFeature(std::move(list)));
+  }
 
-  // Rule: "extension", channel trunk.
-  std::unique_ptr<SimpleFeature> simple_feature(CreateFeature<SimpleFeature>());
-  std::unique_ptr<base::DictionaryValue> rule(
-      DictionaryBuilder()
-          .Set("channel", "trunk")
-          .Set("extension_types", ListBuilder().Append("extension").Build())
-          .Build());
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
-
-  // Rule: "legacy_packaged_app", channel stable.
-  simple_feature.reset(CreateFeature<SimpleFeature>());
-  rule = DictionaryBuilder()
-             .Set("channel", "stable")
-             .Set("extension_types",
-                  ListBuilder().Append("legacy_packaged_app").Build())
-             .Build();
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
-
-  std::unique_ptr<ComplexFeature> feature(
-      new ComplexFeature(std::move(features)));
-
-  // Test match 1st rule.
+  Feature* feature = static_cast<Feature*>(complex_feature.get());
   {
     ScopedCurrentChannel current_channel(version_info::Channel::UNKNOWN);
-    EXPECT_EQ(
-        Feature::IS_AVAILABLE,
-        feature->IsAvailableToManifest("1",
-                                       Manifest::TYPE_EXTENSION,
-                                       Manifest::INVALID_LOCATION,
-                                       Feature::UNSPECIFIED_PLATFORM,
-                                       Feature::GetCurrentPlatform()).result());
+    EXPECT_EQ(Feature::IS_AVAILABLE,
+              feature
+                  ->IsAvailableToManifest("1", Manifest::TYPE_EXTENSION,
+                                          Manifest::INVALID_LOCATION,
+                                          Feature::UNSPECIFIED_PLATFORM)
+                  .result());
   }
-
-  // Test match 2nd rule.
   {
     ScopedCurrentChannel current_channel(version_info::Channel::BETA);
-    EXPECT_EQ(
-        Feature::IS_AVAILABLE,
-        feature->IsAvailableToManifest("2",
-                                       Manifest::TYPE_LEGACY_PACKAGED_APP,
-                                       Manifest::INVALID_LOCATION,
-                                       Feature::UNSPECIFIED_PLATFORM,
-                                       Feature::GetCurrentPlatform()).result());
+    EXPECT_EQ(Feature::IS_AVAILABLE,
+              feature
+                  ->IsAvailableToManifest(
+                      "2", Manifest::TYPE_LEGACY_PACKAGED_APP,
+                      Manifest::INVALID_LOCATION, Feature::UNSPECIFIED_PLATFORM)
+                  .result());
   }
-
-  // Test feature not available to extensions above channel unknown.
   {
     ScopedCurrentChannel current_channel(version_info::Channel::BETA);
-    EXPECT_NE(
-        Feature::IS_AVAILABLE,
-        feature->IsAvailableToManifest("1",
-                                       Manifest::TYPE_EXTENSION,
-                                       Manifest::INVALID_LOCATION,
-                                       Feature::UNSPECIFIED_PLATFORM,
-                                       Feature::GetCurrentPlatform()).result());
+    EXPECT_NE(Feature::IS_AVAILABLE,
+              feature
+                  ->IsAvailableToManifest("1", Manifest::TYPE_EXTENSION,
+                                          Manifest::INVALID_LOCATION,
+                                          Feature::UNSPECIFIED_PLATFORM)
+                  .result());
   }
 }
 

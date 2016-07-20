@@ -72,7 +72,6 @@ component("gfx") {
     "color_space.h",
     "color_space_mac.mm",
     "color_space_win.cc",
-    "color_space_x11.cc",
     "color_utils.cc",
     "color_utils.h",
     "favicon_size.cc",
@@ -407,10 +406,7 @@ component("gfx") {
     deps += [ "//ui/gfx/x" ]
     configs += [ "//build/config/linux:x11" ]
   } else {
-    sources -= [
-      "color_space_x11.cc",
-      "path_x11.cc",
-    ]
+    sources -= [ "path_x11.cc" ]
   }
 
   if (use_cairo) {
@@ -465,6 +461,7 @@ group("selection_bound") {
 }
 
 # Depend on this to use selection_bound.h without pulling in all of gfx.
+# Cannot be a static_library in component builds due to exported functions
 source_set("selection_bound_sources") {
   visibility = [ ":*" ]
 
@@ -499,6 +496,7 @@ group("memory_buffer") {
     ]
   }
 }
+# Cannot be a static_library in component builds due to exported functions
 source_set("memory_buffer_sources") {
   visibility = [ ":*" ]  # Depend on through ":memory_buffer".
 
@@ -537,7 +535,7 @@ source_set("memory_buffer_sources") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "image/image_unittest_util.cc",

@@ -9,10 +9,10 @@ InspectorTest.inlineStyleSection = function()
 
 InspectorTest.computedStyleWidget = function()
 {
-    return WebInspector.panels.elements.sidebarPanes.computedStyle.children()[0]
+    return WebInspector.panels.elements.sidebarPanes.computedStyle;
 }
 
-InspectorTest.dumpComputedStyle = function()
+InspectorTest.dumpComputedStyle = function(doNotAutoExpand)
 {
     var computed = InspectorTest.computedStyleWidget();
     var treeOutline = computed._propertiesOutline;
@@ -26,6 +26,8 @@ InspectorTest.dumpComputedStyle = function()
         dumpText += " ";
         dumpText += treeElement.title.querySelector(".property-value").textContent;
         InspectorTest.addResult(dumpText);
+        if (doNotAutoExpand && !treeElement.expanded)
+            continue;
         for (var trace of treeElement.children()) {
             var title = trace.title;
             var dumpText = "";
@@ -50,7 +52,7 @@ InspectorTest.findComputedPropertyWithName = function(name)
     for (var treeElement of children) {
         var property = treeElement[WebInspector.ComputedStyleWidget._propertySymbol];
         if (property.name === name)
-            return treeElement.title;
+            return treeElement;
     }
     return null;
 }
@@ -435,8 +437,8 @@ InspectorTest.toggleMatchedStyleProperty = function(propertyName, checked)
 InspectorTest.eventListenersWidget = function()
 {
     var sidebarPane = WebInspector.panels.elements.sidebarPanes.eventListeners;
-    sidebarPane.expand();
-    return sidebarPane.children()[0];
+    sidebarPane.requestReveal();
+    return sidebarPane;
 }
 
 InspectorTest.expandAndDumpSelectedElementEventListeners = function(callback)

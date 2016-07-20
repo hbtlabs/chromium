@@ -157,13 +157,8 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   SET_STRING("screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL);
   SET_STRING("user-email", IDS_FEEDBACK_USER_EMAIL_LABEL);
 #if defined(OS_CHROMEOS)
-  // We must check ArcBridgeService::available() before
-  // ArcAuthService::IsArcEnabled() to avoid crashes in browsertests when
-  // |profile_| is not set in ArcAuthService when ARC is not available.
-  if (arc::ArcBridgeService::Get() &&
-      arc::ArcBridgeService::Get()->available() &&
-      arc::ArcAuthService::Get() &&
-      arc::ArcAuthService::Get()->IsArcEnabled()) {
+  const arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
+  if (auth_service && auth_service->IsArcEnabled()) {
     SET_STRING("sys-info",
                IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC);
   } else {
@@ -259,15 +254,15 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
   feedback_data->set_description(feedback_info.description);
 
   if (feedback_info.category_tag.get())
-    feedback_data->set_category_tag(*feedback_info.category_tag.get());
+    feedback_data->set_category_tag(*feedback_info.category_tag);
   if (feedback_info.page_url.get())
-    feedback_data->set_page_url(*feedback_info.page_url.get());
+    feedback_data->set_page_url(*feedback_info.page_url);
   if (feedback_info.email.get())
-    feedback_data->set_user_email(*feedback_info.email.get());
+    feedback_data->set_user_email(*feedback_info.email);
 
   if (!attached_file_uuid.empty()) {
     feedback_data->set_attached_filename(
-        StripFakepath((*feedback_info.attached_file.get()).name));
+        StripFakepath((*feedback_info.attached_file).name));
     feedback_data->set_attached_file_uuid(attached_file_uuid);
   }
 
@@ -275,7 +270,7 @@ bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
     feedback_data->set_screenshot_uuid(screenshot_uuid);
 
   if (feedback_info.trace_id.get()) {
-    feedback_data->set_trace_id(*feedback_info.trace_id.get());
+    feedback_data->set_trace_id(*feedback_info.trace_id);
   }
 
   std::unique_ptr<FeedbackData::SystemLogsMap> sys_logs(

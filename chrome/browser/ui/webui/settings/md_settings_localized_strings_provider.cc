@@ -19,9 +19,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/google_chrome_strings.h"
 #include "chrome/grit/locale_settings.h"
-#include "chrome/grit/settings_chromium_strings.h"
-#include "chrome/grit/settings_google_chrome_strings.h"
-#include "chrome/grit/settings_strings.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/google/core/browser/google_util.h"
@@ -240,22 +237,20 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
 #if defined(OS_CHROMEOS)
 void AddBluetoothStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
-      {"bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH},
-      {"bluetoothAddDevicePageTitle", IDS_SETTINGS_BLUETOOTH_ADD_DEVICE},
-      {"bluetoothPairDevicePageTitle", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE},
-      {"bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE},
-      {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
+      {"bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY},
       {"bluetoothAddDevice", IDS_OPTIONS_SETTINGS_ADD_BLUETOOTH_DEVICE},
-      {"bluetoothNoDevices", IDS_OPTIONS_SETTINGS_BLUETOOTH_NO_DEVICES},
+      {"bluetoothAddDevicePageTitle", IDS_SETTINGS_BLUETOOTH_ADD_DEVICE},
       {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
+      {"bluetoothConnecting", IDS_SETTINGS_BLUETOOTH_CONNECTING},
       {"bluetoothDisconnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISCONNECT},
-      {"bluetoothConnecting", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECTING},
+      {"bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR},
+      {"bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE},
+      {"bluetoothNoDevices", IDS_OPTIONS_SETTINGS_BLUETOOTH_NO_DEVICES},
+      {"bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH},
+      {"bluetoothPairDevicePageTitle", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE},
+      {"bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY},
       {"bluetoothRemove", IDS_SETTINGS_BLUETOOTH_REMOVE},
       {"bluetoothScanning", IDS_OPTIONS_SETTINGS_BLUETOOTH_SCANNING},
-      {"bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY},
-      {"bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY},
-      {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
-      {"bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR},
       // Device connecting and pairing.
       {"bluetoothStartConnecting", IDS_SETTINGS_BLUETOOTH_START_CONNECTING},
       {"bluetoothEnterKey", IDS_OPTIONS_SETTINGS_BLUETOOTH_ENTER_KEY},
@@ -267,6 +262,35 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
       {"bluetooth_requestPasskey", IDS_SETTINGS_BLUETOOTH_REQUEST_PASSKEY},
       {"bluetooth_displayPasskey", IDS_SETTINGS_BLUETOOTH_DISPLAY_PASSKEY},
       {"bluetooth_confirmPasskey", IDS_SETTINGS_BLUETOOTH_CONFIRM_PASSKEY},
+      // These ids are generated in JS using 'bluetooth_result_' + a value from
+      // bluetoothPrivate.ConnectResultType (see bluetooth_private.idl).
+      {"bluetooth_connect_attributeLengthInvalid",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_ATTRIBUTE_LENGTH_INVALID},
+      {"bluetooth_connect_authCanceled",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_CANCELED},
+      {"bluetooth_connect_authFailed",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_FAILED},
+      {"bluetooth_connect_authRejected",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_REJECTED},
+      {"bluetooth_connect_authTimeout",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_TIMEOUT},
+      {"bluetooth_connect_connectionCongested",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_CONNECTION_CONGESTED},
+      {"bluetooth_connect_failed", IDS_SETTINGS_BLUETOOTH_CONNECT_FAILED},
+      {"bluetooth_connect_inProgress",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_IN_PROGRESS},
+      {"bluetooth_connect_insufficientEncryption",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_INSUFFICIENT_ENCRYPTION},
+      {"bluetooth_connect_offsetInvalid",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_OFFSET_INVALID},
+      {"bluetooth_connect_readNotPermitted",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_READ_NOT_PERMITTED},
+      {"bluetooth_connect_requestNotSupported",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_REQUEST_NOT_SUPPORTED},
+      {"bluetooth_connect_unsupportedDevice",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_UNSUPPORTED_DEVICE},
+      {"bluetooth_connect_writeNotPermitted",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -420,13 +444,20 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
   AddLocalizedStringsBulk(html_source, device_strings,
                           arraysize(device_strings));
 
-  LocalizedString touchpad_strings[] = {
+  LocalizedString pointers_strings[] = {
+      {"mouseTitle", IDS_SETTINGS_MOUSE_TITLE},
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
+      {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
        IDS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_ENABLED_LABEL},
+      {"touchpadSpeed", IDS_SETTINGS_TOUCHPAD_SPEED_LABEL},
+      {"pointerSlow", IDS_SETTINGS_POINTER_SPEED_SLOW_LABEL},
+      {"pointerFast", IDS_SETTINGS_POINTER_SPEED_FAST_LABEL},
+      {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
+      {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
   };
-  AddLocalizedStringsBulk(html_source, touchpad_strings,
-                          arraysize(touchpad_strings));
+  AddLocalizedStringsBulk(html_source, pointers_strings,
+                          arraysize(pointers_strings));
 
   LocalizedString keyboard_strings[] = {
       {"keyboardTitle", IDS_SETTINGS_KEYBOARD_TITLE},
@@ -739,9 +770,10 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"savedPasswordsHeading", IDS_SETTINGS_PASSWORDS_SAVED_HEADING},
       {"passwordExceptionsHeading", IDS_SETTINGS_PASSWORDS_EXCEPTIONS_HEADING},
       {"deletePasswordException", IDS_SETTINGS_PASSWORDS_DELETE_EXCEPTION},
-      {"editPassword", IDS_SETTINGS_PASSWORD_EDIT},
+      {"passwordsDone", IDS_SETTINGS_PASSWORD_DONE},
       {"removePassword", IDS_SETTINGS_PASSWORD_REMOVE},
-      {"editPasswordTitle", IDS_SETTINGS_PASSWORDS_EDIT_TITLE},
+      {"passwordDetailsTitle", IDS_SETTINGS_PASSWORDS_VIEW_DETAILS_TITLE},
+      {"passwordViewDetails", IDS_SETTINGS_PASSWORD_VIEW_DETAILS},
       {"editPasswordWebsiteLabel", IDS_SETTINGS_PASSWORDS_WEBSITE},
       {"editPasswordUsernameLabel", IDS_SETTINGS_PASSWORDS_USERNAME},
       {"editPasswordPasswordLabel", IDS_SETTINGS_PASSWORDS_PASSWORD},
@@ -904,12 +936,16 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
 
 void AddPrintingStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
-      {"printingPageTitle", IDS_SETTINGS_PRINTING},
-      {"printingCloudPrintLearnMoreLabel",
-       IDS_SETTINGS_PRINTING_CLOUD_PRINT_LEARN_MORE_LABEL},
-      {"printingNotificationsLabel", IDS_SETTINGS_PRINTING_NOTIFICATIONS_LABEL},
-      {"printingManageCloudPrintDevices",
-       IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES},
+    {"printingPageTitle", IDS_SETTINGS_PRINTING},
+    {"printingCloudPrintLearnMoreLabel",
+     IDS_SETTINGS_PRINTING_CLOUD_PRINT_LEARN_MORE_LABEL},
+    {"printingNotificationsLabel", IDS_SETTINGS_PRINTING_NOTIFICATIONS_LABEL},
+    {"printingManageCloudPrintDevices",
+     IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES},
+    {"cloudPrintersTitle", IDS_SETTINGS_PRINTING_CLOUD_PRINTERS},
+#if defined(OS_CHROMEOS)
+    {"cupsPrintersTitle", IDS_SETTINGS_PRINTING_CUPS_PRINTERS},
+#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -1056,7 +1092,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsCategoryAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
       {"siteSettingsCategoryCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
       {"siteSettingsCategoryCookies", IDS_SETTINGS_SITE_SETTINGS_COOKIES},
-      {"siteSettingsCategoryFullscreen", IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN},
       {"siteSettingsCategoryHandlers", IDS_SETTINGS_SITE_SETTINGS_HANDLERS},
       {"siteSettingsCategoryImages", IDS_SETTINGS_SITE_SETTINGS_IMAGES},
       {"siteSettingsCategoryLocation", IDS_SETTINGS_SITE_SETTINGS_LOCATION},

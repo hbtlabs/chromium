@@ -42,7 +42,7 @@ public:
     const UChar* characters16() const { return m_impl.c_str(); }
     std::string utf8() const;
     static String16 fromUTF8(const char* stringStart, size_t length);
-    static String16 number(int i) { return String16(String16::intToString(i).c_str()); }
+    static String16 fromInteger(int i) { return String16(String16::intToString(i).c_str()); }
     static String16 fromDouble(double d) { return String16(String16::doubleToString(d).c_str()); }
     static String16 fromDoubleFixedPrecision(double d, int len) { return String16(String16::doubleToString(d).c_str()); }
 
@@ -170,7 +170,7 @@ public:
 
     void appendNumber(int i)
     {
-        m_impl = m_impl + String16::number(i).impl();
+        m_impl = m_impl + String16::fromInteger(i).impl();
     }
 
     void appendNumber(double d)
@@ -243,6 +243,7 @@ public:
 };
 } // namespace WTF
 
+#if !defined(__APPLE__) || defined(_LIBCPP_VERSION)
 
 namespace std {
 template<> struct hash<String16> {
@@ -253,6 +254,8 @@ template<> struct hash<String16> {
 };
 
 } // namespace std
+
+#endif // !defined(__APPLE__) || defined(_LIBCPP_VERSION)
 
 using String = WTF::String;
 

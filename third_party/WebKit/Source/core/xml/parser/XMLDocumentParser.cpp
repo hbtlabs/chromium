@@ -66,9 +66,9 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "wtf/AutoReset.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StringExtras.h"
-#include "wtf/TemporaryChange.h"
 #include "wtf/Threading.h"
 #include "wtf/Vector.h"
 #include "wtf/text/UTF8.h"
@@ -828,7 +828,7 @@ XMLDocumentParser::XMLDocumentParser(DocumentFragment* fragment, Element* parent
     }
 
     // If the parent element is not in document tree, there may be no xmlns attribute; just default to the parent's namespace.
-    if (m_defaultNamespaceURI.isNull() && !parentElement->inShadowIncludingDocument())
+    if (m_defaultNamespaceURI.isNull() && !parentElement->isConnected())
         m_defaultNamespaceURI = parentElement->namespaceURI();
 }
 
@@ -870,7 +870,7 @@ void XMLDocumentParser::doWrite(const String& parseString)
     // string.
     if (parseString.length()) {
         XMLDocumentParserScope scope(document());
-        TemporaryChange<bool> encodingScope(m_isCurrentlyParsing8BitChunk, parseString.is8Bit());
+        AutoReset<bool> encodingScope(&m_isCurrentlyParsing8BitChunk, parseString.is8Bit());
         parseChunk(context->context(), parseString);
 
         // JavaScript (which may be run under the parseChunk callstack) may
@@ -1066,7 +1066,7 @@ void XMLDocumentParser::endElementNs()
 
     // The element's parent may have already been removed from document.
     // Parsing continues in this case, but scripts aren't executed.
-    if (!element->inShadowIncludingDocument()) {
+    if (!element->isConnected()) {
         popCurrentNode();
         return;
     }

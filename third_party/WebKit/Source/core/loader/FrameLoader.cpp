@@ -96,7 +96,7 @@
 #include "platform/weborigin/Suborigin.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
@@ -363,10 +363,10 @@ void FrameLoader::receivedMainResourceRedirect(const KURL& newURL)
         m_provisionalItem.clear();
 }
 
-void FrameLoader::setHistoryItemStateForCommit(HistoryCommitType historyCommitType, HistoryNavigationType navigationType)
+void FrameLoader::setHistoryItemStateForCommit(FrameLoadType loadType, HistoryCommitType historyCommitType, HistoryNavigationType navigationType)
 {
     HistoryItem* oldItem = m_currentItem;
-    if (historyCommitType == BackForwardCommit && m_provisionalItem)
+    if (isBackForwardLoadType(loadType) && m_provisionalItem)
         m_currentItem = m_provisionalItem.release();
     else
         m_currentItem = HistoryItem::create();
@@ -379,7 +379,7 @@ void FrameLoader::setHistoryItemStateForCommit(HistoryCommitType historyCommitTy
     // Don't propagate state from the old item to the new item if there isn't an old item (obviously),
     // or if this is a back/forward navigation, since we explicitly want to restore the state we just
     // committed.
-    if (!oldItem || historyCommitType == BackForwardCommit)
+    if (!oldItem || isBackForwardLoadType(loadType))
         return;
     // Don't propagate state from the old item if this is a different-document navigation, unless the before
     // and after pages are logically related. This means they have the same url (ignoring fragment) and
@@ -428,7 +428,7 @@ void FrameLoader::receivedFirstData()
         historyCommitType = HistoryInertCommit;
     else if (historyCommitType == InitialCommitInChildFrame && MixedContentChecker::isMixedContent(m_frame->tree().top()->securityContext()->getSecurityOrigin(), m_documentLoader->url()))
         historyCommitType = HistoryInertCommit;
-    setHistoryItemStateForCommit(historyCommitType, HistoryNavigationType::DifferentDocument);
+    setHistoryItemStateForCommit(m_loadType, historyCommitType, HistoryNavigationType::DifferentDocument);
 
     if (!m_stateMachine.committedMultipleRealLoads() && m_loadType == FrameLoadTypeStandard)
         m_stateMachine.advanceTo(FrameLoaderStateMachine::CommittedMultipleRealLoads);
@@ -608,7 +608,7 @@ static bool shouldSendCompleteNotification(LocalFrame* frame)
         return false;
     // Only send didStopLoading() if there are no navigations in progress at all,
     // whether committed, provisional, or pending.
-    return frame->loader().documentLoader()->sentDidFinishLoad() && !frame->loader().provisionalDocumentLoader() && !frame->loader().client()->hasPendingNavigation();
+    return frame->loader().documentLoader()->sentDidFinishLoad() && !frame->loader().provisionalDocumentLoader();
 }
 
 void FrameLoader::checkCompleted()
@@ -714,7 +714,7 @@ void FrameLoader::updateForSameDocumentNavigation(const KURL& newURL, SameDocume
     if (!m_currentItem)
         historyCommitType = HistoryInertCommit;
 
-    setHistoryItemStateForCommit(historyCommitType, sameDocumentNavigationSource == SameDocumentNavigationHistoryApi ? HistoryNavigationType::HistoryApi : HistoryNavigationType::Fragment);
+    setHistoryItemStateForCommit(type, historyCommitType, sameDocumentNavigationSource == SameDocumentNavigationHistoryApi ? HistoryNavigationType::HistoryApi : HistoryNavigationType::Fragment);
     if (sameDocumentNavigationSource == SameDocumentNavigationHistoryApi) {
         m_currentItem->setStateObject(data);
         m_currentItem->setScrollRestorationType(scrollRestorationType);
@@ -744,7 +744,7 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     detachDocumentLoader(m_provisionalDocumentLoader);
     if (!m_frame->host())
         return;
-    TemporaryChange<FrameLoadType> loadTypeChange(m_loadType, frameLoadType);
+    AutoReset<FrameLoadType> loadTypeChange(&m_loadType, frameLoadType);
     saveScrollState();
 
     KURL oldURL = m_frame->document()->url();
@@ -1119,7 +1119,7 @@ bool FrameLoader::prepareForCommit()
     // At this point, the provisional document loader should not detach, because
     // then the FrameLoader would not have any attached DocumentLoaders.
     if (m_documentLoader) {
-        TemporaryChange<bool> inDetachDocumentLoader(m_protectProvisionalLoader, true);
+        AutoReset<bool> inDetachDocumentLoader(&m_protectProvisionalLoader, true);
         detachDocumentLoader(m_documentLoader);
     }
     // 'abort' listeners can also detach the frame.
@@ -1549,8 +1549,8 @@ void FrameLoader::dispatchDidClearDocumentOfWindowObject()
 
     if (m_dispatchingDidClearWindowObjectInMainWorld)
         return;
-    TemporaryChange<bool>
-        inDidClearWindowObject(m_dispatchingDidClearWindowObjectInMainWorld, true);
+    AutoReset<bool>
+        inDidClearWindowObject(&m_dispatchingDidClearWindowObjectInMainWorld, true);
     // We just cleared the document, not the entire window object, but for the
     // embedder that's close enough.
     client()->dispatchDidClearWindowObjectInMainWorld();
@@ -1563,8 +1563,8 @@ void FrameLoader::dispatchDidClearWindowObjectInMainWorld()
 
     if (m_dispatchingDidClearWindowObjectInMainWorld)
         return;
-    TemporaryChange<bool>
-        inDidClearWindowObject(m_dispatchingDidClearWindowObjectInMainWorld, true);
+    AutoReset<bool>
+        inDidClearWindowObject(&m_dispatchingDidClearWindowObjectInMainWorld, true);
     client()->dispatchDidClearWindowObjectInMainWorld();
 }
 

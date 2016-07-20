@@ -1178,7 +1178,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
     PostSetNeedsCommitToMainThread();
   }
 
-  void WillPrepareTiles(LayerTreeHostImpl* host_impl) override {
+  void WillPrepareTilesOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() != 0)
       return;
 
@@ -1344,12 +1344,14 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
     if (host_impl->active_tree()->source_frame_number() < 2)
       return;
 
-    // Animation state is updated after drawing.
-    ImplThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::Bind(&LayerTreeHostAnimationTestAddAnimationAfterAnimating::
-                       CheckAnimations,
-                   base::Unretained(this), host_impl));
+    // Animation state is updated after drawing. Only do this once.
+    if (!TestEnded()) {
+      ImplThreadTaskRunner()->PostTask(
+          FROM_HERE,
+          base::Bind(&LayerTreeHostAnimationTestAddAnimationAfterAnimating::
+                         CheckAnimations,
+                     base::Unretained(this), host_impl));
+    }
   }
 
   void CheckAnimations(LayerTreeHostImpl* host_impl) {

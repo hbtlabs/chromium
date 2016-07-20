@@ -139,7 +139,6 @@ public:
         NavigatorProductSub = 123,
         NavigatorVendor = 124,
         NavigatorVendorSub = 125,
-        FileError = 126,
         PrefixedAnimationEndEvent = 128,
         UnprefixedAnimationEndEvent = 129,
         PrefixedAndUnprefixedAnimationEndEvent = 130,
@@ -1041,7 +1040,6 @@ public:
         V8ForInInitializer = 1238,
         V8Animation_Id_AttributeGetter = 1239,
         V8Animation_Id_AttributeSetter = 1240,
-        MediaStreamOnEnded = 1241,
         DocumentCreateEventInputEvent = 1242,
         WebAnimationHyphenatedProperty = 1243,
         FormControlsCollectionReturnsRadioNodeListForFieldSet = 1244,
@@ -1244,6 +1242,21 @@ public:
         BeforeInstallPromptEventPreventDefault = 1438,
         BeforeInstallPromptEventPrompt = 1439,
         ExecCommandAltersHTMLStructure = 1440,
+        SecureContextCheckPassed = 1441,
+        SecureContextCheckFailed = 1442,
+        SecureContextCheckForSandboxedOriginPassed = 1443,
+        SecureContextCheckForSandboxedOriginFailed = 1444,
+        V8DefineGetterOrSetterWouldThrow = 1445,
+        V8FunctionConstructorReturnedUndefined = 1446,
+        V8BroadcastChannel_Constructor = 1447,
+        V8BroadcastChannel_PostMessage_Method = 1448,
+        V8BroadcastChannel_Close_Method = 1449,
+
+        TouchStartFired = 1450,
+        MouseDownFired = 1451,
+        PointerDownFired= 1452,
+        PointerDownFiredForTouch = 1453,
+        PointerEventDispatchPointerDown = 1454,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

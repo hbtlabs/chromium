@@ -5,6 +5,8 @@
 #ifndef ASH_AURA_WM_SHELL_AURA_H_
 #define ASH_AURA_WM_SHELL_AURA_H_
 
+#include <memory>
+
 #include "ash/ash_export.h"
 #include "ash/aura/wm_lookup_aura.h"
 #include "ash/common/wm_shell.h"
@@ -19,15 +21,13 @@ class ASH_EXPORT WmShellAura : public WmShell,
                                public aura::client::ActivationChangeObserver,
                                public WindowTreeHostManager::Observer {
  public:
-  explicit WmShellAura(ShellDelegate* delegate);
+  explicit WmShellAura(std::unique_ptr<ShellDelegate> shell_delegate);
   ~WmShellAura() override;
 
   static WmShellAura* Get();
 
-  // Called early in shutdown sequence.
-  void PrepareForShutdown();
-
   // WmShell:
+  void Shutdown() override;
   WmWindow* NewContainerWindow() override;
   WmWindow* GetFocusedWindow() override;
   WmWindow* GetActiveWindow() override;
@@ -44,23 +44,25 @@ class ASH_EXPORT WmShellAura : public WmShell,
   void UnlockCursor() override;
   std::vector<WmWindow*> GetAllRootWindows() override;
   void RecordUserMetricsAction(UserMetricsAction action) override;
+  void RecordTaskSwitchMetric(TaskSwitchSource source) override;
   std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) override;
+  std::unique_ptr<WindowCycleEventFilter> CreateWindowCycleEventFilter()
+      override;
   std::unique_ptr<wm::MaximizeModeEventHandler> CreateMaximizeModeEventHandler()
       override;
   std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
   CreateScopedDisableInternalMouseAndKeyboard() override;
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
-  AccessibilityDelegate* GetAccessibilityDelegate() override;
   SessionStateDelegate* GetSessionStateDelegate() override;
   void AddActivationObserver(WmActivationObserver* observer) override;
   void RemoveActivationObserver(WmActivationObserver* observer) override;
   void AddDisplayObserver(WmDisplayObserver* observer) override;
   void RemoveDisplayObserver(WmDisplayObserver* observer) override;
-  void AddPointerWatcher(views::PointerWatcher* watcher) override;
-  void RemovePointerWatcher(views::PointerWatcher* watcher) override;
+  void AddPointerDownWatcher(views::PointerDownWatcher* watcher) override;
+  void RemovePointerDownWatcher(views::PointerDownWatcher* watcher) override;
 #if defined(OS_CHROMEOS)
   void ToggleIgnoreExternalKeyboard() override;
 #endif

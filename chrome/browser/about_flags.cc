@@ -53,6 +53,7 @@
 #include "components/search/search_switches.h"
 #include "components/security_state/switches.h"
 #include "components/signin/core/common/signin_switches.h"
+#include "components/ssl_config/ssl_config_switches.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -377,6 +378,34 @@ const FeatureEntry::Choice kAshMaterialDesignChoices[] = {
      ash::switches::kAshMaterialDesignExperimental},
 };
 
+const FeatureEntry::Choice kAshMaxWindowsToUseMaskInOverviewChoices[] = {
+    {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_UNLIMITED,
+     ash::switches::kAshMaxWindowsToUseMaskInOverview, "-1"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_ZERO,
+     ash::switches::kAshMaxWindowsToUseMaskInOverview, "0"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_FIVE,
+     ash::switches::kAshMaxWindowsToUseMaskInOverview, "5"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_TEN,
+     ash::switches::kAshMaxWindowsToUseMaskInOverview, "10"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_FIFTEEN,
+     ash::switches::kAshMaxWindowsToUseMaskInOverview, "15"},
+};
+
+const FeatureEntry::Choice kAshMaxWindowsToUseShapeInOverviewChoices[] = {
+    {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_UNLIMITED,
+     ash::switches::kAshMaxWindowsToUseShapeInOverview, "-1"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_ZERO,
+     ash::switches::kAshMaxWindowsToUseShapeInOverview, "0"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_FIVE,
+     ash::switches::kAshMaxWindowsToUseShapeInOverview, "5"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_TEN,
+     ash::switches::kAshMaxWindowsToUseShapeInOverview, "10"},
+    {IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_FIFTEEN,
+     ash::switches::kAshMaxWindowsToUseShapeInOverview, "15"},
+};
+
 const FeatureEntry::Choice kAshMaterialDesignInkDropAnimationSpeed[] = {
     {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", ""},
     {IDS_FLAGS_MATERIAL_DESIGN_INK_DROP_ANIMATION_FAST,
@@ -591,6 +620,12 @@ const FeatureEntry::Choice kEnableWebFontsInterventionV2Choices[] = {
      switches::kEnableWebFontsInterventionV2SwitchValueDisabled},
 };
 
+const FeatureEntry::Choice kSSLVersionMaxChoices[] = {
+    {IDS_GENERIC_EXPERIMENT_CHOICE_DEFAULT, "", "" },
+    {IDS_FLAGS_SSL_VERSION_MAX_TLS12, switches::kSSLVersionMax, "tls1.2"},
+    {IDS_FLAGS_SSL_VERSION_MAX_TLS13, switches::kSSLVersionMax, "tls1.3"},
+};
+
 // RECORDING USER METRICS FOR FLAGS:
 // -----------------------------------------------------------------------------
 // The first line of the entry is the internal name. If you'd like to gather
@@ -646,6 +681,10 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_DISPLAY_LIST_2D_CANVAS_DESCRIPTION, kOsAll,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableDisplayList2dCanvas,
                                switches::kDisableDisplayList2dCanvas)},
+    {"enable-canvas-2d-dynamic-rendering-mode-switching",
+     IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_NAME,
+     IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_DESCRIPTION, kOsAll,
+     SINGLE_VALUE_TYPE(switches::kEnableCanvas2dDynamicRenderingModeSwitching)},
     {"composited-layer-borders", IDS_FLAGS_COMPOSITED_LAYER_BORDERS,
      IDS_FLAGS_COMPOSITED_LAYER_BORDERS_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(cc::switches::kShowCompositedLayerBorders)},
@@ -770,9 +809,8 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_EXPERIMENTAL_WEB_PLATFORM_FEATURES_NAME,
      IDS_FLAGS_EXPERIMENTAL_WEB_PLATFORM_FEATURES_DESCRIPTION, kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableExperimentalWebPlatformFeatures)},
-    {"enable-web-bluetooth", // FLAGS:RECORD_UMA
-     IDS_FLAGS_WEB_BLUETOOTH_NAME,
-     IDS_FLAGS_WEB_BLUETOOTH_DESCRIPTION,
+    {"enable-web-bluetooth",  // FLAGS:RECORD_UMA
+     IDS_FLAGS_WEB_BLUETOOTH_NAME, IDS_FLAGS_WEB_BLUETOOTH_DESCRIPTION,
      kOsCrOS | kOsMac | kOsAndroid | kOsLinux,
      SINGLE_VALUE_TYPE(switches::kEnableWebBluetooth)},
 #if defined(ENABLE_EXTENSIONS)
@@ -945,6 +983,18 @@ const FeatureEntry kFeatureEntries[] = {
         ENABLE_DISABLE_VALUE_TYPE(
             ash::switches::kAshEnableStableOverviewOrder,
             ash::switches::kAshDisableStableOverviewOrder),
+    },
+    {
+        "ash-max-previews-to-use-mask",
+        IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_NAME,
+        IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_MASK_DESCRIPTION, kOsCrOS,
+        MULTI_VALUE_TYPE(kAshMaxWindowsToUseMaskInOverviewChoices),
+    },
+    {
+        "ash-max-previews-to-use-shape",
+        IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_NAME,
+        IDS_FLAGS_ASH_MAX_PREVIEWS_TO_USE_SHAPE_DESCRIPTION, kOsCrOS,
+        MULTI_VALUE_TYPE(kAshMaxWindowsToUseShapeInOverviewChoices),
     },
 #endif  // defined(USE_ASH)
 #if defined(OS_CHROMEOS)
@@ -1512,12 +1562,6 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableChildAccountDetection,
                                switches::kDisableChildAccountDetection)},
 #endif
-#if defined(OS_CHROMEOS) && defined(USE_OZONE)
-    {"ozone-test-single-overlay-support",
-     IDS_FLAGS_OZONE_TEST_SINGLE_HARDWARE_OVERLAY,
-     IDS_FLAGS_OZONE_TEST_SINGLE_HARDWARE_OVERLAY_DESCRIPTION, kOsCrOS,
-     SINGLE_VALUE_TYPE(switches::kOzoneTestSingleOverlaySupport)},
-#endif  // defined(OS_CHROMEOS) && defined(USE_OZONE)
     {"v8-pac-mojo-out-of-process", IDS_FLAGS_V8_PAC_MOJO_OUT_OF_PROCESS_NAME,
      IDS_FLAGS_V8_PAC_MOJO_OUT_OF_PROCESS_DESCRIPTION, kOsDesktop,
      ENABLE_DISABLE_VALUE_TYPE(switches::kV8PacMojoOutOfProcess,
@@ -1797,6 +1841,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-grouped-history", IDS_FLAGS_ENABLE_GROUPED_HISTORY_NAME,
      IDS_FLAGS_ENABLE_GROUPED_HISTORY_DESCRIPTION, kOsDesktop,
      SINGLE_VALUE_TYPE(switches::kHistoryEnableGroupByDomain)},
+    {"ssl-version-max", IDS_FLAGS_SSL_VERSION_MAX_NAME,
+     IDS_FLAGS_SSL_VERSION_MAX_DESCRIPTION, kOsAll,
+     MULTI_VALUE_TYPE(kSSLVersionMaxChoices)},
     {"enable-token-binding", IDS_FLAGS_ENABLE_TOKEN_BINDING_NAME,
      IDS_FLAGS_ENABLE_TOKEN_BINDING_DESCRIPTION, kOsAll,
      FEATURE_VALUE_TYPE(features::kTokenBinding)},
@@ -1810,8 +1857,7 @@ const FeatureEntry kFeatureEntries[] = {
 #if defined(ENABLE_EXTENSIONS)
     {"tab-for-desktop-share", IDS_FLAG_DISABLE_TAB_FOR_DESKTOP_SHARE,
      IDS_FLAG_DISABLE_TAB_FOR_DESKTOP_SHARE_DESCRIPTION, kOsAll,
-     SINGLE_VALUE_TYPE(
-         extensions::switches::kDisableTabForDesktopShare)},
+     SINGLE_VALUE_TYPE(extensions::switches::kDisableTabForDesktopShare)},
     {"disable-desktop-capture-picker-new-ui",
      IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_NEW_UI,
      IDS_FLAG_DISABLE_DESKTOP_CAPTURE_PICKER_NEW_UI_DESCRIPTION, kOsAll,
@@ -1824,6 +1870,10 @@ const FeatureEntry kFeatureEntries[] = {
      FEATURE_WITH_VARIATIONS_VALUE_TYPE(chrome::android::kNTPSnippetsFeature,
                                         kNTPSnippetsFeatureVariations,
                                         ntp_snippets::kStudyName)},
+    {"enable-ntp-offline-page-suggestions",
+     IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_SUGGESTIONS_NAME,
+     IDS_FLAGS_ENABLE_NTP_OFFLINE_PAGE_SUGGESTIONS_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(chrome::android::kNTPOfflinePageSuggestionsFeature)},
 #endif  // defined(OS_ANDROID)
 #if defined(ENABLE_WEBRTC) && BUILDFLAG(RTC_USE_H264)
     {"enable-webrtc-h264-with-openh264-ffmpeg",
@@ -1901,8 +1951,7 @@ const FeatureEntry kFeatureEntries[] = {
     {"important-sites-in-cbd", IDS_FLAGS_IMPORTANT_SITES_IN_CBD_NAME,
      IDS_FLAGS_IMPORTANT_SITES_IN_CBD_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(chrome::android::kImportantSitesInCBD)},
-    {"autoplay-muted-videos",
-     IDS_FLAGS_ENABLE_AUTOPLAY_MUTED_VIDEOS_NAME,
+    {"autoplay-muted-videos", IDS_FLAGS_ENABLE_AUTOPLAY_MUTED_VIDEOS_NAME,
      IDS_FLAGS_ENABLE_AUTOPLAY_MUTED_VIDEOS_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kAutoplayMutedVideos)},
 #endif
@@ -1960,6 +2009,14 @@ const FeatureEntry kFeatureEntries[] = {
      ENABLE_DISABLE_VALUE_TYPE(chromeos::switches::kEnableFilesQuickView,
                                chromeos::switches::kDisableFilesQuickView)},
 #endif  // defined(OS_CHROMEOS)
+#if defined(OS_ANDROID)
+    {"multi-instance-merge-tabs", IDS_FLAGS_MULTI_INSTANCE_MERGE_TABS_NAME,
+     IDS_FLAGS_MULTI_INSTANCE_MERGE_TABS_DESCRIPTION, kOsAndroid,
+     SINGLE_VALUE_TYPE(switches::kMultiInstanceMergeTabs)},
+    {"enable-web-payments", IDS_FLAGS_ENABLE_WEB_PAYMENTS_NAME,
+     IDS_FLAGS_ENABLE_WEB_PAYMENTS_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(features::kWebPayments)},
+#endif  // defined(OS_ANDROID)
     // NOTE: Adding new command-line switches requires adding corresponding
     // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.

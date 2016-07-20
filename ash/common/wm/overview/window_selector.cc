@@ -207,7 +207,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   params.bounds = GetTextFilterPosition(root_window);
   *text_filter_bottom = params.bounds.bottom();
   root_window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
-      widget, kShellWindowId_OverlayContainer, &params);
+      widget, kShellWindowId_StatusContainer, &params);
   widget->Init(params);
 
   // Use |container| to specify the padding surrounding the text and to give
@@ -264,8 +264,9 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
 // static
 bool WindowSelector::IsSelectable(WmWindow* window) {
   wm::WindowState* state = window->GetWindowState();
-  if (state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED ||
-      state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED) {
+  if (!ash::MaterialDesignController::IsOverviewMaterial() &&
+      (state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED ||
+       state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED)) {
     return false;
   }
   return state->IsUserPositionable();
@@ -369,7 +370,7 @@ void WindowSelector::Init(const WindowList& windows) {
   display::Screen::GetScreen()->AddObserver(this);
   shell->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
   // Send an a11y alert.
-  WmShell::Get()->GetAccessibilityDelegate()->TriggerAccessibilityAlert(
+  WmShell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
       A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
 
   UpdateShelfVisibility();
@@ -379,6 +380,14 @@ void WindowSelector::Init(const WindowList& windows) {
 // may cause other, unrelated classes, (ie PanelLayoutManager) to make indirect
 // calls to restoring_minimized_windows() on a partially destructed object.
 void WindowSelector::Shutdown() {
+  size_t remaining_items = 0;
+  for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
+    for (WindowSelectorItem* window_selector_item : window_grid->window_list())
+      window_selector_item->RestoreWindow();
+    remaining_items += window_grid->size();
+  }
+
+  // Setting focus after restoring windows' state avoids unnecessary animations.
   ResetFocusRestoreWindow(true);
   RemoveAllObservers();
 
@@ -389,12 +398,8 @@ void WindowSelector::Shutdown() {
     PanelLayoutManager::Get(window)->SetShowCalloutWidgets(true);
   }
 
-  size_t remaining_items = 0;
-  for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
-    for (WindowSelectorItem* window_selector_item : window_grid->window_list())
-      window_selector_item->RestoreWindow();
-    remaining_items += window_grid->size();
-  }
+  for (std::unique_ptr<WindowGrid>& window_grid : grid_list_)
+    window_grid->Shutdown();
 
   DCHECK(num_items_ >= remaining_items);
   UMA_HISTOGRAM_COUNTS_100("Ash.WindowSelector.OverviewClosedItems",

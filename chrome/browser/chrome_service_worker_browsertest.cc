@@ -12,6 +12,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -215,7 +216,13 @@ class ChromeServiceWorkerFetchTest : public ChromeServiceWorkerTest {
   DISALLOW_COPY_AND_ASSIGN(ChromeServiceWorkerFetchTest);
 };
 
-IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchTest, EmbedPdfSameOrigin) {
+// Flaky on Windows; https://crbug.com/628898.
+#if defined(OS_WIN)
+#define MAYBE_EmbedPdfSameOrigin DISABLED_EmbedPdfSameOrigin
+#else
+#define MAYBE_EmbedPdfSameOrigin EmbedPdfSameOrigin
+#endif
+IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchTest, MAYBE_EmbedPdfSameOrigin) {
   // <embed src="test.pdf">
   const std::string result(ExecuteScriptAndExtractString(
       "var embed = document.createElement('embed');"
@@ -224,7 +231,14 @@ IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchTest, EmbedPdfSameOrigin) {
   EXPECT_EQ(RequestString(GetURL("/test.pdf"), "no-cors", "include"), result);
 }
 
-IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchTest, EmbedPdfOtherOrigin) {
+// Flaky on Windows; https://crbug.com/628898.
+#if defined(OS_WIN)
+#define MAYBE_EmbedPdfOtherOrigin DISABLED_EmbedPdfOtherOrigin
+#else
+#define MAYBE_EmbedPdfOtherOrigin EmbedPdfOtherOrigin
+#endif
+IN_PROC_BROWSER_TEST_F(ChromeServiceWorkerFetchTest,
+                       MAYBE_EmbedPdfOtherOrigin) {
   // <embed src="https://www.example.com/test.pdf">
   const std::string result(ExecuteScriptAndExtractString(
       "var embed = document.createElement('embed');"
@@ -241,11 +255,6 @@ class ChromeServiceWorkerManifestFetchTest
   ChromeServiceWorkerManifestFetchTest() {}
   ~ChromeServiceWorkerManifestFetchTest() override {}
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ChromeServiceWorkerFetchTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kEnableAddToShelf);
-  }
-
   std::string ExecuteManifestFetchTest(const std::string& url,
                                        const std::string& cross_origin) {
     std::string js(
@@ -260,7 +269,7 @@ class ChromeServiceWorkerManifestFetchTest
     }
     js += "document.head.appendChild(link);";
     ExecuteJavaScriptForTests(js);
-    return RequestAppBannerAndGetIssuedRequests();
+    return GetManifestAndIssuedRequests();
   }
 
  private:
@@ -272,13 +281,22 @@ class ChromeServiceWorkerManifestFetchTest
         ->ExecuteJavaScriptForTests(base::ASCIIToUTF16(js));
   }
 
-  std::string RequestAppBannerAndGetIssuedRequests() {
-    browser()->RequestAppBannerFromDevTools(
-        browser()->tab_strip_model()->GetActiveWebContents());
+  std::string GetManifestAndIssuedRequests() {
+    base::RunLoop run_loop;
+    browser()->tab_strip_model()->GetActiveWebContents()->GetManifest(
+        base::Bind(&ManifestCallbackAndRun, run_loop.QuitClosure()));
+    run_loop.Run();
     return ExecuteScriptAndExtractString(
         "if (issuedRequests.length != 0) reportRequests();"
         "else reportOnFetch = true;");
   }
+
+  static void ManifestCallbackAndRun(const base::Closure& continuation,
+                                     const GURL&,
+                                     const content::Manifest&) {
+    continuation.Run();
+  }
+
   DISALLOW_COPY_AND_ASSIGN(ChromeServiceWorkerManifestFetchTest);
 };
 

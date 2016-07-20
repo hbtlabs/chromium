@@ -71,6 +71,7 @@
 #include "core/layout/compositing/CompositedSelection.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
+#include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/page/AutoscrollController.h"
@@ -114,7 +115,6 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
-#include "wtf/TemporaryChange.h"
 #include <memory>
 
 namespace blink {
@@ -559,7 +559,7 @@ void FrameView::adjustViewSizeAndLayout()
 {
     adjustViewSize();
     if (needsLayout()) {
-        TemporaryChange<bool> suppressAdjustViewSize(m_suppressAdjustViewSize, true);
+        AutoReset<bool> suppressAdjustViewSize(&m_suppressAdjustViewSize, true);
         layout();
     }
 }
@@ -787,7 +787,7 @@ void FrameView::performPreLayoutTasks()
     lifecycle().advanceTo(DocumentLifecycle::InPreLayout);
 
     // Don't schedule more layouts, we're in one.
-    TemporaryChange<bool> changeSchedulingEnabled(m_layoutSchedulingEnabled, false);
+    AutoReset<bool> changeSchedulingEnabled(&m_layoutSchedulingEnabled, false);
 
     if (!m_nestedLayoutCount && !m_inSynchronousPostLayout && m_postLayoutTasksTimer.isActive()) {
         // This is a new top-level layout. If there are any remaining tasks from the previous layout, finish them now.
@@ -965,7 +965,7 @@ void FrameView::layout()
 
     FontCachePurgePreventer fontCachePurgePreventer;
     {
-        TemporaryChange<bool> changeSchedulingEnabled(m_layoutSchedulingEnabled, false);
+        AutoReset<bool> changeSchedulingEnabled(&m_layoutSchedulingEnabled, false);
         m_nestedLayoutCount++;
 
         updateCounters();
@@ -2521,7 +2521,7 @@ void FrameView::updateLifecyclePhasesInternal(DocumentLifecycle::LifecycleState 
     if (!m_frame->document()->isActive())
         return;
 
-    TemporaryChange<DocumentLifecycle::LifecycleState> targetStateScope(m_currentUpdateLifecyclePhasesTargetState, targetState);
+    AutoReset<DocumentLifecycle::LifecycleState> targetStateScope(&m_currentUpdateLifecyclePhasesTargetState, targetState);
 
     if (shouldThrottleRendering()) {
         updateViewportIntersectionsForSubtree(std::min(targetState, DocumentLifecycle::CompositingClean));
@@ -3409,6 +3409,11 @@ void FrameView::setScrollOffset(const DoublePoint& offset, ScrollType scrollType
     frame().loader().saveScrollState();
     frame().loader().client()->didChangeScrollOffset();
 
+    if (scrollType == CompositorScroll && m_frame->isMainFrame()) {
+        if (DocumentLoader* documentLoader = m_frame->loader().documentLoader())
+            documentLoader->initialScrollState().wasScrolledByUser = true;
+    }
+
     if (scrollType != AnchoringScroll)
         clearScrollAnchor();
 }
@@ -3646,10 +3651,16 @@ void FrameView::updateScrollbars()
 
 void FrameView::adjustScrollPositionFromUpdateScrollbars()
 {
-    DoublePoint adjustedScrollPosition = clampScrollPosition(scrollPositionDouble());
-
-    if (adjustedScrollPosition != scrollPositionDouble() || scrollOriginChanged()) {
-        ScrollableArea::setScrollPosition(adjustedScrollPosition, ProgrammaticScroll);
+    DoublePoint clamped = clampScrollPosition(scrollPositionDouble());
+    // Restore before clamping because clamping clears the scroll anchor.
+    // TODO(ymalik): This same logic exists in PaintLayerScrollableArea.
+    // Remove when root-layer-scrolls is enabled.
+    if (clamped != scrollPositionDouble() && shouldPerformScrollAnchoring() && m_scrollAnchor.hasScroller()) {
+        m_scrollAnchor.restore();
+        clamped = clampScrollPosition(scrollPositionDouble());
+    }
+    if (clamped != scrollPositionDouble() || scrollOriginChanged()) {
+        ScrollableArea::setScrollPosition(clamped, ProgrammaticScroll);
         resetScrollOriginChanged();
     }
 }

@@ -18,7 +18,7 @@ const char kSoftwareRenderingListJson[] = LONG_STRING_CONST(
 {
   "name": "software rendering list",
   // Please update the version number whenever you change this file.
-  "version": "11.4",
+  "version": "11.7",
   "entries": [
     {
       "id": 1,
@@ -1181,6 +1181,55 @@ LONG_STRING_CONST(
       },
       "vendor_id": "0x80ee",
       "multi_gpu_category": "any",
+      "features": [
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 117,
+      "description": "MediaCodec on Vivante hangs in MediaCodec often",
+      "cr_bugs": [626814],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<=",
+          "value": "4.4.4"
+        }
+      },
+      "gl_renderer": ".*Vivante.*",
+      "features": [
+        "accelerated_video_decode"
+      ]
+    },
+    {
+      "id": 118,
+      "description": "webgl/canvas crashy on imporperly parsed vivante driver",
+      "cr_bugs": [628059],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<=",
+          "value": "4.4.4"
+        }
+      },
+      "gl_vendor": "Vivante.*",
+      "gl_renderer": ".*PXA.*",
+      "features": [
+        "webgl",
+        "accelerated_2d_canvas"
+      ]
+    },
+    {
+      "id": 119,
+      "description": "There are display issues with GPU Raster on OSX 10.9",
+      "cr_bugs": [611310],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<=",
+          "value": "10.9"
+        }
+      },
       "features": [
         "gpu_rasterization"
       ]

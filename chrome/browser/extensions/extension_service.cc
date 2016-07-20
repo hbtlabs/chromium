@@ -546,6 +546,7 @@ bool ExtensionService::UpdateExtension(const extensions::CRXFileInfo& file,
       installer->set_expected_version(expected_version,
                                       false /* fail_install_if_unexpected */);
     }
+    creation_flags = pending_extension_info->creation_flags();
     if (pending_extension_info->mark_acknowledged())
       external_install_manager_->AcknowledgeExternalExtension(id);
   } else if (extension) {
@@ -2358,7 +2359,8 @@ void ExtensionService::UpdateBlacklistedExtensions(
       continue;
     }
     registry_->RemoveBlacklisted(*it);
-    extension_prefs_->SetExtensionBlacklisted(extension->id(), false);
+    extension_prefs_->SetExtensionBlacklistState(extension->id(),
+                                                 extensions::NOT_BLACKLISTED);
     AddExtension(extension.get());
     UMA_HISTOGRAM_ENUMERATION("ExtensionBlacklist.UnblacklistInstalled",
                               extension->location(),

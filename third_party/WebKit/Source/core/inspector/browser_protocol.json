@@ -174,6 +174,13 @@
                   { "name": "column", "type": "integer", "description": "Error column." }
                 ],
                 "hidden": true
+            },
+            {
+                "id": "NavigationResponse",
+                "description": "Proceed: allow the navigation; Cancel: cancel the navigation; CancelAndIgnore: cancels the navigation and makes the requester of the navigation acts like the request was never made.",
+                "type": "string",
+                "enum": ["Proceed", "Cancel", "CancelAndIgnore"],
+                "hidden": true
             }
         ],
         "commands": [
@@ -481,6 +488,25 @@
                 "parameters": [
                     { "name": "threshold", "type": "number", "description": "If set to a positive number, specifies threshold in seconds for input event latency that will cause a console warning about blocked event to be issued. If zero or less, the warning is disabled." }
                 ]
+            },
+            {
+                "name": "setControlNavigations",
+                "parameters": [
+                    { "name": "enabled", "type": "boolean" }
+                ],
+                "description": "Toggles navigation throttling which allows programatic control over navigation and redirect response.",
+                "hidden": true,
+                "handlers": ["browser"]
+            },
+            {
+                "name": "processNavigation",
+                "parameters": [
+                    { "name": "response", "$ref": "NavigationResponse" },
+                    { "name": "navigationId", "type": "integer" }
+                ],
+                "description": "Should be sent in response to a navigationRequested or a redirectRequested event, telling the browser how to handle the navigation.",
+                "hidden": true,
+                "handlers": ["browser"]
             }
         ],
         "events": [
@@ -611,6 +637,17 @@
                 "name": "interstitialHidden",
                 "description": "Fired when interstitial page was hidden",
                 "hidden": true,
+                "handlers": ["browser"]
+            },
+            {
+                "name": "navigationRequested",
+                "description": "Fired when a navigation is started if navigation throttles are enabled.  The navigation will be deferred until processNavigation is called.",
+                "parameters": [
+                    { "name": "isInMainFrame", "type": "boolean", "description": "Whether the navigation is taking place in the main frame or in a subframe." },
+                    { "name": "isRedirect", "type": "boolean", "description": "Whether the navigation has encountered a server redirect or not." },
+                    { "name": "navigationId", "type": "integer" },
+                    { "name": "url", "type": "string", "description": "URL of requested navigation." }
+                ],
                 "handlers": ["browser"]
             }
         ]
@@ -1066,7 +1103,7 @@
                     { "name": "type", "type": "string", "enum": ["parser", "script", "other"], "description": "Type of this initiator." },
                     { "name": "stack", "$ref": "Runtime.StackTrace", "optional": true, "description": "Initiator JavaScript stack trace, set for Script only." },
                     { "name": "url", "type": "string", "optional": true, "description": "Initiator URL, set for Parser type only." },
-                    { "name": "lineNumber", "type": "number", "optional": true, "description": "Initiator line number, set for Parser type only." }
+                    { "name": "lineNumber", "type": "number", "optional": true, "description": "Initiator line number, set for Parser type only (0-based)." }
                 ]
             },
             {
@@ -1506,6 +1543,7 @@
     },
     {
         "domain": "IndexedDB",
+        "dependencies": ["Runtime"],
         "hidden": true,
         "types": [
             {
@@ -1568,9 +1606,9 @@
                 "type": "object",
                 "description": "Data entry.",
                 "properties": [
-                    { "name": "key", "type": "string", "description": "JSON-stringified key object." },
-                    { "name": "primaryKey", "type": "string", "description": "JSON-stringified primary key object." },
-                    { "name": "value", "type": "string", "description": "JSON-stringified value object." }
+                    { "name": "key", "$ref": "Runtime.RemoteObject", "description": "Key object." },
+                    { "name": "primaryKey", "$ref": "Runtime.RemoteObject", "description": "Primary key object." },
+                    { "name": "value", "$ref": "Runtime.RemoteObject", "description": "Value object." }
                 ]
             },
             {
@@ -4179,6 +4217,53 @@
                 ],
                 "description": "Clears storage for origin.",
                 "handlers": ["browser"]
+            }
+        ]
+    },
+    {
+        "domain": "Log",
+        "description": "Provides access to log entries.",
+        "dependencies": ["Runtime", "Network", "Worker"],
+        "hidden": true,
+        "types": [
+            {
+                "id": "LogEntry",
+                "type": "object",
+                "description": "Log entry.",
+                "properties": [
+                    { "name": "source", "type": "string", "enum": ["xml", "javascript", "network", "storage", "appcache", "rendering", "security", "deprecation", "worker", "other"], "description": "Log entry source." },
+                    { "name": "level", "type": "string", "enum": ["log", "warning", "error", "debug", "info"], "description": "Log entry severity." },
+                    { "name": "text", "type": "string", "description": "Logged text." },
+                    { "name": "timestamp", "$ref": "Runtime.Timestamp", "description": "Timestamp when this entry was added." },
+                    { "name": "url", "type": "string", "optional": true, "description": "URL of the resource if known." },
+                    { "name": "lineNumber", "type": "integer", "optional": true, "description": "Line number in the resource." },
+                    { "name": "stackTrace", "$ref": "Runtime.StackTrace", "optional": true, "description": "JavaScript stack trace." },
+                    { "name": "networkRequestId", "$ref": "Network.RequestId", "optional": true, "description": "Identifier of the network request associated with this entry." },
+                    { "name": "workerId", "type": "string", "optional": true, "description": "Identifier of the worker associated with this entry." }
+                ]
+            }
+        ],
+        "commands": [
+            {
+                "name": "enable",
+                "description": "Enables log domain, sends the entries collected so far to the client by means of the <code>entryAdded</code> notification."
+            },
+            {
+                "name": "disable",
+                "description": "Disables log domain, prevents further log entries from being reported to the client."
+            },
+            {
+                "name": "clear",
+                "description": "Clears the log."
+            }
+        ],
+        "events": [
+            {
+                "name": "entryAdded",
+                "parameters": [
+                    { "name": "entry", "$ref": "LogEntry", "description": "The entry." }
+                ],
+                "description": "Issued when new message was logged."
             }
         ]
     },

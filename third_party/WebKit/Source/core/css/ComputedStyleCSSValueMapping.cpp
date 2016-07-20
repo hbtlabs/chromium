@@ -744,11 +744,12 @@ class OrderedNamedLinesCollector {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(OrderedNamedLinesCollector);
 public:
-    OrderedNamedLinesCollector(const ComputedStyle& style, bool isRowAxis, size_t repetitions)
+    OrderedNamedLinesCollector(const ComputedStyle& style, bool isRowAxis, size_t autoRepeatTracksCount)
         : m_orderedNamedGridLines(isRowAxis ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines())
         , m_orderedNamedAutoRepeatGridLines(isRowAxis ? style.autoRepeatOrderedNamedGridColumnLines() : style.autoRepeatOrderedNamedGridRowLines())
         , m_insertionPoint(isRowAxis ? style.gridAutoRepeatColumnsInsertionPoint() : style.gridAutoRepeatRowsInsertionPoint())
-        , m_repetitions(repetitions)
+        , m_autoRepeatTotalTracks(autoRepeatTracksCount)
+        , m_autoRepeatTrackListLength(isRowAxis ? style.gridAutoRepeatColumns().size() : style.gridAutoRepeatRows().size())
     {
     }
 
@@ -763,7 +764,8 @@ private:
     const OrderedNamedGridLines& m_orderedNamedGridLines;
     const OrderedNamedGridLines& m_orderedNamedAutoRepeatGridLines;
     size_t m_insertionPoint;
-    size_t m_repetitions;
+    size_t m_autoRepeatTotalTracks;
+    size_t m_autoRepeatTrackListLength;
 };
 
 void OrderedNamedLinesCollector::appendLines(CSSGridLineNamesValue& lineNamesValue, size_t index, NamedLinesType type) const
@@ -785,9 +787,10 @@ void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue&
         return;
     }
 
-    DCHECK(m_repetitions);
-    if (i > m_insertionPoint + m_repetitions) {
-        appendLines(lineNamesValue, i - (m_repetitions - 1), NamedLines);
+    DCHECK(m_autoRepeatTotalTracks);
+
+    if (i > m_insertionPoint + m_autoRepeatTotalTracks) {
+        appendLines(lineNamesValue, i - (m_autoRepeatTotalTracks - 1), NamedLines);
         return;
     }
 
@@ -797,14 +800,16 @@ void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue&
         return;
     }
 
-    if (i == m_insertionPoint + m_repetitions) {
-        appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+    if (i == m_insertionPoint + m_autoRepeatTotalTracks) {
+        appendLines(lineNamesValue, m_autoRepeatTrackListLength, AutoRepeatNamedLines);
         appendLines(lineNamesValue, m_insertionPoint + 1, NamedLines);
         return;
     }
 
-    appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
-    appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+    size_t autoRepeatIndexInFirstRepetition = (i - m_insertionPoint) % m_autoRepeatTrackListLength;
+    if (!autoRepeatIndexInFirstRepetition && i > m_insertionPoint)
+        appendLines(lineNamesValue, m_autoRepeatTrackListLength, AutoRepeatNamedLines);
+    appendLines(lineNamesValue, autoRepeatIndexInFirstRepetition, AutoRepeatNamedLines);
 }
 
 static void addValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collector, size_t i, CSSValueList& list)
@@ -837,28 +842,22 @@ static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const
     if (trackListIsEmpty)
         return CSSPrimitiveValue::createIdentifier(CSSValueNone);
 
-    size_t repetitions = isLayoutGrid ? toLayoutGrid(layoutObject)->autoRepeatCountForDirection(direction) : 0;
-    OrderedNamedLinesCollector collector(style, isRowAxis, repetitions);
+    size_t autoRepeatTotalTracks = isLayoutGrid ? toLayoutGrid(layoutObject)->autoRepeatCountForDirection(direction) : 0;
+    OrderedNamedLinesCollector collector(style, isRowAxis, autoRepeatTotalTracks);
     CSSValueList* list = CSSValueList::createSpaceSeparated();
     size_t insertionIndex;
     if (isLayoutGrid) {
         const auto* grid = toLayoutGrid(layoutObject);
-        const Vector<LayoutUnit>& trackPositions = direction == ForColumns ? grid->columnPositions() : grid->rowPositions();
-        // There are at least #tracks + 1 grid lines (trackPositions). Apart from that, the grid container can generate implicit grid tracks,
-        // so we'll have more trackPositions than trackSizes as the latter only contain the explicit grid.
-        ASSERT(trackPositions.size() - 1 >= trackSizes.size());
+        Vector<LayoutUnit> computedTrackSizes = grid->trackSizesForComputedStyle(direction);
+        size_t numTracks = computedTrackSizes.size();
 
-        size_t i;
-        LayoutUnit gutterSize = grid->guttersSize(direction, 2);
-        LayoutUnit offsetBetweenTracks = grid->offsetBetweenTracks(direction);
-        for (i = 0; i < trackPositions.size() - 2; ++i) {
+        for (size_t i = 0; i < numTracks; ++i) {
             addValuesForNamedGridLinesAtIndex(collector, i, *list);
-            list->append(*zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i] - gutterSize - offsetBetweenTracks, style));
+            list->append(*zoomAdjustedPixelValue(computedTrackSizes[i], style));
         }
-        // Last track line does not have any gutter or distribution offset.
-        addValuesForNamedGridLinesAtIndex(collector, i, *list);
-        list->append(*zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i], style));
-        insertionIndex = trackPositions.size() - 1;
+        addValuesForNamedGridLinesAtIndex(collector, numTracks + 1, *list);
+
+        insertionIndex = numTracks;
     } else {
         for (size_t i = 0; i < trackSizes.size(); ++i) {
             addValuesForNamedGridLinesAtIndex(collector, i, *list);

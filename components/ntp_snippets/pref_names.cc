@@ -7,6 +7,8 @@
 namespace ntp_snippets {
 namespace prefs {
 
+const char kEnableSnippets[] = "ntp_snippets.enable";
+
 const char kSnippetHosts[] = "ntp_snippets.hosts";
 
 }  // namespace prefs

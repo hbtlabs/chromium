@@ -621,6 +621,7 @@
         '<@(trace_event_test_sources)',
       ],
       'dependencies': [
+        'allocator/allocator.gyp:allocator_features#target',
         'base',
         'base_i18n',
         'base_message_loop_tests',
@@ -1422,6 +1423,7 @@
             'android/java/src/org/chromium/base/ContentUriUtils.java',
             'android/java/src/org/chromium/base/ContextUtils.java',
             'android/java/src/org/chromium/base/CpuFeatures.java',
+            'android/java/src/org/chromium/base/EarlyTraceEvent.java',
             'android/java/src/org/chromium/base/EventLog.java',
             'android/java/src/org/chromium/base/FieldTrialList.java',
             'android/java/src/org/chromium/base/ImportantFileWriterAndroid.java',

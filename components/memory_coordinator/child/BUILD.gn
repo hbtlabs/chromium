@@ -10,8 +10,11 @@ source_set("child") {
 
   deps = [
     "//base",
-    "//components/memory_coordinator/common",
     "//components/memory_coordinator/public/interfaces",
+  ]
+
+  public_deps = [
+    "//components/memory_coordinator/common",
   ]
 }
 

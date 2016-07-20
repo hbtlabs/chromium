@@ -1,5 +1,0 @@
-include_rules = [
-  "+components/prefs",
-  "+content/public/browser",
-  "+net",
-]

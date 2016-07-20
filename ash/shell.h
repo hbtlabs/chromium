@@ -27,9 +27,6 @@
 #include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/public/activation_change_observer.h"
 
-namespace app_list {
-class AppListView;
-}
 namespace aura {
 class EventFilter;
 class RootWindow;
@@ -62,7 +59,7 @@ class UserActivityPowerManagerNotifier;
 }
 namespace views {
 class NonClientFrameView;
-class PointerWatcher;
+class PointerDownWatcher;
 class Widget;
 namespace corewm {
 class TooltipController;
@@ -80,8 +77,7 @@ class WindowModalityController;
 namespace ash {
 
 class AcceleratorController;
-class AccessibilityDelegate;
-class AppListController;
+class AcceleratorControllerDelegateAura;
 class AshNativeCursorManager;
 class AutoclickController;
 class BluetoothNotificationController;
@@ -110,7 +106,7 @@ class MouseCursorEventFilter;
 class NewWindowDelegate;
 class OverlayEventFilter;
 class PartialMagnificationController;
-class PointerWatcherDelegate;
+class PointerDownWatcherDelegate;
 class PowerButtonController;
 class PowerEventObserver;
 class ProjectingObserver;
@@ -128,7 +124,6 @@ class SessionStateDelegate;
 class Shelf;
 class ShelfDelegate;
 class ShelfItemDelegateManager;
-class ShelfModel;
 class ShelfWindowWatcher;
 class ShellDelegate;
 struct ShellInitParams;
@@ -138,7 +133,6 @@ class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
 class SystemTray;
-class ToastManager;
 class ToplevelWindowEventHandler;
 class TouchTransformerController;
 class TouchObserverHUD;
@@ -147,7 +141,6 @@ class VirtualKeyboardController;
 class VideoActivityNotifier;
 class VideoDetector;
 class WebNotificationTray;
-class WindowCycleController;
 class WindowPositioner;
 class WmShellAura;
 class WmWindow;
@@ -231,24 +224,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   void ShowContextMenu(const gfx::Point& location_in_screen,
                        ui::MenuSourceType source_type);
 
-  // Shows the app list. |window| specifies in which display the app
-  // list should be shown. If this is NULL, the active root window
-  // will be used.
-  void ShowAppList(aura::Window* anchor);
-
-  // Dismisses the app list.
-  void DismissAppList();
-
-  // Shows the app list if it's not visible. Dismisses it otherwise.
-  void ToggleAppList(aura::Window* anchor);
-
-  // Returns app list actual visibility. This might differ from
-  // GetAppListTargetVisibility() when hiding animation is still in flight.
-  bool IsApplistVisible() const;
-
-  // Returns app list target visibility.
-  bool GetAppListTargetVisibility() const;
-
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
   views::NonClientFrameView* CreateDefaultNonClientFrameView(
@@ -300,8 +275,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Show shelf view if it was created hidden (before session has started).
   void ShowShelf();
 
-  void AddPointerWatcher(views::PointerWatcher* watcher);
-  void RemovePointerWatcher(views::PointerWatcher* watcher);
+  void AddPointerDownWatcher(views::PointerDownWatcher* watcher);
+  void RemovePointerDownWatcher(views::PointerDownWatcher* watcher);
 
 #if defined(OS_CHROMEOS)
   // Test if MaximizeModeWindowManager is not enabled, and if
@@ -313,6 +288,9 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   AcceleratorController* accelerator_controller() {
     return accelerator_controller_.get();
+  }
+  AcceleratorControllerDelegateAura* accelerator_controller_delegate() {
+    return accelerator_controller_delegate_.get();
   }
 
   DisplayManager* display_manager() { return display_manager_.get(); }
@@ -341,9 +319,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return lock_state_controller_.get();
   }
   VideoDetector* video_detector() { return video_detector_.get(); }
-  WindowCycleController* window_cycle_controller() {
-    return window_cycle_controller_.get();
-  }
   WindowTreeHostManager* window_tree_host_manager() {
     return window_tree_host_manager_.get();
   }
@@ -372,10 +347,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 
   SessionStateDelegate* session_state_delegate() {
     return session_state_delegate_.get();
-  }
-
-  AccessibilityDelegate* accessibility_delegate() {
-    return accessibility_delegate_.get();
   }
 
   NewWindowDelegate* new_window_delegate() {
@@ -485,8 +456,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   }
 #endif  // defined(OS_CHROMEOS)
 
-  ShelfModel* shelf_model() { return shelf_model_.get(); }
-
   WindowPositioner* window_positioner() { return window_positioner_.get(); }
 
   // Returns the launcher delegate, creating if necesary.
@@ -523,8 +492,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return screen_pinning_controller_.get();
   }
 
-  ToastManager* toast_manager() { return toast_manager_.get(); }
-
   GPUSupport* gpu_support() { return gpu_support_.get(); }
 
  private:
@@ -553,7 +520,7 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Prepares the shelf to be deleted.
   void ShutdownShelf();
 
-  // ash::SystemModalContainerEventFilterDelegate overrides:
+  // SystemModalContainerEventFilterDelegate:
   bool CanWindowReceiveEvents(aura::Window* window) override;
 
   // Overridden from ui::EventTarget:
@@ -591,17 +558,16 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::vector<WindowAndBoundsPair> to_restore_;
 
   std::unique_ptr<UserMetricsRecorder> user_metrics_recorder_;
+  std::unique_ptr<AcceleratorControllerDelegateAura>
+      accelerator_controller_delegate_;
   std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<UserWallpaperDelegate> user_wallpaper_delegate_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
-  std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<NewWindowDelegate> new_window_delegate_;
-  std::unique_ptr<PointerWatcherDelegate> pointer_watcher_delegate_;
+  std::unique_ptr<PointerDownWatcherDelegate> pointer_down_watcher_delegate_;
   std::unique_ptr<ShelfDelegate> shelf_delegate_;
   std::unique_ptr<ShelfItemDelegateManager> shelf_item_delegate_manager_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
-
-  std::unique_ptr<ShelfModel> shelf_model_;
   std::unique_ptr<WindowPositioner> window_positioner_;
 
   std::unique_ptr<DragDropController> drag_drop_controller_;
@@ -616,7 +582,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<LockStateController> lock_state_controller_;
   std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
   std::unique_ptr<VideoDetector> video_detector_;
-  std::unique_ptr<WindowCycleController> window_cycle_controller_;
   std::unique_ptr<WindowTreeHostManager> window_tree_host_manager_;
   std::unique_ptr<HighContrastController> high_contrast_controller_;
   std::unique_ptr<MagnificationController> magnification_controller_;
@@ -686,8 +651,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<ui::EventHandler> magnifier_key_scroll_handler_;
   std::unique_ptr<ui::EventHandler> speech_feedback_handler_;
 #endif  // defined(OS_CHROMEOS)
-
-  std::unique_ptr<ToastManager> toast_manager_;
 
   // |native_cursor_manager_| is owned by |cursor_manager_|, but we keep a
   // pointer to vend to test code.

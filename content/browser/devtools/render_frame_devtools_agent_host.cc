@@ -13,6 +13,7 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
+#include "content/browser/devtools/page_navigation_throttle.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/dom_handler.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
@@ -103,7 +104,7 @@ class RenderFrameDevToolsAgentHost::FrameHostHolder {
                                int call_id,
                                const std::string& method,
                                const std::string& message);
-  void InspectElement(int x, int y);
+  void InspectElement(int session_id, int x, int y);
   void ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
   void Suspend();
   void Resume();
@@ -210,10 +211,10 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::DispatchProtocolMessage(
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::InspectElement(
-    int x, int y) {
+    int session_id, int x, int y) {
   DCHECK(attached_);
   host_->Send(new DevToolsAgentMsg_InspectElement(
-      host_->GetRoutingID(), x, y));
+      host_->GetRoutingID(), session_id, x, y));
 }
 
 void
@@ -343,6 +344,26 @@ void RenderFrameDevToolsAgentHost::OnBeforeNavigation(
   RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
   if (agent_host)
     agent_host->AboutToNavigate(navigation_handle);
+}
+
+// static
+std::unique_ptr<NavigationThrottle>
+RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(
+    NavigationHandle* navigation_handle) {
+  FrameTreeNode* frame_tree_node =
+      static_cast<NavigationHandleImpl*>(navigation_handle)->frame_tree_node();
+  while (frame_tree_node && frame_tree_node->parent()) {
+    frame_tree_node = frame_tree_node->parent();
+  }
+  RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
+  // Note Page.setControlNavigations is intended to control navigations in the
+  // main frame and all child frames and |page_handler_| only exists for the
+  // main frame.
+  if (agent_host && agent_host->page_handler_) {
+    return agent_host->page_handler_->CreateThrottleForNavigation(
+        navigation_handle);
+  }
+  return nullptr;
 }
 
 RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
@@ -489,9 +510,9 @@ bool RenderFrameDevToolsAgentHost::DispatchProtocolMessage(
 
 void RenderFrameDevToolsAgentHost::InspectElement(int x, int y) {
   if (current_)
-    current_->InspectElement(x, y);
+    current_->InspectElement(session_id(), x, y);
   if (pending_)
-    pending_->InspectElement(x, y);
+    pending_->InspectElement(session_id(), x, y);
 }
 
 void RenderFrameDevToolsAgentHost::OnClientAttached() {

@@ -13,10 +13,11 @@
 #include "ash/ash_export.h"
 #include "ash/common/media_delegate.h"
 #include "ash/common/metrics/user_metrics_action.h"
+#include "ash/common/wm/lock_state_observer.h"
 #include "base/observer_list.h"
 
 namespace views {
-class PointerWatcher;
+class PointerDownWatcher;
 }
 
 namespace ash {
@@ -31,15 +32,21 @@ class MaximizeModeController;
 class MruWindowTracker;
 class ScopedDisableInternalMouseAndKeyboard;
 class SessionStateDelegate;
+class ShelfModel;
 class ShellDelegate;
 class ShellObserver;
 class SystemTrayDelegate;
 class SystemTrayNotifier;
+class ToastManager;
+class WindowCycleController;
+class WindowCycleEventFilter;
 class WindowResizer;
 class WindowSelectorController;
 class WmActivationObserver;
 class WmDisplayObserver;
 class WmWindow;
+
+enum class TaskSwitchSource;
 
 namespace wm {
 class MaximizeModeEventHandler;
@@ -59,7 +66,14 @@ class ASH_EXPORT WmShell {
   static WmShell* Get();
   static bool HasInstance() { return instance_ != nullptr; }
 
+  void Initialize();
+  virtual void Shutdown();
+
   ShellDelegate* delegate() { return delegate_.get(); }
+
+  AccessibilityDelegate* accessibility_delegate() {
+    return accessibility_delegate_.get();
+  }
 
   BrightnessControlDelegate* brightness_control_delegate() {
     return brightness_control_delegate_.get();
@@ -81,12 +95,20 @@ class ASH_EXPORT WmShell {
 
   MediaDelegate* media_delegate() { return media_delegate_.get(); }
 
+  ShelfModel* shelf_model() { return shelf_model_.get(); }
+
   SystemTrayNotifier* system_tray_notifier() {
     return system_tray_notifier_.get();
   }
 
   SystemTrayDelegate* system_tray_delegate() {
     return system_tray_delegate_.get();
+  }
+
+  ToastManager* toast_manager() { return toast_manager_.get(); }
+
+  WindowCycleController* window_cycle_controller() {
+    return window_cycle_controller_.get();
   }
 
   WindowSelectorController* window_selector_controller() {
@@ -131,6 +153,22 @@ class ASH_EXPORT WmShell {
     simulate_modal_window_open_for_testing_ = modal_window_open;
   }
 
+  // Shows the app list on the active root window.
+  void ShowAppList();
+
+  // Dismisses the app list.
+  void DismissAppList();
+
+  // Shows the app list if it's not visible. Dismisses it otherwise.
+  void ToggleAppList();
+
+  // Returns app list actual visibility. This might differ from
+  // GetAppListTargetVisibility() when hiding animation is still in flight.
+  bool IsApplistVisible() const;
+
+  // Returns app list target visibility.
+  bool GetAppListTargetVisibility() const;
+
   // Returns true if a window is currently pinned.
   virtual bool IsPinned() = 0;
 
@@ -156,6 +194,7 @@ class ASH_EXPORT WmShell {
   virtual std::vector<WmWindow*> GetAllRootWindows() = 0;
 
   virtual void RecordUserMetricsAction(UserMetricsAction action) = 0;
+  virtual void RecordTaskSwitchMetric(TaskSwitchSource source) = 0;
 
   // Returns a WindowResizer to handle dragging. |next_window_resizer| is
   // the next WindowResizer in the WindowResizer chain. This may return
@@ -163,6 +202,9 @@ class ASH_EXPORT WmShell {
   virtual std::unique_ptr<WindowResizer> CreateDragWindowResizer(
       std::unique_ptr<WindowResizer> next_window_resizer,
       wm::WindowState* window_state) = 0;
+
+  virtual std::unique_ptr<WindowCycleEventFilter>
+  CreateWindowCycleEventFilter() = 0;
 
   virtual std::unique_ptr<wm::MaximizeModeEventHandler>
   CreateMaximizeModeEventHandler() = 0;
@@ -192,8 +234,6 @@ class ASH_EXPORT WmShell {
   // Called when virtual keyboard has been activated/deactivated.
   void OnVirtualKeyboardActivated(bool activated);
 
-  virtual AccessibilityDelegate* GetAccessibilityDelegate() = 0;
-
   virtual SessionStateDelegate* GetSessionStateDelegate() = 0;
 
   virtual void AddActivationObserver(WmActivationObserver* observer) = 0;
@@ -205,8 +245,13 @@ class ASH_EXPORT WmShell {
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
-  virtual void AddPointerWatcher(views::PointerWatcher* watcher) = 0;
-  virtual void RemovePointerWatcher(views::PointerWatcher* watcher) = 0;
+  virtual void AddPointerDownWatcher(views::PointerDownWatcher* watcher) = 0;
+  virtual void RemovePointerDownWatcher(views::PointerDownWatcher* watcher) = 0;
+
+  // TODO: Move these back to LockStateController when that has been moved.
+  void OnLockStateEvent(LockStateObserver::EventType event);
+  void AddLockStateObserver(LockStateObserver* observer);
+  void RemoveLockStateObserver(LockStateObserver* observer);
 
 #if defined(OS_CHROMEOS)
   LogoutConfirmationController* logout_confirmation_controller() {
@@ -218,7 +263,7 @@ class ASH_EXPORT WmShell {
 #endif
 
  protected:
-  explicit WmShell(ShellDelegate* delegate);
+  explicit WmShell(std::unique_ptr<ShellDelegate> shell_delegate);
   virtual ~WmShell();
 
   base::ObserverList<ShellObserver>* shell_observers() {
@@ -229,9 +274,10 @@ class ASH_EXPORT WmShell {
 
   // Helpers to set (and initialize) or destroy various delegates.
   // TODO(msw|jamescook): Remove these once ShellDelegate, etc. are ported.
-  void SetMediaDelegate(std::unique_ptr<MediaDelegate> delegate);
   void SetSystemTrayDelegate(std::unique_ptr<SystemTrayDelegate> delegate);
   void DeleteSystemTrayDelegate();
+
+  void DeleteWindowCycleController();
 
   void DeleteWindowSelectorController();
 
@@ -240,6 +286,8 @@ class ASH_EXPORT WmShell {
 
   void CreateMruWindowTracker();
   void DeleteMruWindowTracker();
+
+  void DeleteToastManager();
 
  private:
   friend class AcceleratorControllerTest;
@@ -250,6 +298,7 @@ class ASH_EXPORT WmShell {
   base::ObserverList<ShellObserver> shell_observers_;
   std::unique_ptr<ShellDelegate> delegate_;
 
+  std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<FocusCycler> focus_cycler_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
@@ -258,9 +307,14 @@ class ASH_EXPORT WmShell {
   std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
   std::unique_ptr<MediaDelegate> media_delegate_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
+  std::unique_ptr<ShelfModel> shelf_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;
+  std::unique_ptr<ToastManager> toast_manager_;
+  std::unique_ptr<WindowCycleController> window_cycle_controller_;
   std::unique_ptr<WindowSelectorController> window_selector_controller_;
+
+  base::ObserverList<LockStateObserver> lock_state_observers_;
 
   bool simulate_modal_window_open_for_testing_ = false;
 

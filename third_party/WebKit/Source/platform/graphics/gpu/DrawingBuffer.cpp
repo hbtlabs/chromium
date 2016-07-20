@@ -30,6 +30,7 @@
 
 #include "platform/graphics/gpu/DrawingBuffer.h"
 
+#include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -288,6 +289,7 @@ bool DrawingBuffer::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExt
         if (m_discardFramebufferSupported) {
             // Explicitly discard framebuffer to save GPU memory bandwidth for tile-based GPU arch.
             const GLenum attachments[3] = { GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT };
+            m_gl->BindFramebuffer(GL_FRAMEBUFFER, m_fbo);
             m_gl->DiscardFramebufferEXT(GL_FRAMEBUFFER, 3, attachments);
         }
     } else {
@@ -568,7 +570,7 @@ bool DrawingBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint
     const GLuint64 fenceSync = gl->InsertFenceSyncCHROMIUM();
 
     gl->Flush();
-    GLbyte syncToken[24];
+    GLbyte syncToken[GL_SYNC_TOKEN_SIZE_CHROMIUM] = { 0 };
     gl->GenSyncTokenCHROMIUM(fenceSync, syncToken);
     m_gl->WaitSyncTokenCHROMIUM(syncToken);
 

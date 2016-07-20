@@ -7,6 +7,7 @@ import re
 from core import perf_benchmark
 from telemetry import benchmark
 from telemetry.timeline import chrome_trace_category_filter
+from telemetry.timeline import chrome_trace_config
 from telemetry.web_perf import timeline_based_measurement
 import page_sets
 
@@ -63,24 +64,24 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   https://goo.gl/Jek2NL.
   """
 
-  def SetExtraBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs([
-        # TODO(perezju): Temporary workaround to disable periodic memory dumps.
-        # See: http://crbug.com/513692
-        '--enable-memory-benchmarking',
-    ])
-
   def CreateTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options(
         chrome_trace_category_filter.ChromeTraceCategoryFilter(
             '-*,disabled-by-default-memory-infra'))
     options.config.enable_android_graphics_memtrack = True
     options.SetTimelineBasedMetrics(['memoryMetric'])
+    # Setting an empty memory dump config disables periodic dumps.
+    options.config.chrome_trace_config.SetMemoryDumpConfig(
+        chrome_trace_config.MemoryDumpConfig())
     return options
+
+  def CreateStorySet(self, options):
+    return page_sets.SystemHealthStorySet(platform=self.PLATFORM,
+                                          take_memory_measurement=True)
 
   @classmethod
   def Name(cls):
-    return 'system_health.memory_%s' % cls.page_set.PLATFORM
+    return 'system_health.memory_%s' % cls.PLATFORM
 
   @classmethod
   def ValueCanBeAddedPredicate(cls, value, is_first_result):
@@ -91,7 +92,7 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
 
 class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
-  page_set = page_sets.DesktopSystemHealthStorySet
+  PLATFORM = 'desktop'
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
@@ -102,14 +103,17 @@ class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
 
 class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Mobile Chrome Memory System Health Benchmark."""
-  page_set = page_sets.MobileSystemHealthStorySet
+  PLATFORM = 'mobile'
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/612144 (reference on Nexus 5X).
-    return possible_browser.platform.GetDeviceTypeName() == 'Desktop' or (
-        possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+    # http://crbug.com/612144
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    return possible_browser.platform.GetDeviceTypeName() == 'Desktop'
+
 
 @benchmark.Enabled('android-webview')
 class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):

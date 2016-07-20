@@ -2931,6 +2931,26 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="CredentialManager_AccountChooser_Accepted">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user chose a credential via the account chooser.
+  </description>
+</action>
+
+<action name="CredentialManager_AccountChooser_Dismissed">
+  <owner>vasilii@chromium.org</owner>
+  <description>The user dismissed the account chooser.</description>
+</action>
+
+<action name="CredentialManager_Autosignin">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The website tried to automatically sign the user in and got a credential
+    back from the browser.
+  </description>
+</action>
+
 <action name="CriticalNotificationShown">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -3111,6 +3131,14 @@ should be able to be added at any place in this file.
     The user clicked &quot;Don't ask again&quot; on the info bar.
   </description>
   <obsolete>Renamed to DefaultBrowserInfoBar_Cancel in M52.</obsolete>
+</action>
+
+<action name="DefaultBrowserInfoBar_Ignore">
+  <owner>pmonette@chromium.org</owner>
+  <description>
+    The hosting tab was closed before any user interaction happened with the
+    info bar.
+  </description>
 </action>
 
 <action name="Delete">
@@ -9334,6 +9362,13 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileTabClosedUndoShortCut">
+  <owner>xingliu@chromium.com</owner>
+  <description>
+    Undo tab closure by keyboard shortcut ctrl+shift+T, for Android only.
+  </description>
+</action>
+
 <action name="MobileTabStripCloseTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -11536,6 +11571,11 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Options_ShowStorageManager">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management</description>
+</action>
+
 <action name="Options_ShowSyncAdvanced">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Show advanced sync settings</description>
@@ -11599,6 +11639,31 @@ should be able to be added at any place in this file.
 <action name="Options_Startup_NewTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Options_StorageOpenAccounts">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Other users</description>
+</action>
+
+<action name="Options_StorageOpenAndroidStorage">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Android storage</description>
+</action>
+
+<action name="Options_StorageOpenClearBrowsingData">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Browsing data</description>
+</action>
+
+<action name="Options_StorageOpenClearDriveCache">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Offline files</description>
+</action>
+
+<action name="Options_StorageOpenDownloads">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Downloads</description>
 </action>
 
 <action name="Options_SupervisedUsers_Disable">
@@ -12176,6 +12241,21 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="PasswordManager_Autofilled">
+  <owner>vasilii@chromium.org</owner>
+  <description>Username/password were autofilled on pageload.</description>
+</action>
+
+<action name="PasswordManager_ChoseSubdomainPassword">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user submitted a form with an existing credential saved for another
+    subdomain. For example, the user might have signed in on
+    https://accounts.spotify.com using a credential previously saved for
+    https://play.spotify.com.
+  </description>
+</action>
+
 <action name="PasswordManager_Disabled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -12184,6 +12264,43 @@ should be able to be added at any place in this file.
 <action name="PasswordManager_Enabled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="PasswordManager_LoggedInWithNewPassword">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user tried to log in with an existing (possibly for another subdomain)
+    credential but different password.
+  </description>
+</action>
+
+<action name="PasswordManager_LoggedInWithNewUsername">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user tried to log in with a completely new (possibly auto generated)
+    credential.
+  </description>
+</action>
+
+<action name="PasswordManager_LoginFailed">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user submitted a password form, but the website appeared to reject the
+    credentials.  This action reflects the password manager component's logic
+    for whether or not to offer to save a password.  At the time of writing,
+    failure means that either the form submission was canceled with a failure
+    message, or the form submission succeeded, but the user was directed back to
+    a page that still contained a login form.
+  </description>
+</action>
+
+<action name="PasswordManager_LoginPassed">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user submitted a password form and the website appeared to accept the
+    credentials.  This action reflects the password manager component's logic
+    for whether or not to offer to save a password.
+  </description>
 </action>
 
 <action name="PasswordManager_RemovePasswordException">
@@ -12211,6 +12328,15 @@ should be able to be added at any place in this file.
   <description>
     Counts the number of times a user submits an autofilled credential which
     matches their sync account.
+  </description>
+</action>
+
+<action name="PasswordManager_UsedNonDefaultUsername">
+  <owner>vasilii@chromium.org</owner>
+  <description>
+    The user logged in with an existing credential other than the default one.
+    This results in the default credential being updated, to the credential that
+    the user most recently logged in with.
   </description>
 </action>
 

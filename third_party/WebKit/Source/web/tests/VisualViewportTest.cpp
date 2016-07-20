@@ -162,8 +162,8 @@ public:
         return webScrollLayer;
     }
 
-    WebViewImpl* webViewImpl() const { return m_helper.webViewImpl(); }
-    LocalFrame* frame() const { return m_helper.webViewImpl()->mainFrameImpl()->frame(); }
+    WebViewImpl* webViewImpl() const { return m_helper.webView(); }
+    LocalFrame* frame() const { return m_helper.webView()->mainFrameImpl()->frame(); }
 
     static void configureSettings(WebSettings* settings)
     {
@@ -188,15 +188,9 @@ private:
     FrameTestHelpers::WebViewHelper m_helper;
 };
 
-typedef void (*SettingOverrideFunction)(WebSettings*);
-
-static void DefaultSettingOverride(WebSettings *)
-{
-}
-
 class ParameterizedVisualViewportTest
     : public VisualViewportTest
-    , public testing::WithParamInterface<SettingOverrideFunction> {
+    , public testing::WithParamInterface<FrameTestHelpers::SettingOverrideFunction> {
 public:
     void overrideSettings(WebSettings *settings) override
     {
@@ -204,13 +198,9 @@ public:
     }
 };
 
-static void RootLayerScrollsSettingOverride(WebSettings *settings)
-{
-    settings->setRootLayerScrolls(true);
-}
 INSTANTIATE_TEST_CASE_P(All, ParameterizedVisualViewportTest, ::testing::Values(
-    DefaultSettingOverride,
-    RootLayerScrollsSettingOverride));
+    FrameTestHelpers::DefaultSettingOverride,
+    FrameTestHelpers::RootLayerScrollsSettingOverride));
 
 // Test that resizing the VisualViewport works as expected and that resizing the
 // WebView resizes the VisualViewport.
@@ -425,7 +415,7 @@ TEST_P(ParameterizedVisualViewportTest, TestWebViewResizedBeforeAttachment)
 
     // Make sure that a resize that comes in while there's no root layer is
     // honoured when we attach to the layer tree.
-    WebFrameWidget* mainFrameWidget = static_cast<WebFrameWidget*>(webViewImpl()->mainFrame()->toWebLocalFrame()->frameWidget());
+    WebFrameWidgetBase* mainFrameWidget = webViewImpl()->mainFrameImpl()->frameWidget();
     mainFrameWidget->setRootGraphicsLayer(nullptr);
     webViewImpl()->resize(IntSize(320, 240));
     mainFrameWidget->setRootGraphicsLayer(rootGraphicsLayer);
@@ -524,7 +514,8 @@ TEST_P(ParameterizedVisualViewportTest, TestFractionalScrollOffsetIsNotOverwritt
 
     FrameView& frameView = *webViewImpl()->mainFrameImpl()->frameView();
     frameView.layoutViewportScrollableArea()->setScrollPosition(DoublePoint(0, 10.5), ProgrammaticScroll);
-    webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(10, 20), WebFloatSize(), 1, 0);
+    frameView.layoutViewportScrollableArea()->ScrollableArea::setScrollPosition(
+        DoublePoint(10, 30.5), CompositorScroll);
 
     EXPECT_EQ(30.5, frameView.layoutViewportScrollableArea()->scrollPositionDouble().y());
 
@@ -1174,37 +1165,6 @@ TEST_P(ParameterizedVisualViewportTest, ScrollIntoViewFractionalOffset)
 
     EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.5f, 100.5f), visualViewport.location());
-}
-
-// Top controls can make an unscrollable page temporarily scrollable, causing
-// a scroll clamp when the page is resized. Make sure this bug is fixed.
-// crbug.com/437620
-TEST_F(VisualViewportTest, TestResizeDoesntChangeScrollOffset)
-{
-    RuntimeEnabledFeatures::setInertTopControlsEnabled(false);
-    initializeWithAndroidSettings();
-    webViewImpl()->resizeWithTopControls(IntSize(980, 650), 20, false);
-
-    navigateTo("about:blank");
-
-    VisualViewport& visualViewport = frame()->page()->frameHost().visualViewport();
-    FrameView& frameView = *webViewImpl()->mainFrameImpl()->frameView();
-
-    // Outer viewport isn't scrollable
-    EXPECT_SIZE_EQ(IntSize(980, 650), frameView.visibleContentRect().size());
-
-    visualViewport.setScale(2);
-    visualViewport.move(FloatPoint(0, 40));
-
-    // Simulate bringing down the top controls by 20px but counterscrolling the outer viewport.
-    webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(0, 20), WebFloatSize(), 1, 1);
-
-    EXPECT_EQ(20, frameView.layoutViewportScrollableArea()->scrollPosition().y());
-
-    webViewImpl()->resizeWithTopControls(WebSize(980, 630), 20, true);
-
-    EXPECT_EQ(0, frameView.layoutViewportScrollableArea()->scrollPosition().y());
-    EXPECT_EQ(60, visualViewport.location().y());
 }
 
 static IntPoint expectedMaxFrameViewScrollOffset(VisualViewport& visualViewport, FrameView& frameView)

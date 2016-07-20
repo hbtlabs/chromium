@@ -4,9 +4,11 @@
 
 source_set("cpp") {
   sources = [
+    "bitmap_uploader.h",
     "context_provider.h",
     "gles2_context.h",
     "input_event_handler.h",
+    "lib/bitmap_uploader.cc",
     "lib/command_buffer_client_impl.cc",
     "lib/command_buffer_client_impl.h",
     "lib/context_provider.cc",
@@ -64,7 +66,6 @@ source_set("cpp") {
     "//services/ui/gles2:lib",
     "//services/ui/public/interfaces",
     "//ui/display",
-    "//ui/display/mojo",
     "//ui/events",
     "//ui/gfx/geometry",
   ]
@@ -72,4 +73,6 @@ source_set("cpp") {
   data_deps = [
     "//services/ui",
   ]
+
+  defines = [ "GL_GLEXT_PROTOTYPES" ]
 }

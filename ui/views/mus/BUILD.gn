@@ -58,7 +58,6 @@ component("mus") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
-    "//components/bitmap_uploader",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/catalog/public/cpp",
@@ -73,7 +72,6 @@ component("mus") {
     "//ui/aura",
     "//ui/compositor",
     "//ui/display",
-    "//ui/display/mojo",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/gfx",
@@ -118,7 +116,7 @@ group("for_mojo_application") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [

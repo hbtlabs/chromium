@@ -564,6 +564,9 @@ bool Resource::unlock()
     if (RuntimeEnabledFeatures::doNotUnlockSharedBufferEnabled())
         return false;
 
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, unlockHistogram, new EnumerationHistogram("Blink.SharedBuffer.Unlock", kLastResourceType));
+    unlockHistogram.count(getType());
+
     m_data->unlock();
     return true;
 }
@@ -986,11 +989,18 @@ bool Resource::lock()
     // If locking fails, our buffer has been purged. There's no point
     // in leaving a purged resource in MemoryCache.
     if (!m_data->lock()) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, failedLockHistogram, new EnumerationHistogram("Blink.SharedBuffer.FailedLock", kLastResourceType));
+        failedLockHistogram.count(getType());
+
         m_data.clear();
         setEncodedSize(0);
         memoryCache()->remove(this);
         return false;
     }
+
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, successfulLockHistogram, new EnumerationHistogram("Blink.SharedBuffer.SuccessfulLock", kLastResourceType));
+    successfulLockHistogram.count(getType());
+
     return true;
 }
 
@@ -1094,44 +1104,6 @@ bool Resource::isLoadEventBlockingResourceType() const
     }
     ASSERT_NOT_REACHED();
     return false;
-}
-
-// Do not modify existing strings below because they are used as UMA names.
-// https://crbug.com/579496
-const char* Resource::resourceTypeName(Resource::Type type)
-{
-    switch (type) {
-    case Resource::MainResource:
-        return "MainResource";
-    case Resource::Image:
-        return "Image";
-    case Resource::CSSStyleSheet:
-        return "CSSStyleSheet";
-    case Resource::Script:
-        return "Script";
-    case Resource::Font:
-        return "Font";
-    case Resource::Raw:
-        return "Raw";
-    case Resource::SVGDocument:
-        return "SVGDocument";
-    case Resource::XSLStyleSheet:
-        return "XSLStyleSheet";
-    case Resource::LinkPrefetch:
-        return "LinkPrefetch";
-    case Resource::LinkPreload:
-        return "LinkPreload";
-    case Resource::TextTrack:
-        return "TextTrack";
-    case Resource::ImportResource:
-        return "ImportResource";
-    case Resource::Media:
-        return "Media";
-    case Resource::Manifest:
-        return "Manifest";
-    }
-    ASSERT_NOT_REACHED();
-    return "Unknown";
 }
 
 } // namespace blink

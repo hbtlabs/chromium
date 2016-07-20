@@ -506,7 +506,7 @@ bundle_data("test_support_bundle_data") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "base/load_timing_info_test_util.cc",
@@ -1749,6 +1749,8 @@ if (!is_ios) {
 
 # Fuzzers
 
+# This has a global (InitGlobals) that must always be linked in, so
+# must be a source set instead of a static library.
 source_set("net_fuzzer_test_support") {
   testonly = true
 

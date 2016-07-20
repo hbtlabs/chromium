@@ -553,12 +553,10 @@ TEST_F(FFmpegDemuxerTest,
   // Run the test twice with a seek in between.
   for (int i = 0; i < 2; ++i) {
     audio->Read(
-        NewReadCBWithCheckedDiscard(FROM_HERE, 40, 0, kInfiniteDuration(),
-                                    true));
+        NewReadCBWithCheckedDiscard(FROM_HERE, 40, 0, kInfiniteDuration, true));
     base::RunLoop().Run();
-    audio->Read(
-        NewReadCBWithCheckedDiscard(FROM_HERE, 41, 2903, kInfiniteDuration(),
-                                    true));
+    audio->Read(NewReadCBWithCheckedDiscard(FROM_HERE, 41, 2903,
+                                            kInfiniteDuration, true));
     base::RunLoop().Run();
     audio->Read(NewReadCBWithCheckedDiscard(
         FROM_HERE, 173, 5805, base::TimeDelta::FromMicroseconds(10159), true));
@@ -1077,7 +1075,7 @@ TEST_F(FFmpegDemuxerTest, IsValidAnnexB) {
     stream->EnableBitstreamConverter();
 
     stream->Read(base::Bind(&ValidateAnnexB, stream));
-    message_loop_.Run();
+    base::RunLoop().Run();
 
     demuxer_->Stop();
     demuxer_.reset();
@@ -1152,10 +1150,10 @@ TEST_F(FFmpegDemuxerTest, HEVC_in_MP4_container) {
   ASSERT_TRUE(video);
 
   video->Read(NewReadCB(FROM_HERE, 3569, 66733, true));
-  message_loop_.Run();
+  base::RunLoop().Run();
 
   video->Read(NewReadCB(FROM_HERE, 1042, 200200, false));
-  message_loop_.Run();
+  base::RunLoop().Run();
 #else
   InitializeDemuxerAndExpectPipelineStatus(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 #endif
@@ -1171,10 +1169,10 @@ TEST_F(FFmpegDemuxerTest, Read_AC3_Audio) {
 
   // Read the first two frames and check that we are getting expected data
   audio->Read(NewReadCB(FROM_HERE, 834, 0, true));
-  message_loop_.Run();
+  base::RunLoop().Run();
 
   audio->Read(NewReadCB(FROM_HERE, 836, 34830, true));
-  message_loop_.Run();
+  base::RunLoop().Run();
 #else
   InitializeDemuxerAndExpectPipelineStatus(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 #endif
@@ -1190,10 +1188,10 @@ TEST_F(FFmpegDemuxerTest, Read_EAC3_Audio) {
 
   // Read the first two frames and check that we are getting expected data
   audio->Read(NewReadCB(FROM_HERE, 870, 0, true));
-  message_loop_.Run();
+  base::RunLoop().Run();
 
   audio->Read(NewReadCB(FROM_HERE, 872, 34830, true));
-  message_loop_.Run();
+  base::RunLoop().Run();
 #else
   InitializeDemuxerAndExpectPipelineStatus(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
 #endif

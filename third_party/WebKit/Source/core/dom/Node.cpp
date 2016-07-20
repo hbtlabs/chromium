@@ -534,30 +534,36 @@ void Node::normalize()
     }
 }
 
-bool Node::isContentEditable(UserSelectAllTreatment treatment) const
+// TODO(yoichio): Move to core/editing
+enum EditableLevel { Editable, RichlyEditable };
+static bool hasEditableStyle(const Node&, EditableLevel);
+static bool isEditableToAccessibility(const Node&, EditableLevel);
+
+bool Node::isContentEditable() const
 {
     document().updateStyleAndLayoutTree();
-    return hasEditableStyle(Editable, treatment);
+    return blink::hasEditableStyle(*this, Editable);
 }
 
 bool Node::isContentRichlyEditable() const
 {
     document().updateStyleAndLayoutTree();
-    return hasEditableStyle(RichlyEditable, UserSelectAllIsAlwaysNonEditable);
+    return blink::hasEditableStyle(*this, RichlyEditable);
 }
 
-bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment treatment) const
+// TODO(yoichio): Move to core/editing
+static bool hasEditableStyle(const Node& node, EditableLevel editableLevel)
 {
-    if (isPseudoElement())
+    if (node.isPseudoElement())
         return false;
 
     // Ideally we'd call DCHECK(!needsStyleRecalc()) here, but
     // ContainerNode::setFocus() calls setNeedsStyleRecalc(), so the assertion
     // would fire in the middle of Document::setFocusedNode().
 
-    for (const Node& node : NodeTraversal::inclusiveAncestorsOf(*this)) {
-        if ((node.isHTMLElement() || node.isDocumentNode()) && node.layoutObject()) {
-            switch (node.layoutObject()->style()->userModify()) {
+    for (const Node& ancestor : NodeTraversal::inclusiveAncestorsOf(node)) {
+        if ((ancestor.isHTMLElement() || ancestor.isDocumentNode()) && ancestor.layoutObject()) {
+            switch (ancestor.layoutObject()->style()->userModify()) {
             case READ_ONLY:
                 return false;
             case READ_WRITE:
@@ -573,9 +579,10 @@ bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment 
     return false;
 }
 
-bool Node::isEditableToAccessibility(EditableLevel editableLevel) const
+// TODO(yoichio): Move to core/editing
+static bool isEditableToAccessibility(const Node& node, EditableLevel editableLevel)
 {
-    if (hasEditableStyle(editableLevel))
+    if (blink::hasEditableStyle(node, editableLevel))
         return true;
 
     // FIXME: Respect editableLevel for ARIA editable elements.
@@ -583,9 +590,35 @@ bool Node::isEditableToAccessibility(EditableLevel editableLevel) const
         return false;
 
     // FIXME(dmazzoni): support ScopedAXObjectCache (crbug/489851).
-    if (AXObjectCache* cache = document().existingAXObjectCache())
-        return cache->rootAXEditableElement(this);
+    if (AXObjectCache* cache = node.document().existingAXObjectCache())
+        return cache->rootAXEditableElement(&node);
 
+    return false;
+}
+
+// TODO(yoichio): Move to core/editing
+bool Node::hasEditableStyle(EditableType editableType) const
+{
+    switch (editableType) {
+    case ContentIsEditable:
+        return blink::hasEditableStyle(*this, Editable);
+    case HasEditableAXRole:
+        return isEditableToAccessibility(*this, Editable);
+    }
+    NOTREACHED();
+    return false;
+}
+
+// TODO(yoichio): Move to core/editing
+bool Node::layoutObjectIsRichlyEditable(EditableType editableType) const
+{
+    switch (editableType) {
+    case ContentIsEditable:
+        return blink::hasEditableStyle(*this, RichlyEditable);
+    case HasEditableAXRole:
+        return isEditableToAccessibility(*this, RichlyEditable);
+    }
+    NOTREACHED();
     return false;
 }
 
@@ -621,7 +654,7 @@ inline static ShadowRoot* oldestShadowRootFor(const Node* node)
 
 Node& Node::shadowIncludingRoot() const
 {
-    if (inShadowIncludingDocument())
+    if (isConnected())
         return document();
     Node* root = const_cast<Node*>(this);
     while (Node* host = root->shadowHost())
@@ -659,7 +692,7 @@ bool Node::needsDistributionRecalc() const
 void Node::updateDistribution()
 {
     // Extra early out to avoid spamming traces.
-    if (inShadowIncludingDocument() && !document().childNeedsDistributionRecalc())
+    if (isConnected() && !document().childNeedsDistributionRecalc())
         return;
     TRACE_EVENT0("blink", "Node::updateDistribution");
     ScriptForbiddenScope forbidScript;
@@ -767,7 +800,7 @@ void Node::clearNeedsStyleRecalc()
 
 bool Node::inActiveDocument() const
 {
-    return inShadowIncludingDocument() && document().isActive();
+    return isConnected() && document().isActive();
 }
 
 Node* Node::focusDelegate()
@@ -811,7 +844,7 @@ void Node::clearNodeLists()
 bool Node::isDescendantOf(const Node *other) const
 {
     // Return true if other is an ancestor of this, otherwise false
-    if (!other || !other->hasChildren() || inShadowIncludingDocument() != other->inShadowIncludingDocument())
+    if (!other || !other->hasChildren() || isConnected() != other->isConnected())
         return false;
     if (other->treeScope() != treeScope())
         return false;
@@ -842,7 +875,7 @@ bool Node::isShadowIncludingInclusiveAncestorOf(const Node* node) const
     if (document() != node->document())
         return false;
 
-    if (inShadowIncludingDocument() != node->inShadowIncludingDocument())
+    if (isConnected() != node->isConnected())
         return false;
 
     bool hasChildren = isContainerNode() && toContainerNode(this)->hasChildren();
@@ -917,10 +950,10 @@ void Node::reattach(const AttachContext& context)
     // We only need to detach if the node has already been through attach().
     if (getStyleChangeType() < NeedsReattachStyleChange)
         detach(reattachContext);
-    attach(reattachContext);
+    attachLayoutTree(reattachContext);
 }
 
-void Node::attach(const AttachContext&)
+void Node::attachLayoutTree(const AttachContext&)
 {
     DCHECK(document().inStyleRecalc() || isDocumentNode());
     DCHECK(!document().lifecycle().inDetach());
@@ -977,6 +1010,9 @@ int Node::maxCharacterOffset() const
 // is obviously misplaced.
 bool Node::canStartSelection() const
 {
+    if (isDisabledFormControl(this))
+        return false;
+
     if (hasEditableStyle())
         return true;
 
@@ -1450,8 +1486,8 @@ unsigned short Node::compareDocumentPosition(const Node* otherNode, ShadowTreesT
 
     // If one node is in the document and the other is not, we must be disconnected.
     // If the nodes have different owning documents, they must be disconnected.  Note that we avoid
-    // comparing Attr nodes here, since they return false from inShadowIncludingDocument() all the time (which seems like a bug).
-    if (start1->inShadowIncludingDocument() != start2->inShadowIncludingDocument() || (treatment == TreatShadowTreesAsDisconnected && start1->treeScope() != start2->treeScope())) {
+    // comparing Attr nodes here, since they return false from isConnected() all the time (which seems like a bug).
+    if (start1->isConnected() != start2->isConnected() || (treatment == TreatShadowTreesAsDisconnected && start1->treeScope() != start2->treeScope())) {
         unsigned short direction = (this > otherNode) ? DOCUMENT_POSITION_PRECEDING : DOCUMENT_POSITION_FOLLOWING;
         return DOCUMENT_POSITION_DISCONNECTED | DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC | direction;
     }
@@ -2201,7 +2237,7 @@ bool Node::willRespondToMouseClickEvents()
 {
     if (isDisabledFormControl(this))
         return false;
-    return isContentEditable(UserSelectAllIsAlwaysNonEditable) || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
+    return isContentEditable() || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
 }
 
 bool Node::willRespondToTouchEvents()

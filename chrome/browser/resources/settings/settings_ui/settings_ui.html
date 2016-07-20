@@ -118,7 +118,8 @@
       addressed -->
     <cr-toolbar page-name="$i18n{settings}"
         clear-label="$i18n{clearSearch}" search-prompt="$i18n{searchPrompt}
-        (coming soon!)" on-cr-menu-tap="onMenuButtonTap_">
+        (coming soon!)" on-cr-menu-tap="onMenuButtonTap_"
+        spinner-active="[[toolbarSpinnerActive_]]">
     </cr-toolbar>
     <app-drawer swipe-open>
       <div class="drawer-header">$i18n{settings}</div>
@@ -128,7 +129,8 @@
       </div>
     </app-drawer>
     <paper-header-panel mode="waterfall">
-      <settings-main prefs="{{prefs}}" current-route="{{currentRoute}}">
+      <settings-main prefs="{{prefs}}" current-route="{{currentRoute}}"
+          toolbar-spinner-active="{{toolbarSpinnerActive_}}">
       </settings-main>
     </paper-header-panel>
 
@@ -136,7 +138,7 @@
     <div id="appeal" hidden="[[appealClosed_]]">
       <span id="request">
         <h1>Please read: A personal appeal from the Chrome settings team.</h1>
-        <a href="https://goo.gl/btju6c">Please file bugs</a>
+        <a href="[[appealBugUrl_]]">Please file bugs</a>
         before you
         <a href="chrome://settings-frame">go back to the old settings</a>.
       </span>

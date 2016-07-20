@@ -46,24 +46,29 @@ Polymer({
       type: Array,
       value: function() { return []; },
     },
+
+
+    /**
+     * Assigning a non-null value triggers the add/edit dialog.
+     * @private {?chrome.passwordsPrivate.PasswordUiEntry}
+     */
+    activePassword: Object,
   },
 
   listeners: {
     'passwordList.scroll': 'closeMenu_',
-    'tap': 'closeMenu_',
   },
 
   /**
    * Sets the password in the current password dialog if the loginPair matches.
    * @param {!chrome.passwordsPrivate.LoginPair} loginPair
-   * @param {!string} password
+   * @param {string} password
    */
   setPassword: function(loginPair, password) {
-    var passwordDialog = this.$.passwordEditDialog;
-    if (passwordDialog.item && passwordDialog.item.loginPair &&
-        passwordDialog.item.loginPair.originUrl == loginPair.originUrl &&
-        passwordDialog.item.loginPair.username == loginPair.username) {
-      passwordDialog.password = password;
+    if (this.activePassword &&
+        this.activePassword.loginPair.originUrl == loginPair.originUrl &&
+        this.activePassword.loginPair.username == loginPair.username) {
+      this.$$('password-edit-dialog').password = password;
     }
   },
 
@@ -73,11 +78,16 @@ Polymer({
    */
   onMenuEditPasswordTap_: function() {
     var menu = /** @type {CrSharedMenuElement} */(this.$.menu);
-    var data =
+    this.activePassword =
         /** @type {chrome.passwordsPrivate.PasswordUiEntry} */(menu.itemData);
-    this.$.passwordEditDialog.item = data;
-    this.$.passwordEditDialog.open();
     menu.closeMenu();
+  },
+
+  /** @private */
+  unstampPasswordEditDialog_: function(e) {
+    var expectedDialog = this.$$('password-edit-dialog').$.dialog;
+    if (Polymer.dom(e).rootTarget == expectedDialog)
+      this.activePassword = null;
   },
 
   /**

@@ -283,7 +283,7 @@ public:
 
     void setInlineStyleProperty(CSSPropertyID, CSSValueID identifier, bool important = false);
     void setInlineStyleProperty(CSSPropertyID, double value, CSSPrimitiveValue::UnitType, bool important = false);
-    void setInlineStyleProperty(CSSPropertyID, CSSValue*, bool important = false);
+    void setInlineStyleProperty(CSSPropertyID, const CSSValue*, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, const String& value, bool important = false);
 
     bool removeInlineStyleProperty(CSSPropertyID);
@@ -328,7 +328,7 @@ public:
 
     virtual void copyNonAttributePropertiesFromElement(const Element&) { }
 
-    void attach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
     void detach(const AttachContext& = AttachContext()) override;
 
     virtual LayoutObject* createLayoutObject(const ComputedStyle&);
@@ -563,7 +563,7 @@ public:
     void updateFromCompositorMutation(const CompositorMutation&);
 
     // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
-    // the element is inShadowIncludingDocument() and the context is an isolated world.
+    // the element is isConnected() and the context is an isolated world.
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1);
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2);
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2, const QualifiedName& attr3);
@@ -651,7 +651,7 @@ private:
 
     StyleRecalcChange recalcOwnStyle(StyleRecalcChange);
     // TODO(nainar): Make this const ComputedStyle&.
-    StyleRecalcChange buildOwnLayout(ComputedStyle&);
+    StyleRecalcChange buildLayoutTree(ComputedStyle&);
 
     inline void checkForEmptyStyleChange();
 
@@ -869,9 +869,9 @@ inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* inse
 {
     DCHECK(!childNeedsStyleInvalidation());
     DCHECK(!needsStyleInvalidation());
-    DCHECK(insertionPoint->inShadowIncludingDocument() || insertionPoint->isInShadowTree() || isContainerNode());
-    if (insertionPoint->inShadowIncludingDocument()) {
-        setFlag(InDocumentFlag);
+    DCHECK(insertionPoint->isConnected() || insertionPoint->isInShadowTree() || isContainerNode());
+    if (insertionPoint->isConnected()) {
+        setFlag(IsConnectedFlag);
         insertionPoint->document().incrementNodeCount();
     }
     if (parentOrShadowHostNode()->isInShadowTree())
@@ -883,9 +883,9 @@ inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* inse
 
 inline void Node::removedFrom(ContainerNode* insertionPoint)
 {
-    DCHECK(insertionPoint->inShadowIncludingDocument() || isContainerNode() || isInShadowTree());
-    if (insertionPoint->inShadowIncludingDocument()) {
-        clearFlag(InDocumentFlag);
+    DCHECK(insertionPoint->isConnected() || isContainerNode() || isInShadowTree());
+    if (insertionPoint->isConnected()) {
+        clearFlag(IsConnectedFlag);
         insertionPoint->document().decrementNodeCount();
     }
     if (isInShadowTree() && !containingTreeScope().rootNode().isShadowRoot())

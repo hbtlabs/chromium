@@ -50,7 +50,6 @@
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebFrameLoadType.h"
-#include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebFrameSerializerClient.h"
 #include "third_party/WebKit/public/web/WebHistoryCommitType.h"
 #include "third_party/WebKit/public/web/WebMeaningfulLayout.h"
@@ -81,8 +80,8 @@ class SyncMessage;
 }
 
 namespace blink {
-class WebMouseEvent;
 class WebContentDecryptionModule;
+class WebMouseEvent;
 class WebPresentationClient;
 class WebPushClient;
 class WebSecurityOrigin;
@@ -158,6 +157,7 @@ struct CommonNavigationParams;
 struct CustomContextMenuContext;
 struct FileChooserFileInfo;
 struct FileChooserParams;
+struct FrameOwnerProperties;
 struct FrameReplicationState;
 struct NavigationParams;
 struct RequestNavigationParams;
@@ -193,16 +193,15 @@ class CONTENT_EXPORT RenderFrameImpl
   // the latter is MSG_ROUTING_NONE.  Note: This is called only when
   // RenderFrame is being created in response to IPC message from the browser
   // process. All other frame creation is driven through Blink and Create.
-  static void CreateFrame(
-      int routing_id,
-      int proxy_routing_id,
-      int opener_routing_id,
-      int parent_routing_id,
-      int previous_sibling_routing_id,
-      const FrameReplicationState& replicated_state,
-      CompositorDependencies* compositor_deps,
-      const FrameMsg_NewFrame_WidgetParams& params,
-      const blink::WebFrameOwnerProperties& frameOwner_properties);
+  static void CreateFrame(int routing_id,
+                          int proxy_routing_id,
+                          int opener_routing_id,
+                          int parent_routing_id,
+                          int previous_sibling_routing_id,
+                          const FrameReplicationState& replicated_state,
+                          CompositorDependencies* compositor_deps,
+                          const FrameMsg_NewFrame_WidgetParams& params,
+                          const FrameOwnerProperties& frame_owner_properties);
 
   // Returns the RenderFrameImpl for the given routing ID.
   static RenderFrameImpl* FromRoutingID(int routing_id);
@@ -791,7 +790,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnReplaceMisspelling(const base::string16& text);
   void OnCopyImageAt(int x, int y);
   void OnSaveImageAt(int x, int y);
-  void OnCSSInsertRequest(const std::string& css);
   void OnAddMessageToConsole(ConsoleMessageLevel level,
                              const std::string& message);
   void OnJavaScriptExecuteRequest(const base::string16& javascript,
@@ -820,7 +818,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnUpdateOpener(int opener_routing_id);
   void OnDidUpdateSandboxFlags(blink::WebSandboxFlags flags);
   void OnSetFrameOwnerProperties(
-      const blink::WebFrameOwnerProperties& frame_owner_properties);
+      const FrameOwnerProperties& frame_owner_properties);
   void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
   void OnSetFocusedFrame();
   void OnTextTrackSettingsChanged(

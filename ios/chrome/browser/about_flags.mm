@@ -184,14 +184,6 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
     command_line->AppendSwitch(switches::kDisableIOSWKWebView);
   }
 
-  // Populate command line flags from TabEviction.
-  NSString* tabEviction = [defaults stringForKey:@"TabEviction"];
-  if ([tabEviction isEqualToString:@"Enabled"]) {
-    command_line->AppendSwitch(switches::kEnableTabEviction);
-  } else if ([tabEviction isEqualToString:@"Disabled"]) {
-    command_line->AppendSwitch(switches::kDisableTabEviction);
-  }
-
   // Set the UA flag if UseMobileSafariUA is enabled.
   if ([defaults boolForKey:@"UseMobileSafariUA"]) {
     // Safari uses "Vesion/", followed by the OS version excluding bugfix, where
@@ -204,6 +196,11 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
 
     command_line->AppendSwitchASCII(switches::kUserAgent,
                                     web::BuildUserAgentFromProduct(product));
+  }
+
+  // Populate command line flags from QRScanner.
+  if ([defaults boolForKey:@"EnableQRCodeReader"]) {
+    command_line->AppendSwitch(switches::kEnableQRScanner);
   }
 
   // Freeform commandline flags.  These are added last, so that any flags added

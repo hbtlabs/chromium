@@ -155,8 +155,6 @@
       'common/extensions/extension_metrics.h',
       'common/extensions/extension_process_policy.cc',
       'common/extensions/extension_process_policy.h',
-      'common/extensions/features/feature_util.cc',
-      'common/extensions/features/feature_util.h',
       'common/extensions/image_writer/image_writer_util_mac.cc',
       'common/extensions/image_writer/image_writer_util_mac.h',
       'common/extensions/manifest_handlers/app_icon_color_info.cc',
@@ -652,6 +650,7 @@
         'mojom_typemaps': [
           '../skia/public/interfaces/skbitmap.typemap',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'dependencies': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',

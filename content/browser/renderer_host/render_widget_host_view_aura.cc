@@ -2460,9 +2460,11 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
 }
 
 ui::InputMethod* RenderWidgetHostViewAura::GetInputMethod() const {
+  if (!window_)
+    return nullptr;
   aura::Window* root_window = window_->GetRootWindow();
   if (!root_window)
-    return NULL;
+    return nullptr;
   return root_window->GetHost()->GetInputMethod();
 }
 
@@ -2908,18 +2910,12 @@ void RenderWidgetHostViewAura::DelegatedFrameHostResizeLockWasReleased() {
   host_->WasResized();
 }
 
-void RenderWidgetHostViewAura::DelegatedFrameHostSendCompositorSwapAck(
-    int output_surface_id,
-    const cc::CompositorFrameAck& ack) {
-  host_->Send(new ViewMsg_SwapCompositorFrameAck(host_->GetRoutingID(),
-                                                 output_surface_id, ack));
-}
-
 void RenderWidgetHostViewAura::DelegatedFrameHostSendReclaimCompositorResources(
     int output_surface_id,
-    const cc::CompositorFrameAck& ack) {
-  host_->Send(new ViewMsg_ReclaimCompositorResources(host_->GetRoutingID(),
-                                                     output_surface_id, ack));
+    bool is_swap_ack,
+    const cc::ReturnedResourceArray& resources) {
+  host_->Send(new ViewMsg_ReclaimCompositorResources(
+      host_->GetRoutingID(), output_surface_id, is_swap_ack, resources));
 }
 
 void RenderWidgetHostViewAura::DelegatedFrameHostOnLostCompositorResources() {

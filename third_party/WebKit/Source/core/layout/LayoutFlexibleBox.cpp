@@ -63,10 +63,10 @@ struct LayoutFlexibleBox::LineContext {
 };
 
 struct LayoutFlexibleBox::FlexItem {
-    FlexItem(LayoutBox* box, LayoutUnit innerFlexBaseSize, LayoutUnit hypotheticalMainSize)
+    FlexItem(LayoutBox* box, LayoutUnit flexBaseContentSize, LayoutUnit hypotheticalMainContentSize)
         : box(box)
-        , innerFlexBaseSize(innerFlexBaseSize)
-        , hypotheticalMainSize(hypotheticalMainSize)
+        , flexBaseContentSize(flexBaseContentSize)
+        , hypotheticalMainContentSize(hypotheticalMainContentSize)
         , frozen(false)
     {
     }
@@ -74,14 +74,14 @@ struct LayoutFlexibleBox::FlexItem {
     // This constructor is used for out-of-flow children
     explicit FlexItem(LayoutBox* box)
         : box(box)
-        , innerFlexBaseSize()
-        , hypotheticalMainSize()
+        , flexBaseContentSize()
+        , hypotheticalMainContentSize()
         , frozen(true)
     {
     }
     LayoutBox* box;
-    const LayoutUnit innerFlexBaseSize;
-    const LayoutUnit hypotheticalMainSize;
+    const LayoutUnit flexBaseContentSize;
+    const LayoutUnit hypotheticalMainContentSize;
     LayoutUnit flexedContentSize;
     bool frozen;
 };
@@ -496,6 +496,11 @@ LayoutUnit LayoutFlexibleBox::crossAxisIntrinsicExtentForChild(const LayoutBox& 
 LayoutUnit LayoutFlexibleBox::mainAxisExtentForChild(const LayoutBox& child) const
 {
     return isHorizontalFlow() ? child.size().width() : child.size().height();
+}
+
+LayoutUnit LayoutFlexibleBox::mainAxisContentExtentForChild(const LayoutBox& child) const
+{
+    return isHorizontalFlow() ? child.contentWidth() : child.contentHeight();
 }
 
 LayoutUnit LayoutFlexibleBox::crossAxisExtent() const
@@ -1251,12 +1256,13 @@ bool LayoutFlexibleBox::computeNextFlexLine(OrderedFlexItemList& orderedChildren
 void LayoutFlexibleBox::freezeViolations(Vector<FlexItem*>& violations, LayoutUnit& availableFreeSpace, double& totalFlexGrow, double& totalFlexShrink, double& totalWeightedFlexShrink)
 {
     for (size_t i = 0; i < violations.size(); ++i) {
+        DCHECK(!violations[i]->frozen) << i;
         LayoutBox* child = violations[i]->box;
         LayoutUnit childSize = violations[i]->flexedContentSize;
-        availableFreeSpace -= childSize - violations[i]->innerFlexBaseSize;
+        availableFreeSpace -= childSize - violations[i]->flexBaseContentSize;
         totalFlexGrow -= child->style()->flexGrow();
         totalFlexShrink -= child->style()->flexShrink();
-        totalWeightedFlexShrink -= child->style()->flexShrink() * violations[i]->innerFlexBaseSize;
+        totalWeightedFlexShrink -= child->style()->flexShrink() * violations[i]->flexBaseContentSize;
         // totalWeightedFlexShrink can be negative when we exceed the precision of a double when we initially
         // calcuate totalWeightedFlexShrink. We then subtract each child's weighted flex shrink with full precision,
         // now leading to a negative result. See css3/flexbox/large-flex-shrink-assert.html
@@ -1273,11 +1279,14 @@ void LayoutFlexibleBox::freezeInflexibleItems(FlexSign flexSign, OrderedFlexItem
     for (size_t i = 0; i < children.size(); ++i) {
         FlexItem& flexItem = children[i];
         LayoutBox* child = flexItem.box;
+        if (child->isOutOfFlowPositioned())
+            continue;
+        DCHECK(!flexItem.frozen) << i;
         float flexFactor = (flexSign == PositiveFlexibility) ? child->style()->flexGrow() : child->style()->flexShrink();
         if (flexFactor == 0
-            || (flexSign == PositiveFlexibility && flexItem.innerFlexBaseSize > flexItem.hypotheticalMainSize)
-            || (flexSign == NegativeFlexibility && flexItem.innerFlexBaseSize < flexItem.hypotheticalMainSize)) {
-            flexItem.flexedContentSize = flexItem.hypotheticalMainSize;
+            || (flexSign == PositiveFlexibility && flexItem.flexBaseContentSize > flexItem.hypotheticalMainContentSize)
+            || (flexSign == NegativeFlexibility && flexItem.flexBaseContentSize < flexItem.hypotheticalMainContentSize)) {
+            flexItem.flexedContentSize = flexItem.hypotheticalMainContentSize;
             newInflexibleItems.append(&flexItem);
         }
     }
@@ -1302,18 +1311,18 @@ bool LayoutFlexibleBox::resolveFlexibleLengths(FlexSign flexSign, OrderedFlexIte
     for (size_t i = 0; i < children.size(); ++i) {
         FlexItem& flexItem = children[i];
         LayoutBox* child = flexItem.box;
-        if (child->isOutOfFlowPositioned()) {
+        if (child->isOutOfFlowPositioned())
             continue;
-        }
 
         if (flexItem.frozen)
             continue;
-        LayoutUnit childSize = flexItem.innerFlexBaseSize;
+
+        LayoutUnit childSize = flexItem.flexBaseContentSize;
         double extraSpace = 0;
         if (remainingFreeSpace > 0 && totalFlexGrow > 0 && flexSign == PositiveFlexibility && std::isfinite(totalFlexGrow)) {
             extraSpace = remainingFreeSpace * child->style()->flexGrow() / totalFlexGrow;
         } else if (remainingFreeSpace < 0 && totalWeightedFlexShrink > 0 && flexSign == NegativeFlexibility && std::isfinite(totalWeightedFlexShrink) && child->style()->flexShrink()) {
-            extraSpace = remainingFreeSpace * child->style()->flexShrink() * flexItem.innerFlexBaseSize / totalWeightedFlexShrink;
+            extraSpace = remainingFreeSpace * child->style()->flexShrink() * flexItem.flexBaseContentSize / totalWeightedFlexShrink;
         }
         if (std::isfinite(extraSpace))
             childSize += LayoutUnit::fromFloatRound(extraSpace);
@@ -1321,7 +1330,7 @@ bool LayoutFlexibleBox::resolveFlexibleLengths(FlexSign flexSign, OrderedFlexIte
         LayoutUnit adjustedChildSize = adjustChildSizeForMinAndMax(*child, childSize);
         DCHECK_GE(adjustedChildSize, 0);
         flexItem.flexedContentSize = adjustedChildSize;
-        usedFreeSpace += adjustedChildSize - flexItem.innerFlexBaseSize;
+        usedFreeSpace += adjustedChildSize - flexItem.flexBaseContentSize;
 
         LayoutUnit violation = adjustedChildSize - childSize;
         if (violation > 0)
@@ -1405,12 +1414,12 @@ static LayoutUnit alignmentOffset(LayoutUnit availableFreeSpace, ItemPosition po
     return LayoutUnit();
 }
 
-void LayoutFlexibleBox::setOverrideMainAxisSizeForChild(LayoutBox& child, LayoutUnit childPreferredSize)
+void LayoutFlexibleBox::setOverrideMainAxisContentSizeForChild(LayoutBox& child, LayoutUnit childPreferredSize)
 {
     if (hasOrthogonalFlow(child))
-        child.setOverrideLogicalContentHeight(childPreferredSize - child.borderAndPaddingLogicalHeight());
+        child.setOverrideLogicalContentHeight(childPreferredSize);
     else
-        child.setOverrideLogicalContentWidth(childPreferredSize - child.borderAndPaddingLogicalWidth());
+        child.setOverrideLogicalContentWidth(childPreferredSize);
 }
 
 LayoutUnit LayoutFlexibleBox::staticMainAxisPositionForPositionedChild(const LayoutBox& child)
@@ -1607,9 +1616,8 @@ void LayoutFlexibleBox::layoutAndPlaceChildren(LayoutUnit& crossAxisOffset, cons
 
         child->setMayNeedPaintInvalidation();
 
-        LayoutUnit childPreferredSize = flexItem.flexedContentSize + mainAxisBorderAndPaddingExtentForChild(*child);
-        setOverrideMainAxisSizeForChild(*child, childPreferredSize);
-        if (childPreferredSize != mainAxisExtentForChild(*child)) {
+        setOverrideMainAxisContentSizeForChild(*child, flexItem.flexedContentSize);
+        if (flexItem.flexedContentSize != mainAxisContentExtentForChild(*child)) {
             child->setChildNeedsLayout(MarkOnlyThis);
         } else {
             // To avoid double applying margin changes in updateAutoMarginsInCrossAxis, we reset the margins here.

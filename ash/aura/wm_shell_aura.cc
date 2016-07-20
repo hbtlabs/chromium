@@ -4,6 +4,8 @@
 
 #include "ash/aura/wm_shell_aura.h"
 
+#include <utility>
+
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_delegate.h"
@@ -15,10 +17,12 @@
 #include "ash/common/wm_display_observer.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/metrics/task_switch_metrics_recorder.h"
 #include "ash/shell.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/maximize_mode/maximize_mode_event_handler_aura.h"
 #include "ash/wm/screen_pinning_controller.h"
+#include "ash/wm/window_cycle_event_filter_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/client/focus_client.h"
@@ -38,7 +42,8 @@
 
 namespace ash {
 
-WmShellAura::WmShellAura(ShellDelegate* delegate) : WmShell(delegate) {
+WmShellAura::WmShellAura(std::unique_ptr<ShellDelegate> shell_delegate)
+    : WmShell(std::move(shell_delegate)) {
   WmShell::Set(this);
 }
 
@@ -46,12 +51,14 @@ WmShellAura::~WmShellAura() {
   WmShell::Set(nullptr);
 }
 
-void WmShellAura::PrepareForShutdown() {
+void WmShellAura::Shutdown() {
   if (added_activation_observer_)
     Shell::GetInstance()->activation_client()->RemoveObserver(this);
 
   if (added_display_observer_)
     Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
+
+  WmShell::Shutdown();
 }
 
 WmWindow* WmShellAura::NewContainerWindow() {
@@ -126,7 +133,12 @@ std::vector<WmWindow*> WmShellAura::GetAllRootWindows() {
 }
 
 void WmShellAura::RecordUserMetricsAction(UserMetricsAction action) {
-  return Shell::GetInstance()->metrics()->RecordUserMetricsAction(action);
+  Shell::GetInstance()->metrics()->RecordUserMetricsAction(action);
+}
+
+void WmShellAura::RecordTaskSwitchMetric(TaskSwitchSource source) {
+  Shell::GetInstance()->metrics()->task_switch_metrics_recorder().OnTaskSwitch(
+      source);
 }
 
 std::unique_ptr<WindowResizer> WmShellAura::CreateDragWindowResizer(
@@ -134,6 +146,11 @@ std::unique_ptr<WindowResizer> WmShellAura::CreateDragWindowResizer(
     wm::WindowState* window_state) {
   return base::WrapUnique(
       DragWindowResizer::Create(next_window_resizer.release(), window_state));
+}
+
+std::unique_ptr<WindowCycleEventFilter>
+WmShellAura::CreateWindowCycleEventFilter() {
+  return base::MakeUnique<WindowCycleEventFilterAura>();
 }
 
 std::unique_ptr<wm::MaximizeModeEventHandler>
@@ -158,10 +175,6 @@ void WmShellAura::OnOverviewModeStarting() {
 
 void WmShellAura::OnOverviewModeEnded() {
   FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
-}
-
-AccessibilityDelegate* WmShellAura::GetAccessibilityDelegate() {
-  return Shell::GetInstance()->accessibility_delegate();
 }
 
 SessionStateDelegate* WmShellAura::GetSessionStateDelegate() {
@@ -192,12 +205,12 @@ void WmShellAura::RemoveDisplayObserver(WmDisplayObserver* observer) {
   display_observers_.RemoveObserver(observer);
 }
 
-void WmShellAura::AddPointerWatcher(views::PointerWatcher* watcher) {
-  Shell::GetInstance()->AddPointerWatcher(watcher);
+void WmShellAura::AddPointerDownWatcher(views::PointerDownWatcher* watcher) {
+  Shell::GetInstance()->AddPointerDownWatcher(watcher);
 }
 
-void WmShellAura::RemovePointerWatcher(views::PointerWatcher* watcher) {
-  Shell::GetInstance()->RemovePointerWatcher(watcher);
+void WmShellAura::RemovePointerDownWatcher(views::PointerDownWatcher* watcher) {
+  Shell::GetInstance()->RemovePointerDownWatcher(watcher);
 }
 
 #if defined(OS_CHROMEOS)
