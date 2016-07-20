@@ -290,9 +290,7 @@ base::Optional<std::string> BluetoothDeviceBlueZ::GetName() const {
           object_path_);
   DCHECK(properties);
 
-  if (properties->alias.is_valid())
-    return properties->alias.value();
-  return base::nullopt;
+  return properties->alias.value();
 }
 
 bool BluetoothDeviceBlueZ::IsPaired() const {
