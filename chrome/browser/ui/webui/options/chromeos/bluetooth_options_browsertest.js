@@ -24,7 +24,7 @@ BluetoothWebUITestAsync.prototype = {
     address: '00:11:22:33:44:55',
     connectable: true,
     connected: false,
-    name: 'Fake Device',
+    name: 'Fake Device (alias)',
     paired: true
   },
 
@@ -32,7 +32,7 @@ BluetoothWebUITestAsync.prototype = {
     address: '20:7D:74:00:00:04',
     connectable: false,
     connected: false,
-    name: 'Paired Unconnectable Device',
+    name: 'Paired Unconnectable Device (alias)',
     paired: true
   },
 
@@ -282,25 +282,32 @@ TEST_F('BluetoothWebUITestAsync', 'testDisconnect', function() {
     // Wait for fake bluetooth impl to send any updates.
     chrome.bluetooth.getAdapterState(function(state) {
       var pairedDeviceList = $('bluetooth-paired-devices-list');
+      console.log("##################### 1");
 
       // First connect to the device so that the fake implementation state is
       // connected.
       chrome.bluetoothPrivate.connect(
           this.fakePairedDevice.address, function(result) {
+                                             console.log("##################### 2");
             assertEquals(
                 chrome.bluetoothPrivate.ConnectResultType.SUCCESS, result);
+            console.log("##################### 3");
 
             var element = this.getElementForDevice(
                 pairedDeviceList, this.fakePairedDevice.name);
+            console.log("##################### 4");
             assertTrue(!!element, this.fakePairedDevice.name);
+            console.log("##################### 5");
             expectTrue(!!element.getAttribute('connected'));
 
             // Simulate disconnecting from a connected device.
             var button = element.querySelector('.row-delete-button');
             button.click();
+            console.log("##################### 6");
 
             // Wait for fake bluetooth impl to send any updates.
             chrome.bluetooth.getAdapterState(function(state) {
+                                                 console.log("##################### 7");
               element = this.getElementForDevice(
                   pairedDeviceList, this.fakePairedDevice.name);
               expectFalse(!!element.getAttribute('connected'));
