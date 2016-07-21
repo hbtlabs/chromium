@@ -148,10 +148,7 @@ const char FakeBluetoothDeviceClient::kPairingActionRequest[] = "Request";
 const char FakeBluetoothDeviceClient::kPairedDevicePath[] = "/fake/hci0/dev0";
 const char FakeBluetoothDeviceClient::kPairedDeviceAddress[] =
     "00:11:22:33:44:55";
-const char FakeBluetoothDeviceClient::kPairedDeviceName[] =
-    "Fake Device (name)";
-const char FakeBluetoothDeviceClient::kPairedDeviceAlias[] =
-    "Fake Device (alias)";
+const char FakeBluetoothDeviceClient::kPairedDeviceName[] = "Fake Device";
 const uint32_t FakeBluetoothDeviceClient::kPairedDeviceClass = 0x000104;
 
 const char FakeBluetoothDeviceClient::kLegacyAutopairPath[] = "/fake/hci0/dev1";
@@ -242,9 +239,7 @@ const char FakeBluetoothDeviceClient::kPairedUnconnectableDevicePath[] =
 const char FakeBluetoothDeviceClient::kPairedUnconnectableDeviceAddress[] =
     "20:7D:74:00:00:04";
 const char FakeBluetoothDeviceClient::kPairedUnconnectableDeviceName[] =
-    "Paired Unconnectable Device (name)";
-const char FakeBluetoothDeviceClient::kPairedUnconnectableDeviceAlias[] =
-    "Paired Unconnectable Device (alias)";
+    "Paired Unconnectable Device";
 const uint32_t FakeBluetoothDeviceClient::kPairedUnconnectableDeviceClass =
     0x000104;
 
@@ -315,8 +310,8 @@ FakeBluetoothDeviceClient::FakeBluetoothDeviceClient()
                  base::Unretained(this), dbus::ObjectPath(kPairedDevicePath))));
   properties->address.ReplaceValue(kPairedDeviceAddress);
   properties->bluetooth_class.ReplaceValue(kPairedDeviceClass);
-  properties->name.ReplaceValue(kPairedDeviceName);
-  properties->alias.ReplaceValue(kPairedDeviceAlias);
+  properties->name.ReplaceValue("Fake Device (Name)");
+  properties->alias.ReplaceValue(kPairedDeviceName);
   properties->paired.ReplaceValue(true);
   properties->trusted.ReplaceValue(true);
   properties->adapter.ReplaceValue(
@@ -338,8 +333,8 @@ FakeBluetoothDeviceClient::FakeBluetoothDeviceClient()
       dbus::ObjectPath(kPairedUnconnectableDevicePath))));
   properties->address.ReplaceValue(kPairedUnconnectableDeviceAddress);
   properties->bluetooth_class.ReplaceValue(kPairedUnconnectableDeviceClass);
-  properties->name.ReplaceValue(kPairedUnconnectableDeviceName);
-  properties->alias.ReplaceValue(kPairedUnconnectableDeviceAlias);
+  properties->name.ReplaceValue("Fake Device 2 (Unconnectable)");
+  properties->alias.ReplaceValue(kPairedUnconnectableDeviceName);
   properties->paired.ReplaceValue(true);
   properties->trusted.ReplaceValue(true);
   properties->adapter.ReplaceValue(
