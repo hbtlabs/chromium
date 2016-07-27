@@ -172,12 +172,12 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
     if (!editableRoot->getAttributeEventListener(EventTypeNames::webkitBeforeTextInserted)
         // FIXME: Remove these checks once textareas and textfields actually register an event handler.
         && !(shadowAncestorElement && shadowAncestorElement->layoutObject() && shadowAncestorElement->layoutObject()->isTextControl())
-        && editableRoot->layoutObjectIsRichlyEditable()) {
+        && hasRichlyEditableStyle(*editableRoot)) {
         removeInterchangeNodes(m_fragment.get());
         return;
     }
 
-    if (!editableRoot->layoutObjectIsRichlyEditable()) {
+    if (!hasRichlyEditableStyle(*editableRoot)) {
         bool isPlainText = true;
         for (Node& node : NodeTraversal::childrenOf(*m_fragment)) {
             if (isInterchangeHTMLBRElement(&node) && &node == m_fragment->lastChild())
@@ -217,7 +217,7 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
     // Give the root a chance to change the text.
     BeforeTextInsertedEvent* evt = BeforeTextInsertedEvent::create(text);
     editableRoot->dispatchEvent(evt);
-    if (text != evt->text() || !editableRoot->layoutObjectIsRichlyEditable()) {
+    if (text != evt->text() || !hasRichlyEditableStyle(*editableRoot)) {
         restoreAndRemoveTestRenderingNodesToFragment(holder);
 
         m_fragment = createFragmentFromText(selection.toNormalizedEphemeralRange(), evt->text());
@@ -399,7 +399,7 @@ inline void ReplaceSelectionCommand::InsertedNodes::didReplaceNode(Node& node, N
         m_lastNodeInserted = &newNode;
 }
 
-ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFragment* fragment, CommandOptions options, EditAction editAction)
+ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFragment* fragment, CommandOptions options, InputEvent::InputType inputType)
     : CompositeEditCommand(document)
     , m_selectReplacement(options & SelectReplacement)
     , m_smartReplace(options & SmartReplace)
@@ -407,7 +407,7 @@ ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFra
     , m_documentFragment(fragment)
     , m_preventNesting(options & PreventNesting)
     , m_movingParagraph(options & MovingParagraph)
-    , m_editAction(editAction)
+    , m_inputType(inputType)
     , m_sanitizeFragment(options & SanitizeFragment)
     , m_shouldMergeEnd(false)
 {
@@ -581,7 +581,7 @@ void ReplaceSelectionCommand::removeRedundantStylesAndKeepStyleSpanInline(Insert
             continue;
         }
 
-        if (element->parentNode() && element->parentNode()->layoutObjectIsRichlyEditable())
+        if (element->parentNode() && hasRichlyEditableStyle(*element->parentNode()))
             removeElementAttribute(element, contenteditableAttr);
 
         // WebKit used to not add display: inline and float: none on copy.
@@ -701,7 +701,7 @@ void ReplaceSelectionCommand::makeInsertedContentRoundTrippableWithHTMLTreeBuild
 
 void ReplaceSelectionCommand::moveElementOutOfAncestor(Element* element, Element* ancestor, EditingState* editingState)
 {
-    if (!ancestor->parentNode()->hasEditableStyle())
+    if (!hasEditableStyle(*ancestor->parentNode()))
         return;
 
     VisiblePosition positionAtEndOfNode = createVisiblePosition(lastPositionInOrAfterNode(element));
@@ -1227,7 +1227,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
 
     Element* blockStart = enclosingBlock(insertionPos.anchorNode());
     if ((isHTMLListElement(refNode) || (isLegacyAppleHTMLSpanElement(refNode) && isHTMLListElement(refNode->firstChild())))
-        && blockStart && blockStart->layoutObject()->isListItem() && blockStart->parentNode()->hasEditableStyle()) {
+        && blockStart && blockStart->layoutObject()->isListItem() && hasEditableStyle(*blockStart->parentNode())) {
         refNode = insertAsListItems(toHTMLElement(refNode), blockStart, insertionPos, insertedNodes, editingState);
         if (editingState->isAborted())
             return;
@@ -1636,9 +1636,9 @@ void ReplaceSelectionCommand::mergeTextNodesAroundPosition(Position& position, P
     }
 }
 
-EditAction ReplaceSelectionCommand::editingAction() const
+InputEvent::InputType ReplaceSelectionCommand::inputType() const
 {
-    return m_editAction;
+    return m_inputType;
 }
 
 // If the user is inserting a list into an existing list, instead of nesting the list,

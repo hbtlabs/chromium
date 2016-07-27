@@ -645,7 +645,7 @@ inline float operator-(const float a, const LayoutUnit& b)
 inline LayoutUnit operator-(const LayoutUnit& a)
 {
     LayoutUnit returnVal;
-    returnVal.setRawValue(-a.rawValue());
+    returnVal.setRawValue(saturatedNegative(a.rawValue()));
     return returnVal;
 }
 

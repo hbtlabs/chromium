@@ -25,7 +25,6 @@
 #include "content/browser/download/mhtml_generation_manager.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/frame_host/cross_site_transferring_request.h"
-#include "content/browser/frame_host/frame_mojo_shell.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
@@ -82,14 +81,23 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "device/vibration/vibration_manager_impl.h"
+#include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/interface_provider.h"
 #include "ui/accessibility/ax_tree.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "url/gurl.h"
 
+// media::mojom::ServiceFactory is generated in GN builds only.
+#if defined(MOJO_SHELL_CLIENT)
+#include "media/mojo/interfaces/service_factory.mojom.h"
+#endif
+
 #if defined(OS_ANDROID)
 #include "content/browser/mojo/service_registrar_android.h"
+#if defined(ENABLE_MOJO_CDM)
+#include "content/browser/media/android/provision_fetcher_impl.h"
+#endif
 #endif
 
 #if defined(OS_MACOSX)
@@ -171,6 +179,26 @@ void GrantFileAccess(int child_id,
       policy->GrantReadFile(child_id, file);
   }
 }
+
+#if defined(MOJO_SHELL_CLIENT)
+// media::mojom::ServiceFactory is generated in GN builds only.
+void CreateMediaServiceFactory(
+    BrowserContext* browser_context,
+    RenderFrameHost* render_frame_host,
+    media::mojom::ServiceFactoryRequest request) {
+  shell::Connector* connector =
+      BrowserContext::GetShellConnectorFor(browser_context);
+  std::unique_ptr<shell::Connection> connection =
+      connector->Connect("mojo:media");
+#if defined(OS_ANDROID) && defined(ENABLE_MOJO_CDM)
+  connection->GetInterfaceRegistry()->AddInterface(
+      base::Bind(&ProvisionFetcherImpl::Create, this));
+#endif
+  GetContentClient()->browser()->ExposeInterfacesToMediaService(
+      connection->GetInterfaceRegistry(), render_frame_host);
+  connection->GetInterface(std::move(request));
+}
+#endif  // defined(MOJO_SHELL_CLIENT)
 
 }  // namespace
 
@@ -1335,37 +1363,41 @@ void RenderFrameHostImpl::OnBeforeUnloadACK(
   base::TimeTicks before_unload_end_time = renderer_before_unload_end_time;
   if (!renderer_before_unload_start_time.is_null() &&
       !renderer_before_unload_end_time.is_null()) {
-    // When passing TimeTicks across process boundaries, we need to compensate
-    // for any skew between the processes. Here we are converting the
-    // renderer's notion of before_unload_end_time to TimeTicks in the browser
-    // process. See comments in inter_process_time_ticks_converter.h for more.
     base::TimeTicks receive_before_unload_ack_time = base::TimeTicks::Now();
-    InterProcessTimeTicksConverter converter(
-        LocalTimeTicks::FromTimeTicks(send_before_unload_start_time_),
-        LocalTimeTicks::FromTimeTicks(receive_before_unload_ack_time),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time),
-        RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
-    LocalTimeTicks browser_before_unload_end_time =
-        converter.ToLocalTimeTicks(
-            RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
-    before_unload_end_time = browser_before_unload_end_time.ToTimeTicks();
 
-    // Collect UMA on the inter-process skew.
-    bool is_skew_additive = false;
-    if (converter.IsSkewAdditiveForMetrics()) {
-      is_skew_additive = true;
-      base::TimeDelta skew = converter.GetSkewForMetrics();
-      if (skew >= base::TimeDelta()) {
-        UMA_HISTOGRAM_TIMES(
-            "InterProcessTimeTicks.BrowserBehind_RendererToBrowser", skew);
-      } else {
-        UMA_HISTOGRAM_TIMES(
-            "InterProcessTimeTicks.BrowserAhead_RendererToBrowser", -skew);
+    if (!base::TimeTicks::IsConsistentAcrossProcesses()) {
+      // TimeTicks is not consistent across processes and we are passing
+      // TimeTicks across process boundaries so we need to compensate for any
+      // skew between the processes. Here we are converting the renderer's
+      // notion of before_unload_end_time to TimeTicks in the browser process.
+      // See comments in inter_process_time_ticks_converter.h for more.
+      InterProcessTimeTicksConverter converter(
+          LocalTimeTicks::FromTimeTicks(send_before_unload_start_time_),
+          LocalTimeTicks::FromTimeTicks(receive_before_unload_ack_time),
+          RemoteTimeTicks::FromTimeTicks(renderer_before_unload_start_time),
+          RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+      LocalTimeTicks browser_before_unload_end_time =
+          converter.ToLocalTimeTicks(
+              RemoteTimeTicks::FromTimeTicks(renderer_before_unload_end_time));
+      before_unload_end_time = browser_before_unload_end_time.ToTimeTicks();
+
+      // Collect UMA on the inter-process skew.
+      bool is_skew_additive = false;
+      if (converter.IsSkewAdditiveForMetrics()) {
+        is_skew_additive = true;
+        base::TimeDelta skew = converter.GetSkewForMetrics();
+        if (skew >= base::TimeDelta()) {
+          UMA_HISTOGRAM_TIMES(
+              "InterProcessTimeTicks.BrowserBehind_RendererToBrowser", skew);
+        } else {
+          UMA_HISTOGRAM_TIMES(
+              "InterProcessTimeTicks.BrowserAhead_RendererToBrowser", -skew);
+        }
       }
+      UMA_HISTOGRAM_BOOLEAN(
+          "InterProcessTimeTicks.IsSkewAdditive_RendererToBrowser",
+          is_skew_additive);
     }
-    UMA_HISTOGRAM_BOOLEAN(
-        "InterProcessTimeTicks.IsSkewAdditive_RendererToBrowser",
-        is_skew_additive);
 
     base::TimeDelta on_before_unload_overhead_time =
         (receive_before_unload_ack_time - send_before_unload_start_time_) -
@@ -1564,12 +1596,30 @@ void RenderFrameHostImpl::OnRunFileChooser(const FileChooserParams& params) {
   delegate_->RunFileChooser(this, params);
 }
 
+void RenderFrameHostImpl::RequestTextSurroundingSelection(
+    const TextSurroundingSelectionCallback& callback,
+    int max_length) {
+  DCHECK(!callback.is_null());
+  // Only one outstanding request is allowed at any given time.
+  // If already one request is in progress, then immediately release callback
+  // with empty result.
+  if (!text_surrounding_selection_callback_.is_null()) {
+    callback.Run(base::string16(), 0, 0);
+    return;
+  }
+  text_surrounding_selection_callback_ = callback;
+  Send(
+      new FrameMsg_TextSurroundingSelectionRequest(GetRoutingID(), max_length));
+}
+
 void RenderFrameHostImpl::OnTextSurroundingSelectionResponse(
     const base::string16& content,
     uint32_t start_offset,
     uint32_t end_offset) {
-  render_view_host_->OnTextSurroundingSelectionResponse(
-      content, start_offset, end_offset);
+  // Just Run the callback instead of propagating further.
+  text_surrounding_selection_callback_.Run(content, start_offset, end_offset);
+  // Reset the callback for enabling early exit from future request.
+  text_surrounding_selection_callback_.Reset();
 }
 
 void RenderFrameHostImpl::OnDidAccessInitialDocument() {
@@ -2059,11 +2109,12 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
                    base::Unretained(this)));
   }
 
-  if (!frame_mojo_shell_)
-    frame_mojo_shell_.reset(new FrameMojoShell(this));
-
-  GetInterfaceRegistry()->AddInterface<shell::mojom::Connector>(base::Bind(
-      &FrameMojoShell::BindRequest, base::Unretained(frame_mojo_shell_.get())));
+#if defined(MOJO_SHELL_CLIENT)
+  // media::mojom::ServiceFactory is generated in GN builds only.
+  GetInterfaceRegistry()->AddInterface<media::mojom::ServiceFactory>(
+      base::Bind(&CreateMediaServiceFactory,
+                 GetProcess()->GetBrowserContext(), this));
+#endif  // defined(MOJO_SHELL_CLIENT)
 
 #if defined(ENABLE_WEBVR)
   const base::CommandLine& browser_command_line =
@@ -2821,9 +2872,11 @@ void RenderFrameHostImpl::UpdatePermissionsForNavigation(
     ChildProcessSecurityPolicyImpl::GetInstance()->GrantRequestURL(
         GetProcess()->GetID(), common_params.url);
     if (common_params.url.SchemeIs(url::kDataScheme) &&
-        common_params.base_url_for_data_url.SchemeIs(url::kFileScheme)) {
-      // If 'data:' is used, and we have a 'file:' base url, grant access to
-      // local files.
+        !common_params.base_url_for_data_url.is_empty()) {
+      // When there's a base URL specified for the data URL, we also need to
+      // grant access to the base URL. This allows file: and other unexpected
+      // schemes to be accepted at commit time and during CORS checks (e.g., for
+      // font requests).
       ChildProcessSecurityPolicyImpl::GetInstance()->GrantRequestURL(
           GetProcess()->GetID(), common_params.base_url_for_data_url);
     }

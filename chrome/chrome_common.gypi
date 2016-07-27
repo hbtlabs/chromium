@@ -64,6 +64,9 @@
       'common/multi_process_lock_win.cc',
       'common/origin_trials/chrome_origin_trial_policy.cc',
       'common/origin_trials/chrome_origin_trial_policy.h',
+      'common/page_load_metrics/page_load_metrics_messages.h',
+      'common/page_load_metrics/page_load_timing.cc',
+      'common/page_load_metrics/page_load_timing.h',
       'common/partial_circular_buffer.cc',
       'common/partial_circular_buffer.h',
       'common/pref_names_util.cc',
@@ -369,6 +372,7 @@
           'dependencies': [
             '<(DEPTH)/device/usb/usb.gyp:device_usb',
             '<(DEPTH)/chrome/common/extensions/api/api.gyp:chrome_api',
+            '<(DEPTH)/chrome/common/extensions/api/api.gyp:extensions_features',
             '<(DEPTH)/extensions/common/api/api.gyp:extensions_api',
             '<(DEPTH)/extensions/extensions.gyp:extensions_common',
             '<(DEPTH)/extensions/extensions_resources.gyp:extensions_resources',
@@ -410,6 +414,7 @@
             '<(DEPTH)/components/components.gyp:password_manager_content_mojo_bindings',
             '<(DEPTH)/components/components.gyp:password_manager_core_common',
             '<(DEPTH)/components/components.gyp:signin_core_common',
+            '<(DEPTH)/components/components.gyp:spellcheck_common',
             '<(DEPTH)/components/components.gyp:translate_content_common',
             '<(DEPTH)/components/components.gyp:visitedlink_common',
             '<(DEPTH)/extensions/extensions.gyp:extensions_common_constants',
@@ -637,6 +642,24 @@
         'proto_out_dir': 'chrome/common/safe_browsing',
       },
       'includes': [ '../build/protoc.gypi' ],
+    },
+    {
+      # GN version: //chrome/common:search_provider_mojom
+      'target_name': 'common_search_provider_mojom',
+      'type': 'static_library',
+      'sources': [
+        'common/search_provider.mojom',
+      ],
+      'variables': {
+        'mojom_typemaps': [
+          '../url/mojo/gurl.typemap',
+        ],
+      },
+      'dependencies': [
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../url/url.gyp:url_mojom',
+      ],
+      'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
     },
     {
       'target_name': 'common_mojo_bindings_mojom',

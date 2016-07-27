@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/win/win_util.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
@@ -34,6 +35,9 @@ ScreenWin* g_screen_win_instance = nullptr;
 
 float GetMonitorScaleFactor(HMONITOR monitor) {
   DCHECK(monitor);
+  if (display::Display::HasForceDeviceScaleFactor())
+    return display::Display::GetForcedDeviceScaleFactor();
+
   if (base::win::IsProcessPerMonitorDpiAware()) {
     static auto get_dpi_for_monitor_func = [](){
       using GetDpiForMonitorPtr = decltype(::GetDpiForMonitor)*;
@@ -312,6 +316,18 @@ int ScreenWin::GetSystemMetricsForHwnd(HWND hwnd, int metric) {
       system_metrics_result * metrics_relative_scale_factor));
 }
 
+// static
+float ScreenWin::GetScaleFactorForHWND(HWND hwnd) {
+  if (!g_screen_win_instance)
+    return ScreenWinDisplay().display().device_scale_factor();
+
+  DCHECK(hwnd);
+  HWND rootHwnd = g_screen_win_instance->GetRootWindow(hwnd);
+  ScreenWinDisplay screen_win_display =
+      g_screen_win_instance->GetScreenWinDisplayNearestHWND(rootHwnd);
+  return screen_win_display.display().device_scale_factor();
+}
+
 HWND ScreenWin::GetHWNDFromNativeView(gfx::NativeView window) const {
   NOTREACHED();
   return nullptr;
@@ -411,6 +427,7 @@ void ScreenWin::Initialize() {
       new gfx::SingletonHwndObserver(
           base::Bind(&ScreenWin::OnWndProc, base::Unretained(this))));
   UpdateFromDisplayInfos(GetDisplayInfosFromSystem());
+  RecordDisplayScaleFactors();
 }
 
 MONITORINFOEX ScreenWin::MonitorInfoFromScreenPoint(
@@ -527,18 +544,6 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplay(
 }
 
 // static
-float ScreenWin::GetScaleFactorForHWND(HWND hwnd) {
-  if (!g_screen_win_instance)
-    return ScreenWinDisplay().display().device_scale_factor();
-
-  DCHECK(hwnd);
-  HWND rootHwnd = g_screen_win_instance->GetRootWindow(hwnd);
-  ScreenWinDisplay screen_win_display =
-      g_screen_win_instance->GetScreenWinDisplayNearestHWND(rootHwnd);
-  return screen_win_display.display().device_scale_factor();
-}
-
-// static
 template <typename Getter, typename GetterType>
 ScreenWinDisplay ScreenWin::GetScreenWinDisplayVia(Getter getter,
                                                    GetterType value) {
@@ -546,6 +551,23 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplayVia(Getter getter,
     return ScreenWinDisplay();
 
   return (g_screen_win_instance->*getter)(value);
+}
+
+void ScreenWin::RecordDisplayScaleFactors() const {
+  std::vector<int> unique_scale_factors;
+  for (const auto& screen_win_display : screen_win_displays_) {
+    const float scale_factor =
+        screen_win_display.display().device_scale_factor();
+    // Multiply the reported value by 100 to display it as a percentage. Clamp
+    // it so that if it's wildly out-of-band we won't send it to the backend.
+    const int reported_scale = std::min(
+        std::max(base::checked_cast<int>(scale_factor * 100), 0), 1000);
+    if (std::find(unique_scale_factors.begin(), unique_scale_factors.end(),
+                  reported_scale) == unique_scale_factors.end()) {
+      unique_scale_factors.push_back(reported_scale);
+      UMA_HISTOGRAM_SPARSE_SLOWLY("UI.DeviceScale", reported_scale);
+    }
+  }
 }
 
 }  // namespace win

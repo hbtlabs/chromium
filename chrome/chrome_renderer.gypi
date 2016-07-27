@@ -37,6 +37,10 @@
       'renderer/net_benchmarking_extension.h',
       'renderer/page_load_histograms.cc',
       'renderer/page_load_histograms.h',
+      'renderer/page_load_metrics/metrics_render_frame_observer.cc',
+      'renderer/page_load_metrics/metrics_render_frame_observer.h',
+      'renderer/page_load_metrics/page_timing_metrics_sender.cc',
+      'renderer/page_load_metrics/page_timing_metrics_sender.h',
       'renderer/plugins/non_loadable_plugin_placeholder.cc',
       'renderer/plugins/non_loadable_plugin_placeholder.h',
       'renderer/plugins/plugin_uma.cc',
@@ -234,6 +238,10 @@
       'renderer/pepper/chrome_pdf_print_client.cc',
       'renderer/pepper/chrome_pdf_print_client.h',
     ],
+    'chrome_renderer_leak_detector_sources': [
+      'renderer/leak_detector/leak_detector_remote_client.cc',
+      'renderer/leak_detector/leak_detector_remote_client.h',
+    ],
   },
   'targets': [
     {
@@ -243,6 +251,7 @@
       'dependencies': [
         'common',
         'common_mojo_bindings',
+        'common_search_provider_mojom',
         'chrome_features.gyp:chrome_common_features',
         'chrome_resources.gyp:chrome_resources',
         'chrome_resources.gyp:chrome_strings',
@@ -256,7 +265,6 @@
         '../components/components.gyp:network_hints_renderer',
         '../components/components.gyp:omnibox_common',
         '../components/components.gyp:error_page_renderer',
-        '../components/components.gyp:page_load_metrics_renderer',
         '../components/components.gyp:password_manager_content_renderer',
         '../components/components.gyp:plugins_renderer',
         '../components/components.gyp:startup_metric_utils_interfaces',
@@ -396,6 +404,15 @@
           ],
           'include_dirs': [
             '<(DEPTH)/third_party/wtl/include',
+          ],
+        }],
+        ['chromeos==1', {
+          'sources': [
+            '<@(chrome_renderer_leak_detector_sources)',
+          ],
+          'dependencies': [
+            '../components/components.gyp:metrics_leak_detector',
+            '../components/components.gyp:metrics_mojo_bindings',
           ],
         }],
       ],

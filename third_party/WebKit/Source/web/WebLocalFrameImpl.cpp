@@ -157,7 +157,6 @@
 #include "modules/bluetooth/BluetoothSupplement.h"
 #include "modules/installedapp/InstalledAppController.h"
 #include "modules/notifications/NotificationPermissionClient.h"
-#include "modules/permissions/PermissionController.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/push_messaging/PushController.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
@@ -1488,8 +1487,6 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
         ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
     if (RuntimeEnabledFeatures::presentationEnabled())
         PresentationController::provideTo(*m_frame, m_client ? m_client->presentationClient() : nullptr);
-    if (RuntimeEnabledFeatures::permissionsEnabled())
-        PermissionController::provideTo(*m_frame, m_client ? m_client->permissionClient() : nullptr);
     if (RuntimeEnabledFeatures::webVREnabled())
         VRController::provideTo(*m_frame, m_client ? m_client->serviceRegistry() : nullptr);
     if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
@@ -1965,12 +1962,22 @@ void WebLocalFrameImpl::didCallIsSearchProviderInstalled()
 
 bool WebLocalFrameImpl::find(int identifier, const WebString& searchText, const WebFindOptions& options, bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow)
 {
+    if (!frame())
+        return false;
+
+    // Unlikely, but just in case we try to find-in-page on a detached frame.
+    DCHECK(frame()->host());
+
     // Search for an active match only if this frame is focused or if this is a
     // find next request.
-    if (isFocused() || options.findNext)
-        return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, selectionRect, activeNow);
+    if (!isFocused() && !options.findNext)
+        return false;
 
-    return false;
+    // Up-to-date, clean tree is required for finding text in page, since it relies
+    // on TextIterator to look over the text.
+    frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+    return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, selectionRect, activeNow);
 }
 
 void WebLocalFrameImpl::stopFinding(StopFindAction action)

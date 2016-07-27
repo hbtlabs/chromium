@@ -24,8 +24,10 @@ CustomElementDefinition::CustomElementDefinition(
 CustomElementDefinition::CustomElementDefinition(
     const CustomElementDescriptor& descriptor,
     const HashSet<AtomicString>& observedAttributes)
-    : m_observedAttributes(observedAttributes)
-    , m_descriptor(descriptor)
+    : m_descriptor(descriptor)
+    , m_observedAttributes(observedAttributes)
+    , m_hasStyleAttributeChangedCallback(
+        observedAttributes.contains(HTMLNames::styleAttr.localName()))
 {
 }
 
@@ -120,16 +122,23 @@ void CustomElementDefinition::upgrade(Element* element)
     DCHECK_EQ(m_constructionStack.size(), depth); // It's a *stack*.
     m_constructionStack.removeLast();
 
-    if (!succeeded)
+    if (!succeeded) {
+        element->setCustomElementState(CustomElementState::Failed);
         return;
+    }
 
     CHECK(element->getCustomElementState() == CustomElementState::Custom);
 }
 
 bool CustomElementDefinition::hasAttributeChangedCallback(
-    const QualifiedName& name)
+    const QualifiedName& name) const
 {
     return m_observedAttributes.contains(name.localName());
+}
+
+bool CustomElementDefinition::hasStyleAttributeChangedCallback() const
+{
+    return m_hasStyleAttributeChangedCallback;
 }
 
 void CustomElementDefinition::enqueueUpgradeReaction(Element* element)

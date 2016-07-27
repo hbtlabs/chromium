@@ -25,18 +25,17 @@ namespace ui {
 DisplayCompositor::DisplayCompositor(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     gfx::AcceleratedWidget widget,
-    const scoped_refptr<GpuState>& gpu_state,
     const scoped_refptr<SurfacesState>& surfaces_state)
     : task_runner_(task_runner),
       surfaces_state_(surfaces_state),
       factory_(surfaces_state->manager(), this),
       allocator_(surfaces_state->next_client_id()) {
-  allocator_.RegisterSurfaceClientId(surfaces_state_->manager());
+  surfaces_state_->manager()->RegisterSurfaceClientId(allocator_.client_id());
   surfaces_state_->manager()->RegisterSurfaceFactoryClient(
       allocator_.client_id(), this);
 
   scoped_refptr<SurfacesContextProvider> surfaces_context_provider(
-      new SurfacesContextProvider(widget, gpu_state));
+      new SurfacesContextProvider(widget));
   // TODO(rjkroege): If there is something better to do than CHECK, add it.
   CHECK(surfaces_context_provider->BindToCurrentThread());
 
@@ -78,11 +77,12 @@ DisplayCompositor::DisplayCompositor(
 DisplayCompositor::~DisplayCompositor() {
   surfaces_state_->manager()->UnregisterSurfaceFactoryClient(
       allocator_.client_id());
+  surfaces_state_->manager()->InvalidateSurfaceClientId(allocator_.client_id());
 }
 
 void DisplayCompositor::SubmitCompositorFrame(
     cc::CompositorFrame frame,
-    const base::Callback<void(cc::SurfaceDrawStatus)>& callback) {
+    const base::Callback<void()>& callback) {
   gfx::Size frame_size =
       frame.delegated_frame_data->render_pass_list.back()->output_rect.size();
   if (frame_size.IsEmpty() || frame_size != display_size_) {

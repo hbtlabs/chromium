@@ -35,6 +35,7 @@
         '<(DEPTH)/skia/skia.gyp:skia',
         '<(DEPTH)/ui/display/display.gyp:display_types',
         '<(DEPTH)/ui/display/display.gyp:display_util',
+        '<(DEPTH)/ui/gl/gl.gyp:gl',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
         '<(DEPTH)/ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry',
         '<(DEPTH)/ui/gfx/ipc/gfx_ipc.gyp:gfx_ipc',
@@ -78,6 +79,7 @@
         '<(DEPTH)/skia/skia.gyp:skia',
         '<(DEPTH)/ui/display/display.gyp:display_types',
         '<(DEPTH)/ui/display/display.gyp:display_util',
+        '<(DEPTH)/ui/gl/gl.gyp:gl',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
         '<(DEPTH)/ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry',
         '<(DEPTH)/ui/gfx/ipc/skia/gfx_ipc_skia.gyp:gfx_ipc_skia',
@@ -264,11 +266,6 @@
     ['<(ozone_platform_cast) == 1', {
       'includes': [
         'platform/cast/cast.gypi',
-      ],
-    }],
-    ['<(ozone_platform_egltest) == 1', {
-      'includes': [
-        'platform/egltest/egltest.gypi',
       ],
     }],
     ['<(ozone_platform_gbm) == 1', {

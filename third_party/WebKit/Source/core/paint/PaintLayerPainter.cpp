@@ -370,7 +370,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
 
         Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
         if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-            ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
+            const ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
             ASSERT(objectPaintProperties && objectPaintProperties->localBorderBoxProperties());
             PaintChunkProperties properties(context.getPaintController().currentPaintChunkProperties());
             auto& localBorderBoxProperties = *objectPaintProperties->localBorderBoxProperties();
@@ -378,7 +378,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
             properties.clip = localBorderBoxProperties.propertyTreeState.clip;
             properties.effect = localBorderBoxProperties.propertyTreeState.effect;
             properties.backfaceHidden = m_paintLayer.layoutObject()->hasHiddenBackface();
-            scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
+            scopedPaintChunkProperties.emplace(context.getPaintController(), m_paintLayer, properties);
         }
 
         bool shouldPaintBackground = isPaintingCompositedBackground && shouldPaintContent && !selectionOnly;
@@ -693,7 +693,7 @@ void PaintLayerPainter::paintFragmentWithPhase(PaintPhase phase, const PaintLaye
     Optional<ScrollRecorder> scrollRecorder;
     LayoutPoint paintOffset = -m_paintLayer.layoutBoxLocation();
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-        ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
+        const ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
         ASSERT(objectPaintProperties && objectPaintProperties->localBorderBoxProperties());
         paintOffset += toSize(objectPaintProperties->localBorderBoxProperties()->paintOffset);
     } else {

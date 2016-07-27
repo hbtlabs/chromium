@@ -1575,7 +1575,7 @@ void Element::attachLayoutTree(const AttachContext& context)
     createPseudoElementIfNeeded(PseudoIdFirstLetter);
 }
 
-void Element::detach(const AttachContext& context)
+void Element::detachLayoutTree(const AttachContext& context)
 {
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
     cancelFocusAppearanceUpdate();
@@ -1584,7 +1584,7 @@ void Element::detach(const AttachContext& context)
         ElementRareData* data = elementRareData();
         data->clearPseudoElements();
 
-        // attach() will clear the computed style for us when inside recalcStyle.
+        // attachLayoutTree() will clear the computed style for us when inside recalcStyle.
         if (!document().inStyleRecalc())
             data->clearComputedStyle();
 
@@ -1607,7 +1607,7 @@ void Element::detach(const AttachContext& context)
             shadow->detach(context);
     }
 
-    ContainerNode::detach(context);
+    ContainerNode::detachLayoutTree(context);
 
     if (!context.performingReattach && isUserActionElement()) {
         if (hovered())
@@ -1737,7 +1737,7 @@ void Element::recalcStyle(StyleRecalcChange change, Text* nextTextSibling)
                 if (root->shouldCallRecalcStyle(change))
                     root->recalcStyle(change);
             }
-            recalcChildStyle(change);
+            recalcDescendantStyles(change);
         }
 
         updatePseudoElement(PseudoIdAfter, change);
@@ -1959,7 +1959,7 @@ ShadowRoot* Element::attachShadow(const ScriptState* scriptState, const ShadowRo
 
     const AtomicString& tagName = localName();
     bool tagNameIsSupported = isV0CustomElement()
-        || isCustomElement()
+        || getCustomElementState() != CustomElementState::Uncustomized
         || tagName == HTMLNames::articleTag
         || tagName == HTMLNames::asideTag
         || tagName == HTMLNames::blockquoteTag
@@ -2649,6 +2649,18 @@ NodeIntersectionObserverData* Element::intersectionObserverData() const
 NodeIntersectionObserverData& Element::ensureIntersectionObserverData()
 {
     return ensureElementRareData().ensureIntersectionObserverData();
+}
+
+HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>* Element::resizeObserverData() const
+{
+    if (hasRareData())
+        return elementRareData()->resizeObserverData();
+    return nullptr;
+}
+
+HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>& Element::ensureResizeObserverData()
+{
+    return ensureElementRareData().ensureResizeObserverData();
 }
 
 // Step 1 of http://domparsing.spec.whatwg.org/#insertadjacenthtml()
@@ -3563,6 +3575,18 @@ void Element::inlineStyleChanged()
     DCHECK(elementData());
     elementData()->m_styleAttributeIsDirty = true;
     InspectorInstrumentation::didInvalidateStyleAttr(this);
+
+    if (MutationObserverInterestGroup* recipients = MutationObserverInterestGroup::createForAttributesMutation(*this, styleAttr)) {
+        // We don't use getAttribute() here to get a style attribute value
+        // before the change.
+        AtomicString oldValue;
+        if (const Attribute* attribute = elementData()->attributes().find(styleAttr))
+            oldValue = attribute->value();
+        recipients->enqueueMutationRecord(MutationRecord::createAttributes(this, styleAttr, oldValue));
+        // Need to synchronize every time so that following MutationRecords will
+        // have correct oldValues.
+        synchronizeAttribute(styleAttr);
+    }
 }
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValueID identifier, bool important)

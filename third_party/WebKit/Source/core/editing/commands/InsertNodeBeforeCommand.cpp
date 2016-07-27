@@ -26,6 +26,7 @@
 #include "core/editing/commands/InsertNodeBeforeCommand.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "core/editing/EditingUtilities.h"
 
 namespace blink {
 
@@ -41,22 +42,22 @@ InsertNodeBeforeCommand::InsertNodeBeforeCommand(Node* insertChild, Node* refChi
     DCHECK(m_refChild);
     DCHECK(m_refChild->parentNode()) << m_refChild;
 
-    DCHECK(m_refChild->parentNode()->hasEditableStyle() || !m_refChild->parentNode()->inActiveDocument()) << m_refChild->parentNode();
+    DCHECK(hasEditableStyle(*m_refChild->parentNode()) || !m_refChild->parentNode()->inActiveDocument()) << m_refChild->parentNode();
 }
 
 void InsertNodeBeforeCommand::doApply(EditingState*)
 {
     ContainerNode* parent = m_refChild->parentNode();
-    if (!parent || (m_shouldAssumeContentIsAlwaysEditable == DoNotAssumeContentIsAlwaysEditable && !parent->isContentEditable()))
+    if (!parent || (m_shouldAssumeContentIsAlwaysEditable == DoNotAssumeContentIsAlwaysEditable && !isContentEditable(*parent)))
         return;
-    DCHECK(parent->isContentEditable()) << parent;
+    DCHECK(isContentEditable(*parent)) << parent;
 
     parent->insertBefore(m_insertChild.get(), m_refChild.get(), IGNORE_EXCEPTION);
 }
 
 void InsertNodeBeforeCommand::doUnapply()
 {
-    if (!m_insertChild->isContentEditable())
+    if (!isContentEditable(*m_insertChild))
         return;
 
     m_insertChild->remove(IGNORE_EXCEPTION);

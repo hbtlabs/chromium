@@ -22,8 +22,8 @@
     'gpu/fake_video_decode_accelerator.h',
     'gpu/gpu_video_accelerator_util.cc',
     'gpu/gpu_video_accelerator_util.h',
-    'gpu/gpu_video_decode_accelerator_factory_impl.cc',
-    'gpu/gpu_video_decode_accelerator_factory_impl.h',
+    'gpu/gpu_video_decode_accelerator_factory.cc',
+    'gpu/gpu_video_decode_accelerator_factory.h',
     'gpu/gpu_video_decode_accelerator_helpers.h',
     'gpu/shared_memory_region.cc',
     'gpu/shared_memory_region.h',
@@ -113,8 +113,8 @@
         'gpu/avda_shared_state.cc',
         'gpu/avda_shared_state.h',
         'gpu/avda_state_provider.h',
-        'gpu/avda_surface_tracker.h',
         'gpu/avda_surface_tracker.cc',
+        'gpu/avda_surface_tracker.h',
       ],
     }],
     ['OS=="android" and enable_webrtc==1', {
@@ -274,6 +274,9 @@
               'gpu/va_drm.sigs',
             ],
           },
+          'dependencies': [
+            '../ui/ozone/gl/ozone_gl.gyp:ozone_gl',
+          ],
           'sources': [
             'gpu/vaapi_drm_picture.cc',
             'gpu/vaapi_drm_picture.h',
@@ -325,6 +328,7 @@
       'dependencies': [
         '../media/media.gyp:media',
         '../media/media.gyp:mf_initializer',
+        '../third_party/libyuv/libyuv.gyp:libyuv',
         '../ui/gl/gl.gyp:gl',
         '../ui/gl/init/gl_init.gyp:gl_init',
       ],
@@ -355,6 +359,8 @@
         'gpu/dxva_picture_buffer_win.h',
         'gpu/dxva_video_decode_accelerator_win.cc',
         'gpu/dxva_video_decode_accelerator_win.h',
+        'gpu/media_foundation_video_encode_accelerator_win.cc',
+        'gpu/media_foundation_video_encode_accelerator_win.h',
       ],
       'include_dirs': [
         '<(DEPTH)/third_party/khronos',

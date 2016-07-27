@@ -107,6 +107,7 @@ class CSSTransitionData;
 class CSSVariableData;
 class Font;
 class FontMetrics;
+class Hyphenation;
 class RotateTransformOperation;
 class ScaleTransformOperation;
 class ShadowList;
@@ -482,6 +483,8 @@ public:
     bool hasUniquePseudoStyle() const;
     bool hasPseudoElementStyle() const;
 
+    // Note: canContainAbsolutePositionObjects should return true if canContainFixedPositionObjects.
+    // We currently never use this value directly, always OR'ing it with canContainFixedPositionObjects.
     bool canContainAbsolutePositionObjects() const { return position() != StaticPosition; }
     bool canContainFixedPositionObjects() const { return hasTransformRelatedProperty() || containsPaint();}
 
@@ -848,8 +851,8 @@ public:
     bool isGridAutoFlowDirectionColumn() const { return (m_rareNonInheritedData->m_grid->m_gridAutoFlow & InternalAutoFlowDirectionColumn) == InternalAutoFlowDirectionColumn; }
     bool isGridAutoFlowAlgorithmSparse() const { return (m_rareNonInheritedData->m_grid->m_gridAutoFlow & InternalAutoFlowAlgorithmSparse) == InternalAutoFlowAlgorithmSparse; }
     bool isGridAutoFlowAlgorithmDense() const { return (m_rareNonInheritedData->m_grid->m_gridAutoFlow & InternalAutoFlowAlgorithmDense) == InternalAutoFlowAlgorithmDense; }
-    const GridTrackSize& gridAutoColumns() const { return m_rareNonInheritedData->m_grid->m_gridAutoColumns; }
-    const GridTrackSize& gridAutoRows() const { return m_rareNonInheritedData->m_grid->m_gridAutoRows; }
+    const Vector<GridTrackSize>& gridAutoColumns() const { return m_rareNonInheritedData->m_grid->m_gridAutoColumns; }
+    const Vector<GridTrackSize>& gridAutoRows() const { return m_rareNonInheritedData->m_grid->m_gridAutoRows; }
     const Length& gridColumnGap() const { return m_rareNonInheritedData->m_grid->m_gridColumnGap; }
     const Length& gridRowGap() const { return m_rareNonInheritedData->m_grid->m_gridRowGap; }
 
@@ -888,7 +891,7 @@ public:
     const AtomicString& highlight() const { return m_rareInheritedData->highlight; }
     Hyphens getHyphens() const { return static_cast<Hyphens>(m_rareInheritedData->hyphens); }
     const AtomicString& hyphenationString() const { return m_rareInheritedData->hyphenationString; }
-    const AtomicString& locale() const { return getFontDescription().locale(false); }
+    const AtomicString& locale() const { return LayoutLocale::localeString(getFontDescription().locale()); }
     EResize resize() const { return static_cast<EResize>(m_rareNonInheritedData->m_resize); }
     bool hasInlinePaginationAxis() const
     {
@@ -1384,8 +1387,8 @@ public:
     void setJustifySelf(const StyleSelfAlignmentData& data) { SET_VAR(m_rareNonInheritedData, m_justifySelf, data); }
     void setJustifySelfPosition(ItemPosition position) { m_rareNonInheritedData.access()->m_justifySelf.setPosition(position); }
     void setJustifySelfOverflow(OverflowAlignment overflow) { m_rareNonInheritedData.access()->m_justifySelf.setOverflow(overflow); }
-    void setGridAutoColumns(const GridTrackSize& length) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridAutoColumns, length); }
-    void setGridAutoRows(const GridTrackSize& length) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridAutoRows, length); }
+    void setGridAutoColumns(const Vector<GridTrackSize>& trackSizeList) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridAutoColumns, trackSizeList); }
+    void setGridAutoRows(const Vector<GridTrackSize>& trackSizeList) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridAutoRows, trackSizeList); }
     void setGridTemplateColumns(const Vector<GridTrackSize>& lengths) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridTemplateColumns, lengths); }
     void setGridTemplateRows(const Vector<GridTrackSize>& lengths) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridTemplateRows, lengths); }
     void setGridAutoRepeatColumns(const Vector<GridTrackSize>& trackSizes) { SET_NESTED_VAR(m_rareNonInheritedData, m_grid, m_gridAutoRepeatColumns, trackSizes); }
@@ -1622,6 +1625,7 @@ public:
     QuotesData* quotes() const { return m_rareInheritedData->quotes.get(); }
     void setQuotes(PassRefPtr<QuotesData>);
 
+    Hyphenation* getHyphenation() const;
     const AtomicString& hyphenString() const;
 
     bool inheritedEqual(const ComputedStyle&) const;
@@ -1843,8 +1847,8 @@ public:
 
     static GridAutoFlow initialGridAutoFlow() { return AutoFlowRow; }
 
-    static GridTrackSize initialGridAutoColumns() { return GridTrackSize(Length(Auto)); }
-    static GridTrackSize initialGridAutoRows() { return GridTrackSize(Length(Auto)); }
+    static Vector<GridTrackSize> initialGridAutoColumns();
+    static Vector<GridTrackSize> initialGridAutoRows();
 
     static NamedGridLinesMap initialNamedGridColumnLines() { return NamedGridLinesMap(); }
     static NamedGridLinesMap initialNamedGridRowLines() { return NamedGridLinesMap(); }

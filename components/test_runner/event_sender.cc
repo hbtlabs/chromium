@@ -20,7 +20,7 @@
 #include "components/test_runner/test_interfaces.h"
 #include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
-#include "components/test_runner/web_test_proxy.h"
+#include "components/test_runner/web_view_test_proxy.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
@@ -1274,8 +1274,8 @@ EventSender::SavedEvent::SavedEvent()
       milliseconds(0),
       modifiers(0) {}
 
-EventSender::EventSender(WebTestProxyBase* web_test_proxy_base)
-    : web_test_proxy_base_(web_test_proxy_base),
+EventSender::EventSender(WebViewTestProxyBase* web_view_test_proxy_base)
+    : web_view_test_proxy_base_(web_view_test_proxy_base),
       replaying_saved_events_(false),
       weak_factory_(this) {
   Reset();
@@ -1780,7 +1780,7 @@ void EventSender::TextZoomOut() {
 }
 
 void EventSender::ZoomPageIn() {
-  const std::vector<WebTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxyBase*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
@@ -1790,7 +1790,7 @@ void EventSender::ZoomPageIn() {
 }
 
 void EventSender::ZoomPageOut() {
-  const std::vector<WebTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxyBase*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
@@ -1800,7 +1800,7 @@ void EventSender::ZoomPageOut() {
 }
 
 void EventSender::SetPageZoomFactor(double zoom_factor) {
-  const std::vector<WebTestProxyBase*>& window_list =
+  const std::vector<WebViewTestProxyBase*>& window_list =
       interfaces()->GetWindowList();
 
   for (size_t i = 0; i < window_list.size(); ++i) {
@@ -1920,6 +1920,14 @@ void EventSender::GestureFlingStart(float x,
     event.sourceDevice = blink::WebGestureDeviceTouchscreen;
   } else {
     args->ThrowError();
+    return;
+  }
+
+  float max_start_velocity = std::max(fabs(velocity_x), fabs(velocity_y));
+  if (!max_start_velocity) {
+    v8::Isolate* isolate = blink::mainThreadIsolate();
+    isolate->ThrowException(v8::Exception::TypeError(
+      gin::StringToV8(isolate, "Invalid max start velocity.")));
     return;
   }
 
@@ -2241,7 +2249,7 @@ void EventSender::SendCurrentTouchEvent(WebInputEvent::Type type,
   uint32_t unique_touch_event_id;
   GetOptionalTouchArgs(args, moved_beyond_slop_region, unique_touch_event_id);
 
-  DCHECK_GT(static_cast<unsigned>(WebTouchEvent::touchesLengthCap),
+  DCHECK_GT(static_cast<unsigned>(WebTouchEvent::kTouchesLengthCap),
             touch_points_.size());
   if (force_layout_on_events_)
     view()->updateAllLifecyclePhases();
@@ -2840,19 +2848,19 @@ void EventSender::SendGesturesForMouseWheelEvent(
 }
 
 TestInterfaces* EventSender::interfaces() {
-  return web_test_proxy_base_->test_interfaces();
+  return web_view_test_proxy_base_->test_interfaces();
 }
 
 WebTestDelegate* EventSender::delegate() {
-  return web_test_proxy_base_->delegate();
+  return web_view_test_proxy_base_->delegate();
 }
 
 const blink::WebView* EventSender::view() const {
-  return web_test_proxy_base_->web_view();
+  return web_view_test_proxy_base_->web_view();
 }
 
 blink::WebView* EventSender::view() {
-  return web_test_proxy_base_->web_view();
+  return web_view_test_proxy_base_->web_view();
 }
 
 std::unique_ptr<WebInputEvent> EventSender::ScaleEvent(

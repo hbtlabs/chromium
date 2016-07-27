@@ -67,6 +67,10 @@ class CC_EXPORT PropertyTree {
   ~PropertyTree();
   PropertyTree<T>& operator=(const PropertyTree<T>&);
 
+  // Property tree node starts from index 0.
+  static const int kInvalidNodeId = -1;
+  static const int kRootNodeId = 0;
+
   bool operator==(const PropertyTree<T>& other) const;
 
   int Insert(const T& tree_node, int parent_id);
@@ -74,12 +78,12 @@ class CC_EXPORT PropertyTree {
   T* Node(int i) {
     // TODO(vollick): remove this.
     CHECK(i < static_cast<int>(nodes_.size()));
-    return i > -1 ? &nodes_[i] : nullptr;
+    return i > kInvalidNodeId ? &nodes_[i] : nullptr;
   }
   const T* Node(int i) const {
     // TODO(vollick): remove this.
     CHECK(i < static_cast<int>(nodes_.size()));
-    return i > -1 ? &nodes_[i] : nullptr;
+    return i > kInvalidNodeId ? &nodes_[i] : nullptr;
   }
 
   T* parent(const T* t) { return Node(t->parent_id); }
@@ -131,6 +135,8 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
 
   bool operator==(const TransformTree& other) const;
 
+  static const int kContentsRootNodeId = 1;
+
   int Insert(const TransformNode& tree_node, int parent_id);
 
   void clear();
@@ -147,15 +153,6 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   bool ComputeTransform(int source_id,
                         int dest_id,
                         gfx::Transform* transform) const;
-
-  // Computes the change of basis transform from node |source_id| to |dest_id|,
-  // including any sublayer scale at |dest_id|.  The function returns false iff
-  // the inverse of a singular transform was used (and the result should,
-  // therefore, not be trusted).
-  bool ComputeTransformWithDestinationSurfaceContentsScale(
-      int source_id,
-      int dest_id,
-      gfx::Transform* transform) const;
 
   void ResetChangeTracking();
   // Updates the parent, target, and screen space transforms and snapping.
@@ -220,10 +217,12 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
     return nodes_affected_by_outer_viewport_bounds_delta_;
   }
 
-  const gfx::Transform& FromTarget(int node_id) const;
+  const gfx::Transform& FromTarget(int node_id, int effect) const;
   void SetFromTarget(int node_id, const gfx::Transform& transform);
 
-  const gfx::Transform& ToTarget(int node_id) const;
+  // TODO(sunxd): Remove target space transforms in cached data when we
+  // completely implement computing draw transforms on demand.
+  const gfx::Transform& ToTarget(int node_id, int effect_id) const;
   void SetToTarget(int node_id, const gfx::Transform& transform);
 
   const gfx::Transform& FromScreen(int node_id) const;
@@ -242,17 +241,9 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
     return cached_data_;
   }
 
-  gfx::Transform ToScreenSpaceTransformWithoutSurfaceContentsScale(
-      int id) const;
-
   void ToProtobuf(proto::PropertyTree* proto) const;
   void FromProtobuf(const proto::PropertyTree& proto,
                     std::unordered_map<int, int>* node_id_to_index_map);
-
- private:
-  // Returns true iff the node at |desc_id| is a descendant of the node at
-  // |anc_id|.
-  bool IsDescendant(int desc_id, int anc_id) const;
 
   // Computes the combined transform between |source_id| and |dest_id| and
   // returns false if the inverse of a singular transform was used. These two
@@ -267,6 +258,11 @@ class CC_EXPORT TransformTree final : public PropertyTree<TransformNode> {
   bool CombineInversesBetween(int source_id,
                               int dest_id,
                               gfx::Transform* transform) const;
+
+ private:
+  // Returns true iff the node at |desc_id| is a descendant of the node at
+  // |anc_id|.
+  bool IsDescendant(int desc_id, int anc_id) const;
 
   void UpdateLocalTransform(TransformNode* node);
   void UpdateScreenSpaceTransform(TransformNode* node,
@@ -300,6 +296,8 @@ class CC_EXPORT ClipTree final : public PropertyTree<ClipNode> {
  public:
   bool operator==(const ClipTree& other) const;
 
+  static const int kViewportNodeId = 1;
+
   void SetViewportClip(gfx::RectF viewport_rect);
   gfx::RectF ViewportClip();
 
@@ -315,6 +313,8 @@ class CC_EXPORT EffectTree final : public PropertyTree<EffectNode> {
 
   EffectTree& operator=(const EffectTree& from);
   bool operator==(const EffectTree& other) const;
+
+  static const int kContentsRootNodeId = 1;
 
   void clear();
 
@@ -474,9 +474,34 @@ struct CombinedAnimationScale {
   }
 };
 
+struct DrawTransforms {
+  bool invertible;
+  gfx::Transform from_target;
+  gfx::Transform to_target;
+
+  DrawTransforms(gfx::Transform from, gfx::Transform to)
+      : invertible(true), from_target(from), to_target(to) {}
+  bool operator==(const DrawTransforms& other) const {
+    return invertible == other.invertible && from_target == other.from_target &&
+           to_target == other.to_target;
+  }
+};
+
+struct DrawTransformData {
+  int update_number;
+  DrawTransforms transforms;
+
+  // TODO(sunxd): Move screen space transforms here if it can improve
+  // performance.
+  DrawTransformData()
+      : update_number(-1), transforms(gfx::Transform(), gfx::Transform()) {}
+};
+
 struct PropertyTreesCachedData {
   int property_tree_update_number;
   std::vector<AnimationScaleData> animation_scales;
+  mutable std::vector<std::unordered_map<int, DrawTransformData>>
+      draw_transforms;
 
   PropertyTreesCachedData();
   ~PropertyTreesCachedData();
@@ -521,6 +546,7 @@ class CC_EXPORT PropertyTrees final {
   int sequence_number;
   bool is_main_thread;
   bool is_active;
+  bool verify_transform_tree_calculations;
 
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
@@ -551,8 +577,19 @@ class CC_EXPORT PropertyTrees final {
   void SetAnimationScalesForTesting(int transform_id,
                                     float maximum_animation_scale,
                                     float starting_animation_scale);
+
+  // GetDrawTransforms may change the value of cached_data_.
+  const DrawTransforms& GetDrawTransforms(int transform_id,
+                                          int effect_id) const;
+
   void ResetCachedData();
   void UpdateCachedNumber();
+  gfx::Transform ToScreenSpaceTransformWithoutSurfaceContentsScale(
+      int transform_id,
+      int effect_id) const;
+  bool ComputeTransformToTarget(int transform_id,
+                                int effect_id,
+                                gfx::Transform* transform) const;
 
  private:
   gfx::Vector2dF inner_viewport_container_bounds_delta_;

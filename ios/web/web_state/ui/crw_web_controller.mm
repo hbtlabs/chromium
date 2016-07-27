@@ -325,8 +325,6 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
   // TODO(droger): Remove |_observerBridges| when all CRWWebControllerObservers
   // are converted to WebStateObservers.
   ScopedVector<web::WebControllerObserverBridge> _observerBridges;
-  // |windowId| that is saved when a page changes. Used to detect refreshes.
-  base::scoped_nsobject<NSString> _lastSeenWindowID;
   // YES if a user interaction has been registered at any time once the page has
   // loaded.
   BOOL _userInteractionRegistered;
@@ -431,7 +429,7 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
   base::scoped_nsobject<NSMutableSet> _injectedScriptManagers;
 
   // Script manager for setting the windowID.
-  base::scoped_nsobject<CRWJSWindowIdManager> _windowIDJSManager;
+  base::scoped_nsobject<CRWJSWindowIDManager> _windowIDJSManager;
 
   // The receiver of JavaScripts.
   base::scoped_nsobject<CRWJSInjectionReceiver> _jsInjectionReceiver;
@@ -1038,9 +1036,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     _defaultURL = GURL(url::kAboutBlankURL);
     _jsInjectionReceiver.reset(
         [[CRWJSInjectionReceiver alloc] initWithEvaluator:self]);
-    _windowIDJSManager.reset([(CRWJSWindowIdManager*)[_jsInjectionReceiver
-        instanceOfClass:[CRWJSWindowIdManager class]] retain]);
-    _lastSeenWindowID.reset();
     _webViewProxy.reset(
         [[CRWWebViewProxyImpl alloc] initWithWebController:self]);
     [[_webViewProxy scrollViewProxy] addObserver:self];
@@ -1600,17 +1595,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 }
 
 - (void)injectWindowID {
-  if (![_windowIDJSManager hasBeenInjected]) {
-    // Default value for shouldSuppressDialogs is NO, so updating them only
-    // when necessary is a good optimization.
-    if (_shouldSuppressDialogsOnWindowIDInjection) {
-      self.shouldSuppressDialogs = YES;
-      _shouldSuppressDialogsOnWindowIDInjection = NO;
-    }
-
-    [_windowIDJSManager inject];
-    DCHECK([_windowIDJSManager hasBeenInjected]);
+  // Default value for shouldSuppressDialogs is NO, so updating them only
+  // when necessary is a good optimization.
+  if (_shouldSuppressDialogsOnWindowIDInjection) {
+    self.shouldSuppressDialogs = YES;
+    _shouldSuppressDialogsOnWindowIDInjection = NO;
   }
+
+  [_windowIDJSManager inject];
 }
 
 // Set the specified recognizer to take priority over any recognizers in the
@@ -2222,17 +2214,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 }
 
 - (void)prepareForGoBack {
-  // Make sure any transitions that may have occurred have been seen and acted
-  // on by the CRWWebController, so the history stack and state of the
-  // CRWWebController is 100% up to date before the stack navigation starts.
-  if (_webView) {
-    [self injectWindowID];
-  }
-
-  bool wasShowingInterstitial = _webStateImpl->IsShowingWebInterstitial();
-
   // Before changing the current session history entry, record the tab state.
-  if (!wasShowingInterstitial) {
+  if (!_webStateImpl->IsShowingWebInterstitial()) {
     [self recordStateInHistory];
   }
 }
@@ -2519,26 +2502,13 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 }
 
 - (void)injectScript:(NSString*)script forClass:(Class)JSInjectionManagerClass {
-  // Skip evaluation if there's no content (e.g., if what's being injected is
-  // an umbrella manager).
-  if ([script length]) {
-    // Every injection except windowID requires windowID check.
-    if (JSInjectionManagerClass != [CRWJSWindowIdManager class]) {
-      script = [self scriptByAddingWindowIDCheckForScript:script];
-      web::ExecuteJavaScript(_webView, script, nil);
-    } else {
-      web::ExecuteJavaScript(_webView, script, ^(id, NSError* error) {
-        // TODO(crbug.com/628832): Refactor retry logic.
-        if (error.code == WKErrorJavaScriptExceptionOccurred) {
-          // This can happen if WKUserScript has not been injected yet.
-          // Retry if that's the case, because windowID injection is critical
-          // for the system to function.
-          [_injectedScriptManagers removeObject:JSInjectionManagerClass];
-          [self injectWindowID];
-        }
-      });
-    }
-  }
+  DCHECK(script.length);
+  // Script execution is an asynchronous operation which may pass sensitive
+  // data to the page. executeJavaScript:completionHandler makes sure that
+  // receiver page did not change by checking its window id.
+  // |[_webView evaluateJavaScript:completionHandler:]| is not used here because
+  // it does not check that page is the same.
+  [self executeJavaScript:script completionHandler:nil];
   [_injectedScriptManagers addObject:JSInjectionManagerClass];
 }
 
@@ -2644,7 +2614,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (NSString*)scriptByAddingWindowIDCheckForScript:(NSString*)script {
   NSString* kTemplate = @"if (__gCrWeb['windowId'] === '%@') { %@; }";
-  return [NSString stringWithFormat:kTemplate, [self windowId], script];
+  return [NSString
+      stringWithFormat:kTemplate, [_windowIDJSManager windowID], script];
 }
 
 - (BOOL)respondToWKScriptMessage:(WKScriptMessage*)scriptMessage {
@@ -2666,9 +2637,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   std::string windowID;
   message->GetString("crwWindowId", &windowID);
   // Check for correct windowID
-  if (![[self windowId] isEqualToString:base::SysUTF8ToNSString(windowID)]) {
+  if (base::SysNSStringToUTF8([_windowIDJSManager windowID]) != windowID) {
     DLOG(WARNING) << "Message from JS ignored due to non-matching windowID: " <<
-        [self windowId] << " != " << base::SysUTF8ToNSString(windowID);
+        [_windowIDJSManager windowID]
+                  << " != " << base::SysUTF8ToNSString(windowID);
     return NO;
   }
   base::DictionaryValue* command = nullptr;
@@ -3204,7 +3176,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)resetDocumentSpecificState {
   _lastUserInteraction.reset();
   _clickInProgress = NO;
-  _lastSeenWindowID.reset([[_windowIDJSManager windowId] copy]);
 }
 
 - (void)didStartLoadingURL:(const GURL&)url updateHistory:(BOOL)updateHistory {
@@ -3435,6 +3406,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
   if (!inMainFrame && !userInteracted)
     return;
+
+  // Reset SSL status to default.
+  web::NavigationManager* navManager = self.webState->GetNavigationManager();
+  if (navManager->GetLastCommittedItem())
+    navManager->GetLastCommittedItem()->GetSSL() = web::SSLStatus();
 
   NSURL* errorURL = [NSURL
       URLWithString:[userInfo objectForKey:NSURLErrorFailingURLStringErrorKey]];
@@ -4496,11 +4472,22 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     [_SSLStatusUpdater setDelegate:self];
   }
   NSString* host = base::SysUTF8ToNSString(_documentURL.host());
-  NSArray* certChain = [_webView certificateChain];
   BOOL hasOnlySecureContent = [_webView hasOnlySecureContent];
+  base::ScopedCFTypeRef<SecTrustRef> trust;
+// TODO(crbug.com/628696): Remove these guards after moving to iOS10 SDK.
+#if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
+  if (base::ios::IsRunningOnIOS10OrLater()) {
+    trust.reset([_webView serverTrust], base::scoped_policy::RETAIN);
+  } else {
+    trust = web::CreateServerTrustFromChain([_webView certificateChain], host);
+  }
+#else
+  trust = web::CreateServerTrustFromChain([_webView certificateChain], host);
+#endif
+
   [_SSLStatusUpdater updateSSLStatusForNavigationItem:currentNavItem
                                          withCertHost:host
-                                            certChain:certChain
+                                                trust:std::move(trust)
                                  hasOnlySecureContent:hasOnlySecureContent];
 }
 
@@ -4697,6 +4684,10 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     [messageRouter setScriptMessageHandler:messageHandler
                                       name:kScriptImmediateName
                                    webView:webView];
+    _windowIDJSManager.reset(
+        [[CRWJSWindowIDManager alloc] initWithWebView:webView]);
+  } else {
+    _windowIDJSManager.reset();
   }
   [_webView setNavigationDelegate:self];
   [_webView setUIDelegate:self];
@@ -5250,11 +5241,9 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 #pragma mark CRWSSLStatusUpdater DataSource/Delegate Methods
 
 - (void)SSLStatusUpdater:(CRWSSLStatusUpdater*)SSLStatusUpdater
-    querySSLStatusForCertChain:(NSArray*)certChain
-                          host:(NSString*)host
-             completionHandler:(StatusQueryHandler)completionHandler {
-  base::ScopedCFTypeRef<SecTrustRef> trust(
-      web::CreateServerTrustFromChain(certChain, host));
+    querySSLStatusForTrust:(base::ScopedCFTypeRef<SecTrustRef>)trust
+                      host:(NSString*)host
+         completionHandler:(StatusQueryHandler)completionHandler {
   [_certVerificationController querySSLStatusForTrust:std::move(trust)
                                                  host:host
                                     completionHandler:completionHandler];
@@ -5318,10 +5307,13 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     [self webPageChanged];
   }
 
-  // Fast back forward navigation does not call |didFinishNavigation:|, so
-  // signal did finish navigation explicitly.
   [self updateSSLStatusForCurrentNavigationItem];
-  [self didFinishNavigation];
+
+  // Fast back forward navigation may not call |didFinishNavigation:|, so
+  // signal did finish navigation explicitly.
+  if (_lastRegisteredRequestURL == _documentURL) {
+    [self didFinishNavigation];
+  }
 }
 
 - (void)webViewTitleDidChange {
@@ -5617,14 +5609,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (NSUInteger)observerCount {
   DCHECK_EQ(_observerBridges.size(), [_observers count]);
   return [_observers count];
-}
-
-- (NSString*)windowId {
-  return [_windowIDJSManager windowId];
-}
-
-- (void)setWindowId:(NSString*)windowId {
-  return [_windowIDJSManager setWindowId:windowId];
 }
 
 - (void)simulateLoadRequestWithURL:(const GURL&)URL {

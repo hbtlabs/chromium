@@ -26,32 +26,26 @@ class Parent : public shell::Service,
  public:
   Parent() {}
   ~Parent() override {
-    connector_ = nullptr;
     child_connection_.reset();
     parent_bindings_.CloseAllBindings();
   }
 
  private:
   // Service:
-  void OnStart(shell::Connector* connector,
-               const shell::Identity& identity,
-               uint32_t id) override {
-    connector_ = connector;
-  }
   bool OnConnect(shell::Connection* connection) override {
     connection->AddInterface<shell::test::mojom::Parent>(this);
     return true;
   }
 
   // InterfaceFactory<shell::test::mojom::Parent>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               shell::test::mojom::ParentRequest request) override {
     parent_bindings_.AddBinding(this, std::move(request));
   }
 
   // Parent:
   void ConnectToChild(const ConnectToChildCallback& callback) override {
-    child_connection_ = connector_->Connect("mojo:lifecycle_unittest_app");
+    child_connection_ = connector()->Connect("mojo:lifecycle_unittest_app");
     shell::test::mojom::LifecycleControlPtr lifecycle;
     child_connection_->GetInterface(&lifecycle);
     {
@@ -67,7 +61,6 @@ class Parent : public shell::Service,
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
-  shell::Connector* connector_;
   std::unique_ptr<shell::Connection> child_connection_;
   mojo::BindingSet<shell::test::mojom::Parent> parent_bindings_;
 

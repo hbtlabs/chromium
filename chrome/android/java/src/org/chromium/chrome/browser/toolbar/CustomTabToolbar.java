@@ -660,7 +660,10 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         } else if (v == mTitleUrlContainer) {
             ClipboardManager clipboard = (ClipboardManager) getContext()
                     .getSystemService(Context.CLIPBOARD_SERVICE);
-            ClipData clip = ClipData.newPlainText("url", mUrlBar.getText());
+            Tab tab = getCurrentTab();
+            if (tab == null) return false;
+            String url = tab.getOriginalUrl();
+            ClipData clip = ClipData.newPlainText("url", url);
             clipboard.setPrimaryClip(clip);
             Toast.makeText(getContext(), R.string.url_copied, Toast.LENGTH_SHORT).show();
             return true;
@@ -725,9 +728,6 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
     @Override
     public void setAutocompleteProfile(Profile profile) {}
-
-    @Override
-    public void backKeyPressed() {}
 
     @Override
     public void showAppMenuUpdateBadge() {}

@@ -47,7 +47,8 @@ class RequestCoordinator : public KeyedService {
 
   // Queues |request| to later load and save when system conditions allow.
   // Returns true if the page could be queued successfully.
-  bool SavePageLater(const GURL& url, const ClientId& client_id);
+  bool SavePageLater(
+      const GURL& url, const ClientId& client_id, bool user_reqeusted);
 
   // Starts processing of one or more queued save page later requests.
   // Returns whether processing was started and that caller should expect
@@ -61,8 +62,7 @@ class RequestCoordinator : public KeyedService {
   // is stopped or complete.
   void StopProcessing();
 
-  // TODO(dougarnett): Move to OfflinerPolicy in some form.
-  const Scheduler::TriggerConditions& GetTriggerConditionsForUserRequest();
+  const Scheduler::TriggerConditions GetTriggerConditionsForUserRequest();
 
   // A way for tests to set the callback in use when an operation is over.
   void SetProcessingCallbackForTest(const base::Callback<void(bool)> callback) {
@@ -123,6 +123,10 @@ class RequestCoordinator : public KeyedService {
     offliner_timeout_ = timeout;
   }
 
+  void SetDeviceConditionsForTest(DeviceConditions& current_conditions) {
+    current_conditions_.reset(new DeviceConditions(current_conditions));
+  }
+
   friend class RequestCoordinatorTest;
 
   // The offliner can only handle one request at a time - if the offliner is
@@ -131,10 +135,11 @@ class RequestCoordinator : public KeyedService {
   bool is_busy_;
   // True if the current request has been canceled.
   bool is_canceled_;
-  // How long to wait for an offliner request before giving up.
-  base::TimeDelta offliner_timeout_;
   // Unowned pointer to the current offliner, if any.
   Offliner* offliner_;
+  base::Time operation_start_time_;
+  // Last known conditions for network, battery
+  std::unique_ptr<DeviceConditions> current_conditions_;
   // RequestCoordinator takes over ownership of the policy
   std::unique_ptr<OfflinerPolicy> policy_;
   // OfflinerFactory.  Used to create offline pages. Owned.
@@ -153,6 +158,8 @@ class RequestCoordinator : public KeyedService {
   RequestCoordinatorEventLogger event_logger_;
   // Timer to watch for pre-render attempts running too long.
   base::OneShotTimer watchdog_timer_;
+  // How long to wait for an offliner request before giving up.
+  base::TimeDelta offliner_timeout_;
   // Allows us to pass a weak pointer to callbacks.
   base::WeakPtrFactory<RequestCoordinator> weak_ptr_factory_;
 

@@ -27,9 +27,7 @@ class Target : public shell::Service,
 
  private:
   // shell::Service:
-  void OnStart(shell::Connector* connector,
-               const shell::Identity& identity,
-               uint32_t id) override {
+  void OnStart(const shell::Identity& identity) override {
     identity_ = identity;
   }
   bool OnConnect(shell::Connection* connection) override {
@@ -38,7 +36,7 @@ class Target : public shell::Service,
   }
 
   // shell::InterfaceFactory<ConnectTestService>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               ConnectTestServiceRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }

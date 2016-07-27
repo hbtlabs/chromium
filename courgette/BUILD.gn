@@ -63,6 +63,11 @@ static_library("courgette_lib") {
     "third_party/bsdiff/bsdiff_search.h",
     "third_party/bsdiff/paged_array.h",
     "third_party/bsdiff/qsufsort.h",
+    "third_party/divsufsort/divsufsort.cc",
+    "third_party/divsufsort/divsufsort.h",
+    "third_party/divsufsort/divsufsort_private.h",
+    "third_party/divsufsort/sssort.cc",
+    "third_party/divsufsort/trsort.cc",
     "types_elf.h",
     "types_win_pe.h",
   ]
@@ -109,20 +114,38 @@ if (!is_ios) {
     ]
   }
 
-  # The official build scripts expect courgette.exe to be in the official build
-  # archives but it's not clear if they really need it, copy courgette64.exe to
-  # courgette.exe to work around this. https://crbug.com/629243
-  if (is_win && current_cpu == "x64") {
-    copy("copy_courgette64_to_courgette") {
-      sources = [
-        "$root_out_dir/courgette64.exe",
-      ]
-      outputs = [
-        "$root_out_dir/courgette.exe",
-      ]
-      deps = [
-        ":courgette",
-      ]
+  if (is_win) {
+    if (current_cpu == "x64") {
+      # TODO(sebmarchand): The official build scripts expect courgette.exe to be
+      # in the official build archives, remove this once they have been updated.
+      # https://crbug.com/629243
+      copy("copy_courgette_binaries") {
+        sources = [
+          "$root_out_dir/courgette64.exe",
+        ]
+        outputs = [
+          "$root_out_dir/courgette.exe",
+        ]
+        deps = [
+          ":courgette",
+        ]
+      }
+    } else {
+      # Make sure that we have a copy of courgette64.exe in the root out
+      # directory.
+      copy("copy_courgette_binaries") {
+        courgette64_label = ":courgette(//build/toolchain/win:x64)"
+        courgette64_out_dir = get_label_info(courgette64_label, "root_out_dir")
+        sources = [
+          "$courgette64_out_dir/courgette64.exe",
+        ]
+        outputs = [
+          "$root_out_dir/{{source_file_part}}",
+        ]
+        deps = [
+          courgette64_label,
+        ]
+      }
     }
   }
 }
@@ -150,6 +173,7 @@ test("courgette_unittests") {
     "third_party/bsdiff/bsdiff_search_unittest.cc",
     "third_party/bsdiff/paged_array_unittest.cc",
     "third_party/bsdiff/qsufsort_unittest.cc",
+    "third_party/divsufsort/divsufsort_unittest.cc",
     "typedrva_unittest.cc",
     "versioning_unittest.cc",
   ]

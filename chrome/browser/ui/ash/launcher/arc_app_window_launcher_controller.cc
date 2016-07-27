@@ -5,13 +5,13 @@
 
 #include <string>
 
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
-#include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
@@ -386,7 +386,7 @@ void ArcAppWindowLauncherController::OnAppRemoved(const std::string& app_id) {
   const ArcAppWindowLauncherItemController* controller = it->second;
 
   std::vector<int> task_ids_to_remove;
-  for (const auto window : controller->windows()) {
+  for (auto* window : controller->windows()) {
     AppWindow* app_window = static_cast<AppWindow*>(window);
     task_ids_to_remove.push_back(app_window->task_id());
   }
@@ -411,7 +411,7 @@ void ArcAppWindowLauncherController::OnTaskCreated(
 
   task_id_to_app_window_[task_id] = std::move(app_window);
 
-  for (auto window : observed_windows_)
+  for (auto* window : observed_windows_)
     CheckForAppWindowWidget(window);
 }
 
@@ -525,7 +525,7 @@ void ArcAppWindowLauncherController::StartObserving(Profile* profile) {
 }
 
 void ArcAppWindowLauncherController::StopObserving(Profile* profile) {
-  for (auto window : observed_windows_)
+  for (auto* window : observed_windows_)
     window->RemoveObserver(this);
   ArcAppListPrefs* prefs = ArcAppListPrefs::Get(profile);
   prefs->RemoveObserver(this);

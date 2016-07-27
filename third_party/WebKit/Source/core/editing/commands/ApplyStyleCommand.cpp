@@ -122,10 +122,10 @@ static bool offsetIsBeforeLastNodeOffset(int offset, Node* anchorNode)
     return offset < currentOffset;
 }
 
-ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, EditAction editingAction, EPropertyLevel propertyLevel)
+ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, InputEvent::InputType inputType, EPropertyLevel propertyLevel)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(editingAction)
+    , m_inputType(inputType)
     , m_propertyLevel(propertyLevel)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -139,7 +139,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* sty
 ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, const Position& start, const Position& end)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(EditActionChangeAttributes)
+    , m_inputType(InputEvent::InputType::ChangeAttributes)
     , m_propertyLevel(PropertyDefault)
     , m_start(start)
     , m_end(end)
@@ -153,7 +153,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* sty
 ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly)
     : CompositeEditCommand(element->document())
     , m_style(EditingStyle::create())
-    , m_editingAction(EditActionChangeAttributes)
+    , m_inputType(InputEvent::InputType::ChangeAttributes)
     , m_propertyLevel(PropertyDefault)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -164,10 +164,10 @@ ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly)
 {
 }
 
-ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, IsInlineElementToRemoveFunction isInlineElementToRemoveFunction, EditAction editingAction)
+ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, IsInlineElementToRemoveFunction isInlineElementToRemoveFunction, InputEvent::InputType inputType)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(editingAction)
+    , m_inputType(inputType)
     , m_propertyLevel(PropertyDefault)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -235,9 +235,9 @@ void ApplyStyleCommand::doApply(EditingState* editingState)
     }
 }
 
-EditAction ApplyStyleCommand::editingAction() const
+InputEvent::InputType ApplyStyleCommand::inputType() const
 {
-    return m_editingAction;
+    return m_inputType;
 }
 
 void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editingState)
@@ -275,6 +275,7 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editi
     VisiblePosition nextParagraphStart(nextPositionOf(endOfParagraph(paragraphStart)));
     VisiblePosition beyondEnd(nextPositionOf(endOfParagraph(visibleEnd)));
     while (paragraphStart.isNotNull() && paragraphStart.deepEquivalent() != beyondEnd.deepEquivalent()) {
+        DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
         StyleChange styleChange(style, paragraphStart.deepEquivalent());
         if (styleChange.cssStyle().length() || m_removeOnly) {
             Element* block = enclosingBlock(paragraphStart.deepEquivalent().anchorNode());
@@ -283,21 +284,30 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editi
                 HTMLElement* newBlock = moveParagraphContentsToNewBlockIfNecessary(paragraphStartToMove, editingState);
                 if (editingState->isAborted())
                     return;
-                if (newBlock)
+                if (newBlock) {
                     block = newBlock;
+                    if (paragraphStart.isOrphan())
+                        paragraphStart = createVisiblePosition(Position::firstPositionInNode(newBlock));
+                }
+                DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
             }
             if (block && block->isHTMLElement()) {
                 removeCSSStyle(style, toHTMLElement(block), editingState);
                 if (editingState->isAborted())
                     return;
-                if (!m_removeOnly)
+                DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
+                if (!m_removeOnly) {
                     addBlockStyle(styleChange, toHTMLElement(block));
+                    DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
+                }
             }
 
+            DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
             if (nextParagraphStart.isOrphan())
                 nextParagraphStart = nextPositionOf(endOfParagraph(paragraphStart));
         }
 
+        DCHECK(!nextParagraphStart.isOrphan()) << nextParagraphStart;
         paragraphStart = nextParagraphStart;
         nextParagraphStart = nextPositionOf(endOfParagraph(paragraphStart));
     }
@@ -779,12 +789,12 @@ void ApplyStyleCommand::fixRangeAndApplyInlineStyle(EditingStyle* style, const P
 
 static bool containsNonEditableRegion(Node& node)
 {
-    if (!node.hasEditableStyle())
+    if (!hasEditableStyle(node))
         return true;
 
     Node* sibling = NodeTraversal::nextSkippingChildren(node);
     for (Node* descendent = node.firstChild(); descendent && descendent != sibling; descendent = NodeTraversal::next(*descendent)) {
-        if (!descendent->hasEditableStyle())
+        if (!hasEditableStyle(*descendent))
             return true;
     }
 
@@ -842,10 +852,10 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, Node* s
     for (Node* next; node && node != pastEndNode; node = next) {
         next = NodeTraversal::next(*node);
 
-        if (!node->layoutObject() || !node->hasEditableStyle())
+        if (!node->layoutObject() || !hasEditableStyle(*node))
             continue;
 
-        if (!node->layoutObjectIsRichlyEditable() && node->isHTMLElement()) {
+        if (!hasRichlyEditableStyle(*node) && node->isHTMLElement()) {
             HTMLElement* element = toHTMLElement(node);
             // This is a plaintext-only region. Only proceed if it's fully selected.
             // pastEndNode is the node after the last fully selected node, so if it's inside node then
@@ -866,7 +876,7 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, Node* s
             continue;
 
         if (node->hasChildren()) {
-            if (node->contains(pastEndNode) || containsNonEditableRegion(*node) || !node->parentNode()->hasEditableStyle())
+            if (node->contains(pastEndNode) || containsNonEditableRegion(*node) || !hasEditableStyle(*node->parentNode()))
                 continue;
             if (editingIgnoresContent(node)) {
                 next = NodeTraversal::nextSkippingChildren(*node);
@@ -984,7 +994,7 @@ bool ApplyStyleCommand::removeInlineStyleFromElement(EditingStyle* style, HTMLEl
 {
     DCHECK(element);
 
-    if (!element->parentNode() || !element->parentNode()->isContentEditable())
+    if (!element->parentNode() || !isContentEditable(*element->parentNode()))
         return false;
 
     if (isStyledInlineElementToRemove(element)) {
@@ -1476,7 +1486,7 @@ void ApplyStyleCommand::surroundNodeRangeWithElement(Node* passedStartNode, Node
 
     while (node) {
         Node* next = node->nextSibling();
-        if (node->isContentEditable()) {
+        if (isContentEditable(*node)) {
             removeNode(node, editingState);
             if (editingState->isAborted())
                 return;
@@ -1491,16 +1501,16 @@ void ApplyStyleCommand::surroundNodeRangeWithElement(Node* passedStartNode, Node
 
     Node* nextSibling = element->nextSibling();
     Node* previousSibling = element->previousSibling();
-    if (nextSibling && nextSibling->isElementNode() && nextSibling->hasEditableStyle()
+    if (nextSibling && nextSibling->isElementNode() && hasEditableStyle(*nextSibling)
         && areIdenticalElements(*element, toElement(*nextSibling))) {
         mergeIdenticalElements(element, toElement(nextSibling), editingState);
         if (editingState->isAborted())
             return;
     }
 
-    if (previousSibling && previousSibling->isElementNode() && previousSibling->hasEditableStyle()) {
+    if (previousSibling && previousSibling->isElementNode() && hasEditableStyle(*previousSibling)) {
         Node* mergedElement = previousSibling->nextSibling();
-        if (mergedElement->isElementNode() && mergedElement->hasEditableStyle()
+        if (mergedElement->isElementNode() && hasEditableStyle(*mergedElement)
             && areIdenticalElements(toElement(*previousSibling), toElement(*mergedElement))) {
             mergeIdenticalElements(toElement(previousSibling), toElement(mergedElement), editingState);
             if (editingState->isAborted())

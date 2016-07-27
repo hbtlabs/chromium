@@ -23,6 +23,7 @@
 
 #include "core/html/HTMLAnchorElement.h"
 
+#include "core/editing/EditingUtilities.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/FrameHost.h"
@@ -37,6 +38,7 @@
 #include "core/page/ChromeClient.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/WebNavigationHintType.h"
 
 namespace blink {
 
@@ -44,15 +46,6 @@ using namespace HTMLNames;
 
 class HTMLAnchorElement::NavigationHintSender : public GarbageCollected<HTMLAnchorElement::NavigationHintSender> {
 public:
-    // TODO(horo): Move WebNavigationHintType to public/ directory.
-    enum class WebNavigationHintType {
-        Unknown,
-        LinkMouseDown,
-        LinkTapUnconfirmed,
-        LinkTapDown,
-        Last = LinkTapDown
-    };
-
     static NavigationHintSender* create(HTMLAnchorElement* anchorElement)
     {
         return new NavigationHintSender(anchorElement);
@@ -116,7 +109,7 @@ void HTMLAnchorElement::NavigationHintSender::maybeSendNavigationHint(WebNavigat
     if (!shouldSendNavigationHint())
         return;
 
-    // TODO(horo): Send the navigation hint message to the browser process.
+    sendNavigationHint(m_anchorElement->href(), type);
 }
 
 HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& document)
@@ -144,7 +137,7 @@ DEFINE_TRACE(HTMLAnchorElement)
 
 bool HTMLAnchorElement::supportsFocus() const
 {
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return HTMLElement::supportsFocus();
     // If not a link we should still be able to focus the element if it has tabIndex.
     return isLink() || HTMLElement::supportsFocus();
@@ -260,7 +253,7 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
 
 void HTMLAnchorElement::setActive(bool down)
 {
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return;
 
     ContainerNode::setActive(down);
@@ -318,7 +311,7 @@ bool HTMLAnchorElement::canStartSelection() const
 {
     if (!isLink())
         return HTMLElement::canStartSelection();
-    return hasEditableStyle();
+    return hasEditableStyle(*this);
 }
 
 bool HTMLAnchorElement::draggable() const
@@ -391,7 +384,7 @@ short HTMLAnchorElement::tabIndex() const
 
 bool HTMLAnchorElement::isLiveLink() const
 {
-    return isLink() && !hasEditableStyle();
+    return isLink() && !hasEditableStyle(*this);
 }
 
 void HTMLAnchorElement::sendPings(const KURL& destinationURL) const

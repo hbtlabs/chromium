@@ -69,12 +69,11 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       was_ever_ready_since_last_transform_animation_(true),
       background_color_(0),
       safe_opaque_background_color_(0),
-      blend_mode_(SkXfermode::kSrcOver_Mode),
       draw_blend_mode_(SkXfermode::kSrcOver_Mode),
-      transform_tree_index_(-1),
-      effect_tree_index_(-1),
-      clip_tree_index_(-1),
-      scroll_tree_index_(-1),
+      transform_tree_index_(TransformTree::kInvalidNodeId),
+      effect_tree_index_(EffectTree::kInvalidNodeId),
+      clip_tree_index_(ClipTree::kInvalidNodeId),
+      scroll_tree_index_(ScrollTree::kInvalidNodeId),
       sorting_context_id_(0),
       current_draw_mode_(DRAW_MODE_NONE),
       mutable_properties_(MutableProperty::kNone),
@@ -123,22 +122,9 @@ void LayerImpl::SetDebugInfo(
 }
 
 void LayerImpl::DistributeScroll(ScrollState* scroll_state) {
-  DCHECK(scroll_state);
-  if (scroll_state->FullyConsumed())
-    return;
-
-  scroll_state->DistributeToScrollChainDescendant();
-
-  // If the scroll doesn't propagate, and we're currently scrolling
-  // a layer other than this one, prevent the scroll from
-  // propagating to this layer.
-  if (!scroll_state->should_propagate() &&
-      scroll_state->delta_consumed_for_scroll_sequence() &&
-      scroll_state->current_native_scrolling_node()->owner_id != id()) {
-    return;
-  }
-
-  ApplyScroll(scroll_state);
+  ScrollTree& scroll_tree = layer_tree_impl()->property_trees()->scroll_tree;
+  ScrollNode* scroll_node = scroll_tree.Node(scroll_tree_index());
+  return scroll_tree.DistributeScroll(scroll_node, scroll_state);
 }
 
 void LayerImpl::ApplyScroll(ScrollState* scroll_state) {
@@ -158,6 +144,15 @@ void LayerImpl::SetClipTreeIndex(int index) {
 
 void LayerImpl::SetEffectTreeIndex(int index) {
   effect_tree_index_ = index;
+}
+
+int LayerImpl::render_target_effect_tree_index() const {
+  EffectNode* effect_node =
+      layer_tree_impl_->property_trees()->effect_tree.Node(effect_tree_index_);
+  if (effect_node->render_surface)
+    return effect_node->id;
+  else
+    return effect_node->target_id;
 }
 
 void LayerImpl::SetScrollTreeIndex(int index) {
@@ -341,7 +336,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->touch_event_handler_region_ = touch_event_handler_region_;
   layer->background_color_ = background_color_;
   layer->safe_opaque_background_color_ = safe_opaque_background_color_;
-  layer->blend_mode_ = blend_mode_;
   layer->draw_blend_mode_ = draw_blend_mode_;
   layer->position_ = position_;
   layer->transform_ = transform_;
@@ -349,7 +343,6 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->effect_tree_index_ = effect_tree_index_;
   layer->clip_tree_index_ = clip_tree_index_;
   layer->scroll_tree_index_ = scroll_tree_index_;
-  layer->filters_ = filters_;
   layer->sorting_context_id_ = sorting_context_id_;
   layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
 
@@ -451,14 +444,14 @@ bool LayerImpl::LayerPropertyChanged() const {
       (layer_tree_impl()->property_trees() &&
        layer_tree_impl()->property_trees()->full_tree_damaged))
     return true;
-  if (transform_tree_index() == -1)
+  if (transform_tree_index() == TransformTree::kInvalidNodeId)
     return false;
   TransformNode* transform_node =
       layer_tree_impl()->property_trees()->transform_tree.Node(
           transform_tree_index());
   if (transform_node && transform_node->transform_changed)
     return true;
-  if (effect_tree_index() == -1)
+  if (effect_tree_index() == EffectTree::kInvalidNodeId)
     return false;
   EffectNode* effect_node =
       layer_tree_impl()->property_trees()->effect_tree.Node(
@@ -596,18 +589,19 @@ gfx::ScrollOffset LayerImpl::ScrollOffsetForAnimation() const {
 }
 
 void LayerImpl::OnFilterAnimated(const FilterOperations& filters) {
-  if (filters_ != filters) {
-    SetFilters(filters);
-    SetNeedsPushProperties();
-    layer_tree_impl()->set_needs_update_draw_properties();
-    EffectTree& effect_tree = layer_tree_impl()->property_trees()->effect_tree;
-    EffectNode* node = effect_tree.Node(effect_tree_index_);
-    DCHECK(layer_tree_impl()->property_trees()->IsInIdToIndexMap(
-        PropertyTrees::TreeType::EFFECT, id()));
-    node->effect_changed = true;
-    layer_tree_impl()->property_trees()->changed = true;
-    effect_tree.set_needs_update(true);
-  }
+  layer_tree_impl()->AddToFilterAnimationsMap(id(), filters);
+  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
+  DCHECK(
+      property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()));
+  EffectNode* node = property_trees->effect_tree.Node(effect_tree_index());
+  if (node->filters == filters)
+    return;
+  node->filters = filters;
+  node->effect_changed = true;
+  property_trees->changed = true;
+  property_trees->effect_tree.set_needs_update(true);
+  SetNeedsPushProperties();
+  layer_tree_impl()->set_needs_update_draw_properties();
 }
 
 void LayerImpl::OnOpacityAnimated(float opacity) {
@@ -681,6 +675,29 @@ void LayerImpl::OnOpacityIsPotentiallyAnimatingChanged(
       property_trees->effect_id_to_index_map[id()]);
   node->has_potential_opacity_animation = has_potential_animation;
   property_trees->effect_tree.set_needs_update(true);
+}
+
+void LayerImpl::OnFilterIsCurrentlyAnimatingChanged(
+    bool is_currently_animating) {
+  DCHECK(layer_tree_impl_);
+  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
+  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
+    return;
+  EffectNode* node = property_trees->effect_tree.Node(
+      property_trees->effect_id_to_index_map[id()]);
+
+  node->is_currently_animating_filter = is_currently_animating;
+}
+
+void LayerImpl::OnFilterIsPotentiallyAnimatingChanged(
+    bool has_potential_animation) {
+  DCHECK(layer_tree_impl_);
+  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
+  if (!property_trees->IsInIdToIndexMap(PropertyTrees::TreeType::EFFECT, id()))
+    return;
+  EffectNode* node = property_trees->effect_tree.Node(
+      property_trees->effect_id_to_index_map[id()]);
+  node->has_potential_filter_animation = has_potential_animation;
 }
 
 bool LayerImpl::IsActive() const {
@@ -776,10 +793,6 @@ SkColor LayerImpl::SafeOpaqueBackgroundColor() const {
   return color;
 }
 
-void LayerImpl::SetFilters(const FilterOperations& filters) {
-  filters_ = filters;
-}
-
 bool LayerImpl::FilterIsAnimating() const {
   return GetAnimationHost()->IsAnimatingFilterProperty(
       element_id(), GetElementTypeForAnimation());
@@ -832,10 +845,6 @@ void LayerImpl::SetMutableProperties(uint32_t properties) {
   mutable_properties_ = properties;
   // If this layer is already in the element map, update its properties.
   layer_tree_impl_->AddToElementMap(this);
-}
-
-void LayerImpl::SetBlendMode(SkXfermode::Mode blend_mode) {
-  blend_mode_ = blend_mode;
 }
 
 void LayerImpl::SetPosition(const gfx::PointF& position) {
@@ -1143,23 +1152,13 @@ gfx::Rect LayerImpl::GetScaledEnclosingRectInTargetSpace(float scale) const {
 
 RenderSurfaceImpl* LayerImpl::render_target() {
   EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
-  EffectNode* node = effect_tree.Node(effect_tree_index_);
-
-  if (node->render_surface)
-    return node->render_surface;
-  else
-    return effect_tree.Node(node->target_id)->render_surface;
+  return effect_tree.Node(render_target_effect_tree_index())->render_surface;
 }
 
 const RenderSurfaceImpl* LayerImpl::render_target() const {
   const EffectTree& effect_tree =
       layer_tree_impl_->property_trees()->effect_tree;
-  const EffectNode* node = effect_tree.Node(effect_tree_index_);
-
-  if (node->render_surface)
-    return node->render_surface;
-  else
-    return effect_tree.Node(node->target_id)->render_surface;
+  return effect_tree.Node(render_target_effect_tree_index())->render_surface;
 }
 
 bool LayerImpl::IsHidden() const {
@@ -1175,7 +1174,7 @@ bool LayerImpl::InsideReplica() const {
   EffectNode* node = effect_tree.Node(effect_tree_index_);
 
   while (node->id > 0) {
-    if (node->replica_layer_id != -1)
+    if (node->replica_layer_id != EffectTree::kInvalidNodeId)
       return true;
     node = effect_tree.Node(node->target_id);
   }

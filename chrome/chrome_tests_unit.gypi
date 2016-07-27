@@ -157,6 +157,7 @@
       'browser/net/spdyproxy/data_reduction_proxy_chrome_settings_unittest.cc',
       'browser/net/spdyproxy/data_reduction_proxy_settings_unittest_android.cc',
       'browser/net/url_info_unittest.cc',
+      'browser/page_load_metrics/metrics_web_contents_observer_unittest.cc',
       'browser/page_load_metrics/observers/aborts_page_load_metrics_observer_unittest.cc',
       'browser/page_load_metrics/observers/core_page_load_metrics_observer_unittest.cc',
       'browser/page_load_metrics/observers/data_reduction_proxy_metrics_observer_unittest.cc',
@@ -217,7 +218,6 @@
       'browser/profiles/profile_shortcut_manager_unittest_win.cc',
       'browser/push_messaging/push_messaging_app_identifier_unittest.cc',
       'browser/push_messaging/push_messaging_notification_manager_unittest.cc',
-      'browser/push_messaging/push_messaging_permission_context_unittest.cc',
       'browser/push_messaging/push_messaging_service_unittest.cc',
       'browser/renderer_host/chrome_navigation_data_unittest.cc',
       'browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper_unit_test.mm',
@@ -315,6 +315,10 @@
       'renderer/chrome_content_renderer_client_unittest.cc',
       'renderer/content_settings_observer_unittest.cc',
       'renderer/instant_restricted_id_cache_unittest.cc',
+      'renderer/page_load_metrics/fake_page_timing_metrics_ipc_sender.cc',
+      'renderer/page_load_metrics/fake_page_timing_metrics_ipc_sender.h',
+      'renderer/page_load_metrics/metrics_render_frame_observer_unittest.cc',
+      'renderer/page_load_metrics/page_timing_metrics_sender_unittest.cc',
       'renderer/plugins/plugin_uma_unittest.cc',
       'renderer/prerender/prerender_dispatcher_unittest.cc',
       'renderer/searchbox/search_bouncer_unittest.cc',
@@ -395,6 +399,7 @@
       'browser/background/background_application_list_model_unittest.cc',
       'browser/background/background_contents_service_unittest.cc',
       'browser/background/background_mode_manager_unittest.cc',
+      'browser/background/background_mode_optimizer_unittest.cc',
     ],
     'chrome_unit_tests_extensions_sources': [
       '../apps/saved_files_service_unittest.cc',
@@ -1033,6 +1038,7 @@
       'browser/chromeos/fileapi/external_file_url_util_unittest.cc',
       'browser/chromeos/fileapi/file_access_permissions_unittest.cc',
       'browser/chromeos/fileapi/file_system_backend_unittest.cc',
+      'browser/chromeos/hats/hats_notification_controller_unittest.cc',
       'browser/chromeos/input_method/browser_state_monitor_unittest.cc',
       'browser/chromeos/input_method/input_method_configuration_unittest.cc',
       'browser/chromeos/input_method/input_method_engine_unittest.cc',
@@ -1655,6 +1661,7 @@
     'chrome_unit_tests_arc_sources': [
       'browser/chromeos/arc/arc_auth_service_unittest.cc',
       'browser/chromeos/arc/arc_policy_bridge_unittest.cc',
+      'browser/ui/views/intent_picker_bubble_view_unittest.cc',
     ],
     # Sources for Offline pages. For now only for Android.
     'chrome_unit_tests_offline_pages_sources': [
@@ -2260,7 +2267,9 @@
         'test_support_common',
         'test_support_unit',
         # 3) anything tests directly depend on
+        '../components/components.gyp:component_updater_test_support',
         '../components/components.gyp:generate_version_info',
+        '../components/components.gyp:subresource_filter_core_browser_test_support',
         '../courgette/courgette.gyp:courgette_lib',
         '../google_apis/google_apis.gyp:google_apis',
         '../skia/skia.gyp:skia',

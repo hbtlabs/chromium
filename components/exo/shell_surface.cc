@@ -8,6 +8,7 @@
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm/window_state.h"
+#include "ash/common/wm/window_state_delegate.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -27,6 +28,8 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/gfx/path.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_observer.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/shadow.h"
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
@@ -96,6 +99,39 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
+};
+
+// Handles a user's fullscreen request (Shift+F4/F4).
+class CustomWindowStateDelegate : public ash::wm::WindowStateDelegate,
+                                  public views::WidgetObserver {
+ public:
+  explicit CustomWindowStateDelegate(views::Widget* widget) : widget_(widget) {
+    widget_->AddObserver(this);
+  }
+  ~CustomWindowStateDelegate() override {
+    if (widget_)
+      widget_->RemoveObserver(this);
+  }
+
+  // Overridden from ash::wm::WindowStateDelegate:
+  bool ToggleFullscreen(ash::wm::WindowState* window_state) override {
+    if (widget_) {
+      bool enter_fullscreen = !window_state->IsFullscreen();
+      widget_->SetFullscreen(enter_fullscreen);
+    }
+    return true;
+  }
+
+  // Overridden from views::WidgetObserver:
+  void OnWidgetDestroying(views::Widget* widget) override {
+    widget_->RemoveObserver(this);
+    widget_ = nullptr;
+  }
+
+ private:
+  views::Widget* widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(CustomWindowStateDelegate);
 };
 
 class ShellSurfaceWidget : public views::Widget {
@@ -908,6 +944,10 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
         ui::AcceleratorManager::kNormalPriority, this);
   }
 
+  // Set delegate for handling of fullscreening.
+  window_state->SetDelegate(std::unique_ptr<ash::wm::WindowStateDelegate>(
+      new CustomWindowStateDelegate(widget_)));
+
   // Show widget next time Commit() is called.
   pending_show_widget_ = true;
 }
@@ -1108,10 +1148,10 @@ void ShellSurface::UpdateWidgetBounds() {
   gfx::Rect visible_bounds = GetVisibleBounds();
   gfx::Rect new_widget_bounds = visible_bounds;
 
-  // Avoid changing widget origin unless initial bounds were specificed and
+  // Avoid changing widget origin unless initial bounds were specified and
   // widget origin is always relative to it.
   if (initial_bounds_.IsEmpty())
-    new_widget_bounds.set_origin(widget_->GetNativeWindow()->bounds().origin());
+    new_widget_bounds.set_origin(widget_->GetWindowBoundsInScreen().origin());
 
   // Update widget origin using the surface origin if the current location of
   // surface is being anchored to one side of the widget as a result of a
@@ -1119,9 +1159,7 @@ void ShellSurface::UpdateWidgetBounds() {
   if (resize_component_ != HTCAPTION) {
     gfx::Point new_widget_origin =
         GetSurfaceOrigin() + visible_bounds.OffsetFromOrigin();
-    aura::Window::ConvertPointToTarget(widget_->GetNativeWindow(),
-                                       widget_->GetNativeWindow()->parent(),
-                                       &new_widget_origin);
+    wm::ConvertPointToScreen(widget_->GetNativeWindow(), &new_widget_origin);
     new_widget_bounds.set_origin(new_widget_origin);
   }
 
@@ -1129,7 +1167,7 @@ void ShellSurface::UpdateWidgetBounds() {
   // should not result in a configure request.
   DCHECK(!ignore_window_bounds_changes_);
   ignore_window_bounds_changes_ = true;
-  if (widget_->GetNativeWindow()->bounds() != new_widget_bounds)
+  if (widget_->GetWindowBoundsInScreen() != new_widget_bounds)
     widget_->SetBounds(new_widget_bounds);
   ignore_window_bounds_changes_ = false;
 

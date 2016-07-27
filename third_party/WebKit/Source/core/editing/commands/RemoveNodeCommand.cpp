@@ -27,6 +27,7 @@
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Node.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/commands/EditingState.h"
 #include "wtf/Assertions.h"
 
@@ -45,9 +46,9 @@ void RemoveNodeCommand::doApply(EditingState* editingState)
 {
     ContainerNode* parent = m_node->parentNode();
     if (!parent || (m_shouldAssumeContentIsAlwaysEditable == DoNotAssumeContentIsAlwaysEditable
-        && !parent->isContentEditable() && parent->inActiveDocument()))
+        && !isContentEditable(*parent) && parent->inActiveDocument()))
         return;
-    DCHECK(parent->isContentEditable() || !parent->inActiveDocument()) << parent;
+    DCHECK(isContentEditable(*parent) || !parent->inActiveDocument()) << parent;
 
     m_parent = parent;
     m_refChild = m_node->nextSibling();
@@ -64,7 +65,7 @@ void RemoveNodeCommand::doUnapply()
 {
     ContainerNode* parent = m_parent.release();
     Node* refChild = m_refChild.release();
-    if (!parent || !parent->hasEditableStyle())
+    if (!parent || !hasEditableStyle(*parent))
         return;
 
     parent->insertBefore(m_node.get(), refChild, IGNORE_EXCEPTION);

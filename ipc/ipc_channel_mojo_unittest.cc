@@ -226,10 +226,6 @@ class ListenerExpectingErrors : public IPC::Listener {
  public:
   ListenerExpectingErrors() : has_error_(false) {}
 
-  void OnChannelConnected(int32_t peer_pid) override {
-    base::MessageLoop::current()->QuitWhenIdle();
-  }
-
   bool OnMessageReceived(const IPC::Message& message) override { return true; }
 
   void OnChannelError() override {
@@ -758,6 +754,10 @@ class IPCChannelProxyMojoTest : public IPCChannelMojoTestBase {
   }
   void CreateProxy(IPC::Listener* listener) { runner_->CreateProxy(listener); }
   void RunProxy() { runner_->RunProxy(); }
+  void DestroyProxy() {
+    runner_.reset();
+    base::RunLoop().RunUntilIdle();
+  }
 
   IPC::ChannelProxy* proxy() { return runner_->proxy(); }
 
@@ -808,6 +808,7 @@ class ListenerWithSimpleProxyAssociatedInterface
   void RequestQuit(const RequestQuitCallback& callback) override {
     received_quit_ = true;
     callback.Run();
+    binding_.Close();
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
@@ -838,7 +839,7 @@ TEST_F(IPCChannelProxyMojoTest, ProxyThreadAssociatedInterface) {
   EXPECT_TRUE(WaitForClientShutdown());
   EXPECT_TRUE(listener.received_all_messages());
 
-  base::RunLoop().RunUntilIdle();
+  DestroyProxy();
 }
 
 class ChannelProxyClient {
@@ -848,6 +849,10 @@ class ChannelProxyClient {
   }
   void CreateProxy(IPC::Listener* listener) { runner_->CreateProxy(listener); }
   void RunProxy() { runner_->RunProxy(); }
+  void DestroyProxy() {
+    runner_.reset();
+    base::RunLoop().RunUntilIdle();
+  }
 
   IPC::ChannelProxy* proxy() { return runner_->proxy(); }
 
@@ -856,26 +861,17 @@ class ChannelProxyClient {
   std::unique_ptr<ChannelProxyRunner> runner_;
 };
 
-class ListenerThatWaitsForConnect : public IPC::Listener {
+class DummyListener : public IPC::Listener {
  public:
-  explicit ListenerThatWaitsForConnect(const base::Closure& connect_handler)
-      : connect_handler_(connect_handler) {}
-
   // IPC::Listener
   bool OnMessageReceived(const IPC::Message& message) override { return true; }
-  void OnChannelConnected(int32_t) override { connect_handler_.Run(); }
-
- private:
-  base::Closure connect_handler_;
 };
 
 DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(ProxyThreadAssociatedInterfaceClient,
                                     ChannelProxyClient) {
-  base::RunLoop connect_loop;
-  ListenerThatWaitsForConnect listener(connect_loop.QuitClosure());
+  DummyListener listener;
   CreateProxy(&listener);
   RunProxy();
-  connect_loop.Run();
 
   // Send a bunch of interleaved messages, alternating between the associated
   // interface and a legacy IPC::Message.
@@ -889,6 +885,8 @@ DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(ProxyThreadAssociatedInterfaceClient,
   }
   driver->RequestQuit(base::MessageLoop::QuitWhenIdleClosure());
   base::RunLoop().Run();
+
+  DestroyProxy();
 }
 
 #if defined(OS_POSIX)

@@ -177,7 +177,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
   }
   const StorageType storage = STORAGE_OPAQUE;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -232,7 +232,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvData(
     base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_UNOWNED_MEMORY;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -267,7 +267,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvGpuMemoryBuffers(
     base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_GPU_MEMORY_BUFFERS;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -304,7 +304,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
     base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_UNOWNED_MEMORY;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -340,7 +340,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
     base::TimeDelta timestamp) {
   const StorageType storage = STORAGE_DMABUFS;
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -351,7 +351,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
       new VideoFrame(format, storage, coded_size, visible_rect, natural_size,
                      mailbox_holders, ReleaseMailboxCB(), timestamp);
   if (!frame || !frame->DuplicateFileDescriptors(dmabuf_fds)) {
-    LOG(DFATAL) << __FUNCTION__ << " Couldn't duplicate fds.";
+    LOG(DFATAL) << __func__ << " Couldn't duplicate fds.";
     return nullptr;
   }
   return frame;
@@ -388,7 +388,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapCVPixelBuffer(
   const StorageType storage = STORAGE_UNOWNED_MEMORY;
 
   if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;
@@ -414,7 +414,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
   DCHECK(frame->visible_rect().Contains(visible_rect));
 
   if (!AreValidPixelFormatsForWrap(frame->format(), format)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid format conversion."
+    LOG(DFATAL) << __func__ << " Invalid format conversion."
                 << VideoPixelFormatToString(frame->format()) << " to "
                 << VideoPixelFormatToString(format);
     return nullptr;
@@ -422,7 +422,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
 
   if (!IsValidConfig(format, frame->storage_type(), frame->coded_size(),
                      visible_rect, natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, frame->storage_type(),
                                   frame->coded_size(), visible_rect,
                                   natural_size);
@@ -448,7 +448,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
     for (size_t i = 0; i < kMaxPlanes; ++i)
       original_fds.push_back(frame->dmabuf_fd(i));
     if (!wrapping_frame->DuplicateFileDescriptors(original_fds)) {
-      LOG(DFATAL) << __FUNCTION__ << " Couldn't duplicate fds.";
+      LOG(DFATAL) << __func__ << " Couldn't duplicate fds.";
       return nullptr;
     }
   }
@@ -515,7 +515,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateHoleFrame(
   const StorageType storage = STORAGE_HOLE;
   const gfx::Rect visible_rect = gfx::Rect(size);
   if (!IsValidConfig(format, storage, size, visible_rect, size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, size, visible_rect, size);
     return nullptr;
   }
@@ -650,6 +650,24 @@ bool VideoFrame::IsMappable() const {
 
 bool VideoFrame::HasTextures() const {
   return !mailbox_holders_[0].mailbox.IsZero();
+}
+
+gfx::ColorSpace VideoFrame::ColorSpace() const {
+  int videoframe_color_space;
+  if (metadata()->GetInteger(media::VideoFrameMetadata::COLOR_SPACE,
+                             &videoframe_color_space)) {
+    switch (videoframe_color_space) {
+      case media::COLOR_SPACE_JPEG:
+        return gfx::ColorSpace::CreateJpeg();
+      case media::COLOR_SPACE_HD_REC709:
+        return gfx::ColorSpace::CreateREC709();
+      case media::COLOR_SPACE_SD_REC601:
+        return gfx::ColorSpace::CreateREC601();
+      default:
+        break;
+    }
+  }
+  return gfx::ColorSpace();
 }
 
 int VideoFrame::stride(size_t plane) const {
@@ -823,7 +841,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalStorage(
 
   if (!IsValidConfig(format, storage_type, coded_size, visible_rect,
                      natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage_type, coded_size,
                                   visible_rect, natural_size);
     return nullptr;
@@ -989,7 +1007,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateFrameInternal(
   const StorageType storage = STORAGE_OWNED_MEMORY;
   if (!IsValidConfig(format, storage, new_coded_size, visible_rect,
                      natural_size)) {
-    LOG(DFATAL) << __FUNCTION__ << " Invalid config."
+    LOG(DFATAL) << __func__ << " Invalid config."
                 << ConfigToString(format, storage, coded_size, visible_rect,
                                   natural_size);
     return nullptr;

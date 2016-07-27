@@ -16,6 +16,7 @@
 #include "content/common/accessibility_messages.h"
 #include "ui/accessibility/ax_text_utils.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
@@ -296,7 +297,7 @@ BrowserAccessibility* BrowserAccessibility::InternalGetChild(
   if (!node_ || !manager_ || child_index >= InternalChildCount())
     return nullptr;
 
-  const auto child_node = node_->ChildAtIndex(child_index);
+  auto* child_node = node_->ChildAtIndex(child_index);
   DCHECK(child_node);
   return manager_->GetFromAXNode(child_node);
 }
@@ -339,7 +340,7 @@ const ui::AXNodeData& BrowserAccessibility::GetData() const {
 }
 
 gfx::Rect BrowserAccessibility::GetLocation() const {
-  return GetData().location;
+  return gfx::ToEnclosingRect(GetData().location);
 }
 
 int32_t BrowserAccessibility::GetRole() const {

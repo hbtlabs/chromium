@@ -237,13 +237,16 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
 #if defined(USE_OZONE)
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kEnableHardwareOverlays)) {
+    std::string enable_overlay_flag =
+        command_line->GetSwitchValueASCII(switches::kEnableHardwareOverlays);
     std::unique_ptr<ui::OverlayCandidatesOzone> overlay_candidates =
         ui::OzonePlatform::GetInstance()
             ->GetOverlayManager()
             ->CreateOverlayCandidates(widget);
     validator.reset(
         new display_compositor::CompositorOverlayCandidateValidatorOzone(
-            std::move(overlay_candidates)));
+            std::move(overlay_candidates),
+            enable_overlay_flag == "single-fullscreen"));
   }
 #elif defined(OS_MACOSX)
   // Overlays are only supported through the remote layer API.
@@ -267,11 +270,6 @@ CreateOverlayCandidateValidator(gfx::AcceleratedWidget widget) {
 }
 
 static bool ShouldCreateGpuOutputSurface(ui::Compositor* compositor) {
-#if defined(MOJO_RUNNER_CLIENT)
-  if (shell::ShellIsRemote() && !ui::GpuService::UseChromeGpuCommandBuffer())
-    return false;
-#endif
-
 #if defined(OS_CHROMEOS)
   // Software fallback does not happen on Chrome OS.
   return true;
@@ -687,13 +685,8 @@ ui::ContextFactory* GpuProcessTransportFactory::GetContextFactory() {
   return this;
 }
 
-std::unique_ptr<cc::SurfaceIdAllocator>
-GpuProcessTransportFactory::CreateSurfaceIdAllocator() {
-  std::unique_ptr<cc::SurfaceIdAllocator> allocator =
-      base::WrapUnique(new cc::SurfaceIdAllocator(next_surface_client_id_++));
-  if (GetSurfaceManager())
-    allocator->RegisterSurfaceClientId(GetSurfaceManager());
-  return allocator;
+uint32_t GpuProcessTransportFactory::AllocateSurfaceClientId() {
+  return next_surface_client_id_++;
 }
 
 void GpuProcessTransportFactory::ResizeDisplay(ui::Compositor* compositor,
@@ -730,6 +723,19 @@ void GpuProcessTransportFactory::SetAuthoritativeVSyncInterval(
   DCHECK(data);
   if (data->begin_frame_source)
     data->begin_frame_source->SetAuthoritativeVSyncInterval(interval);
+}
+
+void GpuProcessTransportFactory::SetDisplayVSyncParameters(
+    ui::Compositor* compositor,
+    base::TimeTicks timebase,
+    base::TimeDelta interval) {
+  PerCompositorDataMap::iterator it = per_compositor_data_.find(compositor);
+  if (it == per_compositor_data_.end())
+    return;
+  PerCompositorData* data = it->second;
+  DCHECK(data);
+  if (data->begin_frame_source)
+    data->begin_frame_source->OnUpdateVSyncParameters(timebase, interval);
 }
 
 void GpuProcessTransportFactory::SetOutputIsSecure(ui::Compositor* compositor,

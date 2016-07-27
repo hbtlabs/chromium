@@ -103,13 +103,17 @@ const char kBypassAppBannerEngagementChecks[] =
 // Certificate Transparency: Uses the provided log(s) for checking Signed
 // Certificate Timestamps provided with certificates.
 // The switch's value is:
-//   log_description:log_key:log_url,log_description:log_key:log_url,...
+//   log_description:log_key:log_url[:log_dns_domain],
+//   log_description:log_key:log_url[:log_dns_domain],...
 // where
 //   log_description is a textual description of the log.
 //   log_key is a Base64'd DER-encoded SubjectPublicKeyInfo of the log's
 //   public key.
 //   log_url is a URL for the log, excluding the schema (which is always
 //   assumed to be HTTPS as required by RFC6962).
+//   log_dns_domain is the domain name to use for DNS queries requesting
+//   inclusion proofs (as per
+//   https://github.com/google/certificate-transparency-rfcs/blob/master/dns/draft-ct-over-dns.md).
 // Multiple logs can be specified by repeating description:key pairs,
 // separated by a comma.
 const char kCertificateTransparencyLog[]    = "certificate-transparency-log";
@@ -672,10 +676,6 @@ const char kNetLogCaptureMode[]             = "net-log-capture-mode";
 // want to avoid having the default browser info-bar displayed.
 const char kNoDefaultBrowserCheck[]         = "no-default-browser-check";
 
-// By default, an https page can load images, fonts or frames from an http
-// page. This switch overrides this to block this lesser mixed-content problem.
-const char kNoDisplayingInsecureContent[]   = "no-displaying-insecure-content";
-
 // Disables all experiments set on about:flags. Does not disable about:flags
 // itself. Useful if an experiment makes chrome crash at startup: One can start
 // chrome with --no-experiments, disable the problematic lab at about:flags and
@@ -996,32 +996,6 @@ const char kWinHttpProxyResolver[]          = "winhttp-proxy-resolver";
 // Specifies which category option was clicked in the Windows Jumplist that
 // resulted in a browser startup.
 const char kWinJumplistAction[]             = "win-jumplist-action";
-
-#if defined(ENABLE_SPELLCHECK)
-#if defined(OS_ANDROID)
-// Enables use of the Android spellchecker.
-const char kEnableAndroidSpellChecker[] = "enable-android-spellchecker";
-#endif  // defined(OS_ANDROID)
-
-// Enables participation in the field trial for user feedback to spelling
-// service.
-const char kEnableSpellingFeedbackFieldTrial[] =
-    "enable-spelling-feedback-field-trial";
-
-// Specifies the number of seconds between sending batches of feedback to
-// spelling service. The default is 30 minutes. The minimum is 5 seconds. This
-// switch is for temporary testing only.
-// TODO(rouslan): Remove this flag when feedback testing is complete. Revisit by
-// August 2013.
-const char kSpellingServiceFeedbackIntervalSeconds[] =
-    "spelling-service-feedback-interval-seconds";
-
-// Specifies the URL where spelling service feedback data will be sent instead
-// of the default URL. This switch is for temporary testing only.
-// TODO(rouslan): Remove this flag when feedback testing is complete. Revisit by
-// August 2013.
-const char kSpellingServiceFeedbackUrl[] = "spelling-service-feedback-url";
-#endif  // defined(ENABLE_SPELLCHECK)
 
 #if defined(GOOGLE_CHROME_BUILD)
 // Shows a Google icon next to context menu items powered by Google services.

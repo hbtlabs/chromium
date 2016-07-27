@@ -255,6 +255,107 @@ int comparePositions(const VisiblePosition& a, const VisiblePosition& b)
     return comparePositions(a.deepEquivalent(), b.deepEquivalent());
 }
 
+enum EditableLevel { Editable, RichlyEditable };
+static bool hasEditableLevel(const Node& node, EditableLevel editableLevel)
+{
+    if (node.isPseudoElement())
+        return false;
+
+    // Ideally we'd call DCHECK(!needsStyleRecalc()) here, but
+    // ContainerNode::setFocus() calls setNeedsStyleRecalc(), so the assertion
+    // would fire in the middle of Document::setFocusedNode().
+
+    for (const Node& ancestor : NodeTraversal::inclusiveAncestorsOf(node)) {
+        if ((ancestor.isHTMLElement() || ancestor.isDocumentNode()) && ancestor.layoutObject()) {
+            switch (ancestor.layoutObject()->style()->userModify()) {
+            case READ_ONLY:
+                return false;
+            case READ_WRITE:
+                return true;
+            case READ_WRITE_PLAINTEXT_ONLY:
+                return editableLevel != RichlyEditable;
+            }
+            NOTREACHED();
+            return false;
+        }
+    }
+
+    return false;
+}
+
+static bool hasAXEditableLevel(const Node& node, EditableLevel editableLevel)
+{
+    if (hasEditableLevel(node, editableLevel))
+        return true;
+
+    // FIXME: Respect editableLevel for ARIA editable elements.
+    if (editableLevel == RichlyEditable)
+        return false;
+
+    // FIXME(dmazzoni): support ScopedAXObjectCache (crbug/489851).
+    if (AXObjectCache* cache = node.document().existingAXObjectCache())
+        return cache->rootAXEditableElement(&node);
+
+    return false;
+}
+
+bool isContentEditable(const Node& node)
+{
+    node.document().updateStyleAndLayoutTree();
+    return hasEditableLevel(node, Editable);
+}
+
+bool isContentRichlyEditable(const Node& node)
+{
+    node.document().updateStyleAndLayoutTree();
+    return hasEditableLevel(node, RichlyEditable);
+}
+
+bool hasEditableStyle(const Node& node, EditableType editableType)
+{
+    switch (editableType) {
+    case ContentIsEditable:
+        return hasEditableLevel(node, Editable);
+    case HasEditableAXRole:
+        return hasAXEditableLevel(node, Editable);
+    }
+    NOTREACHED();
+    return false;
+}
+
+bool hasRichlyEditableStyle(const Node& node)
+{
+    return hasEditableLevel(node, RichlyEditable);
+}
+
+bool isRootEditableElement(const Node& node)
+{
+    return hasEditableStyle(node) && node.isElementNode() && (!node.parentNode() || !hasEditableStyle(*node.parentNode())
+        || !node.parentNode()->isElementNode() || &node == node.document().body());
+}
+
+Element* rootEditableElement(const Node& node)
+{
+    const Node* result = nullptr;
+    for (const Node* n = &node; n && hasEditableStyle(*n); n = n->parentNode()) {
+        if (n->isElementNode())
+            result = n;
+        if (node.document().body() == n)
+            break;
+    }
+    return toElement(const_cast<Node*>(result));
+}
+
+Element* rootEditableElement(const Node& node, EditableType editableType)
+{
+    if (editableType == HasEditableAXRole) {
+        if (AXObjectCache* cache = node.document().existingAXObjectCache())
+            return const_cast<Element*>(cache->rootAXEditableElement(&node));
+    }
+
+    return rootEditableElement(node);
+}
+
 ContainerNode* highestEditableRoot(const Position& position, EditableType editableType)
 {
     if (position.isNull())
@@ -269,7 +370,7 @@ ContainerNode* highestEditableRoot(const Position& position, EditableType editab
 
     ContainerNode* node = highestRoot->parentNode();
     while (node) {
-        if (node->hasEditableStyle(editableType))
+        if (hasEditableStyle(*node, editableType))
             highestRoot = node;
         if (isHTMLBodyElement(*node))
             break;
@@ -279,12 +380,12 @@ ContainerNode* highestEditableRoot(const Position& position, EditableType editab
     return highestRoot;
 }
 
-ContainerNode* highestEditableRoot(const PositionInFlatTree& position, EditableType editableType)
+ContainerNode* highestEditableRoot(const PositionInFlatTree& position)
 {
-    return highestEditableRoot(toPositionInDOMTree(position), editableType);
+    return highestEditableRoot(toPositionInDOMTree(position), ContentIsEditable);
 }
 
-bool isEditablePosition(const Position& position, EditableType editableType)
+bool isEditablePosition(const Position& position)
 {
     Node* node = position.parentAnchoredEquivalent().anchorNode();
     if (!node)
@@ -303,12 +404,12 @@ bool isEditablePosition(const Position& position, EditableType editableType)
 
     if (node->isDocumentNode())
         return false;
-    return node->hasEditableStyle(editableType);
+    return hasEditableStyle(*node, ContentIsEditable);
 }
 
-bool isEditablePosition(const PositionInFlatTree& p, EditableType editableType)
+bool isEditablePosition(const PositionInFlatTree& p)
 {
-    return isEditablePosition(toPositionInDOMTree(p), editableType);
+    return isEditablePosition(toPositionInDOMTree(p));
 }
 
 bool isAtUnsplittableElement(const Position& pos)
@@ -318,7 +419,7 @@ bool isAtUnsplittableElement(const Position& pos)
 }
 
 
-bool isRichlyEditablePosition(const Position& p, EditableType editableType)
+bool isRichlyEditablePosition(const Position& p)
 {
     Node* node = p.anchorNode();
     if (!node)
@@ -327,7 +428,7 @@ bool isRichlyEditablePosition(const Position& p, EditableType editableType)
     if (isDisplayInsideTable(node))
         node = node->parentNode();
 
-    return node->layoutObjectIsRichlyEditable(editableType);
+    return hasRichlyEditableStyle(*node);
 }
 
 Element* rootEditableElementOf(const Position& p, EditableType editableType)
@@ -342,9 +443,9 @@ Element* rootEditableElementOf(const Position& p, EditableType editableType)
     return rootEditableElement(*node, editableType);
 }
 
-Element* rootEditableElementOf(const PositionInFlatTree& p, EditableType editableType)
+Element* rootEditableElementOf(const PositionInFlatTree& p)
 {
-    return rootEditableElementOf(toPositionInDOMTree(p), editableType);
+    return rootEditableElementOf(toPositionInDOMTree(p), ContentIsEditable);
 }
 
 // TODO(yosin) This does not handle [table, 0] correctly.
@@ -509,7 +610,7 @@ PositionTemplate<Strategy> firstEditablePositionAfterPositionInRootAlgorithm(con
 {
     DCHECK(!needsLayoutTreeUpdate(highestRoot)) << position << ' ' << highestRoot;
     // position falls before highestRoot.
-    if (position.compareTo(PositionTemplate<Strategy>::firstPositionInNode(&highestRoot)) == -1 && highestRoot.hasEditableStyle())
+    if (position.compareTo(PositionTemplate<Strategy>::firstPositionInNode(&highestRoot)) == -1 && hasEditableStyle(highestRoot))
         return PositionTemplate<Strategy>::firstPositionInNode(&highestRoot);
 
     PositionTemplate<Strategy> editablePosition = position;
@@ -818,6 +919,20 @@ bool nodeIsUserSelectAll(const Node* node)
 
 }
 
+EUserSelect usedValueOfUserSelect(const Node& node)
+{
+    if (node.isHTMLElement() && toHTMLElement(node).isTextFormControl())
+        return SELECT_TEXT;
+    if (!node.layoutObject())
+        return SELECT_NONE;
+
+    const ComputedStyle* style = node.layoutObject()->style();
+    if (style->userModify() != READ_ONLY)
+        return SELECT_TEXT;
+
+    return style->userSelect();
+}
+
 template <typename Strategy>
 TextDirection directionOfEnclosingBlockAlgorithm(const PositionTemplate<Strategy>& position)
 {
@@ -851,7 +966,7 @@ TextDirection primaryDirectionOf(const Node& node)
     return primaryDirection;
 }
 
-String stringWithRebalancedWhitespace(const String& string, bool startIsStartOfParagraph, bool endIsEndOfParagraph)
+String stringWithRebalancedWhitespace(const String& string, bool startIsStartOfParagraph, bool shouldEmitNBSPbeforeEnd)
 {
     unsigned length = string.length();
 
@@ -867,7 +982,8 @@ String stringWithRebalancedWhitespace(const String& string, bool startIsStartOfP
             continue;
         }
 
-        if (previousCharacterWasSpace || (!i && startIsStartOfParagraph) || (i + 1 == length && endIsEndOfParagraph)) {
+        // We need to ensure there is no next sibling text node. See http://crbug.com/310149
+        if (previousCharacterWasSpace || (!i && startIsStartOfParagraph) || (i + 1 == length && shouldEmitNBSPbeforeEnd)) {
             rebalancedString.append(noBreakSpaceCharacter);
             previousCharacterWasSpace = false;
         } else {
@@ -1102,7 +1218,7 @@ Element* enclosingElementWithTag(const Position& p, const QualifiedName& tagName
     ContainerNode* root = highestEditableRoot(p);
     Element* ancestor = p.anchorNode()->isElementNode() ? toElement(p.anchorNode()) : p.anchorNode()->parentElement();
     for (; ancestor; ancestor = ancestor->parentElement()) {
-        if (root && !ancestor->hasEditableStyle())
+        if (root && !hasEditableStyle(*ancestor))
             continue;
         if (ancestor->hasTagName(tagName))
             return ancestor;
@@ -1125,7 +1241,7 @@ static Node* enclosingNodeOfTypeAlgorithm(const PositionTemplate<Strategy>& p, b
     for (Node* n = p.anchorNode(); n; n = Strategy::parent(*n)) {
         // Don't return a non-editable node if the input position was editable, since
         // the callers from editing will no doubt want to perform editing inside the returned node.
-        if (root && !n->hasEditableStyle())
+        if (root && !hasEditableStyle(*n))
             continue;
         if (nodeIsOfType(n))
             return n;
@@ -1151,7 +1267,7 @@ Node* highestEnclosingNodeOfType(const Position& p, bool (*nodeIsOfType)(const N
     Node* highest = nullptr;
     ContainerNode* root = rule == CannotCrossEditingBoundary ? highestEditableRoot(p) : nullptr;
     for (Node* n = p.computeContainerNode(); n && n != stayWithin; n = n->parentNode()) {
-        if (root && !n->hasEditableStyle())
+        if (root && !hasEditableStyle(*n))
             continue;
         if (nodeIsOfType(n))
             highest = n;
@@ -1288,7 +1404,7 @@ bool canMergeLists(Element* firstList, Element* secondList)
         return false;
 
     return firstList->hasTagName(secondList->tagQName()) // make sure the list types match (ol vs. ul)
-    && firstList->hasEditableStyle() && secondList->hasEditableStyle() // both lists are editable
+    && hasEditableStyle(*firstList) && hasEditableStyle(*secondList) // both lists are editable
     && rootEditableElement(*firstList) == rootEditableElement(*secondList) // don't cross editing boundaries
     && isVisiblyAdjacent(Position::inParentAfterNode(*firstList), Position::inParentBeforeNode(*secondList));
     // Make sure there is no visible content between this li and the previous list
@@ -1449,7 +1565,7 @@ static Position previousCharacterPosition(const Position& position, TextAffinity
 // This assumes that it starts in editable content.
 Position leadingWhitespacePosition(const Position& position, TextAffinity affinity, WhitespacePositionOption option)
 {
-    DCHECK(isEditablePosition(position, ContentIsEditable)) << position;
+    DCHECK(isEditablePosition(position)) << position;
     if (position.isNull())
         return Position();
 
@@ -1477,7 +1593,7 @@ Position leadingWhitespacePosition(const Position& position, TextAffinity affini
 // This assumes that it starts in editable content.
 Position trailingWhitespacePosition(const Position& position, TextAffinity, WhitespacePositionOption option)
 {
-    DCHECK(isEditablePosition(position, ContentIsEditable)) << position;
+    DCHECK(isEditablePosition(position)) << position;
     if (position.isNull())
         return Position();
 
@@ -1730,7 +1846,7 @@ bool areIdenticalElements(const Node& first, const Node& second)
     if (!firstElement.hasEquivalentAttributes(&secondElement))
         return false;
 
-    return firstElement.hasEditableStyle() && secondElement.hasEditableStyle();
+    return hasEditableStyle(firstElement) && hasEditableStyle(secondElement);
 }
 
 bool isNonTableCellHTMLBlockElement(const Node* node)

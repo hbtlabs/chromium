@@ -117,7 +117,7 @@ uint32_t ComputeOffset(const void* start, const void* position) {
          static_cast<const uint8_t*>(start);
 }
 
-ShaderVariableBaseType FragmentOutputTypeToBaseType(GLenum type) {
+ShaderVariableBaseType InputOutputTypeToBaseType(bool is_input, GLenum type) {
   switch (type) {
     case GL_INT:
     case GL_INT_VEC2:
@@ -133,6 +133,17 @@ ShaderVariableBaseType FragmentOutputTypeToBaseType(GLenum type) {
     case GL_FLOAT_VEC2:
     case GL_FLOAT_VEC3:
     case GL_FLOAT_VEC4:
+      return SHADER_VARIABLE_FLOAT;
+    case GL_FLOAT_MAT2:
+    case GL_FLOAT_MAT3:
+    case GL_FLOAT_MAT4:
+    case GL_FLOAT_MAT2x3:
+    case GL_FLOAT_MAT3x2:
+    case GL_FLOAT_MAT2x4:
+    case GL_FLOAT_MAT4x2:
+    case GL_FLOAT_MAT3x4:
+    case GL_FLOAT_MAT4x3:
+      DCHECK(is_input);
       return SHADER_VARIABLE_FLOAT;
     default:
       NOTREACHED();
@@ -299,6 +310,10 @@ Program::Program(ProgramManager* manager, GLuint service_id)
       fragment_output_written_mask_(0u) {
   DCHECK(manager_);
   manager_->StartTracking(this);
+  uint32_t packed_size = (manager_->max_vertex_attribs() + 15) / 16;
+  vertex_input_base_type_mask_.resize(packed_size);
+  vertex_input_active_mask_.resize(packed_size);
+  ClearVertexInputMasks();
 }
 
 void Program::Reset() {
@@ -316,6 +331,14 @@ void Program::Reset() {
   attrib_location_to_index_map_.clear();
   fragment_output_type_mask_ = 0u;
   fragment_output_written_mask_ = 0u;
+  ClearVertexInputMasks();
+}
+
+void Program::ClearVertexInputMasks() {
+  for (uint32_t ii = 0; ii < vertex_input_base_type_mask_.size(); ++ii) {
+    vertex_input_base_type_mask_[ii] = 0u;
+    vertex_input_active_mask_[ii] = 0u;
+  }
 }
 
 void Program::UpdateFragmentOutputBaseTypes() {
@@ -351,9 +374,57 @@ void Program::UpdateFragmentOutputBaseTypes() {
       int shift_bits = ii * 2;
       fragment_output_written_mask_ |= 0x3 << shift_bits;
       fragment_output_type_mask_ |=
-          FragmentOutputTypeToBaseType(output.type) << shift_bits;
+          InputOutputTypeToBaseType(false, output.type) << shift_bits;
     }
   }
+}
+
+void Program::UpdateVertexInputBaseTypes() {
+  ClearVertexInputMasks();
+  DCHECK_LE(attrib_infos_.size(), manager_->max_vertex_attribs());
+  for (size_t ii = 0; ii < attrib_infos_.size(); ++ii) {
+    const VertexAttrib& input = attrib_infos_[ii];
+    if (ProgramManager::HasBuiltInPrefix(input.name)) {
+      continue;
+    }
+    int shift_bits = (input.location % 16) * 2;
+    vertex_input_active_mask_[ii / 16] |= 0x3 << shift_bits;
+    vertex_input_base_type_mask_[ii / 16] |=
+        InputOutputTypeToBaseType(true, input.type) << shift_bits;
+  }
+}
+
+void Program::UpdateUniformBlockSizeInfo() {
+  switch (feature_info().context_type()) {
+    case CONTEXT_TYPE_OPENGLES2:
+    case CONTEXT_TYPE_WEBGL1:
+      // Uniform blocks do not exist in ES2.
+      return;
+    default:
+      break;
+  }
+
+  uniform_block_size_info_.clear();
+
+  GLint num_uniform_blocks = 0;
+  glGetProgramiv(service_id_, GL_ACTIVE_UNIFORM_BLOCKS, &num_uniform_blocks);
+  uniform_block_size_info_.resize(num_uniform_blocks);
+  for (GLint ii = 0; ii < num_uniform_blocks; ++ii) {
+    GLint binding = 0;
+    glGetActiveUniformBlockiv(
+        service_id_, ii, GL_UNIFORM_BLOCK_BINDING, &binding);
+    uniform_block_size_info_[ii].binding = static_cast<GLuint>(binding);
+
+    GLint size = 0;
+    glGetActiveUniformBlockiv(
+        service_id_, ii, GL_UNIFORM_BLOCK_DATA_SIZE, &size);
+    uniform_block_size_info_[ii].data_size = static_cast<GLuint>(size);
+  }
+}
+
+void Program::SetUniformBlockBinding(GLuint index, GLuint binding) {
+  DCHECK_GT(uniform_block_size_info_.size(), index);
+  uniform_block_size_info_[index].binding = binding;
 }
 
 std::string Program::ProcessLogInfo(
@@ -590,6 +661,8 @@ void Program::Update() {
   UpdateFragmentInputs();
   UpdateProgramOutputs();
   UpdateFragmentOutputBaseTypes();
+  UpdateVertexInputBaseTypes();
+  UpdateUniformBlockSizeInfo();
 
   valid_ = true;
 }
@@ -2342,6 +2415,7 @@ ProgramManager::ProgramManager(
     uint32_t max_varying_vectors,
     uint32_t max_draw_buffers,
     uint32_t max_dual_source_draw_buffers,
+    uint32_t max_vertex_attribs,
     const GpuPreferences& gpu_preferences,
     FeatureInfo* feature_info)
     : program_count_(0),
@@ -2350,6 +2424,7 @@ ProgramManager::ProgramManager(
       max_varying_vectors_(max_varying_vectors),
       max_draw_buffers_(max_draw_buffers),
       max_dual_source_draw_buffers_(max_dual_source_draw_buffers),
+      max_vertex_attribs_(max_vertex_attribs),
       gpu_preferences_(gpu_preferences),
       feature_info_(feature_info) {}
 

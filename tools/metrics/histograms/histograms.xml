@@ -993,6 +993,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Arc.CumulativeUseTime" units="seconds">
+  <owner>elijahtaylor@google.com</owner>
+  <owner>mitsuji@google.com</owner>
+  <summary>
+    ARC use time. The use time is incremented in regular intervals while android
+    container is active. Reported at most once a day, at which point accumulated
+    time is reset (which means that sum of reported times for a OS version would
+    give an estimate of ARC usage time per OS version).
+  </summary>
+</histogram>
+
 <histogram name="Arc.IntentHandlerAction" enum="ArcIntentHandlerAction">
   <owner>elijahtaylor@google.com</owner>
   <owner>mitsuji@google.com</owner>
@@ -1403,6 +1414,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>kuscher@google.com</owner>
   <owner>rbyers@chromium.org</owner>
   <summary>The duration of mostly stationary long-duration touches.</summary>
+</histogram>
+
+<histogram name="Ash.SystemMenu.DefaultView.VisibleRows"
+    enum="SystemMenuDefaultViewRows">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <summary>
+    The visible rows displayed in the system menu's default view. Recorded each
+    time the menu is opened.
+  </summary>
 </histogram>
 
 <histogram name="Ash.SystemMenu.PercentageOfWorkAreaHeightCoveredByMenu"
@@ -3660,6 +3681,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Time spent on 2D canvas toDataURL API call.</summary>
 </histogram>
 
+<histogram name="Blink.ColorSpace.Destination" enum="Gamma">
+  <owner>msarett@chromium.org</owner>
+  <summary>Gamma properties of destination color space.</summary>
+</histogram>
+
 <histogram name="Blink.Compositing.UpdateTime" units="microseconds">
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5642,7 +5668,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <summary>
     The length of time between a dangerous download appearing on the downloads
-    shelf, and the &quot;Dismiss&quot; button being clicked.
+    shelf, and the &quot;Dismiss&quot; button being clicked. Deprecated since
+    M54.
   </summary>
 </histogram>
 
@@ -21682,6 +21709,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Media.AVDA.FrameSentAsOverlay" enum="BooleanFrameAsOverlay">
+  <owner>liberato@chromium.org</owner>
+  <summary>
+    Record a count for each frame sent to the client by AVDA.  True counts
+    indicate that the frame was an overlay (SurfaceView).  False counts are for
+    SurfaceTexture frames.
+  </summary>
+</histogram>
+
 <histogram name="Media.AVDA.InputQueueTime" units="ms">
   <owner>watk@chromium.org</owner>
   <obsolete>
@@ -23211,6 +23247,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>Location the user clicked to open the Media Router dialog.</summary>
 </histogram>
 
+<histogram name="MediaRouter.Provider.TerminateRoute.Result"
+    enum="MediaRouteProviderResult">
+  <owner>mfoltz@chromium.org</owner>
+  <summary>Result of a request to terminate a route.</summary>
+</histogram>
+
 <histogram name="MediaRouter.Provider.Version" enum="MediaRouteProviderVersion">
   <owner>mfoltz@chromium.org</owner>
   <summary>
@@ -23337,13 +23379,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <obsolete>
-    Deprecated 07/2016 and replaced with Memory.Browser.Large2.
-  </obsolete>
   <summary>
     The private working set used by the browser process.  Recorded once per UMA
     ping.  Note the existence of Memory.Browser.Large, which doesn't have
-    overflow issues.
+    overflow issues. TODO(rkaplow): This should be replaced with
+    Memory.Browser.Large2 in M54.
   </summary>
 </histogram>
 
@@ -23690,12 +23730,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>kouhei@chromium.org</owner>
-  <obsolete>
-    Deprecated 07/2016 and replaced with Memory.Renderer.Large2.
-  </obsolete>
   <summary>
     The private working set used by each renderer process.  Each renderer
-    process provides one sample.  Recorded once per UMA ping.
+    process provides one sample.  Recorded once per UMA ping. TODO(rkaplow):
+    This should be replaced with Memory.Renderer.Large2 in M54.
   </summary>
 </histogram>
 
@@ -26569,6 +26607,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Net.CertificateTransparency.CanInclusionCheckSCT"
+    enum="SCTCanBeChecked">
+  <owner>eranm@chromium.org</owner>
+  <summary>
+    Whether an observed Signed Certificate Timestamp (SCT) can be checked for
+    inclusion. An SCT can be checked for inclusion if the client has a valid
+    Signed Tree Head (STH) and the STH currently known to the client was issued
+    24 hours after the timestamp in the SCT (24 hours being the typical Maximum
+    Merge Delay).
+  </summary>
+</histogram>
+
 <histogram name="Net.CertificateTransparency.MainFrameValidSCTCount">
   <owner>eranm@chromium.org</owner>
   <summary>
@@ -28550,6 +28600,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Time from when an HTTP request is issued to when the first byte is
     processed.
+  </summary>
+</histogram>
+
+<histogram name="Net.HttpTimeToFirstByte.LargeUpload" units="ms">
+  <owner>mmenke@chromium.org</owner>
+  <summary>
+    Time from when an HTTP request is issued to when the first byte is
+    processed, for requests with an upload that is &gt; 1 MiB. Excludes chunked
+    uploads.
   </summary>
 </histogram>
 
@@ -35027,6 +35086,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NewTabPage.RequestThrottler.PerDay" units="requests">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Records how many requests of the given type the browser tried to perform
+    each day where the type is specified by the _suffix of the histogram. The
+    histogram is emitted only after midnight of the given day passes - right
+    before the first following request (which can be several days later if the
+    user does not use Chrome in the meantime). The histogram counts requests
+    with both QUOTA_GRANTED and QUOTA_EXCEEDED status, i.e. the count can easily
+    exceed the daily quota. Forced requests are not counted here.
+  </summary>
+</histogram>
+
+<histogram name="NewTabPage.RequestThrottler.RequestStatus"
+    enum="NtpRequestThrottlerStatus">
+  <owner>jkrcal@chromium.org</owner>
+  <summary>
+    Records the status w.r.t. the quota for all requests of the given type. The
+    type of request is specified by the _suffix of the histogram.
+  </summary>
+</histogram>
+
 <histogram name="NewTabPage.SearchURLs.Total">
   <obsolete>
     Deprecated 2016-02 (and not recorded for some time before that).
@@ -35732,6 +35813,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="NQE.CachedNetworkQualityAvailable" enum="BooleanAvailable">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Records if the cached network quality (from memory or from a persistent
+    source) was available. Recorded right after connection change event.
+  </summary>
+</histogram>
+
 <histogram name="NQE.CellularSignalStrengthAvailable" enum="BooleanAvailable">
   <owner>tbansal@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
@@ -35739,6 +35829,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Whether the signal strength for the cellular network was available or not.
     Recorded right before a connection change event. Recorded only on cellular
     connections on Android platform.
+  </summary>
+</histogram>
+
+<histogram name="NQE.Correlation.ResourceLoadTime.0Kb_128Kb">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Records estimated network quality (estimated RTT, estimated downlink
+    bandwidth), resource load size, and the resource load time in a single UMA
+    sample. This metric is recorded randomly when a resource load finishes. Each
+    sample in this sparse histogram consists of multiple metrics (each occupying
+    few bits in the sample). The data in the histogram would be analyzed using
+    custom scripts. A sample is recorded only when the resource size is between
+    0 Kilobits (inclusive) and 128 Kilobits (exclusive).
   </summary>
 </histogram>
 
@@ -35786,6 +35890,20 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Records the estimate of the RTT provided by the external estimate provided.
     Recorded every time the external estimate provider provides a valid RTT
     estimate to the network quality estimator.
+  </summary>
+</histogram>
+
+<histogram
+    name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff"
+    units="ms">
+  <owner>tbansal@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Records the difference between the HTTP RTT estimated by the external
+    estimate provider and the observed HTTP RTT. The HTTP RTT estimated by the
+    external estimate provider at the time of navigation start is compared with
+    the HTTP RTT observed during the specified time interval following the start
+    of the navigation.
   </summary>
 </histogram>
 
@@ -37073,6 +37191,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="OriginTrials.FeatureEnabled" enum="OriginTrialEnableResult">
+  <obsolete>
+    Obsolete as of Chrome 54. Sort of replaced by OriginTrials.ValidationResult.
+  </obsolete>
   <owner>chasej@chromium.org</owner>
   <owner>iclelland@chromium.org</owner>
   <summary>
@@ -37084,11 +37205,24 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="OriginTrials.FeatureEnabled.MessageGenerated"
     enum="OriginTrialMessageGeneratedResult">
+  <obsolete>
+    Obsolete as of Chrome 54.
+  </obsolete>
   <owner>chasej@chromium.org</owner>
   <owner>iclelland@chromium.org</owner>
   <summary>
     Counts how often an error message is generated for each origin trial check
     to enable an experimental feature.
+  </summary>
+</histogram>
+
+<histogram name="OriginTrials.ValidationResult" enum="OriginTrialTokenStatus">
+  <owner>chasej@chromium.org</owner>
+  <owner>iclelland@chromium.org</owner>
+  <summary>
+    Counts the results of token validation checks to enable experimental
+    features. The result for each token validation check is counted once per
+    token per execution context (e.g. page, worker).
   </summary>
 </histogram>
 
@@ -37730,14 +37864,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="PageLoad.PaintTiming.ForegroundToFirstPaint" units="ms">
-  <owner>pkotwicz@chromium.org</owner>
-  <summary>
-    Measures the time from a background tab being switched to the foreground to
-    the time the first paint is performed, for main frame documents.
-  </summary>
-</histogram>
-
 <histogram name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"
     units="ms">
   <owner>ksakamoto@chromium.org</owner>
@@ -37880,9 +38006,6 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="PageLoad.Timing2.ForegroundToFirstPaint" units="ms">
   <owner>pkotwicz@chromium.org</owner>
-  <obsolete>
-    deprecated in favor of PageLoad.PaintTiming.ForegroundToFirstPaint
-  </obsolete>
   <summary>
     Measures the time from a background tab being switched to the foreground to
     the time the first paint is performed, for main frame documents.
@@ -38920,6 +39043,39 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     Whether saved password for HTTPS site had a valid SSL cert when the password
     was saved.
+  </summary>
+</histogram>
+
+<histogram name="PaymentRequest.CheckoutFunnel.Completed" enum="BooleanHit">
+  <owner>sebsg@chromium.org</owner>
+  <summary>When the merchant has processed the user's Payment Request.</summary>
+</histogram>
+
+<histogram name="PaymentRequest.CheckoutFunnel.Initiated" enum="BooleanHit">
+  <owner>sebsg@chromium.org</owner>
+  <summary>When a Payment Request gets initiated by the user.</summary>
+</histogram>
+
+<histogram name="PaymentRequest.CheckoutFunnel.PayClicked" enum="BooleanHit">
+  <owner>sebsg@chromium.org</owner>
+  <summary>
+    When the user clicks the &quot;pay&quot; button in the Payment Request UI.
+  </summary>
+</histogram>
+
+<histogram name="PaymentRequest.CheckoutFunnel.ReceivedInstrumentDetails"
+    enum="BooleanHit">
+  <owner>sebsg@chromium.org</owner>
+  <summary>
+    When the browser retrieves the instrument details from the payment app to
+    complete a purchase.
+  </summary>
+</histogram>
+
+<histogram name="PaymentRequest.CheckoutFunnel.Shown" enum="BooleanHit">
+  <owner>sebsg@chromium.org</owner>
+  <summary>
+    When the Payment Request UI gets shown after initialization.
   </summary>
 </histogram>
 
@@ -40910,6 +41066,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PlatformFile.FlushTime" units="ms">
+  <obsolete>
+    Deprecated as of 2016-07 because the histogram's purpose of adding colour to
+    the description of File::Flush() has been fulfilled.
+  </obsolete>
   <owner>tnagel@chromium.org</owner>
   <summary>The time it takes to run File::Flush().</summary>
 </histogram>
@@ -41504,6 +41664,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeConnect" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from domanLookupEnd to connectStart based on Navigation Timing.
@@ -41511,6 +41674,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeDomainLookup" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from fetchStart to domainLookupStart based on Navigation Timing.
@@ -41518,6 +41684,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeDomLoading" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016. Replaced by
+    PageLoad.DocumentTiming.NavigationToDOMContentLoadedEventFired.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from responseStart to domLoading based on Navigation Timing.
@@ -41525,6 +41695,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeFetch" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from navigationStart to fetchStart based on Navigation Timing when no
@@ -41533,6 +41706,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeFetchRedirect" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from navigationStart to fetchStart excluding time spent on redirects
@@ -41541,6 +41717,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeLoadEvent" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016. Replaced by
+    PageLoad.DocumentTiming.NavigationToLoadEventFired.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from domContentLoadedEventEnd to loadEventStart based on Navigation
@@ -41549,6 +41729,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_DelayBeforeRequest" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from connectEnd to requestStart based on Navigation Timing.
@@ -41593,6 +41776,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_Redirect" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from redirectStart to redirectEnd based on Navigation Timing when
@@ -41601,6 +41787,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_Request" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016. Replaced by
+    PageLoad.ParseTiming.NavigationToParseStart.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from requestStart to responseStart based on Navigation Timing.
@@ -41608,6 +41798,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="PLT.NT_Response" units="ms">
+  <obsolete>
+    Deprecated as of 7/19/2016. Replaced by PageLoad.ParseTiming.ParseDuration.
+  </obsolete>
   <owner>bolian@chromium.org</owner>
   <summary>
     Time from responseStart to responseEnd based on Navigation Timing.
@@ -42841,6 +43034,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Precache.CacheStatus.NonPrefetch" enum="HttpCachePattern">
+  <owner>jamartin@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    Like HttpCache.Pattern but only for requests not made during precaching.
+    Logged per-request.
+  </summary>
+</histogram>
+
 <histogram name="Precache.DownloadedNonPrecache" units="bytes">
   <owner>bengr@chromium.org</owner>
   <summary>
@@ -42925,6 +43127,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="Precache.Freshness.Prefetch" units="seconds">
+  <owner>jamartin@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    The freshness lifetimes of the resources that were precached from the moment
+    they were fetched or revalidated as described in RFC 2616 13.2.4. Logged per
+    precache request.
+  </summary>
+</histogram>
+
 <histogram name="Precache.Latency.NonPrefetch" units="ms">
   <owner>twifkak@chromium.org</owner>
   <owner>bengr@chromium.org</owner>
@@ -42979,6 +43191,18 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     The number of bytes during user browsing that were served from the cache,
     but would have been downloaded over a network if precaching was disabled.
     Logged per-request.
+  </summary>
+</histogram>
+
+<histogram name="Precache.Saved.Freshness" units="seconds">
+  <owner>jamartin@chromium.org</owner>
+  <owner>bengr@chromium.org</owner>
+  <summary>
+    The freshness lifetimes (RFC 2616 13.2.4) of the resources that were
+    precached and later used (and thus served from the cache). This is computed
+    at serving time and thus possibly different from the precached value if the
+    cache entry was revalidated. Logged per-request but only once per URL and
+    precaching cycle (as Precache.Saved).
   </summary>
 </histogram>
 
@@ -51984,6 +52208,36 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="ServiceWorkerCache.Scheduler.IsOperationSlow" enum="Boolean">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    An operation is slow (true) if it takes at least 10 seconds to run. If an
+    operation never completes, it will still be recorded as slow.
+  </summary>
+</histogram>
+
+<histogram name="ServiceWorkerCache.Scheduler.OperationDuration" units="ms">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    The time in ms from when an operation is started until it completes.
+  </summary>
+</histogram>
+
+<histogram name="ServiceWorkerCache.Scheduler.QueueDuration" units="ms">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    The time in ms from when an operation was queued until its task is posted.
+  </summary>
+</histogram>
+
+<histogram name="ServiceWorkerCache.Scheduler.QueueLength" units="operations">
+  <owner>jkarlin@chromium.org</owner>
+  <summary>
+    The number of operations in the scheduling queue just before enqueuing a new
+    operation.
+  </summary>
+</histogram>
+
 <histogram name="Session.TotalDuration" units="ms">
   <owner>mariakhomenko@chromium.org</owner>
   <owner>fqian@chromium.org</owner>
@@ -58979,7 +59233,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.CrashCreated">
+<histogram name="Tabs.SadTab.CrashCreated" units="tabs">
   <owner>jamescook@chromium.org</owner>
   <summary>
     Cumulative number of times a tab crashed with &quot;Aw, Snap!&quot;,
@@ -58991,7 +59245,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.CrashDisplayed">
+<histogram name="Tabs.SadTab.CrashDisplayed" units="tabs">
   <owner>jamescook@chromium.org</owner>
   <summary>
     Cumulative number of times a tab crashed with &quot;Aw, Snap!&quot; and the
@@ -59002,7 +59256,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.KillCreated">
+<histogram name="Tabs.SadTab.KillCreated" units="tabs">
   <owner>jamescook@chromium.org</owner>
   <summary>
     Cumulative number of times a tab was killed with a &quot;He's dead,
@@ -59016,7 +59270,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.KillCreated.OOM">
+<histogram name="Tabs.SadTab.KillCreated.OOM" units="tabs">
   <owner>oshima@chromium.org</owner>
   <summary>
     Cumulative number of times a tab was killed with a &quot;He's dead,
@@ -59029,7 +59283,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.KillDisplayed">
+<histogram name="Tabs.SadTab.KillDisplayed" units="tabs">
   <owner>jamescook@chromium.org</owner>
   <summary>
     Cumulative number of times a tab was killed with a &quot;He's dead,
@@ -59040,7 +59294,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.KillDisplayed.OOM">
+<histogram name="Tabs.SadTab.KillDisplayed.OOM" units="tabs">
   <owner>oshima@chromium.org</owner>
   <summary>
     Cumulative number of times a tab was killed with a &quot;He's dead,
@@ -59052,7 +59306,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
-<histogram name="Tabs.SadTab.ReloadCount">
+<histogram name="Tabs.SadTab.OomCreated" units="tabs">
+  <owner>wfh@chromium.org</owner>
+  <summary>
+    Cumulative number of times a tab crashed with &quot;Aw, Snap!&quot;,
+    recorded once per tab oom event.  For example, a user who ran out of memory
+    in 3 tabs will record a count in the 1 bin, 2 bin, and 3 bin.  Thus each bin
+    N is the number of sessions where users experienced N or more oom events.
+    The user may not have actually seen the sad tab page, as it might have been
+    an inactive tab. Compare to Tabs.SadTab.OomDisplayed.
+  </summary>
+</histogram>
+
+<histogram name="Tabs.SadTab.OomDisplayed" units="tabs">
+  <owner>wfh@chromium.org</owner>
+  <summary>
+    Cumulative number of times a tab ran out of memory with &quot;Aw,
+    Snap!&quot; and the user saw the page, recorded once per tab oom event.  For
+    example, a user who ran out of memory in 3 tabs will record a count in the 1
+    bin, 2 bin, and 3 bin.  Thus each bin N is the number of sessions where
+    users experienced N or more oom events.  Compare to Tabs.SadTab.OomCreated.
+  </summary>
+</histogram>
+
+<histogram name="Tabs.SadTab.ReloadCount" units="tabs">
   <owner>jamescook@chromium.org</owner>
   <summary>
     The number of times a tab was reloaded because it was killed (usually by the
@@ -59864,6 +60141,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </obsolete>
   <owner>tdresser@chromium.org</owner>
   <summary>Whether a scroll is executed on main thread.</summary>
+</histogram>
+
+<histogram name="UI.DeviceScale" units="%">
+  <owner>bsep@chromium.org</owner>
+  <summary>
+    The device scales available on the system at startup. A system may report
+    more than one if it has multiple displays with varying device scales. Only
+    logged on Windows.
+  </summary>
 </histogram>
 
 <histogram name="UMA.ActualLogUploadInterval" units="minutes">
@@ -64144,6 +64430,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="WebRTC.Call.LifetimeInSeconds" units="seconds">
+  <owner>asapersson@chromium.org</owner>
+  <summary>
+    The lifetime of a call. Recorded when a Call instance is destroyed.
+  </summary>
+</histogram>
+
 <histogram name="WebRTC.Call.PacerBitrateInKbps" units="kbps">
   <owner>holmer@chromium.org</owner>
   <summary>
@@ -64637,7 +64930,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <owner>asapersson@chromium.org</owner>
   <summary>
     Configured video codec for a sent video stream. Recorded when a
-    VideoSendStream is created.
+    VideoSendStream is destroyed (for streams whose lifetime is longer than 10
+    seconds).
   </summary>
 </histogram>
 
@@ -64890,6 +65184,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <summary>
     The average received width per frame for a received video stream. Recorded
     when a stream is removed.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.Video.ReceiveStreamLifetimeInSeconds" units="seconds">
+  <owner>asapersson@chromium.org</owner>
+  <summary>
+    The lifetime of a video receive stream. Recorded when a VideoReceiveStream
+    instance is destroyed.
   </summary>
 </histogram>
 
@@ -65249,6 +65551,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     input to video engine until a packet is sent to the network. For each sent
     packet, the maximum delay of all sent packets over the last second is
     reported. The average of these reported delays is recorded.
+  </summary>
+</histogram>
+
+<histogram name="WebRTC.Video.SendStreamLifetimeInSeconds" units="seconds">
+  <owner>asapersson@chromium.org</owner>
+  <summary>
+    The lifetime of a video send stream. Recorded when a VideoSendStream
+    instance is destroyed.
   </summary>
 </histogram>
 
@@ -67703,6 +68013,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="Lacks Form Manager"/>
 </enum>
 
+<enum name="BooleanFrameAsOverlay" type="int">
+  <int value="0" label="Frame was not allow_overlay"/>
+  <int value="1" label="Frame was allow_overlay"/>
+</enum>
+
 <enum name="BooleanFromAddressBook" type="int">
   <int value="0" label="Not From Address Book"/>
   <int value="1" label="From Address Book"/>
@@ -68149,6 +68464,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="Different clip settings in a sorting context is not supported."/>
   <int value="17"
       label="Different vertex opacities for a single texture is not supported"/>
+  <int value="18" label="RenderPassDrawQuad has a filter scale."/>
+  <int value="19" label="RenderPassDrawQuad has background filters."/>
+  <int value="20" label="RenderPassDrawQuad has a mask."/>
+  <int value="21" label="RenderPassDrawQuad has unconvertable filters."/>
 </enum>
 
 <enum name="CanvasContextType" type="int">
@@ -70183,6 +70502,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="CrashExitCodes" type="int">
+  <int value="1" label="RESULT_CODE_KILLED"/>
   <int value="2" label="RESULT_CODE_HUNG"/>
   <int value="3" label="RESULT_CODE_KILLED_BAD_MESSAGE"/>
   <int value="4" label="RESULT_CODE_INVALID_CMDLINE_URL"/>
@@ -70210,6 +70530,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="28" label="RESULT_CODE_SXS_MIGRATION_FAILED"/>
   <int value="29" label="RESULT_CODE_ACTION_DISALLOWED_BY_POLICY"/>
   <int value="30" label="RESULT_CODE_INVALID_SANDBOX_STATE"/>
+  <int value="258" label="WAIT_TIMEOUT"/>
   <int value="7006" label="SBOX_FATAL_INTEGRITY"/>
   <int value="7007" label="SBOX_FATAL_DROPTOKEN"/>
   <int value="7008" label="SBOX_FATAL_FLUSHANDLES"/>
@@ -70223,11 +70544,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="85436397" label="Crashpad_SimulatedCrash"/>
   <int value="529697949" label="CPP_EH_EXCEPTION"/>
   <int value="533692099" label="STATUS_GUARD_PAGE_VIOLATION"/>
-  <int value="536870904" label="EXCEPTION_OUT_OF_MEMORY"/>
+  <int value="536870904" label="Out of Memory"/>
   <int value="1073740791" label="STATUS_STACK_BUFFER_OVERRUN"/>
+  <int value="1073740940" label="STATUS_HEAP_CORRUPTION"/>
+  <int value="1073741502" label="STATUS_DLL_INIT_FAILED"/>
   <int value="1073741510" label="STATUS_CONTROL_C_EXIT"/>
   <int value="1073741515" label="STATUS_DLL_NOT_FOUND"/>
   <int value="1073741571" label="STATUS_STACK_OVERFLOW"/>
+  <int value="1073741659" label="STATUS_BAD_IMPERSONATION_LEVEL"/>
   <int value="1073741674" label="STATUS_PRIVILEGED_INSTRUCTION"/>
   <int value="1073741675" label="STATUS_INTEGER_OVERFLOW"/>
   <int value="1073741676" label="STATUS_INTEGER_DIVIDE_BY_ZERO"/>
@@ -70243,13 +70567,16 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1073741786" label="STATUS_INVALID_DISPOSITION"/>
   <int value="1073741787" label="STATUS_NONCONTINUABLE_EXCEPTION"/>
   <int value="1073741790" label="STATUS_ACCESS_DENIED"/>
+  <int value="1073741794" label="STATUS_INVALID_LOCK_SEQUENCE"/>
   <int value="1073741795" label="STATUS_ILLEGAL_INSTRUCTION"/>
+  <int value="1073741800" label="STATUS_CONFLICTING_ADDRESSES"/>
   <int value="1073741801" label="STATUS_NO_MEMORY"/>
   <int value="1073741811" label="STATUS_INVALID_PARAMETER"/>
   <int value="1073741816" label="STATUS_INVALID_HANDLE"/>
   <int value="1073741818" label="STATUS_IN_PAGE_ERROR"/>
   <int value="1073741819" label="STATUS_ACCESS_VIOLATION"/>
   <int value="1073741829" label="STATUS_SEGMENT_NOTIFICATION"/>
+  <int value="1073741845" label="STATUS_FATAL_APP_EXIT"/>
   <int value="2147483644" label="STATUS_SINGLE_STEP"/>
   <int value="2147483645" label="STATUS_BREAKPOINT"/>
   <int value="2147483646" label="STATUS_DATATYPE_MISALIGNMENT"/>
@@ -72998,6 +73325,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
       label="Disable Certificate Transparency enforcement for these sites"/>
   <int value="336"
       label="Configure the list of installed apps on the login screen"/>
+  <int value="337" label="Enable Android Backup Service"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -73312,7 +73640,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <enum name="ExtensionBubbleAction" type="int">
   <int value="0" label="Learn more"/>
   <int value="1" label="Execute"/>
-  <int value="2" label="Dismiss"/>
+  <int value="2" label="Dismiss by user action"/>
+  <int value="3" label="Dismiss by deactivation"/>
 </enum>
 
 <enum name="ExtensionCreationFlags" type="int">
@@ -74962,6 +75291,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1141" label="QUICKUNLOCKPRIVATE_GETACTIVEMODES"/>
   <int value="1142" label="QUICKUNLOCKPRIVATE_GETAVAILABLEMODES"/>
   <int value="1143" label="WEBSTOREPRIVATE_ISPENDINGCUSTODIANAPPROVAL"/>
+  <int value="1144" label="TABS_DISCARD"/>
 </enum>
 
 <enum name="ExtensionIconState" type="int">
@@ -77055,6 +77385,28 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1452" label="PointerDownFired"/>
   <int value="1453" label="PointerDownFiredForTouch"/>
   <int value="1454" label="PointerEventDispatchPointerDown"/>
+  <int value="1455" label="SVGSMILBeginOrEndEventValue"/>
+  <int value="1456" label="SVGSMILBeginOrEndSyncbaseValue"/>
+  <int value="1457" label="SVGSMILElementInsertedAfterLoad"/>
+  <int value="1458" label="V8VisualViewport_ScrollLeft_AttributeGetter"/>
+  <int value="1459" label="V8VisualViewport_ScrollTop_AttributeGetter"/>
+  <int value="1460" label="V8VisualViewport_PageX_AttributeGetter"/>
+  <int value="1461" label="V8VisualViewport_PageY_AttributeGetter"/>
+  <int value="1462" label="V8VisualViewport_ClientWidth_AttributeGetter"/>
+  <int value="1463" label="V8VisualViewport_ClientHeight_AttributeGetter"/>
+  <int value="1464" label="V8VisualViewport_Scale_AttributeGetter"/>
+  <int value="1465" label="VisualViewportScrollFired"/>
+  <int value="1466" label="VisualViewportResizeFired"/>
+  <int value="1467" label="NodeGetRootNode"/>
+  <int value="1468" label="SlotChangeEventAddListener"/>
+  <int value="1469" label="CSSValueAppearanceButtonRendered"/>
+  <int value="1470" label="CSSValueAppearanceButtonForAnchor"/>
+  <int value="1471" label="CSSValueAppearanceButtonForButton"/>
+  <int value="1472" label="CSSValueAppearanceButtonForOtherButtons"/>
+  <int value="1473" label="CSSValueAppearanceTextFieldRendered"/>
+  <int value="1474" label="CSSValueAppearanceTextFieldForSearch"/>
+  <int value="1475" label="CSSValueAppearanceTextFieldForTextField"/>
+  <int value="1476" label="RTCPeerConnectionGetStats"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -78055,6 +78407,15 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="6" label="ListAccounts call failed"/>
   <int value="7" label="No restore needed, fresh cookies found"/>
   <int value="8" label="Overflow"/>
+</enum>
+
+<enum name="Gamma" type="int">
+  <int value="0" label="kLinear_Gamma"/>
+  <int value="1" label="kSRGB_Gamma"/>
+  <int value="2" label="k2Dot2Curve_Gamma"/>
+  <int value="3" label="kNonStandard_Gamma"/>
+  <int value="4" label="kNull_Gamma"/>
+  <int value="5" label="kFail_Gamma"/>
 </enum>
 
 <enum name="GATTCharacteristicHash" type="int">
@@ -79309,8 +79670,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <enum name="Hresult" type="int">
   <int value="-2147467262" label="E_NOINTERFACE"/>
+  <int value="-2147467259" label="E_FAIL"/>
   <int value="-2147417848" label="RPC_E_DISCONNECTED"/>
   <int value="-2147221164" label="REGDB_E_CLASSNOTREG"/>
+  <int value="-2147219455" label="GOOPDATE_E_NO_NETWORK"/>
   <int value="-2147219437" label="GOOPDATE_E_APP_UPDATE_DISABLED_BY_POLICY"/>
   <int value="-2147219198" label="GOOPDATEINSTALL_E_INSTALLER_FAILED"/>
   <int value="-2147024894" label="ERROR_FILE_NOT_FOUND"/>
@@ -79324,8 +79687,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="-2147023436" label="ERROR_TIMEOUT"/>
   <int value="-2147023179" label="RPC_S_UNKNOWN_IF"/>
   <int value="-2147023174" label="RPC_S_SERVER_UNAVAILABLE"/>
+  <int value="-2147012894" label="WININET_E_TIMEOUT"/>
+  <int value="-2147012889" label="WININET_E_NAME_NOT_RESOLVED"/>
+  <int value="-2147012867" label="WININET_E_CANNOT_CONNECT"/>
+  <int value="-2147012866" label="WININET_E_CONNECTION_ABORTED"/>
   <int value="-2147009295" label="ERROR_INSTALL_PACKAGE_NOT_FOUND"/>
   <int value="-2146959355" label="CO_E_SERVER_EXEC_FAILURE"/>
+  <int value="-1606219753" label="GOOPDATE_E_NON_BLOCKING_CALL_PENDING"/>
+  <int value="-1606219747" label="GOOPDATE_E_APP_USING_EXTERNAL_UPDATER"/>
 </enum>
 
 <enum name="HttpAuthCount" type="int">
@@ -81760,6 +82129,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-1319688939" label="ignore-gpu-blacklist"/>
   <int value="-1302904242" label="enable-navigation-tracing"/>
   <int value="-1285021473" label="save-page-as-mhtml"/>
+  <int value="-1276912933" label="enable-quick-unlock-pin"/>
   <int value="-1271563519" label="enable-appcontainer"/>
   <int value="-1269084216" label="ash-md"/>
   <int value="-1268836676" label="disable-out-of-process-pdf"/>
@@ -81879,6 +82249,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="-488779992" label="blink-settings"/>
   <int value="-478462945" label="enable-ephemeral-apps"/>
   <int value="-475049740" label="disable-vr-shell"/>
+  <int value="-474322576" label="disable-quick-unlock-pin"/>
   <int value="-462205750" label="enable-service-worker-sync"/>
   <int value="-455203267" label="use_new_features_summary"/>
   <int value="-430360431" label="disable-password-generation"/>
@@ -82090,6 +82461,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1087235172" label="file-manager-enable-new-audio-player"/>
   <int value="1090377940" label="enable-quic-https"/>
   <int value="1095061640" label="enable-prominent-url-app-flow"/>
+  <int value="1098823967" label="ash-enable-window-cycle-ui"/>
   <int value="1104948452" label="manual-enhanced-bookmarks-optout"/>
   <int value="1105439588" label="enable-swipe-selection"/>
   <int value="1107543566" label="enable-one-copy"/>
@@ -83378,6 +83750,17 @@ To add a new entry, add it with any value and run test to compute valid value.
 <enum name="MediaPlayerExitStatus" type="int">
   <int value="0" label="No errors"/>
   <int value="1" label="Has errors"/>
+</enum>
+
+<enum name="MediaRouteProviderResult" type="int">
+  <int value="0" label="UnknownError"/>
+  <int value="1" label="Ok"/>
+  <int value="2" label="TimedOut"/>
+  <int value="3" label="RouteNotFound"/>
+  <int value="4" label="SinkNotFound"/>
+  <int value="5" label="InvalidOrigin"/>
+  <int value="6" label="OffTheRecordMismatch"/>
+  <int value="7" label="NoSupportedProvider"/>
 </enum>
 
 <enum name="MediaRouteProviderVersion" type="int">
@@ -84930,6 +85313,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="2" label="NTP Promo link clicked"/>
 </enum>
 
+<enum name="NtpRequestThrottlerStatus" type="int">
+  <int value="0" label="Forced request"/>
+  <int value="1" label="Quota granted"/>
+  <int value="2" label="Quota exceeded"/>
+</enum>
+
 <enum name="NtpSnippetsFetchResult" type="int">
   <int value="0" label="Success"/>
   <int value="1" label="Empty hosts"/>
@@ -85327,6 +85716,9 @@ To add a new entry, add it with any value and run test to compute valid value.
 </enum>
 
 <enum name="OriginTrialEnableResult" type="int">
+  <obsolete>
+    Obsolete as of M54 and replaced by OriginTrialTokenStatus.
+  </obsolete>
   <int value="0" label="Success"/>
   <int value="1" label="NotSupported"/>
   <int value="2" label="Insecure"/>
@@ -85341,9 +85733,24 @@ To add a new entry, add it with any value and run test to compute valid value.
 </enum>
 
 <enum name="OriginTrialMessageGeneratedResult" type="int">
+  <obsolete>
+    Obsolete as of Chrome 54.
+  </obsolete>
   <int value="0" label="NotRequested"/>
   <int value="1" label="Yes"/>
   <int value="2" label="No"/>
+</enum>
+
+<enum name="OriginTrialTokenStatus" type="int">
+  <int value="0" label="Success"/>
+  <int value="1" label="NotSupported"/>
+  <int value="2" label="Insecure"/>
+  <int value="3" label="Expired"/>
+  <int value="4" label="WrongOrigin"/>
+  <int value="5" label="InvalidSignature"/>
+  <int value="6" label="Malformed"/>
+  <int value="7" label="WrongVersion"/>
+  <int value="8" label="FeatureDisabled"/>
 </enum>
 
 <enum name="OSAgnosticErrno" type="int">
@@ -88213,13 +88620,13 @@ To add a new entry, add it with any value and run test to compute valid value.
 </enum>
 
 <enum name="QuicConnectionMigrationStatus" type="int">
-  <int value="1" label="NO_MIGRATABLE_STREAMS"/>
-  <int value="2" label="ALREADY_MIGRATED"/>
-  <int value="3" label="INTERNAL_ERROR"/>
-  <int value="4" label="TOO_MANY_CHANGES"/>
-  <int value="5" label="SUCCESS"/>
-  <int value="6" label="NON_MIGRATABLE_STREAM"/>
-  <int value="7" label="DISABLED"/>
+  <int value="0" label="NO_MIGRATABLE_STREAMS"/>
+  <int value="1" label="ALREADY_MIGRATED"/>
+  <int value="2" label="INTERNAL_ERROR"/>
+  <int value="3" label="TOO_MANY_CHANGES"/>
+  <int value="4" label="SUCCESS"/>
+  <int value="5" label="NON_MIGRATABLE_STREAM"/>
+  <int value="6" label="DISABLED"/>
 </enum>
 
 <enum name="QuicDisabledReason" type="int">
@@ -89635,6 +90042,12 @@ To add a new entry, add it with any value and run test to compute valid value.
 <enum name="ScrollThread" type="int">
   <int value="0" label="Scroll on impl-thread"/>
   <int value="1" label="Scroll on main-thread"/>
+</enum>
+
+<enum name="SCTCanBeChecked" type="int">
+  <int value="0" label="No valid STH"/>
+  <int value="1" label="Requires newer STH"/>
+  <int value="2" label="Can be checked for inclusion"/>
 </enum>
 
 <enum name="SCTOrigin" type="int">
@@ -92698,6 +93111,35 @@ To add a new entry, add it with any value and run test to compute valid value.
   <int value="1" label="IP address"/>
   <int value="2" label="Web URL"/>
   <int value="3" label="SSID"/>
+</enum>
+
+<enum name="SystemMenuDefaultViewRows" type="int">
+  <int value="0" label="NOT_RECORDED - Should not be recorded"/>
+  <int value="1" label="TEST - Should not be recorded"/>
+  <int value="2" label="Accessibility"/>
+  <int value="3" label="Audio"/>
+  <int value="4" label="Bluetooth"/>
+  <int value="5" label="Caps lock"/>
+  <int value="6" label="Cast"/>
+  <int value="7" label="Date"/>
+  <int value="8" label="Display settings"/>
+  <int value="9" label="Display brightness"/>
+  <int value="10" label="Enterprise"/>
+  <int value="11" label="IME"/>
+  <int value="12" label="Multi profile media"/>
+  <int value="13" label="Network"/>
+  <int value="14" label="Settings"/>
+  <int value="15" label="Update"/>
+  <int value="16" label="Power"/>
+  <int value="17" label="Rotation lock"/>
+  <int value="18" label="Screen capture"/>
+  <int value="19" label="Screen share"/>
+  <int value="20" label="Session length limit"/>
+  <int value="21" label="SMS"/>
+  <int value="22" label="Supervised user"/>
+  <int value="23" label="Tracing"/>
+  <int value="24" label="User"/>
+  <int value="25" label="VPN"/>
 </enum>
 
 <enum name="TabBackgroundLoadStatus" type="int">
@@ -98634,6 +99076,8 @@ To add a new entry, add it with any value and run test to compute valid value.
       name="NQE.Accuracy.EffectiveConnectionType.EstimatedObservedDiff"/>
   <affected-histogram name="NQE.Accuracy.HttpRTT.EstimatedObservedDiff"/>
   <affected-histogram name="NQE.Accuracy.TransportRTT.EstimatedObservedDiff"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NQE.Accuracy.Metric.AccuracyRecordingIntervals"
@@ -98660,6 +99104,10 @@ To add a new entry, add it with any value and run test to compute valid value.
       name="NQE.Accuracy.TransportRTT.EstimatedObservedDiff.Negative"/>
   <affected-histogram
       name="NQE.Accuracy.TransportRTT.EstimatedObservedDiff.Positive"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Negative"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Positive"/>
 </histogram_suffixes>
 
 <histogram_suffixes
@@ -98744,6 +99192,18 @@ To add a new entry, add it with any value and run test to compute valid value.
       name="NQE.Accuracy.TransportRTT.EstimatedObservedDiff.Positive.30"/>
   <affected-histogram
       name="NQE.Accuracy.TransportRTT.EstimatedObservedDiff.Positive.60"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Negative.15"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Negative.30"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Negative.60"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Positive.15"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Positive.30"/>
+  <affected-histogram
+      name="NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff.Positive.60"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NQE.DifferentPercentiles" separator=".">
@@ -98817,6 +99277,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="bookmark" label="Offline bookmark cache"/>
   <suffix name="last_n" label="Offline recent pages"/>
   <suffix name="async_loading" label="Offline async loaded pages"/>
+  <suffix name="custom_tabs" label="Offline custom tabs"/>
   <affected-histogram name="OfflinePages.DeletePage.AccessCount"/>
   <affected-histogram name="OfflinePages.DeletePage.LastOpenToCreated"/>
   <affected-histogram name="OfflinePages.DeletePage.PageSize"/>
@@ -99323,6 +99784,14 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="WorkerProcess"/>
   <affected-histogram name="PerformanceMonitor.AverageCPU"/>
   <affected-histogram name="PerformanceMonitor.HighCPU"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="PermissionRequestGesture" separator=".">
+  <suffix name="Gesture" label="With user gesture"/>
+  <suffix name="NoGesture" label="Without user gesture"/>
+  <affected-histogram name="Permissions.Prompt.Accepted"/>
+  <affected-histogram name="Permissions.Prompt.Denied"/>
+  <affected-histogram name="Permissions.Prompt.Shown"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="PermissionTypes" separator=".">
@@ -100076,6 +100545,13 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="Media.EME.RequestMediaKeySystemAccess"/>
 </histogram_suffixes>
 
+<histogram_suffixes name="RequestThrottlerTypes">
+  <suffix name="SuggestionFetcher"
+      label="Fetcher for content suggestions on mobile NTP"/>
+  <affected-histogram name="NewTabPage.RequestThrottler.PerDay"/>
+  <affected-histogram name="NewTabPage.RequestThrottler.RequestStatus"/>
+</histogram_suffixes>
+
 <histogram_suffixes name="ResourceLoaderSizeSlice" separator=".">
   <suffix name="LT_2kB" label="Sliced for resources smaller than 2kB."/>
   <suffix name="LT_32kB"
@@ -100448,6 +100924,12 @@ To add a new entry, add it with any value and run test to compute valid value.
   <suffix name="FETCH_SUB_RESOURCE" label="FETCH_SUB_RESOURCE"/>
   <suffix name="UNKNOWN" label="UNKNOWN"/>
   <suffix name="FOREIGN_FETCH" label="FOREIGN_FETCH"/>
+  <suffix name="NAVIGATION_HINT_LINK_MOUSE_DOWN"
+      label="NAVIGATION_HINT_LINK_MOUSE_DOWN"/>
+  <suffix name="NAVIGATION_HINT_LINK_TAP_UNCONFIRMED"
+      label="NAVIGATION_HINT_LINK_TAP_UNCONFIRMED"/>
+  <suffix name="NAVIGATION_HINT_LINK_TAP_DOWN"
+      label="NAVIGATION_HINT_LINK_TAP_DOWN"/>
   <affected-histogram name="ServiceWorker.StartWorker.StatusByPurpose"/>
   <affected-histogram name="ServiceWorker.StartWorker.Time_DuringStartup"/>
   <affected-histogram name="ServiceWorker.StartWorker.Time_ExistingProcess"/>
@@ -100536,6 +101018,18 @@ To add a new entry, add it with any value and run test to compute valid value.
       label="The time to perform the 'open' operation on a ServiceWorker
              CacheStorage, which gets or creates a cache."/>
   <affected-histogram name="ServiceWorkerCache.CacheStorage"/>
+</histogram_suffixes>
+
+<histogram_suffixes name="ServiceWorkerScheduler" separator="."
+    ordering="prefix">
+  <suffix name="CacheStorage" label="Collected from a CacheStorage instance"/>
+  <suffix name="Cache" label="Collected from a CacheStorageCache instance"/>
+  <suffix name="BackgroundSyncManager"
+      label="Collected from a BackgroundSyncManager instance"/>
+  <affected-histogram name="ServiceWorkerCache.Scheduler.IsOperationSlow"/>
+  <affected-histogram name="ServiceWorkerCache.Scheduler.OperationDuration"/>
+  <affected-histogram name="ServiceWorkerCache.Scheduler.QueueDuration"/>
+  <affected-histogram name="ServiceWorkerCache.Scheduler.QueueLength"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ServiceWorkerSpecialApps" separator=".">
@@ -100690,7 +101184,7 @@ To add a new entry, add it with any value and run test to compute valid value.
   <affected-histogram name="SimpleCache.SyncOpenResult"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="SkiaDrawScaleFactorFilterQuality">
+<histogram_suffixes name="SkiaDrawScaleFactorFilterQuality" separator=".">
   <affected-histogram name="Skia.DrawScaleFactor"/>
   <suffix name="AnyFilterQuality" label="Any filter quality was used."/>
   <suffix name="HighFilterQuality" label="High filter quality was used."/>

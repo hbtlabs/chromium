@@ -55,6 +55,7 @@ class EventDispatchMediator;
 class EventListener;
 class ExceptionState;
 class FloatPoint;
+class GetRootNodeOptions;
 class LocalFrame;
 class HTMLInputElement;
 class HTMLQualifiedName;
@@ -91,6 +92,7 @@ class Text;
 class TouchEvent;
 
 const int nodeStyleChangeShift = 19;
+const int nodeCustomElementShift = 21;
 
 enum StyleChangeType {
     NoStyleChange = 0,
@@ -100,12 +102,14 @@ enum StyleChangeType {
 };
 
 enum class CustomElementState {
+    // https://dom.spec.whatwg.org/#concept-element-custom-element-state
     Uncustomized = 0,
-    Custom = 1,
-    Undefined = 2,
-};
+    Custom = 1 << nodeCustomElementShift,
+    Undefined = 2 << nodeCustomElementShift,
+    Failed = 3 << nodeCustomElementShift,
 
-CORE_EXPORT std::ostream& operator<<(std::ostream&, CustomElementState);
+    NotDefinedFlag = 2 << nodeCustomElementShift,
+};
 
 class NodeRareDataBase {
 public:
@@ -201,6 +205,7 @@ public:
     NodeList* childNodes();
     Node* firstChild() const;
     Node* lastChild() const;
+    Node* getRootNode(const GetRootNodeOptions&) const;
     Node& treeRoot() const;
     Node& shadowIncludingRoot() const;
     bool isUnclosedNodeOf(const Node&) const;
@@ -253,8 +258,7 @@ public:
     bool isFirstLetterPseudoElement() const { return getPseudoId() == PseudoIdFirstLetter; }
     virtual PseudoId getPseudoId() const { return PseudoIdNone; }
 
-    bool isCustomElement() const { return getFlag(CustomElementFlag); }
-    CustomElementState getCustomElementState() const;
+    CustomElementState getCustomElementState() const { return static_cast<CustomElementState>(m_nodeFlags & CustomElementStateMask); }
     void setCustomElementState(CustomElementState);
     bool isV0CustomElement() const { return getFlag(V0CustomElementFlag); }
     enum V0CustomElementState {
@@ -416,12 +420,6 @@ public:
     // must be recognized as inert to prevent text selection.
     bool isInert() const;
 
-    bool isContentEditable() const;
-    bool isContentRichlyEditable() const;
-
-    bool hasEditableStyle(EditableType = ContentIsEditable) const;
-    bool layoutObjectIsRichlyEditable(EditableType = ContentIsEditable) const;
-
     virtual LayoutRect boundingBox() const;
     IntRect pixelSnappedBoundingBox() const { return pixelSnappedIntRect(boundingBox()); }
 
@@ -519,7 +517,7 @@ public:
 
     // Detaches the node from the layout tree, making it invisible in the rendered view. This method will remove
     // the node's layout object from the layout tree and delete it.
-    virtual void detach(const AttachContext& = AttachContext());
+    virtual void detachLayoutTree(const AttachContext& = AttachContext());
 
     void reattach(const AttachContext& = AttachContext());
     void lazyReattachIfAttached();
@@ -699,8 +697,7 @@ private:
         ChildNeedsStyleRecalcFlag = 1 << 18,
         StyleChangeMask = 1 << nodeStyleChangeShift | 1 << (nodeStyleChangeShift + 1),
 
-        CustomElementFlag = 1 << 21,
-        CustomElementCustomFlag = 1 << 22,
+        CustomElementStateMask = 0x3 << nodeCustomElementShift,
 
         HasNameOrIsEditingTextFlag = 1 << 23,
         HasWeakReferencesFlag = 1 << 24,
@@ -834,7 +831,7 @@ inline void Node::lazyReattachIfAttached()
     AttachContext context;
     context.performingReattach = true;
 
-    detach(context);
+    detachLayoutTree(context);
     markAncestorsWithChildNeedsStyleRecalc();
 }
 
@@ -860,22 +857,15 @@ inline ScriptWrappable* ScriptWrappable::fromNode(Node* node)
     return node;
 }
 
-// TODO(yoichio): Move to core/editing
-CORE_EXPORT bool isRootEditableElement(const Node&);
-CORE_EXPORT Element* rootEditableElement(const Node&);
-CORE_EXPORT Element* rootEditableElement(const Node&, EditableType);
-
 // Allow equality comparisons of Nodes by reference or pointer, interchangeably.
 DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES_REFCOUNTED(Node)
 
 
 #define DEFINE_NODE_TYPE_CASTS(thisType, predicate) \
-    template<typename T> inline thisType* to##thisType(const RefPtr<T>& node) { return to##thisType(node.get()); } \
     DEFINE_TYPE_CASTS(thisType, Node, node, node->predicate, node.predicate)
 
 // This requires isClassName(const Node&).
 #define DEFINE_NODE_TYPE_CASTS_WITH_FUNCTION(thisType) \
-    template<typename T> inline thisType* to##thisType(const RefPtr<T>& node) { return to##thisType(node.get()); } \
     DEFINE_TYPE_CASTS(thisType, Node, node, is##thisType(*node), is##thisType(node))
 
 #define DECLARE_NODE_FACTORY(T) \

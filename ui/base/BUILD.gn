@@ -161,6 +161,10 @@ component("base") {
     "dragdrop/drop_target_win.h",
     "dragdrop/os_exchange_data.cc",
     "dragdrop/os_exchange_data.h",
+    "dragdrop/os_exchange_data_provider_builder_mac.h",
+    "dragdrop/os_exchange_data_provider_builder_mac.mm",
+    "dragdrop/os_exchange_data_provider_factory.cc",
+    "dragdrop/os_exchange_data_provider_factory.h",
     "dragdrop/os_exchange_data_provider_mac.h",
     "dragdrop/os_exchange_data_provider_mac.mm",
     "dragdrop/os_exchange_data_provider_win.cc",
@@ -299,6 +303,7 @@ component("base") {
       "accelerators/accelerator_history.h",
       "accelerators/accelerator_manager.cc",
       "accelerators/accelerator_manager.h",
+      "accelerators/accelerator_manager_delegate.h",
       "base_window.cc",
       "base_window.h",
       "clipboard/clipboard.cc",
@@ -556,6 +561,8 @@ component("base") {
       "dragdrop/drop_target_event.h",
       "dragdrop/os_exchange_data.cc",
       "dragdrop/os_exchange_data.h",
+      "dragdrop/os_exchange_data_provider_factory.cc",
+      "dragdrop/os_exchange_data_provider_factory.h",
       "nine_image_painter_factory.cc",
       "nine_image_painter_factory.h",
     ]
@@ -753,6 +760,7 @@ test("ui_base_unittests") {
   } else {  # !is_ios
     sources += [
       "accelerators/accelerator_manager_unittest.cc",
+      "accelerators/accelerator_unittest.cc",
       "accelerators/menu_label_accelerator_util_linux_unittest.cc",
       "clipboard/custom_data_helper_unittest.cc",
       "cocoa/base_view_unittest.mm",

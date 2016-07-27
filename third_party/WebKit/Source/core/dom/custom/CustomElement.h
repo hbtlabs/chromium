@@ -30,7 +30,7 @@ public:
     static CustomElementsRegistry* registry(const Element&);
     static CustomElementsRegistry* registry(const Document&);
 
-    static CustomElementDefinition* definitionForElement(const Element&);
+    static CustomElementDefinition* definitionForElement(const Element*);
 
     static bool isValidName(const AtomicString& name);
 
@@ -41,6 +41,8 @@ public:
     static HTMLElement* createCustomElementSync(Document&, const QualifiedName&, ExceptionState&);
     static HTMLElement* createCustomElementSync(Document&, const QualifiedName&);
     static HTMLElement* createCustomElementAsync(Document&, const QualifiedName&);
+
+    static HTMLElement* createFailedElement(Document&, const QualifiedName&);
 
     static void enqueue(Element*, CustomElementReaction*);
     static void enqueueConnectedCallback(Element*);

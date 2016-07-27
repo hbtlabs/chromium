@@ -34,6 +34,7 @@ static_library("renderer") {
     "//chrome:strings",
     "//chrome/common",
     "//chrome/common:mojo_bindings",
+    "//chrome/common:search_provider_mojom",
     "//components/autofill/content/renderer",
     "//components/cdm/renderer",
     "//components/content_settings/content/common",
@@ -44,7 +45,6 @@ static_library("renderer") {
     "//components/guest_view/renderer",
     "//components/network_hints/renderer",
     "//components/omnibox/common",
-    "//components/page_load_metrics/renderer",
     "//components/password_manager/content/renderer",
     "//components/plugins/renderer",
     "//components/printing/renderer",
@@ -58,6 +58,7 @@ static_library("renderer") {
     "//components/web_cache/renderer",
     "//content/app/resources",
     "//content/app/strings",
+    "//content/public/common",
     "//content/public/renderer",
     "//net",
     "//skia",
@@ -154,6 +155,8 @@ static_library("renderer") {
   if (enable_spellcheck) {
     sources +=
         rebase_path(gypi_values.chrome_renderer_spellchecker_sources, ".", "..")
+    deps += [ "//components/spellcheck/common:common" ]
+
     if (!is_android) {
       deps += [ "//third_party/hunspell" ]
     }
@@ -183,6 +186,10 @@ static_library("renderer") {
       "spellchecker/hunspell_engine.cc",
       "spellchecker/hunspell_engine.h",
     ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//chrome/renderer/leak_detector:leak_detector" ]
   }
 }
 

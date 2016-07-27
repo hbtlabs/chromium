@@ -167,11 +167,11 @@ void DeleteSelectionCommand::initializePositionData(EditingState* editingState)
     initializeStartEnd(start, end);
     DCHECK(start.isNotNull());
     DCHECK(end.isNotNull());
-    if (!isEditablePosition(start, ContentIsEditable)) {
+    if (!isEditablePosition(start)) {
         editingState->abort();
         return;
     }
-    if (!isEditablePosition(end, ContentIsEditable)) {
+    if (!isEditablePosition(end)) {
         Node* highestRoot = highestEditableRoot(start);
         DCHECK(highestRoot);
         end = lastEditablePositionBeforePositionInRoot(end, *highestRoot);
@@ -335,7 +335,7 @@ static Position firstEditablePositionInNode(Node* node)
 {
     DCHECK(node);
     Node* next = node;
-    while (next && !next->hasEditableStyle())
+    while (next && !hasEditableStyle(*next))
         next = NodeTraversal::next(*next, node);
     return next ? firstPositionInOrBeforeNode(next) : Position();
 }
@@ -347,7 +347,7 @@ void DeleteSelectionCommand::removeNode(Node* node, EditingState* editingState, 
 
     if (m_startRoot != m_endRoot && !(node->isDescendantOf(m_startRoot.get()) && node->isDescendantOf(m_endRoot.get()))) {
         // If a node is not in both the start and end editable roots, remove it only if its inside an editable region.
-        if (!node->parentNode()->hasEditableStyle()) {
+        if (!hasEditableStyle(*node->parentNode())) {
             // Don't remove non-editable atomic nodes.
             if (!node->hasChildren())
                 return;
@@ -929,12 +929,12 @@ void DeleteSelectionCommand::doApply(EditingState* editingState)
     clearTransientState();
 }
 
-EditAction DeleteSelectionCommand::editingAction() const
+InputEvent::InputType DeleteSelectionCommand::inputType() const
 {
     // Note that DeleteSelectionCommand is also used when the user presses the Delete key,
-    // but in that case there's a TypingCommand that supplies the editingAction(), so
+    // but in that case there's a TypingCommand that supplies the inputType(), so
     // the Undo menu correctly shows "Undo Typing"
-    return EditActionCut;
+    return InputEvent::InputType::Cut;
 }
 
 // Normally deletion doesn't preserve the typing style that was present before it.  For example,

@@ -83,7 +83,7 @@ public:
 
     unsigned countChildren() const;
 
-    Element* querySelector(const AtomicString& selectors, ExceptionState&);
+    Element* querySelector(const AtomicString& selectors, ExceptionState& = ASSERT_NO_EXCEPTION);
     StaticElementList* querySelectorAll(const AtomicString& selectors, ExceptionState&);
 
     Node* insertBefore(Node* newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -110,7 +110,7 @@ public:
     void cloneChildNodes(ContainerNode* clone);
 
     void attachLayoutTree(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
     LayoutRect boundingBox() const final;
     void setFocus(bool) override;
     void focusStateChanged();
@@ -159,7 +159,7 @@ public:
     // since it's not clear that they alter the style bits of siblings and children.
     enum SiblingCheckType { FinishedParsingChildren, SiblingElementInserted, SiblingElementRemoved };
     void checkForSiblingStyleChanges(SiblingCheckType, Node* changedNode, Node* nodeBeforeChange, Node* nodeAfterChange);
-    void recalcChildStyle(StyleRecalcChange);
+    void recalcDescendantStyles(StyleRecalcChange);
 
     bool childrenSupportStyleSharing() const { return !hasRestyleFlags(); }
 

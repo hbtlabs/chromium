@@ -806,9 +806,9 @@ void HTMLInputElement::attachLayoutTree(const AttachContext& context)
         document().updateFocusAppearanceSoon(SelectionBehaviorOnFocus::Restore);
 }
 
-void HTMLInputElement::detach(const AttachContext& context)
+void HTMLInputElement::detachLayoutTree(const AttachContext& context)
 {
-    HTMLTextFormControlElement::detach(context);
+    HTMLTextFormControlElement::detachLayoutTree(context);
     m_needsToUpdateViewValue = true;
     m_inputTypeView->closePopupView();
 }
@@ -1581,6 +1581,41 @@ bool HTMLInputElement::hasValidDataListOptions() const
             return true;
     }
     return false;
+}
+
+HeapVector<Member<HTMLOptionElement>> HTMLInputElement::filteredDataListOptions() const
+{
+    HeapVector<Member<HTMLOptionElement>> filtered;
+    HTMLDataListElement* dataList = this->dataList();
+    if (!dataList)
+        return filtered;
+
+    String value = innerEditorValue();
+    if (multiple() && type() == InputTypeNames::email) {
+        Vector<String> emails;
+        value.split(',', true, emails);
+        if (!emails.isEmpty())
+            value = emails.last().stripWhiteSpace();
+    }
+
+    HTMLDataListOptionsCollection* options = dataList->options();
+    filtered.reserveCapacity(options->length());
+    value = value.foldCase();
+    for (unsigned i = 0; i < options->length(); ++i) {
+        HTMLOptionElement* option = options->item(i);
+        DCHECK(option);
+        if (!value.isEmpty()) {
+            // Firefox shows OPTIONs with matched labels, Edge shows OPTIONs
+            // with matches values. We show both.
+            if (option->value().foldCase().find(value) == kNotFound && option->label().foldCase().find(value) == kNotFound)
+                continue;
+        }
+        // TODO(tkent): Should allow invalid strings. crbug.com/607097.
+        if (!isValidValue(option->value()))
+            continue;
+        filtered.append(option);
+    }
+    return filtered;
 }
 
 void HTMLInputElement::setListAttributeTargetObserver(ListAttributeTargetObserver* newObserver)

@@ -5,15 +5,18 @@
 #ifndef TaskRunnerHelper_h
 #define TaskRunnerHelper_h
 
+#include "core/CoreExport.h"
 #include "wtf/Allocator.h"
 
 namespace blink {
 
 class Document;
+class ExecutionContext;
 class LocalFrame;
+class ScriptState;
 class WebTaskRunner;
 
-class TaskRunnerHelper final {
+class CORE_EXPORT TaskRunnerHelper final {
     STATIC_ONLY(TaskRunnerHelper);
 public:
     static WebTaskRunner* getUnthrottledTaskRunner(LocalFrame*);
@@ -22,6 +25,8 @@ public:
     static WebTaskRunner* getUnthrottledTaskRunner(Document*);
     static WebTaskRunner* getTimerTaskRunner(Document*);
     static WebTaskRunner* getLoadingTaskRunner(Document*);
+    static WebTaskRunner* getUnthrottledTaskRunner(ExecutionContext*);
+    static WebTaskRunner* getUnthrottledTaskRunner(ScriptState*);
 };
 
 } // namespace blink

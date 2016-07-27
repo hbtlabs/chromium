@@ -118,6 +118,12 @@ ScriptPromise ImageCapture::setOptions(ScriptState* scriptState, const PhotoSett
     settings->has_zoom = photoSettings.hasZoom();
     if (settings->has_zoom)
         settings->zoom = photoSettings.zoom();
+    settings->has_height = photoSettings.hasImageHeight();
+    if (settings->has_height)
+        settings->height = photoSettings.imageHeight();
+    settings->has_width = photoSettings.hasImageWidth();
+    if (settings->has_width)
+        settings->width = photoSettings.imageWidth();
 
     m_service->SetOptions(m_streamTrack->component()->source()->id(), std::move(settings), convertToBaseCallback(WTF::bind(&ImageCapture::onSetOptions, wrapPersistent(this), wrapPersistent(resolver))));
     return promise;
@@ -190,15 +196,21 @@ ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
 
 void ImageCapture::onCapabilities(ScriptPromiseResolver* resolver, media::mojom::blink::PhotoCapabilitiesPtr capabilities)
 {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     if (!m_serviceRequests.contains(resolver))
         return;
     if (capabilities.is_null()) {
         resolver->reject(DOMException::create(UnknownError, "platform error"));
     } else {
         // TODO(mcasas): Should be using a mojo::StructTraits.
+        MediaSettingsRange* iso = MediaSettingsRange::create(capabilities->iso->max, capabilities->iso->min, capabilities->iso->current);
+        MediaSettingsRange* height = MediaSettingsRange::create(capabilities->height->max, capabilities->height->min, capabilities->height->current);
+        MediaSettingsRange* width = MediaSettingsRange::create(capabilities->width->max, capabilities->width->min, capabilities->width->current);
         MediaSettingsRange* zoom = MediaSettingsRange::create(capabilities->zoom->max, capabilities->zoom->min, capabilities->zoom->current);
         PhotoCapabilities* caps = PhotoCapabilities::create();
+        caps->setIso(iso);
+        caps->setImageHeight(height);
+        caps->setImageWidth(width);
         caps->setZoom(zoom);
         caps->setFocusMode(capabilities->focus_mode);
         resolver->resolve(caps);
@@ -218,17 +230,16 @@ void ImageCapture::onSetOptions(ScriptPromiseResolver* resolver, bool result)
     m_serviceRequests.remove(resolver);
 }
 
-void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver, const String& mimeType, mojo::WTFArray<uint8_t> data)
+void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver, media::mojom::blink::BlobPtr blob)
 {
     if (!m_serviceRequests.contains(resolver))
         return;
 
-    if (data.is_null() || data.empty()) {
+    // TODO(mcasas): Should be using a mojo::StructTraits.
+    if (blob->data.isEmpty())
         resolver->reject(DOMException::create(UnknownError, "platform error"));
-    } else {
-        const auto& storage = data.storage();
-        resolver->resolve(Blob::create(storage.data(), storage.size(), mimeType));
-    }
+    else
+        resolver->resolve(Blob::create(blob->data.data(), blob->data.size(), blob->mime_type));
     m_serviceRequests.remove(resolver);
 }
 

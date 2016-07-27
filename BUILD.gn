@@ -16,6 +16,7 @@ import("//build_overrides/v8.gni")
 import("//media/media_options.gni")
 import("//third_party/openh264/openh264_args.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+import("//v8/gni/v8.gni")
 import("//v8/snapshot_toolchain.gni")
 
 if (is_android) {
@@ -105,6 +106,7 @@ if (is_win) {
       "//chrome/installer/mini_installer",
       "//components/policy:pack_policy_templates",
       "//courgette",
+      "//courgette:copy_courgette_binaries",
       "//remoting/webapp",
     ]
     if (target_cpu == "x86") {
@@ -462,8 +464,6 @@ group("both_gn_and_gyp") {
       "//chrome:manpage",
       "//chrome:xdg_mime",
       "//net:disk_cache_memory_test",
-      "//net:flip_in_mem_edsm_server",
-      "//net:flip_in_mem_edsm_server_unittests",
       "//net:quic_client",
       "//net:quic_server",
       "//sandbox/linux:chrome_sandbox",

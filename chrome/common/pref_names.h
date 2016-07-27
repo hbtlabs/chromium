@@ -19,6 +19,7 @@ namespace prefs {
 extern const char kArcApps[];
 extern const char kArcBackupRestoreEnabled[];
 extern const char kArcEnabled[];
+extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
 extern const char kArcSetNotificationsEnabledDeferred[];
 extern const char kArcSignedIn[];
@@ -169,13 +170,11 @@ extern const char kPromptForDownload[];
 extern const char kAlternateErrorPagesEnabled[];
 extern const char kDnsPrefetchingStartupList[];
 extern const char kDnsPrefetchingHostReferralList[];
-extern const char kDisableSpdy[];
 extern const char kHttpServerProperties[];
 #if defined(OS_ANDROID)
 extern const char kLastPolicyCheckTime[];
 #endif
 extern const char kInstantUIZeroSuggestUrlPrefix[];
-extern const char kNetworkPredictionEnabled[];
 extern const char kNetworkPredictionOptions[];
 extern const char kDefaultAppsInstallState[];
 extern const char kHideWebStoreIcon[];
@@ -789,6 +788,10 @@ extern const char kEasyUnlockLocalStateUserPrefs[];
 extern const char kRecoveryComponentNeedsElevation[];
 
 extern const char kRegisteredSupervisedUserWhitelists[];
+
+#if BUILDFLAG(ENABLE_BACKGROUND)
+extern const char kRestartInBackground[];
+#endif
 
 #if defined(ENABLE_EXTENSIONS)
 extern const char kAnimationPolicy[];

@@ -421,12 +421,39 @@ Framebuffer::~Framebuffer() {
 }
 
 bool Framebuffer::HasUnclearedAttachment(
-    GLenum attachment) const {
-  AttachmentMap::const_iterator it =
-      attachments_.find(attachment);
-  if (it != attachments_.end()) {
-    const Attachment* attachment = it->second.get();
-    return !attachment->cleared();
+    GLenum attachment_type) const {
+  const Attachment* attachment = GetAttachment(attachment_type);
+  switch (attachment_type) {
+    case GL_DEPTH_ATTACHMENT:
+    case GL_STENCIL_ATTACHMENT:
+      attachment = attachment ? attachment :
+          GetAttachment(GL_DEPTH_STENCIL_ATTACHMENT);
+      break;
+   default:
+      break;
+  }
+  return attachment && !attachment->cleared();
+}
+
+bool Framebuffer::HasDepthStencilFormatAttachment() const {
+  const Attachment* depth_attachment = GetAttachment(GL_DEPTH_ATTACHMENT);
+  const Attachment* stencil_attachment = GetAttachment(GL_STENCIL_ATTACHMENT);
+  const Attachment* depth_stencil_attachment = GetAttachment(
+      GL_DEPTH_STENCIL_ATTACHMENT);
+  if (depth_attachment && stencil_attachment) {
+    GLenum depth_format = depth_attachment->internal_format();
+    depth_format = TextureManager::ExtractFormatFromStorageFormat(depth_format);
+    GLenum stencil_format = stencil_attachment->internal_format();
+    stencil_format = TextureManager::ExtractFormatFromStorageFormat(
+        stencil_format);
+    return depth_format == GL_DEPTH_STENCIL &&
+        stencil_format == GL_DEPTH_STENCIL;
+  }
+  if (depth_stencil_attachment) {
+    GLenum depth_stencil_format = depth_stencil_attachment->internal_format();
+    depth_stencil_format = TextureManager::ExtractFormatFromStorageFormat(
+        depth_stencil_format);
+    return depth_stencil_format == GL_DEPTH_STENCIL;
   }
   return false;
 }
@@ -580,6 +607,9 @@ void Framebuffer::ClearUnclearedIntOr3DTexturesOrPartiallyClearedTextures(
   }
 }
 
+// TODO(jiawei.shao@intel.com): when the texture or the renderbuffer in
+// format DEPTH_STENCIL, mark the specific part (depth or stencil) of it as
+// cleared or uncleared instead of the whole one.
 void Framebuffer::MarkAttachmentAsCleared(
     RenderbufferManager* renderbuffer_manager,
     TextureManager* texture_manager,
@@ -747,6 +777,16 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
     }
   }
 
+  // Binding different images to depth and stencil attachment points should
+  // return FRAMEBUFFER_UNSUPPORTED.
+  const Attachment* depth_attachment = GetAttachment(GL_DEPTH_ATTACHMENT);
+  const Attachment* stencil_attachment = GetAttachment(GL_STENCIL_ATTACHMENT);
+  if (depth_attachment && stencil_attachment) {
+    if (!depth_attachment->IsSameAttachment(stencil_attachment)) {
+      return GL_FRAMEBUFFER_UNSUPPORTED;
+    }
+  }
+
   // This does not mean the framebuffer is actually complete. It just means our
   // checks passed.
   return GL_FRAMEBUFFER_COMPLETE;
@@ -794,7 +834,7 @@ GLenum Framebuffer::GetStatus(
 }
 
 bool Framebuffer::IsCleared() const {
-  // are all the attachments cleaared?
+  // are all the attachments cleared?
   for (AttachmentMap::const_iterator it = attachments_.begin();
        it != attachments_.end(); ++it) {
     Attachment* attachment = it->second.get();

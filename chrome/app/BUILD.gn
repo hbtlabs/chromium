@@ -3,8 +3,15 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//tools/grit/grit_rule.gni")
+
+# This target is for dependency tracking for the command ID header.
+source_set("command_ids") {
+  sources = [
+    "chrome_command_ids.h",
+  ]
+}
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -308,7 +315,7 @@ static_library("test_support") {
   if (is_chromeos) {
     deps += [
       "//chrome/browser/chromeos",
-      "//components/metrics:leak_detector",
+      "//components/metrics/leak_detector:leak_detector",
     ]
   }
 
@@ -325,17 +332,17 @@ static_library("test_support") {
 }
 
 if (use_aura) {
-  mojo_application_manifest("chrome_manifest") {
+  service_manifest("chrome_manifest") {
     type = "exe"
-    application_name = "chrome"
+    name = "chrome"
     source = "mojo/chrome_manifest.json"
     base_manifest = "${root_out_dir}/content_browser_manifest.json"
     base_deps = [ "//content/public/app:browser_manifest" ]
   }
 
-  mojo_application_manifest("chrome_renderer_manifest") {
+  service_manifest("chrome_renderer_manifest") {
     type = "exe"
-    application_name = "chrome_renderer"
+    name = "chrome_renderer"
     source = "mojo/chrome_renderer_manifest.json"
     base_manifest = "${root_out_dir}/content_renderer_manifest.json"
     base_deps = [ "//content/public/app:renderer_manifest" ]

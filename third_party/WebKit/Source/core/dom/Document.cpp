@@ -113,6 +113,7 @@
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/DragCaretController.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
@@ -126,6 +127,8 @@
 #include "core/events/HashChangeEvent.h"
 #include "core/events/PageTransitionEvent.h"
 #include "core/events/ScopedEventQueue.h"
+#include "core/events/VisualViewportResizeEvent.h"
+#include "core/events/VisualViewportScrollEvent.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/DOMVisualViewport.h"
@@ -191,6 +194,7 @@
 #include "core/loader/ImageLoader.h"
 #include "core/loader/NavigationScheduler.h"
 #include "core/loader/appcache/ApplicationCacheHost.h"
+#include "core/observer/ResizeObserverController.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/EventWithHitTestResults.h"
 #include "core/page/FocusController.h"
@@ -360,7 +364,7 @@ static Widget* widgetForElement(const Element& focusedElement)
 
 static bool acceptsEditingFocus(const Element& element)
 {
-    DCHECK(element.hasEditableStyle());
+    DCHECK(hasEditableStyle(element));
 
     return element.document().frame() && rootEditableElement(element);
 }
@@ -446,7 +450,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_compositorPendingAnimations(new CompositorPendingAnimations())
     , m_templateDocumentHost(nullptr)
     , m_didAssociateFormControlsTimer(this, &Document::didAssociateFormControlsTimerFired)
-    , m_timers(TaskRunnerHelper::getTimerTaskRunner(this)->adoptClone())
+    , m_timers(TaskRunnerHelper::getTimerTaskRunner(this)->clone())
     , m_hasViewportUnits(false)
     , m_parserSyncPolicy(AllowAsynchronousParsing)
     , m_nodeCount(0)
@@ -2125,7 +2129,7 @@ void Document::attachLayoutTree(const AttachContext& context)
         view()->didAttachDocument();
 }
 
-void Document::detach(const AttachContext& context)
+void Document::detachLayoutTree(const AttachContext& context)
 {
     TRACE_EVENT0("blink", "Document::detach");
     RELEASE_ASSERT(!m_frame || m_frame->tree().childCount() == 0);
@@ -2141,7 +2145,7 @@ void Document::detach(const AttachContext& context)
     // Defer widget updates to avoid plugins trying to run script inside ScriptForbiddenScope,
     // which will crash the renderer after https://crrev.com/200984
     HTMLFrameOwnerElement::UpdateSuspendScope suspendWidgetHierarchyUpdates;
-    // Don't allow script to run in the middle of detach() because a detaching Document is not in a
+    // Don't allow script to run in the middle of detachLayoutTree() because a detaching Document is not in a
     // consistent state.
     ScriptForbiddenScope forbidScript;
     view()->dispose();
@@ -2194,7 +2198,7 @@ void Document::detach(const AttachContext& context)
         clearAXObjectCache();
 
     m_layoutView = nullptr;
-    ContainerNode::detach(context);
+    ContainerNode::detachLayoutTree(context);
 
     if (this != &axObjectCacheOwner()) {
         if (AXObjectCache* cache = existingAXObjectCache()) {
@@ -2231,13 +2235,13 @@ void Document::detach(const AttachContext& context)
     }
 
     m_timers.setTimerTaskRunner(
-        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->adoptClone());
+        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->clone());
 
     // This is required, as our LocalFrame might delete itself as soon as it detaches
-    // us. However, this violates Node::detach() semantics, as it's never
-    // possible to re-attach. Eventually Document::detach() should be renamed,
+    // us. However, this violates Node::detachLayoutTree() semantics, as it's never
+    // possible to re-attach. Eventually Document::detachLayoutTree() should be renamed,
     // or this setting of the frame to 0 could be made explicit in each of the
-    // callers of Document::detach().
+    // callers of Document::detachLayoutTree().
     m_frame = nullptr;
 
     if (m_mediaQueryMatcher)
@@ -2246,7 +2250,7 @@ void Document::detach(const AttachContext& context)
     m_lifecycle.advanceTo(DocumentLifecycle::Stopped);
 
     // FIXME: Currently we call notifyContextDestroyed() only in
-    // Document::detach(), which means that we don't call
+    // Document::detachLayoutTree(), which means that we don't call
     // notifyContextDestroyed() for a document that doesn't get detached.
     // If such a document has any observer, the observer won't get
     // a contextDestroyed() notification. This can happen for a document
@@ -3924,14 +3928,14 @@ void Document::enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryList
 
 void Document::enqueueVisualViewportScrollEvent()
 {
-    Event* event = Event::create(EventTypeNames::scroll);
+    VisualViewportScrollEvent* event = VisualViewportScrollEvent::create();
     event->setTarget(domWindow()->visualViewport());
     ensureScriptedAnimationController().enqueuePerFrameEvent(event);
 }
 
 void Document::enqueueVisualViewportResizeEvent()
 {
-    Event* event = Event::create(EventTypeNames::resize);
+    VisualViewportResizeEvent* event = VisualViewportResizeEvent::create();
     event->setTarget(domWindow()->visualViewport());
     ensureScriptedAnimationController().enqueuePerFrameEvent(event);
 }
@@ -5198,6 +5202,13 @@ NodeIntersectionObserverData& Document::ensureIntersectionObserverData()
     return *m_intersectionObserverData;
 }
 
+ResizeObserverController& Document::ensureResizeObserverController()
+{
+    if (!m_resizeObserverController)
+        m_resizeObserverController = new ResizeObserverController();
+    return *m_resizeObserverController;
+}
+
 static void runAddConsoleMessageTask(MessageSource source, MessageLevel level, const String& message, ExecutionContext* context)
 {
     context->addConsoleMessage(ConsoleMessage::create(source, level, message));
@@ -5309,12 +5320,9 @@ void Document::removeFromTopLayer(Element* element)
 
 HTMLDialogElement* Document::activeModalDialog() const
 {
-    for (auto it = m_topLayerElements.rbegin(); it != m_topLayerElements.rend(); ++it) {
-        if (isHTMLDialogElement(*it))
-            return toHTMLDialogElement((*it).get());
-    }
-
-    return nullptr;
+    if (m_topLayerElements.isEmpty())
+        return 0;
+    return toHTMLDialogElement(m_topLayerElements.last().get());
 }
 
 void Document::exitPointerLock()
@@ -6001,6 +6009,7 @@ DEFINE_TRACE(Document)
     visitor->trace(m_intersectionObserverController);
     visitor->trace(m_intersectionObserverData);
     visitor->trace(m_snapCoordinator);
+    visitor->trace(m_resizeObserverController);
     Supplementable<Document>::trace(visitor);
     TreeScope::trace(visitor);
     ContainerNode::trace(visitor);

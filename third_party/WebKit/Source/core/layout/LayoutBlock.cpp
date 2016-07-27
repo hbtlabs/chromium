@@ -258,7 +258,10 @@ void LayoutBlock::addChildBeforeDescendant(LayoutObject* newChild, LayoutObject*
 
     // If the requested insertion point is not one of our children, then this is because
     // there is an anonymous container within this object that contains the beforeDescendant.
-    if (beforeDescendantContainer->isAnonymousBlock()) {
+    if (beforeDescendantContainer->isAnonymousBlock()
+        // Full screen layoutObjects and full screen placeholders act as anonymous blocks, not tables:
+        || beforeDescendantContainer->isLayoutFullScreen()
+        || beforeDescendantContainer->isLayoutFullScreenPlaceholder()) {
         // Insert the child into the anonymous block box instead of here.
         if (newChild->isInline() || newChild->isFloatingOrOutOfFlowPositioned() || beforeDescendant->parent()->slowFirstChild() != beforeDescendant)
             beforeDescendant->parent()->addChild(newChild, beforeDescendant);
@@ -1088,7 +1091,7 @@ static inline bool isEditingBoundary(LayoutObject* ancestor, LineLayoutBox child
     ASSERT(!ancestor || ancestor->nonPseudoNode());
     ASSERT(child && child.nonPseudoNode());
     return !ancestor || !ancestor->parent() || (ancestor->hasLayer() && ancestor->parent()->isLayoutView())
-        || ancestor->nonPseudoNode()->hasEditableStyle() == child.nonPseudoNode()->hasEditableStyle();
+        || hasEditableStyle(*ancestor->nonPseudoNode()) == hasEditableStyle(*child.nonPseudoNode());
 }
 
 // FIXME: This function should go on LayoutObject.
@@ -1606,7 +1609,7 @@ bool LayoutBlock::hasDragCaret() const
 LayoutRect LayoutBlock::localCaretRect(InlineBox* inlineBox, int caretOffset, LayoutUnit* extraWidthToEndOfLine)
 {
     // Do the normal calculation in most cases.
-    if (firstChild() || isInlineBoxWrapperActuallyChild())
+    if ((firstChild() && !firstChild()->isPseudoElement()) || isInlineBoxWrapperActuallyChild())
         return LayoutBox::localCaretRect(inlineBox, caretOffset, extraWidthToEndOfLine);
 
     LayoutRect caretRect = localCaretRectForEmptyElement(size().width(), textIndentOffset());

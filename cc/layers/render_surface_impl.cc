@@ -76,11 +76,12 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
     return gfx::RectF();
 
   gfx::Rect surface_content_rect = content_rect();
-  if (!owning_layer_->filters().IsEmpty()) {
+  const FilterOperations& filters = Filters();
+  if (!filters.IsEmpty()) {
     const gfx::Transform& owning_layer_draw_transform =
         owning_layer_->DrawTransform();
     DCHECK(owning_layer_draw_transform.IsScale2d());
-    surface_content_rect = owning_layer_->filters().MapRect(
+    surface_content_rect = filters.MapRect(
         surface_content_rect, owning_layer_draw_transform.matrix());
   }
   gfx::RectF drawable_content_rect = MathUtil::MapClippedRect(
@@ -88,7 +89,7 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
   if (HasReplica()) {
     drawable_content_rect.Union(MathUtil::MapClippedRect(
         replica_draw_transform(), gfx::RectF(surface_content_rect)));
-  } else if (!owning_layer_->filters().IsEmpty() && is_clipped()) {
+  } else if (!filters.IsEmpty() && is_clipped()) {
     // Filter could move pixels around, but still need to be clipped.
     drawable_content_rect.Intersect(gfx::RectF(clip_rect()));
   }
@@ -102,6 +103,14 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
     return gfx::RectF();
 
   return drawable_content_rect;
+}
+
+SkXfermode::Mode RenderSurfaceImpl::BlendMode() const {
+  return OwningEffectNode()->blend_mode;
+}
+
+bool RenderSurfaceImpl::UsesDefaultBlendMode() const {
+  return BlendMode() == SkXfermode::kSrcOver_Mode;
 }
 
 SkColor RenderSurfaceImpl::GetDebugBorderColor() const {
@@ -126,7 +135,7 @@ int RenderSurfaceImpl::OwningLayerId() const {
 }
 
 bool RenderSurfaceImpl::HasReplica() const {
-  return OwningEffectNode()->replica_layer_id != -1;
+  return OwningEffectNode()->replica_layer_id != EffectTree::kInvalidNodeId;
 }
 
 const LayerImpl* RenderSurfaceImpl::ReplicaLayer() const {
@@ -145,7 +154,7 @@ LayerImpl* RenderSurfaceImpl::MaskLayer() {
 }
 
 bool RenderSurfaceImpl::HasMask() const {
-  return OwningEffectNode()->mask_layer_id != -1;
+  return OwningEffectNode()->mask_layer_id != EffectTree::kInvalidNodeId;
 }
 
 LayerImpl* RenderSurfaceImpl::ReplicaMaskLayer() {
@@ -154,7 +163,12 @@ LayerImpl* RenderSurfaceImpl::ReplicaMaskLayer() {
 }
 
 bool RenderSurfaceImpl::HasReplicaMask() const {
-  return OwningEffectNode()->replica_mask_layer_id != -1;
+  return OwningEffectNode()->replica_mask_layer_id !=
+         EffectTree::kInvalidNodeId;
+}
+
+const FilterOperations& RenderSurfaceImpl::Filters() const {
+  return OwningEffectNode()->filters;
 }
 
 const FilterOperations& RenderSurfaceImpl::BackgroundFilters() const {
@@ -357,11 +371,11 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
 
   SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
-  shared_quad_state->SetAll(
-      draw_transform, content_rect().size(), content_rect(),
-      draw_properties_.clip_rect, draw_properties_.is_clipped,
-      draw_properties_.draw_opacity, owning_layer_->blend_mode(),
-      owning_layer_->sorting_context_id());
+  shared_quad_state->SetAll(draw_transform, content_rect().size(),
+                            content_rect(), draw_properties_.clip_rect,
+                            draw_properties_.is_clipped,
+                            draw_properties_.draw_opacity, BlendMode(),
+                            owning_layer_->sorting_context_id());
 
   if (owning_layer_->ShowDebugBorders()) {
     DebugBorderDrawQuad* debug_border_quad =
@@ -396,8 +410,8 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
       render_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   quad->SetNew(shared_quad_state, content_rect(), visible_layer_rect,
                render_pass_id, mask_resource_id, mask_uv_scale,
-               mask_texture_size, owning_layer_->filters(),
-               owning_layer_to_target_scale, BackgroundFilters());
+               mask_texture_size, Filters(), owning_layer_to_target_scale,
+               BackgroundFilters());
 }
 
 }  // namespace cc

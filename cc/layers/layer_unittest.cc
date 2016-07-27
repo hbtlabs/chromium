@@ -26,6 +26,7 @@
 #include "cc/test/geometry_test_utils.h"
 #include "cc/test/layer_internals_for_test.h"
 #include "cc/test/layer_test_common.h"
+#include "cc/test/stub_layer_tree_host_single_thread_client.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
@@ -108,9 +109,6 @@ namespace cc {
 // The tests still have helpful names, and a test with the name FooBar would
 // have a wrapper method in this class called RunFooBarTest.
 class LayerSerializationTest : public testing::Test {
- public:
-  LayerSerializationTest() : fake_client_(FakeLayerTreeHostClient::DIRECT_3D) {}
-
  protected:
   void SetUp() override {
     layer_tree_host_ =
@@ -899,8 +897,7 @@ class LayerTest : public testing::Test {
       : host_impl_(LayerTreeSettings(),
                    &task_runner_provider_,
                    &shared_bitmap_manager_,
-                   &task_graph_runner_),
-        fake_client_(FakeLayerTreeHostClient::DIRECT_3D) {
+                   &task_graph_runner_) {
     timeline_impl_ =
         AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
     timeline_impl_->set_is_impl_only(true);
@@ -920,7 +917,7 @@ class LayerTest : public testing::Test {
         AnimationHost::CreateForTesting(ThreadInstance::MAIN);
 
     layer_tree_host_.reset(
-        new StrictMock<MockLayerTreeHost>(&fake_client_, &params));
+        new StrictMock<MockLayerTreeHost>(&single_thread_client_, &params));
   }
 
   void TearDown() override {
@@ -989,6 +986,7 @@ class LayerTest : public testing::Test {
   TestTaskGraphRunner task_graph_runner_;
   FakeLayerTreeHostImpl host_impl_;
 
+  StubLayerTreeHostSingleThreadClient single_thread_client_;
   FakeLayerTreeHostClient fake_client_;
   std::unique_ptr<StrictMock<MockLayerTreeHost>> layer_tree_host_;
   scoped_refptr<Layer> parent_;
@@ -1846,8 +1844,6 @@ TEST_F(LayerTest, MaskAndReplicaHasParent) {
 
 class LayerTreeHostFactory {
  public:
-  LayerTreeHostFactory() : client_(FakeLayerTreeHostClient::DIRECT_3D) {}
-
   std::unique_ptr<LayerTreeHost> Create() {
     return Create(LayerTreeSettings());
   }
@@ -1862,11 +1858,12 @@ class LayerTreeHostFactory {
     params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
     params.animation_host =
         AnimationHost::CreateForTesting(ThreadInstance::MAIN);
-    return LayerTreeHost::CreateSingleThreaded(&client_, &params);
+    return LayerTreeHost::CreateSingleThreaded(&single_thread_client_, &params);
   }
 
  private:
   FakeLayerTreeHostClient client_;
+  StubLayerTreeHostSingleThreadClient single_thread_client_;
   TestSharedBitmapManager shared_bitmap_manager_;
   TestTaskGraphRunner task_graph_runner_;
   TestGpuMemoryBufferManager gpu_memory_buffer_manager_;

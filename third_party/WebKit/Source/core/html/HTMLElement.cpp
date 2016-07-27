@@ -29,6 +29,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
+#include "core/MathMLNames.h"
 #include "core/XMLNames.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSMarkup.h"
@@ -42,6 +43,7 @@
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/EventListener.h"
 #include "core/events/KeyboardEvent.h"
@@ -57,6 +59,7 @@
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/SpatialNavigation.h"
+#include "core/svg/SVGSVGElement.h"
 #include "platform/Language.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/BidiTextRun.h"
@@ -70,6 +73,41 @@ using namespace HTMLNames;
 using namespace WTF;
 
 using namespace std;
+
+namespace {
+
+// https://w3c.github.io/editing/execCommand.html#editing-host
+bool isEditingHost(const Node& node)
+{
+    if (!node.isHTMLElement())
+        return false;
+    String normalizedValue = toHTMLElement(node).contentEditable();
+    if (normalizedValue == "true" || normalizedValue == "plaintext-only")
+        return true;
+    return node.document().inDesignMode() && node.document().documentElement() == &node;
+}
+
+// https://w3c.github.io/editing/execCommand.html#editable
+bool isEditable(const Node& node)
+{
+    if (isEditingHost(node))
+        return false;
+    if (node.isHTMLElement() && toHTMLElement(node).contentEditable() == "false")
+        return false;
+    if (!node.parentNode())
+        return false;
+    if (!isEditingHost(*node.parentNode()) && !isEditable(*node.parentNode()))
+        return false;
+    if (node.isHTMLElement())
+        return true;
+    if (isSVGSVGElement(node))
+        return true;
+    if (node.isElementNode() && toElement(node).hasTagName(MathMLNames::mathTag))
+        return true;
+    return !node.isElementNode() && node.parentNode()->isHTMLElement();
+}
+
+} // anonymous namespace
 
 DEFINE_ELEMENT_FACTORY_WITH_TAGNAME(HTMLElement);
 
@@ -586,6 +624,11 @@ void HTMLElement::setContentEditable(const String& enabled, ExceptionState& exce
         exceptionState.throwDOMException(SyntaxError, "The value provided ('" + enabled + "') is not one of 'true', 'false', 'plaintext-only', or 'inherit'.");
 }
 
+bool HTMLElement::isContentEditableForBinding() const
+{
+    return isEditingHost(*this) || isEditable(*this);
+}
+
 bool HTMLElement::draggable() const
 {
     return equalIgnoringCase(getAttribute(draggableAttr), "true");
@@ -777,6 +820,8 @@ void HTMLElement::dirAttributeChanged(const AtomicString& value)
 {
     // If an ancestor has dir=auto, and this node has the first character,
     // changes to dir attribute may affect the ancestor.
+    if (!canParticipateInFlatTree())
+        return;
     updateDistribution();
     Element* parent = FlatTreeTraversal::parentElement(*this);
     if (parent && parent->isHTMLElement() && toHTMLElement(parent)->selfOrAncestorHasDirAutoAttribute())
@@ -1028,7 +1073,7 @@ bool HTMLElement::matchesReadWritePseudoClass() const
         // All other values should be treated as "inherit".
     }
 
-    return parentElement() && parentElement()->hasEditableStyle();
+    return parentElement() && hasEditableStyle(*parentElement());
 }
 
 void HTMLElement::handleKeypressEvent(KeyboardEvent* event)
@@ -1038,7 +1083,7 @@ void HTMLElement::handleKeypressEvent(KeyboardEvent* event)
     // if the element is a text form control (like <input type=text> or <textarea>)
     // or has contentEditable attribute on, we should enter a space or newline
     // even in spatial navigation mode instead of handling it as a "click" action.
-    if (isTextFormControl() || isContentEditable())
+    if (isTextFormControl() || blink::isContentEditable(*this))
         return;
     int charCode = event->charCode();
     if (charCode == '\r' || charCode == ' ') {

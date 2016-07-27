@@ -18,10 +18,10 @@
 #include "build/build_config.h"
 #include "third_party/WebKit/public/platform/WebDragData.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEventResult.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
-#include "third_party/WebKit/public/web/WebTouchPoint.h"
+#include "third_party/WebKit/public/platform/WebTouchPoint.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -37,7 +37,7 @@ namespace test_runner {
 
 class TestInterfaces;
 class WebTestDelegate;
-class WebTestProxyBase;
+class WebViewTestProxyBase;
 
 // Key event location code introduced in DOM Level 3.
 // See also: http://www.w3.org/TR/DOM-Level-3-Events/#events-keyboardevents
@@ -50,7 +50,7 @@ enum KeyLocationCode {
 
 class EventSender {
  public:
-  explicit EventSender(WebTestProxyBase*);
+  explicit EventSender(WebViewTestProxyBase*);
   virtual ~EventSender();
 
   void Reset();
@@ -257,7 +257,7 @@ class EventSender {
   int wm_sys_dead_char_;
 #endif
 
-  WebTestProxyBase* web_test_proxy_base_;
+  WebViewTestProxyBase* web_view_test_proxy_base_;
   TestInterfaces* interfaces();
   WebTestDelegate* delegate();
   const blink::WebView* view() const;

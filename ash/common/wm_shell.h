@@ -17,11 +17,12 @@
 #include "base/observer_list.h"
 
 namespace views {
-class PointerDownWatcher;
+class PointerWatcher;
 }
 
 namespace ash {
 
+class AcceleratorController;
 class AccessibilityDelegate;
 class BrightnessControlDelegate;
 class DisplayInfo;
@@ -32,6 +33,7 @@ class MaximizeModeController;
 class MruWindowTracker;
 class ScopedDisableInternalMouseAndKeyboard;
 class SessionStateDelegate;
+class ShelfDelegate;
 class ShelfModel;
 class ShellDelegate;
 class ShellObserver;
@@ -71,6 +73,10 @@ class ASH_EXPORT WmShell {
 
   ShellDelegate* delegate() { return delegate_.get(); }
 
+  AcceleratorController* accelerator_controller() {
+    return accelerator_controller_.get();
+  }
+
   AccessibilityDelegate* accessibility_delegate() {
     return accessibility_delegate_.get();
   }
@@ -94,6 +100,8 @@ class ASH_EXPORT WmShell {
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
 
   MediaDelegate* media_delegate() { return media_delegate_.get(); }
+
+  ShelfDelegate* shelf_delegate() { return shelf_delegate_.get(); }
 
   ShelfModel* shelf_model() { return shelf_model_.get(); }
 
@@ -245,13 +253,15 @@ class ASH_EXPORT WmShell {
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
-  virtual void AddPointerDownWatcher(views::PointerDownWatcher* watcher) = 0;
-  virtual void RemovePointerDownWatcher(views::PointerDownWatcher* watcher) = 0;
+  virtual void AddPointerWatcher(views::PointerWatcher* watcher) = 0;
+  virtual void RemovePointerWatcher(views::PointerWatcher* watcher) = 0;
 
   // TODO: Move these back to LockStateController when that has been moved.
   void OnLockStateEvent(LockStateObserver::EventType event);
   void AddLockStateObserver(LockStateObserver* observer);
   void RemoveLockStateObserver(LockStateObserver* observer);
+
+  void SetShelfDelegateForTesting(std::unique_ptr<ShelfDelegate> test_delegate);
 
 #if defined(OS_CHROMEOS)
   LogoutConfirmationController* logout_confirmation_controller() {
@@ -277,6 +287,8 @@ class ASH_EXPORT WmShell {
   void SetSystemTrayDelegate(std::unique_ptr<SystemTrayDelegate> delegate);
   void DeleteSystemTrayDelegate();
 
+  void CreateShelfDelegate();
+
   void DeleteWindowCycleController();
 
   void DeleteWindowSelectorController();
@@ -289,6 +301,9 @@ class ASH_EXPORT WmShell {
 
   void DeleteToastManager();
 
+  void SetAcceleratorController(
+      std::unique_ptr<AcceleratorController> accelerator_controller);
+
  private:
   friend class AcceleratorControllerTest;
   friend class Shell;
@@ -298,6 +313,7 @@ class ASH_EXPORT WmShell {
   base::ObserverList<ShellObserver> shell_observers_;
   std::unique_ptr<ShellDelegate> delegate_;
 
+  std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<FocusCycler> focus_cycler_;
@@ -307,6 +323,7 @@ class ASH_EXPORT WmShell {
   std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
   std::unique_ptr<MediaDelegate> media_delegate_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
+  std::unique_ptr<ShelfDelegate> shelf_delegate_;
   std::unique_ptr<ShelfModel> shelf_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<SystemTrayDelegate> system_tray_delegate_;

@@ -201,14 +201,17 @@ WebInspector.ElementsPanel.prototype = {
     {
         var extensions = self.runtime.extensions("@WebInspector.View");
 
+        var promises = [];
         for (var i = 0; i < extensions.length; ++i) {
             var descriptor = extensions[i].descriptor();
             if (descriptor["location"] !== "elements-panel")
                 continue;
 
             var title = WebInspector.UIString(descriptor["title"]);
-            extensions[i].instancePromise().then(addSidebarView.bind(this, title));
+            promises.push(extensions[i].instancePromise().then(addSidebarView.bind(this, title)));
         }
+
+        Promise.all(promises).then(this._sidebarViewsLoadedForTest.bind(this));
 
         /**
          * @param {string} title
@@ -221,8 +224,13 @@ WebInspector.ElementsPanel.prototype = {
             this._elementsSidebarViews.push(view);
 
             if (this.sidebarPaneView)
-                this.sidebarPaneView.addPane(view);
+                this.sidebarPaneView.appendView(view);
         }
+    },
+
+    _sidebarViewsLoadedForTest: function()
+    {
+        // For sniffing in tests.
     },
 
     /**
@@ -907,7 +915,7 @@ WebInspector.ElementsPanel.prototype = {
                 showMetrics.call(this, false);
         }
 
-        this.sidebarPaneView = new WebInspector.SidebarTabbedPane();
+        this.sidebarPaneView = new WebInspector.View.TabbedPaneContainer();
         this.sidebarPaneView.element.addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
         if (this._popoverHelper)
             this._popoverHelper.hidePopover();
@@ -918,8 +926,7 @@ WebInspector.ElementsPanel.prototype = {
             this._splitWidget.installResizer(this.sidebarPaneView.headerElement());
 
             var compositePane = new WebInspector.View(WebInspector.UIString("Styles"));
-            compositePane.element.classList.add("composite");
-            compositePane.element.classList.add("fill");
+            compositePane.element.classList.add("flex-auto");
 
             var splitWidget = new WebInspector.SplitWidget(true, true, "stylesPaneSplitViewState", 215);
             splitWidget.show(compositePane.element);
@@ -928,29 +935,29 @@ WebInspector.ElementsPanel.prototype = {
             splitWidget.setSidebarWidget(computedStylePanesWrapper);
 
             computedPane.show(computedStylePanesWrapper.element);
-            this.sidebarPaneView.addPane(compositePane);
+            this.sidebarPaneView.appendView(compositePane);
         } else {
             var stylesPane = new WebInspector.View(WebInspector.UIString("Styles"));
-            stylesPane.element.classList.add("composite", "fill", "metrics-and-styles");
+            stylesPane.element.classList.add("flex-auto", "metrics-and-styles");
 
             matchedStylesContainer.show(stylesPane.element);
             computedStylePanesWrapper.show(computedPane.element);
 
             this.sidebarPaneView.addEventListener(WebInspector.TabbedPane.EventTypes.TabSelected, tabSelected, this);
-            this.sidebarPaneView.addPane(stylesPane);
-            this.sidebarPaneView.addPane(computedPane);
+            this.sidebarPaneView.appendView(stylesPane);
+            this.sidebarPaneView.appendView(computedPane);
         }
 
         this.sidebarPanes.styles.show(matchedStylePanesWrapper.element);
         this.sidebarPanes.computedStyle.show(computedStylePanesWrapper.element);
         showMetrics.call(this, horizontally);
 
-        this.sidebarPaneView.addPane(this.sidebarPanes.eventListeners);
-        this.sidebarPaneView.addPane(this.sidebarPanes.domBreakpoints);
-        this.sidebarPaneView.addPane(this.sidebarPanes.properties);
+        this.sidebarPaneView.appendView(this.sidebarPanes.eventListeners);
+        this.sidebarPaneView.appendView(this.sidebarPanes.domBreakpoints);
+        this.sidebarPaneView.appendView(this.sidebarPanes.properties);
 
         for (var sidebarViewWrapper of this._elementsSidebarViews)
-            this.sidebarPaneView.addPane(sidebarViewWrapper);
+            this.sidebarPaneView.appendView(sidebarViewWrapper);
 
         this._extensionSidebarPanesContainer = this.sidebarPaneView;
 
@@ -978,7 +985,7 @@ WebInspector.ElementsPanel.prototype = {
     _addExtensionSidebarPane: function(pane)
     {
         if (pane.panelName() === this.name)
-            this._extensionSidebarPanesContainer.addPane(pane);
+            this._extensionSidebarPanesContainer.appendView(pane);
     },
 
     __proto__: WebInspector.Panel.prototype

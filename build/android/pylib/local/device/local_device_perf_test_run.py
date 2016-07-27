@@ -9,11 +9,11 @@ import os
 import pickle
 import shutil
 import tempfile
+import threading
 import time
 import zipfile
 
 from devil.android import battery_utils
-from devil.android import device_blacklist
 from devil.android import device_errors
 from devil.android import device_list
 from devil.android import device_utils
@@ -25,7 +25,39 @@ from devil.utils import parallelizer
 from pylib import constants
 from pylib.base import base_test_result
 from pylib.constants import host_paths
+from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
+
+
+class HeartBeat(object):
+
+  def __init__(self, shard, wait_time=60*10):
+    """ HeartBeat Logger constructor.
+
+    Args:
+      shard: A perf test runner device shard.
+      wait_time: time to wait between heartbeat messages.
+    """
+    self._shard = shard
+    self._running = False
+    self._timer = None
+    self._wait_time = wait_time
+
+  def Start(self):
+    if not self._running:
+      self._timer = threading.Timer(self._wait_time, self._LogMessage)
+      self._timer.start()
+      self._running = True
+
+  def Stop(self):
+    if self._running:
+      self._timer.cancel()
+      self._running = False
+
+  def _LogMessage(self):
+    logging.info('Currently working on test %s', self._shard.current_test)
+    self._timer = threading.Timer(self._wait_time, self._LogMessage)
+    self._timer.start()
 
 
 class TestShard(object):
@@ -36,6 +68,7 @@ class TestShard(object):
     for t in tests:
       logging.info('  %s', t)
     self._battery = battery_utils.BatteryUtils(device)
+    self._current_test = None
     self._device = device
     self._env = env
     self._index = index
@@ -44,8 +77,9 @@ class TestShard(object):
     self._test_instance = test_instance
     self._tests = tests
     self._timeout = timeout
+    self._heart_beat = HeartBeat(self)
 
-  @local_device_test_run.handle_shard_failures
+  @local_device_environment.handle_shard_failures
   def RunTestsOnShard(self):
     results = base_test_result.TestRunResults()
     for test in self._tests:
@@ -96,6 +130,9 @@ class TestShard(object):
     if (self._test_instance.collect_chartjson_data
         or self._tests[test].get('archive_output_dir')):
       self._output_dir = tempfile.mkdtemp()
+
+    self._current_test = test
+    self._heart_beat.Start()
 
   def _RunSingleTest(self, test):
     self._test_instance.WriteBuildBotJson(self._output_dir)
@@ -205,7 +242,13 @@ class TestShard(object):
       forwarder.Forwarder.UnmapAllDevicePorts(self._device)
     except Exception: # pylint: disable=broad-except
       logging.exception('Exception when resetting ports.')
+    finally:
+      self._heart_beat.Stop()
+      self._current_test = None
 
+  @property
+  def current_test(self):
+    return self._current_test
 
 class LocalDevicePerfTestRun(local_device_test_run.LocalDeviceTestRun):
 
@@ -296,15 +339,12 @@ class LocalDevicePerfTestRun(local_device_test_run.LocalDeviceTestRun):
     if not self._test_buckets:
       raise local_device_test_run.NoTestsError()
 
-    blacklist = (device_blacklist.Blacklist(self._env.blacklist)
-                 if self._env.blacklist
-                 else None)
-
     def run_perf_tests(shard_id):
-      if device_status.IsBlacklisted(str(self._devices[shard_id]), blacklist):
+      if device_status.IsBlacklisted(
+          str(self._devices[shard_id]), self._env.blacklist):
         logging.warning('Device %s is not active. Will not create shard %s.',
                         str(self._devices[shard_id]), shard_id)
-        return []
+        return None
       s = TestShard(self._env, self._test_instance, self._devices[shard_id],
                     shard_id, self._test_buckets[shard_id],
                     retries=self._env.max_tries, timeout=self._timeout)
@@ -312,7 +352,7 @@ class LocalDevicePerfTestRun(local_device_test_run.LocalDeviceTestRun):
 
     device_indices = range(min(len(self._devices), len(self._test_buckets)))
     shards = parallelizer.Parallelizer(device_indices).pMap(run_perf_tests)
-    return shards.pGet(self._timeout)
+    return [x for x in shards.pGet(self._timeout) if x is not None]
 
   # override
   def TestPackage(self):

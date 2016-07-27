@@ -125,34 +125,9 @@ CanonicalCookie::CanonicalCookie()
       httponly_(false) {
 }
 
-CanonicalCookie::CanonicalCookie(const GURL& url,
-                                 const std::string& name,
-                                 const std::string& value,
-                                 const std::string& domain,
-                                 const std::string& path,
-                                 const base::Time& creation,
-                                 const base::Time& expiration,
-                                 const base::Time& last_access,
-                                 bool secure,
-                                 bool httponly,
-                                 CookieSameSite same_site,
-                                 CookiePriority priority)
-    : name_(name),
-      value_(value),
-      domain_(domain),
-      path_(path),
-      creation_date_(creation),
-      expiry_date_(expiration),
-      last_access_date_(last_access),
-      secure_(secure),
-      httponly_(httponly),
-      same_site_(same_site),
-      priority_(priority) {}
-
 CanonicalCookie::CanonicalCookie(const CanonicalCookie& other) = default;
 
-CanonicalCookie::~CanonicalCookie() {
-}
+CanonicalCookie::~CanonicalCookie() {}
 
 // static
 std::string CanonicalCookie::CanonPath(const GURL& url,
@@ -246,10 +221,10 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
   }
 
   return base::WrapUnique(new CanonicalCookie(
-      url, parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain,
-      cookie_path, creation_time, cookie_expires, creation_time,
-      parsed_cookie.IsSecure(), parsed_cookie.IsHttpOnly(),
-      parsed_cookie.SameSite(), parsed_cookie.Priority()));
+      parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain, cookie_path,
+      creation_time, cookie_expires, creation_time, parsed_cookie.IsSecure(),
+      parsed_cookie.IsHttpOnly(), parsed_cookie.SameSite(),
+      parsed_cookie.Priority()));
 }
 
 // static
@@ -305,7 +280,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
                             canon_path_component.len);
 
   return base::WrapUnique(new CanonicalCookie(
-      url, parsed_name, parsed_value, cookie_domain, cookie_path, creation,
+      parsed_name, parsed_value, cookie_domain, cookie_path, creation,
       expiration, creation, secure, http_only, same_site, priority));
 }
 
@@ -322,9 +297,9 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
     bool http_only,
     CookieSameSite same_site,
     CookiePriority priority) {
-  return base::WrapUnique(new CanonicalCookie(
-      GURL(), name, value, domain, path, creation, expiration, last_access,
-      secure, http_only, same_site, priority));
+  return base::WrapUnique(
+      new CanonicalCookie(name, value, domain, path, creation, expiration,
+                          last_access, secure, http_only, same_site, priority));
 }
 
 bool CanonicalCookie::IsEquivalentForSecureCookieMatching(
@@ -479,6 +454,29 @@ bool CanonicalCookie::FullCompare(const CanonicalCookie& other) const {
 
   return Priority() < other.Priority();
 }
+
+CanonicalCookie::CanonicalCookie(const std::string& name,
+                                 const std::string& value,
+                                 const std::string& domain,
+                                 const std::string& path,
+                                 const base::Time& creation,
+                                 const base::Time& expiration,
+                                 const base::Time& last_access,
+                                 bool secure,
+                                 bool httponly,
+                                 CookieSameSite same_site,
+                                 CookiePriority priority)
+    : name_(name),
+      value_(value),
+      domain_(domain),
+      path_(path),
+      creation_date_(creation),
+      expiry_date_(expiration),
+      last_access_date_(last_access),
+      secure_(secure),
+      httponly_(httponly),
+      same_site_(same_site),
+      priority_(priority) {}
 
 // static
 CanonicalCookie::CookiePrefix CanonicalCookie::GetCookiePrefix(

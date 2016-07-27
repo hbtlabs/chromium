@@ -68,6 +68,7 @@
 #include "chrome/browser/android/ntp/ntp_snippets_bridge.h"
 #include "chrome/browser/android/ntp/ntp_snippets_launcher.h"
 #include "chrome/browser/android/offline_pages/background_scheduler_bridge.h"
+#include "chrome/browser/android/offline_pages/downloads/offline_page_download_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_bridge.h"
 #include "chrome/browser/android/omnibox/answers_image_bridge.h"
 #include "chrome/browser/android/omnibox/autocomplete_controller_android.h"
@@ -172,6 +173,7 @@
 #include "components/gcm_driver/instance_id/android/component_jni_registrar.h"
 #include "components/invalidation/impl/android/component_jni_registrar.h"
 #include "components/navigation_interception/component_jni_registrar.h"
+#include "components/ntp_tiles/most_visited_sites.h"
 #include "components/policy/core/browser/android/component_jni_registrar.h"
 #include "components/safe_json/android/component_jni_registrar.h"
 #include "components/signin/core/browser/android/component_jni_registrar.h"
@@ -198,6 +200,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"Invalidation", invalidation::android::RegisterInvalidationJni},
     {"NavigationInterception",
      navigation_interception::RegisterNavigationInterceptionJni},
+    {"NTPTiles", ntp_tiles::MostVisitedSites::Register},
     {"Policy", policy::android::RegisterPolicy},
     {"SafeJson", safe_json::android::RegisterSafeJsonJni},
     {"Signin", signin::android::RegisterSigninJni},
@@ -325,6 +328,8 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"OAuth2TokenServiceDelegateAndroid",
      OAuth2TokenServiceDelegateAndroid::Register},
     {"OfflinePageBridge", offline_pages::android::RegisterOfflinePageBridge},
+    {"OfflinePageDownloadBridge",
+     offline_pages::android::OfflinePageDownloadBridge::Register},
     {"OmniboxPrerender", RegisterOmniboxPrerender},
     {"OmniboxUrlEmphasizer",
      OmniboxUrlEmphasizer::RegisterOmniboxUrlEmphasizer},

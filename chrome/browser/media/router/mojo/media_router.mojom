@@ -46,9 +46,8 @@ struct MediaRoute {
   string? custom_controller_path;
   // Set to true if this route should be displayed for |media_sink_id| in UI.
   bool for_display;
-  // Set to true if this route was created by an off the record (incognito)
-  // profile.
-  bool off_the_record;
+  // Set to true if this route was created by an incognito profile.
+  bool incognito;
 };
 
 // Notifications or an actionable events to be shown to the user.
@@ -122,13 +121,20 @@ struct SinkSearchCriteria {
   string domain;
 };
 
-// Maps to a ResultCode value in route_request_result.h
-// The enum defined here is a subset of those defined in route_request_result.h.
+// Keep in sync with:
+// - RouteRequestResult::ResultCode in route_request_result.h
+// - MediaRouteProviderResult enum in tools/metrics/histograms.xml.
+// - mr.RouteRequestResultCode in route_request_error.js
 enum RouteRequestResultCode {
   UNKNOWN_ERROR,
   OK,
   TIMED_OUT,
-  ROUTE_NOT_FOUND
+  ROUTE_NOT_FOUND,
+  SINK_NOT_FOUND,
+  INVALID_ORIGIN,
+  INCOGNITO_MISMATCH,
+  NO_SUPPORTED_PROVIDER
+// New values must be added here.
 };
 
 // Modeled after the MediaRouter interface defined in
@@ -147,8 +153,7 @@ interface MediaRouteProvider {
   // If |timeout_millis| is positive, it will be used in place of the default
   // timeout defined by Media Route Provider Manager.
   //
-  // If |off_the_record| is true, the request was made by an off the record
-  // (incognito) profile.
+  // If |incognito| is true, the request was made by an incognito profile.
   //
   // If the operation was successful, |route| will be defined and
   //     |error_text| will be null.
@@ -162,7 +167,7 @@ interface MediaRouteProvider {
               string origin,
               int32 tab_id,
               int64 timeout_millis,
-              bool off_the_record) =>
+              bool incognito) =>
                   (MediaRoute? route,
                    string? error_text,
                    RouteRequestResultCode result_code);
@@ -176,8 +181,8 @@ interface MediaRouteProvider {
   // If |timeout_millis| is positive, it will be used in place of the default
   // timeout defined by Media Route Provider Manager.
   //
-  // If the route request was created by an off the record (incognito) profile,
-  // |off_the_record| must be true.
+  // If the route request was created by an incognito profile,
+  // |incognito| must be true.
   //
   // If the operation was successful, |route| will be defined and
   //     |error_text| will be null.
@@ -190,7 +195,7 @@ interface MediaRouteProvider {
             string origin,
             int32 tab_id,
             int64 timeout_millis,
-            bool off_the_record) =>
+            bool incognito) =>
                 (MediaRoute? route,
                  string? error_text,
                  RouteRequestResultCode result_code);
@@ -209,8 +214,8 @@ interface MediaRouteProvider {
   // timeout defined by Media Route Provider Manager; see CreateRoute for
   // additional documentation.
   //
-  // If the route request was created by an off the record (incognito) profile,
-  // |off_the_record| must be true.
+  // If the route request was created by an incognito profile,
+  // |incognito| must be true.
   //
   // If the operation was successful, |route| will be defined and
   // |error_text| will be null. If the operation failed, |route| will be null
@@ -224,13 +229,17 @@ interface MediaRouteProvider {
                         string origin,
                         int32 tab_id,
                         int64 timeout_millis,
-                        bool off_the_record) =>
+                        bool incognito) =>
                             (MediaRoute? route,
                              string? error_text,
                              RouteRequestResultCode result_code);
 
-  // Terminates the route specified by |route_id|.
-  TerminateRoute(string route_id);
+  // Terminates the route specified by |route_id|.  If the route was terminated
+  // successfully, |result_code| is set to OK and |error_text| is null.
+  // Otherwise, |result_code| is an error code and |error_text| describes the
+  // error.
+  TerminateRoute(string route_id) =>
+      (string? error_text, RouteRequestResultCode result_code);
 
   // Sends |message| via the media route |media_route_id|.
   // If the operation was successful, |sent| is true; otherwise it is false.
@@ -381,4 +390,3 @@ interface MediaRouter {
   OnRouteMessagesReceived(string route_id,
                           array<RouteMessage> messages);
 };
-

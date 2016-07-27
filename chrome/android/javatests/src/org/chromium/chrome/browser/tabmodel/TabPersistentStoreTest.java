@@ -13,7 +13,9 @@ import android.util.SparseArray;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelper;
 import org.chromium.chrome.browser.snackbar.undo.UndoBarController;
@@ -23,6 +25,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabSelectionType;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabPersistentStoreObserver;
 import org.chromium.chrome.browser.tabmodel.TestTabModelDirectory.TabModelMetaDataInfo;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.OverviewListLayout;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.content.browser.test.NativeLibraryTestBase;
@@ -143,7 +146,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
             mTabCreatorManager = new MockTabCreatorManager(this);
             mTabPersistentStoreObserver = new MockTabPersistentStoreObserver();
             mTabPersistentStore = new TabPersistentStore(
-                    this, 0, context, mTabCreatorManager, mTabPersistentStoreObserver, false);
+                    this, 0, context, mTabCreatorManager, mTabPersistentStoreObserver, true);
             mTabModelOrderController = new TabModelOrderController(this);
 
             Callable<TabModelImpl> callable = new Callable<TabModelImpl>() {
@@ -282,7 +285,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
         assertNull(store.mPrefetchActiveTabTask);
 
         // Make sure the metadata file loads properly and in order.
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         mockObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, mockObserver.mTabCountAtStartup);
 
@@ -325,7 +328,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
         MockTabPersistentStoreObserver firstObserver = new MockTabPersistentStoreObserver();
         final TabPersistentStore firstStore = new TabPersistentStore(
                 firstSelector, 0, mAppContext, firstManager, firstObserver, false);
-        firstStore.loadState();
+        firstStore.loadState(false /* ignoreIncognitoFiles */);
         firstObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, firstObserver.mTabCountAtStartup);
         firstObserver.detailsReadCallback.waitForCallback(0, numExpectedTabs);
@@ -349,7 +352,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
         // Make sure that all of the Tabs appear in the new one -- even though the new file was
         // written before the first TabPersistentStore loaded any TabState files and added them to
         // the TabModels.
-        secondStore.loadState();
+        secondStore.loadState(false /* ignoreIncognitoFiles */);
         secondObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, secondObserver.mTabCountAtStartup);
 
@@ -404,7 +407,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
                 mockSelector, 0, mAppContext, mockManager, mockObserver, false);
 
         // Make sure the metadata file loads properly and in order.
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         mockObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, mockObserver.mTabCountAtStartup);
 
@@ -447,7 +450,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
                 mockSelector, 0, mAppContext, mockManager, mockObserver, false);
 
         // Load the TabModel metadata.
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         mockObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, mockObserver.mTabCountAtStartup);
         mockObserver.detailsReadCallback.waitForCallback(0, numExpectedTabs);
@@ -482,7 +485,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
 
         assertNotNull(store.mPrefetchActiveTabTask);
 
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         store.restoreTabs(true);
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -569,6 +572,21 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
         }
     }
 
+    @SmallTest
+    @Feature({"TabPersistentStore", "MultiWindow"})
+    @MinAndroidSdkLevel(24)
+    @CommandLineFlags.Add(FeatureUtilities.MERGE_TABS_FLAG)
+    public void testDuplicateTabIdsOnColdStart() throws Exception {
+        final TabModelMetaDataInfo info = TestTabModelDirectory.TAB_MODEL_METADATA_V5_NO_M18;
+
+        // Write the same data to tab_state0 and tab_state1.
+        mMockDirectory.writeTabModelFiles(info, true, 0);
+        mMockDirectory.writeTabModelFiles(info, true, 1);
+
+        // This method will check that the correct number of tabs are created.
+        createAndRestoreRealTabModelImpls(info);
+    }
+
     private TestTabModelSelector createAndRestoreRealTabModelImpls(TabModelMetaDataInfo info)
             throws Exception {
         TestTabModelSelector selector = new TestTabModelSelector(mAppContext);
@@ -578,7 +596,7 @@ public class TabPersistentStoreTest extends NativeLibraryTestBase {
 
         // Load up the TabModel metadata.
         int numExpectedTabs = info.numRegularTabs + info.numIncognitoTabs;
-        store.loadState();
+        store.loadState(false /* ignoreIncognitoFiles */);
         mockObserver.initializedCallback.waitForCallback(0, 1);
         assertEquals(numExpectedTabs, mockObserver.mTabCountAtStartup);
         mockObserver.detailsReadCallback.waitForCallback(0, info.contents.length);

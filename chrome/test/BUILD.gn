@@ -11,6 +11,7 @@ import("//chrome/chrome_tests.gni")
 import("//chrome/common/features.gni")
 import("//chrome/test/base/js2gtest.gni")
 import("//testing/test.gni")
+import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -481,10 +482,10 @@ if (!is_android) {
           "../../ui/views/widget/desktop_aura/x11_topmost_window_finder_interactive_uitest.cc",
         ]
       }
-      if (use_aura) {
-        # TODO(ekaramad): These tests are activated for aura only. They should
-        # be moved to 'interactive_ui_tests' sources for all platforms once bug
-        # 578168 is fixed.
+      if (use_aura || is_mac) {
+        # TODO(ekaramad): These tests are activated for aura and mac only. They
+        # should be moved to 'interactive_ui_tests' sources for all platforms
+        # once https://crbug.com/578168 is fixed.
         sources += [ "//chrome/browser/renderer_host/site_per_process_text_input_browsertest.cc" ]
         deps += [ "//ui/touch_selection" ]
       }
@@ -979,9 +980,11 @@ test("browser_tests") {
       "//media",
       "//media/base:test_support",
       "//media/cast:test_support",
+      "//mojo/common:common_base",
       "//net",
       "//net:test_support",
       "//sdch",
+      "//services/shell/public/cpp",
       "//skia",
       "//sync",
       "//testing/gmock",
@@ -1256,12 +1259,12 @@ test("browser_tests") {
     if (is_win) {
       deps += [
         "//chrome:other_version",
+        "//chrome/app:command_ids",
         "//third_party/wtl",
         "//ui/resources",
       ]
     } else {
       sources -= [
-        "../app/chrome_command_ids.h",
         "../app/chrome_dll_resource.h",
         "../app/chrome_version.rc.version",
         "../browser/media_galleries/fileapi/iapps_finder_impl_win_browsertest.cc",
@@ -1539,6 +1542,7 @@ if (!is_android) {
       "//chrome:packed_resources",
       "//chrome:resources",
       "//chrome:strings",
+      "//chrome/app:command_ids",
       "//chrome/common",
       "//chrome/renderer",
       "//crypto:platform",
@@ -1618,6 +1622,7 @@ if (!is_android) {
     deps = [
       ":sync_integration_test_support",
       ":test_support_ui",
+      "//chrome/app:command_ids",
       "//crypto:platform",
       "//sync",
       "//testing/gmock",
@@ -1800,7 +1805,9 @@ test("unit_tests") {
     # 3) anything tests directly depend on
     "//chrome:resources",
     "//chrome:strings",
+    "//components/component_updater:test_support",
     "//components/safe_browsing_db:test_database_manager",
+    "//components/subresource_filter/core/browser:test_support",
     "//components/version_info:generate_version_info",
     "//courgette:courgette_lib",
     "//google_apis",
@@ -1961,8 +1968,8 @@ test("unit_tests") {
                     "//chrome")
     deps += [
       "//ash:test_support",
+      "//ash/common/strings",
       "//ash/resources",
-      "//ash/strings",
     ]
 
     # We eventually want to compile both in Win Aura builds, see
@@ -2424,11 +2431,9 @@ if (!is_android && !is_ios && !is_chromecast) {
       configs -= [ "//build/config/win:default_incremental_linking" ]
       configs +=
           [ "//build/config/win:default_large_module_incremental_linking" ]
+      deps += [ "//chrome/app:command_ids" ]
     } else {
-      sources -= [
-        "../app/chrome_command_ids.h",
-        "../app/chrome_version.rc.version",
-      ]
+      sources -= [ "../app/chrome_version.rc.version" ]
     }
     if (!is_mac) {
       sources -= [ "perf/mach_ports_performancetest.cc" ]

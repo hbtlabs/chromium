@@ -101,6 +101,8 @@ void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillWalletImportEnabled,
                                 true);
+  registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileUseDatesFixed,
+                                true);
   registry->RegisterIntegerPref(autofill::prefs::kAutofillLastVersionDeduped,
                                 atoi(version_info::GetVersionNumber().c_str()));
 }
@@ -1029,7 +1031,7 @@ TEST_F(
   AutofillProfile expected_profile(sync_profile);
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1062,7 +1064,7 @@ TEST_F(
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that matches an older new sync
@@ -1089,7 +1091,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   AutofillProfile expected_profile(sync_profile);
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
   expected_profile.set_use_date(native_profile->use_date());
 
   std::vector<AutofillProfile*> native_profiles;
@@ -1123,7 +1125,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that matches an a new sync
@@ -1153,7 +1155,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
   expected_profile.set_use_date(sync_profile.use_date());
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1187,7 +1189,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that differ only by name a new

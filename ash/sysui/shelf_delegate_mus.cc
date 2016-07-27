@@ -7,14 +7,13 @@
 #include <memory>
 
 #include "ash/common/shelf/shelf_item_delegate.h"
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
 #include "ash/common/shelf/shelf_menu_model.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shell.h"
 #include "base/strings/string_util.h"
 #include "mojo/common/common_type_converters.h"
 #include "services/shell/public/cpp/connector.h"
@@ -89,11 +88,6 @@ class ShelfItemDelegateMus : public ShelfItemDelegate {
     bool IsCommandIdEnabled(int command_id) const override {
       return command_id > 0;
     }
-    bool GetAcceleratorForCommandId(
-        int command_id,
-        ui::Accelerator* accelerator) const override {
-      return false;
-    }
     void ExecuteCommand(int command_id, int event_flags) override {
       item_delegate_->user_window_controller_->ActivateUserWindow(command_id);
     }
@@ -153,8 +147,7 @@ class ShelfItemDelegateMus : public ShelfItemDelegate {
 
 ShelfItemDelegateMus* GetShelfItemDelegate(ShelfID shelf_id) {
   return static_cast<ShelfItemDelegateMus*>(
-      Shell::GetInstance()->shelf_item_delegate_manager()->GetShelfItemDelegate(
-          shelf_id));
+      WmShell::Get()->shelf_model()->GetShelfItemDelegate(shelf_id));
 }
 
 // Returns an icon image from an SkBitmap, or the default shelf icon
@@ -322,8 +315,7 @@ void ShelfDelegateMus::PinItem(
   item_delegate->SetDelegate(std::move(delegate));
   item_delegate->set_pinned(true);
   item_delegate->set_title(item->app_title.To<base::string16>());
-  Shell::GetInstance()->shelf_item_delegate_manager()->SetShelfItemDelegate(
-      shelf_id, std::move(item_delegate));
+  model_->SetShelfItemDelegate(shelf_id, std::move(item_delegate));
 }
 
 void ShelfDelegateMus::UnpinItem(const mojo::String& app_id) {
@@ -393,8 +385,7 @@ void ShelfDelegateMus::OnUserWindowAdded(
       new ShelfItemDelegateMus(user_window_controller_.get()));
   item_delegate->AddWindow(user_window->window_id,
                            user_window->window_title.To<base::string16>());
-  Shell::GetInstance()->shelf_item_delegate_manager()->SetShelfItemDelegate(
-      shelf_id, std::move(item_delegate));
+  model_->SetShelfItemDelegate(shelf_id, std::move(item_delegate));
 }
 
 void ShelfDelegateMus::OnUserWindowRemoved(uint32_t window_id) {

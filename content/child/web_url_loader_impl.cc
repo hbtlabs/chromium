@@ -550,7 +550,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
       GetRequestContextFrameTypeForWebURLRequest(request);
   request_info.extra_data = request.getExtraData();
   request_info.report_raw_headers = request.reportRawHeaders();
-  request_info.loading_web_task_runner.reset(web_task_runner_->clone());
+  request_info.loading_web_task_runner = web_task_runner_->clone();
   request_info.lofi_state = static_cast<LoFiState>(request.getLoFiState());
 
   scoped_refptr<ResourceRequestBodyImpl> request_body =
@@ -1134,7 +1134,8 @@ void WebURLLoaderImpl::PopulateURLRequestForRedirect(
 void WebURLLoaderImpl::loadSynchronously(const WebURLRequest& request,
                                          WebURLResponse& response,
                                          WebURLError& error,
-                                         WebData& data) {
+                                         WebData& data,
+                                         int64_t& encoded_data_length) {
   TRACE_EVENT0("loading", "WebURLLoaderImpl::loadSynchronously");
   SyncLoadResponse sync_load_response;
   context_->Start(request, &sync_load_response);
@@ -1156,6 +1157,7 @@ void WebURLLoaderImpl::loadSynchronously(const WebURLRequest& request,
                       request.reportRawHeaders());
   response.addToEncodedBodyLength(sync_load_response.encoded_body_length);
   response.addToDecodedBodyLength(sync_load_response.data.size());
+  encoded_data_length = sync_load_response.encoded_data_length;
 
   data.assign(sync_load_response.data.data(), sync_load_response.data.size());
 }
@@ -1187,7 +1189,7 @@ void WebURLLoaderImpl::setLoadingTaskRunner(
     blink::WebTaskRunner* loading_task_runner) {
   // There's no guarantee on the lifetime of |loading_task_runner| so we take a
   // copy.
-  context_->SetWebTaskRunner(base::WrapUnique(loading_task_runner->clone()));
+  context_->SetWebTaskRunner(loading_task_runner->clone());
 }
 
 // This function is implemented here because it uses net functions. it is

@@ -516,8 +516,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accParent(IDispatch** disp_parent) {
     // destruction. Possible cases where this could occur include tabs being
     // dragged to a new window, etc.
     if (!parent_obj) {
-      DVLOG(1) <<  "In Function: "
-               << __FUNCTION__
+      DVLOG(1) << "In Function: " << __func__
                << ". Parent IAccessible interface is NULL. Returning failure";
       return E_FAIL;
     }
@@ -2516,7 +2515,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_startIndex(long* index) {
     return E_INVALIDARG;
 
   int32_t hypertext_offset = 0;
-  const auto parent = GetParent();
+  auto* parent = GetParent();
   if (parent) {
     hypertext_offset =
         ToBrowserAccessibilityWin(parent)->GetHypertextOffsetFromChild(*this);
@@ -3224,10 +3223,7 @@ BrowserAccessibilityWin::ConvertReturnedElement(
 
 STDMETHODIMP BrowserAccessibilityWin::GetPatternProvider(PATTERNID id,
                                                          IUnknown** provider) {
-  DVLOG(1) << "In Function: "
-           << __FUNCTION__
-           << " for pattern id: "
-           << id;
+  DVLOG(1) << "In Function: " << __func__ << " for pattern id: " << id;
   if (id == UIA_ValuePatternId || id == UIA_TextPatternId) {
     if (HasState(ui::AX_STATE_EDITABLE)) {
       DVLOG(1) << "Returning UIA text provider";
@@ -3241,10 +3237,7 @@ STDMETHODIMP BrowserAccessibilityWin::GetPatternProvider(PATTERNID id,
 
 STDMETHODIMP BrowserAccessibilityWin::GetPropertyValue(PROPERTYID id,
                                                        VARIANT* ret) {
-  DVLOG(1) << "In Function: "
-           << __FUNCTION__
-           << " for property id: "
-           << id;
+  DVLOG(1) << "In Function: " << __func__ << " for property id: " << id;
   V_VT(ret) = VT_EMPTY;
   if (id == UIA_ControlTypePropertyId) {
     if (HasState(ui::AX_STATE_EDITABLE)) {
@@ -3309,7 +3302,8 @@ HRESULT WINAPI BrowserAccessibilityWin::InternalQueryInterface(
       return E_NOINTERFACE;
     }
   } else if (iid == IID_IAccessibleHyperlink) {
-    auto ax_object = reinterpret_cast<const BrowserAccessibilityWin*>(this_ptr);
+    auto* ax_object =
+        reinterpret_cast<const BrowserAccessibilityWin*>(this_ptr);
     if (!ax_object || !ax_object->IsHyperlink()) {
       *object = nullptr;
       return E_NOINTERFACE;
@@ -3357,7 +3351,7 @@ void BrowserAccessibilityWin::ComputeStylesIfNeeded() {
 
   int start_offset = 0;
   for (size_t i = 0; i < PlatformChildCount(); ++i) {
-    const auto child = ToBrowserAccessibilityWin(PlatformGetChild(i));
+    auto* child = ToBrowserAccessibilityWin(PlatformGetChild(i));
     DCHECK(child);
     std::vector<base::string16> attributes(child->ComputeTextAttributes());
 
@@ -3582,7 +3576,7 @@ void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
   // the character index of each embedded object character to the id of the
   // child object it points to.
   for (unsigned int i = 0; i < PlatformChildCount(); ++i) {
-    const auto child = ToBrowserAccessibilityWin(PlatformGetChild(i));
+    auto* child = ToBrowserAccessibilityWin(PlatformGetChild(i));
     DCHECK(child);
     // Similar to Firefox, we don't expose text-only objects in IA2 hypertext.
     if (child->IsTextOnlyObject()) {
@@ -3920,7 +3914,7 @@ BrowserAccessibilityWin::GetSpellingAttributes() const {
              BrowserAccessibilityManager::NextTextOnlyObject(
                  InternalGetChild(0));
          static_text; static_text = static_text->GetNextSibling()) {
-      auto text_win = ToBrowserAccessibilityWin(static_text);
+      auto* text_win = ToBrowserAccessibilityWin(static_text);
       if (text_win) {
         std::map<int, std::vector<base::string16>> text_spelling_attributes =
             text_win->GetSpellingAttributes();
@@ -4022,7 +4016,7 @@ void BrowserAccessibilityWin::IntAttributeToIA2(
 
 bool BrowserAccessibilityWin::IsHyperlink() const {
   int32_t hyperlink_index = -1;
-  const auto parent = GetParent();
+  auto* parent = GetParent();
   if (parent) {
     hyperlink_index =
         ToBrowserAccessibilityWin(parent)->GetHyperlinkIndexFromChild(*this);
@@ -4109,8 +4103,8 @@ int32_t BrowserAccessibilityWin::GetHypertextOffsetFromChild(
 
 int32_t BrowserAccessibilityWin::GetHypertextOffsetFromDescendant(
     const BrowserAccessibilityWin& descendant) const {
-  auto parent_object = ToBrowserAccessibilityWin(descendant.GetParent());
-  auto current_object = const_cast<BrowserAccessibilityWin*>(&descendant);
+  auto* parent_object = ToBrowserAccessibilityWin(descendant.GetParent());
+  auto* current_object = const_cast<BrowserAccessibilityWin*>(&descendant);
   while (parent_object && parent_object != this) {
     current_object = parent_object;
     parent_object = ToBrowserAccessibilityWin(current_object->GetParent());
@@ -4682,7 +4676,7 @@ void BrowserAccessibilityWin::InitRoleAndState() {
     ia_state |= STATE_SYSTEM_SELECTED;
   if (HasState(ui::AX_STATE_VISITED))
     ia_state |= STATE_SYSTEM_TRAVERSED;
-  if (!HasState(ui::AX_STATE_ENABLED))
+  if (HasState(ui::AX_STATE_DISABLED))
     ia_state |= STATE_SYSTEM_UNAVAILABLE;
   if (HasState(ui::AX_STATE_VERTICAL))
     ia2_state |= IA2_STATE_VERTICAL;

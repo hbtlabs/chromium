@@ -54,26 +54,6 @@ void SearchIPCRouter::SendHistorySyncCheckResult(bool sync_history) {
   Send(new ChromeViewMsg_HistorySyncCheckResult(routing_id(), sync_history));
 }
 
-void SearchIPCRouter::SetPromoInformation(bool is_app_launcher_enabled) {
-  if (!policy_->ShouldSendSetPromoInformation())
-    return;
-
-  Send(new ChromeViewMsg_SearchBoxPromoInformation(routing_id(),
-                                                   is_app_launcher_enabled));
-}
-
-void SearchIPCRouter::SetDisplayInstantResults() {
-  if (!policy_->ShouldSendSetDisplayInstantResults())
-    return;
-
-  bool is_search_results_page = !search::GetSearchTerms(web_contents()).empty();
-  bool display_instant_results =
-      is_search_results_page ? search::ShouldPrefetchSearchResultsOnSRP()
-                             : search::ShouldPrefetchSearchResults();
-  Send(new ChromeViewMsg_SearchBoxSetDisplayInstantResults(
-       routing_id(), display_instant_results));
-}
-
 void SearchIPCRouter::SetSuggestionToPrefetch(
     const InstantSuggestion& suggestion) {
   if (!policy_->ShouldSendSetSuggestionToPrefetch())

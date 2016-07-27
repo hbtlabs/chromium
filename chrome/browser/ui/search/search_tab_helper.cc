@@ -20,7 +20,6 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/browser/ui/app_list/app_list_util.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
@@ -264,11 +263,6 @@ bool SearchTabHelper::IsSearchResultsPage() {
   return model_.mode().is_origin_search();
 }
 
-void SearchTabHelper::RenderViewCreated(
-    content::RenderViewHost* render_view_host) {
-  ipc_router_.SetPromoInformation(IsAppLauncherEnabled());
-}
-
 void SearchTabHelper::DidStartNavigationToPendingEntry(
     const GURL& url,
     content::NavigationController::ReloadType /* reload_type */) {
@@ -330,10 +324,6 @@ void SearchTabHelper::NavigationEntryCommitted(
 
   if (!load_details.is_main_frame)
     return;
-
-  if (search::ShouldAssignURLToInstantRenderer(web_contents_->GetURL(),
-                                               profile()))
-    ipc_router_.SetDisplayInstantResults();
 
   UpdateMode(true);
 

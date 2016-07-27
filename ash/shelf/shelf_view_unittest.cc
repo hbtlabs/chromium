@@ -13,16 +13,15 @@
 #include "ash/common/shelf/overflow_bubble.h"
 #include "ash/common/shelf/overflow_bubble_view.h"
 #include "ash/common/shelf/shelf_constants.h"
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
 #include "ash/common/shelf/shelf_menu_model.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shelf/shelf_tooltip_manager.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_shell.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_icon_observer.h"
-#include "ash/shelf/shelf_tooltip_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -31,13 +30,13 @@
 #include "ash/test/overflow_bubble_view_test_api.h"
 #include "ash/test/shelf_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
-#include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shelf_item_delegate.h"
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -309,17 +308,12 @@ class ShelfViewTest : public AshTestBase {
   static const char*
       kTimeBetweenWindowMinimizedAndActivatedActionsHistogramName;
 
-  ShelfViewTest()
-      : model_(NULL),
-        shelf_view_(NULL),
-        browser_index_(1),
-        item_manager_(NULL) {}
+  ShelfViewTest() : model_(nullptr), shelf_view_(nullptr), browser_index_(1) {}
   ~ShelfViewTest() override {}
 
   void SetUp() override {
     AshTestBase::SetUp();
-    ShellTestApi test_api(Shell::GetInstance());
-    model_ = test_api.shelf_model();
+    model_ = WmShell::Get()->shelf_model();
     Shelf* shelf = Shelf::ForPrimaryDisplay();
     shelf_view_ = ShelfTestAPI(shelf).shelf_view();
 
@@ -330,9 +324,6 @@ class ShelfViewTest : public AshTestBase {
     test_api_->SetAnimationDuration(1);  // Speeds up animation for test.
 
     ReplaceShelfDelegate();
-
-    item_manager_ = Shell::GetInstance()->shelf_item_delegate_manager();
-    DCHECK(item_manager_);
 
     // Add browser shortcut shelf item at index 0 for test.
     AddBrowserShortcut();
@@ -348,7 +339,7 @@ class ShelfViewTest : public AshTestBase {
   void CreateAndSetShelfItemDelegateForID(ShelfID id) {
     std::unique_ptr<ShelfItemDelegate> delegate(
         new TestShelfItemDelegate(NULL));
-    item_manager_->SetShelfItemDelegate(id, std::move(delegate));
+    model_->SetShelfItemDelegate(id, std::move(delegate));
   }
 
   ShelfID AddBrowserShortcut() {
@@ -693,21 +684,17 @@ class ShelfViewTest : public AshTestBase {
   }
 
   void ReplaceShelfDelegate() {
-    // Replace ShelfDelegate.
-    ShellTestApi shell_test_api(Shell::GetInstance());
-    shell_test_api.SetShelfDelegate(NULL);
     shelf_delegate_ = new TestShelfDelegateForShelfView();
-    shell_test_api.SetShelfDelegate(shelf_delegate_);
-    ShelfTestAPI(Shelf::ForPrimaryDisplay()).set_delegate(shelf_delegate_);
     test_api_->SetShelfDelegate(shelf_delegate_);
+    WmShell::Get()->SetShelfDelegateForTesting(
+        base::WrapUnique(shelf_delegate_));
   }
 
   ShelfModel* model_;
   ShelfView* shelf_view_;
   int browser_index_;
-  ShelfItemDelegateManager* item_manager_;
 
-  // Owned by ash::Shell.
+  // Owned by ash::WmShell.
   TestShelfDelegateForShelfView* shelf_delegate_;
 
   std::unique_ptr<ShelfViewTestAPI> test_api_;
@@ -1210,10 +1197,10 @@ TEST_F(ShelfViewTest, DragWithNotDraggableItemInFront) {
   SetupForDragTest(&id_map);
 
   (static_cast<TestShelfItemDelegate*>(
-       item_manager_->GetShelfItemDelegate(id_map[1].first)))
+       model_->GetShelfItemDelegate(id_map[1].first)))
       ->set_is_draggable(false);
   (static_cast<TestShelfItemDelegate*>(
-       item_manager_->GetShelfItemDelegate(id_map[2].first)))
+       model_->GetShelfItemDelegate(id_map[2].first)))
       ->set_is_draggable(false);
 
   ASSERT_NO_FATAL_FAILURE(DragAndVerify(3, 1, shelf_view_, id_map));
@@ -1248,7 +1235,7 @@ TEST_F(ShelfViewTest, ClickingTwiceActivatesOnce) {
   // Watch for selection of the browser shortcut.
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
-  item_manager_->SetShelfItemDelegate(
+  model_->SetShelfItemDelegate(
       browser_shelf_id, std::unique_ptr<ShelfItemDelegate>(selection_tracker));
 
   // A single click selects the item.
@@ -1273,7 +1260,7 @@ TEST_F(ShelfViewTest, ClickAndMoveSlightly) {
   // Replace the ShelfItemDelegate for |shelf_id| with one which tracks whether
   // the shelf item gets selected.
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
-  item_manager_->SetShelfItemDelegate(
+  model_->SetShelfItemDelegate(
       shelf_id, std::unique_ptr<ShelfItemDelegate>(selection_tracker));
 
   gfx::Vector2d press_offset(5, 30);
@@ -1881,7 +1868,7 @@ TEST_F(ShelfViewTest,
 
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
-  item_manager_->SetShelfItemDelegate(
+  model_->SetShelfItemDelegate(
       browser_shelf_id, std::unique_ptr<ShelfItemDelegate>(selection_tracker));
 
   SimulateClick(browser_index_);
@@ -1898,7 +1885,7 @@ TEST_F(ShelfViewTest, Launcher_TaskUserActionsRecordedWhenItemSelected) {
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
   selection_tracker->set_item_selected_action(
       ShelfItemDelegate::kNewWindowCreated);
-  item_manager_->SetShelfItemDelegate(
+  model_->SetShelfItemDelegate(
       browser_shelf_id, std::unique_ptr<ShelfItemDelegate>(selection_tracker));
 
   SimulateClick(browser_index_);
@@ -1913,7 +1900,7 @@ TEST_F(ShelfViewTest,
 
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ShelfItemSelectionTracker* selection_tracker = new ShelfItemSelectionTracker;
-  item_manager_->SetShelfItemDelegate(
+  model_->SetShelfItemDelegate(
       browser_shelf_id, std::unique_ptr<ShelfItemDelegate>(selection_tracker));
 
   selection_tracker->set_item_selected_action(
@@ -2051,10 +2038,6 @@ class TestShelfMenuModel : public ShelfMenuModel,
   bool IsCommandIdChecked(int command_id) const override { return false; }
   bool IsCommandIdEnabled(int command_id) const override {
     return command_id != 0;
-  }
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) const override {
-    return false;
   }
   void ExecuteCommand(int command_id, int event_flags) override {}
 
@@ -2569,8 +2552,8 @@ TEST_F(ShelfViewInkDropTest, ShelfButtonWithMenuPressRelease) {
   // Set a delegate for the shelf item that returns an app list menu.
   ShelfID browser_shelf_id = model_->items()[browser_index_].id;
   ListMenuShelfItemDelegate* list_menu_delegate = new ListMenuShelfItemDelegate;
-  item_manager_->SetShelfItemDelegate(browser_shelf_id,
-                                      base::WrapUnique(list_menu_delegate));
+  model_->SetShelfItemDelegate(browser_shelf_id,
+                               base::WrapUnique(list_menu_delegate));
 
   views::CustomButton* button = browser_button_;
   gfx::Point mouse_location = button->GetLocalBounds().CenterPoint();

@@ -37,7 +37,6 @@
 #include "content/public/browser/user_metrics.h"
 #include "extensions/common/constants.h"
 #include "grit/components_chromium_strings.h"
-#include "grit/components_google_chrome_strings.h"
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -670,10 +669,10 @@ void WebsiteSettingsPopupView::SetPermissionInfo(
     layout->AddPaddingRow(1, kContentRowSpacing);
   }
 
-  for (auto object : chosen_object_info_list) {
+  for (auto* object : chosen_object_info_list) {
     layout->StartRow(1, content_column);
     // The view takes ownership of the object info.
-    auto object_view = new ChosenObjectView(base::WrapUnique(object));
+    auto* object_view = new ChosenObjectView(base::WrapUnique(object));
     object_view->AddObserver(this);
     layout->AddView(object_view, 1, 1, views::GridLayout::LEADING,
                     views::GridLayout::CENTER);

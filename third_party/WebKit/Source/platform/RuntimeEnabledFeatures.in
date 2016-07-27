@@ -91,13 +91,11 @@ FastMobileScrolling
 FileAPIBlobClose status=experimental
 FileSystem status=stable
 ForeignFetch status=experimental
-FormDataNewMethods status=stable
 FullscreenUnprefixed status=test
 FrameTimingSupport status=experimental
 GeometryInterfaces status=test
 GetUserMedia depends_on=MediaDevices, status=stable
 GlobalCacheStorage status=stable
-HiResEventTimeStamp status=stable
 IDBObserver status=experimental
 ImageCapture status=experimental
 ImageColorProfiles
@@ -111,7 +109,6 @@ InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
-LinkPreconnect status=stable
 LinkPreload status=stable
 LinkHeader status=stable
 LinkServiceWorker status=experimental
@@ -179,6 +176,7 @@ RequestIdleCallback status=stable
 ResponseConstructedWithReadableStream status=stable
 ResponseBodyWithV8ExtraStream status=stable
 ResizeObserver status=experimental
+RTCPeerConnectionNewGetStats status=test
 SandboxBlocksModals status=stable
 ScreenOrientation status=stable
 ScriptedSpeech status=stable

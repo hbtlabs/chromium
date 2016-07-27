@@ -32,7 +32,7 @@ class _PageCyclerV2(perf_benchmark.PerfBenchmark):
 
     tbm_options = timeline_based_measurement.Options(
         overhead_level=cat_filter)
-    tbm_options.SetTimelineBasedMetrics(['firstPaintMetric'])
+    tbm_options.SetTimelineBasedMetrics(['loadingMetric'])
     return tbm_options
 
   @classmethod
@@ -138,4 +138,67 @@ class PageCyclerV2IntlKoThVi(_PageCyclerV2):
 
   def CreateStorySet(self, options):
     return page_sets.IntlKoThViPageSet(cache_temperatures=[
+          cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
+
+
+class PageCyclerV2Top10Mobile(_PageCyclerV2):
+  """Page load time benchmark for the top 10 mobile web pages.
+
+  Runs against pages recorded in November, 2013.
+  """
+
+  @classmethod
+  def Name(cls):
+    return 'page_cycler_v2.top_10_mobile'
+
+  def CreateStorySet(self, options):
+    return page_sets.Top10MobilePageSet(run_no_page_interactions=True,
+        cache_temperatures=[
+            cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
+
+
+class PageCyclerV2ToughLayoutCases(_PageCyclerV2):
+  """Page loading for the slowest layouts observed in the Alexa top 1 million.
+
+  Recorded in July 2013.
+  """
+  page_set = page_sets.ToughLayoutCasesPageSet
+
+  @classmethod
+  def Name(cls):
+    return 'page_cycler_v2.tough_layout_cases'
+
+  def CreateStorySet(self, options):
+    return page_sets.ToughLayoutCasesPageSet(cache_temperatures=[
+          cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
+
+
+@benchmark.Disabled('reference', 'android')
+class PageCyclerV2BasicOopifIsolated(_PageCyclerV2):
+  """ A benchmark measuring performance of out-of-process iframes. """
+  page_set = page_sets.OopifBasicPageSet
+
+  @classmethod
+  def Name(cls):
+    return 'page_cycler_v2_site_isolation.basic_oopif'
+
+  def SetExtraBrowserOptions(self, options):
+    options.AppendExtraBrowserArgs(['--site-per-process'])
+
+  def CreateStorySet(self, options):
+    return page_sets.OopifBasicPageSet(cache_temperatures=[
+          cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])
+
+
+class PageCyclerV2BasicOopif(_PageCyclerV2):
+  """ A benchmark measuring performance of the out-of-process iframes page
+  set, without running in out-of-process iframes mode.. """
+  page_set = page_sets.OopifBasicPageSet
+
+  @classmethod
+  def Name(cls):
+    return 'page_cycler_v2.basic_oopif'
+
+  def CreateStorySet(self, options):
+    return page_sets.OopifBasicPageSet(cache_temperatures=[
           cache_temperature.PCV1_COLD, cache_temperature.PCV1_WARM])

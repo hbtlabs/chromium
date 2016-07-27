@@ -23,6 +23,10 @@ extern const base::Feature kArcMemoryManagement;
 extern const base::Feature kAutomaticTabDiscarding;
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
+#if defined(OS_WIN) || defined(OS_LINUX)
+extern const base::Feature kBackgroundModeAllowRestart;
+#endif  // defined(OS_WIN) || defined(OS_LINUX)
+
 extern const base::Feature kBlockSmallContent;
 
 extern const base::Feature kBrowserHangFixesExperiment;
@@ -61,6 +65,8 @@ extern const base::Feature kSyzyasanDeferredFree;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;
+
+extern const base::Feature kQuickUnlockPin;
 #endif  // defined(OS_CHROMEOS)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

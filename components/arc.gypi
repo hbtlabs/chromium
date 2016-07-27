@@ -35,6 +35,8 @@
       'sources': [
         'arc/arc_bridge_bootstrap.cc',
         'arc/arc_bridge_bootstrap.h',
+        'arc/arc_bridge_host_impl.h',
+        'arc/arc_bridge_host_impl.cc',
         'arc/arc_bridge_service_impl.cc',
         'arc/arc_bridge_service_impl.h',
         'arc/arc_service_manager.cc',
@@ -83,8 +85,6 @@
         'arc/storage_manager/arc_storage_manager.h',
         'arc/user_data/arc_user_data_service.cc',
         'arc/user_data/arc_user_data_service.h',
-        'arc/window_manager/arc_window_manager_bridge.cc',
-        'arc/window_manager/arc_window_manager_bridge.h',
       ],
     },
     {
@@ -168,6 +168,7 @@
         'arc/common/bluetooth.mojom',
         'arc/common/clipboard.mojom',
         'arc/common/crash_collector.mojom',
+        'arc/common/enterprise_reporting.mojom',
         'arc/common/file_system.mojom',
         'arc/common/ime.mojom',
         'arc/common/intent_helper.mojom',
@@ -183,7 +184,6 @@
         'arc/common/storage_manager.mojom',
         'arc/common/video.mojom',
         'arc/common/video_accelerator.mojom',
-        'arc/common/window_manager.mojom',
         'arc/common/app_struct_traits.cc',
       ],
       'includes': [ '../mojo/mojom_bindings_generator.gypi' ],

@@ -317,7 +317,7 @@ class DriverBugWorkaroundsUponGLRendererPage(DriverBugWorkaroundsTestsPage):
       self.expected_workaround = "texsubimage_faster_than_teximage"
       self.unexpected_workaround = "disable_d3d11"
     elif sys.platform.startswith('linux'):
-      self.expected_workaround = "disable_multisampled_render_to_texture"
+      self.expected_workaround = "disable_transparent_visuals"
     elif sys.platform == 'darwin':
       pass
     super(DriverBugWorkaroundsUponGLRendererPage, self).__init__(
@@ -553,9 +553,7 @@ class NoTransparentVisualsShared(GpuProcessSharedPageState):
       test, finder_options, story_set)
     options = finder_options.browser_options
     if sys.platform.startswith('linux'):
-      # Hit id 173 from kGpuDriverBugListJson.
-      options.AppendExtraBrowserArgs('--gpu-testing-gl-version=4.5.0 ' \
-                                     'NVIDIA 352.41')
+      options.AppendExtraBrowserArgs('--disable_transparent_visuals=1')
 
 class NoTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
   def __init__(self, story_set, expectations):
@@ -596,8 +594,6 @@ class GpuProcessTestsStorySet(story_set_module.StorySet):
     self.AddStory(GpuInfoCompletePage(self, expectations))
     self.AddStory(NoGpuProcessPage(self, expectations))
     self.AddStory(SoftwareGpuProcessPage(self, expectations))
-    if not is_platform_android:
-      self.AddStory(SkipGpuProcessPage(self, expectations))
     self.AddStory(DriverBugWorkaroundsInGpuProcessPage(self, expectations))
     self.AddStory(IdentifyActiveGpuPage1(self, expectations))
     self.AddStory(IdentifyActiveGpuPage2(self, expectations))
@@ -607,8 +603,10 @@ class GpuProcessTestsStorySet(story_set_module.StorySet):
     self.AddStory(DriverBugWorkaroundsUponGLRendererPage(self, expectations))
     self.AddStory(EqualBugWorkaroundsInBrowserAndGpuProcessPage(self,
                                                                 expectations))
-    self.AddStory(HasTransparentVisualsGpuProcessPage(self, expectations))
-    self.AddStory(NoTransparentVisualsGpuProcessPage(self, expectations))
+    if not is_platform_android:
+      self.AddStory(SkipGpuProcessPage(self, expectations))
+      self.AddStory(HasTransparentVisualsGpuProcessPage(self, expectations))
+      self.AddStory(NoTransparentVisualsGpuProcessPage(self, expectations))
 
   @property
   def allow_mixed_story_states(self):

@@ -315,10 +315,6 @@ public:
     {
     }
 
-    virtual ~ColorOverlay()
-    {
-    }
-
 private:
     void paintPageOverlay(const PageOverlay& pageOverlay, GraphicsContext& graphicsContext, const WebSize& size) const override
     {
@@ -1126,16 +1122,18 @@ WebInputEventResult WebViewImpl::handleKeyEvent(const WebKeyboardEvent& event)
     }
 
 #if !OS(MACOSX)
-    const WebInputEvent::Type contextMenuTriggeringEventType =
+    const WebInputEvent::Type contextMenuKeyTriggeringEventType =
 #if OS(WIN)
         WebInputEvent::KeyUp;
 #else
         WebInputEvent::RawKeyDown;
 #endif
+    const WebInputEvent::Type shiftF10TriggeringEventType = WebInputEvent::RawKeyDown;
 
     bool isUnmodifiedMenuKey = !(event.modifiers & WebInputEvent::InputModifiers) && event.windowsKeyCode == VKEY_APPS;
     bool isShiftF10 = (event.modifiers & WebInputEvent::InputModifiers) == WebInputEvent::ShiftKey && event.windowsKeyCode == VKEY_F10;
-    if ((isUnmodifiedMenuKey || isShiftF10) && event.type == contextMenuTriggeringEventType) {
+    if ((isUnmodifiedMenuKey && event.type == contextMenuKeyTriggeringEventType)
+        || (isShiftF10 && event.type == shiftF10TriggeringEventType)) {
         sendContextMenuEvent(event);
         return WebInputEventResult::HandledSystem;
     }
@@ -1375,7 +1373,7 @@ Node* WebViewImpl::bestTapNode(const GestureEventWithHitTestResults& targetedTap
     }
 
     // Editable nodes should not be highlighted (e.g., <input>)
-    if (bestTouchNode->hasEditableStyle())
+    if (hasEditableStyle(*bestTouchNode))
         return nullptr;
 
     Node* cursorDefiningAncestor =
@@ -2273,7 +2271,7 @@ void WebViewImpl::setFocus(bool enable)
                 // no caret and does respond to keyboard inputs.
                 if (element->isTextFormControl()) {
                     element->updateFocusAppearance(SelectionBehaviorOnFocus::Restore);
-                } else if (element->isContentEditable()) {
+                } else if (isContentEditable(*element)) {
                     // updateFocusAppearance() selects all the text of
                     // contentseditable DIVs. So we set the selection explicitly
                     // instead. Note that this has the side effect of moving the
@@ -2342,7 +2340,7 @@ bool WebViewImpl::setComposition(
     const EphemeralRange range = inputMethodController.compositionEphemeralRange();
     if (range.isNotNull()) {
         Node* node = range.startPosition().computeContainerNode();
-        if (!node || !node->isContentEditable())
+        if (!node || !isContentEditable(*node))
             return false;
     }
 
@@ -2540,7 +2538,7 @@ WebTextInputType WebViewImpl::textInputType()
             return WebTextInputTypeDateTimeField;
     }
 
-    if (element->isContentEditable())
+    if (isContentEditable(*element))
         return WebTextInputTypeContentEditable;
 
     return WebTextInputTypeNone;
@@ -2995,7 +2993,7 @@ void WebViewImpl::clearFocusedElement()
     // knows to remove selection from it. Otherwise, the text field is still
     // processing keyboard events even though focus has been moved to the page and
     // keystrokes get eaten as a result.
-    if (oldFocusedElement->isContentEditable() || oldFocusedElement->isTextFormControl())
+    if (isContentEditable(*oldFocusedElement) || oldFocusedElement->isTextFormControl())
         localFrame->selection().clear();
 }
 
@@ -3003,7 +3001,7 @@ void WebViewImpl::clearFocusedElement()
 // http://crbug.com/612560
 static bool isElementEditable(const Element* element)
 {
-    if (element->isContentEditable())
+    if (isContentEditable(*element))
         return true;
 
     if (element->isTextFormControl()) {
@@ -3426,19 +3424,17 @@ void WebViewImpl::refreshPageScaleFactorAfterLayout()
 
 void WebViewImpl::updatePageDefinedViewportConstraints(const ViewportDescription& description)
 {
-    // If we're not reading the viewport meta tag, allow GPU rasterization.
-    if (!settingsImpl()->viewportMetaEnabled()) {
-        m_matchesHeuristicsForGpuRasterization = true;
-        if (m_layerTreeView)
-            m_layerTreeView->heuristicsForGpuRasterizationUpdated(m_matchesHeuristicsForGpuRasterization);
-    }
-
     if (!page() || (!m_size.width && !m_size.height) || !page()->mainFrame()->isLocalFrame())
         return;
 
     if (!settings()->viewportEnabled()) {
         pageScaleConstraintsSet().clearPageDefinedConstraints();
         updateMainFrameLayoutSize();
+
+        // If we don't support mobile viewports, allow GPU rasterization.
+        m_matchesHeuristicsForGpuRasterization = true;
+        if (m_layerTreeView)
+            m_layerTreeView->heuristicsForGpuRasterizationUpdated(m_matchesHeuristicsForGpuRasterization);
         return;
     }
 
@@ -4152,7 +4148,7 @@ void WebViewImpl::setPageOverlayColor(WebColor color)
     if (color == Color::transparent)
         return;
 
-    m_pageColorOverlay = PageOverlay::create(this, new ColorOverlay(color));
+    m_pageColorOverlay = PageOverlay::create(this, wrapUnique(new ColorOverlay(color)));
     m_pageColorOverlay->update();
 }
 

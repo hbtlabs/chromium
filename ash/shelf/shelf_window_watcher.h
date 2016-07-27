@@ -7,8 +7,6 @@
 
 #include <stdint.h>
 
-#include "ash/shelf/scoped_observer_with_duplicated_sources.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "ui/aura/window_observer.h"
@@ -28,7 +26,6 @@ class ActivationClient;
 namespace ash {
 
 class ShelfModel;
-class ShelfItemDelegateManager;
 class WmWindow;
 
 // ShelfWindowWatcher creates and handles a ShelfItem for windows that have
@@ -37,8 +34,7 @@ class ShelfWindowWatcher : public aura::client::ActivationChangeObserver,
                            public aura::WindowObserver,
                            public display::DisplayObserver {
  public:
-  ShelfWindowWatcher(ShelfModel* model,
-                     ShelfItemDelegateManager* item_delegate_manager);
+  explicit ShelfWindowWatcher(ShelfModel* model);
   ~ShelfWindowWatcher() override;
 
  private:
@@ -127,7 +123,6 @@ class ShelfWindowWatcher : public aura::client::ActivationChangeObserver,
 
   // Owned by Shell.
   ShelfModel* model_;
-  ShelfItemDelegateManager* item_delegate_manager_;
 
   RootWindowObserver root_window_observer_;
 
@@ -141,11 +136,6 @@ class ShelfWindowWatcher : public aura::client::ActivationChangeObserver,
 
   // Holds removed windows that has an item from default container.
   ScopedObserver<aura::Window, aura::WindowObserver> observed_removed_windows_;
-
-  // Holds all observed activation clients.
-  ScopedObserverWithDuplicatedSources<aura::client::ActivationClient,
-                                      aura::client::ActivationChangeObserver>
-      observed_activation_clients_;
 
   DISALLOW_COPY_AND_ASSIGN(ShelfWindowWatcher);
 };

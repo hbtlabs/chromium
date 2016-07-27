@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "services/ui/common/mojo_gpu_memory_buffer_manager.h"
-#include "services/ui/gles2/raster_thread_helper.h"
+#include "services/ui/public/cpp/raster_thread_helper.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/compositor/compositor.h"
 #include "ui/views/mus/mus_export.h"
@@ -47,7 +47,7 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() override;
+  uint32_t AllocateSurfaceClientId() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
@@ -55,13 +55,16 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
                             const gfx::ColorSpace& color_space) override {}
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override {}
+  void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                 base::TimeTicks timebase,
+                                 base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
   void AddObserver(ui::ContextFactoryObserver* observer) override {}
   void RemoveObserver(ui::ContextFactoryObserver* observer) override {}
 
   SurfaceBinding surface_binding_;
   uint32_t next_surface_id_namespace_;
-  gles2::RasterThreadHelper raster_thread_helper_;
+  ui::RasterThreadHelper raster_thread_helper_;
   ui::MojoGpuMemoryBufferManager gpu_memory_buffer_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceContextFactory);

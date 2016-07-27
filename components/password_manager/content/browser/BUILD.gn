@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("browser") {
+static_library("browser") {
   sources = [
     "bad_message.cc",
     "bad_message.h",
@@ -20,6 +20,7 @@ source_set("browser") {
     "//base",
     "//components/autofill/content/browser",
     "//components/autofill/content/common",
+    "//components/autofill/content/public/interfaces",
     "//components/autofill/core/common",
     "//components/keyed_service/content",
     "//components/password_manager/content/public/cpp",
@@ -30,6 +31,7 @@ source_set("browser") {
     "//content/public/browser",
     "//content/public/common",
     "//ipc",
+    "//mojo/common:common_base",
     "//net",
   ]
 }

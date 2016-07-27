@@ -24,15 +24,13 @@ class ShutdownServiceApp
 
  private:
   // shell::Service:
-  void OnStart(Connector* connector, const Identity& identity,
-               uint32_t id) override {}
   bool OnConnect(Connection* connection) override {
     connection->AddInterface<mojom::ShutdownTestService>(this);
     return true;
   }
 
   // InterfaceFactory<mojom::ShutdownTestService>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               mojom::ShutdownTestServiceRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }

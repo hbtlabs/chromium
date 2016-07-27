@@ -46,7 +46,6 @@ class CopyOutputResult;
 class Layer;
 class SurfaceFactory;
 class SurfaceIdAllocator;
-enum class SurfaceDrawStatus;
 }
 
 namespace blink {
@@ -162,9 +161,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       override;
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-  void OnTextSurroundingSelectionResponse(const base::string16& content,
-                                          size_t start_offset,
-                                          size_t end_offset) override;
   void OnDidNavigateMainFrameToNewPage() override;
 
   // cc::SurfaceFactoryClient implementation.
@@ -250,16 +246,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void SetOverlayVideoMode(bool enabled);
 
-  typedef base::Callback<
-      void(const base::string16& content, int start_offset, int end_offset)>
-      TextSurroundingSelectionCallback;
-  void SetTextSurroundingSelectionCallback(
-      const TextSurroundingSelectionCallback& callback);
-
   static void OnContextLost();
 
  private:
-  void RunAckCallbacks(cc::SurfaceDrawStatus status);
+  void RunAckCallbacks();
 
   void DestroyDelegatedContent();
   void CheckOutputSurfaceChanged(uint32_t output_surface_id);
@@ -394,8 +384,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   };
 
   std::unique_ptr<LastFrameInfo> last_frame_info_;
-
-  TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;

@@ -424,7 +424,7 @@ DragOperation DragController::operationForLoad(DragData* dragData)
     ASSERT(dragData);
     Document* doc = m_page->deprecatedLocalMainFrame()->documentAtPoint(dragData->clientPosition());
 
-    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || doc->hasEditableStyle()))
+    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || hasEditableStyle(*doc)))
         return DragOperationNone;
     return dragOperation(dragData);
 }
@@ -564,9 +564,9 @@ bool DragController::canProcessDrag(DragData* dragData)
 
     if (isHTMLPlugInElement(*result.innerNode())) {
         HTMLPlugInElement* plugin = toHTMLPlugInElement(result.innerNode());
-        if (!plugin->canProcessDrag() && !result.innerNode()->hasEditableStyle())
+        if (!plugin->canProcessDrag() && !hasEditableStyle(*result.innerNode()))
             return false;
-    } else if (!result.innerNode()->hasEditableStyle()) {
+    } else if (!hasEditableStyle(*result.innerNode())) {
         return false;
     }
 
@@ -718,7 +718,7 @@ static Image* getImage(Element* element)
 
 static void prepareDataTransferForImageDrag(LocalFrame* source, DataTransfer* dataTransfer, Element* node, const KURL& linkURL, const KURL& imageURL, const String& label)
 {
-    if (node->isContentRichlyEditable()) {
+    if (isContentRichlyEditable(*node)) {
         Range* range = source->document()->createRange();
         range->selectNode(node, ASSERT_NO_EXCEPTION);
         source->selection().setSelection(VisibleSelection(EphemeralRange(range)));

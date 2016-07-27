@@ -10,7 +10,7 @@ if (is_android) {
 }
 
 # GYP version: components/ntp_snippets.gypi:ntp_snippets
-source_set("ntp_snippets") {
+static_library("ntp_snippets") {
   sources = [
     "content_suggestion.cc",
     "content_suggestion.h",
@@ -38,6 +38,8 @@ source_set("ntp_snippets") {
     "offline_pages/offline_page_suggestions_provider.h",
     "pref_names.cc",
     "pref_names.h",
+    "request_throttler.cc",
+    "request_throttler.h",
     "switches.cc",
     "switches.h",
   ]
@@ -71,7 +73,7 @@ source_set("ntp_snippets") {
 if (is_android) {
   java_cpp_enum("ntp_snippets_java_enums_srcjar") {
     sources = [
-      "ntp_snippets_status_service.h",
+      "content_suggestions_category_status.h",
     ]
   }
 }
@@ -87,6 +89,7 @@ source_set("unit_tests") {
     "ntp_snippets_status_service_unittest.cc",
     "ntp_snippets_test_utils.cc",
     "ntp_snippets_test_utils.h",
+    "request_throttler_unittest.cc",
   ]
 
   deps = [

@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "tools/gn/commands.h"
 #include "tools/gn/deps_iterator.h"
 #include "tools/gn/filesystem_utils.h"
@@ -32,7 +33,7 @@ typedef std::multimap<const Target*, const Target*> DepMap;
 
 // Populates the reverse dependency map for the targets in the Setup.
 void FillDepMap(Setup* setup, DepMap* dep_map) {
-  for (auto* target : setup->builder()->GetAllResolvedTargets()) {
+  for (auto* target : setup->builder().GetAllResolvedTargets()) {
     for (const auto& dep_pair : target->GetDeps(Target::DEPS_ALL))
       dep_map->insert(std::make_pair(dep_pair.ptr, target));
   }
@@ -142,6 +143,9 @@ bool TargetContainsFile(const Target* target, const SourceFile& file) {
   }
   for (const auto& cur_file : target->data()) {
     if (cur_file == file.value())
+      return true;
+    if (cur_file.back() == '/' &&
+        base::StartsWith(file.value(), cur_file, base::CompareCase::SENSITIVE))
       return true;
   }
 
@@ -439,7 +443,7 @@ int RunRefs(const std::vector<std::string>& args) {
   // the output, while for normal targets you don't want to see the inputs,
   // only what refers to them.
   std::vector<const Target*> all_targets =
-      setup->builder()->GetAllResolvedTargets();
+      setup->builder().GetAllResolvedTargets();
   UniqueVector<const Target*> explicit_target_matches;
   for (const auto& file : file_matches) {
     GetTargetsContainingFile(setup, all_targets, file, all_toolchains,

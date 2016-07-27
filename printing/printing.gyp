@@ -72,7 +72,6 @@
         'print_settings_initializer_win.h',
         'printed_document.cc',
         'printed_document.h',
-        'printed_document_linux.cc',
         'printed_document_mac.cc',
         'printed_document_win.cc',
         'printed_page.cc',
@@ -130,6 +129,7 @@
         }],
         ['chromeos==1',{
           'sources': [
+            'printed_document_chromeos.cc',
             'printing_context_no_system_dialog.cc',
             'printing_context_no_system_dialog.h',
           ],
@@ -168,16 +168,33 @@
                 ],
               },
             }],
+            ['chromeos==1', {
+              'sources': [
+                'backend/cups_connection.cc',
+                'backend/cups_connection.h',
+                'backend/cups_deleters.cc',
+                'backend/cups_deleters.h',
+                'backend/cups_ipp_util.cc',
+                'backend/cups_ipp_util.h',
+                'backend/cups_printer.cc',
+                'backend/cups_printer.h',
+                'backend/print_backend_cups_ipp.cc',
+                'backend/print_backend_cups_ipp.h',
+                'printing_context_chromeos.cc',
+                'printing_context_chromeos.h',
+              ],
+            }, { # chromeos==0
+              'sources': [
+                'backend/cups_helper.cc',
+                'backend/cups_helper.h',
+                'backend/print_backend_cups.cc',
+              ],
+            }],
           ],
           'defines': [
             # PRINT_BACKEND_AVAILABLE disables the default dummy implementation
             # of the print backend and enables a custom implementation instead.
             'PRINT_BACKEND_AVAILABLE',
-          ],
-          'sources': [
-            'backend/cups_helper.cc',
-            'backend/cups_helper.h',
-            'backend/print_backend_cups.cc',
           ],
         }],
         ['OS=="linux" and chromeos==1', {
@@ -188,10 +205,12 @@
           ],
           'sources': [
             'backend/print_backend_chromeos.cc',
+            'printed_document_chromeos.cc',
           ],
         }],
         ['OS=="linux" and chromeos==0', {
           'sources': [
+            'printed_document_linux.cc',
             'printing_context_linux.cc',
             'printing_context_linux.h',
           ],
@@ -247,8 +266,12 @@
           'defines': [
             'USE_CUPS',
           ],
-          'sources': [
-            'backend/cups_helper_unittest.cc',
+          'conditions': [
+            ['chromeos==1', {
+              'sources': ['backend/cups_ipp_util_unittest.cc'],
+            }, {
+              'sources': ['backend/cups_helper_unittest.cc'],
+            }],
           ],
         }],
       ],

@@ -116,6 +116,8 @@ class LayerTreeHostImplTest : public testing::Test,
     settings.gpu_rasterization_enabled = true;
     settings.verify_clip_tree_calculations = true;
     settings.verify_transform_tree_calculations = true;
+    settings.renderer_settings.buffer_to_texture_target_map =
+        DefaultBufferToTextureTargetMapForTesting();
     return settings;
   }
 
@@ -573,8 +575,7 @@ TEST_F(LayerTreeHostImplTest, NotifyIfCanDrawChanged) {
 
 TEST_F(LayerTreeHostImplTest, ResourcelessDrawWithEmptyViewport) {
   CreateHostImpl(DefaultSettings(),
-                 FakeOutputSurface::CreateDelegatingSoftware(
-                     base::WrapUnique(new SoftwareOutputDevice())));
+                 FakeOutputSurface::CreateDelegatingSoftware());
   SetupScrollAndContentsLayers(gfx::Size(100, 100));
   host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
@@ -3657,6 +3658,21 @@ struct PrepareToDrawSuccessTestCase {
       : expected_result(result) {}
 };
 
+static void CreateLayerFromState(
+    DidDrawCheckLayer* root,
+    const scoped_refptr<AnimationTimeline>& timeline,
+    const PrepareToDrawSuccessTestCase::State& state) {
+  static int layer_id = 2;
+  root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
+      root->layer_tree_impl(), layer_id++, state.has_missing_tile,
+      state.has_incomplete_tile, state.is_animating,
+      root->layer_tree_impl()->resource_provider(), timeline));
+  DidDrawCheckLayer* layer =
+      static_cast<DidDrawCheckLayer*>(root->test_properties()->children.back());
+  if (state.has_copy_request)
+    layer->AddCopyRequest();
+}
+
 TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
   std::vector<PrepareToDrawSuccessTestCase> cases;
 
@@ -3755,35 +3771,9 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
     scope << "Test case: " << i;
     SCOPED_TRACE(scope.str());
 
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 2, testcase.layer_before.has_missing_tile,
-        testcase.layer_before.has_incomplete_tile,
-        testcase.layer_before.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* before = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_before.has_copy_request)
-      before->AddCopyRequest();
-
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 3, testcase.layer_between.has_missing_tile,
-        testcase.layer_between.has_incomplete_tile,
-        testcase.layer_between.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* between = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_between.has_copy_request)
-      between->AddCopyRequest();
-
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 4, testcase.layer_after.has_missing_tile,
-        testcase.layer_after.has_incomplete_tile,
-        testcase.layer_after.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* after = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_after.has_copy_request)
-      after->AddCopyRequest();
+    CreateLayerFromState(root, timeline(), testcase.layer_before);
+    CreateLayerFromState(root, timeline(), testcase.layer_between);
+    CreateLayerFromState(root, timeline(), testcase.layer_after);
     host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
     if (testcase.high_res_required)
@@ -3800,8 +3790,7 @@ TEST_F(LayerTreeHostImplTest, PrepareToDrawSucceedsAndFails) {
 TEST_F(LayerTreeHostImplTest,
        PrepareToDrawWhenDrawAndSwapFullViewportEveryFrame) {
   CreateHostImpl(DefaultSettings(),
-                 FakeOutputSurface::CreateDelegatingSoftware(
-                     base::WrapUnique(new SoftwareOutputDevice())));
+                 FakeOutputSurface::CreateDelegatingSoftware());
 
   const gfx::Transform external_transform;
   const gfx::Rect external_viewport;
@@ -3849,35 +3838,9 @@ TEST_F(LayerTreeHostImplTest,
     scope << "Test case: " << i;
     SCOPED_TRACE(scope.str());
 
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 2, testcase.layer_before.has_missing_tile,
-        testcase.layer_before.has_incomplete_tile,
-        testcase.layer_before.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* before = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_before.has_copy_request)
-      before->AddCopyRequest();
-
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 3, testcase.layer_between.has_missing_tile,
-        testcase.layer_between.has_incomplete_tile,
-        testcase.layer_between.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* between = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_between.has_copy_request)
-      between->AddCopyRequest();
-
-    root->test_properties()->AddChild(MissingTextureAnimatingLayer::Create(
-        host_impl_->active_tree(), 4, testcase.layer_after.has_missing_tile,
-        testcase.layer_after.has_incomplete_tile,
-        testcase.layer_after.is_animating, host_impl_->resource_provider(),
-        timeline()));
-    DidDrawCheckLayer* after = static_cast<DidDrawCheckLayer*>(
-        root->test_properties()->children.back());
-    if (testcase.layer_after.has_copy_request)
-      after->AddCopyRequest();
+    CreateLayerFromState(root, timeline(), testcase.layer_before);
+    CreateLayerFromState(root, timeline(), testcase.layer_between);
+    CreateLayerFromState(root, timeline(), testcase.layer_after);
     host_impl_->active_tree()->BuildPropertyTreesForTesting();
 
     if (testcase.high_res_required)
@@ -6759,10 +6722,8 @@ class LayerTreeHostImplViewportCoveredTest : public LayerTreeHostImplTest {
       did_activate_pending_tree_(false) {}
 
   std::unique_ptr<OutputSurface> CreateFakeOutputSurface(bool software) {
-    if (software) {
-      return FakeOutputSurface::CreateDelegatingSoftware(
-          base::WrapUnique(new SoftwareOutputDevice()));
-    }
+    if (software)
+      return FakeOutputSurface::CreateDelegatingSoftware();
     return FakeOutputSurface::CreateDelegating3d();
   }
 
@@ -7643,9 +7604,8 @@ class CountingSoftwareDevice : public SoftwareOutputDevice {
 TEST_F(LayerTreeHostImplTest,
        ForcedDrawToSoftwareDeviceSkipsUnsupportedLayers) {
   set_reduce_memory_result(false);
-  EXPECT_TRUE(CreateHostImpl(
-      DefaultSettings(), FakeOutputSurface::CreateDelegatingSoftware(
-                             base::WrapUnique(new CountingSoftwareDevice))));
+  EXPECT_TRUE(CreateHostImpl(DefaultSettings(),
+                             FakeOutputSurface::CreateDelegatingSoftware()));
 
   const gfx::Transform external_transform;
   const gfx::Rect external_viewport;
@@ -10857,8 +10817,7 @@ TEST_F(LayerTreeHostImplTest, RecomputeGpuRasterOnOutputSurfaceChange) {
   EXPECT_TRUE(host_impl_->use_gpu_rasterization());
 
   // Re-initialize with a software output surface.
-  output_surface_ = FakeOutputSurface::CreateDelegatingSoftware(
-      base::WrapUnique(new SoftwareOutputDevice));
+  output_surface_ = FakeOutputSurface::CreateDelegatingSoftware();
   host_impl_->InitializeRenderer(output_surface_.get());
   EXPECT_FALSE(host_impl_->use_gpu_rasterization());
 }

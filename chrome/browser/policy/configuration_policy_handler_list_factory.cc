@@ -107,9 +107,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kPacHttpsUrlStrippingEnabled,
     prefs::kPacHttpsUrlStrippingEnabled,
     base::Value::TYPE_BOOLEAN },
-  { key::kDisableSpdy,
-    prefs::kDisableSpdy,
-    base::Value::TYPE_BOOLEAN },
   { key::kSafeBrowsingEnabled,
     prefs::kSafeBrowsingEnabled,
     base::Value::TYPE_BOOLEAN },
@@ -511,6 +508,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
   { key::kArcEnabled,
     prefs::kArcEnabled,
+    base::Value::TYPE_BOOLEAN },
+  { key::kArcBackupRestoreEnabled,
+    prefs::kArcBackupRestoreEnabled,
     base::Value::TYPE_BOOLEAN },
 #endif  // defined(OS_CHROMEOS)
 

@@ -185,7 +185,6 @@ extern const char kMetricsRecordingOnly[];
 extern const char kMonitoringDestinationID[];
 extern const char kNetLogCaptureMode[];
 extern const char kNoDefaultBrowserCheck[];
-extern const char kNoDisplayingInsecureContent[];
 extern const char kNoExperiments[];
 extern const char kNoFirstRun[];
 extern const char kNoPings[];
@@ -265,15 +264,6 @@ extern const char kWindowSize[];
 extern const char kWindowWorkspace[];
 extern const char kWinHttpProxyResolver[];
 extern const char kWinJumplistAction[];
-
-#if defined(ENABLE_SPELLCHECK)
-#if defined(OS_ANDROID)
-extern const char kEnableAndroidSpellChecker[];
-#endif  // defined(OS_ANDROID)
-extern const char kEnableSpellingFeedbackFieldTrial[];
-extern const char kSpellingServiceFeedbackIntervalSeconds[];
-extern const char kSpellingServiceFeedbackUrl[];
-#endif  // defined(ENABLE_SPELLCHECK)
 
 #if defined(GOOGLE_CHROME_BUILD)
 extern const char kEnableGoogleBrandedContextMenu[];

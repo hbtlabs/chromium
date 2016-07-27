@@ -99,7 +99,7 @@ FrameSelection::FrameSelection(LocalFrame* frame)
     , m_granularity(CharacterGranularity)
     , m_xPosForVerticalArrowNavigation(NoXPosForVerticalArrowNavigation())
     , m_focused(frame->page() && frame->page()->focusController().focusedFrame() == frame)
-    , m_frameCaret(new FrameCaret(frame))
+    , m_frameCaret(new FrameCaret(frame, *m_selectionEditor))
 {
     DCHECK(frame);
 }
@@ -320,10 +320,7 @@ void FrameSelection::setSelectionAlgorithm(const VisibleSelectionTemplate<Strate
     const VisibleSelection oldSelectionInDOMTree = selection();
 
     m_selectionEditor->setVisibleSelection(s, options);
-    if (s.isCaret())
-        m_frameCaret->setCaretPosition(PositionWithAffinity(toPositionInDOMTree(s.start()), s.affinity()));
-    else
-        m_frameCaret->clear();
+    m_frameCaret->setCaretRectNeedsUpdate();
 
     if (!s.isNone() && !(options & DoNotSetFocus)) {
         setFocusedNodeIfNeeded();
@@ -477,15 +474,9 @@ void FrameSelection::respondToNodeModification(Node& node, bool baseRemoved, boo
     if (clearLayoutTreeSelection)
         selection().start().document()->layoutViewItem().clearSelection();
 
-    if (clearDOMTreeSelection) {
+    if (clearDOMTreeSelection)
         setSelection(VisibleSelection(), DoNotSetFocus);
-    } else {
-        const VisibleSelection& selection = m_selectionEditor->visibleSelection<EditingStrategy>();
-        if (selection.isCaret())
-            m_frameCaret->setCaretPosition(PositionWithAffinity(selection.start(), selection.affinity()));
-        else
-            m_frameCaret->clear();
-    }
+    m_frameCaret->setCaretRectNeedsUpdate();
 
     // TODO(yosin): We should move to call |TypingCommand::closeTyping()| to
     // |Editor| class.
@@ -795,7 +786,7 @@ void FrameSelection::selectFrameElementInParentIfFullySelected()
         return;
 
     // This method's purpose is it to make it easier to select iframes (in order to delete them).  Don't do anything if the iframe isn't deletable.
-    if (!ownerElementParent->hasEditableStyle())
+    if (!blink::hasEditableStyle(*ownerElementParent))
         return;
 
     // Create compute positions before and after the element.
@@ -1185,7 +1176,7 @@ void FrameSelection::setSelectionFromNone()
 
     Document* document = m_frame->document();
     bool caretBrowsing = m_frame->settings() && m_frame->settings()->caretBrowsingEnabled();
-    if (!isNone() || !(document->hasEditableStyle() || caretBrowsing))
+    if (!isNone() || !(blink::hasEditableStyle(*document) || caretBrowsing))
         return;
 
     Element* documentElement = document->documentElement();

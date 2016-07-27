@@ -68,7 +68,6 @@ class Service
       public shell::InterfaceFactory<mojom::AccessibilityManager>,
       public shell::InterfaceFactory<mojom::Clipboard>,
       public shell::InterfaceFactory<mojom::DisplayManager>,
-      public shell::InterfaceFactory<mojom::Gpu>,
       public shell::InterfaceFactory<mojom::GpuService>,
       public shell::InterfaceFactory<mojom::UserAccessManager>,
       public shell::InterfaceFactory<mojom::UserActivityMonitor>,
@@ -90,18 +89,16 @@ class Service
 
   void InitializeResources(shell::Connector* connector);
 
-  // Returns the user specific state for the user id of |connection|. Service
-  // owns the return value.
+  // Returns the user specific state for the user id of |remote_identity|.
+  // Service owns the return value.
   // TODO(sky): if we allow removal of user ids then we need to close anything
   // associated with the user (all incoming pipes...) on removal.
-  UserState* GetUserState(shell::Connection* connection);
+  UserState* GetUserState(const shell::Identity& remote_identity);
 
-  void AddUserIfNecessary(shell::Connection* connection);
+  void AddUserIfNecessary(const shell::Identity& remote_identity);
 
   // shell::Service:
-  void OnStart(shell::Connector* connector,
-               const shell::Identity& identity,
-               uint32_t id) override;
+  void OnStart(const shell::Identity& identity) override;
   bool OnConnect(shell::Connection* connection) override;
 
   // WindowServerDelegate:
@@ -111,48 +108,44 @@ class Service
   void CreateDefaultDisplays() override;
 
   // shell::InterfaceFactory<mojom::AccessibilityManager> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::AccessibilityManagerRequest request) override;
 
   // shell::InterfaceFactory<mojom::Clipboard> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::ClipboardRequest request) override;
 
   // shell::InterfaceFactory<mojom::DisplayManager> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::DisplayManagerRequest request) override;
 
-  // shell::InterfaceFactory<mojom::Gpu> implementation.
-  void Create(shell::Connection* connection,
-              mojom::GpuRequest request) override;
-
   // shell::InterfaceFactory<mojom::GpuService> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::GpuServiceRequest request) override;
 
   // shell::InterfaceFactory<mojom::UserAccessManager> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::UserAccessManagerRequest request) override;
 
   // shell::InterfaceFactory<mojom::UserActivityMonitor> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::UserActivityMonitorRequest request) override;
 
   // shell::InterfaceFactory<mojom::WindowManagerWindowTreeFactory>
   // implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::WindowManagerWindowTreeFactoryRequest request) override;
 
   // shell::InterfaceFactory<mojom::WindowTreeFactory>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::WindowTreeFactoryRequest request) override;
 
   // shell::InterfaceFactory<mojom::WindowTreeHostFactory>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::WindowTreeHostFactoryRequest request) override;
 
   // shell::InterfaceFactory<mojom::WindowServerTest> implementation.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::WindowServerTestRequest request) override;
 
   // Callback for display configuration. |id| is the identifying token for the
@@ -174,7 +167,6 @@ class Service
   InputDeviceServer input_device_server_;
 
   bool test_config_;
-  bool use_chrome_gpu_command_buffer_;
 #if defined(USE_OZONE)
   std::unique_ptr<ui::ClientNativePixmapFactory> client_native_pixmap_factory_;
 #endif

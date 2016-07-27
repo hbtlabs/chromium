@@ -138,7 +138,7 @@ TEST_F(SpdyStreamTest, SendDataAfterOpen) {
       kStreamUrl, 1, kPostBodyLength, LOWEST, NULL, 0));
   AddWrite(req);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostSynReply(NULL, 0));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(NULL, 0));
   AddRead(resp);
 
   SpdySerializedFrame msg(
@@ -168,13 +168,12 @@ TEST_F(SpdyStreamTest, SendDataAfterOpen) {
   StreamDelegateSendImmediate delegate(stream, kPostBodyStringPiece);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
@@ -217,7 +216,7 @@ TEST_F(SpdyStreamTest, Trailers) {
       spdy_util_.ConstructSpdyDataFrame(1, kPostBody, kPostBodyLength, true));
   AddWrite(msg);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostSynReply(NULL, 0));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(NULL, 0));
   AddRead(resp);
 
   SpdySerializedFrame echo(
@@ -248,13 +247,12 @@ TEST_F(SpdyStreamTest, Trailers) {
   StreamDelegateWithTrailers delegate(stream, kPostBodyStringPiece);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
@@ -290,12 +288,12 @@ TEST_F(SpdyStreamTest, PushedStream) {
   base::WeakPtr<SpdyStream> stream = stream_request.ReleaseStream();
   ActivatePushStream(spdy_session.get(), stream.get());
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   // Set required request headers.
   SpdyHeaderBlock request_headers;
   spdy_util_.AddUrlToHeaderBlock(kStreamUrl, &request_headers);
-  stream->OnPushPromiseHeadersReceived(request_headers);
+  stream->OnPushPromiseHeadersReceived(std::move(request_headers));
 
   base::Time response_time = base::Time::Now();
   base::TimeTicks first_byte_time = base::TimeTicks::Now();
@@ -311,7 +309,6 @@ TEST_F(SpdyStreamTest, PushedStream) {
   headers["alpha"] = "beta";
   stream->OnAdditionalResponseHeadersReceived(headers);
 
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   StreamDelegateDoNothing delegate(stream->GetWeakPtr());
@@ -342,7 +339,7 @@ TEST_F(SpdyStreamTest, StreamError) {
       kStreamUrl, 1, kPostBodyLength, LOWEST, NULL, 0));
   AddWrite(req);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(resp);
 
   SpdySerializedFrame msg(
@@ -374,13 +371,12 @@ TEST_F(SpdyStreamTest, StreamError) {
   StreamDelegateSendImmediate delegate(stream, kPostBodyStringPiece);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
@@ -427,7 +423,7 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenRequestResponse) {
       1, chunk_data.data(), chunk_data.length(), true));
   AddWrite(last_chunk);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostSynReply(NULL, 0));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(NULL, 0));
   AddRead(resp);
 
   AddReadEOF();
@@ -450,13 +446,12 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenRequestResponse) {
   StreamDelegateWithBody delegate(stream, body_data);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
@@ -477,7 +472,7 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenBidirectional) {
       kStreamUrl, 1, kPostBodyLength, LOWEST, NULL, 0));
   AddWrite(req);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostSynReply(NULL, 0));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(NULL, 0));
   AddRead(resp);
 
   std::string chunk_data(kMaxSpdyFrameChunkSize, 'x');
@@ -507,13 +502,12 @@ TEST_F(SpdyStreamTest, SendLargeDataAfterOpenBidirectional) {
   StreamDelegateSendImmediate delegate(stream, body_data);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_CONNECTION_CLOSED));
@@ -535,7 +529,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeaders) {
 
   const char* const kExtraHeaders[] = {"X-UpperCase", "yes"};
   SpdySerializedFrame reply(
-      spdy_util_.ConstructSpdyGetSynReply(kExtraHeaders, 1, 1));
+      spdy_util_.ConstructSpdyGetReply(kExtraHeaders, 1, 1));
   AddRead(reply);
 
   SpdySerializedFrame rst(
@@ -561,12 +555,11 @@ TEST_F(SpdyStreamTest, UpperCaseHeaders) {
   StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kStreamUrl));
   EXPECT_EQ(ERR_IO_PENDING, stream->SendRequestHeaders(std::move(headers),
                                                        NO_MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   EXPECT_THAT(delegate.WaitForClose(), IsError(ERR_SPDY_PROTOCOL_ERROR));
@@ -581,7 +574,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersOnPush) {
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST, true));
   AddWrite(syn);
 
-  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(reply);
 
   const char* const extra_headers[] = {"X-UpperCase", "yes"};
@@ -614,12 +607,11 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersOnPush) {
   StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kStreamUrl));
   EXPECT_EQ(ERR_IO_PENDING, stream->SendRequestHeaders(std::move(headers),
                                                        NO_MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   data.RunUntilPaused();
@@ -642,7 +634,7 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersInHeadersFrame) {
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST, true));
   AddWrite(syn);
 
-  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(reply);
 
   SpdySerializedFrame push(
@@ -682,12 +674,11 @@ TEST_F(SpdyStreamTest, UpperCaseHeadersInHeadersFrame) {
   StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kStreamUrl));
   EXPECT_EQ(ERR_IO_PENDING, stream->SendRequestHeaders(std::move(headers),
                                                        NO_MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   data.RunUntilPaused();
@@ -716,7 +707,7 @@ TEST_F(SpdyStreamTest, DuplicateHeaders) {
       spdy_util_.ConstructSpdyGet(nullptr, 0, 1, LOWEST, true));
   AddWrite(syn);
 
-  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(reply);
 
   SpdySerializedFrame push(
@@ -756,12 +747,11 @@ TEST_F(SpdyStreamTest, DuplicateHeaders) {
   StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kStreamUrl));
   EXPECT_EQ(ERR_IO_PENDING, stream->SendRequestHeaders(std::move(headers),
                                                        NO_MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   data.RunUntilPaused();
@@ -822,7 +812,6 @@ TEST_F(SpdyStreamTest, IncreaseSendWindowSizeOverflow) {
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   data.RunUntilPaused();
@@ -885,7 +874,7 @@ void SpdyStreamTest::RunResumeAfterUnstallRequestResponseTest(
       spdy_util_.ConstructSpdyDataFrame(1, kPostBody, kPostBodyLength, true));
   AddWrite(body);
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(resp);
 
   AddReadEOF();
@@ -907,14 +896,13 @@ void SpdyStreamTest::RunResumeAfterUnstallRequestResponseTest(
   StreamDelegateWithBody delegate(stream, kPostBodyStringPiece);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
   EXPECT_FALSE(stream->send_stalled_by_flow_control());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   StallStream(stream);
@@ -958,7 +946,7 @@ void SpdyStreamTest::RunResumeAfterUnstallBidirectionalTest(
 
   AddReadPause();
 
-  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(resp);
 
   SpdySerializedFrame msg(
@@ -988,13 +976,12 @@ void SpdyStreamTest::RunResumeAfterUnstallBidirectionalTest(
   StreamDelegateSendImmediate delegate(stream, kPostBodyStringPiece);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(
       spdy_util_.ConstructPostHeaderBlock(kStreamUrl, kPostBodyLength));
   EXPECT_EQ(ERR_IO_PENDING,
             stream->SendRequestHeaders(std::move(headers), MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   data.RunUntilPaused();
@@ -1041,7 +1028,7 @@ TEST_F(SpdyStreamTest, ReceivedBytes) {
 
   AddReadPause();
 
-  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetSynReply(NULL, 0, 1));
+  SpdySerializedFrame reply(spdy_util_.ConstructSpdyGetReply(NULL, 0, 1));
   AddRead(reply);
 
   AddReadPause();
@@ -1071,12 +1058,11 @@ TEST_F(SpdyStreamTest, ReceivedBytes) {
   StreamDelegateDoNothing delegate(stream);
   stream->SetDelegate(&delegate);
 
-  EXPECT_FALSE(stream->HasUrlFromHeaders());
+  EXPECT_TRUE(stream->GetUrlFromHeaders().is_empty());
 
   SpdyHeaderBlock headers(spdy_util_.ConstructGetHeaderBlock(kStreamUrl));
   EXPECT_EQ(ERR_IO_PENDING, stream->SendRequestHeaders(std::move(headers),
                                                        NO_MORE_DATA_TO_SEND));
-  EXPECT_TRUE(stream->HasUrlFromHeaders());
   EXPECT_EQ(kStreamUrl, stream->GetUrlFromHeaders().spec());
 
   int64_t reply_frame_len = reply.size();

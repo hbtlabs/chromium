@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "ash/shelf/shelf_delegate.h"
-#include "ash/shell.h"
+#include "ash/common/shelf/shelf_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -82,8 +82,10 @@ bool IsArcDisabledForEnterprise() {
 ash::ShelfDelegate* GetShelfDelegate() {
   if (g_shelf_delegate_for_testing)
     return g_shelf_delegate_for_testing;
-  if (ash::Shell::HasInstance())
-    return ash::Shell::GetInstance()->GetShelfDelegate();
+  if (ash::WmShell::HasInstance()) {
+    DCHECK(ash::WmShell::Get()->shelf_delegate());
+    return ash::WmShell::Get()->shelf_delegate();
+  }
   return nullptr;
 }
 
@@ -125,6 +127,7 @@ void ArcAuthService::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(prefs::kArcSignedIn, false);
   registry->RegisterBooleanPref(prefs::kArcBackupRestoreEnabled, true);
+  registry->RegisterBooleanPref(prefs::kArcLocationServiceEnabled, true);
 }
 
 // static
@@ -205,7 +208,8 @@ void ArcAuthService::OnBridgeStopped(ArcBridgeService::StopReason reason) {
   clear_required_ = false;
   chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->RemoveArcData(
       cryptohome::Identification(
-          multi_user_util::GetAccountIdFromProfile(profile_)));
+          multi_user_util::GetAccountIdFromProfile(profile_)),
+      chromeos::SessionManagerClient::ArcCallback());
 }
 
 std::string ArcAuthService::GetAndResetAuthCode() {
@@ -255,6 +259,8 @@ void ArcAuthService::OnSignInComplete() {
   UpdateProvisioningTiming(base::Time::Now() - sign_in_time_, true,
                            IsAccountManaged(profile_));
   UpdateProvisioningResultUMA(ProvisioningResult::SUCCESS);
+
+  FOR_EACH_OBSERVER(Observer, observer_list_, OnInitialStart());
 }
 
 void ArcAuthService::OnSignInFailed(arc::mojom::ArcSignInFailureReason reason) {

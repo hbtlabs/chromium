@@ -44,17 +44,18 @@
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "cc/output/buffer_to_texture_target_map.h"
 #include "components/memory_coordinator/browser/memory_coordinator.h"
 #include "components/memory_coordinator/common/memory_coordinator_features.h"
 #include "components/scheduler/common/scheduler_switches.h"
 #include "components/tracing/common/tracing_switches.h"
-#include "components/webmessaging/broadcast_channel_provider.h"
 #include "content/browser/appcache/appcache_dispatcher_host.h"
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_sync/background_sync_service_impl.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/blob_dispatcher_host.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/broadcast_channel/broadcast_channel_provider.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/browser_main.h"
 #include "content/browser/browser_main_loop.h"
@@ -232,10 +233,6 @@
 #include "content/browser/renderer_host/p2p/socket_dispatcher_host.h"
 #include "content/common/media/aec_dump_messages.h"
 #include "content/common/media/media_stream_messages.h"
-#endif
-
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "services/ui/common/switches.h"  // nogncheck
 #endif
 
 #if defined(USE_MINIKIN_HYPHENATION)
@@ -442,16 +439,6 @@ class SessionStorageHolder : public base::SupportsUserData::Data {
       session_storage_namespaces_awaiting_close_;
   DISALLOW_COPY_AND_ASSIGN(SessionStorageHolder);
 };
-
-std::string UintVectorToString(const std::vector<unsigned>& vector) {
-  std::string str;
-  for (auto it : vector) {
-    if (!str.empty())
-      str += ",";
-    str += base::UintToString(it);
-  }
-  return str;
-}
 
 void CreateMemoryCoordinatorHandle(
     int render_process_id,
@@ -886,7 +873,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
           storage_partition_impl_->GetDOMStorageContext(),
           storage_partition_impl_->GetCacheStorageContext()));
   AddFilter(render_message_filter.get());
-  AddFilter(new RenderFrameMessageFilter(
+
+  render_frame_message_filter_ = new RenderFrameMessageFilter(
       GetID(),
 #if defined(ENABLE_PLUGINS)
       PluginServiceImpl::GetInstance(),
@@ -895,7 +883,9 @@ void RenderProcessHostImpl::CreateMessageFilters() {
 #endif
       GetBrowserContext(),
       request_context.get(),
-      widget_helper_.get()));
+      widget_helper_.get());
+  AddFilter(render_frame_message_filter_.get());
+
   BrowserContext* browser_context = GetBrowserContext();
   ResourceContext* resource_context = browser_context->GetResourceContext();
 
@@ -1088,7 +1078,7 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
                  base::Unretained(this)));
 
   GetInterfaceRegistry()->AddInterface(
-      base::Bind(&webmessaging::BroadcastChannelProvider::Connect,
+      base::Bind(&BroadcastChannelProvider::Connect,
                  base::Unretained(
                      storage_partition_impl_->GetBroadcastChannelProvider())));
 
@@ -1314,36 +1304,23 @@ static void AppendCompositorCommandLineFlags(base::CommandLine* command_line) {
   if (IsMainFrameBeforeActivationEnabled())
     command_line->AppendSwitch(cc::switches::kEnableMainFrameBeforeActivation);
 
-  // Persistent buffers may come at a performance hit (not all platform specific
-  // buffers support it), so only enable them if partial raster is enabled and
-  // we are actually going to use them.
-  // TODO(dcastagna): Once GPU_READ_CPU_READ_WRITE_PERSISTENT is removed
-  // kContentImageTextureTarget and kVideoImageTextureTarget can be merged into
-  // one flag.
-  gfx::BufferUsage buffer_usage =
-      IsPartialRasterEnabled()
-          ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
-          : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
-  std::vector<unsigned> image_targets(
-      static_cast<size_t>(gfx::BufferFormat::LAST) + 1, GL_TEXTURE_2D);
-  for (size_t format = 0;
-       format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
-    image_targets[format] =
-        BrowserGpuMemoryBufferManager::GetImageTextureTarget(
-            static_cast<gfx::BufferFormat>(format), buffer_usage);
+  cc::BufferToTextureTargetMap image_targets;
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      uint32_t target =
+          BrowserGpuMemoryBufferManager::GetImageTextureTarget(format, usage);
+      image_targets.insert(cc::BufferToTextureTargetMap::value_type(
+          cc::BufferToTextureTargetKey(usage, format), target));
+    }
   }
-  command_line->AppendSwitchASCII(switches::kContentImageTextureTarget,
-                                  UintVectorToString(image_targets));
-
-  for (size_t format = 0;
-       format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
-    image_targets[format] =
-        BrowserGpuMemoryBufferManager::GetImageTextureTarget(
-            static_cast<gfx::BufferFormat>(format),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
-  }
-  command_line->AppendSwitchASCII(switches::kVideoImageTextureTarget,
-                                  UintVectorToString(image_targets));
+  command_line->AppendSwitchASCII(
+      switches::kContentImageTextureTarget,
+      cc::BufferToTextureTargetMapToString(image_targets));
 
   // Appending disable-gpu-feature switches due to software rendering list.
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
@@ -1542,10 +1519,10 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kVModule,
     // Please keep these in alphabetical order. Compositor switches here should
     // also be added to chrome/browser/chromeos/login/chrome_restart_request.cc.
+    cc::switches::kDisableBeginFrameScheduling,
     cc::switches::kDisableCachedPictureRaster,
     cc::switches::kDisableCompositedAntialiasing,
     cc::switches::kDisableThreadedAnimation,
-    cc::switches::kEnableBeginFrameScheduling,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnableLayerLists,
     cc::switches::kEnableTileCompression,
@@ -1603,7 +1580,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
 #endif
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
     switches::kUseMusInRenderer,
-    ui::switches::kUseMojoGpuCommandBufferInMus,
 #endif
   };
   renderer_cmd->CopySwitchesFrom(browser_cmd, kSwitchNames,
@@ -1698,9 +1674,6 @@ bool RenderProcessHostImpl::Shutdown(int exit_code, bool wait) {
 bool RenderProcessHostImpl::FastShutdownIfPossible() {
   if (run_renderer_in_process())
     return false;  // Single process mode never shuts down the renderer.
-
-  if (!GetContentClient()->browser()->IsFastShutdownPossible())
-    return false;
 
   if (!child_process_launcher_.get() || child_process_launcher_->IsStarting() ||
       !GetHandle())
@@ -2097,6 +2070,7 @@ IPC::ChannelProxy* RenderProcessHostImpl::GetChannel() {
 }
 
 void RenderProcessHostImpl::AddFilter(BrowserMessageFilter* filter) {
+  filter->RegisterAssociatedInterfaces(channel_.get());
   channel_->AddFilter(filter->GetFilter());
 }
 
@@ -2129,20 +2103,6 @@ void RenderProcessHostImpl::UnregisterHost(int host_id) {
   SiteProcessMap* map =
       GetSiteProcessMapForBrowserContext(host->GetBrowserContext());
   map->RemoveProcess(host);
-}
-
-// static
-void RenderProcessHostImpl::CheckAllTerminated() {
-  iterator iter(AllHostsIterator());
-  while (!iter.IsAtEnd()) {
-    // The leftover hosts must have reset IPC channel and getting deleted soon.
-    RenderProcessHostImpl* host =
-        static_cast<RenderProcessHostImpl*>(iter.GetCurrentValue());
-    CHECK(host->listeners_.IsEmpty());
-    CHECK_EQ(0, host->worker_ref_count_);
-    CHECK(!host->channel_);
-    CHECK(host->deleting_soon_);
-  }
 }
 
 // static

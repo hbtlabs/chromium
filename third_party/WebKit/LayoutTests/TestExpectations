@@ -46,8 +46,8 @@ crbug.com/622898 fast/repaint/window-resize-background-image-fixed-centered.html
 crbug.com/622898 fast/repaint/window-resize-background-image-fixed-centered-composited.html [ Failure Pass ]
 crbug.com/622898 [ Win ] fast/repaint/window-resize-background-image-non-fixed.html [ Failure ]
 
-crbug.com/538697 [ Win7 Debug ] virtual/threaded/printing/webgl-oversized-printing.html [ Crash ]
-crbug.com/538697 [ Win7 Debug ] printing/webgl-oversized-printing.html [ Crash ]
+crbug.com/538697 [ Win7 Debug ] virtual/threaded/printing/webgl-oversized-printing.html [ Failure Crash ]
+crbug.com/538697 [ Win7 Debug ] printing/webgl-oversized-printing.html [ Failure Crash ]
 
 crbug.com/617152 imported/wpt/mediacapture-streams/GUM-impossible-constraint.https.html [ Skip ]
 
@@ -58,6 +58,8 @@ crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-transform-shadow-in-wor
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-gradients-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-drawImage-in-worker.html [ Failure ]
 crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-drawImage.html [ Failure ]
+crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-imageSmoothing.html [ Failure ]
+crbug.com/593514 virtual/gpu/fast/canvas/OffscreenCanvas-2d-imageSmoothing-in-worker.html [ Failure ]
 
 crbug.com/417782 [ Linux Win ] virtual/rootlayerscrolls/fast/scrolling/fractional-scroll-offset-fixed-position-non-composited.html [ Failure ]
 crbug.com/492664 [ Linux ] imported/csswg-test/css-writing-modes-3/box-offsets-rel-pos-vlr-005.xht [ Failure ]
@@ -79,7 +81,6 @@ crbug.com/520736 [ Win7 ] media/W3C/video/networkState/networkState_during_progr
 
 crbug.com/563650 inspector/elements/css-rule-hover-highlights-selectors.html [ Pass Failure ]
 
-crbug.com/522641 inspector/elements/styles-4/styles-update-links.html [ Pass Timeout ]
 crbug.com/522645 [ Linux ] virtual/android/fullscreen/video-fixed-background.html [ Failure Pass ]
 crbug.com/522647 http/tests/notifications/close-dispatch-asynchronous.html [ Failure Pass ]
 crbug.com/522648 fast/events/touch/compositor-touch-hit-rects-iframes.html [ Crash Failure Pass ]
@@ -90,7 +91,6 @@ crbug.com/521084 animations/additive-transform-animations.html [ Pass Timeout ]
 crbug.com/521086 fast/cookies/cookies-disabled-in-data-url.html [ Crash Pass Timeout ]
 crbug.com/521089 [ Precise ] fast/preloader/image.html [ Failure Pass ]
 crbug.com/521090 [ Mac Win ] http/tests/history/post-replace-state-reload.html [ Crash Failure Pass ]
-crbug.com/521091 http/tests/inspector/elements/styles/selector-line-sourcemap-header.html [ Crash Failure Timeout Pass ]
 crbug.com/521093 http/tests/loading/pdf-commit-load-callbacks.html [ Failure Pass ]
 crbug.com/521094 [ Mac ] http/tests/navigation/beacon-cross-origin.https.html [ Crash Failure Pass ]
 crbug.com/521096 imported/wpt/webstorage/event_case_sensitive.html [ Failure Pass ]
@@ -100,7 +100,6 @@ crbug.com/520169 [ Win ] fast/dom/Geolocation/timestamp.html [ Failure Pass ]
 crbug.com/520170 [ Win ] fast/dom/timer-throttling-hidden-page.html [ Failure Pass ]
 crbug.com/520174 fast/events/message-port-start-and-close-different-microtask.html [ Failure Pass ]
 crbug.com/520177 [ Android ] fast/images/style-access-during-imageChanged-crash.html [ Crash Failure Pass ]
-crbug.com/520179 fast/preloader/document-write-noscript.html [ Failure Pass ]
 crbug.com/520180 [ Linux ] fast/text/basic/001.html [ Pass Timeout ]
 crbug.com/520183 http/tests/fouc/scroll-left-while-loading.html [ Pass Timeout ]
 crbug.com/520184 http/tests/history/frameset-repeated-name.html [ Failure Pass ]
@@ -142,8 +141,6 @@ crbug.com/567965 [ Debug ] imported/wpt/user-timing/test_user_timing_measure.htm
 crbug.com/518992 [ Win Release ] imported/wpt/user-timing/test_user_timing_measure.html [ Skip ]
 crbug.com/567965 [ Debug ] imported/wpt/user-timing/test_user_timing_mark.html [ Skip ]
 crbug.com/518993 imported/wpt/user-timing/test_user_timing_measure_navigation_timing.html [ Skip ]
-
-crbug.com/526594 [ Win ] plugins/webview-plugin-lifecycle.html [ Failure ]
 
 crbug.com/519001 storage/indexeddb/pending-version-change-stuck-works-with-terminate.html [ Pass Timeout ]
 crbug.com/519002 storage/indexeddb/pending-version-change-stuck.html [ Pass Timeout ]
@@ -214,7 +211,6 @@ crbug.com/569139 fast/js/string-replace-2.html [ Failure ]
 crbug.com/569139 fast/js/regexp-caching.html [ Failure ]
 crbug.com/597221 fast/dom/Window/window-postmessage-clone-deep-array.html [ Failure ]
 
-crbug.com/498539 http/tests/inspector/elements/styles/selector-line.html [ Pass Timeout ]
 crbug.com/498539 http/tests/inspector/network/network-datareceived.html [ Pass Timeout ]
 crbug.com/498539 [ Win ] inspector/tracing/decode-resize.html [ Failure Timeout ]
 crbug.com/498539 [ Win ] inspector/tracing/timeline-misc/timeline-event-dispatch.html [ Failure Pass ]
@@ -224,7 +220,6 @@ crbug.com/498539 virtual/threaded/inspector/tracing/timeline-misc/timeline-bound
 crbug.com/498539 inspector/tracing/timeline-js/timeline-injected-script-eval.html [ Pass Failure ]
 crbug.com/498539 inspector/tracing/timeline-time/timeline-time.html [ Pass Failure Timeout ]
 crbug.com/498539 inspector/tracing/timeline-time/timeline-timer.html [ Pass Failure ]
-crbug.com/498539 inspector/elements/styles-3/styles-change-node-while-editing.html [ Failure Pass ]
 crbug.com/498539 [ Mac ] inspector/sources/debugger/live-edit-no-reveal.html [ Crash Pass Timeout ]
 crbug.com/498539 [ Mac10.10 ] inspector/sources/debugger/debug-inlined-scripts-fragment-id.html [ Pass Timeout ]
 crbug.com/498539 [ Precise ] inspector/sources/debugger-step/debugger-step-over-inlined-scripts.html [ Pass Timeout ]
@@ -259,7 +254,6 @@ crbug.com/498539 [ Precise Win7 ] inspector/agents-enable-disable.html [ Crash P
 crbug.com/498539 [ Precise Win7 ] inspector/elements/styles-1/edit-inspector-stylesheet.html [ Failure Pass Timeout ]
 crbug.com/498539 crbug.com/410145 [ Release ] inspector-protocol/heap-profiler/heap-objects-tracking.html [ Crash Pass ]
 crbug.com/498539 [ Win7 Release ] inspector/elements/styles-2/perform-undo-perform-of-mergable-action.html [ Failure Pass ]
-crbug.com/498539 [ Win7 ] inspector/elements/styles-3/selector-list.html [ Failure Pass ]
 crbug.com/498539 [ Win7 Debug ] inspector/elements/styles-3/styles-computed-trace.html [ Crash Pass ]
 crbug.com/498539 [ Win7 ] inspector/elements/styles-4/styles-update-from-js.html [ Crash Pass ]
 
@@ -722,8 +716,6 @@ crbug.com/377696 printing/width-overflow.html [ Skip ]
 crbug.com/397255 [ Linux ] css3/masking/clip-path-reference-userSpaceOnUse.html [ Failure ]
 crbug.com/396940 ietestcenter/css3/multicolumn/column-containing-block-001.htm [ Failure ]
 crbug.com/396940 ietestcenter/css3/multicolumn/column-containing-block-002.htm [ Failure ]
-crbug.com/378610 [ Win ] svg/custom/focus-ring-text.svg [ Failure ]
-crbug.com/378610 [ Mac ] svg/custom/focus-ring-text.svg [ Failure Pass ]
 
 crbug.com/474987 [ Win Mac ] css3/flexbox/auto-margins.html [ Failure ]
 
@@ -756,7 +748,6 @@ crbug.com/613887 http/tests/preload/meta-viewport-link-headers.html [ Failure Pa
 crbug.com/564403 http/tests/inspector/service-workers/service-worker-manager.html [ Failure Pass ]
 
 crbug.com/613728 fast/table/border-collapsing/cached-cell-append.html [ Failure ]
-crbug.com/613728 fast/table/border-collapsing/cached-cell-remove.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-69296.html [ Failure ]
 crbug.com/613728 fast/table/border-collapsing/cached-change-table-border-width.html [ Failure ]
 
@@ -837,8 +828,6 @@ crbug.com/624233 [ Win ] virtual/gpu-rasterization/fast/images/color-profile-bac
 
 crbug.com/385014 crbug.com/410145 accessibility/canvas-fallback-content-2.html [ Pass Failure Timeout ]
 
-crbug.com/440452 virtual/display_list_2d_canvas/fast/canvas/canvas-partial-invalidation-zoomed.html [ Pass Timeout ]
-
 crbug.com/574283 [ Mac ] virtual/threaded/fast/scroll-behavior/smooth-scroll/fixed-background-in-iframe.html [ Skip ]
 crbug.com/574283 [ Mac ] virtual/threaded/fast/scroll-behavior/smooth-scroll/horizontal-smooth-scroll-in-rtl.html [ Skip ]
 crbug.com/574283 [ Mac ] virtual/threaded/fast/scroll-behavior/smooth-scroll/main-thread-scrolling-reason-added.html [ Skip ]
@@ -878,7 +867,6 @@ crbug.com/498021 [ Linux ] fast/text/emphasis-complex.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/international/danda-space.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/international/hindi-whitespace.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/selection-multiple-runs.html [ Failure ]
-crbug.com/498021 [ Linux ] editing/pasteboard/4944770-2.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/encoding/invalid-UTF-8.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/emoticons.html [ Failure ]
 crbug.com/498021 [ Linux ] fast/text/international/hindi-spacing.html [ Failure ]
@@ -1103,11 +1091,12 @@ crbug.com/619103 paint/selection/text-selection-newline-mixed-ltr-rtl.html [ Fai
 crbug.com/619103 paint/selection/text-selection-newline-rtl-double-linebreak.html [ Failure ]
 crbug.com/619103 virtual/rootlayerscrolls/fast/scrolling/background-paint-scrolled-out-and-in.html [ Crash Timeout ]
 crbug.com/619103 virtual/rootlayerscrolls/fast/scrolling/background-paint-scrolled.html [ Crash Timeout ]
-crbug.com/619103 [ Debug ] fast/layers/remove-layer-with-nested-stacking.html [ Crash Timeout ]
-
-crbug.com/443596 media/sources-fallback-codecs.html [ Pass Failure ]
+crbug.com/619103 fast/layers/remove-layer-with-nested-stacking.html [ Pass Crash Timeout ]
+crbug.com/619103 compositing/iframes/become-composited-nested-iframes.html [ Pass Crash Timeout ]
 
 crbug.com/464736 http/tests/xmlhttprequest/ontimeout-event-override-after-failure.html [ Pass Failure ]
+
+crbug.com/621772 fast/forms/color/color-suggestion-picker-with-scrollbar-appearance.html [ Pass Failure ]
 
 crbug.com/595483 [ Android ] editing/caret/caret-color.html [ Failure Crash ]
 crbug.com/595483 [ Android ] fast/invalid/009.html [ Failure Crash ]
@@ -1216,8 +1205,6 @@ crbug.com/579493 http/tests/security/xss-DENIED-xsl-document-securityOrigin.xml 
 crbug.com/572723 [ Linux Mac10.9 ] inspector/sources/debugger/debugger-disable-enable.html [ Pass Failure Timeout ]
 crbug.com/572723 inspector/sources/debugger/debugger-uncaught-promise-on-pause.html [ Timeout Pass ]
 
-crbug.com/572726 inspector/tracing/timeline-misc/timeline-node-reference.html [ Timeout Pass Crash ]
-
 crbug.com/155836 fast/text/emphasis-ellipsis-complextext.html [ Failure Pass ]
 
 crbug.com/577380 [ Linux Debug ] http/tests/serviceworker/chromium/registration-stress.html [ Failure ]
@@ -1254,6 +1241,8 @@ crbug.com/587737 [ Mac10.11 Retina ] virtual/gpu-rasterization/fast/images/color
 
 crbug.com/599975 [ Android ] media/video-autoplay.html [ Crash Timeout ]
 
+crbug.com/632007 [ Linux ] svg/zoom/page/zoom-mask-with-percentages.svg [ Failure Pass ]
+
 # DocumentWriteEvaluator is still experimental
 crbug.com/599115 http/tests/preload/document-write [ Failure ]
 crbug.com/599115 http/tests/preload/document-write/document_write_no_preload.html [ Pass ]
@@ -1275,7 +1264,7 @@ crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/onfinish.html 
 crbug.com/600248 imported/wpt/web-animations/interfaces/Animation/playbackRate.html [ Pass Failure ]
 
 crbug.com/611658 [ Win7 ] fast/forms/text/text-font-height-mismatch.html [ Failure ]
-crbug.com/611658 [ Win7 ] fast/text/emphasis-combined-text.html [ Failure ]
+crbug.com/611658 [ Win ] fast/text/emphasis-combined-text.html [ Failure ]
 crbug.com/611658 [ Win7 ] fast/text/emphasis.html [ Failure ]
 crbug.com/611658 [ Win7 ] fast/writing-mode/english-lr-text.html [ Failure ]
 
@@ -1322,6 +1311,8 @@ crbug.com/606302 [ Linux Mac Win7 ] transforms/3d/point-mapping/3d-point-mapping
 crbug.com/606302 [ Win7 Debug ] compositing/perpendicular-layer-sorting.html [ Failure ]
 crbug.com/606302 [ Win7 Debug ] transforms/3d/point-mapping/3d-point-mapping-deep.html [ Failure ]
 
+crbug.com/632000 [ Linux ] fast/images/paint-subrect-grid.html [ NeedsRebaseline ]
+
 crbug.com/613659 imported/wpt/quirks-mode/percentage-height-calculation.html [ Failure ]
 crbug.com/613661 imported/wpt/quirks-mode/table-cell-nowrap-minimum-width-calculation.html [ Failure ]
 crbug.com/613663 imported/wpt/quirks-mode/table-cell-width-calculation.html [ Failure ]
@@ -1362,29 +1353,23 @@ crbug.com/627798 fast/repaint/resize-scrollable-iframe.html [ Pass Failure ]
 crbug.com/627798 fast/repaint/text-match-document-change.html [ Pass Failure ]
 
 # Very slight rendering changes caused by Skia rect clipping change.
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-space.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/png-with-color-profile.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-profile-match.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/exif-orientation-height-image-document.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-reflection.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cross-fade-png.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-repeat.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cross-fade.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-border-image-source.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-munsell-srgb-to-srgb.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-canvas-pattern.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-border-image.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-munsell-adobe-to-srgb.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-mask-image-svg.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-group.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-image-canvas.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/jpeg-with-color-profile.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-svg.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-background-image-cover.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/color-profile-object.html [ NeedsManualRebaseline ]
-crbug.com/627844 virtual/gpu-rasterization/fast/images/ycbcr-with-cmyk-color-profile.html [ NeedsManualRebaseline ]
 crbug.com/627844 virtual/gpu/fast/canvas/canvas-createImageBitmap-colorClamping.html [ Pass Failure ]
 
 crbug.com/629711 [ Linux Debug ] fast/workers/shared-worker-exception.html [ Crash Pass ]
 crbug.com/629711 [ Linux Debug ] virtual/sharedarraybuffer/fast/workers/shared-worker-exception.html [ Crash Pass ]
+
+crbug.com/630967 [ Linux Debug ] svg/parser/whitespace-length-invalid-1.html [ Skip ]
+crbug.com/630967 [ Linux Debug ] svg/parser/whitespace-length-invalid-2.html [ Skip ]
+crbug.com/630967 [ Linux Debug ] svg/parser/whitespace-angle.html [ Skip ]
+
+crbug.com/630615 [ Win7 ] fast/images/color-profile-background-image-space.html [ Skip ]
+crbug.com/399507 [ Mac10.9 Mac10.10 Linux ] virtual/threaded/inspector/tracing/timeline-paint/layer-tree.html [ Skip ]
+
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/subframe-scrollBy.html [ Pass Failure ]
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/main-frame-element-scroll.html [ Pass Failure ]
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/main-frame-element-scrollBy.html [ Pass Failure ]
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/main-frame-element-scrollTo.html [ Pass Failure ]
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/main-frame-scroll.html [ Pass Failure ]
+crbug.com/631039 [ Win7 ] virtual/threaded/fast/scroll-behavior/overflow-scroll-scroll.html [ Pass Failure ]
+
+crbug.com/630996 [ Win7 Win10 Linux ] http/tests/fetch/referrer/serviceworker-echo-referrer-from-default-document.html [ Skip ]

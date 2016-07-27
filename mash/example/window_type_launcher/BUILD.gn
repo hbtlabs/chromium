@@ -3,8 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//mojo/public/mojo_application.gni")
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 
@@ -56,15 +56,15 @@ copy("window_type_launcher_resources") {
     "$root_out_dir/views_mus_resources.pak",
   ]
   outputs = [
-    "$root_out_dir/Mojo Applications/window_type_launcher_exe/resources/views_mus_resources.pak",
+    "$root_out_dir/Packages/window_type_launcher_exe/resources/views_mus_resources.pak",
   ]
   deps = [
     "//ui/views/mus:resources",
   ]
 }
 
-mojo_application_manifest("manifest") {
+service_manifest("manifest") {
   type = "exe"
-  application_name = "window_type_launcher_exe"
+  name = "window_type_launcher_exe"
   source = "manifest.json"
 }

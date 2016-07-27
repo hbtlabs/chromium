@@ -244,6 +244,7 @@ ResourceProvider::Resource::Resource(GLuint texture_id,
       bound_image_id(0),
       hint(hint),
       type(type),
+      usage(gfx::BufferUsage::GPU_READ_CPU_READ_WRITE),
       format(format),
       shared_bitmap(nullptr) {}
 
@@ -390,7 +391,7 @@ ResourceProvider::ResourceProvider(
     size_t id_allocation_chunk_size,
     bool delegated_sync_points_required,
     bool use_gpu_memory_buffer_resources,
-    const std::vector<unsigned>& use_image_texture_targets)
+    const BufferToTextureTargetMap& buffer_to_texture_target_map)
     : compositor_context_provider_(compositor_context_provider),
       shared_bitmap_manager_(shared_bitmap_manager),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
@@ -413,7 +414,7 @@ ResourceProvider::ResourceProvider(
       best_render_buffer_format_(RGBA_8888),
       id_allocation_chunk_size_(id_allocation_chunk_size),
       use_sync_query_(false),
-      use_image_texture_targets_(use_image_texture_targets),
+      buffer_to_texture_target_map_(buffer_to_texture_target_map),
       tracing_id_(g_next_resource_provider_tracing_id.GetNext()) {
   DCHECK(id_allocation_chunk_size_);
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -556,11 +557,13 @@ ResourceId ResourceProvider::CreateResource(const gfx::Size& size,
       // GPU memory buffers don't support LUMINANCE_F16.
       if (format != LUMINANCE_F16) {
         return CreateGLTexture(size, hint, RESOURCE_TYPE_GPU_MEMORY_BUFFER,
-                               format);
+                               format,
+                               gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
       }
     // Fall through and use a regular texture.
     case RESOURCE_TYPE_GL_TEXTURE:
-      return CreateGLTexture(size, hint, RESOURCE_TYPE_GL_TEXTURE, format);
+      return CreateGLTexture(size, hint, RESOURCE_TYPE_GL_TEXTURE, format,
+                             gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
 
     case RESOURCE_TYPE_BITMAP:
       DCHECK_EQ(RGBA_8888, format);
@@ -574,13 +577,14 @@ ResourceId ResourceProvider::CreateResource(const gfx::Size& size,
 ResourceId ResourceProvider::CreateGpuMemoryBufferResource(
     const gfx::Size& size,
     TextureHint hint,
-    ResourceFormat format) {
+    ResourceFormat format,
+    gfx::BufferUsage usage) {
   DCHECK(!size.IsEmpty());
   switch (default_resource_type_) {
     case RESOURCE_TYPE_GPU_MEMORY_BUFFER:
     case RESOURCE_TYPE_GL_TEXTURE: {
       return CreateGLTexture(size, hint, RESOURCE_TYPE_GPU_MEMORY_BUFFER,
-                             format);
+                             format, usage);
     }
     case RESOURCE_TYPE_BITMAP:
       DCHECK_EQ(RGBA_8888, format);
@@ -594,19 +598,24 @@ ResourceId ResourceProvider::CreateGpuMemoryBufferResource(
 ResourceId ResourceProvider::CreateGLTexture(const gfx::Size& size,
                                              TextureHint hint,
                                              ResourceType type,
-                                             ResourceFormat format) {
+                                             ResourceFormat format,
+                                             gfx::BufferUsage usage) {
   DCHECK_LE(size.width(), max_texture_size_);
   DCHECK_LE(size.height(), max_texture_size_);
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  // TODO(crbug.com/590317): We should not assume that all resources created by
+  // ResourceProvider are GPU_READ_CPU_READ_WRITE. We should determine this
+  // based on the current RasterBufferProvider's needs.
   GLenum target = type == RESOURCE_TYPE_GPU_MEMORY_BUFFER
-                      ? GetImageTextureTarget(format)
+                      ? GetImageTextureTarget(usage, format)
                       : GL_TEXTURE_2D;
 
   ResourceId id = next_id_++;
   Resource* resource =
       InsertResource(id, Resource(0, size, Resource::INTERNAL, target,
                                   GL_LINEAR, hint, type, format));
+  resource->usage = usage;
   resource->allocated = false;
   return id;
 }
@@ -1225,6 +1234,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
   DCHECK(IsGpuResourceType(resource->type));
   format_ = resource->format;
   size_ = resource->size;
+  usage_ = resource->usage;
   gpu_memory_buffer_ = std::move(resource->gpu_memory_buffer);
   resource->gpu_memory_buffer = nullptr;
 }
@@ -1256,8 +1266,7 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
   if (!gpu_memory_buffer_) {
     gpu_memory_buffer_ =
         resource_provider_->gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
-            size_, BufferFormat(format_),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
+            size_, BufferFormat(format_), usage_, gpu::kNullSurfaceHandle);
   }
   return gpu_memory_buffer_.get();
 }
@@ -1474,6 +1483,7 @@ void ResourceProvider::ReceiveFromChild(
                                            it->mailbox_holder.texture_target));
       resource->read_lock_fences_enabled = it->read_lock_fences_enabled;
       resource->is_overlay_candidate = it->is_overlay_candidate;
+      resource->color_space = it->color_space;
     }
     resource->child_id = child;
     // Don't allocate a texture for a child.
@@ -1600,6 +1610,7 @@ void ResourceProvider::TransferResource(Resource* source,
   resource->size = source->size;
   resource->read_lock_fences_enabled = source->read_lock_fences_enabled;
   resource->is_overlay_candidate = source->is_overlay_candidate;
+  resource->color_space = source->color_space;
 
   if (source->type == RESOURCE_TYPE_BITMAP) {
     resource->mailbox_holder.mailbox = source->shared_bitmap_id;
@@ -1813,8 +1824,8 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
   if (resource->type == RESOURCE_TYPE_GPU_MEMORY_BUFFER) {
     resource->gpu_memory_buffer =
         gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
-            size, BufferFormat(format),
-            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
+            size, BufferFormat(format), resource->usage,
+            gpu::kNullSurfaceHandle);
     LazyCreateImage(resource);
     resource->dirty_image = true;
     resource->is_overlay_candidate = true;
@@ -1900,11 +1911,13 @@ GLint ResourceProvider::GetActiveTextureUnit(GLES2Interface* gl) {
   return active_unit;
 }
 
-GLenum ResourceProvider::GetImageTextureTarget(ResourceFormat format) {
+GLenum ResourceProvider::GetImageTextureTarget(gfx::BufferUsage usage,
+                                               ResourceFormat format) {
   gfx::BufferFormat buffer_format = BufferFormat(format);
-  DCHECK_GT(use_image_texture_targets_.size(),
-            static_cast<size_t>(buffer_format));
-  return use_image_texture_targets_[static_cast<size_t>(buffer_format)];
+  auto found = buffer_to_texture_target_map_.find(
+      BufferToTextureTargetKey(usage, buffer_format));
+  DCHECK(found != buffer_to_texture_target_map_.end());
+  return found->second;
 }
 
 void ResourceProvider::ValidateResource(ResourceId id) const {

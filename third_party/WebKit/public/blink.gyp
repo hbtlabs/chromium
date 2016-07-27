@@ -37,6 +37,7 @@
             'platform/mime_registry.mojom',
             'platform/modules/background_sync/background_sync.mojom',
             'platform/modules/bluetooth/web_bluetooth.mojom',
+            'platform/modules/broadcastchannel/broadcast_channel.mojom',
             'platform/modules/geolocation/geolocation.mojom',
             'platform/modules/hyphenation/hyphenation.mojom',
             'platform/modules/notifications/notification.mojom',
@@ -52,6 +53,10 @@
         # Duplicated in GN: //third_party/WebKit/public:android_mojo_bindings
         'blink_android_mojo_sources': [
             'platform/modules/payments/payment_request.mojom',
+        ],
+        'blink_typemap_sources': [
+            '<(DEPTH)/cc/ipc/surface_id.typemap',
+            '<(DEPTH)/cc/ipc/surface_sequence.typemap',
         ],
     },
     'targets': [
@@ -117,15 +122,15 @@
                     '<@(blink_android_mojo_sources)',
                 ],
                 'mojom_typemaps': [
-                    '<(DEPTH)/cc/ipc/surface_id.typemap',
-                    '<(DEPTH)/cc/ipc/surface_sequence.typemap',
-
+                    '../Source/platform/mojo/SecurityOrigin.typemap',
+                    '<@(blink_typemap_sources)',
                 ],
                 'for_blink': 'true',
                 'use_new_wrapper_types': 'false',
             },
             'dependencies' : [
                 '<(DEPTH)/cc/ipc/cc_ipc.gyp:interfaces_blink',
+                '<(DEPTH)/url/url.gyp:url_mojom_for_blink',
             ],
             'includes': [
                 '../../../mojo/mojom_bindings_generator_explicit.gypi',
@@ -141,14 +146,15 @@
                     '<@(blink_android_mojo_sources)',
                 ],
                 'mojom_typemaps': [
-                  '../../../device/bluetooth/public/interfaces/bluetooth_uuid.typemap',
-                    '<(DEPTH)/cc/ipc/surface_id.typemap',
-                    '<(DEPTH)/cc/ipc/surface_sequence.typemap',
+                    '../../../device/bluetooth/public/interfaces/bluetooth_uuid.typemap',
+                    '<(DEPTH)/url/mojo/origin.typemap',
+                    '<@(blink_typemap_sources)',
                 ],
                 'use_new_wrapper_types': 'false',
             },
             'dependencies' : [
                 '<(DEPTH)/cc/ipc/cc_ipc.gyp:interfaces',
+                '<(DEPTH)/url/url.gyp:url_mojom',
             ],
             'includes': [
                 '../../../mojo/mojom_bindings_generator_explicit.gypi',

@@ -61,7 +61,7 @@ base::FilePath GetPathForApplicationName(const std::string& application_name) {
   base::FilePath base_path;
   PathService::Get(base::DIR_EXE, &base_path);
   // TODO(beng): this won't handle user-specific components.
-  return base_path.AppendASCII(kMojoApplicationsDirName).AppendASCII(path).
+  return base_path.AppendASCII(kPackagesDirName).AppendASCII(path).
       AppendASCII("resources");
 }
 
@@ -98,7 +98,7 @@ Catalog::Catalog(std::unique_ptr<Store> store)
 void Catalog::ScanSystemPackageDir() {
   base::FilePath system_package_dir;
   PathService::Get(base::DIR_MODULE, &system_package_dir);
-  system_package_dir = system_package_dir.AppendASCII(kMojoApplicationsDirName);
+  system_package_dir = system_package_dir.AppendASCII(kPackagesDirName);
   system_reader_->Read(system_package_dir, &system_cache_,
                        base::Bind(&Catalog::SystemPackageDirScanned,
                                   weak_factory_.GetWeakPtr()));
@@ -111,26 +111,24 @@ bool Catalog::OnConnect(shell::Connection* connection) {
   return true;
 }
 
-void Catalog::Create(shell::Connection* connection,
+void Catalog::Create(const shell::Identity& remote_identity,
                      shell::mojom::ResolverRequest request) {
-  Instance* instance =
-      GetInstanceForUserId(connection->GetRemoteIdentity().user_id());
+  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
   instance->BindResolver(std::move(request));
 }
 
-void Catalog::Create(shell::Connection* connection,
+void Catalog::Create(const shell::Identity& remote_identity,
                      mojom::CatalogRequest request) {
-  Instance* instance =
-      GetInstanceForUserId(connection->GetRemoteIdentity().user_id());
+  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
   instance->BindCatalog(std::move(request));
 }
 
-void Catalog::Create(shell::Connection* connection,
+void Catalog::Create(const shell::Identity& remote_identity,
                      filesystem::mojom::DirectoryRequest request) {
   if (!lock_table_)
     lock_table_ = new filesystem::LockTable;
   base::FilePath resources_path =
-      GetPathForApplicationName(connection->GetRemoteIdentity().name());
+      GetPathForApplicationName(remote_identity.name());
   new filesystem::DirectoryImpl(std::move(request), resources_path,
                                 scoped_refptr<filesystem::SharedTempDir>(),
                                 lock_table_);

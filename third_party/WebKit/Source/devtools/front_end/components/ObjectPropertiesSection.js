@@ -602,7 +602,7 @@ WebInspector.ObjectPropertyTreeElement._appendEmptyPlaceholderIfNeeded = functio
 {
     if (treeNode.childCount())
         return;
-    var title = createElementWithClass("div", "info");
+    var title = createElementWithClass("div", "gray-info-message");
     title.textContent = emptyPlaceholder || WebInspector.UIString("No Properties");
     var infoElement = new TreeElement(title);
     treeNode.appendChild(infoElement);
@@ -977,7 +977,7 @@ WebInspector.ObjectPropertiesSection.createNameElement = function(name)
 WebInspector.ObjectPropertiesSection.valueTextForFunctionDescription = function(description)
 {
     var text = description.replace(/^function [gs]et /, "function ");
-    var matches = /function\s([^)]*)/.exec(text);
+    var matches = /^function\s([^)]*)/.exec(text);
     if (!matches) {
         // process shorthand methods
         matches = /[^(]*(\([^)]*)/.exec(text);

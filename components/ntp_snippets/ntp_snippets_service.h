@@ -61,8 +61,9 @@ namespace ntp_snippets {
 class NTPSnippetsDatabase;
 class NTPSnippetsServiceObserver;
 
-// Stores and vends fresh content data for the NTP.
-// TODO(pke): Rename this service to ArticleSuggestionsService and move to
+// Retrieves fresh content data (articles) from the server, stores them and
+// provides them as content suggestions.
+// TODO(pke): Rename this service to ArticleSuggestionsProvider and move to
 // a subdirectory.
 class NTPSnippetsService : public KeyedService,
                            public image_fetcher::ImageFetcherDelegate,
@@ -91,7 +92,7 @@ class NTPSnippetsService : public KeyedService,
   void Shutdown() override;
 
   // Returns whether the service is ready. While this is false, the list of
-  // snippets will be empty, and all modifications to it (fetch, discard, etc)
+  // snippets will be empty, and all modifications to it (fetch, dismiss, etc)
   // will be ignored.
   bool ready() const { return state_ == State::READY; }
 
@@ -100,20 +101,25 @@ class NTPSnippetsService : public KeyedService,
   bool initialized() const { return ready() || state_ == State::DISABLED; }
 
   // Fetches snippets from the server and adds them to the current ones.
-  void FetchSnippets();
+  // Requests can be marked more important by setting |force_request| to true
+  // (such request might circumvent the daily quota for requests, etc.) Useful
+  // for requests triggered by the user.
+  void FetchSnippets(bool force_request);
+
   // Fetches snippets from the server for specified hosts (overriding
   // suggestions from the suggestion service) and adds them to the current ones.
   // Only called from chrome://snippets-internals, DO NOT USE otherwise!
   // Ignored while |loaded()| is false.
-  void FetchSnippetsFromHosts(const std::set<std::string>& hosts);
+  void FetchSnippetsFromHosts(const std::set<std::string>& hosts,
+                              bool force_request);
 
   // Available snippets.
   const NTPSnippet::PtrVector& snippets() const { return snippets_; }
 
-  // Returns the list of snippets previously discarded by the user (that are
+  // Returns the list of snippets previously dismissed by the user (that are
   // not expired yet).
-  const NTPSnippet::PtrVector& discarded_snippets() const {
-    return discarded_snippets_;
+  const NTPSnippet::PtrVector& dismissed_snippets() const {
+    return dismissed_snippets_;
   }
 
   const NTPSnippetsFetcher* snippets_fetcher() const {
@@ -136,11 +142,11 @@ class NTPSnippetsService : public KeyedService,
   void SetObserver(Observer* observer) override;
   ContentSuggestionsCategoryStatus GetCategoryStatus(
       ContentSuggestionsCategory category) override;
-  void DiscardSuggestion(const std::string& suggestion_id) override;
+  void DismissSuggestion(const std::string& suggestion_id) override;
   void FetchSuggestionImage(const std::string& suggestion_id,
                             const ImageFetchedCallback& callback) override;
   void ClearCachedSuggestionsForDebugging() override;
-  void ClearDiscardedSuggestionsForDebugging() override;
+  void ClearDismissedSuggestionsForDebugging() override;
 
   // Returns the lists of suggestion hosts the snippets are restricted to.
   std::set<std::string> GetSuggestionsHosts() const;
@@ -153,6 +159,7 @@ class NTPSnippetsService : public KeyedService,
   static int GetMaxSnippetCountForTesting();
 
  private:
+  friend class NTPSnippetsServiceTest;
   FRIEND_TEST_ALL_PREFIXES(NTPSnippetsServiceTest, HistorySyncStateChanges);
 
   // TODO(pke): As soon as the DisabledReason is replaced with the new status,
@@ -214,7 +221,7 @@ class NTPSnippetsService : public KeyedService,
   std::set<std::string> GetSnippetHostsFromPrefs() const;
   void StoreSnippetHostsToPrefs(const std::set<std::string>& hosts);
 
-  // Removes the expired snippets (including discarded) from the service and the
+  // Removes the expired snippets (including dismissed) from the service and the
   // database, and schedules another pass for the next expiration.
   void ClearExpiredSnippets();
 
@@ -270,12 +277,12 @@ class NTPSnippetsService : public KeyedService,
 
   suggestions::SuggestionsService* suggestions_service_;
 
-  // All current suggestions (i.e. not discarded ones).
+  // All current suggestions (i.e. not dismissed ones).
   NTPSnippet::PtrVector snippets_;
 
-  // Suggestions that the user discarded. We keep these around until they expire
+  // Suggestions that the user dismissed. We keep these around until they expire
   // so we won't re-add them on the next fetch.
-  NTPSnippet::PtrVector discarded_snippets_;
+  NTPSnippet::PtrVector dismissed_snippets_;
 
   // The ISO 639-1 code of the language used by the application.
   const std::string application_language_code_;

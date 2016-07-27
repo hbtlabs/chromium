@@ -165,6 +165,7 @@ static_library("common") {
                            "//chrome")
     public_deps += [
       "//chrome/common/extensions/api",
+      "//chrome/common/extensions/api:extensions_features",
       "//device/usb",
       "//extensions:extensions_resources",
       "//extensions/common",
@@ -436,4 +437,14 @@ mojom("mojo_bindings") {
   ]
 
   use_new_wrapper_types = false
+}
+
+mojom("search_provider_mojom") {
+  sources = [
+    "search_provider.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojo:url_mojom_gurl",
+  ]
 }

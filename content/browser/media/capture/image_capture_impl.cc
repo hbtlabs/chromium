@@ -51,20 +51,19 @@ void RunFailedSetOptionsCallback(
 
 void RunTakePhotoCallbackOnUIThread(
     const ImageCaptureImpl::TakePhotoCallback& callback,
-    mojo::String mime_type,
-    mojo::Array<uint8_t> data) {
+    media::mojom::BlobPtr blob) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, mime_type, base::Passed(std::move(data))));
+      base::Bind(callback, base::Passed(std::move(blob))));
 }
 
 void RunFailedTakePhotoCallback(const ImageCaptureImpl::TakePhotoCallback& cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  cb.Run("", mojo::Array<uint8_t>());
+  cb.Run(media::mojom::Blob::New());
 }
 
 void GetCapabilitiesOnIOThread(
-    const mojo::String& source_id,
+    const std::string& source_id,
     MediaStreamManager* media_stream_manager,
     media::ScopedResultCallback<ImageCaptureImpl::GetCapabilitiesCallback>
         callback) {
@@ -80,7 +79,7 @@ void GetCapabilitiesOnIOThread(
 }
 
 void SetOptionsOnIOThread(
-    const mojo::String& source_id,
+    const std::string& source_id,
     MediaStreamManager* media_stream_manager,
     media::mojom::PhotoSettingsPtr settings,
     media::ScopedResultCallback<ImageCaptureImpl::SetOptionsCallback>
@@ -97,7 +96,7 @@ void SetOptionsOnIOThread(
 }
 
 void TakePhotoOnIOThread(
-    const mojo::String& source_id,
+    const std::string& source_id,
     MediaStreamManager* media_stream_manager,
     media::ScopedResultCallback<ImageCaptureImpl::TakePhotoCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -123,7 +122,7 @@ void ImageCaptureImpl::Create(
 ImageCaptureImpl::~ImageCaptureImpl() {}
 
 void ImageCaptureImpl::GetCapabilities(
-    const mojo::String& source_id,
+    const std::string& source_id,
     const GetCapabilitiesCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -138,7 +137,7 @@ void ImageCaptureImpl::GetCapabilities(
                  base::Passed(&scoped_callback)));
 }
 
-void ImageCaptureImpl::SetOptions(const mojo::String& source_id,
+void ImageCaptureImpl::SetOptions(const std::string& source_id,
                                   media::mojom::PhotoSettingsPtr settings,
                                   const SetOptionsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -154,7 +153,7 @@ void ImageCaptureImpl::SetOptions(const mojo::String& source_id,
                  base::Passed(&settings), base::Passed(&scoped_callback)));
 }
 
-void ImageCaptureImpl::TakePhoto(const mojo::String& source_id,
+void ImageCaptureImpl::TakePhoto(const std::string& source_id,
                                  const TakePhotoCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 

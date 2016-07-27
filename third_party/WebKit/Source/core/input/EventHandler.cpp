@@ -37,6 +37,7 @@
 #include "core/dom/TouchList.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
@@ -307,6 +308,11 @@ void EventHandler::nodeWillBeRemoved(Node& nodeToBeRemoved)
     }
 }
 
+void EventHandler::immediatelyProcessPendingPointerCapture(int pointerId)
+{
+    m_pointerEventManager.immediatelyProcessPendingPointerCapture(pointerId);
+}
+
 WebInputEventResult EventHandler::handleMousePressEvent(const MouseEventWithHitTestResults& event)
 {
     TRACE_EVENT0("blink", "EventHandler::handleMousePressEvent");
@@ -548,7 +554,7 @@ bool EventHandler::useHandCursor(Node* node, bool isOverLink)
     if (!node)
         return false;
 
-    return ((isOverLink || isSubmitImage(node)) && !node->hasEditableStyle());
+    return ((isOverLink || isSubmitImage(node)) && !hasEditableStyle(*node));
 }
 
 void EventHandler::cursorUpdateTimerFired(Timer<EventHandler>*)
@@ -735,7 +741,7 @@ OptionalCursor EventHandler::selectCursor(const HitTestResult& result)
 
 OptionalCursor EventHandler::selectAutoCursor(const HitTestResult& result, Node* node, const Cursor& iBeam)
 {
-    bool editable = (node && node->hasEditableStyle());
+    bool editable = (node && hasEditableStyle(*node));
 
     const bool isOverLink = !selectionController().mouseDownMayStartSelect() && result.isOverLink();
     if (useHandCursor(node, isOverLink))

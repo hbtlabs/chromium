@@ -41,6 +41,7 @@ namespace android {
 namespace {
 
 const char kOfflinePageBridgeKey[] = "offline-page-bridge";
+const bool kUserRequested = true;
 
 void ToJavaOfflinePageList(JNIEnv* env,
                            jobject j_result_obj,
@@ -53,6 +54,7 @@ void ToJavaOfflinePageList(JNIEnv* env,
         ConvertUTF8ToJavaString(env, offline_page.client_id.name_space).obj(),
         ConvertUTF8ToJavaString(env, offline_page.client_id.id).obj(),
         ConvertUTF8ToJavaString(env, offline_page.GetOfflineURL().spec()).obj(),
+        ConvertUTF8ToJavaString(env, offline_page.file_path.value()).obj(),
         offline_page.file_size, offline_page.creation_time.ToJavaTime(),
         offline_page.access_count, offline_page.last_access_time.ToJavaTime());
   }
@@ -67,6 +69,7 @@ ScopedJavaLocalRef<jobject> ToJavaOfflinePageItem(
       ConvertUTF8ToJavaString(env, offline_page.client_id.name_space).obj(),
       ConvertUTF8ToJavaString(env, offline_page.client_id.id).obj(),
       ConvertUTF8ToJavaString(env, offline_page.GetOfflineURL().spec()).obj(),
+      ConvertUTF8ToJavaString(env, offline_page.file_path.value()).obj(),
       offline_page.file_size, offline_page.creation_time.ToJavaTime(),
       offline_page.access_count, offline_page.last_access_time.ToJavaTime());
 }
@@ -144,6 +147,11 @@ static jboolean IsOfflineBookmarksEnabled(JNIEnv* env,
 static jboolean IsBackgroundLoadingEnabled(JNIEnv* env,
                                            const JavaParamRef<jclass>& clazz) {
   return offline_pages::IsOfflinePagesBackgroundLoadingEnabled();
+}
+
+static jboolean IsPageSharingEnabled(JNIEnv* env,
+                                     const JavaParamRef<jclass>& clazz) {
+  return offline_pages::IsOfflinePagesSharingEnabled();
 }
 
 static jboolean CanSavePage(JNIEnv* env,
@@ -366,7 +374,7 @@ void OfflinePageBridge::SavePageLater(
           GetForBrowserContext(browser_context_);
 
   coordinator->SavePageLater(
-      GURL(ConvertJavaStringToUTF8(env, j_url)), client_id);
+      GURL(ConvertJavaStringToUTF8(env, j_url)), client_id, kUserRequested);
 }
 
 void OfflinePageBridge::DeletePages(

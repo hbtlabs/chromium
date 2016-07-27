@@ -154,7 +154,7 @@ public:
 
     bool layoutObjectIsNeeded(const ComputedStyle&) final;
     LayoutObject* createLayoutObject(const ComputedStyle&) override;
-    void detach(const AttachContext& = AttachContext()) final;
+    void detachLayoutTree(const AttachContext& = AttachContext()) final;
     void updateFocusAppearance(SelectionBehaviorOnFocus) final;
 
     // FIXME: For isActivatedSubmit and setActivatedSubmit, we should use the NVI-idiom here by making
@@ -208,6 +208,8 @@ public:
     HTMLDataListElement* dataList() const;
     bool hasValidDataListOptions() const;
     void listAttributeTargetChanged();
+    // Associated <datalist> options which match to the current INPUT value.
+    HeapVector<Member<HTMLOptionElement>> filteredDataListOptions() const;
 
     HTMLInputElement* checkedRadioButtonForGroup();
     bool isInRequiredRadioButtonGroup();
