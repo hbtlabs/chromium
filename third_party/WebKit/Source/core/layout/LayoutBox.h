@@ -354,6 +354,8 @@ public:
     IntSize absoluteContentBoxOffset() const;
     // The content box converted to absolute coords (taking transforms into account).
     FloatQuad absoluteContentQuad() const;
+    // The clip rect of the background.
+    LayoutRect backgroundClipRect() const;
 
     // This returns the content area of the box (excluding padding and border). The only difference with contentBoxRect is that computedCSSContentBoxRect
     // does include the intrinsic padding in the content box as this is what some callers expect (like getComputedStyle).
@@ -422,8 +424,8 @@ public:
 
     // IE extensions. Used to calculate offsetWidth/Height.  Overridden by inlines (LayoutFlow)
     // to return the remaining width on a given line (and the height of a single line).
-    LayoutUnit offsetWidth() const final { return m_frameRect.width(); }
-    LayoutUnit offsetHeight() const final { return m_frameRect.height(); }
+    LayoutUnit offsetWidth() const override { return m_frameRect.width(); }
+    LayoutUnit offsetHeight() const override { return m_frameRect.height(); }
 
     int pixelSnappedOffsetWidth(const Element*) const final;
     int pixelSnappedOffsetHeight(const Element*) const final;
@@ -552,10 +554,6 @@ public:
     void setOverrideContainingBlockContentLogicalHeight(LayoutUnit);
     void clearContainingBlockOverrideSize();
     void clearOverrideContainingBlockContentLogicalHeight();
-    LayoutUnit overrideContainingBlockContentWidth() const;
-    LayoutUnit overrideContainingBlockContentHeight() const;
-    bool hasOverrideContainingBlockWidth() const;
-    bool hasOverrideContainingBlockHeight() const;
 
     LayoutUnit extraInlineOffset() const;
     LayoutUnit extraBlockOffset() const;
@@ -840,8 +838,8 @@ public:
     LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
     int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
 
-    LayoutUnit offsetLeft(const Element*) const final;
-    LayoutUnit offsetTop(const Element*) const final;
+    LayoutUnit offsetLeft(const Element*) const override;
+    LayoutUnit offsetTop(const Element*) const override;
 
     LayoutPoint flipForWritingModeForChild(const LayoutBox* child, const LayoutPoint&) const;
     LayoutUnit flipForWritingMode(LayoutUnit position) const WARN_UNUSED_RETURN {

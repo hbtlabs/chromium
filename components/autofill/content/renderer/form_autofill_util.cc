@@ -675,10 +675,9 @@ std::vector<std::string> AncestorTagNames(
 bool IsLabelValid(base::StringPiece16 inferred_label,
     const std::vector<base::char16>& stop_words) {
   // If |inferred_label| has any character other than those in |stop_words|.
-  auto first_non_stop_word = std::find_if(inferred_label.begin(),
-      inferred_label.end(), [&stop_words](base::char16 c) {
-          return !ContainsValue(stop_words, c);
-      });
+  auto* first_non_stop_word = std::find_if(
+      inferred_label.begin(), inferred_label.end(),
+      [&stop_words](base::char16 c) { return !ContainsValue(stop_words, c); });
   return first_non_stop_word != inferred_label.end();
 }
 
@@ -1146,7 +1145,7 @@ bool FormOrFieldsetsToFormData(
   }
 
   // Copy the created FormFields into the resulting FormData object.
-  for (const auto& iter : form_fields)
+  for (const auto* iter : form_fields)
     form->fields.push_back(*iter);
   return true;
 }
@@ -1399,8 +1398,15 @@ void WebFormControlElementToFormField(const WebFormControlElement& element,
     if (!g_prevent_layout)
       field->is_focusable = element.isFocusable();
     field->should_autocomplete = element.autoComplete();
+
+    // Use 'text-align: left|right' if set or 'direction' otherwise.
+    // See crbug.com/482339
     field->text_direction = element.directionForFormData() ==
         "rtl" ? base::i18n::RIGHT_TO_LEFT : base::i18n::LEFT_TO_RIGHT;
+    if (element.alignmentForFormData() == "left")
+        field->text_direction = base::i18n::LEFT_TO_RIGHT;
+    else if (element.alignmentForFormData() == "right")
+        field->text_direction = base::i18n::RIGHT_TO_LEFT;
   }
 
   if (IsAutofillableInputElement(input_element)) {
@@ -1551,7 +1557,7 @@ bool UnownedCheckoutFormElementsAndFieldSetsToFormData(
     "wallet"
   };
 
-  for (const auto& keyword : kKeywords) {
+  for (const auto* keyword : kKeywords) {
     // Compare char16 elements of |title| with char elements of |keyword| using
     // operator==.
     auto title_pos = std::search(title.begin(), title.end(),

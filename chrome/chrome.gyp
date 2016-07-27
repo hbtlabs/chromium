@@ -490,6 +490,7 @@
             '../components/components.gyp:invalidation_java',
             '../components/components.gyp:investigated_scenario_java',
             '../components/components.gyp:ntp_tiles_enums_java',
+            '../components/components.gyp:ntp_tiles_java',
             '../components/components.gyp:navigation_interception_java',
             '../components/components.gyp:offline_page_model_enums_java',
             '../components/components.gyp:policy_java',
@@ -707,7 +708,7 @@
             '..',
           ],
           'conditions': [
-            ['use_cups==1 and OS!="chromeos"', {
+            ['use_cups==1 and chromeos==0', {
               'dependencies': [
                 '../printing/printing.gyp:cups',
               ],
@@ -715,15 +716,15 @@
                 'service/cloud_print/print_system_cups.cc',
               ],
             }],
-            ['OS!="win" and use_cups!=1', {
-              'sources': [
-                'service/cloud_print/print_system_dummy.cc',
-              ],
-            }],
             ['OS=="win"', {
               'sources': [
                 'service/service_utility_process_host.cc',
                 'service/service_utility_process_host.h',
+              ],
+            }],
+            ['chromeos==1 or (OS!="win" and use_cups!=1)', {
+              'sources': [
+                'service/cloud_print/print_system_dummy.cc',
               ],
             }],
           ],

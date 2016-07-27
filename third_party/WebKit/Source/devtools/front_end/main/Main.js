@@ -77,18 +77,6 @@ WebInspector.Main.prototype = {
      */
     _createSettings: function(prefs)
     {
-        // Patch settings from the URL param (for tests).
-        var settingsParam = Runtime.queryParam("settings");
-        if (settingsParam) {
-            try {
-                var settings = JSON.parse(window.decodeURI(settingsParam));
-                for (var key in settings)
-                    prefs[key] = settings[key];
-            } catch (e) {
-                // Ignore malformed settings.
-            }
-        }
-
         this._initializeExperiments(prefs);
         WebInspector.settings = new WebInspector.Settings(new WebInspector.SettingsStorage(prefs,
             InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference, InspectorFrontendHost.clearPreferences));
@@ -137,6 +125,8 @@ WebInspector.Main.prototype = {
                 Runtime.experiments.enableForTest("layersPanel");
             if (testPath.indexOf("security/") !== -1)
                 Runtime.experiments.enableForTest("securityPanel");
+            if (testPath.indexOf("accessibility/") !== -1)
+                Runtime.experiments.enableForTest("accessibilityInspection");
         }
 
         Runtime.experiments.setDefaultExperiments([
@@ -1023,7 +1013,7 @@ WebInspector.TargetCrashedScreen.show = function(debuggerModel)
     dialog.setWrapsContent(true);
     dialog.addCloseButton();
     dialog.setDimmed(true);
-    var hideBound = dialog.detach.bind(dialog, false);
+    var hideBound = dialog.detach.bind(dialog);
     debuggerModel.addEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, hideBound);
 
     new WebInspector.TargetCrashedScreen(onHide).show(dialog.element);

@@ -11,6 +11,7 @@
 
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/display/display_manager.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
@@ -312,14 +313,12 @@ SysUIApplication::SysUIApplication() {}
 
 SysUIApplication::~SysUIApplication() {}
 
-void SysUIApplication::OnStart(::shell::Connector* connector,
-                               const ::shell::Identity& identity,
-                               uint32_t id) {
+void SysUIApplication::OnStart(const ::shell::Identity& identity) {
   ash_init_.reset(new AshInit());
-  ash_init_->Initialize(connector, identity);
+  ash_init_->Initialize(connector(), identity);
 
   ui::mojom::InputDeviceServerPtr server;
-  connector->ConnectToInterface("mojo:ui", &server);
+  connector()->ConnectToInterface("mojo:ui", &server);
   input_device_client_.Connect(std::move(server));
 }
 
@@ -330,14 +329,15 @@ bool SysUIApplication::OnConnect(::shell::Connection* connection) {
 }
 
 void SysUIApplication::Create(
-    ::shell::Connection* connection,
+    const ::shell::Identity& remote_identity,
     mash::shelf::mojom::ShelfControllerRequest request) {
   mash::shelf::mojom::ShelfController* shelf_controller =
-      static_cast<ShelfDelegateMus*>(Shell::GetInstance()->GetShelfDelegate());
+      static_cast<ShelfDelegateMus*>(WmShell::Get()->shelf_delegate());
+  DCHECK(shelf_controller);
   shelf_controller_bindings_.AddBinding(shelf_controller, std::move(request));
 }
 
-void SysUIApplication::Create(::shell::Connection* connection,
+void SysUIApplication::Create(const ::shell::Identity& remote_identity,
                               mojom::WallpaperControllerRequest request) {
   mojom::WallpaperController* wallpaper_controller =
       static_cast<UserWallpaperDelegateMus*>(

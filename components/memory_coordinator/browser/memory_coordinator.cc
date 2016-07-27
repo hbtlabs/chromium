@@ -31,14 +31,17 @@ class MemoryCoordinatorHandleImpl : public mojom::MemoryCoordinatorHandle {
   DISALLOW_COPY_AND_ASSIGN(MemoryCoordinatorHandleImpl);
 };
 
-MemoryCoordinator::MemoryCoordinator() {}
+MemoryCoordinator::MemoryCoordinator()
+    : pressure_listener_(
+          base::Bind(&MemoryCoordinator::OnMemoryPressure,
+                     base::Unretained(this))) {}
 
 MemoryCoordinator::~MemoryCoordinator() {}
 
 void MemoryCoordinator::CreateHandle(
     int render_process_id,
     mojom::MemoryCoordinatorHandleRequest request) {
-  auto handle = new MemoryCoordinatorHandleImpl(std::move(request));
+  auto* handle = new MemoryCoordinatorHandleImpl(std::move(request));
   handle->binding().set_connection_error_handler(
       base::Bind(&MemoryCoordinator::OnConnectionError, base::Unretained(this),
                  render_process_id));
@@ -51,6 +54,21 @@ size_t MemoryCoordinator::NumChildrenForTesting() {
 
 void MemoryCoordinator::OnConnectionError(int render_process_id) {
   children_.erase(render_process_id);
+}
+
+void MemoryCoordinator::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel level) {
+  // TODO(bashi): The current implementation just translates memory pressure
+  // levels to memory coordinator states. The logic will be replaced with
+  // the priority tracker.
+  if (level == base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE) {
+    clients()->Notify(FROM_HERE, &MemoryCoordinatorClient::OnMemoryStateChange,
+                      mojom::MemoryState::THROTTLED);
+  } else if (level ==
+             base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
+    clients()->Notify(FROM_HERE, &MemoryCoordinatorClient::OnMemoryStateChange,
+                      mojom::MemoryState::SUSPENDED);
+  }
 }
 
 }  // namespace memory_coordinator

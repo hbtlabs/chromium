@@ -7,9 +7,9 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//build_overrides/v8.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
+import("//v8/gni/v8.gni")
 
 content_tests_gypi_values =
     exec_script("//build/gypi_to_gn.py",
@@ -264,9 +264,8 @@ static_library("browsertest_support") {
 mojom("content_test_mojo_bindings") {
   sources = [
     "../public/test/test_mojo_service.mojom",
+    "test_browser_associated_interfaces.mojom",
   ]
-
-  use_new_wrapper_types = false
 }
 
 mojom("web_ui_test_mojo_bindings") {
@@ -425,7 +424,6 @@ test("content_browsertests") {
     ":web_ui_test_mojo_bindings",
     "//base/test:test_support",
     "//components/memory_coordinator/browser",
-    "//components/network_session_configurator",
     "//components/scheduler",
     "//content:resources",
     "//content/app:both_for_content_tests",

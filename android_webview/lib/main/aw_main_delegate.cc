@@ -30,6 +30,7 @@
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "cc/base/switches.h"
+#include "components/crash/content/app/breakpad_linux.h"
 #include "components/external_video_surface/browser/android/external_video_surface_container_impl.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
 #include "content/public/browser/browser_main_runner.h"
@@ -74,7 +75,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
       ->set_fling_touchscreen_tap_suppression_enabled(false);
 
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
-  cl->AppendSwitch(cc::switches::kEnableBeginFrameScheduling);
 
   // WebView uses the Android system's scrollbars and overscroll glow.
   cl->AppendSwitch(switches::kDisableOverscrollEdgeEffect);
@@ -153,7 +153,7 @@ void AwMainDelegate::PreSandboxStartup() {
       command_line.GetSwitchValueASCII(switches::kProcessType);
   int crash_signal_fd = -1;
   if (process_type == switches::kRendererProcess) {
-    auto global_descriptors = base::GlobalDescriptors::GetInstance();
+    auto* global_descriptors = base::GlobalDescriptors::GetInstance();
     int pak_fd = global_descriptors->Get(kAndroidWebViewLocalePakDescriptor);
     base::MemoryMappedFile::Region pak_region =
         global_descriptors->GetRegion(kAndroidWebViewLocalePakDescriptor);
@@ -167,10 +167,12 @@ void AwMainDelegate::PreSandboxStartup() {
     crash_signal_fd =
         global_descriptors->Get(kAndroidWebViewCrashSignalDescriptor);
   }
-  if (process_type.empty() &&
-      command_line.HasSwitch(switches::kSingleProcess)) {
-    // "webview" has a special treatment in breakpad_linux.cc.
-    process_type = "webview";
+  if (process_type.empty()) {
+    if (command_line.HasSwitch(switches::kSingleProcess)) {
+      process_type = breakpad::kWebViewSingleProcessType;
+    } else {
+      process_type = breakpad::kBrowserProcessType;
+    }
   }
 
   crash_reporter::EnableMicrodumpCrashReporter(process_type, crash_signal_fd);

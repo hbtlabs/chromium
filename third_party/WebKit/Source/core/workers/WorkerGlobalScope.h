@@ -40,6 +40,7 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerEventQueue.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
+#include "core/workers/WorkerSettings.h"
 #include "platform/heap/Handle.h"
 #include "wtf/ListHashSet.h"
 #include <memory>
@@ -74,7 +75,7 @@ public:
     virtual CachedMetadataHandler* createWorkerScriptCachedMetadataHandler(const KURL& scriptURL, const Vector<char>* metaData) { return nullptr; }
 
     KURL completeURL(const String&) const;
-    void dispose();
+    void dispose() final;
     void exceptionUnhandled(const String& errorMessage, std::unique_ptr<SourceLocation>);
 
     void registerEventListener(V8AbstractEventListener*);
@@ -119,15 +120,12 @@ public:
         return const_cast<WorkerGlobalScope*>(this);
     }
 
-    // Returns true when the WorkerGlobalScope is closing (e.g. via close()
-    // method). If this returns true, the worker is going to be shutdown after
-    // the current task execution. Workers that don't support close operation
-    // should always return false.
-    bool isClosing() const { return m_closing; }
+    bool isClosing() const final { return m_closing; }
 
     const KURL& url() const { return m_url; }
     WorkerThread* thread() const { return m_thread; }
     double timeOrigin() const { return m_timeOrigin; }
+    WorkerSettings* workerSettings() const { return m_workerSettings.get(); }
 
     WorkerOrWorkletScriptController* scriptController() final { return m_scriptController.get(); }
     WorkerInspectorController* workerInspectorController() { return m_workerInspectorController.get(); }
@@ -138,6 +136,7 @@ public:
 
 protected:
     WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData>, WorkerClients*);
+    void setWorkerSettings(std::unique_ptr<WorkerSettings>);
     void applyContentSecurityPolicyFromVector(const Vector<CSPHeaderAndType>& headers);
 
     void addMessageToWorkerConsole(ConsoleMessage*);
@@ -162,6 +161,7 @@ private:
     const KURL m_url;
     const String m_userAgent;
     V8CacheOptions m_v8CacheOptions;
+    std::unique_ptr<WorkerSettings> m_workerSettings;
 
     mutable Member<WorkerLocation> m_location;
     mutable Member<WorkerNavigator> m_navigator;

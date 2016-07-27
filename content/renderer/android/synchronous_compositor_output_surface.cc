@@ -106,10 +106,10 @@ SynchronousCompositorOutputSurface::SynchronousCompositorOutputSurface(
   capabilities_.delegated_rendering = true;
   memory_policy_.priority_cutoff_when_visible =
       gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
-  surface_id_allocator_->RegisterSurfaceClientId(surface_manager_.get());
 }
 
-SynchronousCompositorOutputSurface::~SynchronousCompositorOutputSurface() {}
+SynchronousCompositorOutputSurface::~SynchronousCompositorOutputSurface() =
+    default;
 
 void SynchronousCompositorOutputSurface::SetSyncClient(
     SynchronousCompositorOutputSurfaceClient* compositor) {
@@ -143,6 +143,7 @@ bool SynchronousCompositorOutputSurface::BindToClient(
   registry_->RegisterOutputSurface(routing_id_, this);
   registered_ = true;
 
+  surface_manager_->RegisterSurfaceClientId(surface_id_allocator_->client_id());
   surface_manager_->RegisterSurfaceFactoryClient(
       surface_id_allocator_->client_id(), this);
 
@@ -174,6 +175,8 @@ void SynchronousCompositorOutputSurface::DetachFromClient() {
     surface_factory_->Destroy(delegated_surface_id_);
   surface_manager_->UnregisterSurfaceFactoryClient(
       surface_id_allocator_->client_id());
+  surface_manager_->InvalidateSurfaceClientId(
+      surface_id_allocator_->client_id());
   display_ = nullptr;
   surface_factory_ = nullptr;
   surface_id_allocator_ = nullptr;
@@ -190,7 +193,7 @@ void SynchronousCompositorOutputSurface::Reshape(
   // Intentional no-op: surface size is controlled by the embedder.
 }
 
-static void NoOpDrawCallback(cc::SurfaceDrawStatus s) {}
+static void NoOpDrawCallback() {}
 
 void SynchronousCompositorOutputSurface::SwapBuffers(
     cc::CompositorFrame frame) {

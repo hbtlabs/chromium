@@ -155,7 +155,7 @@ bool GetTextMarkerData(AXTextMarkerRef text_marker,
                        int* offset) {
   DCHECK(text_marker);
   DCHECK(object && offset);
-  auto marker_data = reinterpret_cast<const AXTextMarkerData*>(
+  const auto* marker_data = reinterpret_cast<const AXTextMarkerData*>(
       AXTextMarkerGetBytePtr(text_marker));
   if (!marker_data)
     return false;
@@ -868,7 +868,7 @@ bool InitializeAccessibilityTreeSearch(
   if (![self instanceActive])
     return nil;
   return [NSNumber numberWithBool:
-      GetState(browserAccessibility_, ui::AX_STATE_ENABLED)];
+      !GetState(browserAccessibility_, ui::AX_STATE_DISABLED)];
 }
 
 // Returns a text marker that points to the last character in the document that

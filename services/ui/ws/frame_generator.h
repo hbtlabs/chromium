@@ -16,13 +16,11 @@ namespace cc {
 class CompositorFrame;
 class CopyOutputRequest;
 class RenderPass;
-enum class SurfaceDrawStatus;
 }
 
 namespace ui {
 
 class DisplayCompositor;
-class GpuState;
 class SurfacesState;
 
 namespace ws {
@@ -39,7 +37,6 @@ class ServerWindow;
 class FrameGenerator {
  public:
   FrameGenerator(FrameGeneratorDelegate* delegate,
-                 scoped_refptr<GpuState> gpu_state,
                  scoped_refptr<SurfacesState> surfaces_state);
   virtual ~FrameGenerator();
 
@@ -64,7 +61,7 @@ class FrameGenerator {
   // This is called after the DisplayCompositor has completed generating a new
   // frame for the display. TODO(fsamuel): Idle time processing should happen
   // here if there is budget for it.
-  void DidDraw(cc::SurfaceDrawStatus status);
+  void DidDraw();
 
   // Generates the CompositorFrame for the current |dirty_rect_|.
   cc::CompositorFrame GenerateCompositorFrame();
@@ -77,7 +74,6 @@ class FrameGenerator {
                       float opacity);
 
   FrameGeneratorDelegate* delegate_;
-  scoped_refptr<GpuState> gpu_state_;
   scoped_refptr<SurfacesState> surfaces_state_;
 
   std::unique_ptr<DisplayCompositor> display_compositor_;

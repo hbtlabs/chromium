@@ -236,15 +236,15 @@ void PresentationFrame::ListenForConnectionStateChange(
         state_changed_cb) {
   auto it = presentation_id_to_route_id_.find(connection.presentation_id);
   if (it == presentation_id_to_route_id_.end()) {
-    DLOG(ERROR) << __FUNCTION__ << "route id not found for presentation: "
+    DLOG(ERROR) << __func__ << "route id not found for presentation: "
                 << connection.presentation_id;
     return;
   }
 
   const MediaRoute::Id& route_id = it->second;
   if (connection_state_subscriptions_.contains(route_id)) {
-    DLOG(ERROR) << __FUNCTION__ << "Already listening connection state change "
-                                   "for route: "
+    DLOG(ERROR) << __func__
+                << "Already listening connection state change for route: "
                 << route_id;
     return;
   }
@@ -749,20 +749,19 @@ void PresentationServiceDelegateImpl::JoinSession(
     const std::string& presentation_id,
     const content::PresentationSessionStartedCallback& success_cb,
     const content::PresentationSessionErrorCallback& error_cb) {
-  bool off_the_record = web_contents_->GetBrowserContext()->IsOffTheRecord();
+  bool incognito = web_contents_->GetBrowserContext()->IsOffTheRecord();
   std::vector<MediaRouteResponseCallback> route_response_callbacks;
   route_response_callbacks.push_back(base::Bind(
       &PresentationServiceDelegateImpl::OnJoinRouteResponse,
       weak_factory_.GetWeakPtr(), render_process_id, render_frame_id,
       content::PresentationSessionInfo(presentation_url, presentation_id),
       success_cb, error_cb));
-  router_->JoinRoute(MediaSourceForPresentationUrl(presentation_url).id(),
-                     presentation_id,
-                     GetLastCommittedURLForFrame(
-                         RenderFrameHostId(render_process_id, render_frame_id))
-                         .GetOrigin(),
-                     web_contents_, route_response_callbacks, base::TimeDelta(),
-                     off_the_record);
+  router_->JoinRoute(
+      MediaSourceForPresentationUrl(presentation_url).id(), presentation_id,
+      GetLastCommittedURLForFrame(
+          RenderFrameHostId(render_process_id, render_frame_id))
+          .GetOrigin(),
+      web_contents_, route_response_callbacks, base::TimeDelta(), incognito);
 }
 
 void PresentationServiceDelegateImpl::CloseConnection(

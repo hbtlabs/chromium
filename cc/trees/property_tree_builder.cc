@@ -767,6 +767,22 @@ static inline float Opacity(LayerImpl* layer) {
   return layer->test_properties()->opacity;
 }
 
+static inline SkXfermode::Mode BlendMode(Layer* layer) {
+  return layer->blend_mode();
+}
+
+static inline SkXfermode::Mode BlendMode(LayerImpl* layer) {
+  return layer->test_properties()->blend_mode;
+}
+
+static inline const FilterOperations& Filters(Layer* layer) {
+  return layer->filters();
+}
+
+static inline const FilterOperations& Filters(LayerImpl* layer) {
+  return layer->test_properties()->filters;
+}
+
 static inline const FilterOperations& BackgroundFilters(Layer* layer) {
   return layer->background_filters();
 }
@@ -822,7 +838,7 @@ bool ShouldCreateRenderSurface(LayerType* layer,
   }
 
   // If the layer uses a CSS filter.
-  if (!layer->filters().IsEmpty() || !BackgroundFilters(layer).IsEmpty()) {
+  if (!Filters(layer).IsEmpty() || !BackgroundFilters(layer).IsEmpty()) {
     return true;
   }
 
@@ -848,7 +864,7 @@ bool ShouldCreateRenderSurface(LayerType* layer,
   // TODO(rosca): this is temporary, until blending is implemented for other
   // types of quads than RenderPassDrawQuad. Layers having descendants that draw
   // content will still create a separate rendering surface.
-  if (!layer->uses_default_blend_mode()) {
+  if (BlendMode(layer) != SkXfermode::kSrcOver_Mode) {
     TRACE_EVENT_INSTANT0(
         "cc", "PropertyTreeBuilder::ShouldCreateRenderSurface blending",
         TRACE_EVENT_SCOPE_THREAD);
@@ -874,7 +890,9 @@ bool ShouldCreateRenderSurface(LayerType* layer,
       num_descendants_that_draw_content > 0 &&
       (layer->DrawsContent() || num_descendants_that_draw_content > 1);
 
-  if (EffectiveOpacity(layer) != 1.f && ShouldFlattenTransform(layer) &&
+  bool may_have_transparency = EffectiveOpacity(layer) != 1.f ||
+                               HasPotentiallyRunningOpacityAnimation(layer);
+  if (may_have_transparency && ShouldFlattenTransform(layer) &&
       at_least_two_layers_in_subtree_draw_content) {
     TRACE_EVENT_INSTANT0(
         "cc", "PropertyTreeBuilder::ShouldCreateRenderSurface opacity",
@@ -928,6 +946,8 @@ bool AddEffectNodeIfNeeded(
   const bool has_transparency = EffectiveOpacity(layer) != 1.f;
   const bool has_potential_opacity_animation =
       HasPotentialOpacityAnimation(layer);
+  const bool has_potential_filter_animation =
+      HasPotentiallyRunningFilterAnimation(layer);
   const bool should_create_render_surface = ShouldCreateRenderSurface(
       layer, data_from_ancestor.compound_transform_since_render_target,
       data_from_ancestor.axis_align_since_render_target);
@@ -956,13 +976,17 @@ bool AddEffectNodeIfNeeded(
   }
 
   node.opacity = Opacity(layer);
+  node.blend_mode = BlendMode(layer);
   node.has_render_surface = should_create_render_surface;
   node.has_copy_request = HasCopyRequest(layer);
+  node.filters = Filters(layer);
   node.background_filters = BackgroundFilters(layer);
   node.has_potential_opacity_animation = has_potential_opacity_animation;
+  node.has_potential_filter_animation = has_potential_filter_animation;
   node.double_sided = DoubleSided(layer);
   node.subtree_hidden = HideLayerAndSubtree(layer);
   node.is_currently_animating_opacity = OpacityIsAnimating(layer);
+  node.is_currently_animating_filter = FilterIsAnimating(layer);
 
   EffectTree& effect_tree = data_for_children->property_trees->effect_tree;
   if (MaskLayer(layer)) {
@@ -1177,7 +1201,7 @@ void BuildPropertyTreesInternal(
     data_for_children.render_target = data_for_children.effect_tree_parent;
     layer->set_draw_blend_mode(SkXfermode::kSrcOver_Mode);
   } else {
-    layer->set_draw_blend_mode(layer->blend_mode());
+    layer->set_draw_blend_mode(BlendMode(layer));
   }
 
   bool created_transform_node = AddTransformNodeIfNeeded(
@@ -1406,6 +1430,10 @@ void PropertyTreeBuilder::BuildPropertyTrees(
     PropertyTrees* property_trees) {
   property_trees->is_main_thread = true;
   property_trees->is_active = false;
+  property_trees->verify_transform_tree_calculations =
+      root_layer->layer_tree_host()
+          ->settings()
+          .verify_transform_tree_calculations;
   SkColor color = root_layer->layer_tree_host()->background_color();
   if (SkColorGetA(color) != 255)
     color = SkColorSetA(color, 255);
@@ -1418,6 +1446,7 @@ void PropertyTreeBuilder::BuildPropertyTrees(
   for (auto* layer : *root_layer->layer_tree_host())
     CheckScrollAndClipPointersForLayer(layer);
 #endif
+  property_trees->ResetCachedData();
 }
 
 void PropertyTreeBuilder::BuildPropertyTrees(
@@ -1434,6 +1463,10 @@ void PropertyTreeBuilder::BuildPropertyTrees(
     PropertyTrees* property_trees) {
   property_trees->is_main_thread = false;
   property_trees->is_active = root_layer->IsActive();
+  property_trees->verify_transform_tree_calculations =
+      root_layer->layer_tree_impl()
+          ->settings()
+          .verify_transform_tree_calculations;
   SkColor color = root_layer->layer_tree_impl()->background_color();
   if (SkColorGetA(color) != 255)
     color = SkColorSetA(color, 255);

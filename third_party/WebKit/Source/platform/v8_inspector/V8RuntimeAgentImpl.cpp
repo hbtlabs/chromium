@@ -115,7 +115,7 @@ void V8RuntimeAgentImpl::evaluate(
         scope.context()->AllowCodeGenerationFromStrings(true);
 
     v8::MaybeLocal<v8::Value> maybeResultValue;
-    v8::Local<v8::Script> script = m_debugger->compileInternalScript(scope.context(), toV8String(m_debugger->isolate(), expression), String16());
+    v8::Local<v8::Script> script = m_debugger->compileScript(scope.context(), toV8String(m_debugger->isolate(), expression), String16(), false);
     if (!script.IsEmpty())
         maybeResultValue = m_debugger->runCompiledScript(scope.context(), script);
 
@@ -289,7 +289,7 @@ void V8RuntimeAgentImpl::compileScript(ErrorString* errorString,
     if (!scope.initialize())
         return;
 
-    v8::Local<v8::Script> script = m_debugger->compileInternalScript(scope.context(), toV8String(m_debugger->isolate(), expression), sourceURL);
+    v8::Local<v8::Script> script = m_debugger->compileScript(scope.context(), toV8String(m_debugger->isolate(), expression), sourceURL, false);
     if (script.IsEmpty()) {
         v8::Local<v8::Message> message = scope.tryCatch().Message();
         if (!message.IsEmpty())
@@ -369,7 +369,7 @@ void V8RuntimeAgentImpl::enable(ErrorString* errorString)
 {
     if (m_enabled)
         return;
-    m_session->client()->runtimeEnabled();
+    m_debugger->client()->beginEnsureAllContextsInGroup(m_session->contextGroupId());
     m_enabled = true;
     m_state->setBoolean(V8RuntimeAgentImplState::runtimeEnabled, true);
     m_session->debugger()->enableStackCapturingIfNeeded();
@@ -388,7 +388,7 @@ void V8RuntimeAgentImpl::disable(ErrorString* errorString)
     m_session->debugger()->disableStackCapturingIfNeeded();
     m_session->discardInjectedScripts();
     reset();
-    m_session->client()->runtimeDisabled();
+    m_debugger->client()->endEnsureAllContextsInGroup(m_session->contextGroupId());
 }
 
 void V8RuntimeAgentImpl::reset()

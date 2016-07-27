@@ -119,8 +119,7 @@ LayerTestCommon::LayerImplTest::LayerImplTest()
     : LayerImplTest(LayerTreeSettingsForTesting()) {}
 
 LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
-    : client_(FakeLayerTreeHostClient::DIRECT_3D),
-      output_surface_(FakeOutputSurface::Create3d()),
+    : output_surface_(FakeOutputSurface::CreateDelegating3d()),
       host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_, settings)),
       render_pass_(RenderPass::Create()),
       layer_impl_id_(2) {
@@ -129,7 +128,7 @@ LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
   host_->host_impl()->active_tree()->SetRootLayerForTesting(std::move(root));
   root_layer_for_testing()->SetHasRenderSurface(true);
   host_->host_impl()->SetVisible(true);
-  host_->host_impl()->InitializeRenderer(output_surface_.get());
+  EXPECT_TRUE(host_->host_impl()->InitializeRenderer(output_surface_.get()));
 
   const int timeline_id = AnimationIdProvider::NextTimelineId();
   timeline_ = AnimationTimeline::Create(timeline_id);

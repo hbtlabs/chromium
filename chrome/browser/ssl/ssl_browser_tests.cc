@@ -50,7 +50,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/network_session_configurator/switches.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_interstitials/core/controller_client.h"
@@ -610,9 +609,10 @@ class SSLUITestBlock : public SSLUITest {
  public:
   SSLUITestBlock() : SSLUITest() {}
 
-  // Browser will neither run nor display insecure content.
+  // Browser will not run insecure content.
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kNoDisplayingInsecureContent);
+    // By overriding SSLUITest, we won't apply the flag that allows running
+    // insecure content.
   }
 };
 
@@ -2342,25 +2342,6 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestUnsafeImageWithUserException) {
   // The actual image (Google logo) is 114 pixels wide, so we assume a good
   // image is greater than 100.
   EXPECT_GT(img_width, 100);
-}
-
-// Test that when the browser blocks displaying insecure content (images), the
-// indicator shows a secure page, because the blocking made the otherwise
-// unsafe page safe (the notification of this state is handled by other means).
-IN_PROC_BROWSER_TEST_F(SSLUITestBlock, TestBlockDisplayingInsecureImage) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(https_server_.Start());
-
-  std::string replacement_path;
-  GetFilePathWithHostAndPortReplacement(
-      "/ssl/page_displays_insecure_content.html",
-      embedded_test_server()->host_port_pair(), &replacement_path);
-
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL(replacement_path));
-
-  CheckAuthenticatedState(browser()->tab_strip_model()->GetActiveWebContents(),
-                          AuthState::NONE);
 }
 
 // Test that when the browser blocks displaying insecure content (iframes), the

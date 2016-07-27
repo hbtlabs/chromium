@@ -8,22 +8,21 @@
 #include <string>
 #include <utility>
 
-#include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/accelerators/accelerator_delegate.h"
-#include "ash/accelerators/focus_manager_factory.h"
 #include "ash/aura/wm_shell_aura.h"
 #include "ash/aura/wm_window_aura.h"
 #include "ash/autoclick/autoclick_controller.h"
+#include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/ash_switches.h"
 #include "ash/common/gpu_support.h"
 #include "ash/common/keyboard/keyboard_ui.h"
 #include "ash/common/login_status.h"
-#include "ash/common/pointer_down_watcher_delegate.h"
+#include "ash/common/pointer_watcher_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shelf/app_list_shelf_item_delegate.h"
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_item_delegate.h"
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
@@ -58,7 +57,6 @@
 #include "ash/new_window_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_delegate.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shelf/shelf_window_watcher.h"
 #include "ash/shell_factory.h"
@@ -105,7 +103,6 @@
 #include "ui/message_center/message_center.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/corewm/tooltip_controller.h"
-#include "ui/views/focus/focus_manager_factory.h"
 #include "ui/views/widget/native_widget_aura.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/accelerator_filter.h"
@@ -373,6 +370,18 @@ void Shell::OnRootWindowAdded(WmWindow* root_window) {
 }
 
 void Shell::CreateShelf() {
+  // Must occur after SessionStateDelegate creation and user login.
+  DCHECK(session_state_delegate_);
+  DCHECK_GT(session_state_delegate_->NumberOfLoggedInUsers(), 0);
+  wm_shell_->CreateShelfDelegate();
+
+  // TODO(jamescook): This is here for historical reasons. Move it to WmShell.
+  // http://crbug.com/629257
+  if (!shelf_window_watcher_) {
+    shelf_window_watcher_.reset(
+        new ShelfWindowWatcher(wm_shell_->shelf_model()));
+  }
+
   RootWindowControllerList controllers = GetAllRootWindowControllers();
   for (RootWindowControllerList::iterator iter = controllers.begin();
        iter != controllers.end(); ++iter)
@@ -425,12 +434,12 @@ void Shell::ShutdownShelf() {
   }
 }
 
-void Shell::AddPointerDownWatcher(views::PointerDownWatcher* watcher) {
-  pointer_down_watcher_delegate_->AddPointerDownWatcher(watcher);
+void Shell::AddPointerWatcher(views::PointerWatcher* watcher) {
+  pointer_watcher_delegate_->AddPointerWatcher(watcher);
 }
 
-void Shell::RemovePointerDownWatcher(views::PointerDownWatcher* watcher) {
-  pointer_down_watcher_delegate_->RemovePointerDownWatcher(watcher);
+void Shell::RemovePointerWatcher(views::PointerWatcher* watcher) {
+  pointer_watcher_delegate_->RemovePointerWatcher(watcher);
 }
 
 #if defined(OS_CHROMEOS)
@@ -504,32 +513,6 @@ SystemTray* Shell::GetPrimarySystemTray() {
   return GetPrimaryRootWindowController()->GetSystemTray();
 }
 
-ShelfDelegate* Shell::GetShelfDelegate() {
-  if (!shelf_delegate_) {
-    ShelfModel* shelf_model = wm_shell_->shelf_model();
-    // Creates ShelfItemDelegateManager before ShelfDelegate.
-    // TODO(jamescook): Move this into WmShell.
-    shelf_item_delegate_manager_.reset(
-        new ShelfItemDelegateManager(shelf_model));
-
-    shelf_delegate_.reset(
-        wm_shell_->delegate()->CreateShelfDelegate(shelf_model));
-    std::unique_ptr<ShelfItemDelegate> controller(new AppListShelfItemDelegate);
-
-    // Finding the shelf model's location of the app list and setting its
-    // ShelfItemDelegate.
-    int app_list_index = shelf_model->GetItemIndexForType(TYPE_APP_LIST);
-    DCHECK_GE(app_list_index, 0);
-    ShelfID app_list_id = shelf_model->items()[app_list_index].id;
-    DCHECK(app_list_id);
-    shelf_item_delegate_manager_->SetShelfItemDelegate(app_list_id,
-                                                       std::move(controller));
-    shelf_window_watcher_.reset(new ShelfWindowWatcher(
-        shelf_model, shelf_item_delegate_manager_.get()));
-  }
-  return shelf_delegate_.get();
-}
-
 void Shell::SetTouchHudProjectionEnabled(bool enabled) {
   if (is_touch_hud_projection_enabled_ == enabled)
     return;
@@ -590,8 +573,6 @@ Shell::~Shell() {
   user_metrics_recorder_->OnShellShuttingDown();
 
   wm_shell_->delegate()->PreShutdown();
-
-  views::FocusManagerFactory::Install(nullptr);
 
   // Remove the focus from any window. This will prevent overhead and side
   // effects (e.g. crashes) from changing focus during shutdown.
@@ -685,10 +666,6 @@ Shell::~Shell() {
   // path. (crbug.com/485438).
   wm_shell_->DeleteMruWindowTracker();
 
-  // Chrome implementation of shelf delegate depends on FocusClient,
-  // so must be deleted before |focus_client_| (below).
-  shelf_delegate_.reset();
-
   // These need a valid Shell instance to clean up properly, so explicitly
   // delete them before invalidating the instance.
   // Alphabetical. TODO(oshima): sort.
@@ -698,8 +675,6 @@ Shell::~Shell() {
   event_client_.reset();
   toplevel_window_event_handler_.reset();
   visibility_controller_.reset();
-  // |shelf_item_delegate_manager_| observes the shelf model.
-  shelf_item_delegate_manager_.reset();
 
   power_button_controller_.reset();
   lock_state_controller_.reset();
@@ -736,7 +711,7 @@ Shell::~Shell() {
   focus_client_.reset();
   screen_position_controller_.reset();
   new_window_delegate_.reset();
-  pointer_down_watcher_delegate_.reset();
+  pointer_watcher_delegate_.reset();
 
   keyboard::KeyboardController::ResetInstance(nullptr);
 
@@ -843,10 +818,6 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   display_manager_->RefreshFontParams();
 
-  // Install the custom factory first so that views::FocusManagers for Tray,
-  // Shelf, and WallPaper could be created by the factory.
-  views::FocusManagerFactory::Install(new AshFocusManagerFactory);
-
   aura::Env::GetInstance()->set_context_factory(init_params.context_factory);
 
   // The WindowModalityController needs to be at the front of the input event
@@ -883,8 +854,8 @@ void Shell::Init(const ShellInitParams& init_params) {
         display::Screen::GetScreen()->GetPrimaryDisplay());
 
   accelerator_controller_delegate_.reset(new AcceleratorControllerDelegateAura);
-  accelerator_controller_.reset(
-      new AcceleratorController(accelerator_controller_delegate_.get()));
+  wm_shell_->SetAcceleratorController(base::MakeUnique<AcceleratorController>(
+      accelerator_controller_delegate_.get(), nullptr));
   wm_shell_->CreateMaximizeModeController();
 
   AddPreTargetHandler(window_tree_host_manager_->input_method_event_handler());
@@ -908,7 +879,7 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   accelerator_filter_.reset(new ::wm::AcceleratorFilter(
       std::unique_ptr<::wm::AcceleratorDelegate>(new AcceleratorDelegate),
-      accelerator_controller_->accelerator_history()));
+      wm_shell_->accelerator_controller()->accelerator_history()));
   AddPreTargetHandler(accelerator_filter_.get());
 
   event_transformation_handler_.reset(new EventTransformationHandler);
@@ -981,8 +952,8 @@ void Shell::Init(const ShellInitParams& init_params) {
   session_state_delegate_.reset(
       wm_shell_->delegate()->CreateSessionStateDelegate());
   new_window_delegate_.reset(wm_shell_->delegate()->CreateNewWindowDelegate());
-  pointer_down_watcher_delegate_ =
-      wm_shell_->delegate()->CreatePointerDownWatcherDelegate();
+  pointer_watcher_delegate_ =
+      wm_shell_->delegate()->CreatePointerWatcherDelegate();
 
   resize_shadow_controller_.reset(new ResizeShadowController());
   shadow_controller_.reset(new ::wm::ShadowController(activation_client_));

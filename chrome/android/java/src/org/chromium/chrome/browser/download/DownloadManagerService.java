@@ -43,6 +43,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -116,7 +117,6 @@ public class DownloadManagerService extends BroadcastReceiver implements
 
     private final LongSparseArray<DownloadItem> mSystemDownloadIdMap =
             new LongSparseArray<DownloadItem>();
-    // Using vector for thread safety.
     @VisibleForTesting protected final List<String> mAutoResumableDownloadIds =
             new ArrayList<String>();
     private final List<DownloadUmaStatsEntry> mUmaEntries = new ArrayList<DownloadUmaStatsEntry>();
@@ -555,16 +555,14 @@ public class DownloadManagerService extends BroadcastReceiver implements
                     }
                     break;
                 case DOWNLOAD_STATUS_FAILED:
-                    mDownloadNotifier.notifyDownloadFailed(info);
                     downloadItems.add(item);
+                    mDownloadNotifier.notifyDownloadFailed(info);
                     Log.w(TAG, "Download failed: " + info.getFilePath());
                     break;
                 case DOWNLOAD_STATUS_IN_PROGRESS:
                     if (info.isPaused()) {
-                        mDownloadNotifier.notifyDownloadPaused(info, false);
-                        if (info.isResumable()) {
-                            recordDownloadResumption(UMA_DOWNLOAD_RESUMPTION_MANUAL_PAUSE);
-                        }
+                        mDownloadNotifier.notifyDownloadPaused(info);
+                        recordDownloadResumption(UMA_DOWNLOAD_RESUMPTION_MANUAL_PAUSE);
                     } else {
                         mDownloadNotifier.notifyDownloadProgress(info,
                                 progress.mStartTimeInMillis, progress.mCanDownloadWhileMetered);
@@ -574,7 +572,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
                     mDownloadNotifier.notifyDownloadCanceled(item.getId());
                     break;
                 case DOWNLOAD_STATUS_INTERRUPTED:
-                    mDownloadNotifier.notifyDownloadPaused(info, progress.mIsAutoResumable);
+                    mDownloadNotifier.notifyDownloadInterrupted(info, progress.mIsAutoResumable);
                     break;
                 default:
                     assert false;
@@ -640,7 +638,11 @@ public class DownloadManagerService extends BroadcastReceiver implements
 
         mIsUIUpdateScheduled = true;
         final List<DownloadProgress> progressToUpdate = new ArrayList<DownloadProgress>();
-        for (DownloadProgress progress : mDownloadProgressMap.values()) {
+        Iterator<Map.Entry<String, DownloadProgress>> iter =
+                mDownloadProgressMap.entrySet().iterator();
+        while (iter.hasNext()) {
+            Map.Entry<String, DownloadProgress> entry = iter.next();
+            DownloadProgress progress = entry.getValue();
             if (progress.mIsUpdated) {
                 progressToUpdate.add(new DownloadProgress(progress));
                 progress.mIsUpdated = false;
@@ -650,7 +652,7 @@ public class DownloadManagerService extends BroadcastReceiver implements
                     || progress.mDownloadItem.getDownloadInfo().isPaused())
                     && (progress.mDownloadStatus != DOWNLOAD_STATUS_INTERRUPTED
                             || !progress.mIsAutoResumable)) {
-                mDownloadProgressMap.remove(progress.mDownloadItem.getId());
+                iter.remove();
             }
         }
         if (progressToUpdate.isEmpty()) {
@@ -1099,18 +1101,18 @@ public class DownloadManagerService extends BroadcastReceiver implements
                 progress.mCanDownloadWhileMetered = isActiveNetworkMetered(mContext);
             }
         }
-        nativeResumeDownload(getNativeDownloadManagerService(), item.getId());
+        nativeResumeDownload(getNativeDownloadManagerService(), item.getId(),
+                item.getDownloadInfo().isOffTheRecord());
     }
 
     /**
      * Called to cancel a download.
      * @param downloadGuid GUID of the download.
+     * @param isOffTheRecord Whether the download is off the record.
      * @param isNotificationDismissed Whether cancel is caused by dismissing the notification.
      */
-    void cancelDownload(String downloadGuid, boolean isNotificationDismissed) {
-        DownloadProgress progress = mDownloadProgressMap.get(downloadGuid);
-        boolean isOffTheRecord = progress == null
-                ? false : progress.mDownloadItem.getDownloadInfo().isOffTheRecord();
+    void cancelDownload(String downloadGuid, boolean isOffTheRecord,
+            boolean isNotificationDismissed) {
         nativeCancelDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord,
                 isNotificationDismissed);
         recordDownloadFinishedUMA(DOWNLOAD_STATUS_CANCELLED, downloadGuid, 0);
@@ -1119,9 +1121,10 @@ public class DownloadManagerService extends BroadcastReceiver implements
     /**
      * Called to pause a download.
      * @param downloadGuid GUID of the download.
+     * @param isOffTheRecord Whether the download is off the record.
      */
-    void pauseDownload(String downloadGuid) {
-        nativePauseDownload(getNativeDownloadManagerService(), downloadGuid);
+    void pauseDownload(String downloadGuid, boolean isOffTheRecord) {
+        nativePauseDownload(getNativeDownloadManagerService(), downloadGuid, isOffTheRecord);
         DownloadProgress progress = mDownloadProgressMap.get(downloadGuid);
         // Calling pause will stop listening to the download item. Update its progress now.
         // If download is already completed, canceled or failed, there is no need to update the
@@ -1544,23 +1547,24 @@ public class DownloadManagerService extends BroadcastReceiver implements
     public void onMaxBandwidthChanged(double maxBandwidthMbps) {}
 
     @Override
-    public void onNetworkConnect(int netId, int connectionType) {}
+    public void onNetworkConnect(long netId, int connectionType) {}
 
     @Override
-    public void onNetworkSoonToDisconnect(int netId) {}
+    public void onNetworkSoonToDisconnect(long netId) {}
 
     @Override
-    public void onNetworkDisconnect(int netId) {}
+    public void onNetworkDisconnect(long netId) {}
 
     @Override
-    public void purgeActiveNetworkList(int[] activeNetIds) {}
+    public void purgeActiveNetworkList(long[] activeNetIds) {}
 
     private native long nativeInit();
     private native void nativeResumeDownload(
-            long nativeDownloadManagerService, String downloadGuid);
+            long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord);
     private native void nativeCancelDownload(
             long nativeDownloadManagerService, String downloadGuid, boolean isOffTheRecord,
             boolean isNotificationDismissed);
-    private native void nativePauseDownload(long nativeDownloadManagerService, String downloadGuid);
+    private native void nativePauseDownload(long nativeDownloadManagerService, String downloadGuid,
+            boolean isOffTheRecord);
     private native void nativeGetAllDownloads(long nativeDownloadManagerService);
 }

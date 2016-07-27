@@ -81,7 +81,6 @@ inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser
     , m_sizes(DOMTokenList::create(this))
     , m_relList(RelList::create(this))
     , m_createdByParser(createdByParser)
-    , m_isInShadowTree(false)
 {
 }
 
@@ -144,7 +143,7 @@ bool HTMLLinkElement::loadLink(const String& type, const String& as, const Strin
 
 LinkResource* HTMLLinkElement::linkResourceToProcess()
 {
-    bool visible = isConnected() && !m_isInShadowTree;
+    bool visible = isConnected() && !isInShadowTree();
     if (!visible) {
         ASSERT(!linkStyle() || !linkStyle()->hasSheet());
         return nullptr;
@@ -205,8 +204,7 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
     if (!insertionPoint->isConnected())
         return InsertionDone;
 
-    m_isInShadowTree = isInShadowTree();
-    if (m_isInShadowTree) {
+    if (isInShadowTree()) {
         String message = "HTML element <link> is ignored in shadow tree.";
         document().addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
         return InsertionDone;
@@ -224,13 +222,15 @@ Node::InsertionNotificationRequest HTMLLinkElement::insertedInto(ContainerNode* 
 
 void HTMLLinkElement::removedFrom(ContainerNode* insertionPoint)
 {
+    // Store the result of isInShadowTree() here before Node::removedFrom(..) clears the flags.
+    bool wasInShadowTree = isInShadowTree();
     HTMLElement::removedFrom(insertionPoint);
     if (!insertionPoint->isConnected())
         return;
 
     m_linkLoader->released();
 
-    if (m_isInShadowTree) {
+    if (wasInShadowTree) {
         ASSERT(!linkStyle() || !linkStyle()->hasSheet());
         return;
     }
@@ -440,8 +440,13 @@ enum StyleSheetCacheStatus {
 
 void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const String& charset, const CSSStyleSheetResource* cachedStyleSheet)
 {
-    if (!m_owner->isConnected()) {
-        ASSERT(!m_sheet);
+    if (!m_owner->isInDocumentTree()) {
+        // While the stylesheet is asynchronously loading, the owner can be moved out of a document tree.
+        // In that case, cancel any processing on the loaded content.
+        m_loading = false;
+        removePendingSheet();
+        if (m_sheet)
+            clearSheet();
         return;
     }
 
@@ -451,15 +456,6 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
         m_loading = false;
         removePendingSheet();
         notifyLoadedSheetAndAllCriticalSubresources(Node::ErrorOccurredLoadingSubresource);
-        return;
-    }
-    // While the stylesheet is asynchronously loading, the owner can be moved under
-    // shadow tree.  In that case, cancel any processing on the loaded content.
-    if (m_owner->isInShadowTree()) {
-        m_loading = false;
-        removePendingSheet();
-        if (m_sheet)
-            clearSheet();
         return;
     }
 
@@ -667,8 +663,7 @@ void LinkStyle::process()
 
         bool mediaQueryMatches = true;
         LocalFrame* frame = loadingFrame();
-        if (!m_owner->media().isEmpty() && frame && frame->document()) {
-            RefPtr<ComputedStyle> documentStyle = StyleResolver::styleForDocument(*frame->document());
+        if (!m_owner->media().isEmpty() && frame) {
             MediaQuerySet* media = MediaQuerySet::create(m_owner->media());
             MediaQueryEvaluator evaluator(frame);
             mediaQueryMatches = evaluator.eval(media);

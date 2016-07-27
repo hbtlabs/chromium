@@ -74,7 +74,6 @@ namespace content {
 
 class CrossProcessFrameConnector;
 class CrossSiteTransferringRequest;
-class FrameMojoShell;
 class FrameTree;
 class FrameTreeNode;
 class NavigationHandleImpl;
@@ -161,6 +160,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   int GetProxyCount() override;
   void FilesSelectedInChooser(const std::vector<FileChooserFileInfo>& files,
                               FileChooserParams::Mode permissions) override;
+  void RequestTextSurroundingSelection(
+      const TextSurroundingSelectionCallback& callback,
+      int max_length) override;
 
   // mojom::FrameHost
   void GetInterfaceProvider(
@@ -1000,9 +1002,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // RFH.
   std::unique_ptr<PermissionServiceContext> permission_service_context_;
 
-  // The frame's Mojo Shell service.
-  std::unique_ptr<FrameMojoShell> frame_mojo_shell_;
-
   // Holder of Mojo connection with ImageDownloader service in RenderFrame.
   content::mojom::ImageDownloaderPtr mojo_image_downloader_;
 
@@ -1036,6 +1035,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   mojo::Binding<mojom::FrameHost> frame_host_binding_;
   mojom::FramePtr frame_;
+
+  // Callback for responding when
+  // |FrameHostMsg_TextSurroundingSelectionResponse| message comes.
+  TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

@@ -59,6 +59,7 @@
 #include "chrome/browser/component_updater/widevine_cdm_component_installer.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/geolocation/chrome_access_token_store.h"
 #include "chrome/browser/gpu/gl_string_manager.h"
 #include "chrome/browser/gpu/three_d_api_observer.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
@@ -86,9 +87,9 @@
 #include "chrome/browser/tracing/navigation_tracing.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
-#include "chrome/browser/ui/app_modal/chrome_javascript_native_dialog_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/javascript_dialogs/chrome_javascript_native_dialog_factory.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -140,6 +141,8 @@
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/geolocation_delegate.h"
+#include "content/public/browser/geolocation_provider.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -232,6 +235,10 @@
 #include "components/nacl/browser/nacl_process_host.h"
 #endif  // !defined(DISABLE_NACL)
 
+#if BUILDFLAG(ENABLE_BACKGROUND)
+#include "chrome/browser/background/background_mode_manager.h"
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
+
 #if defined(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/startup_helper.h"
 #include "extensions/browser/extension_protocols.h"
@@ -269,6 +276,19 @@
 using content::BrowserThread;
 
 namespace {
+
+// A provider of Geolocation services to override AccessTokenStore.
+class ChromeGeolocationDelegate : public content::GeolocationDelegate {
+ public:
+  ChromeGeolocationDelegate() = default;
+
+  scoped_refptr<content::AccessTokenStore> CreateAccessTokenStore() final {
+    return new ChromeAccessTokenStore();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ChromeGeolocationDelegate);
+};
 
 // This function provides some ways to test crash and assertion handling
 // behavior of the program.
@@ -1201,6 +1221,9 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // ChromeOS needs ResourceBundle::InitSharedInstance to be called before this.
   browser_process_->PreCreateThreads();
 
+  content::GeolocationProvider::SetGeolocationDelegate(
+      new ChromeGeolocationDelegate());
+
   return content::RESULT_CODE_NORMAL_EXIT;
 }
 
@@ -2016,11 +2039,24 @@ void ChromeBrowserMainParts::PostDestroyThreads() {
   // not finish.
   NOTREACHED();
 #else
+
+  int restart_flags = restart_last_session_
+                          ? browser_shutdown::RESTART_LAST_SESSION
+                          : browser_shutdown::NO_FLAGS;
+
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  if (restart_flags) {
+    restart_flags |= BackgroundModeManager::should_restart_in_background()
+                         ? browser_shutdown::RESTART_IN_BACKGROUND
+                         : browser_shutdown::NO_FLAGS;
+  }
+#endif  // BUILDFLAG(ENABLE_BACKGROUND)
+
   browser_process_->PostDestroyThreads();
   // browser_shutdown takes care of deleting browser_process, so we need to
   // release it.
   ignore_result(browser_process_.release());
-  browser_shutdown::ShutdownPostThreadsStop(restart_last_session_);
+  browser_shutdown::ShutdownPostThreadsStop(restart_flags);
   master_prefs_.reset();
   process_singleton_.reset();
   device_event_log::Shutdown();

@@ -772,6 +772,11 @@ void FocusController::focusDocumentView(Frame* frame, bool notifyEmbedder)
             dispatchFocusEvent(*document, *focusedElement);
     }
 
+    // dispatchBlurEvent/dispatchFocusEvent could have changed the focused frame, or
+    // detached the frame.
+    if (newFocusedFrame && !newFocusedFrame->view())
+        return;
+
     setFocusedFrame(frame, notifyEmbedder);
 }
 
@@ -1020,7 +1025,7 @@ Element* FocusController::findFocusableElementInShadowHost(const Element& shadow
 
 static bool relinquishesEditingFocus(const Element& element)
 {
-    DCHECK(element.hasEditableStyle());
+    DCHECK(hasEditableStyle(element));
     return element.document().frame() && rootEditableElement(element);
 }
 

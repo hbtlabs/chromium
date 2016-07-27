@@ -35,12 +35,30 @@ enum PermissionAction {
   PERMISSION_ACTION_NUM,
 };
 
+// This should stay in sync with the SourceUI enum in the permission report
+// protobuf (src/chrome/common/safe_browsing/permission_report.proto).
+enum class PermissionSourceUI {
+  PROMPT = 0,
+  OIB = 1,
+  SITE_SETTINGS = 2,
+  PAGE_ACTION = 3,
+
+  // Always keep this at the end.
+  SOURCE_UI_NUM,
+};
+
 // Provides a convenient way of logging UMA for permission related operations.
 class PermissionUmaUtil {
  public:
   static const char kPermissionsPromptShown[];
+  static const char kPermissionsPromptShownGesture[];
+  static const char kPermissionsPromptShownNoGesture[];
   static const char kPermissionsPromptAccepted[];
+  static const char kPermissionsPromptAcceptedGesture[];
+  static const char kPermissionsPromptAcceptedNoGesture[];
   static const char kPermissionsPromptDenied[];
+  static const char kPermissionsPromptDeniedGesture[];
+  static const char kPermissionsPromptDeniedNoGesture[];
   static const char kPermissionsPromptRequestsPerPrompt[];
   static const char kPermissionsPromptMergedBubbleTypes[];
   static const char kPermissionsPromptMergedBubbleAccepted[];
@@ -63,6 +81,7 @@ class PermissionUmaUtil {
                                 const GURL& requesting_origin,
                                 Profile* profile);
   static void PermissionRevoked(content::PermissionType permission,
+                                PermissionSourceUI source_ui,
                                 const GURL& revoked_origin,
                                 Profile* profile);
 
@@ -97,6 +116,7 @@ class PermissionUmaUtil {
 
   static void RecordPermissionAction(content::PermissionType permission,
                                      PermissionAction action,
+                                     PermissionSourceUI source_ui,
                                      const GURL& requesting_origin,
                                      Profile* profile);
 

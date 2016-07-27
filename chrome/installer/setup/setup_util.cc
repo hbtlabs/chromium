@@ -34,7 +34,6 @@
 #include "chrome/installer/setup/user_hive_visitor.h"
 #include "chrome/installer/util/app_registration_data.h"
 #include "chrome/installer/util/google_update_constants.h"
-#include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/installation_state.h"
 #include "chrome/installer/util/installer_state.h"
 #include "chrome/installer/util/master_preferences.h"
@@ -42,7 +41,6 @@
 #include "chrome/installer/util/util_constants.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff/bsdiff.h"
-#include "third_party/bspatch/mbspatch.h"
 
 namespace installer {
 
@@ -150,8 +148,8 @@ int BsdiffPatchFiles(const base::FilePath& src,
   if (src.empty() || patch.empty() || dest.empty())
     return installer::PATCH_INVALID_ARGUMENTS;
 
-  const int patch_status = courgette::ApplyBinaryPatch(src, patch, dest);
-  const int exit_code = patch_status != OK ?
+  const int patch_status = bsdiff::ApplyBinaryPatch(src, patch, dest);
+  const int exit_code = patch_status != bsdiff::OK ?
                         patch_status + kBsdiffErrorOffset : 0;
 
   LOG_IF(ERROR, exit_code)

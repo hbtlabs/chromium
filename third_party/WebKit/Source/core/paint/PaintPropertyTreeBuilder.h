@@ -15,6 +15,7 @@ namespace blink {
 
 class FrameView;
 class LayoutObject;
+class ObjectPaintProperties;
 
 // The context for PaintPropertyTreeBuilder.
 // It's responsible for bookkeeping tree state in other order, for example, the most recent
@@ -27,13 +28,21 @@ struct PaintPropertyTreeBuilderContext {
         // When a layout object recur to its children, the main context is expected to refer
         // the object's border box, then the callee will derive its own border box by translating
         // the space with its own layout location.
-        TransformPaintPropertyNode* transform = nullptr;
+        const TransformPaintPropertyNode* transform = nullptr;
         LayoutPoint paintOffset;
+        // Whether newly created children should flatten their inherited transform
+        // (equivalently, draw into the plane of their parent). Should generally
+        // be updated whenever |transform| is; flattening only needs to happen
+        // to immediate children.
+        bool shouldFlattenInheritedTransform = false;
+        // Rendering context for 3D sorting. See
+        // TransformPaintPropertyNode::renderingContextID.
+        unsigned renderingContextID = 0;
         // The clip node describes the accumulated raster clip for the current subtree.
         // Note that the computed raster region in canvas space for a clip node is independent from
         // the transform and paint offset above. Also the actual raster region may be affected
         // by layerization and occlusion tracking.
-        ClipPaintPropertyNode* clip = nullptr;
+        const ClipPaintPropertyNode* clip = nullptr;
     };
 
     ContainingBlockContext current;
@@ -53,7 +62,7 @@ struct PaintPropertyTreeBuilderContext {
     // The effect hierarchy is applied by the stacking context tree. It is guaranteed that every
     // DOM descendant is also a stacking context descendant. Therefore, we don't need extra
     // bookkeeping for effect nodes and can generate the effect tree from a DOM-order traversal.
-    EffectPaintPropertyNode* currentEffect = nullptr;
+    const EffectPaintPropertyNode* currentEffect = nullptr;
 };
 
 // Creates paint property tree nodes for special things in the layout tree.

@@ -861,19 +861,17 @@ void Browser::RemoveWindow(views::Widget* window) {
 
 std::unique_ptr<navigation::View> Browser::CreateView() {
   navigation::mojom::ViewFactoryPtr factory;
-  connector_->ConnectToInterface("exe:navigation", &factory);
+  connector()->ConnectToInterface("exe:navigation", &factory);
   return base::WrapUnique(new navigation::View(std::move(factory)));
 }
 
-void Browser::OnStart(shell::Connector* connector,
-                      const shell::Identity& identity,
-                      uint32_t id) {
-  connector_ = connector;
-  tracing_.Initialize(connector, identity.name());
+void Browser::OnStart(const shell::Identity& identity) {
+  tracing_.Initialize(connector(), identity.name());
 
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
+  aura_init_.reset(
+      new views::AuraInit(connector(), "views_mus_resources.pak"));
   window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector, identity);
+      views::WindowManagerConnection::Create(connector(), identity);
 }
 
 bool Browser::OnConnect(shell::Connection* connection) {
@@ -897,7 +895,7 @@ void Browser::Launch(uint32_t what, mojom::LaunchMode how) {
   AddWindow(window);
 }
 
-void Browser::Create(shell::Connection* connection,
+void Browser::Create(const shell::Identity& remote_identity,
                      mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

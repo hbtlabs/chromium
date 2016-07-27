@@ -113,7 +113,7 @@ class CacheStorage::CacheLoader {
 
   // After the backend has been deleted, do any extra house keeping such as
   // removing the cache's directory.
-  virtual void CleanUpDeletedCache(const std::string& key) = 0;
+  virtual void CleanUpDeletedCache(CacheStorageCache* cache) = 0;
 
   // Writes the cache names (and sizes) to disk if applicable.
   virtual void WriteIndex(const StringVector& cache_names,
@@ -127,12 +127,12 @@ class CacheStorage::CacheLoader {
   // the cache if necessary.
   virtual void NotifyCacheCreated(
       const std::string& cache_name,
-      std::unique_ptr<CacheStorageCacheHandle> cache_handle){};
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {};
 
-  // Notification that a cache has been doomed and will be deleted once the last
-  // cache handle has been dropped. If the loader is holding a handle to the
-  // cache, it should drop it now.
-  virtual void NotifyCacheDoomed(const std::string& cache_name){};
+  // Notification that the cache for |cache_handle| has been doomed. If the
+  // loader is holding a handle to the cache, it should drop it now.
+  virtual void NotifyCacheDoomed(
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) {};
 
  protected:
   scoped_refptr<base::SequencedTaskRunner> cache_task_runner_;
@@ -181,9 +181,7 @@ class CacheStorage::MemoryLoader : public CacheStorage::CacheLoader {
     callback.Run(std::move(cache));
   }
 
-  void CleanUpDeletedCache(const std::string& cache_name) override {
-    DCHECK(!ContainsKey(cache_handles_, cache_name));
-  }
+  void CleanUpDeletedCache(CacheStorageCache* cache) override {}
 
   void WriteIndex(const StringVector& cache_names,
                   const BoolCallback& callback) override {
@@ -202,9 +200,10 @@ class CacheStorage::MemoryLoader : public CacheStorage::CacheLoader {
     cache_handles_.insert(std::make_pair(cache_name, std::move(cache_handle)));
   };
 
-  void NotifyCacheDoomed(const std::string& cache_name) override {
-    DCHECK(ContainsKey(cache_handles_, cache_name));
-    cache_handles_.erase(cache_name);
+  void NotifyCacheDoomed(
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) override {
+    DCHECK(ContainsKey(cache_handles_, cache_handle->value()->cache_name()));
+    cache_handles_.erase(cache_handle->value()->cache_name());
   };
 
  private:
@@ -285,13 +284,13 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     callback.Run(CreateCache(cache_name));
   }
 
-  void CleanUpDeletedCache(const std::string& cache_name) override {
+  void CleanUpDeletedCache(CacheStorageCache* cache) override {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    DCHECK(ContainsKey(cache_name_to_cache_dir_, cache_name));
+    DCHECK(ContainsKey(doomed_cache_to_path_, cache));
 
     base::FilePath cache_path =
-        origin_path_.AppendASCII(cache_name_to_cache_dir_[cache_name]);
-    cache_name_to_cache_dir_.erase(cache_name);
+        origin_path_.AppendASCII(doomed_cache_to_path_[cache]);
+    doomed_cache_to_path_.erase(cache);
 
     cache_task_runner_->PostTask(
         FROM_HERE, base::Bind(&SimpleCacheLoader::CleanUpDeleteCacheDirInPool,
@@ -391,6 +390,16 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     callback.Run(std::move(names));
   }
 
+  void NotifyCacheDoomed(
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle) override {
+    DCHECK(ContainsKey(cache_name_to_cache_dir_,
+                       cache_handle->value()->cache_name()));
+    auto iter =
+        cache_name_to_cache_dir_.find(cache_handle->value()->cache_name());
+    doomed_cache_to_path_[cache_handle->value()] = iter->second;
+    cache_name_to_cache_dir_.erase(iter);
+  };
+
  private:
   friend class MigratedLegacyCacheDirectoryNameTest;
   ~SimpleCacheLoader() override {}
@@ -476,6 +485,7 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
 
   const base::FilePath origin_path_;
   std::map<std::string, std::string> cache_name_to_cache_dir_;
+  std::map<CacheStorageCache*, std::string> doomed_cache_to_path_;
 
   base::WeakPtrFactory<SimpleCacheLoader> weak_ptr_factory_;
 };
@@ -491,7 +501,8 @@ CacheStorage::CacheStorage(
     : initialized_(false),
       initializing_(false),
       memory_only_(memory_only),
-      scheduler_(new CacheStorageScheduler()),
+      scheduler_(new CacheStorageScheduler(
+          CacheStorageSchedulerClient::CLIENT_STORAGE)),
       origin_path_(path),
       cache_task_runner_(cache_task_runner),
       quota_manager_proxy_(quota_manager_proxy),
@@ -785,12 +796,17 @@ void CacheStorage::DeleteCacheDidWriteIndex(
     return;
   }
 
+  // Make sure that a cache handle exists for the doomed cache to ensure that
+  // DeleteCacheFinalize is called.
+  std::unique_ptr<CacheStorageCacheHandle> cache_handle =
+      GetLoadedCache(cache_name);
+
   CacheMap::iterator map_iter = cache_map_.find(cache_name);
   doomed_caches_.insert(
       std::make_pair(map_iter->second.get(), std::move(map_iter->second)));
   cache_map_.erase(map_iter);
 
-  cache_loader_->NotifyCacheDoomed(cache_name);
+  cache_loader_->NotifyCacheDoomed(std::move(cache_handle));
 
   callback.Run(true, CACHE_STORAGE_OK);
 }
@@ -813,7 +829,7 @@ void CacheStorage::DeleteCacheDidGetSize(
       storage::QuotaClient::kServiceWorkerCache, origin_,
       storage::kStorageTypeTemporary, -1 * cache_size);
 
-  cache_loader_->CleanUpDeletedCache(cache->cache_name());
+  cache_loader_->CleanUpDeletedCache(cache.get());
 }
 
 void CacheStorage::EnumerateCachesImpl(
@@ -928,20 +944,16 @@ void CacheStorage::DropCacheHandleRef(CacheStorageCache* cache) {
 
   iter->second -= 1;
   if (iter->second == 0) {
-    // Delete the CacheStorageCache object. It's either in the main cache map or
-    // the CacheStorage::Delete operation has run on the cache, in which case
-    // it's in the doomed caches map.
-    auto cache_map_iter = cache_map_.find(cache->cache_name());
-
-    if (cache_map_iter == cache_map_.end()) {
-      auto doomed_caches_iter = doomed_caches_.find(cache);
-      DCHECK(doomed_caches_iter != doomed_caches_.end());
-
+    auto doomed_caches_iter = doomed_caches_.find(cache);
+    if (doomed_caches_iter != doomed_caches_.end()) {
       // The last reference to a doomed cache is gone, perform clean up.
       DeleteCacheFinalize(std::move(doomed_caches_iter->second));
       doomed_caches_.erase(doomed_caches_iter);
       return;
     }
+
+    auto cache_map_iter = cache_map_.find(cache->cache_name());
+    DCHECK(cache_map_iter != cache_map_.end());
 
     cache_map_iter->second.reset();
     cache_handle_counts_.erase(iter);

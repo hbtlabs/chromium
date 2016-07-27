@@ -22,13 +22,6 @@
       Jeśli jest włączona lub nieustawiona, statystyki będą raportowane.</translation>
 <translation id="1046484220783400299">Włącz wycofane funkcje platform internetowych na określony czas</translation>
 <translation id="1047128214168693844">Nie zezwalaj żadnej witrynie na śledzenie fizycznej lokalizacji użytkownika</translation>
-<translation id="1057535219415338480">Włącza przewidywanie działań sieciowych w <ph name="PRODUCT_NAME" /> i uniemożliwia użytkownikom zmianę tego ustawienia.
-
-      Ta zasada steruje nie tylko wstępnym pobieraniem DNS, ale też wstępnym łączeniem przez TCP i SSL oraz wstępnym renderowaniem. Nazwa zasady wiąże się ze wstępnym pobieraniem DNS z przyczyn historycznych.
-
-      Jeśli włączysz lub wyłączysz tę zasadę, użytkownicy nie będą mogli zmienić ani nadpisać tego ustawienia w <ph name="PRODUCT_NAME" />.
-
-      Jeśli ta zasada pozostanie nieustawiona, ustawienie zostanie włączone, ale użytkownicy będą mogli je zmienić.</translation>
 <translation id="1062011392452772310">Włącz zaświadczanie zdalne dla urządzenia</translation>
 <translation id="1090892140761957285">URL do weryfikowania tokena uwierzytelniania klienta dostępu zdalnego.
 
@@ -646,6 +639,7 @@
 <translation id="3030000825273123558">Włącz raportowanie statystyk</translation>
 <translation id="3034580675120919256">Umożliwia określenie, czy w witrynach może być wykonywany kod JavaScript. Wykonanie kodu JavaScript może być dozwolone lub zabronione we wszystkich witrynach. W przypadku nieskonfigurowania tej zasady będzie używane ustawienie „AllowJavaScript”, a użytkownik będzie mógł je zmienić.</translation>
 <translation id="3038323923255997294">Kontynuuj działanie aplikacji w tle po zamknięciu <ph name="PRODUCT_NAME" /></translation>
+<translation id="3046192273793919231">Wysyłaj pakiety sieciowe na serwer zarządzania w celu monitorowania stanu online</translation>
 <translation id="3048744057455266684">Jeśli ta zasada jest ustawiona, a URL wyszukiwania zaproponowany przez omnibox zawiera ten parametr w ciągu zapytania lub identyfikatorze fragmentu, wtedy sugestia zamiast nieprzetworzonego adresu URL wyszukiwania pokaże wyszukiwane hasła i dostawcę wyszukiwania.
 
           Ta zasada jest opcjonalna. Jeśli nie jest ustawiona, nie zachodzi zamiana wyszukiwanego hasła.
@@ -908,6 +902,11 @@
 
           Jeśli nie ustawisz tej zasady lub wybierzesz wartość fałsz, użytkownicy mogą przesyłać pliki na Dysk Google.</translation>
 <translation id="3915395663995367577">Adres URL pliku PAC serwera proxy</translation>
+<translation id="3939893074578116847">Wysyłaj pakiety sieciowe do serwera zarządzania w celu monitorowania stanu online,
+      by serwer mógł sprawdzić, czy urządzenie jest offline.
+
+      Jeśli ta zasada jest włączona, pakiety sieciowe monitorowania (<ph name="HEARTBEATS_TERM" />) będą wysyłane.
+      Jeśli jest wyłączona lub nieskonfigurowana, pakiety nie będą wysyłane.</translation>
 <translation id="3964909636571393861">Zezwalaj na dostęp do listy adresów URL</translation>
 <translation id="3965339130942650562">Limit czasu bezczynności, po którym następuje wylogowanie</translation>
 <translation id="3967075520570946456">Włącz wyświetlanie strony powitalnej przy pierwszym uruchomieniu przeglądarki po uaktualnieniu systemu operacyjnego.</translation>
@@ -1236,6 +1235,11 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli ta zasada jest ustawiona, użytkownik zostanie automatycznie zalogowany do określonej sesji po upływie określonego czasu nieaktywności na ekranie logowania. Sesja publiczna musi zostać wcześniej skonfigurowana (zobacz zasadę |DeviceLocalAccounts|).
 
       Jeśli ta zasada jest nieustawiona, automatyczne logowanie nie działa.</translation>
+<translation id="5535957389335373033">Częstotliwość wysyłania pakietów sieciowych monitorowania (w milisekundach).
+
+      Jeśli ta zasada nie jest skonfigurowana, domyślna częstotliwość wynosi trzy minuty.
+      Minimalna częstotliwość to 30 s, a maksymalna – 24 godz.
+      Wartości spoza tego zakresu zostaną zmienione na wartości graniczne.</translation>
 <translation id="5535973522252703021">Biała lista serwerów przekazywania poświadczeń w protokole Kerberos</translation>
 <translation id="5560039246134246593">Dodaj parametr do pobierania odmian w <ph name="PRODUCT_NAME" />.
 
@@ -1775,7 +1779,6 @@ Zwykle ta zasada jest wyłączona w celu ochrony przed phishingiem. W przypadku 
       Jeśli nie ustawisz tej zasady, funkcja automatycznego czyszczenia korzysta z domyślnej wbudowanej strategii. Obecnie to „RemoveLRUIfDormant”.</translation>
 <translation id="7336878834592315572">Zachowaj pliki cookie na czas trwania sesji</translation>
 <translation id="7340034977315324840">Zgłoś godziny aktywności urządzenia</translation>
-<translation id="7381326101471547614">Wyłącza protokół SPDY w <ph name="PRODUCT_NAME" />. Po włączeniu tej zasady protokół SPDY jest niedostępny w <ph name="PRODUCT_NAME" />. W przeciwnym razie protokołu można używać. Jeśli zasada nie zostanie ustawiona, protokół SPDY będzie dostępny.</translation>
 <translation id="7384999953864505698">Zezwala na protokół QUIC</translation>
 <translation id="7406651467768226499">Czy zezwolić aplikacji kiosku uruchamianej automatycznie z zerowym opóźnieniem na kontrolowanie wersji <ph name="PRODUCT_OS_NAME" />.
 
@@ -2353,6 +2356,7 @@ Więcej opcji i szczegółowych przykładów znajdziesz na:
 <translation id="9187743794267626640">Wyłącz podłączanie pamięci zewnętrznych</translation>
 <translation id="9197740283131855199">Wartość procentowa skalowania opóźnienia przyciemnienia ekranu, jeśli użytkownik stanie się aktywny po przyciemnieniu</translation>
 <translation id="9200828125069750521">Parametry dla adresów URL obrazów używających POST</translation>
+<translation id="9217154963008402249">Częstotliwość pakietów sieciowych monitorowania</translation>
 <translation id="922540222991413931">Konfiguruj źródła instalacji rozszerzeń, aplikacji i skryptów użytkownika</translation>
 <translation id="924557436754151212">Importuj zapisane hasła z przeglądarki domyślnej przy pierwszym uruchomieniu</translation>
 <translation id="930930237275114205">Ustaw katalog danych użytkownika <ph name="PRODUCT_FRAME_NAME" /></translation>

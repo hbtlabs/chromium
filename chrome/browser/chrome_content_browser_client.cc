@@ -34,6 +34,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/character_encoding.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
@@ -47,7 +48,6 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/engagement/site_engagement_eviction_policy.h"
 #include "chrome/browser/font_family_cache.h"
-#include "chrome/browser/geolocation/chrome_access_token_store.h"
 #include "chrome/browser/media/media_capture_devices_dispatcher.h"
 #include "chrome/browser/metrics/chrome_browser_main_extra_parts_metrics.h"
 #include "chrome/browser/nacl_host/nacl_browser_delegate_impl.h"
@@ -72,7 +72,7 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/search_engines/search_provider_install_state_message_filter.h"
+#include "chrome/browser/search_engines/search_provider_install_state_impl.h"
 #include "chrome/browser/speech/chrome_speech_recognition_manager_delegate.h"
 #include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/speech/tts_message_filter.h"
@@ -131,7 +131,9 @@
 #include "components/rappor/rappor_utils.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/spellcheck/common/spellcheck_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_host_impl.h"
+#include "components/subresource_filter/content/browser/subresource_filter_navigation_throttle.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/variations/variations_associated_data.h"
@@ -144,7 +146,6 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -325,9 +326,12 @@
 #include "media/mojo/services/mojo_media_application_factory.h"  // nogncheck
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/metrics/leak_detector/leak_detector_remote_controller.h"
+#endif
+
 using base::FileDescriptor;
 using blink::WebWindowFeatures;
-using content::AccessTokenStore;
 using content::BrowserThread;
 using content::BrowserURLHandler;
 using content::ChildProcessSecurityPolicy;
@@ -631,19 +635,6 @@ class SafeBrowsingSSLCertReporter : public SSLCertReporter {
  private:
   const scoped_refptr<safe_browsing::SafeBrowsingUIManager>
       safe_browsing_ui_manager_;
-};
-
-// A provider of Geolocation services to override AccessTokenStore.
-class ChromeGeolocationDelegate : public content::GeolocationDelegate {
- public:
-  ChromeGeolocationDelegate() = default;
-
-  scoped_refptr<AccessTokenStore> CreateAccessTokenStore() final {
-    return new ChromeAccessTokenStore();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(ChromeGeolocationDelegate);
 };
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
@@ -967,14 +958,18 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
   net::URLRequestContextGetter* context =
       host->GetStoragePartition()->GetURLRequestContext();
 
-  host->AddFilter(new ChromeRenderMessageFilter(id, profile));
+  host->AddFilter(new ChromeRenderMessageFilter(
+      id, profile, host->GetStoragePartition()->GetServiceWorkerContext()));
 #if defined(ENABLE_EXTENSIONS)
   host->AddFilter(new cast::CastTransportHostFilter);
 #endif
 #if defined(ENABLE_PRINTING)
   host->AddFilter(new printing::PrintingMessageFilter(id, profile));
 #endif
-  host->AddFilter(new SearchProviderInstallStateMessageFilter(id, profile));
+  host->GetInterfaceRegistry()->AddInterface(
+      base::Bind(&SearchProviderInstallStateImpl::Create, id, profile),
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI));
 #if defined(ENABLE_SPELLCHECK)
   host->AddFilter(new SpellCheckMessageFilter(id));
 #endif
@@ -1633,7 +1628,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
       switches::kDisableJavaScriptHarmonyShipping,
       switches::kDisableNewBookmarkApps,
 #if defined(ENABLE_SPELLCHECK) && defined(OS_ANDROID)
-      switches::kEnableAndroidSpellChecker,
+      spellcheck::switches::kEnableAndroidSpellChecker,
 #endif
       switches::kEnableBenchmarking,
       switches::kEnableNaCl,
@@ -2296,15 +2291,6 @@ net::NetLog* ChromeContentBrowserClient::GetNetLog() {
   return g_browser_process->net_log();
 }
 
-content::GeolocationDelegate*
-ChromeContentBrowserClient::CreateGeolocationDelegate() {
-  return new ChromeGeolocationDelegate();
-}
-
-bool ChromeContentBrowserClient::IsFastShutdownPossible() {
-  return true;
-}
-
 void ChromeContentBrowserClient::OverrideWebkitPrefs(
     RenderViewHost* rvh, WebPreferences* web_prefs) {
   Profile* profile = Profile::FromBrowserContext(
@@ -2787,9 +2773,14 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
     content::RenderProcessHost* render_process_host) {
   registry->AddInterface(
       base::Bind(&startup_metric_utils::StartupMetricHostImpl::Create));
+
+#if defined(OS_CHROMEOS)
+  registry->AddInterface<metrics::mojom::LeakDetector>(
+      base::Bind(&metrics::LeakDetectorRemoteController::Create));
+#endif
 }
 
-void ChromeContentBrowserClient::RegisterFrameMojoShellInterfaces(
+void ChromeContentBrowserClient::ExposeInterfacesToMediaService(
     shell::InterfaceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
 // TODO(xhwang): Only register this when ENABLE_MOJO_MEDIA.
@@ -2942,7 +2933,8 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
     // Add interstitial page while merge session process (cookie reconstruction
     // from OAuth2 refresh token in ChromeOS login) is still in progress while
     // we are attempting to load a google property.
-    if (!merge_session_throttling_utils::AreAllSessionMergedAlready() &&
+    if (merge_session_throttling_utils::ShouldAttachNavigationThrottle() &&
+        !merge_session_throttling_utils::AreAllSessionMergedAlready() &&
         handle->GetURL().SchemeIsHTTPOrHTTPS()) {
       throttles.push_back(MergeSessionNavigationThrottle::Create(handle));
     }
@@ -2976,6 +2968,20 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
   if (!handle->IsInMainFrame())
     throttles.push_back(new extensions::ExtensionNavigationThrottle(handle));
 #endif
+
+  subresource_filter::ContentSubresourceFilterDriverFactory*
+      subresource_filter_driver_factory =
+          subresource_filter::ContentSubresourceFilterDriverFactory::
+              FromWebContents(handle->GetWebContents());
+  if (subresource_filter_driver_factory && handle->IsInMainFrame() &&
+      handle->GetURL().SchemeIsHTTPOrHTTPS()) {
+    // TODO(melandory): Activation logic should be moved to the
+    // WebContentsObserver, once ReadyToCommitNavigation is available on
+    // pre-PlzNavigate world (tracking bug: https://crbug.com/621856).
+    throttles.push_back(
+        subresource_filter::SubresourceFilterNavigationThrottle::Create(
+            handle));
+  }
 
   return throttles;
 }

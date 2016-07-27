@@ -174,8 +174,25 @@ cr.define('md_history.history_list_test', function() {
           });
         });
 
-        element.$.sharedMenu.itemData = {domain: 'example.com'};
-        MockInteractions.tap(element.$.menuMoreButton);
+        app.$['history'].$.sharedMenu.itemData = {domain: 'example.com'};
+        MockInteractions.tap(app.$['history'].$.menuMoreButton);
+      });
+
+      test('scrolling history list closes overflow menu', function() {
+        var sharedMenu = app.$.history.$.sharedMenu;
+        for (var i = 0; i < 10; i++)
+          app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+
+        return flush().then(function() {
+          items = Polymer.dom(element.root).querySelectorAll('history-item');
+
+          MockInteractions.tap(items[2].$['menu-button']);
+          assertTrue(sharedMenu.menuOpen);
+          element.$['infinite-list'].scrollTop = 100;
+          return flush();
+        }).then(function() {
+          assertFalse(sharedMenu.menuOpen);
+        });
       });
 
       test('changing search deselects items', function() {
@@ -225,6 +242,45 @@ cr.define('md_history.history_list_test', function() {
           MockInteractions.tap(app.$.toolbar.$$('#delete-button'));
 
           // Confirmation dialog should appear.
+          assertTrue(listContainer.$.dialog.opened);
+
+          MockInteractions.tap(listContainer.$$('.action-button'));
+        });
+      });
+
+      test('deleting items using shortcuts', function(done) {
+        var listContainer = app.$.history;
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+        flush().then(function() {
+          items = Polymer.dom(element.root).querySelectorAll('history-item');
+
+          // Dialog should not appear when there is no item selected.
+          MockInteractions.pressAndReleaseKeyOn(
+            document.body, 46, '', 'Delete');
+          assertFalse(listContainer.$.dialog.opened);
+
+          MockInteractions.tap(items[1].$.checkbox);
+          MockInteractions.tap(items[2].$.checkbox);
+
+          assertEquals(2, toolbar.count);
+
+          registerMessageCallback('removeVisits', this, function(toRemove) {
+            assertEquals('https://www.example.com', toRemove[0].url);
+            assertEquals('https://www.google.com', toRemove[1].url);
+            assertEquals('2016-03-14 10:00 UTC', toRemove[0].timestamps[0]);
+            assertEquals('2016-03-14 9:00 UTC', toRemove[1].timestamps[0]);
+            done();
+          });
+
+          MockInteractions.pressAndReleaseKeyOn(
+            document.body, 46, '', 'Delete');
+          assertTrue(listContainer.$.dialog.opened);
+
+          MockInteractions.tap(listContainer.$$('.cancel-button'));
+          assertFalse(listContainer.$.dialog.opened);
+
+          MockInteractions.pressAndReleaseKeyOn(
+            document.body, 8, '', 'Backspace');
           assertTrue(listContainer.$.dialog.opened);
 
           MockInteractions.tap(listContainer.$$('.action-button'));

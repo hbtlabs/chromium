@@ -73,27 +73,7 @@ using testing::Mock;
 namespace cc {
 namespace {
 
-class LayerTreeHostTest : public LayerTreeTest {
- protected:
-  // These tests are not pixel tests, and they use a fake output surface,
-  // while storing pointers to the test-types for tests to poke at.
-  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    auto context = TestContextProvider::Create();
-    context_provider_ = context.get();
-    auto ret = delegating_renderer()
-                   ? FakeOutputSurface::CreateDelegating3d(std::move(context))
-                   : FakeOutputSurface::Create3d(std::move(context));
-    output_surface_ = ret.get();
-    return std::move(ret);
-  }
-
-  FakeOutputSurface* fake_output_surface() { return output_surface_; }
-  TestContextProvider* test_context_provider() { return context_provider_; }
-
- private:
-  FakeOutputSurface* output_surface_ = nullptr;
-  TestContextProvider* context_provider_ = nullptr;
-};
+class LayerTreeHostTest : public LayerTreeTest {};
 
 class LayerTreeHostTestHasImplThreadTest : public LayerTreeHostTest {
  public:
@@ -992,6 +972,9 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
   void SetupTree() override {
     root_ = Layer::Create();
     layer_tree_host()->SetRootLayer(root_);
+    blur_filter_.Append(FilterOperation::CreateBlurFilter(0.5f));
+    brightness_filter_.Append(FilterOperation::CreateBrightnessFilter(0.25f));
+    sepia_filter_.Append(FilterOperation::CreateSepiaFilter(0.75f));
     LayerTreeHostTest::SetupTree();
   }
 
@@ -1014,6 +997,21 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
       case 4:
         node->opacity = 0.25f;
         node->is_currently_animating_opacity = true;
+        break;
+      case 5:
+        node->filters = blur_filter_;
+        node->is_currently_animating_filter = true;
+        break;
+      case 6:
+        node->is_currently_animating_filter = true;
+        break;
+      case 7:
+        node->is_currently_animating_filter = false;
+        break;
+      case 8:
+        node->filters = sepia_filter_;
+        node->is_currently_animating_filter = true;
+        break;
     }
   }
 
@@ -1041,6 +1039,26 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
         break;
       case 4:
         EXPECT_EQ(node->opacity, 0.25f);
+        impl->sync_tree()->root_layer_for_testing()->OnFilterAnimated(
+            brightness_filter_);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 5:
+        EXPECT_EQ(node->filters, brightness_filter_);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 6:
+        EXPECT_EQ(node->filters, brightness_filter_);
+        impl->sync_tree()->root_layer_for_testing()->OnFilterAnimated(
+            brightness_filter_);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 7:
+        EXPECT_EQ(node->filters, blur_filter_);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 8:
+        EXPECT_EQ(node->filters, sepia_filter_);
         EndTest();
         break;
     }
@@ -1050,6 +1068,9 @@ class LayerTreeHostTestEffectTreeSync : public LayerTreeHostTest {
 
  private:
   scoped_refptr<Layer> root_;
+  FilterOperations blur_filter_;
+  FilterOperations brightness_filter_;
+  FilterOperations sepia_filter_;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestEffectTreeSync);
@@ -2938,7 +2959,9 @@ class LayerTreeHostTestUIResource : public LayerTreeHostTest {
   }
 
   void DidActivateTreeOnThread(LayerTreeHostImpl* impl) override {
-    auto* context = test_context_provider()->TestContext3d();
+    auto* context = static_cast<TestContextProvider*>(
+                        impl->output_surface()->context_provider())
+                        ->TestContext3d();
 
     int frame = impl->active_tree()->source_frame_number();
     switch (frame) {
@@ -3999,13 +4022,13 @@ class LayerTreeHostTestTreeActivationCallback : public LayerTreeHostTest {
       case 1:
         EXPECT_EQ(0, callback_count_);
         callback_count_ = 0;
-        SetCallback(true);
+        SetCallback(host_impl, true);
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
         EXPECT_EQ(1, callback_count_);
         callback_count_ = 0;
-        SetCallback(false);
+        SetCallback(host_impl, false);
         PostSetNeedsCommitToMainThread();
         break;
       case 3:
@@ -4024,8 +4047,8 @@ class LayerTreeHostTestTreeActivationCallback : public LayerTreeHostTest {
 
   void AfterTest() override { EXPECT_EQ(3, num_commits_); }
 
-  void SetCallback(bool enable) {
-    fake_output_surface()->SetTreeActivationCallback(
+  void SetCallback(LayerTreeHostImpl* host_impl, bool enable) {
+    host_impl->SetTreeActivationCallback(
         enable
             ? base::Bind(
                   &LayerTreeHostTestTreeActivationCallback::ActivationCallback,
@@ -4619,9 +4642,9 @@ class LayerTreeHostTestKeepSwapPromise : public LayerTreeHostTest {
         base::AutoLock lock(swap_promise_result_.lock);
         EXPECT_FALSE(swap_promise_result_.did_activate_called);
         EXPECT_FALSE(swap_promise_result_.did_swap_called);
-        SetCallback(true);
+        SetCallback(host_impl, true);
       } else {
-        SetCallback(false);
+        SetCallback(host_impl, false);
       }
     }
   }
@@ -4640,8 +4663,8 @@ class LayerTreeHostTestKeepSwapPromise : public LayerTreeHostTest {
     EXPECT_TRUE(swap_promise_result_.did_activate_called);
   }
 
-  void SetCallback(bool enable) {
-    fake_output_surface()->SetTreeActivationCallback(
+  void SetCallback(LayerTreeHostImpl* host_impl, bool enable) {
+    host_impl->SetTreeActivationCallback(
         enable
             ? base::Bind(&LayerTreeHostTestKeepSwapPromise::ActivationCallback,
                          base::Unretained(this))
@@ -6763,6 +6786,14 @@ MULTI_THREAD_TEST_F(LayerTreeHostTestDestroyWhileInitializingOutputSurface);
 // frame's metadata.
 class LayerTreeHostTestPaintedDeviceScaleFactor : public LayerTreeHostTest {
  protected:
+  LayerTreeHostTestPaintedDeviceScaleFactor() = default;
+
+  std::unique_ptr<OutputSurface> CreateOutputSurface() override {
+    auto ret = FakeOutputSurface::CreateDelegating3d();
+    fake_output_surface_ = ret.get();
+    return std::move(ret);
+  }
+
   void BeginTest() override {
     layer_tree_host()->SetPaintedDeviceScaleFactor(2.0f);
     EXPECT_EQ(1.0f, layer_tree_host()->device_scale_factor());
@@ -6777,11 +6808,13 @@ class LayerTreeHostTestPaintedDeviceScaleFactor : public LayerTreeHostTest {
   void SwapBuffersCompleteOnThread() override {
     EXPECT_EQ(
         2.0f,
-        fake_output_surface()->last_sent_frame()->metadata.device_scale_factor);
+        fake_output_surface_->last_sent_frame()->metadata.device_scale_factor);
     EndTest();
   }
 
   void AfterTest() override {}
+
+  FakeOutputSurface* fake_output_surface_ = nullptr;
 };
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPaintedDeviceScaleFactor);

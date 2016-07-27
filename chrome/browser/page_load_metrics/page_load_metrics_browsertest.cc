@@ -17,6 +17,10 @@ class MetricsWebContentsObserverBrowserTest : public InProcessBrowserTest {
   ~MetricsWebContentsObserverBrowserTest() override {}
 
  protected:
+  void NavigateToUntrackedUrl() {
+    ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  }
+
   base::HistogramTester histogram_tester_;
 
   DISALLOW_COPY_AND_ASSIGN(MetricsWebContentsObserverBrowserTest);
@@ -36,8 +40,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest, NewPage) {
 
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramDomContentLoaded, 1);
   histogram_tester_.ExpectTotalCount(internal::kHistogramLoad, 1);
@@ -55,8 +58,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
                                embedded_test_server()->GetURL("/title1.html"));
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html#hash"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramDomContentLoaded, 1);
   histogram_tester_.ExpectTotalCount(internal::kHistogramLoad, 1);
@@ -71,8 +73,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
                                embedded_test_server()->GetURL("/title1.html"));
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   // We expect one histogram sample for each navigation to title1.html.
   histogram_tester_.ExpectTotalCount(internal::kHistogramCommit, 2);
@@ -87,8 +88,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
 
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/simple.svg"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title1.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramCommit, 0);
 }
@@ -98,8 +98,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIVersionURL));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title1.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(internal::kHistogramCommit, 0);
 }
@@ -111,8 +110,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_external_script.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 1);
@@ -125,8 +123,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_no_script.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 0);
@@ -137,8 +134,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest, NoDocumentWrite) {
 
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/title1.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteParseStartToFirstContentfulPaint, 0);
   histogram_tester_.ExpectTotalCount(
@@ -152,9 +148,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_script_block.html"));
-
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 1);
@@ -180,8 +174,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 1);
 
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 1);
@@ -197,8 +190,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_script_async.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
@@ -211,8 +203,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_external_script.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);
@@ -225,8 +216,7 @@ IN_PROC_BROWSER_TEST_F(MetricsWebContentsObserverBrowserTest,
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/page_load_metrics/document_write_no_script.html"));
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/title2.html"));
+  NavigateToUntrackedUrl();
 
   histogram_tester_.ExpectTotalCount(
       internal::kHistogramDocWriteBlockParseStartToFirstContentfulPaint, 0);

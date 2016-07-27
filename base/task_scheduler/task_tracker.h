@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_base.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task_scheduler/scheduler_lock.h"
+#include "base/task_scheduler/sequence.h"
 #include "base/task_scheduler/task.h"
 #include "base/task_scheduler/task_traits.h"
 
@@ -40,16 +41,21 @@ class BASE_EXPORT TaskTracker {
   // this operation is allowed (|task| should be posted if-and-only-if it is).
   bool WillPostTask(const Task* task);
 
-  // Runs |task| unless the current shutdown state prevents that. WillPostTask()
-  // must have allowed |task| to be posted.
-  void RunTask(const Task* task);
+  // Runs the next Task in |sequence| unless the current shutdown state prevents
+  // that. WillPostTask() must have allowed the Task to be posted.
+  void RunNextTaskInSequence(const Sequence* sequence);
 
-  // Returns true if shutdown has completed.
+  // Returns true once shutdown has started (Shutdown() has been called but
+  // might not have returned).
+  bool HasShutdownStarted() const;
+
+  // Returns true if shutdown has completed (Shutdown() has returned).
   bool IsShutdownComplete() const;
 
-  // Returns true while shutdown is in progress (i.e. Shutdown() has been called
-  // but hasn't returned).
-  bool IsShuttingDownForTesting() const;
+  // Causes HasShutdownStarted() to return true. Unlike when Shutdown() returns,
+  // IsShutdownComplete() won't return true after this returns. Shutdown()
+  // cannot be called after this.
+  void SetHasShutdownStartedForTesting();
 
  private:
   class State;

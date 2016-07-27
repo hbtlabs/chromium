@@ -53,9 +53,6 @@ class ArcBridgeService {
     virtual void OnBridgeReady() {}
     virtual void OnBridgeStopped(StopReason reason) {}
 
-    // Called whenever ARC's availability has changed for this system.
-    virtual void OnAvailableChanged(bool available) {}
-
    protected:
     virtual ~Observer() {}
   };
@@ -70,13 +67,8 @@ class ArcBridgeService {
   // switch.
   static bool GetEnabled(const base::CommandLine* command_line);
 
-  // SetDetectedAvailability() should be called once CheckArcAvailability() on
-  // the session_manager is called. This can only be called on the thread that
-  // this class was created on.
-  virtual void SetDetectedAvailability(bool availability) = 0;
-
   // HandleStartup() should be called upon profile startup.  This will only
-  // launch an instance if the instance service is available and it is enabled.
+  // launch an instance if the instance is enabled.
   // This can only be called on the thread that this class was created on.
   virtual void HandleStartup() = 0;
 
@@ -97,6 +89,9 @@ class ArcBridgeService {
   InstanceHolder<mojom::ClipboardInstance>* clipboard() { return &clipboard_; }
   InstanceHolder<mojom::CrashCollectorInstance>* crash_collector() {
     return &crash_collector_;
+  }
+  InstanceHolder<mojom::EnterpriseReportingInstance>* enterprise_reporting() {
+    return &enterprise_reporting_;
   }
   InstanceHolder<mojom::FileSystemInstance>* file_system() {
     return &file_system_;
@@ -120,12 +115,6 @@ class ArcBridgeService {
     return &storage_manager_;
   }
   InstanceHolder<mojom::VideoInstance>* video() { return &video_; }
-  InstanceHolder<mojom::WindowManagerInstance>* window_manager() {
-    return &window_manager_;
-  }
-
-  // Gets if ARC is available in this system.
-  bool available() const { return available_; }
 
   // Gets if ARC is currently running.
   bool ready() const { return state() == State::READY; }
@@ -179,6 +168,7 @@ class ArcBridgeService {
   InstanceHolder<mojom::BluetoothInstance> bluetooth_;
   InstanceHolder<mojom::ClipboardInstance> clipboard_;
   InstanceHolder<mojom::CrashCollectorInstance> crash_collector_;
+  InstanceHolder<mojom::EnterpriseReportingInstance> enterprise_reporting_;
   InstanceHolder<mojom::FileSystemInstance> file_system_;
   InstanceHolder<mojom::ImeInstance> ime_;
   InstanceHolder<mojom::IntentHelperInstance> intent_helper_;
@@ -191,16 +181,12 @@ class ArcBridgeService {
   InstanceHolder<mojom::ProcessInstance> process_;
   InstanceHolder<mojom::StorageManagerInstance> storage_manager_;
   InstanceHolder<mojom::VideoInstance> video_;
-  InstanceHolder<mojom::WindowManagerInstance> window_manager_;
 
   // Gets the current state of the bridge service.
   State state() const { return state_; }
 
   // Changes the current state and notifies all observers.
   void SetState(State state);
-
-  // Changes the current availability and notifies all observers.
-  void SetAvailable(bool availability);
 
   // Sets the reason the bridge is stopped. This function must be always called
   // before SetState(State::STOPPED) to report a correct reason with
@@ -222,9 +208,6 @@ class ArcBridgeService {
   base::ObserverList<Observer> observer_list_;
 
   base::ThreadChecker thread_checker_;
-
-  // If the ARC instance service is available.
-  bool available_;
 
   // The current state of the bridge.
   ArcBridgeService::State state_;

@@ -45,6 +45,7 @@
 #include "chrome/renderer/net/net_error_helper.h"
 #include "chrome/renderer/net_benchmarking_extension.h"
 #include "chrome/renderer/page_load_histograms.h"
+#include "chrome/renderer/page_load_metrics/metrics_render_frame_observer.h"
 #include "chrome/renderer/pepper/pepper_helper.h"
 #include "chrome/renderer/plugins/non_loadable_plugin_placeholder.h"
 #include "chrome/renderer/plugins/plugin_preroller.h"
@@ -70,7 +71,6 @@
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
-#include "components/page_load_metrics/renderer/metrics_render_frame_observer.h"
 #include "components/password_manager/content/renderer/credential_manager_client.h"
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/plugins/renderer/mobile_youtube_plugin.h"
@@ -1065,13 +1065,6 @@ bool ChromeContentRendererClient::ShouldFork(WebLocalFrame* frame,
     *send_referrer = true;
     return true;
   }
-
-  // For now, we skip the rest for POST submissions.  This is because
-  // http://crbug.com/101395 is more likely to cause compatibility issues
-  // with hosted apps and extensions than WebUI pages.  We will remove this
-  // check when cross-process POST submissions are supported.
-  if (http_method != "GET")
-    return false;
 
   // If |url| matches one of the prerendered URLs, stop this navigation and try
   // to swap in the prerendered page on the browser process. If the prerendered

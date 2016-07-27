@@ -45,27 +45,6 @@ class MAYBE_WebRtcBrowserTest : public WebRtcContentBrowserTest {
   void MakeTypicalPeerConnectionCall(const std::string& javascript) {
     MakeTypicalCall(javascript, "/media/peerconnection-call.html");
   }
-
-  // Convenience method for making calls that detect if audio os playing (which
-  // has some special prerequisites, such that there needs to be an audio output
-  // device on the executing machine).
-  void MakeAudioDetectingPeerConnectionCall(const std::string& javascript) {
-    if (!media::AudioManager::Get()->HasAudioOutputDevices()) {
-      // Bots with no output devices will force the audio code into a state
-      // where it doesn't manage to set either the low or high latency path.
-      // This test will compute useless values in that case, so skip running on
-      // such bots (see crbug.com/326338).
-      LOG(INFO) << "Missing output devices: skipping test...";
-      return;
-    }
-
-    ASSERT_TRUE(base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kUseFakeDeviceForMediaStream))
-            << "Must run with fake devices since the test will explicitly look "
-            << "for the fake device signal.";
-
-    MakeTypicalPeerConnectionCall(javascript);
-  }
 };
 
 // These tests will make a complete PeerConnection-based call and verify that
@@ -134,19 +113,11 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
   MakeTypicalPeerConnectionCall(kJavascript);
 }
 
-// Causes asserts in libjingle: http://crbug.com/484826.
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       DISABLED_CanMakeAudioCallAndThenRenegotiateToVideo) {
+                       CanMakeAudioCallAndThenRenegotiateToVideo) {
   const char* kJavascript =
       "callAndRenegotiateToVideo({audio: true}, {audio: true, video:true});";
   MakeTypicalPeerConnectionCall(kJavascript);
-}
-
-// Causes asserts in libjingle: http://crbug.com/484826.
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       DISABLED_CanMakeVideoCallAndThenRenegotiateToAudio) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndRenegotiateToAudio({audio: true, video:true}, {audio: true});");
 }
 
 // This test makes a call between pc1 and pc2 where a video only stream is sent
@@ -198,54 +169,6 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, NegotiateOfferWithBLine) {
   MakeTypicalPeerConnectionCall("negotiateOfferWithBLine();");
 }
 
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CanSetupLegacyCall) {
-  MakeTypicalPeerConnectionCall("callWithLegacySdp();");
-}
-
-// This test will make a PeerConnection-based call and test an unreliable text
-// dataChannel.
-// TODO(mallinath) - Remove this test after rtp based data channel is disabled.
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CallWithDataOnly) {
-  MakeTypicalPeerConnectionCall("callWithDataOnly();");
-}
-
-#if defined(MEMORY_SANITIZER)
-// Fails under MemorySanitizer: http://crbug.com/405951
-#define MAYBE_CallWithSctpDataOnly DISABLED_CallWithSctpDataOnly
-#else
-#define MAYBE_CallWithSctpDataOnly CallWithSctpDataOnly
-#endif
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, MAYBE_CallWithSctpDataOnly) {
-  MakeTypicalPeerConnectionCall("callWithSctpDataOnly();");
-}
-
-// This test will make a PeerConnection-based call and test an unreliable text
-// dataChannel and audio and video tracks.
-// TODO(mallinath) - Remove this test after rtp based data channel is disabled.
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CallWithDataAndMedia) {
-  MakeTypicalPeerConnectionCall("callWithDataAndMedia();");
-}
-
-
-#if defined(MEMORY_SANITIZER)
-// Fails under MemorySanitizer: http://crbug.com/405951
-#define MAYBE_CallWithSctpDataAndMedia DISABLED_CallWithSctpDataAndMedia
-#else
-#define MAYBE_CallWithSctpDataAndMedia CallWithSctpDataAndMedia
-#endif
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       MAYBE_CallWithSctpDataAndMedia) {
-  MakeTypicalPeerConnectionCall("callWithSctpDataAndMedia();");
-}
-
-// This test will make a PeerConnection-based call and test an unreliable text
-// dataChannel and later add an audio and video track.
-// Doesn't work, therefore disabled: https://crbug.com/293252.
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       DISABLED_CallWithDataAndLaterAddMedia) {
-  MakeTypicalPeerConnectionCall("callWithDataAndLaterAddMedia();");
-}
-
 // This test will make a PeerConnection-based call and send a new Video
 // MediaStream that has been created based on a MediaStream created with
 // getUserMedia.
@@ -265,54 +188,6 @@ IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CallAndModifyStream) {
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, AddTwoMediaStreamsToOnePC) {
   MakeTypicalPeerConnectionCall("addTwoMediaStreamsToOneConnection();");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishAudioVideoCallAndEnsureAudioIsPlaying) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureAudioIsPlaying({audio:true, video:true});");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishAudioOnlyCallAndEnsureAudioIsPlaying) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureAudioIsPlaying({audio:true});");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishIsac16KCallAndEnsureAudioIsPlaying) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callWithIsac16KAndEnsureAudioIsPlaying({audio:true});");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishAudioVideoCallAndVerifyRemoteMutingWorks) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureRemoteAudioTrackMutingWorks();");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishAudioVideoCallAndVerifyLocalMutingWorks) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureLocalAudioTrackMutingWorks();");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EnsureLocalVideoMuteDoesntMuteAudio) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureLocalVideoMutingDoesntMuteAudio();");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EnsureRemoteVideoMuteDoesntMuteAudio) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureRemoteVideoMutingDoesntMuteAudio();");
-}
-
-IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest,
-                       EstablishAudioVideoCallAndVerifyUnmutingWorks) {
-  MakeAudioDetectingPeerConnectionCall(
-      "callAndEnsureAudioTrackUnmutingWorks();");
 }
 
 IN_PROC_BROWSER_TEST_F(MAYBE_WebRtcBrowserTest, CallAndVerifyVideoMutingWorks) {

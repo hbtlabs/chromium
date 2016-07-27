@@ -22,13 +22,6 @@
       Se for definida como "true" ou não for configurada, as estatísticas serão informadas.</translation>
 <translation id="1046484220783400299">Ativar por um tempo limitado recursos da plataforma Web cujo uso esteja suspenso</translation>
 <translation id="1047128214168693844">Não permitir que nenhum site rastreie a localização física dos usuários</translation>
-<translation id="1057535219415338480">Ativa as sugestões de rede no <ph name="PRODUCT_NAME" /> e impede que os usuários alterem essa configuração.
-
-      Controla não apenas a pré-busca de DNS, mas também a pré-conexão de SSL e o pré-processamento de páginas da Web. O nome da política se refere apenas à pré-busca de DNS por razões históricas.
-
-      Se você ativar ou desativar essa configuração, os usuários não poderão alterá-la ou substituí-la no <ph name="PRODUCT_NAME" />.
-
-      Se essa política não for definida, ela ficará ativada, e o usuário poderá alterá-la.</translation>
 <translation id="1062011392452772310">Ativar declaração remota para o dispositivo</translation>
 <translation id="1090892140761957285">URL para validação do token de autenticação de cliente de acesso remoto.
 
@@ -640,6 +633,7 @@ Se esta política não for definida, 'AllowPlugins' será usada, e o usuário po
 <translation id="3030000825273123558">Ativa relatórios de métricas</translation>
 <translation id="3034580675120919256">Permite que você defina se os websites estão autorizados a executar JavaScript. O JavaScript em execução pode ser permitido ou negado para todos os websites. Se esta política for deixada sem definição, a política "AllowJavaScript" será utilizada, podendo ser modificada pelo usuário.</translation>
 <translation id="3038323923255997294">Continua executando os aplicativos em segundo plano quando o <ph name="PRODUCT_NAME" /> é fechado</translation>
+<translation id="3046192273793919231">Enviar pacotes de rede ao servidor de gerenciamento para monitorar o status on-line</translation>
 <translation id="3048744057455266684">Se esta política estiver definida e um URL de pesquisa sugerido pela omnibox tiver esse parâmetro na string de consulta ou no identificador do fragmento, a sugestão mostrará os termos de pesquisa e o provedor de pesquisa no lugar do URL bruto da pesquisa.
 
           Esta política é opcional. Se não for definida, não ocorrerá substituição do termo de pesquisa.
@@ -900,6 +894,11 @@ Se esta política não for definida, 'AllowPlugins' será usada, e o usuário po
 
          Se não está definida como "false", os usuários podem transferir arquivos para o Google Drive.</translation>
 <translation id="3915395663995367577">URL de um arquivo proxy .pac</translation>
+<translation id="3939893074578116847">Enviar pacotes de rede ao servidor de gerenciamento para monitorar o status on-line, a fim de permitir
+      que o servidor detecte se o dispositivo está off-line.
+
+      Se esta política for definida como true, pacotes de monitoramento de rede (os chamados <ph name="HEARTBEATS_TERM" />) serão enviados.
+      Se definida como false ou não configurada, nenhum pacote será enviado.</translation>
 <translation id="3964909636571393861">Permite acesso a uma lista de URLs</translation>
 <translation id="3965339130942650562">Tempo limite até que a saída do usuário ocioso seja executada</translation>
 <translation id="3967075520570946456">Ativar a exibição da página de boas-vindas na primeira inicialização do navegador após a atualização do sistema operacional.</translation>
@@ -1217,6 +1216,11 @@ Se esta política não for definida, 'AllowPlugins' será usada, e o usuário po
       Se esta política for definida, automaticamente ocorrerá o login na sessão especificada após haver transcorrido um período sem interação do usuário na tela de login. A sessão pública já deve estar configurada (consulte |DeviceLocalAccounts|).
 
       Se esta política não for definida, não ocorrerá login automático.</translation>
+<translation id="5535957389335373033">Frequência com que os pacotes de monitoramento de rede são enviados, em milissegundos.
+
+      Se esta política for configurada, a frequência padrão é de três minutos. A frequência
+      mínima é de 30 segundos, e a frequência máxima é de 24 horas. Valores
+      fora desse intervalo são fixados nessa faixa.</translation>
 <translation id="5535973522252703021">Lista branca do servidor de delegação Kerberos</translation>
 <translation id="5560039246134246593">Adicionar um parâmetro para buscar o termo-semente "Variações" no <ph name="PRODUCT_NAME" />.
 
@@ -1761,7 +1765,6 @@ Se esta política não for definida, 'AllowPlugins' será usada, e o usuário po
       Se esta política não for configurada, a limpeza automática usa a estratégia integrada padrão, que atualmente é a estratégia "RemoveLRUIfDormant".</translation>
 <translation id="7336878834592315572">Manter cookies enquanto durar a sessão</translation>
 <translation id="7340034977315324840">Informar horário das atividades do dispositivo</translation>
-<translation id="7381326101471547614">Desativa o uso do protocolo SPDY no <ph name="PRODUCT_NAME" />. Se essa política estiver ativada, o protocolo SPDY não estará disponível no <ph name="PRODUCT_NAME" />. A configuração dessa política para desativada permitirá o uso do SPDY. Se essa política for deixada sem configuração, o SPDY estará disponível.</translation>
 <translation id="7384999953864505698">Permite o protocolo QUIC</translation>
 <translation id="7406651467768226499">Permitir que o app em Kiosk aberto automaticamente com zero de atraso controle a versão do <ph name="PRODUCT_OS_NAME" />.
 
@@ -2332,6 +2335,7 @@ Se esta política não for definida, 'AllowPlugins' será usada, e o usuário po
 <translation id="9187743794267626640">Desativa a montagem de armazenamento externo</translation>
 <translation id="9197740283131855199">Percentual pelo qual calcular o intervalo de escurecimento da tela se o usuário ficar ativo após o escurecimento</translation>
 <translation id="9200828125069750521">Parâmetros para URL de imagens que usa POST</translation>
+<translation id="9217154963008402249">Frequência de pacotes de monitoramento de rede</translation>
 <translation id="922540222991413931">Configurar extensão, aplicativo e origens de instalação do script do usuário</translation>
 <translation id="924557436754151212">Importar senhas salvas do navegador padrão na primeira execução</translation>
 <translation id="930930237275114205">Configura o diretório de dados do usuário do <ph name="PRODUCT_FRAME_NAME" /></translation>

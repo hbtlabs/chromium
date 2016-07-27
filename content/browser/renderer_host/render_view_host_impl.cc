@@ -370,7 +370,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params.min_size = GetWidget()->min_size_for_auto_resize();
   params.max_size = GetWidget()->max_size_for_auto_resize();
   params.page_zoom_level = delegate_->GetPendingPageZoomLevel();
-  params.image_decode_color_space = gfx::ColorSpace::FromBestMonitor();
+  params.image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
   GetWidget()->GetResizeParams(&params.initial_size);
 
   if (!Send(new ViewMsg_New(params)))
@@ -1120,16 +1120,6 @@ bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     return false;
   }
   return true;
-}
-
-void RenderViewHostImpl::OnTextSurroundingSelectionResponse(
-    const base::string16& content,
-    size_t start_offset,
-    size_t end_offset) {
-  if (!GetWidget()->GetView())
-    return;
-  GetWidget()->GetView()->OnTextSurroundingSelectionResponse(
-      content, start_offset, end_offset);
 }
 
 WebPreferences RenderViewHostImpl::GetWebkitPreferences() {

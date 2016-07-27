@@ -24,7 +24,6 @@
 #include "components/arc/power/arc_power_bridge.h"
 #include "components/arc/storage_manager/arc_storage_manager.h"
 #include "components/arc/user_data/arc_user_data_service.h"
-#include "components/arc/window_manager/arc_window_manager_bridge.h"
 #include "components/prefs/pref_member.h"
 #include "ui/arc/notification/arc_notification_manager.h"
 
@@ -101,27 +100,17 @@ void ArcServiceManager::OnPrimaryUserProfilePrepared(
     std::unique_ptr<BooleanPrefMember> arc_enabled_pref) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  AddService(base::WrapUnique(new ArcUserDataService(
-      arc_bridge_service(), std::move(arc_enabled_pref), account_id)));
+  arc_user_data_service_.reset(new ArcUserDataService(arc_bridge_service(),
+      std::move(arc_enabled_pref), account_id));
 
   AddService(base::WrapUnique(
       new ArcNotificationManager(arc_bridge_service(), account_id)));
 }
 
-void ArcServiceManager::OnAshStarted() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // We might come here multiple times. As such we should only do this once.
-  if (on_ash_started_called_)
-    return;
-
-  on_ash_started_called_ = true;
-  AddService(
-      base::WrapUnique(new ArcWindowManagerBridge(arc_bridge_service())));
-}
-
 void ArcServiceManager::Shutdown() {
   icon_loader_ = nullptr;
   activity_resolver_ = nullptr;
+  arc_user_data_service_ = nullptr;
   services_.clear();
 }
 

@@ -21,6 +21,7 @@ namespace arc {
 
 class ArcBridgeService;
 class ArcService;
+class ArcUserDataService;
 
 // Manages creation and destruction of services that communicate with the ARC
 // instance via the ArcBridgeService.
@@ -46,9 +47,6 @@ class ArcServiceManager {
       const AccountId& account_id,
       std::unique_ptr<BooleanPrefMember> arc_enabled_pref);
 
-  // Called once the windowing system (ash) has been started.
-  void OnAshStarted();
-
   // Called to shut down all ARC services.
   void Shutdown();
 
@@ -69,6 +67,10 @@ class ArcServiceManager {
     return activity_resolver_;
   }
 
+  ArcUserDataService* arc_user_data_service() {
+    return arc_user_data_service_.get();
+  }
+
  private:
   base::ThreadChecker thread_checker_;
   scoped_refptr<base::TaskRunner> blocking_task_runner_;
@@ -77,10 +79,7 @@ class ArcServiceManager {
   std::vector<std::unique_ptr<ArcService>> services_;
   scoped_refptr<ActivityIconLoader> icon_loader_;
   scoped_refptr<LocalActivityResolver> activity_resolver_;
-
-  // True once the window manager service got added, barring adding any more
-  // of those since OnAshStarted() might be called multiple times.
-  bool on_ash_started_called_ = false;
+  std::unique_ptr<ArcUserDataService> arc_user_data_service_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcServiceManager);
 };

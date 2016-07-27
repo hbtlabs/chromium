@@ -64,7 +64,7 @@ class CONTENT_EXPORT CompositorImpl
   static bool IsInitialized();
 
   static cc::SurfaceManager* GetSurfaceManager();
-  static std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator();
+  static uint32_t AllocateSurfaceClientId();
 
   static scoped_refptr<cc::VulkanInProcessContextProvider>
   SharedVulkanContextProviderAndroid();
@@ -130,7 +130,6 @@ class CONTENT_EXPORT CompositorImpl
 
   // root_layer_ is the persistent internal root layer, while subroot_layer_
   // is the one attached by the compositor client.
-  scoped_refptr<cc::Layer> root_layer_;
   scoped_refptr<cc::Layer> subroot_layer_;
 
   // Destruction order matters here:

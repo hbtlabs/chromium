@@ -26,7 +26,6 @@
 # (INCLUDING NEGLIGENCE OR/ OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 from __future__ import print_function
 import json
 import logging
@@ -37,43 +36,15 @@ import time
 import traceback
 import urllib2
 
-from webkitpy.common.checkout.baselineoptimizer import BaselineOptimizer
 from webkitpy.common.memoized import memoized
+from webkitpy.common.net.buildbot import Build
 from webkitpy.common.system.executive import ScriptError
-from webkitpy.layout_tests.controllers.test_result_writer import baseline_name
 from webkitpy.layout_tests.models.test_expectations import TestExpectations, BASELINE_SUFFIX_LIST, SKIP
 from webkitpy.layout_tests.port import factory
 from webkitpy.tool.commands.command import Command
 
 
 _log = logging.getLogger(__name__)
-
-
-class Build(object):
-    """Represents a combination of builder and build number.
-
-    If build number is None, this represents the latest build
-    for a given builder.
-
-    TODO(qyearsley): Move this somewhere else; note it's very similar to TryJob,
-    and it seems like it might belong in the buildbot module.
-    TODO(qyearsley): Make this a subclass of namedtuple so that __hash__,
-    __eq__ and __cmp__ don't need to be explicitly added.
-    """
-    def __init__(self, builder_name, build_number=None):
-        self.builder_name = builder_name
-        self.build_number = build_number
-
-    # Having __hash__ and __eq__ allow instances of this class to be used
-    # as keys in dictionaries.
-    def __hash__(self):
-        return hash((self.builder_name, self.build_number))
-
-    def __eq__(self, other):
-        return (self.builder_name, self.build_number) == (other.builder_name, other.build_number)
-
-    def __cmp__(self, other):
-        return cmp((self.builder_name, self.build_number), (other.builder_name, other.build_number))
 
 
 class AbstractRebaseliningCommand(Command):
@@ -95,13 +66,6 @@ class AbstractRebaseliningCommand(Command):
         super(AbstractRebaseliningCommand, self).__init__(options=options)
         self._baseline_suffix_list = BASELINE_SUFFIX_LIST
         self._scm_changes = {'add': [], 'delete': [], 'remove-lines': []}
-
-    def _results_url(self, builder_name, build_number=None):
-        builder = self._tool.buildbot.builder_with_name(builder_name)
-        if build_number:
-            build = builder.build(build_number)
-            return build.results_url()
-        return builder.latest_layout_test_results_url()
 
     def _add_to_scm_later(self, path):
         self._scm_changes['add'].append(path)
@@ -252,7 +216,7 @@ class RebaselineTest(BaseInternalRebaselineCommand):
         if options.results_directory:
             results_url = 'file://' + options.results_directory
         else:
-            results_url = self._results_url(options.builder, build_number=options.build_number)
+            results_url = self._tool.buildbot.results_url(options.builder, build_number=options.build_number)
 
         for suffix in self._baseline_suffix_list:
             self._rebaseline_test(options.builder, options.test, suffix, results_url)
@@ -260,49 +224,6 @@ class RebaselineTest(BaseInternalRebaselineCommand):
 
     def execute(self, options, args, tool):
         self._rebaseline_test_and_update_expectations(options)
-        self._print_scm_changes()
-
-
-class OptimizeBaselines(AbstractRebaseliningCommand):
-    name = "optimize-baselines"
-    help_text = "Reshuffles the baselines for the given tests to use as litte space on disk as possible."
-    show_in_main_help = True
-    argument_names = "TEST_NAMES"
-
-    def __init__(self):
-        super(OptimizeBaselines, self).__init__(options=[
-            self.suffixes_option,
-            optparse.make_option('--no-modify-scm', action='store_true', default=False,
-                                 help='Dump SCM commands as JSON instead of actually committing changes.'),
-        ] + self.platform_options)
-
-    def _optimize_baseline(self, optimizer, test_name):
-        files_to_delete = []
-        files_to_add = []
-        for suffix in self._baseline_suffix_list:
-            name = baseline_name(self._tool.filesystem, test_name, suffix)
-            succeeded, more_files_to_delete, more_files_to_add = optimizer.optimize(name)
-            if not succeeded:
-                _log.error("Heuristics failed to optimize %s", name)
-            files_to_delete.extend(more_files_to_delete)
-            files_to_add.extend(more_files_to_add)
-        return files_to_delete, files_to_add
-
-    def execute(self, options, args, tool):
-        self._baseline_suffix_list = options.suffixes.split(',')
-        port_names = tool.port_factory.all_port_names(options.platform)
-        if not port_names:
-            _log.error("No port names match '%s'", options.platform)
-            return
-        port = tool.port_factory.get(port_names[0])
-        optimizer = BaselineOptimizer(tool, port, port_names, skip_scm_commands=options.no_modify_scm)
-        tests = port.tests(args)
-        for test_name in tests:
-            files_to_delete, files_to_add = self._optimize_baseline(optimizer, test_name)
-            for path in files_to_delete:
-                self._delete_from_scm_later(path)
-            for path in files_to_add:
-                self._add_to_scm_later(path)
         self._print_scm_changes()
 
 
@@ -323,8 +244,7 @@ class AbstractParallelRebaselineCommand(AbstractRebaseliningCommand):
         """
         build_to_results = {}
         for builder_name in self._release_builders():
-            builder = self._tool.buildbot.builder_with_name(builder_name)
-            builder_results = builder.latest_layout_test_results()
+            builder_results = self._tool.buildbot.latest_layout_test_results(builder_name)
             if builder_results:
                 build_to_results[Build(builder_name)] = builder_results
             else:
@@ -693,12 +613,8 @@ class Rebaseline(AbstractParallelRebaselineCommand):
         ])
 
     def _builders_to_pull_from(self):
-        chosen_names = self._tool.user.prompt_with_list(
+        return self._tool.user.prompt_with_list(
             "Which builder to pull results from:", self._release_builders(), can_choose_multiple=True)
-        return [self._builder_with_name(name) for name in chosen_names]
-
-    def _builder_with_name(self, name):
-        return self._tool.buildbot.builder_with_name(name)
 
     def execute(self, options, args, tool):
         if not args:
@@ -708,7 +624,7 @@ class Rebaseline(AbstractParallelRebaselineCommand):
         if options.builders:
             builders_to_check = []
             for builder_names in options.builders:
-                builders_to_check += [self._builder_with_name(name) for name in builder_names.split(",")]
+                builders_to_check += builder_names.split(",")
         else:
             builders_to_check = self._builders_to_pull_from()
 
@@ -719,7 +635,7 @@ class Rebaseline(AbstractParallelRebaselineCommand):
             for test in args:
                 if test not in test_prefix_list:
                     test_prefix_list[test] = {}
-                build = Build(builder.name())
+                build = Build(builder)
                 test_prefix_list[test][build] = suffixes_to_update
 
         if options.verbose:

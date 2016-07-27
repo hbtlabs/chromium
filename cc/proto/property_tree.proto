@@ -8,6 +8,7 @@ import "element_id.proto";
 import "rectf.proto";
 import "scroll_offset.proto";
 import "size.proto";
+import "skxfermode.proto";
 import "synced_property.proto";
 import "transform.proto";
 import "vector2df.proto";
@@ -86,17 +87,20 @@ message ClipNodeData {
 }
 
 // Proto for struct EffectNodeData.
-// NEXT ID: 21
+// NEXT ID: 26
 message EffectNodeData {
   optional float opacity = 1;
   optional float screen_space_opacity = 2;
+  optional SkXfermode.Mode blend_mode = 25;
   optional bool has_render_surface = 3;
   optional bool has_copy_request = 4;
   optional bool hidden_by_backface_visibility = 14;
   optional bool double_sided = 13;
   optional bool is_drawn = 6;
   optional bool subtree_hidden = 15;
+  optional bool has_potential_filter_animation = 21;
   optional bool has_potential_opacity_animation = 7;
+  optional bool is_currently_animating_filter = 22;
   optional bool is_currently_animating_opacity = 16;
   optional bool effect_changed = 11;
   optional int64 num_copy_requests_in_subtree = 8;
@@ -107,6 +111,9 @@ message EffectNodeData {
   optional int64 replica_layer_id = 18;
   optional int64 replica_mask_layer_id = 19;
   optional Vector2dF surface_contents_scale = 20;
+  // TODO(nyquist): Add support for FilterOperation. See crbug.com/541321.
+  // repeated FilterOperation filters = 23;
+  // repeated FilterOperation background_filters = 24;
 }
 
 // Proto for struct ScrollNodeData
@@ -199,7 +206,7 @@ message EffectTreeData {
 }
 
 // Proto for class PropertyTrees.
-// NEXT ID: 16
+// NEXT ID: 17
 message PropertyTrees {
   optional PropertyTree transform_tree = 1;
   optional PropertyTree effect_tree = 2;
@@ -213,6 +220,7 @@ message PropertyTrees {
   optional int64 sequence_number = 6;
   optional bool is_main_thread = 13;
   optional bool is_active = 14;
+  optional bool verify_transform_tree_calculations = 16;
 
   optional Vector2dF inner_viewport_container_bounds_delta = 8;
   optional Vector2dF outer_viewport_container_bounds_delta = 9;

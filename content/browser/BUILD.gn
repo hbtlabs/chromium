@@ -15,6 +15,10 @@ source_set("browser") {
     ":for_content_tests",  # See top of //content/BUILD.gn for why.
     "//content/public/browser:browser_sources",
   ]
+  if (is_android) {
+    # See comment in content/app/BUILD.gn above content_app_deps.
+    visibility += [ "//content/app:*" ]
+  }
 
   configs += [
     "//build/config:precompiled_headers",
@@ -43,7 +47,6 @@ source_set("browser") {
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/url_formatter",
-    "//components/webmessaging",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -71,6 +74,7 @@ source_set("browser") {
     "//media/capture",
     "//media/gpu/ipc/client",
     "//media/midi",
+    "//media/mojo/interfaces",
     "//media/mojo/interfaces:image_capture",
     "//mojo/common",
     "//mojo/edk/system",

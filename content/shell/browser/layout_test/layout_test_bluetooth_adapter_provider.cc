@@ -176,6 +176,10 @@ LayoutTestBluetoothAdapterProvider::GetBluetoothAdapter(
     return GetDelayedServicesDiscoveryAdapter();
   if (fake_adapter_name.empty())
     return nullptr;
+  // New adapters that can be used when fuzzing the Web Bluetooth API
+  // should also be added to
+  // src/third_party/WebKit/Source/modules/
+  //   bluetooth/testing/clusterfuzz/constraints.py.
 
   NOTREACHED() << fake_adapter_name;
   return nullptr;
@@ -648,6 +652,10 @@ LayoutTestBluetoothAdapterProvider::GetBaseDevice(
   ON_CALL(*device, GetGattService(_))
       .WillByDefault(
           Invoke(device.get(), &MockBluetoothDevice::GetMockService));
+
+  ON_CALL(*device, CreateGattConnection(_, _))
+      .WillByDefault(RunCallback<1 /* error_callback */>(
+          BluetoothDevice::ERROR_UNSUPPORTED_DEVICE));
 
   return device;
 }

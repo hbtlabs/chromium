@@ -30,7 +30,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # ========================
 
     # 2.0.1 OR LATER
-
     # Too slow (take about one hour to run)
     self.Skip('deqp/functional/gles3/builtinprecision/*.html', bug=619403)
 
@@ -39,88 +38,19 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux'], bug=483282)
 
     # All platforms.
-
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
-
-    self.Fail('conformance2/rendering/attrib-type-match.html', bug=627193)
-
-    self.Fail('conformance2/rendering/uniform-block-buffer-size.html',
-        bug=628863)
-
-    self.Fail('conformance2/transform_feedback/' +
-        'unwritten-output-defaults-to-zero.html', bug=1441) # ANGLE bug
-
-    # Avoid a conflict with a Mac expectation by setting
-    self.Fail('conformance2/textures/misc/tex-input-validation.html',
-        ['d3d9', 'd3d11', 'opengl'], bug=483282)
 
     # All platforms with AMD GPU.
     self.Fail('deqp/functional/gles3/multisample.html',
         ['amd'], bug=617290)
 
-    self.Fail('conformance2/rendering/framebuffer-unsupported.html',
-        bug=628861)
-
-    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
-        bug=1450) # ANGLE bug
-    # self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
-    #     ['mac'], bug=483282)
-    # self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
-    #     ['linux', 'amd', 'intel'], bug=483282)
-
-    self.Fail('conformance/textures/image_bitmap_from_canvas/' +
-        'tex-2d-rgba-rgba-unsigned_short_4_4_4_4.html',
-        ['win'], bug=628954)
-    self.Fail('conformance/textures/image_bitmap_from_canvas/' +
-        'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
-        ['win'], bug=628954)
-    self.Fail('conformance/textures/image_bitmap_from_canvas/' +
-        'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
-        ['win'], bug=628954)
-
     # Windows only.
-    self.Fail('conformance/glsl/bugs/' +
-              'pow-of-small-constant-in-user-defined-function.html',
-        ['win'], bug=485641)
-    self.Fail('conformance/misc/uninitialized-test.html',
-        ['win'], bug=483282)
-    self.Fail('conformance/rendering/point-specific-shader-variables.html',
-        ['win'], bug=616335)
-    self.Fail('conformance/textures/canvas/' +
-              'tex-2d-rgba-rgba-unsigned_short_4_4_4_4.html',
-              ['win'], bug=483282)
-    self.Fail('conformance/textures/canvas/' +
-              'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
-              ['win'], bug=483282)
-    self.Fail('conformance/textures/canvas/' +
-              'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
-              ['win'], bug=483282)
-    self.Fail('conformance/textures/webgl_canvas/' +
-              'tex-2d-rgba-rgba-unsigned_short_4_4_4_4.html',
-              ['win'], bug=483282)
-    self.Fail('conformance/textures/webgl_canvas/' +
-              'tex-2d-rgba-rgba-unsigned_short_5_5_5_1.html',
-              ['win'], bug=483282)
-    self.Fail('conformance/textures/webgl_canvas/' +
-              'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
-              ['win'], bug=483282)
-    self.Fail('deqp/data/gles2/shaders/functions.html',
-        ['win'], bug=478572)
 
-    self.Fail('conformance2/glsl3/array-in-complex-expression.html',
-        ['win'], bug=483282)
-
-    self.Fail('deqp/functional/gles3/fboinvalidate/whole.html',
-        ['win'], bug=624506)
-
-    # ANGLE bug id
-    self.Fail('deqp/functional/gles3/fbomultisample*',
-        ['win'], bug=1246)
+    # This should be fixed in the latest driver.
     self.Fail('deqp/functional/gles3/fboinvalidate/sub.html',
-        ['win'], bug=1246)
+        ['win'], bug=1246) # ANGLE bug.
 
     # Windows 8 only.
-
     self.Flaky('deqp/functional/gles3/buffercopy.html', ['win8'], bug=587601)
 
     # Win / NVidia
@@ -141,8 +71,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/shadertexturefunction/texturesize.html',
         ['win', ('amd', 0x6779)], bug=483282)
 
-    self.Fail('deqp/functional/gles3/framebufferblit/rect_02.html',
-        ['win', ('amd', 0x6779)], bug=483282)
     self.Fail('deqp/functional/gles3/textureshadow/2d*',
         ['win', ('amd', 0x6779)], bug=483282)
     self.Fail('deqp/functional/gles3/textureshadow/cube*',
@@ -150,6 +78,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('deqp/functional/gles3/transformfeedback/*',
         ['win', ('amd', 0x6779)], bug=626068)
+
+    self.Fail('deqp/functional/gles3/shadercommonfunction.html',
+        ['win', ('amd', 0x6779)], bug=483282)
+    self.Fail('deqp/functional/gles3/fbomultisample.8_samples.html',
+        ['win', ('amd', 0x6779)], bug=483282)
 
     # It's unfortunate that these suppressions need to be so broad, but
     # basically any test that uses readPixels is potentially flaky, and
@@ -204,9 +137,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/uniformbuffers/*.html',
         ['win', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/framebufferblit/rect_02.html',
-        ['win', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/textureshadow/2d_array_*.html',
+        ['win', 'intel'], bug=483282)
+    self.Fail('conformance2/rendering/uniform-block-buffer-size.html',
+        ['win', 'intel'], bug=628863)
+
+    self.Fail('deqp/functional/gles3/fbomultisample*',
         ['win', 'intel'], bug=483282)
 
     # It's unfortunate that these suppressions need to be so broad, but it
@@ -217,10 +153,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('deqp/*', ['win', 'intel'], bug=628395)
 
     # Mac only.
-    self.Flaky('deqp/functional/gles3/shaderindexing/varying.html',
-        ['mac'], bug=619264)
+    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
+        ['mac'], bug=483282)
     self.Fail('deqp/functional/gles3/shaderloop_do_while.html',
         ['mac'], bug=617820)
+    self.Fail('deqp/functional/gles3/fbocompleteness.html',
+        ['mac'], bug=630800)
+    # self.Fail('deqp/functional/gles3/fbocompleteness.html',
+    #     ['mac', ('nvidia', 0xfe9)], bug=616562)
     self.Fail('deqp/data/gles3/shaders/linkage.html',
         ['mac'], bug=601821)
 
@@ -233,16 +173,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('deqp/data/gles3/shaders/qualification_order.html',
         ['mac'], bug=483282)
-    self.Fail('deqp/functional/gles3/pixelbufferobject.html',
-        ['mac'], bug=483282)
 
     self.Fail('conformance2/renderbuffers/framebuffer-test.html',
         ['mac'], bug=483282)
     self.Fail('conformance2/rendering/framebuffer-completeness-unaffected.html',
         ['mac'], bug=604053)
-
-    self.Fail('deqp/functional/gles3/instancedrendering.html',
-        ['mac'], bug=483282)
 
     self.Fail('deqp/functional/gles3/negativetextureapi.html',
         ['mac'], bug=483282)
@@ -304,14 +239,14 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac', ('nvidia', 0xfe9), 'no_angle'], bug=483282)
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
+    self.Fail('deqp/functional/gles3/pixelbufferobject.html',
+        ['mac', ('nvidia', 0xfe9)], bug=483282)
     self.Fail('deqp/functional/gles3/shaderstruct.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
     self.Fail('deqp/functional/gles3/shaderswitch.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
     self.Fail('deqp/functional/gles3/negativevertexarrayapi.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
-    self.Fail('deqp/functional/gles3/fbocompleteness.html',
-        ['mac', ('nvidia', 0xfe9)], bug=616562)
 
     self.Fail('deqp/functional/gles3/texturespecification/' +
         'basic_copyteximage2d.html',
@@ -406,8 +341,16 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/negativeshaderapi.html',
         ['mac', ('nvidia', 0xfe9)], bug=483282)
 
+    self.Flaky('deqp/functional/gles3/vertexarrays/' +
+        'multiple_attributes.output.html',
+        ['mac', ('nvidia', 0xfe9)], bug=483282)
+
     # Mac AMD
     self.Fail('deqp/functional/gles3/clipping.html',
+        ['mac', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/instancedrendering.html',
+        ['mac', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/pixelbufferobject.html',
         ['mac', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/primitiverestart/00.html',
         ['mac', 'amd'], bug=598930)
@@ -447,8 +390,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Mac Intel
     self.Fail('deqp/functional/gles3/shadercommonfunction.html',
-        ['mac', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/shaderderivate_*',
         ['mac', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/transformfeedback/*.html',
         ['mac', 'intel'], bug=483282)
@@ -506,10 +447,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac', 'intel'], bug=483282)
     self.Fail('deqp/functional/gles3/framebufferblit/rect_04.html',
         ['mac', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/framebufferblit/rect_05.html',
-        ['mac', 'intel'], bug=483282)
-    self.Fail('deqp/functional/gles3/framebufferblit/rect_06.html',
-        ['mac', 'intel'], bug=483282)
 
     self.Fail('conformance2/textures/misc/tex-unpack-params.html',
         ['mac', 'intel'], bug=483282)
@@ -531,9 +468,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
                'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
                ['linux'], bug=627525)
 
-    self.Fail('deqp/functional/gles3/fboinvalidate/whole.html',
-        ['linux'], bug=624506)
-
     # Multi-vendor failures.
 
     self.Fail('deqp/data/gles3/shaders/functions.html',
@@ -545,6 +479,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('deqp/functional/gles3/texturespecification/' +
         'random_teximage2d_2d.html',
         ['linux', 'amd', 'intel'], bug=618447)
+    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
+        ['linux', 'amd', 'intel'], bug=483282)
+    self.Fail('deqp/data/gles3/shaders/linkage.html',
+        ['linux', 'amd', 'intel'], bug=483282)
 
     # Linux with ANGLE only
     self.Fail('conformance/misc/uninitialized-test.html',
@@ -564,10 +502,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'opengl'], bug=483282)
 
     # Linux NVIDIA only.
-    # La la la la la la la la la la ... (well, not right now, soon)
-    self.Fail('deqp/functional/gles3/texturespecification/' +
-        'random_teximage2d_cube.html',
-        ['linux', 'nvidia'], bug=483282)
+    # La la la la la la la la la la ...
 
     # Linux NVIDIA with ANGLE only
     self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
@@ -651,10 +586,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Linux Intel without ANGLE only
     self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
         ['linux', 'intel', 'no_angle'], bug=598902)
-    self.Fail('conformance2/renderbuffers/framebuffer-object-attachment.html',
-        ['linux', 'intel', 'no_angle'], bug=598902)
-    self.Fail('deqp/functional/gles3/fbocompleteness.html',
-        ['linux', 'intel', 'no_angle'], bug=598902)
 
     # Linux AMD only.
     # It looks like AMD shader compiler rejects many valid ES3 semantics.
@@ -674,8 +605,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/texturefiltering/3d*',
         ['linux', 'amd'], bug=606114)
-    self.Fail('deqp/functional/gles3/fbocompleteness.html',
-        ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/lifetime.html',
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/shadertexturefunction/texture.html',
@@ -799,6 +728,8 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/fbomultisample*',
         ['linux', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/fbocompleteness.html',
+        ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/fragmentoutput/*.html',
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/textureshadow/*.html',
@@ -857,6 +788,10 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     self.Fail('conformance2/glsl3/vector-dynamic-indexing.html',
         ['linux', 'amd'], bug=483282)
+    self.Fail('conformance2/reading/read-pixels-pack-parameters.html',
+        ['linux', 'amd', 'no_angle'], bug=483282)
+    self.Fail('conformance2/textures/misc/tex-unpack-params.html',
+        ['linux', 'amd', 'no_angle'], bug=483282)
 
     # Conflicting expectations to test that the
     # "Expectations Have No collisions" unittest works.

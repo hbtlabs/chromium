@@ -20,7 +20,7 @@ void EnsureAllChildrenAreVisible(ui::Layer* layer) {
   std::list<ui::Layer*> layers;
   layers.push_back(layer);
   while (!layers.empty()) {
-    for (auto child : layers.front()->children())
+    for (auto* child : layers.front()->children())
       layers.push_back(child);
     layers.front()->SetVisible(true);
     layers.pop_front();
@@ -51,17 +51,7 @@ void WindowMirrorView::Init() {
 }
 
 gfx::Size WindowMirrorView::GetPreferredSize() const {
-  const int kMaxWidth = 512;
-  const int kMaxHeight = 256;
-
-  gfx::Size target_size = target_->GetBounds().size();
-  if (target_size.width() <= kMaxWidth && target_size.height() <= kMaxHeight) {
-    return target_size;
-  }
-
-  float scale = std::min(kMaxWidth / static_cast<float>(target_size.width()),
-                         kMaxHeight / static_cast<float>(target_size.height()));
-  return gfx::ScaleToCeiledSize(target_size, scale, scale);
+  return target_->GetBounds().size();
 }
 
 void WindowMirrorView::Layout() {

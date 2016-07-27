@@ -189,9 +189,10 @@
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
@@ -738,7 +739,7 @@ class PolicyTest : public InProcessBrowserTest {
         ->SetScreenshotDelegate(std::move(chrome_screenshot_grabber));
 
     SetScreenshotPolicy(enabled);
-    ash::Shell::GetInstance()->accelerator_controller()->PerformActionIfEnabled(
+    ash::WmShell::Get()->accelerator_controller()->PerformActionIfEnabled(
         ash::TAKE_SCREENSHOT);
 
     content::RunMessageLoop();
@@ -1336,26 +1337,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
   content::CrashTab(contents);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_RELOAD));
   EXPECT_TRUE(IsWebGLEnabled(contents));
-}
-
-IN_PROC_BROWSER_TEST_F(PolicyTest, DisableSpdy) {
-  // Verifies that SPDY can be disable by policy.
-  EXPECT_TRUE(net::HttpStreamFactory::spdy_enabled());
-  PolicyMap policies;
-  policies.Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(true)), nullptr);
-  UpdateProviderPolicy(policies);
-  content::RunAllPendingInMessageLoop();
-  EXPECT_FALSE(net::HttpStreamFactory::spdy_enabled());
-  // Verify that it can be force-enabled too.
-  browser()->profile()->GetPrefs()->SetBoolean(prefs::kDisableSpdy, true);
-  policies.Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  UpdateProviderPolicy(policies);
-  content::RunAllPendingInMessageLoop();
-  EXPECT_TRUE(net::HttpStreamFactory::spdy_enabled());
 }
 
 namespace {
@@ -3972,6 +3953,36 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
   EXPECT_TRUE(arc_bridge_service->stopped());
+
+  TearDownTest();
+}
+
+// Test ArcBackupRestoreEnabled policy.
+IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
+  SetUpTest();
+
+  const PrefService* const pref = browser()->profile()->GetPrefs();
+
+  // ARC Backup & Restore is switched on by default.
+  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_FALSE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+
+  // Disable ARC Backup & Restore.
+  PolicyMap policies;
+  policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::FundamentalValue>(false), nullptr);
+  UpdateProviderPolicy(policies);
+  EXPECT_FALSE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
+
+  // Enable ARC Backup & Restore.
+  policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::MakeUnique<base::FundamentalValue>(true), nullptr);
+  UpdateProviderPolicy(policies);
+  EXPECT_TRUE(pref->GetBoolean(prefs::kArcBackupRestoreEnabled));
+  EXPECT_TRUE(pref->IsManagedPreference(prefs::kArcBackupRestoreEnabled));
 
   TearDownTest();
 }

@@ -30,19 +30,16 @@ class WindowTypeLauncher
 
  private:
   // shell::Service:
-  void OnStart(shell::Connector* connector,
-               const shell::Identity& identity,
-               uint32_t id) override;
+  void OnStart(const shell::Identity& identity) override;
   bool OnConnect(shell::Connection* connection) override;
 
   // mash::mojom::Launchable:
   void Launch(uint32_t what, mash::mojom::LaunchMode how) override;
 
   // shell::InterfaceFactory<mash::mojom::Launchable>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mash::mojom::LaunchableRequest request) override;
 
-  shell::Connector* connector_ = nullptr;
   mojo::BindingSet<mash::mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 

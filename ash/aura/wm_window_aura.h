@@ -47,6 +47,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   WmRootWindowController* GetRootWindowController() override;
   WmShell* GetShell() const override;
   void SetName(const char* name) override;
+  std::string GetName() const override;
   base::string16 GetTitle() const override;
   void SetShellWindowId(int id) override;
   int GetShellWindowId() const override;
@@ -75,6 +76,7 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   int GetIntProperty(WmWindowProperty key) override;
   const wm::WindowState* GetWindowState() const override;
   WmWindow* GetToplevelWindow() override;
+  WmWindow* GetToplevelWindowForFocus() override;
   void SetParentUsingContext(WmWindow* context,
                              const gfx::Rect& screen_bounds) override;
   void AddChild(WmWindow* window) override;
@@ -154,6 +156,8 @@ class ASH_EXPORT WmWindowAura : public WmWindow, public aura::WindowObserver {
   void AddObserver(WmWindowObserver* observer) override;
   void RemoveObserver(WmWindowObserver* observer) override;
   bool HasObserver(const WmWindowObserver* observer) const override;
+  void AddLimitedPreTargetHandler(ui::EventHandler* handler) override;
+  void RemoveLimitedPreTargetHandler(ui::EventHandler* handler) override;
 
  private:
   // aura::WindowObserver:

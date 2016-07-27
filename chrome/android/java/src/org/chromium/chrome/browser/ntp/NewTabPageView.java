@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.ntp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -13,7 +14,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
-import android.net.Uri;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawableFactory;
 import android.support.v7.widget.RecyclerView;
@@ -96,6 +96,7 @@ public class NewTabPageView extends FrameLayout
     private OnSearchBoxScrollListener mSearchBoxScrollListener;
 
     private NewTabPageManager mManager;
+    private UiConfig mUiConfig;
     private MostVisitedDesign mMostVisitedDesign;
     private MostVisitedItem[] mMostVisitedItems;
     private boolean mFirstShow = true;
@@ -221,22 +222,6 @@ public class NewTabPageView extends FrameLayout
     }
 
     /**
-     * Returns a title suitable for display for a link (e.g. a most visited item). If |title| is
-     * non-empty, this simply returns it. Otherwise, returns a shortened form of the URL.
-     */
-    static String getTitleForDisplay(String title, String url) {
-        if (TextUtils.isEmpty(title) && url != null) {
-            Uri uri = Uri.parse(url);
-            String host = uri.getHost();
-            String path = uri.getPath();
-            if (host == null) host = "";
-            if (TextUtils.isEmpty(path) || path.equals("/")) path = "";
-            title = host + path;
-        }
-        return title;
-    }
-
-    /**
      * Default constructor required for XML inflation.
      */
     public NewTabPageView(Context context, AttributeSet attrs) {
@@ -255,6 +240,7 @@ public class NewTabPageView extends FrameLayout
     public void initialize(NewTabPageManager manager, boolean searchProviderHasLogo,
             SnippetsBridge snippetsBridge) {
         mManager = manager;
+        mUiConfig = new UiConfig(this);
         ViewStub stub = (ViewStub) findViewById(R.id.new_tab_page_layout_stub);
 
         mUseCardsUi = snippetsBridge != null;
@@ -305,7 +291,8 @@ public class NewTabPageView extends FrameLayout
 
         // Set up snippets
         if (mUseCardsUi) {
-            mNewTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout, snippetsBridge);
+            mNewTabPageAdapter =
+                    new NewTabPageAdapter(mManager, mNewTabPageLayout, snippetsBridge, mUiConfig);
             mRecyclerView.setAdapter(mNewTabPageAdapter);
 
             // Set up swipe-to-dismiss
@@ -635,13 +622,6 @@ public class NewTabPageView extends FrameLayout
      */
     void playAnimatedLogo(BaseGifImage gifImage) {
         mSearchProviderLogoView.playAnimatedLogo(gifImage);
-    }
-
-    /**
-     * @return Whether the GIF animation is playing in the logo.
-     */
-    boolean isAnimatedLogoShowing() {
-        return mSearchProviderLogoView.isAnimatedLogoShowing();
     }
 
     /**
@@ -1051,7 +1031,7 @@ public class NewTabPageView extends FrameLayout
                 LayoutInflater inflater, MostVisitedItem item, boolean isInitialLoad) {
             final MostVisitedItemView view = (MostVisitedItemView) inflater.inflate(
                     R.layout.most_visited_item, mMostVisitedLayout, false);
-            view.setTitle(getTitleForDisplay(item.getTitle(), item.getUrl()));
+            view.setTitle(TitleUtil.getTitleForDisplay(item.getTitle(), item.getUrl()));
             view.setOfflineAvailable(item.isOfflineAvailable());
 
             LargeIconCallback iconCallback = new LargeIconCallbackImpl(item, view, isInitialLoad);
@@ -1100,6 +1080,18 @@ public class NewTabPageView extends FrameLayout
             mRecyclerView.updatePeekingCard();
             mRecyclerView.updateSnippetsHeaderDisplay();
         }
+    }
+
+    @Override
+    protected void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+
+        // When the viewport configuration changes, we want to update the display style so that the
+        // observers are aware of the new available space. Another moment to do this update could
+        // be through a OnLayoutChangeListener, but then we get notified of the change after the
+        // layout pass, which means that the new style will only be visible after layout happens
+        // again. We prefer updating here to avoid having to require that additional layout pass.
+        mUiConfig.updateDisplayStyle();
     }
 
     private int getVerticalScroll() {

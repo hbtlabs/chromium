@@ -24,7 +24,10 @@ Polymer({
   ],
 
   listeners: {
+    'history-list-scrolled': 'closeMenu_',
     'load-more-history': 'loadMoreHistory_',
+    'tap': 'closeMenu_',
+    'toggle-menu': 'toggleMenu_',
   },
 
   /**
@@ -34,6 +37,7 @@ Polymer({
    */
   historyResult: function(info, results) {
     this.initializeResults_(info, results);
+    this.closeMenu_();
 
     if (this.selectedPage_ == 'grouped-list') {
       this.$$('#grouped-list').historyData = results;
@@ -143,5 +147,47 @@ Polymer({
   /** @private */
   onDialogCancelTap_: function() {
     this.$.dialog.close();
-  }
+  },
+
+  /**
+   * Closes the overflow menu.
+   * @private
+   */
+  closeMenu_: function() {
+    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).closeMenu();
+  },
+
+  /**
+   * Opens the overflow menu unless the menu is already open and the same button
+   * is pressed.
+   * @param {{detail: {item: !HistoryEntry, target: !HTMLElement}}} e
+   * @private
+   */
+  toggleMenu_: function(e) {
+    var target = e.detail.target;
+    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).toggleMenu(
+        target, e.detail.item);
+  },
+
+  /** @private */
+  onMoreFromSiteTap_: function() {
+    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
+    this.fire('search-domain', {domain: menu.itemData.domain});
+    menu.closeMenu();
+  },
+
+  /** @private */
+  onRemoveFromHistoryTap_: function() {
+    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
+    md_history.BrowserService.getInstance()
+        .deleteItems([menu.itemData])
+        .then(function(items) {
+          this.$['infinite-list'].removeDeletedHistory_(items);
+          // This unselect-all is to reset the toolbar when deleting a selected
+          // item. TODO(tsergeant): Make this automatic based on observing list
+          // modifications.
+          this.fire('unselect-all');
+        }.bind(this));
+    menu.closeMenu();
+  },
 });

@@ -269,6 +269,7 @@ class NTPSnippetsServiceTest : public test::NTPSnippetsTestBase {
         test_url_(base::StringPrintf(kTestContentSnippetsServerFormat,
                                      google_apis::GetAPIKey().c_str())) {
     NTPSnippetsService::RegisterProfilePrefs(pref_service()->registry());
+    RequestThrottler::RegisterProfilePrefs(pref_service()->registry());
 
     // Since no SuggestionsService is injected in tests, we need to force the
     // service to fetch from all hosts.
@@ -311,7 +312,8 @@ class NTPSnippetsServiceTest : public test::NTPSnippetsTestBase {
     std::unique_ptr<NTPSnippetsFetcher> snippets_fetcher =
         base::MakeUnique<NTPSnippetsFetcher>(
             fake_signin_manager(), fake_token_service_.get(),
-            std::move(request_context_getter), base::Bind(&ParseJson),
+            std::move(request_context_getter), pref_service(),
+            base::Bind(&ParseJson),
             /*is_stable_channel=*/true);
 
     fake_signin_manager()->SignIn("foo@bar.com");
@@ -334,6 +336,11 @@ class NTPSnippetsServiceTest : public test::NTPSnippetsTestBase {
       WaitForDBLoad(service_.get());
   }
 
+  std::string MakeUniqueID(const std::string& within_category_id) {
+    return NTPSnippetsService::MakeUniqueID(
+        ContentSuggestionsCategory::ARTICLES, within_category_id);
+  }
+
  protected:
   const GURL& test_url() { return test_url_; }
   NTPSnippetsService* service() { return service_.get(); }
@@ -347,7 +354,7 @@ class NTPSnippetsServiceTest : public test::NTPSnippetsTestBase {
 
   void LoadFromJSONString(const std::string& json) {
     SetUpFetchResponse(json);
-    service()->FetchSnippets();
+    service()->FetchSnippets(true);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -486,7 +493,7 @@ TEST_F(NTPSnippetsServiceTest, LoadIncompleteJsonWithExistingSnippets) {
   EXPECT_THAT(service()->snippets(), SizeIs(1));
 }
 
-TEST_F(NTPSnippetsServiceTest, Discard) {
+TEST_F(NTPSnippetsServiceTest, Dismiss) {
   std::vector<std::string> source_urls, publishers, amp_urls;
   source_urls.push_back(std::string("http://site.com"));
   publishers.push_back(std::string("Source 1"));
@@ -498,44 +505,44 @@ TEST_F(NTPSnippetsServiceTest, Discard) {
 
   ASSERT_THAT(service()->snippets(), SizeIs(1));
 
-  // Discarding a non-existent snippet shouldn't do anything.
-  service()->DiscardSuggestion("http://othersite.com");
+  // Dismissing a non-existent snippet shouldn't do anything.
+  service()->DismissSuggestion(MakeUniqueID("http://othersite.com"));
   EXPECT_THAT(service()->snippets(), SizeIs(1));
 
-  // Discard the snippet.
-  service()->DiscardSuggestion(kSnippetUrl);
+  // Dismiss the snippet.
+  service()->DismissSuggestion(MakeUniqueID(kSnippetUrl));
   EXPECT_THAT(service()->snippets(), IsEmpty());
 
   // Make sure that fetching the same snippet again does not re-add it.
   LoadFromJSONString(json_str);
   EXPECT_THAT(service()->snippets(), IsEmpty());
 
-  // The snippet should stay discarded even after re-creating the service.
+  // The snippet should stay dismissed even after re-creating the service.
   EXPECT_CALL(mock_scheduler(), Schedule(_, _, _, _)).Times(1);
   CreateSnippetsService(/*enabled=*/true);
   LoadFromJSONString(json_str);
   EXPECT_THAT(service()->snippets(), IsEmpty());
 
-  // The snippet can be added again after clearing discarded snippets.
-  service()->ClearDiscardedSuggestionsForDebugging();
+  // The snippet can be added again after clearing dismissed snippets.
+  service()->ClearDismissedSuggestionsForDebugging();
   EXPECT_THAT(service()->snippets(), IsEmpty());
   LoadFromJSONString(json_str);
   EXPECT_THAT(service()->snippets(), SizeIs(1));
 }
 
-TEST_F(NTPSnippetsServiceTest, GetDiscarded) {
+TEST_F(NTPSnippetsServiceTest, GetDismissed) {
   LoadFromJSONString(GetTestJson({GetSnippet()}));
 
-  service()->DiscardSuggestion(kSnippetUrl);
-  const NTPSnippet::PtrVector& snippets = service()->discarded_snippets();
+  service()->DismissSuggestion(MakeUniqueID(kSnippetUrl));
+  const NTPSnippet::PtrVector& snippets = service()->dismissed_snippets();
   EXPECT_EQ(1u, snippets.size());
   for (auto& snippet : snippets) {
     EXPECT_EQ(kSnippetUrl, snippet->id());
   }
 
-  // There should be no discarded snippet after clearing the list.
-  service()->ClearDiscardedSuggestionsForDebugging();
-  EXPECT_EQ(0u, service()->discarded_snippets().size());
+  // There should be no dismissed snippet after clearing the list.
+  service()->ClearDismissedSuggestionsForDebugging();
+  EXPECT_EQ(0u, service()->dismissed_snippets().size());
 }
 
 TEST_F(NTPSnippetsServiceTest, CreationTimestampParseFail) {
@@ -810,14 +817,14 @@ TEST_F(NTPSnippetsServiceTest, LogNumArticlesHistogram) {
   EXPECT_THAT(
       tester.GetAllSamples("NewTabPage.Snippets.NumArticlesZeroDueToDiscarded"),
       IsEmpty());
-  // Discarding a snippet should decrease the list size. This will only be
+  // Dismissing a snippet should decrease the list size. This will only be
   // logged after the next fetch.
-  service()->DiscardSuggestion(kSnippetUrl);
+  service()->DismissSuggestion(MakeUniqueID(kSnippetUrl));
   LoadFromJSONString(GetTestJson({GetSnippet()}));
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticles"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/3),
                           base::Bucket(/*min=*/1, /*count=*/2)));
-  // Discarded snippets shouldn't influence NumArticlesFetched.
+  // Dismissed snippets shouldn't influence NumArticlesFetched.
   EXPECT_THAT(tester.GetAllSamples("NewTabPage.Snippets.NumArticlesFetched"),
               ElementsAre(base::Bucket(/*min=*/0, /*count=*/1),
                           base::Bucket(/*min=*/1, /*count=*/3)));
@@ -831,7 +838,7 @@ TEST_F(NTPSnippetsServiceTest, LogNumArticlesHistogram) {
   tester.ExpectTotalCount("NewTabPage.Snippets.NumArticlesFetched", 4);
 }
 
-TEST_F(NTPSnippetsServiceTest, DiscardShouldRespectAllKnownUrls) {
+TEST_F(NTPSnippetsServiceTest, DismissShouldRespectAllKnownUrls) {
   const std::string creation =
       NTPSnippet::TimeToJsonString(GetDefaultCreationTime());
   const std::string expiry =
@@ -850,11 +857,11 @@ TEST_F(NTPSnippetsServiceTest, DiscardShouldRespectAllKnownUrls) {
   LoadFromJSONString(GetTestJson({GetSnippetWithUrlAndTimesAndSources(
       source_urls[0], creation, expiry, source_urls, publishers, amp_urls)}));
   ASSERT_THAT(service()->snippets(), SizeIs(1));
-  // Discard the snippet via the mashable source corpus ID.
-  service()->DiscardSuggestion(source_urls[0]);
+  // Dismiss the snippet via the mashable source corpus ID.
+  service()->DismissSuggestion(MakeUniqueID(source_urls[0]));
   EXPECT_THAT(service()->snippets(), IsEmpty());
 
-  // The same article from the AOL domain should now be detected as discarded.
+  // The same article from the AOL domain should now be detected as dismissed.
   LoadFromJSONString(GetTestJson({GetSnippetWithUrlAndTimesAndSources(
       source_urls[1], creation, expiry, source_urls, publishers, amp_urls)}));
   ASSERT_THAT(service()->snippets(), IsEmpty());
@@ -871,7 +878,7 @@ TEST_F(NTPSnippetsServiceTest, HistorySyncStateChanges) {
   service()->OnDisabledReasonChanged(DisabledReason::SIGNED_OUT);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(NTPSnippetsService::State::DISABLED, service()->state_);
-  EXPECT_THAT(service()->snippets(), IsEmpty()); // No fetch should be made.
+  EXPECT_THAT(service()->snippets(), IsEmpty());  // No fetch should be made.
 
   // Simulate user sign in. The service should be ready again and load snippets.
   SetUpFetchResponse(GetTestJson({GetSnippet()}));

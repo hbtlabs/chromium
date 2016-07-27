@@ -40,6 +40,7 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/editing/Editor.h"
 #include "core/events/GestureEvent.h"
@@ -168,9 +169,8 @@ FrameLoader::FrameLoader(LocalFrame* frame)
     , m_progressTracker(ProgressTracker::create(frame))
     , m_loadType(FrameLoadTypeStandard)
     , m_inStopAllLoaders(false)
-    , m_checkTimer(this, &FrameLoader::checkTimerFired)
+    , m_checkTimer(this, &FrameLoader::checkTimerFired, TaskRunnerHelper::getLoadingTaskRunner(frame))
     , m_didAccessInitialDocument(false)
-    , m_didAccessInitialDocumentTimer(this, &FrameLoader::didAccessInitialDocumentTimerFired)
     , m_forcedSandboxFlags(SandboxNone)
     , m_dispatchingDidClearWindowObjectInMainWorld(false)
     , m_protectProvisionalLoader(false)
@@ -343,7 +343,7 @@ void FrameLoader::replaceDocumentWhileExecutingJavaScriptURL(const String& sourc
     // frame on a detached DOM tree, which is bad.
     SubframeLoadingDisabler disabler(m_frame->document());
     m_frame->detachChildren();
-    m_frame->document()->detach();
+    m_frame->document()->detachLayoutTree();
     clear();
 
     // detachChildren() potentially detaches the frame from the document. The
@@ -358,9 +358,9 @@ void FrameLoader::replaceDocumentWhileExecutingJavaScriptURL(const String& sourc
 void FrameLoader::receivedMainResourceRedirect(const KURL& newURL)
 {
     client()->dispatchDidReceiveServerRedirectForProvisionalLoad();
-    // If a back/forward navigation redirects cross-origin, don't reuse any state from the HistoryItem.
-    if (m_provisionalItem && !SecurityOrigin::create(m_provisionalItem->url())->isSameSchemeHostPort(SecurityOrigin::create(newURL).get()))
-        m_provisionalItem.clear();
+
+    // If a back/forward navigation redirects, don't reuse any state from the HistoryItem.
+    m_provisionalItem.clear();
 }
 
 void FrameLoader::setHistoryItemStateForCommit(FrameLoadType loadType, HistoryCommitType historyCommitType, HistoryNavigationType navigationType)
@@ -444,6 +444,11 @@ void FrameLoader::receivedFirstData()
     // didObserveLoadingBehavior() must be called after dispatchDidCommitLoad() is called for the metrics tracking logic to handle it properly.
     if (client()->isControlledByServiceWorker(*m_documentLoader))
         client()->didObserveLoadingBehavior(WebLoadingBehaviorServiceWorkerControlled);
+
+    // Links with media values need more information (like viewport
+    // information). This happens after the first chunk is parsed in
+    // HTMLDocumentParser.
+    m_documentLoader->dispatchLinkHeaderPreloads(nullptr, LinkLoader::OnlyLoadNonMedia);
 
     TRACE_EVENT1("devtools.timeline", "CommitLoad", "data", InspectorCommitLoadEvent::data(m_frame));
     InspectorInstrumentation::didCommitLoad(m_frame, m_documentLoader.get());
@@ -1061,22 +1066,12 @@ void FrameLoader::didAccessInitialDocument()
     // We only need to notify the client once, and only for the main frame.
     if (isLoadingMainFrame() && !m_didAccessInitialDocument) {
         m_didAccessInitialDocument = true;
-        // Notify asynchronously, since this is called within a JavaScript security check.
-        m_didAccessInitialDocumentTimer.startOneShot(0, BLINK_FROM_HERE);
-    }
-}
 
-void FrameLoader::didAccessInitialDocumentTimerFired(Timer<FrameLoader>*)
-{
-    if (client())
-        client()->didAccessInitialDocument();
-}
-
-void FrameLoader::notifyIfInitialDocumentAccessed()
-{
-    if (m_didAccessInitialDocumentTimer.isActive()) {
-        m_didAccessInitialDocumentTimer.stop();
-        didAccessInitialDocumentTimerFired(0);
+        // Forbid script execution to prevent re-entering V8, since this is
+        // called from a binding security check.
+        ScriptForbiddenScope forbidScripts;
+        if (client())
+            client()->didAccessInitialDocument();
     }
 }
 
@@ -1129,7 +1124,7 @@ bool FrameLoader::prepareForCommit()
     // No more events will be dispatched so detach the Document.
     // TODO(yoav): Should we also be nullifying domWindow's document (or domWindow) since the doc is now detached?
     if (m_frame->document())
-        m_frame->document()->detach();
+        m_frame->document()->detachLayoutTree();
     m_documentLoader = m_provisionalDocumentLoader.release();
     takeObjectSnapshot();
 

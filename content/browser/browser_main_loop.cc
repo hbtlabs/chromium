@@ -73,6 +73,7 @@
 #include "content/common/mojo/mojo_shell_connection_impl.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/geolocation_provider.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/tracing_controller.h"
 #include "content/public/common/content_client.h"
@@ -1103,11 +1104,6 @@ void BrowserMainLoop::ShutdownThreadsAndCleanUp() {
       }
       case BrowserThread::IO: {
         TRACE_EVENT0("shutdown", "BrowserMainLoop::Subsystem:IOThread");
-        // At this point we should have removed all tabs which will lead to all
-        // RenderProcessHostImpl instances getting terminated.
-        // It is suspected that this is not happening: crbug.com/608049.
-        // TODO(alokp): Remove this after fixing the issue.
-        RenderProcessHostImpl::CheckAllTerminated();
         ResetThread_IO(std::move(io_thread_));
         break;
       }

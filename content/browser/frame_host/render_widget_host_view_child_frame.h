@@ -30,7 +30,6 @@
 
 namespace cc {
 class SurfaceFactory;
-enum class SurfaceDrawStatus;
 }
 
 
@@ -100,9 +99,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override;
-  void SelectionChanged(const base::string16& text,
-                        size_t offset,
-                        const gfx::Range& range) override;
   void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
@@ -154,6 +150,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
 
+  InputEventAckState FilterInputEvent(
+      const blink::WebInputEvent& input_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
 
@@ -170,7 +168,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // Declared 'public' instead of 'protected' here to allow derived classes
   // to Bind() to it.
-  void SurfaceDrawn(uint32_t output_surface_id, cc::SurfaceDrawStatus drawn);
+  void SurfaceDrawn(uint32_t output_surface_id);
 
   // Exposed for tests.
   bool IsChildFrameForTesting() const override;

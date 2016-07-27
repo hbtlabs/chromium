@@ -142,6 +142,7 @@ class PlatformMouseEvent;
 class ProcessingInstruction;
 class QualifiedName;
 class Range;
+class ResizeObserverController;
 class ResourceFetcher;
 class RootScrollerController;
 class SVGDocumentExtensions;
@@ -466,7 +467,7 @@ public:
     ResourceFetcher* fetcher() { return m_fetcher.get(); }
 
     void attachLayoutTree(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
 
     // If you have a Document, use layoutView() instead which is faster.
     void layoutObject() const = delete;
@@ -706,6 +707,9 @@ public:
     IntersectionObserverController* intersectionObserverController();
     IntersectionObserverController& ensureIntersectionObserverController();
     NodeIntersectionObserverData& ensureIntersectionObserverData();
+
+    ResizeObserverController* resizeObserverController() const { return m_resizeObserverController; }
+    ResizeObserverController& ensureResizeObserverController();
 
     void updateViewportDescription();
 
@@ -1349,8 +1353,6 @@ private:
 
     bool m_hasFullscreenSupplement; // For early return in Fullscreen::fromIfExists()
 
-    // The last element in |m_topLayerElements| is topmost in the top layer
-    // stack and is thus the one that will be visually on top.
     HeapVector<Member<Element>> m_topLayerElements;
 
     int m_loadEventDelayCount;
@@ -1410,6 +1412,7 @@ private:
 
     Member<IntersectionObserverController> m_intersectionObserverController;
     Member<NodeIntersectionObserverData> m_intersectionObserverData;
+    Member<ResizeObserverController> m_resizeObserverController;
 
     int m_nodeCount;
 

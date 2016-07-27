@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../../../mojo_application.gni")
-
 source_set("tests") {
   testonly = true
 
@@ -19,6 +17,7 @@ source_set("tests") {
     "constant_unittest.cc",
     "container_test_util.cc",
     "container_test_util.h",
+    "data_view_unittest.cc",
     "equals_unittest.cc",
     "handle_passing_unittest.cc",
     "interface_ptr_unittest.cc",

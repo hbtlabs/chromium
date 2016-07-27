@@ -26,7 +26,7 @@
 #include "services/shell/runner/common/client_util.h"
 #include "services/shell/runner/common/switches.h"
 
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
+#if defined(OS_LINUX)
 #include "sandbox/linux/services/namespace_sandbox.h"
 #endif
 
@@ -73,7 +73,7 @@ mojom::ServicePtr ChildProcessHost::Start(
       base::CommandLine::ForCurrentProcess();
   base::FilePath target_path = parent_command_line->GetProgram();
   // |app_path_| can be empty in tests.
-  if (!app_path_.MatchesExtension(FILE_PATH_LITERAL(".mojo")) &&
+  if (!app_path_.MatchesExtension(FILE_PATH_LITERAL(".library")) &&
       !app_path_.empty()) {
     target_path = app_path_;
   }
@@ -177,7 +177,7 @@ void ChildProcessHost::DoLaunch(
 #endif
   DVLOG(2) << "Launching child with command line: "
            << child_command_line->GetCommandLineString();
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
+#if defined(OS_LINUX)
   if (start_sandboxed_) {
     child_process_ =
         sandbox::NamespaceSandbox::LaunchProcess(*child_command_line, options);

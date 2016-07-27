@@ -1016,9 +1016,9 @@ void WindowTree::NewTopLevelWindow(
     uint32_t change_id,
     Id transport_window_id,
     mojo::Map<mojo::String, mojo::Array<uint8_t>> transport_properties) {
-  DCHECK(!waiting_for_top_level_window_info_);
   // TODO(sky): rather than DCHECK, have this kill connection.
   DCHECK(!window_manager_internal_);  // Not valid for the windowmanager.
+  DCHECK(!waiting_for_top_level_window_info_);
   const ClientWindowId client_window_id(transport_window_id);
   // TODO(sky): need a way for client to provide context to figure out display.
   Display* display = display_manager()->displays().empty()
@@ -1185,7 +1185,7 @@ void WindowTree::SetEventObserver(mojom::EventMatcherPtr matcher,
   };
 
   if (matcher->type_matcher) {
-    auto iter =
+    auto* iter =
         std::find(std::begin(event_type_whitelist),
                   std::end(event_type_whitelist), matcher->type_matcher->type);
     if (iter == std::end(event_type_whitelist)) {
@@ -1366,7 +1366,8 @@ void WindowTree::SetClientArea(
   window->SetClientArea(insets, additional_client_areas);
 }
 
-void WindowTree::SetHitTestMask(Id transport_window_id, const gfx::Rect& mask) {
+void WindowTree::SetHitTestMask(Id transport_window_id,
+                                const base::Optional<gfx::Rect>& mask) {
   ServerWindow* window =
       GetWindowByClientId(ClientWindowId(transport_window_id));
   if (!window || !access_policy_->CanSetHitTestMask(window)) {
@@ -1374,8 +1375,8 @@ void WindowTree::SetHitTestMask(Id transport_window_id, const gfx::Rect& mask) {
     return;
   }
 
-  if (!mask.IsEmpty())
-    window->SetHitTestMask(mask);
+  if (mask)
+    window->SetHitTestMask(*mask);
   else
     window->ClearHitTestMask();
 }

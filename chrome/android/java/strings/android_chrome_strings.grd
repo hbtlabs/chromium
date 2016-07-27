@@ -195,6 +195,12 @@ CHAR-LIMIT guidelines:
       <message name="IDS_YESTERDAY" desc="Generic Label saying the date is yesterday.">
         Yesterday
       </message>
+      <message name="IDS_SELECT" desc="Prompt for user to select something. [CHAR-LIMIT=20]">
+        Select
+      </message>
+      <message name="IDS_ADD" desc="Prompt for the user to add something, like a new address. [CHAR-LIMIT=20]">
+        Add
+      </message>
 
       <!-- Main Preferences -->
       <message name="IDS_PREFERENCES" desc="Title for Chrome's Settings.">
@@ -290,9 +296,6 @@ CHAR-LIMIT guidelines:
       <message name="IDS_AUTOFILL_CREDIT_CARD_EDITOR_BILLING_ADDRESS" desc="Label for a spinner input field containing a list of billing addresses for a credit card. [CHAR-LIMIT=32]">
         Billing address
       </message>
-      <message name="IDS_AUTOFILL_BILLING_ADDRESS_SELECT_PROMPT" desc="Prompt for user to select a billing address in autofill settings for a credit card. [CHAR-LIMIT=24]">
-        Select
-      </message>
       <message name="IDS_AUTOFILL_DESCRIBE_LOCAL_COPY" desc="Text label that describes a Wallet credit card which has been copied to the local Chrome instance.">
          Copied to Chrome
        </message>
@@ -333,11 +336,38 @@ CHAR-LIMIT guidelines:
       <message name="IDS_MANAGE_PASSWORDS_TEXT" desc="Text for link to manage passwords on Account Central.">
         View and manage saved passwords at <ph name="BEGIN_LINK">&lt;link&gt;</ph>passwords.google.com<ph name="END_LINK">&lt;/link&gt;</ph>
       </message>
+      <message name="IDS_REDIRECT_TO_PASSWORDS_TEXT" desc="Title of password settings entry in main Chrome preferences for users who will be redirected to passwords.google.com to manage their passwords.">
+        Saved passwords
+      </message>
+      <message name="IDS_REDIRECT_TO_PASSWORDS_LINK" desc="Hostname of the site where users will go if they tap the passwords settings in main Chrome preferences.">
+        passwords.google.com
+      </message>
       <message name="IDS_SAVED_PASSWORDS_NONE_TEXT" desc="Text when there are no saved passwords/exceptions.">
         Saved passwords will appear here.
       </message>
       <message name="IDS_PASSWORD_ENTRY_EDITOR_TITLE" desc='Title of the "edit a name/password" screen.'>
-        Edit saved name/password or exception
+        Edit saved account
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_SITE_TITLE" desc='Title preceding the identification of the site where the stored password comes from.'>
+        Site
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_USERNAME_TITLE" desc='Title preceding username of the account where the stored password comes from.'>
+        Username
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_PASSWORD" desc='Title preceding password on password entry editor.'>
+        Password
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_COPY_STORED_SITE" desc='Content description for the button that copies the stored password.'>
+        Copy site
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_COPY_STORED_USERNAME" desc='Content description for the button that copies the stored password.'>
+        Copy username
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_COPY_STORED_PASSWORD" desc='Content description for the button that copies the stored password.'>
+        Copy password
+      </message>
+      <message name="IDS_PASSWORD_ENTRY_EDITOR_VIEW_STORED_PASSWORD" desc='Content description for the button that allows users to view the stored password upon reauthentication.'>
+        Unmask password
       </message>
 
       <!-- Homepage preferences -->
@@ -788,27 +818,18 @@ Your Google account may have other forms of browsing history like searches and a
 To obtain new licenses, connect to the internet and play your downloaded content.
       </message>
 
-      <!-- Language preferences -->
-      <message name="IDS_LANGUAGE" desc="Title for Language settings screen. [CHAR-LIMIT=32]">
-        Language
-      </message>
-      <message name="IDS_GOOGLE_TRANSLATE" desc='Title for the Google Translate preference. [CHAR-LIMIT=32]'>
+      <!-- Google translate preferences -->
+      <message name="IDS_GOOGLE_TRANSLATE" desc='Title for the Google Translate settings screen. [CHAR-LIMIT=32]'>
         Google Translate
       </message>
       <message name="IDS_TRANSLATE_PREFS_DESCRIPTION" desc="Translate preference description">
-        Offer to translate pages using Google Translate
+        When this feature is turned on, Chrome will offer to translate pages written in other languages using Google Translate.
       </message>
       <message name="IDS_TRANSLATE_PREFS_TOAST_DESCRIPTION" desc="Translate settings reset toast when resetting defaults">
         Your translate settings have been reset.
       </message>
       <message name="IDS_RESET_TRANSLATE_DEFAULTS" desc="Title for translate reset menu preference">
         Reset translate settings
-      </message>
-      <message name="IDS_AUTO_DETECT_ENCODING" desc="Title for checkbox to enable or disable automatic detection of the character encoding in web pages. ">
-        Auto detect encoding
-      </message>
-      <message name="IDS_AUTO_DETECT_ENCODING_DESCRIPTION" desc="Description for checkbox to enable or disable automatic detection of the character encoding in web pages. ">
-        Automatically determine character encoding
       </message>
 
       <!-- Storage preferences -->
@@ -825,6 +846,11 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_FULLSCREEN_PERMISSION_TITLE" desc="Title for the permission of entering fullscreen without popup alert [CHAR-LIMIT=32]">
         Full screen
+      </message>
+
+      <!-- USB preferences -->
+      <message name="IDS_WEBSITE_SETTINGS_REVOKE_DEVICE_PERMISSION" desc="Content description for revoking a website's permission to access a device.">
+        Revoke device permission
       </message>
 
       <!-- Data Saver -->
@@ -1236,6 +1262,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_BLUETOOTH_CONFIRM_BUTTON" desc="The button to confirm association of a website with a Bluetooth device. Use the same term as in 'Pair this Bluetooth headset with your phone.'">
         Pair
       </message>
+      <message name="IDS_BLUETOOTH_NOT_SEEING_IT" desc="The message to show at the bottom of the dialog when Bluetooth scanning has uncovered some items but is still scanning for others.">
+        Not seeing your device? <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>.
+      </message>
       <message name="IDS_BLUETOOTH_NOT_SEEING_IT_IDLE_NONE_FOUND" desc="The message to show at the bottom of the dialog when Bluetooth scanning has not uncovered any devices and it is no longer discovering devices.">
         <ph name="BEGIN_LINK">&lt;link&gt;</ph>Get help<ph name="END_LINK">&lt;/link&gt;</ph>
       </message>
@@ -1566,9 +1595,6 @@ You are signing in with a managed account and giving its administrator control o
       </message>
 
       <!-- Add to Home screen strings -->
-      <message name="IDS_ADD" desc="Title for Add button [CHAR-LIMIT=20]">
-        Add
-      </message>
       <message name="IDS_ADD_TO_HOMESCREEN_TITLE" desc="Edit text title for Add to Home screen dialog [CHAR-LIMIT=30]">
         Title
       </message>
@@ -2617,14 +2643,8 @@ You can control the Physical Web in Chrome Settings.
       <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment.">
         Payment
       </message>
-      <message name="IDS_PAYMENTS_SELECT_METHOD_OF_PAYMENT_PROMPT" desc="The label for the button that presents the user with the list of possible methods of payments, for example a list of their credit cards..">
-        Select payment method
-      </message>
       <message name="IDS_PAYMENTS_CONTACT_DETAILS_LABEL" desc="The title for the section that lets the user select how they can be contacted.">
         Contact info
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_CONTACT_DETAILS_PROMPT" desc="The label for the button that presents the user with the list of possible phone numbers and email addresses where the user can be reached.">
-        Select contact details
       </message>
       <message name="IDS_PAYMENTS_ADD_CONTACT_DETAILS_LABEL" desc="The title of the dialog for user to add new contact information, such as email address or phone number.">
         Add contact info
@@ -2640,15 +2660,6 @@ You can control the Physical Web in Chrome Settings.
       </message>
       <message name="IDS_PAYMENTS_SHIPPING_OPTION_LABEL" desc="The title for the section that lets the user select how the product should be shipped.">
         Shipping option
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_SHIPPING_PROMPT" desc="The label for the button that presents the user with the list of possible shipping addresses and options.">
-        Select shipping
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_SHIPPING_OPTION_PROMPT" desc="The label for the button that presents the user with the list of possible shipping options.">
-        Select shipping option
-      </message>
-      <message name="IDS_PAYMENTS_SELECT_SHIPPING_ADDRESS_PROMPT" desc="The label for the button that presents the user with the list of possible shipping addresses.">
-        Select shipping address
       </message>
       <message name="IDS_PAYMENTS_ORDER_SUMMARY_LABEL" desc="The title of the section that shows the summary of the order, including names and prices of individual line items, i.e. the bill.">
         Order summary
@@ -2690,7 +2701,7 @@ You can control the Physical Web in Chrome Settings.
         Add contact info
       </message>
       <message name="IDS_PAYMENTS_SELECT_SHIPPING_ADDRESS_FOR_SHIPPING_METHODS" desc="Text implying that a user needs to pick a shipping address to see the shipping methods.">
-        Select a shipping address to check shipping methods.
+        Select a shipping address to check shipping methods and requirements.
       </message>
       <message name="IDS_PAYMENTS_CHECKING_OPTION" desc="Text explaining that the option the user selected is being checked and verified.">
         Checking

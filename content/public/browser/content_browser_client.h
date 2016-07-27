@@ -107,7 +107,6 @@ class BrowserURLHandler;
 class ClientCertificateDelegate;
 class DevToolsManagerDelegate;
 class ExternalVideoSurfaceContainer;
-class GeolocationDelegate;
 class LocationProvider;
 class MediaObserver;
 class NavigationHandle;
@@ -535,13 +534,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Getters for common objects.
   virtual net::NetLog* GetNetLog();
 
-  // Allows the embedder to provide a Delegate for Geolocation to override some
-  // functionality of the API (e.g. AccessTokenStore, LocationProvider).
-  virtual GeolocationDelegate* CreateGeolocationDelegate();
-
-  // Returns true if fast shutdown is possible.
-  virtual bool IsFastShutdownPossible();
-
   // Called by WebContents to override the WebKit preferences that are used by
   // the renderer. The content layer will add its own settings, and then it's up
   // to the embedder to update it if it wants.
@@ -657,9 +649,9 @@ class CONTENT_EXPORT ContentBrowserClient {
       shell::InterfaceRegistry* registry,
       RenderProcessHost* render_process_host) {}
 
-  // Allows to register browser Mojo interfaces exposed through the
-  // FrameMojoShell.
-  virtual void RegisterFrameMojoShellInterfaces(
+  // Called when RenderFrameHostImpl connects to the Media service. Expose
+  // interfaces to the service using |registry|.
+  virtual void ExposeInterfacesToMediaService(
       shell::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 

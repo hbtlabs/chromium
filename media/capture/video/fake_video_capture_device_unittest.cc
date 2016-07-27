@@ -21,7 +21,6 @@
 #include "media/base/video_capture_types.h"
 #include "media/capture/video/fake_video_capture_device_factory.h"
 #include "media/capture/video/video_capture_device.h"
-#include "mojo/public/cpp/bindings/string.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -152,21 +151,20 @@ class ImageCaptureClient : public base::RefCounted<ImageCaptureClient> {
                void(const base::Callback<void(bool)>&));
 
   // GMock doesn't support move-only arguments, so we use this forward method.
-  void DoOnPhotoTaken(mojo::String mime_type, mojo::Array<uint8_t> data) {
+  void DoOnPhotoTaken(mojom::BlobPtr blob) {
     // Only PNG images are supported right now.
-    EXPECT_STREQ("image/png", mime_type.storage().c_str());
+    EXPECT_STREQ("image/png", blob->mime_type.c_str());
     // Not worth decoding the incoming data. Just check that the header is PNG.
     // http://www.libpng.org/pub/png/spec/1.2/PNG-Rationale.html#R.PNG-file-signature
-    ASSERT_GT(data.size(), 4u);
-    EXPECT_EQ('P', data[1]);
-    EXPECT_EQ('N', data[2]);
-    EXPECT_EQ('G', data[3]);
+    ASSERT_GT(blob->data.size(), 4u);
+    EXPECT_EQ('P', blob->data[1]);
+    EXPECT_EQ('N', blob->data[2]);
+    EXPECT_EQ('G', blob->data[3]);
     OnCorrectPhotoTaken();
   }
   MOCK_METHOD0(OnCorrectPhotoTaken, void(void));
-  MOCK_METHOD1(
-      OnTakePhotoFailure,
-      void(const base::Callback<void(mojo::String, mojo::Array<uint8_t>)>&));
+  MOCK_METHOD1(OnTakePhotoFailure,
+               void(const base::Callback<void(mojom::BlobPtr)>&));
 
  private:
   friend class base::RefCounted<ImageCaptureClient>;
@@ -320,6 +318,17 @@ TEST_F(FakeVideoCaptureDeviceTest, GetAndSetCapabilities) {
 
   auto* capabilities = image_capture_client_->capabilities();
   ASSERT_TRUE(capabilities);
+  EXPECT_EQ(100u, capabilities->iso->min);
+  EXPECT_EQ(100u, capabilities->iso->max);
+  EXPECT_EQ(100u, capabilities->iso->current);
+  EXPECT_EQ(capture_params.requested_format.frame_size.height(),
+            static_cast<int>(capabilities->height->current));
+  EXPECT_EQ(240u, capabilities->height->min);
+  EXPECT_EQ(1080u, capabilities->height->max);
+  EXPECT_EQ(capture_params.requested_format.frame_size.width(),
+            static_cast<int>(capabilities->width->current));
+  EXPECT_EQ(320u, capabilities->width->min);
+  EXPECT_EQ(1920u, capabilities->width->max);
   EXPECT_EQ(100u, capabilities->zoom->min);
   EXPECT_EQ(400u, capabilities->zoom->max);
   EXPECT_GE(capabilities->zoom->current, capabilities->zoom->min);

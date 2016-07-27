@@ -37,6 +37,7 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/TagCollection.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
 #include "core/html/HTMLCollection.h"
@@ -171,7 +172,7 @@ bool WebNode::isFocusable() const
 
 bool WebNode::isContentEditable() const
 {
-    return m_private->isContentEditable();
+    return blink::isContentEditable(*m_private);
 }
 
 bool WebNode::isInsideFocusableElementOrARIAWidget() const

@@ -145,6 +145,10 @@ void WmWindowAura::SetName(const char* name) {
   window_->SetName(name);
 }
 
+std::string WmWindowAura::GetName() const {
+  return window_->name();
+}
+
 base::string16 WmWindowAura::GetTitle() const {
   return window_->title();
 }
@@ -280,6 +284,10 @@ const wm::WindowState* WmWindowAura::GetWindowState() const {
 
 WmWindow* WmWindowAura::GetToplevelWindow() {
   return Get(window_->GetToplevelWindow());
+}
+
+WmWindow* WmWindowAura::GetToplevelWindowForFocus() {
+  return Get(::wm::GetToplevelWindow(window_));
 }
 
 void WmWindowAura::SetParentUsingContext(WmWindow* context,
@@ -652,6 +660,15 @@ void WmWindowAura::RemoveObserver(WmWindowObserver* observer) {
 
 bool WmWindowAura::HasObserver(const WmWindowObserver* observer) const {
   return observers_.HasObserver(observer);
+}
+
+void WmWindowAura::AddLimitedPreTargetHandler(ui::EventHandler* handler) {
+  // This behaves differently from WmWindowMus for child and embedded windows.
+  window_->AddPreTargetHandler(handler);
+}
+
+void WmWindowAura::RemoveLimitedPreTargetHandler(ui::EventHandler* handler) {
+  window_->RemovePreTargetHandler(handler);
 }
 
 void WmWindowAura::OnWindowHierarchyChanging(

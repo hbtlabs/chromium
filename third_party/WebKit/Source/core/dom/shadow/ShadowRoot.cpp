@@ -140,7 +140,7 @@ void ShadowRoot::recalcStyle(StyleRecalcChange change)
     // There's no style to update so just calling recalcStyle means we're updated.
     clearNeedsStyleRecalc();
 
-    recalcChildStyle(change);
+    recalcDescendantStyles(change);
     clearChildNeedsStyleRecalc();
 }
 
@@ -150,11 +150,11 @@ void ShadowRoot::attachLayoutTree(const AttachContext& context)
     DocumentFragment::attachLayoutTree(context);
 }
 
-void ShadowRoot::detach(const AttachContext& context)
+void ShadowRoot::detachLayoutTree(const AttachContext& context)
 {
     if (context.clearInvalidation)
         document().styleEngine().styleInvalidator().clearInvalidation(*this);
-    DocumentFragment::detach(context);
+    DocumentFragment::detachLayoutTree(context);
 }
 
 Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* insertionPoint)

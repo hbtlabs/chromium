@@ -89,7 +89,8 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface =
+      FakeOutputSurface::CreateDelegating3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   std::unique_ptr<LayerImpl> root_layer =
@@ -101,7 +102,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
   ASSERT_TRUE(owning_layer->render_surface());
 
   SkXfermode::Mode blend_mode = SkXfermode::kSoftLight_Mode;
-  owning_layer->SetBlendMode(blend_mode);
+  owning_layer->test_properties()->blend_mode = blend_mode;
   RenderSurfaceImpl* render_surface = owning_layer->render_surface();
 
   root_layer->test_properties()->AddChild(std::move(owning_layer));

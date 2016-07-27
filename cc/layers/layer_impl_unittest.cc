@@ -112,7 +112,8 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface =
+      FakeOutputSurface::CreateDelegating3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);
@@ -155,7 +156,6 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   arbitrary_transform.Scale3d(0.1f, 0.2f, 0.3f);
   FilterOperations arbitrary_filters;
   arbitrary_filters.Append(FilterOperation::CreateOpacityFilter(0.5f));
-  SkXfermode::Mode arbitrary_blend_mode = SkXfermode::kMultiply_Mode;
 
   // These properties are internal, and should not be considered "change" when
   // they are used.
@@ -214,8 +214,6 @@ TEST(LayerImplTest, VerifyLayerChangesAreTrackedProperly) {
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
       root->SetTransform(arbitrary_transform));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetContentsOpaque(true));
-  EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(
-      root->SetBlendMode(arbitrary_blend_mode));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetDrawsContent(true));
   EXECUTE_AND_VERIFY_SUBTREE_DID_NOT_CHANGE(root->SetBounds(bounds_size));
 }
@@ -224,7 +222,8 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface =
+      FakeOutputSurface::CreateDelegating3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);
@@ -255,7 +254,6 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   arbitrary_transform.Scale3d(0.1f, 0.2f, 0.3f);
   FilterOperations arbitrary_filters;
   arbitrary_filters.Append(FilterOperation::CreateOpacityFilter(0.5f));
-  SkXfermode::Mode arbitrary_blend_mode = SkXfermode::kMultiply_Mode;
 
   // Set layer to draw content so that their draw property by property trees is
   // verified.
@@ -311,15 +309,16 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
       layer->SetBackgroundColor(arbitrary_color));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->OnOpacityAnimated(arbitrary_number));
-  VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBlendMode(arbitrary_blend_mode);
-                                      layer->NoteLayerPropertyChanged());
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->OnTransformAnimated(arbitrary_transform));
   VERIFY_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size);
                                       layer->NoteLayerPropertyChanged());
 
   // Unrelated functions, set to the same values, no needs update.
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetFilters(arbitrary_filters));
+  layer->test_properties()->filters = arbitrary_filters;
+  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
+  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
+      layer->OnFilterAnimated(arbitrary_filters));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetMasksToBounds(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetContentsOpaque(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
@@ -328,8 +327,6 @@ TEST(LayerImplTest, VerifyNeedsUpdateDrawProperties) {
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetDrawsContent(true));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetBackgroundColor(arbitrary_color));
-  VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
-      layer->SetBlendMode(arbitrary_blend_mode));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(
       layer->SetTransform(arbitrary_transform));
   VERIFY_NO_NEEDS_UPDATE_DRAW_PROPERTIES(layer->SetBounds(arbitrary_size));
@@ -342,7 +339,8 @@ TEST(LayerImplTest, SafeOpaqueBackgroundColor) {
   FakeImplTaskRunnerProvider task_runner_provider;
   TestSharedBitmapManager shared_bitmap_manager;
   TestTaskGraphRunner task_graph_runner;
-  std::unique_ptr<OutputSurface> output_surface = FakeOutputSurface::Create3d();
+  std::unique_ptr<OutputSurface> output_surface =
+      FakeOutputSurface::CreateDelegating3d();
   FakeLayerTreeHostImpl host_impl(&task_runner_provider, &shared_bitmap_manager,
                                   &task_graph_runner);
   host_impl.SetVisible(true);

@@ -24,8 +24,8 @@ message PermissionReport {
   // The platform.
   optional PlatformType platform_type = 3;
 
-  // When the request was initiated.
-  repeated RequestTrigger request_trigger = 4;
+  // Whether the action was after a user gesture.
+  optional GestureType gesture = 4;
 
   // The action the user took. Required.
   optional Action action = 5;
@@ -43,18 +43,16 @@ message PermissionReport {
     ANDROID_PLATFORM = 2;
   }
 
-  // Various request triggers we want to record, e.g. on page load.
-  enum RequestTrigger {
-    REQUEST_TRIGGER_UNSPECIFIED = 0;
-    ONLOAD = 1;
-    AFTER_GESTURE = 2;
+  // Whether the action occurred after a user gesture.
+  enum GestureType {
+    GESTURE_TYPE_UNSPECIFIED = 0;
+    GESTURE = 1;
+    NO_GESTURE = 2;
   }
 
   // User Permission Actions. This enum is intentionally different with 
   // the one in src/chrome/browser/permissions/permission_uma_util.h
   enum Action {
-    // TODO(stefanocs): Add ACTION_UNSPECIFIED to the corresponding Safe
-    // Browsing logs proto.
     ACTION_UNSPECIFIED = 0;
     GRANTED = 1;
     DENIED = 2;
@@ -68,9 +66,8 @@ message PermissionReport {
     SOURCE_UI_UNSPECIFIED = 0;
     PROMPT = 1;
     OIB = 2;
-    // TODO(stefanocs): Remove CONTENT_SETTINGS from the corresponding Safe
-    // Browsing logs proto.
     SITE_SETTINGS = 3;
+    PAGE_ACTION = 4;
   }
 
   // The various types of permissions. This should stay in sync with the

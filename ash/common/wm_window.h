@@ -28,6 +28,7 @@ class Transform;
 }
 
 namespace ui {
+class EventHandler;
 class Layer;
 }
 
@@ -45,7 +46,6 @@ class WmWindowObserver;
 enum class WmWindowProperty;
 
 namespace wm {
-class WMEvent;
 class WindowState;
 }
 
@@ -73,6 +73,7 @@ class ASH_EXPORT WmWindow {
 
   // Used for debugging.
   virtual void SetName(const char* name) = 0;
+  virtual std::string GetName() const = 0;
 
   virtual base::string16 GetTitle() const = 0;
 
@@ -125,7 +126,11 @@ class ASH_EXPORT WmWindow {
   }
   virtual const wm::WindowState* GetWindowState() const = 0;
 
+  // The implementation of this matches aura::Window::GetToplevelWindow().
   virtual WmWindow* GetToplevelWindow() = 0;
+  // The implementation of this matches
+  // aura::client::ActivationClient::GetToplevelWindow().
+  virtual WmWindow* GetToplevelWindowForFocus() = 0;
 
   // See aura::client::ParentWindowWithContext() for details of what this does.
   virtual void SetParentUsingContext(WmWindow* context,
@@ -278,6 +283,13 @@ class ASH_EXPORT WmWindow {
   virtual void AddObserver(WmWindowObserver* observer) = 0;
   virtual void RemoveObserver(WmWindowObserver* observer) = 0;
   virtual bool HasObserver(const WmWindowObserver* observer) const = 0;
+
+  // Adds or removes a handler to receive events targeted at this window, before
+  // this window handles the events itself; the handler does not recieve events
+  // from embedded windows. This only supports windows with internal widgets;
+  // see GetInternalWidget(). Ownership of the handler is not transferred.
+  virtual void AddLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
+  virtual void RemoveLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
 
  protected:
   virtual ~WmWindow() {}

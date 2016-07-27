@@ -48,8 +48,11 @@ _java_target_whitelist = [
   "//third_party/netty4:netty_all",
   "//third_party/netty-tcnative:netty-tcnative",
   "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
+  "//third_party/robolectric:android-all-5.0.0_r2-robolectric-1",
   "//third_party/robolectric:json-20080701",
   "//third_party/robolectric:tagsoup-1.2",
+  "//third_party/robolectric:shadows-core-3.0",
+  "//third_party/robolectric:shadows-multidex-3.0",
 ]
 
 # Targets that match the whitelist but are not actually java targets.
@@ -1846,12 +1849,17 @@ if (enable_java_templates) {
     _enable_interface_jars_javac = true
     if (defined(invoker.processors_javac)) {
       _processors = invoker.processors_javac
-      _enable_iterface_jars_javac = _processors == []
+      _enable_interface_jars_javac = _processors == []
     }
 
     _processor_args = []
     if (defined(invoker.processor_args_javac)) {
       _processor_args = invoker.processor_args_javac
+    }
+
+    _additional_jar_files = []
+    if (defined(invoker.additional_jar_files)) {
+      _additional_jar_files = invoker.additional_jar_files
     }
 
     if (defined(invoker.enable_incremental_javac_override)) {
@@ -1985,6 +1993,9 @@ if (enable_java_templates) {
       }
       foreach(e, _processor_args) {
         args += [ "--processor-arg=" + e ]
+      }
+      foreach(e, _additional_jar_files) {
+        args += [ "--additional-jar-file=" + e ]
       }
       if (invoker.java_files != []) {
         args += [ "@" + rebase_path(invoker.java_sources_file, root_build_dir) ]
@@ -2203,6 +2214,7 @@ if (enable_java_templates) {
     compile_java(_compile_java_target) {
       forward_variables_from(invoker,
                              [
+                               "additional_jar_files",
                                "alternative_android_sdk_ijar",
                                "alternative_android_sdk_ijar_dep",
                                "dist_jar_path",

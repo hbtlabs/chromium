@@ -156,7 +156,7 @@ class MockTaskRunner : public blink::WebTaskRunner {
     void postTask(const WebTraceLocation&, Task*) override { }
     void postDelayedTask(const WebTraceLocation&, Task*, double) override { }
     bool runsTasksOnCurrentThread() override { return true; }
-    WebTaskRunner* clone() override { return nullptr; }
+    std::unique_ptr<WebTaskRunner> clone() override { return nullptr; }
     double virtualTimeSeconds() const override { return 0.0; }
     double monotonicallyIncreasingVirtualTimeSeconds() const override { return 0.0; }
 };
@@ -231,6 +231,12 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_EQ(client->imageChangedCount(), 0);
     ASSERT_FALSE(client->notifyFinishedCalled());
 
+    // Add a client to check an assertion error doesn't happen
+    // (crbug.com/630983).
+    Persistent<MockImageResourceClient> client2 = new MockImageResourceClient(cachedImage);
+    ASSERT_EQ(client2->imageChangedCount(), 0);
+    ASSERT_FALSE(client2->notifyFinishedCalled());
+
     const char thirdPart[] = "--boundary";
     cachedImage->appendData(thirdPart, strlen(thirdPart));
     ASSERT_TRUE(cachedImage->resourceBuffer());
@@ -246,6 +252,8 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_EQ(cachedImage->getImage()->height(), 1);
     ASSERT_EQ(client->imageChangedCount(), 1);
     ASSERT_TRUE(client->notifyFinishedCalled());
+    ASSERT_EQ(client2->imageChangedCount(), 1);
+    ASSERT_TRUE(client2->notifyFinishedCalled());
 }
 
 TEST(ImageResourceTest, CancelOnDetach)
@@ -619,6 +627,22 @@ TEST(ImageResourceTest, AddClientAfterPrune)
     EXPECT_EQ(1, imageResource->getImage()->width());
     EXPECT_EQ(1, imageResource->getImage()->height());
     EXPECT_TRUE(client2->notifyFinishedCalled());
+}
+
+TEST(ImageResourceTest, CancelOnDecodeError)
+{
+    KURL testURL(ParsedURLString, "http://www.test.com/cancelTest.html");
+    URLTestHelpers::registerMockedURLLoad(testURL, "cancelTest.html", "text/html");
+
+    ResourceFetcher* fetcher = ResourceFetcher::create(ImageResourceTestMockFetchContext::create());
+    FetchRequest request(testURL, FetchInitiatorInfo());
+    ImageResource* cachedImage = ImageResource::fetch(request, fetcher);
+    Platform::current()->getURLLoaderMockFactory()->unregisterURL(testURL);
+
+    cachedImage->loader()->didReceiveResponse(nullptr, WrappedResourceResponse(ResourceResponse(testURL, "image/jpeg", 18, nullAtom, String())), nullptr);
+    cachedImage->loader()->didReceiveData(nullptr, "notactuallyanimage", 18, 18, 18);
+    EXPECT_EQ(Resource::DecodeError, cachedImage->getStatus());
+    EXPECT_FALSE(cachedImage->isLoading());
 }
 
 } // namespace blink

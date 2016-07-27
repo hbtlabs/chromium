@@ -79,7 +79,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabManagerBasics) {
   browser()->OpenURL(open3);
   load3.Wait();
 
-  auto tsm = browser()->tab_strip_model();
+  auto* tsm = browser()->tab_strip_model();
   EXPECT_EQ(3, tsm->count());
 
   // Navigate the current (third) tab to a different URL, so we can test
@@ -308,7 +308,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectRecentlyUsedTabs) {
   base::SimpleTestTickClock test_clock_;
   tab_manager->set_test_tick_clock(&test_clock_);
 
-  auto tsm = browser()->tab_strip_model();
+  auto* tsm = browser()->tab_strip_model();
 
   // Set the minimum time of protection.
   tab_manager->minimum_protection_time_ =
@@ -368,7 +368,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
       browser(), GURL(chrome::kChromeUIAboutURL), NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
-  auto tab = browser()->tab_strip_model()->GetWebContentsAt(1);
+  auto* tab = browser()->tab_strip_model()->GetWebContentsAt(1);
 
   // Simulate that a video stream is now being captured.
   content::MediaStreamDevice fake_media_device(
@@ -391,6 +391,46 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
 
   // Should be able to discard the background tab now.
   EXPECT_TRUE(tab_manager->DiscardTabImpl());
+}
+
+IN_PROC_BROWSER_TEST_F(TabManagerTest, AutoDiscardable) {
+  using content::WindowedNotificationObserver;
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+
+  // Disable the protection of recent tabs.
+  tab_manager->minimum_protection_time_ = base::TimeDelta::FromMinutes(0);
+
+  // Get two tabs open.
+  WindowedNotificationObserver load1(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
+                      CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open1);
+  load1.Wait();
+
+  WindowedNotificationObserver load2(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open2);
+  load2.Wait();
+
+  // Set the auto-discardable state of the first tab to false.
+  auto tsm = browser()->tab_strip_model();
+  ASSERT_EQ(2, tsm->count());
+  tab_manager->SetTabAutoDiscardableState(tsm->GetWebContentsAt(0), false);
+
+  // Shouldn't discard the tab, since auto-discardable is deactivated.
+  EXPECT_FALSE(tab_manager->DiscardTabImpl());
+
+  // Reset auto-discardable state to true.
+  tab_manager->SetTabAutoDiscardableState(tsm->GetWebContentsAt(0), true);
+
+  // Now it should be able to discard the tab.
+  EXPECT_TRUE(tab_manager->DiscardTabImpl());
+  EXPECT_TRUE(tab_manager->IsTabDiscarded(tsm->GetWebContentsAt(0)));
 }
 
 }  // namespace memory

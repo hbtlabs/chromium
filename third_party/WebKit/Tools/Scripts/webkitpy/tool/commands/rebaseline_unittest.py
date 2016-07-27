@@ -4,24 +4,23 @@
 
 import unittest
 
-from webkitpy.common.net.buildbot_mock import MockBuilder
 from webkitpy.common.net.layouttestresults import LayoutTestResults
 from webkitpy.common.system.executive_mock import MockExecutive
 from webkitpy.common.system.executive_mock import MockExecutive2
 from webkitpy.common.system.outputcapture import OutputCapture
 from webkitpy.layout_tests.builder_list import BuilderList
 from webkitpy.tool.commands.rebaseline import *
-from webkitpy.tool.mock_tool import MockTool, MockOptions
+from webkitpy.tool.mock_tool import MockWebKitPatch, MockOptions
 
 
 class BaseTestCase(unittest.TestCase):
     MOCK_WEB_RESULT = 'MOCK Web result, convert 404 to None=True'
-    WEB_PREFIX = 'http://example.com/f/builders/MOCK Mac10.11/results/layout-test-results'
+    WEB_PREFIX = 'https://storage.googleapis.com/chromium-layout-test-archives/MOCK_Mac10_11/results/layout-test-results'
 
     command_constructor = None
 
     def setUp(self):
-        self.tool = MockTool()
+        self.tool = MockWebKitPatch()
         # lint warns that command_constructor might not be set, but this is intentional; pylint: disable=E1102
         self.command = self.command_constructor()
         self.tool.builders = BuilderList({
@@ -254,6 +253,7 @@ Bug(A) [ Debug ] : fast/css/large-list-of-rules-crash.html [ Failure ]
         self.options.suffixes = "png,wav,txt"
         self.command._rebaseline_test_and_update_expectations(self.options)
 
+        self.maxDiff = None
         self.assertItemsEqual(self.tool.web.urls_fetched,
                               [self.WEB_PREFIX + '/userscripts/another-test-actual.png',
                                self.WEB_PREFIX + '/userscripts/another-test-actual.wav',
@@ -530,7 +530,7 @@ class TestRebaseline(BaseTestCase):
     command_constructor = Rebaseline  # AKA webkit-patch rebaseline
 
     def test_rebaseline(self):
-        self.command._builders_to_pull_from = lambda: [MockBuilder('MOCK Win7')]
+        self.command._builders_to_pull_from = lambda: ['MOCK Win7']
 
         self._write("userscripts/first-test.html", "test data")
 
@@ -545,7 +545,7 @@ class TestRebaseline(BaseTestCase):
                           [['python', 'echo', 'rebaseline-test-internal', '--suffixes', 'txt,png', '--builder', 'MOCK Win7', '--test', 'userscripts/first-test.html', '--verbose']]])
 
     def test_rebaseline_directory(self):
-        self.command._builders_to_pull_from = lambda: [MockBuilder('MOCK Win7')]
+        self.command._builders_to_pull_from = lambda: ['MOCK Win7']
 
         self._write("userscripts/first-test.html", "test data")
         self._write("userscripts/second-test.html", "test data")
@@ -853,78 +853,6 @@ Bug(foo) [ Linux Win ] fast/dom/prototype-taco.html [ Rebaseline ]
                  '--builder', 'MOCK Mac10.10', '--test', 'fast/dom/missing-image.html'],
             ]
         ])
-
-
-class TestOptimizeBaselines(BaseTestCase):
-    command_constructor = OptimizeBaselines
-
-    def _write_test_file(self, port, path, contents):
-        abs_path = self.tool.filesystem.join(port.layout_tests_dir(), path)
-        self.tool.filesystem.write_text_file(abs_path, contents)
-
-    def setUp(self):
-        super(TestOptimizeBaselines, self).setUp()
-
-    def test_modify_scm(self):
-        test_port = self.tool.port_factory.get('test')
-        self._write_test_file(test_port, 'another/test.html', "Dummy test contents")
-        self._write_test_file(test_port, 'platform/test-mac-mac10.10/another/test-expected.txt', "result A")
-        self._write_test_file(test_port, 'another/test-expected.txt', "result A")
-
-        OutputCapture().assert_outputs(self, self.command.execute, args=[
-            MockOptions(suffixes='txt', no_modify_scm=False, platform='test-mac-mac10.10'),
-            ['another/test.html'],
-            self.tool,
-        ], expected_stdout='{"add": [], "remove-lines": [], "delete": []}\n')
-
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'platform/test-mac-mac10.10/another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'another/test-expected.txt')))
-
-    def test_no_modify_scm(self):
-        test_port = self.tool.port_factory.get('test')
-        self._write_test_file(test_port, 'another/test.html', "Dummy test contents")
-        self._write_test_file(test_port, 'platform/test-mac-mac10.10/another/test-expected.txt', "result A")
-        self._write_test_file(test_port, 'another/test-expected.txt', "result A")
-
-        OutputCapture().assert_outputs(self, self.command.execute, args=[
-            MockOptions(suffixes='txt', no_modify_scm=True, platform='test-mac-mac10.10'),
-            ['another/test.html'],
-            self.tool,
-        ], expected_stdout='{"add": [], "remove-lines": [], "delete": ["/test.checkout/LayoutTests/platform/test-mac-mac10.10/another/test-expected.txt"]}\n')
-
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'another/test-expected.txt')))
-
-    def test_optimize_all_suffixes_by_default(self):
-        test_port = self.tool.port_factory.get('test')
-        self._write_test_file(test_port, 'another/test.html', "Dummy test contents")
-        self._write_test_file(test_port, 'platform/test-mac-mac10.10/another/test-expected.txt', "result A")
-        self._write_test_file(test_port, 'platform/test-mac-mac10.10/another/test-expected.png', "result A png")
-        self._write_test_file(test_port, 'another/test-expected.txt', "result A")
-        self._write_test_file(test_port, 'another/test-expected.png', "result A png")
-
-        try:
-            oc = OutputCapture()
-            oc.capture_output()
-            self.command.execute(MockOptions(suffixes='txt,wav,png', no_modify_scm=True, platform='test-mac-mac10.10'),
-                                 ['another/test.html'],
-                                 self.tool)
-        finally:
-            out, _, _ = oc.restore_output()
-
-        self.assertEquals(out, '{"add": [], "remove-lines": [], "delete": ["/test.checkout/LayoutTests/platform/test-mac-mac10.10/another/test-expected.txt", "/test.checkout/LayoutTests/platform/test-mac-mac10.10/another/test-expected.png"]}\n')
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.txt')))
-        self.assertFalse(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'platform/mac/another/test-expected.png')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'another/test-expected.txt')))
-        self.assertTrue(self.tool.filesystem.exists(self.tool.filesystem.join(
-            test_port.layout_tests_dir(), 'another/test-expected.png')))
 
 
 class TestAutoRebaseline(BaseTestCase):
@@ -1437,3 +1365,9 @@ Bug(foo) [ Linux Win ] fast/dom/prototype-taco.html [ NeedsRebaseline ]
     def test_execute_with_dry_run(self):
         self._basic_execute_test([], dry_run=True)
         self.assertEqual(self.tool.scm().local_commits(), [])
+
+    def test_bot_revision_data(self):
+        self._setup_mock_build_data()
+        self.assertEqual(
+            self.command.bot_revision_data(self.tool.scm()),
+            [{'builder': 'MOCK Win7', 'revision': '9000'}])

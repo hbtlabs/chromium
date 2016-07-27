@@ -99,6 +99,11 @@ public:
         return m_layoutObject->isImage();
     }
 
+    bool isLayoutFullScreen() const
+    {
+        return m_layoutObject->isLayoutFullScreen();
+    }
+
     bool isListItem() const
     {
         return m_layoutObject->isListItem();
@@ -289,7 +294,7 @@ public:
         return m_layoutObject->resolveColor(colorProperty);
     }
 
-    ObjectPaintProperties* objectPaintProperties() const
+    const ObjectPaintProperties* objectPaintProperties() const
     {
         return m_layoutObject->objectPaintProperties();
     }

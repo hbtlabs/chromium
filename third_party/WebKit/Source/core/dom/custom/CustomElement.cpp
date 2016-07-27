@@ -15,6 +15,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/HTMLUnknownElement.h"
 #include "platform/text/Character.h"
 #include "wtf/text/AtomicStringHash.h"
 
@@ -32,11 +33,19 @@ CustomElementsRegistry* CustomElement::registry(const Document& document)
     return nullptr;
 }
 
-CustomElementDefinition* CustomElement::definitionForElement(const Element& element)
+static CustomElementDefinition* definitionForElementWithoutCheck(const Element& element)
 {
+    DCHECK_EQ(element.getCustomElementState(), CustomElementState::Custom);
     if (CustomElementsRegistry* registry = CustomElement::registry(element))
         return registry->definitionForName(element.localName());
     return nullptr;
+}
+
+CustomElementDefinition* CustomElement::definitionForElement(const Element* element)
+{
+    if (!element || element->getCustomElementState() != CustomElementState::Custom)
+        return nullptr;
+    return definitionForElementWithoutCheck(*element);
 }
 
 bool CustomElement::isValidName(const AtomicString& name)
@@ -160,6 +169,23 @@ HTMLElement* CustomElement::createUndefinedElement(Document& document, const Qua
     return element;
 }
 
+HTMLElement* CustomElement::createFailedElement(Document& document, const QualifiedName& tagName)
+{
+    DCHECK(shouldCreateCustomElement(document, tagName));
+
+    // "create an element for a token":
+    // https://html.spec.whatwg.org/multipage/syntax.html#create-an-element-for-the-token
+
+    // 7. If this step throws an exception, let element be instead a new element
+    // that implements HTMLUnknownElement, with no attributes, namespace set to
+    // given namespace, namespace prefix set to null, custom element state set
+    // to "failed", and node document set to document.
+
+    HTMLElement* element = HTMLUnknownElement::create(tagName, document);
+    element->setCustomElementState(CustomElementState::Failed);
+    return element;
+}
+
 void CustomElement::enqueue(Element* element, CustomElementReaction* reaction)
 {
     // To enqueue an element on the appropriate element queue
@@ -180,16 +206,14 @@ void CustomElement::enqueue(Element* element, CustomElementReaction* reaction)
 
 void CustomElement::enqueueConnectedCallback(Element* element)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasConnectedCallback())
         definition->enqueueConnectedCallback(element);
 }
 
 void CustomElement::enqueueDisconnectedCallback(Element* element)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasDisconnectedCallback())
         definition->enqueueDisconnectedCallback(element);
 }
@@ -199,8 +223,7 @@ void CustomElement::enqueueAttributeChangedCallback(Element* element,
     const QualifiedName& name,
     const AtomicString& oldValue, const AtomicString& newValue)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasAttributeChangedCallback(name))
         definition->enqueueAttributeChangedCallback(element, name, oldValue, newValue);
 }

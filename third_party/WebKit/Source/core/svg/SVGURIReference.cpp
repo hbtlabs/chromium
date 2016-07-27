@@ -56,38 +56,49 @@ KURL SVGURIReference::legacyHrefURL(const Document& document) const
     return document.completeURL(stripLeadingAndTrailingHTMLSpaces(hrefString()));
 }
 
-AtomicString SVGURIReference::fragmentIdentifierFromIRIString(const String& urlString, const TreeScope& treeScope)
+SVGURLReferenceResolver::SVGURLReferenceResolver(const String& urlString, const Document& document)
+    : m_relativeUrl(urlString)
+    , m_document(&document)
+    , m_isLocal(urlString.startsWith('#'))
 {
-    const Document& document = treeScope.document();
-
-    KURL url = document.completeURL(urlString);
-    if (!url.hasFragmentIdentifier() || !equalIgnoringFragmentIdentifier(url, document.url()))
-        return emptyAtom;
-    return AtomicString(url.fragmentIdentifier());
 }
 
-Element* SVGURIReference::targetElementFromIRIString(const String& urlString, const TreeScope& treeScope, AtomicString* fragmentIdentifier, Document* externalDocument)
+KURL SVGURLReferenceResolver::absoluteUrl() const
 {
-    const Document& document = treeScope.document();
+    if (m_absoluteUrl.isNull())
+        m_absoluteUrl = m_document->completeURL(m_relativeUrl);
+    return m_absoluteUrl;
+}
 
-    KURL url = document.completeURL(urlString);
-    if (!url.hasFragmentIdentifier())
+bool SVGURLReferenceResolver::isLocal() const
+{
+    return m_isLocal || equalIgnoringFragmentIdentifier(absoluteUrl(), m_document->url());
+}
+
+AtomicString SVGURLReferenceResolver::fragmentIdentifier() const
+{
+    // If this is a "fragment-only" URL, then the reference is always local, so
+    // just return what's after the '#' as the fragment.
+    if (m_isLocal)
+        return AtomicString(m_relativeUrl.substring(1));
+    return AtomicString(absoluteUrl().fragmentIdentifier());
+}
+
+AtomicString SVGURIReference::fragmentIdentifierFromIRIString(const String& urlString, const TreeScope& treeScope)
+{
+    SVGURLReferenceResolver resolver(urlString, treeScope.document());
+    if (!resolver.isLocal())
+        return emptyAtom;
+    return resolver.fragmentIdentifier();
+}
+
+Element* SVGURIReference::targetElementFromIRIString(const String& urlString, const TreeScope& treeScope, AtomicString* fragmentIdentifier)
+{
+    AtomicString id = fragmentIdentifierFromIRIString(urlString, treeScope);
+    if (id.isEmpty())
         return nullptr;
-
-    AtomicString id(url.fragmentIdentifier());
     if (fragmentIdentifier)
         *fragmentIdentifier = id;
-
-    if (externalDocument) {
-        // Enforce that the referenced url matches the url of the document that we've loaded for it!
-        ASSERT(equalIgnoringFragmentIdentifier(url, externalDocument->url()));
-        return externalDocument->getElementById(id);
-    }
-
-    // Exit early if the referenced url is external, and we have no externalDocument given.
-    if (!equalIgnoringFragmentIdentifier(url, document.url()))
-        return nullptr;
-
     return treeScope.getElementById(id);
 }
 

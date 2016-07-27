@@ -8,7 +8,6 @@
 #include "base/guid.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
 #include "media/base/cdm_factory.h"
@@ -306,15 +305,6 @@ SpeechRecognitionManagerDelegate*
 
 net::NetLog* ContentBrowserClient::GetNetLog() {
   return nullptr;
-}
-
-GeolocationDelegate* ContentBrowserClient::CreateGeolocationDelegate() {
-  // We don't need to override anything, the default implementation is good.
-  return nullptr;
-}
-
-bool ContentBrowserClient::IsFastShutdownPossible() {
-  return true;
 }
 
 base::FilePath ContentBrowserClient::GetDefaultDownloadDirectory() {

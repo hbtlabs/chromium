@@ -27,6 +27,7 @@
 using autofill::PasswordForm;
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
+using password_manager::PasswordStore;
 
 namespace {
 const char kEmptyString[] = "";
@@ -286,7 +287,7 @@ bool NativeBackendLibsecret::DisableAutoSignInForOrigins(
   if (!GetLoginsList(nullptr, ALL_LOGINS, &all_forms))
     return false;
 
-  for (auto& form : all_forms) {
+  for (auto* form : all_forms) {
     if (origin_filter.Run(form->origin) && !form->skip_zero_click) {
       form->skip_zero_click = true;
       if (!UpdateLogin(*form, changes))
@@ -298,7 +299,7 @@ bool NativeBackendLibsecret::DisableAutoSignInForOrigins(
 }
 
 bool NativeBackendLibsecret::GetLogins(
-    const PasswordForm& form,
+    const PasswordStore::FormDigest& form,
     ScopedVector<autofill::PasswordForm>* forms) {
   return GetLoginsList(&form, ALL_LOGINS, forms);
 }
@@ -328,7 +329,8 @@ bool NativeBackendLibsecret::AddUpdateLoginSearch(
     return false;
   }
 
-  *forms = ConvertFormList(found, &lookup_form);
+  PasswordStore::FormDigest form(lookup_form);
+  *forms = ConvertFormList(found, &form);
   return true;
 }
 
@@ -402,7 +404,7 @@ bool NativeBackendLibsecret::GetAllLogins(
 }
 
 bool NativeBackendLibsecret::GetLoginsList(
-    const PasswordForm* lookup_form,
+    const PasswordStore::FormDigest* lookup_form,
     GetLoginsListOptions options,
     ScopedVector<autofill::PasswordForm>* forms) {
   LibsecretAttributesBuilder attrs;
@@ -467,7 +469,7 @@ bool NativeBackendLibsecret::GetLoginsBetween(
       date_to_compare == CREATION_TIMESTAMP
           ? &autofill::PasswordForm::date_created
           : &autofill::PasswordForm::date_synced;
-  for (auto& saved_form : all_forms) {
+  for (auto*& saved_form : all_forms) {
     if (get_begin <= saved_form->*date_member &&
         (get_end.is_null() || saved_form->*date_member < get_end)) {
       forms->push_back(saved_form);
@@ -498,7 +500,7 @@ bool NativeBackendLibsecret::RemoveLoginsBetween(
 
 ScopedVector<autofill::PasswordForm> NativeBackendLibsecret::ConvertFormList(
     GList* found,
-    const PasswordForm* lookup_form) {
+    const PasswordStore::FormDigest* lookup_form) {
   ScopedVector<autofill::PasswordForm> forms;
   password_manager::PSLDomainMatchMetric psl_domain_match_metric =
       password_manager::PSL_DOMAIN_MATCH_NONE;

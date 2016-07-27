@@ -77,7 +77,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
         transport_rtt_set_(false),
         recent_transport_rtt_set_(false),
         downlink_throughput_kbps_set_(false),
-        recent_downlink_throughput_kbps_set_(false) {
+        recent_downlink_throughput_kbps_set_(false),
+        rand_double_(0.0) {
     // Set up embedded test server.
     embedded_test_server_.ServeFilesFromDirectory(
         base::FilePath(FILE_PATH_LITERAL("net/data/url_request_unittest")));
@@ -263,17 +264,19 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
     return NetworkQualityEstimator::GetAccuracyRecordingIntervals();
   }
 
+  void set_rand_double(double rand_double) { rand_double_ = rand_double; }
+
+  double RandDouble() const override { return rand_double_; }
+
   using NetworkQualityEstimator::SetTickClockForTesting;
-  using NetworkQualityEstimator::ReadCachedNetworkQualityEstimate;
   using NetworkQualityEstimator::OnConnectionTypeChanged;
 
  private:
   // NetworkQualityEstimator implementation that returns the overridden
   // network
   // id (instead of invoking platform APIs).
-  NetworkQualityEstimator::NetworkID GetCurrentNetworkID() const override {
-    return NetworkQualityEstimator::NetworkID(current_network_type_,
-                                              current_network_id_);
+  nqe::internal::NetworkID GetCurrentNetworkID() const override {
+    return nqe::internal::NetworkID(current_network_type_, current_network_id_);
   }
 
   bool effective_connection_type_set_;
@@ -305,6 +308,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
 
   bool recent_downlink_throughput_kbps_set_;
   int32_t recent_downlink_throughput_kbps_;
+
+  double rand_double_;
 
   // Embedded server used for testing.
   EmbeddedTestServer embedded_test_server_;
@@ -391,6 +396,11 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
   std::map<std::string, std::string> variation_params;
   TestNetworkQualityEstimator estimator(variation_params);
 
+  estimator.SimulateNetworkChangeTo(
+      NetworkChangeNotifier::ConnectionType::CONNECTION_UNKNOWN, "test");
+  histogram_tester.ExpectUniqueSample("NQE.CachedNetworkQualityAvailable",
+                                      false, 1);
+
   base::TimeDelta rtt;
   int32_t kbps;
   EXPECT_FALSE(estimator.GetHttpRTTEstimate(&rtt));
@@ -431,6 +441,8 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
 
   estimator.SimulateNetworkChangeTo(
       NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI, "test-1");
+  histogram_tester.ExpectUniqueSample("NQE.CachedNetworkQualityAvailable",
+                                      false, 2);
   histogram_tester.ExpectTotalCount("NQE.PeakKbps.Unknown", 1);
   histogram_tester.ExpectTotalCount("NQE.FastestRTT.Unknown", 1);
 
@@ -457,6 +469,8 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
 
   estimator.SimulateNetworkChangeTo(
       NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI, std::string());
+  histogram_tester.ExpectUniqueSample("NQE.CachedNetworkQualityAvailable",
+                                      false, 3);
   histogram_tester.ExpectTotalCount("NQE.PeakKbps.Unknown", 1);
   histogram_tester.ExpectTotalCount("NQE.FastestRTT.Unknown", 1);
 
@@ -473,6 +487,13 @@ TEST(NetworkQualityEstimatorTest, TestKbpsRTTUpdates) {
       NetworkQualityEstimator::EffectiveConnectionType::
           EFFECTIVE_CONNECTION_TYPE_UNKNOWN,
       1);
+
+  estimator.SimulateNetworkChangeTo(
+      NetworkChangeNotifier::ConnectionType::CONNECTION_UNKNOWN, "test");
+  histogram_tester.ExpectBucketCount("NQE.CachedNetworkQualityAvailable", false,
+                                     3);
+  histogram_tester.ExpectBucketCount("NQE.CachedNetworkQualityAvailable", true,
+                                     1);
 }
 
 TEST(NetworkQualityEstimatorTest, StoreObservations) {
@@ -670,36 +691,6 @@ TEST(NetworkQualityEstimatorTest, ObtainAlgorithmToUseFromParams) {
   }
 }
 
-// Tests that |GetEffectiveConnectionType| returns correct connection type when
-// no variation params are specified.
-TEST(NetworkQualityEstimatorTest, ObtainThresholdsNone) {
-  std::map<std::string, std::string> variation_params;
-
-  TestNetworkQualityEstimator estimator(variation_params);
-
-  // Simulate the connection type as Wi-Fi so that GetEffectiveConnectionType
-  // does not return Offline if the device is offline.
-  estimator.SimulateNetworkChangeTo(NetworkChangeNotifier::CONNECTION_WIFI,
-                                    "test");
-
-  const struct {
-    int32_t rtt_msec;
-    NetworkQualityEstimator::EffectiveConnectionType expected_conn_type;
-  } tests[] = {
-      {5000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
-      {20, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
-  };
-
-  for (const auto& test : tests) {
-    estimator.set_http_rtt(base::TimeDelta::FromMilliseconds(test.rtt_msec));
-    estimator.set_recent_http_rtt(
-        base::TimeDelta::FromMilliseconds(test.rtt_msec));
-    estimator.set_downlink_throughput_kbps(INT32_MAX);
-    estimator.set_recent_downlink_throughput_kbps(INT32_MAX);
-    EXPECT_EQ(test.expected_conn_type, estimator.GetEffectiveConnectionType());
-  }
-}
-
 // Tests that |GetEffectiveConnectionType| returns
 // EFFECTIVE_CONNECTION_TYPE_OFFLINE when the device is currently offline.
 TEST(NetworkQualityEstimatorTest, Offline) {
@@ -767,6 +758,114 @@ TEST(NetworkQualityEstimatorTest, ObtainThresholdsOnlyRTT) {
     estimator.set_http_rtt(base::TimeDelta::FromMilliseconds(test.rtt_msec));
     estimator.set_recent_http_rtt(
         base::TimeDelta::FromMilliseconds(test.rtt_msec));
+    estimator.set_downlink_throughput_kbps(INT32_MAX);
+    estimator.set_recent_downlink_throughput_kbps(INT32_MAX);
+    EXPECT_EQ(test.expected_conn_type, estimator.GetEffectiveConnectionType());
+  }
+}
+
+// Tests that default transport RTT thresholds for different effective
+// connection types are correctly set.
+TEST(NetworkQualityEstimatorTest, DefaultTransportRTTBasedThresholds) {
+  const struct {
+    bool override_defaults_using_variation_params;
+    int32_t transport_rtt_msec;
+    NetworkQualityEstimator::EffectiveConnectionType expected_conn_type;
+  } tests[] = {
+      // When the variation params do not override connection thresholds,
+      // default values should be used.
+      {false, 5000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 4000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 3000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 2000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 1500, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {false, 1000,
+       NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+      {false, 20, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+      // Override default thresholds using variation params.
+      {true, 5000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_OFFLINE},
+      {true, 4000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_OFFLINE},
+      {true, 3000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {true, 2000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {true, 1500, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {true, 1000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {true, 20, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+  };
+
+  for (const auto& test : tests) {
+    std::map<std::string, std::string> variation_params;
+    variation_params["effective_connection_type_algorithm"] =
+        "TransportRTTOrDownstreamThroughput";
+    if (test.override_defaults_using_variation_params) {
+      variation_params["Offline.ThresholdMedianTransportRTTMsec"] = "4000";
+      variation_params["Slow2G.ThresholdMedianTransportRTTMsec"] = "2000";
+      variation_params["2G.ThresholdMedianTransportRTTMsec"] = "1000";
+    }
+
+    TestNetworkQualityEstimator estimator(variation_params);
+
+    // Simulate the connection type as Wi-Fi so that GetEffectiveConnectionType
+    // does not return Offline if the device is offline.
+    estimator.SimulateNetworkChangeTo(NetworkChangeNotifier::CONNECTION_WIFI,
+                                      "test");
+
+    estimator.set_transport_rtt(
+        base::TimeDelta::FromMilliseconds(test.transport_rtt_msec));
+    estimator.set_recent_transport_rtt(
+        base::TimeDelta::FromMilliseconds(test.transport_rtt_msec));
+    estimator.set_downlink_throughput_kbps(INT32_MAX);
+    estimator.set_recent_downlink_throughput_kbps(INT32_MAX);
+    EXPECT_EQ(test.expected_conn_type, estimator.GetEffectiveConnectionType());
+  }
+}
+
+// Tests that default HTTP RTT thresholds for different effective
+// connection types are correctly set.
+TEST(NetworkQualityEstimatorTest, DefaultHttpRTTBasedThresholds) {
+  const struct {
+    bool override_defaults_using_variation_params;
+    int32_t http_rtt_msec;
+    NetworkQualityEstimator::EffectiveConnectionType expected_conn_type;
+  } tests[] = {
+      // When the variation params do not override connection thresholds,
+      // default values should be used.
+      {false, 5000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 4000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 3000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {false, 2000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {false, 1500, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {false, 1000,
+       NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+      {false, 20, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+      // Override default thresholds using variation params.
+      {true, 5000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_OFFLINE},
+      {true, 4000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_OFFLINE},
+      {true, 3000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {true, 2000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G},
+      {true, 1500, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {true, 1000, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_2G},
+      {true, 20, NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_BROADBAND},
+  };
+
+  for (const auto& test : tests) {
+    std::map<std::string, std::string> variation_params;
+    if (test.override_defaults_using_variation_params) {
+      variation_params["Offline.ThresholdMedianHttpRTTMsec"] = "4000";
+      variation_params["Slow2G.ThresholdMedianHttpRTTMsec"] = "2000";
+      variation_params["2G.ThresholdMedianHttpRTTMsec"] = "1000";
+    }
+
+    TestNetworkQualityEstimator estimator(variation_params);
+
+    // Simulate the connection type as Wi-Fi so that GetEffectiveConnectionType
+    // does not return Offline if the device is offline.
+    estimator.SimulateNetworkChangeTo(NetworkChangeNotifier::CONNECTION_WIFI,
+                                      "test");
+
+    estimator.set_http_rtt(
+        base::TimeDelta::FromMilliseconds(test.http_rtt_msec));
+    estimator.set_recent_http_rtt(
+        base::TimeDelta::FromMilliseconds(test.http_rtt_msec));
     estimator.set_downlink_throughput_kbps(INT32_MAX);
     estimator.set_recent_downlink_throughput_kbps(INT32_MAX);
     EXPECT_EQ(test.expected_conn_type, estimator.GetEffectiveConnectionType());
@@ -976,164 +1075,6 @@ TEST(NetworkQualityEstimatorTest, HalfLifeParam) {
     EXPECT_NEAR(test.expected_weight_multiplier,
                 estimator.weight_multiplier_per_second_, 0.001)
         << test.description;
-  }
-}
-
-// Test if the network estimates are cached when network change notification
-// is invoked.
-TEST(NetworkQualityEstimatorTest, TestCaching) {
-  std::map<std::string, std::string> variation_params;
-  TestNetworkQualityEstimator estimator(variation_params);
-  size_t expected_cache_size = 0;
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Cache entry will not be added for (NONE, "").
-  estimator.downstream_throughput_kbps_observations_.AddObservation(
-      NetworkQualityEstimator::ThroughputObservation(
-          1, base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.rtt_observations_.AddObservation(
-      NetworkQualityEstimator::RttObservation(
-          base::TimeDelta::FromMilliseconds(1000), base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_2G, "test-1");
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Entry will be added for (2G, "test1").
-  // Also, set the network quality for (2G, "test1") so that it is stored in
-  // the cache.
-  estimator.downstream_throughput_kbps_observations_.AddObservation(
-      NetworkQualityEstimator::ThroughputObservation(
-          1, base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.rtt_observations_.AddObservation(
-      NetworkQualityEstimator::RttObservation(
-          base::TimeDelta::FromMilliseconds(1000), base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_3G, "test-1");
-  ++expected_cache_size;
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Entry will be added for (3G, "test1").
-  // Also, set the network quality for (3G, "test1") so that it is stored in
-  // the cache.
-  estimator.downstream_throughput_kbps_observations_.AddObservation(
-      NetworkQualityEstimator::ThroughputObservation(
-          2, base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.rtt_observations_.AddObservation(
-      NetworkQualityEstimator::RttObservation(
-          base::TimeDelta::FromMilliseconds(500), base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_3G, "test-2");
-  ++expected_cache_size;
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Entry will not be added for (3G, "test2").
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_2G, "test-1");
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Read the network quality for (2G, "test-1").
-  EXPECT_TRUE(estimator.ReadCachedNetworkQualityEstimate());
-
-  base::TimeDelta rtt;
-  int32_t kbps;
-  EXPECT_TRUE(estimator.GetHttpRTTEstimate(&rtt));
-  EXPECT_TRUE(estimator.GetDownlinkThroughputKbpsEstimate(&kbps));
-  EXPECT_EQ(1, kbps);
-  EXPECT_EQ(base::TimeDelta::FromMilliseconds(1000), rtt);
-  EXPECT_FALSE(estimator.GetTransportRTTEstimate(&rtt));
-
-  // No new entry should be added for (2G, "test-1") since it already exists
-  // in the cache.
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_3G, "test-1");
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Read the network quality for (3G, "test-1").
-  EXPECT_TRUE(estimator.ReadCachedNetworkQualityEstimate());
-  EXPECT_TRUE(estimator.GetHttpRTTEstimate(&rtt));
-  EXPECT_TRUE(estimator.GetDownlinkThroughputKbpsEstimate(&kbps));
-  EXPECT_EQ(2, kbps);
-  EXPECT_EQ(base::TimeDelta::FromMilliseconds(500), rtt);
-  // No new entry should be added for (3G, "test1") since it already exists
-  // in the cache.
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_3G, "test-2");
-  EXPECT_EQ(expected_cache_size, estimator.cached_network_qualities_.size());
-
-  // Reading quality of (3G, "test-2") should return false.
-  EXPECT_FALSE(estimator.ReadCachedNetworkQualityEstimate());
-
-  // Reading quality of (2G, "test-3") should return false.
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_2G, "test-3");
-  EXPECT_FALSE(estimator.ReadCachedNetworkQualityEstimate());
-}
-
-// Tests if the cache size remains bounded. Also, ensure that the cache is
-// LRU.
-TEST(NetworkQualityEstimatorTest, TestLRUCacheMaximumSize) {
-  std::map<std::string, std::string> variation_params;
-  TestNetworkQualityEstimator estimator(variation_params);
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI, std::string());
-  EXPECT_EQ(0U, estimator.cached_network_qualities_.size());
-
-  // Add 100 more networks than the maximum size of the cache.
-  size_t network_count =
-      NetworkQualityEstimator::kMaximumNetworkQualityCacheSize + 100;
-
-  base::TimeTicks update_time_of_network_100;
-  for (size_t i = 0; i < network_count; ++i) {
-    estimator.downstream_throughput_kbps_observations_.AddObservation(
-        NetworkQualityEstimator::ThroughputObservation(
-            2, base::TimeTicks::Now(),
-            NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-    estimator.rtt_observations_.AddObservation(
-        NetworkQualityEstimator::RttObservation(
-            base::TimeDelta::FromMilliseconds(500), base::TimeTicks::Now(),
-            NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-
-    if (i == 100)
-      update_time_of_network_100 = base::TimeTicks::Now();
-
-    estimator.SimulateNetworkChangeTo(
-        NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI,
-        base::SizeTToString(i));
-    if (i < NetworkQualityEstimator::kMaximumNetworkQualityCacheSize)
-      EXPECT_EQ(i, estimator.cached_network_qualities_.size());
-    EXPECT_LE(estimator.cached_network_qualities_.size(),
-              static_cast<size_t>(
-                  NetworkQualityEstimator::kMaximumNetworkQualityCacheSize));
-  }
-  // One more call so that the last network is also written to cache.
-  estimator.downstream_throughput_kbps_observations_.AddObservation(
-      NetworkQualityEstimator::ThroughputObservation(
-          2, base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.rtt_observations_.AddObservation(
-      NetworkQualityEstimator::RttObservation(
-          base::TimeDelta::FromMilliseconds(500), base::TimeTicks::Now(),
-          NETWORK_QUALITY_OBSERVATION_SOURCE_URL_REQUEST));
-  estimator.SimulateNetworkChangeTo(
-      NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI,
-      base::SizeTToString(network_count - 1));
-  EXPECT_EQ(static_cast<size_t>(
-                NetworkQualityEstimator::kMaximumNetworkQualityCacheSize),
-            estimator.cached_network_qualities_.size());
-
-  // Test that the cache is LRU by examining its contents. Networks in cache
-  // must all be newer than the 100th network.
-  for (NetworkQualityEstimator::CachedNetworkQualities::iterator it =
-           estimator.cached_network_qualities_.begin();
-       it != estimator.cached_network_qualities_.end(); ++it) {
-    EXPECT_GE((it->second).last_update_time_, update_time_of_network_100);
   }
 }
 
@@ -1833,8 +1774,13 @@ TEST(NetworkQualityEstimatorTest, MAYBE_RecordAccuracy) {
       base::SimpleTestTickClock* tick_clock_ptr = tick_clock.get();
       tick_clock_ptr->Advance(base::TimeDelta::FromSeconds(1));
 
+      std::unique_ptr<ExternalEstimateProvider> external_estimate_provider(
+          new TestExternalEstimateProvider(test.rtt, 0));
+
       std::map<std::string, std::string> variation_params;
-      TestNetworkQualityEstimator estimator(variation_params);
+      TestNetworkQualityEstimator estimator(
+          variation_params, std::move(external_estimate_provider));
+
       estimator.SetTickClockForTesting(std::move(tick_clock));
       estimator.SimulateNetworkChangeTo(
           NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI, "test-1");
@@ -1927,6 +1873,15 @@ TEST(NetworkQualityEstimatorTest, MAYBE_RecordAccuracy) {
           "NQE.Accuracy.TransportRTT.EstimatedObservedDiff." +
               sign_suffix_with_zero_samples + "." + interval_value + ".60_140",
           0);
+
+      histogram_tester.ExpectUniqueSample(
+          "NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff." +
+              sign_suffix_with_one_sample + "." + interval_value + ".60_140",
+          diff, 1);
+      histogram_tester.ExpectTotalCount(
+          "NQE.ExternalEstimateProvider.RTT.Accuracy.EstimatedObservedDiff." +
+              sign_suffix_with_zero_samples + "." + interval_value + ".60_140",
+          0);
     }
   }
 }
@@ -1982,6 +1937,144 @@ TEST(NetworkQualityEstimatorTest, TestRecordNetworkIDAvailability) {
       NetworkChangeNotifier::ConnectionType::CONNECTION_2G, "test-1");
   histogram_tester.ExpectBucketCount("NQE.NetworkIdAvailable", 1, 3);
   histogram_tester.ExpectTotalCount("NQE.NetworkIdAvailable", 4);
+}
+
+// Tests that the correlation histogram is recorded correctly based on
+// correlation logging probability set in the variation params.
+TEST(NetworkQualityEstimatorTest, CorrelationHistogram) {
+  // Match the values set in network_quality_estimator.cc.
+  static const int32_t kTrimBits = 5;
+  static const int32_t kBitsPerMetric = 7;
+
+  const struct {
+    bool use_transport_rtt;
+    double rand_double;
+    double correlation_logging_probability;
+    base::TimeDelta transport_rtt;
+    int32_t expected_transport_rtt_milliseconds;
+    base::TimeDelta http_rtt;
+    int32_t expected_http_rtt_milliseconds;
+    int32_t downstream_throughput_kbps;
+    int32_t expected_downstream_throughput_kbps;
+
+  } tests[] = {
+      {
+          // Verify that the metric is not recorded if the logging probability
+          // is set to 0.0.
+          false, 0.5, 0.0, base::TimeDelta::FromSeconds(1), 1000 >> kTrimBits,
+          base::TimeDelta::FromSeconds(2), 2000 >> kTrimBits, 3000,
+          3000 >> kTrimBits,
+      },
+      {
+          // Verify that the metric is not recorded if the logging probability
+          // is lower than the value returned by the random number generator.
+          false, 0.3, 0.1, base::TimeDelta::FromSeconds(1), 1000 >> kTrimBits,
+          base::TimeDelta::FromSeconds(2), 2000 >> kTrimBits, 3000,
+          3000 >> kTrimBits,
+      },
+      {
+          // Verify that the metric is recorded if the logging probability is
+          // higher than the value returned by the random number generator.
+          false, 0.3, 0.4, base::TimeDelta::FromSeconds(1), 1000 >> kTrimBits,
+          base::TimeDelta::FromSeconds(2), 2000 >> kTrimBits, 3000,
+          3000 >> kTrimBits,
+      },
+      {
+          // Verify that the metric is recorded if the logging probability is
+          // set to 1.0.
+          false, 0.5, 1.0, base::TimeDelta::FromSeconds(1), 1000 >> kTrimBits,
+          base::TimeDelta::FromSeconds(2), 2000 >> kTrimBits, 3000,
+          3000 >> kTrimBits,
+      },
+      {
+          // Verify that the metric is recorded if the logging probability is
+          // set to 1.0.
+          true, 0.5, 1.0, base::TimeDelta::FromSeconds(1), 1000 >> kTrimBits,
+          base::TimeDelta::FromSeconds(2), 2000 >> kTrimBits, 3000,
+          3000 >> kTrimBits,
+      },
+      {
+          // Verify that if the metric is larger than
+          // 2^(kBitsPerMetric + kTrimBits), it is rounded down to
+          // (2^(kBitsPerMetric + kTrimBits) - 1) >> kTrimBits.
+          false, 0.5, 1.0, base::TimeDelta::FromSeconds(10), 4095 >> kTrimBits,
+          base::TimeDelta::FromSeconds(20), 4095 >> kTrimBits, 30000,
+          4095 >> kTrimBits,
+      },
+  };
+
+  for (const auto& test : tests) {
+    base::HistogramTester histogram_tester;
+
+    std::map<std::string, std::string> variation_params;
+    variation_params["correlation_logging_probability"] =
+        base::DoubleToString(test.correlation_logging_probability);
+    if (test.use_transport_rtt) {
+      variation_params["effective_connection_type_algorithm"] =
+          "TransportRTTOrDownstreamThroughput";
+    }
+    TestNetworkQualityEstimator estimator(variation_params);
+
+    estimator.set_transport_rtt(test.transport_rtt);
+    estimator.set_recent_transport_rtt(test.transport_rtt);
+    estimator.set_http_rtt(test.http_rtt);
+    estimator.set_recent_http_rtt(test.http_rtt);
+    estimator.set_downlink_throughput_kbps(test.downstream_throughput_kbps);
+    estimator.set_rand_double(test.rand_double);
+
+    TestDelegate test_delegate;
+    TestURLRequestContext context(true);
+    context.set_network_quality_estimator(&estimator);
+    context.Init();
+
+    // Start a main-frame request that should cause network quality estimator to
+    // record the network quality at the last main frame request.
+    std::unique_ptr<URLRequest> request_1(context.CreateRequest(
+        estimator.GetEchoURL(), DEFAULT_PRIORITY, &test_delegate));
+    request_1->SetLoadFlags(request_1->load_flags() | LOAD_MAIN_FRAME);
+    request_1->Start();
+    base::RunLoop().Run();
+    histogram_tester.ExpectTotalCount(
+        "NQE.Correlation.ResourceLoadTime.0Kb_128Kb", 0);
+
+    // Start another main-frame request which should cause network quality
+    // estimator to record the correlation UMA.
+    std::unique_ptr<URLRequest> request_2(context.CreateRequest(
+        estimator.GetEchoURL(), DEFAULT_PRIORITY, &test_delegate));
+    request_2->Start();
+    base::RunLoop().Run();
+
+    if (test.rand_double >= test.correlation_logging_probability) {
+      histogram_tester.ExpectTotalCount(
+          "NQE.Correlation.ResourceLoadTime.0Kb_128Kb", 0);
+      continue;
+    }
+    histogram_tester.ExpectTotalCount(
+        "NQE.Correlation.ResourceLoadTime.0Kb_128Kb", 1);
+    std::vector<base::Bucket> buckets = histogram_tester.GetAllSamples(
+        "NQE.Correlation.ResourceLoadTime.0Kb_128Kb");
+    // Get the bits at index 0-10 which contain the RTT.
+    // 128 is 2^kBitsPerMetric.
+    if (test.use_transport_rtt) {
+      EXPECT_EQ(test.expected_transport_rtt_milliseconds,
+                buckets.at(0).min >> kBitsPerMetric >> kBitsPerMetric >>
+                    kBitsPerMetric);
+    } else {
+      EXPECT_EQ(test.expected_http_rtt_milliseconds,
+                buckets.at(0).min >> kBitsPerMetric >> kBitsPerMetric >>
+                    kBitsPerMetric);
+    }
+
+    // Get the bits at index 11-17 which contain the downstream throughput.
+    EXPECT_EQ(test.expected_downstream_throughput_kbps,
+              (buckets.at(0).min >> kBitsPerMetric >> kBitsPerMetric) % 128);
+
+    // Get the bits at index 18-24 which contain the resource fetch time.
+    EXPECT_LE(0, (buckets.at(0).min >> kBitsPerMetric) % 128);
+
+    // Get the bits at index 25-31 which contain the resource load size.
+    EXPECT_LE(0, (buckets.at(0).min) % 128);
+  }
 }
 
 }  // namespace net

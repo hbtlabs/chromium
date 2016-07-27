@@ -345,8 +345,10 @@ RenderWidgetHostViewAndroid::RenderWidgetHostViewAndroid(
       locks_on_frame_count_(0),
       observing_root_window_(false),
       weak_ptr_factory_(this) {
-  if (CompositorImpl::GetSurfaceManager())
-    id_allocator_ = CompositorImpl::CreateSurfaceIdAllocator();
+  id_allocator_.reset(
+      new cc::SurfaceIdAllocator(CompositorImpl::AllocateSurfaceClientId()));
+  CompositorImpl::GetSurfaceManager()->RegisterSurfaceClientId(
+      id_allocator_->client_id());
   host_->SetView(this);
   SetContentViewCore(content_view_core);
 }
@@ -499,7 +501,8 @@ bool RenderWidgetHostViewAndroid::HasFocus() const {
 }
 
 bool RenderWidgetHostViewAndroid::IsSurfaceAvailableForCopy() const {
-  return !using_browser_compositor_ || HasValidFrame();
+  return !using_browser_compositor_ ||
+         (HasValidFrame() && surface_factory_.get());
 }
 
 void RenderWidgetHostViewAndroid::Show() {
@@ -555,23 +558,6 @@ void RenderWidgetHostViewAndroid::UnlockCompositingSurface() {
   }
 }
 
-void RenderWidgetHostViewAndroid::SetTextSurroundingSelectionCallback(
-    const TextSurroundingSelectionCallback& callback) {
-  // Only one outstanding request is allowed at any given time.
-  DCHECK(!callback.is_null());
-  text_surrounding_selection_callback_ = callback;
-}
-
-void RenderWidgetHostViewAndroid::OnTextSurroundingSelectionResponse(
-    const base::string16& content,
-    size_t start_offset,
-    size_t end_offset) {
-  if (text_surrounding_selection_callback_.is_null())
-    return;
-  text_surrounding_selection_callback_.Run(content, start_offset, end_offset);
-  text_surrounding_selection_callback_.Reset();
-}
-
 void RenderWidgetHostViewAndroid::OnShowUnhandledTapUIIfNeeded(int x_dip,
                                                                int y_dip) {
   if (!content_view_core_)
@@ -592,7 +578,7 @@ void RenderWidgetHostViewAndroid::ReleaseLocksOnSurface() {
   while (locks_on_frame_count_ > 0) {
     UnlockCompositingSurface();
   }
-  RunAckCallbacks(cc::SurfaceDrawStatus::DRAW_SKIPPED);
+  RunAckCallbacks();
 }
 
 gfx::Rect RenderWidgetHostViewAndroid::GetViewBounds() const {
@@ -812,6 +798,8 @@ void RenderWidgetHostViewAndroid::Destroy() {
     surface_id_ = cc::SurfaceId();
   }
   surface_factory_.reset();
+  CompositorImpl::GetSurfaceManager()->InvalidateSurfaceClientId(
+      id_allocator_->client_id());
 
   // The RenderWidgetHost's destruction led here, so don't call it.
   host_ = NULL;
@@ -904,9 +892,10 @@ void RenderWidgetHostViewAndroid::CopyFromCompositingSurface(
           dst_size_in_pixel, preferred_color_type, start_time, callback));
   if (!src_subrect_in_pixel.IsEmpty())
     request->set_area(src_subrect_in_pixel);
-  // Make sure the layer doesn't get deleted until we fulfill the request.
+  // Make sure the current frame doesn't get deleted until we fulfill the
+  // request.
   LockCompositingSurface();
-  view_.GetLayer()->RequestCopyOfOutput(std::move(request));
+  surface_factory_->RequestCopyOfSurface(surface_id_, std::move(request));
 }
 
 void RenderWidgetHostViewAndroid::CopyFromCompositingSurfaceToVideoFrame(
@@ -1060,7 +1049,7 @@ void RenderWidgetHostViewAndroid::InternalSwapCompositorFrame(
   }
 
   if (host_->is_hidden())
-    RunAckCallbacks(cc::SurfaceDrawStatus::DRAW_SKIPPED);
+    RunAckCallbacks();
   frame_evictor_->SwappedFrame(!host_->is_hidden());
 
   // As the metadata update may trigger view invalidation, always call it after
@@ -1337,7 +1326,7 @@ void RenderWidgetHostViewAndroid::HideInternal() {
   if (overscroll_controller_)
     overscroll_controller_->Disable();
 
-  RunAckCallbacks(cc::SurfaceDrawStatus::DRAW_SKIPPED);
+  RunAckCallbacks();
 
   // Inform the renderer that we are being hidden so it can reduce its resource
   // utilization.
@@ -1700,7 +1689,7 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
       resize = true;
     if (content_view_core_) {
       content_view_core_->RemoveObserver(this);
-      content_view_core_->GetViewAndroid()->RemoveChild(&view_);
+      view_.RemoveFromParent();
     }
     if (content_view_core) {
       content_view_core->AddObserver(this);
@@ -1746,8 +1735,7 @@ void RenderWidgetHostViewAndroid::SetContentViewCore(
   }
 }
 
-void RenderWidgetHostViewAndroid::RunAckCallbacks(
-    cc::SurfaceDrawStatus status) {
+void RenderWidgetHostViewAndroid::RunAckCallbacks() {
   while (!ack_callbacks_.empty()) {
     ack_callbacks_.front().Run();
     ack_callbacks_.pop();
@@ -1774,7 +1762,7 @@ void RenderWidgetHostViewAndroid::OnContentViewCoreDestroyed() {
 }
 
 void RenderWidgetHostViewAndroid::OnCompositingDidCommit() {
-  RunAckCallbacks(cc::SurfaceDrawStatus::DRAWN);
+  RunAckCallbacks();
 }
 
 void RenderWidgetHostViewAndroid::OnRootWindowVisibilityChanged(bool visible) {
@@ -1816,7 +1804,7 @@ void RenderWidgetHostViewAndroid::OnAttachCompositor() {
 void RenderWidgetHostViewAndroid::OnDetachCompositor() {
   DCHECK(content_view_core_);
   DCHECK(using_browser_compositor_);
-  RunAckCallbacks(cc::SurfaceDrawStatus::DRAW_SKIPPED);
+  RunAckCallbacks();
   overscroll_controller_.reset();
 }
 
@@ -1974,8 +1962,8 @@ void RenderWidgetHostViewBase::GetDefaultScreenInfo(
   results->orientationType =
       RenderWidgetHostViewBase::GetOrientationTypeForMobile(display);
   gfx::DeviceDisplayInfo info;
-  results->depth = info.GetBitsPerPixel();
-  results->depthPerComponent = info.GetBitsPerComponent();
+  results->depth = display.color_depth();
+  results->depthPerComponent = display.depth_per_component();
   results->isMonochrome = (results->depthPerComponent == 0);
 }
 

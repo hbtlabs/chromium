@@ -168,7 +168,6 @@ split_static_library("ui") {
       "//components/bubble:bubble",
       "//components/crash/core/browser",
       "//components/net_log",
-      "//components/page_load_metrics/browser",
       "//components/power",
       "//components/suggestions/proto",
       "//components/url_formatter",
@@ -278,7 +277,7 @@ split_static_library("ui") {
     deps += [
       "//ash",
       "//ash:ash_with_content",
-      "//ash/strings",
+      "//ash/common/strings",
       "//ash/sysui/public/interfaces",
       "//components/user_manager",
       "//mash/shelf/public/interfaces",
@@ -585,6 +584,7 @@ split_static_library("ui") {
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:api_registration",
     ]
+    allow_circular_includes_from = [ "//chrome/browser/extensions" ]
     sources += rebase_path(gypi_values.chrome_browser_ui_extensions_sources,
                            ".",
                            "//chrome")

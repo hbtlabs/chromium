@@ -339,8 +339,8 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->IsElasticOverscrollEnabled();
   settings.renderer_settings.use_gpu_memory_buffer_resources =
       compositor_deps->IsGpuMemoryBufferCompositorResourcesEnabled();
-  settings.use_image_texture_targets =
-      compositor_deps->GetImageTextureTargets();
+  settings.renderer_settings.buffer_to_texture_target_map =
+      compositor_deps->GetBufferToTextureTargetMap();
   settings.image_decode_tasks_enabled =
       compositor_deps->AreImageDecodeTasksEnabled();
 
@@ -486,7 +486,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     settings.create_low_res_tiling = true;
   if (cmd.HasSwitch(switches::kDisableLowResTiling))
     settings.create_low_res_tiling = false;
-  if (cmd.HasSwitch(cc::switches::kEnableBeginFrameScheduling))
+  if (!cmd.HasSwitch(cc::switches::kDisableBeginFrameScheduling))
     settings.use_external_begin_frame_source = true;
 
   if (cmd.HasSwitch(switches::kEnableRGBA4444Textures) &&
@@ -895,7 +895,7 @@ bool RenderWidgetCompositor::CompositeIsSynchronous() const {
 
 void RenderWidgetCompositor::layoutAndPaintAsync(
     blink::WebLayoutAndPaintAsyncCallback* callback) {
-  DCHECK(!temporary_copy_output_request_ && !layout_and_paint_async_callback_);
+  DCHECK(!layout_and_paint_async_callback_);
   layout_and_paint_async_callback_ = callback;
 
   if (CompositeIsSynchronous()) {
@@ -922,10 +922,21 @@ void RenderWidgetCompositor::InvokeLayoutAndPaintCallback() {
 
 void RenderWidgetCompositor::compositeAndReadbackAsync(
     blink::WebCompositeAndReadbackAsyncCallback* callback) {
-  DCHECK(!temporary_copy_output_request_ && !layout_and_paint_async_callback_);
-  temporary_copy_output_request_ =
-      cc::CopyOutputRequest::CreateBitmapRequest(
-          base::Bind(&CompositeAndReadbackAsyncCallback, callback));
+  DCHECK(!layout_and_paint_async_callback_);
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
+      layer_tree_host_->task_runner_provider()->MainThreadTaskRunner();
+  std::unique_ptr<cc::CopyOutputRequest> request =
+      cc::CopyOutputRequest::CreateBitmapRequest(base::Bind(
+          [](blink::WebCompositeAndReadbackAsyncCallback* callback,
+             scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+             std::unique_ptr<cc::CopyOutputResult> result) {
+            task_runner->PostTask(FROM_HERE,
+                                  base::Bind(&CompositeAndReadbackAsyncCallback,
+                                             callback, base::Passed(&result)));
+          },
+          callback, base::Passed(&main_thread_task_runner)));
+  layer_tree_host_->QueueSwapPromise(
+      delegate_->RequestCopyOfOutputForLayoutTest(std::move(request)));
 
   // Force a commit to happen. The temporary copy output request will
   // be installed after layout which will happen as a part of the commit, for
@@ -1014,17 +1025,6 @@ void RenderWidgetCompositor::BeginMainFrameNotExpectedSoon() {
 
 void RenderWidgetCompositor::UpdateLayerTreeHost() {
   delegate_->UpdateVisualState();
-  if (temporary_copy_output_request_) {
-    // For WebViewImpl, this will always have a root layer.  For other widgets,
-    // the widget may be closed before servicing this request, so ignore it.
-    if (cc::Layer* root_layer = layer_tree_host_->root_layer()) {
-      root_layer->RequestCopyOfOutput(
-          std::move(temporary_copy_output_request_));
-    } else {
-      temporary_copy_output_request_->SendEmptyResult();
-      temporary_copy_output_request_ = nullptr;
-    }
-  }
 }
 
 void RenderWidgetCompositor::ApplyViewportDeltas(
@@ -1081,7 +1081,6 @@ void RenderWidgetCompositor::WillCommit() {
 }
 
 void RenderWidgetCompositor::DidCommit() {
-  DCHECK(!temporary_copy_output_request_);
   delegate_->DidCommitCompositorFrame();
   compositor_deps_->GetRendererScheduler()->DidCommitFrameToCompositor();
 }

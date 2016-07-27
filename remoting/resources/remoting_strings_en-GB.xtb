@@ -74,7 +74,6 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
 <translation id="2676780859508944670">Working…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Software updates usually happen automatically, but can fail in some rare cases. Updating the software should take no more than a few minutes and can be done while connected to your computer remotely.</translation>
-<translation id="2813770873348017932">Connections to the remote computer are temporarily blocked because somebody was trying to connect to it with invalid PIN. Please try again later.</translation>
 <translation id="2841013758207633010">Time</translation>
 <translation id="2851674870054673688">Once they have entered the code your sharing session will begin.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -236,6 +235,7 @@ Desktop Host</translation>
 <translation id="6930242544192836755">Duration</translation>
 <translation id="6939719207673461467">Show/hide keyboard.</translation>
 <translation id="6944854424004126054">Restore window</translation>
+<translation id="6963936880795878952">Connections to the remote computer are temporarily blocked because somebody was trying to connect to it with an invalid PIN. Please try again later.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Are you sure you want to disable remote connections to <ph name="HOSTNAME" />? If you change your mind, you'll need to visit that computer to re-enable connections.</translation>
 <translation id="6998989275928107238">To</translation>

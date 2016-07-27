@@ -704,6 +704,29 @@ FloatQuad LayoutBox::absoluteContentQuad() const
     return localToAbsoluteQuad(FloatRect(rect));
 }
 
+LayoutRect LayoutBox::backgroundClipRect() const
+{
+    // TODO(flackr): Check for the maximum background clip rect.
+    switch (style()->backgroundClip()) {
+    case BorderFillBox:
+        // A 'border-box' clip on scrollable elements local attachment is treated as 'padding-box'.
+        // https://www.w3.org/TR/css3-background/#the-background-attachment
+        if (!style()->isOverflowVisible() && style()->backgroundLayers().attachment() == LocalBackgroundAttachment)
+            return paddingBoxRect();
+        return borderBoxRect();
+        break;
+    case PaddingFillBox:
+        return paddingBoxRect();
+        break;
+    case ContentFillBox:
+        return contentBoxRect();
+        break;
+    default:
+        break;
+    }
+    return LayoutRect();
+}
+
 void LayoutBox::addOutlineRects(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset, IncludeBlockVisualOverflowOrNot) const
 {
     rects.append(LayoutRect(additionalOffset, size()));
@@ -807,7 +830,7 @@ bool LayoutBox::canBeProgramaticallyScrolled() const
     if (scrollsOverflow() && hasScrollableOverflow)
         return true;
 
-    return node && node->hasEditableStyle();
+    return node && hasEditableStyle(*node);
 }
 
 void LayoutBox::autoscroll(const IntPoint& positionInRootFrame)
@@ -1099,26 +1122,26 @@ LayoutUnit LayoutBox::overrideContainingBlockContentLogicalWidth() const
     return gOverrideContainingBlockLogicalWidthMap->get(this);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 LayoutUnit LayoutBox::overrideContainingBlockContentLogicalHeight() const
 {
     ASSERT(hasOverrideContainingBlockLogicalHeight());
     return gOverrideContainingBlockLogicalHeightMap->get(this);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 bool LayoutBox::hasOverrideContainingBlockLogicalWidth() const
 {
     return gOverrideContainingBlockLogicalWidthMap && gOverrideContainingBlockLogicalWidthMap->contains(this);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 bool LayoutBox::hasOverrideContainingBlockLogicalHeight() const
 {
     return gOverrideContainingBlockLogicalHeightMap && gOverrideContainingBlockLogicalHeightMap->contains(this);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 void LayoutBox::setOverrideContainingBlockContentLogicalWidth(LayoutUnit logicalWidth)
 {
     if (!gOverrideContainingBlockLogicalWidthMap)
@@ -1126,7 +1149,7 @@ void LayoutBox::setOverrideContainingBlockContentLogicalWidth(LayoutUnit logical
     gOverrideContainingBlockLogicalWidthMap->set(this, logicalWidth);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 void LayoutBox::setOverrideContainingBlockContentLogicalHeight(LayoutUnit logicalHeight)
 {
     if (!gOverrideContainingBlockLogicalHeightMap)
@@ -1134,7 +1157,7 @@ void LayoutBox::setOverrideContainingBlockContentLogicalHeight(LayoutUnit logica
     gOverrideContainingBlockLogicalHeightMap->set(this, logicalHeight);
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 void LayoutBox::clearContainingBlockOverrideSize()
 {
     if (gOverrideContainingBlockLogicalWidthMap)
@@ -1142,31 +1165,11 @@ void LayoutBox::clearContainingBlockOverrideSize()
     clearOverrideContainingBlockContentLogicalHeight();
 }
 
-// TODO (lajava) Now that we have implemented these functions based on physical direction, we'd rather remove the logical ones.
+// TODO (lajava) Shouldn't we implement these functions based on physical direction ?.
 void LayoutBox::clearOverrideContainingBlockContentLogicalHeight()
 {
     if (gOverrideContainingBlockLogicalHeightMap)
         gOverrideContainingBlockLogicalHeightMap->remove(this);
-}
-
-LayoutUnit LayoutBox::overrideContainingBlockContentWidth() const
-{
-    return containingBlock()->isHorizontalWritingMode() ? overrideContainingBlockContentLogicalWidth() : overrideContainingBlockContentLogicalHeight();
-}
-
-LayoutUnit LayoutBox::overrideContainingBlockContentHeight() const
-{
-    return containingBlock()->isHorizontalWritingMode() ? overrideContainingBlockContentLogicalHeight() : overrideContainingBlockContentLogicalWidth();
-}
-
-bool LayoutBox::hasOverrideContainingBlockWidth() const
-{
-    return containingBlock()->isHorizontalWritingMode() ? hasOverrideContainingBlockLogicalWidth() : hasOverrideContainingBlockLogicalHeight();
-}
-
-bool LayoutBox::hasOverrideContainingBlockHeight() const
-{
-    return containingBlock()->isHorizontalWritingMode() ? hasOverrideContainingBlockLogicalHeight() : hasOverrideContainingBlockLogicalWidth();
 }
 
 LayoutUnit LayoutBox::extraInlineOffset() const
@@ -1201,9 +1204,21 @@ void LayoutBox::clearExtraInlineAndBlockOffests()
         gExtraBlockOffsetMap->remove(this);
 }
 
+static LayoutUnit borderPaddingWidthForBoxSizing(const LayoutBox* box)
+{
+    // This excludes intrinsic padding on cells. It includes width from collapsed borders.
+    return box->computedCSSPaddingStart() + box->computedCSSPaddingEnd() + box->borderStart() + box->borderEnd();
+}
+
+static LayoutUnit borderPaddingHeightForBoxSizing(const LayoutBox* box)
+{
+    // This excludes intrinsic padding on cells. It includes height from collapsed borders.
+    return box->computedCSSPaddingBefore() + box->computedCSSPaddingAfter() + box->borderBefore() + box->borderAfter();
+}
+
 LayoutUnit LayoutBox::adjustBorderBoxLogicalWidthForBoxSizing(float width) const
 {
-    LayoutUnit bordersPlusPadding = borderAndPaddingLogicalWidth();
+    LayoutUnit bordersPlusPadding = borderPaddingWidthForBoxSizing(this);
     LayoutUnit result(width);
     if (style()->boxSizing() == BoxSizingContentBox)
         return result + bordersPlusPadding;
@@ -1212,7 +1227,7 @@ LayoutUnit LayoutBox::adjustBorderBoxLogicalWidthForBoxSizing(float width) const
 
 LayoutUnit LayoutBox::adjustBorderBoxLogicalHeightForBoxSizing(float height) const
 {
-    LayoutUnit bordersPlusPadding = borderAndPaddingLogicalHeight();
+    LayoutUnit bordersPlusPadding = borderPaddingHeightForBoxSizing(this);
     LayoutUnit result(height);
     if (style()->boxSizing() == BoxSizingContentBox)
         return result + bordersPlusPadding;
@@ -1223,7 +1238,7 @@ LayoutUnit LayoutBox::adjustContentBoxLogicalWidthForBoxSizing(float width) cons
 {
     LayoutUnit result(width);
     if (style()->boxSizing() == BoxSizingBorderBox)
-        result -= borderAndPaddingLogicalWidth();
+        result -= borderPaddingWidthForBoxSizing(this);
     return std::max(LayoutUnit(), result);
 }
 
@@ -1231,7 +1246,7 @@ LayoutUnit LayoutBox::adjustContentBoxLogicalHeightForBoxSizing(float height) co
 {
     LayoutUnit result(height);
     if (style()->boxSizing() == BoxSizingBorderBox)
-        result -= borderAndPaddingLogicalHeight();
+        result -= borderPaddingHeightForBoxSizing(this);
     return std::max(LayoutUnit(), result);
 }
 
@@ -1380,21 +1395,7 @@ bool LayoutBox::backgroundIsKnownToBeOpaqueInRect(const LayoutRect& localRect) c
     // FIXME: The background color clip is defined by the last layer.
     if (style()->backgroundLayers().next())
         return false;
-    LayoutRect backgroundRect;
-    switch (style()->backgroundClip()) {
-    case BorderFillBox:
-        backgroundRect = borderBoxRect();
-        break;
-    case PaddingFillBox:
-        backgroundRect = paddingBoxRect();
-        break;
-    case ContentFillBox:
-        backgroundRect = contentBoxRect();
-        break;
-    default:
-        break;
-    }
-    return backgroundRect.contains(localRect);
+    return backgroundClipRect().contains(localRect);
 }
 
 static bool isCandidateForOpaquenessTest(const LayoutBox& childBox)
@@ -1750,10 +1751,10 @@ LayoutUnit LayoutBox::perpendicularContainingBlockLogicalHeight() const
 void LayoutBox::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags mode) const
 {
     bool isFixedPos = style()->position() == FixedPosition;
-    bool hasTransform = hasLayer() && layer()->transform();
-    // If this box has a transform, it acts as a fixed position container for fixed descendants,
+
+    // If this box has a transform or contains paint, it acts as a fixed position container for fixed descendants,
     // and may itself also be fixed position. So propagate 'fixed' up only if this box is fixed position.
-    if (hasTransform && !isFixedPos)
+    if (style()->canContainFixedPositionObjects() && !isFixedPos)
         mode &= ~IsFixed;
     else if (isFixedPos)
         mode |= IsFixed;
@@ -1767,9 +1768,9 @@ void LayoutBox::mapAncestorToLocal(const LayoutBoxModelObject* ancestor, Transfo
         return;
 
     bool isFixedPos = style()->position() == FixedPosition;
-    bool hasTransform = hasLayer() && layer()->transform();
-    if (hasTransform && !isFixedPos) {
-        // If this box has a transform, it acts as a fixed position container for fixed descendants,
+
+    if (style()->canContainFixedPositionObjects() && !isFixedPos) {
+        // If this box has a transform or contains paint, it acts as a fixed position container for fixed descendants,
         // and may itself also be fixed position. So propagate 'fixed' up only if this box is fixed position.
         mode &= ~IsFixed;
     } else if (isFixedPos) {
@@ -2102,6 +2103,10 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ances
         // coordinate space to the parent space, then back to <tr> / <td>.
         if (tableRowContainer)
             topLeft.moveBy(-tableRowContainer->topLeftLocation(toLayoutBox(container)));
+    } else if (container->isRuby()) {
+        // TODO(wkorman): Generalize Ruby specialization and/or document more clearly.
+        // See the accompanying specialization in LayoutInline::mapToVisualRectInAncestorSpace.
+        topLeft.moveBy(topLeftLocation());
     } else {
         topLeft.moveBy(location());
     }
@@ -2773,8 +2778,6 @@ LayoutUnit LayoutBox::computePercentageLogicalHeight(const Length& height) const
         LayoutUnit contentBoxHeight = cb->adjustContentBoxLogicalHeightForBoxSizing(cbstyle.logicalHeight().value());
         availableHeight = cb->constrainContentBoxLogicalHeightByMinMax(
             contentBoxHeight - cb->scrollbarLogicalHeight(), LayoutUnit(-1)).clampNegativeToZero();
-        if (cb->isTableCell())
-            includeBorderPadding = true;
     } else if (cb->isTableCell()) {
         if (!skippedAutoHeightContainingBlock) {
             // Table cells violate what the CSS spec says to do with heights. Basically we

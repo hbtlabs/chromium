@@ -421,10 +421,6 @@ class SearchBoxExtensionWrapper : public v8::Extension {
   // Focuses the omnibox.
   static void Focus(const v8::FunctionCallbackInfo<v8::Value>& args);
 
-  // Gets whether or not the app launcher is enabled.
-  static void GetAppLauncherEnabled(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-
   // Gets Most Visited Items.
   static void GetMostVisitedItems(
       const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -493,10 +489,6 @@ class SearchBoxExtensionWrapper : public v8::Extension {
 
   // Undoes the deletion of a Most Visited item.
   static void UndoMostVisitedDeletion(
-      const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // Indicates whether the page supports Instant.
-  static void GetDisplayInstantResults(
       const v8::FunctionCallbackInfo<v8::Value>& args);
 
  private:
@@ -601,8 +593,6 @@ SearchBoxExtensionWrapper::GetNativeFunctionTemplate(
     return v8::FunctionTemplate::New(isolate, DeleteMostVisitedItem);
   if (name->Equals(v8::String::NewFromUtf8(isolate, "Focus")))
     return v8::FunctionTemplate::New(isolate, Focus);
-  if (name->Equals(v8::String::NewFromUtf8(isolate, "GetAppLauncherEnabled")))
-    return v8::FunctionTemplate::New(isolate, GetAppLauncherEnabled);
   if (name->Equals(v8::String::NewFromUtf8(isolate, "GetMostVisitedItems")))
     return v8::FunctionTemplate::New(isolate, GetMostVisitedItems);
   if (name->Equals(v8::String::NewFromUtf8(isolate, "GetMostVisitedItemData")))
@@ -645,9 +635,6 @@ SearchBoxExtensionWrapper::GetNativeFunctionTemplate(
     return v8::FunctionTemplate::New(isolate, UndoAllMostVisitedDeletions);
   if (name->Equals(v8::String::NewFromUtf8(isolate, "UndoMostVisitedDeletion")))
     return v8::FunctionTemplate::New(isolate, UndoMostVisitedDeletion);
-  if (name->Equals(
-          v8::String::NewFromUtf8(isolate, "GetDisplayInstantResults")))
-    return v8::FunctionTemplate::New(isolate, GetDisplayInstantResults);
   return v8::Local<v8::FunctionTemplate>();
 }
 
@@ -715,16 +702,6 @@ void SearchBoxExtensionWrapper::Focus(
 
   DVLOG(1) << render_view << " Focus";
   SearchBox::Get(render_view)->Focus();
-}
-
-// static
-void SearchBoxExtensionWrapper::GetAppLauncherEnabled(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  content::RenderView* render_view = GetRenderView();
-  if (!render_view) return;
-
-  args.GetReturnValue().Set(
-      SearchBox::Get(render_view)->app_launcher_enabled());
 }
 
 // static
@@ -1156,19 +1133,6 @@ void SearchBoxExtensionWrapper::UndoMostVisitedDeletion(
   DVLOG(1) << render_view << " UndoMostVisitedDeletion";
   SearchBox::Get(render_view)
       ->UndoMostVisitedDeletion(args[0]->ToInteger()->Value());
-}
-
-// static
-void SearchBoxExtensionWrapper::GetDisplayInstantResults(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  content::RenderView* render_view = GetRenderView();
-  if (!render_view) return;
-
-  bool display_instant_results =
-      SearchBox::Get(render_view)->display_instant_results();
-  DVLOG(1) << render_view << " GetDisplayInstantResults" <<
-      display_instant_results;
-  args.GetReturnValue().Set(display_instant_results);
 }
 
 }  // namespace extensions_v8

@@ -9,6 +9,8 @@ static_library("arc") {
   sources = [
     "arc_bridge_bootstrap.cc",
     "arc_bridge_bootstrap.h",
+    "arc_bridge_host_impl.cc",
+    "arc_bridge_host_impl.h",
     "arc_bridge_service_impl.cc",
     "arc_bridge_service_impl.h",
     "arc_service_manager.cc",
@@ -56,8 +58,6 @@ static_library("arc") {
     "storage_manager/arc_storage_manager.h",
     "user_data/arc_user_data_service.cc",
     "user_data/arc_user_data_service.h",
-    "window_manager/arc_window_manager_bridge.cc",
-    "window_manager/arc_window_manager_bridge.h",
   ]
 
   deps = [
@@ -138,6 +138,7 @@ mojom("arc_bindings") {
     "common/bluetooth.mojom",
     "common/clipboard.mojom",
     "common/crash_collector.mojom",
+    "common/enterprise_reporting.mojom",
     "common/file_system.mojom",
     "common/ime.mojom",
     "common/intent_helper.mojom",
@@ -153,7 +154,6 @@ mojom("arc_bindings") {
     "common/storage_manager.mojom",
     "common/video.mojom",
     "common/video_accelerator.mojom",
-    "common/window_manager.mojom",
   ]
 
   deps = [

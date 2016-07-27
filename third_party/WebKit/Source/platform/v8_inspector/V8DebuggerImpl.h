@@ -114,12 +114,14 @@ public:
     v8::MaybeLocal<v8::Value> runCompiledScript(v8::Local<v8::Context>, v8::Local<v8::Script>);
     v8::MaybeLocal<v8::Value> callFunction(v8::Local<v8::Function>, v8::Local<v8::Context>, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> info[]);
     v8::MaybeLocal<v8::Value> compileAndRunInternalScript(v8::Local<v8::Context>, v8::Local<v8::String>);
-    v8::Local<v8::Script> compileInternalScript(v8::Local<v8::Context>, v8::Local<v8::String>, const String16& fileName);
+    v8::Local<v8::Script> compileScript(v8::Local<v8::Context>, v8::Local<v8::String>, const String16& fileName, bool markAsInternal);
     v8::Local<v8::Context> regexContext();
 
     void enableStackCapturingIfNeeded();
     void disableStackCapturingIfNeeded();
     V8ConsoleMessageStorage* ensureConsoleMessageStorage(int contextGroupId);
+    std::unique_ptr<V8StackTraceImpl> createStackTraceImpl(v8::Local<v8::StackTrace>);
+    std::unique_ptr<V8StackTraceImpl> captureStackTraceImpl(bool fullStack);
 
     // V8Debugger implementation
     std::unique_ptr<V8InspectorSession> connect(int contextGroupId, protocol::FrontendChannel*, V8InspectorSessionClient*, const String16* state) override;
@@ -130,7 +132,6 @@ public:
     void didExecuteScript(v8::Local<v8::Context>) override;
     void idleStarted() override;
     void idleFinished() override;
-    void logToConsole(v8::Local<v8::Context>, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2) override;
     void exceptionThrown(int contextGroupId, const String16& errorMessage, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId) override;
     unsigned promiseRejected(v8::Local<v8::Context>, const String16& errorMessage, v8::Local<v8::Value> exception, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId) override;
     void promiseRejectionRevoked(v8::Local<v8::Context>, unsigned promiseRejectionId) override;

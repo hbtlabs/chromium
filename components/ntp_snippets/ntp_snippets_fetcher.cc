@@ -45,7 +45,10 @@ namespace ntp_snippets {
 
 namespace {
 
-const char kApiScope[] = "https://www.googleapis.com/auth/webhistory";
+const char kChromeReaderApiScope[] =
+    "https://www.googleapis.com/auth/webhistory";
+const char kContentSuggestionsApiScope[] =
+    "https://www.googleapis.com/auth/chrome-content-suggestions";
 const char kChromeReaderServer[] =
     "https://chromereader-pa.googleapis.com/v1/fetch";
 const char kContentSuggestionsServer[] =
@@ -155,6 +158,7 @@ NTPSnippetsFetcher::NTPSnippetsFetcher(
     SigninManagerBase* signin_manager,
     OAuth2TokenService* token_service,
     scoped_refptr<URLRequestContextGetter> url_request_context_getter,
+    PrefService* pref_service,
     const ParseJSONCallback& parse_json_callback,
     bool is_stable_channel)
     : OAuth2TokenService::Consumer("ntp_snippets"),
@@ -169,6 +173,9 @@ NTPSnippetsFetcher::NTPSnippetsFetcher(
                      : CHROME_READER_API),
       is_stable_channel_(is_stable_channel),
       tick_clock_(new base::DefaultTickClock()),
+      request_throttler_(
+          pref_service,
+          RequestThrottler::RequestType::CONTENT_SUGGESTION_FETCHER),
       weak_ptr_factory_(this) {
   // Parse the variation parameters and set the defaults if missing.
   std::string personalization = variations::GetVariationParamValue(
@@ -211,7 +218,11 @@ void NTPSnippetsFetcher::SetCallback(
 void NTPSnippetsFetcher::FetchSnippetsFromHosts(
     const std::set<std::string>& hosts,
     const std::string& language_code,
-    int count) {
+    int count,
+    bool force_request) {
+  if (!request_throttler_.DemandQuotaForRequest(force_request))
+    return;
+
   hosts_ = hosts;
   fetch_start_time_ = tick_clock_->NowTicks();
 
@@ -261,7 +272,7 @@ std::string NTPSnippetsFetcher::RequestParams::BuildRequest() {
                                only_return_personalized_results);
 
     auto content_restricts = base::MakeUnique<base::ListValue>();
-    for (const auto& metadata : {"TITLE", "SNIPPET", "THUMBNAIL"}) {
+    for (const auto* metadata : {"TITLE", "SNIPPET", "THUMBNAIL"}) {
       auto entry = base::MakeUnique<base::DictionaryValue>();
       entry->SetString("type", "METADATA");
       entry->SetString("value", metadata);
@@ -400,7 +411,9 @@ void NTPSnippetsFetcher::FetchSnippetsAuthenticated(
 
 void NTPSnippetsFetcher::StartTokenRequest() {
   OAuth2TokenService::ScopeSet scopes;
-  scopes.insert(kApiScope);
+  scopes.insert(fetch_api_ == CHROME_CONTENT_SUGGESTIONS_API
+                    ? kContentSuggestionsApiScope
+                    : kChromeReaderApiScope);
   oauth_request_ = token_service_->StartRequest(
       signin_manager_->GetAuthenticatedAccountId(), scopes, this);
 }

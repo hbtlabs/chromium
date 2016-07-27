@@ -102,6 +102,8 @@ class CC_EXPORT LayerImpl {
   void OnTransformIsPotentiallyAnimatingChanged(bool has_potential_animation);
   void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
   void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
+  void OnFilterIsCurrentlyAnimatingChanged(bool is_currently_animating);
+  void OnFilterIsPotentiallyAnimatingChanged(bool has_potential_animation);
   bool IsActive() const;
 
   void DistributeScroll(ScrollState* scroll_state);
@@ -117,6 +119,7 @@ class CC_EXPORT LayerImpl {
 
   void SetEffectTreeIndex(int index);
   int effect_tree_index() const { return effect_tree_index_; }
+  int render_target_effect_tree_index() const;
 
   void SetScrollTreeIndex(int index);
   int scroll_tree_index() const { return scroll_tree_index_; }
@@ -192,8 +195,6 @@ class CC_EXPORT LayerImpl {
   // non-opaque color.  Tries to return background_color(), if possible.
   SkColor SafeOpaqueBackgroundColor() const;
 
-  void SetFilters(const FilterOperations& filters);
-  const FilterOperations& filters() const { return filters_; }
   bool FilterIsAnimating() const;
   bool HasPotentiallyRunningFilterAnimation() const;
 
@@ -211,15 +212,10 @@ class CC_EXPORT LayerImpl {
   void SetMutableProperties(uint32_t properties);
   uint32_t mutable_properties() const { return mutable_properties_; }
 
-  void SetBlendMode(SkXfermode::Mode);
-  SkXfermode::Mode blend_mode() const { return blend_mode_; }
   void set_draw_blend_mode(SkXfermode::Mode blend_mode) {
     draw_blend_mode_ = blend_mode;
   }
   SkXfermode::Mode draw_blend_mode() const { return draw_blend_mode_; }
-  bool uses_default_blend_mode() const {
-    return blend_mode_ == SkXfermode::kSrcOver_Mode;
-  }
 
   void SetPosition(const gfx::PointF& position);
   gfx::PointF position() const { return position_; }
@@ -540,9 +536,6 @@ class CC_EXPORT LayerImpl {
   SkColor background_color_;
   SkColor safe_opaque_background_color_;
 
-  SkXfermode::Mode blend_mode_;
-  // draw_blend_mode may be different than blend_mode_,
-  // when a RenderSurface re-parents the layer's blend_mode.
   SkXfermode::Mode draw_blend_mode_;
   gfx::PointF position_;
   gfx::Transform transform_;
@@ -552,8 +545,6 @@ class CC_EXPORT LayerImpl {
   int effect_tree_index_;
   int clip_tree_index_;
   int scroll_tree_index_;
-
-  FilterOperations filters_;
 
  protected:
   friend class TreeSynchronizer;

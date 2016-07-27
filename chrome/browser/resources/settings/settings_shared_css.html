@@ -1,5 +1,5 @@
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
-<link rel="import" href="/settings_root_css.html">
+<link rel="import" href="/settings_vars_css.html">
 
 <!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
@@ -65,7 +65,7 @@
 
       iron-dropdown .dropdown-item:focus,
       paper-dropdown-menu .dropdown-item:focus {
-        background-color: var(--paper-grey-300);
+        background-color: var(--cr-focused-item-color);
         outline: none;
       }
 
@@ -79,11 +79,6 @@
         @apply(--settings-actionable);
       }
 
-      iron-dropdown .dropdown-content .dropdown-item:hover,
-      iron-dropdown .dropdown-content paper-item:hover {
-        background-color: var(--settings-hover-color);
-      }
-
       span ~ a {
         -webkit-margin-start: 4px;
       }
@@ -92,32 +87,28 @@
       [is='action-link']:active,
       [is='action-link']:hover,
       [is='action-link']:visited,
-      paper-button.primary-button,
-      paper-button.tertiary-button {
+      .primary-button,
+      .tertiary-button {
         color: var(--google-blue-700);
       }
 
-      paper-button.primary-button,
-      paper-button.tertiary-button {
+      .primary-button,
+      .tertiary-button {
         --paper-button-flat-keyboard-focus: {
           background-color: rgba(51, 103, 214, .12);  /* --google-blue-700 */
         };
       }
 
       [is='action-link']:hover {
-        /* TODO(dbeam): check with bettes@ on this one, but I'm pretty sure we
-         * shouldn't be showing much :hover stuff on Polymer pages. */
         text-decoration: none;
       }
 
-      /*
-       * There are three main button styles, .primary-button, .secondary-button,
+      /* There are three main button styles, .primary-button, .secondary-button,
        * and .tertiary-button. The primary is the action button (e.g. "edit",
        * "delete") while the secondary is often a "Cancel" button. A tertiary
        * button may be used to get more information or similar, that we expect
-       * most users will not need.
-       */
-      paper-button.primary-button {
+       * most users will not need. */
+      .primary-button {
         --paper-button: {
           font-weight: 500;
           text-align: start;
@@ -125,7 +116,7 @@
       }
 
       /* See notes in .primary-button. */
-      paper-button.secondary-button {
+      .secondary-button {
         --paper-button: {
           color: var(--paper-grey-600);
           text-decoration: none;
@@ -137,16 +128,16 @@
       }
 
       /* See notes in .primary-button. */
-      paper-button.tertiary-button {
+      .tertiary-button {
         --paper-button: {
           font-weight: 400;
           text-decoration: none;
         };
       }
 
-      .settings-box paper-button.primary-button,
-      .settings-box paper-button.secondary-button,
-      .settings-box paper-button.secondary-button {
+      .settings-box .primary-button,
+      .settings-box .secondary-button,
+      .settings-box .secondary-button {
         margin-left: -12px;
         margin-right: -12px;
         padding-left: 12px;
@@ -185,11 +176,9 @@
         text-align: end;
       }
 
-      /*
-       * A list-frame is an outer container for list-items. It is intended to be
+      /* A list-frame is an outer container for list-items. It is intended to be
        * outside of a settings-box. A list-frame is likely to follow a
-       * settings box.
-       */
+       * settings box. */
       .list-frame {
         -webkit-padding-end: 20px;
         -webkit-padding-start: 56px;
@@ -204,10 +193,8 @@
         @apply(--settings-secondary);
       }
 
-      /*
-       * A list-item is intended to be contained within a list-frame. The list
-       * frame will setup the initial start margin.
-       */
+      /* A list-item is intended to be contained within a list-frame. The list
+       * frame will setup the initial start margin. */
       .list-item {
         align-items: center;
         display: flex;
@@ -254,10 +241,8 @@
         font-weight: 500;
       }
 
-      /*
-       * A settings-box is a horizontal row of text or controls within a
-       * setting section (page or subpage).
-       */
+      /* A settings-box is a horizontal row of text or controls within a
+       * setting section (page or subpage). */
       .settings-box {
         align-items: center;
         border-top: var(--settings-separator-line);
@@ -266,11 +251,9 @@
         padding: 0 20px;
       }
 
-      /*
-       * We use an explicit tag to remove the top border, rather than a
+      /* We use an explicit tag to remove the top border, rather than a
        * :first-of-type modifier. This is a conscious choice, please consult
-       * with dbeam@ or dschuyler@ prior to changing it.
-       */
+       * with dbeam@ or dschuyler@ prior to changing it. */
       .settings-box.first,
       .settings-box.continuation {
         border-top: none;
@@ -280,15 +263,20 @@
         display: block;
       }
 
-      /*
-       * A row with two lines of text. Often the lower line will be .secondary.
+      /* A row with two lines of text. Often the lower line will be .secondary.
        */
       .settings-box.two-line {
         min-height: 56px;
       }
 
-      [actionable] {
-        @apply(--settings-actionable);
+      /*
+       * A settings box with a single start-aligned column, generally but not
+       * necessarily used in combination with two-line.
+       */
+      .settings-box.single-column {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
       }
 
       /* The lower line of text in a .settings-box.two-line. */
@@ -317,8 +305,7 @@
        *  | Main action area .settings-box    | .secondary-action |
        *  +-------------------------------------------------------+
        *  | Another setting-box without a secondary-action        |
-       *  +-------------------------------------------------------+
-       */
+       *  +-------------------------------------------------------+ */
       .settings-box .secondary-action {
         -webkit-border-start: var(--settings-separator-line);
         -webkit-padding-start: 20px;

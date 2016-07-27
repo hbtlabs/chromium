@@ -27,7 +27,6 @@
 
 #include "core/dom/Fullscreen.h"
 
-#include "bindings/core/v8/ExceptionMessages.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
@@ -43,9 +42,11 @@
 #include "core/html/HTMLMediaElement.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/layout/LayoutBlockFlow.h"
+#include "core/layout/LayoutFullScreen.h"
+#include "core/layout/api/LayoutFullScreenItem.h"
 #include "core/page/ChromeClient.h"
-#include "core/page/Page.h"
-#include "core/style/ComputedStyle.h"
+#include "platform/ScopedOrientationChangeIndicator.h"
 #include "platform/UserGestureIndicator.h"
 
 namespace blink {
@@ -196,6 +197,7 @@ bool Fullscreen::isFullScreen(Document& document)
 
 Fullscreen::Fullscreen(Document& document)
     : ContextLifecycleObserver(&document)
+    , m_fullScreenLayoutObject(nullptr)
     , m_eventQueueTimer(this, &Fullscreen::eventQueueTimerFired)
     , m_forCrossProcessDescendant(false)
 {
@@ -214,6 +216,9 @@ inline Document* Fullscreen::document()
 void Fullscreen::contextDestroyed()
 {
     m_eventQueue.clear();
+
+    if (m_fullScreenLayoutObject)
+        m_fullScreenLayoutObject->destroy();
 
     m_fullScreenElement = nullptr;
     m_fullScreenElementStack.clear();
@@ -250,25 +255,26 @@ void Fullscreen::requestFullscreen(Element& element, RequestType requestType, bo
         if (!fullscreenElementReady(element))
             break;
 
-        // This algorithm is not allowed to show a pop-up:
-        //   An algorithm is allowed to show a pop-up if, in the task in which the algorithm is running, either:
-        //   - an activation behavior is currently being processed whose click event was trusted, or
-        //   - the event listener for a trusted click event is being handled.
+        // Fullscreen is not supported.
+        if (!fullscreenIsSupported(element.document()))
+            break;
+
+        // This algorithm is not allowed to request fullscreen.
+        // An algorithm is allowed to request fullscreen if one of the following
+        // is true:
+        //  - the algorithm is triggered by a user activation.
+        //  - the algorithm is triggered by a user generated orientation change.
         //
         // If |forCrossProcessDescendant| is true, requestFullscreen
         // was already called on a descendant element in another process, and
         // getting here means that it already passed the user gesture check.
-        if (!UserGestureIndicator::utilizeUserGesture() && !forCrossProcessDescendant) {
+        if (!UserGestureIndicator::utilizeUserGesture() && !ScopedOrientationChangeIndicator::processingOrientationChange() && !forCrossProcessDescendant) {
             String message = ExceptionMessages::failedToExecute("requestFullScreen",
                 "Element", "API can only be initiated by a user gesture.");
             document()->addConsoleMessage(
                 ConsoleMessage::create(JSMessageSource, WarningMessageLevel, message));
             break;
         }
-
-        // Fullscreen is not supported.
-        if (!fullscreenIsSupported(element.document()))
-            break;
 
         // 2. Let doc be element's node document. (i.e. "this")
         Document* currentDoc = document();
@@ -482,12 +488,30 @@ bool Fullscreen::fullscreenEnabled(Document& document)
 void Fullscreen::didEnterFullscreenForElement(Element* element)
 {
     DCHECK(element);
-    DCHECK(element->isInTopLayer());
-
     if (!document()->isActive())
         return;
 
+    if (m_fullScreenLayoutObject)
+        m_fullScreenLayoutObject->unwrapLayoutObject();
+
     m_fullScreenElement = element;
+
+    // Create a placeholder block for a the full-screen element, to keep the page from reflowing
+    // when the element is removed from the normal flow. Only do this for a LayoutBox, as only
+    // a box will have a frameRect. The placeholder will be created in setFullScreenLayoutObject()
+    // during layout.
+    LayoutObject* layoutObject = m_fullScreenElement->layoutObject();
+    bool shouldCreatePlaceholder = layoutObject && layoutObject->isBox();
+    if (shouldCreatePlaceholder) {
+        m_savedPlaceholderFrameRect = toLayoutBox(layoutObject)->frameRect();
+        m_savedPlaceholderComputedStyle = ComputedStyle::clone(layoutObject->styleRef());
+    }
+
+    // TODO(alexmos): When |m_forCrossProcessDescendant| is true, some of
+    // this layout work has already been done in another process, so it should
+    // not be necessary to repeat it here.
+    if (m_fullScreenElement != document()->documentElement())
+        LayoutFullScreen::wrapLayoutObject(layoutObject, layoutObject ? layoutObject->parent() : 0, document());
 
     // When |m_forCrossProcessDescendant| is true, m_fullScreenElement
     // corresponds to the HTMLFrameOwnerElement for the out-of-process iframe
@@ -524,13 +548,15 @@ void Fullscreen::didExitFullscreen()
     if (!document()->isActive())
         return;
 
-    document()->removeFromTopLayer(m_fullScreenElement.get());
     m_fullScreenElement->willStopBeingFullscreenElement();
 
     if (m_forCrossProcessDescendant)
         m_fullScreenElement->setContainsFullScreenElement(false);
 
     m_fullScreenElement->setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(false);
+
+    if (m_fullScreenLayoutObject)
+        LayoutFullScreenItem(m_fullScreenLayoutObject).unwrapLayoutObject();
 
     document()->styleEngine().ensureFullscreenUAStyle();
     m_fullScreenElement->pseudoStateChanged(CSSSelector::PseudoFullScreen);
@@ -551,12 +577,28 @@ void Fullscreen::didExitFullscreen()
     m_forCrossProcessDescendant = false;
 }
 
-void Fullscreen::didUpdateSize(Element& element)
+void Fullscreen::setFullScreenLayoutObject(LayoutFullScreen* layoutObject)
 {
-    // StyleAdjuster will set the size so we need to do a style recalc.
-    // Normally changing size means layout so just doing a style recalc is a
-    // bit surprising.
-    element.setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::FullScreen));
+    if (layoutObject == m_fullScreenLayoutObject)
+        return;
+
+    if (layoutObject && m_savedPlaceholderComputedStyle) {
+        layoutObject->createPlaceholder(m_savedPlaceholderComputedStyle.release(), m_savedPlaceholderFrameRect);
+    } else if (layoutObject && m_fullScreenLayoutObject && m_fullScreenLayoutObject->placeholder()) {
+        LayoutBlockFlow* placeholder = m_fullScreenLayoutObject->placeholder();
+        layoutObject->createPlaceholder(ComputedStyle::clone(placeholder->styleRef()), placeholder->frameRect());
+    }
+
+    if (m_fullScreenLayoutObject)
+        m_fullScreenLayoutObject->unwrapLayoutObject();
+    DCHECK(!m_fullScreenLayoutObject);
+
+    m_fullScreenLayoutObject = layoutObject;
+}
+
+void Fullscreen::fullScreenLayoutObjectDestroyed()
+{
+    m_fullScreenLayoutObject = nullptr;
 }
 
 void Fullscreen::enqueueChangeEvent(Document& document, RequestType requestType)
@@ -641,14 +683,12 @@ void Fullscreen::popFullscreenElementStack()
     if (m_fullScreenElementStack.isEmpty())
         return;
 
-    document()->removeFromTopLayer(m_fullScreenElementStack.last().first.get());
     m_fullScreenElementStack.removeLast();
 }
 
 void Fullscreen::pushFullscreenElementStack(Element& element, RequestType requestType)
 {
     m_fullScreenElementStack.append(std::make_pair(&element, requestType));
-    document()->addToTopLayer(&element);
 }
 
 DEFINE_TRACE(Fullscreen)

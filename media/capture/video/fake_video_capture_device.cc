@@ -101,15 +101,15 @@ void DoTakeFakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
   DrawPacman(true /* use_argb */, buffer.get(), elapsed_time, fake_capture_rate,
              capture_format.frame_size, zoom);
 
-  std::vector<uint8_t> encoded_data;
+  mojom::BlobPtr blob = mojom::Blob::New();
   const bool result = gfx::PNGCodec::Encode(
       buffer.get(), gfx::PNGCodec::FORMAT_RGBA, capture_format.frame_size,
       capture_format.frame_size.width() * 4, true /* discard_transparency */,
-      std::vector<gfx::PNGCodec::Comment>(), &encoded_data);
+      std::vector<gfx::PNGCodec::Comment>(), &blob->data);
   DCHECK(result);
 
-  callback.Run(mojo::String::From("image/png"),
-               mojo::Array<uint8_t>::From(encoded_data));
+  blob->mime_type = "image/png";
+  callback.Run(std::move(blob));
 }
 
 FakeVideoCaptureDevice::FakeVideoCaptureDevice(BufferOwnership buffer_ownership,
@@ -182,6 +182,19 @@ void FakeVideoCaptureDevice::GetPhotoCapabilities(
     GetPhotoCapabilitiesCallback callback) {
   mojom::PhotoCapabilitiesPtr photo_capabilities =
       mojom::PhotoCapabilities::New();
+  photo_capabilities->iso = mojom::Range::New();
+  photo_capabilities->iso->current = 100;
+  photo_capabilities->iso->max = 100;
+  photo_capabilities->iso->min = 100;
+  photo_capabilities->height = mojom::Range::New();
+  photo_capabilities->height->current = capture_format_.frame_size.height();
+  photo_capabilities->height->max = 1080;
+  photo_capabilities->height->min = 240;
+  photo_capabilities->width = mojom::Range::New();
+  photo_capabilities->width->current = capture_format_.frame_size.width();
+  photo_capabilities->width->max = 1920;
+  photo_capabilities->width->min = 320;
+  photo_capabilities->focus_mode = mojom::FocusMode::UNAVAILABLE;
   photo_capabilities->zoom = mojom::Range::New();
   photo_capabilities->zoom->current = current_zoom_;
   photo_capabilities->zoom->max = kMaxZoom;

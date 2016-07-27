@@ -227,6 +227,11 @@ void InsertListCommand::doApply(EditingState* editingState)
     doApplyForSingleParagraph(false, listTag, *firstRangeOf(endingSelection()), editingState);
 }
 
+InputEvent::InputType InsertListCommand::inputType() const
+{
+    return m_type == OrderedList ? InputEvent::InputType::InsertOrderedList : InputEvent::InputType::InsertUnorderedList;
+}
+
 bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HTMLQualifiedName& listTag, Range& currentSelection, EditingState* editingState)
 {
     // FIXME: This will produce unexpected results for a selection that starts just before a
@@ -236,17 +241,17 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
     Node* listChildNode = enclosingListChild(selectionNode);
     bool switchListType = false;
     if (listChildNode) {
-        if (!listChildNode->parentNode()->hasEditableStyle())
+        if (!hasEditableStyle(*listChildNode->parentNode()))
             return false;
         // Remove the list child.
         HTMLElement* listElement = enclosingList(listChildNode);
         if (listElement) {
-            if (!listElement->hasEditableStyle()) {
+            if (!hasEditableStyle(*listElement)) {
                 // Since, |listElement| is uneditable, we can't move |listChild|
                 // out from |listElement|.
                 return false;
             }
-            if (!listElement->parentNode()->hasEditableStyle()) {
+            if (!hasEditableStyle(*listElement->parentNode())) {
                 // Since parent of |listElement| is uneditable, we can not remove
                 // |listElement| for switching list type neither unlistify.
                 return false;
@@ -260,8 +265,8 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
             if (editingState->isAborted())
                 return false;
         }
-        DCHECK(listElement->hasEditableStyle());
-        DCHECK(listElement->parentNode()->hasEditableStyle());
+        DCHECK(hasEditableStyle(*listElement));
+        DCHECK(hasEditableStyle(*listElement->parentNode()));
         if (!listElement->hasTagName(listTag)) {
             // |listChildNode| will be removed from the list and a list of type
             // |m_type| will be created.
@@ -330,7 +335,7 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
 {
     // Since, unlistify paragraph inserts nodes into parent and removes node
     // from parent, if parent of |listElement| should be editable.
-    DCHECK(listElement->parentNode()->hasEditableStyle());
+    DCHECK(hasEditableStyle(*listElement->parentNode()));
     Node* nextListChild;
     Node* previousListChild;
     VisiblePosition start;

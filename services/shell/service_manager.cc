@@ -137,7 +137,7 @@ class ServiceManager::Instance
       parent_->RemoveChild(this);
     // |children_| will be modified during destruction.
     std::set<Instance*> children = children_;
-    for (auto child : children)
+    for (auto* child : children)
       service_manager_->OnInstanceError(child);
 
     // Shutdown all bindings before we close the runner. This way the process
@@ -294,7 +294,7 @@ class ServiceManager::Instance
   }
 
   // InterfaceFactory<mojom::ServiceManager>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               mojom::ServiceManagerRequest request) override {
     service_manager_bindings_.AddBinding(this, std::move(request));
   }
@@ -413,7 +413,7 @@ class ServiceManager::Instance
       return;
     }
     pid_ = pid;
-    service_manager_->NotifyPIDAvailable(id_, pid_);
+    service_manager_->NotifyPIDAvailable(identity_, pid_);
   }
 
   void OnServiceLost(base::WeakPtr<shell::ServiceManager> service_manager) {
@@ -594,11 +594,11 @@ void ServiceManager::OnInstanceError(Instance* instance) {
   // Remove the Service Manager.
   auto it = identity_to_instance_.find(identity);
   DCHECK(it != identity_to_instance_.end());
-  int id = instance->id();
   identity_to_instance_.erase(it);
-  listeners_.ForAllPtrs([this, id](mojom::ServiceManagerListener* listener) {
-                          listener->OnServiceStopped(id);
-                        });
+  listeners_.ForAllPtrs(
+      [this, identity](mojom::ServiceManagerListener* listener) {
+        listener->OnServiceStopped(mojom::Identity::From(identity));
+      });
   delete instance;
   if (!instance_quit_callback_.is_null())
     instance_quit_callback_.Run(identity);
@@ -650,10 +650,12 @@ ServiceManager::Instance* ServiceManager::GetExistingInstance(
   return nullptr;
 }
 
-void ServiceManager::NotifyPIDAvailable(uint32_t id, base::ProcessId pid) {
-  listeners_.ForAllPtrs([id, pid](mojom::ServiceManagerListener* listener) {
-                          listener->OnServiceStarted(id, pid);
-                        });
+void ServiceManager::NotifyPIDAvailable(const Identity& identity,
+                                        base::ProcessId pid) {
+  listeners_.ForAllPtrs(
+      [identity, pid](mojom::ServiceManagerListener* listener) {
+        listener->OnServiceStarted(mojom::Identity::From(identity), pid);
+      });
 }
 
 bool ServiceManager::ConnectToExistingInstance(

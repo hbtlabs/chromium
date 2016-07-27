@@ -21,6 +21,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/StyleEngine.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/VerticalPositionCache.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
@@ -407,7 +408,7 @@ LineLayoutBlockFlow RootInlineBox::block() const
 
 static bool isEditableLeaf(InlineBox* leaf)
 {
-    return leaf && leaf->getLineLayoutItem().node() && leaf->getLineLayoutItem().node()->hasEditableStyle();
+    return leaf && leaf->getLineLayoutItem().node() && hasEditableStyle(*leaf->getLineLayoutItem().node());
 }
 
 InlineBox* RootInlineBox::closestLeafChildForPoint(const LayoutPoint& pointInContents, bool onlyEditableLeaves)

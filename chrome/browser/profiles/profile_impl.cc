@@ -44,7 +44,6 @@
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_service.h"
 #include "chrome/browser/download/download_service_factory.h"
-#include "chrome/browser/net/net_pref_observer.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
@@ -627,6 +626,7 @@ void ProfileImpl::DoFinalInit() {
 #if defined(ENABLE_PLUGINS)
   ChromePluginServiceFilter::GetInstance()->RegisterResourceContext(
       PluginPrefs::GetForProfile(this).get(),
+      HostContentSettingsMapFactory::GetForProfile(this),
       io_data_.GetResourceContextNoInit());
 #endif
 
@@ -717,6 +717,10 @@ ProfileImpl::~ProfileImpl() {
   // This causes the Preferences file to be written to disk.
   if (prefs_loaded)
     SetExitType(EXIT_NORMAL);
+
+  // This must be called before ProfileIOData::ShutdownOnUIThread but after
+  // other profile-related destroy notifications are dispatched.
+  ShutdownStoragePartitions();
 }
 
 std::string ProfileImpl::GetProfileUserName() const {
@@ -845,12 +849,6 @@ void ProfileImpl::OnLocaleReady() {
     SCOPED_UMA_HISTOGRAM_TIMER("Profile.CreateBrowserContextServicesTime");
     BrowserContextDependencyManager::GetInstance()->
       CreateBrowserContextServices(this);
-  }
-
-  DCHECK(!net_pref_observer_);
-  {
-    TRACE_EVENT0("browser", "ProfileImpl::OnPrefsLoaded:NetPrefObserver")
-    net_pref_observer_.reset(new NetPrefObserver(prefs_.get()));
   }
 
   ChromeVersionService::OnProfileLoaded(prefs_.get(), IsNewProfile());

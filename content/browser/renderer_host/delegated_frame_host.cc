@@ -75,7 +75,10 @@ DelegatedFrameHost::DelegatedFrameHost(DelegatedFrameHostClient* client)
       delegated_frame_evictor_(new DelegatedFrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   factory->GetContextFactory()->AddObserver(this);
-  id_allocator_ = factory->GetContextFactory()->CreateSurfaceIdAllocator();
+  id_allocator_.reset(new cc::SurfaceIdAllocator(
+      factory->GetContextFactory()->AllocateSurfaceClientId()));
+  factory->GetSurfaceManager()->RegisterSurfaceClientId(
+      id_allocator_->client_id());
   factory->GetSurfaceManager()->RegisterSurfaceFactoryClient(
       id_allocator_->client_id(), this);
 }
@@ -539,8 +542,7 @@ void DelegatedFrameHost::SendReclaimCompositorResources(
   }
 }
 
-void DelegatedFrameHost::SurfaceDrawn(uint32_t output_surface_id,
-                                      cc::SurfaceDrawStatus drawn) {
+void DelegatedFrameHost::SurfaceDrawn(uint32_t output_surface_id) {
   SendReclaimCompositorResources(output_surface_id, true /* is_swap_ack */);
 }
 
@@ -819,6 +821,8 @@ DelegatedFrameHost::~DelegatedFrameHost() {
     surface_factory_->Destroy(surface_id_);
   factory->GetSurfaceManager()->UnregisterSurfaceFactoryClient(
       id_allocator_->client_id());
+  factory->GetSurfaceManager()->InvalidateSurfaceClientId(
+      id_allocator_->client_id());
 
   DCHECK(!vsync_manager_.get());
 }
@@ -833,10 +837,7 @@ void DelegatedFrameHost::SetCompositor(ui::Compositor* compositor) {
   vsync_manager_ = compositor_->vsync_manager();
   vsync_manager_->AddObserver(this);
 
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  uint32_t parent = compositor->surface_id_allocator()->client_id();
-  factory->GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
-      parent, id_allocator_->client_id());
+  compositor_->AddSurfaceClient(id_allocator_->client_id());
 }
 
 void DelegatedFrameHost::ResetCompositor() {
@@ -853,11 +854,7 @@ void DelegatedFrameHost::ResetCompositor() {
     vsync_manager_ = NULL;
   }
 
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  uint32_t parent = compositor_->surface_id_allocator()->client_id();
-  factory->GetSurfaceManager()->UnregisterSurfaceNamespaceHierarchy(
-      parent, id_allocator_->client_id());
-
+  compositor_->RemoveSurfaceClient(id_allocator_->client_id());
   compositor_ = nullptr;
 }
 

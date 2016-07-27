@@ -21,10 +21,8 @@ namespace ui {
 namespace ws {
 
 FrameGenerator::FrameGenerator(FrameGeneratorDelegate* delegate,
-                               scoped_refptr<GpuState> gpu_state,
                                scoped_refptr<SurfacesState> surfaces_state)
     : delegate_(delegate),
-      gpu_state_(gpu_state),
       surfaces_state_(surfaces_state),
       draw_timer_(false, false),
       weak_factory_(this) {
@@ -46,9 +44,8 @@ void FrameGenerator::RequestRedraw(const gfx::Rect& redraw_region) {
 void FrameGenerator::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget) {
   if (widget != gfx::kNullAcceleratedWidget) {
-    display_compositor_.reset(
-        new DisplayCompositor(base::ThreadTaskRunnerHandle::Get(), widget,
-                              gpu_state_, surfaces_state_));
+    display_compositor_.reset(new DisplayCompositor(
+        base::ThreadTaskRunnerHandle::Get(), widget, surfaces_state_));
   }
 }
 
@@ -83,7 +80,7 @@ void FrameGenerator::Draw() {
   dirty_rect_ = gfx::Rect();
 }
 
-void FrameGenerator::DidDraw(cc::SurfaceDrawStatus status) {
+void FrameGenerator::DidDraw() {
   frame_pending_ = false;
   delegate_->OnCompositorFrameDrawn();
   if (!dirty_rect_.IsEmpty())
@@ -93,7 +90,7 @@ void FrameGenerator::DidDraw(cc::SurfaceDrawStatus status) {
 cc::CompositorFrame FrameGenerator::GenerateCompositorFrame() {
   const ViewportMetrics& metrics = delegate_->GetViewportMetrics();
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  gfx::Rect output_rect(metrics.size_in_pixels);
+  gfx::Rect output_rect = metrics.bounds;
   dirty_rect_.Intersect(output_rect);
   const cc::RenderPassId render_pass_id(1, 1);
   render_pass->SetNew(render_pass_id, output_rect, dirty_rect_,
@@ -174,7 +171,7 @@ void FrameGenerator::DrawWindowTree(
                 bounds_at_origin /* clip_rect */, false /* is_clipped */,
                 combined_opacity, SkXfermode::kSrcOver_Mode,
                 0 /* sorting-context_id */);
-    auto quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+    auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
@@ -196,7 +193,7 @@ void FrameGenerator::DrawWindowTree(
                 combined_opacity, SkXfermode::kSrcOver_Mode,
                 0 /* sorting-context_id */);
 
-    auto quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
+    auto* quad = pass->CreateAndAppendDrawQuad<cc::SurfaceDrawQuad>();
     quad->SetAll(sqs, bounds_at_origin /* rect */,
                  gfx::Rect() /* opaque_rect */,
                  bounds_at_origin /* visible_rect */, true /* needs_blending*/,
