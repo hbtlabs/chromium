@@ -725,8 +725,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
       command_line.HasSwitch(switches::kRootLayerScrolls));
   webview()->setShowFPSCounter(
       command_line.HasSwitch(cc::switches::kShowFPSCounter));
-  webview()->setDeviceColorProfile(
-      params.image_decode_color_space.GetICCProfile());
+  webview()->setDeviceColorProfile(params.image_decode_color_space.GetData());
 
   ApplyWebPreferencesInternal(webkit_preferences_, webview(), compositor_deps_);
 
@@ -2436,6 +2435,7 @@ void RenderViewImpl::OnDisableAutoResize(const gfx::Size& new_size) {
 
   if (!new_size.IsEmpty()) {
     ResizeParams resize_params;
+    resize_params.screen_info = screen_info_;
     resize_params.new_size = new_size;
     resize_params.physical_backing_size = physical_backing_size_;
     resize_params.top_controls_shrink_blink_size =
@@ -2816,7 +2816,7 @@ void RenderViewImpl::pageImportanceSignalsChanged() {
   if (!webview() || !main_render_frame_)
     return;
 
-  const auto& web_signals = webview()->pageImportanceSignals();
+  auto* web_signals = webview()->pageImportanceSignals();
 
   PageImportanceSignals signals;
   signals.had_form_interaction = web_signals->hadFormInteraction();

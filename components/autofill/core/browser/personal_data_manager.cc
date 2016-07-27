@@ -318,7 +318,12 @@ void PersonalDataManager::OnSyncServiceInitialized(
     return;
   }
 
-  // Otherwise, run the de-duplication now.
+  // This runs as a one-time fix, tracked in syncable prefs. If it has already
+  // run, it is a NOP (other than checking the pref).
+  ApplyProfileUseDatesFix();
+
+  // This runs at most once per major version, tracked in syncable prefs. If it
+  // has already run for this version, it's a NOP, other than checking the pref.
   ApplyDedupingRoutine();
 }
 
@@ -349,7 +354,6 @@ void PersonalDataManager::OnWebDataServiceRequestDone(
         ReceiveLoadedDbValues(h, result, &pending_profiles_query_,
                               &web_profiles_);
         LogProfileCount();  // This only logs local profiles.
-        ApplyProfileUseDatesFix();
       } else {
         ReceiveLoadedDbValues(h, result, &pending_server_profiles_query_,
                               &server_profiles_);
@@ -404,8 +408,14 @@ void PersonalDataManager::AutofillMultipleChanged() {
 }
 
 void PersonalDataManager::SyncStarted(syncer::ModelType model_type) {
-  if (model_type == syncer::AUTOFILL_PROFILE &&
-      is_autofill_profile_dedupe_pending_) {
+  if (model_type == syncer::AUTOFILL_PROFILE) {
+    // This runs as a one-time fix, tracked in syncable prefs. If it has already
+    // run, it is a NOP (other than checking the pref).
+    ApplyProfileUseDatesFix();
+
+    // This runs at most once per major version, tracked in syncable prefs. If
+    // it has already run for this version, it's a NOP, other than checking the
+    // pref.
     ApplyDedupingRoutine();
   }
 }
@@ -590,10 +600,10 @@ void PersonalDataManager::UpdateServerCreditCard(
     return;
 
   // Look up by server id, not GUID.
-  CreditCard* existing_credit_card = nullptr;
-  for (auto it : server_credit_cards_) {
-    if (credit_card.server_id() == it->server_id()) {
-      existing_credit_card = it;
+  const CreditCard* existing_credit_card = nullptr;
+  for (const auto* server_card : server_credit_cards_) {
+    if (credit_card.server_id() == server_card->server_id()) {
+      existing_credit_card = server_card;
       break;
     }
   }
@@ -620,9 +630,9 @@ void PersonalDataManager::UpdateServerCardBillingAddress(
     return;
 
   CreditCard* existing_credit_card = nullptr;
-  for (auto it : server_credit_cards_) {
-    if (credit_card.guid() == it->guid()) {
-      existing_credit_card = it;
+  for (auto* server_card : server_credit_cards_) {
+    if (credit_card.guid() == server_card->guid()) {
+      existing_credit_card = server_card;
       break;
     }
   }

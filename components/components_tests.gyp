@@ -107,9 +107,8 @@
       'captive_portal/captive_portal_detector_unittest.cc',
     ],
     'cast_certificate_unittest_sources': [
-      'cast_certificate/cast_cert_validator_test_helpers.cc',
-      'cast_certificate/cast_cert_validator_test_helpers.h',
       'cast_certificate/cast_cert_validator_unittest.cc',
+      'cast_certificate/cast_crl_unittest.cc',
     ],
     'certificate_reporting_unittest_sources': [
       'certificate_reporting/error_report_unittest.cc',
@@ -119,6 +118,8 @@
       'certificate_transparency/ct_policy_manager_unittest.cc',
       'certificate_transparency/log_dns_client_unittest.cc',
       'certificate_transparency/log_proof_fetcher_unittest.cc',
+      'certificate_transparency/mock_log_dns_traffic.cc',
+      'certificate_transparency/mock_log_dns_traffic.h',
       'certificate_transparency/single_tree_tracker_unittest.cc',
     ],
     'child_trace_message_filter_unittest_sources': [
@@ -134,6 +135,7 @@
     'component_updater_unittest_sources': [
       'component_updater/component_updater_service_unittest.cc',
       'component_updater/default_component_installer_unittest.cc',
+      'component_updater/configurator_impl_unittest.cc',
       'component_updater/timer_unittest.cc',
     ],
     'content_settings_unittest_sources': [
@@ -352,6 +354,7 @@
       'login/screens/screen_context_unittest.cc',
     ],
     'memory_coordinator_unittest_sources': [
+      'memory_coordinator/browser/memory_coordinator_unittest.cc',
       'memory_coordinator/child/child_memory_coordinator_impl_unittest.cc',
     ],
     'memory_pressure_unittest_sources': [
@@ -390,6 +393,7 @@
       'metrics/leak_detector/leak_analyzer_unittest.cc',
       'metrics/leak_detector/leak_detector_impl_unittest.cc',
       'metrics/leak_detector/leak_detector_unittest.cc',
+      'metrics/leak_detector/protobuf_to_mojo_converter_unittest.cc',
       'metrics/leak_detector/ranked_set_unittest.cc',
     ],
     'mime_util_unittest_sources': [
@@ -437,6 +441,9 @@
       'offline_pages/background/request_queue_store_unittest.cc',
       'offline_pages/background/request_queue_unittest.cc',
       'offline_pages/background/save_page_request_unittest.cc',
+    ],
+    'offline_pages_downloads_unittest_sources': [
+      'offline_pages/downloads/download_ui_adapter_unittest.cc',
     ],
     'offline_pages_unittest_sources': [
       'offline_pages/archive_manager_unittest.cc',
@@ -488,13 +495,6 @@
     'packed_ct_ev_whitelist_unittest_sources': [
       'packed_ct_ev_whitelist/bit_stream_reader_unittest.cc',
       'packed_ct_ev_whitelist/packed_ct_ev_whitelist_unittest.cc',
-    ],
-    'page_load_metrics_unittest_sources': [
-      'page_load_metrics/browser/metrics_web_contents_observer_unittest.cc',
-      'page_load_metrics/renderer/fake_page_timing_metrics_ipc_sender.cc',
-      'page_load_metrics/renderer/fake_page_timing_metrics_ipc_sender.h',
-      'page_load_metrics/renderer/metrics_render_frame_observer_unittest.cc',
-      'page_load_metrics/renderer/page_timing_metrics_sender_unittest.cc',
     ],
     'password_manager_unittest_sources': [
       'password_manager/content/browser/content_password_manager_driver_unittest.cc',
@@ -616,6 +616,7 @@
       'proximity_auth/ble/bluetooth_low_energy_connection_finder_unittest.cc',
       'proximity_auth/ble/bluetooth_low_energy_connection_unittest.cc',
       'proximity_auth/ble/bluetooth_low_energy_device_whitelist_unittest.cc',
+      'proximity_auth/ble/bluetooth_low_energy_weave_client_connection_unittest.cc',
       'proximity_auth/ble/bluetooth_low_energy_weave_packet_generator_unittest.cc',
       'proximity_auth/ble/bluetooth_low_energy_weave_packet_receiver_unittest.cc',
       'proximity_auth/bluetooth_connection_finder_unittest.cc',
@@ -799,6 +800,7 @@
     'subresource_filter_content_browser_unittest_sources': [
       'subresource_filter/content/browser/content_ruleset_distributor_unittest.cc',
       'subresource_filter/content/browser/content_subresource_filter_driver_factory_unittest.cc',
+      'subresource_filter/content/browser/subresource_filter_navigation_throttle_unittests.cc',
     ],
     'subresource_filter_content_renderer_unittest_sources': [
       'subresource_filter/content/renderer/document_subresource_filter_unittest.cc',
@@ -1152,6 +1154,8 @@
         'components.gyp:bubble',
         'components.gyp:captive_portal_test_support',
         'components.gyp:cast_certificate',
+        'components.gyp:cast_certificate_test_proto',
+        'components.gyp:cast_certificate_test_support',
         'components.gyp:certificate_reporting',
         'components.gyp:cloud_devices_common',
         'components.gyp:component_updater',
@@ -1321,7 +1325,6 @@
             '<@(network_hints_unittest_sources)',
             '<@(ntp_tiles_unittest_sources)',
             '<@(packed_ct_ev_whitelist_unittest_sources)',
-            '<@(page_load_metrics_unittest_sources)',
             '<@(power_unittest_sources)',
             '<@(safe_browsing_db_unittest_sources)',
             '<@(safe_json_unittest_sources)',
@@ -1339,6 +1342,7 @@
           ],
           'dependencies': [
             '../content/content_shell_and_tests.gyp:test_support_content',
+            '../mojo/mojo_base.gyp:mojo_common_lib',
             '../skia/skia.gyp:skia',
             'components.gyp:autofill_content_browser',
             'components.gyp:autofill_content_renderer',
@@ -1360,14 +1364,13 @@
             'components.gyp:guest_view_test_support',
             'components.gyp:history_content_browser',
             'components.gyp:keyed_service_content',
+            'components.gyp:memory_coordinator_browser',
             'components.gyp:memory_coordinator_child',
             'components.gyp:metrics_gpu',
             'components.gyp:navigation_interception',
             'components.gyp:network_hints_renderer',
             'components.gyp:ntp_tiles',
             'components.gyp:packed_ct_ev_whitelist',
-            'components.gyp:page_load_metrics_browser',
-            'components.gyp:page_load_metrics_renderer',
             'components.gyp:password_manager_content_browser',
             'components.gyp:power',
             'components.gyp:precache_content',
@@ -1380,6 +1383,7 @@
             'components.gyp:subresource_filter_content_browser',
             'components.gyp:subresource_filter_content_common',
             'components.gyp:subresource_filter_content_renderer',
+            'components.gyp:subresource_filter_core_browser',
             'components.gyp:test_database_manager',
             'components.gyp:url_matcher',
             'components.gyp:visitedlink_browser',
@@ -1580,6 +1584,7 @@
             'components.gyp:arc',
             'components.gyp:arc_test_support',
             'components.gyp:metrics_leak_detector',
+            'components.gyp:metrics_mojo_bindings',
             'components.gyp:ownership',
             'components.gyp:pairing',
             'components.gyp:user_manager_test_support',
@@ -1598,6 +1603,7 @@
         }],
         ['OS=="linux" and chromeos!=1', {
           'sources': [
+            'os_crypt/key_storage_kwallet_unittest.cc',
             'os_crypt/kwallet_dbus_unittest.cc',
             'os_crypt/os_crypt_linux_unittest.cc',
             'os_crypt/os_crypt_util_linux_unittest.cc',

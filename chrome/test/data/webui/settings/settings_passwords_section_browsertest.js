@@ -84,6 +84,19 @@ SettingsPasswordSectionBrowserTest.prototype = {
   },
 
   /**
+   * Returns all children of an element that has children added by a dom-repeat.
+   * @param {!Element} element
+   * @return {!Array<!Element>}
+   * @private
+   */
+  getDomRepeatChildren_: function(element) {
+    var template = element.children[element.children.length - 1];
+    assertEquals('TEMPLATE', template.tagName);
+    // The template is at the end of the list of children and should be skipped.
+    return Array.prototype.slice.call(element.children, 0, -1);
+  },
+
+  /**
    * Skips over the template and returns all visible children of an iron-list.
    * @param {!Element} ironList
    * @return {!Array<!Element>}
@@ -129,7 +142,7 @@ SettingsPasswordSectionBrowserTest.prototype = {
   /**
    * Helper method used to test for a url in a list of passwords.
    * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} passwordList
-   * @param {!string} url The URL that is being searched for.
+   * @param {string} url The URL that is being searched for.
    */
   listContainsUrl(passwordList, url) {
     for (var i = 0; i < passwordList.length; ++i) {
@@ -142,7 +155,7 @@ SettingsPasswordSectionBrowserTest.prototype = {
   /**
    * Helper method used to test for a url in a list of passwords.
    * @param {!Array<!chrome.passwordsPrivate.ExceptionPair>} exceptionList
-   * @param {!string} url The URL that is being searched for.
+   * @param {string} url The URL that is being searched for.
    */
   exceptionsListContainsUrl(exceptionList, url) {
     for (var i = 0; i < exceptionList.length; ++i) {
@@ -159,7 +172,6 @@ SettingsPasswordSectionBrowserTest.prototype = {
    */
   flushPasswordSection_: function(passwordsSection) {
     passwordsSection.$.passwordList.notifyResize();
-    passwordsSection.$.passwordExceptionsList.notifyResize();
     Polymer.dom.flush();
   },
 };
@@ -268,6 +280,58 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       clickRemoveButton();
     });
 
+    test('verifyFilterPasswords', function() {
+      var passwordList = [
+        FakeDataMaker.passwordEntry('one.com', 'show', 5),
+        FakeDataMaker.passwordEntry('two.com', 'shower', 3),
+        FakeDataMaker.passwordEntry('three.com/show', 'four', 1),
+        FakeDataMaker.passwordEntry('four.com', 'three', 2),
+        FakeDataMaker.passwordEntry('five.com', 'two', 4),
+        FakeDataMaker.passwordEntry('six-show.com', 'one', 6),
+      ];
+
+      var passwordsSection = self.createPasswordsSection_(passwordList, []);
+      passwordsSection.filter = 'show';
+      Polymer.dom.flush();
+
+      var expectedPasswordList = [
+        FakeDataMaker.passwordEntry('one.com', 'show', 5),
+        FakeDataMaker.passwordEntry('two.com', 'shower', 3),
+        FakeDataMaker.passwordEntry('three.com/show', 'four', 1),
+        FakeDataMaker.passwordEntry('six-show.com', 'one', 6),
+      ];
+
+      self.validatePasswordList(
+          self.getIronListChildren_(passwordsSection.$.passwordList),
+          expectedPasswordList);
+    });
+
+    test('verifyFilterPasswordExceptions', function() {
+      var exceptionList = [
+        FakeDataMaker.exceptionEntry('docsshow.google.com'),
+        FakeDataMaker.exceptionEntry('showmail.com'),
+        FakeDataMaker.exceptionEntry('google.com'),
+        FakeDataMaker.exceptionEntry('inbox.google.com'),
+        FakeDataMaker.exceptionEntry('mapsshow.google.com'),
+        FakeDataMaker.exceptionEntry('plus.google.comshow'),
+      ];
+
+      var passwordsSection = self.createPasswordsSection_([], exceptionList);
+      passwordsSection.filter = 'show';
+      Polymer.dom.flush();
+
+      var expectedExceptionList = [
+        FakeDataMaker.exceptionEntry('docsshow.google.com'),
+        FakeDataMaker.exceptionEntry('showmail.com'),
+        FakeDataMaker.exceptionEntry('mapsshow.google.com'),
+        FakeDataMaker.exceptionEntry('plus.google.comshow'),
+      ];
+
+      self.validateExceptionList_(
+          self.getDomRepeatChildren_(passwordsSection.$.passwordExceptionsList),
+          expectedExceptionList);
+    });
+
     test('verifyPasswordExceptions', function() {
       var exceptionList = [
         FakeDataMaker.exceptionEntry('docs.google.com'),
@@ -280,13 +344,8 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
 
       var passwordsSection = self.createPasswordsSection_([], exceptionList);
 
-      // Assert that the data is passed into the iron list. If this fails,
-      // then other expectations will also fail.
-      assertEquals(exceptionList,
-                   passwordsSection.$.passwordExceptionsList.items);
-
       self.validateExceptionList_(
-          self.getIronListChildren_(passwordsSection.$.passwordExceptionsList),
+          self.getDomRepeatChildren_(passwordsSection.$.passwordExceptionsList),
           exceptionList);
     });
 
@@ -304,7 +363,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       var passwordsSection = self.createPasswordsSection_([], exceptionList);
 
       self.validateExceptionList_(
-          self.getIronListChildren_(passwordsSection.$.passwordExceptionsList),
+          self.getDomRepeatChildren_(passwordsSection.$.passwordExceptionsList),
           exceptionList);
 
       // Simulate 'mail.com' being removed from the list.
@@ -315,7 +374,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       self.flushPasswordSection_(passwordsSection);
 
       self.validateExceptionList_(
-          self.getIronListChildren_(passwordsSection.$.passwordExceptionsList),
+          self.getDomRepeatChildren_(passwordsSection.$.passwordExceptionsList),
           exceptionList);
     });
 
@@ -334,7 +393,7 @@ TEST_F('SettingsPasswordSectionBrowserTest', 'uiTests', function() {
       var passwordsSection = self.createPasswordsSection_([], exceptionList);
 
       var exceptions =
-          self.getIronListChildren_(passwordsSection.$.passwordExceptionsList);
+          self.getDomRepeatChildren_(passwordsSection.$.passwordExceptionsList);
 
       // The index of the button currently being checked.
       var index = 0;

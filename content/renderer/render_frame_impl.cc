@@ -35,7 +35,6 @@
 #include "cc/base/switches.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/child/appcache/appcache_dispatcher.h"
-#include "content/child/permissions/permission_dispatcher.h"
 #include "content/child/quota_dispatcher.h"
 #include "content/child/request_extra_data.h"
 #include "content/child/service_worker/service_worker_handle_reference.h"
@@ -684,10 +683,6 @@ WebFrameLoadType ReloadFrameLoadTypeFor(
 RenderFrameImpl::CreateRenderFrameImplFunction g_create_render_frame_impl =
     nullptr;
 
-void OnGotInstanceID(shell::mojom::ConnectResult result,
-                     mojo::String user_id,
-                     uint32_t instance_id) {}
-
 WebString ConvertRelativePathToHtmlAttribute(const base::FilePath& path) {
   DCHECK(!path.IsAbsolute());
   return WebString::fromUTF8(
@@ -827,8 +822,6 @@ bool IsContentWithCertificateErrorsRelevantToUI(
   // subresource errors duplicative.
   return (!url::Origin(GURL(url)).IsSameOriginWith(
               url::Origin(GURL(main_ds->request().url()))) ||
-          main_resource_ssl_status.security_style !=
-              ssl_status.security_style ||
           main_resource_ssl_status.cert_id != ssl_status.cert_id ||
           main_resource_ssl_status.cert_status != ssl_status.cert_status ||
           main_resource_ssl_status.security_bits != ssl_status.security_bits ||
@@ -2776,6 +2769,9 @@ RenderFrameImpl::createServiceWorkerProvider() {
 }
 
 void RenderFrameImpl::didAccessInitialDocument() {
+  // NOTE: Do not call back into JavaScript here, since this call is made from a
+  // V8 security check.
+
   // If the request hasn't yet committed, notify the browser process that it is
   // no longer safe to show the pending URL of the main frame, since a URL spoof
   // is now possible. (If the request has committed, the browser already knows.)
@@ -2812,11 +2808,11 @@ blink::WebFrame* RenderFrameImpl::createChildFrame(
   Send(new FrameHostMsg_CreateChildFrame(params, &child_routing_id));
 
   // Allocation of routing id failed, so we can't create a child frame. This can
-  // happen if the synchronous IPC message above has failed.
-  if (child_routing_id == MSG_ROUTING_NONE) {
-    NOTREACHED() << "Failed to allocate routing id for child frame.";
+  // happen if the synchronous IPC message above has failed.  This can
+  // legitimately happen when the browser process has already destroyed
+  // RenderProcessHost, but the renderer process hasn't quit yet.
+  if (child_routing_id == MSG_ROUTING_NONE)
     return nullptr;
-  }
 
   // This method is always called by local frames, never remote frames.
 
@@ -4218,17 +4214,15 @@ void RenderFrameImpl::didDisplayContentWithCertificateErrors(
     const blink::WebCString& security_info) {
   if (IsContentWithCertificateErrorsRelevantToUI(frame_, url, security_info)) {
     Send(new FrameHostMsg_DidDisplayContentWithCertificateErrors(
-        routing_id_, url, security_info));
+        routing_id_, url));
   }
 }
 
 void RenderFrameImpl::didRunContentWithCertificateErrors(
     const blink::WebURL& url,
     const blink::WebCString& security_info) {
-  if (IsContentWithCertificateErrorsRelevantToUI(frame_, url, security_info)) {
-    Send(new FrameHostMsg_DidRunContentWithCertificateErrors(routing_id_, url,
-                                                             security_info));
-  }
+  if (IsContentWithCertificateErrorsRelevantToUI(frame_, url, security_info))
+    Send(new FrameHostMsg_DidRunContentWithCertificateErrors(routing_id_, url));
 }
 
 void RenderFrameImpl::didChangePerformanceTiming() {
@@ -4462,14 +4456,6 @@ void RenderFrameImpl::enterFullscreen() {
 
 void RenderFrameImpl::exitFullscreen() {
   Send(new FrameHostMsg_ToggleFullscreen(routing_id_, false));
-}
-
-blink::WebPermissionClient* RenderFrameImpl::permissionClient() {
-  if (!permission_client_) {
-    permission_client_.reset(
-        new PermissionDispatcher(GetRemoteInterfaces()));
-  }
-  return permission_client_.get();
 }
 
 blink::WebAppBannerClient* RenderFrameImpl::appBannerClient() {
@@ -4827,6 +4813,9 @@ void RenderFrameImpl::didStopLoading() {
                "id", routing_id_);
   render_view_->FrameDidStopLoading(frame_);
   Send(new FrameHostMsg_DidStopLoading(routing_id_));
+
+  // Clear any pending NavigationParams if they didn't get used.
+  pending_navigation_params_.reset();
 }
 
 void RenderFrameImpl::didChangeLoadProgress(double load_progress) {
@@ -5013,12 +5002,10 @@ WebNavigationPolicy RenderFrameImpl::decidePolicyForNavigation(
                         info.navigationType != blink::WebNavigationTypeReload);
 
     if (!should_fork && url.SchemeIs(url::kFileScheme)) {
-      // Fork non-file to file opens.  Check the opener URL if this is the
-      // initial navigation in a newly opened window.
-      GURL source_url(old_url);
-      if (is_initial_navigation && source_url.is_empty() && frame_->opener())
-        source_url = frame_->opener()->top()->document().url();
-      should_fork = !source_url.SchemeIs(url::kFileScheme);
+      // Fork non-file to file opens.  Note that this may fork unnecessarily if
+      // another tab (hosting a file or not) targeted this one before its
+      // initial navigation, but that shouldn't cause a problem.
+      should_fork = !old_url.SchemeIs(url::kFileScheme);
     }
 
     if (!should_fork) {
@@ -5615,7 +5602,11 @@ void RenderFrameImpl::NavigateInternal(
     }
 
     // A session history navigation should have been accompanied by state.
-    CHECK_EQ(request_params.page_id, -1);
+    // TODO(creis): This is known to be failing in UseSubframeNavigationEntries
+    // in https://crbug.com/568703, when the PageState on a FrameNavigationEntry
+    // is unexpectedly empty.  Until the cause is found, keep this as a DCHECK
+    // and load the URL without PageState.
+    DCHECK_EQ(request_params.page_id, -1);
 
     should_load_request = true;
   }
@@ -5668,9 +5659,6 @@ void RenderFrameImpl::NavigateInternal(
     if (!frame_->isLoading() && !has_history_navigation_in_frame)
       Send(new FrameHostMsg_DidStopLoading(routing_id_));
   }
-
-  // In case LoadRequest failed before didCreateDataSource was called.
-  pending_navigation_params_.reset();
 }
 
 void RenderFrameImpl::UpdateEncoding(WebFrame* frame,
@@ -6134,8 +6122,8 @@ media::MediaPermission* RenderFrameImpl::GetMediaPermission() {
 #if defined(ENABLE_MOJO_MEDIA)
 shell::mojom::InterfaceProvider* RenderFrameImpl::GetMediaInterfaceProvider() {
   if (!media_interface_provider_) {
-    media_interface_provider_.reset(new MediaInterfaceProvider(base::Bind(
-        &RenderFrameImpl::ConnectToApplication, base::Unretained(this))));
+    media_interface_provider_.reset(
+        new MediaInterfaceProvider(GetRemoteInterfaces()));
   }
 
   return media_interface_provider_.get();
@@ -6197,20 +6185,6 @@ void RenderFrameImpl::RegisterMojoInterfaces() {
 template <typename Interface>
 void RenderFrameImpl::GetInterface(mojo::InterfaceRequest<Interface> request) {
   GetRemoteInterfaces()->GetInterface(std::move(request));
-}
-
-shell::mojom::InterfaceProviderPtr RenderFrameImpl::ConnectToApplication(
-    const GURL& url) {
-  if (!connector_)
-    GetRemoteInterfaces()->GetInterface(&connector_);
-  shell::mojom::InterfaceProviderPtr interface_provider;
-  shell::mojom::IdentityPtr target(shell::mojom::Identity::New());
-  target->name = url.spec();
-  target->user_id = shell::mojom::kInheritUserID;
-  target->instance = "";
-  connector_->Connect(std::move(target), GetProxy(&interface_provider), nullptr,
-                      nullptr, base::Bind(&OnGotInstanceID));
-  return interface_provider;
 }
 
 media::RendererWebMediaPlayerDelegate*

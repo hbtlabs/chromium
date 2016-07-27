@@ -150,10 +150,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   }
   SkXfermode::Mode draw_blend_mode() const { return draw_blend_mode_; }
 
-  bool uses_default_blend_mode() const {
-    return inputs_.blend_mode == SkXfermode::kSrcOver_Mode;
-  }
-
   // A layer is root for an isolated group when it and all its descendants are
   // drawn over a black and fully transparent background, creating an isolated
   // group. It should be used along with SetBlendMode(), in order to restrict
@@ -430,6 +426,10 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetEffectTreeIndex(int index);
   int effect_tree_index() const;
 
+  // TODO(sunxd): Remove this when we do not compute target space transforms on
+  // main thread in tests.
+  int render_target_effect_tree_index() const;
+
   void SetScrollTreeIndex(int index);
   int scroll_tree_index() const;
 
@@ -564,6 +564,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void OnTransformIsPotentiallyAnimatingChanged(bool is_animating);
   void OnOpacityIsCurrentlyAnimatingChanged(bool is_currently_animating);
   void OnOpacityIsPotentiallyAnimatingChanged(bool has_potential_animation);
+  void OnFilterIsCurrentlyAnimatingChanged(bool is_currently_animating);
+  void OnFilterIsPotentiallyAnimatingChanged(bool has_potential_animation);
 
   bool FilterIsAnimating() const;
   bool TransformIsAnimating() const;

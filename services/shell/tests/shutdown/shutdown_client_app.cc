@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connector.h"
@@ -24,18 +25,13 @@ class ShutdownClientApp
 
  private:
   // shell::Service:
-  void OnStart(Connector* connector, const Identity& identity,
-               uint32_t id) override {
-    connector_ = connector;
-  }
-
   bool OnConnect(Connection* connection) override {
     connection->AddInterface<mojom::ShutdownTestClientController>(this);
     return true;
   }
 
   // InterfaceFactory<mojom::ShutdownTestClientController>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               mojom::ShutdownTestClientControllerRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -43,7 +39,8 @@ class ShutdownClientApp
   // mojom::ShutdownTestClientController:
   void ConnectAndWait(const ConnectAndWaitCallback& callback) override {
     mojom::ShutdownTestServicePtr service;
-    connector_->ConnectToInterface("mojo:shutdown_service", &service);
+    connector()->ConnectToInterface("mojo:shutdown_service",
+                                               &service);
 
     mojo::Binding<mojom::ShutdownTestClient> client_binding(this);
 
@@ -52,11 +49,15 @@ class ShutdownClientApp
 
     service->SetClient(std::move(client_ptr));
 
-    client_binding.WaitForIncomingMethodCall();
+    base::MessageLoop::ScopedNestableTaskAllower nestable_allower(
+        base::MessageLoop::current());
+    base::RunLoop run_loop;
+    client_binding.set_connection_error_handler(run_loop.QuitClosure());
+    run_loop.Run();
+
     callback.Run();
   }
 
-  Connector* connector_ = nullptr;
   mojo::BindingSet<mojom::ShutdownTestClientController> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(ShutdownClientApp);

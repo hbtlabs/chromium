@@ -41,7 +41,6 @@
         '../components/components.gyp:crash_component_breakpad_to_be_deleted',
         '../components/components.gyp:devtools_discovery',
         '../components/components.gyp:devtools_http_handler',
-        '../components/components.gyp:network_session_configurator_switches',
         '../components/components.gyp:web_cache_renderer',
         '../components/components.gyp:plugins_renderer',
         '../components/test_runner/test_runner.gyp:test_runner',
@@ -196,9 +195,10 @@
         'shell/browser/shell_views.cc',
         'shell/browser/shell_web_contents_view_delegate.h',
         'shell/browser/shell_web_contents_view_delegate_android.cc',
+        'shell/browser/shell_web_contents_view_delegate_aura.cc',
         'shell/browser/shell_web_contents_view_delegate_creator.h',
         'shell/browser/shell_web_contents_view_delegate_mac.mm',
-        'shell/browser/shell_web_contents_view_delegate_win.cc',
+        'shell/browser/shell_web_contents_view_delegate_views.cc',
         'shell/common/layout_test/layout_test_content_client.cc',
         'shell/common/layout_test/layout_test_content_client.h',
         'shell/common/layout_test/layout_test_messages.cc',
@@ -313,10 +313,12 @@
               ],
               'sources/': [
                 ['exclude', 'shell/browser/shell_aura.cc'],
+                ['exclude', 'shell/browser/shell_web_contents_view_delegate_aura.cc'],
               ],
             }, {
               'sources/': [
                 ['exclude', 'shell/browser/shell_views.cc'],
+                ['exclude', 'shell/browser/shell_web_contents_view_delegate_views.cc'],
               ],
             }],
           ],
@@ -324,6 +326,8 @@
           'sources/': [
             ['exclude', 'shell/browser/shell_aura.cc'],
             ['exclude', 'shell/browser/shell_views.cc'],
+            ['exclude', 'shell/browser/shell_web_contents_view_delegate_aura.cc'],
+            ['exclude', 'shell/browser/shell_web_contents_view_delegate_views.cc'],
           ],
         }],  # use_aura==1
         ['chromeos==1', {

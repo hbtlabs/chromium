@@ -29,20 +29,6 @@ void RecordOfflinerResultUMA(Offliner::RequestStatus request_status) {
                             Offliner::RequestStatus::STATUS_COUNT);
 }
 
-// TODO(dougarnett/petewil): Move to Policy object. Also consider lower minimum
-// battery percentage once there is some processing time limits in place.
-const Scheduler::TriggerConditions kUserRequestTriggerConditions(
-    false /* require_power_connected */,
-    50 /* minimum_battery_percentage */,
-    false /* require_unmetered_network */);
-
-// Timeout is 2.5 minutes based on the size of Marshmallow doze mode
-// maintenance window (3 minutes)
-// TODO(petewil): Find the optimal timeout based on data for 2G connections and
-// common EM websites. crbug.com/625204
-// TODO(petewil): Move this value into the policy object.
-long OFFLINER_TIMEOUT_SECONDS = 150;
-
 }  // namespace
 
 RequestCoordinator::RequestCoordinator(std::unique_ptr<OfflinerPolicy> policy,
@@ -51,31 +37,33 @@ RequestCoordinator::RequestCoordinator(std::unique_ptr<OfflinerPolicy> policy,
                                        std::unique_ptr<Scheduler> scheduler)
     : is_busy_(false),
       is_canceled_(false),
-      offliner_timeout_(base::TimeDelta::FromSeconds(OFFLINER_TIMEOUT_SECONDS)),
       offliner_(nullptr),
       policy_(std::move(policy)),
       factory_(std::move(factory)),
       queue_(std::move(queue)),
       scheduler_(std::move(scheduler)),
       last_offlining_status_(Offliner::RequestStatus::UNKNOWN),
+      offliner_timeout_(base::TimeDelta::FromSeconds(
+          policy_->GetSinglePageTimeLimitInSeconds())),
       weak_ptr_factory_(this) {
   DCHECK(policy_ != nullptr);
-  picker_.reset(new RequestPicker(queue_.get()));
+  picker_.reset(new RequestPicker(queue_.get(), policy_.get()));
 }
 
 RequestCoordinator::~RequestCoordinator() {}
 
 bool RequestCoordinator::SavePageLater(
-    const GURL& url, const ClientId& client_id) {
-  DVLOG(2) << "URL is " << url << " " << __FUNCTION__;
+    const GURL& url, const ClientId& client_id, bool was_user_requested) {
+  DVLOG(2) << "URL is " << url << " " << __func__;
 
-  // TODO(petewil): We need a robust scheme for allocating new IDs.
+  // TODO(petewil): We need a robust scheme for allocating new IDs.  We may need
+  // GUIDS for the downloads home design.
   static int64_t id = 0;
 
   // Build a SavePageRequest.
   // TODO(petewil): Use something like base::Clock to help in testing.
   offline_pages::SavePageRequest request(
-      id++, url, client_id, base::Time::Now());
+      id++, url, client_id, base::Time::Now(), was_user_requested);
 
   // Put the request on the request queue.
   queue_->AddRequest(request,
@@ -95,7 +83,15 @@ void RequestCoordinator::AddRequestResultCallback(
 
 // Called in response to updating a request in the request queue.
 void RequestCoordinator::UpdateRequestCallback(
-    RequestQueue::UpdateRequestResult result) {}
+    RequestQueue::UpdateRequestResult result) {
+  // If the request succeeded, nothing to do.  If it failed, we can't really do
+  // much, so just log it.
+  if (result != RequestQueue::UpdateRequestResult::SUCCESS) {
+    // TODO(petewil): Consider adding UMA or showing on offline-internals page.
+    DLOG(WARNING) << "Failed to update a request retry count. "
+                  << static_cast<int>(result);
+  }
+}
 
 void RequestCoordinator::StopProcessing() {
   is_canceled_ = true;
@@ -116,7 +112,12 @@ void RequestCoordinator::StopProcessing() {
 bool RequestCoordinator::StartProcessing(
     const DeviceConditions& device_conditions,
     const base::Callback<void(bool)>& callback) {
+  current_conditions_.reset(new DeviceConditions(device_conditions));
   if (is_busy_) return false;
+
+  // Mark the time at which we started processing so we can check our time
+  // budget.
+  operation_start_time_ = base::Time::Now();
 
   is_canceled_ = false;
   scheduler_callback_ = callback;
@@ -129,13 +130,27 @@ bool RequestCoordinator::StartProcessing(
 }
 
 void RequestCoordinator::TryNextRequest() {
+  // If there is no time left in the budget, return to the scheduler.
+  // We do not remove the pending task that was set up earlier in case
+  // we run out of time, so the background scheduler will return to us
+  // at the next opportunity to run background tasks.
+  if (base::Time::Now() - operation_start_time_ >
+      base::TimeDelta::FromSeconds(
+          policy_->GetBackgroundProcessingTimeBudgetSeconds())) {
+    // Let the scheduler know we are done processing.
+    scheduler_callback_.Run(true);
+
+    return;
+  }
+
   // Choose a request to process that meets the available conditions.
   // This is an async call, and returns right away.
   picker_->ChooseNextRequest(
       base::Bind(&RequestCoordinator::RequestPicked,
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&RequestCoordinator::RequestQueueEmpty,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr()),
+      current_conditions_.get());
 }
 
 // Called by the request picker when a request has been picked.
@@ -180,8 +195,8 @@ void RequestCoordinator::SendRequestToOffliner(const SavePageRequest& request) {
 void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
                                               Offliner::RequestStatus status) {
   DVLOG(2) << "offliner finished, saved: "
-           << (status == Offliner::RequestStatus::SAVED) << ", status: "
-           << (int) status << ", " << __FUNCTION__;
+           << (status == Offliner::RequestStatus::SAVED)
+           << ", status: " << static_cast<int>(status) << ", " << __func__;
   DCHECK_NE(status, Offliner::RequestStatus::UNKNOWN);
   DCHECK_NE(status, Offliner::RequestStatus::LOADED);
   event_logger_.RecordSavePageRequestUpdated(
@@ -194,23 +209,40 @@ void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
 
   is_busy_ = false;
 
-  // If the request succeeded, remove it from the Queue and maybe schedule
-  // another one.
-  if (status == Offliner::RequestStatus::SAVED) {
+  int64_t new_attempt_count = request.attempt_count() + 1;
+
+  // Remove the request from the queue if it either succeeded or exceeded the
+  // max number of retries.
+  if (status == Offliner::RequestStatus::SAVED
+       || new_attempt_count > policy_->GetMaxRetries()) {
     queue_->RemoveRequest(request.request_id(),
                           base::Bind(&RequestCoordinator::UpdateRequestCallback,
                                      weak_ptr_factory_.GetWeakPtr()));
-
-    // TODO(petewil): Check time budget. Return to the scheduler if we are out.
-
-    // Start another request if we have time.
-    TryNextRequest();
+  } else {
+    // If we failed, but are not over the limit, update the request in the
+    // queue.
+    SavePageRequest updated_request(request);
+    updated_request.set_attempt_count(new_attempt_count);
+    updated_request.set_last_attempt_time(base::Time::Now());
+    RequestQueue::UpdateRequestCallback update_callback =
+        base::Bind(&RequestCoordinator::UpdateRequestCallback,
+                   weak_ptr_factory_.GetWeakPtr());
+    queue_->UpdateRequest(
+        updated_request,
+        base::Bind(&RequestCoordinator::UpdateRequestCallback,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
+
+  TryNextRequest();
 }
 
-const Scheduler::TriggerConditions&
+const Scheduler::TriggerConditions
 RequestCoordinator::GetTriggerConditionsForUserRequest() {
-  return kUserRequestTriggerConditions;
+  Scheduler::TriggerConditions trigger_conditions(
+      policy_->PowerRequiredForUserRequestedPage(),
+      policy_->BatteryPercentageRequiredForUserRequestedPage(),
+      policy_->UnmeteredNetworkRequiredForUserRequestedPage());
+  return trigger_conditions;
 }
 
 void RequestCoordinator::GetOffliner() {

@@ -25,6 +25,7 @@ enum class Accelerator : uint32_t {
   NewChromeTab,
   NewChromeIncognitoWindow,
   ShowTaskManager,
+  ToggleTouchHud,
 };
 
 struct AcceleratorSpec {
@@ -44,6 +45,8 @@ AcceleratorSpec g_spec[] = {
      ui::mojom::kEventFlagControlDown | ui::mojom::kEventFlagShiftDown},
     {Accelerator::ShowTaskManager, ui::mojom::KeyboardCode::ESCAPE,
      ui::mojom::kEventFlagShiftDown},
+    {Accelerator::ToggleTouchHud, ui::mojom::KeyboardCode::P,
+     ui::mojom::kEventFlagControlDown | ui::mojom::kEventFlagAltDown},
 };
 
 void AssertTrue(bool success) {
@@ -54,8 +57,7 @@ void DoNothing() {}
 
 }  // namespace
 
-AppDriver::AppDriver()
-    : connector_(nullptr), binding_(this), weak_factory_(this) {}
+AppDriver::AppDriver() : binding_(this), weak_factory_(this) {}
 
 AppDriver::~AppDriver() {}
 
@@ -67,7 +69,7 @@ void AppDriver::OnAvailableCatalogEntries(
   }
 
   ui::mojom::AcceleratorRegistrarPtr registrar;
-  connector_->ConnectToInterface(entries[0]->name, &registrar);
+  connector()->ConnectToInterface(entries[0]->name, &registrar);
 
   if (binding_.is_bound())
     binding_.Unbind();
@@ -85,10 +87,7 @@ void AppDriver::OnAvailableCatalogEntries(
   }
 }
 
-void AppDriver::OnStart(shell::Connector* connector,
-                        const shell::Identity& identity,
-                        uint32_t id) {
-  connector_ = connector;
+void AppDriver::OnStart(const shell::Identity& identity) {
   AddAccelerators();
 }
 
@@ -118,18 +117,20 @@ void AppDriver::OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) {
        {mojom::kIncognitoWindow, "exe:chrome", LaunchMode::MAKE_NEW}},
       {Accelerator::ShowTaskManager,
        {mojom::kWindow, "mojo:task_viewer", LaunchMode::DEFAULT}},
+      {Accelerator::ToggleTouchHud,
+       {mojom::kWindow, "mojo:touch_hud", LaunchMode::DEFAULT}},
   };
 
   const auto iter = options.find(static_cast<Accelerator>(id));
   DCHECK(iter != options.end());
   const LaunchOptions& entry = iter->second;
   LaunchablePtr launchable;
-  connector_->ConnectToInterface(entry.app, &launchable);
+  connector()->ConnectToInterface(entry.app, &launchable);
   launchable->Launch(entry.option, entry.mode);
 }
 
 void AppDriver::AddAccelerators() {
-  connector_->ConnectToInterface("mojo:catalog", &catalog_);
+  connector()->ConnectToInterface("mojo:catalog", &catalog_);
   catalog_->GetEntriesProvidingClass(
       "mus:window_manager", base::Bind(&AppDriver::OnAvailableCatalogEntries,
                                        weak_factory_.GetWeakPtr()));

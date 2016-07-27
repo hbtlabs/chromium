@@ -17,7 +17,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/google_chrome_strings.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -60,7 +59,7 @@ void AddLocalizedStringsBulk(content::WebUIDataSource* html_source,
   }
 }
 
-void AddCommonStrings(content::WebUIDataSource* html_source) {
+void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
   LocalizedString localized_strings[] = {
       {"add", IDS_ADD},
       {"cancel", IDS_CANCEL},
@@ -70,15 +69,19 @@ void AddCommonStrings(content::WebUIDataSource* html_source) {
       {"save", IDS_SAVE},
       {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
       {"basicPageTitle", IDS_SETTINGS_BASIC},
-      {"searchPrompt", IDS_SETTINGS_SEARCH_PROMPT},
-      // TODO(dpapad); IDS_DOWNLOAD_CLEAR_SEARCH and IDS_MD_HISTORY_CLEAR_SEARCH
-      // are identical, merge them to one and re-use here.
-      {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
       {"settings", IDS_SETTINGS_SETTINGS},
       {"restart", IDS_SETTINGS_RESTART},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+
+  html_source->AddBoolean(
+      "isGuest",
+#if defined(OS_CHROMEOS)
+      user_manager::UserManager::Get()->IsLoggedInAsGuest());
+#else
+      profile->IsOffTheRecord());
+#endif
 }
 
 void AddA11yStrings(content::WebUIDataSource* html_source) {
@@ -636,7 +639,7 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"OncTypeEthernet", IDS_NETWORK_TYPE_ETHERNET},
       {"OncTypeVPN", IDS_NETWORK_TYPE_VPN},
       {"OncTypeWiFi", IDS_NETWORK_TYPE_WIFI},
-      {"OncTypeWimax", IDS_NETWORK_TYPE_WIMAX},
+      {"OncTypeWiMAX", IDS_NETWORK_TYPE_WIMAX},
       {"vpnNameTemplate",
        IDS_OPTIONS_SETTINGS_SECTION_THIRD_PARTY_VPN_NAME_TEMPLATE},
   };
@@ -772,6 +775,7 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"deletePasswordException", IDS_SETTINGS_PASSWORDS_DELETE_EXCEPTION},
       {"passwordsDone", IDS_SETTINGS_PASSWORD_DONE},
       {"removePassword", IDS_SETTINGS_PASSWORD_REMOVE},
+      {"searchPasswords", IDS_SETTINGS_PASSWORD_SEARCH},
       {"passwordDetailsTitle", IDS_SETTINGS_PASSWORDS_VIEW_DETAILS_TITLE},
       {"passwordViewDetails", IDS_SETTINGS_PASSWORD_VIEW_DETAILS},
       {"editPasswordWebsiteLabel", IDS_SETTINGS_PASSWORDS_WEBSITE},
@@ -987,6 +991,23 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source) {
                          l10n_util::GetStringFUTF16(
                              IDS_SETTINGS_IMPROVE_BROWSING_EXPERIENCE,
                              base::ASCIIToUTF16(chrome::kPrivacyLearnMoreURL)));
+}
+
+void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
+  LocalizedString localized_strings[] = {
+    {"searchPrompt", IDS_SETTINGS_SEARCH_PROMPT},
+    {"searchNoResults", IDS_SETTINGS_SEARCH_NO_RESULTS},
+    // TODO(dpapad); IDS_DOWNLOAD_CLEAR_SEARCH and IDS_MD_HISTORY_CLEAR_SEARCH
+    // are identical, merge them to one and re-use here.
+    {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
+  };
+  AddLocalizedStringsBulk(html_source, localized_strings,
+                          arraysize(localized_strings));
+
+  base::string16 help_text = l10n_util::GetStringFUTF16(
+      IDS_SETTINGS_SEARCH_NO_RESULTS_HELP,
+      base::ASCIIToUTF16(chrome::kSettingsSearchHelpURL));
+  html_source->AddString("searchNoResultsHelp", help_text);
 }
 
 void AddSearchStrings(content::WebUIDataSource* html_source) {
@@ -1293,7 +1314,7 @@ void AddWebContentStrings(content::WebUIDataSource* html_source) {
 
 void AddLocalizedStrings(content::WebUIDataSource* html_source,
                          Profile* profile) {
-  AddCommonStrings(html_source);
+  AddCommonStrings(html_source, profile);
 
   AddA11yStrings(html_source);
   AddAboutStrings(html_source);
@@ -1332,6 +1353,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddPrivacyStrings(html_source);
   AddResetStrings(html_source);
   AddSearchEnginesStrings(html_source);
+  AddSearchInSettingsStrings(html_source);
   AddSearchStrings(html_source);
   AddSiteSettingsStrings(html_source);
 #if !defined(OS_CHROMEOS)

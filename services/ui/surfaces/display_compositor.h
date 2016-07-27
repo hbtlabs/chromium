@@ -10,7 +10,6 @@
 #include "cc/surfaces/surface_factory.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id_allocator.h"
-#include "services/ui/gles2/gpu_state.h"
 #include "services/ui/surfaces/surfaces_state.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -30,7 +29,6 @@ class DisplayCompositor : public cc::SurfaceFactoryClient,
  public:
   DisplayCompositor(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                     gfx::AcceleratedWidget widget,
-                    const scoped_refptr<GpuState>& gpu_state,
                     const scoped_refptr<SurfacesState>& surfaces_state);
   ~DisplayCompositor() override;
 
@@ -38,9 +36,8 @@ class DisplayCompositor : public cc::SurfaceFactoryClient,
   // display should be changed. A well-behaving embedder should only submit
   // a CompositorFrame once per BeginFrame tick. The callback is called the
   // first time this frame is used to draw, or if the frame is discarded.
-  void SubmitCompositorFrame(
-      cc::CompositorFrame frame,
-      const base::Callback<void(cc::SurfaceDrawStatus)>& callback);
+  void SubmitCompositorFrame(cc::CompositorFrame frame,
+                             const base::Callback<void()>& callback);
 
   // TODO(fsamuel): This is used for surface hittesting and should not be
   // exposed outside of DisplayCompositor.

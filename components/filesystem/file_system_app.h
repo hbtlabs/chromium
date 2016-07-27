@@ -31,13 +31,11 @@ class FileSystemApp : public shell::Service,
   static base::FilePath GetUserDataDir();
 
   // |shell::Service| override:
-  void OnStart(shell::Connector* connector,
-               const shell::Identity& identity,
-               uint32_t id) override;
+  void OnStart(const shell::Identity& identity) override;
   bool OnConnect(shell::Connection* connection) override;
 
   // |InterfaceFactory<Files>| implementation:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojo::InterfaceRequest<mojom::FileSystem> request) override;
 
   mojo::TracingImpl tracing_;

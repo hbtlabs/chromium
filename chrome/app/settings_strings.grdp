@@ -136,19 +136,19 @@
       Delay before click:
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT" desc="Description of an extremely short delay before clicks.">
-      extremely short
+      extremely short (600ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT" desc="Description of a very short delay before clicks.">
-      very short
+      very short (800ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT" desc="Description of a short delay before clicks.">
-      short
+      short (1000ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG" desc="Description of a long delay before clicks.">
-      long
+      long (2000ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG" desc="Description of a very long delay before clicks.">
-      very long
+      very long (4000ms)
     </message>
     <message name="IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL" desc="Label for checkbox which enables an on-screen keyboard.">
       Enable on-screen keyboard
@@ -211,6 +211,12 @@
   </message>
   <message name="IDS_SETTINGS_SEARCH_PROMPT" desc="Label for input field to search within settings.">
     Search settings
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_NO_RESULTS" desc="Text description of a search that has no results.">
+    No matches were found.
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_NO_RESULTS_HELP" desc="Help text for a search that has no results.">
+    Go to <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Google Chrome help<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> if you can't find what you're looking for.
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
@@ -328,6 +334,9 @@
   </message>
   <message name="IDS_SETTINGS_PASSWORD_REMOVE" desc="Label for a context menu item that removes the selected password." meaning="Remove selected password.">
     Remove
+  </message>
+  <message name="IDS_SETTINGS_PASSWORD_SEARCH" desc="Placeholder/label for the text input field that allows a user to filter saved passwords.">
+    Search passwords
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_VIEW_DETAILS_TITLE" desc="Title for the dialog that shows password details. This dialog lets a user see a saved password and copy the username.">
     Saved password details
@@ -943,8 +952,8 @@
   <message name="IDS_SETTINGS_NETWORK_PREDICTION_ENABLED_DESCRIPTION" desc="In the advanced options tab, the text next to the checkbox that enables prediction of network actions.  Actions include browser-initiated DNS prefetching, TCP and SSL preconnection, and prerendering of webpages.">
     Use a prediction service to load pages more quickly
   </message>
-  <message name="IDS_SETTINGS_SAFEBROWSING_ENABLEPROTECTION" desc="The label of the 'Enable phishing and malware protection' checkbox">
-    Enable phishing and malware protection
+  <message name="IDS_SETTINGS_SAFEBROWSING_ENABLEPROTECTION" desc="The label of the 'Protect you and your device from dangerous sites' checkbox">
+    Protect you and your device from dangerous sites
   </message>
   <message name="IDS_SETTINGS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING" desc="Checkbox label: should Chrome upload information about suspicious downloads and websites to Safe Browsing">
     Automatically report details of possible security incidents to Google
@@ -968,7 +977,7 @@
     Manage Certificates
   </message>
   <message name="IDS_SETTINGS_MANAGE_CERTIFICATES_DESCRIPTION" desc="Secondary, continued explanation of how to manage SSL certificates and settings in Privacy options">
-    Manage your SSL certificates and settings
+    Manage HTTPS/SSL certificates and settings
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS" desc="Text of the button that takes a user to settings page thats allows users to modify site settings. Also the title of that settings page.">
     Site Settings

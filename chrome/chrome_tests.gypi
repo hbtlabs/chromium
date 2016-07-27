@@ -54,7 +54,6 @@
       # desktop platforms.
       '../apps/app_restore_service_browsertest.cc',
       '../apps/load_and_launch_browsertest.cc',
-      'app/chrome_command_ids.h',
       'app/chrome_dll.rc',
       'app/chrome_dll_resource.h',
       'app/chrome_version.rc.version',
@@ -292,6 +291,7 @@
       'browser/extensions/process_management_browsertest.cc',
       'browser/extensions/process_manager_browsertest.cc',
       'browser/extensions/requirements_checker_browsertest.cc',
+      'browser/extensions/renderer_initialization_browsertest.cc',
       'browser/extensions/sandboxed_pages_apitest.cc',
       'browser/extensions/service_worker_apitest.cc',
       'browser/extensions/shared_module_apitest.cc',
@@ -555,6 +555,7 @@
       'browser/ui/webui/password_manager_internals/password_manager_internals_ui_browsertest.cc',
       'browser/ui/webui/policy_ui_browsertest.cc',
       'browser/ui/webui/print_preview/print_preview_ui_browsertest.cc',
+      'browser/ui/webui/set_as_default_browser_ui_browsertest_win.cc',
       'browser/ui/webui/settings/md_settings_ui_browsertest.cc',
       'browser/ui/webui/signin/inline_login_ui_browsertest.cc',
       'browser/ui/webui/signin/user_manager_ui_browsertest.cc',
@@ -1366,7 +1367,6 @@
       'test/chromedriver/net/websocket.h',
     ],
     'performance_browser_tests_sources': [
-      'app/chrome_command_ids.h',
       'app/chrome_dll.rc',
       'app/chrome_dll_resource.h',
       'app/chrome_version.rc.version',
@@ -1482,7 +1482,6 @@
       'test/chromedriver/test_util.h',
     ],
     'sync_integration_tests_sources': [
-      'app/chrome_command_ids.h',
       'app/chrome_dll.rc',
       'app/chrome_dll_resource.h',
       'app/chrome_version.rc.version',
@@ -1602,7 +1601,6 @@
       'browser/sync/test/integration/wifi_credentials_helper_chromeos.h',
     ],
     'sync_performance_tests_sources': [
-      'app/chrome_command_ids.h',
       'app/chrome_dll.rc',
       'app/chrome_dll_resource.h',
       'app/chrome_version.rc.version',
@@ -2192,6 +2190,7 @@
         '../components/components.gyp:safe_browsing_db',
         '../components/components.gyp:ssl_config',
         '../components/components.gyp:subresource_filter_core_browser_test_support',
+        '../components/components.gyp:subresource_filter_core_common_test_support',
         '../components/components.gyp:subresource_filter_content_browser',
         '../components/components.gyp:test_database_manager',
         '../components/components.gyp:translate_core_common',
@@ -2529,7 +2528,6 @@
           ],
         }, { # else: OS != "win"
           'sources!': [
-            'app/chrome_command_ids.h',
             'app/chrome_dll.rc',
             'app/chrome_dll_resource.h',
             'app/chrome_version.rc.version',
@@ -2662,6 +2660,10 @@
           'sources!': [
             # TODO(dbeam): log webui URLs on iOS and test them.
             'browser/ui/webui/log_web_ui_url_browsertest.cc',
+          ],
+        }, { # else: OS != "ios"
+          'dependencies': [
+            '../mojo/mojo_base.gyp:mojo_common_lib',
           ],
         }],
         ['enable_app_list==1', {
@@ -2817,7 +2819,6 @@
           }
         }, { # else: OS != "win"
           'sources!': [
-            'app/chrome_command_ids.h',
             'app/chrome_dll.rc',
             'app/chrome_dll_resource.h',
             'app/chrome_version.rc.version',

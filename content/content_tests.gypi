@@ -300,6 +300,7 @@
       'renderer/render_view_browsertest_mac.mm',
       'renderer/render_widget_browsertest.cc',
       'renderer/visual_state_browsertest.cc',
+      'renderer/webclipboard_impl_browsertest.cc',
       'test/browser_test_utils_browsertest.cc',
       'test/content_browser_test_test.cc',
       'test/webui_resource_browsertest.cc',
@@ -312,6 +313,8 @@
     'content_browsertests_webrtc_sources': [
       'browser/media/webrtc/webrtc_audio_debug_recordings_browsertest.cc',
       'browser/media/webrtc/webrtc_browsertest.cc',
+      'browser/media/webrtc/webrtc_browsertest_audio.cc',
+      'browser/media/webrtc/webrtc_browsertest_data.cc',
       'browser/media/webrtc/webrtc_capture_from_element_browsertest.cc',
       'browser/media/webrtc/webrtc_datachannel_browsertest.cc',
       'browser/media/webrtc/webrtc_getusermedia_browsertest.cc',
@@ -391,12 +394,14 @@
       'browser/bluetooth/bluetooth_allowed_devices_map_unittest.cc',
       'browser/bluetooth/bluetooth_blacklist_unittest.cc',
       'browser/bluetooth/frame_connected_bluetooth_devices_unittest.cc',
+      'browser/browser_associated_interface_unittest.cc',
       'browser/browser_thread_unittest.cc',
       'browser/browser_url_handler_impl_unittest.cc',
       'browser/byte_stream_unittest.cc',
       'browser/cache_storage/cache_storage_blob_to_disk_cache_unittest.cc',
       'browser/cache_storage/cache_storage_cache_unittest.cc',
       'browser/cache_storage/cache_storage_manager_unittest.cc',
+      'browser/cache_storage/cache_storage_operation_unittest.cc',
       'browser/cache_storage/cache_storage_scheduler_unittest.cc',
       'browser/child_process_security_policy_unittest.cc',
       'browser/cocoa/system_hotkey_map_unittest.mm',
@@ -529,6 +534,7 @@
       'browser/media/cdm_service_impl_unittest.cc',
       'browser/media/media_internals_unittest.cc',
       'browser/media/midi_host_unittest.cc',
+      'browser/media/session/audio_focus_manager_unittest.cc',
       'browser/media/session/media_session_controller_unittest.cc',
       'browser/media/session/media_session_uma_helper_unittest.cc',
       'browser/net/quota_policy_cookie_store_unittest.cc',
@@ -778,6 +784,7 @@
     # WebRTC-specific sources. Put WebRTC plugin-related stuff further below.
     'content_unittests_webrtc_sources': [
       'browser/media/webrtc/webrtc_internals_unittest.cc',
+      'browser/media/webrtc/webrtc_internals_message_handler_unittest.cc',
       'browser/media/webrtc/webrtc_eventlog_host_unittest.cc',
       'browser/renderer_host/p2p/socket_host_tcp_server_unittest.cc',
       'browser/renderer_host/p2p/socket_host_tcp_unittest.cc',
@@ -1361,10 +1368,8 @@
       'type': 'static_library',
       'sources': [
         'public/test/test_mojo_service.mojom',
+        'test/test_browser_associated_interfaces.mojom',
       ],
-      'variables': {
-        'use_new_wrapper_types': 'false',
-      },
       'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
     },
     {

@@ -44,6 +44,7 @@
 #include "core/dom/ElementRareData.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/GetRootNodeOptions.h"
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/NodeRareData.h"
 #include "core/dom/NodeTraversal.h"
@@ -55,6 +56,7 @@
 #include "core/dom/Text.h"
 #include "core/dom/TreeScopeAdopter.h"
 #include "core/dom/UserActionElementSet.h"
+#include "core/dom/custom/CustomElement.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/InsertionPoint.h"
@@ -381,6 +383,11 @@ Node& Node::treeRoot() const
     return const_cast<Node&>(*node);
 }
 
+Node* Node::getRootNode(const GetRootNodeOptions& options) const
+{
+    return (options.hasComposed() && options.composed()) ? &shadowIncludingRoot() : &treeRoot();
+}
+
 Node* Node::insertBefore(Node* newChild, Node* refChild, ExceptionState& exceptionState)
 {
     if (isContainerNode())
@@ -532,94 +539,6 @@ void Node::normalize()
         else
             node = NodeTraversal::nextPostOrder(*node);
     }
-}
-
-// TODO(yoichio): Move to core/editing
-enum EditableLevel { Editable, RichlyEditable };
-static bool hasEditableStyle(const Node&, EditableLevel);
-static bool isEditableToAccessibility(const Node&, EditableLevel);
-
-bool Node::isContentEditable() const
-{
-    document().updateStyleAndLayoutTree();
-    return blink::hasEditableStyle(*this, Editable);
-}
-
-bool Node::isContentRichlyEditable() const
-{
-    document().updateStyleAndLayoutTree();
-    return blink::hasEditableStyle(*this, RichlyEditable);
-}
-
-// TODO(yoichio): Move to core/editing
-static bool hasEditableStyle(const Node& node, EditableLevel editableLevel)
-{
-    if (node.isPseudoElement())
-        return false;
-
-    // Ideally we'd call DCHECK(!needsStyleRecalc()) here, but
-    // ContainerNode::setFocus() calls setNeedsStyleRecalc(), so the assertion
-    // would fire in the middle of Document::setFocusedNode().
-
-    for (const Node& ancestor : NodeTraversal::inclusiveAncestorsOf(node)) {
-        if ((ancestor.isHTMLElement() || ancestor.isDocumentNode()) && ancestor.layoutObject()) {
-            switch (ancestor.layoutObject()->style()->userModify()) {
-            case READ_ONLY:
-                return false;
-            case READ_WRITE:
-                return true;
-            case READ_WRITE_PLAINTEXT_ONLY:
-                return editableLevel != RichlyEditable;
-            }
-            ASSERT_NOT_REACHED();
-            return false;
-        }
-    }
-
-    return false;
-}
-
-// TODO(yoichio): Move to core/editing
-static bool isEditableToAccessibility(const Node& node, EditableLevel editableLevel)
-{
-    if (blink::hasEditableStyle(node, editableLevel))
-        return true;
-
-    // FIXME: Respect editableLevel for ARIA editable elements.
-    if (editableLevel == RichlyEditable)
-        return false;
-
-    // FIXME(dmazzoni): support ScopedAXObjectCache (crbug/489851).
-    if (AXObjectCache* cache = node.document().existingAXObjectCache())
-        return cache->rootAXEditableElement(&node);
-
-    return false;
-}
-
-// TODO(yoichio): Move to core/editing
-bool Node::hasEditableStyle(EditableType editableType) const
-{
-    switch (editableType) {
-    case ContentIsEditable:
-        return blink::hasEditableStyle(*this, Editable);
-    case HasEditableAXRole:
-        return isEditableToAccessibility(*this, Editable);
-    }
-    NOTREACHED();
-    return false;
-}
-
-// TODO(yoichio): Move to core/editing
-bool Node::layoutObjectIsRichlyEditable(EditableType editableType) const
-{
-    switch (editableType) {
-    case ContentIsEditable:
-        return blink::hasEditableStyle(*this, RichlyEditable);
-    case HasEditableAXRole:
-        return isEditableToAccessibility(*this, RichlyEditable);
-    }
-    NOTREACHED();
-    return false;
 }
 
 LayoutBox* Node::layoutBox() const
@@ -947,9 +866,9 @@ void Node::reattach(const AttachContext& context)
     AttachContext reattachContext(context);
     reattachContext.performingReattach = true;
 
-    // We only need to detach if the node has already been through attach().
+    // We only need to detach if the node has already been through attachLayoutTree().
     if (getStyleChangeType() < NeedsReattachStyleChange)
-        detach(reattachContext);
+        detachLayoutTree(reattachContext);
     attachLayoutTree(reattachContext);
 }
 
@@ -966,7 +885,7 @@ void Node::attachLayoutTree(const AttachContext&)
         cache->updateCacheAfterNodeIsAttached(this);
 }
 
-void Node::detach(const AttachContext& context)
+void Node::detachLayoutTree(const AttachContext& context)
 {
     DCHECK(document().lifecycle().stateAllowsDetach());
     DocumentLifecycle::DetachScope willDetach(document().lifecycle());
@@ -1013,7 +932,7 @@ bool Node::canStartSelection() const
     if (isDisabledFormControl(this))
         return false;
 
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return true;
 
     if (layoutObject()) {
@@ -1138,39 +1057,6 @@ ContainerNode* Node::parentOrShadowHostOrTemplateHostNode() const
         return static_cast<const TemplateContentDocumentFragment*>(this)->host();
     return parentOrShadowHostNode();
 }
-
-// TODO(yoichio): Move to core/editing
-bool isRootEditableElement(const Node& node)
-{
-    return node.hasEditableStyle() && node.isElementNode() && (!node.parentNode() || !node.parentNode()->hasEditableStyle()
-        || !node.parentNode()->isElementNode() || &node == node.document().body());
-}
-
-// TODO(yoichio): Move to core/editing
-Element* rootEditableElement(const Node& node, EditableType editableType)
-{
-    if (editableType == HasEditableAXRole) {
-        if (AXObjectCache* cache = node.document().existingAXObjectCache())
-            return const_cast<Element*>(cache->rootAXEditableElement(&node));
-    }
-
-    return rootEditableElement(node);
-}
-
-// TODO(yoichio): Move to core/editing
-Element* rootEditableElement(const Node& node)
-{
-    const Node* result = nullptr;
-    for (const Node* n = &node; n && n->hasEditableStyle(); n = n->parentNode()) {
-        if (n->isElementNode())
-            result = n;
-        if (node.document().body() == n)
-            break;
-    }
-    return toElement(const_cast<Node*>(result));
-}
-
-// FIXME: End of obviously misplaced HTML editing functions.  Try to move these out of Node.
 
 Document* Node::ownerDocument() const
 {
@@ -1657,7 +1543,7 @@ void Node::showNode(const char* prefix) const
         appendAttributeDesc(this, attrs, idAttr, " ID");
         appendAttributeDesc(this, attrs, classAttr, " CLASS");
         appendAttributeDesc(this, attrs, styleAttr, " STYLE");
-        if (hasEditableStyle())
+        if (hasEditableStyle(*this))
             attrs.append(" (editable)");
         if (document().focusedElement() == this)
             attrs.append(" (focused)");
@@ -2237,7 +2123,7 @@ bool Node::willRespondToMouseClickEvents()
 {
     if (isDisabledFormControl(this))
         return false;
-    return isContentEditable() || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
+    return isContentEditable(*this) || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
 }
 
 bool Node::willRespondToTouchEvents()
@@ -2335,24 +2221,6 @@ bool Node::isUserActionElementFocused() const
     return document().userActionElements().isFocused(this);
 }
 
-std::ostream& operator<<(std::ostream& os, CustomElementState state)
-{
-    switch (state) {
-    case CustomElementState::Uncustomized: return os << "Uncustomized";
-    case CustomElementState::Undefined: return os << "Undefined";
-    case CustomElementState::Custom: return os << "Custom";
-    default: NOTREACHED();
-    }
-    return os;
-}
-
-CustomElementState Node::getCustomElementState() const
-{
-    return !isCustomElement()
-        ? CustomElementState::Uncustomized
-        : (getFlag(CustomElementCustomFlag) ? CustomElementState::Custom : CustomElementState::Undefined);
-}
-
 void Node::setCustomElementState(CustomElementState newState)
 {
     CustomElementState oldState = getCustomElementState();
@@ -2369,25 +2237,24 @@ void Node::setCustomElementState(CustomElementState newState)
     case CustomElementState::Custom:
         DCHECK_EQ(CustomElementState::Undefined, oldState);
         break;
+
+    case CustomElementState::Failed:
+        DCHECK_NE(CustomElementState::Failed, oldState);
+        break;
     }
 
     DCHECK(isHTMLElement());
     DCHECK_NE(V0Upgraded, getV0CustomElementState());
-#if DCHECK_IS_ON()
-    bool wasDefined = toElement(this)->isDefined();
-#endif
 
-    setFlag(CustomElementFlag);
-    if (newState == CustomElementState::Custom)
-        setFlag(CustomElementCustomFlag);
+    Element* element = toElement(this);
+    bool wasDefined = element->isDefined();
+
+    m_nodeFlags = (m_nodeFlags & ~CustomElementStateMask)
+        | static_cast<NodeFlags>(newState);
     DCHECK(newState == getCustomElementState());
 
-    // When the state goes from Uncustomized to Undefined, and then to Custom,
-    // isDefined is always flipped.
-#if DCHECK_IS_ON()
-    DCHECK_NE(wasDefined, toElement(this)->isDefined());
-#endif
-    toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
+    if (element->isDefined() != wasDefined)
+        element->pseudoStateChanged(CSSSelector::PseudoDefined);
 }
 
 void Node::setV0CustomElementState(V0CustomElementState newState)

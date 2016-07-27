@@ -56,6 +56,7 @@ namespace {
 const char kNoRequisition[] = "none";
 const char kRemoraRequisition[] = "remora";
 const char kSharkRequisition[] = "shark";
+const char kRialtoRequisition[] = "rialto";
 
 // Zero-touch enrollment flag values.
 const char kZeroTouchEnrollmentForced[] = "forced";
@@ -247,6 +248,29 @@ std::string DeviceCloudPolicyManagerChromeOS::GetMachineModel() {
   return GetMachineStatistic(chromeos::system::kHardwareClassKey);
 }
 
+// static
+ZeroTouchEnrollmentMode
+DeviceCloudPolicyManagerChromeOS::GetZeroTouchEnrollmentMode() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(
+          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment)) {
+    return ZeroTouchEnrollmentMode::DISABLED;
+  }
+
+  std::string value = command_line->GetSwitchValueASCII(
+      chromeos::switches::kEnterpriseEnableZeroTouchEnrollment);
+  if (value == kZeroTouchEnrollmentForced) {
+    return ZeroTouchEnrollmentMode::FORCED;
+  }
+  if (value.empty()) {
+    return ZeroTouchEnrollmentMode::ENABLED;
+  }
+  LOG(WARNING) << "Malformed value \"" << value << "\" for switch --"
+               << chromeos::switches::kEnterpriseEnableZeroTouchEnrollment
+               << ". Ignoring switch.";
+  return ZeroTouchEnrollmentMode::DISABLED;
+}
+
 void DeviceCloudPolicyManagerChromeOS::StartConnection(
     std::unique_ptr<CloudPolicyClient> client_to_connect,
     EnterpriseInstallAttributes* install_attributes) {
@@ -323,7 +347,8 @@ void DeviceCloudPolicyManagerChromeOS::InitializeRequisition() {
       local_state_->SetString(prefs::kDeviceEnrollmentRequisition,
                               requisition);
       if (requisition == kRemoraRequisition ||
-          requisition == kSharkRequisition) {
+          requisition == kSharkRequisition ||
+          requisition == kRialtoRequisition) {
         SetDeviceEnrollmentAutoStart();
       } else {
         local_state_->SetBoolean(
@@ -344,12 +369,8 @@ void DeviceCloudPolicyManagerChromeOS::InitializeEnrollment() {
   if (chromeos::StartupUtils::IsOobeCompleted())
     return;
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(
-          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment) &&
-      command_line->GetSwitchValueASCII(
-          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment) ==
-          kZeroTouchEnrollmentForced) {
+  if (DeviceCloudPolicyManagerChromeOS::GetZeroTouchEnrollmentMode() ==
+      ZeroTouchEnrollmentMode::FORCED) {
     SetDeviceEnrollmentAutoStart();
   }
 }

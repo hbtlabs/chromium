@@ -562,6 +562,9 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // The icon created from the bitmap image of the app icon.
   base::win::ScopedHICON app_icon_;
 
+  // The current DPI.
+  int dpi_;
+
   // Event handling ------------------------------------------------------------
 
   // The flags currently being used with TrackMouseEvent to track mouse
@@ -605,9 +608,6 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
   // Generates touch-ids for touch-events.
   ui::SequentialIDGenerator id_generator_;
-
-  // Indicates if the window needs the WS_VSCROLL and WS_HSCROLL styles.
-  bool needs_scroll_styles_;
 
   // Set to true if we are in the context of a sizing operation.
   bool in_size_loop_;

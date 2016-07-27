@@ -104,9 +104,15 @@ class TabManager : public TabStripModelObserver {
 
   // Discards a tab with the given unique ID. The tab still exists in the
   // tab-strip; clicking on it will reload it. Returns null if the tab cannot
-  // be found or cannot be discarded. Otherwise returns the old web_contents
-  // that got discarded. This value is mostly useful during testing.
+  // be found or cannot be discarded. Otherwise returns the new web_contents
+  // of the discarded tab.
   content::WebContents* DiscardTabById(int64_t target_web_contents_id);
+
+  // Method used by the extensions API to discard tabs. If |contents| is null,
+  // discards the least important tab using DiscardTab(). Otherwise discards
+  // the given contents. Returns the new web_contents or null if no tab
+  // was discarded.
+  content::WebContents* DiscardTabByExtension(content::WebContents* contents);
 
   // Log memory statistics for the running processes, then discards a tab.
   // Tab discard happens sometime later, as collecting the statistics touches
@@ -124,11 +130,29 @@ class TabManager : public TabStripModelObserver {
   // thread.
   TabStatsList GetUnsortedTabStats();
 
-  // Add/remove observers.
   void AddObserver(TabManagerObserver* observer);
   void RemoveObserver(TabManagerObserver* observer);
 
+  // Used in tests to change the protection time of the tabs.
+  void set_minimum_protection_time_for_tests(
+      base::TimeDelta minimum_protection_time);
+
+  // Returns the auto-discardable state of the tab. When true, the tab is
+  // eligible to be automatically discarded when critical memory pressure hits,
+  // otherwise the tab is ignored and will never be automatically discarded.
+  // Note that this property doesn't block the discarding of the tab via other
+  // methods (about:discards for instance).
+  bool IsTabAutoDiscardable(content::WebContents* contents) const;
+
+  // Sets/clears the auto-discardable state of the tab.
+  void SetTabAutoDiscardableState(content::WebContents* contents, bool state);
+
+  // Returns true if |first| is considered less desirable to be killed than
+  // |second|.
+  static bool CompareTabStats(const TabStats& first, const TabStats& second);
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, AutoDiscardable);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, CanOnlyDiscardOnce);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ChildProcessNotifications);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, Comparator);
@@ -150,6 +174,11 @@ class TabManager : public TabStripModelObserver {
   // changes, so that observers can be informed.
   void OnDiscardedStateChange(content::WebContents* contents,
                               bool is_discarded);
+
+  // Called by WebContentsData whenever the auto-discardable state of a
+  // WebContents changes, so that observers can be informed.
+  void OnAutoDiscardableStateChange(content::WebContents* contents,
+                                    bool is_auto_discardable);
 
   // The time that a renderer is given to react to a memory pressure
   // notification before another renderer is also notified. This prevents all
@@ -244,10 +273,6 @@ class TabManager : public TabStripModelObserver {
   // creating one if needed.
   WebContentsData* GetWebContentsData(content::WebContents* contents) const;
 
-  // Returns true if |first| is considered less desirable to be killed than
-  // |second|.
-  static bool CompareTabStats(TabStats first, TabStats second);
-
   // Returns either the system's clock or the test clock. See |test_tick_clock_|
   // for more details.
   base::TimeTicks NowTicks() const;
@@ -256,8 +281,9 @@ class TabManager : public TabStripModelObserver {
   // schedules another call to itself as long as memory pressure continues.
   void DoChildProcessDispatch();
 
-  // Implementation of DiscardTab.
-  bool DiscardTabImpl();
+  // Implementation of DiscardTab. Returns null if no tab was discarded.
+  // Otherwise returns the new web_contents of the discarded tab.
+  content::WebContents* DiscardTabImpl();
 
   // Returns true if tabs can be discarded only once.
   bool CanOnlyDiscardOnce();

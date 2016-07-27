@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include "base/memory/ptr_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/debug/benchmark_instrumentation.h"
 #include "cc/output/compositor_frame.h"
@@ -62,7 +61,7 @@ Display::~Display() {
     for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
       Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
       if (surface)
-        surface->RunDrawCallbacks(SurfaceDrawStatus::DRAW_SKIPPED);
+        surface->RunDrawCallbacks();
     }
   }
 }
@@ -157,8 +156,7 @@ void Display::InitializeRenderer() {
       settings_.texture_id_allocation_chunk_size,
       output_surface_->capabilities().delegated_sync_points_required,
       settings_.use_gpu_memory_buffer_resources,
-      std::vector<unsigned>(static_cast<size_t>(gfx::BufferFormat::LAST) + 1,
-                            GL_TEXTURE_2D)));
+      settings_.buffer_to_texture_target_map));
 
   if (output_surface_->context_provider()) {
     DCHECK(texture_mailbox_deleter_);
@@ -242,7 +240,7 @@ bool Display::DrawAndSwap() {
   for (const auto& id_entry : aggregator_->previous_contained_surfaces()) {
     Surface* surface = surface_manager_->GetSurfaceForId(id_entry.first);
     if (surface)
-      surface->RunDrawCallbacks(SurfaceDrawStatus::DRAWN);
+      surface->RunDrawCallbacks();
   }
 
   DelegatedFrameData* frame_data = frame.delegated_frame_data.get();

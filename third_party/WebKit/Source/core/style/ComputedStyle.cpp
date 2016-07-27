@@ -1253,6 +1253,12 @@ void ComputedStyle::clearResetDirectives()
         it->value.clearReset();
 }
 
+Hyphenation* ComputedStyle::getHyphenation() const
+{
+    return getHyphens() == HyphensAuto
+        ? getFontDescription().localeOrDefault().getHyphenation() : nullptr;
+}
+
 const AtomicString& ComputedStyle::hyphenString() const
 {
     const AtomicString& hyphenationString = m_rareInheritedData.get()->hyphenationString;
@@ -1923,6 +1929,23 @@ bool ComputedStyle::shadowListHasCurrentColor(const ShadowList* shadowList)
             return true;
     }
     return false;
+}
+
+static inline Vector<GridTrackSize> initialGridAutoTracks()
+{
+    Vector<GridTrackSize> trackSizeList;
+    trackSizeList.append(GridTrackSize(Length(Auto)));
+    return trackSizeList;
+}
+
+Vector<GridTrackSize> ComputedStyle::initialGridAutoColumns()
+{
+    return initialGridAutoTracks();
+}
+
+Vector<GridTrackSize> ComputedStyle::initialGridAutoRows()
+{
+    return initialGridAutoTracks();
 }
 
 int adjustForAbsoluteZoom(int value, float zoomFactor)

@@ -33,6 +33,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/browser_plugin_guest_mode.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -50,7 +51,8 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       observing_begin_frame_source_(false),
       parent_surface_client_id_(0),
       weak_factory_(this) {
-  id_allocator_ = CreateSurfaceIdAllocator();
+  id_allocator_.reset(new cc::SurfaceIdAllocator(AllocateSurfaceClientId()));
+  GetSurfaceManager()->RegisterSurfaceClientId(id_allocator_->client_id());
   RegisterSurfaceNamespaceId();
 
   host_->SetView(this);
@@ -59,6 +61,9 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
   if (!surface_id_.is_null())
     surface_factory_->Destroy(surface_id_);
+
+  if (GetSurfaceManager())
+    GetSurfaceManager()->InvalidateSurfaceClientId(id_allocator_->client_id());
 }
 
 void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
@@ -292,12 +297,6 @@ void RenderWidgetHostViewChildFrame::SetTooltipText(
   frame_connector_->GetRootRenderWidgetHostView()->SetTooltipText(tooltip_text);
 }
 
-void RenderWidgetHostViewChildFrame::SelectionChanged(
-    const base::string16& text,
-    size_t offset,
-    const gfx::Range& range) {
-}
-
 void RenderWidgetHostViewChildFrame::LockCompositingSurface() {
   NOTIMPLEMENTED();
 }
@@ -343,8 +342,7 @@ void RenderWidgetHostViewChildFrame::GestureEventAck(
     frame_connector_->BubbleScrollEvent(event);
 }
 
-void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id,
-                                                  cc::SurfaceDrawStatus drawn) {
+void RenderWidgetHostViewChildFrame::SurfaceDrawn(uint32_t output_surface_id) {
   DCHECK_GT(ack_pending_count_, 0U);
   if (host_) {
     host_->Send(new ViewMsg_ReclaimCompositorResources(
@@ -660,6 +658,31 @@ void RenderWidgetHostViewChildFrame::OnSetNeedsBeginFrames(
     else
       begin_frame_source_->RemoveObserver(this);
   }
+}
+
+InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
+    const blink::WebInputEvent& input_event) {
+  if (input_event.type == blink::WebInputEvent::GestureFlingStart) {
+    const blink::WebGestureEvent& gesture_event =
+        static_cast<const blink::WebGestureEvent&>(input_event);
+    // Zero-velocity touchpad flings are an Aura-specific signal that the
+    // touchpad scroll has ended, and should not be forwarded to the renderer.
+    if (gesture_event.sourceDevice == blink::WebGestureDeviceTouchpad &&
+        !gesture_event.data.flingStart.velocityX &&
+        !gesture_event.data.flingStart.velocityY) {
+      // Here we indicate that there was no consumer for this event, as
+      // otherwise the fling animation system will try to run an animation
+      // and will also expect a notification when the fling ends. Since
+      // CrOS just uses the GestureFlingStart with zero-velocity as a means
+      // of indicating that touchpad scroll has ended, we don't actually want
+      // a fling animation.
+      // Note: this event handling is modeled on similar code in
+      // TenderWidgetHostViewAura::FilterInputEvent().
+      return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
+    }
+  }
+
+  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
 BrowserAccessibilityManager*

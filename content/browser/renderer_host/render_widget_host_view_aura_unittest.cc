@@ -1737,7 +1737,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
   // Report that the surface is drawn to trigger an ACK.
   cc::Surface* surface = manager->GetSurfaceForId(view_->surface_id());
   EXPECT_TRUE(surface);
-  surface->RunDrawCallbacks(cc::SurfaceDrawStatus::DRAWN);
+  surface->RunDrawCallbacks();
   EXPECT_EQ(1u, sink_->message_count());
   {
     const IPC::Message* msg = sink_->GetMessageAt(0);
@@ -4323,9 +4323,7 @@ class InputMethodResultAuraTest : public InputMethodAuraTestBase {
   DISALLOW_COPY_AND_ASSIGN(InputMethodResultAuraTest);
 };
 
-// This test verifies that ui::TextInputClient::SetCompositionText call leads to
-// IPC message InputMsg_ImeSetComposition being sent to the right renderer
-// process.
+// This test verifies ui::TextInputClient::SetCompositionText.
 TEST_F(InputMethodResultAuraTest, SetCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::SetCompositionText,
@@ -4337,9 +4335,7 @@ TEST_F(InputMethodResultAuraTest, SetCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::ConfirmCompositionText call
-// leads to IPC message InputMsg_ImeConfirmComposition being sent to the right
-// renderer process.
+// This test is for ui::TextInputClient::ConfirmCompositionText.
 TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::ConfirmCompositionText,
@@ -4352,9 +4348,7 @@ TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::ConfirmCompositionText call
-// leads to IPC message InputMsg_ImeSetComposition being sent to the right
-// renderer process.
+// This test is for ui::TextInputClient::ConfirmCompositionText.
 TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::ClearCompositionText,
@@ -4367,8 +4361,7 @@ TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::InsertText call leads to IPC
-// message InputMsg_ImeSetComposition being sent to the right renderer process.
+// This test is for that ui::TextInputClient::InsertText.
 TEST_F(InputMethodResultAuraTest, InsertText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::InsertText,
@@ -4380,10 +4373,8 @@ TEST_F(InputMethodResultAuraTest, InsertText) {
   }
 }
 
-// This test makes a specific view active and then forces the tab's view end the
-// current IME composition session by sending out an IME IPC to confirm
-// composition. The test then verifies that the message is sent
-//  to the active widget's process.
+// This test is for RenderWidgetHostViewAura::FinishImeCompositionSession which
+// is in response to a mouse click during an ongoing composition.
 TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
   base::Closure ime_finish_session_call =
       base::Bind(&RenderWidgetHostViewAura::FinishImeCompositionSession,
@@ -4397,8 +4388,26 @@ TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
   }
 }
 
+// This test is for ui::TextInputClient::ChangeTextDirectionAndLayoutAlignment.
+TEST_F(InputMethodResultAuraTest, ChangeTextDirectionAndLayoutAlignment) {
+  base::Closure ime_finish_session_call = base::Bind(
+      base::IgnoreResult(
+          &RenderWidgetHostViewAura::ChangeTextDirectionAndLayoutAlignment),
+      base::Unretained(tab_view()), base::i18n::LEFT_TO_RIGHT);
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    EXPECT_TRUE(!!RunAndReturnIPCSent(ime_finish_session_call,
+                                      processes_[index],
+                                      ViewMsg_SetTextDirection::ID));
+  }
+}
+
 // A class of tests which verify the correctness of some tracked IME related
-// state at the browser side, e.g., caret bounds.
+// state at the browser side. Each test verifies the correctness tracking for
+// one specific state. To do so, the views are activated in a predetermined
+// sequence and each time, the IPC call for the corresponding state is simulated
+// through calling the method on the view. Then the test verifies that the value
+// returned by the view or ui::TextInputClient is the expected value from IPC.
 class InputMethodStateAuraTest : public InputMethodAuraTestBase {
  public:
   InputMethodStateAuraTest() {}
@@ -4421,10 +4430,8 @@ class InputMethodStateAuraTest : public InputMethodAuraTestBase {
   DISALLOW_COPY_AND_ASSIGN(InputMethodStateAuraTest);
 };
 
-// This test activates the views on the tab according to a predefined order and
-// for each tab, simulates a selection bounds changed call. Then it verifies
-// that the caret bounds reported by the TextInputClient match those reported
-// for the active view.
+// This test is for caret bounds which are calculated based on the tracked value
+// for selection bounds.
 TEST_F(InputMethodStateAuraTest, GetCaretBounds) {
   ViewHostMsg_SelectionBounds_Params params;
   params.is_anchor_first = true;
@@ -4450,9 +4457,7 @@ TEST_F(InputMethodStateAuraTest, GetCaretBounds) {
   }
 }
 
-// This test activates child frames in a specific sequence and changes their
-// composition range. Then it verifies that the ui::TextInputClient returns the
-// correct character bound at the given indices.
+// This test is for composition character bounds.
 TEST_F(InputMethodStateAuraTest, GetCompositionCharacterBounds) {
   gfx::Rect bound;
   // Initially, there should be no bounds.
@@ -4469,6 +4474,68 @@ TEST_F(InputMethodStateAuraTest, GetCompositionCharacterBounds) {
     // Valid bound at index 0.
     EXPECT_TRUE(text_input_client()->GetCompositionCharacterBounds(0, &bound));
     EXPECT_EQ(4 + (int)index, bound.height());
+  }
+}
+
+// This test is for selected text.
+TEST_F(InputMethodStateAuraTest, GetSelectedText) {
+  base::string16 text = base::ASCIIToUTF16("some text of length 22");
+  size_t offset = 0U;
+  gfx::Range selection_range(20, 21);
+
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    views_[index]->SelectionChanged(text, offset, selection_range);
+    base::string16 expected_text = text.substr(
+        selection_range.GetMin() - offset, selection_range.length());
+
+    EXPECT_EQ(expected_text, views_[index]->GetSelectedText());
+
+    // Changing offset to make sure that the next view has a different text
+    // selection.
+    offset++;
+  }
+}
+
+// This test is for text range.
+TEST_F(InputMethodStateAuraTest, GetTextRange) {
+  base::string16 text = base::ASCIIToUTF16("some text of length 22");
+  size_t offset = 0U;
+  gfx::Range selection_range;
+
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    gfx::Range expected_range(offset, offset + text.length());
+    views_[index]->SelectionChanged(text, offset, selection_range);
+    gfx::Range range_from_client;
+
+    // For aura this always returns true.
+    EXPECT_TRUE(text_input_client()->GetTextRange(&range_from_client));
+    EXPECT_EQ(expected_range, range_from_client);
+
+    // Changing offset to make sure that the next view has a different text
+    // selection.
+    offset++;
+  }
+}
+
+// This test is for selection range.
+TEST_F(InputMethodStateAuraTest, GetSelectionRange) {
+  base::string16 text;
+  gfx::Range expected_range(0U, 1U);
+
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    views_[index]->SelectionChanged(text, 0U, expected_range);
+    gfx::Range range_from_client;
+
+    // This method always returns true.
+    EXPECT_TRUE(text_input_client()->GetSelectionRange(&range_from_client));
+    EXPECT_EQ(expected_range, range_from_client);
+
+    // Changing range to make sure that the next view has a different text
+    // selection.
+    expected_range.set_end(expected_range.end() + 1U);
   }
 }
 

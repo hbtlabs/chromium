@@ -20,7 +20,9 @@ Options::Options(int argc, const char** argv)
       argv(argv),
       user_agent(content::BuildUserAgentFromProduct(kProductName)),
       message_pump(nullptr),
-      single_process_mode(false) {}
+      single_process_mode(false),
+      disable_sandbox(false),
+      gl_implementation("osmesa") {}
 
 Options::Options(Options&& options) = default;
 
@@ -64,8 +66,18 @@ Builder& Builder::SetSingleProcessMode(bool single_process_mode) {
   return *this;
 }
 
+Builder& Builder::SetDisableSandbox(bool disable_sandbox) {
+  options_.disable_sandbox = disable_sandbox;
+  return *this;
+}
+
 Builder& Builder::SetProtocolHandlers(ProtocolHandlerMap protocol_handlers) {
   options_.protocol_handlers = std::move(protocol_handlers);
+  return *this;
+}
+
+Builder& Builder::SetGLImplementation(const std::string& gl_implementation) {
+  options_.gl_implementation = gl_implementation;
   return *this;
 }
 

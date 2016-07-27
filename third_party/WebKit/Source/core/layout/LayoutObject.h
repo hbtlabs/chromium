@@ -179,8 +179,8 @@ const int showTreeCharacterOffset = 39;
 //
 // LayoutObjects are created during the DOM attachment. This phase computes
 // the style and create the LayoutObject associated with the Node (see
-// Node::attach). LayoutObjects are destructed during detachment (see
-// Node::detach), which can happen when the DOM node is removed from the
+// Node::attachLayoutTree). LayoutObjects are destructed during detachment (see
+// Node::detachLayoutTree), which can happen when the DOM node is removed from the
 // DOM tree, during page tear down or when the style is changed to contain
 // 'display: none'.
 //
@@ -408,9 +408,10 @@ public:
     // property tree nodes that are created by the layout object for painting.
     // The property nodes are only updated during InUpdatePaintProperties phase
     // of the document lifecycle and shall remain immutable during other phases.
-    ObjectPaintProperties* objectPaintProperties() const;
+    const ObjectPaintProperties* objectPaintProperties() const;
+
+private:
     ObjectPaintProperties& ensureObjectPaintProperties();
-    void clearObjectPaintProperties();
 
 private:
     //////////////////////////////////////////
@@ -500,6 +501,8 @@ public:
     bool isProgress() const { return isOfType(LayoutObjectProgress); }
     bool isQuote() const { return isOfType(LayoutObjectQuote); }
     bool isLayoutButton() const { return isOfType(LayoutObjectLayoutButton); }
+    bool isLayoutFullScreen() const { return isOfType(LayoutObjectLayoutFullScreen); }
+    bool isLayoutFullScreenPlaceholder() const { return isOfType(LayoutObjectLayoutFullScreenPlaceholder); }
     bool isLayoutGrid() const { return isOfType(LayoutObjectLayoutGrid); }
     bool isLayoutIFrame() const { return isOfType(LayoutObjectLayoutIFrame); }
     bool isLayoutImage() const { return isOfType(LayoutObjectLayoutImage); }
@@ -648,7 +651,9 @@ public:
         // LayoutBlock::createAnonymousBlock(). This includes creating an anonymous
         // LayoutBlock having a BLOCK or BOX display. Other classes such as LayoutTextFragment
         // are not LayoutBlocks and will return false. See https://bugs.webkit.org/show_bug.cgi?id=56709.
-        return isAnonymous() && (style()->display() == BLOCK || style()->display() == BOX) && style()->styleType() == PseudoIdNone && isLayoutBlock() && !isListMarker() && !isLayoutFlowThread() && !isLayoutMultiColumnSet();
+        return isAnonymous() && (style()->display() == BLOCK || style()->display() == BOX) && style()->styleType() == PseudoIdNone && isLayoutBlock() && !isListMarker() && !isLayoutFlowThread() && !isLayoutMultiColumnSet()
+            && !isLayoutFullScreen()
+            && !isLayoutFullScreenPlaceholder();
     }
     bool isElementContinuation() const { return node() && node()->layoutObject() != this; }
     bool isInlineElementContinuation() const { return isElementContinuation() && isInline(); }
@@ -1363,6 +1368,10 @@ public:
         invalidateDisplayItemClient(client, reason);
     }
 
+    // This calls paintingLayer() which walks up the tree.
+    // If possible, use the faster paintInvalidationState.paintingLayer().setNeedsRepaint().
+    void slowSetPaintingLayerNeedsRepaint() const;
+
     // Sets painting layer needsRepaint, then calls invaldiateDisplayItemClient().
     // Should use this version when PaintInvalidationState is available.
     void setPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(const PaintInvalidationState&, const DisplayItemClient&, PaintInvalidationReason) const;
@@ -1379,13 +1388,16 @@ public:
     class MutableForPainting {
     public:
         void setPreviousPaintOffset(const LayoutPoint& paintOffset) { m_layoutObject.setPreviousPaintOffset(paintOffset); }
-        ObjectPaintProperties& ensureObjectPaintProperties() { return m_layoutObject.ensureObjectPaintProperties(); }
-        void clearObjectPaintProperties() { m_layoutObject.clearObjectPaintProperties(); }
         PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState) { return m_layoutObject.invalidatePaintIfNeeded(paintInvalidationState); }
         void clearPaintInvalidationFlags(const PaintInvalidationState& paintInvalidationState) { m_layoutObject.clearPaintInvalidationFlags(paintInvalidationState); }
         void setShouldDoDelayedFullPaintInvalidation() { m_layoutObject.setShouldDoFullPaintInvalidation(PaintInvalidationDelayedFull); }
 
     private:
+        friend class PaintPropertyTreeBuilder;
+        // The following two functions can be called from PaintPropertyTreeBuilder only.
+        ObjectPaintProperties& ensureObjectPaintProperties() { return m_layoutObject.ensureObjectPaintProperties(); }
+        ObjectPaintProperties* objectPaintProperties() { return const_cast<ObjectPaintProperties*>(m_layoutObject.objectPaintProperties()); }
+
         friend class LayoutObject;
         MutableForPainting(const LayoutObject& layoutObject) : m_layoutObject(const_cast<LayoutObject&>(layoutObject)) { }
 
@@ -1422,6 +1434,8 @@ protected:
         LayoutObjectQuote,
         LayoutObjectLayoutButton,
         LayoutObjectLayoutFlowThread,
+        LayoutObjectLayoutFullScreen,
+        LayoutObjectLayoutFullScreenPlaceholder,
         LayoutObjectLayoutGrid,
         LayoutObjectLayoutIFrame,
         LayoutObjectLayoutImage,
@@ -1567,10 +1581,6 @@ protected:
     // parts which are invalidated separately (e.g. scrollbars).
     // The caller should ensure the painting layer has been setNeedsRepaint before calling this function.
     virtual void invalidateDisplayItemClients(PaintInvalidationReason) const;
-
-    // This calls paintingLayer() which walks up the tree.
-    // If possible, use the faster paintInvalidationState.paintingLayer().setNeedsRepaint().
-    void slowSetPaintingLayerNeedsRepaint() const;
 
     // Sets painting layer needsRepaint, then calls invalidateDisplayItemClients().
     // Should use this version when PaintInvalidationState is available.

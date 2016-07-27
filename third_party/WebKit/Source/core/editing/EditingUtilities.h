@@ -72,15 +72,20 @@ CORE_EXPORT bool needsLayoutTreeUpdate(const Position&);
 // Node
 // -------------------------------------------------------------------------
 
-// Functions returning Node
-
+CORE_EXPORT bool isContentEditable(const Node&);
+CORE_EXPORT bool isContentRichlyEditable(const Node&);
+CORE_EXPORT bool hasEditableStyle(const Node&, EditableType = ContentIsEditable);
+CORE_EXPORT bool hasRichlyEditableStyle(const Node&);
+CORE_EXPORT bool isRootEditableElement(const Node&);
+CORE_EXPORT Element* rootEditableElement(const Node&);
+CORE_EXPORT Element* rootEditableElement(const Node&, EditableType);
 // highestEditableRoot returns the highest editable node. If the
 // rootEditableElement of the speicified Position is <body>, this returns the
 // <body>. Otherwise, this searches ancestors for the highest editable node in
 // defiance of editing boundaries. This returns a Document if designMode="on"
 // and the specified Position is not in the <body>.
 CORE_EXPORT ContainerNode* highestEditableRoot(const Position&, EditableType = ContentIsEditable);
-ContainerNode* highestEditableRoot(const PositionInFlatTree&, EditableType = ContentIsEditable);
+ContainerNode* highestEditableRoot(const PositionInFlatTree&);
 
 Node* highestEnclosingNodeOfType(const Position&, bool (*nodeIsOfType)(const Node*),
     EditingBoundaryCrossingRule = CannotCrossEditingBoundary, Node* stayWithin = nullptr);
@@ -165,6 +170,7 @@ CORE_EXPORT bool areIdenticalElements(const Node&, const Node&);
 bool isNonTableCellHTMLBlockElement(const Node*);
 bool isBlockFlowElement(const Node&);
 bool nodeIsUserSelectAll(const Node*);
+EUserSelect usedValueOfUserSelect(const Node&);
 bool isTextSecurityNode(const Node*);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const Position&);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const PositionInFlatTree&);
@@ -232,9 +238,9 @@ int comparePositions(const PositionWithAffinity&, const PositionWithAffinity&);
 // FIXME: Both isEditablePosition and isRichlyEditablePosition rely on up-to-date
 // style to give proper results. They shouldn't update style by default, but
 // should make it clear that that is the contract.
-CORE_EXPORT bool isEditablePosition(const Position&, EditableType = ContentIsEditable);
-bool isEditablePosition(const PositionInFlatTree&, EditableType = ContentIsEditable);
-bool isRichlyEditablePosition(const Position&, EditableType = ContentIsEditable);
+CORE_EXPORT bool isEditablePosition(const Position&);
+bool isEditablePosition(const PositionInFlatTree&);
+bool isRichlyEditablePosition(const Position&);
 bool lineBreakExistsAtPosition(const Position&);
 bool isAtUnsplittableElement(const Position&);
 
@@ -309,7 +315,7 @@ HTMLSpanElement* createTabSpanElement(Document&);
 HTMLSpanElement* createTabSpanElement(Document&, const String& tabText);
 
 Element* rootEditableElementOf(const Position&, EditableType = ContentIsEditable);
-Element* rootEditableElementOf(const PositionInFlatTree&, EditableType = ContentIsEditable);
+Element* rootEditableElementOf(const PositionInFlatTree&);
 Element* rootEditableElementOf(const VisiblePosition&);
 Element* unsplittableElementForPosition(const Position&);
 
@@ -347,7 +353,7 @@ inline bool isAmbiguousBoundaryCharacter(UChar character)
     return character == '\'' || character == rightSingleQuotationMarkCharacter || character == hebrewPunctuationGershayimCharacter;
 }
 
-String stringWithRebalancedWhitespace(const String&, bool startIsStartOfParagraph, bool endIsEndOfParagraph);
+String stringWithRebalancedWhitespace(const String&, bool startIsStartOfParagraph, bool shouldEmitNBSPbeforeEnd);
 const String& nonBreakingSpaceString();
 
 // -------------------------------------------------------------------------

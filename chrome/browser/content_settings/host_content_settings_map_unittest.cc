@@ -368,7 +368,7 @@ TEST_F(HostContentSettingsMapTest, Observer) {
 
   GURL host("http://example.com/");
   ContentSettingsPattern primary_pattern =
-      ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("http://example.com:80");
   ContentSettingsPattern secondary_pattern =
       ContentSettingsPattern::Wildcard();
   EXPECT_CALL(observer, OnContentSettingsChanged(host_content_settings_map,
@@ -949,7 +949,7 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeOnly) {
 
     base::DictionaryValue* dummy_payload = new base::DictionaryValue;
     dummy_payload->SetInteger("setting", CONTENT_SETTING_ALLOW);
-    all_settings_dictionary->SetWithoutPathExpansion("[*.]\xC4\x87ira.com,*",
+    all_settings_dictionary->SetWithoutPathExpansion("www.\xC4\x87ira.com,*",
                                                      dummy_payload);
   }
 
@@ -959,9 +959,9 @@ TEST_F(HostContentSettingsMapTest, CanonicalizeExceptionsUnicodeOnly) {
       prefs->GetDictionary(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES));
   const base::DictionaryValue* result = NULL;
   EXPECT_FALSE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
-      "[*.]\xC4\x87ira.com,*", &result));
+      "www.\xC4\x87ira.com,*", &result));
   EXPECT_TRUE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
-      "[*.]xn--ira-ppa.com,*", &result));
+      "www.xn--ira-ppa.com,*", &result));
 }
 
 // If both Unicode and its punycode pattern exist, make sure we don't touch the
@@ -1214,7 +1214,7 @@ TEST_F(HostContentSettingsMapTest, AddContentSettingsObserver) {
 
   GURL host("http://example.com/");
   ContentSettingsPattern pattern =
-      ContentSettingsPattern::FromString("[*.]example.com");
+      ContentSettingsPattern::FromString("http://example.com:80");
   EXPECT_CALL(mock_observer, OnContentSettingChanged(
                                  pattern, ContentSettingsPattern::Wildcard(),
                                  CONTENT_SETTINGS_TYPE_COOKIES, ""));
@@ -1355,6 +1355,13 @@ TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
   TestingProfile profile;
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(&profile);
+  PrefService* prefs = profile.GetPrefs();
+  // Set the pref to its initial state so that migration can be done later in
+  // the test (normally it is done on construction of HostContentSettingsMap).
+  int default_value;
+  prefs->GetDefaultPrefValue(prefs::kDomainToOriginMigrationStatus)
+      ->GetAsInteger(&default_value);
+  prefs->SetInteger(prefs::kDomainToOriginMigrationStatus, default_value);
 
   // Set old formatted http settings.
   GURL http_host("http://example.com/");
@@ -1426,7 +1433,7 @@ TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
               "https://[*.]example.com:443");
   EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
 
-  host_content_settings_map->MigrateDomainScopedSettings();
+  host_content_settings_map->MigrateDomainScopedSettings(false);
 
   // After migration, settings only affect origins.
   EXPECT_EQ(
@@ -1462,6 +1469,114 @@ TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
   EXPECT_TRUE(settings[0].primary_pattern.ToString() ==
               "https://example.com:443");
   EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
+}
+
+// Ensure that migration only happens once upon construction of the HCSM and
+// once after syncing (even when these events occur multiple times).
+TEST_F(HostContentSettingsMapTest, DomainToOriginMigrationStatus) {
+  TestingProfile profile;
+  PrefService* prefs = profile.GetPrefs();
+
+  GURL http_host("http://example.com/");
+  GURL http_host_narrower("http://a.example.com/");
+  std::string host_pattern_string =
+      ContentSettingsPattern::FromURL(http_host).ToString();
+
+  {
+    DictionaryPrefUpdate update(prefs,
+                                GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES));
+    base::DictionaryValue* all_settings_dictionary = update.Get();
+    ASSERT_TRUE(NULL != all_settings_dictionary);
+
+    base::DictionaryValue* domain_setting = new base::DictionaryValue;
+    domain_setting->SetInteger("setting", CONTENT_SETTING_ALLOW);
+    all_settings_dictionary->SetWithoutPathExpansion(host_pattern_string + ",*",
+                                                     domain_setting);
+  }
+
+  const base::DictionaryValue* all_settings_dictionary =
+      prefs->GetDictionary(GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES));
+  const base::DictionaryValue* result = NULL;
+  EXPECT_TRUE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
+      "[*.]example.com,*", &result));
+
+  // Migration is done on construction of HostContentSettingsMap.
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+
+  // Change default setting to BLOCK.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_COOKIES, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  // Settings only apply to origins. Migration got executed.
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  GURL https_host("https://example.com/");
+  GURL https_host_narrower("https://a.example.com/");
+
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(https_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_COOKIES,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_COOKIES,
+                std::string()));
+  // Settings apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  // Try to do migration again before sync.
+  host_content_settings_map->MigrateDomainScopedSettings(false);
+
+  // Settings still apply to subdomains. Migration didn't get executed.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  // Do migration after sync.
+  host_content_settings_map->MigrateDomainScopedSettings(true);
+
+  // Settings only apply to origins. Migration got executed.
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  GURL http1_host("http://google.com/");
+  GURL http1_host_narrower("http://a.google.com/");
+
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(http1_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_COOKIES,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http1_host, http1_host, CONTENT_SETTINGS_TYPE_COOKIES,
+                std::string()));
+  // Settings apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http1_host_narrower, http1_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  // Try to do migration again after sync.
+  host_content_settings_map->MigrateDomainScopedSettings(true);
+
+  // Settings still apply to subdomains. Migration didn't get executed.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http1_host_narrower, http1_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
 }
 
 TEST_F(HostContentSettingsMapTest, InvalidPattern) {

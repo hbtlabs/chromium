@@ -9,6 +9,7 @@
 #include "base/hash.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/default_clock.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "chrome/common/safe_browsing/permission_report.pb.h"
 #include "components/variations/active_field_trials.h"
 #include "content/public/browser/permission_type.h"
@@ -80,6 +81,41 @@ PermissionReport::Action PermissionActionForReport(PermissionAction action) {
   return PermissionReport::ACTION_UNSPECIFIED;
 }
 
+PermissionReport::SourceUI SourceUIForReport(PermissionSourceUI source_ui) {
+  switch (source_ui) {
+    case PermissionSourceUI::PROMPT:
+      return PermissionReport::PROMPT;
+    case PermissionSourceUI::OIB:
+      return PermissionReport::OIB;
+    case PermissionSourceUI::SITE_SETTINGS:
+      return PermissionReport::SITE_SETTINGS;
+    case PermissionSourceUI::PAGE_ACTION:
+      return PermissionReport::PAGE_ACTION;
+    case PermissionSourceUI::SOURCE_UI_NUM:
+      break;
+  }
+
+  NOTREACHED();
+  return PermissionReport::SOURCE_UI_UNSPECIFIED;
+}
+
+PermissionReport::GestureType GestureTypeForReport(
+    PermissionRequestGestureType gesture_type) {
+  switch (gesture_type) {
+    case PermissionRequestGestureType::UNKNOWN:
+      return PermissionReport::GESTURE_TYPE_UNSPECIFIED;
+    case PermissionRequestGestureType::GESTURE:
+      return PermissionReport::GESTURE;
+    case PermissionRequestGestureType::NO_GESTURE:
+      return PermissionReport::NO_GESTURE;
+    case PermissionRequestGestureType::NUM:
+      break;
+  }
+
+  NOTREACHED();
+  return PermissionReport::GESTURE_TYPE_UNSPECIFIED;
+}
+
 }  // namespace
 
 bool PermissionAndOrigin::operator==(const PermissionAndOrigin& other) const {
@@ -112,11 +148,14 @@ PermissionReporter::~PermissionReporter() {}
 
 void PermissionReporter::SendReport(const GURL& origin,
                                     content::PermissionType permission,
-                                    PermissionAction action) {
+                                    PermissionAction action,
+                                    PermissionSourceUI source_ui,
+                                    PermissionRequestGestureType gesture_type) {
   if (IsReportThresholdExceeded(permission, origin))
     return;
   std::string serialized_report;
-  BuildReport(origin, permission, action, &serialized_report);
+  BuildReport(origin, permission, action, source_ui, gesture_type,
+              &serialized_report);
   permission_report_sender_->Send(GURL(kPermissionActionReportingUploadUrl),
                                   serialized_report);
 }
@@ -125,11 +164,15 @@ void PermissionReporter::SendReport(const GURL& origin,
 bool PermissionReporter::BuildReport(const GURL& origin,
                                      PermissionType permission,
                                      PermissionAction action,
+                                     PermissionSourceUI source_ui,
+                                     PermissionRequestGestureType gesture_type,
                                      std::string* output) {
   PermissionReport report;
   report.set_origin(origin.spec());
   report.set_permission(PermissionTypeForReport(permission));
   report.set_action(PermissionActionForReport(action));
+  report.set_source_ui(SourceUIForReport(source_ui));
+  report.set_gesture(GestureTypeForReport(gesture_type));
 
   // Collect platform data.
 #if defined(OS_ANDROID)

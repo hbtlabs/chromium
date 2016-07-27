@@ -60,7 +60,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "grit/components_chromium_strings.h"
-#include "grit/components_google_chrome_strings.h"
 #include "grit/components_strings.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
@@ -293,8 +292,9 @@ void WebsiteSettings::OnSitePermissionChanged(ContentSettingsType type,
     // in the permissions layer. See crbug.com/469221.
     content::PermissionType permission_type;
     if (PermissionUtil::GetPermissionType(type, &permission_type)) {
-      PermissionUmaUtil::PermissionRevoked(permission_type, this->site_url_,
-                                           this->profile_);
+      PermissionUmaUtil::PermissionRevoked(permission_type,
+                                           PermissionSourceUI::OIB,
+                                           this->site_url_, this->profile_);
     }
   }
 

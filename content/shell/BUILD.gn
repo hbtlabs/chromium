@@ -15,8 +15,8 @@ if (is_android) {
   import("//build/config/android/config.gni")
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
-  import("//build_overrides/v8.gni")
   import("//build/mac/tweak_info_plist.gni")
+  import("//v8/gni/v8.gni")
 } else if (is_win) {
   import("//build/win/syzygy/syzygy.gni")
 }
@@ -151,7 +151,6 @@ static_library("content_shell_lib") {
     "browser/shell_web_contents_view_delegate_android.cc",
     "browser/shell_web_contents_view_delegate_creator.h",
     "browser/shell_web_contents_view_delegate_mac.mm",
-    "browser/shell_web_contents_view_delegate_win.cc",
     "common/layout_test/layout_test_content_client.cc",
     "common/layout_test/layout_test_content_client.h",
     "common/layout_test/layout_test_messages.cc",
@@ -223,7 +222,6 @@ static_library("content_shell_lib") {
     "//components/crash/content/app:app_breakpad_mac_win_to_be_deleted",
     "//components/devtools_discovery",
     "//components/devtools_http_handler",
-    "//components/network_session_configurator:switches",
     "//components/plugins/renderer",
     "//components/test_runner:test_runner",
     "//components/url_formatter",
@@ -328,7 +326,10 @@ static_library("content_shell_lib") {
     ]
 
     if (toolkit_views) {
-      sources += [ "browser/shell_views.cc" ]
+      sources += [
+        "browser/shell_views.cc",
+        "browser/shell_web_contents_view_delegate_views.cc",
+      ]
       deps += [
         "//ui/resources",
         "//ui/views",
@@ -337,7 +338,10 @@ static_library("content_shell_lib") {
         "//ui/wm:test_support",
       ]
     } else {
-      sources += [ "browser/shell_aura.cc" ]
+      sources += [
+        "browser/shell_aura.cc",
+        "browser/shell_web_contents_view_delegate_aura.cc",
+      ]
     }
   } else {
     sources -= [
@@ -463,6 +467,7 @@ if (is_android) {
     deps = [
       ":content_shell_framework_bundle_data",
       ":content_shell_resources_bundle_data",
+      "//build/config/sanitizers:deps",
 
       # TODO(rsesek): Remove this after GYP is gone, since it only needs to
       # be here per the comment in blink_test_platform_support_mac.mm about
@@ -699,6 +704,7 @@ if (is_mac) {
     ]
     deps = [
       ":content_shell_framework+link",
+      "//build/config/sanitizers:deps",
     ]
     ldflags = [
       # The helper is in Content Shell.app/Contents/Frameworks/Content Shell Helper.app/Contents/MacOS/

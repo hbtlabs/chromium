@@ -113,9 +113,18 @@ struct HeadlessBrowser::Options {
   // web content, which can be a security risk.
   bool single_process_mode;
 
+  // Run the browser without renderer sandbox. This option can be
+  // a security risk and should be used with caution.
+  bool disable_sandbox;
+
   // Custom network protocol handlers. These can be used to override URL
   // fetching for different network schemes.
   ProtocolHandlerMap protocol_handlers;
+
+  // Choose the GL implementation to use for rendering. A suitable
+  // implementantion is selected by default. Setting this to an empty
+  // string can be used to disable GL rendering (e.g., WebGL support).
+  std::string gl_implementation;
 
  private:
   Options(int argc, const char** argv);
@@ -135,7 +144,9 @@ class HeadlessBrowser::Options::Builder {
   Builder& SetProxyServer(const net::HostPortPair& proxy_server);
   Builder& SetHostResolverRules(const std::string& host_resolver_rules);
   Builder& SetSingleProcessMode(bool single_process_mode);
+  Builder& SetDisableSandbox(bool disable_sandbox);
   Builder& SetProtocolHandlers(ProtocolHandlerMap protocol_handlers);
+  Builder& SetGLImplementation(const std::string& gl_implementation);
 
   Options Build();
 

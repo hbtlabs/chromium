@@ -505,7 +505,7 @@ void ContainerNode::removeBetween(Node* previousChild, Node* nextChild, Node& ol
     AttachContext context;
     context.clearInvalidation = true;
     if (!oldChild.needsAttach())
-        oldChild.detach(context);
+        oldChild.detachLayoutTree(context);
 
     if (nextChild)
         nextChild->setPreviousSibling(previousChild);
@@ -759,17 +759,17 @@ void ContainerNode::attachLayoutTree(const AttachContext& context)
     Node::attachLayoutTree(context);
 }
 
-void ContainerNode::detach(const AttachContext& context)
+void ContainerNode::detachLayoutTree(const AttachContext& context)
 {
     AttachContext childrenContext(context);
     childrenContext.resolvedStyle = nullptr;
     childrenContext.clearInvalidation = true;
 
     for (Node* child = firstChild(); child; child = child->nextSibling())
-        child->detach(childrenContext);
+        child->detachLayoutTree(childrenContext);
 
     setChildNeedsStyleRecalc();
-    Node::detach(context);
+    Node::detachLayoutTree(context);
 }
 
 void ContainerNode::childrenChanged(const ChildrenChange& change)
@@ -1193,7 +1193,7 @@ void ContainerNode::setRestyleFlag(DynamicRestyleFlags mask)
     ensureRareData().setRestyleFlag(mask);
 }
 
-void ContainerNode::recalcChildStyle(StyleRecalcChange change)
+void ContainerNode::recalcDescendantStyles(StyleRecalcChange change)
 {
     DCHECK(document().inStyleRecalc());
     DCHECK(change >= UpdatePseudoElements || childNeedsStyleRecalc());

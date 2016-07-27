@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "ash/common/accelerators/accelerator_controller.h"
 #include "ash/common/display/display_info.h"
 #include "ash/common/keyboard/keyboard_ui.h"
 #include "ash/common/session/session_state_delegate.h"
@@ -19,11 +20,14 @@
 #include "ash/common/wm/window_cycle_event_filter.h"
 #include "ash/common/wm/window_resizer.h"
 #include "ash/common/wm_activation_observer.h"
+#include "ash/mus/accelerators/accelerator_controller_delegate_mus.h"
+#include "ash/mus/accelerators/accelerator_controller_registrar.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_window_mus.h"
 #include "ash/mus/container_ids.h"
 #include "ash/mus/drag_window_resizer.h"
 #include "ash/mus/root_window_controller.h"
+#include "ash/mus/window_manager.h"
 #include "base/memory/ptr_util.h"
 #include "components/user_manager/user_info_impl.h"
 #include "services/ui/common/util.h"
@@ -97,12 +101,24 @@ class SessionStateDelegateStub : public SessionStateDelegate {
 }  // namespace
 
 WmShellMus::WmShellMus(std::unique_ptr<ShellDelegate> shell_delegate,
-                       ::ui::WindowTreeClient* client)
+                       WindowManager* window_manager)
     : WmShell(std::move(shell_delegate)),
-      client_(client),
+      window_manager_(window_manager),
       session_state_delegate_(new SessionStateDelegateStub) {
-  client_->AddObserver(this);
+  window_tree_client()->AddObserver(this);
   WmShell::Set(this);
+
+  uint16_t accelerator_namespace_id = 0u;
+  const bool add_result =
+      window_manager->GetNextAcceleratorNamespaceId(&accelerator_namespace_id);
+  // WmShellMus is created early on, so that this should always succeed.
+  DCHECK(add_result);
+  accelerator_controller_delegate_.reset(new AcceleratorControllerDelegateMus);
+  accelerator_controller_registrar_.reset(new AcceleratorControllerRegistrar(
+      window_manager_, accelerator_namespace_id));
+  SetAcceleratorController(base::MakeUnique<AcceleratorController>(
+      accelerator_controller_delegate_.get(),
+      accelerator_controller_registrar_.get()));
 
   CreateMaximizeModeController();
 
@@ -126,7 +142,8 @@ WmShellMus::~WmShellMus() {
   DeleteWindowCycleController();
   DeleteWindowSelectorController();
   DeleteMruWindowTracker();
-  RemoveClientObserver();
+  if (window_tree_client())
+    window_tree_client()->RemoveObserver(this);
   WmShell::Set(nullptr);
 }
 
@@ -170,15 +187,15 @@ WmRootWindowControllerMus* WmShellMus::GetRootWindowControllerWithDisplayId(
 }
 
 WmWindow* WmShellMus::NewContainerWindow() {
-  return WmWindowMus::Get(client_->NewWindow());
+  return WmWindowMus::Get(window_tree_client()->NewWindow());
 }
 
 WmWindow* WmShellMus::GetFocusedWindow() {
-  return WmWindowMus::Get(client_->GetFocusedWindow());
+  return WmWindowMus::Get(window_tree_client()->GetFocusedWindow());
 }
 
 WmWindow* WmShellMus::GetActiveWindow() {
-  return GetToplevelAncestor(client_->GetFocusedWindow());
+  return GetToplevelAncestor(window_tree_client()->GetFocusedWindow());
 }
 
 WmWindow* WmShellMus::GetPrimaryRootWindow() {
@@ -307,13 +324,12 @@ void WmShellMus::RemoveDisplayObserver(WmDisplayObserver* observer) {
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::AddPointerDownWatcher(views::PointerDownWatcher* watcher) {
-  // TODO(jamescook): Move PointerDownWatcherDelegateMus to //ash/mus
-  // and use here.
+void WmShellMus::AddPointerWatcher(views::PointerWatcher* watcher) {
+  // TODO(jamescook): Move PointerWatcherDelegateMus to //ash/mus and use here.
   NOTIMPLEMENTED();
 }
 
-void WmShellMus::RemovePointerDownWatcher(views::PointerDownWatcher* watcher) {
+void WmShellMus::RemovePointerWatcher(views::PointerWatcher* watcher) {
   NOTIMPLEMENTED();
 }
 
@@ -323,18 +339,14 @@ void WmShellMus::ToggleIgnoreExternalKeyboard() {
 }
 #endif  // defined(OS_CHROMEOS)
 
+::ui::WindowTreeClient* WmShellMus::window_tree_client() {
+  return window_manager_->window_tree_client();
+}
+
 // static
 bool WmShellMus::IsActivationParent(::ui::Window* window) {
   return window && IsActivatableShellWindowId(
                        WmWindowMus::Get(window)->GetShellWindowId());
-}
-
-void WmShellMus::RemoveClientObserver() {
-  if (!client_)
-    return;
-
-  client_->RemoveObserver(this);
-  client_ = nullptr;
 }
 
 // TODO: support OnAttemptToReactivateWindow, http://crbug.com/615114.
@@ -350,8 +362,8 @@ void WmShellMus::OnWindowTreeFocusChanged(::ui::Window* gained_focus,
 }
 
 void WmShellMus::OnDidDestroyClient(::ui::WindowTreeClient* client) {
-  DCHECK_EQ(client, client_);
-  RemoveClientObserver();
+  DCHECK_EQ(window_tree_client(), client);
+  client->RemoveObserver(this);
 }
 
 }  // namespace mus

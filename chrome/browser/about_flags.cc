@@ -32,7 +32,6 @@
 #include "chrome/common/features.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/google_chrome_strings.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/cloud_devices/common/cloud_devices_switches.h"
@@ -53,6 +52,7 @@
 #include "components/search/search_switches.h"
 #include "components/security_state/switches.h"
 #include "components/signin/core/common/signin_switches.h"
+#include "components/spellcheck/common/spellcheck_switches.h"
 #include "components/ssl_config/ssl_config_switches.h"
 #include "components/sync_driver/sync_driver_switches.h"
 #include "components/tracing/common/tracing_switches.h"
@@ -683,7 +683,8 @@ const FeatureEntry kFeatureEntries[] = {
                                switches::kDisableDisplayList2dCanvas)},
     {"enable-canvas-2d-dynamic-rendering-mode-switching",
      IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_NAME,
-     IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_DESCRIPTION, kOsAll,
+     IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_DESCRIPTION,
+     kOsAll,
      SINGLE_VALUE_TYPE(switches::kEnableCanvas2dDynamicRenderingModeSwitching)},
     {"composited-layer-borders", IDS_FLAGS_COMPOSITED_LAYER_BORDERS,
      IDS_FLAGS_COMPOSITED_LAYER_BORDERS_DESCRIPTION, kOsAll,
@@ -829,7 +830,7 @@ const FeatureEntry kFeatureEntries[] = {
 #if defined(ENABLE_SPELLCHECK) && defined(OS_ANDROID)
     {"enable-android-spellchecker", IDS_OPTIONS_ENABLE_SPELLCHECK,
      IDS_OPTIONS_ENABLE_ANDROID_SPELLCHECKER_DESCRIPTION, kOsAndroid,
-     SINGLE_VALUE_TYPE(switches::kEnableAndroidSpellChecker)},
+     SINGLE_VALUE_TYPE(spellcheck::switches::kEnableAndroidSpellChecker)},
 #endif
     {"enable-scroll-prediction", IDS_FLAGS_SCROLL_PREDICTION_NAME,
      IDS_FLAGS_SCROLL_PREDICTION_DESCRIPTION, kOsDesktop,
@@ -886,6 +887,9 @@ const FeatureEntry kFeatureEntries[] = {
     {"ash-enable-unified-desktop", IDS_FLAGS_ASH_ENABLE_UNIFIED_DESKTOP_NAME,
      IDS_FLAGS_ASH_ENABLE_UNIFIED_DESKTOP_DESCRIPTION, kOsCrOS,
      SINGLE_VALUE_TYPE(ash::switches::kAshEnableUnifiedDesktop)},
+    {"ash-enable-window-cycle-ui", IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_NAME,
+     IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_DESCRIPTION, kOsCrOS,
+     SINGLE_VALUE_TYPE(ash::switches::kAshEnableWindowCycleUi)},
     {"enable-easy-unlock-proximity-detection",
      IDS_FLAGS_EASY_UNLOCK_PROXIMITY_DETECTION_NAME,
      IDS_FLAGS_EASY_UNLOCK_PROXIMITY_DETECTION_DESCRIPTION, kOsCrOS,
@@ -1216,7 +1220,8 @@ const FeatureEntry kFeatureEntries[] = {
     {"enable-spelling-feedback-field-trial",
      IDS_FLAGS_SPELLING_FEEDBACK_FIELD_TRIAL_NAME,
      IDS_FLAGS_SPELLING_FEEDBACK_FIELD_TRIAL_DESCRIPTION, kOsAll,
-     SINGLE_VALUE_TYPE(switches::kEnableSpellingFeedbackFieldTrial)},
+     SINGLE_VALUE_TYPE(
+         spellcheck::switches::kEnableSpellingFeedbackFieldTrial)},
 #endif
     {"enable-webgl-draft-extensions", IDS_FLAGS_WEBGL_DRAFT_EXTENSIONS_NAME,
      IDS_FLAGS_WEBGL_DRAFT_EXTENSIONS_DESCRIPTION, kOsAll,
@@ -1688,6 +1693,9 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_NAME,
      IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesBackgroundLoadingFeature)},
+    {"offline-pages-sharing", IDS_FLAGS_OFFLINE_PAGES_SHARING_NAME,
+     IDS_FLAGS_OFFLINE_PAGES_SHARING_DESCRIPTION, kOsAndroid,
+     FEATURE_VALUE_TYPE(offline_pages::kOfflinePagesSharingFeature)},
 #endif  // defined(OS_ANDROID)
     {"disallow-doc-written-script-loads",
      IDS_FLAGS_DISALLOW_DOC_WRITTEN_SCRIPTS_UI_NAME,
@@ -2008,6 +2016,9 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_FILES_QUICK_VIEW_DESCRIPTION, kOsCrOS,
      ENABLE_DISABLE_VALUE_TYPE(chromeos::switches::kEnableFilesQuickView,
                                chromeos::switches::kDisableFilesQuickView)},
+    {"quick-unlock-pin", IDS_FLAGS_QUICK_UNLOCK_PIN,
+     IDS_FLAGS_QUICK_UNLOCK_PIN_DESCRIPTION, kOsCrOS,
+     FEATURE_VALUE_TYPE(features::kQuickUnlockPin)},
 #endif  // defined(OS_CHROMEOS)
 #if defined(OS_ANDROID)
     {"multi-instance-merge-tabs", IDS_FLAGS_MULTI_INSTANCE_MERGE_TABS_NAME,
@@ -2017,8 +2028,8 @@ const FeatureEntry kFeatureEntries[] = {
      IDS_FLAGS_ENABLE_WEB_PAYMENTS_DESCRIPTION, kOsAndroid,
      FEATURE_VALUE_TYPE(features::kWebPayments)},
 #endif  // defined(OS_ANDROID)
-    // NOTE: Adding new command-line switches requires adding corresponding
-    // entries to enum "LoginCustomFlags" in histograms.xml. See note in
+        // NOTE: Adding new command-line switches requires adding corresponding
+        // entries to enum "LoginCustomFlags" in histograms.xml. See note in
     // histograms.xml and don't forget to run AboutFlagsHistogramTest unit test.
 };
 

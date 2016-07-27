@@ -33,8 +33,8 @@ cr.define('chrome.SnippetsInternals', function() {
       event.preventDefault();
     });
 
-    $('discarded-snippets-clear').addEventListener('click', function(event) {
-      chrome.send('clearDiscarded');
+    $('dismissed-snippets-clear').addEventListener('click', function(event) {
+      chrome.send('clearDismissed');
       event.preventDefault();
     });
 
@@ -44,13 +44,16 @@ cr.define('chrome.SnippetsInternals', function() {
       event.preventDefault();
     });
 
-    $('submit-clear-discarded-suggestions')
+    $('submit-clear-dismissed-suggestions')
         .addEventListener('click', function(event) {
-      chrome.send('clearDiscardedSuggestions');
+      chrome.send('clearDismissedSuggestions');
       event.preventDefault();
     });
 
-    chrome.send('loaded');
+    window.addEventListener('focus', refreshContent);
+    window.setInterval(refreshContent, 1000);
+
+    refreshContent();
   }
 
   function setHostRestricted(restricted) {
@@ -76,9 +79,9 @@ cr.define('chrome.SnippetsInternals', function() {
     displayList(snippets, 'snippets', 'snippet-title');
   }
 
-  function receiveDiscardedSnippets(discardedSnippets) {
-    displayList(discardedSnippets, 'discarded-snippets',
-                'discarded-snippet-title');
+  function receiveDismissedSnippets(dismissedSnippets) {
+    displayList(dismissedSnippets, 'dismissed-snippets',
+                'dismissed-snippet-title');
   }
 
   function receiveContentSuggestions(categoriesList) {
@@ -106,6 +109,10 @@ cr.define('chrome.SnippetsInternals', function() {
     link.download = 'snippets.json';
     link.href = 'data:,' + json;
     link.click();
+  }
+
+  function refreshContent() {
+    chrome.send('refreshContent');
   }
 
   function toggleHidden(event) {
@@ -143,7 +150,7 @@ cr.define('chrome.SnippetsInternals', function() {
     receiveProperty: receiveProperty,
     receiveHosts: receiveHosts,
     receiveSnippets: receiveSnippets,
-    receiveDiscardedSnippets: receiveDiscardedSnippets,
+    receiveDismissedSnippets: receiveDismissedSnippets,
     receiveContentSuggestions: receiveContentSuggestions,
     receiveJson: receiveJson,
   };

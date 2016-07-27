@@ -61,6 +61,7 @@ class P2PSocketDispatcherHost;
 class PermissionServiceContext;
 class PeerConnectionTrackerHost;
 class RendererMainThread;
+class RenderFrameMessageFilter;
 class RenderWidgetHelper;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
@@ -203,10 +204,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   static void RegisterHost(int host_id, RenderProcessHost* host);
   static void UnregisterHost(int host_id);
 
-  // CHECKs that all hosts have terminated.
-  // Added temporarily to diagnose crbug.com/608049.
-  static void CheckAllTerminated();
-
   // Implementation of FilterURL below that can be shared with the mock class.
   static void FilterURL(RenderProcessHost* rph, bool empty_allowed, GURL* url);
 
@@ -249,6 +246,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
     return browser_demuxer_android_;
   }
 #endif
+
+  RenderFrameMessageFilter* render_frame_message_filter_for_testing() const {
+    return render_frame_message_filter_.get();
+  }
 
   MessagePortMessageFilter* message_port_message_filter() const {
     return message_port_message_filter_.get();
@@ -381,6 +382,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Used to allow a RenderWidgetHost to intercept various messages on the
   // IO thread.
   scoped_refptr<RenderWidgetHelper> widget_helper_;
+
+  scoped_refptr<RenderFrameMessageFilter> render_frame_message_filter_;
 
   // The filter for MessagePort messages coming from the renderer.
   scoped_refptr<MessagePortMessageFilter> message_port_message_filter_;

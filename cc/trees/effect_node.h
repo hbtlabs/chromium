@@ -7,6 +7,7 @@
 
 #include "cc/base/cc_export.h"
 #include "cc/output/filter_operations.h"
+#include "third_party/skia/include/core/SkXfermode.h"
 
 namespace base {
 namespace trace_event {
@@ -33,7 +34,10 @@ struct CC_EXPORT EffectNode {
   float opacity;
   float screen_space_opacity;
 
+  FilterOperations filters;
   FilterOperations background_filters;
+
+  SkXfermode::Mode blend_mode;
 
   gfx::Vector2dF surface_contents_scale;
 
@@ -46,7 +50,9 @@ struct CC_EXPORT EffectNode {
   // TODO(jaydasika) : Delete this after implementation of
   // SetHideLayerAndSubtree is cleaned up. (crbug.com/595843)
   bool subtree_hidden;
+  bool has_potential_filter_animation;
   bool has_potential_opacity_animation;
+  bool is_currently_animating_filter;
   bool is_currently_animating_opacity;
   // We need to track changes to effects on the compositor to compute damage
   // rect.

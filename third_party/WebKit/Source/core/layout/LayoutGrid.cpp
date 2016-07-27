@@ -274,19 +274,15 @@ public:
         NOTREACHED();
         sizingState = ColumnSizingFirstIteration;
     }
-    bool isValidTransitionForDirection(GridTrackSizingDirection direction)
+    bool isValidTransition(GridTrackSizingDirection direction) const
     {
         switch (sizingState) {
         case ColumnSizingFirstIteration:
-            return direction == ForColumns ? true : false;
-        case RowSizingFirstIteration:
-            return direction == ForRows ? true : false;
         case ColumnSizingSecondIteration:
-            if (direction == ForRows)
-                sizingState = RowSizingFirstIteration;
-            return true;
+            return direction == ForColumns;
+        case RowSizingFirstIteration:
         case RowSizingSecondIteration:
-            return direction == ForRows ? true : false;
+            return direction == ForRows;
         }
         NOTREACHED();
         return false;
@@ -394,7 +390,7 @@ LayoutUnit LayoutGrid::computeTrackBasedLogicalHeight(const GridSizingData& sizi
 
 void LayoutGrid::computeTrackSizesForDirection(GridTrackSizingDirection direction, GridSizingData& sizingData, LayoutUnit freeSpace)
 {
-    DCHECK(sizingData.isValidTransitionForDirection(direction));
+    DCHECK(sizingData.isValidTransition(direction));
     sizingData.freeSpaceForDirection(direction) = freeSpace - guttersSize(direction, 0, direction == ForRows ? gridRowCount() : gridColumnCount());
     sizingData.sizingOperation = TrackSizing;
 
@@ -848,7 +844,7 @@ const GridTrackSize& LayoutGrid::rawGridTrackSize(GridTrackSizingDirection direc
     bool isRowAxis = direction == ForColumns;
     const Vector<GridTrackSize>& trackStyles = isRowAxis ? styleRef().gridTemplateColumns() : styleRef().gridTemplateRows();
     const Vector<GridTrackSize>& autoRepeatTrackStyles = isRowAxis ? styleRef().gridAutoRepeatColumns() : styleRef().gridAutoRepeatRows();
-    const GridTrackSize& autoTrackSize = isRowAxis ? styleRef().gridAutoColumns() : styleRef().gridAutoRows();
+    const Vector<GridTrackSize>& autoTrackStyles = isRowAxis ? styleRef().gridAutoColumns() : styleRef().gridAutoRows();
     size_t insertionPoint = isRowAxis ? styleRef().gridAutoRepeatColumnsInsertionPoint() : styleRef().gridAutoRepeatRowsInsertionPoint();
     size_t autoRepeatTracksCount = autoRepeatCountForDirection(direction);
 
@@ -858,12 +854,17 @@ const GridTrackSize& LayoutGrid::rawGridTrackSize(GridTrackSizingDirection direc
     size_t explicitTracksCount = trackStyles.size() + autoRepeatTracksCount;
 
     int untranslatedIndexAsInt = translatedIndex + (isRowAxis ? m_smallestColumnStart : m_smallestRowStart);
-    if (untranslatedIndexAsInt < 0)
-        return autoTrackSize;
+    size_t autoTrackStylesSize = autoTrackStyles.size();
+    if (untranslatedIndexAsInt < 0) {
+        int index = untranslatedIndexAsInt % static_cast<int>(autoTrackStylesSize);
+        // We need to traspose the index because the first negative implicit line will get the last defined auto track and so on.
+        index += index ? autoTrackStylesSize : 0;
+        return autoTrackStyles[index];
+    }
 
     size_t untranslatedIndex = static_cast<size_t>(untranslatedIndexAsInt);
     if (untranslatedIndex >= explicitTracksCount)
-        return autoTrackSize;
+        return autoTrackStyles[(untranslatedIndex - explicitTracksCount) % autoTrackStylesSize];
 
     if (LIKELY(!autoRepeatTracksCount) || untranslatedIndex < insertionPoint)
         return trackStyles[untranslatedIndex];
@@ -1825,20 +1826,6 @@ void LayoutGrid::applyStretchAlignmentToTracksIfNeeded(GridTrackSizingDirection 
     availableSpace = LayoutUnit();
 }
 
-bool LayoutGrid::isChildOverflowingContainingBlockHeight(const LayoutBox& child) const
-{
-    // TODO (lajava) We must consider margins to determine whether it overflows or not (see https://crbug/628155)
-    LayoutUnit containingBlockContentHeight = child.hasOverrideContainingBlockHeight() ? child.overrideContainingBlockContentHeight() : LayoutUnit();
-    return child.size().height() > containingBlockContentHeight;
-}
-
-bool LayoutGrid::isChildOverflowingContainingBlockWidth(const LayoutBox& child) const
-{
-    // TODO (lajava) We must consider margins to determine whether it overflows or not (see https://crbug/628155)
-    LayoutUnit containingBlockContentWidth = child.hasOverrideContainingBlockWidth() ? child.overrideContainingBlockContentWidth() : LayoutUnit();
-    return child.size().width() > containingBlockContentWidth;
-}
-
 void LayoutGrid::layoutGridItems(GridSizingData& sizingData)
 {
     populateGridPositionsForDirection(sizingData, ForColumns);
@@ -1884,10 +1871,12 @@ void LayoutGrid::layoutGridItems(GridSizingData& sizingData)
 #endif
         child->setLogicalLocation(findChildLogicalPosition(*child, sizingData));
 
-        // Keep track of children overflowing their grid area as we might need to paint them even if the grid-area is
-        // not visible.
+        // Keep track of children overflowing their grid area as we might need to paint them even if the grid-area is not visible.
         // Using physical dimensions for simplicity, so we can forget about orthogonalty.
-        if (isChildOverflowingContainingBlockHeight(*child) || isChildOverflowingContainingBlockWidth(*child))
+        // TODO (lajava): Child's margins should account when evaluating whether it overflows its grid area (http://crbug.com/628155).
+        LayoutUnit childGridAreaHeight = isHorizontalWritingMode() ? overrideContainingBlockContentLogicalHeight : overrideContainingBlockContentLogicalWidth;
+        LayoutUnit childGridAreaWidth = isHorizontalWritingMode() ? overrideContainingBlockContentLogicalWidth : overrideContainingBlockContentLogicalHeight;
+        if (child->size().height() > childGridAreaHeight || child->size().width() > childGridAreaWidth)
             m_gridItemsOverflowingGridArea.append(child);
     }
 }
@@ -2194,20 +2183,23 @@ void LayoutGrid::applyStretchAlignmentToChildIfNeeded(LayoutBox& child)
 
     auto& childStyle = child.styleRef();
     bool isHorizontalMode = isHorizontalWritingMode();
-    bool hasAutoSizeInColumnAxis = isHorizontalMode ? childStyle.height().isAuto() : childStyle.width().isAuto();
-    bool allowedToStretchChildAlongColumnAxis = hasAutoSizeInColumnAxis && !childStyle.marginBeforeUsing(style()).isAuto() && !childStyle.marginAfterUsing(style()).isAuto();
-    if (allowedToStretchChildAlongColumnAxis && ComputedStyle::resolveAlignment(styleRef(), childStyle, ItemPositionStretch) == ItemPositionStretch) {
-        // TODO (lajava): If the child has orthogonal flow, then it already has an override height set, so use it.
-        // TODO (lajava): grid track sizing and positioning do not support orthogonal modes yet.
-        if (child.isHorizontalWritingMode() == isHorizontalMode) {
-            LayoutUnit stretchedLogicalHeight = availableAlignmentSpaceForChildBeforeStretching(child.overrideContainingBlockContentLogicalHeight(), child);
-            LayoutUnit desiredLogicalHeight = child.constrainLogicalHeightByMinMax(stretchedLogicalHeight, LayoutUnit(-1));
-            child.setOverrideLogicalContentHeight(desiredLogicalHeight - child.borderAndPaddingLogicalHeight());
-            if (desiredLogicalHeight != child.logicalHeight()) {
-                // TODO (lajava): Can avoid laying out here in some cases. See https://webkit.org/b/87905.
-                child.setLogicalHeight(LayoutUnit());
-                child.setNeedsLayout(LayoutInvalidationReason::GridChanged);
-            }
+    bool childHasAutoSizeInColumnAxis = isHorizontalMode ? childStyle.height().isAuto() : childStyle.width().isAuto();
+    bool childHasAutoSizeInRowAxis = isHorizontalMode ? childStyle.width().isAuto() : childStyle.height().isAuto();
+    bool allowedToStretchChildAlongColumnAxis = childHasAutoSizeInColumnAxis && !hasAutoMarginsInColumnAxis(child);
+    bool allowedToStretchChildAlongRowAxis = childHasAutoSizeInRowAxis && !hasAutoMarginsInRowAxis(child);
+    bool stretchingAlongRowAxis = ComputedStyle::resolveJustification(styleRef(), childStyle, ItemPositionStretch) == ItemPositionStretch;
+    bool stretchingAlongColumnAxis = ComputedStyle::resolveAlignment(styleRef(), childStyle, ItemPositionStretch) == ItemPositionStretch;
+
+    GridTrackSizingDirection childBlockDirection = flowAwareDirectionForChild(child, ForRows);
+    bool allowedToStretchChildBlockSize = childBlockDirection == ForRows ? allowedToStretchChildAlongColumnAxis && stretchingAlongColumnAxis : allowedToStretchChildAlongRowAxis && stretchingAlongRowAxis;
+    if (allowedToStretchChildBlockSize) {
+        LayoutUnit stretchedLogicalHeight = availableAlignmentSpaceForChildBeforeStretching(overrideContainingBlockContentSizeForChild(child, childBlockDirection), child);
+        LayoutUnit desiredLogicalHeight = child.constrainLogicalHeightByMinMax(stretchedLogicalHeight, LayoutUnit(-1));
+        child.setOverrideLogicalContentHeight(desiredLogicalHeight - child.borderAndPaddingLogicalHeight());
+        if (desiredLogicalHeight != child.logicalHeight()) {
+            // TODO (lajava): Can avoid laying out here in some cases. See https://webkit.org/b/87905.
+            child.setLogicalHeight(LayoutUnit());
+            child.setNeedsLayout(LayoutInvalidationReason::GridChanged);
         }
     }
 }

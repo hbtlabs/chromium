@@ -20,6 +20,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/base/container_util.h"
@@ -41,10 +42,12 @@
 #include "cc/quads/stream_video_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/raster/scoped_gpu_raster.h"
+#include "cc/resources/resource_pool.h"
 #include "cc/resources/scoped_resource.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/gles2_cmd_format.h"
 #include "gpu/command_buffer/common/gpu_memory_allocation.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -2765,10 +2768,10 @@ void GLRenderer::SwapBuffers(CompositorFrameMetadata metadata) {
 }
 
 void GLRenderer::SwapBuffersComplete() {
-  // Once a resouce has been swap-ACKed, send a query to the GPU process to ask
-  // if the resource is no longer being consumed by the system compositor. The
-  // response will come with the next swap-ACK.
   if (settings_->release_overlay_resources_after_gpu_query) {
+    // Once a resource has been swap-ACKed, send a query to the GPU process to
+    // ask if the resource is no longer being consumed by the system compositor.
+    // The response will come with the next swap-ACK.
     if (!swapping_overlay_resources_.empty()) {
       for (OverlayResourceLock& lock : swapping_overlay_resources_.front()) {
         unsigned texture = lock->texture_id();
@@ -2788,6 +2791,12 @@ void GLRenderer::SwapBuffersComplete() {
       }
       gl_->ScheduleCALayerInUseQueryCHROMIUM(textures.size(), textures.data());
     }
+  } else if (swapping_overlay_resources_.size() > 1) {
+    // If a query is not needed to release the overlay buffers, we can
+    // assume that once a swap buffer is completed only the last set of
+    // submitted overlay buffers are still in use by GL/Hardware Display.
+    DCHECK_EQ(2u, swapping_overlay_resources_.size());
+    swapping_overlay_resources_.pop_front();
   }
 }
 
@@ -3632,13 +3641,36 @@ bool GLRenderer::IsContextLost() {
 
 void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
   scoped_refptr<CALayerOverlaySharedState> shared_state;
+  size_t copied_render_pass_count = 0;
   for (const CALayerOverlay& ca_layer_overlay : frame->ca_layer_overlay_list) {
+    if (!overlay_resource_pool_) {
+      overlay_resource_pool_ = ResourcePool::CreateForGpuMemoryBufferResources(
+          resource_provider_, base::ThreadTaskRunnerHandle::Get().get(),
+          gfx::BufferUsage::SCANOUT);
+    }
+
+    ResourceId contents_resource_id = ca_layer_overlay.contents_resource_id;
+    Resource* resource = nullptr;
+    // Some CALayers require a final round of processing.
+    if (ca_layer_overlay.render_pass_id.IsValid()) {
+      CopyRenderPassToOverlayResource(ca_layer_overlay.render_pass_id,
+                                      &resource);
+      contents_resource_id = resource->id();
+      ++copied_render_pass_count;
+    }
+
     unsigned texture_id = 0;
-    if (ca_layer_overlay.contents_resource_id) {
+    if (contents_resource_id) {
       pending_overlay_resources_.push_back(
           base::WrapUnique(new ResourceProvider::ScopedReadLockGL(
-              resource_provider_, ca_layer_overlay.contents_resource_id)));
+              resource_provider_, contents_resource_id)));
       texture_id = pending_overlay_resources_.back()->texture_id();
+
+      if (resource) {
+        // Once a resource is released, it is marked as "busy". It will be
+        // available for reuse after the ScopedReadLockGL is destroyed.
+        overlay_resource_pool_->ReleaseResource(resource);
+      }
     }
     GLfloat contents_rect[4] = {
         ca_layer_overlay.contents_rect.x(), ca_layer_overlay.contents_rect.y(),
@@ -3667,9 +3699,36 @@ void GLRenderer::ScheduleCALayers(DrawingFrame* frame) {
           ca_layer_overlay.shared_state->opacity, is_clipped, clip_rect,
           sorting_context_id, transform);
     }
+    if (!ca_layer_overlay.filter_effects.empty()) {
+      std::vector<GLCALayerFilterEffect> effects;
+      effects.resize(ca_layer_overlay.filter_effects.size());
+      for (size_t i = 0; i < ca_layer_overlay.filter_effects.size(); ++i) {
+        const ui::CARendererLayerParams::FilterEffect& filter_effect =
+            ca_layer_overlay.filter_effects[i];
+        GLCALayerFilterEffect& effect = effects[i];
+        effect.type = static_cast<GLint>(filter_effect.type);
+        effect.amount = filter_effect.amount;
+        effect.drop_shadow_offset_x = filter_effect.drop_shadow_offset.x();
+        effect.drop_shadow_offset_y = filter_effect.drop_shadow_offset.y();
+
+        static_assert(sizeof(GLuint) == sizeof(SkColor),
+                      "GLuint and SkColor must have the same size.");
+        effect.drop_shadow_color =
+            static_cast<GLuint>(filter_effect.drop_shadow_color);
+      }
+
+      gl_->ScheduleCALayerFilterEffectsCHROMIUM(effects.size(), effects.data());
+    }
     gl_->ScheduleCALayerCHROMIUM(
         texture_id, contents_rect, ca_layer_overlay.background_color,
         ca_layer_overlay.edge_aa_mask, bounds_rect, filter);
+  }
+
+  // Take the number of copied render passes in this frame, and use 3 times that
+  // amount as the cache limit.
+  if (overlay_resource_pool_) {
+    overlay_resource_pool_->SetResourceUsageLimits(
+        std::numeric_limits<std::size_t>::max(), copied_render_pass_count * 3);
   }
 }
 
@@ -3694,6 +3753,34 @@ void GLRenderer::ScheduleOverlays(DrawingFrame* frame) {
         overlay.plane_z_order, overlay.transform, texture_id,
         ToNearestRect(overlay.display_rect), overlay.uv_rect);
   }
+}
+
+void GLRenderer::CopyRenderPassToOverlayResource(
+    const RenderPassId& render_pass_id,
+    Resource** resource) {
+  ScopedResource* contents_texture =
+      render_pass_textures_[render_pass_id].get();
+  DCHECK(contents_texture);
+  DCHECK(contents_texture->id());
+  *resource = overlay_resource_pool_->AcquireResource(
+      contents_texture->size(), ResourceFormat::RGBA_8888);
+  ResourceProvider::ScopedWriteLockGL destination(resource_provider_,
+                                                  (*resource)->id(), false);
+
+  GLuint source_texture = 0;
+  std::unique_ptr<ResourceProvider::ScopedReadLockGL> source;
+  if (current_framebuffer_lock_ &&
+      current_framebuffer_lock_->texture_id() == contents_texture->id()) {
+    source_texture = current_framebuffer_lock_->texture_id();
+  } else {
+    source.reset(new ResourceProvider::ScopedReadLockGL(
+        resource_provider_, contents_texture->id()));
+    source_texture = source->texture_id();
+  }
+  gl_->CopySubTextureCHROMIUM(source_texture, destination.texture_id(), 0, 0, 0,
+                              0, contents_texture->size().width(),
+                              contents_texture->size().height(), GL_TRUE,
+                              GL_FALSE, GL_FALSE);
 }
 
 }  // namespace cc

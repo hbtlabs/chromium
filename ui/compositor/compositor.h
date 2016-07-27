@@ -128,9 +128,8 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Gets the task graph runner.
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
-  // Creates a Surface ID allocator with a new namespace.
-  virtual std::unique_ptr<cc::SurfaceIdAllocator>
-  CreateSurfaceIdAllocator() = 0;
+  // Allocate a new client ID for the display compositor.
+  virtual uint32_t AllocateSurfaceClientId() = 0;
 
   // Gets the surface manager.
   virtual cc::SurfaceManager* GetSurfaceManager() = 0;
@@ -145,6 +144,11 @@ class COMPOSITOR_EXPORT ContextFactory {
 
   virtual void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                              base::TimeDelta interval) = 0;
+  // Mac path for transporting vsync parameters to the display.  Other platforms
+  // update it via the BrowserCompositorOutputSurface directly.
+  virtual void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                         base::TimeTicks timebase,
+                                         base::TimeDelta interval) = 0;
 
   virtual void SetOutputIsSecure(Compositor* compositor, bool secure) = 0;
 
@@ -193,6 +197,12 @@ class COMPOSITOR_EXPORT Compositor
   ~Compositor() override;
 
   ui::ContextFactory* context_factory() { return context_factory_; }
+
+  void AddSurfaceClient(uint32_t client_id);
+  void RemoveSurfaceClient(uint32_t client_id);
+  const std::unordered_map<uint32_t, uint32_t>& SurfaceClientsForTesting() {
+    return surface_clients_;
+  }
 
   void SetOutputSurface(std::unique_ptr<cc::OutputSurface> surface);
 
@@ -375,6 +385,7 @@ class COMPOSITOR_EXPORT Compositor
   base::ObserverList<CompositorAnimationObserver> animation_observer_list_;
 
   gfx::AcceleratedWidget widget_;
+  std::unordered_map<uint32_t, uint32_t> surface_clients_;
   bool widget_valid_;
   bool output_surface_requested_;
   std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;

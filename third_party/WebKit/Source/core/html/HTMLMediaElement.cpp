@@ -1639,10 +1639,8 @@ void HTMLMediaElement::setReadyState(ReadyState state)
                     // We might end up in a situation where the previous
                     // observer didn't had time to fire yet. We can avoid
                     // creating a new one in this case.
-                    if (!m_autoplayVisibilityObserver) {
-                        m_autoplayVisibilityObserver = new ElementVisibilityObserver(this, WTF::bind(&HTMLMediaElement::onVisibilityChangedForAutoplay, wrapWeakPersistent(this)));
-                        m_autoplayVisibilityObserver->start();
-                    }
+                    if (!m_autoplayVisibilityObserver)
+                        m_autoplayVisibilityObserver = ElementVisibilityObserver::create(this, this);
                 } else {
                     m_paused = false;
                     invalidateCachedTime();
@@ -1796,8 +1794,6 @@ void HTMLMediaElement::finishSeek()
     scheduleEvent(EventTypeNames::seeked);
 
     setDisplayMode(Video);
-
-    Platform::current()->recordAction(UserMetricsAction("Media_Seeked"));
 }
 
 HTMLMediaElement::ReadyState HTMLMediaElement::getReadyState() const
@@ -2106,7 +2102,6 @@ Nullable<ExceptionCode> HTMLMediaElement::play()
         UserGestureIndicator::utilizeUserGesture();
         // We ask the helper to remove the gesture requirement for us, so that
         // it can record the reason.
-        Platform::current()->recordAction(UserMetricsAction("Media_Play_WithGesture"));
         m_autoplayHelper->unlockUserGesture(GesturelessPlaybackEnabledByPlayMethod);
     }
 
@@ -2194,14 +2189,12 @@ void HTMLMediaElement::requestRemotePlayback()
 {
     DCHECK(m_remoteRoutesAvailable);
     webMediaPlayer()->requestRemotePlayback();
-    Platform::current()->recordAction(UserMetricsAction("Media_RequestRemotePlayback"));
 }
 
 void HTMLMediaElement::requestRemotePlaybackControl()
 {
     DCHECK(m_remoteRoutesAvailable);
     webMediaPlayer()->requestRemotePlaybackControl();
-    Platform::current()->recordAction(UserMetricsAction("Media_RequestRemotePlayback_Control"));
 }
 
 void HTMLMediaElement::closeMediaSource()
@@ -2267,8 +2260,6 @@ void HTMLMediaElement::setVolume(double vol, ExceptionState& exceptionState)
         return;
     }
 
-    Platform::current()->recordAction(UserMetricsAction("Media_SetVolume"));
-
     m_volume = vol;
     updateVolume();
     scheduleEvent(EventTypeNames::volumechange);
@@ -2295,11 +2286,6 @@ void HTMLMediaElement::setMuted(bool muted)
     m_autoplayHelper->mutedChanged();
 
     updateVolume();
-
-    if (muted)
-        Platform::current()->recordAction(UserMetricsAction("Media_Playback_Mute_On"));
-    else
-        Platform::current()->recordAction(UserMetricsAction("Media_Playback_Mute_Off"));
 
     scheduleEvent(EventTypeNames::volumechange);
 
@@ -2910,7 +2896,6 @@ void HTMLMediaElement::timeChanged()
             }
             // Queue a task to fire a simple event named ended at the media element.
             scheduleEvent(EventTypeNames::ended);
-            Platform::current()->recordAction(UserMetricsAction("Media_Playback_Ended"));
         }
     }
     updatePlayState();
@@ -3136,8 +3121,6 @@ void HTMLMediaElement::updatePlayState()
             webMediaPlayer()->setRate(playbackRate());
             updateVolume();
             webMediaPlayer()->play();
-            Platform::current()->recordAction(
-                UserMetricsAction("Media_Playback_Started"));
             m_autoplayHelper->playbackStarted();
         }
 
@@ -3149,7 +3132,6 @@ void HTMLMediaElement::updatePlayState()
     } else { // Should not be playing right now
         if (isPlaying) {
             webMediaPlayer()->pause();
-            Platform::current()->recordAction(UserMetricsAction("Media_Paused"));
             m_autoplayHelper->playbackStopped();
         }
 
@@ -3671,8 +3653,8 @@ DEFINE_TRACE(HTMLMediaElement)
     visitor->trace(m_srcObject);
     visitor->trace(m_autoplayVisibilityObserver);
     visitor->template registerWeakMembers<HTMLMediaElement, &HTMLMediaElement::clearWeakMembers>(this);
-    Supplementable<HTMLMediaElement>::trace(visitor);
     HTMLElement::trace(visitor);
+    Supplementable<HTMLMediaElement>::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 
@@ -3910,7 +3892,7 @@ void HTMLMediaElement::recordAutoplayUnmuteStatus(AutoplayUnmuteActionStatus sta
     autoplayUnmuteHistogram.count(status);
 }
 
-void HTMLMediaElement::onVisibilityChangedForAutoplay(bool isVisible)
+void HTMLMediaElement::onVisibilityChanged(bool isVisible)
 {
     if (!isVisible)
         return;

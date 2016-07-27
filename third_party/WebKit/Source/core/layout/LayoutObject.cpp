@@ -2641,7 +2641,7 @@ void LayoutObject::willBeDestroyed()
         selectionPaintInvalidationMap->remove(this);
 
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
-        clearObjectPaintProperties();
+        objectPaintPropertiesMap().remove(this);
 
     clearLayoutRootIfNeeded();
 
@@ -3262,14 +3262,14 @@ PositionWithAffinity LayoutObject::createPositionWithAffinity(int offset, TextAf
 {
     // If this is a non-anonymous layoutObject in an editable area, then it's simple.
     if (Node* node = nonPseudoNode()) {
-        if (!node->hasEditableStyle()) {
+        if (!hasEditableStyle(*node)) {
             // If it can be found, we prefer a visually equivalent position that is editable.
             const Position position = Position(node, offset);
             Position candidate = mostForwardCaretPosition(position, CanCrossEditingBoundary);
-            if (candidate.anchorNode()->hasEditableStyle())
+            if (hasEditableStyle(*candidate.anchorNode()))
                 return PositionWithAffinity(candidate, affinity);
             candidate = mostBackwardCaretPosition(position, CanCrossEditingBoundary);
-            if (candidate.anchorNode()->hasEditableStyle())
+            if (hasEditableStyle(*candidate.anchorNode()))
                 return PositionWithAffinity(candidate, affinity);
         }
         // FIXME: Eliminate legacy editing positions
@@ -3627,7 +3627,7 @@ void LayoutObject::setIsBackgroundAttachmentFixedObject(bool isBackgroundAttachm
         frameView()->removeBackgroundAttachmentFixedObject(this);
 }
 
-ObjectPaintProperties* LayoutObject::objectPaintProperties() const
+const ObjectPaintProperties* LayoutObject::objectPaintProperties() const
 {
     ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
     return objectPaintPropertiesMap().get(this);
@@ -3641,12 +3641,6 @@ ObjectPaintProperties& LayoutObject::ensureObjectPaintProperties()
         addResult.storedValue->value = ObjectPaintProperties::create();
 
     return *addResult.storedValue->value;
-}
-
-void LayoutObject::clearObjectPaintProperties()
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    objectPaintPropertiesMap().remove(this);
 }
 
 } // namespace blink

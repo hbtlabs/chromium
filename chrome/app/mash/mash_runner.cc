@@ -6,6 +6,7 @@
 
 #include "ash/mus/window_manager_application.h"
 #include "ash/sysui/sysui_application.h"
+#include "ash/touch_hud/mus/touch_hud_application.h"
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -17,7 +18,7 @@
 #include "base/process/launch.h"
 #include "content/public/common/content_switches.h"
 #include "mash/app_driver/app_driver.h"
-#include "mash/quick_launch/quick_launch_application.h"
+#include "mash/quick_launch/quick_launch.h"
 #include "mash/session/session.h"
 #include "mash/task_viewer/task_viewer.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -58,7 +59,7 @@ class DefaultService : public shell::Service,
   }
 
   // shell::InterfaceFactory<ServiceFactory>
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojo::InterfaceRequest<ServiceFactory> request) override {
     service_factory_bindings_.AddBinding(this, std::move(request));
   }
@@ -72,8 +73,8 @@ class DefaultService : public shell::Service,
     }
     service_ = CreateService(mojo_name);
     if (service_) {
-      shell_connection_.reset(
-          new shell::ServiceContext(service_.get(), std::move(request)));
+      service_->set_context(base::MakeUnique<shell::ServiceContext>(
+          service_.get(), std::move(request)));
       return;
     }
     LOG(ERROR) << "unknown name " << mojo_name;
@@ -88,12 +89,14 @@ class DefaultService : public shell::Service,
       return base::WrapUnique(new ash::sysui::SysUIApplication);
     if (name == "mojo:ash")
       return base::WrapUnique(new ash::mus::WindowManagerApplication);
+    if (name == "mojo:touch_hud")
+      return base::WrapUnique(new ash::touch_hud::TouchHudApplication);
     if (name == "mojo:mash_session")
       return base::WrapUnique(new mash::session::Session);
     if (name == "mojo:ui")
       return base::WrapUnique(new ui::Service);
     if (name == "mojo:quick_launch")
-      return base::WrapUnique(new mash::quick_launch::QuickLaunchApplication);
+      return base::WrapUnique(new mash::quick_launch::QuickLaunch);
     if (name == "mojo:task_viewer")
       return base::WrapUnique(new mash::task_viewer::TaskViewer);
 #if defined(OS_LINUX)
@@ -108,7 +111,6 @@ class DefaultService : public shell::Service,
 
   mojo::BindingSet<ServiceFactory> service_factory_bindings_;
   std::unique_ptr<shell::Service> service_;
-  std::unique_ptr<shell::ServiceContext> shell_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(DefaultService);
 };
@@ -187,10 +189,10 @@ void MashRunner::RunMain() {
   init_params->native_runner_delegate = &native_runner_delegate;
   background_shell.Init(std::move(init_params));
   service_.reset(new DefaultService);
-  shell_connection_.reset(new shell::ServiceContext(
+  service_->set_context(base::MakeUnique<shell::ServiceContext>(
       service_.get(),
       background_shell.CreateServiceRequest("exe:chrome_mash")));
-  shell_connection_->connector()->Connect("mojo:mash_session");
+  service_->connector()->Connect("mojo:mash_session");
   base::MessageLoop::current()->Run();
 }
 
@@ -205,7 +207,7 @@ void MashRunner::StartChildApp(
   // TODO(sky): use MessagePumpMojo.
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
   service_.reset(new DefaultService);
-  shell_connection_.reset(new shell::ServiceContext(
+  service_->set_context(base::MakeUnique<shell::ServiceContext>(
       service_.get(), std::move(service_request)));
   message_loop.Run();
 }

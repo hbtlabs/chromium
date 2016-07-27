@@ -28,6 +28,7 @@
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/gpu_process_launch_causes.h"
+#include "content/common/render_frame_message_filter.mojom.h"
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
@@ -210,7 +211,7 @@ class CONTENT_EXPORT RenderThreadImpl
   bool IsPartialRasterEnabled() override;
   bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
-  std::vector<unsigned> GetImageTextureTargets() override;
+  const cc::BufferToTextureTargetMap& GetBufferToTextureTargetMap() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner>
@@ -238,6 +239,10 @@ class CONTENT_EXPORT RenderThreadImpl
       int routing_id,
       scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
       const GURL& url);
+
+  std::unique_ptr<cc::SwapPromise> RequestCopyOfOutputForLayoutTest(
+      int32_t routing_id,
+      std::unique_ptr<cc::CopyOutputRequest> request);
 
   // True if we are running layout tests. This currently disables forwarding
   // various status messages to the console, skips network error pages, and
@@ -329,6 +334,8 @@ class CONTENT_EXPORT RenderThreadImpl
   VideoCaptureImplManager* video_capture_impl_manager() const {
     return vc_manager_.get();
   }
+
+  mojom::RenderFrameMessageFilter* render_frame_message_filter();
 
   // Get the GPU channel. Returns NULL if the channel is not established or
   // has been lost.
@@ -663,8 +670,7 @@ class CONTENT_EXPORT RenderThreadImpl
   bool is_gpu_memory_buffer_compositor_resources_enabled_;
   bool is_partial_raster_enabled_;
   bool is_elastic_overscroll_enabled_;
-  std::vector<unsigned> use_image_texture_targets_;
-  std::vector<unsigned> use_video_frame_image_texture_targets_;
+  cc::BufferToTextureTargetMap buffer_to_texture_target_map_;
   bool are_image_decode_tasks_enabled_;
   bool is_threaded_animation_enabled_;
 
@@ -698,6 +704,8 @@ class CONTENT_EXPORT RenderThreadImpl
   PendingFrameCreateMap pending_frame_creates_;
 
   mojom::StoragePartitionServicePtr storage_partition_service_;
+
+  mojom::RenderFrameMessageFilterAssociatedPtr render_frame_message_filter_;
 
   bool is_renderer_suspended_;
 

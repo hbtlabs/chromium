@@ -251,16 +251,16 @@ static_library("test_support") {
     "fake_oauth_token_getter.h",
     "host_mock_objects.cc",
     "host_mock_objects.h",
-    "security_key/fake_ipc_gnubby_auth_handler.cc",
-    "security_key/fake_ipc_gnubby_auth_handler.h",
-    "security_key/fake_remote_security_key_ipc_client.cc",
-    "security_key/fake_remote_security_key_ipc_client.h",
-    "security_key/fake_remote_security_key_ipc_server.cc",
-    "security_key/fake_remote_security_key_ipc_server.h",
-    "security_key/fake_remote_security_key_message_reader.cc",
-    "security_key/fake_remote_security_key_message_reader.h",
-    "security_key/fake_remote_security_key_message_writer.cc",
-    "security_key/fake_remote_security_key_message_writer.h",
+    "security_key/fake_ipc_security_key_auth_handler.cc",
+    "security_key/fake_ipc_security_key_auth_handler.h",
+    "security_key/fake_security_key_ipc_client.cc",
+    "security_key/fake_security_key_ipc_client.h",
+    "security_key/fake_security_key_ipc_server.cc",
+    "security_key/fake_security_key_ipc_server.h",
+    "security_key/fake_security_key_message_reader.cc",
+    "security_key/fake_security_key_message_reader.h",
+    "security_key/fake_security_key_message_writer.cc",
+    "security_key/fake_security_key_message_writer.h",
     "setup/mock_oauth_client.cc",
     "setup/mock_oauth_client.h",
   ]
@@ -330,14 +330,14 @@ source_set("unit_tests") {
     "resizing_host_observer_unittest.cc",
     "resources_unittest.cc",
     "screen_resolution_unittest.cc",
-    "security_key/gnubby_auth_handler_linux_unittest.cc",
-    "security_key/gnubby_auth_handler_win_unittest.cc",
-    "security_key/gnubby_extension_session_unittest.cc",
-    "security_key/remote_security_key_ipc_client_unittest.cc",
-    "security_key/remote_security_key_ipc_server_unittest.cc",
-    "security_key/remote_security_key_message_handler_unittest.cc",
-    "security_key/remote_security_key_message_reader_impl_unittest.cc",
-    "security_key/remote_security_key_message_writer_impl_unittest.cc",
+    "security_key/security_key_auth_handler_linux_unittest.cc",
+    "security_key/security_key_auth_handler_win_unittest.cc",
+    "security_key/security_key_extension_session_unittest.cc",
+    "security_key/security_key_ipc_client_unittest.cc",
+    "security_key/security_key_ipc_server_unittest.cc",
+    "security_key/security_key_message_handler_unittest.cc",
+    "security_key/security_key_message_reader_impl_unittest.cc",
+    "security_key/security_key_message_writer_impl_unittest.cc",
     "server_log_entry_host_unittest.cc",
     "setup/me2me_native_messaging_host_unittest.cc",
     "setup/oauth_helper_unittest.cc",
@@ -995,6 +995,12 @@ if (enable_me2me_host) {
       if (is_mac) {
         extra_configs = [ "//remoting:version" ]
         info_plist = "remoting_me2me_host-Info.plist"
+        extra_substitutions = [
+          "BUNDLE_ID=$host_bundle_id",
+          "VERSION_FULL=$remoting_version_full",
+          "VERSION_SHORT=$remoting_version_short",
+          "MACOSX_DEPLOYMENT_TARGET=10.7",
+        ]
       } else {
         configs += [ "//remoting:version" ]
       }
@@ -1081,6 +1087,12 @@ if (enable_me2me_host) {
       if (is_mac) {
         info_plist = "setup/native_messaging_host-Info.plist"
         extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+        extra_substitutions = [
+          "BUNDLE_ID=$native_messaging_host_bundle_id",
+          "VERSION_FULL=$remoting_version_full",
+          "VERSION_SHORT=$remoting_version_short",
+          "MACOSX_DEPLOYMENT_TARGET=10.7",
+        ]
       } else {
         configs += [ "//build/config/compiler:wexit_time_destructors" ]
       }
@@ -1416,6 +1428,12 @@ if (enable_me2me_host) {
 
     mac_app_bundle("remoting_host_uninstaller") {
       info_plist = _uninstaller_plist
+      extra_substitutions = [
+        "BUNDLE_ID=$uninstaller_bundle_id",
+        "VERSION_FULL=$remoting_version_full",
+        "VERSION_SHORT=$remoting_version_short",
+        "MACOSX_DEPLOYMENT_TARGET=10.7",
+      ]
 
       defines = [
         "HOST_BUNDLE_NAME=\"" + host_bundle_name + "\"",
@@ -1472,7 +1490,7 @@ if (enable_me2me_host) {
       deps = [
         ":remoting_host_prefpane",
         ":remoting_host_prefpane_bundle_data",
-        ":remoting_host_prefpane_plist",
+        ":remoting_host_prefpane_plist_bundle_data",
         ":remoting_host_prefpane_resources",
         ":remoting_host_prefpane_xibs",
         ":remoting_infoplist_strings",
@@ -1537,12 +1555,24 @@ if (enable_me2me_host) {
       }
     }
 
-    bundle_data("remoting_host_prefpane_plist") {
-      sources = [
-        "mac/me2me_preference_pane-Info.plist",
+    mac_info_plist("remoting_host_prefpane_plist") {
+      info_plist = "mac/me2me_preference_pane-Info.plist"
+      extra_substitutions = [
+        "BUNDLE_ID=$prefpane_bundle_id",
+        "VERSION_FULL=$remoting_version_full",
+        "VERSION_SHORT=$remoting_version_short",
+        "MACOSX_DEPLOYMENT_TARGET=10.7",
       ]
+      executable_name = "remoting_host_prefpane"
+    }
+
+    bundle_data("remoting_host_prefpane_plist_bundle_data") {
+      sources = get_target_outputs(":remoting_host_prefpane_plist")
       outputs = [
         "{{bundle_root_dir}}/Info.plist",
+      ]
+      public_deps = [
+        ":remoting_host_prefpane_plist",
       ]
     }
 

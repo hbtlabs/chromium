@@ -57,9 +57,6 @@
 namespace content {
 namespace {
 
-base::LazyInstance<base::ThreadLocalPointer<GpuChildThread>> g_lazy_tls =
-    LAZY_INSTANCE_INITIALIZER;
-
 static base::LazyInstance<scoped_refptr<ThreadSafeSender> >
     g_thread_safe_sender = LAZY_INSTANCE_INITIALIZER;
 
@@ -144,11 +141,6 @@ ChildThreadImpl::Options GetOptions(
 
 }  // namespace
 
-// static
-GpuChildThread* GpuChildThread::current() {
-  return g_lazy_tls.Pointer()->Get();
-}
-
 GpuChildThread::GpuChildThread(
     GpuWatchdogThread* watchdog_thread,
     bool dead_on_arrival,
@@ -166,7 +158,6 @@ GpuChildThread::GpuChildThread(
   target_services_ = NULL;
 #endif
   g_thread_safe_sender.Get() = thread_safe_sender();
-  g_lazy_tls.Pointer()->Set(this);
 }
 
 GpuChildThread::GpuChildThread(
@@ -195,7 +186,6 @@ GpuChildThread::GpuChildThread(
     VLOG(1) << "gl::init::InitializeGLOneOff failed";
 
   g_thread_safe_sender.Get() = thread_safe_sender();
-  g_lazy_tls.Pointer()->Set(this);
 }
 
 GpuChildThread::~GpuChildThread() {
@@ -203,7 +193,6 @@ GpuChildThread::~GpuChildThread() {
     delete deferred_messages_.front();
     deferred_messages_.pop();
   }
-  g_lazy_tls.Pointer()->Set(nullptr);
 }
 
 void GpuChildThread::Shutdown() {
@@ -220,18 +209,6 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
   if (!in_browser_process_)
     media::SetMediaClientAndroid(GetContentClient()->GetMediaClientAndroid());
 #endif
-
-  // Only set once per process instance.
-  process_control_.reset(new GpuProcessControlImpl());
-
-  GetInterfaceRegistry()->AddInterface(base::Bind(
-      &GpuChildThread::BindProcessControlRequest, base::Unretained(this)));
-
-  if (GetContentClient()->gpu()) {  // NULL in tests.
-    GetContentClient()->gpu()->ExposeInterfacesToBrowser(
-        GetInterfaceRegistry());
-  }
-
   // We don't want to process any incoming interface requests until
   // OnInitialize() is invoked.
   GetInterfaceRegistry()->PauseBinding();
@@ -348,8 +325,6 @@ void GpuChildThread::StoreShaderToDisk(int32_t client_id,
 }
 
 void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
-  GetInterfaceRegistry()->ResumeBinding();
-
   gpu_preferences_ = gpu_preferences;
 
   gpu_info_.video_decode_accelerator_capabilities =
@@ -408,6 +383,19 @@ void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
       ->GetGpuPlatformSupport()
       ->OnChannelEstablished(this);
 #endif
+
+  // Only set once per process instance.
+  process_control_.reset(new GpuProcessControlImpl());
+
+  GetInterfaceRegistry()->AddInterface(base::Bind(
+      &GpuChildThread::BindProcessControlRequest, base::Unretained(this)));
+
+  if (GetContentClient()->gpu()) {  // NULL in tests.
+    GetContentClient()->gpu()->ExposeInterfacesToBrowser(
+        GetInterfaceRegistry(), gpu_preferences_);
+  }
+
+  GetInterfaceRegistry()->ResumeBinding();
 }
 
 void GpuChildThread::OnFinalize() {

@@ -23,6 +23,7 @@
 #include "core/dom/Node.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Text.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
@@ -116,7 +117,7 @@ bool providesContextMenuItems(Node* node)
     ASSERT(node->layoutObject() || node->isShadowRoot());
     if (!node->layoutObject())
         return false;
-    if (node->isContentEditable())
+    if (isContentEditable(*node))
         return true;
     if (node->isLink())
         return true;
@@ -298,10 +299,10 @@ void compileSubtargetList(const HeapVector<Member<Node>>& intersectedNodes, Subt
         // Consolidate bounds for editable content.
         if (editableAncestors.contains(candidate))
             continue;
-        if (candidate->isContentEditable()) {
+        if (isContentEditable(*candidate)) {
             Node* replacement = candidate;
             Node* parent = candidate->parentOrShadowHostNode();
-            while (parent && parent->isContentEditable()) {
+            while (parent && isContentEditable(*parent)) {
                 replacement = parent;
                 if (editableAncestors.contains(replacement)) {
                     replacement = nullptr;

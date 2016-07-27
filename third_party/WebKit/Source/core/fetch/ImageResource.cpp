@@ -117,7 +117,7 @@ void ImageResource::markClientsAndObserversFinished()
 
 void ImageResource::didAddClient(ResourceClient* client)
 {
-    DCHECK(!m_data || m_image);
+    DCHECK((m_multipartParser && isLoading()) || !m_data || m_image);
     Resource::didAddClient(client);
 }
 
@@ -130,7 +130,15 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
     if (isCacheValidator())
         return;
 
-    DCHECK(!m_data || m_image);
+    // When the response is not multipart, if |m_data| exists, |m_image| must
+    // be created. This is assured that |updateImage()| is called when
+    // |appendData()| is called.
+    //
+    // On the other hand, when the response is multipart, |updateImage()| is
+    // not called in |appendData()|, which means |m_image| might not be created
+    // even when |m_data| exists. This is intentional since creating a |m_image|
+    // on receiving data might destroy an existing image in a previous part.
+    DCHECK((m_multipartParser && isLoading()) || !m_data || m_image);
 
     if (m_image && !m_image->isNull()) {
         observer->imageChanged(this);
@@ -338,7 +346,6 @@ void ImageResource::notifyObservers(const IntRect* changeRect)
 
 void ImageResource::clear()
 {
-    prune();
     clearImage();
     m_data.clear();
     setEncodedSize(0);
@@ -375,7 +382,7 @@ void ImageResource::updateImage(bool allDataReceived)
     if (m_data)
         createImage();
 
-    bool sizeAvailable = false;
+    Image::SizeAvailability sizeAvailable = Image::SizeUnavailable;
 
     // Have the image update its data from its internal buffer.
     // It will not do anything now, but will delay decoding until
@@ -389,19 +396,20 @@ void ImageResource::updateImage(bool allDataReceived)
     // received all the data or the size is known. Each chunk from the
     // network causes observers to repaint, which will force that chunk
     // to decode.
-    if (sizeAvailable || allDataReceived) {
-        if (!m_image || m_image->isNull()) {
-            if (!errorOccurred())
-                setStatus(DecodeError);
-            clear();
-            if (memoryCache()->contains(this))
-                memoryCache()->remove(this);
-        }
-
-        // It would be nice to only redraw the decoded band of the image, but with the current design
-        // (decoding delayed until painting) that seems hard.
-        notifyObservers();
+    if (sizeAvailable == Image::SizeUnavailable && !allDataReceived)
+        return;
+    if (!m_image || m_image->isNull()) {
+        if (!errorOccurred())
+            setStatus(DecodeError);
+        if (!allDataReceived && m_loader)
+            m_loader->didFinishLoading(nullptr, monotonicallyIncreasingTime(), encodedSize());
+        clear();
+        memoryCache()->remove(this);
     }
+
+    // It would be nice to only redraw the decoded band of the image, but with the current design
+    // (decoding delayed until painting) that seems hard.
+    notifyObservers();
 }
 
 void ImageResource::updateImageAndClearBuffer()

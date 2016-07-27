@@ -9,7 +9,6 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/shelf/shelf_constants.h"
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
@@ -100,19 +99,14 @@ void ShelfWindowWatcher::RemovedWindowObserver::OnWindowDestroyed(
   window_watcher_->FinishObservingRemovedWindow(window);
 }
 
-ShelfWindowWatcher::ShelfWindowWatcher(
-    ShelfModel* model,
-    ShelfItemDelegateManager* item_delegate_manager)
+ShelfWindowWatcher::ShelfWindowWatcher(ShelfModel* model)
     : model_(model),
-      item_delegate_manager_(item_delegate_manager),
       root_window_observer_(this),
       removed_window_observer_(this),
       observed_windows_(this),
       observed_root_windows_(&root_window_observer_),
-      observed_removed_windows_(&removed_window_observer_),
-      observed_activation_clients_(this) {
-  // We can't assume all RootWindows have the same ActivationClient.
-  // Add a RootWindow and its ActivationClient to the observed list.
+      observed_removed_windows_(&removed_window_observer_) {
+  Shell::GetInstance()->activation_client()->AddObserver(this);
   for (aura::Window* root : Shell::GetAllRootWindows())
     OnRootWindowAdded(WmWindowAura::Get(root));
 
@@ -121,6 +115,7 @@ ShelfWindowWatcher::ShelfWindowWatcher(
 
 ShelfWindowWatcher::~ShelfWindowWatcher() {
   display::Screen::GetScreen()->RemoveObserver(this);
+  Shell::GetInstance()->activation_client()->RemoveObserver(this);
 }
 
 void ShelfWindowWatcher::AddShelfItem(aura::Window* window) {
@@ -132,8 +127,7 @@ void ShelfWindowWatcher::AddShelfItem(aura::Window* window) {
   SetShelfIDForWindow(id, window);
   std::unique_ptr<ShelfItemDelegate> item_delegate(
       new ShelfWindowWatcherItemDelegate(window));
-  // |item_delegate| is owned by |item_delegate_manager_|.
-  item_delegate_manager_->SetShelfItemDelegate(id, std::move(item_delegate));
+  model_->SetShelfItemDelegate(id, std::move(item_delegate));
   model_->Add(item);
 }
 
@@ -144,10 +138,6 @@ void ShelfWindowWatcher::RemoveShelfItem(aura::Window* window) {
 
 void ShelfWindowWatcher::OnRootWindowAdded(WmWindow* root_window_wm) {
   aura::Window* root_window = WmWindowAura::GetAuraWindow(root_window_wm);
-  // |observed_activation_clients_| can have the same ActivationClient multiple
-  // times - which would be handled by the |observed_activation_clients_|.
-  observed_activation_clients_.Add(
-      aura::client::GetActivationClient(root_window));
   observed_root_windows_.Add(root_window);
 
   aura::Window* default_container =
@@ -159,8 +149,6 @@ void ShelfWindowWatcher::OnRootWindowAdded(WmWindow* root_window_wm) {
 
 void ShelfWindowWatcher::OnRootWindowRemoved(aura::Window* root_window) {
   observed_root_windows_.Remove(root_window);
-  observed_activation_clients_.Remove(
-      aura::client::GetActivationClient(root_window));
 }
 
 void ShelfWindowWatcher::UpdateShelfItemStatus(aura::Window* window,

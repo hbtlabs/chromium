@@ -19,6 +19,7 @@
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/mus/mus_util.h"
+#include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/display.h"
 #include "ui/views/view.h"
@@ -179,6 +180,13 @@ void WmWindowMus::SetName(const char* name) {
   } else {
     window_->ClearSharedProperty(::ui::mojom::WindowManager::kName_Property);
   }
+}
+
+std::string WmWindowMus::GetName() const {
+  return window_->HasSharedProperty(::ui::mojom::WindowManager::kName_Property)
+             ? window_->GetSharedProperty<std::string>(
+                   ::ui::mojom::WindowManager::kName_Property)
+             : std::string();
 }
 
 base::string16 WmWindowMus::GetTitle() const {
@@ -342,6 +350,12 @@ const wm::WindowState* WmWindowMus::GetWindowState() const {
 }
 
 WmWindow* WmWindowMus::GetToplevelWindow() {
+  return WmShellMus::GetToplevelAncestor(window_);
+}
+
+WmWindow* WmWindowMus::GetToplevelWindowForFocus() {
+  // TODO(sky): resolve if we really need two notions of top-level. In the mus
+  // world they are the same.
   return WmShellMus::GetToplevelAncestor(window_);
 }
 
@@ -724,6 +738,15 @@ void WmWindowMus::RemoveObserver(WmWindowObserver* observer) {
 
 bool WmWindowMus::HasObserver(const WmWindowObserver* observer) const {
   return observers_.HasObserver(observer);
+}
+
+void WmWindowMus::AddLimitedPreTargetHandler(ui::EventHandler* handler) {
+  DCHECK(GetInternalWidget());
+  widget_->GetNativeWindow()->AddPreTargetHandler(handler);
+}
+
+void WmWindowMus::RemoveLimitedPreTargetHandler(ui::EventHandler* handler) {
+  widget_->GetNativeWindow()->RemovePreTargetHandler(handler);
 }
 
 void WmWindowMus::OnTreeChanging(const TreeChangeParams& params) {

@@ -4,10 +4,12 @@
 
 #include "content/browser/renderer_host/text_input_manager.h"
 
+#include "base/strings/string16.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/view_messages.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/range/range.h"
 
 namespace content {
 
@@ -18,6 +20,9 @@ bool AreDifferentTextInputStates(const content::TextInputState& old_state,
 #if defined(USE_AURA)
   return old_state.type != new_state.type || old_state.mode != new_state.mode ||
          old_state.flags != new_state.flags ||
+         old_state.can_compose_inline != new_state.can_compose_inline;
+#elif defined(OS_MACOSX)
+  return old_state.type != new_state.type ||
          old_state.can_compose_inline != new_state.can_compose_inline;
 #else
   // TODO(ekaramad): Implement the logic for other platforms (crbug.com/578168).
@@ -42,7 +47,7 @@ TextInputManager::~TextInputManager() {
   for (auto pair : text_input_state_map_)
     views.push_back(pair.first);
 
-  for (auto view : views)
+  for (auto* view : views)
     Unregister(view);
 }
 
@@ -52,24 +57,32 @@ RenderWidgetHostImpl* TextInputManager::GetActiveWidget() const {
                         : nullptr;
 }
 
-const TextInputState* TextInputManager::GetTextInputState() {
-  return !!active_view_ ? &text_input_state_map_[active_view_] : nullptr;
+const TextInputState* TextInputManager::GetTextInputState() const {
+  return !!active_view_ ? &text_input_state_map_.at(active_view_) : nullptr;
 }
 
-gfx::Rect TextInputManager::GetSelectionBoundsRect() {
+gfx::Rect TextInputManager::GetSelectionBoundsRect() const {
   if (!active_view_)
     return gfx::Rect();
 
   return gfx::RectBetweenSelectionBounds(
-      selection_region_map_[active_view_].anchor,
-      selection_region_map_[active_view_].focus);
+      selection_region_map_.at(active_view_).anchor,
+      selection_region_map_.at(active_view_).focus);
 }
 
-const std::vector<gfx::Rect>*
-TextInputManager::GetCompositionCharacterBounds() {
+const std::vector<gfx::Rect>* TextInputManager::GetCompositionCharacterBounds()
+    const {
   return !!active_view_
-             ? &composition_range_info_map_[active_view_].character_bounds
+             ? &composition_range_info_map_.at(active_view_).character_bounds
              : nullptr;
+}
+
+const TextInputManager::TextSelection* TextInputManager::GetTextSelection(
+    RenderWidgetHostViewBase* view) const {
+  DCHECK(!view || IsRegistered(view));
+  if (!view)
+    view = active_view_;
+  return !!view ? &text_selection_map_.at(view) : nullptr;
 }
 
 void TextInputManager::UpdateTextInputState(
@@ -174,16 +187,38 @@ void TextInputManager::ImeCompositionRangeChanged(
                     OnImeCompositionRangeChanged(this, view));
 }
 
+void TextInputManager::SelectionChanged(RenderWidgetHostViewBase* view,
+                                        const base::string16& text,
+                                        size_t offset,
+                                        const gfx::Range& range) {
+  DCHECK(IsRegistered(view));
+
+  text_selection_map_[view].text = text;
+  text_selection_map_[view].offset = offset;
+  text_selection_map_[view].range.set_start(range.start());
+  text_selection_map_[view].range.set_end(range.end());
+
+  FOR_EACH_OBSERVER(Observer, observer_list_,
+                    OnTextSelectionChanged(this, view));
+}
+
 void TextInputManager::Register(RenderWidgetHostViewBase* view) {
   DCHECK(!IsRegistered(view));
 
   text_input_state_map_[view] = TextInputState();
+  selection_region_map_[view] = SelectionRegion();
+  composition_range_info_map_[view] = CompositionRangeInfo();
+  text_selection_map_[view] = TextSelection();
 }
 
 void TextInputManager::Unregister(RenderWidgetHostViewBase* view) {
   DCHECK(IsRegistered(view));
 
   text_input_state_map_.erase(view);
+  selection_region_map_.erase(view);
+  composition_range_info_map_.erase(view);
+  text_selection_map_.erase(view);
+
   if (active_view_ == view) {
     active_view_ = nullptr;
     NotifyObserversAboutInputStateUpdate(view, true);
@@ -232,5 +267,13 @@ TextInputManager::CompositionRangeInfo::CompositionRangeInfo(
     const CompositionRangeInfo& other) = default;
 
 TextInputManager::CompositionRangeInfo::~CompositionRangeInfo() {}
+
+TextInputManager::TextSelection::TextSelection()
+    : offset(0), range(gfx::Range::InvalidRange()), text(base::string16()) {}
+
+TextInputManager::TextSelection::TextSelection(const TextSelection& other) =
+    default;
+
+TextInputManager::TextSelection::~TextSelection() {}
 
 }  // namespace content

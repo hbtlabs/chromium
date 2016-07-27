@@ -16,7 +16,6 @@
 #include "platform/v8_inspector/V8RuntimeAgentImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
-#include "platform/v8_inspector/public/V8ContentSearchUtil.h"
 #include "platform/v8_inspector/public/V8Debugger.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
 
@@ -51,6 +50,7 @@ static const char skipAllPauses[] = "skipAllPauses";
 } // namespace DebuggerAgentState;
 
 static const int maxSkipStepFrameCount = 128;
+static const char backtraceObjectGroup[] = "backtrace";
 
 static String16 breakpointIdSuffix(V8DebuggerAgentImpl::BreakpointSource source)
 {
@@ -516,10 +516,15 @@ void V8DebuggerAgentImpl::searchInContent(ErrorString* error, const String16& sc
 {
     v8::HandleScope handles(m_isolate);
     ScriptsMap::iterator it = m_scripts.find(scriptId);
-    if (it != m_scripts.end())
-        *results = V8ContentSearchUtil::searchInTextByLines(m_session, toProtocolString(it->second->source(m_isolate)), query, optionalCaseSensitive.fromMaybe(false), optionalIsRegex.fromMaybe(false));
-    else
+    if (it == m_scripts.end()) {
         *error = String16("No script for id: " + scriptId);
+        return;
+    }
+
+    std::vector<std::unique_ptr<protocol::Debugger::SearchMatch>> matches = searchInTextByLinesImpl(m_session, toProtocolString(it->second->source(m_isolate)), query, optionalCaseSensitive.fromMaybe(false), optionalIsRegex.fromMaybe(false));
+    *results = protocol::Array<protocol::Debugger::SearchMatch>::create();
+    for (size_t i = 0; i < matches.size(); ++i)
+        (*results)->addItem(std::move(matches[i]));
 }
 
 void V8DebuggerAgentImpl::setScriptSource(ErrorString* errorString,
@@ -645,7 +650,7 @@ void V8DebuggerAgentImpl::resume(ErrorString* errorString)
         return;
     m_scheduledDebuggerStep = NoStep;
     m_steppingFromFramework = false;
-    m_session->releaseObjectGroup(V8InspectorSession::backtraceObjectGroup);
+    m_session->releaseObjectGroup(backtraceObjectGroup);
     debugger().continueProgram();
 }
 
@@ -661,7 +666,7 @@ void V8DebuggerAgentImpl::stepOver(ErrorString* errorString)
     }
     m_scheduledDebuggerStep = StepOver;
     m_steppingFromFramework = isTopPausedCallFrameBlackboxed();
-    m_session->releaseObjectGroup(V8InspectorSession::backtraceObjectGroup);
+    m_session->releaseObjectGroup(backtraceObjectGroup);
     debugger().stepOverStatement();
 }
 
@@ -671,7 +676,7 @@ void V8DebuggerAgentImpl::stepInto(ErrorString* errorString)
         return;
     m_scheduledDebuggerStep = StepInto;
     m_steppingFromFramework = isTopPausedCallFrameBlackboxed();
-    m_session->releaseObjectGroup(V8InspectorSession::backtraceObjectGroup);
+    m_session->releaseObjectGroup(backtraceObjectGroup);
     debugger().stepIntoStatement();
 }
 
@@ -683,7 +688,7 @@ void V8DebuggerAgentImpl::stepOut(ErrorString* errorString)
     m_skipNextDebuggerStepOut = false;
     m_recursionLevelForStepOut = 1;
     m_steppingFromFramework = isTopPausedCallFrameBlackboxed();
-    m_session->releaseObjectGroup(V8InspectorSession::backtraceObjectGroup);
+    m_session->releaseObjectGroup(backtraceObjectGroup);
     debugger().stepOutOfFunction();
 }
 
@@ -873,9 +878,6 @@ void V8DebuggerAgentImpl::willExecuteScript(int scriptId)
     // Fast return.
     if (m_scheduledDebuggerStep != StepInto)
         return;
-    // Skip unknown scripts (e.g. InjectedScript).
-    if (m_scripts.find(String16::fromInteger(scriptId)) == m_scripts.end())
-        return;
     schedulePauseOnNextStatementIfSteppingInto();
 }
 
@@ -947,12 +949,12 @@ std::unique_ptr<Array<CallFrame>> V8DebuggerAgentImpl::currentCallFrames(ErrorSt
             if (hasInternalError(errorString, !details->Get(debuggerContext, toV8StringInternalized(m_isolate, "scopeChain")).ToLocal(&scopeChain) || !scopeChain->IsArray()))
                 return Array<CallFrame>::create();
             v8::Local<v8::Array> scopeChainArray = scopeChain.As<v8::Array>();
-            if (!injectedScript->wrapPropertyInArray(errorString, scopeChainArray, toV8StringInternalized(m_isolate, "object"), V8InspectorSession::backtraceObjectGroup))
+            if (!injectedScript->wrapPropertyInArray(errorString, scopeChainArray, toV8StringInternalized(m_isolate, "object"), backtraceObjectGroup))
                 return Array<CallFrame>::create();
-            if (!injectedScript->wrapObjectProperty(errorString, details, toV8StringInternalized(m_isolate, "this"), V8InspectorSession::backtraceObjectGroup))
+            if (!injectedScript->wrapObjectProperty(errorString, details, toV8StringInternalized(m_isolate, "this"), backtraceObjectGroup))
                 return Array<CallFrame>::create();
             if (details->Has(debuggerContext, toV8StringInternalized(m_isolate, "returnValue")).FromMaybe(false)) {
-                if (!injectedScript->wrapObjectProperty(errorString, details, toV8StringInternalized(m_isolate, "returnValue"), V8InspectorSession::backtraceObjectGroup))
+                if (!injectedScript->wrapObjectProperty(errorString, details, toV8StringInternalized(m_isolate, "returnValue"), backtraceObjectGroup))
                     return Array<CallFrame>::create();
             }
         } else {
@@ -992,15 +994,15 @@ void V8DebuggerAgentImpl::didParseSource(std::unique_ptr<V8DebuggerScript> scrip
     String16 scriptSource = toProtocolString(script->source(m_isolate));
     bool isDeprecatedSourceURL = false;
     if (!success)
-        script->setSourceURL(V8ContentSearchUtil::findSourceURL(scriptSource, false, &isDeprecatedSourceURL));
+        script->setSourceURL(findSourceURL(scriptSource, false, &isDeprecatedSourceURL));
     else if (script->hasSourceURL())
-        V8ContentSearchUtil::findSourceURL(scriptSource, false, &isDeprecatedSourceURL);
+        findSourceURL(scriptSource, false, &isDeprecatedSourceURL);
 
     bool isDeprecatedSourceMappingURL = false;
     if (!success)
-        script->setSourceMappingURL(V8ContentSearchUtil::findSourceMapURL(scriptSource, false, &isDeprecatedSourceMappingURL));
+        script->setSourceMappingURL(findSourceMapURL(scriptSource, false, &isDeprecatedSourceMappingURL));
     else if (!script->sourceMappingURL().isEmpty())
-        V8ContentSearchUtil::findSourceMapURL(scriptSource, false, &isDeprecatedSourceMappingURL);
+        findSourceMapURL(scriptSource, false, &isDeprecatedSourceMappingURL);
 
     bool isContentScript = script->isContentScript();
     bool isInternalScript = script->isInternalScript();
@@ -1054,6 +1056,13 @@ V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::didPause(v8::Local<v8
     JavaScriptCallFrames callFrames = debugger().currentCallFrames(1);
     JavaScriptCallFrame* topCallFrame = !callFrames.empty() ? callFrames.begin()->get() : nullptr;
 
+    // Skip pause in internal scripts (e.g. InjectedScriptSource.js).
+    if (topCallFrame) {
+        ScriptsMap::iterator it = m_scripts.find(String16::fromInteger(topCallFrame->sourceID()));
+        if (it != m_scripts.end() && it->second->isInternalScript())
+            return RequestStepFrame;
+    }
+
     V8DebuggerAgentImpl::SkipPauseRequest result;
     if (m_skipAllPauses)
         result = RequestContinue;
@@ -1085,7 +1094,7 @@ V8DebuggerAgentImpl::SkipPauseRequest V8DebuggerAgentImpl::didPause(v8::Local<v8
         if (injectedScript) {
             m_breakReason = isPromiseRejection ? protocol::Debugger::Paused::ReasonEnum::PromiseRejection : protocol::Debugger::Paused::ReasonEnum::Exception;
             ErrorString errorString;
-            auto obj = injectedScript->wrapObject(&errorString, exception, V8InspectorSession::backtraceObjectGroup);
+            auto obj = injectedScript->wrapObject(&errorString, exception, backtraceObjectGroup);
             m_breakAuxData = obj ? obj->serialize() : nullptr;
             // m_breakAuxData might be null after this.
         }

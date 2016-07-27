@@ -63,6 +63,8 @@ class MutableStylePropertySet;
 class NodeIntersectionObserverData;
 class PropertySetCSSStyleDeclaration;
 class PseudoElement;
+class ResizeObservation;
+class ResizeObserver;
 class ScrollState;
 class ScrollStateCallback;
 class ScrollToOptions;
@@ -329,7 +331,7 @@ public:
     virtual void copyNonAttributePropertiesFromElement(const Element&) { }
 
     void attachLayoutTree(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
 
     virtual LayoutObject* createLayoutObject(const ComputedStyle&);
     virtual bool layoutObjectIsNeeded(const ComputedStyle&);
@@ -374,7 +376,7 @@ public:
     void setIsInCanvasSubtree(bool value) { setElementFlag(IsInCanvasSubtree, value); }
     bool isInCanvasSubtree() const { return hasElementFlag(IsInCanvasSubtree); }
 
-    bool isDefined() const { return getCustomElementState() != CustomElementState::Undefined; }
+    bool isDefined() const { return !(static_cast<int>(getCustomElementState()) & static_cast<int>(CustomElementState::NotDefinedFlag)); }
     bool isUpgradedV0CustomElement() { return getV0CustomElementState() == V0Upgraded; }
     bool isUnresolvedV0CustomElement() { return getV0CustomElementState() == V0WaitingForUpgrade; }
 
@@ -578,6 +580,9 @@ public:
     NodeIntersectionObserverData* intersectionObserverData() const;
     NodeIntersectionObserverData& ensureIntersectionObserverData();
 
+    HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>* resizeObserverData() const;
+    HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>& ensureResizeObserverData();
+
 protected:
     Element(const QualifiedName& tagName, Document*, ConstructionType);
 
@@ -758,7 +763,6 @@ template<typename T> inline const T* toElement(const Node* node)
     ASSERT_WITH_SECURITY_IMPLICATION(!node || isElementOfType<const T>(*node));
     return static_cast<const T*>(node);
 }
-template<typename T, typename U> inline T* toElement(const RefPtr<U>& node) { return toElement<T>(node.get()); }
 
 inline bool isDisabledFormControl(const Node* node)
 {

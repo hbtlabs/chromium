@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "base/time/time.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "url/gurl.h"
 
@@ -50,12 +51,15 @@ class PermissionReporter {
   // Sends a serialized permission report to the report collection server.
   // The permission report includes |origin| as the origin of
   // the site requesting permission, |permission| as the type of permission
-  // requested, and |action| as the action taken. The report will be serialized
+  // requested, |action| as the action taken, and |gesture_type| as to whether
+  // the action occurred after a user gesture. The report will be serialized
   // using protobuf defined in
   // //src/chrome/common/safe_browsing/permission_report.proto
   void SendReport(const GURL& origin,
                   content::PermissionType permission,
-                  PermissionAction action);
+                  PermissionAction action,
+                  PermissionSourceUI source_ui,
+                  PermissionRequestGestureType gesture_type);
 
  private:
   friend class PermissionReporterTest;
@@ -73,6 +77,8 @@ class PermissionReporter {
   static bool BuildReport(const GURL& origin,
                           content::PermissionType permission,
                           PermissionAction action,
+                          PermissionSourceUI source_ui,
+                          PermissionRequestGestureType gesture_type,
                           std::string* output);
 
   // Returns false if the number of reports sent in the last one minute per

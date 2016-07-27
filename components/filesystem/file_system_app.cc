@@ -39,10 +39,8 @@ FileSystemApp::FileSystemApp() : lock_table_(new LockTable) {}
 
 FileSystemApp::~FileSystemApp() {}
 
-void FileSystemApp::OnStart(shell::Connector* connector,
-                            const shell::Identity& identity,
-                            uint32_t id) {
-  tracing_.Initialize(connector, identity.name());
+void FileSystemApp::OnStart(const shell::Identity& identity) {
+  tracing_.Initialize(connector(), identity.name());
 }
 
 bool FileSystemApp::OnConnect(shell::Connection* connection) {
@@ -51,9 +49,9 @@ bool FileSystemApp::OnConnect(shell::Connection* connection) {
 }
 
 // |InterfaceFactory<Files>| implementation:
-void FileSystemApp::Create(shell::Connection* connection,
+void FileSystemApp::Create(const shell::Identity& remote_identity,
                            mojo::InterfaceRequest<mojom::FileSystem> request) {
-  new FileSystemImpl(connection, std::move(request), GetUserDataDir(),
+  new FileSystemImpl(remote_identity, std::move(request), GetUserDataDir(),
                      lock_table_);
 }
 

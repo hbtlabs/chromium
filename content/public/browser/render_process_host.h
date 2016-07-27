@@ -11,12 +11,14 @@
 #include <list>
 
 #include "base/id_map.h"
+#include "base/memory/ptr_util.h"
 #include "base/process/kill.h"
 #include "base/process/process_handle.h"
 #include "base/supports_user_data.h"
 #include "content/common/content_export.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_sender.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "ui/gfx/native_widget_types.h"
 
 class GURL;
@@ -34,7 +36,6 @@ class MediaKeys;
 namespace shell {
 class Connection;
 class InterfaceProvider;
-class InterfaceRegistry;
 }
 
 namespace content {

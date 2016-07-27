@@ -22,13 +22,6 @@
       Als het beleid is ingesteld op 'waar', worden de statistieken gemeld.</translation>
 <translation id="1046484220783400299">Verouderde webplatformfuncties beperkte tijd inschakelen</translation>
 <translation id="1047128214168693844">Niet toestaan dat sites de fysieke locatie van gebruikers bijhouden</translation>
-<translation id="1057535219415338480">Hiermee wordt netwerkvoorspelling in <ph name="PRODUCT_NAME" /> ingeschakeld en wordt voorkomen dat gebruikers deze instelling kunnen wijzigen.
-
-      Hiermee wordt niet alleen DNS-prefetching beheerd, maar ook het vooraf verbinden met TCP en SSL en het vooraf renderen van webpagina's. De beleidsnaam verwijst naar DNS-prefetching vanwege historische redenen.
-
-      Als je deze instelling in- of uitschakelt, kunnen gebruikers deze instelling niet wijzigen of overschrijven in <ph name="PRODUCT_NAME" />.
-
-      Als dit beleid niet wordt ingesteld, wordt het automatisch ingeschakeld, maar de gebruiker kan het wijzigen.</translation>
 <translation id="1062011392452772310">Externe bevestiging van apparaat inschakelen</translation>
 <translation id="1090892140761957285">URL voor het valideren van verificatietoken voor client voor externe toegang.
 
@@ -677,6 +670,7 @@
 
           Als dit beleid niet wordt ingesteld, wordt 'AllowJavaScript' gebruikt en kan de gebruiker dit aanpassen.</translation>
 <translation id="3038323923255997294">Doorgaan met uitvoeren van achtergrondapps als <ph name="PRODUCT_NAME" /> is gesloten</translation>
+<translation id="3046192273793919231">Netwerkpakketten verzenden naar de beheerserver om de online status bij te houden</translation>
 <translation id="3048744057455266684">Als dit beleid is ingesteld en een zoek-URL die is voorgesteld vanuit de omnibox, deze parameter in de zoekreeks of in de fragment-ID bevat, geeft de suggestie de zoektermen en zoekprovider weer en niet de onbewerkte zoek-URL.
 
           Dit beleid is optioneel. Als het niet wordt ingesteld, wordt er geen vervanging van zoektermen uitgevoerd.
@@ -958,6 +952,10 @@
 
           Als de optie niet is ingesteld of is ingesteld op 'onwaar', kunnen gebruikers bestanden naar Google Drive overzetten.</translation>
 <translation id="3915395663995367577">URL naar een PAC-bestand voor de proxy</translation>
+<translation id="3939893074578116847">Netwerkpakketten verzenden naar de beheerserver om de online status bij te houden, zodat de server kan detecteren of het apparaat offline is.
+
+      Als dit beleid is ingesteld op 'waar', worden netwerkpakketten voor bijhouden (zogenaamde <ph name="HEARTBEATS_TERM" />) verzonden.
+      Als dit beleid is ingesteld op 'onwaar' of niet is ingesteld, worden er geen pakketten verzonden.</translation>
 <translation id="3964909636571393861">Toegang verlenen aan een lijst met URL's</translation>
 <translation id="3965339130942650562">Time-out tot de inactieve gebruiker is uitgelogd</translation>
 <translation id="3967075520570946456">Inschakelen dat de welkomstpagina wordt weergegeven bij de eerste keer opstarten van de browser na een upgrade van het besturingssysteem.</translation>
@@ -1336,6 +1334,9 @@
       Als dit beleid is ingesteld, wordt de opgegeven sessie automatisch ingelogd na een tijdsperiode zonder gebruikersinteractie op het inlogscherm is verstreken. De openbare sessie moet al zijn geconfigureerd (zie |DeviceLocalAccounts|).
 
       Als dit beleid niet is ingesteld, wordt er niet automatisch ingelogd.</translation>
+<translation id="5535957389335373033">Hoe vaak netwerkpakketten voor bijhouden worden verzonden, in milliseconden.
+
+      Als dit beleid niet is ingesteld, is de standaardfrequentie 3 minuten. De minimumfrequentie is 30 seconden en de maximumfrequentie is 24 uur. Waarden die buiten dit bereik vallen, worden afgerond tot dit bereik.</translation>
 <translation id="5535973522252703021">Witte lijst voor Kerberos-delegatieserver</translation>
 <translation id="5560039246134246593">Een parameter toevoegen aan het ophalen van de seed voor varianten in <ph name="PRODUCT_NAME" />.
 
@@ -1918,7 +1919,6 @@ Geheugengegevens worden in alle gevallen aan de pagina gerapporteerd, afgezien v
       Als dit beleid niet wordt ingesteld, gebruikt de automatische opschoonfunctie de standaard ingebouwde strategie. Momenteel is dit de strategie'RemoveLRUIfDormant'.</translation>
 <translation id="7336878834592315572">Cookies bewaren voor de duur van de sessie</translation>
 <translation id="7340034977315324840">Tijdsduur van apparaatgebruik melden</translation>
-<translation id="7381326101471547614">Hiermee wordt het gebruik van het SPDY-protocol in <ph name="PRODUCT_NAME" /> uitgeschakeld. Als dit beleid is ingeschakeld, is het SPDY-protocol niet beschikbaar in <ph name="PRODUCT_NAME" />. Als je dit beleid instelt op uitgeschakeld, kan het SPDY-protocol worden gebruikt. Als dit beleid niet wordt ingesteld, is het SPDY-protocol beschikbaar.</translation>
 <translation id="7384999953864505698">QUIC-protocol toestaan</translation>
 <translation id="7406651467768226499">Of de kiosk-app die automatisch zonder vertraging is gestart, de <ph name="PRODUCT_OS_NAME" />-versie mag beheren.
 
@@ -2527,6 +2527,7 @@ Geheugengegevens worden in alle gevallen aan de pagina gerapporteerd, afgezien v
 <translation id="9187743794267626640">Koppelen van externe opslag uitschakelen</translation>
 <translation id="9197740283131855199">Percentage waarmee de dimvertraging van het scherm wordt geschaald als de gebruiker actief wordt na het dimmen</translation>
 <translation id="9200828125069750521">Parameters voor afbeeldings-URL die POST gebruikt</translation>
+<translation id="9217154963008402249">Frequentie van netwerkpakketten voor bijhouden</translation>
 <translation id="922540222991413931">Installatiebronnen voor het configureren van extensies, apps en gebruikersscripts</translation>
 <translation id="924557436754151212">Opgeslagen wachtwoorden importeren uit standaardbrowser bij eerste uitvoering</translation>
 <translation id="930930237275114205">Directory met gebruikersgegevens voor <ph name="PRODUCT_FRAME_NAME" /> instellen</translation>

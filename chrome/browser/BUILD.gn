@@ -344,6 +344,7 @@ split_static_library("browser") {
       "//chrome/browser/devtools",
       "//chrome/browser/metrics/variations:chrome_ui_string_overrider_factory",
       "//chrome/browser/resources:component_extension_resources",
+      "//chrome/common:search_provider_mojom",
       "//chrome/common/net",
       "//chrome/installer/util:with_no_strings",
       "//components/about_handler",
@@ -458,10 +459,12 @@ split_static_library("browser") {
   }
   if (enable_extensions) {
     public_deps += [ "//chrome/browser/extensions" ]
+    allow_circular_includes_from += [ "//chrome/browser/extensions" ]
     deps += [
       "//chrome/browser/sync_file_system/drive_backend:sync_file_system_drive_proto",
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:api_registration",
+      "//chrome/common/extensions/api:extensions_features",
       "//components/drive:drive",
       "//components/proximity_auth/ble",
       "//components/proximity_auth/cryptauth",
@@ -502,6 +505,8 @@ split_static_library("browser") {
     sources += rebase_path(gypi_values.chrome_browser_spellchecker_sources,
                            ".",
                            "//chrome")
+    deps += [ "//components/spellcheck/common:common" ]
+
     if (!is_android) {
       deps += [ "//third_party/hunspell" ]
     }
@@ -586,8 +591,13 @@ split_static_library("browser") {
     sources += [
       "metrics/leak_detector/leak_detector_controller.cc",
       "metrics/leak_detector/leak_detector_controller.h",
+      "metrics/leak_detector/leak_detector_remote_controller.cc",
+      "metrics/leak_detector/leak_detector_remote_controller.h",
     ]
-    public_deps += [ "//components/metrics:leak_detector" ]
+    public_deps += [
+      "//components/metrics/leak_detector:interfaces",
+      "//components/metrics/leak_detector:leak_detector",
+    ]
   }
 
   if (use_cups) {
@@ -635,6 +645,7 @@ split_static_library("browser") {
   if (use_ash) {
     sources +=
         rebase_path(gypi_values.chrome_browser_ash_sources, ".", "//chrome")
+    deps += [ "//ash" ]
   }
 
   if (use_x11) {
@@ -1151,6 +1162,7 @@ static_library("test_support") {
     "//components/prefs:test_support",
     "//components/search_engines:test_support",
     "//components/subresource_filter/core/browser:test_support",
+    "//components/subresource_filter/core/common:test_support",
     "//components/syncable_prefs:test_support",
     "//components/user_prefs/tracked:user_prefs_tracked_test_support",
     "//content/test:test_support",

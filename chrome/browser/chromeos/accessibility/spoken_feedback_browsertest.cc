@@ -4,10 +4,11 @@
 
 #include <queue>
 
-#include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_types.h"
 #include "ash/common/system/tray/system_tray.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -104,7 +105,7 @@ class LoggedInSpokenFeedbackTest : public InProcessBrowserTest {
 
   bool PerformAcceleratorAction(ash::AcceleratorAction action) {
     ash::AcceleratorController* controller =
-        ash::Shell::GetInstance()->accelerator_controller();
+        ash::WmShell::Get()->accelerator_controller();
     return controller->PerformActionIfEnabled(action);
   }
 
@@ -227,6 +228,39 @@ IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, DISABLED_AddBookmark) {
   EXPECT_EQ("button", speech_monitor_.GetNextUtterance());
 }
 
+IN_PROC_BROWSER_TEST_F(LoggedInSpokenFeedbackTest, NavigateNotificationCenter) {
+  EnableChromeVox();
+
+  EXPECT_TRUE(PerformAcceleratorAction(ash::SHOW_MESSAGE_CENTER_BUBBLE));
+
+  // Wait for it to say "Notification Center, window".
+  while ("Notification Center, window" != speech_monitor_.GetNextUtterance()) {
+  }
+
+  // Tab until we get to the Do Not Disturb button.
+  SendKeyPress(ui::VKEY_TAB);
+  do {
+    std::string ut = speech_monitor_.GetNextUtterance();
+
+    if (ut == "Do not disturb")
+      break;
+    else if (ut == "Button")
+      SendKeyPress(ui::VKEY_TAB);
+  } while (true);
+  EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Not pressed", speech_monitor_.GetNextUtterance());
+
+  SendKeyPress(ui::VKEY_SPACE);
+  EXPECT_EQ("Do not disturb", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Pressed", speech_monitor_.GetNextUtterance());
+
+  SendKeyPress(ui::VKEY_SPACE);
+  EXPECT_EQ("Do not disturb", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Button", speech_monitor_.GetNextUtterance());
+  EXPECT_EQ("Not pressed", speech_monitor_.GetNextUtterance());
+}
+
 //
 // Spoken feedback tests in both a logged in browser window and guest mode.
 //
@@ -261,7 +295,13 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(kTestAsNormalUser,
                       kTestAsGuestUser));
 
-IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, EnableSpokenFeedback) {
+// TODO(crbug.com/630031): Flaky on ASan LSan bot.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_EnableSpokenFeedback DISABLED_EnableSpokenFeedback
+#else
+#define MAYBE_EnableSpokenFeedback EnableSpokenFeedback
+#endif  // defined(ADDRESS_SANITIZER)
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, MAYBE_EnableSpokenFeedback) {
   EnableChromeVox();
 }
 

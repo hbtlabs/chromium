@@ -10,12 +10,6 @@ Polymer({
   is: 'settings-main',
 
   properties: {
-    /** @private */
-    isAdvancedMenuOpen_: {
-      type: Boolean,
-      value: false,
-    },
-
     /**
      * Preferences state.
      */
@@ -35,25 +29,28 @@ Polymer({
     },
 
     /** @private */
-    showAdvancedPage_: {
+    advancedToggleExpanded_: {
       type: Boolean,
       value: false,
     },
 
     /** @private */
-    showAdvancedToggle_: {
-      type: Boolean,
-      value: true,
+    inSubpage_: Boolean,
+
+    /**
+     * Controls which main pages are displayed via dom-ifs.
+     * @type {!{about: boolean, basic: boolean, advanced: boolean}}
+     * @private
+     */
+    showPages_: {
+      type: Object,
+      value: function() {
+        return {about: false, basic: false, advanced: false};
+      },
     },
 
     /** @private */
-    showBasicPage_: {
-      type: Boolean,
-      value: true,
-    },
-
-    /** @private */
-    showAboutPage_: {
+    showNoResultsFound_: {
       type: Boolean,
       value: false,
     },
@@ -62,6 +59,15 @@ Polymer({
       type: Boolean,
       value: false,
       notify: true,
+    },
+
+    /**
+     * Dictionary defining page visibility.
+     * @type {!GuestModePageVisibility}
+     */
+    pageVisibility: {
+      type: Object,
+      value: function() { return {}; },
     },
   },
 
@@ -73,19 +79,11 @@ Polymer({
   },
 
   /** @override */
-  ready: function() {
-    settings.getSearchManager().setCallback(function(isRunning) {
-      this.toolbarSpinnerActive = isRunning;
-    }.bind(this));
-  },
-
-  /** @override */
   attached: function() {
     document.addEventListener('toggle-advanced-page', function(e) {
-      this.showAdvancedPage_ = e.detail;
-      this.isAdvancedMenuOpen_ = e.detail;
+      this.advancedToggleExpanded_ = e.detail;
       this.currentRoute = {
-        page: this.isAdvancedMenuOpen_ ? 'advanced' : 'basic',
+        page: this.advancedToggleExpanded_ ? 'advanced' : 'basic',
         section: '',
         subpage: [],
       };
@@ -105,9 +103,19 @@ Polymer({
    * @param {boolean} opened Whether the menu is expanded.
    * @return {string} Which icon to use.
    * @private
-   * */
+   */
   arrowState_: function(opened) {
     return opened ? 'settings:arrow-drop-up' : 'cr:arrow-drop-down';
+  },
+
+  /**
+   * @param {boolean} showBasicPage
+   * @param {boolean} inSubpage
+   * @return {boolean}
+   * @private
+   */
+  showAdvancedToggle_: function(showBasicPage, inSubpage) {
+    return showBasicPage && !inSubpage;
   },
 
   /**
@@ -115,24 +123,84 @@ Polymer({
    * @private
    */
   currentRouteChanged_: function(newRoute) {
-    var isSubpage = !!newRoute.subpage.length;
+    this.inSubpage_ = newRoute.subpage.length > 0;
+    this.style.height = this.inSubpage_ ? '100%' : '';
 
-    this.showAboutPage_ = newRoute.page == 'about';
+    if (newRoute.page == 'about') {
+      this.showPages_ = {about: true, basic: false, advanced: false};
+    } else {
+      this.showPages_ = {
+        about: false,
+        basic: newRoute.page == 'basic' || !this.inSubpage_,
+        advanced: newRoute.page == 'advanced' ||
+            (!this.inSubpage_ && this.advancedToggleExpanded_),
+      };
 
-    this.showAdvancedToggle_ = !this.showAboutPage_ && !isSubpage;
+      if (this.showPages_.advanced) {
+        assert(!this.pageVisibility ||
+            this.pageVisibility.advancedSettings !== false);
+        this.advancedToggleExpanded_ = true;
+      }
+    }
 
-    this.showBasicPage_ = this.showAdvancedToggle_ || newRoute.page == 'basic';
+    // Wait for any other changes prior to calculating the overflow padding.
+    this.async(function() {
+      this.$.overscroll.style.paddingBottom = this.overscrollHeight_() + 'px';
+    });
+  },
 
-    this.showAdvancedPage_ =
-        (this.isAdvancedMenuOpen_ && this.showAdvancedToggle_) ||
-        newRoute.page == 'advanced';
+  /**
+   * Return the height that the over scroll padding should be set to.
+   * This is used to determine how much padding to apply to the end of the
+   * content so that the last element may align with the top of the content
+   * area.
+   * @return {number}
+   * @private
+   */
+  overscrollHeight_: function() {
+    if (!this.currentRoute || this.currentRoute.subpage.length != 0 ||
+        this.showPages_.about) {
+      return 0;
+    }
 
-    this.style.height = isSubpage ? '100%' : '';
+    // Ensure any dom-if reflects the current properties.
+    Polymer.dom.flush();
+
+    /**
+     * @param {!Element} element
+     * @return {number}
+     */
+    var calcHeight = function(element) {
+      var style = getComputedStyle(element);
+      var height = this.parentNode.scrollHeight - element.offsetHeight +
+          parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+      assert(height >= 0);
+      return height;
+    }.bind(this);
+
+    if (this.showPages_.advanced) {
+      var lastSection = this.$$('settings-advanced-page').$$(
+          'settings-section:last-of-type');
+      // |lastSection| may be null in unit tests.
+      if (!lastSection)
+        return 0;
+      return calcHeight(lastSection);
+    }
+
+    assert(this.showPages_.basic);
+    var lastSection = this.$$('settings-basic-page').$$(
+        'settings-section:last-of-type');
+    // |lastSection| may be null in unit tests.
+    if (!lastSection)
+      return 0;
+    var toggleContainer = this.$$('#toggleContainer');
+    return calcHeight(lastSection) -
+        (toggleContainer ? toggleContainer.offsetHeight : 0);
   },
 
   /** @private */
   toggleAdvancedPage_: function() {
-    this.fire('toggle-advanced-page', !this.isAdvancedMenuOpen_);
+    this.fire('toggle-advanced-page', !this.advancedToggleExpanded_);
   },
 
   /**
@@ -152,20 +220,39 @@ Polymer({
    */
   searchContents: function(query) {
     this.ensureInDefaultSearchPage_();
+    this.toolbarSpinnerActive = true;
 
     // Trigger rendering of the basic and advanced pages and search once ready.
-    // Even if those are already rendered, yield to the message loop before
-    // initiating searching.
-    this.showBasicPage_ = true;
+    this.showPages_ = {about: false, basic: true, advanced: true};
+
     setTimeout(function() {
       settings.getSearchManager().search(
           query, assert(this.$$('settings-basic-page')));
     }.bind(this), 0);
-
-    this.showAdvancedPage_ = true;
     setTimeout(function() {
       settings.getSearchManager().search(
-          query, assert(this.$$('settings-advanced-page')));
+          query, assert(this.$$('settings-advanced-page'))).then(
+          function(request) {
+            if (!request.finished) {
+              // Nothing to do here. A previous search request was canceled
+              // because a new search request was issued before the first one
+              // completed.
+              return;
+            }
+
+            this.toolbarSpinnerActive = false;
+            this.showNoResultsFound_ =
+                !request.isSame('') && !request.didFindMatches();
+          }.bind(this));
     }.bind(this), 0);
+  },
+
+  /**
+   * @param {(boolean|undefined)} visibility
+   * @return {boolean} True unless visibility is false.
+   * @private
+   */
+  showAdvancedSettings_: function(visibility) {
+    return visibility !== false;
   },
 });

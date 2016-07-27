@@ -607,8 +607,14 @@ TEST_P(GLES2DecoderWithShaderTest, GetAttachedShadersBadSharedMemoryFails) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderWithShaderTest, GetShaderPrecisionFormatSucceeds) {
-  ScopedGLImplementationSetter gl_impl(::gl::kGLImplementationEGLGLES2);
+TEST_P(GLES2DecoderManualInitTest, GetShaderPrecisionFormatSucceeds) {
+  // Force ES underlying implementation to ensure we check the shader precision
+  // format.
+  InitState init;
+  init.gl_version = "opengl es 2.0";
+  init.bind_generates_resource = true;
+  InitDecoder(init);
+
   GetShaderPrecisionFormat cmd;
   typedef GetShaderPrecisionFormat::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
@@ -2197,16 +2203,20 @@ TEST_P(GLES2DecoderWithShaderTest, GetUniformLocationInvalidArgs) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderWithShaderTest, UniformBlockBindingValidArgs) {
-  EXPECT_CALL(*gl_, UniformBlockBinding(kServiceProgramId, 2, 3));
+TEST_P(GLES3DecoderWithESSL3ShaderTest, Basic) {
+  // Make sure the setup is correct for ES3.
+  EXPECT_TRUE(decoder_->unsafe_es3_apis_enabled());
+  EXPECT_TRUE(feature_info()->validators()->texture_bind_target.IsValid(
+      GL_TEXTURE_3D));
+}
+
+TEST_P(GLES3DecoderWithESSL3ShaderTest, UniformBlockBindingValidArgs) {
+  EXPECT_CALL(*gl_, UniformBlockBinding(kServiceProgramId, 1, 3));
   SpecializedSetup<cmds::UniformBlockBinding, 0>(true);
   cmds::UniformBlockBinding cmd;
-  cmd.Init(client_program_id_, 2, 3);
-  decoder_->set_unsafe_es3_apis_enabled(true);
+  cmd.Init(client_program_id_, 1, 3);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderWithShaderTest, BindUniformLocationCHROMIUMBucket) {

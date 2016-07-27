@@ -30,6 +30,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
+#if defined(OS_IOS)
+#include "base/ios/ios_util.h"
+#endif
+
 using autofill::PasswordForm;
 using base::ASCIIToUTF16;
 using ::testing::Eq;
@@ -160,16 +164,17 @@ class LoginDatabaseTest : public testing::Test {
     EXPECT_EQ(2U, result.size());
     result.clear();
 
-    PasswordForm second_non_html_auth(non_html_auth);
-    second_non_html_auth.origin = GURL("http://second.example.com");
-    second_non_html_auth.signon_realm = "http://second.example.com/Realm";
+    PasswordStore::FormDigest second_non_html_auth = {
+        scheme, "http://second.example.com/Realm",
+        GURL("http://second.example.com")};
 
     // This shouldn't match anything.
     EXPECT_TRUE(db().GetLogins(second_non_html_auth, &result));
     EXPECT_EQ(0U, result.size());
 
     // non-html auth still matches against itself.
-    EXPECT_TRUE(db().GetLogins(non_html_auth, &result));
+    EXPECT_TRUE(
+        db().GetLogins(PasswordStore::FormDigest(non_html_auth), &result));
     ASSERT_EQ(1U, result.size());
     EXPECT_EQ(result[0]->signon_realm, "http://example.com/Realm");
 
@@ -195,7 +200,7 @@ class LoginDatabaseTest : public testing::Test {
     ip_form.date_created = now;
 
     EXPECT_EQ(AddChangeForForm(ip_form), db().AddLogin(ip_form));
-    EXPECT_TRUE(db().GetLogins(ip_form, &result));
+    EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(ip_form), &result));
     ASSERT_EQ(1U, result.size());
     EXPECT_EQ(result[0]->signon_realm, origin);
 
@@ -209,6 +214,14 @@ class LoginDatabaseTest : public testing::Test {
 };
 
 TEST_F(LoginDatabaseTest, Logins) {
+#if defined(OS_IOS) && TARGET_IPHONE_SIMULATOR
+  // TODO(crbug.com/619982): This test is currently failing on the latest iOS10
+  // simulator due to a bug we expect to be fixed shortly.  Temporarilly
+  // disabling the test for iOS10 simulator runs only.
+  if (base::ios::IsRunningOnIOS10OrLater()) {
+    return;
+  }
+#endif
   ScopedVector<autofill::PasswordForm> result;
 
   // Verify the database is empty.
@@ -228,7 +241,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   result.clear();
 
   // Match against an exact copy.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(form, *result[0]);
   result.clear();
@@ -239,7 +252,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   form2.submit_element = ASCIIToUTF16("reallySignIn");
 
   // Match against an inexact copy
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
@@ -248,7 +261,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   form3.action = GURL("http://www.google.com/new/accounts/Login");
 
   // signon_realm is the same, should match.
-  EXPECT_TRUE(db().GetLogins(form3, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form3), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
@@ -257,7 +270,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   form4.signon_realm = "https://www.google.com/";
 
   // We have only an http record, so no match for this.
-  EXPECT_TRUE(db().GetLogins(form4, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form4), &result));
   EXPECT_EQ(0U, result.size());
 
   // Let's imagine the user logs into the secure site.
@@ -267,7 +280,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   result.clear();
 
   // Now the match works
-  EXPECT_TRUE(db().GetLogins(form4, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form4), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
@@ -278,7 +291,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   result.clear();
 
   // The old form wont match the new site (http vs https).
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(0U, result.size());
 
   // User changes their password.
@@ -290,7 +303,7 @@ TEST_F(LoginDatabaseTest, Logins) {
   // old form, and there is only one record.
   EXPECT_EQ(UpdateChangeForForm(form5), db().UpdateLogin(form5));
   // matches
-  EXPECT_TRUE(db().GetLogins(form5, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form5), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
   // Only one record.
@@ -335,7 +348,7 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   result.clear();
 
   // Match against an exact copy.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
@@ -346,7 +359,7 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   form2.signon_realm = "https://mobile.foo.com/";
 
   // Match against the mobile site.
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   EXPECT_EQ("https://foo.com/", result[0]->signon_realm);
   EXPECT_TRUE(result[0]->is_public_suffix_match);
@@ -355,7 +368,7 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatching) {
   EXPECT_FALSE(db().RemoveLogin(*result[0]));
   result.clear();
   // Ensure that the original form is still there
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 }
@@ -389,10 +402,8 @@ TEST_F(LoginDatabaseTest, TestFederatedMatching) {
   EXPECT_EQ(2U, result.size());
 
   // Match against desktop.
-  PasswordForm form_request;
-  form_request.origin = GURL("https://foo.com/");
-  form_request.signon_realm = "https://foo.com/";
-  form_request.scheme = PasswordForm::SCHEME_HTML;
+  PasswordStore::FormDigest form_request = {
+      PasswordForm::SCHEME_HTML, "https://foo.com/", GURL("https://foo.com/")};
   EXPECT_TRUE(db().GetLogins(form_request, &result));
   EXPECT_THAT(result, testing::ElementsAre(testing::Pointee(form)));
 
@@ -454,15 +465,14 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingShouldMatchingApply) {
   result.clear();
 
   // Match against an exact copy.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // We go to a different site on the same domain where feature is not needed.
-  PasswordForm form2(form);
-  form2.origin = GURL("https://some.other.google.com/");
-  form2.action = GURL("https://some.other.google.com/login");
-  form2.signon_realm = "https://some.other.google.com/";
+  PasswordStore::FormDigest form2 = {PasswordForm::SCHEME_HTML,
+                                     "https://some.other.google.com/",
+                                     GURL("https://some.other.google.com/")};
 
   // Match against the other site. Should not match since feature should not be
   // enabled for this domain.
@@ -502,10 +512,8 @@ TEST_F(LoginDatabaseTest, TestFederatedMatchingWithoutPSLMatching) {
   EXPECT_EQ(2U, result.size());
 
   // Match against the first one.
-  PasswordForm form_request;
-  form_request.origin = form.origin;
-  form_request.signon_realm = form.signon_realm;
-  form_request.scheme = PasswordForm::SCHEME_HTML;
+  PasswordStore::FormDigest form_request = {PasswordForm::SCHEME_HTML,
+                                            form.signon_realm, form.origin};
   EXPECT_TRUE(db().GetLogins(form_request, &result));
   EXPECT_THAT(result, testing::ElementsAre(testing::Pointee(form)));
 
@@ -549,14 +557,13 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingDifferentSites) {
   result.clear();
 
   // Match against an exact copy.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // We go to the mobile site.
-  PasswordForm form2(form);
+  PasswordStore::FormDigest form2(form);
   form2.origin = GURL("https://mobile.foo.com/");
-  form2.action = GURL("https://mobile.foo.com/login");
   form2.signon_realm = "https://mobile.foo.com/";
 
   // Match against the mobile site.
@@ -585,9 +592,8 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingDifferentSites) {
   result.clear();
 
   // We go to the mobile site of baz.com.
-  PasswordForm form3(form);
+  PasswordStore::FormDigest form3(form);
   form3.origin = GURL("https://m.baz.com/login/");
-  form3.action = GURL("https://m.baz.com/login/");
   form3.signon_realm = "https://m.baz.com/";
 
   // Match against the mobile site of baz.com.
@@ -644,75 +650,75 @@ TEST_F(LoginDatabaseTest, TestPublicSuffixDomainMatchingRegexp) {
   result.clear();
 
   // Match against an exact copy.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // www.foo.com should match.
   PasswordForm form2 = GetFormWithNewSignonRealm(form, "http://www.foo.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // a.b.foo.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://a.b.foo.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // a-b.foo.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://a-b.foo.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // foo-bar.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://foo-bar.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // www.foo-bar.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://www.foo-bar.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // a.b.foo-bar.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://a.b.foo-bar.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // a-b.foo-bar.com should match.
   form2 = GetFormWithNewSignonRealm(form, "http://a-b.foo-bar.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(1U, result.size());
   result.clear();
 
   // foo.com with port 1337 should not match.
   form2 = GetFormWithNewSignonRealm(form, "http://foo.com:1337/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(0U, result.size());
 
   // http://foo.com should not match since the scheme is wrong.
   form2 = GetFormWithNewSignonRealm(form, "https://foo.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(0U, result.size());
 
   // notfoo.com should not match.
   form2 = GetFormWithNewSignonRealm(form, "http://notfoo.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(0U, result.size());
 
   // baz.com should not match.
   form2 = GetFormWithNewSignonRealm(form, "http://baz.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(0U, result.size());
 
   // foo-baz.com should not match.
   form2 = GetFormWithNewSignonRealm(form, "http://foo-baz.com/");
-  EXPECT_TRUE(db().GetLogins(form2, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form2), &result));
   EXPECT_EQ(0U, result.size());
 }
 
@@ -844,7 +850,7 @@ TEST_F(LoginDatabaseTest, GetAutoSignInLogins) {
 
   EXPECT_TRUE(db().GetAutoSignInLogins(&result));
   EXPECT_EQ(4U, result.size());
-  for (const auto& form : result)
+  for (const auto* form : result)
     EXPECT_FALSE(form->skip_zero_click);
 
   EXPECT_TRUE(db().DisableAutoSignInForOrigin(origin));
@@ -865,7 +871,7 @@ TEST_F(LoginDatabaseTest, DisableAutoSignInForOrigin) {
   EXPECT_TRUE(AddZeroClickableLogin(&db(), "foo4", origin4));
 
   EXPECT_TRUE(db().GetAutofillableLogins(&result));
-  for (const auto& form : result)
+  for (const auto* form : result)
     EXPECT_FALSE(form->skip_zero_click);
 
   EXPECT_TRUE(db().DisableAutoSignInForOrigin(origin1));
@@ -909,7 +915,7 @@ TEST_F(LoginDatabaseTest, BlacklistedLogins) {
   ASSERT_EQ(0U, result.size());
 
   // GetLogins should give the blacklisted result.
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(form, *result[0]);
   result.clear();
@@ -968,7 +974,8 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   encountered_form.submit_element = ASCIIToUTF16("signIn");
 
   // Get matches for encountered_form.
-  EXPECT_TRUE(db().GetLogins(encountered_form, &result));
+  EXPECT_TRUE(
+      db().GetLogins(PasswordStore::FormDigest(encountered_form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(incomplete_form.origin, result[0]->origin);
   EXPECT_EQ(incomplete_form.signon_realm, result[0]->signon_realm);
@@ -997,7 +1004,8 @@ TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   EXPECT_TRUE(db().RemoveLogin(incomplete_form));
 
   // Get matches for encountered_form again.
-  EXPECT_TRUE(db().GetLogins(encountered_form, &result));
+  EXPECT_TRUE(
+      db().GetLogins(PasswordStore::FormDigest(encountered_form), &result));
   ASSERT_EQ(1U, result.size());
 
   // This time we should have all the info available.
@@ -1122,7 +1130,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   EXPECT_EQ(UpdateChangeForForm(form), db().UpdateLogin(form));
 
   ScopedVector<autofill::PasswordForm> result;
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(form, *result[0]);
 }
@@ -1443,7 +1451,7 @@ TEST_F(LoginDatabaseTest, ClearPasswordValues) {
   EXPECT_EQ(AddChangeForForm(form), db().AddLogin(form));
 
   ScopedVector<autofill::PasswordForm> result;
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   PasswordForm expected_form = form;
   expected_form.password_value.clear();
@@ -1452,7 +1460,7 @@ TEST_F(LoginDatabaseTest, ClearPasswordValues) {
   // Update the password, it should stay empty.
   form.password_value = ASCIIToUTF16("password");
   EXPECT_EQ(UpdateChangeForForm(form), db().UpdateLogin(form));
-  EXPECT_TRUE(db().GetLogins(form, &result));
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &result));
   ASSERT_EQ(1U, result.size());
   EXPECT_EQ(expected_form, *result[0]);
 
@@ -1578,7 +1586,7 @@ void LoginDatabaseMigrationTest::MigrationToVCurrent(
     EXPECT_EQ(list, db.AddLogin(form));
 
     ScopedVector<autofill::PasswordForm> result;
-    EXPECT_TRUE(db.GetLogins(form, &result));
+    EXPECT_TRUE(db.GetLogins(PasswordStore::FormDigest(form), &result));
     ASSERT_EQ(1U, result.size());
     EXPECT_EQ(form, *result[0]);
     EXPECT_TRUE(db.RemoveLogin(form));

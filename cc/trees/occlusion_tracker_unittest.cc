@@ -87,7 +87,6 @@ class OcclusionTrackerTest : public testing::Test {
  protected:
   explicit OcclusionTrackerTest(bool opaque_layers)
       : opaque_layers_(opaque_layers),
-        client_(FakeLayerTreeHostClient::DIRECT_3D),
         host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_)),
         next_layer_impl_id_(1) {}
 
@@ -923,17 +922,17 @@ class OcclusionTrackerTestFilters : public OcclusionTrackerTest {
     blur_layer->test_properties()->force_render_surface = true;
     FilterOperations filters;
     filters.Append(FilterOperation::CreateBlurFilter(10.f));
-    blur_layer->SetFilters(filters);
+    blur_layer->test_properties()->filters = filters;
 
     opaque_layer->test_properties()->force_render_surface = true;
     filters.Clear();
     filters.Append(FilterOperation::CreateGrayscaleFilter(0.5f));
-    opaque_layer->SetFilters(filters);
+    opaque_layer->test_properties()->filters = filters;
 
     opacity_layer->test_properties()->force_render_surface = true;
     filters.Clear();
     filters.Append(FilterOperation::CreateOpacityFilter(0.5f));
-    opacity_layer->SetFilters(filters);
+    opacity_layer->test_properties()->filters = filters;
 
     this->CalcDrawEtc(parent);
 
@@ -1974,7 +1973,8 @@ class OcclusionTrackerTestBlendModeDoesNotOcclude
 
     // Blend mode makes the layer own a surface.
     blend_mode_layer->test_properties()->force_render_surface = true;
-    blend_mode_layer->SetBlendMode(SkXfermode::kMultiply_Mode);
+    blend_mode_layer->test_properties()->blend_mode =
+        SkXfermode::kMultiply_Mode;
 
     this->CalcDrawEtc(parent);
 
@@ -1987,10 +1987,13 @@ class OcclusionTrackerTestBlendModeDoesNotOcclude
     EXPECT_TRUE(occlusion.occlusion_from_outside_target().IsEmpty());
 
     this->VisitLayer(blend_mode_layer, &occlusion);
-    // |top_layer| occludes but not |blend_mode_layer|.
+    // |top_layer| and |blend_mode_layer| both occlude, since the blend mode
+    // gets applied by blend_mode_layer's render surface, not when drawing the
+    // layer itself.
+    EXPECT_EQ(gfx::Rect(100, 100).ToString(),
+              occlusion.occlusion_from_inside_target().ToString());
     EXPECT_EQ(gfx::Rect(10, 12, 20, 22).ToString(),
               occlusion.occlusion_from_outside_target().ToString());
-    EXPECT_TRUE(occlusion.occlusion_from_inside_target().IsEmpty());
 
     this->VisitContributingSurface(blend_mode_layer, &occlusion);
     // |top_layer| occludes but not |blend_mode_layer|.

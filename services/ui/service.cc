@@ -20,7 +20,6 @@
 #include "services/ui/clipboard/clipboard_impl.h"
 #include "services/ui/common/switches.h"
 #include "services/ui/display/platform_screen.h"
-#include "services/ui/gles2/gpu_impl.h"
 #include "services/ui/gpu/gpu_service_impl.h"
 #include "services/ui/gpu/gpu_service_mus.h"
 #include "services/ui/ws/accessibility_manager.h"
@@ -53,7 +52,6 @@
 
 using shell::Connection;
 using mojo::InterfaceRequest;
-using ui::mojom::Gpu;
 using ui::mojom::WindowServerTest;
 using ui::mojom::WindowTreeHostFactory;
 
@@ -69,26 +67,18 @@ const char kResourceFile200[] = "mus_app_resources_200.pak";
 
 // TODO(sky): this is a pretty typical pattern, make it easier to do.
 struct Service::PendingRequest {
-  shell::Connection* connection;
+  shell::Identity remote_identity;
   std::unique_ptr<mojom::WindowTreeFactoryRequest> wtf_request;
   std::unique_ptr<mojom::DisplayManagerRequest> dm_request;
 };
 
 struct Service::UserState {
-  std::unique_ptr<clipboard::ClipboardImpl> clipboard;
   std::unique_ptr<ws::AccessibilityManager> accessibility;
   std::unique_ptr<ws::WindowTreeHostFactory> window_tree_host_factory;
 };
 
 Service::Service()
     : test_config_(false),
-// TODO(penghuang): Kludge: Use mojo command buffer when running on
-// Windows since chrome command buffer breaks unit tests
-#if defined(OS_WIN)
-      use_chrome_gpu_command_buffer_(false),
-#else
-      use_chrome_gpu_command_buffer_(true),
-#endif
       platform_screen_(display::PlatformScreen::Create()),
       weak_ptr_factory_(this) {
 }
@@ -98,9 +88,6 @@ Service::~Service() {
   // WindowServer (or more correctly its Displays) may have state that needs to
   // be destroyed before GpuState as well.
   window_server_.reset();
-
-  if (platform_display_init_params_.gpu_state)
-    platform_display_init_params_.gpu_state->StopThreads();
 }
 
 void Service::InitializeResources(shell::Connector* connector) {
@@ -130,8 +117,9 @@ void Service::InitializeResources(shell::Connector* connector) {
                          ui::SCALE_FACTOR_200P);
 }
 
-Service::UserState* Service::GetUserState(shell::Connection* connection) {
-  const ws::UserId& user_id = connection->GetRemoteIdentity().user_id();
+Service::UserState* Service::GetUserState(
+    const shell::Identity& remote_identity) {
+  const ws::UserId& user_id = remote_identity.user_id();
   auto it = user_id_to_user_state_.find(user_id);
   if (it != user_id_to_user_state_.end())
     return it->second.get();
@@ -139,38 +127,26 @@ Service::UserState* Service::GetUserState(shell::Connection* connection) {
   return user_id_to_user_state_[user_id].get();
 }
 
-void Service::AddUserIfNecessary(shell::Connection* connection) {
-  window_server_->user_id_tracker()->AddUserId(
-      connection->GetRemoteIdentity().user_id());
+void Service::AddUserIfNecessary(const shell::Identity& remote_identity) {
+  window_server_->user_id_tracker()->AddUserId(remote_identity.user_id());
 }
 
-void Service::OnStart(shell::Connector* connector,
-                      const shell::Identity& identity,
-                      uint32_t id) {
+void Service::OnStart(const shell::Identity& identity) {
   platform_display_init_params_.surfaces_state = new SurfacesState;
 
   base::PlatformThread::SetName("mus");
-  tracing_.Initialize(connector, identity.name());
+  tracing_.Initialize(connector(), identity.name());
   TRACE_EVENT0("mus", "Service::Initialize started");
 
   test_config_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kUseTestConfig);
-// TODO(penghuang): Kludge: use mojo command buffer when running on Windows
-// since Chrome command buffer breaks unit tests
-#if defined(OS_WIN)
-  use_chrome_gpu_command_buffer_ = false;
-#else
-  use_chrome_gpu_command_buffer_ =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseMojoGpuCommandBufferInMus);
-#endif
 #if defined(USE_X11)
   XInitThreads();
   if (test_config_)
     ui::test::SetUseOverrideRedirectWindowByDefault(true);
 #endif
 
-  InitializeResources(connector);
+  InitializeResources(connector());
 
 #if defined(USE_OZONE)
   // The ozone platform can provide its own event source. So initialize the
@@ -178,7 +154,7 @@ void Service::OnStart(shell::Connector* connector,
   // Because GL libraries need to be initialized before entering the sandbox,
   // in MUS, |InitializeForUI| will load the GL libraries.
   ui::OzonePlatform::InitParams params;
-  params.connector = connector;
+  params.connector = connector();
   params.single_process = false;
 
   ui::OzonePlatform::InitializeForUI(params);
@@ -205,13 +181,7 @@ void Service::OnStart(shell::Connector* connector,
   // so keep this line below both of those.
   input_device_server_.RegisterAsObserver();
 
-  if (use_chrome_gpu_command_buffer_) {
-    GpuServiceMus::GetInstance();
-  } else {
-    // TODO(rjkroege): It is possible that we might want to generalize the
-    // GpuState object.
-    platform_display_init_params_.gpu_state = new GpuState();
-  }
+  GpuServiceMus::GetInstance();
 
   // Gpu must be running before the PlatformScreen can be initialized.
   platform_screen_->Init();
@@ -229,6 +199,7 @@ bool Service::OnConnect(Connection* connection) {
   connection->AddInterface<mojom::AccessibilityManager>(this);
   connection->AddInterface<mojom::Clipboard>(this);
   connection->AddInterface<mojom::DisplayManager>(this);
+  connection->AddInterface<mojom::GpuService>(this);
   connection->AddInterface<mojom::UserAccessManager>(this);
   connection->AddInterface<mojom::UserActivityMonitor>(this);
   connection->AddInterface<WindowTreeHostFactory>(this);
@@ -236,12 +207,6 @@ bool Service::OnConnect(Connection* connection) {
   connection->AddInterface<mojom::WindowTreeFactory>(this);
   if (test_config_)
     connection->AddInterface<WindowServerTest>(this);
-
-  if (use_chrome_gpu_command_buffer_) {
-    connection->AddInterface<mojom::GpuService>(this);
-  } else {
-    connection->AddInterface<Gpu>(this);
-  }
 
   // On non-Linux platforms there will be no DeviceDataManager instance and no
   // purpose in adding the Mojo interface to connect to.
@@ -260,9 +225,9 @@ void Service::OnFirstDisplayReady() {
   requests.swap(pending_requests_);
   for (auto& request : requests) {
     if (request->wtf_request)
-      Create(request->connection, std::move(*request->wtf_request));
+      Create(request->remote_identity, std::move(*request->wtf_request));
     else
-      Create(request->connection, std::move(*request->dm_request));
+      Create(request->remote_identity, std::move(*request->dm_request));
   }
 }
 
@@ -283,104 +248,92 @@ void Service::CreateDefaultDisplays() {
       &Service::OnCreatedPhysicalDisplay, weak_ptr_factory_.GetWeakPtr()));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::AccessibilityManagerRequest request) {
-  UserState* user_state = GetUserState(connection);
+  UserState* user_state = GetUserState(remote_identity);
   if (!user_state->accessibility) {
-    const ws::UserId& user_id = connection->GetRemoteIdentity().user_id();
+    const ws::UserId& user_id = remote_identity.user_id();
     user_state->accessibility.reset(
         new ws::AccessibilityManager(window_server_.get(), user_id));
   }
   user_state->accessibility->Bind(std::move(request));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::ClipboardRequest request) {
-  UserState* user_state = GetUserState(connection);
-  if (!user_state->clipboard)
-    user_state->clipboard.reset(new clipboard::ClipboardImpl);
-  user_state->clipboard->AddBinding(std::move(request));
+  const ws::UserId& user_id = remote_identity.user_id();
+  window_server_->GetClipboardForUser(user_id)->AddBinding(std::move(request));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::DisplayManagerRequest request) {
   // DisplayManagerObservers generally expect there to be at least one display.
   if (!window_server_->display_manager()->has_displays()) {
     std::unique_ptr<PendingRequest> pending_request(new PendingRequest);
-    pending_request->connection = connection;
+    pending_request->remote_identity = remote_identity;
     pending_request->dm_request.reset(
         new mojom::DisplayManagerRequest(std::move(request)));
     pending_requests_.push_back(std::move(pending_request));
     return;
   }
   window_server_->display_manager()
-      ->GetUserDisplayManager(connection->GetRemoteIdentity().user_id())
+      ->GetUserDisplayManager(remote_identity.user_id())
       ->AddDisplayManagerBinding(std::move(request));
 }
 
-void Service::Create(shell::Connection* connection, mojom::GpuRequest request) {
-  if (use_chrome_gpu_command_buffer_)
-    return;
-  DCHECK(platform_display_init_params_.gpu_state);
-  new GpuImpl(std::move(request), platform_display_init_params_.gpu_state);
-}
-
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::GpuServiceRequest request) {
-  if (!use_chrome_gpu_command_buffer_)
-    return;
-  new GpuServiceImpl(std::move(request), connection);
+  new GpuServiceImpl(std::move(request));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::UserAccessManagerRequest request) {
   window_server_->user_id_tracker()->Bind(std::move(request));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::UserActivityMonitorRequest request) {
-  AddUserIfNecessary(connection);
-  const ws::UserId& user_id = connection->GetRemoteIdentity().user_id();
+  AddUserIfNecessary(remote_identity);
+  const ws::UserId& user_id = remote_identity.user_id();
   window_server_->GetUserActivityMonitorForUser(user_id)->Add(
       std::move(request));
 }
 
-void Service::Create(shell::Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::WindowManagerWindowTreeFactoryRequest request) {
-  AddUserIfNecessary(connection);
+  AddUserIfNecessary(remote_identity);
   window_server_->window_manager_window_tree_factory_set()->Add(
-      connection->GetRemoteIdentity().user_id(), std::move(request));
+    remote_identity.user_id(), std::move(request));
 }
 
-void Service::Create(Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::WindowTreeFactoryRequest request) {
-  AddUserIfNecessary(connection);
+  AddUserIfNecessary(remote_identity);
   if (!window_server_->display_manager()->has_displays()) {
     std::unique_ptr<PendingRequest> pending_request(new PendingRequest);
-    pending_request->connection = connection;
+    pending_request->remote_identity = remote_identity;
     pending_request->wtf_request.reset(
         new mojom::WindowTreeFactoryRequest(std::move(request)));
     pending_requests_.push_back(std::move(pending_request));
     return;
   }
-  AddUserIfNecessary(connection);
-  new ws::WindowTreeFactory(
-      window_server_.get(), connection->GetRemoteIdentity().user_id(),
-      connection->GetRemoteIdentity().name(), std::move(request));
+  AddUserIfNecessary(remote_identity);
+  new ws::WindowTreeFactory(window_server_.get(), remote_identity.user_id(),
+                            remote_identity.name(), std::move(request));
 }
 
-void Service::Create(Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::WindowTreeHostFactoryRequest request) {
-  UserState* user_state = GetUserState(connection);
+  UserState* user_state = GetUserState(remote_identity);
   if (!user_state->window_tree_host_factory) {
     user_state->window_tree_host_factory.reset(new ws::WindowTreeHostFactory(
-        window_server_.get(), connection->GetRemoteIdentity().user_id(),
+        window_server_.get(), remote_identity.user_id(),
         platform_display_init_params_));
   }
   user_state->window_tree_host_factory->AddBinding(std::move(request));
 }
 
-void Service::Create(Connection* connection,
+void Service::Create(const shell::Identity& remote_identity,
                      mojom::WindowServerTestRequest request) {
   if (!test_config_)
     return;

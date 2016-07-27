@@ -21,6 +21,7 @@
  */
 
 #include "core/dom/AXObjectCache.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/layout/BidiRunForLine.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutRubyRun.h"
@@ -2067,8 +2068,9 @@ PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInva
         paintInvalidationState.paintingLayer().setNeedsPaintPhaseFloat();
 
     PaintInvalidationReason reason = LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
-    if (reason == PaintInvalidationNone)
+    if (reason == PaintInvalidationNone || reason == PaintInvalidationDelayedFull)
         return reason;
+
     RootInlineBox* line = firstRootBox();
     if (!line || !line->isFirstLineStyle())
         return reason;

@@ -574,6 +574,7 @@ void ResourceDispatcher::StartSync(const RequestInfo& request_info,
   response->data.swap(result.data);
   response->download_file_path = result.download_file_path;
   response->socket_address = result.socket_address;
+  response->encoded_data_length = result.encoded_data_length;
   response->encoded_body_length = result.encoded_body_length;
 }
 
@@ -594,7 +595,7 @@ int ResourceDispatcher::StartAsync(const RequestInfo& request_info,
       request_info.loading_web_task_runner) {
     resource_scheduling_filter_->SetRequestIdTaskRunner(
         request_id,
-        base::WrapUnique(request_info.loading_web_task_runner->clone()));
+        request_info.loading_web_task_runner->clone());
   }
 
   message_sender_->Send(new ResourceHostMsg_RequestResource(
@@ -608,7 +609,8 @@ void ResourceDispatcher::ToResourceResponseInfo(
     const ResourceResponseHead& browser_info,
     ResourceResponseInfo* renderer_info) const {
   *renderer_info = browser_info;
-  if (request_info.request_start.is_null() ||
+  if (base::TimeTicks::IsConsistentAcrossProcesses() ||
+      request_info.request_start.is_null() ||
       request_info.response_start.is_null() ||
       browser_info.request_start.is_null() ||
       browser_info.response_start.is_null() ||

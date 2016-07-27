@@ -51,7 +51,7 @@ class NewTaskManagerView
   void SetColumnVisibility(int column_id, bool new_visibility) override;
   bool IsTableSorted() const override;
   TableSortDescriptor GetSortDescriptor() const override;
-  void ToggleSortOrder(int visible_column_index) override;
+  void SetSortDescriptor(const TableSortDescriptor& descriptor) override;
 
   // views::View:
   gfx::Size GetPreferredSize() const override;
@@ -88,8 +88,6 @@ class NewTaskManagerView
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int id) const override;
   bool IsCommandIdEnabled(int id) const override;
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) const override;
   void ExecuteCommand(int id, int event_flags) override;
 
  private:

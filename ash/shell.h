@@ -59,7 +59,7 @@ class UserActivityPowerManagerNotifier;
 }
 namespace views {
 class NonClientFrameView;
-class PointerDownWatcher;
+class PointerWatcher;
 class Widget;
 namespace corewm {
 class TooltipController;
@@ -76,7 +76,6 @@ class WindowModalityController;
 
 namespace ash {
 
-class AcceleratorController;
 class AcceleratorControllerDelegateAura;
 class AshNativeCursorManager;
 class AutoclickController;
@@ -106,7 +105,7 @@ class MouseCursorEventFilter;
 class NewWindowDelegate;
 class OverlayEventFilter;
 class PartialMagnificationController;
-class PointerDownWatcherDelegate;
+class PointerWatcherDelegate;
 class PowerButtonController;
 class PowerEventObserver;
 class ProjectingObserver;
@@ -122,8 +121,6 @@ class ScreenPinningController;
 class ScreenPositionController;
 class SessionStateDelegate;
 class Shelf;
-class ShelfDelegate;
-class ShelfItemDelegateManager;
 class ShelfWindowWatcher;
 class ShellDelegate;
 struct ShellInitParams;
@@ -275,8 +272,8 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // Show shelf view if it was created hidden (before session has started).
   void ShowShelf();
 
-  void AddPointerDownWatcher(views::PointerDownWatcher* watcher);
-  void RemovePointerDownWatcher(views::PointerDownWatcher* watcher);
+  void AddPointerWatcher(views::PointerWatcher* watcher);
+  void RemovePointerWatcher(views::PointerWatcher* watcher);
 
 #if defined(OS_CHROMEOS)
   // Test if MaximizeModeWindowManager is not enabled, and if
@@ -286,9 +283,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   bool ShouldSaveDisplaySettings();
 #endif
 
-  AcceleratorController* accelerator_controller() {
-    return accelerator_controller_.get();
-  }
   AcceleratorControllerDelegateAura* accelerator_controller_delegate() {
     return accelerator_controller_delegate_.get();
   }
@@ -373,10 +367,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return activation_client_;
   }
 
-  ShelfItemDelegateManager* shelf_item_delegate_manager() {
-    return shelf_item_delegate_manager_.get();
-  }
-
   base::SequencedWorkerPool* blocking_pool() { return blocking_pool_; }
 
   // Force the shelf to query for it's current visibility state.
@@ -457,9 +447,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
 #endif  // defined(OS_CHROMEOS)
 
   WindowPositioner* window_positioner() { return window_positioner_.get(); }
-
-  // Returns the launcher delegate, creating if necesary.
-  ShelfDelegate* GetShelfDelegate();
 
   UserMetricsRecorder* metrics() { return user_metrics_recorder_.get(); }
 
@@ -560,13 +547,10 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   std::unique_ptr<UserMetricsRecorder> user_metrics_recorder_;
   std::unique_ptr<AcceleratorControllerDelegateAura>
       accelerator_controller_delegate_;
-  std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<UserWallpaperDelegate> user_wallpaper_delegate_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
   std::unique_ptr<NewWindowDelegate> new_window_delegate_;
-  std::unique_ptr<PointerDownWatcherDelegate> pointer_down_watcher_delegate_;
-  std::unique_ptr<ShelfDelegate> shelf_delegate_;
-  std::unique_ptr<ShelfItemDelegateManager> shelf_item_delegate_manager_;
+  std::unique_ptr<PointerWatcherDelegate> pointer_watcher_delegate_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<WindowPositioner> window_positioner_;
 

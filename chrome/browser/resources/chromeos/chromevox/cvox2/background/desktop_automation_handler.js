@@ -129,11 +129,21 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onEventIfInRange: function(evt) {
-    // TODO(dtseng): Consider the end of the current range as well.
-    if (AutomationUtil.isDescendantOf(
-        ChromeVoxState.instance.currentRange.start.node, evt.target) ||
-            evt.target.state.focused)
-      this.onEventDefault(evt);
+    if (evt.target.root.role != RoleType.desktop &&
+        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
+      return;
+
+    var prev = ChromeVoxState.instance.currentRange;
+    if (AutomationUtil.isDescendantOf(prev.start.node, evt.target) ||
+        AutomationUtil.isDescendantOf(evt.target, prev.start.node) ||
+        evt.target.state.focused) {
+      // Intentionally skip setting range.
+      new Output()
+          .withRichSpeechAndBraille(cursors.Range.fromNode(evt.target),
+                                    prev,
+                                    Output.EventType.NAVIGATE)
+          .go();
+    }
   },
 
   /**
@@ -349,8 +359,12 @@ DesktopAutomationHandler.prototype = {
 
       this.lastValueChanged_ = new Date();
 
-      new Output().format('$value', evt.target)
-          .go();
+      var output = new Output();
+
+      if (t.root.role == RoleType.desktop)
+        output.withQueueMode(cvox.QueueMode.FLUSH);
+
+      output.format('$value', evt.target).go();
     }
   },
 

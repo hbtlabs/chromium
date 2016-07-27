@@ -30,6 +30,7 @@
 <translation id="13410144310025252">Προβολή στο Chrome</translation>
 <translation id="1369915414381695676">Προστέθηκε ο ιστότοπος <ph name="SITE_NAME" /></translation>
 <translation id="1373696734384179344">Ανεπαρκής μνήμη για τη λήψη του επιλεγμένου περιεχομένου.</translation>
+<translation id="1376578503827013741">Υπολογισμός…</translation>
 <translation id="138361230106469022">Γεια σας, <ph name="FULL_NAME" /></translation>
 <translation id="1383876407941801731">Αναζήτηση</translation>
 <translation id="1389974829397082527">Δεν υπάρχουν σελιδοδείκτες εδώ</translation>
@@ -46,10 +47,8 @@
 <translation id="1477626028522505441">Η λήψη του αρχείου <ph name="FILE_NAME" /> απέτυχε λόγω προβλημάτων στον διακομιστή.</translation>
 <translation id="1506061864768559482">Μηχανή αναζήτησης</translation>
 <translation id="1513352483775369820">Σελιδοδείκτες και ιστορικό ιστού</translation>
-<translation id="1517433312004943670">Απαιτείται αριθμός τηλεφώνου</translation>
 <translation id="1549000191223877751">Μεταβείτε σε άλλο παράθυρο</translation>
 <translation id="1553358976309200471">Ενημερώστε το Chrome</translation>
-<translation id="1557201757634521564">Αυτόματος εντοπισμός κωδικοποίησης</translation>
 <translation id="1612196535745283361">Το Chrome χρειάζεται πρόσβαση στην τοποθεσία, προκειμένου να κάνει σάρωση για συσκευές. Η πρόσβαση τοποθεσίας είναι <ph name="BEGIN_LINK" />απενεργοποιημένη για αυτήν τη συσκευή<ph name="END_LINK" />.</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
 <translation id="1623104350909869708">Αποτροπή δημιουργίας πρόσθετων παραθύρων διαλόγου από αυτήν τη σελίδα</translation>
@@ -79,7 +78,6 @@
 <translation id="1853692000353488670">Νέα καρτέλα ανώνυμης περιήγησης</translation>
 <translation id="1871284979644508959">Απαιτούμενο πεδίο</translation>
 <translation id="189172778771606813">Κλείσιμο συρταριού πλοήγησης</translation>
-<translation id="1924956916668006832">Επιλογή διεύθυνσης αποστολής</translation>
 <translation id="1933845786846280168">Επιλεγμένη καρτέλα</translation>
 <translation id="194341124344773587">Ενεργοποίηση των αδειών για το Chrome στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
 <translation id="1943432128510653496">Αποθήκευση κωδικών πρόσβασης</translation>
@@ -103,6 +101,7 @@
 <translation id="213279576345780926">Η καρτέλα <ph name="TAB_TITLE" /> έκλεισε</translation>
 <translation id="2138201775715568214">Αναζήτηση κοντινών σελίδων Φυσικού δικτύου</translation>
 <translation id="2139186145475833000">Προσθήκη στην αρχική οθόνη</translation>
+<translation id="2148716181193084225">Σήμερα</translation>
 <translation id="2154710561487035718">Αντιγραφή διεύθυνσης URL</translation>
 <translation id="21570240866965662">Αργή σύνδεση</translation>
 <translation id="219985413780390209">Προστατεύει εσάς και τη συσκευή σας από επικίνδυνους ιστότοπους</translation>
@@ -159,7 +158,6 @@
 <translation id="2777555524387840389">Απομένουν <ph name="SECONDS" /> δευτερόλεπτα</translation>
 <translation id="278029852808208386">Δεν βρέθηκαν συσκευές Bluetooth. <ph name="BEGIN_LINK" />Νέα αναζήτηση<ph name="END_LINK" />.</translation>
 <translation id="2781151931089541271">Απομένει 1 δευτερόλεπτο</translation>
-<translation id="2781389167600714117">Επιλογή αποστολής</translation>
 <translation id="2811892995384186721">Δεν βλέπετε τη συσκευή σας; <ph name="BEGIN_LINK" />Λάβετε βοήθεια<ph name="END_LINK" /></translation>
 <translation id="2836148919159985482">Πατήστε το κουμπί επιστροφής για έξοδο από την πλήρη οθόνη.</translation>
 <translation id="2842985007712546952">Γονικός φάκελος</translation>
@@ -173,6 +171,7 @@
 <translation id="2932150158123903946">Αποθηκευτικός χώρος Google <ph name="APP_NAME" /></translation>
 <translation id="2956410042958133412">Αυτός ο λογαριασμός τελεί υπό τη διαχείριση των γονέων <ph name="PARENT_NAME_1" /> και <ph name="PARENT_NAME_2" />.</translation>
 <translation id="2960796085439532066">Πνευματικά δικαιώματα <ph name="YEAR" /> Google Inc. Με επιφύλαξη παντός δικαιώματος.</translation>
+<translation id="2962095958535813455">Έγινε εναλλαγή σε καρτέλες ανώνυμης περιήγησης</translation>
 <translation id="2968755619301702150">Πρόγρ. προβολής πιστοποιητικού</translation>
 <translation id="2979025552038692506">Επιλεγμένη καρτέλα ανώνυμης περιήγησης</translation>
 <translation id="2996291259634659425">Δημιουργία φράσης πρόσβασης</translation>
@@ -182,13 +181,11 @@
 <translation id="3029704984691124060">Οι φράσεις πρόσβασης δεν συμφωνούν</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Λάβετε βοήθεια<ph name="END_LINK" /></translation>
 <translation id="3063601790762993062">Αποθήκευση βίντεο</translation>
-<translation id="307329814453917357">Πρόταση μετάφρασης σελίδων χρησιμοποιώντας τη Μετάφραση Google</translation>
 <translation id="3089395242580810162">Άνοιγμα σε καρτέλα ανώνυμης περιήγησης</translation>
 <translation id="3090193911106258841">Πρόσβαση στην είσοδο ήχου και βίντεο</translation>
 <translation id="3117051980354074377">Για να εμφανίζονται οι σελιδοδείκτες από τις άλλες συσκευές σας, συνδεθείτε στο Chrome.</translation>
 <translation id="3137521801621304719">Έξοδος από την κατάσταση ανώνυμης περιήγησης</translation>
 <translation id="3149891296864842641">Επιλογή αποστολής</translation>
-<translation id="3162882791484435636">Ορίστε επιλογή αποστολής</translation>
 <translation id="3177909033752230686">Γλώσσα σελίδας:</translation>
 <translation id="3190152372525844641">Ενεργοποίηση των αδειών για το Chrome στις <ph name="BEGIN_LINK" />Ρυθμίσεις Android<ph name="END_LINK" />.</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> αποθηκευμένα δεδομένα</translation>
@@ -201,6 +198,7 @@
 <translation id="3254409185687681395">Προσθήκη αυτής της σελίδας στους σελιδοδείκτες</translation>
 <translation id="326254929494722411">Δεν ρυθμίσατε Λογαριασμό Google σε αυτήν τη συσκευή</translation>
 <translation id="3269093882174072735">Φόρτωση εικόνας</translation>
+<translation id="3269956123044984603">Για να εμφανίζονται οι καρτέλες από τις άλλες συσκευές σας, ενεργοποιήστε τον "Αυτόματο συγχρονισμό δεδομένων" στις ρυθμίσεις λογαριασμού Android.</translation>
 <translation id="3278850099957560514">Εξοικονομήστε δεδομένα χρησιμοποιώντας το Google για τη βελτιστοποίηση των σελίδων που επισκέπτεστε. Οι σελίδες τις οποίες επισκεφτήκατε μέσω ασφαλών συνδέσεων (HTTPS) ή σε καρτέλες ανώνυμης περιήγησης δεν θα βελτιστοποιηθούν ή δεν θα είναι ορατές από την Google.</translation>
 <translation id="3282568296779691940">Σύνδεση στο Chrome</translation>
 <translation id="3303414029551471755">Συνέχεια για λήψη του περιεχομένου;</translation>
@@ -260,7 +258,6 @@
 <translation id="4062305924942672200">Νομικές πληροφορίες</translation>
 <translation id="4089831646916293264">Αυτή η λειτουργία ενδέχεται να εμποδίζει την πρόσβαση σε υπηρεσίες δεδομένων υψηλής ποιότητας που παρέχονται από την εταιρεία κινητής τηλεφωνίας.</translation>
 <translation id="4095146165863963773">Διαγραφή δεδομένων εφαρμογών;</translation>
-<translation id="4099423833822562131">Επιλέξτε μια διεύθυνση αποστολής, για να ελέγξετε τους τρόπους αποστολής.</translation>
 <translation id="4099578267706723511">Συμβάλετε στη βελτίωση του Chrome, στέλνοντας στην Google στατιστικά στοιχεία χρήσης και αναφορές σφαλμάτων.</translation>
 <translation id="410351446219883937">Αυτόματη αναπαραγωγή</translation>
 <translation id="411254640334432676">Αποτυχία λήψης.</translation>
@@ -336,12 +333,12 @@
 <translation id="4988526792673242964">Σελίδες</translation>
 <translation id="4996978546172906250">Κοινή χρήση μέσω</translation>
 <translation id="5000922062037820727">Αποκλείεται (συνιστάται)</translation>
+<translation id="5005498671520578047">Αντιγραφή κωδικού πρόσβασης</translation>
 <translation id="5016205925109358554">Serif</translation>
 <translation id="5039804452771397117">Επιτρέπεται</translation>
 <translation id="5040262127954254034">Απόρρητο</translation>
 <translation id="5056549851600133418">Άρθρα για εσάς</translation>
 <translation id="5063480226653192405">Χρήση</translation>
-<translation id="5087580092889165836">Προσθήκη κάρτας</translation>
 <translation id="5100237604440890931">Συμπτυγμένη - Κάντε κλικ για ανάπτυξη</translation>
 <translation id="510275257476243843">Απομένει 1 ώρα</translation>
 <translation id="5107381076085091558">Η λήψη τέθηκε σε παύση.</translation>
@@ -365,9 +362,9 @@
 <translation id="528192093759286357">Σύρετε από το επάνω τμήμα και αγγίξτε το κουμπί επιστροφής για έξοδο από την πλήρη οθόνη.</translation>
 <translation id="5284584623296338184">Οι αλλαγές σε σελιδοδείκτες, ιστορικό, κωδικούς πρόσβασης και άλλες ρυθμίσεις δεν θα συγχρονίζονται πλέον με το Λογαριασμό σας Google. Ωστόσο, τα υπάρχοντα δεδομένα σας θα παραμείνουν αποθηκευμένα στο λογαριασμό σας Google.</translation>
 <translation id="5301954838959518834">Εντάξει, το κατάλαβα</translation>
-<translation id="5302048478445481009">Γλώσσα</translation>
 <translation id="5304593522240415983">Αυτό το πεδίο δεν μπορεί να είναι κενό</translation>
 <translation id="5308380583665731573">Σύνδεση</translation>
+<translation id="5308603654685598744">Όταν είναι ενεργοποιημένη αυτή η λειτουργία, το Chrome θα προσφέρεται να μεταφράζει σελίδες σε άλλες γλώσσες χρησιμοποιώντας τη Μετάφραση Google.</translation>
 <translation id="5313967007315987356">Προσθήκη ιστότοπου</translation>
 <translation id="5317780077021120954">Αποθήκευση</translation>
 <translation id="5324858694974489420">Ρυθμίσεις γονικού ελέγχου</translation>
@@ -380,8 +377,6 @@
 <translation id="5400569084694353794">Χρησιμοποιώντας αυτήν την εφαρμογή, αποδέχεστε τους <ph name="BEGIN_LINK1" />Όρους Παροχής Υπηρεσιών<ph name="END_LINK1" /> και τη <ph name="BEGIN_LINK2" />Σημείωση Απορρήτου<ph name="END_LINK2" /> του Chrome.</translation>
 <translation id="5414836363063783498">Γίνεται επαλήθευση…</translation>
 <translation id="5423934151118863508">Οι πιο δημοφιλείς σελίδες σας θα εμφανίζονται εδώ</translation>
-<translation id="5424715742813396254">Επεξεργασία ονόματος/κωδικού πρόσβασης ή εξαίρεσης
-</translation>
 <translation id="5437003064129843501">Οι προτάσεις εξατομικευμένου περιεχομένου είναι επί του παρόντος απενεργοποιημένες, επειδή τα συγχρονισμένα δεδομένα σας προστατεύονται με μια προσαρμοσμένη φράση πρόσβασης.</translation>
 <translation id="544291274896356069">Αποχώρηση από την κατάσταση ανώνυμης περιήγησης εάν αυτός ο σύνδεσμος έχει ανοίξει σε εξωτερική εφαρμογή. Συνέχεια;</translation>
 <translation id="5447201525962359567">Όλος ο αποθηκευτικός χώρος ιστότοπων, συμπεριλαμβανομένων των cookie και άλλων τοπικά αποθηκευμένων δεδομένων</translation>
@@ -411,6 +406,7 @@
 
 Ωστόσο, δεν είστε αόρατοι. Με την ανώνυμη περιήγηση δεν γίνεται απόκρυψη της περιήγησής σας από τον εργοδότη σας, τον παροχέα υπηρεσιών διαδικτύου ή τους ιστότοπους που επισκέπτεστε.</translation>
 <translation id="572328651809341494">Πρόσφατες καρτέλες</translation>
+<translation id="5748802427693696783">Έγινε εναλλαγή σε τυπικές καρτέλες</translation>
 <translation id="5749068826913805084">Το Chrome χρειάζεται πρόσβαση στο χώρο αποθήκευσης για τη λήψη αρχείων.</translation>
 <translation id="5763382633136178763">Καρτέλες ανώνυμης περιήγησης</translation>
 <translation id="5765780083710877561">Περιγραφή:</translation>
@@ -430,8 +426,6 @@
 <translation id="5911030830365207728">Μετάφραση Google</translation>
 <translation id="5916664084637901428">Ενεργό</translation>
 <translation id="5939518447894949180">Επαναφορά</translation>
-<translation id="5950380453936610378">Απαιτείται διεύθυνση ηλεκτρονικού ταχυδρομείου</translation>
-<translation id="5961742032223302715">Επιλογή στοιχείων επικοινωνίας</translation>
 <translation id="5968595432776860642">Αναπαραγωγή "<ph name="VIDEO_TITLE" />"</translation>
 <translation id="6010869025736512584">Πρόσβαση στην είσοδο βίντεο</translation>
 <translation id="6012342843556706400">Το Chrome χρειάζεται πρόσβαση στην τοποθεσία προκειμένου να την μοιραστεί με αυτόν τον ιστότοπο.</translation>
@@ -461,10 +455,10 @@
 <translation id="6295158916970320988">Όλοι οι ιστότοποι</translation>
 <translation id="6320088164292336938">Δόνηση</translation>
 <translation id="6324034347079777476">Ο συγχρονισμός συστήματος Android απενεργοποιήθηκε</translation>
-<translation id="6324360525379265737">Αυτόματος καθορισμός κωδικοποίησης χαρακτήρων</translation>
 <translation id="6333140779060797560">Κοινή χρήση μέσω <ph name="APPLICATION" /></translation>
 <translation id="6337234675334993532">Κρυπτογράφηση</translation>
 <translation id="6364438453358674297">Κατάργηση πρότασης από το ιστορικό;</translation>
+<translation id="6383961787135158834">Διαγρ. αποθ. χώρ. ιστότ…</translation>
 <translation id="6388207532828177975">Διαγραφή και επαναφορά</translation>
 <translation id="6404511346730675251">Επεξεργασία σελιδοδείκτη</translation>
 <translation id="6406506848690869874">Συγχρονισμός</translation>
@@ -493,6 +487,7 @@
 <translation id="6643016212128521049">Διαγραφή</translation>
 <translation id="6647073004883890710">Θέλετε το <ph name="PASSWORD_MANAGER_BRAND" /> να ενημερώσει τον κωδικό πρόσβασης για το χρήστη <ph name="USERNAME" /> για αυτόν τον ιστότοπο;</translation>
 <translation id="6656545060687952787">Το Chrome χρειάζεται πρόσβαση στην τοποθεσία, προκειμένου να κάνει σάρωση για συσκευές. <ph name="BEGIN_LINK" />Ενημέρωση δικαιωμάτων<ph name="END_LINK" /></translation>
+<translation id="6657585470893396449">Κωδικός πρόσβασης</translation>
 <translation id="6659594942844771486">Καρτέλα</translation>
 <translation id="666268767214822976">Χρήση υπηρεσίας προβλέψεων για την εμφάνιση σχετικών ερωτημάτων και δημοφιλών ιστότοπων, καθώς πληκτρολογείτε στη γραμμή διευθύνσεων</translation>
 <translation id="666981079809192359">Σημείωση Απορρήτου του Chrome</translation>
@@ -598,6 +593,7 @@
 <translation id="7765158879357617694">Μεταφορά</translation>
 <translation id="7769602470925380267">Αποδοχή και αποσύνδεση</translation>
 <translation id="7772032839648071052">Επιβεβαίωση φράσης πρόσβασης</translation>
+<translation id="7781829728241885113">Χθες</translation>
 <translation id="7788788617745289808">Το Chrome χρειάζεται πρόσβαση στην κάμερα προκειμένου να την μοιραστεί με αυτόν τον ιστότοπο.</translation>
 <translation id="7791543448312431591">Προσθήκη</translation>
 <translation id="780301667611848630">Όχι, ευχαριστώ</translation>
@@ -653,6 +649,7 @@
 <translation id="8481940801237642152">Η σύνδεσή σας σε αυτόν τον ιστότοπο είναι ιδιωτική, αλλά κάποιος χρήστης του δικτύου ενδέχεται να έχει τη δυνατότητα να αλλάξει την εμφάνιση της σελίδας.</translation>
 <translation id="8493948351860045254">Ελευθερώστε χώρο</translation>
 <translation id="8497726226069778601">Δεν υπάρχει τίποτα να δείτε εδώ…ακόμη</translation>
+<translation id="8503813439785031346">Όνομα χρήστη</translation>
 <translation id="8514577642972634246">Είσοδος στην κατάσταση ανώνυμης περιήγησης</translation>
 <translation id="8518901949365209398">Αυτός ο ιστότοπος δεν χρησιμοποιεί ισχυρή ρύθμιση παραμέτρων ασφαλείας (υπογραφές SHA-1), επομένως η σύνδεσή σας ενδέχεται να μην είναι απόρρητη.</translation>
 <translation id="8525306231823319788">Πλήρης οθόνη</translation>

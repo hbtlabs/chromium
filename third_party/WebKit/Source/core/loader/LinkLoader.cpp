@@ -159,7 +159,6 @@ static void preconnectIfNeeded(const LinkRelAttribute& relAttribute, const KURL&
         UseCounter::count(document, UseCounter::LinkRelPreconnect);
         if (caller == LinkCalledFromHeader)
             UseCounter::count(document, UseCounter::LinkHeaderPreconnect);
-        ASSERT(RuntimeEnabledFeatures::linkPreconnectEnabled());
         Settings* settings = document.settings();
         if (settings && settings->logDnsPrefetchAndPreconnect()) {
             document.addConsoleMessage(ConsoleMessage::create(OtherMessageSource, DebugMessageLevel, String("Preconnect triggered for ") + href.getString()));
@@ -302,13 +301,18 @@ static Resource* preloadIfNeeded(const LinkRelAttribute& relAttribute, const KUR
 }
 
 void LinkLoader::loadLinksFromHeader(const String& headerValue, const KURL& baseURL, Document* document, const NetworkHintsInterface& networkHintsInterface,
-    CanLoadResources canLoadResources, ViewportDescriptionWrapper* viewportDescriptionWrapper)
+    CanLoadResources canLoadResources, MediaPreloadPolicy mediaPolicy, ViewportDescriptionWrapper* viewportDescriptionWrapper)
 {
     if (!document || headerValue.isEmpty())
         return;
     LinkHeaderSet headerSet(headerValue);
     for (auto& header : headerSet) {
         if (!header.valid() || header.url().isEmpty() || header.rel().isEmpty())
+            continue;
+
+        if (mediaPolicy == OnlyLoadMedia && header.media().isEmpty())
+            continue;
+        if (mediaPolicy == OnlyLoadNonMedia && !header.media().isEmpty())
             continue;
 
         LinkRelAttribute relAttribute(header.rel());
@@ -320,8 +324,7 @@ void LinkLoader::loadLinksFromHeader(const String& headerValue, const KURL& base
             if (RuntimeEnabledFeatures::linkHeaderEnabled())
                 dnsPrefetchIfNeeded(relAttribute, url, *document, networkHintsInterface, LinkCalledFromHeader);
 
-            if (RuntimeEnabledFeatures::linkPreconnectEnabled())
-                preconnectIfNeeded(relAttribute, url, *document, crossOriginAttributeValue(header.crossOrigin()), networkHintsInterface, LinkCalledFromHeader);
+            preconnectIfNeeded(relAttribute, url, *document, crossOriginAttributeValue(header.crossOrigin()), networkHintsInterface, LinkCalledFromHeader);
         }
         if (canLoadResources != DoNotLoadResources) {
             bool errorOccurred = false;

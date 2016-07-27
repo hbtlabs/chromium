@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "ash/common/material_design/material_design_controller.h"
-#include "ash/mus/accelerator_registrar_impl.h"
+#include "ash/mus/accelerators/accelerator_registrar_impl.h"
 #include "ash/mus/root_window_controller.h"
 #include "ash/mus/shelf_layout_impl.h"
 #include "ash/mus/user_window_controller_impl.h"
@@ -65,7 +65,7 @@ void ShutdownComponents() {
 }  // namespace
 
 WindowManagerApplication::WindowManagerApplication()
-    : connector_(nullptr), screenlock_state_listener_binding_(this) {}
+    : screenlock_state_listener_binding_(this) {}
 
 WindowManagerApplication::~WindowManagerApplication() {
   // AcceleratorRegistrarImpl removes an observer in its destructor. Destroy
@@ -95,21 +95,18 @@ void WindowManagerApplication::InitWindowManager(
   window_manager_->AddObserver(this);
 }
 
-void WindowManagerApplication::OnStart(shell::Connector* connector,
-                                       const shell::Identity& identity,
-                                       uint32_t id) {
-  connector_ = connector;
-  ::ui::GpuService::Initialize(connector);
-  window_manager_.reset(new WindowManager(connector_));
+void WindowManagerApplication::OnStart(const shell::Identity& identity) {
+  ::ui::GpuService::Initialize(connector());
+  window_manager_.reset(new WindowManager(connector()));
 
-  aura_init_.reset(new views::AuraInit(connector_, "ash_mus_resources.pak"));
+  aura_init_.reset(new views::AuraInit(connector(), "ash_mus_resources.pak"));
   MaterialDesignController::Initialize();
 
-  tracing_.Initialize(connector, identity.name());
+  tracing_.Initialize(connector(), identity.name());
 
   ::ui::WindowTreeClient* window_tree_client = new ::ui::WindowTreeClient(
       window_manager_.get(), window_manager_.get(), nullptr);
-  window_tree_client->ConnectAsWindowManager(connector);
+  window_tree_client->ConnectAsWindowManager(connector());
 
   InitWindowManager(window_tree_client);
 }
@@ -127,7 +124,7 @@ bool WindowManagerApplication::OnConnect(shell::Connection* connection) {
 }
 
 void WindowManagerApplication::Create(
-    shell::Connection* connection,
+    const shell::Identity& remote_identity,
     mojo::InterfaceRequest<mojom::ShelfLayout> request) {
   // TODO(msw): Handle multiple shelves (one per display).
   if (!window_manager_->GetRootWindowControllers().empty()) {
@@ -138,7 +135,7 @@ void WindowManagerApplication::Create(
 }
 
 void WindowManagerApplication::Create(
-    shell::Connection* connection,
+    const shell::Identity& remote_identity,
     mojo::InterfaceRequest<mojom::UserWindowController> request) {
   if (!window_manager_->GetRootWindowControllers().empty()) {
     user_window_controller_bindings_.AddBinding(user_window_controller_.get(),
@@ -149,22 +146,20 @@ void WindowManagerApplication::Create(
 }
 
 void WindowManagerApplication::Create(
-    shell::Connection* connection,
+    const shell::Identity& remote_identity,
     mojo::InterfaceRequest<::ui::mojom::AcceleratorRegistrar> request) {
   if (!window_manager_->window_manager_client())
     return;  // Can happen during shutdown.
 
-  static int accelerator_registrar_count = 0;
-  if (accelerator_registrar_count == std::numeric_limits<int>::max()) {
-    // Restart from zero if we have reached the limit. It is technically
-    // possible to end up with multiple active registrars with the same
-    // namespace, but it is highly unlikely. In the event that multiple
-    // registrars have the same namespace, this new registrar will be unable to
-    // install accelerators.
-    accelerator_registrar_count = 0;
+  uint16_t accelerator_namespace_id;
+  if (!window_manager_->GetNextAcceleratorNamespaceId(
+          &accelerator_namespace_id)) {
+    DVLOG(1) << "Max number of accelerators registered, ignoring request.";
+    // All ids are used. Normally shouldn't happen, so we close the connection.
+    return;
   }
   accelerator_registrars_.insert(new AcceleratorRegistrarImpl(
-      window_manager_.get(), ++accelerator_registrar_count, std::move(request),
+      window_manager_.get(), accelerator_namespace_id, std::move(request),
       base::Bind(&WindowManagerApplication::OnAcceleratorRegistrarDestroyed,
                  base::Unretained(this))));
 }

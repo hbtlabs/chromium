@@ -567,7 +567,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
             Intent intent = getIntent();
 
-            CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState());
+            boolean hadCipherData =
+                    CipherFactory.getInstance().restoreFromBundle(getSavedInstanceState());
 
             boolean noRestoreState =
                     CommandLine.getInstance().hasSwitch(ChromeSwitches.NO_RESTORE_STATE);
@@ -578,7 +579,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 // State should be clear when we start first run and hence we do not need to load
                 // a previous state. This may change the current Model, watch out for initialization
                 // based on the model.
-                mTabModelSelectorImpl.loadState();
+                // Never attempt to restore incognito tabs when this activity was previously swiped
+                // away in Recents. http://crbug.com/626629
+                boolean ignoreIncognitoFiles = !hadCipherData;
+                mTabModelSelectorImpl.loadState(ignoreIncognitoFiles);
             }
 
             mIntentWithEffect = false;
@@ -710,6 +714,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 TabOpenType tabOpenType, String externalAppId, int tabIdToBringToFront,
                 boolean hasUserGesture, Intent intent) {
             TabModel tabModel = getCurrentTabModel();
+            boolean fromLauncherShortcut = IntentUtils.safeGetBooleanExtra(
+                    intent, IntentHandler.EXTRA_INVOKED_FROM_SHORTCUT, false);
             switch (tabOpenType) {
                 case REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB:
                     // Used by the bookmarks application.
@@ -774,10 +780,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     openNewTab(url, referer, headers, externalAppId, intent, false);
                     break;
                 case OPEN_NEW_TAB:
+                    if (fromLauncherShortcut) recordLauncherShortcutAction(false);
                     openNewTab(url, referer, headers, externalAppId, intent, true);
                     break;
                 case OPEN_NEW_INCOGNITO_TAB:
                     if (url == null || url.equals(UrlConstants.NTP_URL)) {
+                        if (fromLauncherShortcut) recordLauncherShortcutAction(true);
                         if (TextUtils.equals(externalAppId, getPackageName())) {
                             // Used by the Account management screen to open a new incognito tab.
                             // Account management screen collects its metrics separately.
@@ -1108,6 +1116,14 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 action, BACK_PRESSED_COUNT);
     }
 
+    private void recordLauncherShortcutAction(boolean isIncognito) {
+        if (isIncognito) {
+            RecordUserAction.record("Android.LauncherShortcut.NewIncognitoTab");
+        } else {
+            RecordUserAction.record("Android.LauncherShortcut.NewTab");
+        }
+    }
+
     private void moveTabToOtherWindow(Tab tab) {
         Class<? extends Activity> targetActivity =
                 MultiWindowUtils.getInstance().getOpenInOtherWindowActivity(this);
@@ -1226,7 +1242,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             mHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
+                    boolean hasNextTab =
+                            getCurrentTabModel().getNextTabIfClosed(tabToClose.getId()) != null;
                     getCurrentTabModel().closeTab(tabToClose, false, true, false);
+
+                    // If there is no next tab to open, enter overview mode.
+                    if (!hasNextTab) mLayoutManager.showOverview(false);
                 }
             }, CLOSE_TAB_ON_MINIMIZE_DELAY_MS);
         }
@@ -1481,9 +1502,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
      */
     @VisibleForTesting
     public void maybeMergeTabs() {
-        // TODO(twellington): Handle merging while the tab switcher is showing. Currently the tabs
-        // are merged but the tab switcher view doesn't update.
-
         if (!FeatureUtilities.isTabModelMergingEnabled()) return;
 
         Class<?> otherWindowActivityClass =

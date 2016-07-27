@@ -621,6 +621,14 @@ interface CSSSupportsRule : CSSRule
     method constructor
     method deleteRule
     method insertRule
+interface CSSTokenStreamValue : CSSStyleValue
+    attribute @@toStringTag
+    method @@iterator
+    method constructor
+    method entries
+    method forEach
+    method keys
+    method values
 interface CSSTransformComponent
     attribute @@toStringTag
     getter cssText
@@ -4062,6 +4070,7 @@ interface Node : EventTarget
     method compareDocumentPosition
     method constructor
     method contains
+    method getRootNode
     method hasChildNodes
     method insertBefore
     method isDefaultNamespace
@@ -4169,6 +4178,8 @@ interface OffscreenCanvas
 interface OffscreenCanvasRenderingContext2D
     attribute @@toStringTag
     getter fillStyle
+    getter imageSmoothingEnabled
+    getter imageSmoothingQuality
     getter lineCap
     getter lineDashOffset
     getter lineJoin
@@ -4215,6 +4226,8 @@ interface OffscreenCanvasRenderingContext2D
     method transform
     method translate
     setter fillStyle
+    setter imageSmoothingEnabled
+    setter imageSmoothingQuality
     setter lineCap
     setter lineDashOffset
     setter lineJoin
@@ -4436,6 +4449,9 @@ interface Permissions
 interface PhotoCapabilities
     attribute @@toStringTag
     getter focusMode
+    getter imageHeight
+    getter imageWidth
+    getter iso
     getter zoom
     method constructor
 interface Plugin
@@ -6556,16 +6572,12 @@ interface VisualViewport : EventTarget
     attribute @@toStringTag
     getter clientHeight
     getter clientWidth
-    getter onresize
-    getter onscroll
     getter pageX
     getter pageY
     getter scale
     getter scrollLeft
     getter scrollTop
     method constructor
-    setter onresize
-    setter onscroll
 interface WaveShaperNode : AudioNode
     attribute @@toStringTag
     getter curve

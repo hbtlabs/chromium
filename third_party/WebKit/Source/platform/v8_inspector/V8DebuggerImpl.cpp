@@ -480,6 +480,8 @@ void V8DebuggerImpl::breakProgramCallback(const v8::FunctionCallbackInfo<v8::Val
 {
     DCHECK_EQ(info.Length(), 2);
     V8DebuggerImpl* thisPtr = toV8DebuggerImpl(info.Data());
+    if (!thisPtr->enabled())
+        return;
     v8::Local<v8::Context> pausedContext = thisPtr->m_isolate->GetCurrentContext();
     v8::Local<v8::Value> exception;
     v8::Local<v8::Array> hitBreakpoints;
@@ -630,8 +632,10 @@ void V8DebuggerImpl::compileDebuggerScript()
 
     v8::Local<v8::String> scriptValue = v8::String::NewFromUtf8(m_isolate, DebuggerScript_js, v8::NewStringType::kInternalized, sizeof(DebuggerScript_js)).ToLocalChecked();
     v8::Local<v8::Value> value;
-    if (!compileAndRunInternalScript(debuggerContext(), scriptValue).ToLocal(&value))
+    if (!compileAndRunInternalScript(debuggerContext(), scriptValue).ToLocal(&value)) {
+        NOTREACHED();
         return;
+    }
     DCHECK(value->IsObject());
     m_debuggerScript.Reset(m_isolate, value.As<v8::Object>());
 }
@@ -809,24 +813,22 @@ v8::MaybeLocal<v8::Value> V8DebuggerImpl::callFunction(v8::Local<v8::Function> f
 
 v8::MaybeLocal<v8::Value> V8DebuggerImpl::compileAndRunInternalScript(v8::Local<v8::Context> context, v8::Local<v8::String> source)
 {
-    v8::Local<v8::Script> script = compileInternalScript(context, source, String());
+    v8::Local<v8::Script> script = compileScript(context, source, String(), true);
     if (script.IsEmpty())
         return v8::MaybeLocal<v8::Value>();
     v8::MicrotasksScope microtasksScope(m_isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
     return script->Run(context);
 }
 
-v8::Local<v8::Script> V8DebuggerImpl::compileInternalScript(v8::Local<v8::Context> context, v8::Local<v8::String> code, const String16& fileName)
+v8::Local<v8::Script> V8DebuggerImpl::compileScript(v8::Local<v8::Context> context, v8::Local<v8::String> code, const String16& fileName, bool markAsInternal)
 {
-    // NOTE: For compatibility with WebCore, ScriptSourceCode's line starts at
-    // 1, whereas v8 starts at 0.
     v8::ScriptOrigin origin(
         toV8String(m_isolate, fileName),
         v8::Integer::New(m_isolate, 0),
         v8::Integer::New(m_isolate, 0),
         v8::False(m_isolate), // sharable
         v8::Local<v8::Integer>(),
-        v8::True(m_isolate), // internal
+        v8::Boolean::New(m_isolate, markAsInternal), // internal
         toV8String(m_isolate, String16()), // sourceMap
         v8::True(m_isolate)); // opaqueresource
     v8::ScriptCompiler::Source source(code, origin);
@@ -858,6 +860,11 @@ V8ConsoleMessageStorage* V8DebuggerImpl::ensureConsoleMessageStorage(int context
 }
 
 std::unique_ptr<V8StackTrace> V8DebuggerImpl::createStackTrace(v8::Local<v8::StackTrace> stackTrace)
+{
+    return createStackTraceImpl(stackTrace);
+}
+
+std::unique_ptr<V8StackTraceImpl> V8DebuggerImpl::createStackTraceImpl(v8::Local<v8::StackTrace> stackTrace)
 {
     int contextGroupId = m_isolate->InContext() ? getGroupId(m_isolate->GetCurrentContext()) : 0;
     return V8StackTraceImpl::create(this, contextGroupId, stackTrace, V8StackTraceImpl::maxCallStackSizeToCapture);
@@ -1058,24 +1065,11 @@ void V8DebuggerImpl::idleFinished()
     m_isolate->GetCpuProfiler()->SetIdle(false);
 }
 
-void V8DebuggerImpl::logToConsole(v8::Local<v8::Context> context, v8::Local<v8::Value> arg1, v8::Local<v8::Value> arg2)
-{
-    int contextGroupId = getGroupId(context);
-    InspectedContext* inspectedContext = getContext(contextGroupId, contextId(context));
-    if (!inspectedContext)
-        return;
-    std::vector<v8::Local<v8::Value>> arguments;
-    if (!arg1.IsEmpty())
-        arguments.push_back(arg1);
-    if (!arg2.IsEmpty())
-        arguments.push_back(arg2);
-    ensureConsoleMessageStorage(contextGroupId)->addMessage(V8ConsoleMessage::createForConsoleAPI(m_client->currentTimeMS(), ConsoleAPIType::kLog, arguments, captureStackTrace(false), inspectedContext));
-}
-
 void V8DebuggerImpl::exceptionThrown(int contextGroupId, const String16& errorMessage, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
 {
+    std::unique_ptr<V8StackTraceImpl> stackTraceImpl = wrapUnique(static_cast<V8StackTraceImpl*>(stackTrace.release()));
     unsigned exceptionId = ++m_lastExceptionId;
-    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, m_isolate, 0, v8::Local<v8::Value>(), exceptionId);
+    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTraceImpl), scriptId, m_isolate, 0, v8::Local<v8::Value>(), exceptionId);
     ensureConsoleMessageStorage(contextGroupId)->addMessage(std::move(consoleMessage));
 }
 
@@ -1084,8 +1078,9 @@ unsigned V8DebuggerImpl::promiseRejected(v8::Local<v8::Context> context, const S
     int contextGroupId = getGroupId(context);
     if (!contextGroupId)
         return 0;
+    std::unique_ptr<V8StackTraceImpl> stackTraceImpl = wrapUnique(static_cast<V8StackTraceImpl*>(stackTrace.release()));
     unsigned exceptionId = ++m_lastExceptionId;
-    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTrace), scriptId, m_isolate, contextId(context), exception, exceptionId);
+    std::unique_ptr<V8ConsoleMessage> consoleMessage = V8ConsoleMessage::createForException(m_client->currentTimeMS(), errorMessage, url, lineNumber, columnNumber, std::move(stackTraceImpl), scriptId, m_isolate, contextId(context), exception, exceptionId);
     ensureConsoleMessageStorage(contextGroupId)->addMessage(std::move(consoleMessage));
     return exceptionId;
 }
@@ -1101,6 +1096,11 @@ void V8DebuggerImpl::promiseRejectionRevoked(v8::Local<v8::Context> context, uns
 }
 
 std::unique_ptr<V8StackTrace> V8DebuggerImpl::captureStackTrace(bool fullStack)
+{
+    return captureStackTraceImpl(fullStack);
+}
+
+std::unique_ptr<V8StackTraceImpl> V8DebuggerImpl::captureStackTraceImpl(bool fullStack)
 {
     if (!m_isolate->InContext())
         return nullptr;

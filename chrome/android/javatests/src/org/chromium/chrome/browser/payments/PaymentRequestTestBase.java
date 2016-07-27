@@ -4,12 +4,12 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.os.Handler;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
-import android.widget.TextView;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.UrlUtils;
@@ -17,9 +17,11 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt.CardUnmaskObserverForTest;
+import org.chromium.chrome.browser.payments.PaymentAppFactory.PaymentAppFactoryAddition;
 import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestServiceObserverForTest;
 import org.chromium.chrome.browser.payments.ui.EditorTextField;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection;
+import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSection.OptionRow;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI.PaymentRequestObserverForTest;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
@@ -29,8 +31,13 @@ import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.mojom.payments.PaymentItem;
+import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -42,9 +49,21 @@ import java.util.concurrent.atomic.AtomicReference;
 abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeActivity>
         implements PaymentRequestObserverForTest, PaymentRequestServiceObserverForTest,
         CardUnmaskObserverForTest {
+    /** Flag for installing a payment app without instruments. */
+    protected static final int NO_INSTRUMENTS = 0;
+
+    /** Flag for installing a payment app with instruments. */
+    protected static final int HAVE_INSTRUMENTS = 1;
+
+    /** Flag for installing a fast payment app. */
+    protected static final int IMMEDIATE_RESPONSE = 0;
+
+    /** Flag for installing a slow payment app. */
+    protected static final int DELAYED_RESPONSE = 1;
+
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyForInput;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyToPay;
-    protected final PaymentsCallbackHelper<PaymentRequestUI> mReadyToClose;
+    protected final PaymentsCallbackHelper<PaymentRequestUI> mSelectionChecked;
     protected final PaymentsCallbackHelper<PaymentRequestUI> mResultReady;
     protected final PaymentsCallbackHelper<CardUnmaskPrompt> mReadyForUnmaskInput;
     protected final PaymentsCallbackHelper<CardUnmaskPrompt> mReadyToUnmask;
@@ -66,7 +85,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         super(ChromeActivity.class);
         mReadyForInput = new PaymentsCallbackHelper<>();
         mReadyToPay = new PaymentsCallbackHelper<>();
-        mReadyToClose = new PaymentsCallbackHelper<>();
+        mSelectionChecked = new PaymentsCallbackHelper<>();
         mResultReady = new PaymentsCallbackHelper<>();
         mReadyForUnmaskInput = new PaymentsCallbackHelper<>();
         mReadyToUnmask = new PaymentsCallbackHelper<>();
@@ -229,13 +248,23 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         helper.waitForCallback(callCount);
     }
 
-    /** Returns the left summary label of the "Shipping summary" section. */
-    protected String getAddressSectionLabel() throws ExecutionException {
+    /** Gets the button state for the shipping summary section. */
+    protected int getSummarySectionButtonState() throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mUI.getShippingSummarySectionForTest().getEditButtonState();
+            }
+        });
+    }
+
+    /**  Returns the label corresponding to the payment instrument at the specified |index|. */
+    protected String getPaymentInstrumentLabel(final int index) throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<String>() {
             @Override
             public String call() {
-                return ((TextView) mUI.getShippingSummarySectionForTest().findViewById(
-                        R.id.payments_left_summary_label)).getText().toString();
+                return ((OptionSection) mUI.getPaymentMethodSectionForTest())
+                        .getOptionLabelsForTest(index).getText().toString();
             }
         });
     }
@@ -246,8 +275,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
      */
     protected String getContactDetailsSuggestionLabel(final int suggestionIndex)
             throws ExecutionException {
-        assert (suggestionIndex < getNumberOfContactDetailSuggestions());
-
         return ThreadUtils.runOnUiThreadBlocking(new Callable<String>() {
             @Override
             public String call() {
@@ -257,9 +284,18 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
         });
     }
 
-    /**
-     *  Returns the the number of contact detail suggestions,
-     */
+    /**  Returns the the number of payment instruments. */
+    protected int getNumberOfPaymentInstruments() throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return ((OptionSection) mUI.getPaymentMethodSectionForTest())
+                        .getNumberOfOptionLabelsForTest();
+            }
+        });
+    }
+
+    /**  Returns the the number of contact detail suggestions. */
     protected int getNumberOfContactDetailSuggestions() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
             @Override
@@ -288,7 +324,28 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
     }
 
     /**
-     *  Returns the the number of shipping address suggestions,
+     *  Clicks on the label corresponding to the shipping address suggestion at the specified
+     *  |suggestionIndex|.
+     * @throws InterruptedException
+     */
+    protected void clickOnShippingAddressSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper)
+                    throws ExecutionException, TimeoutException, InterruptedException {
+        assert (suggestionIndex < getNumberOfShippingAddressSuggestions());
+
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                ((OptionSection) mUI.getShippingAddressSectionForTest())
+                        .getOptionLabelsForTest(suggestionIndex).performClick();
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
+    /**
+     *  Returns the the number of shipping address suggestions.
      */
     protected int getNumberOfShippingAddressSuggestions() throws ExecutionException {
         return ThreadUtils.runOnUiThreadBlocking(new Callable<Integer>() {
@@ -296,6 +353,18 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
             public Integer call() {
                 return ((OptionSection) mUI.getShippingAddressSectionForTest())
                         .getNumberOfOptionLabelsForTest();
+            }
+        });
+    }
+
+    /** Returns the {@link OptionRow} at the given index for the shipping address section. */
+    protected OptionRow getShippingAddressOptionRowAtIndex(final int index)
+            throws ExecutionException {
+        return ThreadUtils.runOnUiThreadBlocking(new Callable<OptionRow>() {
+            @Override
+            public OptionRow call() {
+                return ((OptionSection) mUI.getShippingAddressSectionForTest())
+                        .getOptionRowAtIndex(index);
             }
         });
     }
@@ -454,9 +523,9 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
     }
 
     @Override
-    public void onPaymentRequestReadyToClose(PaymentRequestUI ui) {
+    public void onPaymentRequestSelectionChecked(PaymentRequestUI ui) {
         ThreadUtils.assertOnUiThread();
-        mReadyToClose.notifyCalled(ui);
+        mSelectionChecked.notifyCalled(ui);
     }
 
     @Override
@@ -527,5 +596,88 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeA
             mTarget = target;
             notifyCalled();
         }
+    }
+
+    /**
+     * Installs a payment app for testing.
+     *
+     * @param instrumentPresence Whether the app has any payment instruments. Either NO_INSTRUMENTS
+     *                           or HAVE_INSTRUMENTS.
+     * @param responseSpeed      How quickly the app will respond to "get instruments" query. Either
+     *                           IMMEDIATE_RESPONSE or DELAYED_RESPONSE.
+     */
+    protected void installPaymentApp(final int instrumentPresence, final int responseSpeed) {
+        PaymentAppFactory.setAdditionalFactory(new PaymentAppFactoryAddition() {
+            @Override
+            public List<PaymentApp> create(WebContents webContents) {
+                List<PaymentApp> additionalApps = new ArrayList<>();
+                additionalApps.add(new BobPay(instrumentPresence, responseSpeed));
+                return additionalApps;
+            }
+        });
+    }
+
+    /** A payment app implementation for test. */
+    private static class BobPay implements PaymentApp {
+        private final int mInstrumentPresence;
+        private final int mResponseSpeed;
+
+        BobPay(int instrumentPresence, int responseSpeed) {
+            mInstrumentPresence = instrumentPresence;
+            mResponseSpeed = responseSpeed;
+        }
+
+        @Override
+        public void getInstruments(JSONObject details, final InstrumentsCallback
+                instrumentsCallback) {
+            final List<PaymentInstrument> instruments = new ArrayList<>();
+            if (mInstrumentPresence == HAVE_INSTRUMENTS) instruments.add(new BobPayInstrument());
+            Runnable instrumentsReady = new Runnable() {
+                @Override
+                public void run() {
+                    ThreadUtils.assertOnUiThread();
+                    instrumentsCallback.onInstrumentsReady(BobPay.this, instruments);
+                }
+            };
+            if (mResponseSpeed == IMMEDIATE_RESPONSE) {
+                instrumentsReady.run();
+            } else {
+                new Handler().postDelayed(instrumentsReady, 100);
+            }
+        }
+
+        @Override
+        public Set<String> getSupportedMethodNames() {
+            Set<String> methodNames = new HashSet<>();
+            methodNames.add("https://bobpay.com");
+            return methodNames;
+        }
+
+        @Override
+        public String getIdentifier() {
+            return "https://bobpay.com";
+        }
+    }
+
+    /** A payment instrument implementation for test. */
+    private static class BobPayInstrument extends PaymentInstrument {
+        BobPayInstrument() {
+            super("https://bobpay.com", "Bob Pay", null, NO_ICON);
+        }
+
+        @Override
+        public String getMethodName() {
+            return "https://bobpay.com";
+        }
+
+        @Override
+        public void getDetails(String merchantName, String origin, PaymentItem total,
+                List<PaymentItem> cart, JSONObject details, DetailsCallback detailsCallback) {
+            detailsCallback.onInstrumentDetailsReady(
+                    "https://bobpay.com", "{\"transaction\": 1337}");
+        }
+
+        @Override
+        public void dismiss() {}
     }
 }

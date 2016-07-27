@@ -183,8 +183,9 @@ void BrowserPlugin::DidCommitCompositorFrame() {
 
 void BrowserPlugin::OnAdvanceFocus(int browser_plugin_instance_id,
                                    bool reverse) {
-  auto render_frame = RenderFrameImpl::FromRoutingID(render_frame_routing_id());
-  auto render_view = render_frame ? render_frame->GetRenderView() : nullptr;
+  auto* render_frame =
+      RenderFrameImpl::FromRoutingID(render_frame_routing_id());
+  auto* render_view = render_frame ? render_frame->GetRenderView() : nullptr;
   if (!render_view)
     return;
   render_view->GetWebView()->advanceFocus(reverse);
@@ -204,8 +205,9 @@ void BrowserPlugin::OnSetCursor(int browser_plugin_instance_id,
 
 void BrowserPlugin::OnSetMouseLock(int browser_plugin_instance_id,
                                    bool enable) {
-  auto render_frame = RenderFrameImpl::FromRoutingID(render_frame_routing_id());
-  auto render_view = static_cast<RenderViewImpl*>(
+  auto* render_frame =
+      RenderFrameImpl::FromRoutingID(render_frame_routing_id());
+  auto* render_view = static_cast<RenderViewImpl*>(
       render_frame ? render_frame->GetRenderView() : nullptr);
   if (enable) {
     if (mouse_locked_ || !render_view)
@@ -259,8 +261,9 @@ void BrowserPlugin::UpdateGuestFocusState(blink::WebFocusType focus_type) {
 
 bool BrowserPlugin::ShouldGuestBeFocused() const {
   bool embedder_focused = false;
-  auto render_frame = RenderFrameImpl::FromRoutingID(render_frame_routing_id());
-  auto render_view = static_cast<RenderViewImpl*>(
+  auto* render_frame =
+      RenderFrameImpl::FromRoutingID(render_frame_routing_id());
+  auto* render_view = static_cast<RenderViewImpl*>(
       render_frame ? render_frame->GetRenderView() : nullptr);
   if (render_view)
     embedder_focused = render_view->has_focus();
@@ -320,8 +323,9 @@ void BrowserPlugin::destroy() {
 
   container_ = nullptr;
   // Will be a no-op if the mouse is not currently locked.
-  auto render_frame = RenderFrameImpl::FromRoutingID(render_frame_routing_id());
-  auto render_view = static_cast<RenderViewImpl*>(
+  auto* render_frame =
+      RenderFrameImpl::FromRoutingID(render_frame_routing_id());
+  auto* render_view = static_cast<RenderViewImpl*>(
       render_frame ? render_frame->GetRenderView() : nullptr);
   if (render_view)
     render_view->mouse_lock_dispatcher()->OnLockTargetDestroyed(this);
@@ -366,7 +370,7 @@ void BrowserPlugin::updateGeometry(const WebRect& plugin_rect_in_viewport,
   // Convert the plugin_rect_in_viewport to window coordinates, which is css.
   WebRect rect_in_css(plugin_rect_in_viewport);
   blink::WebView* webview = container()->document().frame()->view();
-  RenderView::FromWebView(webview)->GetWidget()->convertViewportToWindow(
+  RenderViewImpl::FromWebView(webview)->GetWidget()->convertViewportToWindow(
       &rect_in_css);
   view_rect_ = rect_in_css;
 

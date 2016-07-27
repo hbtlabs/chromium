@@ -10,11 +10,12 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "jni/VideoCapture_jni.h"
 #include "media/capture/video/android/photo_capabilities.h"
 #include "media/capture/video/android/video_capture_device_factory_android.h"
-#include "mojo/public/cpp/bindings/string.h"
+#include "third_party/libyuv/include/libyuv.h"
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
@@ -151,7 +152,9 @@ void VideoCaptureDeviceAndroid::TakePhoto(TakePhotoCallback callback) {
   std::unique_ptr<TakePhotoCallback> heap_callback(
       new TakePhotoCallback(std::move(callback)));
   const intptr_t callback_id = reinterpret_cast<intptr_t>(heap_callback.get());
-  if (!Java_VideoCapture_takePhoto(env, j_capture_.obj(), callback_id))
+  if (!Java_VideoCapture_takePhoto(env, j_capture_.obj(), callback_id,
+                                   next_photo_resolution_.width(),
+                                   next_photo_resolution_.height()))
     return;
 
   {
@@ -171,6 +174,18 @@ void VideoCaptureDeviceAndroid::GetPhotoCapabilities(
   // PhotoCapabilities to mojom::PhotoCapabilitiesPtr, https://crbug.com/622002.
   mojom::PhotoCapabilitiesPtr photo_capabilities =
       mojom::PhotoCapabilities::New();
+  photo_capabilities->iso = mojom::Range::New();
+  photo_capabilities->iso->current = caps.getCurrentIso();
+  photo_capabilities->iso->max = caps.getMaxIso();
+  photo_capabilities->iso->min = caps.getMinIso();
+  photo_capabilities->height = mojom::Range::New();
+  photo_capabilities->height->current = caps.getCurrentHeight();
+  photo_capabilities->height->max = caps.getMaxHeight();
+  photo_capabilities->height->min = caps.getMinHeight();
+  photo_capabilities->width = mojom::Range::New();
+  photo_capabilities->width->current = caps.getCurrentWidth();
+  photo_capabilities->width->max = caps.getMaxWidth();
+  photo_capabilities->width->min = caps.getMinWidth();
   photo_capabilities->zoom = mojom::Range::New();
   photo_capabilities->zoom->current = caps.getCurrentZoom();
   photo_capabilities->zoom->max = caps.getMaxZoom();
@@ -185,6 +200,18 @@ void VideoCaptureDeviceAndroid::SetPhotoOptions(
     mojom::PhotoSettingsPtr settings,
     SetPhotoOptionsCallback callback) {
   JNIEnv* env = AttachCurrentThread();
+  // |width| and/or |height| are kept for the next TakePhoto()s.
+  if (settings->has_width || settings->has_height)
+    next_photo_resolution_.SetSize(0, 0);
+  if (settings->has_width) {
+    next_photo_resolution_.set_width(
+        base::saturated_cast<int>(settings->width));
+  }
+  if (settings->has_height) {
+    next_photo_resolution_.set_height(
+        base::saturated_cast<int>(settings->height));
+  }
+
   if (settings->has_zoom)
     Java_VideoCapture_setZoom(env, j_capture_.obj(), settings->zoom);
   callback.Run(true);
@@ -209,7 +236,7 @@ void VideoCaptureDeviceAndroid::OnFrameAvailable(
     return;
   }
 
-  base::TimeTicks current_time = base::TimeTicks::Now();
+  const base::TimeTicks current_time = base::TimeTicks::Now();
   if (!got_first_frame_) {
     // Set aside one frame allowance for fluctuation.
     expected_next_frame_time_ = current_time - frame_interval_;
@@ -229,6 +256,58 @@ void VideoCaptureDeviceAndroid::OnFrameAvailable(
   }
 
   env->ReleaseByteArrayElements(data, buffer, JNI_ABORT);
+}
+
+void VideoCaptureDeviceAndroid::OnI420FrameAvailable(JNIEnv* env,
+                                                     jobject obj,
+                                                     jobject y_buffer,
+                                                     jint y_stride,
+                                                     jobject u_buffer,
+                                                     jobject v_buffer,
+                                                     jint uv_row_stride,
+                                                     jint uv_pixel_stride,
+                                                     jint width,
+                                                     jint height,
+                                                     jint rotation) {
+  const base::TimeTicks current_time = base::TimeTicks::Now();
+  if (!got_first_frame_) {
+    // Set aside one frame allowance for fluctuation.
+    expected_next_frame_time_ = current_time - frame_interval_;
+    first_ref_time_ = current_time;
+    got_first_frame_ = true;
+  }
+
+  uint8_t* const y_src =
+      reinterpret_cast<uint8_t*>(env->GetDirectBufferAddress(y_buffer));
+  CHECK(y_src);
+  uint8_t* const u_src =
+      reinterpret_cast<uint8_t*>(env->GetDirectBufferAddress(u_buffer));
+  CHECK(u_src);
+  uint8_t* const v_src =
+      reinterpret_cast<uint8_t*>(env->GetDirectBufferAddress(v_buffer));
+  CHECK(v_src);
+
+  const int y_plane_length = width * height;
+  const int uv_plane_length = y_plane_length / 4;
+  const int buffer_length = y_plane_length + uv_plane_length * 2;
+  std::unique_ptr<uint8_t> buffer(new uint8_t[buffer_length]);
+
+  libyuv::Android420ToI420(y_src, y_stride, u_src, uv_row_stride, v_src,
+                           uv_row_stride, uv_pixel_stride, buffer.get(), width,
+                           buffer.get() + y_plane_length, width / 2,
+                           buffer.get() + y_plane_length + uv_plane_length,
+                           width / 2, width, height);
+
+  // Deliver the frame when it doesn't arrive too early.
+  if (expected_next_frame_time_ <= current_time) {
+    expected_next_frame_time_ += frame_interval_;
+
+    // TODO(qiangchen): Investigate how to get raw timestamp for Android,
+    // rather than using reference time to calculate timestamp.
+    client_->OnIncomingCapturedData(buffer.get(), buffer_length,
+                                    capture_format_, rotation, current_time,
+                                    current_time - first_ref_time_);
+  }
 }
 
 void VideoCaptureDeviceAndroid::OnError(JNIEnv* env,
@@ -260,11 +339,10 @@ void VideoCaptureDeviceAndroid::OnPhotoTaken(
     return;
   }
 
-  std::vector<uint8_t> native_data;
-  base::android::JavaByteArrayToByteVector(env, data.obj(), &native_data);
-
-  cb->Run(mojo::String::From(native_data.empty() ? "" : "image/jpeg"),
-          mojo::Array<uint8_t>::From(native_data));
+  mojom::BlobPtr blob = mojom::Blob::New();
+  base::android::JavaByteArrayToByteVector(env, data.obj(), &blob->data);
+  blob->mime_type = blob->data.empty() ? "" : "image/jpeg";
+  cb->Run(std::move(blob));
 
   photo_callbacks_.erase(reference_it);
 }

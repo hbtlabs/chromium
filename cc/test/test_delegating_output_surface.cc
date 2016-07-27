@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "cc/output/begin_frame_args.h"
+#include "cc/output/copy_output_request.h"
 #include "cc/output/texture_mailbox_deleter.h"
 #include "cc/test/begin_frame_args_test.h"
 
@@ -55,11 +56,16 @@ TestDelegatingOutputSurface::TestDelegatingOutputSurface(
   capabilities_.can_force_reclaim_resources = true;
   capabilities_.delegated_sync_points_required =
       !context_shared_with_compositor;
-
-  surface_id_allocator_->RegisterSurfaceClientId(surface_manager_.get());
 }
 
-TestDelegatingOutputSurface::~TestDelegatingOutputSurface() {}
+TestDelegatingOutputSurface::~TestDelegatingOutputSurface() {
+  DCHECK(copy_requests_.empty());
+}
+
+void TestDelegatingOutputSurface::RequestCopyOfOutput(
+    std::unique_ptr<CopyOutputRequest> request) {
+  copy_requests_.push_back(std::move(request));
+}
 
 bool TestDelegatingOutputSurface::BindToClient(OutputSurfaceClient* client) {
   if (!OutputSurface::BindToClient(client))
@@ -72,6 +78,7 @@ bool TestDelegatingOutputSurface::BindToClient(OutputSurfaceClient* client) {
   if (!capabilities_.delegated_sync_points_required && context_provider())
     context_provider()->SetLostContextCallback(base::Closure());
 
+  surface_manager_->RegisterSurfaceClientId(surface_id_allocator_->client_id());
   surface_manager_->RegisterSurfaceFactoryClient(
       surface_id_allocator_->client_id(), this);
   display_->Initialize(this, surface_manager_.get(),
@@ -86,6 +93,8 @@ void TestDelegatingOutputSurface::DetachFromClient() {
     if (!delegated_surface_id_.is_null())
       surface_factory_->Destroy(delegated_surface_id_);
     surface_manager_->UnregisterSurfaceFactoryClient(
+        surface_id_allocator_->client_id());
+    surface_manager_->InvalidateSurfaceClientId(
         surface_id_allocator_->client_id());
     bound_ = false;
   }
@@ -114,11 +123,16 @@ void TestDelegatingOutputSurface::SwapBuffers(CompositorFrame frame) {
       base::Bind(&TestDelegatingOutputSurface::DrawCallback,
                  weak_ptrs_.GetWeakPtr()));
 
+  for (std::unique_ptr<CopyOutputRequest>& copy_request : copy_requests_)
+    surface_factory_->RequestCopyOfSurface(delegated_surface_id_,
+                                           std::move(copy_request));
+  copy_requests_.clear();
+
   if (!display_->has_scheduler())
     display_->DrawAndSwap();
 }
 
-void TestDelegatingOutputSurface::DrawCallback(SurfaceDrawStatus) {
+void TestDelegatingOutputSurface::DrawCallback() {
   client_->DidSwapBuffersComplete();
 }
 

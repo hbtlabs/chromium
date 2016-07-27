@@ -62,10 +62,10 @@ TypeConverter<media_router::MediaSink, MediaSinkPtr>::Convert(
     const MediaSinkPtr& input) {
   media_router::MediaSink sink(input->sink_id, input->name,
                                SinkIconTypeFromMojo(input->icon_type));
-  if (!input->description.get().empty())
-    sink.set_description(input->description);
-  if (!input->domain.get().empty())
-    sink.set_domain(input->domain);
+  if (input->description && !input->description->empty())
+    sink.set_description(*input->description);
+  if (input->domain && !input->domain->empty())
+    sink.set_domain(*input->domain);
 
   return sink;
 }
@@ -75,10 +75,12 @@ media_router::MediaRoute
 TypeConverter<media_router::MediaRoute, MediaRoutePtr>::Convert(
     const MediaRoutePtr& input) {
   media_router::MediaRoute media_route(
-      input->media_route_id, media_router::MediaSource(input->media_source),
+      input->media_route_id,
+      media_router::MediaSource(input->media_source.value_or(std::string())),
       input->media_sink_id, input->description, input->is_local,
-      input->custom_controller_path, input->for_display);
-  media_route.set_off_the_record(input->off_the_record);
+      input->custom_controller_path.value_or(std::string()),
+      input->for_display);
+  media_route.set_incognito(input->incognito);
   return media_route;
 }
 
@@ -88,10 +90,13 @@ TypeConverter<std::unique_ptr<media_router::MediaRoute>,
               MediaRoutePtr>::Convert(const MediaRoutePtr& input) {
   std::unique_ptr<media_router::MediaRoute> media_route(
       new media_router::MediaRoute(
-          input->media_route_id, media_router::MediaSource(input->media_source),
+          input->media_route_id,
+          media_router::MediaSource(
+              input->media_source.value_or(std::string())),
           input->media_sink_id, input->description, input->is_local,
-          input->custom_controller_path, input->for_display));
-  media_route->set_off_the_record(input->off_the_record);
+          input->custom_controller_path.value_or(std::string()),
+          input->for_display));
+  media_route->set_incognito(input->incognito);
   return media_route;
 }
 
@@ -128,16 +133,15 @@ media_router::Issue TypeConverter<media_router::Issue, IssuePtr>::Convert(
     const IssuePtr& input) {
   std::vector<media_router::IssueAction> actions;
   if (input->secondary_actions) {
-    actions.reserve(input->secondary_actions.size());
-    for (size_t i = 0; i < input->secondary_actions.size(); ++i) {
-      actions.push_back(media_router::IssueAction(
-          IssueActionTypeFromMojo(input->secondary_actions[i])));
-    }
+    actions.reserve(input->secondary_actions->size());
+    for (auto a : *input->secondary_actions)
+      actions.push_back(media_router::IssueAction(IssueActionTypeFromMojo(a)));
   }
   return media_router::Issue(
-      input->title, input->message,
+      input->title, input->message.value_or(std::string()),
       media_router::IssueAction(IssueActionTypeFromMojo(input->default_action)),
-      actions, input->route_id, IssueSeverityFromMojo(input->severity),
+      actions, input->route_id.value_or(std::string()),
+      IssueSeverityFromMojo(input->severity),
       input->is_blocking, input->help_page_id);
 }
 
@@ -185,6 +189,14 @@ media_router::RouteRequestResult::ResultCode RouteRequestResultCodeFromMojo(
       return media_router::RouteRequestResult::TIMED_OUT;
     case RouteRequestResultCode::ROUTE_NOT_FOUND:
       return media_router::RouteRequestResult::ROUTE_NOT_FOUND;
+    case RouteRequestResultCode::SINK_NOT_FOUND:
+      return media_router::RouteRequestResult::SINK_NOT_FOUND;
+    case RouteRequestResultCode::INVALID_ORIGIN:
+      return media_router::RouteRequestResult::INVALID_ORIGIN;
+    case RouteRequestResultCode::INCOGNITO_MISMATCH:
+      return media_router::RouteRequestResult::INCOGNITO_MISMATCH;
+    case RouteRequestResultCode::NO_SUPPORTED_PROVIDER:
+      return media_router::RouteRequestResult::NO_SUPPORTED_PROVIDER;
     default:
       NOTREACHED() << "Unknown RouteRequestResultCode " << result_code;
       return media_router::RouteRequestResult::UNKNOWN_ERROR;

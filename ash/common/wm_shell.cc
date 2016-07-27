@@ -6,9 +6,14 @@
 
 #include <utility>
 
+#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/common/accelerators/ash_focus_manager_factory.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/focus_cycler.h"
 #include "ash/common/keyboard/keyboard_ui.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/app_list_shelf_item_delegate.h"
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
@@ -26,6 +31,7 @@
 #include "base/logging.h"
 #include "ui/app_list/presenter/app_list_presenter.h"
 #include "ui/display/display.h"
+#include "ui/views/focus/focus_manager_factory.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/common/system/chromeos/brightness/brightness_controller_chromeos.h"
@@ -54,11 +60,26 @@ void WmShell::Initialize() {
   accessibility_delegate_.reset(delegate_->CreateAccessibilityDelegate());
   media_delegate_.reset(delegate_->CreateMediaDelegate());
   toast_manager_.reset(new ToastManager);
+
+  // Create the app list item in the shelf data model.
+  AppListShelfItemDelegate::CreateAppListItemAndDelegate(shelf_model_.get());
+
+  // Install the custom factory early on so that views::FocusManagers for Tray,
+  // Shelf, and WallPaper could be created by the factory.
+  views::FocusManagerFactory::Install(new AshFocusManagerFactory);
 }
 
 void WmShell::Shutdown() {
   // Accesses WmShell in its destructor.
   accessibility_delegate_.reset();
+  // ShelfItemDelegate subclasses it owns have complex cleanup to run (e.g. ARC
+  // shelf items in Chrome) so explicitly shutdown early.
+  shelf_model_->DestroyItemDelegates();
+  // Must be destroyed before FocusClient.
+  shelf_delegate_.reset();
+
+  // Balances the Install() in Initialize().
+  views::FocusManagerFactory::Install(nullptr);
 }
 
 void WmShell::OnMaximizeModeStarted() {
@@ -100,17 +121,22 @@ void WmShell::RemoveLockStateObserver(LockStateObserver* observer) {
   lock_state_observers_.RemoveObserver(observer);
 }
 
+void WmShell::SetShelfDelegateForTesting(
+    std::unique_ptr<ShelfDelegate> test_delegate) {
+  shelf_delegate_ = std::move(test_delegate);
+}
+
 WmShell::WmShell(std::unique_ptr<ShellDelegate> shell_delegate)
     : delegate_(std::move(shell_delegate)),
       focus_cycler_(new FocusCycler),
-      shelf_model_(new ShelfModel),
+      shelf_model_(new ShelfModel),  // Must create before ShelfDelegate.
       system_tray_notifier_(new SystemTrayNotifier),
+      window_cycle_controller_(new WindowCycleController),
       window_selector_controller_(new WindowSelectorController) {
 #if defined(OS_CHROMEOS)
   brightness_control_delegate_.reset(new system::BrightnessControllerChromeos);
   keyboard_brightness_control_delegate_.reset(new KeyboardBrightnessController);
 #endif
-  window_cycle_controller_.reset(new WindowCycleController());
 }
 
 WmShell::~WmShell() {}
@@ -187,6 +213,18 @@ void WmShell::DeleteSystemTrayDelegate() {
   system_tray_delegate_.reset();
 }
 
+void WmShell::CreateShelfDelegate() {
+  // May be called multiple times as shelves are created and destroyed.
+  if (shelf_delegate_)
+    return;
+  // Must occur after SessionStateDelegate creation and user login because
+  // Chrome's implementation of ShelfDelegate assumes it can get information
+  // about multi-profile login state.
+  DCHECK(GetSessionStateDelegate());
+  DCHECK_GT(GetSessionStateDelegate()->NumberOfLoggedInUsers(), 0);
+  shelf_delegate_.reset(delegate_->CreateShelfDelegate(shelf_model_.get()));
+}
+
 void WmShell::DeleteWindowCycleController() {
   window_cycle_controller_.reset();
 }
@@ -213,6 +251,11 @@ void WmShell::DeleteMruWindowTracker() {
 
 void WmShell::DeleteToastManager() {
   toast_manager_.reset();
+}
+
+void WmShell::SetAcceleratorController(
+    std::unique_ptr<AcceleratorController> accelerator_controller) {
+  accelerator_controller_ = std::move(accelerator_controller);
 }
 
 }  // namespace ash

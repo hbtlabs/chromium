@@ -30,6 +30,7 @@
 <translation id="13410144310025252">Chrome でページを表示</translation>
 <translation id="1369915414381695676">サイト <ph name="SITE_NAME" /> を追加しました</translation>
 <translation id="1373696734384179344">選択したコンテンツをダウンロードするにはメモリが不足しています。</translation>
+<translation id="1376578503827013741">計算中...</translation>
 <translation id="138361230106469022">こんにちは、<ph name="FULL_NAME" /> さん</translation>
 <translation id="1383876407941801731">検索</translation>
 <translation id="1389974829397082527">ブックマークはありません</translation>
@@ -46,10 +47,8 @@
 <translation id="1477626028522505441">サーバーで問題が発生したため、<ph name="FILE_NAME" /> をダウンロードできませんでした。</translation>
 <translation id="1506061864768559482">検索エンジン</translation>
 <translation id="1513352483775369820">ブックマークとウェブ履歴</translation>
-<translation id="1517433312004943670">電話番号が必要です</translation>
 <translation id="1549000191223877751">他のウィンドウに移動</translation>
 <translation id="1553358976309200471">Chrome を更新</translation>
-<translation id="1557201757634521564">エンコードを自動検出する</translation>
 <translation id="1612196535745283361">Chrome ではデバイスをスキャンするために現在地情報にアクセスする必要があります。現在地情報へのアクセスは<ph name="BEGIN_LINK" />この端末でオフになっています<ph name="END_LINK" />。</translation>
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1623104350909869708">このページで追加のダイアログが作成されないようにする</translation>
@@ -79,7 +78,6 @@
 <translation id="1853692000353488670">新しいシークレット タブ</translation>
 <translation id="1871284979644508959">必須フィールド</translation>
 <translation id="189172778771606813">操作パネルを閉じる</translation>
-<translation id="1924956916668006832">配送先住所を選択</translation>
 <translation id="1933845786846280168">選択したタブ</translation>
 <translation id="194341124344773587"><ph name="BEGIN_LINK" />Android の設定<ph name="END_LINK" />で Chrome の権限を有効にしてください。</translation>
 <translation id="1943432128510653496">パスワードを保存する</translation>
@@ -103,6 +101,7 @@
 <translation id="213279576345780926"><ph name="TAB_TITLE" /> を閉じました</translation>
 <translation id="2138201775715568214">近くのフィジカル ウェブページを探しています</translation>
 <translation id="2139186145475833000">ホーム画面に追加</translation>
+<translation id="2148716181193084225">今日</translation>
 <translation id="2154710561487035718">URL をコピー</translation>
 <translation id="21570240866965662">低速な接続</translation>
 <translation id="219985413780390209">危険なサイトからユーザーとデバイスを保護する</translation>
@@ -159,7 +158,6 @@
 <translation id="2777555524387840389">残り <ph name="SECONDS" /> 秒</translation>
 <translation id="278029852808208386">Bluetooth デバイスが見つかりませんでした。<ph name="BEGIN_LINK" />もう一度検索してください<ph name="END_LINK" />。</translation>
 <translation id="2781151931089541271">残り 1 秒</translation>
-<translation id="2781389167600714117">配送方法を選択</translation>
 <translation id="2811892995384186721">お使いの端末が表示されない場合は、<ph name="BEGIN_LINK" />ヘルプ<ph name="END_LINK" />をご覧ください。</translation>
 <translation id="2836148919159985482">全画面表示を終了するには戻るボタンをタップします。</translation>
 <translation id="2842985007712546952">親フォルダ</translation>
@@ -173,6 +171,7 @@
 <translation id="2932150158123903946">Google <ph name="APP_NAME" /> ストレージ</translation>
 <translation id="2956410042958133412">このアカウントは <ph name="PARENT_NAME_1" /> と <ph name="PARENT_NAME_2" /> によって管理されています。</translation>
 <translation id="2960796085439532066">Copyright <ph name="YEAR" /> Google Inc. All rights reserved.</translation>
+<translation id="2962095958535813455">シークレット タブに切り替えました</translation>
 <translation id="2968755619301702150">証明書ビューア</translation>
 <translation id="2979025552038692506">選択したシークレット タブ</translation>
 <translation id="2996291259634659425">パスフレーズの作成</translation>
@@ -182,13 +181,11 @@
 <translation id="3029704984691124060">パスフレーズが一致しません</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />ヘルプ<ph name="END_LINK" /></translation>
 <translation id="3063601790762993062">動画を保存</translation>
-<translation id="307329814453917357">Google 翻訳を使ってページを翻訳するかどうかを尋ねます</translation>
 <translation id="3089395242580810162">シークレット タブで開く</translation>
 <translation id="3090193911106258841">音声 / ビデオ入力にアクセスしています</translation>
 <translation id="3117051980354074377">他の端末と同じブックマークを使用するには Chrome にログインします。</translation>
 <translation id="3137521801621304719">シークレット モードを終了</translation>
 <translation id="3149891296864842641">配送オプション</translation>
-<translation id="3162882791484435636">配送オプションを選択</translation>
 <translation id="3177909033752230686">ページの言語:</translation>
 <translation id="3190152372525844641"><ph name="BEGIN_LINK" />Android の設定<ph name="END_LINK" />で Chrome の権限を有効にしてください。</translation>
 <translation id="3198916472715691905"><ph name="STORAGE_AMOUNT" /> の保存データ</translation>
@@ -201,6 +198,7 @@
 <translation id="3254409185687681395">このページをブックマークに追加します</translation>
 <translation id="326254929494722411">このデバイスには Google アカウントがまだ設定されていません</translation>
 <translation id="3269093882174072735">画像を読み込む</translation>
+<translation id="3269956123044984603">他の端末と同じタブを使用するには、Android のアカウント設定で [データの自動同期] を有効にします。</translation>
 <translation id="3278850099957560514">アクセスしたページを Google で最適化することにより処理データを減らします。プライベート接続（HTTPS）やシークレット タブでアクセスしたページには、Google による最適化や確認は行われません。</translation>
 <translation id="3282568296779691940">Chrome にログイン</translation>
 <translation id="3303414029551471755">コンテンツのダウンロードに進みますか？</translation>
@@ -260,7 +258,6 @@
 <translation id="4062305924942672200">法的情報</translation>
 <translation id="4089831646916293264">この機能により、携帯通信会社が提供するプレミアム データサービスの利用に問題が発生する可能性があります。</translation>
 <translation id="4095146165863963773">アプリデータを削除しますか？</translation>
-<translation id="4099423833822562131">配送方法を確認するには配送先住所を選択します。</translation>
 <translation id="4099578267706723511">使用統計情報と障害レポートを Google に送信して、Chrome の品質向上にご協力ください。</translation>
 <translation id="410351446219883937">自動再生</translation>
 <translation id="411254640334432676">ダウンロードできませんでした。</translation>
@@ -336,12 +333,12 @@
 <translation id="4988526792673242964">ページ</translation>
 <translation id="4996978546172906250">共有方法</translation>
 <translation id="5000922062037820727">ブロック（推奨）</translation>
+<translation id="5005498671520578047">パスワードのコピー</translation>
 <translation id="5016205925109358554">Serif</translation>
 <translation id="5039804452771397117">許可</translation>
 <translation id="5040262127954254034">プライバシー</translation>
 <translation id="5056549851600133418">おすすめの記事</translation>
 <translation id="5063480226653192405">使用状況</translation>
-<translation id="5087580092889165836">カードを追加</translation>
 <translation id="5100237604440890931">折りたたまれています - クリックすると展開します。</translation>
 <translation id="510275257476243843">残り 1 時間</translation>
 <translation id="5107381076085091558">ダウンロードを一時停止しました。</translation>
@@ -365,9 +362,9 @@
 <translation id="528192093759286357">全画面表示を終了するには、上からドラッグして、戻るボタンをタップします。</translation>
 <translation id="5284584623296338184">今後、ブックマーク、履歴、パスワードなどの設定への変更は Google アカウントに同期されません。ただし、既存のデータは Google アカウントに保存されたままとなります。</translation>
 <translation id="5301954838959518834">OK</translation>
-<translation id="5302048478445481009">言語</translation>
 <translation id="5304593522240415983">この項目は必須です</translation>
 <translation id="5308380583665731573">接続</translation>
+<translation id="5308603654685598744">この機能を有効にすると、外国語のページで翻訳ツールが表示されます。</translation>
 <translation id="5313967007315987356">サイトを追加</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5324858694974489420">保護者設定</translation>
@@ -380,7 +377,6 @@
 <translation id="5400569084694353794">このアプリケーションを使用すると、Chrome の<ph name="BEGIN_LINK1" />利用規約<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />プライバシーに関するお知らせ<ph name="END_LINK2" />に同意したことになります。</translation>
 <translation id="5414836363063783498">確認しています…</translation>
 <translation id="5423934151118863508">最もアクセスの多かったページがここに表示されます</translation>
-<translation id="5424715742813396254">保存した名前 / パスワードまたは例外の編集</translation>
 <translation id="5437003064129843501">同期データがカスタム パスフレーズで保護されているため、おすすめコンテンツの表示機能は現在無効になっています。</translation>
 <translation id="544291274896356069">このリンクを外部アプリケーションで開くと、シークレット モードが解除されます。続行しますか？</translation>
 <translation id="5447201525962359567">すべてのサイトのストレージ（Cookie やローカルに保存した他のデータを含む）</translation>
@@ -410,6 +406,7 @@
 
 あらゆる場所に記録が一切残らないわけではありません。シークレット モードを使っても、雇用主、インターネット サービス プロバイダ、訪問先のウェブサイトに閲覧内容が知られる可能性はあります。</translation>
 <translation id="572328651809341494">最近使ったタブ</translation>
+<translation id="5748802427693696783">標準のタブに切り替えました</translation>
 <translation id="5749068826913805084">Chrome でファイルをダウンロードするにはストレージへのアクセス権が必要です。</translation>
 <translation id="5763382633136178763">シークレット タブ</translation>
 <translation id="5765780083710877561">説明:</translation>
@@ -429,8 +426,6 @@
 <translation id="5911030830365207728">Google 翻訳</translation>
 <translation id="5916664084637901428">オン</translation>
 <translation id="5939518447894949180">リセット</translation>
-<translation id="5950380453936610378">メールアドレスが必要です</translation>
-<translation id="5961742032223302715">連絡先情報を選択</translation>
 <translation id="5968595432776860642">「<ph name="VIDEO_TITLE" />」を再生しています</translation>
 <translation id="6010869025736512584">ビデオ入力にアクセスしています</translation>
 <translation id="6012342843556706400">このサイトと位置情報を共有するには Chrome に位置情報へのアクセスを許可する必要があります。</translation>
@@ -460,10 +455,10 @@
 <translation id="6295158916970320988">すべてのサイト</translation>
 <translation id="6320088164292336938">バイブレーション</translation>
 <translation id="6324034347079777476">Android システムの同期が無効です</translation>
-<translation id="6324360525379265737">文字エンコードを自動判定します</translation>
 <translation id="6333140779060797560"><ph name="APPLICATION" /> で共有します</translation>
 <translation id="6337234675334993532">暗号化</translation>
 <translation id="6364438453358674297">履歴から候補を削除しますか？</translation>
+<translation id="6383961787135158834">サイトのストレージ消去...</translation>
 <translation id="6388207532828177975">消去してリセット</translation>
 <translation id="6404511346730675251">ブックマークを編集</translation>
 <translation id="6406506848690869874">同期</translation>
@@ -492,6 +487,7 @@
 <translation id="6643016212128521049">クリア</translation>
 <translation id="6647073004883890710"><ph name="PASSWORD_MANAGER_BRAND" /> に保存されているこのサイトの <ph name="USERNAME" /> のパスワードを更新しますか？</translation>
 <translation id="6656545060687952787">デバイスをスキャンするには、Chrome で位置情報にアクセスする必要があります。<ph name="BEGIN_LINK" />権限を更新<ph name="END_LINK" /></translation>
+<translation id="6657585470893396449">パスワード</translation>
 <translation id="6659594942844771486">Tab</translation>
 <translation id="666268767214822976">予測サービスを使用し、アドレスバーへの入力時に関連性の高い検索キーワードや人気のウェブサイトを表示します</translation>
 <translation id="666981079809192359">Chrome のプライバシーに関するお知らせ</translation>
@@ -597,6 +593,7 @@
 <translation id="7765158879357617694">移動</translation>
 <translation id="7769602470925380267">同意してログアウトする</translation>
 <translation id="7772032839648071052">パスフレーズの確認</translation>
+<translation id="7781829728241885113">昨日</translation>
 <translation id="7788788617745289808">このサイトとカメラを共有するには Chrome にカメラへのアクセスを許可する必要があります。</translation>
 <translation id="7791543448312431591">追加</translation>
 <translation id="780301667611848630">いいえ</translation>
@@ -652,6 +649,7 @@
 <translation id="8481940801237642152">このサイトへの接続はプライベート接続です。ただし、ネットワーク上のユーザーがこのページのデザインを変更できる可能性はあります。</translation>
 <translation id="8493948351860045254">容量を空ける</translation>
 <translation id="8497726226069778601">表示するものがまだありません</translation>
+<translation id="8503813439785031346">ユーザー名</translation>
 <translation id="8514577642972634246">シークレット モードを開始</translation>
 <translation id="8518901949365209398">このサイトのセキュリティは弱いため（SHA-1 署名）、接続時にプライバシーが保護されない可能性があります。</translation>
 <translation id="8525306231823319788">全画面表示</translation>

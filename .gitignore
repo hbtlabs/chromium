@@ -125,6 +125,7 @@ vs-chromium-project.txt
 /chrome/setup_unittests.xml
 /chrome/supplement.gypi
 /chrome/sync_integration_tests_run.xml
+/chrome/test/android/telemetry_tests/browser_tests/*.wpr
 /chrome/test/chromeos/autotest/files/client/deps/chrome_test/test_src/
 /chrome/test/chromeos/autotest/files/client/deps/page_cycler_dep/test_src/
 /chrome/test/chromeos/autotest/files/client/deps/perf_data_dep/test_src/
@@ -318,6 +319,7 @@ vs-chromium-project.txt
 /third_party/chromite
 /third_party/class-dump/src
 /third_party/cld_2/src
+/third_party/cld_3/src
 /third_party/colorama/src
 /third_party/cros
 /third_party/cros_system_api
@@ -419,7 +421,8 @@ vs-chromium-project.txt
 /third_party/pywebsocket/src
 /third_party/re2/src
 /third_party/requests/src
-/third_party/robolectric/lib
+/third_party/robolectric/lib/*.jar
+/third_party/robolectric/robolectric
 /third_party/scons-2.0.1
 /third_party/sfntly/src
 /third_party/shaderc/src

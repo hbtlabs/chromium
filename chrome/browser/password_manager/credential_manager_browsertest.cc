@@ -10,11 +10,34 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
+#include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/browser/test_password_store.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 
 namespace {
+
+// A helper class that synchronously waits until the password store handles a
+// GetLogins() request.
+class PasswordStoreResultsObserver
+    : public password_manager::PasswordStoreConsumer {
+ public:
+  PasswordStoreResultsObserver() = default;
+
+  void OnGetPasswordStoreResults(
+      ScopedVector<autofill::PasswordForm> results) override {
+    run_loop_.Quit();
+  }
+
+  void Wait() {
+    run_loop_.Run();
+  }
+
+ private:
+  base::RunLoop run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(PasswordStoreResultsObserver);
+};
 
 class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
  public:
@@ -25,8 +48,18 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
         password_manager::ui::CREDENTIAL_REQUEST_STATE;
   }
 
+  // Make sure that the password store processed all the previous calls which
+  // are executed on another thread.
+  void WaitForPasswordStore() {
+    scoped_refptr<password_manager::PasswordStore> password_store =
+        PasswordStoreFactory::GetForProfile(
+            browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS);
+    PasswordStoreResultsObserver syncer;
+    password_store->GetAutofillableLoginsWithAffiliatedRealms(&syncer);
+    syncer.Wait();
+  }
+
  private:
-  net::EmbeddedTestServer https_test_server_;
 
   DISALLOW_COPY_AND_ASSIGN(CredentialManagerBrowserTest);
 };
@@ -59,6 +92,7 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
       RenderViewHost(),
       "navigator.credentials.get({password: true})"
       ".then(cred => window.location = '/password/done.html')"));
+  WaitForPasswordStore();
   ASSERT_EQ(password_manager::ui::CREDENTIAL_REQUEST_STATE,
             PasswordsModelDelegateFromWebContents(WebContents())->GetState());
   PasswordsModelDelegateFromWebContents(WebContents())->ChooseCredential(
@@ -71,9 +105,12 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
 
   // Verify that the form's 'skip_zero_click' is updated and not overwritten
   // by the autofill password manager on successful login.
-  auto& passwords_map = password_store->stored_passwords();
+  WaitForPasswordStore();
+  password_manager::TestPasswordStore::PasswordMap passwords_map =
+      password_store->stored_passwords();
   ASSERT_EQ(1u, passwords_map.size());
-  auto& passwords_vector = passwords_map.begin()->second;
+  const std::vector<autofill::PasswordForm>& passwords_vector =
+      passwords_map.begin()->second;
   ASSERT_EQ(1u, passwords_vector.size());
   const autofill::PasswordForm& form = passwords_vector[0];
   EXPECT_EQ(base::ASCIIToUTF16("user"), form.username_value);
@@ -81,16 +118,9 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   EXPECT_FALSE(form.skip_zero_click);
 }
 
-// TODO(crbug.com/626759): flakily failing on Mac.
-#if defined(OS_MACOSX)
-#define MAYBE_AutoSigninOldCredentialAndNavigation \
-    DISABLED_AutoSigninOldCredentialAndNavigation
-#else
-#define MAYBE_AutoSigninOldCredentialAndNavigation \
-    AutoSigninOldCredentialAndNavigation
-#endif
+
 IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
-                       MAYBE_AutoSigninOldCredentialAndNavigation) {
+                       AutoSigninOldCredentialAndNavigation) {
   // Save credentials with 'skip_zero_click' false.
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
@@ -114,11 +144,15 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   "document.getElementById('password_field').value = 'trash';";
   ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), fill_password));
 
-  // Call the API to trigger the notification to the client.
+  // Call the API with a delay to trigger the notification to the client. The
+  // delay ensures that parsing password forms won't happen again after the API
+  // call making the test flaky.
   ASSERT_TRUE(content::ExecuteScript(
       RenderViewHost(),
-      "navigator.credentials.get({password: true})"
-      ".then(cred => window.location = '/password/done.html')"));
+      "setTimeout( function() {"
+        "navigator.credentials.get({password: true})"
+        ".then(cred => window.location = '/password/done.html');"
+      "}, 1000)"));
 
   NavigationObserver observer(WebContents());
   observer.SetPathToWaitFor("/password/done.html");
@@ -130,36 +164,57 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   EXPECT_FALSE(prompt_observer->IsShowingSavePrompt());
 }
 
-// Disabled due to flakes; see https://crbug.com/629459.
-IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
-                       DISABLED_SaveViaAPIAndAutofill) {
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, SaveViaAPIAndAutofill) {
   NavigateToFile("/password/password_form.html");
-  std::string fill_password =
-  "document.getElementById('username_field').value = 'user';"
-  "document.getElementById('password_field').value = '12345';";
-  ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), fill_password));
 
-  // Call the API to save the form.
+  // Postpone a submit event for 1 second. Even for the static html page Chrome
+  // continues to parse and recreate the PasswordFormManager instances after the
+  // page load. Calling the API before this would make the test flaky. Clicking
+  // on the button emulates server analysing the credential and then saving and
+  // navigating to the landing page.
   ASSERT_TRUE(content::ExecuteScript(
       RenderViewHost(),
-      "var c = new PasswordCredential({ id: 'user', password: '12345' });"
-      "navigator.credentials.store(c);"));
-  std::unique_ptr<BubbleObserver> prompt_observer(
-      new BubbleObserver(WebContents()));
-  EXPECT_TRUE(prompt_observer->IsShowingSavePrompt());
-  prompt_observer->Dismiss();
-
+      "document.getElementById('input_submit_button').addEventListener('click',"
+      "function(event) {"
+        "setTimeout( function() {"
+          "var c = new PasswordCredential({ id: 'user', password: 'API' });"
+          "navigator.credentials.store(c);"
+          "document.getElementById('testform').submit();"
+        "}, 1000 );"
+        "event.preventDefault();"
+      "});"));
+  // Fill the password and click the button to submit the page later. The API
+  // should suppress the autofill password manager.
   NavigationObserver form_submit_observer(WebContents());
   ASSERT_TRUE(content::ExecuteScript(
       RenderViewHost(),
+      "document.getElementById('username_field').value = 'user';"
+      "document.getElementById('password_field').value = 'autofill';"
       "document.getElementById('input_submit_button').click();"));
   form_submit_observer.Wait();
-  EXPECT_FALSE(prompt_observer->IsShowingSavePrompt());
+
+  WaitForPasswordStore();
+  std::unique_ptr<BubbleObserver> prompt_observer(
+      new BubbleObserver(WebContents()));
+  ASSERT_TRUE(prompt_observer->IsShowingSavePrompt());
+  prompt_observer->AcceptSavePrompt();
+
+  WaitForPasswordStore();
+  password_manager::TestPasswordStore::PasswordMap stored =
+      static_cast<password_manager::TestPasswordStore*>(
+          PasswordStoreFactory::GetForProfile(
+              browser()->profile(), ServiceAccessType::IMPLICIT_ACCESS)
+              .get())->stored_passwords();
+  ASSERT_EQ(1u, stored.size());
+  autofill::PasswordForm signin_form = stored.begin()->second[0];
+  EXPECT_EQ(base::ASCIIToUTF16("user"), signin_form.username_value);
+  EXPECT_EQ(base::ASCIIToUTF16("API"), signin_form.password_value);
+  EXPECT_EQ(embedded_test_server()->base_url().spec(),
+            signin_form.signon_realm);
+  EXPECT_EQ(embedded_test_server()->base_url(), signin_form.origin);
 }
 
-// Disabled due to flakes; see https://crbug.com/629459.
-IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
-                       DISABLED_UpdateViaAPIAndAutofill) {
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, UpdateViaAPIAndAutofill) {
   // Save credentials with 'skip_zero_click' false.
   scoped_refptr<password_manager::TestPasswordStore> password_store =
       static_cast<password_manager::TestPasswordStore*>(
@@ -168,7 +223,7 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
               .get());
   autofill::PasswordForm signin_form;
   signin_form.signon_realm = embedded_test_server()->base_url().spec();
-  signin_form.password_value = base::ASCIIToUTF16("12345");
+  signin_form.password_value = base::ASCIIToUTF16("old_pass");
   signin_form.username_value = base::ASCIIToUTF16("user");
   signin_form.origin = embedded_test_server()->base_url();
   signin_form.skip_zero_click = true;
@@ -176,37 +231,46 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
   password_store->AddLogin(signin_form);
 
   NavigateToFile("/password/password_form.html");
-  std::string fill_password =
-      "document.getElementById('username_field').value = 'user';"
-      "document.getElementById('password_field').value = '12345';";
-  ASSERT_TRUE(content::ExecuteScript(RenderViewHost(), fill_password));
 
-  // Call the API to update the form.
+  // Postpone a submit event for 1 second. Even for the static html page Chrome
+  // continues to parse and recreate the PasswordFormManager instances after the
+  // page load. Calling the API before this would make the test flaky. Clicking
+  // on the button emulates server analysing the credential and then saving and
+  // navigating to the landing page.
   ASSERT_TRUE(content::ExecuteScript(
       RenderViewHost(),
-      "var c = new PasswordCredential({ id: 'user', password: '12345' });"
-      "navigator.credentials.store(c);"));
+      "document.getElementById('input_submit_button').addEventListener('click',"
+      "function(event) {"
+        "setTimeout( function() {"
+          "var c = new PasswordCredential({ id: 'user', password: 'API' });"
+          "navigator.credentials.store(c);"
+          "document.getElementById('testform').submit();"
+        "}, 1000 );"
+        "event.preventDefault();"
+      "});"));
+  // Fill the new password and click the button to submit the page later. The
+  // API should suppress the autofill password manager and overwrite the
+  // password.
+  NavigationObserver form_submit_observer(WebContents());
+  ASSERT_TRUE(content::ExecuteScript(
+      RenderViewHost(),
+      "document.getElementById('username_field').value = 'user';"
+      "document.getElementById('password_field').value = 'autofill';"
+      "document.getElementById('input_submit_button').click();"));
+  form_submit_observer.Wait();
+
+  // Wait for the password store before checking the prompt because it pops up
+  // after the store replies.
+  WaitForPasswordStore();
   std::unique_ptr<BubbleObserver> prompt_observer(
       new BubbleObserver(WebContents()));
   EXPECT_FALSE(prompt_observer->IsShowingSavePrompt());
   EXPECT_FALSE(prompt_observer->IsShowingUpdatePrompt());
   signin_form.skip_zero_click = false;
   signin_form.times_used = 1;
+  signin_form.password_value = base::ASCIIToUTF16("API");
   password_manager::TestPasswordStore::PasswordMap stored =
       password_store->stored_passwords();
-  ASSERT_EQ(1u, stored.size());
-  EXPECT_EQ(signin_form, stored[signin_form.signon_realm][0]);
-
-  // Verify that the autofill password manager was suppressed and didn't touch
-  // the store. It would definitely update the '*_element' fields.
-  NavigationObserver form_submit_observer(WebContents());
-  ASSERT_TRUE(content::ExecuteScript(
-      RenderViewHost(),
-      "document.getElementById('input_submit_button').click();"));
-  form_submit_observer.Wait();
-  EXPECT_FALSE(prompt_observer->IsShowingSavePrompt());
-  EXPECT_FALSE(prompt_observer->IsShowingUpdatePrompt());
-  stored = password_store->stored_passwords();
   ASSERT_EQ(1u, stored.size());
   EXPECT_EQ(signin_form, stored[signin_form.signon_realm][0]);
 }

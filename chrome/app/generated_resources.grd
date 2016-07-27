@@ -1801,10 +1801,6 @@ Even if you have downloaded files from this website before, the website might ha
                desc="Text for the button used to stop a dangerous download.">
         Discard
       </message>
-      <message name="IDS_DISMISS_DOWNLOAD"
-               desc="Text for the button used to dismiss a malicious download notification.">
-        Dismiss
-      </message>
 
       <!-- Download Tab Items -->
       <message name="IDS_DOWNLOAD_LINK_PAUSE"
@@ -5558,7 +5554,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Panels
       </message>
       <message name="IDS_FLAGS_PANELS_DESCRIPTION" desc="Description for the flag to enable Panel windows.">
-        Allow extensions to create panel windows that open outside of the browser frame. By default or if disabled, an attempt to open a panel will open a popup instead. Panels on desktop OSes are deprecated and will be removed soon.
+        Allow extensions to create panel windows that open outside of the browser frame. Attempts to open a panel will open a popup instead if not enabled. Default behavior is to allow only for whitelisted extensions. Enabled behavior is to allow for all extensions. Disabled behavior is to disallow panels for any extension.
       </message>
       <message name="IDS_FLAGS_WEBGL2_NAME" desc="Name of the 'Enable WebGL 2.0' flag.">
         WebGL 2.0 Prototype
@@ -6010,6 +6006,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
         </message>
         <message name="IDS_FLAGS_ASH_ENABLE_UNIFIED_DESKTOP_DESCRIPTION" desc="Description for the flag to enable unified desktop mode.">
           Enable unified desktop mode which allows a window to span multiple displays.
+        </message>
+        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_NAME" desc="Name for the flag to enable the window cycle (alt-tab) UI.">
+          Enable window cycle UI.
+        </message>
+        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_DESCRIPTION" desc="Description for the flag to enable the window cycle (alt-tab) UI.">
+          Enable window cycle UI (visual feedback for alt-tab).
         </message>
         <message name="IDS_FLAGS_BOOT_ANIMATION" desc="Name for the flag for wallpaper boot animation (except for OOBE).">
           Boot animation
@@ -7780,6 +7782,25 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_MD_FEEDBACK_SEND_REPORT_BUTTON" desc="Text for Send Report button of the feedback dialog. When clicked, the feedback report will be sent.">
         Send feedback
       </message>
+      <message name="IDS_MD_FEEDBACK_SCREENSHOT_LABEL" desc="Label for the checkbox to indicate whether the shown screenshot should be included in the feedback report.">
+        Include this screenshot:
+      </message>
+      <message name="IDS_MD_FEEDBACK_SEND_SYSTEM_INFO_LABEL" desc="Label for the checkbox to indicate whether the system info should be included in the feedback report.">
+        Send system information
+      </message>
+      <if expr="_google_chrome">
+        <message name="IDS_MD_FEEDBACK_PRIVACY_NOTE" desc="Text for the privacy note shown on the feedback dialog.">
+          Your Chrome and operating system version will be submitted in addition
+          to any information you choose to include above. If you include your email
+          address, Google may contact you regarding your feedback report. This feedback
+          is used to diagnose problems and help improve Chrome. Any personal information
+          you submit, whether explicitly or incidentally will be protected in
+          accordance with our privacy policies.<ph name="BEGIN_BOLD">&lt;strong&gt;
+          </ph> By submitting this feedback, you agree that Google may use feedback
+          that you provide to improve any Google product or service.
+          <ph name="END_BOLD">&lt;/strong&gt;</ph>
+        </message>
+      </if>
 
       <!-- Clear Browsing Data -->
       <message name="IDS_CLEAR_BROWSING_DATA_TITLE" desc="Dialog title">
@@ -14215,9 +14236,6 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_PUSH_MESSSAGING_BLOCK_RADIO" desc="A radio button in Content Settings dialog to deny a site to send push messages.">
         Do not allow any sites to send push messages
       </message>
-      <message name="IDS_PUSH_MESSAGES_BUBBLE_FRAGMENT" desc="Question asked on the info bar whenever a domain wants to send push messages">
-          Receive push messages
-      </message>
       <if expr="enable_notifications">
         <message name="IDS_PUSH_MESSAGING_GENERIC_NOTIFICATION_BODY" desc="Body text of an auto-generated notification informing the user that the site may have received an update in the background, in case the site did not satisfy the visible notification requirement itself.">
           This site has been updated in the background.
@@ -14777,6 +14795,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_FLAGS_OFFLINE_PAGES_BACKGROUND_LOADING_DESCRIPTION" desc="Description for the flag to enable offline pages.">
         Enables the browser to wake up and load offline pages automatically in the background.
+      </message>
+      <message name="IDS_FLAGS_OFFLINE_PAGES_SHARING_NAME" desc="Name for the flag to enable offline pages to be shared.">
+        Enables offline pages to be shared.
+      </message>
+      <message name="IDS_FLAGS_OFFLINE_PAGES_SHARING_DESCRIPTION" desc="Description for the flag to enable offline pages sharing.">
+        Enables the saved offline pages to be shared via other applications.
       </message>
       <message name="IDS_FLAGS_NTP_POPULAR_SITES_NAME" desc="Name for the flag to enable showing non-personalized popular suggestions on the New Tab Page, when no personal suggestions are available yet.">
         Show popular sites on the New Tab page

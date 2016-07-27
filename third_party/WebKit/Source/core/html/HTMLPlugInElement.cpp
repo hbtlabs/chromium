@@ -71,7 +71,7 @@ HTMLPlugInElement::HTMLPlugInElement(const QualifiedName& tagName, Document& doc
 
 HTMLPlugInElement::~HTMLPlugInElement()
 {
-    ASSERT(!m_pluginWrapper); // cleared in detach()
+    DCHECK(!m_pluginWrapper); // cleared in detachLayoutTree()
     ASSERT(!m_isDelayingLoadEvent);
 }
 
@@ -89,7 +89,7 @@ void HTMLPlugInElement::setPersistedPluginWidget(Widget* widget)
     if (m_persistedPluginWidget) {
         if (m_persistedPluginWidget->isPluginView()) {
             m_persistedPluginWidget->hide();
-            m_persistedPluginWidget->dispose();
+            disposeWidgetSoon(m_persistedPluginWidget.release());
         } else {
             ASSERT(m_persistedPluginWidget->isFrameView() || m_persistedPluginWidget->isRemoteFrameView());
         }
@@ -221,7 +221,7 @@ bool HTMLPlugInElement::shouldAccelerate() const
     return false;
 }
 
-void HTMLPlugInElement::detach(const AttachContext& context)
+void HTMLPlugInElement::detachLayoutTree(const AttachContext& context)
 {
     // Update the widget the next time we attach (detaching destroys the plugin).
     // FIXME: None of this "needsWidgetUpdate" related code looks right.
@@ -243,7 +243,7 @@ void HTMLPlugInElement::detach(const AttachContext& context)
 
     resetInstance();
 
-    HTMLFrameOwnerElement::detach(context);
+    HTMLFrameOwnerElement::detachLayoutTree(context);
 }
 
 LayoutObject* HTMLPlugInElement::createLayoutObject(const ComputedStyle& style)
@@ -260,7 +260,7 @@ LayoutObject* HTMLPlugInElement::createLayoutObject(const ComputedStyle& style)
         return image;
     }
 
-
+    m_pluginIsAvailable = true;
     return new LayoutEmbeddedObject(this);
 }
 
@@ -397,7 +397,7 @@ bool HTMLPlugInElement::layoutObjectIsFocusable() const
 
     if (useFallbackContent() || !HTMLFrameOwnerElement::layoutObjectIsFocusable())
         return false;
-    return layoutObject() && layoutObject()->isEmbeddedObject() && !layoutEmbeddedItem().showsUnavailablePluginIndicator();
+    return m_pluginIsAvailable;
 }
 
 bool HTMLPlugInElement::isImageType()
@@ -493,8 +493,10 @@ bool HTMLPlugInElement::loadPlugin(const KURL& url, const String& mimeType, cons
         FrameLoaderClient::DetachedPluginPolicy policy = requireLayoutObject ? FrameLoaderClient::FailOnDetachedPlugin : FrameLoaderClient::AllowDetachedPlugin;
         Widget* widget = frame->loader().client()->createPlugin(this, url, paramNames, paramValues, mimeType, loadManually, policy);
         if (!widget) {
-            if (!layoutItem.isNull() && !layoutItem.showsUnavailablePluginIndicator())
-                layoutItem.setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginMissing);
+            if (!layoutItem.isNull() && !layoutItem.showsUnavailablePluginIndicator()) {
+                m_pluginIsAvailable = false;
+                layoutItem.setPluginAvailability(LayoutEmbeddedObject::PluginMissing);
+            }
             return false;
         }
 
@@ -555,8 +557,10 @@ bool HTMLPlugInElement::allowedToLoadObject(const KURL& url, const String& mimeT
         fastGetAttribute(HTMLNames::typeAttr);
     if (!document().contentSecurityPolicy()->allowObjectFromSource(url)
         || !document().contentSecurityPolicy()->allowPluginTypeForDocument(document(), mimeType, declaredMimeType, url)) {
-        if (LayoutEmbeddedItem layoutItem = layoutEmbeddedItem())
-            layoutItem.setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
+        if (LayoutEmbeddedItem layoutItem = layoutEmbeddedItem()) {
+            m_pluginIsAvailable = false;
+            layoutItem.setPluginAvailability(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
+        }
         return false;
     }
     // If the URL is empty, a plugin could still be instantiated if a MIME-type

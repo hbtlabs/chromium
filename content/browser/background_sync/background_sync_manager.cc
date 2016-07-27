@@ -275,7 +275,8 @@ void BackgroundSyncManager::EmulateDispatchSyncEvent(
 
 BackgroundSyncManager::BackgroundSyncManager(
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context)
-    : service_worker_context_(service_worker_context),
+    : op_scheduler_(CacheStorageSchedulerClient::CLIENT_BACKGROUND_SYNC),
+      service_worker_context_(service_worker_context),
       parameters_(new BackgroundSyncParameters()),
       disabled_(false),
       num_firing_registrations_(0),
@@ -974,8 +975,7 @@ void BackgroundSyncManager::FireReadyEventsDidFindRegistration(
     const base::Closure& event_fired_callback,
     const base::Closure& event_completed_callback,
     ServiceWorkerStatusCode service_worker_status,
-    const scoped_refptr<ServiceWorkerRegistration>&
-        service_worker_registration) {
+    scoped_refptr<ServiceWorkerRegistration> service_worker_registration) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (service_worker_status != SERVICE_WORKER_OK) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(

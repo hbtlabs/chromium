@@ -21,6 +21,7 @@ import android.media.ImageReader;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Range;
 import android.util.Size;
 import android.view.Surface;
 
@@ -127,9 +128,11 @@ public class VideoCaptureCamera2 extends VideoCapture {
                     throw new IllegalStateException();
                 }
 
-                readImageIntoBuffer(image, mCapturedData);
-                nativeOnFrameAvailable(mNativeVideoCaptureDeviceAndroid, mCapturedData,
-                        mCapturedData.length, getCameraRotation());
+                nativeOnI420FrameAvailable(mNativeVideoCaptureDeviceAndroid,
+                        image.getPlanes()[0].getBuffer(), image.getPlanes()[0].getRowStride(),
+                        image.getPlanes()[1].getBuffer(), image.getPlanes()[2].getBuffer(),
+                        image.getPlanes()[1].getRowStride(), image.getPlanes()[1].getPixelStride(),
+                        image.getWidth(), image.getHeight(), getCameraRotation());
             } catch (IllegalStateException ex) {
                 Log.e(TAG, "acquireLatestImage():", ex);
             }
@@ -225,8 +228,6 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
     private final Object mCameraStateLock = new Object();
 
-    private byte[] mCapturedData;
-
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mPreviewSession;
     private CaptureRequest mPreviewRequest;
@@ -312,52 +313,32 @@ public class VideoCaptureCamera2 extends VideoCapture {
         return true;
     }
 
-    private static void readImageIntoBuffer(Image image, byte[] data) {
-        final int imageWidth = image.getWidth();
-        final int imageHeight = image.getHeight();
-        final Image.Plane[] planes = image.getPlanes();
-
-        int offset = 0;
-        for (int plane = 0; plane < planes.length; ++plane) {
-            final ByteBuffer buffer = planes[plane].getBuffer();
-            final int rowStride = planes[plane].getRowStride();
-            // Experimentally, U and V planes have |pixelStride| = 2, which
-            // essentially means they are packed. That's silly, because we are
-            // forced to unpack here.
-            final int pixelStride = planes[plane].getPixelStride();
-            final int planeWidth = (plane == 0) ? imageWidth : imageWidth / 2;
-            final int planeHeight = (plane == 0) ? imageHeight : imageHeight / 2;
-
-            if (pixelStride == 1 && rowStride == planeWidth) {
-                // Copy whole plane from buffer into |data| at once.
-                buffer.get(data, offset, planeWidth * planeHeight);
-                offset += planeWidth * planeHeight;
-            } else {
-                // Copy pixels one by one respecting pixelStride and rowStride.
-                byte[] rowData = new byte[rowStride];
-                for (int row = 0; row < planeHeight - 1; ++row) {
-                    buffer.get(rowData, 0, rowStride);
-                    for (int col = 0; col < planeWidth; ++col) {
-                        data[offset++] = rowData[col * pixelStride];
-                    }
-                }
-
-                // Last row is special in some devices and may not contain the full
-                // |rowStride| bytes of data. See http://crbug.com/458701 and
-                // http://developer.android.com/reference/android/media/Image.Plane.html#getBuffer()
-                buffer.get(rowData, 0, Math.min(rowStride, buffer.remaining()));
-                for (int col = 0; col < planeWidth; ++col) {
-                    data[offset++] = rowData[col * pixelStride];
-                }
-            }
-        }
-    }
-
     private void changeCameraStateAndNotify(CameraState state) {
         synchronized (mCameraStateLock) {
             mCameraState = state;
             mCameraStateLock.notifyAll();
         }
+    }
+
+    // Finds the closest Size to (|width|x|height|) in |sizes|, and returns it or null.
+    // Ignores |width| or |height| if either is zero (== don't care).
+    private static Size findClosestSizeInArray(Size[] sizes, int width, int height) {
+        if (sizes == null) return null;
+        Size closestSize = null;
+        int minDiff = Integer.MAX_VALUE;
+        for (Size size : sizes) {
+            final int diff = ((width > 0) ? Math.abs(size.getWidth() - width) : 0)
+                    + ((height > 0) ? Math.abs(size.getHeight() - height) : 0);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestSize = size;
+            }
+        }
+        if (minDiff == Integer.MAX_VALUE) {
+            Log.e(TAG, "Couldn't find resolution close to (%dx%d)", width, height);
+            return null;
+        }
+        return closestSize;
     }
 
     static boolean isLegacyDevice(Context appContext, int id) {
@@ -476,18 +457,8 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         // Find closest supported size.
         final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.YUV_420_888);
-        if (supportedSizes == null) return false;
-        Size closestSupportedSize = null;
-        int minDiff = Integer.MAX_VALUE;
-        for (Size size : supportedSizes) {
-            final int diff =
-                    Math.abs(size.getWidth() - width) + Math.abs(size.getHeight() - height);
-            if (diff < minDiff) {
-                minDiff = diff;
-                closestSupportedSize = size;
-            }
-        }
-        if (minDiff == Integer.MAX_VALUE) {
+        final Size closestSupportedSize = findClosestSizeInArray(supportedSizes, width, height);
+        if (closestSupportedSize == null) {
             Log.e(TAG, "No supported resolutions.");
             return false;
         }
@@ -497,9 +468,6 @@ public class VideoCaptureCamera2 extends VideoCapture {
         // |mCaptureFormat| is also used to configure the ImageReader.
         mCaptureFormat = new VideoCaptureFormat(closestSupportedSize.getWidth(),
                 closestSupportedSize.getHeight(), frameRate, ImageFormat.YUV_420_888);
-        int expectedFrameSize = mCaptureFormat.mWidth * mCaptureFormat.mHeight
-                * ImageFormat.getBitsPerPixel(mCaptureFormat.mPixelFormat) / 8;
-        mCapturedData = new byte[expectedFrameSize];
         mCameraNativeOrientation =
                 cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
         // TODO(mcasas): The following line is correct for N5 with prerelease Build,
@@ -562,11 +530,36 @@ public class VideoCaptureCamera2 extends VideoCapture {
     public PhotoCapabilities getPhotoCapabilities() {
         final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
 
+        int minIso = 0;
+        int maxIso = 0;
+        final Range<Integer> iso_range =
+                cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+        if (iso_range != null) {
+            minIso = iso_range.getLower();
+            maxIso = iso_range.getUpper();
+        }
+        final int currentIso = mPreviewRequest.get(CaptureRequest.SENSOR_SENSITIVITY);
+
+        final StreamConfigurationMap streamMap =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.JPEG);
+        int minWidth = Integer.MAX_VALUE;
+        int minHeight = Integer.MAX_VALUE;
+        int maxWidth = 0;
+        int maxHeight = 0;
+        for (Size size : supportedSizes) {
+            if (size.getWidth() < minWidth) minWidth = size.getWidth();
+            if (size.getHeight() < minHeight) minHeight = size.getHeight();
+            if (size.getWidth() > maxWidth) maxWidth = size.getWidth();
+            if (size.getHeight() > maxHeight) maxHeight = size.getHeight();
+        }
+        final int currentHeight = mCaptureFormat.getHeight();
+        final int currentWidth = mCaptureFormat.getWidth();
+
         // The Min and Max zoom are returned as x100 by the API to avoid using floating point. There
         // is no min-zoom per se, so clamp it to always 100 (TODO(mcasas): make const member).
         final int minZoom = 100;
         final int maxZoom = Math.round(mMaxZoom * 100);
-
         // Width Ratio x100 is used as measure of current zoom.
         final int currentZoom = 100 * mPreviewRequest.get(CaptureRequest.SCALER_CROP_REGION).width()
                 / cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
@@ -577,7 +570,9 @@ public class VideoCaptureCamera2 extends VideoCapture {
         final boolean isFocusManual = (focusMode == CameraMetadata.CONTROL_AF_MODE_OFF)
                 || (focusMode == CameraMetadata.CONTROL_AF_MODE_EDOF);
 
-        return new PhotoCapabilities(maxZoom, minZoom, currentZoom, !isFocusManual);
+        return new PhotoCapabilities(minIso, maxIso, currentIso, maxHeight, minHeight,
+                currentHeight, maxWidth, minWidth, currentWidth, maxZoom, minZoom, currentZoom,
+                !isFocusManual);
     }
 
     @Override
@@ -606,12 +601,24 @@ public class VideoCaptureCamera2 extends VideoCapture {
     }
 
     @Override
-    public boolean takePhoto(final long callbackId) {
+    public boolean takePhoto(final long callbackId, int width, int height) {
         Log.d(TAG, "takePhoto " + callbackId);
         if (mCameraDevice == null || mCameraState != CameraState.STARTED) return false;
 
-        final ImageReader imageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
-                mCaptureFormat.getHeight(), ImageFormat.JPEG, 1 /* maxImages */);
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
+        final StreamConfigurationMap streamMap =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.JPEG);
+        final Size closestSize = findClosestSizeInArray(supportedSizes, width, height);
+
+        Log.d(TAG, "requested resolution: (%dx%d)", width, height);
+        if (closestSize != null) {
+            Log.d(TAG, " matched (%dx%d)", closestSize.getWidth(), closestSize.getHeight());
+        }
+        final ImageReader imageReader = ImageReader.newInstance(
+                (closestSize != null) ? closestSize.getWidth() : mCaptureFormat.getWidth(),
+                (closestSize != null) ? closestSize.getHeight() : mCaptureFormat.getHeight(),
+                ImageFormat.JPEG, 1 /* maxImages */);
 
         HandlerThread thread = new HandlerThread("CameraPicture");
         thread.start();

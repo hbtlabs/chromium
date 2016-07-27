@@ -98,22 +98,7 @@ static IntRect backgroundRect(const LayoutObject* layoutObject)
 
     LayoutRect rect;
     const LayoutBox* box = toLayoutBox(layoutObject);
-    EFillBox clip = box->style()->backgroundClip();
-    switch (clip) {
-    case BorderFillBox:
-        rect = box->borderBoxRect();
-        break;
-    case PaddingFillBox:
-        rect = box->paddingBoxRect();
-        break;
-    case ContentFillBox:
-        rect = box->contentBoxRect();
-        break;
-    case TextFillBox:
-        break;
-    }
-
-    return pixelSnappedIntRect(rect);
+    return pixelSnappedIntRect(box->backgroundClipRect());
 }
 
 static inline bool isAcceleratedCanvas(const LayoutObject* layoutObject)
@@ -1110,7 +1095,7 @@ void CompositedLayerMapping::registerScrollingLayers()
     // Page scale is applied as a transform on the root layout view layer. Because the scroll
     // layer is further up in the hierarchy, we need to avoid marking the root layout view
     // layer as a container.
-    bool isContainer = m_owningLayer.hasTransformRelatedProperty() && !m_owningLayer.isRootLayer();
+    bool isContainer = m_owningLayer.layoutObject()->style()->canContainFixedPositionObjects() && !m_owningLayer.isRootLayer();
     // FIXME: we should make certain that childForSuperLayers will never be the m_squashingContainmentLayer here
     scrollingCoordinator->setLayerIsContainerForFixedPositionLayers(childForSuperlayers(), isContainer);
 }

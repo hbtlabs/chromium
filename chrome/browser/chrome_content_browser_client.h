@@ -210,10 +210,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   net::NetLog* GetNetLog() override;
-
-  content::GeolocationDelegate* CreateGeolocationDelegate() override;
-
-  bool IsFastShutdownPossible() override;
   void OverrideWebkitPrefs(content::RenderViewHost* rvh,
                            content::WebPreferences* prefs) override;
   void BrowserURLHandlerCreated(content::BrowserURLHandler* handler) override;
@@ -281,7 +277,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void ExposeInterfacesToRenderer(
       shell::InterfaceRegistry* registry,
       content::RenderProcessHost* render_process_host) override;
-  void RegisterFrameMojoShellInterfaces(
+  void ExposeInterfacesToMediaService(
       shell::InterfaceRegistry* registry,
       content::RenderFrameHost* render_frame_host) override;
   void RegisterRenderFrameMojoInterfaces(

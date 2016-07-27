@@ -138,8 +138,6 @@ per-file ownership.gypi=file://components/ownership/OWNERS
 
 per-file packed_ct_ev_whitelist.gypi=file://components/packed_ct_ev_whitelist/OWNERS
 
-per-file page_load_metrics.gypi=file://components/page_load_metrics/OWNERS
-
 per-file pairing.gypi=file://components/pairing/OWNERS
 
 per-file password_manager.gypi=file://components/password_manager/OWNERS
@@ -190,6 +188,8 @@ per-file session_manager.gypi=file://components/session_manager/OWNERS
 per-file sessions.gypi=file://components/sessions/OWNERS
 
 per-file signin.gypi=file://components/signin/OWNERS
+
+per-file spellcheck.gypi=file://components/spellcheck/OWNERS
 
 per-file ssl_errors.gypi=file://components/ssl_errors/OWNERS
 per-file ssl_errors_strings.grdp=file://components/ssl_errors/OWNERS
@@ -242,8 +242,6 @@ per-file web_restrictions.gypi=file://components/web_restrictions/OWNERS
 
 per-file webdata.gypi=file://components/webdata/OWNERS
 per-file webdata_services.gypi=file://components/webdata_services/OWNERS
-
-per-file webmessaging.gypi=file://components/webmessaging/OWNERS
 
 per-file wifi.gypi=file://components/wifi/OWNERS
 

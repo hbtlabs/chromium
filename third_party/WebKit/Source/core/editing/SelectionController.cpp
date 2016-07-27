@@ -85,12 +85,8 @@ DispatchEventResult dispatchSelectStart(Node* node)
 
 VisibleSelectionInFlatTree expandSelectionToRespectUserSelectAll(Node* targetNode, const VisibleSelectionInFlatTree& selection)
 {
-    Node* rootUserSelectAll = EditingInFlatTreeStrategy::rootUserSelectAllForNode(targetNode);
+    Node* const rootUserSelectAll = EditingInFlatTreeStrategy::rootUserSelectAllForNode(targetNode);
     if (!rootUserSelectAll)
-        return selection;
-    if (rootUserSelectAll->isHTMLElement() && toHTMLElement(rootUserSelectAll)->isTextFormControl())
-        return selection;
-    if (rootUserSelectAll->layoutObject()->style()->userModify() != READ_ONLY)
         return selection;
 
     VisibleSelectionInFlatTree newSelection(selection);
@@ -238,8 +234,9 @@ void SelectionController::updateSelectionForMouseDrag(const HitTestResult& hitTe
 
     if (RuntimeEnabledFeatures::userSelectAllEnabled()) {
         // TODO(yosin) Should we use |Strategy::rootUserSelectAllForNode()|?
-        Node* rootUserSelectAllForMousePressNode = EditingInFlatTreeStrategy::rootUserSelectAllForNode(mousePressNode);
-        if (rootUserSelectAllForMousePressNode && rootUserSelectAllForMousePressNode == EditingInFlatTreeStrategy::rootUserSelectAllForNode(target)) {
+        Node* const rootUserSelectAllForMousePressNode = EditingInFlatTreeStrategy::rootUserSelectAllForNode(mousePressNode);
+        Node* const rootUserSelectAllForTarget = EditingInFlatTreeStrategy::rootUserSelectAllForNode(target);
+        if (rootUserSelectAllForMousePressNode && rootUserSelectAllForMousePressNode == rootUserSelectAllForTarget) {
             newSelection.setBase(mostBackwardCaretPosition(PositionInFlatTree::beforeNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
             newSelection.setExtent(mostForwardCaretPosition(PositionInFlatTree::afterNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
         } else {
@@ -251,7 +248,6 @@ void SelectionController::updateSelectionForMouseDrag(const HitTestResult& hitTe
                     newSelection.setBase(mostForwardCaretPosition(PositionInFlatTree::afterNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
             }
 
-            Node* rootUserSelectAllForTarget = EditingInFlatTreeStrategy::rootUserSelectAllForNode(target);
             if (rootUserSelectAllForTarget && mousePressNode->layoutObject() && toPositionInFlatTree(target->layoutObject()->positionForPoint(hitTestResult.localPoint()).position()).compareTo(toPositionInFlatTree(mousePressNode->layoutObject()->positionForPoint(dragStartPos).position())) < 0)
                 newSelection.setExtent(mostBackwardCaretPosition(PositionInFlatTree::beforeNode(rootUserSelectAllForTarget), CanCrossEditingBoundary));
             else if (rootUserSelectAllForTarget && mousePressNode->layoutObject())
@@ -323,7 +319,7 @@ void SelectionController::selectClosestWordFromHitTestResult(const HitTestResult
         // If node doesn't have text except space, tab or line break, do not
         // select that 'empty' area.
         EphemeralRangeInFlatTree range(newSelection.start(), newSelection.end());
-        const String& str = plainText(range, innerNode->hasEditableStyle() ? TextIteratorEmitsObjectReplacementCharacter : TextIteratorDefaultBehavior);
+        const String& str = plainText(range, hasEditableStyle(*innerNode) ? TextIteratorEmitsObjectReplacementCharacter : TextIteratorDefaultBehavior);
         if (str.isEmpty() || str.simplifyWhiteSpace().containsOnlyWhitespace())
             return;
 
@@ -522,7 +518,7 @@ bool SelectionController::handleMouseReleaseEvent(const MouseEventWithHitTestRes
         VisibleSelectionInFlatTree newSelection;
         Node* node = event.innerNode();
         bool caretBrowsing = m_frame->settings() && m_frame->settings()->caretBrowsingEnabled();
-        if (node && node->layoutObject() && (caretBrowsing || node->hasEditableStyle())) {
+        if (node && node->layoutObject() && (caretBrowsing || hasEditableStyle(*node))) {
             const VisiblePositionInFlatTree pos = visiblePositionOfHitTestResult(event.hitTestResult());
             newSelection = VisibleSelectionInFlatTree(pos);
         }
@@ -583,7 +579,7 @@ bool SelectionController::handleGestureLongPress(const PlatformGestureEvent& ges
         return false;
 
     Node* innerNode = hitTestResult.innerNode();
-    bool innerNodeIsSelectable = innerNode && (innerNode->isContentEditable() || innerNode->canStartSelection());
+    bool innerNodeIsSelectable = innerNode && (isContentEditable(*innerNode) || innerNode->canStartSelection());
     if (!innerNodeIsSelectable)
         return false;
 

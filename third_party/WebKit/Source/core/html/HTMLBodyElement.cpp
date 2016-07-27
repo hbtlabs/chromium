@@ -31,6 +31,7 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/StyleChangeReason.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -190,7 +191,7 @@ bool HTMLBodyElement::supportsFocus() const
 {
     // This override is needed because the inherited method bails if the parent is editable.
     // The <body> should be focusable even if <html> is editable.
-    return hasEditableStyle() || HTMLElement::supportsFocus();
+    return hasEditableStyle(*this) || HTMLElement::supportsFocus();
 }
 
 } // namespace blink

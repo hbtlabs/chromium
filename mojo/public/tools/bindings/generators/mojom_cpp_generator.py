@@ -153,8 +153,17 @@ def GetCppPodType(kind):
   return _kind_to_cpp_type[kind]
 
 def GetCppWrapperType(kind):
+  def _AddOptional(type_name):
+    pattern = "WTF::Optional<%s>" if _for_blink else "base::Optional<%s>"
+    return pattern % type_name
+
   if IsTypemappedKind(kind):
-    return GetNativeTypeName(kind)
+    type_name = GetNativeTypeName(kind)
+    if (mojom.IsNullableKind(kind) and
+        not _current_typemap[GetFullMojomNameForKind(kind)][
+           "nullable_is_same_type"]):
+      type_name = _AddOptional(type_name)
+    return type_name
   if mojom.IsEnumKind(kind):
     return GetNameForKind(kind)
   if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
@@ -162,23 +171,19 @@ def GetCppWrapperType(kind):
   if mojom.IsArrayKind(kind):
     pattern = None
     if _use_new_wrapper_types:
+      pattern = "WTF::Vector<%s>" if _for_blink else "std::vector<%s>"
       if mojom.IsNullableKind(kind):
-        pattern = ("WTF::Optional<WTF::Vector<%s>>" if _for_blink else
-            "base::Optional<std::vector<%s>>")
-      else:
-        pattern = "WTF::Vector<%s>" if _for_blink else "std::vector<%s>"
+        pattern = _AddOptional(pattern)
     else:
       pattern = "mojo::WTFArray<%s>" if _for_blink else "mojo::Array<%s>"
     return pattern % GetCppWrapperType(kind.kind)
   if mojom.IsMapKind(kind):
     pattern = None
     if _use_new_wrapper_types:
+      pattern = ("WTF::HashMap<%s, %s>" if _for_blink else
+                 "std::unordered_map<%s, %s>")
       if mojom.IsNullableKind(kind):
-        pattern = ("WTF::Optional<WTF::HashMap<%s, %s>>" if _for_blink else
-                   "base::Optional<std::unordered_map<%s, %s>>")
-      else:
-        pattern = ("WTF::HashMap<%s, %s>" if _for_blink else
-                   "std::unordered_map<%s, %s>")
+        pattern = _AddOptional(pattern)
     else:
       pattern = "mojo::WTFMap<%s, %s>" if _for_blink else "mojo::Map<%s, %s>"
     return pattern % (GetCppWrapperType(kind.key_kind),
@@ -196,8 +201,8 @@ def GetCppWrapperType(kind):
       return "WTF::String"
     if not _use_new_wrapper_types:
       return "mojo::String"
-    return ("base::Optional<std::string>" if mojom.IsNullableKind(kind) else
-            "std::string")
+    type_name = "std::string"
+    return _AddOptional(type_name) if mojom.IsNullableKind(kind) else type_name
   if mojom.IsGenericHandleKind(kind):
     return "mojo::ScopedHandle"
   if mojom.IsDataPipeConsumerKind(kind):
@@ -241,6 +246,20 @@ def GetCppWrapperParamType(kind):
   cpp_wrapper_type = GetCppWrapperType(kind)
   return (cpp_wrapper_type if ShouldPassParamByValue(kind)
                            else "const %s&" % cpp_wrapper_type)
+
+def GetCppDataViewType(kind):
+  if mojom.IsEnumKind(kind):
+    return GetNameForKind(kind)
+  if mojom.IsStructKind(kind) or mojom.IsUnionKind(kind):
+    return "%sDataView" % GetNameForKind(kind)
+  if mojom.IsArrayKind(kind):
+    return "mojo::ArrayDataView<%s>" % GetCppDataViewType(kind.kind)
+  if mojom.IsMapKind(kind):
+    return ("mojo::MapDataView<%s, %s>" % (GetCppDataViewType(kind.key_kind),
+                                           GetCppDataViewType(kind.value_kind)))
+  if mojom.IsStringKind(kind):
+    return "mojo::StringDataView"
+  return GetCppWrapperType(kind)
 
 def GetCppFieldType(kind):
   if mojom.IsStructKind(kind):
@@ -412,6 +431,7 @@ class Generator(generator.Generator):
   cpp_filters = {
     "constant_value": ConstantValue,
     "cpp_wrapper_param_type": GetCppWrapperParamType,
+    "cpp_data_view_type": GetCppDataViewType,
     "cpp_field_type": GetCppFieldType,
     "cpp_union_field_type": GetCppUnionFieldType,
     "cpp_pod_type": GetCppPodType,

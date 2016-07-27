@@ -64,6 +64,8 @@
 #include "core/html/ImageDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
+#include "core/layout/LayoutFullScreen.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/DocumentThreadableLoader.h"
@@ -5543,13 +5545,13 @@ TEST_P(ParameterizedWebFrameTest, DidAccessInitialDocumentBodyBeforeModalDialog)
     runPendingTasks();
     EXPECT_FALSE(webFrameClient.m_didAccessInitialDocument);
 
-    // Access the initial document by modifying the body. We normally set a
-    // timer to notify the client.
+    // Access the initial document by modifying the body.
     newView->mainFrame()->executeScript(
         WebScriptSource("window.opener.document.body.innerHTML += 'Modified';"));
-    EXPECT_FALSE(webFrameClient.m_didAccessInitialDocument);
+    EXPECT_TRUE(webFrameClient.m_didAccessInitialDocument);
 
-    // Make sure that a modal dialog forces us to notify right away.
+    // Run a modal dialog, which used to run a nested message loop and require
+    // a special case for notifying about the access.
     newView->mainFrame()->executeScript(
         WebScriptSource("window.opener.confirm('Modal');"));
     EXPECT_TRUE(webFrameClient.m_didAccessInitialDocument);
@@ -5583,13 +5585,13 @@ TEST_P(ParameterizedWebFrameTest, DidWriteToInitialDocumentBeforeModalDialog)
     EXPECT_FALSE(webFrameClient.m_didAccessInitialDocument);
 
     // Access the initial document with document.write, which moves us past the
-    // initial empty document state of the state machine. We normally set a
-    // timer to notify the client.
+    // initial empty document state of the state machine.
     newView->mainFrame()->executeScript(
         WebScriptSource("window.opener.document.write('Modified'); window.opener.document.close();"));
-    EXPECT_FALSE(webFrameClient.m_didAccessInitialDocument);
+    EXPECT_TRUE(webFrameClient.m_didAccessInitialDocument);
 
-    // Make sure that a modal dialog forces us to notify right away.
+    // Run a modal dialog, which used to run a nested message loop and require
+    // a special case for notifying about the access.
     newView->mainFrame()->executeScript(
         WebScriptSource("window.opener.confirm('Modal');"));
     EXPECT_TRUE(webFrameClient.m_didAccessInitialDocument);
@@ -6434,40 +6436,6 @@ TEST_F(WebFrameTest, MaximumScrollPositionCanBeNegative)
     EXPECT_LT(frameView->maximumScrollPosition().x(), 0);
 }
 
-TEST_F(WebFrameTest, FullscreenCleanTopLayerAndFullscreenStack)
-{
-    FakeCompositingWebViewClient client;
-    registerMockedHttpURLLoad("fullscreen_div.html");
-    FrameTestHelpers::WebViewHelper webViewHelper;
-    int viewportWidth = 640;
-    int viewportHeight = 480;
-    client.m_screenInfo.rect.width = viewportWidth;
-    client.m_screenInfo.rect.height = viewportHeight;
-    WebViewImpl* webViewImpl = webViewHelper.initializeAndLoad(
-        m_baseURL + "fullscreen_div.html", true, 0, &client, nullptr, configureAndroid);
-    webViewImpl->resize(WebSize(viewportWidth, viewportHeight));
-    webViewImpl->updateAllLifecyclePhases();
-
-    UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
-    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
-    Fullscreen& fullscreen = Fullscreen::from(*document);
-
-    Element* divFullscreen = document->getElementById("div1");
-    fullscreen.requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullscreen();
-    ASSERT_TRUE(Fullscreen::isFullScreen(*document));
-
-    // Sanity check. We should have both in our stack.
-    ASSERT_EQ(fullscreen.fullScreenElementStack().size(), 1UL);
-    ASSERT_EQ(document->topLayerElements().size(), 2UL);
-
-    fullscreen.exitFullscreen();
-    webViewImpl->didExitFullscreen();
-
-    ASSERT_EQ(fullscreen.fullScreenElementStack().size(), 0UL);
-    ASSERT_EQ(document->topLayerElements().size(), 0UL);
-}
-
 TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize)
 {
     FakeCompositingWebViewClient client;
@@ -6490,8 +6458,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize)
     ASSERT_TRUE(Fullscreen::isFullScreen(*document));
 
     // Verify that the element is sized to the viewport.
-    Element* fullscreenElement = Fullscreen::currentFullScreenElementFrom(*document);
-    LayoutBox* fullscreenLayoutObject = toLayoutBox(fullscreenElement->layoutObject());
+    LayoutFullScreen* fullscreenLayoutObject = Fullscreen::from(*document).fullScreenLayoutObject();
     EXPECT_EQ(viewportWidth, fullscreenLayoutObject->logicalWidth().toInt());
     EXPECT_EQ(viewportHeight, fullscreenLayoutObject->logicalHeight().toInt());
 
@@ -6595,8 +6562,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenSubframe)
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the element is sized to the viewport.
-    Element* fullscreenElement = Fullscreen::currentFullScreenElementFrom(*document);
-    LayoutBox* fullscreenLayoutObject = toLayoutBox(fullscreenElement->layoutObject());
+    LayoutFullScreen* fullscreenLayoutObject = Fullscreen::from(*document).fullScreenLayoutObject();
     EXPECT_EQ(viewportWidth, fullscreenLayoutObject->logicalWidth().toInt());
     EXPECT_EQ(viewportHeight, fullscreenLayoutObject->logicalHeight().toInt());
 

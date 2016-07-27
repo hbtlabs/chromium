@@ -74,14 +74,14 @@ class MediaRouterMojoImpl : public MediaRouterBase,
                    content::WebContents* web_contents,
                    const std::vector<MediaRouteResponseCallback>& callbacks,
                    base::TimeDelta timeout,
-                   bool off_the_record) override;
+                   bool incognito) override;
   void JoinRoute(const MediaSource::Id& source_id,
                  const std::string& presentation_id,
                  const GURL& origin,
                  content::WebContents* web_contents,
                  const std::vector<MediaRouteResponseCallback>& callbacks,
                  base::TimeDelta timeout,
-                 bool off_the_record) override;
+                 bool incognito) override;
   void ConnectRouteByRouteId(
       const MediaSource::Id& source,
       const MediaRoute::Id& route_id,
@@ -89,7 +89,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
-      bool off_the_record) override;
+      bool incognito) override;
   void TerminateRoute(const MediaRoute::Id& route_id) override;
   void DetachRoute(const MediaRoute::Id& route_id) override;
   void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -124,9 +124,9 @@ class MediaRouterMojoImpl : public MediaRouterBase,
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRoute);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest, JoinRouteTimedOutFails);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           JoinRouteOffTheRecordMismatchFails);
+                           JoinRouteIncognitoMismatchFails);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
-                           OffTheRecordRoutesTerminatedOnProfileShutdown);
+                           IncognitoRoutesTerminatedOnProfileShutdown);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
                            RegisterAndUnregisterMediaSinksObserver);
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
@@ -241,14 +241,14 @@ class MediaRouterMojoImpl : public MediaRouterBase,
                      int tab_id,
                      const std::vector<MediaRouteResponseCallback>& callbacks,
                      base::TimeDelta timeout,
-                     bool off_the_record);
+                     bool incognito);
   void DoJoinRoute(const MediaSource::Id& source_id,
                    const std::string& presentation_id,
                    const std::string& origin,
                    int tab_id,
                    const std::vector<MediaRouteResponseCallback>& callbacks,
                    base::TimeDelta timeout,
-                   bool off_the_record);
+                   bool incognito);
   void DoConnectRouteByRouteId(
       const MediaSource::Id& source_id,
       const MediaRoute::Id& route_id,
@@ -256,7 +256,7 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       int tab_id,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
-      bool off_the_record);
+      bool incognito);
   void DoTerminateRoute(const MediaRoute::Id& route_id);
   void DoDetachRoute(const MediaRoute::Id& route_id);
   void DoSendSessionMessage(const MediaRoute::Id& route_id,
@@ -287,33 +287,40 @@ class MediaRouterMojoImpl : public MediaRouterBase,
       const interfaces::MediaRouter::RegisterMediaRouteProviderCallback&
           callback) override;
   void OnIssue(interfaces::IssuePtr issue) override;
-  void OnSinksReceived(const mojo::String& media_source,
-                       mojo::Array<interfaces::MediaSinkPtr> sinks,
-                       mojo::Array<mojo::String> origins) override;
-  void OnRoutesUpdated(mojo::Array<interfaces::MediaRoutePtr> routes,
-                       const mojo::String& media_source,
-                       mojo::Array<mojo::String> joinable_route_ids) override;
+  void OnSinksReceived(const std::string& media_source,
+                       std::vector<interfaces::MediaSinkPtr> sinks,
+                       const std::vector<std::string>& origins) override;
+  void OnRoutesUpdated(
+      std::vector<interfaces::MediaRoutePtr> routes,
+      const std::string& media_source,
+      const std::vector<std::string>& joinable_route_ids) override;
   void OnSinkAvailabilityUpdated(
       interfaces::MediaRouter::SinkAvailability availability) override;
   void OnPresentationConnectionStateChanged(
-      const mojo::String& route_id,
+      const std::string& route_id,
       interfaces::MediaRouter::PresentationConnectionState state) override;
   void OnPresentationConnectionClosed(
-      const mojo::String& route_id,
+      const std::string& route_id,
       interfaces::MediaRouter::PresentationConnectionCloseReason reason,
-      const mojo::String& message) override;
+      const std::string& message) override;
   void OnRouteMessagesReceived(
-      const mojo::String& route_id,
-      mojo::Array<interfaces::RouteMessagePtr> messages) override;
+      const std::string& route_id,
+      std::vector<interfaces::RouteMessagePtr> messages) override;
+
+  // Result callback when Mojo terminateRoute is invoked.  |route_id| is bound
+  // to the ID of the route that was terminated.
+  void OnTerminateRouteResult(const MediaRoute::Id& route_id,
+                              const base::Optional<std::string>& error_text,
+                              interfaces::RouteRequestResultCode result_code);
 
   // Converts the callback result of calling Mojo CreateRoute()/JoinRoute()
   // into a local callback.
   void RouteResponseReceived(
       const std::string& presentation_id,
-      bool off_the_record,
+      bool incognito,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       interfaces::MediaRoutePtr media_route,
-      mojo::String error_text,
+      const base::Optional<std::string>& error_text,
       interfaces::RouteRequestResultCode result_code);
 
   // Callback invoked by |event_page_tracker_| after an attempt to wake the

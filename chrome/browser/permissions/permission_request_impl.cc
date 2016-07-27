@@ -17,10 +17,14 @@
 PermissionRequestImpl::PermissionRequestImpl(
     const GURL& request_origin,
     content::PermissionType permission_type,
+    Profile* profile,
+    bool has_gesture,
     const PermissionDecidedCallback& permission_decided_callback,
     const base::Closure delete_callback)
     : request_origin_(request_origin),
       permission_type_(permission_type),
+      profile_(profile),
+      has_gesture_(has_gesture),
       permission_decided_callback_(permission_decided_callback),
       delete_callback_(delete_callback),
       is_finished_(false),
@@ -28,10 +32,10 @@ PermissionRequestImpl::PermissionRequestImpl(
 
 PermissionRequestImpl::~PermissionRequestImpl() {
   DCHECK(is_finished_);
-  if (!action_taken_)
-    // TODO(stefanocs): Pass in a non null profile.
+  if (!action_taken_) {
     PermissionUmaUtil::PermissionIgnored(permission_type_, request_origin_,
-                                         nullptr);
+                                         profile_);
+  }
 }
 
 gfx::VectorIconId PermissionRequestImpl::GetVectorIconId() const {
@@ -41,6 +45,7 @@ gfx::VectorIconId PermissionRequestImpl::GetVectorIconId() const {
       return gfx::VectorIconId::LOCATION_ON;
 #if defined(ENABLE_NOTIFICATIONS)
     case content::PermissionType::NOTIFICATIONS:
+    case content::PermissionType::PUSH_MESSAGING:
       return gfx::VectorIconId::NOTIFICATIONS;
 #endif
 #if defined(OS_CHROMEOS)
@@ -68,6 +73,7 @@ int PermissionRequestImpl::GetIconId() const {
       break;
 #if defined(ENABLE_NOTIFICATIONS)
     case content::PermissionType::NOTIFICATIONS:
+    case content::PermissionType::PUSH_MESSAGING:
       icon_id = IDR_INFOBAR_DESKTOP_NOTIFICATIONS;
       break;
 #endif
@@ -89,14 +95,12 @@ base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
       break;
 #if defined(ENABLE_NOTIFICATIONS)
     case content::PermissionType::NOTIFICATIONS:
+    case content::PermissionType::PUSH_MESSAGING:
       message_id = IDS_NOTIFICATION_PERMISSIONS_FRAGMENT;
       break;
 #endif
     case content::PermissionType::MIDI_SYSEX:
       message_id = IDS_MIDI_SYSEX_PERMISSION_FRAGMENT;
-      break;
-    case content::PermissionType::PUSH_MESSAGING:
-      message_id = IDS_PUSH_MESSAGES_BUBBLE_FRAGMENT;
       break;
 #if defined(OS_CHROMEOS)
     case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
@@ -155,4 +159,10 @@ PermissionRequestType PermissionRequestImpl::GetPermissionRequestType()
       NOTREACHED();
       return PermissionRequestType::UNKNOWN;
   }
+}
+
+PermissionRequestGestureType PermissionRequestImpl::GetGestureType()
+    const {
+  return has_gesture_ ? PermissionRequestGestureType::GESTURE
+                      : PermissionRequestGestureType::NO_GESTURE;
 }

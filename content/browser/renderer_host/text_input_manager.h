@@ -9,16 +9,14 @@
 #include <utility>
 
 #include "base/observer_list.h"
+#include "base/strings/string16.h"
 #include "content/common/content_export.h"
 #include "content/common/text_input_state.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/range/range.h"
 #include "ui/gfx/selection_bound.h"
 
 struct ViewHostMsg_SelectionBounds_Params;
-
-namespace gfx {
-class Range;
-}
 
 namespace content {
 
@@ -58,6 +56,27 @@ class CONTENT_EXPORT TextInputManager {
     virtual void OnImeCompositionRangeChanged(
         TextInputManager* text_input_manager,
         RenderWidgetHostViewBase* updated_view) {}
+    // Called when the text selection for the |updated_view_| has changed.
+    virtual void OnTextSelectionChanged(
+        TextInputManager* text_input_manager,
+        RenderWidgetHostViewBase* updated_view) {}
+  };
+
+  // This struct is used to store text selection related information for views.
+  struct TextSelection {
+    TextSelection();
+    TextSelection(const TextSelection& other);
+    ~TextSelection();
+
+    // The offset of the text stored in |text| relative to the start of the web
+    // page.
+    size_t offset;
+
+    // The current selection range relative to the start of the web page.
+    gfx::Range range;
+
+    // The text inside and around the current selection range.
+    base::string16 text;
   };
 
   TextInputManager();
@@ -76,13 +95,19 @@ class CONTENT_EXPORT TextInputManager {
 
   // Returns the currently stored TextInputState. An state of nullptr can be
   // interpreted as a ui::TextInputType of ui::TEXT_INPUT_TYPE_NONE.
-  const TextInputState* GetTextInputState();
+  const TextInputState* GetTextInputState() const;
 
   // Returns the rect between selection bounds.
-  gfx::Rect GetSelectionBoundsRect();
+  gfx::Rect GetSelectionBoundsRect() const;
 
   // Returns a vector of rects representing the character bounds.
-  const std::vector<gfx::Rect>* GetCompositionCharacterBounds();
+  const std::vector<gfx::Rect>* GetCompositionCharacterBounds() const;
+
+  // The following method returns the text selection state for the given |view|.
+  // If |view| == nullptr, it will assume |active_view_| and return its state.
+  // In the case of |active_view_| == nullptr, the method will return nullptr.
+  const TextSelection* GetTextSelection(
+      RenderWidgetHostViewBase* view = nullptr) const;
 
   // ---------------------------------------------------------------------------
   // The following methods are called by RWHVs on the tab to update their IME-
@@ -107,6 +132,12 @@ class CONTENT_EXPORT TextInputManager {
       RenderWidgetHostViewBase* view,
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds);
+
+  // Updates the new text selection information for the |view|.
+  void SelectionChanged(RenderWidgetHostViewBase* view,
+                        const base::string16& text,
+                        size_t offset,
+                        const gfx::Range& range);
 
   // Registers the given |view| for tracking its TextInputState. This is called
   // by any view which has updates in its TextInputState (whether tab's RWHV or
@@ -171,11 +202,13 @@ class CONTENT_EXPORT TextInputManager {
   // cannot have a |TextInputState.type| of ui::TEXT_INPUT_TYPE_NONE.
   RenderWidgetHostViewBase* active_view_;
 
+  // The following maps track corresponding IME state for views. For each view,
+  // the values in the map are initialized and cleared in Register and
+  // Unregister methods, respectively.
   ViewMap<TextInputState> text_input_state_map_;
-
-  // Text selection bounds information for registered views.
   ViewMap<SelectionRegion> selection_region_map_;
   ViewMap<CompositionRangeInfo> composition_range_info_map_;
+  ViewMap<TextSelection> text_selection_map_;
 
   base::ObserverList<Observer> observer_list_;
 

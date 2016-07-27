@@ -667,7 +667,7 @@ static void implementsEventHandlerAttributeAttributeGetter(const v8::FunctionCal
     v8::Local<v8::Object> holder = info.Holder();
     TestInterfaceImplementation* impl = V8TestInterface::toImpl(holder);
     EventListener* cppValue(WTF::getPtr(impl->implementsEventHandlerAttribute()));
-    v8SetReturnValue(info, cppValue ? v8::Local<v8::Value>(V8AbstractEventListener::cast(cppValue)->getListenerObject(impl->getExecutionContext())) : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
+    v8SetReturnValue(info, cppValue ? V8AbstractEventListener::cast(cppValue)->getListenerOrNull(info.GetIsolate(), impl->getExecutionContext()) : v8::Null(info.GetIsolate()).As<v8::Value>());
 }
 
 static void implementsEventHandlerAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -1786,7 +1786,7 @@ static void toJSONMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "toJSON", "TestInterface", info.Holder(), info.GetIsolate());
     TestInterfaceImplementation* impl = V8TestInterface::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forHolderObject(info);
     ScriptValue result = impl->toJSONForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -1815,7 +1815,7 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "iterator", "TestInterface", info.Holder(), info.GetIsolate());
     TestInterfaceImplementation* impl = V8TestInterface::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forHolderObject(info);
     Iterator* result = impl->iterator(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();

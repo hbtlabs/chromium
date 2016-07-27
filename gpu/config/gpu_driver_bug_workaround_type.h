@@ -51,8 +51,6 @@
          disable_gl_rgb_format)                              \
   GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
          disable_multimonitor_multisampling)                 \
-  GPU_OP(DISABLE_MULTISAMPLED_RENDER_TO_TEXTURE,             \
-         disable_multisampled_render_to_texture)             \
   GPU_OP(DISABLE_OVERLAY_CA_LAYERS,                          \
          disable_overlay_ca_layers)                          \
   GPU_OP(DISABLE_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES,     \
@@ -91,8 +89,6 @@
          init_gl_position_in_vertex_shader)                  \
   GPU_OP(INIT_TEXTURE_MAX_ANISOTROPY,                        \
          init_texture_max_anisotropy)                        \
-  GPU_OP(INIT_VARYINGS_WITHOUT_STATIC_USE,                   \
-         init_varyings_without_static_use)                   \
   GPU_OP(INIT_VERTEX_ATTRIBUTES,                             \
          init_vertex_attributes)                             \
   GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_1048576,             \

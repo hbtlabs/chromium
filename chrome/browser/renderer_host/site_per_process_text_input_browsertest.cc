@@ -26,9 +26,10 @@
 #include "ui/base/ime/text_input_type.h"
 #include "url/gurl.h"
 
-// TODO(ekaramad): The following tests are only active on aura platforms. After
-// fixing crbug.com/578168 for all platforms, the following tests should be
-// activated for other platforms, e.g., Mac and Android (crbug.com/602723).
+// TODO(ekaramad): The following tests should be active on all platforms. After
+// fixing https://crbug.com/578168, this test file should be built for android
+// as well and most of the following tests should be enabled for all platforms
+//(https://crbug.com/602723).
 
 ///////////////////////////////////////////////////////////////////////////////
 // TextInputManager and IME Tests
@@ -233,6 +234,36 @@ class ViewCompositionRangeChangedObserver
   const content::RenderWidgetHostView* const expected_view_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewCompositionRangeChangedObserver);
+};
+
+// This class observes the |expected_view| for a change in the text selection
+// that has a selection length of |expected_length|.
+class ViewTextSelectionObserver : public TextInputManagerObserverBase {
+ public:
+  ViewTextSelectionObserver(content::WebContents* web_contents,
+                            content::RenderWidgetHostView* expected_view,
+                            size_t expected_selection_length)
+      : TextInputManagerObserverBase(web_contents),
+        expected_view_(expected_view),
+        expected_selection_length_(expected_selection_length) {
+    tester()->SetOnTextSelectionChangedCallback(base::Bind(
+        &ViewTextSelectionObserver::VerifyChange, base::Unretained(this)));
+  }
+
+ private:
+  void VerifyChange() {
+    if (expected_view_ == tester()->GetUpdatedView()) {
+      size_t selection_length;
+      if (tester()->GetCurrentTextSelectionLength(&selection_length) &&
+          expected_selection_length_ == selection_length)
+        OnSuccess();
+    }
+  }
+
+  const content::RenderWidgetHostView* const expected_view_;
+  const size_t expected_selection_length_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewTextSelectionObserver);
 };
 
 }  // namespace
@@ -506,6 +537,9 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   reset_state_observer.Wait();
 }
 
+// TODO(ekaramad): Enable the following tests on other platforms when the
+// corresponding feature is implemented (http://crbug.com/578168).
+#if defined(USE_AURA)
 // This test creates a page with multiple child frames and adds an <input> to
 // each frame. Then, sequentially, each <input> is focused by sending a tab key.
 // Then, after |TextInputState.type| for a view is changed to text, another key
@@ -582,9 +616,51 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
     send_tab_set_composition_wait_for_bounds_change(view);
 }
 
-// TODO(ekaramad): The following tests are specifically written for Aura and are
-// based on InputMethodObserver. Write similar tests for Mac/Android/Mus
-// (crbug.com/602723).
+// This test creates a page with multiple child frames and adds an <input> to
+// each frame. Then, sequentially, each <input> is focused by sending a tab key.
+// After focusing each input, the whole text is automatically selected and a
+// ViewHostMsg_SelectionChanged IPC sent back to the browser. This test verifies
+// that the browser tracks the text selection from all frames.
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       TrackTextSelectionForAllFrames) {
+  // TODO(ekaramad): Since IME related methods in WebFrameWidgetImpl are not
+  // implemented yet, this test does not work on child frames. Add child frames
+  // to this test when IME methods in WebFramgeWidgetImpl are implemented
+  // (https://crbug.com/626746).
+  CreateIframePage("a()");
+  std::vector<content::RenderFrameHost*> frames{GetFrame(IndexVector{})};
+  std::vector<content::RenderWidgetHostView*> views;
+  for (auto frame : frames)
+    views.push_back(frame->GetView());
+  std::vector<std::string> input_text{"abc"};
+  for (size_t i = 0; i < frames.size(); ++i)
+    AddInputFieldToFrame(frames[i], "text", input_text[i], false);
+
+  content::WebContents* web_contents = active_contents();
+
+  auto send_tab_and_wait_for_selection_change = [&web_contents](
+      content::RenderFrameHost* frame, size_t expected_length) {
+    ViewTextSelectionObserver text_selection_observer(
+        web_contents, frame->GetView(), expected_length);
+    SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, false, false, false);
+    text_selection_observer.Wait();
+  };
+
+  for (size_t i = 0; i < frames.size(); ++i)
+    send_tab_and_wait_for_selection_change(frames[i], input_text[i].size());
+}
+
+// -----------------------------------------------------------------------------
+// Input Method Observer Tests
+//
+// The following tests will make use of the InputMethodObserver to verify that
+// OOPIF pages interact properly with the InputMethod through the tab's view.
+
+// TODO(ekaramad): We only have coverage for some aura tests as the whole idea
+// of ui::TextInputClient/ui::InputMethod/ui::InputMethodObserver seems to be
+// only fit to aura (specifically, OS_CHROMEOS). Can we add more tests here for
+// aura as well as other platforms (https://crbug.com/602723)?
 
 // Observes current input method for state changes.
 class InputMethodObserverBase {
@@ -638,13 +714,13 @@ class InputMethodObserverForShowIme : public InputMethodObserverBase {
   DISALLOW_COPY_AND_ASSIGN(InputMethodObserverForShowIme);
 };
 
+// TODO(ekaramad): This test is actually a unit test and should be moved to
+// somewhere more relevant (https://crbug.com/602723).
 // This test verifies that the IME for Aura is shown if and only if the current
 // client's |TextInputState.type| is not ui::TEXT_INPUT_TYPE_NONE and the flag
 // |TextInputState.show_ime_if_needed| is true. This should happen even when
 // the TextInputState has not changed (according to the platform), e.g., in
 // aura when receiving two consecutive updates with same |TextInputState.type|.
-// TODO(ekaramad): This test is actually a unit test not necessarily an OOPIF
-// test. We should move it to somewhere more relevant.
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
                        CorrectlyShowImeIfNeeded) {
   // We only need the <iframe> page to create RWHV.
@@ -691,3 +767,4 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   sender.SetType(ui::TEXT_INPUT_TYPE_NONE);
   EXPECT_FALSE(send_and_check_show_ime());
 }
+#endif  // USE_AURA

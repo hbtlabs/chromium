@@ -24,6 +24,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_response.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
@@ -215,6 +216,7 @@ void NavigationRequest::BeginNavigation() {
         Referrer::SanitizeForRequest(common_params_.url,
                                      common_params_.referrer),
         begin_params_.has_user_gesture, common_params_.transition, false,
+        begin_params_.request_context_type,
         base::Bind(&NavigationRequest::OnStartChecksComplete,
                    base::Unretained(this)));
     return;
@@ -259,6 +261,7 @@ void NavigationRequest::OnRequestRedirected(
   if (redirect_info.new_method != "POST")
     common_params_.post_data = nullptr;
 
+  request_params_.redirects.push_back(common_params_.url);
   common_params_.url = redirect_info.new_url;
   common_params_.method = redirect_info.new_method;
   common_params_.referrer.url = GURL(redirect_info.new_referrer);
