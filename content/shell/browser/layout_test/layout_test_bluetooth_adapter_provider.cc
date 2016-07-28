@@ -160,8 +160,8 @@ LayoutTestBluetoothAdapterProvider::GetBluetoothAdapter(
     return GetMissingCharacteristicHeartRateAdapter();
   if (fake_adapter_name == "HeartRateAdapter")
     return GetHeartRateAdapter();
-  if (fake_adapter_name == "UnnamedHeartRateAdapter")
-    return GetUnnamedHeartRateAdapter();
+  if (fake_adapter_name == "EmptyNameHeartRateAdapter")
+    return GetEmptyNameHeartRateAdapter();
   if (fake_adapter_name == "TwoHeartRateServicesAdapter")
     return GetTwoHeartRateServicesAdapter();
   if (fake_adapter_name == "DisconnectingHeartRateAdapter")
@@ -446,7 +446,7 @@ LayoutTestBluetoothAdapterProvider::GetHeartRateAdapter() {
 
 // static
 scoped_refptr<NiceMockBluetoothAdapter>
-LayoutTestBluetoothAdapterProvider::GetUnnamedHeartRateAdapter() {
+LayoutTestBluetoothAdapterProvider::GetEmptyNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   std::unique_ptr<NiceMockBluetoothDevice> device(
       GetHeartRateDevice(adapter.get(), ""));

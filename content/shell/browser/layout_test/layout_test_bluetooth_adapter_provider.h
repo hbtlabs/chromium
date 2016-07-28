@@ -182,7 +182,7 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetHeartRateAdapter();
 
-  // |GetUnnamedHeartRateAdapter|
+  // |GetEmptyNameHeartRateAdapter|
   // Inherits from |EmptyAdapter|
   // Internal Structure:
   //   - Heart Rate Device
@@ -196,7 +196,7 @@ class LayoutTestBluetoothAdapterProvider {
   //         - Heart Rate Service - Characteristics as described in
   //           GetHeartRateService.
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
-  GetUnnamedHeartRateAdapter();
+  GetEmptyNameHeartRateAdapter();
 
   // |TwoHeartRateServicesAdapter|
   // Inherits from |EmptyAdapter|
