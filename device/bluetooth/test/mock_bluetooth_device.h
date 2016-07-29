@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/memory/scoped_vector.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -25,6 +26,13 @@ class MockBluetoothAdapter;
 
 class MockBluetoothDevice : public BluetoothDevice {
  public:
+  MockBluetoothDevice(MockBluetoothAdapter* adapter,
+                      uint32_t bluetooth_class,
+                      const base::Optional<std::string>& name,
+                      const std::string& address,
+                      bool paired,
+                      bool connected);
+  // Constructor that doesn't require optional types:
   MockBluetoothDevice(MockBluetoothAdapter* adapter,
                       uint32_t bluetooth_class,
                       const std::string& name,
@@ -43,7 +51,6 @@ class MockBluetoothDevice : public BluetoothDevice {
   MOCK_CONST_METHOD0(GetDeviceID, uint16_t());
   MOCK_CONST_METHOD0(GetAppearance, uint16_t());
   MOCK_CONST_METHOD0(GetName, base::Optional<std::string>());
-  MOCK_CONST_METHOD0(GetNameForDisplay, base::string16());
   MOCK_CONST_METHOD0(GetDeviceType, BluetoothDevice::DeviceType());
   MOCK_CONST_METHOD0(IsPaired, bool());
   MOCK_CONST_METHOD0(IsConnected, bool());
@@ -117,7 +124,7 @@ class MockBluetoothDevice : public BluetoothDevice {
 
  private:
   uint32_t bluetooth_class_;
-  std::string name_;
+  base::Optional<std::string> name_;
   std::string address_;
   BluetoothDevice::UUIDList uuids_;
   bool connected_;
