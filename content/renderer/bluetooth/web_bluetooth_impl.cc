@@ -187,9 +187,12 @@ void WebBluetoothImpl::OnRequestDeviceComplete(
     for (size_t i = 0; i < device->uuids.size(); ++i)
       uuids[i] = blink::WebString::fromUTF8(device->uuids[i]);
 
+    blink::WebString name = device->name.is_null()
+                                ? blink::WebString()
+                                : blink::WebString::fromUTF8(device->name);
+
     callbacks->onSuccess(base::WrapUnique(new blink::WebBluetoothDeviceInit(
-        blink::WebString::fromUTF8(device->id),
-        blink::WebString::fromUTF8(device->name), uuids)));
+        blink::WebString::fromUTF8(device->id), name, uuids)));
   } else {
     callbacks->onError(ToInt32(error));
   }

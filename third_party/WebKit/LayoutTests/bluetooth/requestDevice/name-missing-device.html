@@ -10,17 +10,8 @@ promise_test(() => {
       filters: [{services: ['heart_rate']}],
       optionalServices: ['generic_access']}))
     .then(device => {
-      assert_equals(device.name, 'hmm'); // TODO SHOULD FAIL?
-      return device.gatt.connect();
+        assert_equals(device.name, null);
     })
-    .then(gattServer => gattServer.getPrimaryService('generic_access'))
-    .then(service => service.getCharacteristic('gap.device_name'))
-    .then(characteristic => characteristic.readValue())
-    .then(value => {
-      let decoder = new TextDecoder('utf-8');
-      let value_str = decoder.decode(value);
-      assert_equals(value_str, '');
-    });
 }, 'An unnamed device can be obtained by advertised service UUID.');
 
 promise_test(t => {

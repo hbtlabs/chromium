@@ -409,7 +409,7 @@ class LayoutTestBluetoothAdapterProvider {
                 device::BluetoothDevice::UUIDList uuids =
                     device::BluetoothDevice::UUIDList(),
                 const std::string& address = "00:00:00:00:00:00");
-  // Version without base::optional parameters, for simpler call sites: 
+  // Version without base::optional parameters, for simpler call sites:
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetBaseDevice(device::MockBluetoothAdapter* adapter,
                 const std::string& device_name,
@@ -458,7 +458,7 @@ class LayoutTestBluetoothAdapterProvider {
           base::Optional<std::string>("Connectable Device"),
       device::BluetoothDevice::UUIDList = device::BluetoothDevice::UUIDList(),
       const std::string& address = "00:00:00:00:00:00");
-  // Version without base::optional parameters, for simpler call sites: 
+  // Version without base::optional parameters, for simpler call sites:
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetConnectableDevice(device::MockBluetoothAdapter* adapter,
                        const std::string& device_name,
