@@ -198,6 +198,23 @@ class LayoutTestBluetoothAdapterProvider {
   static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
   GetEmptyNameHeartRateAdapter();
 
+  // |GetNoNameHeartRateAdapter|
+  // Inherits from |EmptyAdapter|
+  // Internal Structure:
+  //   - Heart Rate Device
+  //      - GetName returns base::null_opt.
+  //      - UUIDs:
+  //         - Generic Access UUID (0x1800)
+  //         - Heart Rate UUID (0x180d)
+  //      - Services:
+  //         - Generic Access Service - Characteristics as described in
+  //           GetGenericAccessService.
+  //            - gap.device_name returns an empty string.
+  //         - Heart Rate Service - Characteristics as described in
+  //           GetHeartRateService.
+  static scoped_refptr<testing::NiceMock<device::MockBluetoothAdapter>>
+  GetNoNameHeartRateAdapter();
+
   // |TwoHeartRateServicesAdapter|
   // Inherits from |EmptyAdapter|
   // Internal Structure:
@@ -387,10 +404,21 @@ class LayoutTestBluetoothAdapterProvider {
   //      BluetoothDevice::ConnectErrorCode::ERROR_UNSUPPORTED_DEVICE.
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetBaseDevice(device::MockBluetoothAdapter* adapter,
-                const std::string& device_name = "Base Device",
+                const base::Optional<std::string>& device_name =
+                    base::Optional<std::string>("Base Device"),
                 device::BluetoothDevice::UUIDList uuids =
                     device::BluetoothDevice::UUIDList(),
                 const std::string& address = "00:00:00:00:00:00");
+  // Version without base::optional parameters, for simpler call sites: 
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  GetBaseDevice(device::MockBluetoothAdapter* adapter,
+                const std::string& device_name,
+                device::BluetoothDevice::UUIDList uuids =
+                    device::BluetoothDevice::UUIDList(),
+                const std::string& address = "00:00:00:00:00:00") {
+    return GetBaseDevice(adapter, base::make_optional(device_name), uuids,
+                         address);
+  }
 
   // |BatteryDevice|
   // Inherits from |BaseDevice|(adapter, "Battery Device", uuids,
@@ -426,9 +454,20 @@ class LayoutTestBluetoothAdapterProvider {
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetConnectableDevice(
       device::MockBluetoothAdapter* adapter,
-      const std::string& device_name = "Connectable Device",
+      const base::Optional<std::string>& device_name =
+          base::Optional<std::string>("Connectable Device"),
       device::BluetoothDevice::UUIDList = device::BluetoothDevice::UUIDList(),
       const std::string& address = "00:00:00:00:00:00");
+  // Version without base::optional parameters, for simpler call sites: 
+  static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
+  GetConnectableDevice(device::MockBluetoothAdapter* adapter,
+                       const std::string& device_name,
+                       device::BluetoothDevice::UUIDList uuids =
+                           device::BluetoothDevice::UUIDList(),
+                       const std::string& address = "00:00:00:00:00:00") {
+    return GetConnectableDevice(adapter, base::make_optional(device_name),
+                                uuids, address);
+  }
 
   // |UnconnectableDevice|
   // Inherits from |BaseDevice|(adapter, device_name)
@@ -455,7 +494,8 @@ class LayoutTestBluetoothAdapterProvider {
   // relevant services, characteristics and descriptors.
   static std::unique_ptr<testing::NiceMock<device::MockBluetoothDevice>>
   GetHeartRateDevice(device::MockBluetoothAdapter* adapter,
-                     const std::string& device_name = "Heart Rate Device");
+                     const base::Optional<std::string>& device_name =
+                         base::Optional<std::string>("Heart Rate Device"));
 
   // Services
 
