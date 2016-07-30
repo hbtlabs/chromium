@@ -451,7 +451,7 @@ scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetEmptyNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   std::unique_ptr<NiceMockBluetoothDevice> device(
-      GetHeartRateDevice(adapter.get(), std::string("")));
+      GetHeartRateDevice(adapter.get(), /* device_name */ std::string("")));
 
   // TODO(ortuno): Implement the rest of the service's characteristics
   // See: http://crbug.com/529975
@@ -468,8 +468,11 @@ LayoutTestBluetoothAdapterProvider::GetEmptyNameHeartRateAdapter() {
 scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetNoNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
-  std::unique_ptr<NiceMockBluetoothDevice> device(
-      GetHeartRateDevice(adapter.get(), base::Optional<std::string>()));
+  std::unique_ptr<NiceMockBluetoothDevice> device(GetHeartRateDevice(
+      adapter.get(),
+      /* device_name set to Null. base::nullopt doesn't work due to multiple
+         possible type conversions. */
+      base::Optional<std::string>()));
 
   // TODO(ortuno): Implement the rest of the service's characteristics
   // See: http://crbug.com/529975
