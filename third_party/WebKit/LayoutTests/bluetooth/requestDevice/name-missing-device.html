@@ -34,5 +34,15 @@ promise_test(t => {
       }]})));
 }, 'An unnamed device can not be obtained by name filter.');
 
+promise_test(t => {
+  return setBluetoothFakeAdapter('NoNameHeartRateAdapter')
+  .then(() => promise_rejects(
+    t, 'NotFoundError', requestDeviceWithKeyDown({
+      filters: [{
+        namePrefix: 'a',
+        services: ['heart_rate']
+      }]})));
+}, 'An unnamed device can not be obtained by empty namePrefix filter.');
+
 </script>
 
