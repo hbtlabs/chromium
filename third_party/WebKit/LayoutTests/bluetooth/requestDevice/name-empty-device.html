@@ -5,7 +5,7 @@
 <script>
 'use strict';
 promise_test(() => {
-    return setBluetoothFakeAdapter('UnnamedHeartRateAdapter')
+    return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
     .then(() => requestDeviceWithKeyDown({
       filters: [{services: ['heart_rate']}],
       optionalServices: ['generic_access']}))
@@ -21,12 +21,12 @@ promise_test(() => {
       let value_str = decoder.decode(value);
       assert_equals(value_str, '');
     });
-}, 'An unnamed device can be obtained by advertised service UUID.');
+}, 'An empty name device can be obtained by advertised service UUID.');
 
 promise_test(() => {
-    return setBluetoothFakeAdapter('UnnamedHeartRateAdapter')
+    return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
     .then(() => requestDeviceWithKeyDown({
-      filters: [{name: ['']}],
+      filters: [{name: ''}],
       optionalServices: ['generic_access']}))
     .then(device => {
       assert_equals(device.name, '');
@@ -40,5 +40,37 @@ promise_test(() => {
       let value_str = decoder.decode(value);
       assert_equals(value_str, '');
     });
-}, 'An unnamed device can be obtained by empty name.');
+}, 'An empty name device can be obtained by empty name filter.');
+
+promise_test(t => {
+  return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
+  .then(() => promise_rejects(
+    t, 'NotFoundError', requestDeviceWithKeyDown({
+      filters: [{
+        name: 'a',
+        services: ['heart_rate']
+      }]})));
+}, 'An empty name device is not matched by a filter with a name.');
+
+promise_test(t => {
+  return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
+  .then(() => promise_rejects(
+    t, 'NotFoundError', requestDeviceWithKeyDown({
+      filters: [{
+        namePrefix: 'a',
+        services: ['heart_rate']
+      }]})));
+}, 'An empty name device is not matched by a filter with a namePrefix.');
+
+promise_test(t => {
+  return setBluetoothFakeAdapter('HeartRateAdapter')
+  .then(() => promise_rejects(
+    t, 'NotFoundError', requestDeviceWithKeyDown({
+      filters: [{
+        name: '',
+        services: ['heart_rate']
+      }]})));
+}, 'A named device is not matched by a filter with an empty name.');
+
 </script>
+
