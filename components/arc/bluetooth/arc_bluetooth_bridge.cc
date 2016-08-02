@@ -1372,13 +1372,11 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
     return properties;
   }
 
-  if (type == mojom::BluetoothPropertyType::ALL ||
-      type == mojom::BluetoothPropertyType::BDNAME) {
+  if ((type == mojom::BluetoothPropertyType::ALL ||
+       type == mojom::BluetoothPropertyType::BDNAME) &&
+      device->GetName()) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    // TODO(615720): Use the upcoming GetName (was GetDeviceName).
-    // Unsure what to do here if GetName() returns empty:
-    btp->set_bdname(
-        mojo::String::From(base::UTF16ToUTF8(device->GetNameForDisplay())));
+    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetName())));
     properties.push_back(std::move(btp));
   }
   if (type == mojom::BluetoothPropertyType::ALL ||
@@ -1416,7 +1414,6 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
   if (type == mojom::BluetoothPropertyType::ALL ||
       type == mojom::BluetoothPropertyType::REMOTE_FRIENDLY_NAME) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    // TODO(615720): Use the upcoming GetName (was GetDeviceName).
     btp->set_remote_friendly_name(
         mojo::String::From(base::UTF16ToUTF8(device->GetNameForDisplay())));
     properties.push_back(std::move(btp));
