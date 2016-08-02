@@ -7,8 +7,7 @@
 promise_test(() => {
     return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
     .then(() => requestDeviceWithKeyDown({
-      filters: [{services: ['heart_rate']}],
-      optionalServices: ['generic_access']}))
+      filters: [{services: ['heart_rate']}]}))
     .then(device => {
       assert_equals(device.name, '');
       return device.gatt.connect();
