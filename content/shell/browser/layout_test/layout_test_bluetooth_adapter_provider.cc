@@ -481,9 +481,7 @@ scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetNoNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   std::unique_ptr<NiceMockBluetoothDevice> device(
-      GetHeartRateDevice(adapter.get(),
-                         /* device_name */
-                         nullptr));
+      GetHeartRateDevice(adapter.get(), /* device_name */ nullptr));
 
   // TODO(ortuno): Implement the rest of the service's characteristics
   // See: http://crbug.com/529975
