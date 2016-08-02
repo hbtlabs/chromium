@@ -5,12 +5,12 @@
 <script>
 'use strict';
 promise_test(() => {
-    return setBluetoothFakeAdapter('NoNameHeartRateAdapter')
-    .then(() => requestDeviceWithKeyDown({
-      filters: [{services: ['heart_rate']}]}))
-    .then(device => {
-        assert_equals(device.name, null);
-    })
+  return setBluetoothFakeAdapter('NoNameHeartRateAdapter')
+  .then(() => requestDeviceWithKeyDown({
+    filters: [{services: ['heart_rate']}]}))
+  .then(device => {
+      assert_equals(device.name, null);
+  })
 }, 'An unnamed device can be obtained by advertised service UUID.');
 </script>
 

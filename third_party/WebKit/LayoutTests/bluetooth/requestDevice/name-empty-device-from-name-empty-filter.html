@@ -5,14 +5,13 @@
 <script>
 'use strict';
 promise_test(() => {
-    return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
-    .then(() => requestDeviceWithKeyDown({
-      filters: [{name: ''}],
-      optionalServices: ['generic_access']}))
-    .then(device => {
-      assert_equals(device.name, '');
-      return device.gatt.connect();
-    })
+  return setBluetoothFakeAdapter('EmptyNameHeartRateAdapter')
+  .then(() => requestDeviceWithKeyDown({
+     filters: [{name: ''}],
+     optionalServices: ['generic_access']}))
+  .then(device => {
+    assert_equals(device.name, '');
+  })
 }, 'An empty name device can be obtained by empty name filter.');
 </script>
 
