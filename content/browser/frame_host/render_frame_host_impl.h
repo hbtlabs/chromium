@@ -45,7 +45,7 @@
 #include "ui/base/page_transition_types.h"
 
 #if defined(OS_ANDROID)
-#include "content/public/browser/android/service_registry_android.h"
+#include "content/public/browser/android/interface_registry_android.h"
 #endif
 
 class GURL;
@@ -450,6 +450,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // cross-process window.focus() calls.
   void SetFocusedFrame();
 
+  // This is used to clear focus inside an inner WebContents when focus shifts
+  // to a frame in the outer WebContents or a sibling WebContents.
+  void ClearFocusedFrame();
+
   // Deletes the current selection plus the specified number of characters
   // before and after the selection or caret.
   void ExtendSelectionAndDelete(size_t before, size_t after);
@@ -803,8 +807,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   FrameTreeNode* FindAndVerifyChild(int32_t child_frame_routing_id,
                                     bad_message::BadMessageReason reason);
 
-  // Creates a Web Bluetooth Service owned by the frame.
-  void CreateWebBluetoothService(
+  // Creates Web Bluetooth Service owned by the frame. Returns a raw pointer
+  // to it.
+  WebBluetoothServiceImpl* CreateWebBluetoothService(
       mojo::InterfaceRequest<blink::mojom::WebBluetoothService> request);
 
   // Deletes the Web Bluetooth Service owned by the frame.
@@ -958,7 +963,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
 
 #if defined(OS_ANDROID)
-  std::unique_ptr<ServiceRegistryAndroid> service_registry_android_;
+  std::unique_ptr<InterfaceRegistryAndroid> interface_registry_android_;
 #endif
 
   std::unique_ptr<WebBluetoothServiceImpl> web_bluetooth_service_;

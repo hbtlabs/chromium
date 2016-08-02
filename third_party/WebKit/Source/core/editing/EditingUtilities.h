@@ -53,6 +53,11 @@ enum class PositionMoveType {
     GraphemeCluster,
 };
 
+enum class DeleteDirection {
+    Forward,
+    Backward,
+};
+
 class Document;
 class Element;
 class HTMLBRElement;
@@ -72,8 +77,6 @@ CORE_EXPORT bool needsLayoutTreeUpdate(const Position&);
 // Node
 // -------------------------------------------------------------------------
 
-CORE_EXPORT bool isContentEditable(const Node&);
-CORE_EXPORT bool isContentRichlyEditable(const Node&);
 CORE_EXPORT bool hasEditableStyle(const Node&, EditableType = ContentIsEditable);
 CORE_EXPORT bool hasRichlyEditableStyle(const Node&);
 CORE_EXPORT bool isRootEditableElement(const Node&);
@@ -242,7 +245,6 @@ CORE_EXPORT bool isEditablePosition(const Position&);
 bool isEditablePosition(const PositionInFlatTree&);
 bool isRichlyEditablePosition(const Position&);
 bool lineBreakExistsAtPosition(const Position&);
-bool isAtUnsplittableElement(const Position&);
 
 // miscellaneous functions on Position
 
@@ -279,14 +281,14 @@ CORE_EXPORT VisiblePositionInFlatTree firstEditableVisiblePositionAfterPositionI
 // specified position due by canonicalization.
 CORE_EXPORT VisiblePosition lastEditableVisiblePositionBeforePositionInRoot(const Position&, ContainerNode&);
 CORE_EXPORT VisiblePositionInFlatTree lastEditableVisiblePositionBeforePositionInRoot(const PositionInFlatTree&, ContainerNode&);
-VisiblePosition visiblePositionBeforeNode(Node&);
+CORE_EXPORT VisiblePosition visiblePositionBeforeNode(Node&);
 VisiblePosition visiblePositionAfterNode(Node&);
 
 bool lineBreakExistsAtVisiblePosition(const VisiblePosition&);
 
 int comparePositions(const VisiblePosition&, const VisiblePosition&);
 
-int indexForVisiblePosition(const VisiblePosition&, ContainerNode*& scope);
+CORE_EXPORT int indexForVisiblePosition(const VisiblePosition&, ContainerNode*& scope);
 EphemeralRange makeRange(const VisiblePosition&, const VisiblePosition&);
 EphemeralRange normalizeRange(const EphemeralRange&);
 EphemeralRangeInFlatTree normalizeRange(const EphemeralRangeInFlatTree&);
@@ -317,7 +319,6 @@ HTMLSpanElement* createTabSpanElement(Document&, const String& tabText);
 Element* rootEditableElementOf(const Position&, EditableType = ContentIsEditable);
 Element* rootEditableElementOf(const PositionInFlatTree&);
 Element* rootEditableElementOf(const VisiblePosition&);
-Element* unsplittableElementForPosition(const Position&);
 
 // Boolean functions on Element
 
@@ -364,6 +365,8 @@ const String& nonBreakingSpaceString();
 DispatchEventResult dispatchBeforeInputInsertText(EventTarget*, const String& data);
 DispatchEventResult dispatchBeforeInputFromComposition(EventTarget*, InputEvent::InputType, const String& data, InputEvent::EventCancelable);
 DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*, InputEvent::InputType, const String& data, const RangeVector*);
+
+InputEvent::InputType deletionInputTypeFromTextGranularity(DeleteDirection, TextGranularity);
 
 } // namespace blink
 

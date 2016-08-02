@@ -146,7 +146,7 @@ void GpuServiceMus::StoreShaderToDisk(int client_id,
 void GpuServiceMus::SendAcceleratedSurfaceCreatedChildWindow(
     gpu::SurfaceHandle parent_window,
     gpu::SurfaceHandle child_window) {
-  NOTIMPLEMENTED();
+  ::SetParent(child_window, parent_window);
 }
 #endif
 
@@ -194,6 +194,8 @@ void GpuServiceMus::InitializeOnGpuThread(IPC::ChannelHandle* channel_handle,
       media::GpuJpegDecodeAccelerator::IsSupported();
 
 #if defined(USE_OZONE)
+  // TODO(rjkroege): Must plumb the shell::Connector* to here and pass into
+  // ozone.
   ui::OzonePlatform::InitializeForGPU();
 #endif
 

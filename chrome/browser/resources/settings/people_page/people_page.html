@@ -9,6 +9,7 @@
 <link rel="import" href="/people_page/sync_page.html">
 <link rel="import" href="/people_page/profile_info_browser_proxy.html">
 <link rel="import" href="/people_page/sync_browser_proxy.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
@@ -65,6 +66,10 @@
         background-size: cover;
         height: var(--iron-icon-height);
         width: var(--iron-icon-width);
+      }
+
+      paper-checkbox {
+        margin: 16px 0 2px;
       }
     </style>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
@@ -124,7 +129,8 @@
 
         <template is="dom-if"
             if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
-          <div class="settings-box two-line" on-tap="onSyncTap_" actionable>
+          <div class="settings-box two-line" on-tap="onSyncTap_"
+              id="customize-sync" actionable$="[[!syncStatus.managed]]">
             <div class="icon-container">
               <iron-icon id="sync-icon" icon$="[[getSyncIcon_(syncStatus)]]">
               </iron-icon>
@@ -284,7 +290,7 @@
 </if>
     </settings-animated-pages>
 
-    <cr-dialog id="disconnectDialog">
+    <dialog is="cr-dialog" id="disconnectDialog">
       <div class="title">$i18n{syncDisconnectTitle}</div>
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">
@@ -308,7 +314,7 @@
           $i18n{syncDisconnectConfirm}
         </paper-button>
       </div>
-    </cr-dialog>
+    </dialog>
 
 <if expr="chromeos">
     <template is="dom-if" if="[[easyUnlockEnabled_]]">

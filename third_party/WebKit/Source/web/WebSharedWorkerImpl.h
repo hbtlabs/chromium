@@ -75,7 +75,7 @@ public:
     explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
     // WorkerReportingProxy methods:
-    void reportException(const WTF::String&, std::unique_ptr<SourceLocation>) override;
+    void reportException(const WTF::String&, std::unique_ptr<SourceLocation>, int exceptionId) override;
     void reportConsoleMessage(ConsoleMessage*) override;
     void postMessageToPageInspector(const WTF::String&) override;
     void didEvaluateWorkerScript(bool success) override { }
@@ -130,8 +130,8 @@ private:
     void postMessageToPageInspectorOnMainThread(const String& message);
 
     // WorkerLoaderProxyProvider
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    bool postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     // 'shadow page' - created to proxy loading requests from the worker.
     Persistent<ExecutionContext> m_loadingDocument;

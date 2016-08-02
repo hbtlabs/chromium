@@ -35,6 +35,7 @@ std::unique_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
     TestTaskGraphRunner* task_graph_runner) {
   LayerTreeSettings settings;
   settings.verify_transform_tree_calculations = true;
+  settings.verify_clip_tree_calculations = true;
   return Create(client, task_graph_runner, settings);
 }
 
@@ -89,7 +90,7 @@ void FakeLayerTreeHost::SetNeedsCommit() { needs_commit_ = true; }
 LayerImpl* FakeLayerTreeHost::CommitAndCreateLayerImplTree() {
   TreeSynchronizer::SynchronizeTrees(root_layer(), active_tree());
   active_tree()->SetPropertyTrees(property_trees());
-  TreeSynchronizer::PushLayerProperties(root_layer()->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(root_layer()->GetLayerTree(),
                                         active_tree());
   animation_host()->PushPropertiesTo(host_impl_.animation_host());
 
@@ -111,7 +112,7 @@ LayerImpl* FakeLayerTreeHost::CommitAndCreateLayerImplTree() {
 LayerImpl* FakeLayerTreeHost::CommitAndCreatePendingTree() {
   TreeSynchronizer::SynchronizeTrees(root_layer(), pending_tree());
   pending_tree()->SetPropertyTrees(property_trees());
-  TreeSynchronizer::PushLayerProperties(root_layer()->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(root_layer()->GetLayerTree(),
                                         pending_tree());
   animation_host()->PushPropertiesTo(host_impl_.animation_host());
 

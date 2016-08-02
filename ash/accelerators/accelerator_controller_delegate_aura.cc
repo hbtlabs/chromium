@@ -11,7 +11,6 @@
 
 #include "ash/accelerators/accelerator_commands_aura.h"
 #include "ash/common/accelerators/debug_commands.h"
-#include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
 #include "ash/common/ash_switches.h"
 #include "ash/common/focus_cycler.h"
@@ -35,7 +34,6 @@
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
-#include "ash/new_window_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/rotator/window_rotation.h"
@@ -180,38 +178,6 @@ void HandleMagnifyScreen(int delta_index) {
   }
 }
 
-bool CanHandleNewIncognitoWindow() {
-  return WmShell::Get()->delegate()->IsIncognitoAllowed();
-}
-
-void HandleNewIncognitoWindow() {
-  base::RecordAction(UserMetricsAction("Accel_New_Incognito_Window"));
-  Shell::GetInstance()->new_window_delegate()->NewWindow(
-      true /* is_incognito */);
-}
-
-void HandleNewTab(const ui::Accelerator& accelerator) {
-  if (accelerator.key_code() == ui::VKEY_T)
-    base::RecordAction(UserMetricsAction("Accel_NewTab_T"));
-  Shell::GetInstance()->new_window_delegate()->NewTab();
-}
-
-void HandleNewWindow() {
-  base::RecordAction(UserMetricsAction("Accel_New_Window"));
-  Shell::GetInstance()->new_window_delegate()->NewWindow(
-      false /* is_incognito */);
-}
-
-void HandleOpenFeedbackPage() {
-  base::RecordAction(UserMetricsAction("Accel_Open_Feedback_Page"));
-  Shell::GetInstance()->new_window_delegate()->OpenFeedbackPage();
-}
-
-void HandleRestoreTab() {
-  base::RecordAction(UserMetricsAction("Accel_Restore_Tab"));
-  Shell::GetInstance()->new_window_delegate()->RestoreTab();
-}
-
 display::Display::Rotation GetNextRotation(display::Display::Rotation current) {
   switch (current) {
     case display::Display::ROTATE_0:
@@ -260,11 +226,6 @@ void HandleRotateActiveWindow() {
   }
 }
 
-void HandleShowKeyboardOverlay() {
-  base::RecordAction(UserMetricsAction("Accel_Show_Keyboard_Overlay"));
-  Shell::GetInstance()->new_window_delegate()->ShowKeyboardOverlay();
-}
-
 bool CanHandleShowMessageCenterBubble() {
   RootWindowController* controller =
       RootWindowController::ForTargetRootWindow();
@@ -296,11 +257,6 @@ void HandleShowSystemTrayBubble() {
     controller->GetSystemTray()->ShowDefaultView(BUBBLE_CREATE_NEW);
 }
 
-void HandleShowTaskManager() {
-  base::RecordAction(UserMetricsAction("Accel_Show_Task_Manager"));
-  Shell::GetInstance()->new_window_delegate()->ShowTaskManager();
-}
-
 void HandleTakeWindowScreenshot(ScreenshotDelegate* screenshot_delegate) {
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
   DCHECK(screenshot_delegate);
@@ -320,32 +276,6 @@ void HandleTakeScreenshot(ScreenshotDelegate* screenshot_delegate) {
   DCHECK(screenshot_delegate);
   if (screenshot_delegate->CanTakeScreenshot())
     screenshot_delegate->HandleTakeScreenshotForAllRootWindows();
-}
-
-bool CanHandleToggleAppList(const ui::Accelerator& accelerator,
-                            const ui::Accelerator& previous_accelerator) {
-  if (accelerator.key_code() == ui::VKEY_LWIN) {
-    // If something else was pressed between the Search key (LWIN)
-    // being pressed and released, then ignore the release of the
-    // Search key.
-    if (previous_accelerator.type() != ui::ET_KEY_PRESSED ||
-        previous_accelerator.key_code() != ui::VKEY_LWIN) {
-      return false;
-    }
-
-    // When spoken feedback is enabled, we should neither toggle the list nor
-    // consume the key since Search+Shift is one of the shortcuts the a11y
-    // feature uses. crbug.com/132296
-    if (WmShell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled())
-      return false;
-  }
-  return true;
-}
-
-void HandleToggleAppList(const ui::Accelerator& accelerator) {
-  if (accelerator.key_code() == ui::VKEY_LWIN)
-    base::RecordAction(UserMetricsAction("Accel_Search_LWin"));
-  WmShell::Get()->ToggleAppList();
 }
 
 gfx::ImageSkia CreateWallpaperImage(SkColor fill, SkColor rect) {
@@ -398,22 +328,6 @@ bool CanHandleUnpin() {
 }
 
 #if defined(OS_CHROMEOS)
-void HandleCrosh() {
-  base::RecordAction(UserMetricsAction("Accel_Open_Crosh"));
-
-  Shell::GetInstance()->new_window_delegate()->OpenCrosh();
-}
-
-void HandleFileManager() {
-  base::RecordAction(UserMetricsAction("Accel_Open_File_Manager"));
-
-  Shell::GetInstance()->new_window_delegate()->OpenFileManager();
-}
-
-void HandleGetHelp() {
-  Shell::GetInstance()->new_window_delegate()->OpenGetHelp();
-}
-
 void HandleSwapPrimaryDisplay() {
   base::RecordAction(UserMetricsAction("Accel_Swap_Primary_Display"));
   Shell::GetInstance()->display_configuration_controller()->SetPrimaryDisplayId(
@@ -475,24 +389,16 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
     case LAUNCH_LAST_APP:
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
-    case NEW_INCOGNITO_WINDOW:
-    case NEW_TAB:
-    case NEW_WINDOW:
-    case OPEN_FEEDBACK_PAGE:
-    case RESTORE_TAB:
     case ROTATE_SCREEN:
     case ROTATE_WINDOW:
     case SCALE_UI_DOWN:
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
-    case SHOW_KEYBOARD_OVERLAY:
     case SHOW_MESSAGE_CENTER_BUBBLE:
     case SHOW_SYSTEM_TRAY_BUBBLE:
-    case SHOW_TASK_MANAGER:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
-    case TOGGLE_APP_LIST:
     case UNPIN:
       return true;
 
@@ -502,9 +408,6 @@ bool AcceleratorControllerDelegateAura::HandlesAction(
     case DISABLE_GPU_WATCHDOG:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
-    case OPEN_CROSH:
-    case OPEN_FILE_MANAGER:
-    case OPEN_GET_HELP:
     case POWER_PRESSED:
     case POWER_RELEASED:
     case SWAP_PRIMARY_DISPLAY:
@@ -536,16 +439,12 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case MAGNIFY_SCREEN_ZOOM_IN:
     case MAGNIFY_SCREEN_ZOOM_OUT:
       return CanHandleMagnifyScreen();
-    case NEW_INCOGNITO_WINDOW:
-      return CanHandleNewIncognitoWindow();
     case SCALE_UI_DOWN:
     case SCALE_UI_RESET:
     case SCALE_UI_UP:
       return accelerators::IsInternalDisplayZoomEnabled();
     case SHOW_MESSAGE_CENTER_BUBBLE:
       return CanHandleShowMessageCenterBubble();
-    case TOGGLE_APP_LIST:
-      return CanHandleToggleAppList(accelerator, previous_accelerator);
     case UNPIN:
       return CanHandleUnpin();
 
@@ -560,15 +459,9 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case LAUNCH_APP_6:
     case LAUNCH_APP_7:
     case LAUNCH_LAST_APP:
-    case NEW_TAB:
-    case NEW_WINDOW:
-    case OPEN_FEEDBACK_PAGE:
-    case RESTORE_TAB:
     case ROTATE_SCREEN:
     case ROTATE_WINDOW:
-    case SHOW_KEYBOARD_OVERLAY:
     case SHOW_SYSTEM_TRAY_BUBBLE:
-    case SHOW_TASK_MANAGER:
     case TAKE_PARTIAL_SCREENSHOT:
     case TAKE_SCREENSHOT:
     case TAKE_WINDOW_SCREENSHOT:
@@ -589,9 +482,6 @@ bool AcceleratorControllerDelegateAura::CanPerformAction(
     case DISABLE_GPU_WATCHDOG:
     case LOCK_PRESSED:
     case LOCK_RELEASED:
-    case OPEN_CROSH:
-    case OPEN_FILE_MANAGER:
-    case OPEN_GET_HELP:
     case POWER_PRESSED:
     case POWER_RELEASED:
     case TOGGLE_MIRROR_MODE:
@@ -664,21 +554,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case MAGNIFY_SCREEN_ZOOM_OUT:
       HandleMagnifyScreen(-1);
       break;
-    case NEW_INCOGNITO_WINDOW:
-      HandleNewIncognitoWindow();
-      break;
-    case NEW_TAB:
-      HandleNewTab(accelerator);
-      break;
-    case NEW_WINDOW:
-      HandleNewWindow();
-      break;
-    case OPEN_FEEDBACK_PAGE:
-      HandleOpenFeedbackPage();
-      break;
-    case RESTORE_TAB:
-      HandleRestoreTab();
-      break;
     case ROTATE_SCREEN:
       HandleRotateScreen();
       break;
@@ -694,17 +569,11 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case SCALE_UI_UP:
       accelerators::ZoomInternalDisplay(true /* up */);
       break;
-    case SHOW_KEYBOARD_OVERLAY:
-      HandleShowKeyboardOverlay();
-      break;
     case SHOW_MESSAGE_CENTER_BUBBLE:
       HandleShowMessageCenterBubble();
       break;
     case SHOW_SYSTEM_TRAY_BUBBLE:
       HandleShowSystemTrayBubble();
-      break;
-    case SHOW_TASK_MANAGER:
-      HandleShowTaskManager();
       break;
     case TAKE_PARTIAL_SCREENSHOT:
       HandleTakePartialScreenshot(screenshot_delegate_.get());
@@ -714,9 +583,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
       break;
     case TAKE_WINDOW_SCREENSHOT:
       HandleTakeWindowScreenshot(screenshot_delegate_.get());
-      break;
-    case TOGGLE_APP_LIST:
-      HandleToggleAppList(accelerator);
       break;
     case UNPIN:
       accelerators::Unpin();
@@ -736,15 +602,6 @@ void AcceleratorControllerDelegateAura::PerformAction(
     case LOCK_RELEASED:
       Shell::GetInstance()->power_button_controller()->OnLockButtonEvent(
           action == LOCK_PRESSED, base::TimeTicks());
-      break;
-    case OPEN_CROSH:
-      HandleCrosh();
-      break;
-    case OPEN_FILE_MANAGER:
-      HandleFileManager();
-      break;
-    case OPEN_GET_HELP:
-      HandleGetHelp();
       break;
     case POWER_PRESSED:  // fallthrough
     case POWER_RELEASED:

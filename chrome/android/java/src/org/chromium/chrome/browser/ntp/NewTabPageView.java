@@ -12,6 +12,7 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.support.v4.graphics.drawable.RoundedBitmapDrawable;
@@ -137,6 +138,12 @@ public class NewTabPageView extends FrameLayout
         /** @return Whether the omnibox 'Search or type URL' text should be shown. */
         boolean isFakeOmniboxTextEnabledTablet();
 
+        /** @return Whether context menus should allow the option to open a link in a new window. */
+        boolean isOpenInNewWindowEnabled();
+
+        /** @return Whether context menus should allow the option to open a link in incognito. */
+        boolean isOpenInIncognitoEnabled();
+
         /** Opens the bookmarks page in the current tab. */
         void navigateToBookmarks();
 
@@ -144,13 +151,19 @@ public class NewTabPageView extends FrameLayout
         void navigateToRecentTabs();
 
         /**
-         * Opens an url in the current tab and records related metrics.
+         * Opens a URL in the current tab and records related metrics.
          * @param url the URL to open
          */
         void openSnippet(String url);
 
-        /** Opens a url in the current tab. */
+        /** Opens a URL in the current tab. */
         void openUrl(String url);
+
+        /** Opens a URL in a new window. */
+        void openUrlInNewWindow(String url);
+
+        /** Opens a URL in a new tab. */
+        void openUrlInNewTab(String url, boolean incognito);
 
         /**
          * Animates the search box up into the omnibox and bring up the keyboard.
@@ -393,37 +406,49 @@ public class NewTabPageView extends FrameLayout
     private void updateSearchBoxOnScroll() {
         if (mDisableUrlFocusChangeAnimations) return;
 
-        float toolbarTransitionPercentage;
-        // During startup the view may not be fully initialized, so we only calculate the current
-        // percentage if some basic view properties are sane.
-        if (getWrapperView().getHeight() == 0 || mSearchBoxView.getTop() == 0) {
-            toolbarTransitionPercentage = 0f;
-        } else if (!mUseCardsUi) {
-            toolbarTransitionPercentage =
-                    MathUtils.clamp(getVerticalScroll() / (float) mSearchBoxView.getTop(), 0f, 1f);
-        } else {
-            if (!mRecyclerView.isFirstItemVisible()) {
-                // getVerticalScroll is valid only for the RecyclerView if the first item is
-                // visible. Luckily, if the first item is not visible, we know the toolbar
-                // transition should be 100%.
-                toolbarTransitionPercentage = 1f;
-            } else {
-                final int scrollY = getVerticalScroll();
-                final int top = mSearchBoxView.getTop();  // Relative to mNewTabPageLayout.
-                final int transitionLength = getResources()
-                        .getDimensionPixelSize(R.dimen.ntp_search_box_transition_length);
-
-                // |scrollY - top| gives the distance the search bar is from the top of the screen.
-                toolbarTransitionPercentage = MathUtils.clamp(
-                        (scrollY - top + transitionLength) / (float) transitionLength, 0f, 1f);
-            }
-        }
-
-        updateVisualsForToolbarTransition(toolbarTransitionPercentage);
-
         if (mSearchBoxScrollListener != null) {
-            mSearchBoxScrollListener.onNtpScrollChanged(toolbarTransitionPercentage);
+            mSearchBoxScrollListener.onNtpScrollChanged(getToolbarTransitionPercentage());
         }
+    }
+
+    /**
+     * Calculates the percentage (between 0 and 1) of the transition from the search box to the
+     * omnibox at the top of the New Tab Page, which is determined by the amount of scrolling and
+     * the position of the search box.
+     *
+     * @return the transition percentage
+     */
+    private float getToolbarTransitionPercentage() {
+        // During startup the view may not be fully initialized, so we only calculate the current
+        // percentage if some basic view properties (height of the containing view, position of the
+        // search box) are sane.
+        if (getWrapperView().getHeight() == 0) return 0f;
+
+        int searchBoxTop = mSearchBoxView.getTop();
+        if (searchBoxTop == 0) return 0f;
+
+        // For all other calculations, add the search box padding, because it defines where the
+        // visible "border" of the search box is.
+        searchBoxTop += mSearchBoxView.getPaddingTop();
+
+        if (!mUseCardsUi) {
+            return MathUtils.clamp(getVerticalScroll() / (float) searchBoxTop, 0f, 1f);
+        }
+
+        if (!mRecyclerView.isFirstItemVisible()) {
+            // getVerticalScroll is valid only for the RecyclerView if the first item is
+            // visible. If the first item is not visible, we know the toolbar transition
+            // should be 100%.
+            return 1f;
+        }
+
+        final int scrollY = getVerticalScroll();
+        final float transitionLength =
+                getResources().getDimension(R.dimen.ntp_search_box_transition_length);
+
+        // |scrollY - searchBoxTop| gives the distance the search bar is from the top of the screen.
+        return MathUtils.clamp(
+                (scrollY - searchBoxTop + transitionLength) / transitionLength, 0f, 1f);
     }
 
     private ViewGroup getWrapperView() {
@@ -661,55 +686,52 @@ public class NewTabPageView extends FrameLayout
         int scrollOffset = mUseCardsUi ? 0 : mScrollView.getScrollY();
         mNewTabPageLayout.setTranslationY(percent * (-mMostVisitedLayout.getTop() + scrollOffset
                                                             + mNewTabPageLayout.getPaddingTop()));
-        updateVisualsForToolbarTransition(percent);
     }
 
     /**
-     * Updates the opacity of the fake omnibox and Google logo when scrolling.
-     * @param transitionPercentage
+     * Updates the opacity of the search box when scrolling.
+     *
+     * @param alpha opacity (alpha) value to use.
      */
-    private void updateVisualsForToolbarTransition(float transitionPercentage) {
-        // Complete the full alpha transition in the first 40% of the animation.
-        float searchUiAlpha =
-                transitionPercentage >= 0.4f ? 0f : (0.4f - transitionPercentage) * 2.5f;
-        // Ensure there are no rounding issues when the animation percent is 0.
-        if (transitionPercentage == 0f) searchUiAlpha = 1f;
+    public void setSearchBoxAlpha(float alpha) {
+        mSearchBoxView.setAlpha(alpha);
+    }
 
-        if (!mUseCardsUi) {
-            mSearchProviderLogoView.setAlpha(searchUiAlpha);
-        }
-        mSearchBoxView.setAlpha(searchUiAlpha);
+    /**
+     * Updates the opacity of the search provider logo when scrolling.
+     *
+     * @param alpha opacity (alpha) value to use.
+     */
+    public void setSearchProviderLogoAlpha(float alpha) {
+        mSearchProviderLogoView.setAlpha(alpha);
     }
 
     /**
      * Get the bounds of the search box in relation to the top level NewTabPage view.
      *
-     * @param originalBounds The bounding region of the search box without external transforms
-     *                       applied.  The delta between this and the transformed bounds determines
-     *                       the amount of scroll applied to this view.
-     * @param transformedBounds The bounding region of the search box including any transforms
-     *                          applied by the parent view hierarchy up to the NewTabPage view.
-     *                          This more accurately reflects the current drawing location of the
-     *                          search box.
+     * @param bounds The current drawing location of the search box.
+     * @param translation The translation applied to the search box by the parent view hierarchy up
+     *                    to the NewTabPage view.
      */
-    void getSearchBoxBounds(Rect originalBounds, Rect transformedBounds) {
+    void getSearchBoxBounds(Rect bounds, Point translation) {
         int searchBoxX = (int) mSearchBoxView.getX();
         int searchBoxY = (int) mSearchBoxView.getY();
 
-        originalBounds.set(
-                searchBoxX + mSearchBoxView.getPaddingLeft(),
+        bounds.set(searchBoxX + mSearchBoxView.getPaddingLeft(),
                 searchBoxY + mSearchBoxView.getPaddingTop(),
                 searchBoxX + mSearchBoxView.getWidth() - mSearchBoxView.getPaddingRight(),
                 searchBoxY + mSearchBoxView.getHeight() - mSearchBoxView.getPaddingBottom());
 
-        transformedBounds.set(originalBounds);
+        translation.set(0, 0);
+
         View view = (View) mSearchBoxView.getParent();
         while (view != null) {
-            transformedBounds.offset(-view.getScrollX(), -view.getScrollY());
+            translation.offset(-view.getScrollX(), -view.getScrollY());
             if (view == this) break;
-            transformedBounds.offset((int) view.getX(), (int) view.getY());
+            translation.offset((int) view.getX(), (int) view.getY());
             view = (View) view.getParent();
         }
+        bounds.offset(translation.x, translation.y);
     }
 
     /**

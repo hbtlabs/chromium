@@ -444,6 +444,9 @@
     'gpu': {
       'filepath': 'gpu/',
     },
+    'gyp': {
+      'filepath': '.gyp$|.gypi$',
+    },
     'history_ui': {
       'filepath': 'chrome/browser/resources/(md_)?history|'\
                   'chrome/browser/ui/webui/.*history',
@@ -819,10 +822,10 @@
                   '|^chrome/android/java/src/org/chromium/chrome/browser/sync/'\
                   '|^chrome/browser/sync/'\
                   '|^components/browser_sync/'\
+                  '|^components/sync/'\
                   '|^components/sync_bookmarks/'\
                   '|^components/sync_driver/'\
-                  '|^components/sync_sessions/'\
-                  '|^sync/',
+                  '|^components/sync_sessions/',
     },
     'syncfs': {
       'filepath': 'sync_file_system',
@@ -1498,7 +1501,8 @@
                    'oilpan-reviews@chromium.org'],
     'blink_html': ['blink-reviews-html@chromium.org',
                    'dglazkov+blink@chromium.org'],
-    'blink_htmlparser': ['kinuko+watch@chromium.org'],
+    'blink_htmlparser': ['kinuko+watch@chromium.org',
+                         'loading-reviews+parser@chromium.org'],
     'blink_indexed_db': ['cmumford@chromium.org',
                          'jsbell+idb@chromium.org'],
     'blink_input': ['dtapuska+blinkwatch@chromium.org',
@@ -1734,6 +1738,7 @@
     'gn': ['dpranke@chromium.org',
            'tfarina@chromium.org'],
     'gpu': ['piman+watch@chromium.org'],
+    'gyp': ['dpranke@chromium.org'],
     'history_ui': ['dbeam+watch-history@chromium.org',
                    'dubroy@chromium.org',
                    'pam+watch@chromium.org'],

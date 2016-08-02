@@ -65,12 +65,12 @@ def _get_json(url, web):
     try:
         contents = web.get_binary(url)
     except urllib2.URLError:
-        _log.error('Request failed to URL: %s' % url)
+        _log.error('Request failed to URL: %s', url)
         raise
     try:
         return json.loads(contents)
     except ValueError:
-        _log.error('Invalid JSON: %s' % contents)
+        _log.error('Invalid JSON: %s', contents)
         raise
 
 
@@ -96,7 +96,10 @@ def filter_latest_jobs(jobs):
     for j in jobs:
         if j.build_number > builder_to_highest_number.get(j.builder_name, 0):
             builder_to_highest_number[j.builder_name] = j.build_number
-    return [j for j in jobs if builder_to_highest_number[j.builder_name] == j.build_number]
+    return [j for j in jobs if (
+        j.builder_name in builder_to_highest_number and
+        builder_to_highest_number[j.builder_name] == j.build_number
+    )]
 
 
 def get_latest_try_job_results(issue_number, web):

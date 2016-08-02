@@ -91,6 +91,9 @@ import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.webapps.WebApkBuilder;
+import org.chromium.components.sync.signin.AccountManagerDelegate;
+import org.chromium.components.sync.signin.AccountManagerHelper;
+import org.chromium.components.sync.signin.SystemAccountManagerDelegate;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.ChildProcessLauncher;
@@ -100,9 +103,6 @@ import org.chromium.policy.AppRestrictionsProvider;
 import org.chromium.policy.CombinedPolicyProvider;
 import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
 import org.chromium.printing.PrintingController;
-import org.chromium.sync.signin.AccountManagerDelegate;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.signin.SystemAccountManagerDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ResourceBundle;
@@ -334,15 +334,10 @@ public class ChromeApplication extends ContentApplication {
      */
     private void onForegroundActivityDestroyed() {
         if (ApplicationStatus.isEveryActivityDestroyed()) {
+            // These will all be re-initialized when a new Activity starts / upon next use.
             mBackgroundProcessing.onDestroy();
-            if (mDevToolsServer != null) {
-                mDevToolsServer.destroy();
-                mDevToolsServer = null;
-            }
-            stopApplicationActivityTracker();
             PartnerBrowserCustomizations.destroy();
             ShareHelper.clearSharedImages(this);
-            CombinedPolicyProvider.get().destroy();
         }
     }
 
@@ -827,7 +822,7 @@ public class ChromeApplication extends ContentApplication {
             // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as well.
             // Check if it can happen.
             instance.clearBrowsingData(
-                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.EVERYTHING);
+                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.ALL_TIME);
         }
     }
 

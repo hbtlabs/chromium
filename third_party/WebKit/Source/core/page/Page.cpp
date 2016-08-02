@@ -46,6 +46,7 @@
 #include "core/page/DragController.h"
 #include "core/page/FocusController.h"
 #include "core/page/PointerLockController.h"
+#include "core/page/ScopedPageLoadDeferrer.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/PaintLayer.h"
@@ -104,6 +105,8 @@ Page* Page::createOrdinary(PageClients& pageClients)
 {
     Page* page = create(pageClients);
     ordinaryPages().add(page);
+    if (ScopedPageLoadDeferrer::isActive())
+        page->setDefersLoading(true);
     return page;
 }
 
@@ -533,7 +536,7 @@ void Page::willBeDestroyed()
     PageVisibilityNotifier::notifyContextDestroyed();
 }
 
-void Page::compressStrings(Timer<Page>* timer)
+void Page::compressStrings(TimerBase* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_timerForCompressStrings);
     if (m_visibilityState == PageVisibilityStateHidden)

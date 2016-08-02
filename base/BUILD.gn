@@ -13,14 +13,16 @@
 # unpredictably for the various build types, we prefer a slightly different
 # style. Instead, there are big per-platform blocks of inclusions and
 # exclusions. If a given file has an inclusion or exclusion rule that applies
-# for multiple conditions, perfer to duplicate it in both lists. This makes it
+# for multiple conditions, prefer to duplicate it in both lists. This makes it
 # a bit easier to see which files apply in which cases rather than having a
 # huge sequence of random-looking conditionals.
 
 import("//build/buildflag_header.gni")
 import("//build/config/allocator.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/sysroot.gni")
 import("//build/config/ui.gni")
@@ -1264,7 +1266,11 @@ component("base") {
         ]
       }
       if (is_asan) {
-        data += [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        if (current_cpu == "x64") {
+          data += [ "$clang_base_path/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-x86_64.dll" ]
+        } else {
+          data += [ "$clang_base_path/lib/clang/$clang_version/lib/windows/clang_rt.asan_dynamic-i386.dll" ]
+        }
       }
     }
 
@@ -1913,7 +1919,6 @@ test("base_unittests") {
     "task_scheduler/task_tracker_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
-    "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
     "test/icu_test_util.cc",
@@ -1924,6 +1929,7 @@ test("base_unittests") {
     "test/user_action_tester_unittest.cc",
     "threading/non_thread_safe_unittest.cc",
     "threading/platform_thread_unittest.cc",
+    "threading/post_task_and_reply_impl_unittest.cc",
     "threading/sequenced_task_runner_handle_unittest.cc",
     "threading/sequenced_worker_pool_unittest.cc",
     "threading/simple_thread_unittest.cc",
@@ -2230,6 +2236,7 @@ if (is_android) {
     ]
 
     deps = [
+      "//third_party/android_tools:android_support_annotations_java",
       "//third_party/android_tools:android_support_multidex_java",
       "//third_party/jsr-305:jsr_305_javalib",
     ]
@@ -2421,8 +2428,8 @@ if (is_android) {
     package_name = "org/chromium/base"
 
     defines = []
-    if (!is_java_debug) {
-      defines += [ "NDEBUG" ]
+    if (is_java_debug || dcheck_always_on) {
+      defines += [ "_DCHECK_IS_ON" ]
     }
   }
 

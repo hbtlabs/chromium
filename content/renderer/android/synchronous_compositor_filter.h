@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/macros.h"
@@ -24,6 +25,7 @@ class SynchronousInputHandlerProxy;
 namespace content {
 
 class SynchronousCompositorProxy;
+struct SyncCompositorCommonRendererParams;
 
 class SynchronousCompositorFilter
     : public IPC::MessageFilter,
@@ -69,7 +71,6 @@ class SynchronousCompositorFilter
   // Compositor thread methods.
   void FilterReadyOnCompositorThread();
   void OnMessageReceivedOnCompositorThread(const IPC::Message& message);
-  void CheckIsReady(int routing_id);
   void CreateSynchronousCompositorProxy(
       int routing_id,
       ui::SynchronousInputHandlerProxy* synchronous_input_handler_proxy);
@@ -79,6 +80,9 @@ class SynchronousCompositorFilter
   void UnregisterObjects(int routing_id);
   void RemoveEntryIfNeeded(int routing_id);
   SynchronousCompositorProxy* FindProxy(int routing_id);
+  void OnSynchronizeRendererState(
+      const std::vector<int>& routing_ids,
+      std::vector<SyncCompositorCommonRendererParams>* out);
 
   const scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
 

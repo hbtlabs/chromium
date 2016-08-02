@@ -37,6 +37,7 @@
 namespace blink {
 
 class ConsoleMessage;
+class ErrorEvent;
 class SourceLocation;
 class WorkerThread;
 
@@ -53,7 +54,7 @@ public:
     int contextGroupId();
     void contextCreated(v8::Local<v8::Context>);
     void contextWillBeDestroyed(v8::Local<v8::Context>);
-    void exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation>);
+    void exceptionThrown(ErrorEvent*);
     unsigned promiseRejected(v8::Local<v8::Context>, const String16& errorMessage, v8::Local<v8::Value> exception, std::unique_ptr<SourceLocation>);
 
     // V8DebuggerClient implementation.
@@ -64,9 +65,10 @@ public:
     v8::Local<v8::Context> ensureDefaultContextInGroup(int contextGroupId) override;
     void beginEnsureAllContextsInGroup(int contextGroupId) override;
     void endEnsureAllContextsInGroup(int contextGroupId) override;
+    bool canExecuteScripts(int contextGroupId) override;
 
     v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override;
-    void consoleAPIMessage(int contextGroupId, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override;
+    void consoleAPIMessage(int contextGroupId, V8ConsoleAPIType, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override;
 
 private:
     WorkerThread* m_workerThread;

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/guid.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_number_conversions.h"
@@ -263,7 +264,7 @@ void OfflineInternalsUIMessageHandler::HandleGetStoredPages(
   CHECK(args->GetString(0, &callback_id));
 
   if (offline_page_model_) {
-    offline_page_model_->GetAllPages(
+    offline_page_model_->GetAllPagesWithExpired(
         base::Bind(&OfflineInternalsUIMessageHandler::HandleStoredPagesCallback,
                    weak_ptr_factory_.GetWeakPtr(), callback_id));
   } else {
@@ -336,8 +337,10 @@ void OfflineInternalsUIMessageHandler::HandleAddToRequestQueue(
   std::string url;
   CHECK(args->GetString(1, &url));
 
+  // To be visible in Downloads UI, these items need a well-formed GUID
+  // and AsyncNamespace in their ClientId.
   std::ostringstream id_stream;
-  id_stream << std::rand();
+  id_stream << base::GenerateGUID();
 
   ResolveJavascriptCallback(
       *callback_id,

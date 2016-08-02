@@ -91,10 +91,7 @@ class SynchronousCompositorOutputSurface
   uint32_t GetFramebufferCopyTextureFormat() override;
 
   // Partial SynchronousCompositor API implementation.
-  void DemandDrawHw(const gfx::Size& surface_size,
-                    const gfx::Transform& transform,
-                    const gfx::Rect& viewport,
-                    const gfx::Rect& clip,
+  void DemandDrawHw(const gfx::Size& viewport_size,
                     const gfx::Rect& viewport_rect_for_tile_priority,
                     const gfx::Transform& transform_for_tile_priority);
   void DemandDrawSw(SkCanvas* canvas);
@@ -104,9 +101,10 @@ class SynchronousCompositorOutputSurface
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
 
  private:
+  class SoftwareOutputSurface;
+
   void InvokeComposite(const gfx::Transform& transform,
-                       const gfx::Rect& viewport,
-                       const gfx::Rect& clip);
+                       const gfx::Rect& viewport);
   bool Send(IPC::Message* message);
   void DidActivatePendingTree();
   void DeliverMessages();
@@ -157,6 +155,8 @@ class SynchronousCompositorOutputSurface
   StubDisplayClient display_client_;
   // Uses surface_manager_.
   std::unique_ptr<cc::Display> display_;
+  // Owned by |display_|.
+  SoftwareOutputSurface* software_output_surface_ = nullptr;
 
   base::ThreadChecker thread_checker_;
 

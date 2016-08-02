@@ -76,7 +76,7 @@ DeviceLight status=experimental
 DisableBlockingMethodsDuringMicrotasks status=experimental
 DisplayList2dCanvas status=stable
 DocumentWriteEvaluator
-DOMConvenienceAPI status=experimental
+DOMConvenienceAPI status=stable
 DurableStorage status=experimental, origin_trial_feature_name=DurableStorage
 FontCacheScaling status=test
 ForceDisplayList2dCanvas
@@ -109,6 +109,7 @@ InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
+LayoutNG
 LinkPreload status=stable
 LinkHeader status=stable
 LinkServiceWorker status=experimental
@@ -178,7 +179,6 @@ ResponseBodyWithV8ExtraStream status=stable
 ResizeObserver status=experimental
 RTCPeerConnectionNewGetStats status=test
 SandboxBlocksModals status=stable
-ScreenOrientation status=stable
 ScriptedSpeech status=stable
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 ScrollAnchoring settable_from_internals=True

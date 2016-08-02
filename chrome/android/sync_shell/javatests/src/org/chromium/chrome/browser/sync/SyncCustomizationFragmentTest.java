@@ -29,9 +29,9 @@ import org.chromium.chrome.browser.sync.ui.PassphraseTypeDialogFragment;
 import org.chromium.chrome.browser.sync.ui.SyncCustomizationFragment;
 import org.chromium.chrome.test.util.ActivityUtils;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
-import org.chromium.sync.AndroidSyncSettings;
-import org.chromium.sync.ModelType;
-import org.chromium.sync.PassphraseType;
+import org.chromium.components.sync.AndroidSyncSettings;
+import org.chromium.components.sync.ModelType;
+import org.chromium.components.sync.PassphraseType;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -741,7 +741,8 @@ public class SyncCustomizationFragmentTest extends SyncTestBase {
                 boolean isLocal = false;
                 PersonalDataManager.getInstance().addServerCreditCardForTest(new CreditCard("",
                         "https://example.com", isLocal, false, "Jon Doe", "4111111111111111",
-                        "1111", "11", "20", "visa", 0, ""));
+                        "1111", "11", "20", "visa", 0, "" /* billingAddressId */,
+                        "025eb937c022489eb8dc78cbaa969218" /* serverId */));
             }
         });
     }

@@ -40,10 +40,9 @@
 
 namespace blink {
 
-class InspectorLogAgent;
 class InstrumentingAgents;
 class V8Debugger;
-class WorkerGlobalScope;
+class WorkerThread;
 class WorkerThreadDebugger;
 
 namespace protocol {
@@ -55,8 +54,8 @@ class FrontendChannel;
 class WorkerInspectorController final : public GarbageCollectedFinalized<WorkerInspectorController>, public InspectorSession::Client {
     WTF_MAKE_NONCOPYABLE(WorkerInspectorController);
 public:
-    static WorkerInspectorController* create(WorkerGlobalScope*);
-    ~WorkerInspectorController();
+    static WorkerInspectorController* create(WorkerThread*);
+    ~WorkerInspectorController() override;
     DECLARE_TRACE();
 
     InstrumentingAgents* instrumentingAgents() const { return m_instrumentingAgents.get(); }
@@ -67,18 +66,16 @@ public:
     void dispose();
 
 private:
-    WorkerInspectorController(WorkerGlobalScope*, WorkerThreadDebugger*);
+    WorkerInspectorController(WorkerThread*, WorkerThreadDebugger*);
 
     // InspectorSession::Client implementation.
     void sendProtocolMessage(int sessionId, int callId, const String& response, const String& state) override;
     void resumeStartup() override;
-    void consoleCleared() override;
 
     WorkerThreadDebugger* m_debugger;
-    Member<WorkerGlobalScope> m_workerGlobalScope;
+    WorkerThread* m_thread;
     Member<InstrumentingAgents> m_instrumentingAgents;
     Member<InspectorSession> m_session;
-    Member<InspectorLogAgent> m_logAgent;
 };
 
 } // namespace blink

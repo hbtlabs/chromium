@@ -56,48 +56,47 @@ using ::testing::_;
     Mock::VerifyAndClearExpectations(layer_tree_host_.get());               \
   } while (false)
 
-#define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                    \
-  code_to_test;                                                             \
-  root->layer_tree_host()->BuildPropertyTreesForTesting();                  \
-  EXPECT_TRUE(root->subtree_property_changed());                            \
-  EXPECT_TRUE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(  \
-      root.get()));                                                         \
-  EXPECT_TRUE(child->subtree_property_changed());                           \
-  EXPECT_TRUE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                        \
-  EXPECT_TRUE(grand_child->subtree_property_changed());                     \
-  EXPECT_TRUE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(   \
+#define EXECUTE_AND_VERIFY_SUBTREE_CHANGED(code_to_test)                       \
+  code_to_test;                                                                \
+  root->layer_tree_host()->BuildPropertyTreesForTesting();                     \
+  EXPECT_TRUE(root->subtree_property_changed());                               \
+  EXPECT_TRUE(                                                                 \
+      root->GetLayerTree()->LayerNeedsPushPropertiesForTesting(root.get()));   \
+  EXPECT_TRUE(child->subtree_property_changed());                              \
+  EXPECT_TRUE(                                                                 \
+      child->GetLayerTree()->LayerNeedsPushPropertiesForTesting(child.get())); \
+  EXPECT_TRUE(grand_child->subtree_property_changed());                        \
+  EXPECT_TRUE(grand_child->GetLayerTree()->LayerNeedsPushPropertiesForTesting( \
+      grand_child.get()));
+
+#define EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(code_to_test)                 \
+  code_to_test;                                                                \
+  EXPECT_FALSE(root->subtree_property_changed());                              \
+  EXPECT_FALSE(                                                                \
+      root->GetLayerTree()->LayerNeedsPushPropertiesForTesting(root.get()));   \
+  EXPECT_FALSE(child->subtree_property_changed());                             \
+  EXPECT_FALSE(                                                                \
+      child->GetLayerTree()->LayerNeedsPushPropertiesForTesting(child.get())); \
+  EXPECT_FALSE(grand_child->subtree_property_changed());                       \
+  EXPECT_FALSE(                                                                \
+      grand_child->GetLayerTree()->LayerNeedsPushPropertiesForTesting(         \
           grand_child.get()));
 
-#define EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(code_to_test)               \
-  code_to_test;                                                              \
-  EXPECT_FALSE(root->subtree_property_changed());                            \
-  EXPECT_FALSE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(  \
-      root.get()));                                                          \
-  EXPECT_FALSE(child->subtree_property_changed());                           \
-  EXPECT_FALSE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                         \
-  EXPECT_FALSE(grand_child->subtree_property_changed());                     \
-  EXPECT_FALSE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
-          grand_child.get()));
-
-#define EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(code_to_test)                  \
-  code_to_test;                                                              \
-  root->layer_tree_host()->BuildPropertyTreesForTesting();                   \
-  EXPECT_TRUE(root->layer_property_changed());                               \
-  EXPECT_FALSE(root->subtree_property_changed());                            \
-  EXPECT_TRUE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(   \
-      root.get()));                                                          \
-  EXPECT_FALSE(child->layer_property_changed());                             \
-  EXPECT_FALSE(child->subtree_property_changed());                           \
-  EXPECT_FALSE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
-      child.get()));                                                         \
-  EXPECT_FALSE(grand_child->layer_property_changed());                       \
-  EXPECT_FALSE(grand_child->subtree_property_changed());                     \
-  EXPECT_FALSE(                                                              \
-      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
+#define EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(code_to_test)                    \
+  code_to_test;                                                                \
+  root->layer_tree_host()->BuildPropertyTreesForTesting();                     \
+  EXPECT_TRUE(root->layer_property_changed());                                 \
+  EXPECT_FALSE(root->subtree_property_changed());                              \
+  EXPECT_TRUE(                                                                 \
+      root->GetLayerTree()->LayerNeedsPushPropertiesForTesting(root.get()));   \
+  EXPECT_FALSE(child->layer_property_changed());                               \
+  EXPECT_FALSE(child->subtree_property_changed());                             \
+  EXPECT_FALSE(                                                                \
+      child->GetLayerTree()->LayerNeedsPushPropertiesForTesting(child.get())); \
+  EXPECT_FALSE(grand_child->layer_property_changed());                         \
+  EXPECT_FALSE(grand_child->subtree_property_changed());                       \
+  EXPECT_FALSE(                                                                \
+      grand_child->GetLayerTree()->LayerNeedsPushPropertiesForTesting(         \
           grand_child.get()));
 
 namespace cc {
@@ -140,17 +139,18 @@ class LayerSerializationTest : public testing::Test {
     proto::LayerProperties props = layer_update.layers(0);
 
     // The |dest| layer needs to be able to lookup the scroll and clip parents.
+    LayerTree* layer_tree = layer_tree_host_->GetLayerTree();
     if (src->inputs_.scroll_parent)
-      layer_tree_host_->RegisterLayer(src->inputs_.scroll_parent);
+      layer_tree->RegisterLayer(src->inputs_.scroll_parent);
     if (src->scroll_children_) {
       for (auto* child : *(src->scroll_children_))
-        layer_tree_host_->RegisterLayer(child);
+        layer_tree->RegisterLayer(child);
     }
     if (src->inputs_.clip_parent)
-      layer_tree_host_->RegisterLayer(src->inputs_.clip_parent);
+      layer_tree->RegisterLayer(src->inputs_.clip_parent);
     if (src->clip_children_) {
       for (auto* child : *(src->clip_children_))
-        layer_tree_host_->RegisterLayer(child);
+        layer_tree->RegisterLayer(child);
     }
     // Reset the LayerTreeHost registration for the |src| layer so
     // it can be re-used for the |dest| layer.
@@ -172,6 +172,7 @@ class LayerSerializationTest : public testing::Test {
               dest->offset_to_transform_parent_);
     EXPECT_EQ(src->inputs_.double_sided, dest->inputs_.double_sided);
     EXPECT_EQ(src->draws_content_, dest->draws_content_);
+    EXPECT_EQ(src->may_contain_video_, dest->may_contain_video_);
     EXPECT_EQ(src->inputs_.hide_layer_and_subtree,
               dest->inputs_.hide_layer_and_subtree);
     EXPECT_EQ(src->inputs_.masks_to_bounds, dest->inputs_.masks_to_bounds);
@@ -248,24 +249,24 @@ class LayerSerializationTest : public testing::Test {
 
     // Cleanup scroll tree.
     if (src->inputs_.scroll_parent)
-      layer_tree_host_->UnregisterLayer(src->inputs_.scroll_parent);
+      layer_tree->UnregisterLayer(src->inputs_.scroll_parent);
     src->inputs_.scroll_parent = nullptr;
     dest->inputs_.scroll_parent = nullptr;
     if (src->scroll_children_) {
       for (auto* child : *(src->scroll_children_))
-        layer_tree_host_->UnregisterLayer(child);
+        layer_tree->UnregisterLayer(child);
       src->scroll_children_.reset();
       dest->scroll_children_.reset();
     }
 
     // Cleanup clip tree.
     if (src->inputs_.clip_parent)
-      layer_tree_host_->UnregisterLayer(src->inputs_.clip_parent);
+      layer_tree->UnregisterLayer(src->inputs_.clip_parent);
     src->inputs_.clip_parent = nullptr;
     dest->inputs_.clip_parent = nullptr;
     if (src->clip_children_) {
       for (auto* child : *(src->clip_children_))
-        layer_tree_host_->UnregisterLayer(child);
+        layer_tree->UnregisterLayer(child);
       src->clip_children_.reset();
       dest->clip_children_.reset();
     }
@@ -287,6 +288,7 @@ class LayerSerializationTest : public testing::Test {
     layer->offset_to_transform_parent_ = gfx::Vector2dF(3.14f, 1.618f);
     layer->inputs_.double_sided = true;
     layer->draws_content_ = true;
+    layer->may_contain_video_ = true;
     layer->inputs_.hide_layer_and_subtree = false;
     layer->inputs_.masks_to_bounds = true;
     layer->inputs_.main_thread_scrolling_reasons =
@@ -331,6 +333,7 @@ class LayerSerializationTest : public testing::Test {
     layer->offset_to_transform_parent_ = gfx::Vector2dF(3.14f, 1.618f);
     layer->inputs_.double_sided = !layer->inputs_.double_sided;
     layer->draws_content_ = !layer->draws_content_;
+    layer->may_contain_video_ = !layer->may_contain_video_;
     layer->inputs_.hide_layer_and_subtree =
         !layer->inputs_.hide_layer_and_subtree;
     layer->inputs_.masks_to_bounds = !layer->inputs_.masks_to_bounds;
@@ -389,16 +392,24 @@ class LayerSerializationTest : public testing::Test {
     deserialized_scrollbar->FromLayerSpecificPropertiesProto(
         serialized_scrollbar);
 
-    EXPECT_EQ(source_scrollbar->track_start_,
-              deserialized_scrollbar->track_start_);
-    EXPECT_EQ(source_scrollbar->thumb_thickness_,
-              deserialized_scrollbar->thumb_thickness_);
-    EXPECT_EQ(source_scrollbar->scroll_layer_id_,
-              deserialized_scrollbar->scroll_layer_id_);
-    EXPECT_EQ(source_scrollbar->is_left_side_vertical_scrollbar_,
-              deserialized_scrollbar->is_left_side_vertical_scrollbar_);
-    EXPECT_EQ(source_scrollbar->orientation_,
-              deserialized_scrollbar->orientation_);
+    EXPECT_EQ(source_scrollbar->solid_color_scrollbar_layer_inputs_.track_start,
+              deserialized_scrollbar->solid_color_scrollbar_layer_inputs_
+                  .track_start);
+    EXPECT_EQ(
+        source_scrollbar->solid_color_scrollbar_layer_inputs_.thumb_thickness,
+        deserialized_scrollbar->solid_color_scrollbar_layer_inputs_
+            .thumb_thickness);
+    EXPECT_EQ(
+        source_scrollbar->solid_color_scrollbar_layer_inputs_.scroll_layer_id,
+        deserialized_scrollbar->solid_color_scrollbar_layer_inputs_
+            .scroll_layer_id);
+    EXPECT_EQ(source_scrollbar->solid_color_scrollbar_layer_inputs_
+                  .is_left_side_vertical_scrollbar,
+              deserialized_scrollbar->solid_color_scrollbar_layer_inputs_
+                  .is_left_side_vertical_scrollbar);
+    EXPECT_EQ(source_scrollbar->solid_color_scrollbar_layer_inputs_.orientation,
+              deserialized_scrollbar->solid_color_scrollbar_layer_inputs_
+                  .orientation);
 
     deserialized_scrollbar->SetLayerTreeHost(nullptr);
   }
@@ -1409,7 +1420,8 @@ TEST_F(LayerTest, DeleteRemovedScrollParent) {
   EXPECT_SET_NEEDS_COMMIT(1, child2 = nullptr);
 
   EXPECT_TRUE(
-      layer_tree_host_->LayerNeedsPushPropertiesForTesting(child1.get()));
+      layer_tree_host_->GetLayerTree()->LayerNeedsPushPropertiesForTesting(
+          child1.get()));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, layer_tree_host_->SetRootLayer(nullptr));
 }
@@ -1439,7 +1451,8 @@ TEST_F(LayerTest, DeleteRemovedScrollChild) {
   EXPECT_SET_NEEDS_COMMIT(1, child1 = nullptr);
 
   EXPECT_TRUE(
-      layer_tree_host_->LayerNeedsPushPropertiesForTesting(child2.get()));
+      layer_tree_host_->GetLayerTree()->LayerNeedsPushPropertiesForTesting(
+          child2.get()));
 
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1, layer_tree_host_->SetRootLayer(nullptr));
 }

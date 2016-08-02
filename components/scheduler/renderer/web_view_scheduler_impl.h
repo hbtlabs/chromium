@@ -27,7 +27,6 @@ class WebView;
 
 namespace scheduler {
 
-class AutoAdvancingVirtualTimeDomain;
 class RendererSchedulerImpl;
 class WebFrameSchedulerImpl;
 
@@ -55,28 +54,25 @@ class SCHEDULER_EXPORT WebViewSchedulerImpl : public blink::WebViewScheduler {
 
   void DidStartLoading(unsigned long identifier);
   void DidStopLoading(unsigned long identifier);
-
- private:
-  friend class WebFrameSchedulerImpl;
-
+  void IncrementBackgroundParserCount();
+  void DecrementBackgroundParserCount();
   void Unregister(WebFrameSchedulerImpl* frame_scheduler);
 
-  AutoAdvancingVirtualTimeDomain* virtual_time_domain() const {
-    return virtual_time_domain_.get();
-  }
-
+ private:
   void setAllowVirtualTimeToAdvance(bool allow_virtual_time_to_advance);
+  void ApplyVirtualTimePolicy();
 
   std::set<WebFrameSchedulerImpl*> frame_schedulers_;
   std::set<unsigned long> pending_loads_;
-  std::unique_ptr<AutoAdvancingVirtualTimeDomain> virtual_time_domain_;
-  TaskQueue::PumpPolicy virtual_time_pump_policy_;
   blink::WebView* web_view_;
   RendererSchedulerImpl* renderer_scheduler_;
   VirtualTimePolicy virtual_time_policy_;
+  int background_parser_count_;
   bool page_visible_;
   bool disable_background_timer_throttling_;
   bool allow_virtual_time_to_advance_;
+  bool have_seen_loading_task_;
+  bool virtual_time_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewSchedulerImpl);
 };

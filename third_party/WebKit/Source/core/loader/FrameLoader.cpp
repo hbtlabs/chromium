@@ -169,7 +169,7 @@ FrameLoader::FrameLoader(LocalFrame* frame)
     , m_progressTracker(ProgressTracker::create(frame))
     , m_loadType(FrameLoadTypeStandard)
     , m_inStopAllLoaders(false)
-    , m_checkTimer(this, &FrameLoader::checkTimerFired, TaskRunnerHelper::getLoadingTaskRunner(frame))
+    , m_checkTimer(TaskRunnerHelper::getLoadingTaskRunner(frame), this, &FrameLoader::checkTimerFired)
     , m_didAccessInitialDocument(false)
     , m_forcedSandboxFlags(SandboxNone)
     , m_dispatchingDidClearWindowObjectInMainWorld(false)
@@ -205,6 +205,11 @@ void FrameLoader::init()
     m_provisionalDocumentLoader->startLoadingMainResource();
     m_frame->document()->cancelParsing();
     m_stateMachine.advanceTo(FrameLoaderStateMachine::DisplayingInitialEmptyDocument);
+    // Self-suspend if created in an already deferred Page. Note that both
+    // startLoadingMainResource() and cancelParsing() may have already detached
+    // the frame, since they both fire JS events.
+    if (m_frame->page() && m_frame->page()->defersLoading())
+        setDefersLoading(true);
     takeObjectSnapshot();
 }
 
@@ -661,7 +666,7 @@ void FrameLoader::checkCompleted()
         toLocalFrame(parent)->loader().checkCompleted();
 }
 
-void FrameLoader::checkTimerFired(Timer<FrameLoader>*)
+void FrameLoader::checkTimerFired(TimerBase*)
 {
     if (Page* page = m_frame->page()) {
         if (page->defersLoading())

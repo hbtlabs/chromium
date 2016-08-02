@@ -27,8 +27,9 @@
 #include "content/public/browser/web_ui.h"
 
 using ntp_snippets::ContentSuggestion;
-using ntp_snippets::ContentSuggestionsCategory;
-using ntp_snippets::ContentSuggestionsCategoryStatus;
+using ntp_snippets::Category;
+using ntp_snippets::CategoryStatus;
+using ntp_snippets::KnownCategories;
 
 namespace {
 
@@ -74,41 +75,34 @@ std::unique_ptr<base::DictionaryValue> PrepareSuggestion(
   return entry;
 }
 
-std::string MapCategoryName(ContentSuggestionsCategory category) {
-  switch (category) {
-    case ContentSuggestionsCategory::ARTICLES:
-      return "Articles";
-    case ContentSuggestionsCategory::OFFLINE_PAGES:
-      return "Offline pages (continue browsing)";
-    case ContentSuggestionsCategory::COUNT:
-      NOTREACHED() << "Category::COUNT must not be used as a value";
+// TODO(pke): Replace this as soon as the service delivers the title directly.
+std::string GetCategoryTitle(Category category) {
+  if (category.IsKnownCategory(KnownCategories::ARTICLES)) {
+    return "Articles";
+  }
+  if (category.IsKnownCategory(KnownCategories::OFFLINE_PAGES)) {
+    return "Offline pages (continue browsing)";
   }
   return std::string();
 }
 
-std::string MapCategoryStatus(ContentSuggestionsCategoryStatus status) {
+std::string GetCategoryStatusName(CategoryStatus status) {
   switch (status) {
-    case ContentSuggestionsCategoryStatus::INITIALIZING:
+    case CategoryStatus::INITIALIZING:
       return "INITIALIZING";
-    case ContentSuggestionsCategoryStatus::AVAILABLE:
+    case CategoryStatus::AVAILABLE:
       return "AVAILABLE";
-    case ContentSuggestionsCategoryStatus::AVAILABLE_LOADING:
+    case CategoryStatus::AVAILABLE_LOADING:
       return "AVAILABLE_LOADING";
-    case ContentSuggestionsCategoryStatus::NOT_PROVIDED:
+    case CategoryStatus::NOT_PROVIDED:
       return "NOT_PROVIDED";
-    case ContentSuggestionsCategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED:
+    case CategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED:
       return "ALL_SUGGESTIONS_EXPLICITLY_DISABLED";
-    case ContentSuggestionsCategoryStatus::CATEGORY_EXPLICITLY_DISABLED:
+    case CategoryStatus::CATEGORY_EXPLICITLY_DISABLED:
       return "CATEGORY_EXPLICITLY_DISABLED";
-    case ContentSuggestionsCategoryStatus::SIGNED_OUT:
+    case CategoryStatus::SIGNED_OUT:
       return "SIGNED_OUT";
-    case ContentSuggestionsCategoryStatus::SYNC_DISABLED:
-      return "SYNC_DISABLED";
-    case ContentSuggestionsCategoryStatus::PASSPHRASE_ENCRYPTION_ENABLED:
-      return "PASSPHRASE_ENCRYPTION_ENABLED";
-    case ContentSuggestionsCategoryStatus::HISTORY_SYNC_DISABLED:
-      return "HISTORY_SYNC_DISABLED";
-    case ContentSuggestionsCategoryStatus::LOADING_ERROR:
+    case CategoryStatus::LOADING_ERROR:
       return "LOADING_ERROR";
   }
   return std::string();
@@ -148,8 +142,8 @@ void SnippetsInternalsMessageHandler::OnNewSuggestions() {
 }
 
 void SnippetsInternalsMessageHandler::OnCategoryStatusChanged(
-    ContentSuggestionsCategory category,
-    ContentSuggestionsCategoryStatus new_status) {
+    Category category,
+    CategoryStatus new_status) {
   if (!dom_loaded_)
     return;
   SendContentSuggestions();
@@ -342,9 +336,8 @@ void SnippetsInternalsMessageHandler::SendContentSuggestions() {
   std::unique_ptr<base::ListValue> categories_list(new base::ListValue);
 
   int index = 0;
-  for (ContentSuggestionsCategory category :
-       content_suggestions_service_->GetCategories()) {
-    ContentSuggestionsCategoryStatus status =
+  for (Category category : content_suggestions_service_->GetCategories()) {
+    CategoryStatus status =
         content_suggestions_service_->GetCategoryStatus(category);
     const std::vector<ContentSuggestion>& suggestions =
         content_suggestions_service_->GetSuggestionsForCategory(category);
@@ -356,8 +349,8 @@ void SnippetsInternalsMessageHandler::SendContentSuggestions() {
 
     std::unique_ptr<base::DictionaryValue> category_entry(
         new base::DictionaryValue);
-    category_entry->SetString("name", MapCategoryName(category));
-    category_entry->SetString("status", MapCategoryStatus(status));
+    category_entry->SetString("title", GetCategoryTitle(category));
+    category_entry->SetString("status", GetCategoryStatusName(status));
     category_entry->Set("suggestions", std::move(suggestions_list));
     categories_list->Append(std::move(category_entry));
   }

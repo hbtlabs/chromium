@@ -13,6 +13,9 @@ import android.graphics.drawable.TransitionDrawable;
 import android.media.ThumbnailUtils;
 import android.support.v4.text.BidiFormatter;
 import android.text.format.DateUtils;
+import android.view.ContextMenu;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.View.MeasureSpec;
 import android.view.ViewTreeObserver;
@@ -40,7 +43,8 @@ import java.net.URISyntaxException;
 /**
  * A class that represents the view for a single card snippet.
  */
-public class SnippetArticleViewHolder extends CardViewHolder {
+public class SnippetArticleViewHolder extends CardViewHolder
+        implements MenuItem.OnMenuItemClickListener {
     private static final String TAG = "NtpSnippets";
     private static final String PUBLISHER_FORMAT_STRING = "%s - %s";
     private static final int FADE_IN_ANIMATION_TIME_MS = 300;
@@ -52,8 +56,14 @@ public class SnippetArticleViewHolder extends CardViewHolder {
     private static final String PARAMETER_FAVICON_SERVICE_NAME = "favicons_fetch_from_service";
     private static final String PARAMETER_DISABLED_VALUE = "off";
 
+    // ContextMenu item ids. These must be unique.
+    private static final int ID_OPEN_IN_NEW_WINDOW = 0;
+    private static final int ID_OPEN_IN_NEW_TAB = 1;
+    private static final int ID_OPEN_IN_INCOGNITO_TAB = 2;
+    private static final int ID_REMOVE = 3;
+
     private final NewTabPageManager mNewTabPageManager;
-    private final SnippetsBridge mSnippetsBridge;
+    private final SnippetsSource mSnippetsSource;
     private final TextView mHeadlineTextView;
     private final TextView mPublisherTextView;
     private final TextView mArticleSnippetTextView;
@@ -71,15 +81,15 @@ public class SnippetArticleViewHolder extends CardViewHolder {
      *
      * @param parent The ViewGroup that is going to contain the newly created view.
      * @param manager The NTPManager object used to open an article
-     * @param snippetsBridge The SnippetsBridge used to retrieve the snippet thumbnails.
+     * @param snippetsSource The SnippetsBridge used to retrieve the snippet thumbnails.
      * @param uiConfig The NTP UI configuration object used to adjust the article UI.
      */
     public SnippetArticleViewHolder(NewTabPageRecyclerView parent, NewTabPageManager manager,
-            SnippetsBridge snippetsBridge, UiConfig uiConfig) {
+            SnippetsSource snippetsSource, UiConfig uiConfig) {
         super(R.layout.new_tab_page_snippets_card, parent, uiConfig);
 
         mNewTabPageManager = manager;
-        mSnippetsBridge = snippetsBridge;
+        mSnippetsSource = snippetsSource;
         mThumbnailView = (ImageView) itemView.findViewById(R.id.article_thumbnail);
         mHeadlineTextView = (TextView) itemView.findViewById(R.id.article_headline);
         mPublisherTextView = (TextView) itemView.findViewById(R.id.article_publisher);
@@ -137,6 +147,51 @@ public class SnippetArticleViewHolder extends CardViewHolder {
     }
 
     @Override
+    protected void createContextMenu(ContextMenu menu) {
+        // Create a context menu akin to the one shown for MostVisitedItems.
+        if (mNewTabPageManager.isOpenInNewWindowEnabled()) {
+            addContextMenuItem(menu, ID_OPEN_IN_NEW_WINDOW, R.string.contextmenu_open_in_new_tab);
+        }
+
+        addContextMenuItem(menu, ID_OPEN_IN_NEW_TAB, R.string.contextmenu_open_in_new_tab);
+
+        if (mNewTabPageManager.isOpenInIncognitoEnabled()) {
+            addContextMenuItem(menu, ID_OPEN_IN_INCOGNITO_TAB,
+                    R.string.contextmenu_open_in_incognito_tab);
+        }
+
+        addContextMenuItem(menu, ID_REMOVE, R.string.remove);
+    }
+
+    /**
+     * Convenience method to reduce multi-line function call to single line.
+     */
+    private void addContextMenuItem(ContextMenu menu, int id, int resourceId) {
+        menu.add(Menu.NONE, id, Menu.NONE, resourceId).setOnMenuItemClickListener(this);
+    }
+
+    @Override
+    public boolean onMenuItemClick(MenuItem item) {
+        switch (item.getItemId()) {
+            case ID_OPEN_IN_NEW_WINDOW:
+                mNewTabPageManager.openUrlInNewWindow(mArticle.mUrl);
+                return true;
+            case ID_OPEN_IN_NEW_TAB:
+                mNewTabPageManager.openUrlInNewTab(mArticle.mUrl, false);
+                return true;
+            case ID_OPEN_IN_INCOGNITO_TAB:
+                mNewTabPageManager.openUrlInNewTab(mArticle.mUrl, true);
+                return true;
+            case ID_REMOVE:
+                assert isDismissable() : "Context menu should not be shown for peeking card.";
+                dismiss();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    @Override
     public void onBindViewHolder(NewTabPageListItem article) {
         super.onBindViewHolder(article);
 
@@ -169,7 +224,7 @@ public class SnippetArticleViewHolder extends CardViewHolder {
         } else {
             mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
             mImageCallback = new FetchImageCallback(this, mArticle);
-            mSnippetsBridge.fetchSnippetImage(mArticle, mImageCallback);
+            mSnippetsSource.fetchSnippetImage(mArticle, mImageCallback);
         }
 
         // Set the favicon of the publisher.

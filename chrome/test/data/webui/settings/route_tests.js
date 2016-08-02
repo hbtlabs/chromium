@@ -6,55 +6,53 @@ suite('route', function() {
   test('tree structure', function() {
     // Set up root page routes.
     var BASIC = new settings.Route('/');
-    BASIC.page = 'basic';
     var ADVANCED = new settings.Route('/advanced');
-    ADVANCED.page = 'advanced';
     assertDeepEquals([], ADVANCED.subpage);
 
     // Test a section route.
     var PRIVACY = ADVANCED.createChild('/privacy');
     PRIVACY.section = 'privacy';
-    assertEquals('advanced', PRIVACY.page);
+    assertEquals(ADVANCED, PRIVACY.parent);
     assertDeepEquals([], PRIVACY.subpage);
-    assertFalse(PRIVACY.isDescendantOf(BASIC));
-    assertTrue(PRIVACY.isDescendantOf(ADVANCED));
-    assertFalse(PRIVACY.isDescendantOf(PRIVACY));
-    assertFalse(ADVANCED.isDescendantOf(PRIVACY));
+    assertFalse(BASIC.contains(PRIVACY));
+    assertTrue(ADVANCED.contains(PRIVACY));
+    assertTrue(PRIVACY.contains(PRIVACY));
+    assertFalse(PRIVACY.contains(ADVANCED));
 
     // Test a subpage route.
     var SITE_SETTINGS = PRIVACY.createChild('/siteSettings', 'site-settings');
-    assertEquals('/siteSettings', SITE_SETTINGS.url);
+    assertEquals('/siteSettings', SITE_SETTINGS.path);
+    assertEquals(PRIVACY, SITE_SETTINGS.parent);
     assertFalse(!!SITE_SETTINGS.dialog);
     assertDeepEquals(['site-settings'], SITE_SETTINGS.subpage);
-    assertEquals('advanced', SITE_SETTINGS.page);
     assertEquals('privacy', SITE_SETTINGS.section);
-    assertFalse(SITE_SETTINGS.isDescendantOf(BASIC));
-    assertTrue(SITE_SETTINGS.isDescendantOf(ADVANCED));
-    assertTrue(SITE_SETTINGS.isDescendantOf(PRIVACY));
+    assertFalse(BASIC.contains(SITE_SETTINGS));
+    assertTrue(ADVANCED.contains(SITE_SETTINGS));
+    assertTrue(PRIVACY.contains(SITE_SETTINGS));
 
     // Test a sub-subpage route.
     var SITE_SETTINGS_ALL =
         SITE_SETTINGS.createChild('all', 'all-sites');
-    assertEquals('/siteSettings/all', SITE_SETTINGS_ALL.url);
+    assertEquals('/siteSettings/all', SITE_SETTINGS_ALL.path);
+    assertEquals(SITE_SETTINGS, SITE_SETTINGS_ALL.parent);
     assertDeepEquals(['site-settings', 'all-sites'], SITE_SETTINGS_ALL.subpage);
 
     // Test a dialog route.
     var CLEAR_BROWSING_DATA =
         PRIVACY.createDialog('/clearBrowsingData', 'clear-browsing-data');
+    assertEquals(PRIVACY, CLEAR_BROWSING_DATA.parent);
     assertEquals('clear-browsing-data', CLEAR_BROWSING_DATA.dialog);
     assertEquals('privacy', CLEAR_BROWSING_DATA.section);
-    assertEquals('advanced', CLEAR_BROWSING_DATA.page);
-    assertEquals('privacy', CLEAR_BROWSING_DATA.section);
-    assertFalse(CLEAR_BROWSING_DATA.isDescendantOf(BASIC));
-    assertTrue(CLEAR_BROWSING_DATA.isDescendantOf(ADVANCED));
-    assertTrue(CLEAR_BROWSING_DATA.isDescendantOf(PRIVACY));
+    assertFalse(BASIC.contains(CLEAR_BROWSING_DATA));
+    assertTrue(ADVANCED.contains(CLEAR_BROWSING_DATA));
+    assertTrue(PRIVACY.contains(CLEAR_BROWSING_DATA));
   });
 
   test('no duplicate routes', function() {
-    var urls = new Set();
+    var paths = new Set();
     Object.values(settings.Route).forEach(function(route) {
-      assertFalse(urls.has(route.url), route.url);
-      urls.add(route.url);
+      assertFalse(paths.has(route.path), route.path);
+      paths.add(route.path);
     });
   });
 });

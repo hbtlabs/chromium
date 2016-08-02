@@ -69,7 +69,7 @@
         '../net/net.gyp:net',
         '../skia/skia.gyp:skia',
         '../sql/sql.gyp:sql',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../third_party/fips181/fips181.gyp:fips181',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
@@ -260,8 +260,14 @@
             'autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h',
             'autofill/core/browser/autofill_save_card_infobar_mobile.h',
           ],
-        }]
+        }],
+        ['OS!="ios"', {
+          'dependencies': [
+          '../device/geolocation/geolocation.gyp:device_geolocation',
+          ]
+        }],
       ],
+
     },
 
     {
@@ -330,7 +336,6 @@
               '<(DEPTH)/url/mojo/gurl.typemap',
               '<(DEPTH)/url/mojo/origin.typemap',
             ],
-            'use_new_wrapper_types': 'false',
           },
           'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
           'dependencies': [
@@ -366,7 +371,6 @@
               '<(DEPTH)/url/mojo/gurl.typemap',
               '<(DEPTH)/url/mojo/origin.typemap',
             ],
-            'use_new_wrapper_types': 'false',
           },
           'sources': [
             'autofill/content/public/interfaces/test_autofill_types.mojom',
@@ -399,7 +403,6 @@
               '<(DEPTH)/ui/gfx/geometry/mojo/geometry.typemap',
               '<(DEPTH)/url/mojo/gurl.typemap',
             ],
-            'use_new_wrapper_types': 'false',
           },
           'include_dirs': [
             '..',

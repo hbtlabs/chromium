@@ -1710,7 +1710,7 @@ void Document::updateStyleAndLayoutTree()
 
     unsigned startElementCount = styleEngine().styleForElementCount();
 
-    InspectorInstrumentation::StyleRecalc instrumentation(this);
+    InspectorInstrumentation::willRecalculateStyle(this);
 
     DocumentAnimations::updateAnimationTimingIfNeeded(*this);
     evaluateMediaQueryListIfNeeded();
@@ -1748,6 +1748,7 @@ void Document::updateStyleAndLayoutTree()
 #if DCHECK_IS_ON()
     assertLayoutTreeUpdated(*this);
 #endif
+    InspectorInstrumentation::didRecalculateStyle(this);
 }
 
 void Document::updateStyle()
@@ -1930,7 +1931,7 @@ void Document::clearFocusedElementSoon()
         m_clearFocusedElementTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void Document::clearFocusedElementTimerFired(Timer<Document>*)
+void Document::clearFocusedElementTimerFired(TimerBase*)
 {
     updateStyleAndLayoutTree();
     m_clearFocusedElementTimer.stop();
@@ -2895,9 +2896,9 @@ EventTarget* Document::errorEventTarget()
     return domWindow();
 }
 
-void Document::exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void Document::exceptionThrown(ErrorEvent* event)
 {
-    MainThreadDebugger::instance()->exceptionThrown(m_frame.get(), errorMessage, std::move(location));
+    MainThreadDebugger::instance()->exceptionThrown(this, event);
 }
 
 void Document::setURL(const KURL& url)
@@ -3067,7 +3068,7 @@ void Document::maybeHandleHttpRefresh(const String& content, HttpRefreshType htt
 
     double delay;
     String refreshURL;
-    if (!parseHTTPRefresh(content, httpRefreshType == HttpRefreshFromMetaTag, delay, refreshURL))
+    if (!parseHTTPRefresh(content, httpRefreshType == HttpRefreshFromMetaTag ? isHTMLSpace<UChar> : nullptr, delay, refreshURL))
         return;
     if (refreshURL.isEmpty())
         refreshURL = url().getString();
@@ -4825,7 +4826,7 @@ void Document::finishedParsing()
     m_fetcher->clearPreloads(ResourceFetcher::ClearSpeculativeMarkupPreloads);
 }
 
-void Document::elementDataCacheClearTimerFired(Timer<Document>*)
+void Document::elementDataCacheClearTimerFired(TimerBase*)
 {
     m_elementDataCache.clear();
 }
@@ -5135,7 +5136,7 @@ void Document::cancelFocusAppearanceUpdate()
     m_updateFocusAppearanceTimer.stop();
 }
 
-void Document::updateFocusAppearanceTimerFired(Timer<Document>*)
+void Document::updateFocusAppearanceTimerFired(TimerBase*)
 {
     Element* element = focusedElement();
     if (!element)
@@ -5382,7 +5383,7 @@ bool Document::isDelayingLoadEvent()
     return m_loadEventDelayCount;
 }
 
-void Document::loadEventDelayTimerFired(Timer<Document>*)
+void Document::loadEventDelayTimerFired(TimerBase*)
 {
     if (frame())
         frame()->loader().checkCompleted();
@@ -5395,7 +5396,7 @@ void Document::loadPluginsSoon()
         m_pluginLoadingTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void Document::pluginLoadingTimerFired(Timer<Document>*)
+void Document::pluginLoadingTimerFired(TimerBase*)
 {
     updateStyleAndLayout();
 }
@@ -5738,35 +5739,21 @@ Document& Document::ensureTemplateDocument()
 
 void Document::didAssociateFormControl(Element* element)
 {
-    if (!frame() || !frame()->page())
+    if (!frame() || !frame()->page() || !loadEventFinished())
         return;
-    m_associatedFormControls.add(element);
+
     // We add a slight delay because this could be called rapidly.
     if (!m_didAssociateFormControlsTimer.isActive())
         m_didAssociateFormControlsTimer.startOneShot(0.3, BLINK_FROM_HERE);
 }
 
-void Document::removeFormAssociation(Element* element)
-{
-    auto it = m_associatedFormControls.find(element);
-    if (it == m_associatedFormControls.end())
-        return;
-    m_associatedFormControls.remove(it);
-    if (m_associatedFormControls.isEmpty())
-        m_didAssociateFormControlsTimer.stop();
-}
-
-void Document::didAssociateFormControlsTimerFired(Timer<Document>* timer)
+void Document::didAssociateFormControlsTimerFired(TimerBase* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_didAssociateFormControlsTimer);
     if (!frame() || !frame()->page())
         return;
 
-    HeapVector<Member<Element>> associatedFormControls;
-    copyToVector(m_associatedFormControls, associatedFormControls);
-
-    frame()->page()->chromeClient().didAssociateFormControls(associatedFormControls, frame());
-    m_associatedFormControls.clear();
+    frame()->page()->chromeClient().didAssociateFormControlsAfterLoad(frame());
 }
 
 float Document::devicePixelRatio() const
@@ -5994,7 +5981,6 @@ DEFINE_TRACE(Document)
     visitor->trace(m_registrationContext);
     visitor->trace(m_customElementMicrotaskRunQueue);
     visitor->trace(m_elementDataCache);
-    visitor->trace(m_associatedFormControls);
     visitor->trace(m_useElementsNeedingUpdate);
     visitor->trace(m_layerUpdateSVGFilterElements);
     visitor->trace(m_timers);

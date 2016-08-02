@@ -76,7 +76,7 @@ public:
 
     KURL completeURL(const String&) const;
     void dispose() final;
-    void exceptionUnhandled(const String& errorMessage, std::unique_ptr<SourceLocation>);
+    void exceptionUnhandled(int exceptionId);
 
     void registerEventListener(V8AbstractEventListener*);
     void deregisterEventListener(V8AbstractEventListener*);
@@ -143,7 +143,7 @@ protected:
     void setV8CacheOptions(V8CacheOptions v8CacheOptions) { m_v8CacheOptions = v8CacheOptions; }
 
     // ExecutionContext
-    void exceptionThrown(const String& errorMessage, std::unique_ptr<SourceLocation>) override;
+    void exceptionThrown(ErrorEvent*) override;
     void removeURLFromMemoryCache(const KURL&) final;
 
 private:
@@ -154,9 +154,6 @@ private:
 
     // SecurityContext
     void didUpdateSecurityOrigin() final {}
-
-    void clearScript();
-    void clearInspector();
 
     const KURL m_url;
     const String m_userAgent;
@@ -185,6 +182,9 @@ private:
     Member<ConsoleMessageStorage> m_consoleMessageStorage;
 
     HeapListHashSet<Member<V8AbstractEventListener>> m_eventListeners;
+
+    HeapHashMap<int, Member<ErrorEvent>> m_pendingErrorEvents;
+    int m_lastPendingErrorEventId;
 };
 
 DEFINE_TYPE_CASTS(WorkerGlobalScope, ExecutionContext, context, context->isWorkerGlobalScope(), context.isWorkerGlobalScope());

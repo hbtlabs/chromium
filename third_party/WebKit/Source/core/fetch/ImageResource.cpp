@@ -209,8 +209,8 @@ void ImageResource::destroyDecodedDataIfPossible()
 {
     if (!m_image)
         return;
-    if ((!hasClientsOrObservers() && !isLoading() && m_image->hasOneRef() && m_image->isBitmapImage()) || !errorOccurred())
-        m_image->destroyDecodedData();
+    CHECK(!errorOccurred());
+    m_image->destroyDecodedData();
 }
 
 void ImageResource::doResetAnimation()
@@ -221,7 +221,8 @@ void ImageResource::doResetAnimation()
 
 void ImageResource::allClientsAndObserversRemoved()
 {
-    if (m_image && !errorOccurred()) {
+    if (m_image) {
+        CHECK(!errorOccurred());
         // If possible, delay the resetting until back at the event loop.
         // Doing so after a conservative GC prevents resetAnimation() from
         // upsetting ongoing animation updates (crbug.com/613709)
@@ -357,7 +358,7 @@ inline void ImageResource::createImage()
     if (m_image)
         return;
 
-    if (m_response.mimeType() == "image/svg+xml") {
+    if (response().mimeType() == "image/svg+xml") {
         m_image = SVGImage::create(this);
     } else {
         m_image = BitmapImage::create(this);
@@ -401,8 +402,8 @@ void ImageResource::updateImage(bool allDataReceived)
     if (!m_image || m_image->isNull()) {
         if (!errorOccurred())
             setStatus(DecodeError);
-        if (!allDataReceived && m_loader)
-            m_loader->didFinishLoading(nullptr, monotonicallyIncreasingTime(), encodedSize());
+        if (!allDataReceived && loader())
+            loader()->didFinishLoading(nullptr, monotonicallyIncreasingTime(), encodedSize());
         clear();
         memoryCache()->remove(this);
     }
@@ -455,7 +456,7 @@ void ImageResource::responseReceived(const ResourceResponse& response, std::uniq
         m_multipartParser = new MultipartImageResourceParser(response, response.multipartBoundary(), this);
     Resource::responseReceived(response, std::move(handle));
     if (RuntimeEnabledFeatures::clientHintsEnabled()) {
-        m_devicePixelRatioHeaderValue = m_response.httpHeaderField(HTTPNames::Content_DPR).toFloat(&m_hasDevicePixelRatioHeaderValue);
+        m_devicePixelRatioHeaderValue = this->response().httpHeaderField(HTTPNames::Content_DPR).toFloat(&m_hasDevicePixelRatioHeaderValue);
         if (!m_hasDevicePixelRatioHeaderValue || m_devicePixelRatioHeaderValue <= 0.0) {
             m_devicePixelRatioHeaderValue = 1.0;
             m_hasDevicePixelRatioHeaderValue = false;
@@ -537,14 +538,14 @@ void ImageResource::updateImageAnimationPolicy()
 
 void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
 {
-    if (m_resourceRequest.loFiState() != WebURLRequest::LoFiOn)
+    if (resourceRequest().loFiState() != WebURLRequest::LoFiOn)
         return;
-    if (isLoaded() && !m_response.httpHeaderField("chrome-proxy").contains("q=low"))
+    if (isLoaded() && !response().httpHeaderField("chrome-proxy").contains("q=low"))
         return;
-    m_resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
-    m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
+    setCachePolicyBypassingCache();
+    setLoFiStateOff();
     if (isLoading())
-        m_loader->cancel();
+        loader()->cancel();
     clear();
     notifyObservers();
 
@@ -563,7 +564,7 @@ void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
 {
     ASSERT(m_multipartParser);
 
-    m_response = response;
+    setResponse(response);
     if (m_multipartParsingState == MultipartParsingState::WaitingForFirstPart) {
         // We have nothing to do because we don't have any data.
         m_multipartParsingState = MultipartParsingState::ParsingFirstPart;
@@ -577,8 +578,8 @@ void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
         if (!errorOccurred())
             setStatus(Cached);
         checkNotify();
-        if (m_loader)
-            m_loader->didFinishLoadingFirstPartInMultipart();
+        if (loader())
+            loader()->didFinishLoadingFirstPartInMultipart();
     }
 }
 

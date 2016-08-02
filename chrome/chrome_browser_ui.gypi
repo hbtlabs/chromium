@@ -1269,8 +1269,6 @@
       'browser/ui/cocoa/tab_dialogs_cocoa.mm',
       'browser/ui/cocoa/tab_modal_confirm_dialog_mac.h',
       'browser/ui/cocoa/tab_modal_confirm_dialog_mac.mm',
-      'browser/ui/cocoa/table_row_nsimage_cache.h',
-      'browser/ui/cocoa/table_row_nsimage_cache.mm',
       'browser/ui/cocoa/tabs/alert_indicator_button_cocoa.h',
       'browser/ui/cocoa/tabs/alert_indicator_button_cocoa.mm',
       'browser/ui/cocoa/tabs/tab_controller.h',
@@ -1948,6 +1946,8 @@
       'browser/ui/webui/options/chromeos/internet_options_handler_strings.h',
       'browser/ui/webui/options/chromeos/keyboard_handler.cc',
       'browser/ui/webui/options/chromeos/keyboard_handler.h',
+      'browser/ui/webui/options/chromeos/options_note_handler.cc',
+      'browser/ui/webui/options/chromeos/options_note_handler.h',
       'browser/ui/webui/options/chromeos/pointer_handler.cc',
       'browser/ui/webui/options/chromeos/pointer_handler.h',
       'browser/ui/webui/options/chromeos/power_handler.cc',
@@ -2892,7 +2892,7 @@
         '../content/content.gyp:content_common',
         '../crypto/crypto.gyp:crypto',
         '../skia/skia.gyp:skia',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation',
         '../third_party/cacheinvalidation/cacheinvalidation.gyp:cacheinvalidation_proto_cpp',
         '../third_party/icu/icu.gyp:icui18n',
@@ -2919,7 +2919,7 @@
       ],
       'export_dependent_settings': [
         '../components/components.gyp:dom_distiller_core',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
       ],
       'includes': [
         # Disable LTO due to undefined reference

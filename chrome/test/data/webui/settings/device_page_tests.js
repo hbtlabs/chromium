@@ -142,6 +142,12 @@ cr.define('device_page_tests', function() {
     suiteSetup(function() {
       // Disable animations so sub-pages open within one event loop.
       testing.Test.disableAnimationsAndTransitions();
+
+      // Update the device page route for navigations.
+      // TODO(tommycli): Remove once settings.navigateTo is no longer a stub.
+      settings.navigateTo = function(route) {
+        devicePage.currentRoute = route;
+      };
     });
 
     setup(function(done) {
@@ -150,7 +156,7 @@ cr.define('device_page_tests', function() {
 
       PolymerTest.clearBody();
       devicePage = document.createElement('settings-device-page');
-      devicePage.currentRoute = {page: 'basic', section: '', subpage: []};
+      devicePage.currentRoute = settings.Route.BASIC;
       devicePage.prefs = getFakePrefs();
       settings.DevicePageBrowserProxyImpl.instance_ =
           new TestDevicePageBrowserProxy();
@@ -221,7 +227,7 @@ cr.define('device_page_tests', function() {
 
       test('subpage responds to pointer attach/detach', function() {
         assertEquals('pointers', devicePage.currentRoute.subpage[0]);
-        assertTrue(devicePage.isCurrentRouteOnPointersPage_());
+        assertTrue(devicePage.currentRoute == settings.Route.POINTERS);
         assertLT(0, pointersPage.$.mouse.offsetHeight);
         assertLT(0, pointersPage.$.touchpad.offsetHeight);
         assertLT(0, pointersPage.$$('#mouse h2').offsetHeight);
@@ -434,7 +440,6 @@ cr.define('device_page_tests', function() {
         return Promise.all([
           fakeSystemDisplay.getInfoCalled.promise,
           fakeSystemDisplay.getLayoutCalled.promise,
-          new Promise(function(resolve, reject) { setTimeout(resolve); })
         ]);
       }).then(function() {
         // There should be a single display which should be primary and

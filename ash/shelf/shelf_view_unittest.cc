@@ -12,6 +12,7 @@
 #include "ash/common/shelf/app_list_button.h"
 #include "ash/common/shelf/overflow_bubble.h"
 #include "ash/common/shelf/overflow_bubble_view.h"
+#include "ash/common/shelf/shelf_button.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/shelf_menu_model.h"
 #include "ash/common/shelf/shelf_model.h"
@@ -20,7 +21,6 @@
 #include "ash/common/wm_shell.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_button.h"
 #include "ash/shelf/shelf_icon_observer.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
@@ -2116,6 +2116,8 @@ class TestAppListShellDelegate : public TestShellDelegate {
 
 }  // namespace
 
+// Test fixture that forces material design mode in order to test ink drop
+// ripples on shelf.
 class ShelfViewInkDropTest : public ShelfViewTest {
  public:
   ShelfViewInkDropTest() {}
@@ -2125,20 +2127,9 @@ class ShelfViewInkDropTest : public ShelfViewTest {
     shell_delegate_ = new TestAppListShellDelegate;
     ash_test_helper()->set_test_shell_delegate(shell_delegate_);
 
+    set_material_mode(ash::MaterialDesignController::MATERIAL_EXPERIMENTAL);
+
     ShelfViewTest::SetUp();
-
-    // TODO(mohsen): Ideally, we would want to set material mode before calling
-    // ShelfViewTest::SetUp() so that everything is set up with the correct
-    // material mode. Currently, this is not possible as it expects material
-    // mode be UNINITIALIZED. (See https://crbug.com/620093)
-    ash_md_controller_.reset(new ash::test::MaterialDesignControllerTestAPI(
-        ash::MaterialDesignController::MATERIAL_EXPERIMENTAL));
-  }
-
-  void TearDown() override {
-    ash_md_controller_.reset();
-
-    ShelfViewTest::TearDown();
   }
 
  protected:
@@ -2178,9 +2169,6 @@ class ShelfViewInkDropTest : public ShelfViewTest {
   void FinishAppListVisibilityChange() {
     shell_delegate_->app_list_presenter()->FinishVisibilityChange();
   }
-
-  std::unique_ptr<ash::test::MaterialDesignControllerTestAPI>
-      ash_md_controller_;
 
   TestAppListShellDelegate* shell_delegate_ = nullptr;  // Owned by Shell.
 

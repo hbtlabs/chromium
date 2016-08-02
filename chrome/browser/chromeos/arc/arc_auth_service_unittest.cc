@@ -30,6 +30,8 @@
 #include "components/arc/test/fake_arc_bridge_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/sync/api/fake_sync_change_processor.h"
+#include "components/sync/api/sync_error_factory_mock.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
@@ -37,8 +39,6 @@
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
-#include "sync/api/fake_sync_change_processor.h"
-#include "sync/api/sync_error_factory_mock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arc {
@@ -294,7 +294,8 @@ TEST_F(ArcAuthServiceTest, SignInStatus) {
   EXPECT_TRUE(bridge_service()->ready());
 
   // Report failure.
-  auth_service()->OnSignInFailed(mojom::ArcSignInFailureReason::NETWORK_ERROR);
+  auth_service()->OnSignInFailed(
+      mojom::ArcSignInFailureReason::GMS_NETWORK_ERROR);
   EXPECT_FALSE(prefs->GetBoolean(prefs::kArcSignedIn));
   EXPECT_EQ(ArcAuthService::State::STOPPED, auth_service()->state());
   EXPECT_FALSE(bridge_service()->ready());

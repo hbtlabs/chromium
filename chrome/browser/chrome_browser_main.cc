@@ -90,6 +90,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/javascript_dialogs/chrome_javascript_native_dialog_factory.h"
+#include "chrome/browser/ui/profile_error_dialog.h"
 #include "chrome/browser/ui/startup/bad_flags_prompt.h"
 #include "chrome/browser/ui/startup/default_browser_prompt.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
@@ -141,8 +142,6 @@
 #include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/geolocation_delegate.h"
-#include "content/public/browser/geolocation_provider.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
@@ -153,6 +152,8 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
+#include "device/geolocation/geolocation_delegate.h"
+#include "device/geolocation/geolocation_provider.h"
 #include "grit/platform_locale_settings.h"
 #include "media/base/media_resources.h"
 #include "net/base/net_module.h"
@@ -278,11 +279,11 @@ using content::BrowserThread;
 namespace {
 
 // A provider of Geolocation services to override AccessTokenStore.
-class ChromeGeolocationDelegate : public content::GeolocationDelegate {
+class ChromeGeolocationDelegate : public device::GeolocationDelegate {
  public:
   ChromeGeolocationDelegate() = default;
 
-  scoped_refptr<content::AccessTokenStore> CreateAccessTokenStore() final {
+  scoped_refptr<device::AccessTokenStore> CreateAccessTokenStore() final {
     return new ChromeAccessTokenStore();
   }
 
@@ -403,8 +404,10 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::CreateProfile")
 
   base::Time start = base::Time::Now();
-  if (profiles::IsMultipleProfilesEnabled() &&
-      parsed_command_line.HasSwitch(switches::kProfileDirectory)) {
+  bool profile_dir_specified =
+      profiles::IsMultipleProfilesEnabled() &&
+      parsed_command_line.HasSwitch(switches::kProfileDirectory);
+  if (profile_dir_specified) {
     profiles::SetLastUsedProfile(
         parsed_command_line.GetSwitchValueASCII(switches::kProfileDirectory));
     // Clear kProfilesLastActive since the user only wants to launch a specific
@@ -415,7 +418,7 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
     profile_list->Clear();
   }
 
-  Profile* profile = NULL;
+  Profile* profile = nullptr;
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // On ChromeOS and Android the ProfileManager will use the same path as the
   // one we got passed. GetActiveUserProfile will therefore use the correct path
@@ -423,44 +426,31 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
   DCHECK_EQ(user_data_dir.value(),
             g_browser_process->profile_manager()->user_data_dir().value());
   profile = ProfileManager::GetActiveUserProfile();
+
+  // TODO(port): fix this. See comments near the definition of |user_data_dir|.
+  // It is better to CHECK-fail here than it is to silently exit because of
+  // missing code in the above test.
+  CHECK(profile) << "Cannot get default profile.";
+
 #else
-  base::FilePath profile_path =
-      GetStartupProfilePath(user_data_dir, parsed_command_line);
+  profile = GetStartupProfile(user_data_dir, parsed_command_line);
 
-  profile = g_browser_process->profile_manager()->GetProfile(
-      profile_path);
+  if (!profile && !profile_dir_specified)
+    profile = GetFallbackStartupProfile();
 
-  // If we're using the --new-profile-management flag and this profile is
-  // signed out, then we should show the user manager instead. By switching
-  // the active profile to the guest profile we ensure that no
-  // browser windows will be opened for the guest profile.
-  if (switches::IsNewProfileManagement() &&
-      profile &&
-      !profile->IsGuestSession()) {
-    ProfileAttributesEntry* entry;
-    bool has_entry = g_browser_process->profile_manager()->
-                         GetProfileAttributesStorage().
-                         GetProfileAttributesWithPath(profile_path, &entry);
-    if (has_entry && entry->IsSigninRequired()) {
-      profile = g_browser_process->profile_manager()->GetProfile(
-          ProfileManager::GetGuestProfilePath());
-    }
+  if (!profile) {
+    ProfileErrorType error_type = profile_dir_specified ?
+                                  PROFILE_ERROR_CREATE_FAILURE_SPECIFIED :
+                                  PROFILE_ERROR_CREATE_FAILURE_ALL;
+
+    ShowProfileErrorDialog(error_type, IDS_COULDNT_STARTUP_PROFILE_ERROR);
+    return nullptr;
   }
 #endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
-  if (profile) {
-    UMA_HISTOGRAM_LONG_TIMES(
-        "Startup.CreateFirstProfile", base::Time::Now() - start);
-    return profile;
-  }
 
-#if !defined(OS_WIN)
-  // TODO(port): fix this.  See comments near the definition of
-  // user_data_dir.  It is better to CHECK-fail here than it is to
-  // silently exit because of missing code in the above test.
-  CHECK(profile) << "Cannot get default profile.";
-#endif  // !defined(OS_WIN)
-
-  return NULL;
+  UMA_HISTOGRAM_LONG_TIMES(
+      "Startup.CreateFirstProfile", base::Time::Now() - start);
+  return profile;
 }
 
 #if defined(OS_MACOSX)
@@ -516,14 +506,10 @@ void RegisterComponentsForUpdate() {
     // 2. Chrome OS: On Chrome OS this registration is delayed until user login.
     RegisterEVWhitelistComponent(cus, path);
 
-    // Note: This is behind a base::Feature to verify whether it causes a
-    // suspected startup regression. See: http://crbug.com/626676
-    if (base::FeatureList::IsEnabled(features::kSTHSetComponent)) {
-      // Registration of the STH set fetcher here is not done for:
-      // Android: Because the story around CT on Mobile is not finalized yet.
-      // Chrome OS: On Chrome OS this registration is delayed until user login.
-      RegisterSTHSetComponent(cus, path);
-    }
+    // Registration of the STH set fetcher here is not done for:
+    // Android: Because the story around CT on Mobile is not finalized yet.
+    // Chrome OS: On Chrome OS this registration is delayed until user login.
+    RegisterSTHSetComponent(cus, path);
 #endif  // defined(OS_ANDROID)
     RegisterOriginTrialsComponent(cus, path);
 
@@ -734,25 +720,25 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
                   << " list specified.";
   }
 
-  if (command_line->HasSwitch(switches::kForceVariationIds)) {
-    // Create default variation ids which will always be included in the
-    // X-Client-Data request header.
-    variations::VariationsHttpHeaderProvider* provider =
-        variations::VariationsHttpHeaderProvider::GetInstance();
-    bool result = provider->SetDefaultVariationIds(
-        command_line->GetSwitchValueASCII(switches::kForceVariationIds));
-    CHECK(result) << "Invalid --" << switches::kForceVariationIds
-                  << " list specified.";
-    metrics->AddSyntheticTrialObserver(provider);
-  }
-
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
 
   // Associate parameters chosen in about:flags and create trial/group for them.
   flags_ui::PrefServiceFlagsStorage flags_storage(
       g_browser_process->local_state());
-  about_flags::RegisterAllFeatureVariationParameters(&flags_storage,
-    feature_list.get());
+  std::vector<std::string> variation_ids =
+      about_flags::RegisterAllFeatureVariationParameters(
+          &flags_storage, feature_list.get());
+
+  variations::VariationsHttpHeaderProvider* http_header_provider =
+      variations::VariationsHttpHeaderProvider::GetInstance();
+  // Force the variation ids selected in chrome://flags and/or specified using
+  // the command-line flag.
+  bool result = http_header_provider->ForceVariationIds(
+      command_line->GetSwitchValueASCII(switches::kForceVariationIds),
+      &variation_ids);
+  CHECK(result) << "Invalid list of variation ids specified (either in --"
+                << switches::kForceVariationIds << " or in chrome://flags)";
+  metrics->AddSyntheticTrialObserver(http_header_provider);
 
   feature_list->InitializeFromCommandLine(
       command_line->GetSwitchValueASCII(switches::kEnableFeatures),
@@ -1221,7 +1207,7 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   // ChromeOS needs ResourceBundle::InitSharedInstance to be called before this.
   browser_process_->PreCreateThreads();
 
-  content::GeolocationProvider::SetGeolocationDelegate(
+  device::GeolocationProvider::SetGeolocationDelegate(
       new ChromeGeolocationDelegate());
 
   return content::RESULT_CODE_NORMAL_EXIT;

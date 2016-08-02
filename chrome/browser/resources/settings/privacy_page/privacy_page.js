@@ -44,17 +44,6 @@ Polymer({
     this.ContentSettingsTypes = settings.ContentSettingsTypes;
   },
 
-  /** @suppress {missingProperties} */
-  attached: function() {
-    settings.main.rendered.then(function() {
-      if (this.showClearBrowsingDataDialog_) {
-        var dialog = this.$$('settings-clear-browsing-data-dialog').$.dialog;
-        // TODO(dbeam): cast to a CrDialogElement when it compiles.
-        dialog.refit();
-      }
-    }.bind(this));
-  },
-
   /**
    * @return {boolean} Whether the Clear Browsing Data dialog should be showing.
    * @private
@@ -67,44 +56,26 @@ Polymer({
   /** @private */
   onManageCertificatesTap_: function() {
 <if expr="use_nss_certs">
-    var pages = /** @type {!SettingsAnimatedPagesElement} */(this.$.pages);
-    pages.setSubpageChain(['manage-certificates']);
+    settings.navigateTo(settings.Route.CERTIFICATES);
 </if>
 <if expr="is_win or is_macosx">
     settings.PrivacyPageBrowserProxyImpl.getInstance().
-      showManageSSLCertificates();
+        showManageSSLCertificates();
 </if>
   },
 
   /** @private */
   onSiteSettingsTap_: function() {
-    var pages = /** @type {!SettingsAnimatedPagesElement} */(this.$.pages);
-    pages.setSubpageChain(['site-settings']);
+    settings.navigateTo(settings.Route.SITE_SETTINGS);
   },
 
   /** @private */
   onClearBrowsingDataTap_: function() {
-    this.currentRoute = {
-      page: 'advanced',
-      section: 'privacy',
-      subpage: [],
-      dialog: 'clear-browsing-data',
-    };
+    settings.navigateTo(settings.Route.CLEAR_BROWSER_DATA);
   },
 
-  /**
-   * @param {!Event} event
-   * @private
-   */
-  onIronOverlayClosed_: function(event) {
-    if (Polymer.dom(event).rootTarget.tagName != 'CR-DIALOG')
-      return;
-
-    this.currentRoute = {
-      page: 'advanced',
-      section: 'privacy',
-      subpage: [],
-      // Drop dialog key.
-    };
+  /** @private */
+  onDialogClosed_: function() {
+    settings.navigateTo(settings.Route.PRIVACY);
   },
 });

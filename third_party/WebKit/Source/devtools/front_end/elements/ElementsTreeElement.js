@@ -678,7 +678,9 @@ WebInspector.ElementsTreeElement.prototype = {
             WebInspector.handleElementValueModifications(event, attribute);
             return "";
         }
-        config.setPostKeydownFinishHandler(postKeyDownFinishHandler);
+
+        if (!attributeValueElement.textContent.asParsedURL())
+            config.setPostKeydownFinishHandler(postKeyDownFinishHandler);
 
         this._editing = WebInspector.InplaceEditor.startEditing(attribute, config);
 
@@ -1118,7 +1120,7 @@ WebInspector.ElementsTreeElement.prototype = {
             var extension = markerToExtension.get(marker);
             if (!extension)
                 return;
-            promises.push(extension.instancePromise().then(collectDecoration.bind(null, n)));
+            promises.push(extension.instance().then(collectDecoration.bind(null, n)));
         }
 
         /**

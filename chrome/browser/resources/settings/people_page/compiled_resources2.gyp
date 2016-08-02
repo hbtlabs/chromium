@@ -41,6 +41,7 @@
     {
       'target_name': 'easy_unlock_turn_off_dialog',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/cr_dialog/compiled_resources2.gyp:cr_dialog',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
@@ -67,10 +68,11 @@
     {
       'target_name': 'people_page',
       'dependencies': [
+        '../compiled_resources2.gyp:route',
+        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
-        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         'easy_unlock_browser_proxy',
         'easy_unlock_turn_off_dialog',
         'profile_info_browser_proxy',
@@ -88,7 +90,7 @@
     {
       'target_name': 'quick_unlock_authenticate',
       'dependencies': [
-        'quick_unlock_routing_behavior',
+        '../compiled_resources2.gyp:route',
         '<(EXTERNS_GYP):quick_unlock_private',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -96,32 +98,27 @@
     {
       'target_name': 'quick_unlock_choose_method',
       'dependencies': [
-        'quick_unlock_password_detect_behavior',
+        '../compiled_resources2.gyp:route',
         '../prefs/compiled_resources2.gyp:prefs_types',
         '../prefs/compiled_resources2.gyp:prefs_behavior',
+        'quick_unlock_password_detect_behavior',
         '<(EXTERNS_GYP):quick_unlock_private',
-      ],
-      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
-      'target_name': 'quick_unlock_routing_behavior',
-      'dependencies': [
-        '../settings_page/compiled_resources2.gyp:settings_router',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
       'target_name': 'quick_unlock_password_detect_behavior',
       'dependencies': [
-        'quick_unlock_routing_behavior',
+        '../compiled_resources2.gyp:route',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
       'target_name': 'quick_unlock_setup_pin',
       'dependencies': [
-        'quick_unlock_password_detect_behavior',
+        '../compiled_resources2.gyp:route',
         '../settings_page/compiled_resources2.gyp:settings_router',
+        'quick_unlock_password_detect_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(EXTERNS_GYP):quick_unlock_private',
       ],
@@ -130,12 +127,13 @@
     {
       'target_name': 'sync_page',
       'dependencies': [
+        '../compiled_resources2.gyp:route',
+        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
+        'sync_browser_proxy',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:web_ui_listener_behavior',
-        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
-        'sync_browser_proxy',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

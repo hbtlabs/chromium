@@ -18,7 +18,6 @@
 #include "ash/common/wm/overview/cleanup_animation_observer.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings_factory.h"
-#include "ash/common/wm/overview/scoped_transform_overview_window.h"
 #include "ash/common/wm/overview/window_selector.h"
 #include "ash/common/wm/overview/window_selector_delegate.h"
 #include "ash/common/wm/overview/window_selector_item.h"
@@ -76,7 +75,9 @@ const int kMinCardsMajor = 3;
 
 // Hiding window headers can be resource intensive. Only hide the headers when
 // the number of windows in this grid is less or equal than this number.
-const int kMaxWindowsCountToHideHeader = 10;
+// The default is 0, meaning that mask layers are never used and the bottom
+// corners are not rounded in overview.
+const int kMaxWindowsCountToHideHeaderWithMasks = 0;
 
 const int kOverviewSelectorTransitionMilliseconds = 250;
 
@@ -462,13 +463,13 @@ void WindowGrid::PositionWindowsMD(bool animate) {
   const size_t windows_count = window_list_.size();
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  int windows_to_use_masks = kMaxWindowsCountToHideHeader;
+  int windows_to_use_masks = kMaxWindowsCountToHideHeaderWithMasks;
   if (command_line->HasSwitch(switches::kAshMaxWindowsToUseMaskInOverview) &&
       (!base::StringToInt(command_line->GetSwitchValueASCII(
                               switches::kAshMaxWindowsToUseMaskInOverview),
                           &windows_to_use_masks) ||
        windows_to_use_masks <= kUnlimited)) {
-    windows_to_use_masks = kMaxWindowsCountToHideHeader;
+    windows_to_use_masks = kMaxWindowsCountToHideHeaderWithMasks;
   }
   int windows_to_use_shapes = kUnlimited;
   if (command_line->HasSwitch(switches::kAshMaxWindowsToUseShapeInOverview) &&
@@ -1012,7 +1013,7 @@ bool WindowGrid::FitWindowRectsInBounds(const gfx::Rect& bounds,
   const gfx::Size item_size(0, height);
   size_t i = 0;
   for (auto* window : window_list_) {
-    const gfx::Rect target_bounds = window->GetWindow()->GetTargetBounds();
+    const gfx::Rect target_bounds = window->GetTargetBoundsInScreen();
     const int width =
         std::max(1, gfx::ToFlooredInt(target_bounds.width() *
                                       window->GetItemScale(item_size)) +

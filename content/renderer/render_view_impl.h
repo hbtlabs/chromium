@@ -302,14 +302,12 @@ class CONTENT_EXPORT RenderViewImpl
   void closeWidgetSoon() override;
   void convertViewportToWindow(blink::WebRect* rect) override;
   void convertWindowToViewport(blink::WebFloatRect* rect) override;
-  void didInvalidateRect(const blink::WebRect& rect) override;
   void didOverscroll(const blink::WebFloatSize& overscrollDelta,
                      const blink::WebFloatSize& accumulatedOverscroll,
                      const blink::WebFloatPoint& positionInViewport,
                      const blink::WebFloatSize& velocityInViewport) override;
   void didUpdateTextOfFocusedElementByNonUserInput() override;
   void hasTouchEventHandlers(bool has_handlers) override;
-  blink::WebLayerTreeView* layerTreeView() override;
   void resetInputMethod() override;
   blink::WebScreenInfo screenInfo() override;
   void setToolTipText(const blink::WebString&,
@@ -422,7 +420,6 @@ class CONTENT_EXPORT RenderViewImpl
   void SetEditCommandForNextKeyEvent(const std::string& name,
                                      const std::string& value) override;
   void ClearEditCommands() override;
-  SSLStatus GetSSLStatusOfFrame(blink::WebFrame* frame) const override;
   const std::string& GetAcceptLanguages() const override;
 #if defined(OS_ANDROID)
   void UpdateTopControlsState(TopControlsState constraints,

@@ -25,8 +25,6 @@ ScreenOrientationController::~ScreenOrientationController()
 
 void ScreenOrientationController::provideTo(LocalFrame& frame, WebScreenOrientationClient* client)
 {
-    ASSERT(RuntimeEnabledFeatures::screenOrientationEnabled());
-
     ScreenOrientationController* controller = new ScreenOrientationController(frame, client);
     Supplement<LocalFrame>::provideTo(frame, supplementName(), controller);
 }
@@ -120,8 +118,6 @@ void ScreenOrientationController::pageVisibilityChanged()
 
 void ScreenOrientationController::notifyOrientationChanged()
 {
-    ASSERT(RuntimeEnabledFeatures::screenOrientationEnabled());
-
     if (!isActiveAndVisible())
         return;
 
@@ -171,7 +167,7 @@ void ScreenOrientationController::unlock()
     m_client->unlockOrientation();
 }
 
-void ScreenOrientationController::dispatchEventTimerFired(Timer<ScreenOrientationController>*)
+void ScreenOrientationController::dispatchEventTimerFired(TimerBase*)
 {
     if (!m_orientation)
         return;

@@ -47,6 +47,7 @@
         '../components/url_formatter/url_formatter.gyp:url_formatter',
         '../device/bluetooth/bluetooth.gyp:device_bluetooth',
         '../device/bluetooth/bluetooth.gyp:device_bluetooth_mocks',
+        '../device/geolocation/geolocation.gyp:device_geolocation',
         '../gin/gin.gyp:gin',
         '../gpu/gpu.gyp:gpu',
         '../ipc/ipc.gyp:ipc',
@@ -565,7 +566,6 @@
          'mojom_files': [
            'shell/common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom'
          ],
-         'use_new_wrapper_types': 'false',
        },
        'includes': [
          '../mojo/mojom_bindings_generator_explicit.gypi',

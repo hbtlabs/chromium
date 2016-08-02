@@ -66,7 +66,7 @@
 namespace blink {
 
 enum class WebTreeScopeType;
-class ServiceRegistry;
+class InterfaceProvider;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebAppBannerClient;
@@ -89,7 +89,6 @@ class WebMediaPlayerEncryptedMediaClient;
 class WebMediaPlayerSource;
 class WebMediaSession;
 class WebMediaStream;
-class WebMIDIClient;
 class WebNotificationPermissionCallback;
 class WebServiceWorkerProvider;
 class WebSocketHandle;
@@ -589,10 +588,6 @@ public:
     virtual WebEncryptedMediaClient* encryptedMediaClient() { return 0; }
 
 
-    // Web MIDI -------------------------------------------------------------
-
-    virtual WebMIDIClient* webMIDIClient() { return 0; }
-
     // User agent ------------------------------------------------------
 
     // Asks the embedder if a specific user agent should be used. Non-empty
@@ -705,7 +700,7 @@ public:
     }
 
     // Mojo ----------------------------------------------------------------
-    virtual ServiceRegistry* serviceRegistry() { return nullptr; }
+    virtual InterfaceProvider* interfaceProvider() { return nullptr; }
 
     // Visibility ----------------------------------------------------------
 

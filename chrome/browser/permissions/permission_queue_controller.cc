@@ -11,6 +11,7 @@
 #include "chrome/browser/media/midi_permission_infobar_delegate_android.h"
 #include "chrome/browser/media/protected_media_identifier_infobar_delegate_android.h"
 #include "chrome/browser/notifications/notification_permission_infobar_delegate.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -52,6 +53,7 @@ class PermissionQueueController::PendingInfobarRequest {
                         const PermissionRequestID& id,
                         const GURL& requesting_frame,
                         const GURL& embedder,
+                        bool user_gesture,
                         Profile* profile,
                         const PermissionDecidedCallback& callback);
   ~PendingInfobarRequest();
@@ -72,6 +74,7 @@ class PermissionQueueController::PendingInfobarRequest {
   PermissionRequestID id_;
   GURL requesting_frame_;
   GURL embedder_;
+  bool user_gesture_;
   Profile* profile_;
   PermissionDecidedCallback callback_;
   infobars::InfoBar* infobar_;
@@ -84,12 +87,14 @@ PermissionQueueController::PendingInfobarRequest::PendingInfobarRequest(
     const PermissionRequestID& id,
     const GURL& requesting_frame,
     const GURL& embedder,
+    bool user_gesture,
     Profile* profile,
     const PermissionDecidedCallback& callback)
     : type_(type),
       id_(id),
       requesting_frame_(requesting_frame),
       embedder_(embedder),
+      user_gesture_(user_gesture),
       profile_(profile),
       callback_(callback),
       infobar_(NULL) {}
@@ -114,30 +119,31 @@ void PermissionQueueController::PendingInfobarRequest::CreateInfoBar(
   // is tied to that of the queue controller. Before QueueController
   // is destroyed, all requests will be cancelled and so all delegates
   // will be destroyed.
-  PermissionInfobarDelegate::PermissionSetCallback callback =
-      base::Bind(&PermissionQueueController::OnPermissionSet,
-                 base::Unretained(controller),
-                 id_,
-                 requesting_frame_,
-                 embedder_);
+  PermissionInfobarDelegate::PermissionSetCallback callback = base::Bind(
+      &PermissionQueueController::OnPermissionSet, base::Unretained(controller),
+      id_, requesting_frame_, embedder_, user_gesture_);
   switch (type_) {
     case content::PermissionType::GEOLOCATION:
       infobar_ = GeolocationInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, profile_, callback);
+          GetInfoBarService(id_), requesting_frame_, user_gesture_, profile_,
+          callback);
       break;
 #if defined(ENABLE_NOTIFICATIONS)
     case content::PermissionType::NOTIFICATIONS:
       infobar_ = NotificationPermissionInfobarDelegate::Create(
-          GetInfoBarService(id_), requesting_frame_, profile_, callback);
+          GetInfoBarService(id_), requesting_frame_, user_gesture_, profile_,
+          callback);
       break;
 #endif  // ENABLE_NOTIFICATIONS
     case content::PermissionType::MIDI_SYSEX:
       infobar_ = MidiPermissionInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, profile_, callback);
+          GetInfoBarService(id_), requesting_frame_, user_gesture_, profile_,
+          callback);
       break;
     case content::PermissionType::PROTECTED_MEDIA_IDENTIFIER:
       infobar_ = ProtectedMediaIdentifierInfoBarDelegateAndroid::Create(
-          GetInfoBarService(id_), requesting_frame_, profile_, callback);
+          GetInfoBarService(id_), requesting_frame_, user_gesture_, profile_,
+          callback);
       break;
     default:
       NOTREACHED();
@@ -165,6 +171,7 @@ void PermissionQueueController::CreateInfoBarRequest(
     const PermissionRequestID& id,
     const GURL& requesting_frame,
     const GURL& embedder,
+    bool user_gesture,
     const PermissionDecidedCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -172,8 +179,9 @@ void PermissionQueueController::CreateInfoBarRequest(
       embedder.SchemeIs(content::kChromeUIScheme))
     return;
 
-  pending_infobar_requests_.push_back(PendingInfobarRequest(
-      permission_type_, id, requesting_frame, embedder, profile_, callback));
+  pending_infobar_requests_.push_back(
+      PendingInfobarRequest(permission_type_, id, requesting_frame, embedder,
+                            user_gesture, profile_, callback));
   if (!AlreadyShowingInfoBarForTab(id))
     ShowQueuedInfoBarForTab(id);
 }
@@ -196,27 +204,31 @@ void PermissionQueueController::CancelInfoBarRequest(
   }
 }
 
-void PermissionQueueController::OnPermissionSet(
-    const PermissionRequestID& id,
-    const GURL& requesting_frame,
-    const GURL& embedder,
-    bool update_content_setting,
-    bool allowed) {
+void PermissionQueueController::OnPermissionSet(const PermissionRequestID& id,
+                                                const GURL& requesting_frame,
+                                                const GURL& embedder,
+                                                bool user_gesture,
+                                                bool update_content_setting,
+                                                bool allowed) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // TODO(miguelg): move the permission persistence to
   // PermissionContextBase once all the types are moved there.
+  PermissionRequestGestureType gesture_type =
+      user_gesture ? PermissionRequestGestureType::GESTURE
+                   : PermissionRequestGestureType::NO_GESTURE;
   if (update_content_setting) {
     UpdateContentSetting(requesting_frame, embedder, allowed);
-    if (allowed)
-      PermissionUmaUtil::PermissionGranted(permission_type_, requesting_frame,
-                                           profile_);
-    else
-      PermissionUmaUtil::PermissionDenied(permission_type_, requesting_frame,
-                                          profile_);
+    if (allowed) {
+      PermissionUmaUtil::PermissionGranted(permission_type_, gesture_type,
+                                           requesting_frame, profile_);
+    } else {
+      PermissionUmaUtil::PermissionDenied(permission_type_, gesture_type,
+                                          requesting_frame, profile_);
+    }
   } else {
-    PermissionUmaUtil::PermissionDismissed(permission_type_, requesting_frame,
-                                           profile_);
+    PermissionUmaUtil::PermissionDismissed(permission_type_, gesture_type,
+                                           requesting_frame, profile_);
   }
 
   // Cancel this request first, then notify listeners.  TODO(pkasting): Why

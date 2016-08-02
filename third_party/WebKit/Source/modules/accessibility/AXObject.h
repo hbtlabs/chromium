@@ -493,33 +493,48 @@ public:
         // The number of characters and child objects in the anchor object
         // before the range starts.
         int anchorOffset;
+        // When the same character offset could correspond to two possible
+        // cursor positions, upstream means it's on the previous line rather
+        // than the next line.
+        TextAffinity anchorAffinity;
+
         // The deepest descendant in which the range ends.
         // (nullptr means the current object.)
         Persistent<AXObject> focusObject;
         // The number of characters and child objects in the focus object
         // before the range ends.
         int focusOffset;
+        // When the same character offset could correspond to two possible
+        // cursor positions, upstream means it's on the previous line rather
+        // than the next line.
+        TextAffinity focusAffinity;
 
         AXRange()
             : anchorObject(nullptr)
             , anchorOffset(-1)
+            , anchorAffinity(TextAffinity::Upstream)
             , focusObject(nullptr)
             , focusOffset(-1)
+            , focusAffinity(TextAffinity::Downstream)
         { }
 
         AXRange(int startOffset, int endOffset)
             : anchorObject(nullptr)
             , anchorOffset(startOffset)
+            , anchorAffinity(TextAffinity::Upstream)
             , focusObject(nullptr)
             , focusOffset(endOffset)
+            , focusAffinity(TextAffinity::Downstream)
         { }
 
-        AXRange(AXObject* anchorObject, int anchorOffset,
-            AXObject* focusObject, int focusOffset)
+        AXRange(AXObject* anchorObject, int anchorOffset, TextAffinity anchorAffinity,
+            AXObject* focusObject, int focusOffset, TextAffinity focusAffinity)
             : anchorObject(anchorObject)
             , anchorOffset(anchorOffset)
+            , anchorAffinity(anchorAffinity)
             , focusObject(focusObject)
             , focusOffset(focusOffset)
+            , focusAffinity(focusAffinity)
         { }
 
         bool isValid() const
@@ -823,7 +838,11 @@ public:
     // Location and click point in frame-relative coordinates. DEPRECATED, to be
     // replaced by getRelativeBounds.
     virtual LayoutRect elementRect() const { return m_explicitElementRect; }
-    void setElementRect(LayoutRect r) { m_explicitElementRect = r; }
+    void setElementRect(LayoutRect r, AXObject* container)
+    {
+        m_explicitElementRect = r;
+        m_explicitContainerID = container->axObjectID();
+    }
     virtual void markCachedElementRectDirty() const;
     virtual IntPoint clickPoint();
 
@@ -839,7 +858,7 @@ public:
     // not null, walk up to its container and offset by the container's offset from
     // origin, the container's scroll position if any, and apply the container's transform.
     // Do this until you reach the root of the tree.
-    virtual void getRelativeBounds(AXObject** container, FloatRect& boundsInContainer, SkMatrix44& containerTransform) const;
+    virtual void getRelativeBounds(AXObject** outContainer, FloatRect& outBoundsInContainer, SkMatrix44& outContainerTransform) const;
 
     // Hit testing.
     // Called on the root AX object to return the deepest available element.
@@ -950,6 +969,7 @@ protected:
     AccessibilityRole m_role;
     AXObjectInclusion m_lastKnownIsIgnoredValue;
     LayoutRect m_explicitElementRect;
+    AXID m_explicitContainerID;
 
     // Used only inside textAlternative():
     static String collapseWhitespace(const String&);

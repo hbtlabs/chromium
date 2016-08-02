@@ -34,7 +34,6 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_remover_factory.h"
 #include "chrome/browser/character_encoding.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
@@ -72,7 +71,6 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
-#include "chrome/browser/search_engines/search_provider_install_state_impl.h"
 #include "chrome/browser/speech/chrome_speech_recognition_manager_delegate.h"
 #include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/speech/tts_message_filter.h"
@@ -133,6 +131,7 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/spellcheck/common/spellcheck_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_host_impl.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/content/browser/subresource_filter_navigation_throttle.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/url_formatter/url_fixer.h"
@@ -229,7 +228,7 @@
 #endif
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
-#include "chrome/browser/android/mojo/chrome_service_registrar_android.h"
+#include "chrome/browser/android/mojo/chrome_interface_registrar_android.h"
 #include "chrome/browser/android/ntp/new_tab_page_url_handler.h"
 #include "chrome/browser/android/service_tab_launcher.h"
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
@@ -966,10 +965,6 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
 #if defined(ENABLE_PRINTING)
   host->AddFilter(new printing::PrintingMessageFilter(id, profile));
 #endif
-  host->GetInterfaceRegistry()->AddInterface(
-      base::Bind(&SearchProviderInstallStateImpl::Create, id, profile),
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::UI));
 #if defined(ENABLE_SPELLCHECK)
   host->AddFilter(new SpellCheckMessageFilter(id));
 #endif
@@ -1384,6 +1379,7 @@ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
     "DisallowFetchForDocWrittenScriptsInMainFrame",
 
     // Keys: parseHTMLOnMainThreadSyncTokenize
+    //       parseHTMLOnMainThreadCoalesceChunks
     "ParseHTMLOnMainThread",
   };
 
@@ -2829,7 +2825,7 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoInterfaces(
                  render_frame_host));
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  ChromeServiceRegistrarAndroid::RegisterRenderFrameMojoInterfaces(
+  ChromeInterfaceRegistrarAndroid::ExposeInterfacesToFrame(
       registry, render_frame_host);
 #endif
 }
