@@ -1376,7 +1376,7 @@ ArcBluetoothBridge::GetDeviceProperties(mojom::BluetoothPropertyType type,
        type == mojom::BluetoothPropertyType::BDNAME) &&
       device->GetName()) {
     mojom::BluetoothPropertyPtr btp = mojom::BluetoothProperty::New();
-    btp->set_bdname(mojo::String::From(base::UTF16ToUTF8(device->GetName())));
+    btp->set_bdname(mojo::String::From(device->GetName().value()));
     properties.push_back(std::move(btp));
   }
   if (type == mojom::BluetoothPropertyType::ALL ||
