@@ -463,7 +463,7 @@ scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetEmptyNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
   std::unique_ptr<NiceMockBluetoothDevice> device(
-      GetHeartRateDevice(adapter.get(), /* device_name */ std::string("")));
+      GetHeartRateDevice(adapter.get(), /* device_name */ ""));
 
   // TODO(ortuno): Implement the rest of the service's characteristics
   // See: http://crbug.com/529975
@@ -480,11 +480,10 @@ LayoutTestBluetoothAdapterProvider::GetEmptyNameHeartRateAdapter() {
 scoped_refptr<NiceMockBluetoothAdapter>
 LayoutTestBluetoothAdapterProvider::GetNoNameHeartRateAdapter() {
   scoped_refptr<NiceMockBluetoothAdapter> adapter(GetEmptyAdapter());
-  std::unique_ptr<NiceMockBluetoothDevice> device(GetHeartRateDevice(
-      adapter.get(),
-      /* device_name set to Null. base::nullopt doesn't work due to multiple
-         possible type conversions. */
-      base::Optional<std::string>()));
+  std::unique_ptr<NiceMockBluetoothDevice> device(
+      GetHeartRateDevice(adapter.get(),
+                         /* device_name */
+                         nullptr));
 
   // TODO(ortuno): Implement the rest of the service's characteristics
   // See: http://crbug.com/529975
@@ -751,7 +750,7 @@ LayoutTestBluetoothAdapterProvider::GetDiscoverySession() {
 std::unique_ptr<NiceMockBluetoothDevice>
 LayoutTestBluetoothAdapterProvider::GetBaseDevice(
     MockBluetoothAdapter* adapter,
-    const base::Optional<std::string>& device_name,
+    const char* device_name,
     device::BluetoothDevice::UUIDList uuids,
     const std::string& address) {
   std::unique_ptr<NiceMockBluetoothDevice> device(new NiceMockBluetoothDevice(
@@ -807,7 +806,7 @@ LayoutTestBluetoothAdapterProvider::GetGlucoseDevice(
 std::unique_ptr<NiceMockBluetoothDevice>
 LayoutTestBluetoothAdapterProvider::GetConnectableDevice(
     device::MockBluetoothAdapter* adapter,
-    const base::Optional<std::string>& device_name,
+    const char* device_name,
     BluetoothDevice::UUIDList uuids,
     const std::string& address) {
   std::unique_ptr<NiceMockBluetoothDevice> device(
@@ -833,7 +832,7 @@ std::unique_ptr<NiceMockBluetoothDevice>
 LayoutTestBluetoothAdapterProvider::GetUnconnectableDevice(
     MockBluetoothAdapter* adapter,
     BluetoothDevice::ConnectErrorCode error_code,
-    const std::string& device_name) {
+    const char* device_name) {
   BluetoothDevice::UUIDList uuids;
   uuids.push_back(BluetoothUUID(errorUUID(error_code)));
 
@@ -850,7 +849,7 @@ LayoutTestBluetoothAdapterProvider::GetUnconnectableDevice(
 std::unique_ptr<NiceMockBluetoothDevice>
 LayoutTestBluetoothAdapterProvider::GetHeartRateDevice(
     MockBluetoothAdapter* adapter,
-    const base::Optional<std::string>& device_name) {
+    const char* device_name) {
   BluetoothDevice::UUIDList uuids;
   uuids.push_back(BluetoothUUID(kGenericAccessServiceUUID));
   uuids.push_back(BluetoothUUID(kHeartRateServiceUUID));
