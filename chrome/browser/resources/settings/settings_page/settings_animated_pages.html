@@ -10,10 +10,15 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animated-pages.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animation-runner-behavior.html">
+<link rel="import" href="/route.html">
 
 <dom-module id="settings-animated-pages">
   <template>
     <style>
+      :host {
+        display: block;
+      }
+
       neon-animated-pages ::content > .iron-selected {
         position: static;
       }

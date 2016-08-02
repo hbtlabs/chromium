@@ -36,6 +36,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLAreaElement.h"
+#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLabelElement.h"
@@ -647,7 +648,7 @@ void AXObjectCacheImpl::childrenChanged(AXObject* obj)
     obj->childrenChanged();
 }
 
-void AXObjectCacheImpl::notificationPostTimerFired(Timer<AXObjectCacheImpl>*)
+void AXObjectCacheImpl::notificationPostTimerFired(TimerBase*)
 {
     m_notificationPostTimer.stop();
 
@@ -1265,13 +1266,17 @@ void AXObjectCacheImpl::onTouchAccessibilityHover(const IntPoint& location)
     }
 }
 
-void AXObjectCacheImpl::setCanvasObjectBounds(Element* element, const LayoutRect& rect)
+void AXObjectCacheImpl::setCanvasObjectBounds(HTMLCanvasElement* canvas, Element* element, const LayoutRect& rect)
 {
     AXObject* obj = getOrCreate(element);
     if (!obj)
         return;
 
-    obj->setElementRect(rect);
+    AXObject* axCanvas = getOrCreate(canvas);
+    if (!axCanvas)
+        return;
+
+    obj->setElementRect(rect, axCanvas);
 }
 
 DEFINE_TRACE(AXObjectCacheImpl)

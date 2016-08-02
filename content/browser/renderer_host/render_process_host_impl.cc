@@ -188,7 +188,7 @@
 #if defined(OS_ANDROID)
 #include "content/browser/android/child_process_launcher_android.h"
 #include "content/browser/media/android/browser_demuxer_android.h"
-#include "content/browser/mojo/service_registrar_android.h"
+#include "content/browser/mojo/interface_registrar_android.h"
 #include "content/browser/screen_orientation/screen_orientation_message_filter_android.h"
 #include "ipc/ipc_sync_channel.h"
 #include "media/audio/android/audio_manager_android.h"
@@ -228,9 +228,9 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
-#include "content/browser/media/webrtc/webrtc_internals.h"
 #include "content/browser/renderer_host/media/media_stream_track_metrics_host.h"
 #include "content/browser/renderer_host/p2p/socket_dispatcher_host.h"
+#include "content/browser/webrtc/webrtc_internals.h"
 #include "content/common/media/aec_dump_messages.h"
 #include "content/common/media/media_stream_messages.h"
 #endif
@@ -938,8 +938,8 @@ void RenderProcessHostImpl::CreateMessageFilters() {
       blob_storage_context.get()));
 
 #if defined(ENABLE_WEBRTC)
-  peer_connection_tracker_host_ =
-      new PeerConnectionTrackerHost(GetID(), &webrtc_eventlog_host_);
+  peer_connection_tracker_host_ = new PeerConnectionTrackerHost(
+      GetID(), webrtc_eventlog_host_.GetWeakPtr());
   AddFilter(peer_connection_tracker_host_.get());
   AddFilter(new MediaStreamDispatcherHost(
       GetID(), browser_context->GetResourceContext()->GetMediaDeviceIDSalt(),
@@ -1109,8 +1109,8 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   }
 
 #if defined(OS_ANDROID)
-  ServiceRegistrarAndroid::RegisterProcessHostServices(
-      mojo_child_connection_->service_registry_android());
+  InterfaceRegistrarAndroid::ExposeInterfacesToRenderer(
+      mojo_child_connection_->interface_registry_android());
 #endif
 
   GetContentClient()->browser()->ExposeInterfacesToRenderer(
@@ -1485,6 +1485,8 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kMaxUntiledLayerHeight,
     switches::kMemoryMetrics,
     switches::kMojoLocalStorage,
+    switches::kMSEAudioBufferSizeLimit,
+    switches::kMSEVideoBufferSizeLimit,
     switches::kNoReferrers,
     switches::kNoSandbox,
     switches::kOverridePluginPowerSaverForTesting,
@@ -1510,6 +1512,7 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     // This flag needs to be propagated to the renderer process for
     // --in-process-webgl.
     switches::kUseGL,
+    switches::kUseGpuInTests,
     switches::kUseMobileUserAgent,
     switches::kUseRemoteCompositing,
     switches::kV,

@@ -45,6 +45,9 @@
 #include "platform/text/Hyphenation.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextRunIterator.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebScheduler.h"
+#include "public/platform/WebThread.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -69,7 +72,8 @@ static SecureTextTimerMap* gSecureTextTimers = nullptr;
 class SecureTextTimer final : public TimerBase {
 public:
     SecureTextTimer(LayoutText* layoutText)
-        : m_layoutText(layoutText)
+        : TimerBase(Platform::current()->currentThread()->scheduler()->timerTaskRunner())
+        , m_layoutText(layoutText)
         , m_lastTypedCharacterOffset(-1)
     {
     }
@@ -402,7 +406,7 @@ static IntRect ellipsisRectForBox(InlineTextBox* box, unsigned startPos, unsigne
     return IntRect();
 }
 
-void LayoutText::absoluteQuads(Vector<FloatQuad>& quads, ClippingOption option) const
+void LayoutText::quads(Vector<FloatQuad>& quads, ClippingOption option, LocalOrAbsoluteOption localOrAbsolute) const
 {
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
         FloatRect boundaries(box->calculateBoundaries());
@@ -416,13 +420,16 @@ void LayoutText::absoluteQuads(Vector<FloatQuad>& quads, ClippingOption option) 
             else
                 boundaries.setHeight(ellipsisRect.maxY() - boundaries.y());
         }
-        quads.append(localToAbsoluteQuad(boundaries));
+        if (localOrAbsolute == AbsoluteQuads)
+            quads.append(localToAbsoluteQuad(boundaries));
+        else
+            quads.append(boundaries);
     }
 }
 
 void LayoutText::absoluteQuads(Vector<FloatQuad>& quads) const
 {
-    absoluteQuads(quads, NoClipping);
+    this->quads(quads, NoClipping, AbsoluteQuads);
 }
 
 void LayoutText::absoluteQuadsForRange(Vector<FloatQuad>& quads, unsigned start, unsigned end, bool useSelectionHeight)

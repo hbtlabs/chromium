@@ -5426,11 +5426,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_DISPLAY_LIST_2D_CANVAS_DESCRIPTION" desc="Description of the 'Enable display list 2D canvas' lab.">
         Enables the use of display lists to record 2D canvas commands. This allows 2D canvas rasterization to be performed on separate thread.
       </message>
-      <message name="IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_NAME" desc="Enable canvas 2D dynamic pipeline switching mode.">
+      <message name="IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_NAME" desc="Option that allows canvas 2D contexts to switch from one rendering mode to another on the fly.">
         Enable 2D canvas dynamic rendering mode switching.
       </message>
       <message name="IDS_FLAGS_ENABLE_2D_CANVAS_DYNAMIC_RENDERING_MODE_SWITCHING_DESCRIPTION" desc="Description of 'Enable canvas 2D dynamic pipeline switching mode'">
-        Enables dynamic graphics rendering pipeline switching in the 2D canvas to optimize performance based on the types of draw operations being invoked.
+        There are multiple implementations of the graphics rendering pipeline for the 2D canvas. These different implementations have different performance characteristics. Turning on this flag allows canvas 2D contexts to switch between these implementations on the fly based on how the canvas is used in order to increase performance. For example, going from an implementation that uses the GPU to one that doesn't.
       </message>
       <message name="IDS_FLAGS_EXPERIMENTAL_EXTENSION_APIS_NAME" desc="Name of the 'Experimental Extension APIs' lab.">
         Experimental Extension APIs
@@ -6007,11 +6007,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
         <message name="IDS_FLAGS_ASH_ENABLE_UNIFIED_DESKTOP_DESCRIPTION" desc="Description for the flag to enable unified desktop mode.">
           Enable unified desktop mode which allows a window to span multiple displays.
         </message>
-        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_NAME" desc="Name for the flag to enable the window cycle (alt-tab) UI.">
+        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_NAME" desc="Name for the flag to enable the window cycle (Alt+Tab) UI.">
           Enable window cycle UI.
         </message>
-        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_DESCRIPTION" desc="Description for the flag to enable the window cycle (alt-tab) UI.">
-          Enable window cycle UI (visual feedback for alt-tab).
+        <message name="IDS_FLAGS_ASH_ENABLE_WINDOW_CYCLE_UI_DESCRIPTION" desc="Description for the flag to enable the window cycle (Alt+Tab) UI.">
+          Enable window cycle UI (visual feedback for Alt+Tab).
         </message>
         <message name="IDS_FLAGS_BOOT_ANIMATION" desc="Name for the flag for wallpaper boot animation (except for OOBE).">
           Boot animation
@@ -6999,16 +6999,10 @@ Keep your key file in a safe place. You will need it to create new versions of y
         <message name="IDS_CONFLICTS_LEARN_MORE" desc="The Learn More button in the conflicting module bubble">
             Learn More
         </message>
-        <message name="IDS_CONFLICTS_NOT_NOW" desc="The Not Now button in the conflicting module bubble">
-            Not Now
-        </message>
         </if>
         <if expr="not use_titlecase">
         <message name="IDS_CONFLICTS_LEARN_MORE" desc="The Learn More button in the conflicting module bubble">
             Learn more
-        </message>
-        <message name="IDS_CONFLICTS_NOT_NOW" desc="The Not Now button in the conflicting module bubble">
-            Not now
         </message>
         </if>
       </if> <!-- is_win -->
@@ -8806,9 +8800,6 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_LESS_OPTIONS_LABEL" desc="Label of the toggle element to switch between showing more or less printing options in the Print Preview.">
           Fewer settings
-        </message>
-        <message name="IDS_PRINT_PREVIEW_NO_DESTS_PROMO_NOT_NOW_BUTTON_LABEL" desc="Label of button to cancel the Google Cloud Print promotion.">
-          Not now
         </message>
         <message name="IDS_PRINT_PREVIEW_COULD_NOT_PRINT" desc="Error message when printing fails in the print preview">
           Printing failed. Please check your printer and try again.
@@ -11428,15 +11419,20 @@ The following application will be launched if you accept this request:
       </if>
 
       <!-- General app failure messages -->
-      <message name="IDS_COULDNT_OPEN_PROFILE_ERROR" desc="Error displayed on startup when the profile can not be opened correctly due to problems reading or writing files in it">
+      <message name="IDS_COULDNT_OPEN_PROFILE_ERROR" desc="Error displayed on startup when the profile cannot be opened correctly due to problems reading or writing files in it.">
 Your profile could not be opened correctly.
 
 Some features may be unavailable.  Please check that the profile exists and you have permission to read and write its contents.
       </message>
-      <message name="IDS_REFUSE_TO_RUN_AS_ROOT" desc="Short error message displayed in an error dialog on startup if the user tries to run Chrome as root">
+      <message name="IDS_COULDNT_STARTUP_PROFILE_ERROR" desc="Error displayed when Chrome cannot start because profiles were not opened correctly.">
+Cannot start Chrome because your profile could not be opened correctly.
+
+Please check that the profile exists and you have permission to read and write its contents.
+      </message>
+      <message name="IDS_REFUSE_TO_RUN_AS_ROOT" desc="Short error message displayed in an error dialog on startup if the user tries to run Chrome as root.">
         <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> can not be run as root.
       </message>
-      <message name="IDS_REFUSE_TO_RUN_AS_ROOT_2" desc="Detailed message in the error dialog when the user tries to start Chrome as root">
+      <message name="IDS_REFUSE_TO_RUN_AS_ROOT_2" desc="Detailed message in the error dialog when the user tries to start Chrome as root.">
         Please start <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> as a normal user. To run as root, you must specify an alternate --user-data-dir for storage of profile information.
       </message>
       <if expr="is_win">
@@ -12699,34 +12695,6 @@ Some features may be unavailable.  Please check that the profile exists and you 
         Disallow for reauth
       </message>
 
-      <!-- Update Recommended dialog -->
-      <if expr="not chromeos">
-        <message name="IDS_UPDATE_RECOMMENDED" desc="The main text of the Update Recommended dialog.">
-          <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> is out of date because it hasn't been relaunched in a while. An update is available and will be applied as soon as you relaunch.
-        </message>
-        <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button label for relaunching and updating Chrome.">
-          Relaunch
-        </message>
-      </if>
-      <if expr="chromeos">
-        <message name="IDS_UPDATE_RECOMMENDED" desc="The main text of the Update Recommended dialog.">
-          <ph name="PRODUCT_NAME">$1<ex>Google Chrome OS</ex></ph> needs to be restarted to apply the update.
-        </message>
-        <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button label for restarting and updating Chrome OS.">
-          Restart
-        </message>
-      </if>
-      <if expr="not use_titlecase">
-        <message name="IDS_NOT_NOW" desc="The button label for delaying the relaunch and updating Chrome.">
-          Not now
-        </message>
-      </if>
-      <if expr="use_titlecase">
-        <message name="IDS_NOT_NOW" desc="In Tile Case: The button label for delaying the relaunch and updating Chrome.">
-          Not Now
-        </message>
-      </if>
-
       <!-- Extra Mac UI Strings -->
       <if expr="is_macosx">
         <message name="IDS_PLEASE_RELAUNCH_BROWSER" desc="Title of the alert when Chrome needs to be relaunched for a change/update to take effect.">
@@ -13306,6 +13274,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         </message>
         <message name="IDS_LOGIN_POD_LEGACY_SUPERVISED_USER_REMOVE_WARNING" desc="Text shown as a warning when attempting to remove legacy supervised user.">
           All files and local data associated with the supervised user will be permanently deleted once this supervised user is removed. Visited websites and settings for this supervised user may still be visible by the manager at <ph name="MANAGEMENT_URL">$1<ex>www.example.com</ex></ph>.
+        </message>
+        <message name="IDS_LOGIN_POD_NON_OWNER_USER_REMOVE_WARNING" desc="Text shown as a warning when attempting to remove non-owner user.">
+          All files and local data associated with this user will be permanently deleted once this user is removed. 
         </message>
         <if expr="not chromeos">
           <message name="IDS_USER_MANAGER_GO_GUEST_PROFILES_LOCKED_ERROR" desc="Error message displayed when trying to browser as guest while all profiles are locked.">
@@ -14961,6 +14932,9 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label that is used to inform the user that no Bluetooth devices were found in the chooser popup.">
+        No Bluetooth devices found.
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_ADAPTER_OFF" desc="The label that is used to inform the user that no Bluetooth devices were found because Bluetooth adapter is turned off.">
         Bluetooth turned off.

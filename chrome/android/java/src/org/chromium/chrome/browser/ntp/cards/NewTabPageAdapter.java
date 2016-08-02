@@ -17,13 +17,14 @@ import org.chromium.chrome.browser.ntp.NewTabPageLayout;
 import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.UiConfig;
-import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCategoryStatus;
+import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleListItem;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetHeaderListItem;
 import org.chromium.chrome.browser.ntp.snippets.SnippetHeaderViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.SnippetsObserver;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsSource;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsSource.SnippetsObserver;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     private NewTabPageRecyclerView mRecyclerView;
     private int mProviderStatus;
 
-    private SnippetsBridge mSnippetsBridge;
+    private SnippetsSource mSnippetsSource;
 
     private class ItemTouchCallbacks extends ItemTouchHelper.Callback {
         @Override
@@ -57,7 +58,6 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
             mRecyclerView.onItemDismissStarted(viewHolder.itemView);
 
             NewTabPageAdapter.this.dismissItem(viewHolder);
-            addStatusCardIfNecessary();
         }
 
         @Override
@@ -106,11 +106,11 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
      * @param manager the NewTabPageManager to use to interact with the rest of the system.
      * @param newTabPageLayout the layout encapsulating all the above-the-fold elements
      *                         (logo, search box, most visited tiles)
-     * @param snippetsBridge the bridge to interact with the snippets service.
+     * @param snippetsSource the bridge to interact with the snippets service.
      * @param uiConfig the NTP UI configuration, to be passed to created views.
      */
     public NewTabPageAdapter(NewTabPageManager manager, NewTabPageLayout newTabPageLayout,
-            SnippetsBridge snippetsBridge, UiConfig uiConfig) {
+            SnippetsSource snippetsSource, UiConfig uiConfig) {
         mNewTabPageManager = manager;
         mNewTabPageLayout = newTabPageLayout;
         mAboveTheFold = new AboveTheFoldListItem();
@@ -118,13 +118,13 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         mBottomSpacer = new SpacingListItem();
         mItemTouchCallbacks = new ItemTouchCallbacks();
         mItems = new ArrayList<>();
-        mProviderStatus = ContentSuggestionsCategoryStatus.INITIALIZING;
-        mSnippetsBridge = snippetsBridge;
+        mProviderStatus = CategoryStatus.INITIALIZING;
+        mSnippetsSource = snippetsSource;
         mUiConfig = uiConfig;
-        mStatusCard = StatusListItem.create(snippetsBridge.getCategoryStatus(), this, manager);
+        mStatusCard = StatusListItem.create(snippetsSource.getCategoryStatus(), this);
 
         loadSnippets(new ArrayList<SnippetArticleListItem>());
-        mSnippetsBridge.setObserver(this);
+        snippetsSource.setObserver(this);
     }
 
     /** Returns callbacks to configure the interactions with the RecyclerView's items. */
@@ -154,11 +154,10 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     @Override
     public void onCategoryStatusChanged(int categoryStatus) {
         // Observers should not be registered for that state
-        assert categoryStatus
-                != ContentSuggestionsCategoryStatus.ALL_SUGGESTIONS_EXPLICITLY_DISABLED;
+        assert categoryStatus != CategoryStatus.ALL_SUGGESTIONS_EXPLICITLY_DISABLED;
 
         mProviderStatus = categoryStatus;
-        mStatusCard = StatusListItem.create(mProviderStatus, this, mNewTabPageManager);
+        mStatusCard = StatusListItem.create(mProviderStatus, this);
 
         // We had suggestions but we just got notified about the provider being enabled. Nothing to
         // do then.
@@ -197,7 +196,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
         if (viewType == NewTabPageListItem.VIEW_TYPE_SNIPPET) {
             return new SnippetArticleViewHolder(
-                    mRecyclerView, mNewTabPageManager, mSnippetsBridge, mUiConfig);
+                    mRecyclerView, mNewTabPageManager, mSnippetsSource, mUiConfig);
         }
 
         if (viewType == NewTabPageListItem.VIEW_TYPE_SPACING) {
@@ -219,6 +218,10 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     @Override
     public int getItemCount() {
         return mItems.size();
+    }
+
+    public int getAboveTheFoldPosition() {
+        return mItems.indexOf(mAboveTheFold);
     }
 
     public int getHeaderPosition() {
@@ -286,13 +289,13 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         mRecyclerView = (NewTabPageRecyclerView) recyclerView;
     }
 
-    private void dismissItem(ViewHolder itemViewHolder) {
+    public void dismissItem(ViewHolder itemViewHolder) {
         assert itemViewHolder.getItemViewType() == NewTabPageListItem.VIEW_TYPE_SNIPPET;
 
         int position = itemViewHolder.getAdapterPosition();
         SnippetArticleListItem dismissedSnippet = (SnippetArticleListItem) mItems.get(position);
 
-        mSnippetsBridge.getSnippedVisited(dismissedSnippet, new Callback<Boolean>() {
+        mSnippetsSource.getSnippedVisited(dismissedSnippet, new Callback<Boolean>() {
             @Override
             public void onResult(Boolean result) {
                 NewTabPageUma.recordSnippetAction(result
@@ -301,9 +304,11 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
             }
         });
 
-        mSnippetsBridge.discardSnippet(dismissedSnippet);
+        mSnippetsSource.discardSnippet(dismissedSnippet);
         mItems.remove(position);
         notifyItemRemoved(position);
+
+        addStatusCardIfNecessary();
     }
 
     private void addStatusCardIfNecessary() {

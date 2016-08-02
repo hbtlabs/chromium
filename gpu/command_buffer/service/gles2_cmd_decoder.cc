@@ -1007,6 +1007,18 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
       GLsizei width,
       GLsizei height);
 
+  // Wrapper for CopyTexSubImage3D.
+  void DoCopyTexSubImage3D(
+      GLenum target,
+      GLint level,
+      GLint xoffset,
+      GLint yoffset,
+      GLint zoffset,
+      GLint x,
+      GLint y,
+      GLsizei width,
+      GLsizei height);
+
   void DoCopyTextureCHROMIUM(GLuint source_id,
                              GLuint dest_id,
                              GLenum internal_format,
@@ -1341,8 +1353,11 @@ class GLES2DecoderImpl : public GLES2Decoder, public ErrorStateClient {
   static GLint GetColorEncodingFromInternalFormat(GLenum internalformat);
 
   // Check that the currently bound read framebuffer's color image
-  // isn't the target texture of the glCopyTex{Sub}Image2D.
-  bool FormsTextureCopyingFeedbackLoop(TextureRef* texture, GLint level);
+  // isn't the target texture of the glCopyTex{Sub}Image{2D|3D}.
+  bool FormsTextureCopyingFeedbackLoop(
+      TextureRef* texture,
+      GLint level,
+      GLint layer);
 
   // Check if a framebuffer meets our requirements.
   // Generates |gl_error| if the framebuffer is incomplete.
@@ -3060,8 +3075,7 @@ bool GLES2DecoderImpl::Initialize(
   transform_feedback_manager_.reset(new TransformFeedbackManager(
       group_->max_transform_feedback_separate_attribs(), needs_emulation));
 
-  if (feature_info_->context_type() == CONTEXT_TYPE_WEBGL2 ||
-      feature_info_->context_type() == CONTEXT_TYPE_OPENGLES3) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     if (!feature_info_->IsES3Capable()) {
       LOG(ERROR) << "Underlying driver does not support ES3.";
       Destroy(true);
@@ -3661,9 +3675,7 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
   resources.MaxCallStackDepth = 256;
   resources.MaxDualSourceDrawBuffers = group_->max_dual_source_draw_buffers();
 
-  ContextType context_type = feature_info_->context_type();
-  if (context_type != CONTEXT_TYPE_WEBGL1 &&
-      context_type != CONTEXT_TYPE_OPENGLES2) {
+  if(!feature_info_->IsWebGL1OrES2Context()) {
     resources.MaxVertexOutputVectors =
         group_->max_vertex_output_components() / 4;
     resources.MaxFragmentInputVectors =
@@ -3680,7 +3692,7 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
       PrecisionMeetsSpecForHighpFloat(range[0], range[1], precision);
 
   ShShaderSpec shader_spec;
-  switch (context_type) {
+  switch (feature_info_->context_type()) {
     case CONTEXT_TYPE_WEBGL1:
       shader_spec = SH_WEBGL_SPEC;
       resources.OES_standard_derivatives = derivatives_explicitly_enabled_;
@@ -4275,17 +4287,17 @@ GLint GLES2DecoderImpl::GetColorEncodingFromInternalFormat(
 }
 
 bool GLES2DecoderImpl::FormsTextureCopyingFeedbackLoop(
-    TextureRef* texture, GLint level) {
+    TextureRef* texture, GLint level, GLint layer) {
   Framebuffer* framebuffer = features().chromium_framebuffer_multisample ?
       framebuffer_state_.bound_read_framebuffer.get() :
       framebuffer_state_.bound_draw_framebuffer.get();
   if (!framebuffer)
     return false;
-  const Framebuffer::Attachment* attachment = framebuffer->GetAttachment(
-      GL_COLOR_ATTACHMENT0);
+  const Framebuffer::Attachment* attachment =
+      framebuffer->GetReadBufferAttachment();
   if (!attachment)
     return false;
-  return attachment->FormsFeedbackLoop(texture, level);
+  return attachment->FormsFeedbackLoop(texture, level, layer);
 }
 
 gfx::Size GLES2DecoderImpl::GetBoundReadFrameBufferSize() {
@@ -6015,9 +6027,7 @@ bool GLES2DecoderImpl::GetHelper(
                 GetBoundReadFrameBufferTextureType());
           }
         }
-        if (*params == GL_HALF_FLOAT &&
-            (feature_info_->context_type() == CONTEXT_TYPE_WEBGL1 ||
-             feature_info_->context_type() == CONTEXT_TYPE_OPENGLES2)) {
+        if (*params == GL_HALF_FLOAT && feature_info_->IsWebGL1OrES2Context()) {
           *params = GL_HALF_FLOAT_OES;
         }
         if (*params == GL_SRGB_ALPHA_EXT) {
@@ -7190,7 +7200,17 @@ void GLES2DecoderImpl::ClearUnclearedAttachments(
       glBindFramebufferEXT(GL_DRAW_FRAMEBUFFER, framebuffer->service_id());
     }
     state_.SetDeviceCapabilityState(GL_SCISSOR_TEST, false);
-    glClear(clear_bits);
+    if (workarounds().gl_clear_broken) {
+      ScopedGLErrorSuppressor suppressor("GLES2DecoderImpl::ClearWorkaround",
+                                         GetErrorState());
+      clear_framebuffer_blit_->ClearFramebuffer(
+          this, GetBoundReadFrameBufferSize(), clear_bits,
+          state_.color_clear_red, state_.color_clear_green,
+          state_.color_clear_blue, state_.color_clear_alpha, state_.depth_clear,
+          state_.stencil_clear);
+    } else {
+      glClear(clear_bits);
+    }
   }
 
   if (cleared_int_renderbuffers || clear_bits) {
@@ -8126,13 +8146,8 @@ bool GLES2DecoderImpl::CheckDrawingFeedbackLoops() {
 }
 
 bool GLES2DecoderImpl::SupportsDrawBuffers() const {
-  switch (feature_info_->context_type()) {
-    case CONTEXT_TYPE_OPENGLES2:
-    case CONTEXT_TYPE_WEBGL1:
-      return feature_info_->feature_flags().ext_draw_buffers;
-    default:
-      return true;
-  }
+  return feature_info_->IsWebGL1OrES2Context() ?
+      feature_info_->feature_flags().ext_draw_buffers : true;
 }
 
 bool GLES2DecoderImpl::ValidateAndAdjustDrawBuffers(const char* func_name) {
@@ -8157,13 +8172,9 @@ bool GLES2DecoderImpl::ValidateAndAdjustDrawBuffers(const char* func_name) {
 }
 
 bool GLES2DecoderImpl::ValidateUniformBlockBackings(const char* func_name) {
-  switch (feature_info_->context_type()) {
-    case CONTEXT_TYPE_OPENGLES2:
-    case CONTEXT_TYPE_WEBGL1:
-      // Uniform blocks do not exist in ES2 contexts.
-      return true;
-    default:
-      break;
+  if (feature_info_->IsWebGL1OrES2Context()) {
+    // Uniform blocks do not exist in ES2 contexts.
+    return true;
   }
   DCHECK(state_.current_program.get());
   for (auto info : state_.current_program->uniform_block_size_info()) {
@@ -13000,7 +13011,7 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
     return;
   }
 
-  if (FormsTextureCopyingFeedbackLoop(texture_ref, level)) {
+  if (FormsTextureCopyingFeedbackLoop(texture_ref, level, 0)) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_OPERATION,
         func_name, "source and destination textures are the same");
@@ -13019,7 +13030,7 @@ void GLES2DecoderImpl::DoCopyTexImage2D(
       CopyTexImageResourceManager::CopyTexImageRequiresBlit(feature_info_.get(),
                                                             format);
   if (requires_luma_blit &&
-      !InitializeCopyTexImageBlitter("glCopyTexSubImage2D")) {
+      !InitializeCopyTexImageBlitter(func_name)) {
     return;
   }
 
@@ -13174,7 +13185,7 @@ void GLES2DecoderImpl::DoCopyTexSubImage2D(
     return;
   }
 
-  if (FormsTextureCopyingFeedbackLoop(texture_ref, level)) {
+  if (FormsTextureCopyingFeedbackLoop(texture_ref, level, 0)) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_OPERATION,
         func_name, "source and destination textures are the same");
@@ -13234,6 +13245,67 @@ void GLES2DecoderImpl::DoCopyTexSubImage2D(
                           copyHeight);
     }
   }
+
+  // This may be a slow command.  Exit command processing to allow for
+  // context preemption and GPU watchdog checks.
+  ExitCommandProcessingEarly();
+}
+
+void GLES2DecoderImpl::DoCopyTexSubImage3D(
+    GLenum target,
+    GLint level,
+    GLint xoffset,
+    GLint yoffset,
+    GLint zoffset,
+    GLint x,
+    GLint y,
+    GLsizei width,
+    GLsizei height) {
+  const char* func_name = "glCopyTexSubImage3D";
+  DCHECK(!ShouldDeferReads());
+  TextureRef* texture_ref = texture_manager()->GetTextureInfoForTarget(
+      &state_, target);
+  if (!texture_ref) {
+    LOCAL_SET_GL_ERROR(
+        GL_INVALID_OPERATION, func_name, "unknown texture for target");
+    return;
+  }
+  Texture* texture = texture_ref->texture();
+  GLenum type = 0;
+  GLenum internal_format = 0;
+  if (!texture->GetLevelType(target, level, &type, &internal_format) ||
+      !texture->ValidForTexture(
+          target, level, xoffset, yoffset, zoffset, width, height, 1)) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, func_name, "bad dimensions.");
+    return;
+  }
+
+  if (!CheckBoundReadFramebufferValid(func_name,
+                                      GL_INVALID_FRAMEBUFFER_OPERATION)) {
+    return;
+  }
+
+  GLenum read_format = GetBoundReadFrameBufferInternalFormat();
+  GLenum read_type = GetBoundReadFrameBufferTextureType();
+  if (!ValidateCopyTexFormat(func_name, internal_format,
+                             read_format, read_type)) {
+    return;
+  }
+
+  if (FormsTextureCopyingFeedbackLoop(texture_ref, level, zoffset)) {
+    LOCAL_SET_GL_ERROR(
+        GL_INVALID_OPERATION,
+        func_name, "source and destination textures are the same");
+    return;
+  }
+
+  // TODO(yunchao): Follow-up CLs are necessary. For instance:
+  // 1. emulation of unsized formats in core profile
+  // 2. clear the 3d textures if it is uncleared.
+  // 3. out-of-bounds reading, etc.
+
+  glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width,
+                      height);
 
   // This may be a slow command.  Exit command processing to allow for
   // context preemption and GPU watchdog checks.

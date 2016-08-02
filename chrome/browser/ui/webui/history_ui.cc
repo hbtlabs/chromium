@@ -73,12 +73,16 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIHistoryFrameHost);
   source->AddBoolean("isUserSignedIn", is_authenticated);
+#if !defined(OS_ANDROID)
   source->AddLocalizedString("collapseSessionMenuItemText",
       IDS_HISTORY_OTHER_SESSIONS_COLLAPSE_SESSION);
   source->AddLocalizedString("expandSessionMenuItemText",
       IDS_HISTORY_OTHER_SESSIONS_EXPAND_SESSION);
   source->AddLocalizedString("restoreSessionMenuItemText",
       IDS_HISTORY_OTHER_SESSIONS_OPEN_ALL);
+  source->AddLocalizedString("deleteSessionMenuItemText",
+      IDS_HISTORY_OTHER_SESSIONS_HIDE_FOR_NOW);
+#endif
   source->AddLocalizedString("xMore", IDS_HISTORY_OTHER_DEVICES_X_MORE);
   source->AddLocalizedString("loading", IDS_HISTORY_LOADING);
   source->AddLocalizedString("title", IDS_HISTORY_TITLE);
@@ -101,8 +105,14 @@ content::WebUIDataSource* CreateHistoryUIHTMLSource(Profile* profile) {
   source->AddLocalizedString("clearAllHistory",
                              IDS_HISTORY_OPEN_CLEAR_BROWSING_DATA_DIALOG);
 
-  source->AddString("deleteWarning",
-                    HistoryUI::GetDeleteWarningString(profile));
+  auto availability = IncognitoModePrefs::GetAvailability(profile->GetPrefs());
+  base::string16 delete_string = availability == IncognitoModePrefs::ENABLED
+             ? l10n_util::GetStringFUTF16(
+                   IDS_HISTORY_DELETE_PRIOR_VISITS_WARNING,
+                   base::UTF8ToUTF16(kIncognitoModeShortcut))
+             : l10n_util::GetStringUTF16(
+                   IDS_HISTORY_DELETE_PRIOR_VISITS_WARNING_NO_INCOGNITO);
+  source->AddString("deleteWarning", delete_string);
 
   source->AddLocalizedString("removeBookmark", IDS_HISTORY_REMOVE_BOOKMARK);
   source->AddLocalizedString("actionMenuDescription",
@@ -198,15 +208,4 @@ base::RefCountedMemory* HistoryUI::GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor) {
   return ResourceBundle::GetSharedInstance().
       LoadDataResourceBytesForScale(IDR_HISTORY_FAVICON, scale_factor);
-}
-
-// static
-base::string16 HistoryUI::GetDeleteWarningString(Profile* profile) {
-  auto availability = IncognitoModePrefs::GetAvailability(profile->GetPrefs());
-  return availability == IncognitoModePrefs::ENABLED
-             ? l10n_util::GetStringFUTF16(
-                   IDS_HISTORY_DELETE_PRIOR_VISITS_WARNING,
-                   base::UTF8ToUTF16(kIncognitoModeShortcut))
-             : l10n_util::GetStringUTF16(
-                   IDS_HISTORY_DELETE_PRIOR_VISITS_WARNING_NO_INCOGNITO);
 }

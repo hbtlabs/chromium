@@ -1278,6 +1278,13 @@ public:
         CSSValueAppearanceTextFieldForSearch = 1474,
         CSSValueAppearanceTextFieldForTextField = 1475,
         RTCPeerConnectionGetStats = 1476,
+        SVGSMILAnimationAppliedEffect = 1477,
+        PerformanceResourceTimingSizes = 1478,
+        EventSourceDocument = 1479,
+        EventSourceWorker = 1480,
+        SingleOriginInTimingAllowOrigin = 1481,
+        MultipleOriginsInTimingAllowOrigin = 1482,
+        StarInTimingAllowOrigin = 1483,
 
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.

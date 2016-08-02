@@ -27,7 +27,6 @@
 #include "content/browser/android/java/gin_java_bridge_dispatcher_host.h"
 #include "content/browser/android/load_url_params.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
-#include "content/browser/geolocation/geolocation_service_context.h"
 #include "content/browser/media/media_web_contents_observer.h"
 #include "content/browser/renderer_host/compositor_impl_android.h"
 #include "content/browser/renderer_host/input/web_input_event_builders_android.h"
@@ -52,6 +51,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/user_agent.h"
+#include "device/geolocation/geolocation_service_context.h"
 #include "jni/ContentViewCore_jni.h"
 #include "jni/DragEvent_jni.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -200,13 +200,6 @@ ContentViewCoreImpl* ContentViewCoreImpl::FromWebContents(
 ContentViewCore* ContentViewCore::FromWebContents(
     content::WebContents* web_contents) {
   return ContentViewCoreImpl::FromWebContents(web_contents);
-}
-
-// static
-ContentViewCore* ContentViewCore::GetNativeContentViewCore(JNIEnv* env,
-                                                           jobject obj) {
-  return reinterpret_cast<ContentViewCore*>(
-      Java_ContentViewCore_getNativeContentViewCore(env, obj));
 }
 
 ContentViewCoreImpl::ContentViewCoreImpl(
@@ -872,10 +865,6 @@ ContentViewCoreImpl::GetViewAndroidDelegate() const {
 
 ui::WindowAndroid* ContentViewCoreImpl::GetWindowAndroid() const {
   return view_.GetWindowAndroid();
-}
-
-cc::Layer* ContentViewCoreImpl::GetLayer() const {
-  return view_.GetLayer();
 }
 
 ui::ViewAndroid* ContentViewCoreImpl::GetViewAndroid() {

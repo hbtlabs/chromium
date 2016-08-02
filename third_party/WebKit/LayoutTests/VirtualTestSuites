@@ -12,11 +12,6 @@
   },
   {
     "prefix": "threaded",
-    "base": "fast/canvas-toBlob",
-    "args": ["--enable-threaded-compositing"]
-  },
-  {
-    "prefix": "threaded",
     "base": "compositing/visibility",
     "args": ["--enable-threaded-compositing"]
   },
@@ -91,6 +86,16 @@
              "--force-overlay-fullscreen-video", "--enable-overlay-scrollbars", "--enable-overscroll-notifications",
              "--enable-fixed-layout", "--enable-viewport", "--disable-canvas-aa",
              "--disable-composited-antialiasing"]
+  },
+  {
+    "prefix": "media-gpu-accelerated",
+    "base": "http/tests/media/media-source",
+    "args": ["--use-gpu-in-tests"]
+  },
+  {
+    "prefix": "media-gpu-accelerated",
+    "base": "media",
+    "args": ["--use-gpu-in-tests"]
   },
   {
     "prefix": "android",

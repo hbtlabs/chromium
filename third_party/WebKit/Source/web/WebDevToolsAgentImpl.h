@@ -46,7 +46,6 @@
 namespace blink {
 
 class GraphicsLayer;
-class InspectorLogAgent;
 class InspectedFrames;
 class InspectorOverlay;
 class InspectorResourceContainer;
@@ -119,15 +118,12 @@ private:
 
     // InspectorPageAgent::Client implementation.
     void pageLayoutInvalidated(bool resized) override;
-    void setPausedInDebuggerMessage(const String&) override;
+    void configureOverlay(bool suspended, const String& message) override;
     void waitForCreateWindow(LocalFrame*) override;
 
     // InspectorSession::Client implementation.
     void sendProtocolMessage(int sessionId, int callId, const String& response, const String& state) override;
     void resumeStartup() override;
-    void profilingStarted() override;
-    void profilingStopped() override;
-    void consoleCleared() override;
 
     // WebThread::TaskObserver implementation.
     void willProcessTask() override;
@@ -156,7 +152,6 @@ private:
     Member<InspectorNetworkAgent> m_networkAgent;
     Member<InspectorLayerTreeAgent> m_layerTreeAgent;
     Member<InspectorTracingAgent> m_tracingAgent;
-    Member<InspectorLogAgent> m_logAgent;
 
     Member<InspectorSession> m_session;
     bool m_includeViewAgents;

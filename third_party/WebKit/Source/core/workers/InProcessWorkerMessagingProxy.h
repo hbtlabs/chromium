@@ -67,7 +67,7 @@ public:
     // These methods come from worker context thread via
     // InProcessWorkerObjectProxy and are called on the parent context thread.
     void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>, std::unique_ptr<MessagePortChannelArray>);
-    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>);
+    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId);
     void reportConsoleMessage(MessageSource, MessageLevel, const String& message, std::unique_ptr<SourceLocation>);
     void postMessageToPageInspector(const String&);
     void confirmMessageFromWorkerObject(bool hasPendingActivity);
@@ -91,13 +91,12 @@ protected:
 
 private:
     void workerObjectDestroyedInternal();
-    void terminateInternally();
 
     // WorkerLoaderProxyProvider
     // These methods are called on different threads to schedule loading
     // requests and to send callbacks back to WorkerGlobalScope.
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    bool postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     // Returns true if this is called on the parent context thread.
     bool isParentContextThread() const;

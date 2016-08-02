@@ -127,7 +127,7 @@ private:
     void reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset);
     void evaluateInOverlay(const String& method, const String& argument);
     void evaluateInOverlay(const String& method, std::unique_ptr<protocol::Value> argument);
-    void onTimer(Timer<InspectorOverlay>*);
+    void onTimer(TimerBase*);
     void rebuildOverlayPage();
     void invalidate();
     void scheduleUpdate();
@@ -155,7 +155,7 @@ private:
     bool m_resizeTimerActive;
     bool m_omitTooltip;
     Timer<InspectorOverlay> m_timer;
-    int m_suspendCount;
+    bool m_suspended;
     bool m_inLayout;
     bool m_needsUpdate;
     V8InspectorSession* m_v8Session;

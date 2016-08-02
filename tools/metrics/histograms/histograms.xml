@@ -7161,14 +7161,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="CrosFirstRun.DialogShown">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>
     Records the number of times when first-run dialog was shown.
   </summary>
 </histogram>
 
 <histogram name="CrosFirstRun.FurthestStep">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>
     Index of furthest step that was reached during tutorial. Since order of
     steps could change eventially and new steps could apear we use index here
@@ -7177,23 +7177,23 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="CrosFirstRun.TimeSpent" units="ms">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>The total time that user spent on first-run tutorial.</summary>
 </histogram>
 
 <histogram name="CrosFirstRun.TimeSpentOnStep" units="ms">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>The time that user spent on some step of tutorial.</summary>
 </histogram>
 
 <histogram name="CrosFirstRun.TutorialCompletion"
     enum="CrosFirstRunTutorialCompletionType">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>Tracks the way how user left tutorial.</summary>
 </histogram>
 
 <histogram name="CrosFirstRun.TutorialLaunched">
-  <owner>dzhioev@chromium.org</owner>
+  <owner>alemate@chromium.org</owner>
   <summary>
     Records the number of times when first-run tutorial has been launched.
   </summary>
@@ -19048,7 +19048,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="InputMethod.VirtualKeyboard.GestureTypingEvent"
     enum="IMEGestureTypingEvent">
-  <owner>stevet@chromium.org</owner>
+  <owner>girard@chromium.org</owner>
   <summary>Text input events related to gesture typing.</summary>
 </histogram>
 
@@ -19087,7 +19087,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="InputMethod.VirtualKeyboard.TapCount">
-  <owner>stevet@chromium.org</owner>
+  <owner>girard@chromium.org</owner>
   <summary>
     The number of times the virtual keyboard was tapped while the virtual
     keyboard was alive. Recorded when the virtual keyboard is closed.
@@ -20148,7 +20148,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </histogram>
 
 <histogram name="Keyboard.KeystrokeDeltas" units="ms">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <obsolete>
+    Deprecated 07/2016 in crbug.com/631204 with KeyboardUmaEventFilter removal.
+  </obsolete>
+  <owner>girard@chromium.org</owner>
   <summary>
     The time between keystrokes in Aura text fields. The only keystrokes that
     are measured are ones that produce a printable character and are not over 5
@@ -20834,12 +20837,12 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Login.NewUserPriorityPrefsSyncResult"
     enum="NewUserPriorityPrefsSyncResult">
-  <owner>dzhioev@chromeos.org</owner>
+  <owner>alemate@chromeos.org</owner>
   <summary>Records whether a new user's priority prefs sync timed out.</summary>
 </histogram>
 
 <histogram name="Login.NewUserPriorityPrefsSyncTime" units="ms">
-  <owner>dzhioev@chromeos.org</owner>
+  <owner>alemate@chromeos.org</owner>
   <summary>
     Time spent waiting for priority preferences to sync after new user sign in.
     The operation will time out after 10s.
@@ -29062,6 +29065,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="Net.Predictor.MRUIndex">
   <owner>csharrison@chromium.org</owner>
+  <obsolete>
+    Dev data was collected which was good enough to make a decision on the size
+    of the predictor database.
+  </obsolete>
   <summary>
     The index into the predictor's MRU on navigation. This is the size the MRU
     had to be in order to effectively predict subresources for this navigation.
@@ -37746,6 +37753,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <histogram name="PageLoad.Events.InternalError" enum="InternalErrorLoadEvent">
   <owner>csharrison@chromium.org</owner>
   <owner>bmcquade@chromium.org</owner>
+  <obsolete>
+    Deprecated in favor of PageLoad.Internal.ErrorCode.
+  </obsolete>
   <summary>
     Counts of various internal error conditions in the page_load_metrics system.
   </summary>
@@ -37816,6 +37826,30 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   </summary>
 </histogram>
 
+<histogram name="PageLoad.Internal.ErrorCode" enum="InternalErrorLoadEvent">
+  <owner>csharrison@chromium.org</owner>
+  <owner>bmcquade@chromium.org</owner>
+  <summary>
+    Counts of various internal error conditions in the page_load_metrics system.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.Internal.PageLoadCompleted.AfterAppBackground"
+    enum="BooleanStartedCompleted">
+  <owner>bmcquade@chromium.org</owner>
+  <summary>
+    Whether a page load completed after the app entered the background. We log a
+    'Started' value for each PageLoadTracker that is active when the app enters
+    the background, and a 'Completed' value for each of those PageLoadTrackers
+    that successfully runs its destructor. This helps to understand how many
+    trackers are destroyed while the app is in the background before they are
+    able to run their destructor. This metric is only intended to help in
+    understanding how often app background leads to data loss, and will be
+    deprecated in a subsequent release. Please contact bmcquade@chromium.org
+    before using this metric.
+  </summary>
+</histogram>
+
 <histogram name="PageLoad.Internal.ProvisionalAbortChainSize.ForwardBack"
     units="length">
   <owner>csharrison@chromium.org</owner>
@@ -37861,6 +37895,14 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     other navigations with the same url (before redirects). It's logged when a
     provisional abort does not share a URL, or when a load finally commits. Note
     that we don't log chains of length 0.
+  </summary>
+</histogram>
+
+<histogram name="PageLoad.PaintTiming.ForegroundToFirstPaint" units="ms">
+  <owner>pkotwicz@chromium.org</owner>
+  <summary>
+    Measures the time from a background tab being switched to the foreground to
+    the time the first paint is performed, for main frame documents.
   </summary>
 </histogram>
 
@@ -38006,6 +38048,9 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 
 <histogram name="PageLoad.Timing2.ForegroundToFirstPaint" units="ms">
   <owner>pkotwicz@chromium.org</owner>
+  <obsolete>
+    deprecated in favor of PageLoad.PaintTiming.ForegroundToFirstPaint
+  </obsolete>
   <summary>
     Measures the time from a background tab being switched to the foreground to
     the time the first paint is performed, for main frame documents.
@@ -38866,7 +38911,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Tracks the pair of initial values and pair of final values for the legacy
     preference for controlling the Chrome Password Manager and the new
     preference for controlling Smart Lock on Android. A single sample is
-    recorded after sync has merged last snaphot and finished initialization for
+    recorded after sync has merged last snapshot and finished initialization for
     sync users, and on profile initialization for non-sync users.
   </summary>
 </histogram>
@@ -57190,7 +57235,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Histogram of the run failures for the different sync datatypes. These are
     failures that occur after startup while the datatype is syncing. Note: Due
     to an enumeration reordering, pre-M23 labels are inaccurate (see
-    sync/internal_api/public/base/model_type.h).
+    sync/base/model_type.h).
   </summary>
 </histogram>
 
@@ -57200,7 +57245,7 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
     Histogram of the startup failures for the different sync datatypes. These
     are failures due to missing top level sync nodes or model association Note:
     Due to an enumeration reordering, pre-M23 labels are inaccurate (see
-    sync/internal_api/public/base/model_type.h).
+    sync/base/model_type.h).
   </summary>
 </histogram>
 
@@ -67567,6 +67612,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="129" label="SWDH_SET_HOSTED_VERSION_PROCESS_MISMATCH"/>
   <int value="130" label="MSDH_INVALID_FRAME_ID"/>
   <int value="131" label="SDH_INVALID_PORT_RANGE"/>
+  <int value="132" label="SCO_INVALID_ARGUMENT"/>
+  <int value="133" label="RFH_INCONSISTENT_DEVTOOLS_MESSAGE"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions" type="int">
@@ -68271,6 +68318,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 <enum name="BooleanStale" type="int">
   <int value="0" label="Fresh"/>
   <int value="1" label="Stale"/>
+</enum>
+
+<enum name="BooleanStartedCompleted" type="int">
+  <int value="0" label="Started"/>
+  <int value="1" label="Completed"/>
 </enum>
 
 <enum name="BooleanStreamed" type="int">
@@ -73326,6 +73378,8 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="336"
       label="Configure the list of installed apps on the login screen"/>
   <int value="337" label="Enable Android Backup Service"/>
+  <int value="338"
+      label="Enable generated content suggestions on the New Tab page"/>
 </enum>
 
 <enum name="EnterprisePolicyInvalidations" type="int">
@@ -77407,6 +77461,13 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1474" label="CSSValueAppearanceTextFieldForSearch"/>
   <int value="1475" label="CSSValueAppearanceTextFieldForTextField"/>
   <int value="1476" label="RTCPeerConnectionGetStats"/>
+  <int value="1477" label="SVGSMILAnimationAppliedEffect"/>
+  <int value="1478" label="PerformanceResourceTimingSizes"/>
+  <int value="1479" label="EventSourceDocument"/>
+  <int value="1480" label="EventSourceWorker"/>
+  <int value="1481" label="SingleOriginInTimingAllowOrigin"/>
+  <int value="1482" label="MultipleOriginsInTimingAllowOrigin"/>
+  <int value="1483" label="StarInTimingAllowOrigin"/>
 </enum>
 
 <enum name="FetchRequestMode" type="int">
@@ -78410,12 +78471,17 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
 </enum>
 
 <enum name="Gamma" type="int">
-  <int value="0" label="kLinear_Gamma"/>
-  <int value="1" label="kSRGB_Gamma"/>
-  <int value="2" label="k2Dot2Curve_Gamma"/>
-  <int value="3" label="kNonStandard_Gamma"/>
-  <int value="4" label="kNull_Gamma"/>
-  <int value="5" label="kFail_Gamma"/>
+  <int value="0" label="GammaLinear"/>
+  <int value="1" label="GammaSRGB"/>
+  <int value="2" label="Gamma2Dot2"/>
+  <int value="3" label="GammaNonStandard"/>
+  <int value="4" label="GammaNull"/>
+  <int value="5" label="GammaFail"/>
+  <int value="6" label="GammaInvalid"/>
+  <int value="7" label="GammaExponent"/>
+  <int value="8" label="GammaTable"/>
+  <int value="9" label="GammaParametric"/>
+  <int value="10" label="GammaNamed"/>
 </enum>
 
 <enum name="GATTCharacteristicHash" type="int">
@@ -79715,8 +79781,11 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="1" label="Main frame without interstitial">
     Auth prompt displayed for the main frame, without a blank interstitial
   </int>
-  <int value="2" label="Subresource">
-    Auth prompt displayed for a subresource
+  <int value="2" label="Same origin subresource">
+    Auth prompt displayed for a subresource from the same origin
+  </int>
+  <int value="3" label="Cross origin subresource">
+    Auth prompt displayed for a subresource from a different origin
   </int>
 </enum>
 
@@ -80818,8 +80887,10 @@ http://cs/file:chrome/histograms.xml - but prefer this file for new entries.
   <int value="6"
       label="Multiple aborted provisional loads at navigation start"/>
   <int value="7"
-      label="User input received while not tracking a relevant committed load"/>
+      label="User input received while not tracking a relevant committed load
+             (deprecated)"/>
   <int value="8" label="Inter process TimeTicks skew"/>
+  <int value="9" label="No commit or failed provisional load received"/>
 </enum>
 
 <enum name="InterruptReason" type="int">

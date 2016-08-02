@@ -101,7 +101,6 @@ std::unique_ptr<net::test_server::HttpResponse> RedirectForPathHandler(
   return std::move(response);
 }
 
-const char kBlinkPreconnectFeature[] = "LinkPreconnect";
 const char kChromiumUrl[] = "http://chromium.org";
 const char kInvalidLongUrl[] =
     "http://"
@@ -512,8 +511,6 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
-    command_line->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, kBlinkPreconnectFeature);
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     "PreconnectMore");
   }
@@ -1362,6 +1359,9 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest,
   PrepareFrameSubresources(referring_url_);
   PrepareFrameSubresources(referring_url_);
   PrepareFrameSubresources(referring_url_);
+
+  // The onload event is required to persist prefs.
+  ui_test_utils::NavigateToURL(browser(), referring_url_);
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ShutdownStartupCyclePreresolve) {
@@ -1380,6 +1380,9 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PRE_ClearData) {
   // The target url will have a expected connection count of 2 after this call.
   InstallPredictorObserver(referring_url_, target_url_);
   LearnFromNavigation(referring_url_, target_url_);
+
+  // The onload event is required to persist prefs.
+  ui_test_utils::NavigateToURL(browser(), referring_url_);
 }
 
 // Ensure predictive data is cleared when the history is cleared.

@@ -15,12 +15,11 @@ Polymer({
 
     /**
      * The current active route.
-     * @type {!SettingsRoute}
+     * @type {!settings.Route}
      */
     currentRoute: {
       type: Object,
       notify: true,
-      observer: 'currentRouteChanged_',
     },
 
     /**
@@ -48,28 +47,8 @@ Polymer({
       this.fire('toggle-advanced-page', false);
     }.bind(this));
 
-    this.fire('toggle-advanced-page', this.currentRoute.page == 'advanced');
-  },
-
-  /**
-   * @param {!SettingsRoute} newRoute
-   * @private
-   */
-  currentRouteChanged_: function(newRoute) {
-    // Sync URL changes to the side nav menu.
-
-    if (newRoute.page == 'advanced') {
-      assert(!this.pageVisibility ||
-             this.pageVisibility.advancedSettings !== false);
-      this.$.advancedMenu.selected = this.currentRoute.section;
-      this.$.basicMenu.selected = null;
-    } else if (newRoute.page == 'basic') {
-      this.$.advancedMenu.selected = null;
-      this.$.basicMenu.selected = this.currentRoute.section;
-    } else {
-      this.$.advancedMenu.selected = null;
-      this.$.basicMenu.selected = null;
-    }
+    this.fire('toggle-advanced-page',
+              settings.Route.ADVANCED.contains(this.currentRoute));
   },
 
   /**
@@ -92,14 +71,10 @@ Polymer({
    */
   openPage_: function(event) {
     this.ripple_(/** @type {!Node} */(event.currentTarget));
-    var submenuRoute = event.currentTarget.parentNode.dataset.page;
-    if (submenuRoute) {
-      this.currentRoute = {
-        page: submenuRoute,
-        section: event.currentTarget.dataset.section,
-        subpage: [],
-      };
-    }
+
+    var route = settings.getRouteForPath(event.currentTarget.dataset.path);
+    assert(route, 'settings-menu has an an entry with an invalid path');
+    settings.navigateTo(route);
   },
 
   /**

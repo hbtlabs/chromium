@@ -25,6 +25,7 @@
 #include "chrome/browser/thumbnails/thumbnail_list_source.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/ntp_tiles/popular_sites.h"
+#include "components/safe_json/safe_json_parser.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
 #include "jni/MostVisitedSites_jni.h"
@@ -157,14 +158,17 @@ void MostVisitedSitesBridge::JavaObserver::OnPopularURLsAvailable(
 
 MostVisitedSitesBridge::MostVisitedSitesBridge(Profile* profile)
     : supervisor_(profile),
-      most_visited_(BrowserThread::GetBlockingPool(),
-                    profile->GetPrefs(),
-                    TemplateURLServiceFactory::GetForProfile(profile),
-                    g_browser_process->variations_service(),
-                    profile->GetRequestContext(),
-                    ChromePopularSites::GetDirectory(),
+      popular_sites_(BrowserThread::GetBlockingPool(),
+                     profile->GetPrefs(),
+                     TemplateURLServiceFactory::GetForProfile(profile),
+                     g_browser_process->variations_service(),
+                     profile->GetRequestContext(),
+                     ChromePopularSites::GetDirectory(),
+                     base::Bind(safe_json::SafeJsonParser::Parse)),
+      most_visited_(profile->GetPrefs(),
                     TopSitesFactory::GetForProfile(profile),
                     SuggestionsServiceFactory::GetForProfile(profile),
+                    &popular_sites_,
                     &supervisor_) {
   // Register the thumbnails debugging page.
   // TODO(sfiera): find thumbnails a home. They don't belong here.

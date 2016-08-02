@@ -27,6 +27,7 @@
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/paint_properties.h"
 #include "cc/output/filter_operations.h"
+#include "cc/trees/layer_tree.h"
 #include "cc/trees/mutator_host_client.h"
 #include "cc/trees/property_tree.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -387,8 +388,11 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // of |proto| is only read if |needs_push_properties_| is set.
   void FromLayerPropertiesProto(const proto::LayerProperties& proto);
 
+  // TODO(xingliu): Layer will hold LayerTree instead of LayerTreeHost.
+  // http://crbug.com/628683
   LayerTreeHost* layer_tree_host() { return layer_tree_host_; }
   const LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
+  LayerTree* GetLayerTree() const;
 
   virtual ScrollbarLayerInterface* ToScrollbarLayer();
 
@@ -470,6 +474,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   void SetLayerPropertyChanged();
   bool layer_property_changed() const { return layer_property_changed_; }
+
+  void SetMayContainVideo(bool yes);
 
   void DidBeginTracing();
 
@@ -691,6 +697,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // This pointer value is nil when a Layer is not in a tree and is
   // updated via SetLayerTreeHost() if a layer moves between trees.
   LayerTreeHost* layer_tree_host_;
+  LayerTree* layer_tree_;
 
   Inputs inputs_;
 
@@ -708,6 +715,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
   bool layer_property_changed_ : 1;
+  bool may_contain_video_ : 1;
   SkColor safe_opaque_background_color_;
   // draw_blend_mode may be different than blend_mode_,
   // when a RenderSurface re-parents the layer's blend_mode.

@@ -36,7 +36,7 @@ namespace page_load_metrics {
 
 namespace internal {
 
-const char kErrorEvents[] = "PageLoad.Events.InternalError";
+const char kErrorEvents[] = "PageLoad.Internal.ErrorCode";
 const char kAbortChainSizeReload[] =
     "PageLoad.Internal.ProvisionalAbortChainSize.Reload";
 const char kAbortChainSizeForwardBack[] =
@@ -53,6 +53,8 @@ const char kClientRedirectWithoutPaint[] =
     "PageLoad.Internal.ClientRedirect.NavigationWithoutPaint";
 const char kCommitToCompleteNoTimingIPCs[] =
     "PageLoad.Internal.CommitToComplete.NoTimingIPCs";
+const char kPageLoadCompletedAfterAppBackground[] =
+    "PageLoad.Internal.PageLoadCompleted.AfterAppBackground";
 
 }  // namespace internal
 
@@ -90,14 +92,6 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
 
   // Verify proper ordering between the various timings.
 
-  if (!EventsInOrder(timing.response_start, timing.dom_loading)) {
-    // We sometimes get a zero response_start with a non-zero DOM loading. See
-    // crbug.com/590212.
-    DLOG(ERROR) << "Invalid response_start " << timing.response_start
-                << " for dom_loading " << timing.dom_loading;
-    return false;
-  }
-
   if (!EventsInOrder(timing.response_start, timing.parse_start)) {
     // We sometimes get a zero response_start with a non-zero parse start. See
     // crbug.com/590212.
@@ -133,9 +127,9 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
     return false;
   }
 
-  if (!EventsInOrder(timing.dom_loading,
+  if (!EventsInOrder(timing.parse_stop,
                      timing.dom_content_loaded_event_start)) {
-    NOTREACHED() << "Invalid dom_loading " << timing.dom_loading
+    NOTREACHED() << "Invalid parse_stop " << timing.parse_stop
                  << " for dom_content_loaded_event_start "
                  << timing.dom_content_loaded_event_start;
     return false;
@@ -149,15 +143,17 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
     return false;
   }
 
-  if (!EventsInOrder(timing.dom_loading, timing.first_layout)) {
-    NOTREACHED() << "Invalid dom_loading " << timing.dom_loading
+  if (!EventsInOrder(timing.parse_start, timing.first_layout)) {
+    NOTREACHED() << "Invalid parse_start " << timing.parse_start
                  << " for first_layout " << timing.first_layout;
     return false;
   }
 
   if (!EventsInOrder(timing.first_layout, timing.first_paint)) {
-    NOTREACHED() << "Invalid first_layout " << timing.first_layout
-                 << " for first_paint " << timing.first_paint;
+    // This can happen when we process an XHTML document that doesn't contain
+    // well formed XML. See crbug.com/627607.
+    DLOG(ERROR) << "Invalid first_layout " << timing.first_layout
+                << " for first_paint " << timing.first_paint;
     return false;
   }
 
@@ -185,6 +181,11 @@ bool IsValidPageLoadTiming(const PageLoadTiming& timing) {
 
 void RecordInternalError(InternalErrorLoadEvent event) {
   UMA_HISTOGRAM_ENUMERATION(internal::kErrorEvents, event, ERR_LAST_ENTRY);
+}
+
+void RecordAppBackgroundPageLoadCompleted(bool completed_after_background) {
+  UMA_HISTOGRAM_BOOLEAN(internal::kPageLoadCompletedAfterAppBackground,
+                        completed_after_background);
 }
 
 UserAbortType AbortTypeForPageTransition(ui::PageTransition transition) {
@@ -247,6 +248,7 @@ PageLoadTracker::PageLoadTracker(
     int aborted_chain_size,
     int aborted_chain_size_same_url)
     : did_stop_tracking_(false),
+      app_entered_background_(false),
       navigation_start_(navigation_handle->NavigationStart()),
       url_(navigation_handle->GetURL()),
       abort_type_(ABORT_NONE),
@@ -263,29 +265,33 @@ PageLoadTracker::PageLoadTracker(
 }
 
 PageLoadTracker::~PageLoadTracker() {
+  if (app_entered_background_) {
+    RecordAppBackgroundPageLoadCompleted(true);
+  }
+
   if (did_stop_tracking_)
     return;
 
-  const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
-  DCHECK_NE(static_cast<bool>(info.time_to_commit),
-            static_cast<bool>(failed_provisional_load_info_));
-  if (info.time_to_commit && timing_.IsEmpty()) {
-    RecordInternalError(ERR_NO_IPCS_RECEIVED);
-    const base::TimeTicks commit_time =
-        navigation_start_ + info.time_to_commit.value();
-    PAGE_LOAD_HISTOGRAM(internal::kCommitToCompleteNoTimingIPCs,
-                        base::TimeTicks::Now() - commit_time);
-  }
-  // Recall that trackers that are given ABORT_UNKNOWN_NAVIGATION have their
-  // chain length added to the next navigation. Take care not to double count
-  // them. Also do not double count committed loads, which call this already.
-  if (commit_time_.is_null() && abort_type_ != ABORT_UNKNOWN_NAVIGATION)
-    LogAbortChainHistograms(nullptr);
+  if (commit_time_.is_null()) {
+    if (!failed_provisional_load_info_)
+      RecordInternalError(ERR_NO_COMMIT_OR_FAILED_PROVISIONAL_LOAD);
 
+    // Recall that trackers that are given ABORT_UNKNOWN_NAVIGATION have their
+    // chain length added to the next navigation. Take care not to double count
+    // them. Also do not double count committed loads, which call this already.
+    if (abort_type_ != ABORT_UNKNOWN_NAVIGATION)
+      LogAbortChainHistograms(nullptr);
+  } else if (timing_.IsEmpty()) {
+    RecordInternalError(ERR_NO_IPCS_RECEIVED);
+    PAGE_LOAD_HISTOGRAM(internal::kCommitToCompleteNoTimingIPCs,
+                        base::TimeTicks::Now() - commit_time_);
+  }
+
+  const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
   for (const auto& observer : observers_) {
     if (failed_provisional_load_info_) {
       observer->OnFailedProvisionalLoad(*failed_provisional_load_info_, info);
-    } else {
+    } else if (info.time_to_commit) {
       observer->OnComplete(timing_, info);
     }
   }
@@ -395,6 +401,13 @@ void PageLoadTracker::Redirect(content::NavigationHandle* navigation_handle) {
 void PageLoadTracker::OnInputEvent(const blink::WebInputEvent& event) {
   for (const auto& observer : observers_) {
     observer->OnUserInput(event);
+  }
+}
+
+void PageLoadTracker::FlushMetricsOnAppEnterBackground() {
+  if (!app_entered_background_) {
+    RecordAppBackgroundPageLoadCompleted(false);
+    app_entered_background_ = true;
   }
 }
 
@@ -805,6 +818,17 @@ void MetricsWebContentsObserver::OnInputEvent(
     committed_load_->OnInputEvent(event);
 }
 
+void MetricsWebContentsObserver::FlushMetricsOnAppEnterBackground() {
+  if (committed_load_)
+    committed_load_->FlushMetricsOnAppEnterBackground();
+  for (const auto& kv : provisional_loads_) {
+    kv.second->FlushMetricsOnAppEnterBackground();
+  }
+  for (const auto& tracker : aborted_provisional_loads_) {
+    tracker->FlushMetricsOnAppEnterBackground();
+  }
+}
+
 void MetricsWebContentsObserver::DidRedirectNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame())
@@ -908,22 +932,23 @@ void MetricsWebContentsObserver::OnTimingUpdated(
     content::RenderFrameHost* render_frame_host,
     const PageLoadTiming& timing,
     const PageLoadMetadata& metadata) {
+  // We may receive notifications from frames that have been navigated away
+  // from. We simply ignore them.
+  if (render_frame_host != web_contents()->GetMainFrame()) {
+    RecordInternalError(ERR_IPC_FROM_WRONG_FRAME);
+    return;
+  }
+
+  // While timings arriving for the wrong frame are expected, we do not expect
+  // any of the errors below. Thus, we track occurrences of all errors below,
+  // rather than returning early after encountering an error.
+
   bool error = false;
   if (!committed_load_) {
     RecordInternalError(ERR_IPC_WITH_NO_RELEVANT_LOAD);
     error = true;
   }
 
-  // We may receive notifications from frames that have been navigated away
-  // from. We simply ignore them.
-  if (render_frame_host != web_contents()->GetMainFrame()) {
-    RecordInternalError(ERR_IPC_FROM_WRONG_FRAME);
-    error = true;
-  }
-
-  // For urls like chrome://newtab, the renderer and browser disagree,
-  // so we have to double check that the renderer isn't sending data from a
-  // bad url like https://www.google.com/_/chrome/newtab.
   if (!web_contents()->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
     RecordInternalError(ERR_IPC_FROM_BAD_URL_SCHEME);
     error = true;

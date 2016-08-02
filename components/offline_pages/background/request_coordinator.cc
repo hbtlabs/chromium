@@ -56,12 +56,10 @@ bool RequestCoordinator::SavePageLater(
     const GURL& url, const ClientId& client_id, bool was_user_requested) {
   DVLOG(2) << "URL is " << url << " " << __func__;
 
-  // TODO(petewil): We need a robust scheme for allocating new IDs.  We may need
-  // GUIDS for the downloads home design.
+  // TODO(petewil): We need a robust scheme for allocating new IDs.
   static int64_t id = 0;
 
   // Build a SavePageRequest.
-  // TODO(petewil): Use something like base::Clock to help in testing.
   offline_pages::SavePageRequest request(
       id++, url, client_id, base::Time::Now(), was_user_requested);
 
@@ -76,8 +74,7 @@ void RequestCoordinator::AddRequestResultCallback(
     RequestQueue::AddRequestResult result,
     const SavePageRequest& request) {
 
-  // Inform the scheduler that we have an outstanding task.
-  // TODO(petewil): Determine trigger conditions from policy.
+  // Inform the scheduler that we have an outstanding task..
   scheduler_->Schedule(GetTriggerConditionsForUserRequest());
 }
 
@@ -121,8 +118,6 @@ bool RequestCoordinator::StartProcessing(
 
   is_canceled_ = false;
   scheduler_callback_ = callback;
-  // TODO(petewil): Check existing conditions (should be passed down from
-  // BackgroundTask)
 
   TryNextRequest();
 
@@ -214,7 +209,7 @@ void RequestCoordinator::OfflinerDoneCallback(const SavePageRequest& request,
   // Remove the request from the queue if it either succeeded or exceeded the
   // max number of retries.
   if (status == Offliner::RequestStatus::SAVED
-       || new_attempt_count > policy_->GetMaxRetries()) {
+       || new_attempt_count > policy_->GetMaxTries()) {
     queue_->RemoveRequest(request.request_id(),
                           base::Bind(&RequestCoordinator::UpdateRequestCallback,
                                      weak_ptr_factory_.GetWeakPtr()));

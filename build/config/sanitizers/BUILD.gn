@@ -42,6 +42,7 @@ group("deps_no_options") {
       ":default_sanitizer_ldflags",
     ]
     deps = []
+    public_deps = []
 
     data = [
       "//tools/valgrind/asan/",
@@ -62,9 +63,7 @@ group("deps_no_options") {
       deps += [ "//third_party/instrumented_libraries:deps" ]
     }
     if (use_custom_libcxx) {
-      public_deps = [
-        "//buildtools/third_party/libc++:libcxx_proxy",
-      ]
+      public_deps += [ "//buildtools/third_party/libc++:libcxx_proxy" ]
       data += [ "$root_out_dir/libc++.so" ]
     }
     if (is_mac) {
@@ -72,9 +71,7 @@ group("deps_no_options") {
         ":copy_asan_runtime",
       ]
 
-      public_deps = [
-        ":asan_runtime_bundle_data",
-      ]
+      public_deps += [ ":asan_runtime_bundle_data" ]
     }
   }
 }
@@ -241,16 +238,30 @@ config("asan_flags") {
     }
 
     if (is_win) {
-      assert(current_cpu == "x86", "WinASan is 32-bit only currently")
-      if (is_component_build) {
-        libs = [
-          "clang_rt.asan_dynamic-i386.lib",
-          "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
-        ]
+      if (target_cpu == "x64") {
+        # Windows 64-bit.
+        if (is_component_build) {
+          libs = [
+            "clang_rt.asan_dynamic-x86_64.lib",
+            "clang_rt.asan_dynamic_runtime_thunk-x86_64.lib",
+          ]
+        } else {
+          # TODO(etienneb): DLLs in the non-component build should link against
+          # clang_rt.asan_dll_thunk-x86_64.lib instead.
+          libs = [ "clang_rt.asan-x86_64.lib" ]
+        }
       } else {
-        # TODO(rnk): DLLs in the non-component build should link against
-        # clang_rt.asan_dll_thunk-i386.lib instead.
-        libs = [ "clang_rt.asan-i386.lib" ]
+        assert(target_cpu == "x86", "WinASan unsupported architecture")
+        if (is_component_build) {
+          libs = [
+            "clang_rt.asan_dynamic-i386.lib",
+            "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
+          ]
+        } else {
+          # TODO(etienneb): DLLs in the non-component build should link against
+          # clang_rt.asan_dll_thunk-i386.lib instead.
+          libs = [ "clang_rt.asan-i386.lib" ]
+        }
       }
     }
   }

@@ -17,19 +17,19 @@
 #include "crypto/openssl_util.h"
 #include "crypto/scoped_openssl_types.h"
 #include "crypto/secure_hash.h"
-#include "net/quic/crypto/channel_id.h"
-#include "net/quic/crypto/common_cert_set.h"
-#include "net/quic/crypto/crypto_handshake.h"
-#include "net/quic/crypto/quic_crypto_server_config.h"
-#include "net/quic/crypto/quic_decrypter.h"
-#include "net/quic/crypto/quic_encrypter.h"
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_clock.h"
-#include "net/quic/quic_crypto_client_stream.h"
-#include "net/quic/quic_crypto_server_stream.h"
-#include "net/quic/quic_crypto_stream.h"
-#include "net/quic/quic_server_id.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/channel_id.h"
+#include "net/quic/core/crypto/common_cert_set.h"
+#include "net/quic/core/crypto/crypto_handshake.h"
+#include "net/quic/core/crypto/quic_crypto_server_config.h"
+#include "net/quic/core/crypto/quic_decrypter.h"
+#include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_clock.h"
+#include "net/quic/core/quic_crypto_client_stream.h"
+#include "net/quic/core/quic_crypto_server_stream.h"
+#include "net/quic/core/quic_crypto_stream.h"
+#include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_framer_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -290,9 +290,9 @@ class FullChloGenerator : public ValidateClientHelloResultCallback {
         compressed_certs_cache_(compressed_certs_cache),
         out_(out) {}
 
-  void RunImpl(
-      const CryptoHandshakeMessage& client_hello,
-      const ValidateClientHelloResultCallback::Result& result) override {
+  void RunImpl(const CryptoHandshakeMessage& client_hello,
+               const ValidateClientHelloResultCallback::Result& result,
+               std::unique_ptr<ProofSource::Details> /* details */) override {
     QuicCryptoNegotiatedParameters params;
     string error_details;
     DiversificationNonce diversification_nonce;

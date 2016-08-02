@@ -26,6 +26,7 @@ if (is_win) {
   import("//remoting/host/predefines_win.gni")
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
+  import("//third_party/icu/config.gni")
 }
 
 # Reference this manifest to indicate that a process is per-monitor DPI aware.
@@ -280,6 +281,8 @@ static_library("test_support") {
   if (enable_webrtc) {
     public_deps += [
       "//third_party/libjingle:libjingle_webrtc",
+      "//third_party/webrtc/libjingle/xmllite",
+      "//third_party/webrtc/libjingle/xmpp",
       "//third_party/webrtc/modules/desktop_capture",
     ]
   }
@@ -360,6 +363,12 @@ source_set("unit_tests") {
   }
   if (is_android) {
     sources -= [ "it2me/it2me_native_messaging_host_unittest.cc" ]
+  }
+  if (is_win) {
+    sources += [
+      "win/launch_native_messaging_host_process.cc",
+      "win/launch_native_messaging_host_process.h",
+    ]
   }
 
   configs += [ "//remoting:version" ]
@@ -590,6 +599,8 @@ if (is_win) {
       "win/core_resource.h",
       "win/host_service.cc",
       "win/host_service.h",
+      "win/launch_native_messaging_host_process.cc",
+      "win/launch_native_messaging_host_process.h",
       "win/omaha.cc",
       "win/omaha.h",
       "win/rdp_desktop_session.cc",
@@ -766,7 +777,11 @@ if (enable_remoting_host && !is_android) {
     }
 
     if (enable_webrtc) {
-      deps += [ "//third_party/libjingle:libjingle_webrtc" ]
+      deps += [
+        "//third_party/libjingle:libjingle_webrtc",
+        "//third_party/webrtc/libjingle/xmllite",
+        "//third_party/webrtc/libjingle/xmpp",
+      ]
     }
   }
 
@@ -892,7 +907,11 @@ if (enable_me2me_host) {
     }
 
     if (enable_webrtc) {
-      deps += [ "//third_party/libjingle:libjingle_webrtc" ]
+      deps += [
+        "//third_party/libjingle:libjingle_webrtc",
+        "//third_party/webrtc/libjingle/xmllite",
+        "//third_party/webrtc/libjingle/xmpp",
+      ]
     }
 
     if (is_desktop_linux) {
@@ -976,7 +995,6 @@ if (enable_me2me_host) {
       bundle_data("remoting_host_resources") {
         sources = [
           "$root_gen_dir/remoting/CREDITS.txt",
-          "$root_out_dir/icudtl.dat",
           "remoting_me2me_host.icns",
         ]
 
@@ -986,8 +1004,12 @@ if (enable_me2me_host) {
 
         public_deps = [
           ":credits",
-          "//third_party/icu:icudata",
         ]
+
+        if (icu_use_data_file) {
+          sources += [ "$root_out_dir/icudtl.dat" ]
+          public_deps += [ "//third_party/icu:icudata" ]
+        }
       }
     }
 

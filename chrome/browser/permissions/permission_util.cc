@@ -78,33 +78,56 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
   return true;
 }
 
-void PermissionUtil::SetContentSettingAndRecordRevocation(
+PermissionUtil::ScopedRevocationReporter::ScopedRevocationReporter(
     Profile* profile,
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type,
-    std::string resource_identifier,
-    ContentSetting setting) {
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile);
-  ContentSetting previous_value = map->GetContentSetting(
-      primary_url, secondary_url, content_type, resource_identifier);
+    PermissionSourceUI source_ui)
+    : profile_(profile),
+      primary_url_(primary_url),
+      secondary_url_(secondary_url),
+      content_type_(content_type),
+      source_ui_(source_ui) {
+  if (!primary_url_.is_valid() ||
+      (!secondary_url_.is_valid() && !secondary_url_.is_empty())) {
+    is_initially_allowed_ = false;
+    return;
+  }
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  ContentSetting initial_content_setting = settings_map->GetContentSetting(
+      primary_url_, secondary_url_, content_type_, std::string());
+  is_initially_allowed_ = initial_content_setting == CONTENT_SETTING_ALLOW;
+}
 
-  map->SetContentSettingDefaultScope(primary_url, secondary_url, content_type,
-                                     resource_identifier, setting);
+PermissionUtil::ScopedRevocationReporter::ScopedRevocationReporter(
+    Profile* profile,
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsType content_type,
+    PermissionSourceUI source_ui)
+    : ScopedRevocationReporter(
+          profile,
+          GURL(primary_pattern.ToString()),
+          GURL((secondary_pattern == ContentSettingsPattern::Wildcard())
+                   ? primary_pattern.ToString()
+                   : secondary_pattern.ToString()),
+          content_type,
+          source_ui) {}
 
-  ContentSetting final_value = map->GetContentSetting(
-      primary_url, secondary_url, content_type, resource_identifier);
-
-  if (previous_value == CONTENT_SETTING_ALLOW &&
-      final_value != CONTENT_SETTING_ALLOW) {
+PermissionUtil::ScopedRevocationReporter::~ScopedRevocationReporter() {
+  if (!is_initially_allowed_)
+    return;
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  ContentSetting final_content_setting = settings_map->GetContentSetting(
+      primary_url_, secondary_url_, content_type_, std::string());
+  if (final_content_setting != CONTENT_SETTING_ALLOW) {
     PermissionType permission_type;
-    if (PermissionUtil::GetPermissionType(content_type, &permission_type)) {
-      // TODO(stefanocs): Report revocations from page action as PAGE_ACTION
-      // source UI instead of SITE_SETTINGS source UI.
-      PermissionUmaUtil::PermissionRevoked(permission_type,
-                                           PermissionSourceUI::SITE_SETTINGS,
-                                           primary_url, profile);
+    if (PermissionUtil::GetPermissionType(content_type_, &permission_type)) {
+      PermissionUmaUtil::PermissionRevoked(permission_type, source_ui_,
+                                           primary_url_, profile_);
     }
   }
 }

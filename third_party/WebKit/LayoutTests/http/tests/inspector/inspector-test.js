@@ -74,6 +74,11 @@ InspectorTest.evaluateFunctionInOverlay = function(func, callback)
     }
 }
 
+InspectorTest.waitForOverlayRepaint = function(callback)
+{
+    InspectorTest.invokePageFunctionAsync("requestAnimationFrame", callback);
+}
+
 var lastEvalId = 0;
 var pendingEvalRequests = {};
 
@@ -897,7 +902,7 @@ InspectorTest.dumpLoadedModules = function(next)
     var modules = self.runtime._modules;
     modules.sort(moduleSorter);
     for (var i = 0; i < modules.length; ++i) {
-        if (modules[i]._loaded)
+        if (modules[i]._loadedForTest)
             InspectorTest.addResult("    " + modules[i]._descriptor.name);
     }
     if (next)

@@ -32,7 +32,7 @@ Polymer({
    */
   open: function(type) {
     this.allowException = type == settings.PermissionValues.ALLOW;
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   },
 
   /**
@@ -44,6 +44,11 @@ Polymer({
     this.browserProxy.isPatternValid(pattern).then(function(isValid) {
       this.$.add.disabled = !isValid;
     }.bind(this));
+  },
+
+  /** @private */
+  onCancelTap_: function() {
+    this.$.dialog.cancel();
   },
 
   /**

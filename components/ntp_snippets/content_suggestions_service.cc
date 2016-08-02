@@ -13,6 +13,12 @@
 
 namespace ntp_snippets {
 
+bool ContentSuggestionsService::CompareCategoriesByID::operator()(
+    const Category& left,
+    const Category& right) const {
+  return left.id() < right.id();
+}
+
 ContentSuggestionsService::ContentSuggestionsService(State state)
     : state_(state) {}
 
@@ -27,23 +33,21 @@ void ContentSuggestionsService::Shutdown() {
   FOR_EACH_OBSERVER(Observer, observers_, ContentSuggestionsServiceShutdown());
 }
 
-ContentSuggestionsCategoryStatus ContentSuggestionsService::GetCategoryStatus(
-    ContentSuggestionsCategory category) const {
+CategoryStatus ContentSuggestionsService::GetCategoryStatus(
+    Category category) const {
   if (state_ == State::DISABLED) {
-    return ContentSuggestionsCategoryStatus::
-        ALL_SUGGESTIONS_EXPLICITLY_DISABLED;
+    return CategoryStatus::ALL_SUGGESTIONS_EXPLICITLY_DISABLED;
   }
 
   auto iterator = providers_.find(category);
   if (iterator == providers_.end())
-    return ContentSuggestionsCategoryStatus::NOT_PROVIDED;
+    return CategoryStatus::NOT_PROVIDED;
 
   return iterator->second->GetCategoryStatus(category);
 }
 
 const std::vector<ContentSuggestion>&
-ContentSuggestionsService::GetSuggestionsForCategory(
-    ContentSuggestionsCategory category) const {
+ContentSuggestionsService::GetSuggestionsForCategory(Category category) const {
   auto iterator = suggestions_by_category_.find(category);
   if (iterator == suggestions_by_category_.end())
     return no_suggestions_;
@@ -58,10 +62,10 @@ void ContentSuggestionsService::FetchSuggestionImage(
     callback.Run(suggestion_id, gfx::Image());
     return;
   }
-  ContentSuggestionsCategory category = id_category_map_[suggestion_id];
+  Category category = id_category_map_.at(suggestion_id);
   if (!providers_.count(category)) {
     LOG(WARNING) << "Requested image for suggestion " << suggestion_id
-                 << " for unavailable category " << static_cast<int>(category);
+                 << " for unavailable category " << category;
     callback.Run(suggestion_id, gfx::Image());
     return;
   }
@@ -89,10 +93,10 @@ void ContentSuggestionsService::DismissSuggestion(
     LOG(WARNING) << "Dismissed unknown suggestion " << suggestion_id;
     return;
   }
-  ContentSuggestionsCategory category = id_category_map_[suggestion_id];
+  Category category = id_category_map_.at(suggestion_id);
   if (!providers_.count(category)) {
     LOG(WARNING) << "Dismissed suggestion " << suggestion_id
-                 << " for unavailable category " << static_cast<int>(category);
+                 << " for unavailable category " << category;
     return;
   }
   providers_[category]->DismissSuggestion(suggestion_id);
@@ -128,18 +132,19 @@ void ContentSuggestionsService::RegisterProvider(
   if (state_ == State::DISABLED)
     return;
 
-  for (ContentSuggestionsCategory category : provider->provided_categories()) {
+  for (Category category : provider->GetProvidedCategories()) {
     DCHECK_EQ(0ul, providers_.count(category));
     providers_[category] = provider;
-    // TODO(pke): In the future, make sure that the categories have some useful
-    // (maybe constant, at least consistent) ordering for the UI.
     categories_.push_back(category);
-    if (IsContentSuggestionsCategoryStatusAvailable(
-            provider->GetCategoryStatus(category))) {
+    if (IsCategoryStatusAvailable(provider->GetCategoryStatus(category))) {
       suggestions_by_category_[category] = std::vector<ContentSuggestion>();
     }
     NotifyCategoryStatusChanged(category);
   }
+  std::sort(categories_.begin(), categories_.end(),
+            [this](const Category& left, const Category& right) {
+              return category_factory_.CompareCategories(left, right);
+            });
   provider->SetObserver(this);
 }
 
@@ -147,7 +152,7 @@ void ContentSuggestionsService::RegisterProvider(
 // Private methods
 
 void ContentSuggestionsService::OnNewSuggestions(
-    ContentSuggestionsCategory changed_category,
+    Category changed_category,
     std::vector<ContentSuggestion> new_suggestions) {
   DCHECK(IsCategoryRegistered(changed_category));
 
@@ -157,7 +162,7 @@ void ContentSuggestionsService::OnNewSuggestions(
   }
 
   for (const ContentSuggestion& suggestion : new_suggestions) {
-    id_category_map_[suggestion.id()] = changed_category;
+    id_category_map_.insert(std::make_pair(suggestion.id(), changed_category));
   }
 
   suggestions_by_category_[changed_category] = std::move(new_suggestions);
@@ -166,9 +171,9 @@ void ContentSuggestionsService::OnNewSuggestions(
 }
 
 void ContentSuggestionsService::OnCategoryStatusChanged(
-    ContentSuggestionsCategory changed_category,
-    ContentSuggestionsCategoryStatus new_status) {
-  if (!IsContentSuggestionsCategoryStatusAvailable(new_status)) {
+    Category changed_category,
+    CategoryStatus new_status) {
+  if (!IsCategoryStatusAvailable(new_status)) {
     for (const ContentSuggestion& suggestion :
          suggestions_by_category_[changed_category]) {
       id_category_map_.erase(suggestion.id());
@@ -180,7 +185,7 @@ void ContentSuggestionsService::OnCategoryStatusChanged(
 
 void ContentSuggestionsService::OnProviderShutdown(
     ContentSuggestionsProvider* provider) {
-  for (ContentSuggestionsCategory category : provider->provided_categories()) {
+  for (Category category : provider->GetProvidedCategories()) {
     auto iterator = std::find(categories_.begin(), categories_.end(), category);
     DCHECK(iterator != categories_.end());
     categories_.erase(iterator);
@@ -194,14 +199,12 @@ void ContentSuggestionsService::OnProviderShutdown(
   }
 }
 
-bool ContentSuggestionsService::IsCategoryRegistered(
-    ContentSuggestionsCategory category) const {
+bool ContentSuggestionsService::IsCategoryRegistered(Category category) const {
   return std::find(categories_.begin(), categories_.end(), category) !=
          categories_.end();
 }
 
-void ContentSuggestionsService::NotifyCategoryStatusChanged(
-    ContentSuggestionsCategory category) {
+void ContentSuggestionsService::NotifyCategoryStatusChanged(Category category) {
   FOR_EACH_OBSERVER(
       Observer, observers_,
       OnCategoryStatusChanged(category, GetCategoryStatus(category)));

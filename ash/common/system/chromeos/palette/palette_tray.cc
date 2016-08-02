@@ -4,6 +4,7 @@
 
 #include "ash/common/system/chromeos/palette/palette_tray.h"
 
+#include "ash/common/ash_switches.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
@@ -11,6 +12,7 @@
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/chromeos/palette/palette_tool.h"
 #include "ash/common/system/chromeos/palette/palette_tool_manager.h"
+#include "ash/common/system/chromeos/palette/palette_utils.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -19,6 +21,7 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
+#include "base/command_line.h"
 #include "base/sys_info.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
@@ -44,12 +47,6 @@ const int kVerticalShelfVerticalPadding = 5;
 
 // Width of the palette itself (dp).
 const int kPaletteWidth = 360;
-
-// Returns true if the command line flag is present that enables the palette.
-bool IsPaletteEnabled() {
-  // TODO(jdufault): Hookup this function when the flag is in Chrome.
-  return false;
-}
 
 // Creates a separator.
 views::Separator* CreateSeparator(views::Separator::Orientation orientation) {

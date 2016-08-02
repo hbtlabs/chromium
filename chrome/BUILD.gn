@@ -28,6 +28,7 @@ if (is_android) {
   import("//build/util/version.gni")
   import("//build_overrides/v8.gni")
   import("//media/cdm/ppapi/cdm_paths.gni")
+  import("//third_party/icu/config.gni")
 }
 
 if (is_win) {
@@ -749,7 +750,6 @@ if (is_win) {
       "$root_gen_dir/repack/resources.pak",
       "$root_out_dir/app_mode_loader.app",
       "$root_out_dir/chrome_100_percent.pak",
-      "$root_out_dir/icudtl.dat",
       "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
       "browser/mac/install.sh",
     ]
@@ -762,7 +762,6 @@ if (is_win) {
       ":packed_extra_resources",
       ":packed_resources",
       "//chrome/app_shim:app_mode_loader",
-      "//third_party/icu:icudata",
     ]
 
     if (enable_hidpi) {
@@ -784,6 +783,11 @@ if (is_win) {
         "browser/mac/keystone_promote_postflight.sh",
         "browser/mac/keystone_promote_preflight.sh",
       ]
+    }
+
+    if (icu_use_data_file) {
+      sources += [ "$root_out_dir/icudtl.dat" ]
+      public_deps += [ "//third_party/icu:icudata" ]
     }
 
     if (v8_use_external_startup_data) {
@@ -932,13 +936,8 @@ if (is_win) {
 
   tweak_info_plist("chrome_framework_plist") {
     info_plist = "app/framework-Info.plist"
-    _breakpad_uploads_arg = "0"
-    if (enable_mac_crash_collection) {
-      _breakpad_uploads_arg = "1"
-    }
     args = [
-      "--breakpad=1",
-      "--breakpad_uploads=$_breakpad_uploads_arg",
+      "--breakpad=0",
       "--keystone=0",
       "--scm=1",
       "--branding",
@@ -1173,7 +1172,7 @@ group("browser_dependencies") {
   public_deps = [
     "//chrome/browser",
     "//chrome/common",
-    "//sync",
+    "//components/sync",
   ]
   if (enable_plugins) {
     public_deps += [ "//ppapi/host" ]
@@ -1204,7 +1203,7 @@ group("browser_dependencies") {
 group("child_dependencies") {
   public_deps = [
     "//chrome/common",
-    "//sync",
+    "//components/sync",
   ]
   if (!is_ios) {
     public_deps += [

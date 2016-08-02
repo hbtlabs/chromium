@@ -216,7 +216,7 @@ DEFINE_TRACE(CanvasRenderingContext2D)
     SVGResourceClient::trace(visitor);
 }
 
-void CanvasRenderingContext2D::dispatchContextLostEvent(Timer<CanvasRenderingContext2D>*)
+void CanvasRenderingContext2D::dispatchContextLostEvent(TimerBase*)
 {
     if (canvas() && contextLostRestoredEventsEnabled()) {
         Event* event = Event::createCancelable(EventTypeNames::contextlost);
@@ -234,7 +234,7 @@ void CanvasRenderingContext2D::dispatchContextLostEvent(Timer<CanvasRenderingCon
     }
 }
 
-void CanvasRenderingContext2D::tryRestoreContextEvent(Timer<CanvasRenderingContext2D>* timer)
+void CanvasRenderingContext2D::tryRestoreContextEvent(TimerBase* timer)
 {
     if (m_contextLostMode == NotLostContext) {
         // Canvas was already restored (possibly thanks to a resize), so stop trying.
@@ -257,7 +257,7 @@ void CanvasRenderingContext2D::tryRestoreContextEvent(Timer<CanvasRenderingConte
     }
 }
 
-void CanvasRenderingContext2D::dispatchContextRestoredEvent(Timer<CanvasRenderingContext2D>*)
+void CanvasRenderingContext2D::dispatchContextRestoredEvent(TimerBase*)
 {
     if (m_contextLostMode == NotLostContext)
         return;
@@ -988,12 +988,12 @@ void CanvasRenderingContext2D::updateElementAccessibility(const Path& path, Elem
     Path transformedPath = path;
     transformedPath.transform(state().transform());
 
-    // Offset by the canvas rect, taking border and padding into account.
-    IntRect canvasRect = renderer->absoluteBoundingBoxRect();
-    canvasRect.move(lbmo->borderLeft() + lbmo->paddingLeft(), lbmo->borderTop() + lbmo->paddingTop());
+    // Add border and padding to the bounding rect.
     LayoutRect elementRect = enclosingLayoutRect(transformedPath.boundingRect());
-    elementRect.moveBy(canvasRect.location());
-    axObjectCache->setCanvasObjectBounds(element, elementRect);
+    elementRect.move(lbmo->borderLeft() + lbmo->paddingLeft(), lbmo->borderTop() + lbmo->paddingTop());
+
+    // Update the accessible object.
+    axObjectCache->setCanvasObjectBounds(canvas(), element, elementRect);
 }
 
 void CanvasRenderingContext2D::addHitRegion(const HitRegionOptions& options, ExceptionState& exceptionState)
@@ -1095,6 +1095,12 @@ bool CanvasRenderingContext2D::isAccelerationOptimalForCanvasContent() const
         return false;
     }
     return true;
+}
+
+void CanvasRenderingContext2D::resetUsageTracking()
+{
+    UsageCounters newCounters;
+    m_usageCounters = newCounters;
 }
 
 } // namespace blink

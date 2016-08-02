@@ -838,14 +838,14 @@ public abstract class CronetEngine {
      * @param priority priority of the request which should be one of the
      *         {@link UrlRequest.Builder#REQUEST_PRIORITY_IDLE REQUEST_PRIORITY_*}
      *         values.
-     * @param requestAnnotations Objects to pass on to {@link CronetEngine.RequestFinishedListener}.
+     * @param requestAnnotations Objects to pass on to {@link RequestFinishedListener}.
      * @param disableCache disables cache for the request.
      *         If context is not set up to use cache this param has no effect.
      * @param disableConnectionMigration disables connection migration for this
      *         request if it is enabled for the session.
      * @return new request.
      * @deprecated Use {@link UrlRequest.Builder#build}.
-     * @hide as it references hidden CronetEngine.RequestFinishedListener
+     * @hide as it references hidden RequestFinishedListener
      */
     @Deprecated
     protected abstract UrlRequest createRequest(String url, UrlRequest.Callback callback,
@@ -957,34 +957,6 @@ public abstract class CronetEngine {
      *         </a>.
      */
     public abstract byte[] getGlobalMetricsDeltas();
-
-    /**
-     * Sets the executor which will be used to notify RequestFinished
-     *             listeners, and to notify network quality RTT listeners
-     *             that do not provide an executor.
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API. In short term,
-     * once all Cronet embedders supply a valid executor with
-     * NetworkQualityRTTListener, update the above comment to reflect that
-     * {@link executor} is only used to notify RequestFinishedListeners.
-     * @hide as it's a prototype.
-     */
-    public abstract void setRequestFinishedListenerExecutor(Executor executor);
-
-    /**
-     * Enables the network quality estimator, which collects and reports
-     * measurements of round trip time (RTT) and downstream throughput at
-     * various layers of the network stack. After enabling the estimator,
-     * listeners of RTT and throughput can be added with
-     * {@link #addRttListener} and {@link #addThroughputListener} and
-     * removed with {@link #removeRttListener} and
-     * {@link #removeThroughputListener}. The estimator uses memory and CPU
-     * only when enabled.
-     * @param executor an executor that will be used to notified all
-     *            added RTT and throughput listeners.
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API.
-     * @hide as it's a prototype.
-     */
-    public abstract void enableNetworkQualityEstimator(Executor executor);
 
     /**
      * Configures the network quality estimator for testing. This must be called
@@ -1136,8 +1108,6 @@ public abstract class CronetEngine {
      *
      * @param listener the listener for finished requests.
      *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
-     * using a request finished listener that provides its own executor.
      * @hide as it's a prototype.
      */
     public abstract void addRequestFinishedListener(RequestFinishedListener listener);
@@ -1147,8 +1117,6 @@ public abstract class CronetEngine {
      *
      * @param listener the listener to remove.
      *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
-     * using a request finished listener that provides its own executor.
      * @hide it's a prototype.
      */
     public abstract void removeRequestFinishedListener(RequestFinishedListener listener);
@@ -1267,20 +1235,5 @@ public abstract class CronetEngine {
         public Long getReceivedBytesCount() {
             return mReceivedBytesCount;
         }
-    }
-
-    /**
-     * Interface to listen for finished requests that were created via this CronetEngine instance.
-     *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, and replace it with a listener
-     * whose executor is bound to the lifetime of the listener.
-     * @hide as it's a prototype.
-     */
-    public interface RequestFinishedListener {
-        /**
-         * Invoked with request info.
-         * @param requestInfo {@link UrlRequestInfo} for finished request.
-         */
-        void onRequestFinished(UrlRequestInfo requestInfo);
     }
 }

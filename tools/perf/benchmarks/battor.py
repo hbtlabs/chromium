@@ -16,6 +16,7 @@ class _BattOrBenchmark(perf_benchmark.PerfBenchmark):
     options = timeline_based_measurement.Options()
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = True
+    options.config.enable_atrace_trace = True
     options.config.chrome_trace_config.SetDefaultOverheadFilter()
     options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
     return options
@@ -87,7 +88,6 @@ class BattOrSystemHealthLoadingMobile(_BattOrBenchmark):
     return 'battor.system_health_loading_mobile'
 
 
-@benchmark.Disabled('android')  # crbug.com/618330
 class BattOrPowerCases(_BattOrBenchmark):
   page_set = page_sets.power_cases.PowerCasesPageSet
 
@@ -96,7 +96,6 @@ class BattOrPowerCases(_BattOrBenchmark):
     return 'battor.power_cases'
 
 
-@benchmark.Disabled('android') # crbug.com/618330
 class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
   page_set = page_sets.power_cases.PowerCasesPageSet
 
@@ -104,6 +103,7 @@ class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
     options = timeline_based_measurement.Options()
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = False
+    options.config.enable_atrace_trace = False
     options.config.chrome_trace_config.SetDefaultOverheadFilter()
     options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
     return options

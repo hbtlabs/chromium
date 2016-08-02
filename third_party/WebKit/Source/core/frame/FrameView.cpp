@@ -66,6 +66,7 @@
 #include "core/layout/TracedLayoutObject.h"
 #include "core/layout/api/LayoutBoxModel.h"
 #include "core/layout/api/LayoutItem.h"
+#include "core/layout/api/LayoutPartItem.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/CompositedSelection.h"
@@ -166,7 +167,6 @@ FrameView::FrameView(LocalFrame* frame)
     , m_crossOriginForThrottling(false)
     , m_subtreeThrottled(false)
     , m_currentUpdateLifecyclePhasesTargetState(DocumentLifecycle::Uninitialized)
-    , m_needsScrollbarsUpdate(false)
     , m_suppressAdjustViewSize(false)
     , m_allowsLayoutInvalidationAfterLayoutClean(true)
 {
@@ -379,16 +379,16 @@ void FrameView::invalidateRect(const IntRect& rect)
         return;
     }
 
-    LayoutPart* layoutObject = m_frame->ownerLayoutObject();
-    if (!layoutObject)
+    LayoutPartItem layoutItem = m_frame->ownerLayoutItem();
+    if (layoutItem.isNull())
         return;
 
     IntRect paintInvalidationRect = rect;
-    paintInvalidationRect.move(layoutObject->borderLeft() + layoutObject->paddingLeft(),
-        layoutObject->borderTop() + layoutObject->paddingTop());
+    paintInvalidationRect.move(layoutItem.borderLeft() + layoutItem.paddingLeft(),
+        layoutItem.borderTop() + layoutItem.paddingTop());
     // FIXME: We should not allow paint invalidation out of paint invalidation state. crbug.com/457415
     DisablePaintInvalidationStateAsserts paintInvalidationAssertDisabler;
-    layoutObject->invalidatePaintRectangle(LayoutRect(paintInvalidationRect));
+    layoutItem.invalidatePaintRectangle(LayoutRect(paintInvalidationRect));
 }
 
 void FrameView::setFrameRect(const IntRect& newRect)
@@ -398,34 +398,29 @@ void FrameView::setFrameRect(const IntRect& newRect)
         return;
 
     Widget::setFrameRect(newRect);
+    frameRectsChanged();
 
-    const bool frameSizeChanged = oldRect.size() != newRect.size();
+    if (oldRect.size() == newRect.size())
+        return;
 
-    m_needsScrollbarsUpdate = frameSizeChanged;
     // TODO(wjmaclean): find out why scrollbars fail to resize for complex
     // subframes after changing the zoom level. For now always calling
     // updateScrollbarsIfNeeded() here fixes the issue, but it would be good to
     // discover the deeper cause of this. http://crbug.com/607987.
-    updateScrollbarsIfNeeded();
-
-    frameRectsChanged();
+    updateScrollbars();
 
     updateScrollableAreaSet();
 
     if (LayoutViewItem layoutView = this->layoutViewItem()) {
-        // TODO(majidvp): It seems that this only needs to be called when size
-        // is updated ignoring any change in the location.
         if (layoutView.usesCompositing())
             layoutView.compositor()->frameViewDidChangeSize();
     }
 
-    if (frameSizeChanged) {
-        viewportSizeChanged(newRect.width() != oldRect.width(), newRect.height() != oldRect.height());
+    viewportSizeChanged(newRect.width() != oldRect.width(), newRect.height() != oldRect.height());
 
-        if (m_frame->isMainFrame())
-            m_frame->host()->visualViewport().mainFrameDidChangeSize();
-        frame().loader().restoreScrollPositionAndViewState();
-    }
+    if (m_frame->isMainFrame())
+        m_frame->host()->visualViewport().mainFrameDidChangeSize();
+    frame().loader().restoreScrollPositionAndViewState();
 }
 
 Page* FrameView::page() const
@@ -1645,7 +1640,7 @@ void FrameView::setLayoutSize(const IntSize& size)
     setLayoutSizeInternal(size);
 }
 
-void FrameView::didScrollTimerFired(Timer<FrameView>*)
+void FrameView::didScrollTimerFired(TimerBase*)
 {
     if (m_frame->document() && !m_frame->document()->layoutViewItem().isNull())
         m_frame->document()->fetcher()->updateAllImageResourcePriorities();
@@ -2068,7 +2063,7 @@ bool FrameView::updateWidgets()
     return m_partUpdateSet.isEmpty();
 }
 
-void FrameView::updateWidgetsTimerFired(Timer<FrameView>*)
+void FrameView::updateWidgetsTimerFired(TimerBase*)
 {
     ASSERT(!isInPerformLayout());
     m_updateWidgetsTimer.stop();
@@ -2167,7 +2162,7 @@ void FrameView::sendResizeEventIfNeeded()
         InspectorInstrumentation::didResizeMainFrame(m_frame.get());
 }
 
-void FrameView::postLayoutTimerFired(Timer<FrameView>*)
+void FrameView::postLayoutTimerFired(TimerBase*)
 {
     performPostLayoutTasks();
 }
@@ -3596,14 +3591,12 @@ bool FrameView::shouldIgnoreOverflowHidden() const
 
 void FrameView::updateScrollbarsIfNeeded()
 {
-    if (m_needsScrollbarsUpdate || needsScrollbarReconstruction() || scrollOriginChanged())
+    if (needsScrollbarReconstruction() || scrollOriginChanged())
         updateScrollbars();
 }
 
 void FrameView::updateScrollbars()
 {
-    m_needsScrollbarsUpdate = false;
-
     if (m_frame->settings() && m_frame->settings()->rootLayerScrolls())
         return;
 

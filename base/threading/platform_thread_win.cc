@@ -225,6 +225,11 @@ void PlatformThread::Detach(PlatformThreadHandle thread_handle) {
 }
 
 // static
+bool PlatformThread::CanIncreaseCurrentThreadPriority() {
+  return true;
+}
+
+// static
 void PlatformThread::SetCurrentThreadPriority(ThreadPriority priority) {
   int desired_priority = THREAD_PRIORITY_ERROR_RETURN;
   switch (priority) {
@@ -246,7 +251,7 @@ void PlatformThread::SetCurrentThreadPriority(ThreadPriority priority) {
   }
   DCHECK_NE(desired_priority, THREAD_PRIORITY_ERROR_RETURN);
 
-#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+#if DCHECK_IS_ON()
   const BOOL success =
 #endif
       ::SetThreadPriority(PlatformThread::CurrentHandle().platform_handle(),

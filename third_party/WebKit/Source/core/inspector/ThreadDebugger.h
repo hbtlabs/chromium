@@ -6,6 +6,7 @@
 #define ThreadDebugger_h
 
 #include "core/CoreExport.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "platform/Timer.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/v8_inspector/public/V8Debugger.h"
@@ -39,6 +40,7 @@ public:
     void asyncTaskStarted(void* task);
     void asyncTaskFinished(void* task);
     unsigned promiseRejected(v8::Local<v8::Context>, const String16& errorMessage, v8::Local<v8::Value> exception, std::unique_ptr<SourceLocation>);
+    void promiseRejectionRevoked(v8::Local<v8::Context>, unsigned promiseRejectionId);
 
     // V8DebuggerClient implementation.
     void beginUserGesture() override;
@@ -48,8 +50,6 @@ public:
     bool isExecutionAllowed() override;
     double currentTimeMS() override;
     bool isInspectableHeapObject(v8::Local<v8::Object>) override;
-    void enableAsyncInstrumentation() override;
-    void disableAsyncInstrumentation() override;
     void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
     void consoleTime(const String16& title) override;
     void consoleTimeEnd(const String16& title) override;
@@ -64,7 +64,8 @@ public:
 
 protected:
     void createFunctionProperty(v8::Local<v8::Context>, v8::Local<v8::Object>, const char* name, v8::FunctionCallback, const char* description);
-    void onTimer(Timer<ThreadDebugger>*);
+    void onTimer(TimerBase*);
+    static MessageLevel consoleAPITypeToMessageLevel(V8ConsoleAPIType);
 
     v8::Isolate* m_isolate;
     std::unique_ptr<V8Debugger> m_debugger;
@@ -76,7 +77,6 @@ private:
 
     static void getEventListenersCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 
-    bool m_asyncInstrumentationEnabled;
     Vector<std::unique_ptr<Timer<ThreadDebugger>>> m_timers;
     Vector<V8DebuggerClient::TimerCallback> m_timerCallbacks;
     Vector<void*> m_timerData;

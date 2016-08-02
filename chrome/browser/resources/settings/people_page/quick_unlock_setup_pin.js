@@ -51,12 +51,15 @@ var WEAK_PINS = [
 Polymer({
   is: 'settings-quick-unlock-setup-pin',
 
-  behaviors: [
-    QuickUnlockPasswordDetectBehavior,
-    I18nBehavior
-  ],
+  behaviors: [I18nBehavior, QuickUnlockPasswordDetectBehavior],
 
   properties: {
+    /** @type {!settings.Route} */
+    currentRoute: {
+      type: Object,
+      observer: 'onRouteChanged_',
+    },
+
     /**
      * The current PIN keyboard value.
      * @private
@@ -96,25 +99,22 @@ Polymer({
     },
   },
 
-  observers: [
-    'onRouteChanged_(currentRoute)',
-    'onSetModesChanged_(setModes)'
-  ],
+  observers: ['onSetModesChanged_(setModes)'],
 
   /** @override */
   attached: function() {
     this.resetState_();
 
-    if (this.isScreenActive(QuickUnlockScreen.SETUP_PIN))
+    if (this.currentRoute == settings.Route.QUICK_UNLOCK_SETUP_PIN)
       this.askForPasswordIfUnset();
   },
 
   /**
-   * @param {!SettingsRoute} currentRoute
+   * @param {!settings.Route} currentRoute
    * @private
    */
   onRouteChanged_: function(currentRoute) {
-    if (this.isScreenActive(QuickUnlockScreen.SETUP_PIN)) {
+    if (this.currentRoute == settings.Route.QUICK_UNLOCK_SETUP_PIN) {
       this.askForPasswordIfUnset();
     } else {
       // If the user hits the back button, they can leave the element
@@ -125,7 +125,7 @@ Polymer({
 
   /** @private */
   onSetModesChanged_: function() {
-    if (this.isScreenActive(QuickUnlockScreen.SETUP_PIN))
+    if (this.currentRoute == settings.Route.QUICK_UNLOCK_SETUP_PIN)
       this.askForPasswordIfUnset();
   },
 
@@ -252,11 +252,7 @@ Polymer({
         }
 
         this.resetState_();
-        this.currentRoute = {
-          page: 'basic',
-          section: 'people',
-          subpage: [QuickUnlockScreen.CHOOSE_METHOD]
-        };
+        settings.navigateTo(settings.Route.QUICK_UNLOCK_CHOOSE_METHOD);
       }
 
       this.setModes.call(

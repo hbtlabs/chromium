@@ -31,7 +31,7 @@
 #include "content/public/common/stop_find_action.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/frame_blame_context.h"
-#include "content/renderer/mojo/blink_service_registry_impl.h"
+#include "content/renderer/mojo/blink_interface_provider_impl.h"
 #include "content/renderer/renderer_webcookiejar_impl.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_platform_file.h"
@@ -604,7 +604,6 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::WebRTCPeerConnectionHandler* handler) override;
   blink::WebUserMediaClient* userMediaClient() override;
   blink::WebEncryptedMediaClient* encryptedMediaClient() override;
-  blink::WebMIDIClient* webMIDIClient() override;
   blink::WebString userAgentOverride() override;
   blink::WebString doNotTrackValue() override;
   bool allowWebGL(bool default_value) override;
@@ -634,7 +633,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebString& sink_id,
       const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override;
-  blink::ServiceRegistry* serviceRegistry() override;
+  blink::InterfaceProvider* interfaceProvider() override;
   blink::WebPageVisibilityState visibilityState() const override;
 
   // WebFrameSerializerClient implementation:
@@ -819,6 +818,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const FrameOwnerProperties& frame_owner_properties);
   void OnAdvanceFocus(blink::WebFocusType type, int32_t source_routing_id);
   void OnSetFocusedFrame();
+  void OnClearFocusedFrame();
   void OnTextTrackSettingsChanged(
       const FrameMsg_TextTrackSettings_Params& params);
   void OnPostMessageEvent(const FrameMsg_PostMessage_Params& params);
@@ -1157,9 +1157,6 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<MediaInterfaceProvider> media_interface_provider_;
 #endif
 
-  // MidiClient attached to this frame; lazily initialized.
-  MidiDispatcher* midi_dispatcher_;
-
 #if defined(OS_ANDROID)
   // Manages all media players and sessions in this render frame for
   // communicating with the real media player and sessions in the
@@ -1204,7 +1201,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
   std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
-  std::unique_ptr<BlinkServiceRegistryImpl> blink_service_registry_;
+  std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
   shell::mojom::InterfaceProviderRequest
       pending_remote_interface_provider_request_;
 

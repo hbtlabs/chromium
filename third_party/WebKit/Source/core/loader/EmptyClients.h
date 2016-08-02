@@ -167,7 +167,7 @@ public:
 
     void setTouchAction(TouchAction) override {}
 
-    void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) override {}
+    void didAssociateFormControlsAfterLoad(LocalFrame*) override {}
 
     void annotatedRegionsChanged() override {}
     String acceptLanguages() override;
@@ -283,7 +283,6 @@ public:
     ~EmptyTextCheckerClient() { }
 
     void checkSpellingOfString(const String&, int*, int*) override {}
-    void checkGrammarOfString(const String&, Vector<GrammarDetail>&, int*, int*) override {}
     void requestCheckingOfString(TextCheckingRequest*) override;
 };
 

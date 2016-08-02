@@ -34,7 +34,7 @@ Polymer({
     monthList_: {
       type: Array,
       value: [
-        '01', '02', '03', '04', '05', '06', '07', '09', '10', '11', '12',
+        '01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12',
       ],
     },
 
@@ -80,7 +80,7 @@ Polymer({
     this.expirationYear = this.creditCard.expirationYear;
     this.expirationMonth = this.creditCard.expirationMonth;
 
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   },
 
   /** Closes the dialog. */
@@ -93,7 +93,7 @@ Polymer({
    * @private
    */
   onCancelButtonTap_: function() {
-    this.close();
+    this.$.dialog.cancel();
   },
 
   /**

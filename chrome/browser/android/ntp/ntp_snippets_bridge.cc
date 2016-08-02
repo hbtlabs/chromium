@@ -32,8 +32,9 @@ using base::android::ToJavaLongArray;
 using base::android::ToJavaFloatArray;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
-using ntp_snippets::ContentSuggestionsCategory;
-using ntp_snippets::ContentSuggestionsCategoryStatus;
+using ntp_snippets::Category;
+using ntp_snippets::CategoryStatus;
+using ntp_snippets::KnownCategories;
 
 namespace {
 
@@ -128,7 +129,8 @@ void NTPSnippetsBridge::SnippetVisited(JNIEnv* env,
 int NTPSnippetsBridge::GetCategoryStatus(JNIEnv* env,
                                          const JavaParamRef<jobject>& obj) {
   return static_cast<int>(content_suggestions_service_->GetCategoryStatus(
-      ContentSuggestionsCategory::ARTICLES));
+      content_suggestions_service_->category_factory()->FromKnownCategory(
+          KnownCategories::ARTICLES)));
 }
 
 NTPSnippetsBridge::~NTPSnippetsBridge() {}
@@ -138,26 +140,25 @@ void NTPSnippetsBridge::OnNewSuggestions() {
     return;
 
   std::vector<std::string> ids;
-  std::vector<std::string> titles;
+  std::vector<base::string16> titles;
   // URL for the article. This will also be used to find the favicon for the
   // article.
   std::vector<std::string> urls;
   // URL for the AMP version of the article if it exists. This will be used as
   // the URL to direct the user to on tap.
   std::vector<std::string> amp_urls;
-  std::vector<std::string> snippets;
+  std::vector<base::string16> snippet_texts;
   std::vector<int64_t> timestamps;
-  std::vector<std::string> publishers;
+  std::vector<base::string16> publisher_names;
   std::vector<float> scores;
 
   // Show all suggestions from all categories, even though we currently display
   // them in a single section on the UI.
   // TODO(pke): This is only for debugging new sections and will be replaced
   // with proper multi-section UI support.
-  for (ContentSuggestionsCategory category :
-       content_suggestions_service_->GetCategories()) {
+  for (Category category : content_suggestions_service_->GetCategories()) {
     if (content_suggestions_service_->GetCategoryStatus(category) !=
-        ContentSuggestionsCategoryStatus::AVAILABLE) {
+        CategoryStatus::AVAILABLE) {
       continue;
     }
     for (const ntp_snippets::ContentSuggestion& suggestion :
@@ -168,9 +169,9 @@ void NTPSnippetsBridge::OnNewSuggestions() {
       // HOST_RESTRICT parameters, so this is preferred.
       urls.push_back(suggestion.url().spec());
       amp_urls.push_back(suggestion.amp_url().spec());
-      snippets.push_back(suggestion.snippet_text());
+      snippet_texts.push_back(suggestion.snippet_text());
       timestamps.push_back(suggestion.publish_date().ToJavaTime());
-      publishers.push_back(suggestion.publisher_name());
+      publisher_names.push_back(suggestion.publisher_name());
       scores.push_back(suggestion.score());
     }
   }
@@ -181,16 +182,15 @@ void NTPSnippetsBridge::OnNewSuggestions() {
       ToJavaArrayOfStrings(env, titles).obj(),
       ToJavaArrayOfStrings(env, urls).obj(),
       ToJavaArrayOfStrings(env, amp_urls).obj(),
-      ToJavaArrayOfStrings(env, snippets).obj(),
+      ToJavaArrayOfStrings(env, snippet_texts).obj(),
       ToJavaLongArray(env, timestamps).obj(),
-      ToJavaArrayOfStrings(env, publishers).obj(),
+      ToJavaArrayOfStrings(env, publisher_names).obj(),
       ToJavaFloatArray(env, scores).obj());
 }
 
-void NTPSnippetsBridge::OnCategoryStatusChanged(
-    ContentSuggestionsCategory category,
-    ContentSuggestionsCategoryStatus new_status) {
-  if (category != ContentSuggestionsCategory::ARTICLES)
+void NTPSnippetsBridge::OnCategoryStatusChanged(Category category,
+                                                CategoryStatus new_status) {
+  if (!category.IsKnownCategory(KnownCategories::ARTICLES))
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();

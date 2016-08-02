@@ -8,6 +8,7 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
@@ -293,14 +294,14 @@ public class NewTabPage
         @Override
         public void onCreateContextMenu(ContextMenu menu, OnMenuItemClickListener listener) {
             if (mIsDestroyed) return;
-            if (MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity)) {
+            if (isOpenInNewWindowEnabled()) {
                 menu.add(Menu.NONE, ID_OPEN_IN_NEW_WINDOW, Menu.NONE,
                         R.string.contextmenu_open_in_other_window)
                         .setOnMenuItemClickListener(listener);
             }
             menu.add(Menu.NONE, ID_OPEN_IN_NEW_TAB, Menu.NONE, R.string.contextmenu_open_in_new_tab)
                     .setOnMenuItemClickListener(listener);
-            if (PrefServiceBridge.getInstance().isIncognitoModeEnabled()) {
+            if (isOpenInIncognitoEnabled()) {
                 menu.add(Menu.NONE, ID_OPEN_IN_INCOGNITO_TAB, Menu.NONE,
                         R.string.contextmenu_open_in_incognito_tab).setOnMenuItemClickListener(
                         listener);
@@ -314,22 +315,15 @@ public class NewTabPage
             if (mIsDestroyed) return false;
             switch (menuId) {
                 case ID_OPEN_IN_NEW_WINDOW:
-                    TabDelegate tabDelegate = new TabDelegate(false);
-                    LoadUrlParams loadUrlParams = new LoadUrlParams(item.getUrl());
-                    tabDelegate.createTabInOtherWindow(loadUrlParams, mActivity,
-                            mTab.getParentId());
+                    openUrlInNewWindow(item.getUrl());
                     return true;
                 case ID_OPEN_IN_NEW_TAB:
                     recordOpenedMostVisitedItem(item);
-                    mTabModelSelector.openNewTab(
-                            new LoadUrlParams(item.getUrl(), PageTransition.AUTO_BOOKMARK),
-                            TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, false);
+                    openUrlInNewTab(item.getUrl(), false);
                     return true;
                 case ID_OPEN_IN_INCOGNITO_TAB:
                     recordOpenedMostVisitedItem(item);
-                    mTabModelSelector.openNewTab(
-                            new LoadUrlParams(item.getUrl(), PageTransition.AUTO_BOOKMARK),
-                            TabLaunchType.FROM_LONGPRESS_FOREGROUND, mTab, true);
+                    openUrlInNewTab(item.getUrl(), true);
                     return true;
                 case ID_REMOVE:
                     mMostVisitedSites.addBlacklistedUrl(item.getUrl());
@@ -338,6 +332,29 @@ public class NewTabPage
                 default:
                     return false;
             }
+        }
+
+        @Override
+        public boolean isOpenInNewWindowEnabled() {
+            return MultiWindowUtils.getInstance().isOpenInOtherWindowSupported(mActivity);
+        }
+
+        @Override
+        public boolean isOpenInIncognitoEnabled() {
+            return PrefServiceBridge.getInstance().isIncognitoModeEnabled();
+        }
+
+        @Override
+        public void openUrlInNewWindow(String url) {
+            TabDelegate tabDelegate = new TabDelegate(false);
+            LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+            tabDelegate.createTabInOtherWindow(loadUrlParams, mActivity, mTab.getParentId());
+        }
+
+        @Override
+        public void openUrlInNewTab(String url, boolean incognito) {
+            mTabModelSelector.openNewTab(new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK),
+                    TabLaunchType.FROM_LONGPRESS_BACKGROUND, mTab, incognito);
         }
 
         @Override
@@ -655,16 +672,30 @@ public class NewTabPage
     /**
      * Get the bounds of the search box in relation to the top level NewTabPage view.
      *
-     * @param originalBounds The bounding region of the search box without external transforms
-     *                       applied.  The delta between this and the transformed bounds determines
-     *                       the amount of scroll applied to this view.
-     * @param transformedBounds The bounding region of the search box including any transforms
-     *                          applied by the parent view hierarchy up to the NewTabPage view.
-     *                          This more accurately reflects the current drawing location of the
-     *                          search box.
+     * @param bounds The current drawing location of the search box.
+     * @param translation The translation applied to the search box by the parent view hierarchy up
+     *                    to the NewTabPage view.
      */
-    public void getSearchBoxBounds(Rect originalBounds, Rect transformedBounds) {
-        mNewTabPageView.getSearchBoxBounds(originalBounds, transformedBounds);
+    public void getSearchBoxBounds(Rect bounds, Point translation) {
+        mNewTabPageView.getSearchBoxBounds(bounds, translation);
+    }
+
+    /**
+     * Updates the opacity of the search box when scrolling.
+     *
+     * @param alpha opacity (alpha) value to use.
+     */
+    public void setSearchBoxAlpha(float alpha) {
+        mNewTabPageView.setSearchBoxAlpha(alpha);
+    }
+
+    /**
+     * Updates the opacity of the search provider logo when scrolling.
+     *
+     * @param alpha opacity (alpha) value to use.
+     */
+    public void setSearchProviderLogoAlpha(float alpha) {
+        mNewTabPageView.setSearchProviderLogoAlpha(alpha);
     }
 
     /**

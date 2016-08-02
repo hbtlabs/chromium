@@ -15,7 +15,6 @@ PageLoadTiming::~PageLoadTiming() {}
 bool PageLoadTiming::operator==(const PageLoadTiming& other) const {
   return navigation_start == other.navigation_start &&
          response_start == other.response_start &&
-         dom_loading == other.dom_loading &&
          dom_content_loaded_event_start ==
              other.dom_content_loaded_event_start &&
          load_event_start == other.load_event_start &&
@@ -23,6 +22,7 @@ bool PageLoadTiming::operator==(const PageLoadTiming& other) const {
          first_paint == other.first_paint &&
          first_text_paint == other.first_text_paint &&
          first_image_paint == other.first_image_paint &&
+         first_contentful_paint == other.first_contentful_paint &&
          parse_start == other.parse_start && parse_stop == other.parse_stop &&
          parse_blocked_on_script_load_duration ==
              other.parse_blocked_on_script_load_duration &&
@@ -31,11 +31,11 @@ bool PageLoadTiming::operator==(const PageLoadTiming& other) const {
 }
 
 bool PageLoadTiming::IsEmpty() const {
-  return navigation_start.is_null() && !response_start && !dom_loading &&
+  return navigation_start.is_null() && !response_start &&
          !dom_content_loaded_event_start && !load_event_start &&
          !first_layout && !first_paint && !first_text_paint &&
-         !first_image_paint && !parse_start && !parse_stop &&
-         !parse_blocked_on_script_load_duration &&
+         !first_image_paint && !first_contentful_paint && !parse_start &&
+         !parse_stop && !parse_blocked_on_script_load_duration &&
          !parse_blocked_on_script_load_from_document_write_duration;
 }
 

@@ -108,6 +108,7 @@ public:
     // True if the last display item is a begin that doesn't draw content.
     bool lastDisplayItemIsNoopBegin() const;
     void removeLastDisplayItem();
+    const DisplayItem* lastDisplayItem(unsigned offset);
 
     void beginSkippingCache() { ++m_skippingCacheCount; }
     void endSkippingCache() { DCHECK(m_skippingCacheCount > 0); --m_skippingCacheCount; }
@@ -175,7 +176,7 @@ protected:
     }
 
 private:
-    friend class PaintControllerTest;
+    friend class PaintControllerTestBase;
     friend class PaintControllerPaintTestBase;
 
     void ensureNewDisplayItemListInitialCapacity()
@@ -212,7 +213,7 @@ private:
 #if DCHECK_IS_ON()
     // The following two methods are for checking under-invalidations
     // (when RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled).
-    void showUnderInvalidationError(const char* reason, const DisplayItem& newItem, const DisplayItem& oldItem) const;
+    void showUnderInvalidationError(const char* reason, const DisplayItem& newItem, const DisplayItem* oldItem) const;
     void checkUnderInvalidation();
     bool isCheckingUnderInvalidation() const { return m_underInvalidationCheckingEnd - m_underInvalidationCheckingBegin > 0; }
 #endif
@@ -271,6 +272,10 @@ private:
     // will check if the actual painting results are the same as the cached.
     size_t m_underInvalidationCheckingBegin;
     size_t m_underInvalidationCheckingEnd;
+    // Number of probable under-invalidations that have been skipped temporarily because the
+    // mismatching display items may be removed in the future because of no-op pairs or
+    // compositing folding.
+    int m_skippedProbableUnderInvalidationCount;
     String m_underInvalidationMessagePrefix;
 #endif
 

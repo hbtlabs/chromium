@@ -6,18 +6,17 @@ cr.define('settings', function() {
   /**
    * Class for navigable routes. May only be instantiated within this file.
    * @constructor
-   * @param {string} url
+   * @param {string} path
    * @private
    */
-  var Route = function(url) {
-    this.url = url;
+  var Route = function(path) {
+    this.path = path;
 
-    /** @private {?settings.Route} */
-    this.parent_ = null;
+    /** @type {?settings.Route} */
+    this.parent = null;
 
     // Below are all legacy properties to provide compatibility with the old
     // routing system. TODO(tommycli): Remove once routing refactor complete.
-    this.page = '';
     this.section = '';
     /** @type {!Array<string>} */ this.subpage = [];
   };
@@ -36,11 +35,10 @@ cr.define('settings', function() {
 
       // |path| extends this route's path if it doesn't have a leading slash.
       // If it does have a leading slash, it's just set as the new route's URL.
-      var newUrl = path[0] == '/' ? path : this.url + '/' + path;
+      var newUrl = path[0] == '/' ? path : this.path + '/' + path;
 
       var route = new Route(newUrl);
-      route.parent_ = this;
-      route.page = this.page;
+      route.parent = this;
       route.section = this.section;
       route.subpage = this.subpage.slice();  // Shallow copy.
 
@@ -52,13 +50,13 @@ cr.define('settings', function() {
 
     /**
      * Returns a new Route instance that's a child dialog of this route.
-     * @param {string} url
+     * @param {string} path
      * @param {string} dialogName
      * @return {!settings.Route}
      * @private
      */
-    createDialog: function(url, dialogName) {
-      var route = this.createChild(url);
+    createDialog: function(path, dialogName) {
+      var route = this.createChild(path);
       route.dialog = dialogName;
       return route;
     },
@@ -66,28 +64,27 @@ cr.define('settings', function() {
     /**
      * Returns a new Route instance that's a child section of this route.
      * TODO(tommycli): Remove once we've obsoleted the concept of sections.
-     * @param {string} url
+     * @param {string} path
      * @param {string} section
      * @return {!settings.Route}
      * @private
      */
-    createSection: function(url, section) {
-      var route = this.createChild(url);
+    createSection: function(path, section) {
+      var route = this.createChild(path);
       route.section = section;
       return route;
     },
 
     /**
-     * Returns true if this route is a descendant of the parameter.
+     * Returns true if this route matches or is an ancestor of the parameter.
      * @param {!settings.Route} route
      * @return {boolean}
      */
-    isDescendantOf: function(route) {
-      for (var parent = this.parent_; parent != null; parent = parent.parent_) {
-        if (route == parent)
+    contains: function(route) {
+      for (var r = route; r != null; r = r.parent) {
+        if (this == r)
           return true;
       }
-
       return false;
     },
   };
@@ -97,11 +94,8 @@ cr.define('settings', function() {
 
   // Root pages.
   r.BASIC = new Route('/');
-  r.BASIC.page = 'basic';
   r.ADVANCED = new Route('/advanced');
-  r.ADVANCED.page = 'advanced';
   r.ABOUT = new Route('/help');
-  r.ABOUT.page = 'about';
 
 <if expr="chromeos">
   r.INTERNET = r.BASIC.createSection('/internet', 'internet');
@@ -140,8 +134,9 @@ cr.define('settings', function() {
 
   r.DEVICE = r.BASIC.createSection('/device', 'device');
   r.POINTERS = r.DEVICE.createChild('/pointer-overlay', 'pointers');
-  r.KEYBARD = r.DEVICE.createChild('/keyboard-overlay', 'keyboard');
+  r.KEYBOARD = r.DEVICE.createChild('/keyboard-overlay', 'keyboard');
   r.DISPLAY = r.DEVICE.createChild('/display', 'display');
+  r.NOTES = r.DEVICE.createChild('/note', 'note');
 </if>
 
   r.PRIVACY = r.ADVANCED.createSection('/privacy', 'privacy');
@@ -262,7 +257,83 @@ cr.define('settings', function() {
   r.DETAILED_BUILD_INFO.section = 'about';
 </if>
 
+  var routeObservers_ = new Set();
+
+  /** @polymerBehavior */
+  var RouteObserverBehavior = {
+    /** @override */
+    attached: function() {
+      assert(!routeObservers_.has(this));
+      routeObservers_.add(this);
+    },
+
+    /** @override */
+    detached: function() {
+      assert(routeObservers_.delete(this));
+    },
+
+    /** @abstract */
+    currentRouteChanged: assertNotReached,
+  };
+
+  /**
+   * Returns the matching canonical route, or null if none matches.
+   * @param {string} path
+   * @return {?settings.Route}
+   * @private
+   */
+  var getRouteForPath = function(path) {
+    // TODO(tommycli): Use Object.values once Closure compilation supports it.
+    var matchingKey = Object.keys(Route).find(function(key) {
+      return Route[key].path == path;
+    });
+
+    return Route[matchingKey] || null;
+  };
+
+  /**
+   * The current active route. This may only be updated via the global
+   * function settings.navigateTo.
+   * @private {!settings.Route}
+   */
+  var currentRoute_ = getRouteForPath(window.location.pathname) || Route.BASIC;
+
+  /**
+   * Helper function to set the current route and notify all observers.
+   * @param {!settings.Route} route
+   */
+  var setCurrentRoute = function(route) {
+    currentRoute_ = route;
+    for (var observer of routeObservers_)
+      observer.currentRouteChanged();
+  };
+
+  /** @return {!settings.Route} */
+  var getCurrentRoute = function() { return currentRoute_; };
+
+  /**
+   * Navigates to a canonical route and pushes a new history entry.
+   * @param {!settings.Route} route
+   * @private
+   */
+  var navigateTo = function(route) {
+    if (assert(route) == currentRoute_)
+      return;
+
+    window.history.pushState(undefined, document.title, route.path);
+    setCurrentRoute(route);
+  };
+
+  window.addEventListener('popstate', function(event) {
+    // On pop state, do not push the state onto the window.history again.
+    setCurrentRoute(getRouteForPath(window.location.pathname) || Route.BASIC);
+  });
+
   return {
     Route: Route,
+    RouteObserverBehavior: RouteObserverBehavior,
+    getRouteForPath: getRouteForPath,
+    getCurrentRoute: getCurrentRoute,
+    navigateTo: navigateTo,
   };
 });

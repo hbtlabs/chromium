@@ -165,7 +165,9 @@ DEFINE_SCOPED_UMA_HISTOGRAM_TIMER(PendingTreeDurationHistogramTimer,
                                   "Scheduling.%s.PendingTreeDuration");
 
 LayerTreeHostImpl::FrameData::FrameData()
-    : render_surface_layer_list(nullptr), has_no_damage(false) {}
+    : render_surface_layer_list(nullptr),
+      has_no_damage(false),
+      may_contain_video(false) {}
 
 LayerTreeHostImpl::FrameData::~FrameData() {}
 
@@ -253,9 +255,9 @@ LayerTreeHostImpl::LayerTreeHostImpl(
   SetDebugState(settings.initial_debug_state);
 
   // LTHI always has an active tree.
-  active_tree_ =
-      LayerTreeImpl::create(this, new SyncedProperty<ScaleGroup>(),
-                            new SyncedTopControls, new SyncedElasticOverscroll);
+  active_tree_ = base::MakeUnique<LayerTreeImpl>(
+      this, new SyncedProperty<ScaleGroup>, new SyncedTopControls,
+      new SyncedElasticOverscroll);
   active_tree_->property_trees()->is_active = true;
 
   viewport_ = Viewport::Create(this);
@@ -912,6 +914,8 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(
         DCHECK_EQ(active_tree_.get(), it->layer_tree_impl());
 
         frame->will_draw_layers.push_back(*it);
+        if (it->may_contain_video())
+          frame->may_contain_video = true;
 
         it->AppendQuads(target_render_pass, &append_quads_data);
       }
@@ -1100,6 +1104,7 @@ DrawResult LayerTreeHostImpl::PrepareToDraw(FrameData* frame) {
   frame->render_passes.clear();
   frame->will_draw_layers.clear();
   frame->has_no_damage = false;
+  frame->may_contain_video = false;
 
   if (active_tree_->RootRenderSurface()) {
     gfx::Rect device_viewport_damage_rect = viewport_damage_rect_;
@@ -1207,9 +1212,9 @@ void LayerTreeHostImpl::ResetTreesForTesting() {
   if (active_tree_)
     active_tree_->DetachLayers();
   active_tree_ =
-      LayerTreeImpl::create(this, active_tree()->page_scale_factor(),
-                            active_tree()->top_controls_shown_ratio(),
-                            active_tree()->elastic_overscroll());
+      base::MakeUnique<LayerTreeImpl>(this, active_tree()->page_scale_factor(),
+                                      active_tree()->top_controls_shown_ratio(),
+                                      active_tree()->elastic_overscroll());
   active_tree_->property_trees()->is_active = true;
   if (pending_tree_)
     pending_tree_->DetachLayers();
@@ -1520,16 +1525,13 @@ void LayerTreeHostImpl::ReclaimResources(
 
 void LayerTreeHostImpl::OnDraw(const gfx::Transform& transform,
                                const gfx::Rect& viewport,
-                               const gfx::Rect& clip,
                                bool resourceless_software_draw) {
   DCHECK(!resourceless_software_draw_);
   const bool transform_changed = external_transform_ != transform;
   const bool viewport_changed = external_viewport_ != viewport;
-  const bool clip_changed = external_clip_ != clip;
 
   external_transform_ = transform;
   external_viewport_ = viewport;
-  external_clip_ = clip;
 
   {
     base::AutoReset<bool> resourceless_software_draw_reset(
@@ -1538,15 +1540,9 @@ void LayerTreeHostImpl::OnDraw(const gfx::Transform& transform,
     // For resourceless software draw, always set full damage to ensure they
     // always swap. Otherwise, need to set redraw for any changes to draw
     // parameters.
-    const bool draw_params_changed =
-        transform_changed || viewport_changed || clip_changed;
-    if (resourceless_software_draw_ || draw_params_changed) {
+    if (transform_changed || viewport_changed || resourceless_software_draw_) {
       SetFullRootLayerDamage();
       SetNeedsRedraw();
-    }
-
-    // UpdateDrawProperties does not depend on clip.
-    if (transform_changed || viewport_changed || resourceless_software_draw_) {
       active_tree_->set_needs_update_draw_properties();
     }
 
@@ -1677,7 +1673,7 @@ void LayerTreeHostImpl::DrawLayers(FrameData* frame) {
 
   renderer_->DrawFrame(&frame->render_passes,
                        active_tree_->device_scale_factor(), gfx::ColorSpace(),
-                       DeviceViewport(), DeviceClip());
+                       DeviceViewport(), DeviceViewport());
   // The render passes should be consumed by the renderer.
   DCHECK(frame->render_passes.empty());
 
@@ -1824,6 +1820,7 @@ bool LayerTreeHostImpl::SwapBuffers(const LayerTreeHostImpl::FrameData& frame) {
     return false;
   }
   CompositorFrameMetadata metadata = MakeCompositorFrameMetadata();
+  metadata.may_contain_video = frame.may_contain_video;
   active_tree()->FinishSwapPromises(&metadata);
   for (auto& latency : metadata.latency_info) {
     TRACE_EVENT_WITH_FLOW1("input,benchmark",
@@ -1943,13 +1940,14 @@ bool LayerTreeHostImpl::IsActivelyScrolling() const {
 
 void LayerTreeHostImpl::CreatePendingTree() {
   CHECK(!pending_tree_);
-  if (recycle_tree_)
+  if (recycle_tree_) {
     recycle_tree_.swap(pending_tree_);
-  else
-    pending_tree_ =
-        LayerTreeImpl::create(this, active_tree()->page_scale_factor(),
-                              active_tree()->top_controls_shown_ratio(),
-                              active_tree()->elastic_overscroll());
+  } else {
+    pending_tree_ = base::MakeUnique<LayerTreeImpl>(
+        this, active_tree()->page_scale_factor(),
+        active_tree()->top_controls_shown_ratio(),
+        active_tree()->elastic_overscroll());
+  }
 
   client_->OnCanDrawStateChanged(CanDraw());
   TRACE_EVENT_ASYNC_BEGIN0("cc", "PendingTree:waiting", pending_tree_.get());
@@ -2405,13 +2403,6 @@ gfx::Rect LayerTreeHostImpl::DeviceViewport() const {
     return gfx::Rect(device_viewport_size_);
 
   return external_viewport_;
-}
-
-gfx::Rect LayerTreeHostImpl::DeviceClip() const {
-  if (external_clip_.IsEmpty())
-    return DeviceViewport();
-
-  return external_clip_;
 }
 
 const gfx::Transform& LayerTreeHostImpl::DrawTransform() const {

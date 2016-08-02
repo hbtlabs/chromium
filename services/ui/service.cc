@@ -12,8 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
-#include "mojo/public/c/system/main.h"
 #include "services/catalog/public/cpp/resource_loader.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
@@ -156,7 +156,6 @@ void Service::OnStart(const shell::Identity& identity) {
   ui::OzonePlatform::InitParams params;
   params.connector = connector();
   params.single_process = false;
-
   ui::OzonePlatform::InitializeForUI(params);
 
   // TODO(kylechar): We might not always want a US keyboard layout.

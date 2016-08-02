@@ -256,6 +256,10 @@ BrowserProcessImpl::BrowserProcessImpl(
 }
 
 BrowserProcessImpl::~BrowserProcessImpl() {
+#if defined(ENABLE_EXTENSIONS)
+  extensions::ExtensionsBrowserClient::Set(nullptr);
+#endif
+
 #if !defined(OS_ANDROID)
   KeepAliveRegistry::GetInstance()->RemoveObserver(this);
 #endif  // !defined(OS_ANDROID)
@@ -1085,11 +1089,11 @@ void BrowserProcessImpl::CreateNotificationPlatformBridge() {
 }
 
 void BrowserProcessImpl::CreateNotificationUIManager() {
-// Android does not use the NotificationUIManager anuymore
+// Android does not use the NotificationUIManager anymore
 // All notification traffic is routed through NotificationPlatformBridge.
 #if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
   DCHECK(!notification_ui_manager_);
-  notification_ui_manager_.reset(NotificationUIManager::Create(local_state()));
+  notification_ui_manager_.reset(NotificationUIManager::Create());
   created_notification_ui_manager_ = true;
 #endif
 }
@@ -1151,10 +1155,12 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
 
   base::FilePath user_data_dir;
   PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::FilePath indexed_ruleset_base_dir =
+      user_data_dir.Append(subresource_filter::kTopLevelDirectoryName)
+          .Append(subresource_filter::kIndexedRulesetBaseDirectoryName);
   subresource_filter_ruleset_service_.reset(
       new subresource_filter::RulesetService(
-          local_state(), blocking_task_runner,
-          user_data_dir.Append(subresource_filter::kRulesetBaseDirectoryName)));
+          local_state(), blocking_task_runner, indexed_ruleset_base_dir));
   subresource_filter_ruleset_service_->RegisterDistributor(
       base::WrapUnique(new subresource_filter::ContentRulesetDistributor));
 }

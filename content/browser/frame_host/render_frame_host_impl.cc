@@ -35,7 +35,6 @@
 #include "content/browser/frame_host/render_frame_host_delegate.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
-#include "content/browser/geolocation/geolocation_service_context.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/permissions/permission_service_context.h"
 #include "content/browser/permissions/permission_service_impl.h"
@@ -80,6 +79,7 @@
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
+#include "device/geolocation/geolocation_service_context.h"
 #include "device/vibration/vibration_manager_impl.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/interface_provider.h"
@@ -94,7 +94,7 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "content/browser/mojo/service_registrar_android.h"
+#include "content/browser/mojo/interface_registrar_android.h"
 #if defined(ENABLE_MOJO_CDM)
 #include "content/browser/media/android/provision_fetcher_impl.h"
 #endif
@@ -107,7 +107,7 @@
 #if defined(ENABLE_WEBVR)
 #include "base/command_line.h"
 #include "content/public/common/content_switches.h"
-#include "device/vr/vr_device_manager.h" // nogncheck
+#include "device/vr/vr_service_impl.h" // nogncheck
 #endif
 
 using base::TimeDelta;
@@ -954,7 +954,7 @@ void RenderFrameHostImpl::OnDetach() {
 }
 
 void RenderFrameHostImpl::OnFrameFocused() {
-  frame_tree_->SetFocusedFrame(frame_tree_node_, GetSiteInstance());
+  delegate_->SetFocusedFrame(frame_tree_node_, GetSiteInstance());
 }
 
 void RenderFrameHostImpl::OnOpenURL(const FrameHostMsg_OpenURL_Params& params) {
@@ -2051,7 +2051,7 @@ void RenderFrameHostImpl::OnHidePopup() {
 #endif
 
 void RenderFrameHostImpl::RegisterMojoInterfaces() {
-  GeolocationServiceContext* geolocation_service_context =
+  device::GeolocationServiceContext* geolocation_service_context =
       delegate_ ? delegate_->GetGeolocationServiceContext() : NULL;
   if (geolocation_service_context) {
     // TODO(creis): Bind process ID here so that GeolocationServiceImpl
@@ -2064,7 +2064,7 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
     // the renderer side. Hence, supply the reference to this object as a weak
     // pointer.
     GetInterfaceRegistry()->AddInterface(
-        base::Bind(&GeolocationServiceContext::CreateService,
+        base::Bind(&device::GeolocationServiceContext::CreateService,
                    base::Unretained(geolocation_service_context),
                    base::Bind(&RenderFrameHostImpl::DidUseGeolocationPermission,
                               weak_ptr_factory_.GetWeakPtr())));
@@ -2104,9 +2104,9 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
 #endif
 
   if (enable_web_bluetooth) {
-    GetInterfaceRegistry()->AddInterface(
-        base::Bind(&RenderFrameHostImpl::CreateWebBluetoothService,
-                   base::Unretained(this)));
+    GetInterfaceRegistry()->AddInterface(base::Bind(
+        base::IgnoreResult(&RenderFrameHostImpl::CreateWebBluetoothService),
+        base::Unretained(this)));
   }
 
 #if defined(MOJO_SHELL_CLIENT)
@@ -2122,7 +2122,7 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
 
   if (browser_command_line.HasSwitch(switches::kEnableWebVR)) {
     GetInterfaceRegistry()->AddInterface<device::VRService>(
-        base::Bind(&device::VRDeviceManager::BindRequest));
+        base::Bind(&device::VRServiceImpl::BindRequest));
   }
 #endif
 
@@ -2339,6 +2339,10 @@ void RenderFrameHostImpl::SetFocusedFrame() {
   Send(new FrameMsg_SetFocusedFrame(routing_id_));
 }
 
+void RenderFrameHostImpl::ClearFocusedFrame() {
+  Send(new FrameMsg_ClearFocusedFrame(routing_id_));
+}
+
 void RenderFrameHostImpl::ExtendSelectionAndDelete(size_t before,
                                                    size_t after) {
   Send(new InputMsg_ExtendSelectionAndDelete(routing_id_, before, after));
@@ -2475,19 +2479,18 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   frame_->GetInterfaceProvider(std::move(remote_interfaces_request));
 
 #if defined(OS_ANDROID)
-  service_registry_android_ =
-      ServiceRegistryAndroid::Create(interface_registry_.get(),
-                                     remote_interfaces_.get());
-  ServiceRegistrarAndroid::RegisterFrameHostServices(
-      service_registry_android_.get());
+  interface_registry_android_ =
+      InterfaceRegistryAndroid::Create(interface_registry_.get());
+  InterfaceRegistrarAndroid::ExposeInterfacesToFrame(
+      interface_registry_android_.get());
 #endif
 }
 
 void RenderFrameHostImpl::InvalidateMojoConnection() {
 #if defined(OS_ANDROID)
-  // The Android-specific service registry has a reference to
-  // |service_registry_| and thus must be torn down first.
-  service_registry_android_.reset();
+  // The Android-specific interface registry has a reference to
+  // |interface_registry_| and thus must be torn down first.
+  interface_registry_android_.reset();
 #endif
 
   interface_registry_.reset();
@@ -3004,6 +3007,8 @@ void RenderFrameHostImpl::AXContentTreeDataToAXTreeData(
     return;
 
   // For the root frame tree node, also store the AXTreeID of the focused frame.
+  // TODO(avallee): https://crbug.com/610795: No focus ax events.
+  // This is probably where we need to fix the bug to enable the test.
   FrameTreeNode* focused_frame_tree_node = frame_tree_->GetFocusedFrame();
   if (!focused_frame_tree_node)
     return;
@@ -3013,7 +3018,7 @@ void RenderFrameHostImpl::AXContentTreeDataToAXTreeData(
   dst->focused_tree_id = focused_frame->GetAXTreeID();
 }
 
-void RenderFrameHostImpl::CreateWebBluetoothService(
+WebBluetoothServiceImpl* RenderFrameHostImpl::CreateWebBluetoothService(
     blink::mojom::WebBluetoothServiceRequest request) {
   DCHECK(!web_bluetooth_service_);
   web_bluetooth_service_.reset(
@@ -3023,6 +3028,7 @@ void RenderFrameHostImpl::CreateWebBluetoothService(
   // handler after it's destroyed so it can't run after the RFHI is destroyed.
   web_bluetooth_service_->SetClientConnectionErrorHandler(base::Bind(
       &RenderFrameHostImpl::DeleteWebBluetoothService, base::Unretained(this)));
+  return web_bluetooth_service_.get();
 }
 
 void RenderFrameHostImpl::DeleteWebBluetoothService() {

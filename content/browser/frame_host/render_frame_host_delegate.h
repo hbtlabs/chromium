@@ -29,8 +29,12 @@ namespace IPC {
 class Message;
 }
 
-namespace content {
+namespace device {
 class GeolocationServiceContext;
+}
+
+namespace content {
+class FrameTreeNode;
 class InterstitialPage;
 class PageState;
 class RenderFrameHost;
@@ -149,7 +153,7 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       int browser_plugin_instance_id);
 
   // Gets the GeolocationServiceContext associated with this delegate.
-  virtual GeolocationServiceContext* GetGeolocationServiceContext();
+  virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
 
   // Gets the WakeLockServiceContext associated with this delegate.
   virtual WakeLockServiceContext* GetWakeLockServiceContext();
@@ -183,6 +187,10 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // refactoring for --site-per-process mode is further along.  See
   // https://crbug.com/330264.
   virtual void EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) {}
+
+  // Set the |node| frame as focused in the current FrameTree as well as
+  // possibly changing focus in distinct but related inner/outer WebContents.
+  virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {}
 
   // Creates a WebUI object for a frame navigating to |url|. If no WebUI
   // applies, returns null.

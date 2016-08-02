@@ -9,7 +9,6 @@
 #include "platform/inspector_protocol/String16.h"
 #include "platform/v8_inspector/protocol/Console.h"
 #include "platform/v8_inspector/protocol/Runtime.h"
-#include "platform/v8_inspector/public/V8ConsoleTypes.h"
 #include <deque>
 #include <v8.h>
 
@@ -37,13 +36,14 @@ public:
 
     static std::unique_ptr<V8ConsoleMessage> createForException(
         double timestamp,
-        const String16& message,
+        const String16& detailedMessage,
         const String16& url,
         unsigned lineNumber,
         unsigned columnNumber,
         std::unique_ptr<V8StackTraceImpl>,
         int scriptId,
         v8::Isolate*,
+        const String16& message,
         int contextId,
         v8::Local<v8::Value> exception,
         unsigned exceptionId);
@@ -80,6 +80,7 @@ private:
     unsigned m_exceptionId;
     unsigned m_revokedExceptionId;
     Arguments m_arguments;
+    String16 m_detailedMessage;
 };
 
 class V8ConsoleMessageStorage {
@@ -96,8 +97,6 @@ public:
     void clear();
 
 private:
-    void notifyClear();
-
     V8DebuggerImpl* m_debugger;
     int m_contextGroupId;
     int m_expiredCount;

@@ -279,11 +279,15 @@ def main(argv):
       help='Path to the proguard .info output for this apk.')
   parser.add_option('--has-alternative-locale-resource', action='store_true',
       help='Whether there is alternative-locale-resource in direct deps')
+  parser.add_option('--fail',
+      help='GYP-list of error message lines to fail with.')
 
   options, args = parser.parse_args(argv)
 
   if args:
     parser.error('No positional arguments should be given.')
+  if options.fail:
+    parser.error('\n'.join(build_utils.ParseGypList(options.fail)))
 
   required_options_map = {
       'java_binary': ['build_config', 'jar_path'],
@@ -410,7 +414,6 @@ def main(argv):
           str(deps_not_support_android))
 
   if options.type in ('java_binary', 'java_library', 'android_apk'):
-    deps_info['resources_deps'] = [c['path'] for c in all_resources_deps]
     deps_info['jar_path'] = options.jar_path
     if options.type == 'android_apk' or options.supports_android:
       deps_info['dex_path'] = options.dex_path
