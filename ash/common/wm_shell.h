@@ -15,6 +15,11 @@
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/wm/lock_state_observer.h"
 #include "base/observer_list.h"
+#include "ui/base/ui_base_types.h"
+
+namespace gfx {
+class Point;
+}
 
 namespace views {
 class PointerWatcher;
@@ -31,6 +36,7 @@ class KeyboardBrightnessControlDelegate;
 class KeyboardUI;
 class MaximizeModeController;
 class MruWindowTracker;
+class NewWindowDelegate;
 class ScopedDisableInternalMouseAndKeyboard;
 class SessionStateDelegate;
 class ShelfDelegate;
@@ -100,6 +106,10 @@ class ASH_EXPORT WmShell {
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
 
   MediaDelegate* media_delegate() { return media_delegate_.get(); }
+
+  NewWindowDelegate* new_window_delegate() {
+    return new_window_delegate_.get();
+  }
 
   ShelfDelegate* shelf_delegate() { return shelf_delegate_.get(); }
 
@@ -203,6 +213,11 @@ class ASH_EXPORT WmShell {
 
   virtual void RecordUserMetricsAction(UserMetricsAction action) = 0;
   virtual void RecordTaskSwitchMetric(TaskSwitchSource source) = 0;
+
+  // Shows the context menu for the background and the shelf at
+  // |location_in_screen|.
+  virtual void ShowContextMenu(const gfx::Point& location_in_screen,
+                               ui::MenuSourceType source_type) = 0;
 
   // Returns a WindowResizer to handle dragging. |next_window_resizer| is
   // the next WindowResizer in the WindowResizer chain. This may return
@@ -323,6 +338,7 @@ class ASH_EXPORT WmShell {
   std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
   std::unique_ptr<MediaDelegate> media_delegate_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
+  std::unique_ptr<NewWindowDelegate> new_window_delegate_;
   std::unique_ptr<ShelfDelegate> shelf_delegate_;
   std::unique_ptr<ShelfModel> shelf_model_;
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;

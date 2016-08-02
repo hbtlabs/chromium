@@ -16,6 +16,7 @@ if (is_android) {
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
   import("//build/mac/tweak_info_plist.gni")
+  import("//third_party/icu/config.gni")
   import("//v8/gni/v8.gni")
 } else if (is_win) {
   import("//build/win/syzygy/syzygy.gni")
@@ -235,6 +236,7 @@ static_library("content_shell_lib") {
     "//content/test:test_support",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
+    "//device/geolocation:device_geolocation",
     "//gin",
     "//gpu",
     "//ipc",
@@ -572,7 +574,6 @@ if (is_mac) {
   bundle_data("content_shell_framework_resources") {
     sources = [
       "$root_out_dir/content_shell.pak",
-      "$root_out_dir/icudtl.dat",
       "resources/missingImage.png",
       "resources/textAreaResizeCorner.png",
     ]
@@ -581,9 +582,12 @@ if (is_mac) {
       ":pak",
     ]
 
-    deps = [
-      "//third_party/icu:icudata",
-    ]
+    if (icu_use_data_file) {
+      sources += [ "$root_out_dir/icudtl.dat" ]
+      deps = [
+        "//third_party/icu:icudata",
+      ]
+    }
 
     if (v8_use_external_startup_data) {
       sources += [
@@ -745,6 +749,4 @@ mojom("mojo_bindings") {
   sources = [
     "common/layout_test/layout_test_bluetooth_fake_adapter_setter.mojom",
   ]
-
-  use_new_wrapper_types = false
 }

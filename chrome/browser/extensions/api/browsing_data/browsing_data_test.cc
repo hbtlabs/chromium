@@ -46,34 +46,22 @@ const char kRemoveEverythingArguments[] =
 
 class ExtensionBrowsingDataTest : public InProcessBrowserTest {
  public:
-  base::Time GetBeginTime() {
-    return called_with_details_->removal_begin;
+  const base::Time& GetBeginTime() {
+    return remover_->GetLastUsedBeginTime();
   }
 
   int GetRemovalMask() {
-    return called_with_details_->removal_mask;
+    return remover_->GetLastUsedRemovalMask();
   }
 
   int GetOriginTypeMask() {
-    return called_with_details_->origin_type_mask;
+    return remover_->GetLastUsedOriginTypeMask();
   }
 
  protected:
   void SetUpOnMainThread() override {
-    called_with_details_.reset(new BrowsingDataRemover::NotificationDetails());
-    callback_subscription_ =
-        BrowsingDataRemover::RegisterOnBrowsingDataRemovedCallback(
-            base::Bind(&ExtensionBrowsingDataTest::NotifyWithDetails,
-                       base::Unretained(this)));
-  }
-
-  // Callback for browsing data removal events.
-  void NotifyWithDetails(
-      const BrowsingDataRemover::NotificationDetails& details) {
-    // We're not taking ownership of the details object, but storing a copy of
-    // it locally.
-    called_with_details_.reset(
-        new BrowsingDataRemover::NotificationDetails(details));
+    remover_ =
+        BrowsingDataRemoverFactory::GetForBrowserContext(browser()->profile());
   }
 
   int GetAsMask(const base::DictionaryValue* dict, std::string path,
@@ -148,7 +136,7 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
     EXPECT_TRUE(options->GetDouble("since", &since));
 
     double expected_since = 0;
-    if (since_pref != browsing_data::EVERYTHING) {
+    if (since_pref != browsing_data::ALL_TIME) {
       base::Time time = CalculateBeginDeleteTime(since_pref);
       expected_since = time.ToJsTime();
     }
@@ -256,10 +244,8 @@ class ExtensionBrowsingDataTest : public InProcessBrowserTest {
   }
 
  private:
-  std::unique_ptr<BrowsingDataRemover::NotificationDetails>
-      called_with_details_;
-
-  BrowsingDataRemover::CallbackSubscription callback_subscription_;
+  // Cached pointer to BrowsingDataRemover for access to testing methods.
+  BrowsingDataRemover* remover_;
 };
 
 }  // namespace
@@ -477,7 +463,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, ShortcutFunctionRemovalMask) {
 
 // Test the processing of the 'delete since' preference.
 IN_PROC_BROWSER_TEST_F(ExtensionBrowsingDataTest, SettingsFunctionSince) {
-  SetSinceAndVerify(browsing_data::EVERYTHING);
+  SetSinceAndVerify(browsing_data::ALL_TIME);
   SetSinceAndVerify(browsing_data::LAST_HOUR);
   SetSinceAndVerify(browsing_data::LAST_DAY);
   SetSinceAndVerify(browsing_data::LAST_WEEK);

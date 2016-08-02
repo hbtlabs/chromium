@@ -53,8 +53,10 @@ public:
         PAUSE,
 
         // In this policy virtual time is allowed to advance unless there are pending network
-        // fetches associated any child WebFrameScheduler.
-        PAUSE_IF_NETWORK_FETCHES_PENDING
+        // fetches associated any child WebFrameScheduler, or a document is being parsed on a
+        // background thread. Initially virtual time is not allowed to advance until we have seen
+        // at least one load. The aim being to try and make loading (more) deterministic.
+        DETERMINISTIC_LOADING
     };
 
     // Sets the virtual time policy, which is applied imemdiatly to all child WebFrameSchedulers.

@@ -7,7 +7,6 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
-#include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/inspector_protocol/Parser.h"
@@ -20,18 +19,15 @@ namespace {
 const char kV8StateKey[] = "v8";
 }
 
-InspectorSession::InspectorSession(Client* client, InspectedFrames* inspectedFrames, InstrumentingAgents* instrumentingAgents, int sessionId, bool autoFlush, V8Debugger* debugger, int contextGroupId, const String* savedState)
+InspectorSession::InspectorSession(Client* client, InstrumentingAgents* instrumentingAgents, int sessionId, bool autoFlush, V8Debugger* debugger, int contextGroupId, const String* savedState)
     : m_client(client)
     , m_v8Session(nullptr)
     , m_sessionId(sessionId)
     , m_autoFlush(autoFlush)
     , m_disposed(false)
-    , m_inspectedFrames(inspectedFrames)
     , m_instrumentingAgents(instrumentingAgents)
     , m_inspectorBackendDispatcher(new protocol::UberDispatcher(this))
 {
-    InspectorInstrumentation::frontendCreated();
-
     if (savedState) {
         std::unique_ptr<protocol::Value> state = protocol::parseJSON(*savedState);
         if (state)
@@ -74,7 +70,6 @@ void InspectorSession::dispose()
         m_agents[i - 1]->dispose();
     m_agents.clear();
     m_v8Session.reset();
-    InspectorInstrumentation::frontendDeleted();
 }
 
 void InspectorSession::dispatchProtocolMessage(const String& method, const String& message)
@@ -132,30 +127,9 @@ void InspectorSession::resumeStartup()
     m_client->resumeStartup();
 }
 
-bool InspectorSession::canExecuteScripts()
-{
-    return m_inspectedFrames ? m_inspectedFrames->root()->script().canExecuteScripts(NotAboutToExecuteScript) : true;
-}
-
-void InspectorSession::profilingStarted()
-{
-    m_client->profilingStarted();
-}
-
-void InspectorSession::profilingStopped()
-{
-    m_client->profilingStopped();
-}
-
-void InspectorSession::consoleCleared()
-{
-    m_client->consoleCleared();
-}
-
 DEFINE_TRACE(InspectorSession)
 {
     visitor->trace(m_instrumentingAgents);
-    visitor->trace(m_inspectedFrames);
     visitor->trace(m_agents);
 }
 

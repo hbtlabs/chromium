@@ -158,7 +158,7 @@ cr.define('settings_people_page', function() {
           MockInteractions.tap(disconnectButton);
           Polymer.dom.flush();
 
-          assertTrue(peoplePage.$.disconnectDialog.opened);
+          assertTrue(peoplePage.$.disconnectDialog.open);
           assertFalse(peoplePage.$.deleteProfile.hidden);
 
           var disconnectConfirm = peoplePage.$.disconnectConfirm;
@@ -178,11 +178,11 @@ cr.define('settings_people_page', function() {
           });
           Polymer.dom.flush();
 
-          assertFalse(peoplePage.$.disconnectDialog.opened);
+          assertFalse(peoplePage.$.disconnectDialog.open);
           MockInteractions.tap(disconnectButton);
           Polymer.dom.flush();
 
-          assertTrue(peoplePage.$.disconnectDialog.opened);
+          assertTrue(peoplePage.$.disconnectDialog.open);
           assertTrue(peoplePage.$.deleteProfile.hidden);
 
           var disconnectManagedProfileConfirm =
@@ -212,6 +212,33 @@ cr.define('settings_people_page', function() {
           });
 
           assertTrue(activityControls.hidden);
+        });
+      });
+
+      test('CustomizeSyncDisabledForManagedSignin', function() {
+        assertFalse(!!peoplePage.$$('#customize-sync'));
+
+        return browserProxy.whenCalled('getSyncStatus').then(function() {
+          cr.webUIListenerCallback('sync-status-changed', {
+            signedIn: true,
+            syncSystemEnabled: true,
+          });
+          Polymer.dom.flush();
+
+          var customizeSync = peoplePage.$$('#customize-sync');
+          assertTrue(!!customizeSync);
+          assertTrue(customizeSync.hasAttribute('actionable'));
+        }).then(function() {
+          cr.webUIListenerCallback('sync-status-changed', {
+            managed: true,
+            signedIn: true,
+            syncSystemEnabled: true,
+          });
+          Polymer.dom.flush();
+
+          var customizeSync = peoplePage.$$('#customize-sync');
+          assertTrue(!!customizeSync);
+          assertFalse(customizeSync.hasAttribute('actionable'));
         });
       });
     });

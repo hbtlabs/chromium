@@ -366,6 +366,7 @@ void MemoryCache::evict(MemoryCacheEntry* entry)
 
     Resource* resource = entry->resource();
     WTF_LOG(ResourceLoading, "Evicting resource %p for '%s' from cache", resource, resource->url().getString().latin1().data());
+    TRACE_EVENT1("blink", "MemoryCache::evict", "resource", resource->url().getString().utf8());
     // The resource may have already been removed by someone other than our caller,
     // who needed a fresh copy for a reload. See <http://bugs.webkit.org/show_bug.cgi?id=12479#c6>.
     update(resource, resource->size(), 0, false);
@@ -745,7 +746,7 @@ bool MemoryCache::isInSameLRUListForTest(const Resource* x, const Resource* y)
 
 #ifdef MEMORY_CACHE_STATS
 
-void MemoryCache::dumpStats(Timer<MemoryCache>*)
+void MemoryCache::dumpStats(TimerBase*)
 {
     Statistics s = getStatistics();
     printf("%-13s %-13s %-13s %-13s %-13s %-13s %-13s\n", "", "Count", "Size", "LiveSize", "DecodedSize", "PurgeableSize", "PurgedSize");

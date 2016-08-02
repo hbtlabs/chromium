@@ -11,11 +11,11 @@
 #include "ash/common/default_accessibility_delegate.h"
 #include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
+#include "ash/common/new_window_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
-#include "ash/new_window_delegate.h"
 #include "ash/pointer_watcher_delegate_aura.h"
 #include "ash/test/test_keyboard_ui.h"
 #include "ash/test/test_session_state_delegate.h"
@@ -148,7 +148,7 @@ keyboard::KeyboardUI* TestShellDelegate::CreateKeyboardUI() {
   return new TestKeyboardUI;
 }
 
-void TestShellDelegate::OpenUrl(const GURL& url) {}
+void TestShellDelegate::OpenUrlFromArc(const GURL& url) {}
 
 app_list::AppListPresenter* TestShellDelegate::GetAppListPresenter() {
   if (!app_list_presenter_) {

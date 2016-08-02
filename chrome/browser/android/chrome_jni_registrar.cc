@@ -61,7 +61,7 @@
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
 #include "chrome/browser/android/metrics/variations_session.h"
-#include "chrome/browser/android/mojo/chrome_service_registrar_android.h"
+#include "chrome/browser/android/mojo/chrome_interface_registrar_android.h"
 #include "chrome/browser/android/net/external_estimate_provider_android.h"
 #include "chrome/browser/android/ntp/most_visited_sites_bridge.h"
 #include "chrome/browser/android/ntp/new_tab_page_prefs.h"
@@ -100,6 +100,7 @@
 #include "chrome/browser/android/voice_search_tab_helper.h"
 #include "chrome/browser/android/warmup_manager.h"
 #include "chrome/browser/android/web_contents_factory.h"
+#include "chrome/browser/android/webapk/manifest_upgrade_detector.h"
 #include "chrome/browser/android/webapps/add_to_homescreen_dialog_helper.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
 #include "chrome/browser/autofill/android/personal_data_manager_android.h"
@@ -116,6 +117,7 @@
 #include "chrome/browser/net/spdyproxy/data_reduction_promo_infobar_delegate_android.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_settings_android.h"
 #include "chrome/browser/notifications/notification_platform_bridge_android.h"
+#include "chrome/browser/page_load_metrics/observers/android_page_load_metrics_observer.h"
 #include "chrome/browser/password_manager/account_chooser_dialog_android.h"
 #include "chrome/browser/password_manager/auto_signin_first_run_dialog_android.h"
 #include "chrome/browser/password_manager/credential_android.h"
@@ -177,10 +179,10 @@
 #include "components/policy/core/browser/android/component_jni_registrar.h"
 #include "components/safe_json/android/component_jni_registrar.h"
 #include "components/signin/core/browser/android/component_jni_registrar.h"
+#include "components/sync/android/sync_jni_registrar.h"
 #include "components/variations/android/component_jni_registrar.h"
 #include "components/variations/android/variations_seed_bridge.h"
 #include "components/web_contents_delegate_android/component_jni_registrar.h"
-#include "sync/android/sync_jni_registrar.h"
 
 #if defined(ENABLE_PRINTING) && !defined(ENABLE_PRINT_PREVIEW)
 #include "printing/printing_context_android.h"
@@ -252,12 +254,12 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"ChromeFeatureList", RegisterChromeFeatureListJni},
     {"ChromeHttpAuthHandler",
      ChromeHttpAuthHandler::RegisterChromeHttpAuthHandler},
+    {"ChromeInterfaceRegistrar", ChromeInterfaceRegistrarAndroid::Register},
 #if defined(ENABLE_MEDIA_ROUTER)
     {"ChromeMediaRouter", media_router::MediaRouterAndroid::Register},
     {"ChromeMediaRouterDialogController",
      media_router::MediaRouterDialogControllerAndroid::Register},
 #endif
-    {"ChromeServiceRegistrar", ChromeServiceRegistrarAndroid::Register},
     {"CompositorView", RegisterCompositorView},
     {"ConfirmInfoBar", RegisterConfirmInfoBar},
     {"ConnectionInfoPopupAndroid",
@@ -314,6 +316,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"LayerTitleCache", chrome::android::RegisterLayerTitleCache},
     {"LocationSettings", LocationSettingsImpl::Register},
     {"LogoBridge", RegisterLogoBridge},
+    {"ManifestUpgradeDetector", ManifestUpgradeDetector::Register},
     {"MediaDrmCredentialManager",
      MediaDrmCredentialManager::RegisterMediaDrmCredentialManager},
     {"MostVisitedSites", MostVisitedSitesBridge::Register},
@@ -336,6 +339,7 @@ static base::android::RegistrationMethod kChromeRegisteredMethods[] = {
     {"OmniboxViewUtil", OmniboxViewUtil::RegisterOmniboxViewUtil},
     {"OverlayPanelContent", RegisterOverlayPanelContent},
     {"PlatformUtil", platform_util::RegisterPlatformUtil},
+    {"PageLoadMetrics", RegisterPageLoadMetricsBindings},
     {"PartnerBookmarksReader",
      PartnerBookmarksReader::RegisterPartnerBookmarksReader},
     {"PasswordGenerationPopup",

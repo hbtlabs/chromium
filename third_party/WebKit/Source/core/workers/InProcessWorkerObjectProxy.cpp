@@ -69,9 +69,9 @@ void InProcessWorkerObjectProxy::reportPendingActivity(bool hasPendingActivity)
     getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&InProcessWorkerMessagingProxy::reportPendingActivity, crossThreadUnretained(m_messagingProxy), hasPendingActivity));
 }
 
-void InProcessWorkerObjectProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void InProcessWorkerObjectProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location, int exceptionId)
 {
-    getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&InProcessWorkerMessagingProxy::reportException, crossThreadUnretained(m_messagingProxy), errorMessage, passed(std::move(location))));
+    getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&InProcessWorkerMessagingProxy::reportException, crossThreadUnretained(m_messagingProxy), errorMessage, passed(std::move(location)), exceptionId));
 }
 
 void InProcessWorkerObjectProxy::reportConsoleMessage(ConsoleMessage* consoleMessage)

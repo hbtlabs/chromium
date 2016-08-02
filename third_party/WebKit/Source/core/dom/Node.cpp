@@ -861,7 +861,7 @@ Node* Node::commonAncestor(const Node& other, ContainerNode* (*parent)(const Nod
     return nullptr;
 }
 
-void Node::reattach(const AttachContext& context)
+void Node::reattachLayoutTree(const AttachContext& context)
 {
     AttachContext reattachContext(context);
     reattachContext.performingReattach = true;
@@ -903,7 +903,7 @@ void Node::reattachWhitespaceSiblingsIfNeeded(Text* start)
     for (Node* sibling = start; sibling; sibling = sibling->nextSibling()) {
         if (sibling->isTextNode() && toText(sibling)->containsOnlyWhitespace()) {
             bool hadLayoutObject = !!sibling->layoutObject();
-            toText(sibling)->reattachIfNeeded();
+            toText(sibling)->reattachLayoutTreeIfNeeded();
             // If sibling's layout object status didn't change we don't need to continue checking
             // other siblings since their layout object status won't change either.
             if (!!sibling->layoutObject() == hadLayoutObject)
@@ -2123,7 +2123,8 @@ bool Node::willRespondToMouseClickEvents()
 {
     if (isDisabledFormControl(this))
         return false;
-    return isContentEditable(*this) || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
+    document().updateStyleAndLayoutTree();
+    return hasEditableStyle(*this) || hasEventListeners(EventTypeNames::mouseup) || hasEventListeners(EventTypeNames::mousedown) || hasEventListeners(EventTypeNames::click) || hasEventListeners(EventTypeNames::DOMActivate);
 }
 
 bool Node::willRespondToTouchEvents()

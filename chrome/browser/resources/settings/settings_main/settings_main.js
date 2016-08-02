@@ -20,7 +20,7 @@ Polymer({
 
     /**
      * The current active route.
-     * @type {!SettingsRoute}
+     * @type {!settings.Route}
      */
     currentRoute: {
       type: Object,
@@ -72,31 +72,12 @@ Polymer({
   },
 
   /** @override */
-  created: function() {
-    /** @private {!PromiseResolver} */
-    this.resolver_ = new PromiseResolver;
-    settings.main.rendered = this.resolver_.promise;
-  },
-
-  /** @override */
   attached: function() {
     document.addEventListener('toggle-advanced-page', function(e) {
       this.advancedToggleExpanded_ = e.detail;
-      this.currentRoute = {
-        page: this.advancedToggleExpanded_ ? 'advanced' : 'basic',
-        section: '',
-        subpage: [],
-      };
+      settings.navigateTo(this.advancedToggleExpanded_ ?
+          settings.Route.ADVANCED : settings.Route.BASIC);
     }.bind(this));
-
-    doWhenReady(
-        function() {
-          var basicPage = this.$$('settings-basic-page');
-          return !!basicPage && basicPage.scrollHeight > 0;
-        }.bind(this),
-        function() {
-          this.resolver_.resolve();
-        }.bind(this));
   },
 
   /**
@@ -119,20 +100,19 @@ Polymer({
   },
 
   /**
-   * @param {!SettingsRoute} newRoute
    * @private
    */
   currentRouteChanged_: function(newRoute) {
     this.inSubpage_ = newRoute.subpage.length > 0;
     this.style.height = this.inSubpage_ ? '100%' : '';
 
-    if (newRoute.page == 'about') {
+    if (settings.Route.ABOUT.contains(newRoute)) {
       this.showPages_ = {about: true, basic: false, advanced: false};
     } else {
       this.showPages_ = {
         about: false,
-        basic: newRoute.page == 'basic' || !this.inSubpage_,
-        advanced: newRoute.page == 'advanced' ||
+        basic: settings.Route.BASIC.contains(newRoute) || !this.inSubpage_,
+        advanced: settings.Route.ADVANCED.contains(newRoute) ||
             (!this.inSubpage_ && this.advancedToggleExpanded_),
       };
 
@@ -144,13 +124,16 @@ Polymer({
     }
 
     // Wait for any other changes prior to calculating the overflow padding.
-    this.async(function() {
+    setTimeout(function() {
+      // Ensure any dom-if reflects the current properties.
+      Polymer.dom.flush();
+
       this.$.overscroll.style.paddingBottom = this.overscrollHeight_() + 'px';
-    });
+    }.bind(this));
   },
 
   /**
-   * Return the height that the over scroll padding should be set to.
+   * Return the height that the overscroll padding should be set to.
    * This is used to determine how much padding to apply to the end of the
    * content so that the last element may align with the top of the content
    * area.
@@ -163,39 +146,19 @@ Polymer({
       return 0;
     }
 
-    // Ensure any dom-if reflects the current properties.
-    Polymer.dom.flush();
+    var query = 'settings-section[section="' + this.currentRoute.section + '"]';
+    var topSection = this.$$('settings-basic-page').$$(query);
+    if (!topSection && this.showPages_.advanced)
+      topSection = this.$$('settings-advanced-page').$$(query);
 
-    /**
-     * @param {!Element} element
-     * @return {number}
-     */
-    var calcHeight = function(element) {
-      var style = getComputedStyle(element);
-      var height = this.parentNode.scrollHeight - element.offsetHeight +
-          parseFloat(style.marginTop) + parseFloat(style.marginBottom);
-      assert(height >= 0);
-      return height;
-    }.bind(this);
-
-    if (this.showPages_.advanced) {
-      var lastSection = this.$$('settings-advanced-page').$$(
-          'settings-section:last-of-type');
-      // |lastSection| may be null in unit tests.
-      if (!lastSection)
-        return 0;
-      return calcHeight(lastSection);
-    }
-
-    assert(this.showPages_.basic);
-    var lastSection = this.$$('settings-basic-page').$$(
-        'settings-section:last-of-type');
-    // |lastSection| may be null in unit tests.
-    if (!lastSection)
+    if (!topSection || !topSection.offsetParent)
       return 0;
-    var toggleContainer = this.$$('#toggleContainer');
-    return calcHeight(lastSection) -
-        (toggleContainer ? toggleContainer.offsetHeight : 0);
+
+    // Offset to the selected section (relative to the scrolling window).
+    let sectionTop = topSection.offsetParent.offsetTop + topSection.offsetTop;
+    // The height of the selected section and remaining content (sections).
+    let heightOfShownSections = this.$.overscroll.offsetTop - sectionTop;
+    return Math.max(0, this.parentNode.scrollHeight - heightOfShownSections);
   },
 
   /** @private */
@@ -208,11 +171,7 @@ Polymer({
    * @private
    */
   ensureInDefaultSearchPage_: function() {
-    if (this.currentRoute.page != 'basic' ||
-        this.currentRoute.section != '' ||
-        this.currentRoute.subpage.length != 0) {
-      this.currentRoute = {page: 'basic', section: '', subpage: [], url: ''};
-    }
+    settings.navigateTo(settings.Route.BASIC);
   },
 
   /**

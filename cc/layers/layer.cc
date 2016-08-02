@@ -82,6 +82,7 @@ Layer::Layer()
     : ignore_set_needs_commit_(false),
       parent_(nullptr),
       layer_tree_host_(nullptr),
+      layer_tree_(nullptr),
       num_descendants_that_draw_content_(0),
       transform_tree_index_(TransformTree::kInvalidNodeId),
       effect_tree_index_(EffectTree::kInvalidNodeId),
@@ -95,6 +96,7 @@ Layer::Layer()
       force_render_surface_for_testing_(false),
       subtree_property_changed_(false),
       layer_property_changed_(false),
+      may_contain_video_(false),
       safe_opaque_background_color_(0),
       draw_blend_mode_(SkXfermode::kSrcOver_Mode),
       num_unclipped_descendants_(0) {}
@@ -129,7 +131,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   if (layer_tree_host_) {
     layer_tree_host_->property_trees()->RemoveIdFromIdToIndexMaps(id());
     layer_tree_host_->property_trees()->needs_rebuild = true;
-    layer_tree_host_->UnregisterLayer(this);
+    layer_tree_->UnregisterLayer(this);
     if (inputs_.element_id) {
       layer_tree_host_->animation_host()->UnregisterElement(
           inputs_.element_id, ElementListType::ACTIVE);
@@ -138,7 +140,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   }
   if (host) {
     host->property_trees()->needs_rebuild = true;
-    host->RegisterLayer(this);
+    host->GetLayerTree()->RegisterLayer(this);
     if (inputs_.element_id) {
       host->AddToElementMap(this);
       host->animation_host()->RegisterElement(inputs_.element_id,
@@ -147,6 +149,7 @@ void Layer::SetLayerTreeHost(LayerTreeHost* host) {
   }
 
   layer_tree_host_ = host;
+  layer_tree_ = host ? host->GetLayerTree() : nullptr;
   InvalidatePropertyTreesIndices();
 
   // When changing hosts, the layer needs to commit its properties to the impl
@@ -214,19 +217,20 @@ void Layer::SetNextCommitWaitsForActivation() {
 }
 
 void Layer::SetNeedsPushProperties() {
-  if (layer_tree_host_)
-    layer_tree_host_->AddLayerShouldPushProperties(this);
+  if (layer_tree_)
+    layer_tree_->AddLayerShouldPushProperties(this);
 }
 
 void Layer::ResetNeedsPushPropertiesForTesting() {
-  layer_tree_host_->RemoveLayerShouldPushProperties(this);
+  if (layer_tree_)
+    layer_tree_->RemoveLayerShouldPushProperties(this);
 }
 
 bool Layer::IsPropertyChangeAllowed() const {
-  if (!layer_tree_host_)
+  if (!layer_tree_)
     return true;
 
-  return !layer_tree_host_->in_paint_layer_contents();
+  return !layer_tree_->in_paint_layer_contents();
 }
 
 sk_sp<SkPicture> Layer::GetPicture() const {
@@ -1153,6 +1157,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   // property trees. So, it is enough to check it only for the current layer.
   if (subtree_property_changed_ || layer_property_changed_)
     layer->NoteLayerPropertyChanged();
+  layer->set_may_contain_video(may_contain_video_);
   layer->SetMasksToBounds(inputs_.masks_to_bounds);
   layer->set_main_thread_scrolling_reasons(
       inputs_.main_thread_scrolling_reasons);
@@ -1201,7 +1206,7 @@ void Layer::PushPropertiesTo(LayerImpl* layer) {
   layer_property_changed_ = false;
   inputs_.update_rect = gfx::Rect();
 
-  layer_tree_host()->RemoveLayerShouldPushProperties(this);
+  layer_tree_->RemoveLayerShouldPushProperties(this);
 }
 
 void Layer::TakeCopyRequests(
@@ -1252,10 +1257,12 @@ void Layer::ClearLayerTreePropertiesForDeserializationAndAddToMap(
     LayerIdMap* layer_map) {
   (*layer_map)[inputs_.layer_id] = this;
 
-  if (layer_tree_host_)
-    layer_tree_host_->UnregisterLayer(this);
+  if (layer_tree_)
+    layer_tree_->UnregisterLayer(this);
 
   layer_tree_host_ = nullptr;
+  layer_tree_ = nullptr;
+
   parent_ = nullptr;
 
   // Clear these properties for all the children and add them to the map.
@@ -1291,7 +1298,8 @@ void Layer::FromLayerNodeProto(const proto::LayerNode& proto,
   inputs_.layer_id = proto.id();
 
   layer_tree_host_ = layer_tree_host;
-  layer_tree_host_->RegisterLayer(this);
+  layer_tree_ = layer_tree_host ? layer_tree_host->GetLayerTree() : nullptr;
+  layer_tree_->RegisterLayer(this);
 
   for (int i = 0; i < proto.children_size(); ++i) {
     const proto::LayerNode& child_proto = proto.children(i);
@@ -1359,6 +1367,7 @@ void Layer::LayerSpecificPropertiesToProto(proto::LayerProperties* proto) {
                    base->mutable_offset_to_transform_parent());
   base->set_double_sided(inputs_.double_sided);
   base->set_draws_content(draws_content_);
+  base->set_may_contain_video(may_contain_video_);
   base->set_hide_layer_and_subtree(inputs_.hide_layer_and_subtree);
   base->set_subtree_property_changed(subtree_property_changed_);
   base->set_layer_property_changed(layer_property_changed_);
@@ -1449,6 +1458,7 @@ void Layer::FromLayerSpecificPropertiesProto(
       ProtoToVector2dF(base.offset_to_transform_parent());
   inputs_.double_sided = base.double_sided();
   draws_content_ = base.draws_content();
+  may_contain_video_ = base.may_contain_video();
   inputs_.hide_layer_and_subtree = base.hide_layer_and_subtree();
   subtree_property_changed_ = base.subtree_property_changed();
   layer_property_changed_ = base.layer_property_changed();
@@ -1603,6 +1613,13 @@ void Layer::SetLayerPropertyChanged() {
   if (layer_property_changed_)
     return;
   layer_property_changed_ = true;
+  SetNeedsPushProperties();
+}
+
+void Layer::SetMayContainVideo(bool yes) {
+  if (may_contain_video_ == yes)
+    return;
+  may_contain_video_ = yes;
   SetNeedsPushProperties();
 }
 
@@ -1774,7 +1791,7 @@ void Layer::SetHasWillChangeTransformHint(bool has_will_change) {
 }
 
 AnimationHost* Layer::GetAnimationHost() const {
-  return layer_tree_host_ ? layer_tree_host_->animation_host() : nullptr;
+  return layer_tree_ ? layer_tree_->animation_host() : nullptr;
 }
 
 ElementListType Layer::GetElementTypeForAnimation() const {
@@ -1874,6 +1891,10 @@ gfx::Transform Layer::screen_space_transform() const {
   DCHECK_NE(transform_tree_index_, TransformTree::kInvalidNodeId);
   return draw_property_utils::ScreenSpaceTransform(
       this, layer_tree_host_->property_trees()->transform_tree);
+}
+
+LayerTree* Layer::GetLayerTree() const {
+  return layer_tree_;
 }
 
 }  // namespace cc

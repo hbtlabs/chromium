@@ -136,7 +136,8 @@ class RenderbufferAttachment
   }
 
   bool FormsFeedbackLoop(TextureRef* /* texture */,
-                         GLint /*level */) const override {
+                         GLint /* level */,
+                         GLint /* layer */) const override {
     return false;
   }
 
@@ -306,8 +307,10 @@ class TextureAttachment
         texture_ref_.get(), target_, level_, signature);
   }
 
-  bool FormsFeedbackLoop(TextureRef* texture, GLint level) const override {
-    return texture == texture_ref_.get() && level == level_;
+  bool FormsFeedbackLoop(TextureRef* texture,
+                         GLint level, GLint layer) const override {
+    return texture == texture_ref_.get() &&
+        level == level_ && layer == layer_;
   }
 
   bool EmulatingRGB() const override {
@@ -719,9 +722,7 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
   GLsizei width = -1;
   GLsizei height = -1;
   GLsizei samples = -1;
-  const bool kSamplesMustMatch =
-      feature_info->context_type() == CONTEXT_TYPE_WEBGL1 ||
-      feature_info->context_type() == CONTEXT_TYPE_WEBGL2 ||
+  const bool kSamplesMustMatch = feature_info->IsWebGLContext() ||
       !feature_info->feature_flags().chromium_framebuffer_mixed_samples;
 
   for (AttachmentMap::const_iterator it = attachments_.begin();

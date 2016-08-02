@@ -199,11 +199,6 @@ public:
     void makeLive(Resource*);
     void makeDead(Resource*);
 
-    // This should be called when a Resource object is created.
-    void registerLiveResource(Resource&);
-    // This should be called when a Resource object becomes unnecesarry.
-    void unregisterLiveResource(Resource&);
-
     void removeURLFromCache(const KURL&);
 
     Statistics getStatistics();
@@ -239,7 +234,7 @@ private:
     MemoryCacheLRUList* lruListFor(unsigned accessCount, size_t);
 
 #ifdef MEMORY_CACHE_STATS
-    void dumpStats(Timer<MemoryCache>*);
+    void dumpStats(TimerBase*);
     void dumpLRULists(bool includeLive) const;
 #endif
 

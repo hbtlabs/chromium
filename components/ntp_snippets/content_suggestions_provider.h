@@ -9,9 +9,9 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "components/ntp_snippets/category.h"
+#include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
-#include "components/ntp_snippets/content_suggestions_category.h"
-#include "components/ntp_snippets/content_suggestions_category_status.h"
 
 namespace gfx {
 class Image;
@@ -43,7 +43,7 @@ class ContentSuggestionsProvider {
     // IDs for the ContentSuggestions should be generated with
     // |MakeUniqueID(..)| below.
     virtual void OnNewSuggestions(
-        ContentSuggestionsCategory changed_category,
+        Category changed_category,
         std::vector<ContentSuggestion> suggestions) = 0;
 
     // Called when the status of a category changed.
@@ -52,9 +52,8 @@ class ContentSuggestionsProvider {
     // Whenever the status changes to an unavailable status, all suggestions in
     // that category must immediately be removed from all caches and from the
     // UI.
-    virtual void OnCategoryStatusChanged(
-        ContentSuggestionsCategory changed_category,
-        ContentSuggestionsCategoryStatus new_status) = 0;
+    virtual void OnCategoryStatusChanged(Category changed_category,
+                                         CategoryStatus new_status) = 0;
 
     // Called when the provider needs to shut down and will not deliver any
     // suggestions anymore.
@@ -66,10 +65,13 @@ class ContentSuggestionsProvider {
   // ownership of the observer and the observer must outlive this provider.
   virtual void SetObserver(Observer* observer) = 0;
 
-  // Determines the status of the given |category|, see
-  // ContentSuggestionsCategoryStatus.
-  virtual ContentSuggestionsCategoryStatus GetCategoryStatus(
-      ContentSuggestionsCategory category) = 0;
+  // Returns the categories provided by this provider.
+  // TODO(pke): "The value returned by this getter must not change unless
+  // OnXxx is called on the observer."
+  virtual std::vector<Category> GetProvidedCategories() = 0;
+
+  // Determines the status of the given |category|, see CategoryStatus.
+  virtual CategoryStatus GetCategoryStatus(Category category) = 0;
 
   // Dismisses the suggestion with the given ID. A provider needs to ensure that
   // a once-dismissed suggestion is never delivered again (through the
@@ -94,13 +96,8 @@ class ContentSuggestionsProvider {
   // have been permanently deleted, depending on the provider implementation.
   virtual void ClearDismissedSuggestionsForDebugging() = 0;
 
-  const std::vector<ContentSuggestionsCategory>& provided_categories() const {
-    return provided_categories_;
-  }
-
  protected:
-  ContentSuggestionsProvider(
-      const std::vector<ContentSuggestionsCategory>& provided_categories);
+  ContentSuggestionsProvider(CategoryFactory* category_factory);
   virtual ~ContentSuggestionsProvider();
 
   // Creates a unique ID. The given |within_category_id| must be unique among
@@ -108,16 +105,16 @@ class ContentSuggestionsProvider {
   // combines it with the |category| to form an ID that is unique
   // application-wide, because this provider is the only one that provides
   // suggestions for that category.
-  static std::string MakeUniqueID(ContentSuggestionsCategory category,
-                                  const std::string& within_category_id);
+  std::string MakeUniqueID(Category category,
+                           const std::string& within_category_id);
   // Reverse functions for MakeUniqueID()
-  static ContentSuggestionsCategory GetCategoryFromUniqueID(
-      const std::string& unique_id);
-  static std::string GetWithinCategoryIDFromUniqueID(
-      const std::string& unique_id);
+  Category GetCategoryFromUniqueID(const std::string& unique_id);
+  std::string GetWithinCategoryIDFromUniqueID(const std::string& unique_id);
+
+  CategoryFactory* category_factory() const { return category_factory_; }
 
  private:
-  const std::vector<ContentSuggestionsCategory> provided_categories_;
+  CategoryFactory* category_factory_;
 };
 
 }  // namespace ntp_snippets

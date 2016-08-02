@@ -160,7 +160,6 @@
 #include "modules/presentation/PresentationController.h"
 #include "modules/push_messaging/PushController.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
-#include "modules/vr/VRController.h"
 #include "modules/wake_lock/ScreenWakeLock.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
@@ -181,7 +180,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebLayer.h"
@@ -220,7 +219,6 @@
 #include "web/FindInPageCoordinates.h"
 #include "web/IndexedDBClientImpl.h"
 #include "web/LocalFileSystemClient.h"
-#include "web/MIDIClientProxy.h"
 #include "web/NavigatorContentUtilsClientImpl.h"
 #include "web/NotificationPermissionClientImpl.h"
 #include "web/RemoteFrameOwner.h"
@@ -1400,7 +1398,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::createProvisional(WebFrameClient* client, 
     // disappear, so Page::m_mainFrame can't be updated just yet.
     FrameOwner* tempOwner = DummyFrameOwner::create();
     // TODO(dcheng): This block is very similar to initializeCoreFrame. Try to reuse it here.
-    LocalFrame* frame = LocalFrame::create(webFrame->m_frameLoaderClientImpl.get(), oldFrame->host(), tempOwner, client ? client->serviceRegistry() : nullptr);
+    LocalFrame* frame = LocalFrame::create(webFrame->m_frameLoaderClientImpl.get(), oldFrame->host(), tempOwner, client ? client->interfaceProvider() : nullptr);
     // Set the name and unique name directly, bypassing any of the normal logic
     // to calculate unique name.
     frame->tree().setPrecalculatedName(toWebRemoteFrameImpl(oldWebFrame)->frame()->tree().name(), toWebRemoteFrameImpl(oldWebFrame)->frame()->tree().uniqueName());
@@ -1471,7 +1469,6 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
 
     provideNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
     provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
-    provideMIDITo(*m_frame, MIDIClientProxy::create(m_client ? m_client->webMIDIClient() : nullptr));
     provideIndexedDBClientTo(*m_frame, IndexedDBClientImpl::create());
     provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
     provideNavigatorContentUtilsTo(*m_frame, NavigatorContentUtilsClientImpl::create(this));
@@ -1483,12 +1480,9 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
     if (enableWebBluetooth)
         BluetoothSupplement::provideTo(*m_frame, m_client ? m_client->bluetooth() : nullptr);
 
-    if (RuntimeEnabledFeatures::screenOrientationEnabled())
-        ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
+    ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
     if (RuntimeEnabledFeatures::presentationEnabled())
         PresentationController::provideTo(*m_frame, m_client ? m_client->presentationClient() : nullptr);
-    if (RuntimeEnabledFeatures::webVREnabled())
-        VRController::provideTo(*m_frame, m_client ? m_client->serviceRegistry() : nullptr);
     if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
         provideAudioOutputDeviceClientTo(*m_frame, AudioOutputDeviceClientImpl::create());
     if (RuntimeEnabledFeatures::installedAppEnabled())
@@ -1497,7 +1491,7 @@ void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
 
 void WebLocalFrameImpl::initializeCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& uniqueName)
 {
-    setCoreFrame(LocalFrame::create(m_frameLoaderClientImpl.get(), host, owner, client() ? client()->serviceRegistry() : nullptr));
+    setCoreFrame(LocalFrame::create(m_frameLoaderClientImpl.get(), host, owner, client() ? client()->interfaceProvider() : nullptr));
     frame()->tree().setPrecalculatedName(name, uniqueName);
     // We must call init() after m_frame is assigned because it is referenced
     // during init(). Note that this may dispatch JS events; the frame may be

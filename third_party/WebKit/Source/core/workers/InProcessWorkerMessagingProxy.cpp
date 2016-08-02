@@ -54,10 +54,10 @@ namespace blink {
 
 namespace {
 
-void processUnhandledExceptionOnWorkerGlobalScope(const String& errorMessage, std::unique_ptr<SourceLocation> location, ExecutionContext* scriptContext)
+void processUnhandledExceptionOnWorkerGlobalScope(int exceptionId, ExecutionContext* scriptContext)
 {
     WorkerGlobalScope* globalScope = toWorkerGlobalScope(scriptContext);
-    globalScope->exceptionUnhandled(errorMessage, std::move(location));
+    globalScope->exceptionUnhandled(exceptionId);
 }
 
 void processMessageOnWorkerGlobalScope(PassRefPtr<SerializedScriptValue> message, std::unique_ptr<MessagePortChannelArray> channels, InProcessWorkerObjectProxy* workerObjectProxy, ExecutionContext* scriptContext)
@@ -155,23 +155,23 @@ void InProcessWorkerMessagingProxy::postMessageToWorkerGlobalScope(PassRefPtr<Se
     }
 }
 
-bool InProcessWorkerMessagingProxy::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask> task)
+bool InProcessWorkerMessagingProxy::postTaskToWorkerGlobalScope(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
     if (m_askedToTerminate)
         return false;
 
     DCHECK(m_workerThread);
-    m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
+    m_workerThread->postTask(location, std::move(task));
     return true;
 }
 
-void InProcessWorkerMessagingProxy::postTaskToLoader(std::unique_ptr<ExecutionContextTask> task)
+void InProcessWorkerMessagingProxy::postTaskToLoader(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
     DCHECK(getExecutionContext()->isDocument());
-    getExecutionContext()->postTask(BLINK_FROM_HERE, std::move(task));
+    getExecutionContext()->postTask(location, std::move(task));
 }
 
-void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location, int exceptionId)
 {
     DCHECK(isParentContextThread());
     if (!m_workerObject)
@@ -185,7 +185,7 @@ void InProcessWorkerMessagingProxy::reportException(const String& errorMessage, 
 
     ErrorEvent* event = ErrorEvent::create(errorMessage, location->clone(), nullptr);
     if (m_workerObject->dispatchEvent(event) == DispatchEventResult::NotCanceled)
-        postTaskToWorkerGlobalScope(createCrossThreadTask(&processUnhandledExceptionOnWorkerGlobalScope, errorMessage, passed(std::move(location))));
+        postTaskToWorkerGlobalScope(BLINK_FROM_HERE, createCrossThreadTask(&processUnhandledExceptionOnWorkerGlobalScope, exceptionId));
 }
 
 void InProcessWorkerMessagingProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, std::unique_ptr<SourceLocation> location)
@@ -245,7 +245,7 @@ void InProcessWorkerMessagingProxy::workerThreadTerminated()
     // object may still exist, and it assumes that the proxy exists, too.
     m_askedToTerminate = true;
     m_workerThread = nullptr;
-    terminateInternally();
+    m_workerInspectorProxy->workerThreadTerminated();
     if (m_mayBeDestroyed)
         delete this;
 }
@@ -260,7 +260,7 @@ void InProcessWorkerMessagingProxy::terminateWorkerGlobalScope()
     if (m_workerThread)
         m_workerThread->terminate();
 
-    terminateInternally();
+    m_workerInspectorProxy->workerThreadTerminated();
 }
 
 void InProcessWorkerMessagingProxy::postMessageToPageInspector(const String& message)
@@ -290,12 +290,6 @@ bool InProcessWorkerMessagingProxy::hasPendingActivity() const
 {
     DCHECK(isParentContextThread());
     return (m_unconfirmedMessageCount || m_workerThreadHadPendingActivity) && !m_askedToTerminate;
-}
-
-void InProcessWorkerMessagingProxy::terminateInternally()
-{
-    DCHECK(isParentContextThread());
-    m_workerInspectorProxy->workerThreadTerminated();
 }
 
 bool InProcessWorkerMessagingProxy::isParentContextThread() const

@@ -165,7 +165,7 @@ Polymer({
 
   /** @private */
   onCustomizeFontsTap_: function() {
-    this.$.pages.setSubpageChain(['appearance-fonts']);
+    settings.navigateTo(settings.Route.FONTS);
   },
 
   /** @private */
@@ -190,7 +190,7 @@ Polymer({
 
   /** @private */
   showFontsPage_: function() {
-    return this.currentRoute.subpage[0] == 'appearance-fonts';
+    return this.currentRoute == settings.Route.FONTS;
   },
 
   /**

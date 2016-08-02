@@ -10,6 +10,7 @@
 <link rel="import" href="/controls/settings_input.html">
 <link rel="import" href="/controls/settings_radio_group.html">
 <link rel="import" href="/icons.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
@@ -77,7 +78,8 @@
               <paper-radio-button class="list-item" name="false">
                 $i18n{other}
                 <settings-input no-label-float pref="{{prefs.homepage}}"
-                    label="$i18n{exampleDotCom}">
+                    label="$i18n{exampleDotCom}"
+                    stop-keyboard-event-propagation>
                 </settings-input>
               </paper-radio-button>
             </settings-radio-group>
@@ -93,7 +95,7 @@
             pageVisibility.bookmarksBar)]]">
 <if expr="is_linux and not chromeos">
           <settings-checkbox class="start" label="$i18n{showWindowDecorations}"
-              pref="{{prefs.browser.custom_chrome_frame}}">
+              pref="{{prefs.browser.custom_chrome_frame}}" inverted>
           </settings-checkbox>
         </div>
         <div class="settings-box">

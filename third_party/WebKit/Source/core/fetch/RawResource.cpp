@@ -115,8 +115,8 @@ void RawResource::didAddClient(ResourceClient* c)
             return;
     }
 
-    if (!m_response.isNull())
-        client->responseReceived(this, m_response, nullptr);
+    if (!response().isNull())
+        client->responseReceived(this, response(), nullptr);
     if (!clientWeak || !hasClient(c))
         return;
     if (m_data)
@@ -153,7 +153,7 @@ void RawResource::responseReceived(const ResourceResponse& response, std::unique
     while (RawResourceClient* c = w.next()) {
         // |handle| is cleared when passed, but it's not a problem because
         // |handle| is null when there are two or more clients, as asserted.
-        c->responseReceived(this, m_response, std::move(handle));
+        c->responseReceived(this, this->response(), std::move(handle));
     }
 
     // If we successfully revalidated, we won't get appendData() calls.
@@ -198,8 +198,8 @@ void RawResource::reportResourceTimingToClients(const ResourceTimingInfo& info)
 
 void RawResource::setDefersLoading(bool defers)
 {
-    if (m_loader)
-        m_loader->setDefersLoading(defers);
+    if (loader())
+        loader()->setDefersLoading(defers);
 }
 
 static bool shouldIgnoreHeaderForCacheReuse(AtomicString headerName)
@@ -231,15 +231,15 @@ bool RawResource::canReuse(const ResourceRequest& newRequest) const
     if (dataBufferingPolicy() == DoNotBufferData)
         return false;
 
-    if (!isCacheableHTTPMethod(m_resourceRequest.httpMethod()))
+    if (!isCacheableHTTPMethod(resourceRequest().httpMethod()))
         return false;
-    if (m_resourceRequest.httpMethod() != newRequest.httpMethod())
-        return false;
-
-    if (m_resourceRequest.httpBody() != newRequest.httpBody())
+    if (resourceRequest().httpMethod() != newRequest.httpMethod())
         return false;
 
-    if (m_resourceRequest.allowStoredCredentials() != newRequest.allowStoredCredentials())
+    if (resourceRequest().httpBody() != newRequest.httpBody())
+        return false;
+
+    if (resourceRequest().allowStoredCredentials() != newRequest.allowStoredCredentials())
         return false;
 
     // Ensure most headers match the existing headers before continuing.
@@ -247,7 +247,7 @@ bool RawResource::canReuse(const ResourceRequest& newRequest) const
     // A more detailed check of caching policy will be performed later, this is simply a list of
     // headers that we might permit to be different and still reuse the existing Resource.
     const HTTPHeaderMap& newHeaders = newRequest.httpHeaderFields();
-    const HTTPHeaderMap& oldHeaders = m_resourceRequest.httpHeaderFields();
+    const HTTPHeaderMap& oldHeaders = resourceRequest().httpHeaderFields();
 
     for (const auto& header : newHeaders) {
         AtomicString headerName = header.key;

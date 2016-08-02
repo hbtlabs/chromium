@@ -24,8 +24,8 @@ import org.chromium.chrome.browser.preferences.privacy.PrivacyPreferencesManager
 import org.chromium.chrome.browser.services.AndroidEduAndChildAccountHelper;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.signin.ChromeSigninController;
+import org.chromium.components.sync.signin.AccountManagerHelper;
+import org.chromium.components.sync.signin.ChromeSigninController;
 
 /**
  * A helper to determine what should be the sequence of First Run Experience screens.
@@ -166,10 +166,12 @@ public abstract class FirstRunFlowSequencer  {
             enableCrashUpload();
         }
 
-        // We show the sign-in page if sync is allowed, and this is not an EDU device, and
+        // We show the sign-in page if sync is allowed, and not signed in, and this is not an EDU
+        // device, and
         // - no "skip the first use hints" is set, or
         // - "skip the first use hints" is set, but there is at least one account.
         final boolean offerSignInOk = isSyncAllowed()
+                && !isSignedIn()
                 && !forceEduSignIn
                 && (!shouldSkipFirstUseHints() || googleAccounts.length > 0);
         freProperties.putBoolean(FirstRunActivity.SHOW_SIGNIN_PAGE, offerSignInOk);

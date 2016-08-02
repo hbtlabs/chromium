@@ -172,7 +172,6 @@
 #include "web/SpeechRecognitionClientProxy.h"
 #include "web/StorageQuotaClientImpl.h"
 #include "web/ValidationMessageClientImpl.h"
-#include "web/ViewportAnchor.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
@@ -477,6 +476,7 @@ WebViewImpl::WebViewImpl(WebViewClient* client, WebPageVisibilityState visibilit
     allInstances().add(this);
 
     m_pageImportanceSignals.setObserver(client);
+    m_resizeViewportAnchor = new ResizeViewportAnchor(*m_page);
 }
 
 WebViewImpl::~WebViewImpl()
@@ -1857,7 +1857,7 @@ void WebViewImpl::didUpdateTopControls()
         // needed since the top controls adjustment will change the maximum
         // scroll offset and we may need to reposition them to keep the user's
         // apparent position unchanged.
-        ResizeViewportAnchor anchor(*view, visualViewport);
+        ResizeViewportAnchor::ResizeScope resizeScope(*m_resizeViewportAnchor);
 
         float topControlsViewportAdjustment =
             topControls().layoutHeight() - topControls().contentOffset();
@@ -1935,7 +1935,7 @@ void WebViewImpl::resizeWithTopControls(const WebSize& newSize, float topControl
         RotationViewportAnchor anchor(*view, visualViewport, viewportAnchorCoords, pageScaleConstraintsSet());
         resizeViewWhileAnchored(view, topControlsHeight, topControlsShrinkLayout);
     } else {
-        ResizeViewportAnchor anchor(*view, visualViewport);
+        ResizeViewportAnchor::ResizeScope resizeScope(*m_resizeViewportAnchor);
         resizeViewWhileAnchored(view, topControlsHeight, topControlsShrinkLayout);
     }
     sendResizeEventAndRepaint();
@@ -2269,9 +2269,10 @@ void WebViewImpl::setFocus(bool enable)
                 // If the selection was cleared while the WebView was not
                 // focused, then the focus element shows with a focus ring but
                 // no caret and does respond to keyboard inputs.
+                focusedFrame->document()->updateStyleAndLayoutTree();
                 if (element->isTextFormControl()) {
                     element->updateFocusAppearance(SelectionBehaviorOnFocus::Restore);
-                } else if (isContentEditable(*element)) {
+                } else if (hasEditableStyle(*element)) {
                     // updateFocusAppearance() selects all the text of
                     // contentseditable DIVs. So we set the selection explicitly
                     // instead. Note that this has the side effect of moving the
@@ -2340,7 +2341,8 @@ bool WebViewImpl::setComposition(
     const EphemeralRange range = inputMethodController.compositionEphemeralRange();
     if (range.isNotNull()) {
         Node* node = range.startPosition().computeContainerNode();
-        if (!node || !isContentEditable(*node))
+        focused->document()->updateStyleAndLayoutTree();
+        if (!node || !hasEditableStyle(*node))
             return false;
     }
 
@@ -2538,7 +2540,8 @@ WebTextInputType WebViewImpl::textInputType()
             return WebTextInputTypeDateTimeField;
     }
 
-    if (isContentEditable(*element))
+    document->updateStyleAndLayoutTree();
+    if (hasEditableStyle(*element))
         return WebTextInputTypeContentEditable;
 
     return WebTextInputTypeNone;
@@ -2960,6 +2963,11 @@ void WebViewImpl::focusDocumentView(WebFrame* frame)
     page()->focusController().focusDocumentView(frame->toImplBase()->frame(), false /* notifyEmbedder */);
 }
 
+void WebViewImpl::unfocusDocumentView()
+{
+    page()->focusController().focusDocumentView(nullptr /* frame */, false /* notifyEmbedder */);
+}
+
 void WebViewImpl::setInitialFocus(bool reverse)
 {
     if (!m_page)
@@ -2993,7 +3001,8 @@ void WebViewImpl::clearFocusedElement()
     // knows to remove selection from it. Otherwise, the text field is still
     // processing keyboard events even though focus has been moved to the page and
     // keystrokes get eaten as a result.
-    if (isContentEditable(*oldFocusedElement) || oldFocusedElement->isTextFormControl())
+    document->updateStyleAndLayoutTree();
+    if (hasEditableStyle(*oldFocusedElement) || oldFocusedElement->isTextFormControl())
         localFrame->selection().clear();
 }
 
@@ -3001,7 +3010,8 @@ void WebViewImpl::clearFocusedElement()
 // http://crbug.com/612560
 static bool isElementEditable(const Element* element)
 {
-    if (isContentEditable(*element))
+    element->document().updateStyleAndLayoutTree();
+    if (hasEditableStyle(*element))
         return true;
 
     if (element->isTextFormControl()) {
@@ -3820,7 +3830,7 @@ void WebViewImpl::sendResizeEventAndRepaint()
             updateLayerTreeViewport();
         } else {
             WebRect damagedRect(0, 0, m_size.width, m_size.height);
-            m_client->didInvalidateRect(damagedRect);
+            m_client->widgetClient()->didInvalidateRect(damagedRect);
         }
     }
     updatePageOverlays();
@@ -4051,7 +4061,7 @@ void WebViewImpl::postLayoutResize(WebLocalFrameImpl* webframe)
 {
     FrameView* view = webframe->frame()->view();
     if (webframe == mainFrame())
-        view->resize(mainFrameSize());
+        m_resizeViewportAnchor->resizeFrameView(mainFrameSize());
     else
         view->resize(webframe->frameView()->size());
 }
@@ -4295,7 +4305,7 @@ void WebViewImpl::invalidateRect(const IntRect& rect)
     if (m_layerTreeView)
         updateLayerTreeViewport();
     else if (m_client)
-        m_client->didInvalidateRect(rect);
+        m_client->widgetClient()->didInvalidateRect(rect);
 }
 
 PaintLayerCompositor* WebViewImpl::compositor() const
@@ -4342,7 +4352,7 @@ void WebViewImpl::initializeLayerTreeView()
 {
     if (m_client) {
         m_client->initializeLayerTreeView();
-        m_layerTreeView = m_client->layerTreeView();
+        m_layerTreeView = m_client->widgetClient()->layerTreeView();
     }
 
     if (WebDevToolsAgentImpl* devTools = mainFrameDevToolsAgentImpl())

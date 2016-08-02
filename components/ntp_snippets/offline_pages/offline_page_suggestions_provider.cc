@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 
 using offline_pages::MultipleOfflinePageItemResult;
 using offline_pages::OfflinePageModel;
@@ -20,11 +21,14 @@ const int kMaxSuggestionsCount = 5;
 }  // namespace
 
 OfflinePageSuggestionsProvider::OfflinePageSuggestionsProvider(
+    CategoryFactory* category_factory,
     OfflinePageModel* offline_page_model)
-    : ContentSuggestionsProvider({ContentSuggestionsCategory::OFFLINE_PAGES}),
-      category_status_(ContentSuggestionsCategoryStatus::AVAILABLE_LOADING),
+    : ContentSuggestionsProvider(category_factory),
+      category_status_(CategoryStatus::AVAILABLE_LOADING),
       observer_(nullptr),
-      offline_page_model_(offline_page_model) {
+      offline_page_model_(offline_page_model),
+      provided_category_(
+          category_factory->FromKnownCategory(KnownCategories::OFFLINE_PAGES)) {
   offline_page_model_->AddObserver(this);
 }
 
@@ -33,11 +37,15 @@ OfflinePageSuggestionsProvider::~OfflinePageSuggestionsProvider() {}
 // Inherited from KeyedService.
 void OfflinePageSuggestionsProvider::Shutdown() {
   offline_page_model_->RemoveObserver(this);
-  category_status_ = ContentSuggestionsCategoryStatus::NOT_PROVIDED;
+  category_status_ = CategoryStatus::NOT_PROVIDED;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Private methods
+
+std::vector<Category> OfflinePageSuggestionsProvider::GetProvidedCategories() {
+  return std::vector<Category>({provided_category_});
+}
 
 void OfflinePageSuggestionsProvider::SetObserver(
     ContentSuggestionsProvider::Observer* observer) {
@@ -46,9 +54,8 @@ void OfflinePageSuggestionsProvider::SetObserver(
     FetchOfflinePages();
 }
 
-ContentSuggestionsCategoryStatus
-OfflinePageSuggestionsProvider::GetCategoryStatus(
-    ContentSuggestionsCategory category) {
+CategoryStatus OfflinePageSuggestionsProvider::GetCategoryStatus(
+    Category category) {
   return category_status_;
 }
 
@@ -97,7 +104,7 @@ void OfflinePageSuggestionsProvider::FetchOfflinePages() {
 
 void OfflinePageSuggestionsProvider::OnOfflinePagesLoaded(
     const MultipleOfflinePageItemResult& result) {
-  NotifyStatusChanged(ContentSuggestionsCategoryStatus::AVAILABLE);
+  NotifyStatusChanged(CategoryStatus::AVAILABLE);
   if (!observer_)
     return;
 
@@ -107,36 +114,33 @@ void OfflinePageSuggestionsProvider::OnOfflinePagesLoaded(
     // Currently, the browser opens the offline URL and then immediately
     // redirects to the online URL if the device is online.
     ContentSuggestion suggestion(
-        MakeUniqueID(ContentSuggestionsCategory::OFFLINE_PAGES,
-                     base::IntToString(item.offline_id)),
+        MakeUniqueID(provided_category_, base::IntToString(item.offline_id)),
         item.GetOfflineURL());
 
     // TODO(pke): Sort my most recently visited and only keep the top one of
     // multiple entries for the same URL.
     // TODO(pke): Get more reasonable data from the OfflinePageModel here.
-    suggestion.set_title(item.url.spec());
-    suggestion.set_snippet_text(std::string());
+    suggestion.set_title(base::UTF8ToUTF16(item.url.spec()));
+    suggestion.set_snippet_text(base::string16());
     suggestion.set_publish_date(item.creation_time);
-    suggestion.set_publisher_name(item.url.host());
+    suggestion.set_publisher_name(base::UTF8ToUTF16(item.url.host()));
     suggestions.emplace_back(std::move(suggestion));
     if (suggestions.size() == kMaxSuggestionsCount)
       break;
   }
 
-  observer_->OnNewSuggestions(ContentSuggestionsCategory::OFFLINE_PAGES,
-                              std::move(suggestions));
+  observer_->OnNewSuggestions(provided_category_, std::move(suggestions));
 }
 
 void OfflinePageSuggestionsProvider::NotifyStatusChanged(
-    ContentSuggestionsCategoryStatus new_status) {
+    CategoryStatus new_status) {
   if (category_status_ == new_status)
     return;
   category_status_ = new_status;
 
   if (!observer_)
     return;
-  observer_->OnCategoryStatusChanged(ContentSuggestionsCategory::OFFLINE_PAGES,
-                                     new_status);
+  observer_->OnCategoryStatusChanged(provided_category_, new_status);
 }
 
 }  // namespace ntp_snippets

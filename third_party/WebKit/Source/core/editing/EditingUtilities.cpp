@@ -258,6 +258,8 @@ int comparePositions(const VisiblePosition& a, const VisiblePosition& b)
 enum EditableLevel { Editable, RichlyEditable };
 static bool hasEditableLevel(const Node& node, EditableLevel editableLevel)
 {
+    // TODO(yoichio): We should have this check.
+    // DCHECK(!needsLayoutTreeUpdate(node));
     if (node.isPseudoElement())
         return false;
 
@@ -297,18 +299,6 @@ static bool hasAXEditableLevel(const Node& node, EditableLevel editableLevel)
         return cache->rootAXEditableElement(&node);
 
     return false;
-}
-
-bool isContentEditable(const Node& node)
-{
-    node.document().updateStyleAndLayoutTree();
-    return hasEditableLevel(node, Editable);
-}
-
-bool isContentRichlyEditable(const Node& node)
-{
-    node.document().updateStyleAndLayoutTree();
-    return hasEditableLevel(node, RichlyEditable);
 }
 
 bool hasEditableStyle(const Node& node, EditableType editableType)
@@ -412,13 +402,6 @@ bool isEditablePosition(const PositionInFlatTree& p)
     return isEditablePosition(toPositionInDOMTree(p));
 }
 
-bool isAtUnsplittableElement(const Position& pos)
-{
-    Node* node = pos.anchorNode();
-    return (node == rootEditableElementOf(pos) || node == enclosingNodeOfType(pos, &isTableCell));
-}
-
-
 bool isRichlyEditablePosition(const Position& p)
 {
     Node* node = p.anchorNode();
@@ -453,20 +436,6 @@ Element* rootEditableElementOf(const VisiblePosition& visiblePosition)
 {
     Node* anchorNode = visiblePosition.deepEquivalent().anchorNode();
     return anchorNode ? rootEditableElement(*anchorNode) : nullptr;
-}
-
-// Finds the enclosing element until which the tree can be split.
-// When a user hits ENTER, they won't expect this element to be split into two.
-// You may pass it as the second argument of splitTreeToNode.
-Element* unsplittableElementForPosition(const Position& p)
-{
-    // Since enclosingNodeOfType won't search beyond the highest root editable node,
-    // this code works even if the closest table cell was outside of the root editable node.
-    Element* enclosingCell = toElement(enclosingNodeOfType(p, &isTableCell));
-    if (enclosingCell)
-        return enclosingCell;
-
-    return rootEditableElementOf(p);
 }
 
 template <typename Strategy>
@@ -982,7 +951,6 @@ String stringWithRebalancedWhitespace(const String& string, bool startIsStartOfP
             continue;
         }
 
-        // We need to ensure there is no next sibling text node. See http://crbug.com/310149
         if (previousCharacterWasSpace || (!i && startIsStartOfParagraph) || (i + 1 == length && shouldEmitNBSPbeforeEnd)) {
             rebalancedString.append(noBreakSpaceCharacter);
             previousCharacterWasSpace = false;
@@ -1936,6 +1904,27 @@ DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget* target, InputE
         return DispatchEventResult::NotCanceled;
     InputEvent* beforeInputEvent = InputEvent::createBeforeInput(inputType, data, InputEvent::EventCancelable::IsCancelable, InputEvent::EventIsComposing::NotComposing, ranges);
     return target->dispatchEvent(beforeInputEvent);
+}
+
+InputEvent::InputType deletionInputTypeFromTextGranularity(DeleteDirection direction, TextGranularity granularity)
+{
+    using InputType = InputEvent::InputType;
+    switch (direction) {
+    case DeleteDirection::Forward:
+        if (granularity == WordGranularity)
+            return InputType::DeleteWordForward;
+        if (granularity == LineBoundary)
+            return InputType::DeleteLineForward;
+        return InputType::DeleteContentForward;
+    case DeleteDirection::Backward:
+        if (granularity == WordGranularity)
+            return InputType::DeleteWordBackward;
+        if (granularity == LineBoundary)
+            return InputType::DeleteLineBackward;
+        return InputType::DeleteContentBackward;
+    default:
+        return InputType::None;
+    }
 }
 
 } // namespace blink

@@ -30,7 +30,6 @@ namespace blink {
 ThreadDebugger::ThreadDebugger(v8::Isolate* isolate)
     : m_isolate(isolate)
     , m_debugger(V8Debugger::create(isolate, this))
-    , m_asyncInstrumentationEnabled(false)
 {
 }
 
@@ -45,6 +44,19 @@ ThreadDebugger* ThreadDebugger::from(v8::Isolate* isolate)
         return nullptr;
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
     return data ? data->threadDebugger() : nullptr;
+}
+
+// static
+MessageLevel ThreadDebugger::consoleAPITypeToMessageLevel(V8ConsoleAPIType type)
+{
+    switch (type) {
+    case V8ConsoleAPIType::kDebug: return DebugMessageLevel;
+    case V8ConsoleAPIType::kLog: return LogMessageLevel;
+    case V8ConsoleAPIType::kInfo: return InfoMessageLevel;
+    case V8ConsoleAPIType::kWarning: return WarningMessageLevel;
+    case V8ConsoleAPIType::kError: return ErrorMessageLevel;
+    default: return LogMessageLevel;
+    }
 }
 
 void ThreadDebugger::willExecuteScript(v8::Isolate* isolate, int scriptId)
@@ -73,32 +85,27 @@ void ThreadDebugger::idleFinished(v8::Isolate* isolate)
 
 void ThreadDebugger::asyncTaskScheduled(const String& operationName, void* task, bool recurring)
 {
-    if (m_asyncInstrumentationEnabled)
-        m_debugger->asyncTaskScheduled(operationName, task, recurring);
+    m_debugger->asyncTaskScheduled(operationName, task, recurring);
 }
 
 void ThreadDebugger::asyncTaskCanceled(void* task)
 {
-    if (m_asyncInstrumentationEnabled)
-        m_debugger->asyncTaskCanceled(task);
+    m_debugger->asyncTaskCanceled(task);
 }
 
 void ThreadDebugger::allAsyncTasksCanceled()
 {
-    if (m_asyncInstrumentationEnabled)
-        m_debugger->allAsyncTasksCanceled();
+    m_debugger->allAsyncTasksCanceled();
 }
 
 void ThreadDebugger::asyncTaskStarted(void* task)
 {
-    if (m_asyncInstrumentationEnabled)
-        m_debugger->asyncTaskStarted(task);
+    m_debugger->asyncTaskStarted(task);
 }
 
 void ThreadDebugger::asyncTaskFinished(void* task)
 {
-    if (m_asyncInstrumentationEnabled)
-        m_debugger->asyncTaskFinished(task);
+    m_debugger->asyncTaskFinished(task);
 }
 
 unsigned ThreadDebugger::promiseRejected(v8::Local<v8::Context> context, const String16& errorMessage, v8::Local<v8::Value> exception, std::unique_ptr<SourceLocation> location)
@@ -110,10 +117,16 @@ unsigned ThreadDebugger::promiseRejected(v8::Local<v8::Context> context, const S
     else if (message.startWith("Uncaught "))
         message = message.substring(0, 8) + " (in promise)" + message.substring(8);
 
-    unsigned result = debugger()->promiseRejected(context, message, exception, location->url(), location->lineNumber(), location->columnNumber(), location->cloneStackTrace(), location->scriptId());
-    // TODO(dgozman): maybe not wrap in ConsoleMessage.
+    unsigned result = debugger()->exceptionThrown(context, defaultMessage, exception, message, location->url(), location->lineNumber(), location->columnNumber(), location->cloneStackTrace(), location->scriptId());
+    // TODO(dgozman): do not wrap in ConsoleMessage.
     reportConsoleMessage(toExecutionContext(context), ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message, std::move(location)));
     return result;
+}
+
+void ThreadDebugger::promiseRejectionRevoked(v8::Local<v8::Context> context, unsigned promiseRejectionId)
+{
+    const String16 message = "Handler added to rejected promise";
+    debugger()->exceptionRevoked(context, promiseRejectionId, message);
 }
 
 void ThreadDebugger::beginUserGesture()
@@ -166,18 +179,6 @@ bool ThreadDebugger::isInspectableHeapObject(v8::Local<v8::Object> object)
     if (!wrapper.IsEmpty() && wrapper->IsUndefined())
         return false;
     return true;
-}
-
-void ThreadDebugger::enableAsyncInstrumentation()
-{
-    DCHECK(!m_asyncInstrumentationEnabled);
-    m_asyncInstrumentationEnabled = true;
-}
-
-void ThreadDebugger::disableAsyncInstrumentation()
-{
-    DCHECK(m_asyncInstrumentationEnabled);
-    m_asyncInstrumentationEnabled = false;
 }
 
 static void returnDataCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -373,7 +374,7 @@ void ThreadDebugger::cancelTimer(void* data)
     }
 }
 
-void ThreadDebugger::onTimer(Timer<ThreadDebugger>* timer)
+void ThreadDebugger::onTimer(TimerBase* timer)
 {
     for (size_t index = 0; index < m_timers.size(); ++index) {
         if (m_timers[index].get() == timer) {

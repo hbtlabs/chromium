@@ -62,6 +62,7 @@ WebInspector.CSSModel = function(target)
 
 WebInspector.CSSModel.Events = {
     LayoutEditorChange: "LayoutEditorChange",
+    FontsUpdated: "FontsUpdated",
     MediaQueryResultChanged: "MediaQueryResultChanged",
     ModelWasEnabled: "ModelWasEnabled",
     PseudoStateForced: "PseudoStateForced",
@@ -160,7 +161,7 @@ WebInspector.CSSModel.prototype = {
             var factoryExtension = this._factoryForSourceMap(sourceMap);
             if (!factoryExtension)
                 return Promise.resolve(/** @type {?WebInspector.SourceMap} */(sourceMap));
-            return factoryExtension.instancePromise()
+            return factoryExtension.instance()
                 .then(factory => factory.editableSourceMap(this.target(), sourceMap))
                 .then(map => map || sourceMap)
                 .catchException(/** @type {?WebInspector.SourceMap} */(null));
@@ -758,6 +759,11 @@ WebInspector.CSSModel.prototype = {
         this.dispatchEventToListeners(WebInspector.CSSModel.Events.MediaQueryResultChanged);
     },
 
+    fontsUpdated: function()
+    {
+        this.dispatchEventToListeners(WebInspector.CSSModel.Events.FontsUpdated);
+    },
+
     /**
      * @param {!CSSAgent.StyleSheetId} id
      * @return {?WebInspector.CSSStyleSheetHeader}
@@ -1096,6 +1102,14 @@ WebInspector.CSSDispatcher.prototype = {
     mediaQueryResultChanged: function()
     {
         this._cssModel.mediaQueryResultChanged();
+    },
+
+    /**
+     * @override
+     */
+    fontsUpdated: function()
+    {
+        this._cssModel.fontsUpdated();
     },
 
     /**

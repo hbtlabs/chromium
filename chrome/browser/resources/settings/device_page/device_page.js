@@ -39,6 +39,15 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /** @private */
+    noteAllowed_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('noteAllowed');
+      },
+      readOnly: true,
+    },
   },
 
   observers: [
@@ -83,7 +92,7 @@ Polymer({
    * @private
    */
   onPointersTap_: function() {
-    this.$.pages.setSubpageChain(['pointers']);
+    settings.navigateTo(settings.Route.POINTERS);
   },
 
   /**
@@ -91,7 +100,15 @@ Polymer({
    * @private
    */
   onKeyboardTap_: function() {
-    this.$.pages.setSubpageChain(['keyboard']);
+    settings.navigateTo(settings.Route.KEYBOARD);
+  },
+
+  /**
+   * Handler for tapping the Keyboard settings menu item.
+   * @private
+   */
+  onNoteTap_: function() {
+    settings.navigateTo(settings.Route.NOTES);
   },
 
   /**
@@ -99,7 +116,7 @@ Polymer({
    * @private
    */
   onDisplayTap_: function() {
-    this.$.pages.setSubpageChain(['display']);
+    settings.navigateTo(settings.Route.DISPLAY);
   },
 
   /** @private */
@@ -123,21 +140,8 @@ Polymer({
    */
   checkPointerSubpage_: function() {
     if (!this.hasMouse_ && !this.hasTouchpad_ &&
-        this.isCurrentRouteOnPointersPage_()) {
+        this.currentRoute == settings.Route.POINTERS) {
       this.$.pages.fire('subpage-back');
     }
-  },
-
-  /**
-   * TODO(michaelpg): create generic fn for this and isCurrentRouteOnSyncPage_.
-   * @return {boolean} Whether the current route shows the pointers page.
-   * @private
-   */
-  isCurrentRouteOnPointersPage_: function() {
-    return this.currentRoute &&
-        this.currentRoute.page == 'basic' &&
-        this.currentRoute.section == 'device' &&
-        this.currentRoute.subpage.length == 1 &&
-        this.currentRoute.subpage[0] == 'pointers';
   },
 });

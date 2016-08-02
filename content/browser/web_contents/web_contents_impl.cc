@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
@@ -50,7 +51,6 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
-#include "content/browser/geolocation/geolocation_service_context.h"
 #include "content/browser/host_zoom_map_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/manifest/manifest_manager_host.h"
@@ -81,6 +81,7 @@
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
+#include "content/common/page_state_serialization.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
@@ -118,6 +119,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/web_preferences.h"
+#include "device/geolocation/geolocation_service_context.h"
 #include "net/base/url_util.h"
 #include "net/http/http_cache.h"
 #include "net/http/http_transaction_factory.h"
@@ -337,8 +339,8 @@ WebContentsImpl::ColorChooserInfo::~ColorChooserInfo() {
 WebContentsImpl::WebContentsTreeNode::WebContentsTreeNode()
     : outer_web_contents_(nullptr),
       outer_contents_frame_tree_node_id_(
-          FrameTreeNode::kFrameTreeNodeInvalidId) {
-}
+          FrameTreeNode::kFrameTreeNodeInvalidId),
+      focused_web_contents_(nullptr) {}
 
 WebContentsImpl::WebContentsTreeNode::~WebContentsTreeNode() {
   // Remove child pointer from our parent.
@@ -347,7 +349,7 @@ WebContentsImpl::WebContentsTreeNode::~WebContentsTreeNode() {
         outer_web_contents_->node_->inner_web_contents_tree_nodes_;
     ChildrenSet::iterator iter = child_ptrs_in_parent.find(this);
     DCHECK(iter != child_ptrs_in_parent.end());
-    child_ptrs_in_parent.erase(this);
+    child_ptrs_in_parent.erase(iter);
   }
 
   // Remove parent pointers from our children.
@@ -361,14 +363,26 @@ WebContentsImpl::WebContentsTreeNode::~WebContentsTreeNode() {
 void WebContentsImpl::WebContentsTreeNode::ConnectToOuterWebContents(
     WebContentsImpl* outer_web_contents,
     RenderFrameHostImpl* outer_contents_frame) {
+  DCHECK(!focused_web_contents_) << "Should not attach a root node.";
   outer_web_contents_ = outer_web_contents;
   outer_contents_frame_tree_node_id_ =
       outer_contents_frame->frame_tree_node()->frame_tree_node_id();
 
-  if (!outer_web_contents_->node_)
+  if (!outer_web_contents_->node_) {
+    // This will only be reached when creating a new WebContents tree.
+    // Initialize the root of this tree and set it as focused.
     outer_web_contents_->node_.reset(new WebContentsTreeNode());
+    outer_web_contents_->node_->SetFocusedWebContents(outer_web_contents_);
+  }
 
   outer_web_contents_->node_->inner_web_contents_tree_nodes_.insert(this);
+}
+
+void WebContentsImpl::WebContentsTreeNode::SetFocusedWebContents(
+    WebContentsImpl* web_contents) {
+  DCHECK(!outer_web_contents())
+      << "Only the outermost WebContents tracks focus.";
+  focused_web_contents_ = web_contents;
 }
 
 // WebContentsImpl -------------------------------------------------------------
@@ -416,7 +430,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       is_subframe_(false),
       force_disable_overscroll_content_(false),
       last_dialog_suppressed_(false),
-      geolocation_service_context_(new GeolocationServiceContext()),
+      geolocation_service_context_(new device::GeolocationServiceContext()),
       accessibility_mode_(
           BrowserAccessibilityStateImpl::GetInstance()->accessibility_mode()),
       audio_stream_monitor_(this),
@@ -445,6 +459,12 @@ WebContentsImpl::~WebContentsImpl() {
   is_being_destroyed_ = true;
 
   rwh_input_event_router_.reset();
+
+  WebContentsImpl* outermost = GetOutermostWebContents();
+  if (GetFocusedWebContents() == this && this != outermost) {
+    // If the current WebContents is in focus, unset it.
+    outermost->node_->SetFocusedWebContents(outermost);
+  }
 
   for (FrameTreeNode* node : frame_tree_.Nodes()) {
     // Delete all RFHs pending shutdown, which will lead the corresponding RVHs
@@ -1810,7 +1830,8 @@ RenderWidgetHostImpl* WebContentsImpl::GetFocusedRenderWidgetHost(
   if (receiving_widget != GetMainFrame()->GetRenderWidgetHost())
     return receiving_widget;
 
-  FrameTreeNode* focused_frame = frame_tree_.GetFocusedFrame();
+  FrameTreeNode* focused_frame =
+      GetFocusedWebContents()->frame_tree_.GetFocusedFrame();
   if (!focused_frame)
     return receiving_widget;
 
@@ -2366,7 +2387,8 @@ RenderFrameHost* WebContentsImpl::GetGuestByInstanceID(
   return guest->GetMainFrame();
 }
 
-GeolocationServiceContext* WebContentsImpl::GetGeolocationServiceContext() {
+device::GeolocationServiceContext*
+WebContentsImpl::GetGeolocationServiceContext() {
   return geolocation_service_context_.get();
 }
 
@@ -4175,6 +4197,39 @@ void WebContentsImpl::RemoveBrowserPluginEmbedder() {
     browser_plugin_embedder_.reset();
 }
 
+WebContentsImpl* WebContentsImpl::GetOuterWebContents() {
+  if (BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+    if (node_)
+      return node_->outer_web_contents();
+  } else {
+    if (GetBrowserPluginGuest())
+      return GetBrowserPluginGuest()->embedder_web_contents();
+  }
+  return nullptr;
+}
+
+WebContentsImpl* WebContentsImpl::GetFocusedWebContents() {
+  // There is no inner or outer web contents.
+  if (!node_ && !GetBrowserPluginGuest())
+    return this;
+
+  // We may need to create a node_ on the outermost contents in the
+  // BrowserPlugin case.
+  WebContentsImpl* outermost = GetOutermostWebContents();
+  if (!outermost->node_) {
+    outermost->node_.reset(new WebContentsTreeNode());
+    outermost->node_->SetFocusedWebContents(outermost);
+  }
+  return outermost->node_->focused_web_contents();
+}
+
+WebContentsImpl* WebContentsImpl::GetOutermostWebContents() {
+  WebContentsImpl* root = this;
+  while (root->GetOuterWebContents())
+    root = root->GetOuterWebContents();
+  return root;
+}
+
 void WebContentsImpl::RenderViewCreated(RenderViewHost* render_view_host) {
   // Don't send notifications if we are just creating a swapped-out RVH for
   // the opener chain.  These won't be used for view-source or WebUI, so it's
@@ -4475,6 +4530,27 @@ void WebContentsImpl::UpdateStateForFrame(RenderFrameHost* render_frame_host,
   if (page_state == frame_entry->page_state())
     return;  // Nothing to update.
 
+  if (!page_state.IsValid()) {
+    // Temporarily generate a minidump to diagnose https://crbug.com/568703.
+    base::debug::DumpWithoutCrashing();
+    NOTREACHED() << "Shouldn't set an empty PageState.";
+  }
+
+  // The document_sequence_number and item_sequence_number recorded in the
+  // FrameNavigationEntry should not differ from the one coming with the update,
+  // since it must come from the same document. Do not update it if a difference
+  // is detected, as this indicates that |frame_entry| is not the correct one.
+  ExplodedPageState exploded_state;
+  if (!DecodePageState(page_state.ToEncodedData(), &exploded_state))
+    return;
+
+  if (exploded_state.top.document_sequence_number !=
+          frame_entry->document_sequence_number() ||
+      exploded_state.top.item_sequence_number !=
+          frame_entry->item_sequence_number()) {
+    return;
+  }
+
   frame_entry->set_page_state(page_state);
   controller_.NotifyEntryChanged(entry);
 }
@@ -4575,6 +4651,32 @@ void WebContentsImpl::EnsureOpenerProxiesExist(RenderFrameHost* source_rfh) {
           GetSiteInstance(), nullptr);
     }
   }
+}
+
+void WebContentsImpl::SetFocusedFrame(FrameTreeNode* node,
+                                      SiteInstance* source) {
+  if (!BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
+    frame_tree_.SetFocusedFrame(node, source);
+    return;
+  }
+
+  // 1. Find old focused frame and unfocus it.
+  // 2. Focus the new frame in the current FrameTree.
+  // 3. Set current WebContents as focused.
+  WebContentsImpl* old_focused_contents = GetFocusedWebContents();
+  if (old_focused_contents != this) {
+    // Focus is moving between frame trees, unfocus the frame in the old tree.
+    old_focused_contents->frame_tree_.SetFocusedFrame(nullptr, source);
+    GetOutermostWebContents()->node_->SetFocusedWebContents(this);
+  }
+
+  frame_tree_.SetFocusedFrame(node, source);
+
+  // TODO(avallee): Remove this once page focus is fixed.
+  RenderWidgetHostImpl* rwh = node->current_frame_host()->GetRenderWidgetHost();
+  if (rwh && old_focused_contents != this &&
+      BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+    rwh->Focus();
 }
 
 bool WebContentsImpl::AddMessageToConsole(int32_t level,
@@ -4960,17 +5062,6 @@ RenderFrameHostManager* WebContentsImpl::GetRenderManager() const {
   return frame_tree_.root()->render_manager();
 }
 
-WebContentsImpl* WebContentsImpl::GetOuterWebContents() {
-  if (BrowserPluginGuestMode::UseCrossProcessFramesForGuests()) {
-    if (node_)
-      return node_->outer_web_contents();
-  } else {
-    if (GetBrowserPluginGuest())
-      return GetBrowserPluginGuest()->embedder_web_contents();
-  }
-  return nullptr;
-}
-
 BrowserPluginGuest* WebContentsImpl::GetBrowserPluginGuest() const {
   return browser_plugin_guest_.get();
 }
@@ -5026,19 +5117,6 @@ WebUI* WebContentsImpl::CreateWebUI(const GURL& url,
 
   delete web_ui;
   return NULL;
-}
-
-// TODO(paulmeyer): This method will not be used until find-in-page across
-// GuestViews is implemented.
-WebContentsImpl* WebContentsImpl::GetOutermostWebContents() {
-  // Find the outer-most WebContents.
-  WebContentsImpl* outermost_web_contents = this;
-  while (outermost_web_contents->node_ &&
-         outermost_web_contents->node_->outer_web_contents()) {
-    outermost_web_contents =
-        outermost_web_contents->node_->outer_web_contents();
-  }
-  return outermost_web_contents;
 }
 
 FindRequestManager* WebContentsImpl::GetOrCreateFindRequestManager() {

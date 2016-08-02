@@ -6285,7 +6285,6 @@ interface TouchEvent : UIEvent
     getter targetTouches
     getter touches
     method constructor
-    method initTouchEvent
 interface TouchList
     attribute @@toStringTag
     getter length
@@ -7602,6 +7601,7 @@ interface webkitURL
 [GLOBAL OBJECT]
     attribute GCController
     attribute accessibilityController
+    attribute animationWorklet
     attribute applicationCache
     attribute caches
     attribute chrome
@@ -7616,6 +7616,7 @@ interface webkitURL
     attribute document
     attribute event
     attribute eventSender
+    attribute external
     attribute frameElement
     attribute frames
     attribute gamepadController

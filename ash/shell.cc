@@ -51,10 +51,8 @@
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/ime/input_method_event_handler.h"
-#include "ash/keyboard_uma_event_filter.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/magnifier/partial_magnification_controller.h"
-#include "ash/new_window_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
@@ -315,8 +313,6 @@ void Shell::SetDisplayWorkAreaInsets(Window* contains,
           contains, insets)) {
     return;
   }
-  FOR_EACH_OBSERVER(ShellObserver, *wm_shell_->shell_observers(),
-                    OnDisplayWorkAreaInsetsChanged());
 }
 
 void Shell::OnLoginStateChanged(LoginStatus status) {
@@ -597,7 +593,6 @@ Shell::~Shell() {
   RemovePreTargetHandler(toplevel_window_event_handler_.get());
   RemovePostTargetHandler(toplevel_window_event_handler_.get());
   RemovePreTargetHandler(system_gesture_filter_.get());
-  RemovePreTargetHandler(keyboard_metrics_filter_.get());
   RemovePreTargetHandler(mouse_cursor_filter_.get());
   RemovePreTargetHandler(modality_filter_.get());
 
@@ -710,7 +705,6 @@ Shell::~Shell() {
   window_tree_host_manager_.reset();
   focus_client_.reset();
   screen_position_controller_.reset();
-  new_window_delegate_.reset();
   pointer_watcher_delegate_.reset();
 
   keyboard::KeyboardController::ResetInstance(nullptr);
@@ -891,9 +885,6 @@ void Shell::Init(const ShellInitParams& init_params) {
   system_gesture_filter_.reset(new SystemGestureEventFilter);
   AddPreTargetHandler(system_gesture_filter_.get());
 
-  keyboard_metrics_filter_.reset(new KeyboardUMAEventFilter);
-  AddPreTargetHandler(keyboard_metrics_filter_.get());
-
 #if defined(OS_CHROMEOS)
   sticky_keys_controller_.reset(new StickyKeysController);
 #endif
@@ -951,7 +942,6 @@ void Shell::Init(const ShellInitParams& init_params) {
 
   session_state_delegate_.reset(
       wm_shell_->delegate()->CreateSessionStateDelegate());
-  new_window_delegate_.reset(wm_shell_->delegate()->CreateNewWindowDelegate());
   pointer_watcher_delegate_ =
       wm_shell_->delegate()->CreatePointerWatcherDelegate();
 

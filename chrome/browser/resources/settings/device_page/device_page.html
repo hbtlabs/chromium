@@ -7,9 +7,11 @@
 <link rel="import" href="/device_page/device_page_browser_proxy.html">
 <link rel="import" href="/device_page/display.html">
 <link rel="import" href="/device_page/keyboard.html">
+<link rel="import" href="/device_page/note.html">
 <link rel="import" href="/device_page/pointers.html">
 <link rel="import" href="/icons.html">
 <link rel="import" href="/prefs/prefs.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
@@ -33,6 +35,13 @@
           <iron-icon icon="settings:keyboard"></iron-icon>
           <div class="middle">$i18n{keyboardTitle}</div>
         </div>
+        <template is="dom-if" if=[[noteAllowed_]]>
+          <div class="settings-box" on-tap="onNoteTap_"
+              actionable>
+            <iron-icon icon="settings:note"></iron-icon>
+            <div class="middle">$i18n{noteTitle}</div>
+          </div>
+        </template>
         <div id="displayRow" class="settings-box" on-tap="onDisplayTap_"
             actionable>
           <iron-icon icon="settings:desktop-windows"></iron-icon>
@@ -49,9 +58,16 @@
       </template>
       <template is="dom-if" name="keyboard">
         <settings-subpage page-title="$i18n{keyboardTitle}">
-          <settings-keyboard prefs="{{prefs}}" current-route="{{currentRoute}}">
-          </settings-keyboard>
+          <settings-keyboard prefs="{{prefs}}"></settings-keyboard>
         </settings-subpage>
+      </template>
+      <template is="dom-if" if=[[noteAllowed_]]>
+        <template is="dom-if" name="note">
+          <settings-subpage page-title="$i18n{noteTitle}">
+            <settings-note prefs="{{prefs}}" current-route="{{currentRoute}}">
+            </settings-note>
+          </settings-subpage>
+        </template>
       </template>
       <template is="dom-if" name="display">
         <settings-subpage page-title="$i18n{displayTitle}">

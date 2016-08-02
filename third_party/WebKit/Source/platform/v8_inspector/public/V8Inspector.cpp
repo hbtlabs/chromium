@@ -25,11 +25,6 @@ V8Inspector::~V8Inspector()
     disconnectFrontend();
 }
 
-bool V8Inspector::callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target)
-{
-    return true;
-}
-
 String16 V8Inspector::valueSubtype(v8::Local<v8::Value> value)
 {
     return String16();
@@ -69,6 +64,11 @@ bool V8Inspector::isExecutionAllowed()
 bool V8Inspector::canExecuteScripts()
 {
     return true;
+}
+
+void V8Inspector::notifyContextDestroyed()
+{
+    m_debugger->contextDestroyed(m_context);
 }
 
 } // namespace blink

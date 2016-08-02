@@ -143,7 +143,7 @@ public:
     explicit InspectorRevalidateDOMTask(InspectorDOMAgent*);
     void scheduleStyleAttrRevalidationFor(Element*);
     void reset() { m_timer.stop(); }
-    void onTimer(Timer<InspectorRevalidateDOMTask>*);
+    void onTimer(TimerBase*);
     DECLARE_TRACE();
 
 private:
@@ -165,7 +165,7 @@ void InspectorRevalidateDOMTask::scheduleStyleAttrRevalidationFor(Element* eleme
         m_timer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void InspectorRevalidateDOMTask::onTimer(Timer<InspectorRevalidateDOMTask>*)
+void InspectorRevalidateDOMTask::onTimer(TimerBase*)
 {
     // The timer is stopped on m_domAgent destruction, so this method will never be called after m_domAgent has been destroyed.
     HeapVector<Member<Element>> elements;
@@ -1164,11 +1164,11 @@ void InspectorDOMAgent::innerHighlightQuad(std::unique_ptr<FloatQuad> quad, cons
 Node* InspectorDOMAgent::nodeForRemoteId(ErrorString* errorString, const String& objectId)
 {
     v8::HandleScope handles(m_isolate);
-    v8::Local<v8::Value> value = m_v8Session->findObject(errorString, objectId);
-    if (value.IsEmpty()) {
-        *errorString = "Node for given objectId not found";
+    v8::Local<v8::Value> value;
+    v8::Local<v8::Context> context;
+    String16 objectGroup;
+    if (!m_v8Session->unwrapObject(errorString, objectId, &value, &context, &objectGroup))
         return nullptr;
-    }
     if (!V8Node::hasInstance(value, m_isolate)) {
         *errorString = "Object id doesn't reference a Node";
         return nullptr;

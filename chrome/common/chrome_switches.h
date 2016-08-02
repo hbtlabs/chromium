@@ -45,7 +45,6 @@ extern const char kAuthServerWhitelist[];
 extern const char kAutoOpenDevToolsForTabs[];
 extern const char kAutoSelectDesktopCaptureSource[];
 extern const char kBypassAppBannerEngagementChecks[];
-extern const char kCertificateTransparencyLog[];
 extern const char kCheckForUpdateIntervalSec[];
 extern const char kCipherSuiteBlacklist[];
 extern const char kCloudPrintFile[];
@@ -316,6 +315,7 @@ extern const char kOpenAsh[];
 extern const char kHelp[];
 extern const char kHelpShort[];
 extern const char kPasswordStore[];
+extern const char kWmClass[];
 extern const char kWmUserTimeMs[];
 #endif
 

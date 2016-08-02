@@ -61,10 +61,7 @@ if (is_desktop_linux) {
   # will set this up.
   pkg_config("gnome_keyring") {
     packages = [ "gnome-keyring-1" ]
-    defines = [
-      "USE_GNOME_KEYRING",
-      "DLOPEN_GNOME_KEYRING",
-    ]
+    defines = [ "USE_GNOME_KEYRING" ]
     ignore_libs = true
   }
 
@@ -105,9 +102,9 @@ split_static_library("browser") {
   # non-iOS deps below.
   public_deps = [
     "//components/autofill/core/browser",
+    "//components/sync",
     "//content/public/browser",
     "//sql",
-    "//sync",
   ]
   deps = [
     "//chrome:extra_resources",
@@ -167,6 +164,7 @@ split_static_library("browser") {
     "//components/ntp_tiles",
     "//components/offline_pages",
     "//components/offline_pages/background:background_offliner",
+    "//components/offline_pages/downloads:offline_pages_ui_adapter",
     "//components/omnibox/browser",
     "//components/os_crypt",
     "//components/packed_ct_ev_whitelist",
@@ -196,6 +194,7 @@ split_static_library("browser") {
     "//components/subresource_filter/core/browser",
     "//components/suggestions",
     "//components/supervised_user_error_page",
+    "//components/sync",
     "//components/sync_bookmarks",
     "//components/sync_driver",
     "//components/sync_sessions",
@@ -225,7 +224,6 @@ split_static_library("browser") {
     "//gpu/config",
     "//skia",
     "//sql",
-    "//sync",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
     "//third_party/libjingle",
@@ -344,7 +342,6 @@ split_static_library("browser") {
       "//chrome/browser/devtools",
       "//chrome/browser/metrics/variations:chrome_ui_string_overrider_factory",
       "//chrome/browser/resources:component_extension_resources",
-      "//chrome/common:search_provider_mojom",
       "//chrome/common/net",
       "//chrome/installer/util:with_no_strings",
       "//components/about_handler",
@@ -367,6 +364,7 @@ split_static_library("browser") {
       "//components/network_hints/common",
       "//components/password_manager/content/browser",
       "//components/password_manager/sync/browser",
+      "//components/previews",
       "//components/profile_metrics",
       "//components/proxy_config",
       "//components/resources",

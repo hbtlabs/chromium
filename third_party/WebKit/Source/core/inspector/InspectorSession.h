@@ -18,7 +18,6 @@
 namespace blink {
 
 class ExecutionContext;
-class InspectedFrames;
 class InspectorAgent;
 class InstrumentingAgents;
 class LocalFrame;
@@ -35,13 +34,10 @@ public:
     public:
         virtual void sendProtocolMessage(int sessionId, int callId, const String& response, const String& state) = 0;
         virtual void resumeStartup() { }
-        virtual void profilingStarted() { }
-        virtual void profilingStopped() { }
-        virtual void consoleCleared() { }
         virtual ~Client() {}
     };
 
-    InspectorSession(Client*, InspectedFrames*, InstrumentingAgents*, int sessionId, bool autoFlush, V8Debugger*, int contextGroupId, const String* savedState);
+    InspectorSession(Client*, InstrumentingAgents*, int sessionId, bool autoFlush, V8Debugger*, int contextGroupId, const String* savedState);
     ~InspectorSession() override;
     int sessionId() { return m_sessionId; }
     V8InspectorSession* v8Session() { return m_v8Session.get(); }
@@ -62,17 +58,12 @@ private:
 
     // V8InspectorSessionClient implementation.
     void resumeStartup() override;
-    bool canExecuteScripts() override;
-    void profilingStarted() override;
-    void profilingStopped() override;
-    void consoleCleared() override;
 
     Client* m_client;
     std::unique_ptr<V8InspectorSession> m_v8Session;
     int m_sessionId;
     bool m_autoFlush;
     bool m_disposed;
-    Member<InspectedFrames> m_inspectedFrames;
     Member<InstrumentingAgents> m_instrumentingAgents;
     std::unique_ptr<protocol::UberDispatcher> m_inspectorBackendDispatcher;
     std::unique_ptr<protocol::DictionaryValue> m_state;

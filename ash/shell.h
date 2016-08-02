@@ -95,14 +95,12 @@ class EventTransformationHandler;
 class FirstRunHelper;
 class GPUSupport;
 class HighContrastController;
-class KeyboardUMAEventFilter;
 class LinkHandlerModelFactory;
 class LocaleNotificationController;
 class LockStateController;
 enum class LoginStatus;
 class MagnificationController;
 class MouseCursorEventFilter;
-class NewWindowDelegate;
 class OverlayEventFilter;
 class PartialMagnificationController;
 class PointerWatcherDelegate;
@@ -343,10 +341,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
     return session_state_delegate_.get();
   }
 
-  NewWindowDelegate* new_window_delegate() {
-    return new_window_delegate_.get();
-  }
-
   HighContrastController* high_contrast_controller() {
     return high_contrast_controller_.get();
   }
@@ -549,7 +543,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
       accelerator_controller_delegate_;
   std::unique_ptr<UserWallpaperDelegate> user_wallpaper_delegate_;
   std::unique_ptr<SessionStateDelegate> session_state_delegate_;
-  std::unique_ptr<NewWindowDelegate> new_window_delegate_;
   std::unique_ptr<PointerWatcherDelegate> pointer_watcher_delegate_;
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<WindowPositioner> window_positioner_;
@@ -587,9 +580,6 @@ class ASH_EXPORT Shell : public SystemModalContainerEventFilterDelegate,
   // An event filter that pre-handles key events while the partial
   // screenshot UI or the keyboard overlay is active.
   std::unique_ptr<OverlayEventFilter> overlay_filter_;
-
-  // An event filter for logging keyboard-related metrics.
-  std::unique_ptr<KeyboardUMAEventFilter> keyboard_metrics_filter_;
 
   // An event filter which handles moving and resizing windows.
   std::unique_ptr<ToplevelWindowEventHandler> toplevel_window_event_handler_;

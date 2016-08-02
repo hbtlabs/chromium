@@ -27,7 +27,7 @@
 #include "base/task_scheduler/sequence_sort_key.h"
 #include "base/task_scheduler/task_tracker.h"
 #include "base/task_scheduler/test_task_factory.h"
-#include "base/task_scheduler/test_utils.h"
+#include "base/test/gtest_util.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_checker_impl.h"
@@ -352,9 +352,6 @@ void ExpectIORestriction(IORestriction io_restriction, WaitableEvent* event) {
   if (io_restriction == IORestriction::ALLOWED) {
     ThreadRestrictions::AssertIOAllowed();
   } else {
-    static_assert(
-        ENABLE_THREAD_RESTRICTIONS == DCHECK_IS_ON(),
-        "ENABLE_THREAD_RESTRICTIONS and DCHECK_IS_ON() have diverged.");
     EXPECT_DCHECK_DEATH({ ThreadRestrictions::AssertIOAllowed(); }, "");
   }
 

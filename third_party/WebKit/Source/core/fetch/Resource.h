@@ -291,10 +291,8 @@ protected:
     const HashCountedSet<ResourceClient*>& clients() const { return m_clients; }
     DataBufferingPolicy dataBufferingPolicy() const { return m_options.dataBufferingPolicy; }
 
-    ResourceRequest m_resourceRequest;
-    Member<ResourceLoader> m_loader;
-
-    ResourceResponse m_response;
+    void setCachePolicyBypassingCache();
+    void setLoFiStateOff();
 
     RefPtr<SharedBuffer> m_data;
 
@@ -303,7 +301,7 @@ private:
     class CachedMetadataHandlerImpl;
     class ServiceWorkerResponseCachedMetadataHandler;
 
-    void cancelTimerFired(Timer<Resource>*);
+    void cancelTimerFired(TimerBase*);
 
     void revalidationSucceeded(const ResourceResponse&);
     void revalidationFailed();
@@ -358,6 +356,10 @@ private:
     double m_responseTimestamp;
 
     Timer<Resource> m_cancelTimer;
+
+    ResourceRequest m_resourceRequest;
+    Member<ResourceLoader> m_loader;
+    ResourceResponse m_response;
 };
 
 class ResourceFactory {

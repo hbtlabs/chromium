@@ -721,6 +721,9 @@ void HTMLDocumentParser::startBackgroundParser()
     ASSERT(document());
     m_haveBackgroundParser = true;
 
+    if (document()->frame() && document()->frame()->frameScheduler())
+        document()->frame()->frameScheduler()->setDocumentParsingInBackground(true);
+
     // Make sure that a resolver is set up, so that the correct viewport dimensions will be fed to the background parser and preload scanner.
     if (document()->loader())
         document()->ensureStyleResolver();
@@ -741,6 +744,7 @@ void HTMLDocumentParser::startBackgroundParser()
             config->outstandingTokenLimit = document()->settings()->backgroundHtmlParserOutstandingTokenLimit();
         if (document()->settings()->backgroundHtmlParserPendingTokenLimit())
             config->pendingTokenLimit = document()->settings()->backgroundHtmlParserPendingTokenLimit();
+        config->shouldCoalesceChunks = document()->settings()->parseHTMLOnMainThreadCoalesceChunks();
     }
 
     ASSERT(config->xssAuditor->isSafeToSendToAnotherThread());
@@ -760,6 +764,9 @@ void HTMLDocumentParser::stopBackgroundParser()
     ASSERT(shouldUseThreading());
     ASSERT(m_haveBackgroundParser);
     m_haveBackgroundParser = false;
+
+    if (document()->frame() && document()->frame()->frameScheduler())
+        document()->frame()->frameScheduler()->setDocumentParsingInBackground(false);
 
     // Make this sync, as lsan triggers on some unittests if the task runner is
     // used. Note that these lifetimes will be much more concrete if

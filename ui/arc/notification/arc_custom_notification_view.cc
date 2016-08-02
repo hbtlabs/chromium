@@ -9,6 +9,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/message_center/message_center_style.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
@@ -24,11 +25,14 @@ ArcCustomNotificationView::ArcCustomNotificationView(
     : item_(item), surface_(surface) {
   item_->AddObserver(this);
   OnItemPinnedChanged();
+  surface_->window()->AddObserver(this);
 }
 
 ArcCustomNotificationView::~ArcCustomNotificationView() {
   if (item_)
     item_->RemoveObserver(this);
+  if (surface_ && surface_->window())
+    surface_->window()->RemoveObserver(this);
 }
 
 void ArcCustomNotificationView::CreateFloatingCloseButton() {
@@ -65,6 +69,18 @@ void ArcCustomNotificationView::CreateFloatingCloseButton() {
   Layout();
 }
 
+void ArcCustomNotificationView::UpdatePreferredSize() {
+  gfx::Size preferred_size = surface_->GetSize();
+  if (preferred_size.width() != message_center::kNotificationWidth) {
+    const float scale = static_cast<float>(message_center::kNotificationWidth) /
+                        preferred_size.width();
+    preferred_size.SetSize(message_center::kNotificationWidth,
+                           preferred_size.height() * scale);
+  }
+
+  SetPreferredSize(preferred_size);
+}
+
 void ArcCustomNotificationView::ViewHierarchyChanged(
     const views::View::ViewHierarchyChangedDetails& details) {
   views::Widget* widget = GetWidget();
@@ -80,17 +96,31 @@ void ArcCustomNotificationView::ViewHierarchyChanged(
   if (!widget || !surface_ || !details.is_add)
     return;
 
-  SetPreferredSize(surface_->GetSize());
+  UpdatePreferredSize();
   Attach(surface_->window());
 }
 
 void ArcCustomNotificationView::Layout() {
   views::NativeViewHost::Layout();
 
-  if (!floating_close_button_widget_ || !surface_ || !GetWidget())
+  if (!surface_ || !GetWidget())
     return;
 
-  gfx::Rect surface_local_bounds(surface_->window()->bounds().size());
+  // Scale notification surface if necessary.
+  gfx::Transform transform;
+  const gfx::Size surface_size = surface_->GetSize();
+  const gfx::Size contents_size = GetContentsBounds().size();
+  if (!surface_size.IsEmpty() && !contents_size.IsEmpty()) {
+    transform.Scale(
+        static_cast<float>(contents_size.width()) / surface_size.width(),
+        static_cast<float>(contents_size.height()) / surface_size.height());
+  }
+  surface_->window()->SetTransform(transform);
+
+  if (!floating_close_button_widget_)
+    return;
+
+  gfx::Rect surface_local_bounds(surface_->GetSize());
   gfx::Rect close_button_bounds(floating_close_button_->GetPreferredSize());
   close_button_bounds.set_x(surface_local_bounds.right() -
                             close_button_bounds.width());
@@ -103,6 +133,16 @@ void ArcCustomNotificationView::ButtonPressed(views::Button* sender,
   if (item_ && !item_->pinned() && sender == floating_close_button_) {
     item_->CloseFromCloseButton();
   }
+}
+
+void ArcCustomNotificationView::OnWindowBoundsChanged(aura::Window* window,
+                           const gfx::Rect& old_bounds,
+                           const gfx::Rect& new_bounds) {
+  UpdatePreferredSize();
+}
+
+void ArcCustomNotificationView::OnWindowDestroying(aura::Window* window) {
+  window->RemoveObserver(this);
 }
 
 void ArcCustomNotificationView::OnItemDestroying() {

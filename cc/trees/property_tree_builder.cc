@@ -58,7 +58,6 @@ struct DataForRecursion {
   uint32_t main_thread_scrolling_reasons;
   bool scroll_tree_parent_created_by_uninheritable_criteria;
   const gfx::Transform* device_transform;
-  gfx::Vector2dF scroll_snap;
   gfx::Transform compound_transform_since_render_target;
   bool axis_align_since_render_target;
   SkColor safe_opaque_background_color;
@@ -540,7 +539,6 @@ bool AddTransformNodeIfNeeded(
                           ->offset_to_transform_parent();
       source_index =
           data_from_ancestor.transform_tree_parent->transform_tree_index();
-      source_offset -= data_from_ancestor.scroll_snap;
     }
   }
 
@@ -559,9 +557,6 @@ bool AddTransformNodeIfNeeded(
   }
   data_for_children->transform_tree_parent = layer;
 
-  if (IsContainerForFixedPositionLayers(layer) || is_fixed)
-    data_for_children->scroll_snap = gfx::Vector2dF();
-
   if (!requires_node) {
     data_for_children->should_flatten |= ShouldFlattenTransform(layer);
     gfx::Vector2dF local_offset = layer->position().OffsetFromOrigin() +
@@ -569,7 +564,7 @@ bool AddTransformNodeIfNeeded(
     gfx::Vector2dF source_to_parent;
     if (source_index != parent_index) {
       gfx::Transform to_parent;
-      data_from_ancestor.property_trees->transform_tree.ComputeTransform(
+      data_from_ancestor.property_trees->transform_tree.ComputeTranslation(
           source_index, parent_index, &to_parent);
       source_to_parent = to_parent.To2dTranslation();
     }
@@ -693,8 +688,6 @@ bool AddTransformNodeIfNeeded(
 
   // Flattening (if needed) will be handled by |node|.
   layer->set_should_flatten_transform_from_property_tree(false);
-
-  data_for_children->scroll_snap += node->scroll_snap;
 
   node->owner_id = layer->id();
 
@@ -977,6 +970,7 @@ bool AddEffectNodeIfNeeded(
 
   node.opacity = Opacity(layer);
   node.blend_mode = BlendMode(layer);
+  node.unscaled_mask_target_size = layer->bounds();
   node.has_render_surface = should_create_render_surface;
   node.has_copy_request = HasCopyRequest(layer);
   node.filters = Filters(layer);
