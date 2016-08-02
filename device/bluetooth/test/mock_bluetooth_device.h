@@ -28,14 +28,7 @@ class MockBluetoothDevice : public BluetoothDevice {
  public:
   MockBluetoothDevice(MockBluetoothAdapter* adapter,
                       uint32_t bluetooth_class,
-                      const base::Optional<std::string>& name,
-                      const std::string& address,
-                      bool paired,
-                      bool connected);
-  // Constructor that doesn't require optional types:
-  MockBluetoothDevice(MockBluetoothAdapter* adapter,
-                      uint32_t bluetooth_class,
-                      const std::string& name,
+                      const char* name,
                       const std::string& address,
                       bool paired,
                       bool connected);
@@ -51,6 +44,7 @@ class MockBluetoothDevice : public BluetoothDevice {
   MOCK_CONST_METHOD0(GetDeviceID, uint16_t());
   MOCK_CONST_METHOD0(GetAppearance, uint16_t());
   MOCK_CONST_METHOD0(GetName, base::Optional<std::string>());
+  MOCK_CONST_METHOD0(GetNameForDisplay, base::string16());
   MOCK_CONST_METHOD0(GetDeviceType, BluetoothDevice::DeviceType());
   MOCK_CONST_METHOD0(IsPaired, bool());
   MOCK_CONST_METHOD0(IsConnected, bool());

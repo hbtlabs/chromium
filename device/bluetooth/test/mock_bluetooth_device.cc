@@ -13,16 +13,15 @@
 
 namespace device {
 
-MockBluetoothDevice::MockBluetoothDevice(
-    MockBluetoothAdapter* adapter,
-    uint32_t bluetooth_class,
-    const base::Optional<std::string>& name,
-    const std::string& address,
-    bool paired,
-    bool connected)
+MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
+                                         uint32_t bluetooth_class,
+                                         const char* name,
+                                         const std::string& address,
+                                         bool paired,
+                                         bool connected)
     : BluetoothDevice(adapter),
       bluetooth_class_(bluetooth_class),
-      name_(name),
+      name_(name ? base::Optional<std::string>(name) : base::nullopt),
       address_(address),
       connected_(connected) {
   ON_CALL(*this, GetBluetoothClass())
@@ -40,6 +39,9 @@ MockBluetoothDevice::MockBluetoothDevice(
   ON_CALL(*this, GetDeviceID())
       .WillByDefault(testing::Return(0));
   ON_CALL(*this, GetName()).WillByDefault(testing::Return(name_));
+  ON_CALL(*this, GetNameForDisplay())
+      .WillByDefault(testing::Return(
+          base::UTF8ToUTF16(name_ ? name_.value() : "Unnamed Device")));
   ON_CALL(*this, GetDeviceType())
       .WillByDefault(testing::Return(DEVICE_UNKNOWN));
   ON_CALL(*this, IsPaired())
@@ -58,19 +60,6 @@ MockBluetoothDevice::MockBluetoothDevice(
   ON_CALL(*this, ExpectingConfirmation())
       .WillByDefault(testing::Return(false));
 }
-
-MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
-                                         uint32_t bluetooth_class,
-                                         const std::string& name,
-                                         const std::string& address,
-                                         bool paired,
-                                         bool connected)
-    : MockBluetoothDevice(adapter,
-                          bluetooth_class,
-                          base::make_optional(name),
-                          address,
-                          paired,
-                          connected) {}
 
 MockBluetoothDevice::~MockBluetoothDevice() {}
 
