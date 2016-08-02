@@ -244,7 +244,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns the name of the device suitable for displaying, this may
   // be a synthesized string containing the address and localized type name
   // if the device has no obtained name.
-  base::string16 GetNameForDisplay() const;
+  virtual base::string16 GetNameForDisplay() const;
 
   // Returns the type of the device, limited to those we support or are
   // aware of, by decoding the bluetooth class information. The returned
