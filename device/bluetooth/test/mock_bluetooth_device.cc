@@ -13,13 +13,12 @@
 
 namespace device {
 
-MockBluetoothDevice::MockBluetoothDevice(
-    MockBluetoothAdapter* adapter,
-    uint32_t bluetooth_class,
-    const base::Optional<std::string>& name,
-    const std::string& address,
-    bool paired,
-    bool connected)
+MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
+                                         uint32_t bluetooth_class,
+                                         const char* name,
+                                         const std::string& address,
+                                         bool paired,
+                                         bool connected)
     : BluetoothDevice(adapter),
       bluetooth_class_(bluetooth_class),
       name_(name),
@@ -61,19 +60,6 @@ MockBluetoothDevice::MockBluetoothDevice(
   ON_CALL(*this, ExpectingConfirmation())
       .WillByDefault(testing::Return(false));
 }
-
-MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
-                                         uint32_t bluetooth_class,
-                                         const std::string& name,
-                                         const std::string& address,
-                                         bool paired,
-                                         bool connected)
-    : MockBluetoothDevice(adapter,
-                          bluetooth_class,
-                          base::make_optional(name),
-                          address,
-                          paired,
-                          connected) {}
 
 MockBluetoothDevice::~MockBluetoothDevice() {}
 
