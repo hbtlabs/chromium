@@ -681,7 +681,6 @@ TEST_F(BluetoothTest, GetName_NullName) {
     return;
   }
   InitWithFakeAdapter();
-  StartLowEnergyDiscoverySession();
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
   EXPECT_FALSE(device->GetName());
 }

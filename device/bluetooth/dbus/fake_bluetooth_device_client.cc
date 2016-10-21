@@ -1750,7 +1750,7 @@ void FakeBluetoothDeviceClient::RemoveAllDevices() {
 
 void FakeBluetoothDeviceClient::CreateTestDevice(
     const dbus::ObjectPath& adapter_path,
-    const std::string name,
+    const base::Optional<std::string> name,
     const std::string alias,
     const std::string device_address,
     const std::vector<std::string>& service_uuids,
@@ -1769,7 +1769,10 @@ void FakeBluetoothDeviceClient::CreateTestDevice(
   properties->adapter.ReplaceValue(adapter_path);
 
   properties->address.ReplaceValue(device_address);
-  properties->name.ReplaceValue(name);
+  properties->name.set_valid(name.has_value());
+  properties->name.ReplaceValue(
+      name.value_or("Invalid Device Name set in "
+                    "FakeBluetoothDeviceClient::CreateTestDevice"));
   properties->alias.ReplaceValue(alias);
 
   properties->uuids.ReplaceValue(service_uuids);
