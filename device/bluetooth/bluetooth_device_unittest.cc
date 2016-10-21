@@ -673,7 +673,7 @@ TEST_F(BluetoothTest, AdvertisementData_ConnectionDuringDiscovery) {
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
 
-#if defined(OS_ANDROID) || defined(OS_MACOSX)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS) || defined(OS_MACOSX)
 // GetName for Device with no name.
 TEST_F(BluetoothTest, GetName_NullName) {
   if (!PlatformSupportsLowEnergy()) {
@@ -685,7 +685,7 @@ TEST_F(BluetoothTest, GetName_NullName) {
   BluetoothDevice* device = SimulateLowEnergyDevice(5);
   EXPECT_FALSE(device->GetName());
 }
-#endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
+#endif  // defined(OS_ANDROID) || defined(OS_CHROMEOS)  || defined(OS_MACOSX)
 
 // TODO(506415): Test GetNameForDisplay with a device with no name.
 // BluetoothDevice::GetAddressWithLocalizedDeviceTypeName() will run, which
