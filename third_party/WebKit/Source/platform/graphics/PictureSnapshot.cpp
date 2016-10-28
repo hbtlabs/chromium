@@ -57,7 +57,7 @@ namespace blink {
 PictureSnapshot::PictureSnapshot(sk_sp<const SkPicture> picture)
     : m_picture(std::move(picture)) {}
 
-class SkiaImageDecoder : public SkImageDeserializer {
+class SkiaImageDecoder final : public SkImageDeserializer {
  public:
   sk_sp<SkImage> makeFromMemory(const void* data,
                                 size_t length,
@@ -67,7 +67,7 @@ class SkiaImageDecoder : public SkImageDeserializer {
         SegmentReader::createFromSkData(SkData::MakeWithoutCopy(data, length));
     std::unique_ptr<ImageDecoder> imageDecoder = ImageDecoder::create(
         segmentReader.release(), true, ImageDecoder::AlphaPremultiplied,
-        ImageDecoder::GammaAndColorProfileIgnored);
+        ImageDecoder::ColorSpaceIgnored);
     if (!imageDecoder)
       return nullptr;
 

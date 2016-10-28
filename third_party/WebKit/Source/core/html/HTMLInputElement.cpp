@@ -280,7 +280,7 @@ void HTMLInputElement::stepUp(int n, ExceptionState& exceptionState) {
 }
 
 void HTMLInputElement::stepDown(int n, ExceptionState& exceptionState) {
-  m_inputType->stepUp(-n, exceptionState);
+  m_inputType->stepUp(-1.0 * n, exceptionState);
 }
 
 void HTMLInputElement::blur() {
@@ -718,6 +718,8 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name,
       setNeedsStyleRecalc(
           SubtreeStyleChange,
           StyleChangeReasonForTracing::fromAttribute(valueAttr));
+      if (m_inputType->valueMode() == ValueMode::kValue)
+        setTextAsOfLastFormControlChangeEvent(sanitizeValue(value));
     }
     m_needsToUpdateViewValue = true;
     setNeedsValidityCheck();
@@ -1091,8 +1093,9 @@ void HTMLInputElement::setValue(const String& value,
   notifyFormStateChanged();
 }
 
-void HTMLInputElement::setValueInternal(const String& sanitizedValue,
-                                        TextFieldEventBehavior eventBehavior) {
+void HTMLInputElement::setNonAttributeValue(const String& sanitizedValue) {
+  // This is a common code for ValueMode::kValue.
+  DCHECK_EQ(m_inputType->valueMode(), ValueMode::kValue);
   m_valueIfDirty = sanitizedValue;
   m_hasDirtyValue = !m_valueIfDirty.isNull();
   setNeedsValidityCheck();

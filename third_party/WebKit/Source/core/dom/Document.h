@@ -162,6 +162,7 @@ class SelectorQueryCache;
 class SerializedScriptValue;
 class Settings;
 class SnapCoordinator;
+class StringOrDictionary;
 class StyleEngine;
 class StyleResolver;
 class StyleSheet;
@@ -234,6 +235,30 @@ enum CreateElementFlags {
   CreatedByCreateElement = SynchronousCustomElements,
   // https://html.spec.whatwg.org/#create-an-element-for-the-token
   CreatedByFragmentParser = CreatedByParser | AsynchronousCustomElements,
+};
+
+// Collect data about deferred loading of offscreen cross-origin documents. All
+// cross-origin documents log Created. Only those that would load log a reason.
+// We can then see the % of cross-origin documents that never have to load.
+// See https://crbug.com/635105.
+// Logged to UMA, don't re-arrange entries without creating a new histogram.
+enum WouldLoadReason {
+  Created,
+  // If outer and inner frames aren't in the same process we can't determine
+  // if the inner frame is visible, so just load it.
+  // TODO(dgrogan): Revisit after https://crbug.com/650433 is fixed.
+  WouldLoadOutOfProcess,
+  // The next five indicate frames that are probably used for cross-origin
+  // communication.
+  WouldLoadDisplayNone,
+  WouldLoadZeroByZero,
+  WouldLoadAboveAndLeft,
+  WouldLoadAbove,
+  WouldLoadLeft,
+  // We have to load documents in visible frames.
+  WouldLoadVisible,
+
+  WouldLoadReasonEnd
 };
 
 using DocumentClassFlags = unsigned char;
@@ -1121,11 +1146,11 @@ class CORE_EXPORT Document : public ContainerNode,
   TextAutosizer* textAutosizer();
 
   Element* createElement(const AtomicString& localName,
-                         const AtomicString& typeExtension,
+                         const StringOrDictionary&,
                          ExceptionState&);
   Element* createElementNS(const AtomicString& namespaceURI,
                            const AtomicString& qualifiedName,
-                           const AtomicString& typeExtension,
+                           const StringOrDictionary&,
                            ExceptionState&);
   ScriptValue registerElement(
       ScriptState*,
@@ -1286,9 +1311,14 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool isInMainFrame() const;
 
-  void onVisibilityMaybeChanged(bool visible);
+  void maybeRecordLoadReason(WouldLoadReason);
+  WouldLoadReason wouldLoadReason() { return m_wouldLoadReason; }
 
   PropertyRegistry* propertyRegistry();
+
+  // Indicates whether the user has interacted with this particular Document.
+  void setHasReceivedUserGesture() { m_hasReceivedUserGesture = true; }
+  bool hasReceivedUserGesture() const { return m_hasReceivedUserGesture; }
 
  protected:
   Document(const DocumentInit&, DocumentClassFlags = DefaultDocumentClass);
@@ -1455,7 +1485,7 @@ class CORE_EXPORT Document : public ContainerNode,
       m_executeScriptsWaitingForResourcesTask;
 
   bool m_hasAutofocused;
-  Timer<Document> m_clearFocusedElementTimer;
+  TaskRunnerTimer<Document> m_clearFocusedElementTimer;
   Member<Element> m_autofocusElement;
   Member<Element> m_focusedElement;
   Member<Range> m_sequentialFocusNavigationStartingPoint;
@@ -1509,7 +1539,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<AXObjectCache> m_axObjectCache;
   Member<DocumentMarkerController> m_markers;
 
-  Timer<Document> m_updateFocusAppearanceTimer;
+  TaskRunnerTimer<Document> m_updateFocusAppearanceTimer;
 
   Member<Element> m_cssTarget;
 
@@ -1534,6 +1564,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   bool m_designMode;
   bool m_isRunningExecCommand;
+  bool m_hasReceivedUserGesture;
 
   HeapHashSet<WeakMember<const LiveNodeListBase>> m_listsInvalidatedAtDocument;
   // Oilpan keeps track of all registered NodeLists.
@@ -1577,8 +1608,8 @@ class CORE_EXPORT Document : public ContainerNode,
   HeapVector<Member<Element>> m_topLayerElements;
 
   int m_loadEventDelayCount;
-  Timer<Document> m_loadEventDelayTimer;
-  Timer<Document> m_pluginLoadingTimer;
+  TaskRunnerTimer<Document> m_loadEventDelayTimer;
+  TaskRunnerTimer<Document> m_pluginLoadingTimer;
 
   ViewportDescription m_viewportDescription;
   ViewportDescription m_legacyViewportDescription;
@@ -1600,7 +1631,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<V0CustomElementMicrotaskRunQueue> m_customElementMicrotaskRunQueue;
 
   void elementDataCacheClearTimerFired(TimerBase*);
-  Timer<Document> m_elementDataCacheClearTimer;
+  TaskRunnerTimer<Document> m_elementDataCacheClearTimer;
 
   Member<ElementDataCache> m_elementDataCache;
 
@@ -1614,7 +1645,7 @@ class CORE_EXPORT Document : public ContainerNode,
   Member<Document> m_templateDocument;
   Member<Document> m_templateDocumentHost;
 
-  Timer<Document> m_didAssociateFormControlsTimer;
+  TaskRunnerTimer<Document> m_didAssociateFormControlsTimer;
 
   HeapHashSet<Member<SVGUseElement>> m_useElementsNeedingUpdate;
   HeapHashSet<Member<Element>> m_layerUpdateSVGFilterElements;
@@ -1641,7 +1672,7 @@ class CORE_EXPORT Document : public ContainerNode,
 
   Member<SnapCoordinator> m_snapCoordinator;
 
-  bool m_visibilityWasLogged;
+  WouldLoadReason m_wouldLoadReason;
 
   Member<PropertyRegistry> m_propertyRegistry;
 };

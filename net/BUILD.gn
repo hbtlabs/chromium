@@ -40,20 +40,14 @@ posix_avoid_mmap = is_android && current_cpu != "x86"
 use_v8_in_net = !is_ios
 enable_built_in_dns = !is_ios
 
-config("net_config") {
-  defines = []
-  if (posix_avoid_mmap) {
-    defines += [ "POSIX_AVOID_MMAP" ]
-  }
-  if (disable_file_support) {
-    defines += [ "DISABLE_FILE_SUPPORT" ]
-  }
-  if (disable_ftp_support) {
-    defines += [ "DISABLE_FTP_SUPPORT=1" ]
-  }
-  if (enable_websockets) {
-    defines += [ "ENABLE_WEBSOCKETS" ]
-  }
+buildflag_header("features") {
+  header = "net_features.h"
+  flags = [
+    "POSIX_AVOID_MMAP=$posix_avoid_mmap",
+    "DISABLE_FILE_SUPPORT=$disable_file_support",
+    "DISABLE_FTP_SUPPORT=$disable_ftp_support",
+    "ENABLE_WEBSOCKETS=$enable_websockets",
+  ]
 }
 
 config("net_internal_config") {
@@ -311,9 +305,11 @@ component("net") {
 
   cflags = []
   configs += net_configs
-  public_configs = [ ":net_config" ]
 
-  public_deps += [ "//url" ]
+  public_deps += [
+    ":features",
+    "//url",
+  ]
 
   if (is_mac) {
     libs = [
@@ -1195,34 +1191,6 @@ source_set("simple_quic_tools") {
   ]
 }
 
-action_foreach("stale_while_revalidate_experiment_domains_dafsa") {
-  script = "//net/tools/dafsa/make_dafsa.py"
-  sources = [
-    "base/stale_while_revalidate_experiment_domains.gperf",
-  ]
-  outputs = [
-    "${target_gen_dir}/base/{{source_name_part}}-inc.cc",
-  ]
-  args = [
-    "{{source}}",
-    rebase_path("${target_gen_dir}/base/{{source_name_part}}-inc.cc",
-                root_build_dir),
-  ]
-}
-
-source_set("stale_while_revalidate_experiment_domains") {
-  sources = [
-    "base/stale_while_revalidate_experiment_domains.cc",
-    "base/stale_while_revalidate_experiment_domains.h",
-  ]
-  deps = [
-    ":net",
-    ":stale_while_revalidate_experiment_domains_dafsa",
-    "//base",
-  ]
-  configs += net_configs
-}
-
 if (!is_ios) {
   executable("quic_client") {
     sources = [
@@ -1317,7 +1285,6 @@ test("net_unittests") {
     ":extras",
     ":net",
     ":simple_quic_tools",
-    ":stale_while_revalidate_experiment_domains",
     ":test_support",
     "//base",
     "//base:i18n",
@@ -2043,4 +2010,41 @@ fuzzer_test("net_auth_challenge_tokenizer_fuzzer") {
     "//base",
     "//net",
   ]
+}
+
+fuzzer_test("net_http_security_headers_hsts_fuzzer") {
+  sources = [
+    "http/http_security_headers_hsts_fuzzer.cc",
+  ]
+  deps = [
+    "//base",
+    "//net",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
+}
+
+fuzzer_test("net_http_security_headers_hpkp_fuzzer") {
+  sources = [
+    "http/http_security_headers_hpkp_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+    "//url",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
+}
+
+fuzzer_test("net_http_security_headers_hpkp_report_only_fuzzer") {
+  sources = [
+    "http/http_security_headers_hpkp_report_only_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    "//base",
+    "//net",
+    "//url",
+  ]
+  dict = "data/fuzzer_dictionaries/net_http_security_headers_fuzzer.dict"
 }

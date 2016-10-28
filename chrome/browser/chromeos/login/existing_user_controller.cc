@@ -53,7 +53,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
@@ -63,10 +62,12 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_client.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -151,7 +152,7 @@ bool CanShowDebuggingFeatures() {
              chromeos::switches::kSystemDevMode) &&
          base::CommandLine::ForCurrentProcess()->HasSwitch(
              chromeos::switches::kLoginManager) &&
-         !user_manager::UserManager::Get()->IsSessionStarted();
+         !session_manager::SessionManager::Get()->IsSessionStarted();
 }
 
 void RecordPasswordChangeFlow(LoginPasswordChangeFlow flow) {
@@ -411,7 +412,7 @@ void ExistingUserController::PerformLogin(
   }
 
   if (gaia::ExtractDomainName(user_context.GetAccountId().GetUserEmail()) ==
-      chromeos::login::kSupervisedUserDomain) {
+      user_manager::kSupervisedUserDomain) {
     login_performer_->LoginAsSupervisedUser(user_context);
   } else {
     login_performer_->PerformLogin(user_context, auth_mode);
@@ -589,7 +590,7 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
         base::TimeDelta::FromMilliseconds(kSafeModeRestartUiDelayMs));
   } else if (failure.reason() == AuthFailure::TPM_ERROR) {
     ShowTPMError();
-  } else if (last_login_attempt_account_id_ == login::GuestAccountId()) {
+  } else if (last_login_attempt_account_id_ == user_manager::GuestAccountId()) {
     // Show no errors, just re-enable input.
     login_display_->ClearAndEnablePassword();
     StartPublicSessionAutoLoginTimer();
@@ -807,8 +808,8 @@ bool ExistingUserController::password_changed() const {
 }
 
 void ExistingUserController::LoginAsGuest() {
-  PerformPreLoginActions(
-      UserContext(user_manager::USER_TYPE_GUEST, login::GuestAccountId()));
+  PerformPreLoginActions(UserContext(user_manager::USER_TYPE_GUEST,
+                                     user_manager::GuestAccountId()));
 
   bool allow_guest;
   cros_settings_->GetBoolean(kAccountsPrefAllowGuest, &allow_guest);

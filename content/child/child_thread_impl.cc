@@ -56,8 +56,6 @@
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.h"
-#include "ipc/attachment_broker.h"
-#include "ipc/attachment_broker_unprivileged.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_logging.h"
 #include "ipc/ipc_platform_file.h"
@@ -424,8 +422,6 @@ void ChildThreadImpl::Init(const Options& options) {
   IPC::Logging::GetInstance();
 #endif
 
-  IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
-
   channel_ =
       IPC::SyncChannel::Create(this, ChildProcess::current()->io_task_runner(),
                                ChildProcess::current()->GetShutDownEvent());
@@ -517,8 +513,6 @@ void ChildThreadImpl::Init(const Options& options) {
   if (!base::PowerMonitor::Get()) {
     std::unique_ptr<PowerMonitorBroadcastSource> power_monitor_source(
         new PowerMonitorBroadcastSource());
-    channel_->AddFilter(power_monitor_source->GetMessageFilter());
-
     power_monitor_.reset(
         new base::PowerMonitor(std::move(power_monitor_source)));
   }
@@ -534,10 +528,6 @@ void ChildThreadImpl::Init(const Options& options) {
   for (auto* startup_filter : options.startup_filters) {
     channel_->AddFilter(startup_filter);
   }
-
-  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker())
-    broker->RegisterBrokerCommunicationChannel(channel_.get());
 
   channel_->AddAssociatedInterface(
       base::Bind(&ChildThreadImpl::OnRouteProviderRequest,
@@ -582,10 +572,6 @@ ChildThreadImpl::~ChildThreadImpl() {
 #ifdef IPC_MESSAGE_LOG_ENABLED
   IPC::Logging::GetInstance()->SetIPCSender(NULL);
 #endif
-
-  IPC::AttachmentBroker* broker = IPC::AttachmentBroker::GetGlobal();
-  if (broker && !broker->IsPrivilegedBroker())
-    broker->DeregisterBrokerCommunicationChannel(channel_.get());
 
   channel_->RemoveFilter(histogram_message_filter_.get());
   channel_->RemoveFilter(sync_message_filter_.get());
@@ -656,8 +642,10 @@ ServiceManagerConnection* ChildThreadImpl::GetServiceManagerConnection() {
 }
 
 service_manager::InterfaceRegistry* ChildThreadImpl::GetInterfaceRegistry() {
-  if (!interface_registry_.get())
-    interface_registry_.reset(new service_manager::InterfaceRegistry);
+  if (!interface_registry_.get()) {
+    interface_registry_ = base::MakeUnique<service_manager::InterfaceRegistry>(
+        service_manager::mojom::kServiceManager_ConnectorSpec);
+  }
   return interface_registry_.get();
 }
 
@@ -668,6 +656,22 @@ service_manager::InterfaceProvider* ChildThreadImpl::GetRemoteInterfaces() {
   if (!remote_interfaces_.get())
     remote_interfaces_.reset(new service_manager::InterfaceProvider);
   return remote_interfaces_.get();
+}
+
+const service_manager::ServiceInfo&
+    ChildThreadImpl::GetChildServiceInfo() const {
+  DCHECK(IsConnectedToBrowser());
+  return child_info_;
+}
+
+const service_manager::ServiceInfo&
+    ChildThreadImpl::GetBrowserServiceInfo() const {
+  DCHECK(IsConnectedToBrowser());
+  return browser_info_;
+}
+
+bool ChildThreadImpl::IsConnectedToBrowser() const {
+  return connected_to_browser_;
 }
 
 IPC::MessageRouter* ChildThreadImpl::GetRouter() {
@@ -748,6 +752,7 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
                         OnProcessBackgrounded)
     IPC_MESSAGE_HANDLER(ChildProcessMsg_PurgeAndSuspend,
                         OnProcessPurgeAndSuspend)
+    IPC_MESSAGE_HANDLER(ChildProcessMsg_Resume, OnProcessResume)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -763,6 +768,10 @@ bool ChildThreadImpl::OnMessageReceived(const IPC::Message& msg) {
 void ChildThreadImpl::StartServiceManagerConnection() {
   DCHECK(service_manager_connection_);
   service_manager_connection_->Start();
+  // We don't care about storing the id, since if this pipe closes we're toast.
+  service_manager_connection_->AddOnConnectHandler(
+      base::Bind(&ChildThreadImpl::OnServiceConnect,
+                 weak_factory_.GetWeakPtr()));
 }
 
 bool ChildThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
@@ -779,6 +788,8 @@ void ChildThreadImpl::OnProcessBackgrounded(bool backgrounded) {
 
 void ChildThreadImpl::OnProcessPurgeAndSuspend() {
 }
+
+void ChildThreadImpl::OnProcessResume() {}
 
 void ChildThreadImpl::OnShutdown() {
   base::MessageLoop::current()->QuitWhenIdle();
@@ -864,6 +875,17 @@ void ChildThreadImpl::GetAssociatedInterface(
   Listener* route = router_.GetRoute(routing_id);
   if (route)
     route->OnAssociatedInterfaceRequest(name, request.PassHandle());
+}
+
+void ChildThreadImpl::OnServiceConnect(
+    const service_manager::ServiceInfo& local_info,
+    const service_manager::ServiceInfo& remote_info) {
+  if (remote_info.identity.name() != kBrowserServiceName)
+    return;
+  DCHECK(!connected_to_browser_);
+  connected_to_browser_ = true;
+  child_info_ = local_info;
+  browser_info_ = remote_info;
 }
 
 bool ChildThreadImpl::IsInBrowserProcess() const {

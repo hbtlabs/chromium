@@ -35,7 +35,6 @@
 #include "core/dom/ExecutionContextTask.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "public/platform/WebString.h"
 #include "wtf/Functional.h"
@@ -59,8 +58,6 @@ MessagePort::MessagePort(ExecutionContext& executionContext)
 
 MessagePort::~MessagePort() {
   DCHECK(!m_started || !isEntangled());
-  if (m_scriptStateForConversion)
-    m_scriptStateForConversion->disposePerContextData();
 }
 
 void MessagePort::postMessage(ExecutionContext* context,
@@ -85,12 +82,6 @@ void MessagePort::postMessage(ExecutionContext* context,
       MessagePort::disentanglePorts(context, ports, exceptionState);
   if (exceptionState.hadException())
     return;
-
-  if (message->containsTransferableArrayBuffer())
-    getExecutionContext()->addConsoleMessage(ConsoleMessage::create(
-        JSMessageSource, WarningMessageLevel,
-        "MessagePort cannot send an ArrayBuffer as a transferable object yet. "
-        "See http://crbug.com/334408"));
 
   WebString messageString = message->toWireString();
   std::unique_ptr<WebMessagePortChannelArray> webChannels =

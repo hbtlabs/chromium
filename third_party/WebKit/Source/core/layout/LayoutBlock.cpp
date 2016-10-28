@@ -99,7 +99,8 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
       m_isSelfCollapsing(false),
       m_descendantsWithFloatsMarkedForLayout(false),
       m_hasPositionedObjects(false),
-      m_hasPercentHeightDescendants(false) {
+      m_hasPercentHeightDescendants(false),
+      m_paginationStateChanged(false) {
   // LayoutBlockFlow calls setChildrenInline(true).
   // By default, subclasses do not have inline children.
 }
@@ -399,7 +400,7 @@ void LayoutBlock::layout() {
   bool needsScrollAnchoring =
       hasOverflowClip() && getScrollableArea()->shouldPerformScrollAnchoring();
   if (needsScrollAnchoring)
-    getScrollableArea()->scrollAnchor()->save();
+    getScrollableArea()->scrollAnchor()->notifyBeforeLayout();
 
   // Table cells call layoutBlock directly, so don't add any logic here.  Put
   // code into layoutBlock().
@@ -412,16 +413,6 @@ void LayoutBlock::layout() {
     clearLayoutOverflow();
 
   invalidateBackgroundObscurationStatus();
-
-  // If clamping is delayed, we will restore in
-  // PaintLayerScrollableArea::clampScrollPositionsAfterLayout.
-  // Restoring during the intermediate layout may clamp the scroller to the
-  // wrong bounds.
-  bool clampingDelayed = PaintLayerScrollableArea::DelayScrollOffsetClampScope::
-      clampingIsDelayed();
-  if (needsScrollAnchoring && !clampingDelayed)
-    getScrollableArea()->scrollAnchor()->restore();
-
   m_heightAvailableToChildrenChanged = false;
 }
 
@@ -584,7 +575,7 @@ void LayoutBlock::updateBlockChildDirtyBitsBeforeLayout(bool relayoutChildren,
 
 void LayoutBlock::simplifiedNormalFlowLayout() {
   if (childrenInline()) {
-    ASSERT_WITH_SECURITY_IMPLICATION(isLayoutBlockFlow());
+    SECURITY_DCHECK(isLayoutBlockFlow());
     LayoutBlockFlow* blockFlow = toLayoutBlockFlow(this);
     blockFlow->simplifiedNormalFlowInlineLayout();
   } else {
@@ -611,7 +602,7 @@ bool LayoutBlock::simplifiedLayout() {
 
   {
     // LayoutState needs this deliberate scope to pop before paint invalidation.
-    LayoutState state(*this, locationOffset());
+    LayoutState state(*this);
 
     if (needsPositionedMovementLayout() &&
         !tryLayoutDoingPositionedMovementOnly())
@@ -1794,7 +1785,7 @@ const LayoutBlock* LayoutBlock::enclosingFirstLineStyleBlock() const {
         firstLineBlock->isFloatingOrOutOfFlowPositioned() || !parentBlock ||
         !parentBlock->behavesLikeBlockContainer())
       break;
-    ASSERT_WITH_SECURITY_IMPLICATION(parentBlock->isLayoutBlock());
+    SECURITY_DCHECK(parentBlock->isLayoutBlock());
     if (toLayoutBlock(parentBlock)->firstChild() != firstLineBlock)
       break;
     firstLineBlock = toLayoutBlock(parentBlock);
@@ -1832,7 +1823,7 @@ void LayoutBlock::updateHitTestResult(HitTestResult& result,
 // so the firstChild() is nullptr if the only child is an empty inline-block.
 inline bool LayoutBlock::isInlineBoxWrapperActuallyChild() const {
   return isInlineBlockOrInlineTable() && !size().isEmpty() && node() &&
-         editingIgnoresContent(node());
+         editingIgnoresContent(*node());
 }
 
 bool LayoutBlock::hasCursorCaret() const {
@@ -2031,7 +2022,7 @@ bool LayoutBlock::recalcChildOverflowAfterStyleChange() {
   bool childrenOverflowChanged = false;
 
   if (childrenInline()) {
-    ASSERT_WITH_SECURITY_IMPLICATION(isLayoutBlockFlow());
+    SECURITY_DCHECK(isLayoutBlockFlow());
     childrenOverflowChanged =
         toLayoutBlockFlow(this)->recalcInlineChildrenOverflowAfterStyleChange();
   } else {

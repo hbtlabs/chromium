@@ -14,7 +14,9 @@
 #include "cc/surfaces/local_frame_id.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/surfaces/surface_sequence_generator.h"
-#include "services/ui/ws/server_window_observer.h"
+#include "services/ui/public/interfaces/window_tree_constants.mojom.h"
+#include "services/ui/ws/ids.h"
+#include "services/ui/ws/server_window_tracker.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -31,11 +33,8 @@ class GpuChannelHost;
 
 namespace ui {
 
-namespace surfaces {
-class CompositorFrameSink;
-}
-
 class DisplayCompositor;
+class DisplayCompositorFrameSink;
 
 namespace ws {
 
@@ -45,13 +44,14 @@ class FrameGeneratorTest;
 
 class FrameGeneratorDelegate;
 class ServerWindow;
-class ServerWindowSurface;
+class ServerWindowCompositorFrameSink;
 
 // Responsible for redrawing the display in response to the redraw requests by
 // submitting CompositorFrames to the owned CompositorFrameSink.
-class FrameGenerator : public ServerWindowObserver {
+class FrameGenerator : public ServerWindowTracker {
  public:
   FrameGenerator(FrameGeneratorDelegate* delegate,
+                 ServerWindow* root_window,
                  scoped_refptr<DisplayCompositor> display_compositor);
   ~FrameGenerator() override;
 
@@ -60,8 +60,6 @@ class FrameGenerator : public ServerWindowObserver {
   // Schedules a redraw for the provided region.
   void RequestRedraw(const gfx::Rect& redraw_region);
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget);
-  void RequestCopyOfOutput(
-      std::unique_ptr<cc::CopyOutputRequest> output_request);
 
   bool is_frame_pending() { return frame_pending_; }
 
@@ -87,19 +85,19 @@ class FrameGenerator : public ServerWindowObserver {
   void DrawWindowTree(cc::RenderPass* pass,
                       ServerWindow* window,
                       const gfx::Vector2d& parent_to_root_origin_offset,
-                      float opacity,
-                      bool* may_contain_video);
+                      float opacity);
 
   // Adds a reference to the current cc::Surface of the provided
-  // |window_surface|. If an existing reference is held with a different
-  // LocalFrameId then release that reference first. This is called on each
-  // ServerWindowSurface as FrameGenerator walks the window tree to generate a
-  /// CompositorFrame. This is done to make sure that the window surfaces are
-  // retained for the entirety of the time between submission of the top-level
-  // frame to drawing the frame to screen.
+  // |window_compositor_frame_sink|. If an existing reference is held with a
+  // different LocalFrameId then release that reference first. This is called on
+  // each ServerWindowCompositorFrameSink as FrameGenerator walks the window
+  // tree to generate a CompositorFrame. This is done to make sure that the
+  // window surfaces are retained for the entirety of the time between
+  // submission of the top-level frame to drawing the frame to screen.
   // TODO(fsamuel, kylechar): This will go away once we get surface lifetime
   // management.
-  void AddOrUpdateSurfaceReference(ServerWindowSurface* window_surface);
+  void AddOrUpdateSurfaceReference(mojom::CompositorFrameSinkType type,
+                                   ServerWindow* window);
 
   // Releases any retained references for the provided FrameSink.
   // TODO(fsamuel, kylechar): This will go away once we get surface lifetime
@@ -120,7 +118,7 @@ class FrameGenerator : public ServerWindowObserver {
   cc::SurfaceSequenceGenerator surface_sequence_generator_;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
 
-  std::unique_ptr<surfaces::CompositorFrameSink> compositor_frame_sink_;
+  std::unique_ptr<DisplayCompositorFrameSink> compositor_frame_sink_;
   gfx::AcceleratedWidget widget_ = gfx::kNullAcceleratedWidget;
 
   // The region that needs to be redrawn next time the compositor frame is
@@ -128,7 +126,6 @@ class FrameGenerator : public ServerWindowObserver {
   gfx::Rect dirty_rect_;
   base::Timer draw_timer_;
   bool frame_pending_ = false;
-  bool may_contain_video_ = false;
   struct SurfaceDependency {
     cc::LocalFrameId local_frame_id;
     cc::SurfaceSequence sequence;

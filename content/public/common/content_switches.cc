@@ -373,9 +373,6 @@ const char kEnableExperimentalWebPlatformFeatures[] =
 // Comma-separated list of feature names to enable. See also kDisableFeatures.
 const char kEnableFeatures[] = "enable-features";
 
-// Enable Web Bluetooth.
-const char kEnableWebBluetooth[] = "enable-web-bluetooth";
-
 // WebFonts intervention v2 flag and values.
 const char kEnableWebFontsInterventionV2[] = "enable-webfonts-intervention-v2";
 const char kEnableWebFontsInterventionV2SwitchValueEnabledWith2G[] =
@@ -866,6 +863,10 @@ const char kContentImageTextureTarget[] = "content-image-texture-target";
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";
 
+// Used in conjunction with kUseRemoteCompositing to enable the updated remote
+// compositing path using cc::LayerTreeHostRemote.
+const char kUseLayerTreeHostRemote[] = "use-layer-tree-host-remote";
+
 // Set when Chromium should use a mobile user agent.
 const char kUseMobileUserAgent[] = "use-mobile-user-agent";
 
@@ -912,9 +913,6 @@ const char kDisableWebRtcHWEncoding[]       = "disable-webrtc-hw-encoding";
 const char kDisableWebRtcHWEncodingVPx[] = "vpx";
 const char kDisableWebRtcHWEncodingH264[] = "h264";
 const char kDisableWebRtcHWEncodingNone[] = "none";
-
-// Enables H264 HW encode acceleration for WebRTC.
-const char kEnableWebRtcHWH264Encoding[]    = "enable-webrtc-hw-h264-encoding";
 
 // Enables Origin header in Stun messages for WebRTC.
 const char kEnableWebRtcStunOrigin[]        = "enable-webrtc-stun-origin";

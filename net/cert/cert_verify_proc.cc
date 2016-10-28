@@ -18,6 +18,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "net/cert/asn1_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc_whitelist.h"
@@ -309,6 +310,34 @@ void CheckOCSP(const std::string& raw_response,
   }
 }
 
+// Records histograms indicating whether the certificate |cert|, which
+// is assumed to have been validated chaining to a private root,
+// contains the TLS Feature Extension (https://tools.ietf.org/html/rfc7633) and
+// has valid OCSP information stapled.
+void RecordTLSFeatureExtensionWithPrivateRoot(
+    X509Certificate* cert,
+    const OCSPVerifyResult& ocsp_result) {
+  std::string cert_der;
+  if (!X509Certificate::GetDEREncoded(cert->os_cert_handle(), &cert_der))
+    return;
+
+  // This checks only for the presence of the TLS Feature Extension, but
+  // does not check the feature list, and in particular does not verify that
+  // its value is 'status_request' or 'status_request2'. In practice the
+  // only use of the TLS feature extension is for OCSP stapling, so
+  // don't bother to check the value.
+  bool has_extension = asn1::HasTLSFeatureExtension(cert_der);
+
+  UMA_HISTOGRAM_BOOLEAN("Net.Certificate.TLSFeatureExtensionWithPrivateRoot",
+                        has_extension);
+  if (!has_extension)
+    return;
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "Net.Certificate.TLSFeatureExtensionWithPrivateRootHasOCSP",
+      (ocsp_result.response_status != OCSPVerifyResult::MISSING));
+}
+
 // Comparison functor used for binary searching whether a given HashValue,
 // which MUST be a SHA-256 hash, is contained with an array of SHA-256
 // hashes.
@@ -472,6 +501,11 @@ int CertVerifyProc::Verify(X509Certificate* cert,
       rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
+  // Record a histogram for the presence of the TLS feature extension in
+  // a certificate chaining to a private root.
+  if (rv == OK && !verify_result->is_issued_by_known_root)
+    RecordTLSFeatureExtensionWithPrivateRoot(cert, verify_result->ocsp_result);
+
   return rv;
 }
 
@@ -531,13 +565,11 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
     if (host_info.IsIPAddress())
       continue;
 
-    const size_t registry_len = registry_controlled_domains::GetRegistryLength(
-        dns_name,
-        registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
-        registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     // If the name is not in a known TLD, ignore it. This permits internal
     // names.
-    if (registry_len == 0)
+    if (!registry_controlled_domains::HostHasRegistryControlledDomain(
+            dns_name, registry_controlled_domains::EXCLUDE_UNKNOWN_REGISTRIES,
+            registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
       continue;
 
     for (size_t j = 0; domains[j][0]; ++j) {

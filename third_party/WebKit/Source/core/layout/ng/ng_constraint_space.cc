@@ -6,19 +6,12 @@
 
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/ng/ng_constraint_space.h"
+#include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
 #include "core/layout/ng/ng_units.h"
 
 namespace blink {
-
-NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
-                                     NGDirection direction,
-                                     NGLogicalSize container_size)
-    : physical_space_(new NGPhysicalConstraintSpace(
-          container_size.ConvertToPhysical(writing_mode))),
-      size_(container_size),
-      writing_mode_(writing_mode),
-      direction_(direction) {}
 
 NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
                                      NGDirection direction,
@@ -27,24 +20,6 @@ NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
       size_(physical_space->ContainerSize().ConvertToLogical(writing_mode)),
       writing_mode_(writing_mode),
       direction_(direction) {}
-
-NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
-                                     NGDirection direction,
-                                     const NGConstraintSpace* constraint_space)
-    : physical_space_(constraint_space->PhysicalSpace()),
-      offset_(constraint_space->Offset()),
-      size_(constraint_space->Size()),
-      writing_mode_(writing_mode),
-      direction_(direction) {}
-
-NGConstraintSpace::NGConstraintSpace(const NGConstraintSpace& other,
-                                     NGLogicalOffset offset,
-                                     NGLogicalSize size)
-    : physical_space_(other.PhysicalSpace()),
-      offset_(offset),
-      size_(size),
-      writing_mode_(other.WritingMode()),
-      direction_(other.Direction()) {}
 
 NGConstraintSpace::NGConstraintSpace(NGWritingMode writing_mode,
                                      NGDirection direction,
@@ -88,17 +63,27 @@ NGConstraintSpace* NGConstraintSpace::CreateFromLayoutObject(
   if (box.isLayoutBlock() && toLayoutBlock(box).createsNewFormattingContext())
     is_new_fc = true;
 
-  NGConstraintSpace* derived_constraint_space = new NGConstraintSpace(
+  NGConstraintSpaceBuilder builder(
+      FromPlatformWritingMode(box.styleRef().getWritingMode()));
+  builder
+      .SetContainerSize(
+          NGLogicalSize(container_logical_width, container_logical_height))
+      .SetIsInlineDirectionTriggersScrollbar(
+          box.styleRef().overflowInlineDirection() == OverflowAuto)
+      .SetIsBlockDirectionTriggersScrollbar(
+          box.styleRef().overflowBlockDirection() == OverflowAuto)
+      .SetIsFixedSizeInline(fixed_inline)
+      .SetIsFixedSizeBlock(fixed_block)
+      .SetIsNewFormattingContext(is_new_fc);
+
+  return new NGConstraintSpace(
       FromPlatformWritingMode(box.styleRef().getWritingMode()),
       FromPlatformDirection(box.styleRef().direction()),
-      NGLogicalSize(container_logical_width, container_logical_height));
-  derived_constraint_space->SetOverflowTriggersScrollbar(
-      box.styleRef().overflowInlineDirection() == OverflowAuto,
-      box.styleRef().overflowBlockDirection() == OverflowAuto);
-  derived_constraint_space->SetFixedSize(fixed_inline, fixed_block);
-  derived_constraint_space->SetIsNewFormattingContext(is_new_fc);
+      builder.ToConstraintSpace());
+}
 
-  return derived_constraint_space;
+void NGConstraintSpace::AddExclusion(const NGExclusion* exclusion) const {
+  MutablePhysicalSpace()->AddExclusion(exclusion);
 }
 
 NGLogicalSize NGConstraintSpace::ContainerSize() const {
@@ -146,8 +131,7 @@ void NGConstraintSpace::Subtract(const NGFragment*) {
 NGLayoutOpportunityIterator* NGConstraintSpace::LayoutOpportunities(
     unsigned clear,
     bool for_inline_or_bfc) {
-  NGLayoutOpportunityIterator* iterator =
-      new NGLayoutOpportunityIterator(this, clear, for_inline_or_bfc);
+  NGLayoutOpportunityIterator* iterator = new NGLayoutOpportunityIterator(this);
   return iterator;
 }
 

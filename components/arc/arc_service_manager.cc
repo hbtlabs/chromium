@@ -42,8 +42,8 @@ ArcBridgeService* g_arc_bridge_service_for_testing = nullptr;
 ArcServiceManager::ArcServiceManager(
     scoped_refptr<base::TaskRunner> blocking_task_runner)
     : blocking_task_runner_(blocking_task_runner),
-      icon_loader_(new ActivityIconLoader),
-      activity_resolver_(new LocalActivityResolver) {
+      icon_loader_(new ActivityIconLoader()),
+      activity_resolver_(new LocalActivityResolver()) {
   DCHECK(!g_arc_service_manager);
   g_arc_service_manager = this;
 
@@ -51,7 +51,7 @@ ArcServiceManager::ArcServiceManager(
     arc_bridge_service_.reset(g_arc_bridge_service_for_testing);
     g_arc_bridge_service_for_testing = nullptr;
   } else {
-    arc_bridge_service_.reset(new ArcBridgeServiceImpl());
+    arc_bridge_service_.reset(new ArcBridgeServiceImpl(blocking_task_runner));
   }
 
   AddService(base::MakeUnique<ArcAudioBridge>(arc_bridge_service()));
@@ -107,6 +107,7 @@ void ArcServiceManager::Shutdown() {
   icon_loader_ = nullptr;
   activity_resolver_ = nullptr;
   services_.clear();
+  arc_bridge_service_->OnShutdown();
 }
 
 // static

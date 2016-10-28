@@ -55,6 +55,8 @@ class Range;
 class ScrollableArea;
 class SharedWorkerRepositoryClientImpl;
 class TextFinder;
+class WebAssociatedURLLoader;
+struct WebAssociatedURLLoaderOptions;
 class WebAutofillClient;
 class WebDataSourceImpl;
 class WebDevToolsAgentImpl;
@@ -161,7 +163,8 @@ class WEB_EXPORT WebLocalFrameImpl final
   bool isViewSourceModeEnabled() const override;
   void setReferrerForRequest(WebURLRequest&, const WebURL& referrer) override;
   void dispatchWillSendRequest(WebURLRequest&) override;
-  WebURLLoader* createAssociatedURLLoader(const WebURLLoaderOptions&) override;
+  WebAssociatedURLLoader* createAssociatedURLLoader(
+      const WebAssociatedURLLoaderOptions&) override;
   unsigned unloadListenerCount() const override;
   void setMarkedText(const WebString&,
                      unsigned location,
@@ -265,10 +268,8 @@ class WEB_EXPORT WebLocalFrameImpl final
       const override;
   bool isNavigationScheduledWithin(double interval) const override;
   void setCommittedFirstRealLoad() override;
+  void setHasReceivedUserGesture() override;
   void sendOrientationChangeEvent() override;
-  void willShowInstallBannerPrompt(int requestId,
-                                   const WebVector<WebString>& platforms,
-                                   WebAppBannerPromptReply*) override;
   WebSandboxFlags effectiveSandboxFlags() const override;
   void forceSandboxFlags(WebSandboxFlags) override;
   void requestRunTask(WebSuspendableTask*) const override;

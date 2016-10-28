@@ -26,6 +26,7 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/login_state.h"
 #include "components/prefs/pref_service.h"
+#include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_info.h"
@@ -89,7 +90,8 @@ bool SessionStateDelegateChromeos::CanAddUserToMultiProfile(
 }
 
 bool SessionStateDelegateChromeos::IsActiveUserSessionStarted() const {
-  return user_manager::UserManager::Get()->IsSessionStarted();
+  return session_manager::SessionManager::Get() &&
+         session_manager::SessionManager::Get()->IsSessionStarted();
 }
 
 bool SessionStateDelegateChromeos::CanLockScreen() const {
@@ -103,7 +105,7 @@ bool SessionStateDelegateChromeos::IsScreenLocked() const {
          chromeos::ScreenLocker::default_screen_locker()->locked();
 }
 
-bool SessionStateDelegateChromeos::ShouldLockScreenBeforeSuspending() const {
+bool SessionStateDelegateChromeos::ShouldLockScreenAutomatically() const {
   const user_manager::UserList logged_in_users =
       user_manager::UserManager::Get()->GetLoggedInUsers();
   for (user_manager::UserList::const_iterator it = logged_in_users.begin();

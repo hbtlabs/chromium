@@ -11,6 +11,7 @@ import android.support.annotation.StringRes;
 import android.support.v7.widget.RecyclerView;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
@@ -27,7 +28,8 @@ import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
  * Shows a card prompting the user to sign in. This item is also a {@link TreeNode}, and calling
  * {@link #hide()} or {@link #maybeShow()} will control its visibility.
  */
-public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataSource {
+public class SignInPromo
+        extends ChildNode implements StatusCardViewHolder.DataSource, ImpressionTracker.Listener {
     /**
      * Whether the promo should be visible, according to the parent object.
      *
@@ -41,6 +43,8 @@ public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataS
      * the promo will never be shown.
      */
     private boolean mDismissed;
+
+    private final ImpressionTracker mImpressionTracker = new ImpressionTracker(null, this);
 
     @Nullable
     private final SigninObserver mObserver;
@@ -83,6 +87,7 @@ public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataS
         checkIndex(position);
         assert holder instanceof StatusCardViewHolder;
         ((StatusCardViewHolder) holder).onBindViewHolder(this);
+        mImpressionTracker.reset(mImpressionTracker.wasTriggered() ? null : holder.itemView);
     }
 
     @Override
@@ -92,15 +97,21 @@ public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataS
     }
 
     @Override
+    public int getDismissSiblingPosDelta(int position) {
+        checkIndex(position);
+        return 0;
+    }
+
+    @Override
     @StringRes
     public int getHeader() {
         return R.string.snippets_disabled_generic_prompt;
     }
 
     @Override
-    @StringRes
-    public int getDescription() {
-        return R.string.snippets_disabled_signed_out_instructions;
+    public String getDescription() {
+        return ContextUtils.getApplicationContext().getString(
+                R.string.snippets_disabled_signed_out_instructions);
     }
 
     @Override
@@ -114,23 +125,28 @@ public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataS
         AccountSigninActivity.startIfAllowed(context, SigninAccessPoint.NTP_CONTENT_SUGGESTIONS);
     }
 
+    @Override
+    public void onImpression() {
+        RecordUserAction.record("Signin_Impression_FromNTPContentSuggestions");
+        mImpressionTracker.reset(null);
+    }
+
     public boolean isShown() {
         return !mDismissed && mVisible;
     }
 
     /** Attempts to show the sign in promo. If the user dismissed it before, it will not be shown.*/
-    public void maybeShow() {
+    private void maybeShow() {
         if (mVisible) return;
         mVisible = true;
 
         if (mDismissed) return;
 
-        RecordUserAction.record("Signin_Impression_FromNTPContentSuggestions");
         notifyItemInserted(0);
     }
 
     /** Hides the sign in promo. */
-    public void hide() {
+    private void hide() {
         if (!mVisible) return;
         mVisible = false;
 
@@ -148,7 +164,8 @@ public class SignInPromo extends ChildNode implements StatusCardViewHolder.DataS
         mObserver.unregister();
     }
 
-    private class SigninObserver
+    @VisibleForTesting
+    class SigninObserver
             implements SignInStateObserver, SignInAllowedObserver, DestructionObserver {
         private final SigninManager mSigninManager;
         private final NewTabPageAdapter mAdapter;

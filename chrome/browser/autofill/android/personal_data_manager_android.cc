@@ -181,6 +181,13 @@ void PopulateNativeCreditCardFromJava(
   card->set_server_id(
       ConvertJavaStringToUTF8(Java_CreditCard_getServerId(env, jcard)));
 
+  // Only set the guid if it is an existing card (java guid not empty).
+  // Otherwise, keep the generated one.
+  std::string guid =
+      ConvertJavaStringToUTF8(Java_CreditCard_getGUID(env, jcard));
+  if (!guid.empty())
+    card->set_guid(guid);
+
   if (Java_CreditCard_getIsLocal(env, jcard)) {
     card->set_record_type(CreditCard::LOCAL_CARD);
   } else {
@@ -266,7 +273,6 @@ class FullCardRequester : public payments::FullCardRequest::Delegate,
   DISALLOW_COPY_AND_ASSIGN(FullCardRequester);
 };
 
-// Self-deleting requester of address normalization.
 class AddressNormalizationRequester
     : public PersonalDataManagerAndroid::Delegate,
       public base::SupportsWeakPtr<AddressNormalizationRequester> {
@@ -285,7 +291,7 @@ class AddressNormalizationRequester
   }
 
  private:
-  virtual ~AddressNormalizationRequester() {}
+  ~AddressNormalizationRequester() override {}
 
   void OnRulesSuccessfullyLoaded() override {
     if (personal_data_manager_android_) {
@@ -294,8 +300,6 @@ class AddressNormalizationRequester
           env, jdelegate_, personal_data_manager_android_->NormalizeAddress(
                                guid_, region_code_, env));
     }
-
-    delete this;
   }
 
   ScopedJavaGlobalRef<jobject> jdelegate_;
@@ -580,6 +584,7 @@ void PersonalDataManagerAndroid::SetProfileUseStatsForTesting(
       ConvertJavaStringToUTF8(env, jguid));
   profile->set_use_count(static_cast<size_t>(count));
   profile->set_use_date(base::Time::FromTimeT(date));
+
   personal_data_manager_->NotifyPersonalDataChangedForTest();
 }
 
@@ -623,6 +628,7 @@ void PersonalDataManagerAndroid::SetCreditCardUseStatsForTesting(
       ConvertJavaStringToUTF8(env, jguid));
   card->set_use_count(static_cast<size_t>(count));
   card->set_use_date(base::Time::FromTimeT(date));
+
   personal_data_manager_->NotifyPersonalDataChangedForTest();
 }
 
@@ -662,11 +668,10 @@ void PersonalDataManagerAndroid::OnAddressValidationRulesLoaded(
     const std::string& region_code,
     bool success) {
   // Check if an address normalization is pending.
-  std::map<std::string, Delegate*>::iterator it =
-      pending_normalization_.find(region_code);
+  auto it = pending_normalization_.find(region_code);
   if (it != pending_normalization_.end()) {
-    // The Delegate will self delete after normalizing.
-    it->second->OnRulesSuccessfullyLoaded();
+    for (size_t i = 0; i < it->second.size(); ++i)
+      it->second[i]->OnRulesSuccessfullyLoaded();
     pending_normalization_.erase(it);
   }
 }
@@ -680,8 +685,8 @@ jboolean PersonalDataManagerAndroid::StartAddressNormalization(
   const std::string region_code = ConvertJavaStringToUTF8(env, jregion_code);
   const std::string guid = ConvertJavaStringToUTF8(env, jguid);
 
-  Delegate* requester = new AddressNormalizationRequester(
-      env, jdelegate, region_code, guid, AsWeakPtr());
+  std::unique_ptr<Delegate> requester(new AddressNormalizationRequester(
+      env, jdelegate, region_code, guid, AsWeakPtr()));
 
   // Check if the rules are already loaded.
   if (AreRulesLoadedForRegion(region_code)) {
@@ -690,8 +695,17 @@ jboolean PersonalDataManagerAndroid::StartAddressNormalization(
   } else {
     // Setup the variables so the profile gets normalized when the rules have
     // finished loading.
-    pending_normalization_.insert(
-        std::pair<std::string, Delegate*>(region_code, requester));
+    auto it = pending_normalization_.find(region_code);
+    if (it == pending_normalization_.end()) {
+      // If no entry exists yet, create the entry and assign it to |it|.
+      it = pending_normalization_
+               .insert(std::make_pair(region_code,
+                                      std::vector<std::unique_ptr<Delegate>>()))
+               .first;
+    }
+
+    it->second.push_back(std::move(requester));
+
     return true;
   }
 }
@@ -723,7 +737,7 @@ ScopedJavaLocalRef<jobject> PersonalDataManagerAndroid::NormalizeAddress(
   return CreateJavaProfileFromNative(env, *profile);
 }
 
-void PersonalDataManagerAndroid::CancelPendingAddressNormalization(
+void PersonalDataManagerAndroid::CancelPendingAddressNormalizations(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& unused_obj) {
   pending_normalization_.clear();

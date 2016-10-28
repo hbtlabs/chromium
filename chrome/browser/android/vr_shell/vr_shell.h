@@ -14,9 +14,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "chrome/browser/android/vr_shell/vr_math.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "device/vr/android/gvr/gvr_delegate.h"
+#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr.h"
 #include "third_party/gvr-android-sdk/src/ndk/include/vr/gvr/capi/include/gvr_types.h"
+
+using blink::WebInputEvent;
 
 namespace content {
 class WebContents;
@@ -36,17 +40,17 @@ class VrInputManager;
 class VrShellDelegate;
 class VrShellRenderer;
 struct ContentRectangle;
-struct VrGesture;
 
 enum UiAction {
   HISTORY_BACK = 0,
   HISTORY_FORWARD,
   RELOAD,
   ZOOM_OUT,
-  ZOOM_IN
+  ZOOM_IN,
+  RELOAD_UI
 };
 
-class VrShell : public device::GvrDelegate {
+class VrShell : public device::GvrDelegate, content::WebContentsObserver {
  public:
   VrShell(JNIEnv* env, jobject obj,
           content::WebContents* main_contents,
@@ -112,35 +116,28 @@ class VrShell : public device::GvrDelegate {
   void DoUiAction(const UiAction action);
 
  private:
-  virtual ~VrShell();
+  ~VrShell() override;
   void LoadUIContent();
-  bool IsUiTextureReady();
-  // Converts a pixel rectangle to (0..1) float texture coordinates.
-  // Callers need to ensure that the texture width/height is
-  // initialized by checking IsUiTextureReady() first.
-  Rectf MakeUiGlCopyRect(Recti pixel_rect);
-  void DrawVrShell(const gvr::Mat4f& head_pose);
-  void DrawEye(const gvr::Mat4f& view_matrix,
-               const gvr::BufferViewport& params);
-  void DrawUI(const gvr::Mat4f& render_matrix);
+  void DrawVrShell(const gvr::Mat4f& head_pose, gvr::Frame &frame);
+  void DrawUiView(const gvr::Mat4f* head_pose,
+                  const std::vector<const ContentRectangle*>& elements);
+  void DrawElements(const gvr::Mat4f& render_matrix,
+                    const std::vector<const ContentRectangle*>& elements);
   void DrawCursor(const gvr::Mat4f& render_matrix);
   void DrawWebVr();
-  void DrawWebVrOverlay(int64_t present_time_nanos);
-  void DrawWebVrEye(const gvr::Mat4f& view_matrix,
-                    const gvr::BufferViewport& params,
-                    int64_t present_time_nanos);
 
   void UpdateController(const gvr::Vec3f& forward_vector);
 
   void HandleQueuedTasks();
 
+  // content::WebContentsObserver implementation.
+  void RenderViewHostChanged(content::RenderViewHost* old_host,
+                             content::RenderViewHost* new_host) override;
+
   // samplerExternalOES texture data for UI content image.
   jint ui_texture_id_ = 0;
   // samplerExternalOES texture data for main content image.
   jint content_texture_id_ = 0;
-
-  float desktop_screen_tilt_;
-  float desktop_height_;
 
   std::unique_ptr<UiScene> scene_;
   std::unique_ptr<UiInterface> html_interface_;
@@ -148,6 +145,8 @@ class VrShell : public device::GvrDelegate {
   std::unique_ptr<gvr::GvrApi> gvr_api_;
   std::unique_ptr<gvr::BufferViewportList> buffer_viewport_list_;
   std::unique_ptr<gvr::BufferViewport> buffer_viewport_;
+  std::unique_ptr<gvr::BufferViewport> headlocked_left_viewport_;
+  std::unique_ptr<gvr::BufferViewport> headlocked_right_viewport_;
   std::unique_ptr<gvr::SwapChain> swap_chain_;
 
   gvr::Sizei render_size_;
@@ -172,10 +171,11 @@ class VrShell : public device::GvrDelegate {
   VrInputManager* current_input_target_ = nullptr;
   int ui_tex_width_ = 0;
   int ui_tex_height_ = 0;
+  int content_tex_width_ = 0;
+  int content_tex_height_ = 0;
 
   bool webvr_mode_ = false;
-  bool webvr_secure_origin_ = false;
-  int64_t webvr_warning_end_nanos_ = 0;
+
   // The pose ring buffer size must be a power of two to avoid glitches when
   // the pose index wraps around. It should be large enough to handle the
   // current backlog of poses which is 2-3 frames.

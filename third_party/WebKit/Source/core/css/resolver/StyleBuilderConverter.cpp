@@ -45,10 +45,13 @@
 #include "core/css/CSSURIValue.h"
 #include "core/css/CSSValuePair.h"
 #include "core/css/resolver/FilterOperationResolver.h"
+#include "core/css/resolver/TransformBuilder.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/style/ClipPathOperation.h"
 #include "core/style/TextSizeAdjust.h"
 #include "core/svg/SVGURIReference.h"
+#include "platform/fonts/FontCache.h"
 #include "platform/transforms/RotateTransformOperation.h"
 #include "platform/transforms/ScaleTransformOperation.h"
 #include "platform/transforms/TranslateTransformOperation.h"
@@ -188,6 +191,12 @@ static bool convertFontFamilyName(
   if (value.isFontFamilyValue()) {
     genericFamily = FontDescription::NoFamily;
     familyName = AtomicString(toCSSFontFamilyValue(value).value());
+#if OS(MACOSX)
+    if (familyName == FontCache::legacySystemFontFamily()) {
+      UseCounter::count(state.document(), UseCounter::BlinkMacSystemFont);
+      familyName = FontFamilyNames::system_ui;
+    }
+#endif
   } else if (state.document().settings()) {
     genericFamily =
         convertGenericFamily(toCSSIdentifierValue(value).getValueID());
@@ -1133,6 +1142,13 @@ TextSizeAdjust StyleBuilderConverter::convertTextSizeAdjust(
   return TextSizeAdjust(primitiveValue.getFloatValue() / 100.0f);
 }
 
+TransformOperations StyleBuilderConverter::convertTransformOperations(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  return TransformBuilder::createTransformOperations(
+      value, state.cssToLengthConversionData());
+}
+
 TransformOrigin StyleBuilderConverter::convertTransformOrigin(
     StyleResolverState& state,
     const CSSValue& value) {
@@ -1159,7 +1175,7 @@ ScrollSnapPoints StyleBuilderConverter::convertSnapPoints(
     return points;
 
   const CSSFunctionValue& repeatFunction = toCSSFunctionValue(value);
-  ASSERT_WITH_SECURITY_IMPLICATION(repeatFunction.length() == 1);
+  SECURITY_DCHECK(repeatFunction.length() == 1);
   points.repeatOffset =
       convertLength(state, toCSSPrimitiveValue(repeatFunction.item(0)));
   points.hasRepeat = true;

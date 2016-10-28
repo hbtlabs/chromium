@@ -15,10 +15,10 @@
 #include "services/ui/common/transient_window_utils.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/cpp/surface_id_handler.h"
+#include "services/ui/public/cpp/window_compositor_frame_sink.h"
 #include "services/ui/public/cpp/window_observer.h"
 #include "services/ui/public/cpp/window_private.h"
 #include "services/ui/public/cpp/window_property.h"
-#include "services/ui/public/cpp/window_surface.h"
 #include "services/ui/public/cpp/window_tracker.h"
 #include "services/ui/public/cpp/window_tree_client.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -269,20 +269,27 @@ bool Window::IsDrawn() const {
   return parent_ ? parent_->IsDrawn() : parent_drawn_;
 }
 
-std::unique_ptr<WindowSurface> Window::RequestSurface(mojom::SurfaceType type) {
-  std::unique_ptr<WindowSurfaceBinding> surface_binding;
-  std::unique_ptr<WindowSurface> surface =
-      WindowSurface::Create(&surface_binding);
-  AttachSurface(type, std::move(surface_binding));
-  return surface;
+std::unique_ptr<WindowCompositorFrameSink> Window::RequestCompositorFrameSink(
+    mojom::CompositorFrameSinkType type,
+    scoped_refptr<cc::ContextProvider> context_provider) {
+  std::unique_ptr<WindowCompositorFrameSinkBinding>
+      compositor_frame_sink_binding;
+  std::unique_ptr<WindowCompositorFrameSink> compositor_frame_sink =
+      WindowCompositorFrameSink::Create(std::move(context_provider),
+                                        &compositor_frame_sink_binding);
+  AttachCompositorFrameSink(type, std::move(compositor_frame_sink_binding));
+  return compositor_frame_sink;
 }
 
-void Window::AttachSurface(
-    mojom::SurfaceType type,
-    std::unique_ptr<WindowSurfaceBinding> surface_binding) {
-  window_tree()->AttachSurface(
-      server_id_, type, std::move(surface_binding->surface_request_),
-      mojo::MakeProxy(std::move(surface_binding->surface_client_)));
+void Window::AttachCompositorFrameSink(
+    mojom::CompositorFrameSinkType type,
+    std::unique_ptr<WindowCompositorFrameSinkBinding>
+        compositor_frame_sink_binding) {
+  window_tree()->AttachCompositorFrameSink(
+      server_id_, type,
+      std::move(compositor_frame_sink_binding->compositor_frame_sink_request_),
+      mojo::MakeProxy(std::move(
+          compositor_frame_sink_binding->compositor_frame_sink_client_)));
 }
 
 void Window::ClearSharedProperty(const std::string& name) {

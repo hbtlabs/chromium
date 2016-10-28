@@ -63,7 +63,7 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   const user_manager::UserList& GetLRULoggedInUsers() const override;
   user_manager::UserList GetUnlockUsers() const override;
   const AccountId& GetOwnerAccountId() const override;
-  void SessionStarted() override {}
+  void OnSessionStarted() override {}
   void RemoveUser(const AccountId& account_id,
                   user_manager::RemoveUserDelegate* delegate) override {}
   void RemoveUserFromList(const AccountId& account_id) override;
@@ -93,8 +93,8 @@ class USER_MANAGER_EXPORT FakeUserManager : public UserManagerBase {
   bool IsLoggedInAsGuest() const override;
   bool IsLoggedInAsSupervisedUser() const override;
   bool IsLoggedInAsKioskApp() const override;
+  bool IsLoggedInAsArcKioskApp() const override;
   bool IsLoggedInAsStub() const override;
-  bool IsSessionStarted() const override;
   bool IsUserNonCryptohomeDataEphemeral(
       const AccountId& account_id) const override;
   void AddObserver(Observer* obs) override {}

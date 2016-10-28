@@ -76,21 +76,24 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
     DISALLOW_COPY_AND_ASSIGN(TestApi);
   };
 
-  // Construct an InterfaceRegistry with no filtering rules applied.
-  InterfaceRegistry();
-
-  // Construct an InterfaceRegistry in |local_identity| that exposes only
-  // |allowed_interfaces| to |remote_identity|.
-  InterfaceRegistry(const Identity& local_identity,
-                    const Identity& remote_identity,
-                    const InterfaceSet& allowed_interfaces);
+  // Construct an unbound InterfaceRegistry. This object will not bind requests
+  // for interfaces until Bind() is called.
+  explicit InterfaceRegistry(const std::string& name);
   ~InterfaceRegistry() override;
 
   // Sets a default handler for incoming interface requests which are allowed by
   // capability filters but have no registered handler in this registry.
   void set_default_binder(const Binder& binder) { default_binder_ = binder; }
 
-  void Bind(mojom::InterfaceProviderRequest local_interfaces_request);
+  // Binds a request for an InterfaceProvider from a remote source.
+  // |remote_info| contains the the identity of the remote, and the remote's
+  // InterfaceProviderSpec, which will be intersected with the local's exports
+  // to determine what interfaces may be bound.
+  void Bind(mojom::InterfaceProviderRequest request,
+            const Identity& local_identity,
+            const InterfaceProviderSpec& local_interface_provider_spec,
+            const Identity& remote_identity,
+            const InterfaceProviderSpec& remote_interface_provider_spec);
 
   base::WeakPtr<InterfaceRegistry> GetWeakPtr();
 
@@ -163,10 +166,14 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   mojom::InterfaceProviderRequest pending_request_;
 
   mojo::Binding<mojom::InterfaceProvider> binding_;
-  const Identity local_identity_;
-  const Identity remote_identity_;
-  const InterfaceSet allowed_interfaces_;
-  const bool allow_all_interfaces_;
+  Identity identity_;
+  InterfaceProviderSpec interface_provider_spec_;
+  std::string name_;
+
+  // Metadata computed when Bind() is called:
+  Identity remote_identity_;
+  InterfaceSet allowed_interfaces_;
+  bool allow_all_interfaces_ = false;
 
   NameToInterfaceBinderMap name_to_binder_;
   Binder default_binder_;

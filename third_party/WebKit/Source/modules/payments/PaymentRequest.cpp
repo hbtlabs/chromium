@@ -28,6 +28,7 @@
 #include "mojo/public/cpp/bindings/wtf_array.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/HashSet.h"
 #include <utility>
@@ -49,6 +50,7 @@ using blink::mojom::blink::PaymentOptions;
 using blink::mojom::blink::PaymentOptionsPtr;
 using blink::mojom::blink::PaymentShippingOption;
 using blink::mojom::blink::PaymentShippingOptionPtr;
+using blink::mojom::blink::PaymentShippingType;
 
 template <>
 struct TypeConverter<PaymentCurrencyAmountPtr, blink::PaymentCurrencyAmount> {
@@ -67,6 +69,7 @@ struct TypeConverter<PaymentItemPtr, blink::PaymentItem> {
     PaymentItemPtr output = PaymentItem::New();
     output->label = input.label();
     output->amount = PaymentCurrencyAmount::From(input.amount());
+    output->pending = input.pending();
     return output;
   }
 };
@@ -94,15 +97,13 @@ struct TypeConverter<PaymentDetailsModifierPtr, blink::PaymentDetailsModifier> {
 
     if (input.hasTotal())
       output->total = PaymentItem::From(input.total());
-    else
-      output->total = PaymentItem::New();
 
-    if (input.hasAdditionalDisplayItems())
-      output->additional_display_items =
-          mojo::WTFArray<PaymentItemPtr>::From(input.additionalDisplayItems());
-    else
-      output->additional_display_items = mojo::WTFArray<PaymentItemPtr>::New(0);
-
+    if (input.hasAdditionalDisplayItems()) {
+      for (size_t i = 0; i < input.additionalDisplayItems().size(); ++i) {
+        output->additional_display_items.append(
+            PaymentItem::From(input.additionalDisplayItems()[i]));
+      }
+    }
     return output;
   }
 };
@@ -113,24 +114,26 @@ struct TypeConverter<PaymentDetailsPtr, blink::PaymentDetails> {
     PaymentDetailsPtr output = PaymentDetails::New();
     output->total = PaymentItem::From(input.total());
 
-    if (input.hasDisplayItems())
-      output->display_items =
-          mojo::WTFArray<PaymentItemPtr>::From(input.displayItems());
-    else
-      output->display_items = mojo::WTFArray<PaymentItemPtr>::New(0);
+    if (input.hasDisplayItems()) {
+      for (size_t i = 0; i < input.displayItems().size(); ++i) {
+        output->display_items.append(
+            PaymentItem::From(input.displayItems()[i]));
+      }
+    }
 
-    if (input.hasShippingOptions())
-      output->shipping_options = mojo::WTFArray<PaymentShippingOptionPtr>::From(
-          input.shippingOptions());
-    else
-      output->shipping_options =
-          mojo::WTFArray<PaymentShippingOptionPtr>::New(0);
+    if (input.hasShippingOptions()) {
+      for (size_t i = 0; i < input.shippingOptions().size(); ++i) {
+        output->shipping_options.append(
+            PaymentShippingOption::From(input.shippingOptions()[i]));
+      }
+    }
 
-    if (input.hasModifiers())
-      output->modifiers =
-          mojo::WTFArray<PaymentDetailsModifierPtr>::From(input.modifiers());
-    else
-      output->modifiers = mojo::WTFArray<PaymentDetailsModifierPtr>::New(0);
+    if (input.hasModifiers()) {
+      for (size_t i = 0; i < input.modifiers().size(); ++i) {
+        output->modifiers.append(
+            PaymentDetailsModifier::From(input.modifiers()[i]));
+      }
+    }
 
     if (input.hasError())
       output->error = input.error();
@@ -149,6 +152,14 @@ struct TypeConverter<PaymentOptionsPtr, blink::PaymentOptions> {
     output->request_payer_email = input.requestPayerEmail();
     output->request_payer_phone = input.requestPayerPhone();
     output->request_shipping = input.requestShipping();
+
+    if (input.shippingType() == "delivery")
+      output->shipping_type = PaymentShippingType::DELIVERY;
+    else if (input.shippingType() == "pickup")
+      output->shipping_type = PaymentShippingType::PICKUP;
+    else
+      output->shipping_type = PaymentShippingType::SHIPPING;
+
     return output;
   }
 };
@@ -261,21 +272,11 @@ void validatePaymentDetailsModifiers(
     return;
   }
 
-  HashSet<String> uniqueMethods;
   for (const auto& modifier : modifiers) {
     if (modifier.supportedMethods().isEmpty()) {
       exceptionState.throwTypeError(
           "Must specify at least one payment method identifier");
       return;
-    }
-
-    for (const auto& method : modifier.supportedMethods()) {
-      if (uniqueMethods.contains(method)) {
-        exceptionState.throwTypeError(
-            "Duplicate payment method identifiers are not allowed");
-        return;
-      }
-      uniqueMethods.add(method);
     }
 
     if (modifier.hasTotal()) {
@@ -356,21 +357,11 @@ void validateAndConvertPaymentMethodData(
     return;
   }
 
-  HashSet<String> uniqueMethods;
   for (const auto& pmd : paymentMethodData) {
     if (pmd.supportedMethods().isEmpty()) {
       exceptionState.throwTypeError(
           "Must specify at least one payment method identifier");
       return;
-    }
-
-    for (const auto& method : pmd.supportedMethods()) {
-      if (uniqueMethods.contains(method)) {
-        exceptionState.throwTypeError(
-            "Duplicate payment method identifiers are not allowed");
-        return;
-      }
-      uniqueMethods.add(method);
     }
 
     String stringifiedData = "";
@@ -457,6 +448,19 @@ bool allowedToUsePaymentRequest(const Frame* frame) {
 
   // 4. Return false.
   return false;
+}
+
+WTF::Vector<mojom::blink::PaymentMethodDataPtr> ConvertPaymentMethodData(
+    const Vector<PaymentRequest::MethodData>& blinkMethods) {
+  WTF::Vector<mojom::blink::PaymentMethodDataPtr> mojoMethods(
+      blinkMethods.size());
+  for (size_t i = 0; i < blinkMethods.size(); ++i) {
+    mojoMethods[i] = mojom::blink::PaymentMethodData::New();
+    mojoMethods[i]->supported_methods =
+        WTF::Vector<WTF::String>(blinkMethods[i].supportedMethods);
+    mojoMethods[i]->stringified_data = blinkMethods[i].stringifiedData;
+  }
+  return mojoMethods;
 }
 
 }  // namespace
@@ -668,8 +672,7 @@ PaymentRequest::PaymentRequest(ScriptState* scriptState,
                 mojom::blink::PaymentErrorReason::UNKNOWN)));
   m_paymentProvider->Init(
       m_clientBinding.CreateInterfacePtrAndBind(),
-      mojo::WTFArray<mojom::blink::PaymentMethodDataPtr>::From(
-          validatedMethodData),
+      ConvertPaymentMethodData(validatedMethodData),
       maybeKeepShippingOptions(
           mojom::blink::PaymentDetails::From(details),
           keepShippingOptions && m_options.requestShipping()),
@@ -768,6 +771,11 @@ void PaymentRequest::OnPaymentResponse(
 }
 
 void PaymentRequest::OnError(mojo::PaymentErrorReason error) {
+  if (!Platform::current()) {
+    // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+    return;
+  }
+
   bool isError = false;
   ExceptionCode ec = UnknownError;
   String message;

@@ -136,6 +136,10 @@ class V4Database {
   void VerifyChecksum(
       DatabaseReadyForUpdatesCallback db_ready_for_updates_callback);
 
+  // Records the size of each of the stores managed by this database, along
+  // with the combined size of all the stores.
+  void RecordFileSizeHistograms();
+
  protected:
   V4Database(const scoped_refptr<base::SequencedTaskRunner>& db_task_runner,
              std::unique_ptr<StoreMap> store_map);
@@ -164,7 +168,8 @@ class V4Database {
       const base::FilePath& base_path,
       const ListInfos& list_infos,
       const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
-      NewDatabaseReadyCallback callback);
+      NewDatabaseReadyCallback callback,
+      const base::TimeTicks create_start_time);
 
   // Callback called when a new store has been created and is ready to be used.
   // This method updates the store_map_ to point to the new store, which causes

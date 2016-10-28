@@ -151,6 +151,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/compositor/bottombar/contextualsearch/ContextualSearchPanelMetrics.java",
   "java/src/org/chromium/chrome/browser/compositor/bottombar/contextualsearch/ContextualSearchPeekPromoControl.java",
   "java/src/org/chromium/chrome/browser/compositor/bottombar/contextualsearch/ContextualSearchPromoControl.java",
+  "java/src/org/chromium/chrome/browser/compositor/bottombar/contextualsearch/ContextualSearchQuickActionControl.java",
   "java/src/org/chromium/chrome/browser/compositor/bottombar/contextualsearch/ContextualSearchTermControl.java",
   "java/src/org/chromium/chrome/browser/compositor/bottombar/readermode/ReaderModeBarControl.java",
   "java/src/org/chromium/chrome/browser/compositor/bottombar/readermode/ReaderModePanel.java",
@@ -164,7 +165,6 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerChromePhone.java",
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerChromeTablet.java",
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerDocument.java",
-  "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerDocumentTabSwitcher.java",
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutManagerHost.java",
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutProvider.java",
   "java/src/org/chromium/chrome/browser/compositor/layouts/LayoutRenderHost.java",
@@ -252,6 +252,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/contextualsearch/TapSuppressionHeuristics.java",
   "java/src/org/chromium/chrome/browser/cookies/CanonicalCookie.java",
   "java/src/org/chromium/chrome/browser/cookies/CookiesFetcher.java",
+  "java/src/org/chromium/chrome/browser/crash/ChromeMinidumpUploadDelegate.java",
   "java/src/org/chromium/chrome/browser/crash/CrashFileManager.java",
   "java/src/org/chromium/chrome/browser/crash/LogcatExtractionCallable.java",
   "java/src/org/chromium/chrome/browser/crash/LogcatExtractionService.java",
@@ -382,6 +383,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/gcore/GoogleApiClientHelper.java",
   "java/src/org/chromium/chrome/browser/gcore/LifecycleHook.java",
   "java/src/org/chromium/chrome/browser/gsa/ContextReporter.java",
+  "java/src/org/chromium/chrome/browser/gsa/GSAAccountChangeListener.java",
   "java/src/org/chromium/chrome/browser/gsa/GSAContextDisplaySelection.java",
   "java/src/org/chromium/chrome/browser/gsa/GSAContextReportDelegate.java",
   "java/src/org/chromium/chrome/browser/gsa/GSAHelper.java",
@@ -421,7 +423,6 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/infobar/InstantAppsInfoBarDelegate.java",
   "java/src/org/chromium/chrome/browser/infobar/PermissionInfoBar.java",
   "java/src/org/chromium/chrome/browser/infobar/PermissionUpdateInfoBarDelegate.java",
-  "java/src/org/chromium/chrome/browser/infobar/SavePasswordInfoBar.java",
   "java/src/org/chromium/chrome/browser/infobar/SimpleConfirmInfoBarBuilder.java",
   "java/src/org/chromium/chrome/browser/infobar/SubresourceFilterInfoBar.java",
   "java/src/org/chromium/chrome/browser/infobar/SubPanelListener.java",
@@ -531,6 +532,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/notifications/NotificationSystemStatusUtil.java",
   "java/src/org/chromium/chrome/browser/notifications/StandardNotificationBuilder.java",
   "java/src/org/chromium/chrome/browser/notifications/WebApkNotificationClient.java",
+  "java/src/org/chromium/chrome/browser/ntp/ContextMenuHandler.java",
   "java/src/org/chromium/chrome/browser/ntp/CurrentlyOpenTab.java",
   "java/src/org/chromium/chrome/browser/ntp/DisplayStyleObserver.java",
   "java/src/org/chromium/chrome/browser/ntp/ForeignSessionHelper.java",
@@ -674,6 +676,8 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/payments/PaymentRequestImpl.java",
   "java/src/org/chromium/chrome/browser/payments/PaymentRequestJourneyLogger.java",
   "java/src/org/chromium/chrome/browser/payments/PaymentRequestMetrics.java",
+  "java/src/org/chromium/chrome/browser/payments/PaymentResponseHelper.java",
+  "java/src/org/chromium/chrome/browser/payments/ShippingStrings.java",
   "java/src/org/chromium/chrome/browser/payments/ui/Completable.java",
   "java/src/org/chromium/chrome/browser/payments/ui/EditorDialogToolbar.java",
   "java/src/org/chromium/chrome/browser/payments/ui/EditorDropdownField.java",
@@ -870,6 +874,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/signin/SigninInvestigator.java",
   "java/src/org/chromium/chrome/browser/signin/SigninManager.java",
   "java/src/org/chromium/chrome/browser/signin/SigninPromoUtil.java",
+  "java/src/org/chromium/chrome/browser/snackbar/DataReductionPromoSnackbarController.java",
   "java/src/org/chromium/chrome/browser/snackbar/DataUseSnackbarController.java",
   "java/src/org/chromium/chrome/browser/snackbar/Snackbar.java",
   "java/src/org/chromium/chrome/browser/snackbar/SnackbarCollection.java",
@@ -894,6 +899,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/sync/ui/PassphraseTypeDialogFragment.java",
   "java/src/org/chromium/chrome/browser/sync/ui/SyncCustomizationFragment.java",
   "java/src/org/chromium/chrome/browser/tab/AuthenticatorNavigationInterceptor.java",
+  "java/src/org/chromium/chrome/browser/tab/BrowserControlsVisibilityDelegate.java",
   "java/src/org/chromium/chrome/browser/tab/ChildBackgroundTabShowObserver.java",
   "java/src/org/chromium/chrome/browser/tab/EmptyTabObserver.java",
   "java/src/org/chromium/chrome/browser/tab/InterceptNavigationDelegateImpl.java",
@@ -911,7 +917,6 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/tab/TabUma.java",
   "java/src/org/chromium/chrome/browser/tab/TabWebContentsDelegateAndroid.java",
   "java/src/org/chromium/chrome/browser/tab/TabWebContentsObserver.java",
-  "java/src/org/chromium/chrome/browser/tab/TopControlsVisibilityDelegate.java",
   "java/src/org/chromium/chrome/browser/tabmodel/AsyncTabParams.java",
   "java/src/org/chromium/chrome/browser/tabmodel/AsyncTabParamsManager.java",
   "java/src/org/chromium/chrome/browser/tabmodel/ChromeTabCreator.java",
@@ -937,6 +942,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorImpl.java",
   "java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorObserver.java",
   "java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabObserver.java",
+  "java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabModelObserver.java",
   "java/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorUma.java",
   "java/src/org/chromium/chrome/browser/tabmodel/TabModelUtils.java",
   "java/src/org/chromium/chrome/browser/tabmodel/TabPersistencePolicy.java",
@@ -988,6 +994,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/util/UrlUtilities.java",
   "java/src/org/chromium/chrome/browser/util/ViewUtils.java",
   "java/src/org/chromium/chrome/browser/vr_shell/NonPresentingGvrContext.java",
+  "java/src/org/chromium/chrome/browser/vr_shell/VrDaydreamApi.java",
   "java/src/org/chromium/chrome/browser/vr_shell/VrShellDelegate.java",
   "java/src/org/chromium/chrome/browser/vr_shell/VrShell.java",
   "java/src/org/chromium/chrome/browser/webapps/ActivityAssigner.java",
@@ -1011,6 +1018,7 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/webapps/WebApkActivity9.java",
   "java/src/org/chromium/chrome/browser/webapps/WebApkInstaller.java",
   "java/src/org/chromium/chrome/browser/webapps/WebApkManagedActivity.java",
+  "java/src/org/chromium/chrome/browser/webapps/WebApkMetaData.java",
   "java/src/org/chromium/chrome/browser/webapps/WebApkMetaDataUtils.java",
   "java/src/org/chromium/chrome/browser/webapps/WebApkUpdateManager.java",
   "java/src/org/chromium/chrome/browser/webapps/WebApkVersionManager.java",
@@ -1091,13 +1099,9 @@ chrome_java_sources = [
   "java/src/org/chromium/chrome/browser/widget/newtab/NewTabButton.java",
 ]
 
-# Only used for testing, should not be shipped to end users.
-if (!is_official_build) {
-  chrome_java_sources += [ "java/src/org/chromium/chrome/browser/offlinepages/evaluation/OfflinePageEvaluationBridge.java" ]
-}
-
 chrome_vr_java_sources = [
   "java/src/org/chromium/chrome/browser/vr_shell/NonPresentingGvrContextImpl.java",
+  "java/src/org/chromium/chrome/browser/vr_shell/VrDaydreamApiImpl.java",
   "java/src/org/chromium/chrome/browser/vr_shell/VrShellImpl.java",
   "java/src/org/chromium/chrome/browser/vr_shell/VrWindowAndroid.java",
 ]
@@ -1303,8 +1307,10 @@ chrome_test_java_sources = [
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestDynamicShippingSingleAddressTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestEmailTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestEmailAndFreeShippingTest.java",
+  "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestExpiredLocalCardTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestExtraShippingOptionsTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestFailCompleteTest.java",
+  "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestFieldTrialTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestFreeShippingTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestIncompleteContactDetailsTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestIncompleteEmailTest.java",
@@ -1314,6 +1320,8 @@ chrome_test_java_sources = [
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestMetricsUnitTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestMultipleContactDetailsTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestMetricsTest.java",
+  "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestNameAndFreeShippingTest.java",
+  "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestNameTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestNoShippingTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestPaymentAppAndCardsTest.java",
   "javatests/src/org/chromium/chrome/browser/payments/PaymentRequestPaymentAppTest.java",
@@ -1352,6 +1360,7 @@ chrome_test_java_sources = [
   "javatests/src/org/chromium/chrome/browser/signin/OAuth2TokenServiceTest.java",
   "javatests/src/org/chromium/chrome/browser/signin/SigninHelperTest.java",
   "javatests/src/org/chromium/chrome/browser/signin/SigninTest.java",
+  "javatests/src/org/chromium/chrome/browser/snackbar/DataReductionPromoSnackbarControllerTest.java",
   "javatests/src/org/chromium/chrome/browser/snackbar/SnackbarTest.java",
   "javatests/src/org/chromium/chrome/browser/superviseduser/SupervisedUserContentProviderTest.java",
   "javatests/src/org/chromium/chrome/browser/sync/FakeProfileSyncService.java",
@@ -1371,6 +1380,8 @@ chrome_test_java_sources = [
   "javatests/src/org/chromium/chrome/browser/tabmodel/MultiInstanceMigrationTest.java",
   "javatests/src/org/chromium/chrome/browser/tabmodel/RestoreMigrateTest.java",
   "javatests/src/org/chromium/chrome/browser/tabmodel/TabModelMergingTest.java",
+  "javatests/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorObserverTestBase.java",
+  "javatests/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabModelObserverTest.java",
   "javatests/src/org/chromium/chrome/browser/tabmodel/TabModelSelectorTabObserverTest.java",
   "javatests/src/org/chromium/chrome/browser/tabmodel/TabPersistentStoreTest.java",
   "javatests/src/org/chromium/chrome/browser/tabmodel/TabWindowManagerTest.java",
@@ -1419,6 +1430,7 @@ chrome_test_java_sources = [
 chrome_junit_test_java_sources = [
   "junit/src/org/chromium/chrome/browser/ChromeBackupAgentTest.java",
   "junit/src/org/chromium/chrome/browser/ChromeBackgroundServiceWaiterTest.java",
+  "junit/src/org/chromium/chrome/browser/EnableFeatures.java",
   "junit/src/org/chromium/chrome/browser/ShortcutHelperTest.java",
   "junit/src/org/chromium/chrome/browser/SSLClientCertificateRequestTest.java",
   "junit/src/org/chromium/chrome/browser/compositor/overlays/strip/StripLayoutHelperTest.java",
@@ -1471,6 +1483,7 @@ chrome_junit_test_java_sources = [
   "junit/src/org/chromium/chrome/browser/webapps/WebappDataStorageTest.java",
   "junit/src/org/chromium/chrome/browser/webapps/WebappRegistryTest.java",
   "junit/src/org/chromium/chrome/browser/webapps/WebApkMetaDataUtilsTest.java",
+  "junit/src/org/chromium/chrome/browser/webapps/WebApkUpdateManagerTest.java",
 ]
 
 sync_shell_test_java_sources = [
@@ -1486,3 +1499,9 @@ sync_shell_test_java_sources = [
   "sync_shell/javatests/src/org/chromium/chrome/browser/sync/TypedUrlsTest.java",
   "sync_shell/javatests/src/org/chromium/chrome/browser/sync/ui/PassphraseTypeDialogFragmentTest.java",
 ]
+
+# Only used for testing, should not be shipped to end users.
+if (!is_official_build) {
+  chrome_java_sources += [ "java/src/org/chromium/chrome/browser/offlinepages/evaluation/OfflinePageEvaluationBridge.java" ]
+  chrome_test_java_sources += [ "javatests/src/org/chromium/chrome/browser/offlinepages/OfflinePageSavePageLaterEvaluationTest.java" ]
+}

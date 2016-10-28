@@ -215,9 +215,6 @@ class IpcDesktopEnvironmentTest : public testing::Test {
   // The daemons's end of the daemon-to-desktop channel.
   std::unique_ptr<IPC::ChannelProxy> desktop_channel_;
 
-  // Name of the daemon-to-desktop channel.
-  std::string desktop_channel_name_;
-
   // Delegate that is passed to |desktop_channel_|.
   MockDaemonListener desktop_listener_;
 
@@ -417,15 +414,14 @@ void IpcDesktopEnvironmentTest::CreateDesktopProcess() {
   EXPECT_TRUE(io_task_runner_.get());
 
   // Create the daemon end of the daemon-to-desktop channel.
-  desktop_channel_name_ = IPC::Channel::GenerateUniqueRandomChannelID();
+  mojo::MessagePipe pipe;
   desktop_channel_ = IPC::ChannelProxy::Create(
-      IPC::ChannelHandle(desktop_channel_name_), IPC::Channel::MODE_SERVER,
-      &desktop_listener_, io_task_runner_.get());
+      pipe.handle0.release(), IPC::Channel::MODE_SERVER, &desktop_listener_,
+      io_task_runner_.get());
 
   // Create and start the desktop process.
-  desktop_process_.reset(new DesktopProcess(task_runner_,
-                                            io_task_runner_,
-                                            desktop_channel_name_));
+  desktop_process_.reset(new DesktopProcess(
+      task_runner_, io_task_runner_, io_task_runner_, std::move(pipe.handle1)));
 
   std::unique_ptr<MockDesktopEnvironmentFactory> desktop_environment_factory(
       new MockDesktopEnvironmentFactory());
@@ -491,30 +487,10 @@ TEST_F(IpcDesktopEnvironmentTest, Basic) {
   DeleteDesktopEnvironment();
 }
 
-// Check Capabilities.
-TEST_F(IpcDesktopEnvironmentTest, CapabilitiesNoTouch) {
-  std::unique_ptr<protocol::MockClipboardStub> clipboard_stub(
-      new protocol::MockClipboardStub());
-  EXPECT_CALL(*clipboard_stub, InjectClipboardEvent(_))
-      .Times(0);
-
-  EXPECT_EQ("rateLimitResizeRequests", desktop_environment_->GetCapabilities());
-
-  // Start the input injector and screen capturer.
-  input_injector_->Start(std::move(clipboard_stub));
-
-  // Run the message loop until the desktop is attached.
-  setup_run_loop_->Run();
-
-  // Stop the test.
-  DeleteDesktopEnvironment();
-}
-
 // Check touchEvents capability is set when the desktop environment can
 // inject touch events.
 TEST_F(IpcDesktopEnvironmentTest, TouchEventsCapabilities) {
   // Create an environment with multi touch enabled.
-  desktop_environment_factory_->set_supports_touch_events(true);
   desktop_environment_ = desktop_environment_factory_->Create(
       client_session_control_factory_.GetWeakPtr());
 
@@ -523,8 +499,11 @@ TEST_F(IpcDesktopEnvironmentTest, TouchEventsCapabilities) {
   EXPECT_CALL(*clipboard_stub, InjectClipboardEvent(_))
       .Times(0);
 
-  EXPECT_EQ("rateLimitResizeRequests touchEvents",
-            desktop_environment_->GetCapabilities());
+  std::string expected_capabilities = "rateLimitResizeRequests";
+  if (InputInjector::SupportsTouchEvents())
+    expected_capabilities += " touchEvents";
+
+  EXPECT_EQ(expected_capabilities, desktop_environment_->GetCapabilities());
 
   // Start the input injector and screen capturer.
   input_injector_->Start(std::move(clipboard_stub));

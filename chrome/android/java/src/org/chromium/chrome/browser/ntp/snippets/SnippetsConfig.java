@@ -13,6 +13,7 @@ import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 public final class SnippetsConfig {
     private SnippetsConfig() {}
 
+
     public static boolean isEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS);
     }
@@ -20,6 +21,10 @@ public final class SnippetsConfig {
     public static boolean isSaveToOfflineEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_SAVE_TO_OFFLINE)
                 && OfflinePageBridge.isBackgroundLoadingEnabled();
+    }
+
+    public static boolean isOfflineBadgeEnabled() {
+        return ChromeFeatureList.isEnabled(ChromeFeatureList.NTP_SNIPPETS_OFFLINE_BADGE);
     }
 
     public static boolean isSectionDismissalEnabled() {

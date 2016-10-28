@@ -1365,7 +1365,7 @@ paper-button {
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-<if expr="not chromeos">
+<if expr="not chromeos and not is_android">
 @font-face {
   font-family: 'Roboto';
   font-style: normal;
@@ -3598,14 +3598,13 @@ paper-item {
     </downloads-toolbar>
     <iron-list id="downloads-list" items="{{items_}}" hidden="[[!hasDownloads_]]">
       <template>
-        <downloads-item data="[[item]]" hide-date="[[item.hideDate]]">
-        </downloads-item>
+        <downloads-item data="[[item]]"></downloads-item>
       </template>
     </iron-list>
     <div id="no-downloads" hidden="[[hasDownloads_]]">
       <div>
         <div class="illustration"></div>
-        <span></span>
+        <span>[[noDownloadsText_(inSearchMode_)]]</span>
       </div>
     </div>
   </template>

@@ -28,7 +28,6 @@
 // being false.
 
 Accelerated2dCanvas status=stable, settable_from_internals=True
-AlwaysUseComplexText status=stable
 AudioOutputDevices status=stable
 AudioVideoTracks status=experimental
 AudioWorklet status=experimental
@@ -42,7 +41,7 @@ EnableCanvas2dDynamicRenderingModeSwitching status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
 CompositeOpaqueFixedPosition status=test, settable_from_internals=True
-CompositeOpaqueScrollers status=experimental, settable_from_internals=True
+CompositeOpaqueScrollers status=stable, settable_from_internals=True
 ColorCorrectRendering settable_from_internals=True
 CompositedSelectionUpdate
 CompositorWorker status=experimental
@@ -59,6 +58,7 @@ CSSContainment status=stable
 CSSFontDisplay status=experimental
 CSSFontSizeAdjust status=experimental
 CSSGridLayout status=experimental, settable_from_internals=True
+CSSDisplayContents status=experimental
 CSSHyphens status=stable
 CSSInBodyDoesNotBlockPaint status=experimental
 CSSIndependentTransformProperties status=experimental
@@ -101,7 +101,7 @@ FeaturePolicy status=experimental
 FileAPIBlobClose status=experimental
 FileSystem status=stable
 ForeignFetch status=experimental, origin_trial_feature_name=ForeignFetch
-FramebustingNeedsSameOriginOrUserGesture status=test, settable_from_internals=True
+FramebustingNeedsSameOriginOrUserGesture status=stable, settable_from_internals=True
 FullscreenUnprefixed status=test
 FrameTimingSupport status=experimental
 GamepadExtensions origin_trial_feature_name=WebVR
@@ -144,7 +144,6 @@ NavigatorContentUtils
 WebNFC status=experimental
 NetworkInformation status=stable
 NetInfoDownlinkMax status=stable
-NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationBadge status=stable
 NotificationImage status=experimental
@@ -167,7 +166,7 @@ PassiveDocumentEventListeners status=experimental
 PassiveEventListenersDueToFling status=experimental
 PassPaintVisualRectToCompositor
 PaymentRequest status=experimental
-PaymentRequestPayerName status=experimental
+PaymentRequestPayerName status=stable
 PerformanceObserver status=stable
 PermissionDelegation status=test
 Permissions status=stable
@@ -176,7 +175,7 @@ PointerEvent status=stable
 // For temporary compat testing of Edge-like model - crbug.com/640700
 PointerEventV1SpecCapturing
 PreciseMemoryInfo
-PreferredImageRasterScale settable_from_internals=True
+PreferredImageRasterBounds settable_from_internals=True
 // This feature is deprecated and we are evangelizing affected sites.
 // See https://crbug.com/346236 for current status.
 PrefixedVideoFullscreen status=stable
@@ -233,12 +232,12 @@ TimerThrottlingForHiddenFrames status=stable
 Touch status=stable
 TraceWrappables
 TrustedEventsDefaultAction status=stable
-UnsafeES3APIs
 UserSelectAll status=stable
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
 WebAssemblySerialization status=test
-WebBluetooth origin_trial_feature_name=WebBluetooth
+// WebBluetooth is enabled by default on Android, ChromeOS and Mac.
+WebBluetooth status=experimental
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
 WebUSB status=experimental, origin_trial_feature_name=WebUSB
@@ -259,5 +258,6 @@ WebFontsInterventionV2WithSlow2G
 WebFontsInterventionTrigger
 WebShare status=experimental, origin_trial_feature_name=WebShare, origin_trial_os=android
 Worklet status=experimental
+LazyParseCSS status=experimental
 ParseHTMLOnMainThread status=test
 SendBeaconThrowForBlobWithNonSimpleType status=experimental

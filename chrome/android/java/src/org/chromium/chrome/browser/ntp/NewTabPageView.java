@@ -57,7 +57,9 @@ import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsConfig;
 import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
@@ -299,7 +301,7 @@ public class NewTabPageView extends FrameLayout
         /**
          * Registers a {@link DestructionObserver}, notified when the New Tab Page goes away.
          */
-        void setDestructionObserver(DestructionObserver destructionObserver);
+        void addDestructionObserver(DestructionObserver destructionObserver);
 
         /**
          * @return whether the {@link NewTabPage} associated with this manager is the current page
@@ -389,7 +391,8 @@ public class NewTabPageView extends FrameLayout
 
         // Set up snippets
         if (mUseCardsUi) {
-            mNewTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout, mUiConfig);
+            mNewTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout, mUiConfig,
+                    OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()));
             mRecyclerView.setAdapter(mNewTabPageAdapter);
 
             int scrollOffset;
@@ -523,9 +526,6 @@ public class NewTabPageView extends FrameLayout
         // the current page changes. We check it again to make sure we don't attempt to update the
         // wrong page.
         if (!mManager.isCurrentPage()) return;
-
-        // Disable the search box contents if it is the process of being animated away.
-        ViewUtils.setEnabledRecursive(mSearchBoxView, mSearchBoxView.getAlpha() == 1.0f);
 
         if (mSearchBoxScrollListener != null) {
             mSearchBoxScrollListener.onNtpScrollChanged(getToolbarTransitionPercentage());
@@ -809,6 +809,9 @@ public class NewTabPageView extends FrameLayout
      */
     public void setSearchBoxAlpha(float alpha) {
         mSearchBoxView.setAlpha(alpha);
+
+        // Disable the search box contents if it is the process of being animated away.
+        ViewUtils.setEnabledRecursive(mSearchBoxView, mSearchBoxView.getAlpha() == 1.0f);
     }
 
     /**
@@ -877,12 +880,6 @@ public class NewTabPageView extends FrameLayout
             // it needs to reset the NTP state.
             if (mManager.isLocationBarShownInNTP()) updateSearchBoxOnScroll();
         }
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        setUrlFocusChangeAnimationPercent(0f);
     }
 
     /**
@@ -1020,7 +1017,7 @@ public class NewTabPageView extends FrameLayout
                         offlineAvailable, i, source);
                 View view =
                         mMostVisitedDesign.createMostVisitedItemView(inflater, item, isInitialLoad);
-                item.initView(view);
+                item.initView(view, mUseCardsUi ? mRecyclerView : mScrollView);
             }
 
             mMostVisitedItems[i] = item;
@@ -1047,27 +1044,8 @@ public class NewTabPageView extends FrameLayout
     }
 
     @Override
-    public void onPopularURLsAvailable(
-            String[] urls, String[] faviconUrls, String[] largeIconUrls) {
-        for (int i = 0; i < urls.length; i++) {
-            final String url = urls[i];
-            boolean useLargeIcon = !largeIconUrls[i].isEmpty();
-            // Only fetch one of favicon or large icon based on what is required on the NTP.
-            // The other will be fetched on visiting the site.
-            String iconUrl = useLargeIcon ? largeIconUrls[i] : faviconUrls[i];
-            if (iconUrl.isEmpty()) continue;
-
-            IconAvailabilityCallback callback = new IconAvailabilityCallback() {
-                @Override
-                public void onIconAvailabilityChecked(boolean newlyAvailable) {
-                    if (newlyAvailable) {
-                        mMostVisitedDesign.onIconUpdated(url);
-                    }
-                }
-            };
-            mManager.ensureIconIsAvailable(
-                    url, iconUrl, useLargeIcon, /*isTemporary=*/false, callback);
-        }
+    public void onIconMadeAvailable(String siteUrl) {
+        mMostVisitedDesign.onIconUpdated(siteUrl);
     }
 
     /**

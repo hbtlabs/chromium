@@ -101,7 +101,7 @@
     <dimen name="contextual_search_peek_promo_height">48dp</dimen>
     <dimen name="contextual_search_peek_promo_padding">12dp</dimen>
     <dimen name="contextual_search_caption_text_size">14sp</dimen>
-    <dimen name="contextual_search_thumbnail_size">36dp</dimen>
+    <dimen name="contextual_search_static_image_size">36dp</dimen>
     <!-- The following two dimensions were taking from the UI specs for contextual search, where
     they were 36dp and 3dp respectively, but have been updated to allow for padding around
     TextViews that we cannot get rid of. -->
@@ -284,6 +284,8 @@
     <dimen name="snippets_article_header_height">40dp</dimen>
     <dimen name="snippets_publisher_margin_top_with_article_snippet">16dp</dimen>
     <dimen name="snippets_publisher_margin_top_without_article_snippet">8dp</dimen>
+    <!-- This is in sp because we want the icon to scale with the TextView it sits alongside. -->
+    <dimen name="snippets_offline_icon_size">18sp</dimen>
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>

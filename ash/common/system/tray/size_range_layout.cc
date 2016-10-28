@@ -13,26 +13,20 @@ namespace ash {
 
 // static
 
-gfx::Size SizeRangeLayout::AbsoluteMinSize() {
-  const int kMinSize = 0;
-  return gfx::Size(kMinSize, kMinSize);
-}
-
-gfx::Size SizeRangeLayout::AbsoluteMaxSize() {
-  const int kMaxSize = std::numeric_limits<int>::max();
-  return gfx::Size(kMaxSize, kMaxSize);
-}
+const int SizeRangeLayout::kAbsoluteMinSize = 0;
+const int SizeRangeLayout::kAbsoluteMaxSize = std::numeric_limits<int>::max();
 
 // Non static
 
 SizeRangeLayout::SizeRangeLayout()
-    : SizeRangeLayout(AbsoluteMinSize(), AbsoluteMaxSize()) {}
+    : SizeRangeLayout(gfx::Size(kAbsoluteMinSize, kAbsoluteMinSize),
+                      gfx::Size(kAbsoluteMaxSize, kAbsoluteMaxSize)) {}
 
 SizeRangeLayout::SizeRangeLayout(const gfx::Size& min_size,
                                  const gfx::Size& max_size)
     : layout_manager_(new views::FillLayout()),
-      min_size_(AbsoluteMinSize()),
-      max_size_(AbsoluteMaxSize()) {
+      min_size_(gfx::Size(kAbsoluteMinSize, kAbsoluteMinSize)),
+      max_size_(gfx::Size(kAbsoluteMaxSize, kAbsoluteMaxSize)) {
   SetMinSize(min_size);
   SetMaxSize(max_size);
 }

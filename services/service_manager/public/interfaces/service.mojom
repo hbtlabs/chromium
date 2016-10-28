@@ -8,6 +8,15 @@ import "services/service_manager/public/interfaces/connector.mojom";
 import "services/service_manager/public/interfaces/interface_provider.mojom";
 import "services/service_manager/public/interfaces/interface_provider_spec.mojom";
 
+// Metadata describing an instance of a service.
+struct ServiceInfo {
+  // The service's identity.
+  Identity identity;
+
+  // The service's interface provider specs, from its manifest.
+  map<string, InterfaceProviderSpec> interface_provider_specs;
+};
+
 // Implemented by any service which is known to the Service Manager, for which
 // instances may be tracked. It allows the implementor to receive lifecycle
 // events and service inbound connection attempts.
@@ -32,7 +41,7 @@ interface Service {
   //    An optional Connector request for the service manager to bind, allowing
   //    the initialized client to connect to others.
   //
-  OnStart(Identity identity) => (Connector&? connector_request);
+  OnStart(ServiceInfo info) => (Connector&? connector_request);
 
   // Called when another service attempts to open a connection to this
   // service. A service implements this method to complete the exchange
@@ -43,27 +52,13 @@ interface Service {
   //
   // Parameters:
   //
-  //  source
-  //    The identity of the instance originating the connection.
+  //  source_info
+  //    Contains the source identity and interface provider specs.
   //
   //  interfaces
   //    A request for an InterfaceProvider by which the source service may
   //    seek to bind interface implementations exported by the target.
   //
-  //  required_interfaces
-  //    A whitelist of interface names that should be made available to the
-  //    source that initiated the connection, in accordance to policy described
-  //    in the source & target's service manifests. Attempts to bind interfaces
-  //    not in this whitelist must not be fulfilled.
-  //
-  //  required_capabilities
-  //    A set of the capability names required by the source initiating the
-  //    connection. |required_interfaces| controls interface binding, so this
-  //    is useful mostly if the target wishes to control behavior based on the
-  //    presence of a value in this set.
-  //
-  OnConnect(Identity source,
-            InterfaceProvider&? interfaces,
-            InterfaceSet required_interfaces,
-            CapabilitySet required_capabilities);
+  OnConnect(ServiceInfo source_info,
+            InterfaceProvider&? interfaces);
 };

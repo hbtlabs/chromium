@@ -159,6 +159,12 @@ class AppViewTest : public AppShellTest,
 
 INSTANTIATE_TEST_CASE_P(AppViewTests, AppViewTest, testing::Bool());
 
+#if defined(OS_WIN)
+#define MAYBE_TestAppViewGoodDataShouldSucceed \
+  DISABLED_TestAppViewGoodDataShouldSucceed
+#else
+#define MAYBE_TestAppViewGoodDataShouldSucceed TestAppViewGoodDataShouldSucceed
+#endif
 // Tests that <appview> correctly processes parameters passed on connect.
 IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewGoodDataShouldSucceed) {
   RunTest("testAppViewGoodDataShouldSucceed",
@@ -188,8 +194,16 @@ IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewRefusedDataShouldFail) {
           "app_view/apitest/skeleton");
 }
 
+#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#define MAYBE_TestAppViewWithUndefinedDataShouldSucceed \
+  DISABLED_TestAppViewWithUndefinedDataShouldSucceed
+#else
+#define MAYBE_TestAppViewWithUndefinedDataShouldSucceed \
+  TestAppViewWithUndefinedDataShouldSucceed
+#endif
 // Tests that <appview> is able to navigate to another installed app.
-IN_PROC_BROWSER_TEST_P(AppViewTest, TestAppViewWithUndefinedDataShouldSucceed) {
+IN_PROC_BROWSER_TEST_P(AppViewTest,
+                       MAYBE_TestAppViewWithUndefinedDataShouldSucceed) {
   RunTest("testAppViewWithUndefinedDataShouldSucceed",
           "app_view/apitest",
           "app_view/apitest/skeleton");

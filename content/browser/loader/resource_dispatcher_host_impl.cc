@@ -1195,6 +1195,57 @@ void ResourceDispatcherHostImpl::UpdateRequestForTransfer(
   }
 }
 
+void ResourceDispatcherHostImpl::CompleteTransfer(
+    int request_id,
+    const ResourceRequest& request_data,
+    int route_id) {
+  // Caller should ensure that |request_data| is associated with a transfer.
+  DCHECK(request_data.transferred_request_child_id != -1 ||
+         request_data.transferred_request_request_id != -1);
+
+  bool is_navigational_request =
+      request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME ||
+      request_data.resource_type == RESOURCE_TYPE_SUB_FRAME;
+  if (!is_navigational_request) {
+    // Transfers apply only to navigational requests - the renderer seems to
+    // have sent bogus IPC data.
+    bad_message::ReceivedBadMessage(
+        filter_, bad_message::RDH_TRANSFERRING_NONNAVIGATIONAL_REQUEST);
+    return;
+  }
+
+  // Attempt to find a loader associated with the deferred transfer request.
+  LoaderMap::iterator it = pending_loaders_.find(
+      GlobalRequestID(request_data.transferred_request_child_id,
+                      request_data.transferred_request_request_id));
+  if (it == pending_loaders_.end()) {
+    // Renderer sent transferred_request_request_id and/or
+    // transferred_request_child_id that doesn't have a corresponding entry on
+    // the browser side.
+    // TODO(lukasza): https://crbug.com/659613: Need to understand the scenario
+    // that can lead here (and then attempt to reintroduce a renderer kill
+    // below).
+    return;
+  }
+  ResourceLoader* pending_loader = it->second.get();
+
+  if (!pending_loader->is_transferring()) {
+    // Renderer sent transferred_request_request_id and/or
+    // transferred_request_child_id that doesn't correspond to an actually
+    // transferring loader on the browser side.
+    base::debug::Alias(pending_loader);
+    bad_message::ReceivedBadMessage(filter_,
+                                    bad_message::RDH_REQUEST_NOT_TRANSFERRING);
+    return;
+  }
+
+  // If the request is transferring to a new process, we can update our
+  // state and let it resume with its existing ResourceHandlers.
+  UpdateRequestForTransfer(filter_->child_id(), route_id, request_id,
+                           request_data, it);
+  pending_loader->CompleteTransfer();
+}
+
 void ResourceDispatcherHostImpl::BeginRequest(
     int request_id,
     const ResourceRequest& request_data,
@@ -1239,24 +1290,12 @@ void ResourceDispatcherHostImpl::BeginRequest(
 
   // If the request that's coming in is being transferred from another process,
   // we want to reuse and resume the old loader rather than start a new one.
-  LoaderMap::iterator it = pending_loaders_.find(
-      GlobalRequestID(request_data.transferred_request_child_id,
-                      request_data.transferred_request_request_id));
-  if (it != pending_loaders_.end()) {
+  if (request_data.transferred_request_child_id != -1 ||
+      request_data.transferred_request_request_id != -1) {
     // TODO(yhirano): Make mojo work for this case.
     DCHECK(!url_loader_client);
 
-    // If the request is transferring to a new process, we can update our
-    // state and let it resume with its existing ResourceHandlers.
-    if (it->second->is_transferring()) {
-      ResourceLoader* deferred_loader = it->second.get();
-      UpdateRequestForTransfer(child_id, route_id, request_id,
-                               request_data, it);
-      deferred_loader->CompleteTransfer();
-    } else {
-      bad_message::ReceivedBadMessage(
-          filter_, bad_message::RDH_REQUEST_NOT_TRANSFERRING);
-    }
+    CompleteTransfer(request_id, request_data, route_id);
     return;
   }
 
@@ -2181,7 +2220,7 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       // same mechanism as the cookie one.
       blink::WebPageVisibilityStateVisible, resource_context,
       base::WeakPtr<ResourceMessageFilter>(),  // filter
-      false,  // request_data.report_raw_headers
+      info.report_raw_headers,
       true,   // is_async
       IsUsingLoFi(info.common_params.lofi_state, delegate_, *new_request,
                   resource_context, info.is_main_frame),
@@ -2269,6 +2308,18 @@ void ResourceDispatcherHostImpl::OnRequestResourceWithMojo(
   OnRequestResourceInternal(routing_id, request_id, request,
                             std::move(mojo_request),
                             std::move(url_loader_client));
+  filter_ = nullptr;
+}
+
+void ResourceDispatcherHostImpl::OnSyncLoadWithMojo(
+    int routing_id,
+    int request_id,
+    const ResourceRequest& request_data,
+    ResourceMessageFilter* filter,
+    const SyncLoadResultCallback& result_handler) {
+  filter_ = filter;
+  BeginRequest(request_id, request_data, result_handler, routing_id,
+               nullptr, nullptr);
   filter_ = nullptr;
 }
 

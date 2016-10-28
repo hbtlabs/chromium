@@ -134,4 +134,14 @@ VoiceSearchProvider* ChromeBrowserProvider::GetVoiceSearchProvider() const {
   return nullptr;
 }
 
+id<LogoVendor> ChromeBrowserProvider::CreateLogoVendor(
+    ios::ChromeBrowserState* browser_state,
+    id<UrlLoader> loader) const {
+  return nil;
+}
+
+bool ChromeBrowserProvider::ShouldEmbedderRegisterVoiceSearchPrefs() const {
+  return false;
+}
+
 }  // namespace ios

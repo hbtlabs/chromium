@@ -123,10 +123,6 @@ using blink::WebTouchPoint;
 using blink::WebVector;
 using blink::WebWidget;
 
-#define STATIC_ASSERT_ENUM(a, b)                            \
-  static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                "mismatching enums: " #a)
-
 namespace {
 
 typedef std::map<std::string, ui::TextInputMode> TextInputModeMap;
@@ -154,41 +150,12 @@ class WebWidgetLockTarget : public content::MouseLockDispatcher::LockTarget {
   blink::WebWidget* webwidget_;
 };
 
-class TextInputModeMapSingleton {
- public:
-  static TextInputModeMapSingleton* GetInstance() {
-    return base::Singleton<TextInputModeMapSingleton>::get();
-  }
-  TextInputModeMapSingleton() {
-    map_["verbatim"] = ui::TEXT_INPUT_MODE_VERBATIM;
-    map_["latin"] = ui::TEXT_INPUT_MODE_LATIN;
-    map_["latin-name"] = ui::TEXT_INPUT_MODE_LATIN_NAME;
-    map_["latin-prose"] = ui::TEXT_INPUT_MODE_LATIN_PROSE;
-    map_["full-width-latin"] = ui::TEXT_INPUT_MODE_FULL_WIDTH_LATIN;
-    map_["kana"] = ui::TEXT_INPUT_MODE_KANA;
-    map_["katakana"] = ui::TEXT_INPUT_MODE_KATAKANA;
-    map_["numeric"] = ui::TEXT_INPUT_MODE_NUMERIC;
-    map_["tel"] = ui::TEXT_INPUT_MODE_TEL;
-    map_["email"] = ui::TEXT_INPUT_MODE_EMAIL;
-    map_["url"] = ui::TEXT_INPUT_MODE_URL;
-  }
-  const TextInputModeMap& map() const { return map_; }
- private:
-  TextInputModeMap map_;
-
-  friend struct base::DefaultSingletonTraits<TextInputModeMapSingleton>;
-
-  DISALLOW_COPY_AND_ASSIGN(TextInputModeMapSingleton);
-};
-
-ui::TextInputMode ConvertInputMode(const blink::WebString& input_mode) {
-  static TextInputModeMapSingleton* singleton =
-      TextInputModeMapSingleton::GetInstance();
-  TextInputModeMap::const_iterator it =
-      singleton->map().find(input_mode.utf8());
-  if (it == singleton->map().end())
-    return ui::TEXT_INPUT_MODE_DEFAULT;
-  return it->second;
+bool IsDateTimeInput(ui::TextInputType type) {
+  return type == ui::TEXT_INPUT_TYPE_DATE ||
+         type == ui::TEXT_INPUT_TYPE_DATE_TIME ||
+         type == ui::TEXT_INPUT_TYPE_DATE_TIME_LOCAL ||
+         type == ui::TEXT_INPUT_TYPE_MONTH ||
+         type == ui::TEXT_INPUT_TYPE_TIME || type == ui::TEXT_INPUT_TYPE_WEEK;
 }
 
 content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
@@ -212,6 +179,20 @@ content::RenderWidget::CreateRenderWidgetFunction g_create_render_widget =
 
 content::RenderWidget::RenderWidgetInitializedCallback
     g_render_widget_initialized = nullptr;
+
+ui::TextInputType ConvertWebTextInputType(blink::WebTextInputType type) {
+  // Check the type is in the range representable by ui::TextInputType.
+  DCHECK_LE(type, static_cast<int>(ui::TEXT_INPUT_TYPE_MAX))
+      << "blink::WebTextInputType and ui::TextInputType not synchronized";
+  return static_cast<ui::TextInputType>(type);
+}
+
+ui::TextInputMode ConvertWebTextInputMode(blink::WebTextInputMode mode) {
+  // Check the mode is in the range representable by ui::TextInputMode.
+  DCHECK_LE(mode, static_cast<int>(ui::TEXT_INPUT_MODE_MAX))
+      << "blink::WebTextInputMode and ui::TextInputMode not synchronized";
+  return static_cast<ui::TextInputMode>(mode);
+}
 
 }  // namespace
 
@@ -244,6 +225,7 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       host_closing_(false),
       is_swapped_out_(swapped_out),
       for_oopif_(false),
+      text_input_type_(ui::TEXT_INPUT_TYPE_NONE),
       text_input_mode_(ui::TEXT_INPUT_MODE_DEFAULT),
       text_input_flags_(0),
       can_compose_inline_(true),
@@ -777,13 +759,12 @@ void RenderWidget::DidCommitCompositorFrame() {
     observer.DidCommitCompositorFrame();
   for (auto& observer : render_frame_proxies_)
     observer.DidCommitCompositorFrame();
-  input_handler_->FlushPendingInputEventAck();
 }
 
 void RenderWidget::DidCompletePageScaleAnimation() {}
 
-void RenderWidget::DidCompleteSwapBuffers() {
-  TRACE_EVENT0("renderer", "RenderWidget::DidCompleteSwapBuffers");
+void RenderWidget::DidReceiveCompositorFrameAck() {
+  TRACE_EVENT0("renderer", "RenderWidget::DidReceiveCompositorFrameAck");
 
   // Notify subclasses threaded composited rendering was flushed to the screen.
   DidFlushPaint();
@@ -807,23 +788,6 @@ void RenderWidget::ForwardCompositorProto(const std::vector<uint8_t>& proto) {
 
 bool RenderWidget::IsClosing() const {
   return host_closing_;
-}
-
-void RenderWidget::OnSwapBuffersAborted() {
-  TRACE_EVENT0("renderer", "RenderWidget::OnSwapBuffersAborted");
-  // Schedule another frame so the compositor learns about it.
-  ScheduleComposite();
-}
-
-void RenderWidget::OnSwapBuffersComplete() {
-  TRACE_EVENT0("renderer", "RenderWidget::OnSwapBuffersComplete");
-
-  // Notify subclasses that composited rendering was flushed to the screen.
-  DidFlushPaint();
-}
-
-void RenderWidget::OnSwapBuffersPosted() {
-  TRACE_EVENT0("renderer", "RenderWidget::OnSwapBuffersPosted");
 }
 
 void RenderWidget::RequestScheduleAnimation() {
@@ -943,12 +907,15 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
     return;
   }
 
-  if (!GetWebWidget())
-    return;
+  ui::TextInputType new_type = GetTextInputType();
+  if (IsDateTimeInput(new_type))
+    return;  // Not considered as a text input field in WebKit/Chromium.
 
-  blink::WebTextInputInfo new_info = GetWebWidget()->textInputInfo();
-
-  const ui::TextInputMode new_mode = ConvertInputMode(new_info.inputMode);
+  blink::WebTextInputInfo new_info;
+  if (GetWebWidget())
+    new_info = GetWebWidget()->textInputInfo();
+  const ui::TextInputMode new_mode =
+      ConvertWebTextInputMode(new_info.inputMode);
 
   bool new_can_compose_inline = CanComposeInline();
 
@@ -956,14 +923,15 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
   // shown.
   if (show_ime == ShowIme::IF_NEEDED ||
       (IsUsingImeThread() && change_source == ChangeSource::FROM_IME) ||
-      (text_input_mode_ != new_mode || text_input_info_ != new_info ||
+      (text_input_type_ != new_type || text_input_mode_ != new_mode ||
+       text_input_info_ != new_info ||
        can_compose_inline_ != new_can_compose_inline)
 #if defined(OS_ANDROID)
       || text_field_is_dirty_
 #endif
       ) {
     TextInputState params;
-    params.type = WebKitToUiTextInputType(new_info.type);
+    params.type = new_type;
     params.mode = new_mode;
     params.flags = new_info.flags;
     params.value = new_info.value.utf8();
@@ -987,6 +955,7 @@ void RenderWidget::UpdateTextInputState(ShowIme show_ime,
     Send(new ViewHostMsg_TextInputStateChanged(routing_id(), params));
 
     text_input_info_ = new_info;
+    text_input_type_ = new_type;
     text_input_mode_ = new_mode;
     can_compose_inline_ = new_can_compose_inline;
     text_input_flags_ = new_info.flags;
@@ -1559,7 +1528,7 @@ ui::TextInputType RenderWidget::GetTextInputType() {
     return focused_pepper_plugin_->text_input_type();
 #endif
   if (GetWebWidget())
-    return WebKitToUiTextInputType(GetWebWidget()->textInputType());
+    return ConvertWebTextInputType(GetWebWidget()->textInputType());
   return ui::TEXT_INPUT_TYPE_NONE;
 }
 
@@ -1725,7 +1694,6 @@ void RenderWidget::SetHidden(bool hidden) {
   // The status has changed.  Tell the RenderThread about it and ensure
   // throttled acks are released in case frame production ceases.
   is_hidden_ = hidden;
-  input_handler_->FlushPendingInputEventAck();
 
   if (is_hidden_)
     RenderThreadImpl::current()->WidgetHidden();
@@ -1884,40 +1852,6 @@ void RenderWidget::DidAutoResize(const gfx::Size& new_size) {
   }
 }
 
-// Check blink::WebTextInputType and ui::TextInputType is kept in sync.
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeNone, ui::TEXT_INPUT_TYPE_NONE);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeText, ui::TEXT_INPUT_TYPE_TEXT);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypePassword,
-                   ui::TEXT_INPUT_TYPE_PASSWORD);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeSearch, ui::TEXT_INPUT_TYPE_SEARCH);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeEmail, ui::TEXT_INPUT_TYPE_EMAIL);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeNumber, ui::TEXT_INPUT_TYPE_NUMBER);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeTelephone,
-                   ui::TEXT_INPUT_TYPE_TELEPHONE);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeURL, ui::TEXT_INPUT_TYPE_URL);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeDate, ui::TEXT_INPUT_TYPE_DATE);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeDateTime,
-                   ui::TEXT_INPUT_TYPE_DATE_TIME);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeDateTimeLocal,
-                   ui::TEXT_INPUT_TYPE_DATE_TIME_LOCAL);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeMonth, ui::TEXT_INPUT_TYPE_MONTH);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeTime, ui::TEXT_INPUT_TYPE_TIME);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeWeek, ui::TEXT_INPUT_TYPE_WEEK);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeTextArea,
-                   ui::TEXT_INPUT_TYPE_TEXT_AREA);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeContentEditable,
-                   ui::TEXT_INPUT_TYPE_CONTENT_EDITABLE);
-STATIC_ASSERT_ENUM(blink::WebTextInputTypeDateTimeField,
-                   ui::TEXT_INPUT_TYPE_DATE_TIME_FIELD);
-
-ui::TextInputType RenderWidget::WebKitToUiTextInputType(
-    blink::WebTextInputType type) {
-  // Check the type is in the range representable by ui::TextInputType.
-  DCHECK_LE(type, static_cast<int>(ui::TEXT_INPUT_TYPE_MAX)) <<
-    "blink::WebTextInputType and ui::TextInputType not synchronized";
-  return static_cast<ui::TextInputType>(type);
-}
-
 void RenderWidget::GetCompositionCharacterBounds(
     std::vector<gfx::Rect>* bounds) {
   DCHECK(bounds);
@@ -2016,7 +1950,7 @@ void RenderWidget::resetInputMethod() {
   ImeEventGuard guard(this);
   // If the last text input type is not None, then we should finish any
   // ongoing composition regardless of the new text input type.
-  if (text_input_info_.type != blink::WebTextInputTypeNone) {
+  if (text_input_type_ != ui::TEXT_INPUT_TYPE_NONE) {
     // If a composition text exists, then we need to let the browser process
     // to cancel the input method's ongoing composition session.
     if (GetWebWidget()->finishComposingText(WebWidget::DoNotKeepSelection))
@@ -2089,35 +2023,11 @@ void RenderWidget::SetHandlingInputEventForTesting(bool handling_input_event) {
   input_handler_->set_handling_input_event(handling_input_event);
 }
 
-bool RenderWidget::SendAckForMouseMoveFromDebugger() {
-  return input_handler_->SendAckForMouseMoveFromDebugger();
-}
-
-void RenderWidget::IgnoreAckForMouseMoveFromDebugger() {
-  input_handler_->IgnoreAckForMouseMoveFromDebugger();
-}
-
 void RenderWidget::hasTouchEventHandlers(bool has_handlers) {
   if (render_widget_scheduling_state_)
     render_widget_scheduling_state_->SetHasTouchHandler(has_handlers);
   Send(new ViewHostMsg_HasTouchEventHandlers(routing_id_, has_handlers));
 }
-
-// Check blink::WebTouchAction and content::TouchAction is kept in sync.
-STATIC_ASSERT_ENUM(blink::WebTouchActionNone, TOUCH_ACTION_NONE);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanLeft, TOUCH_ACTION_PAN_LEFT);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanRight, TOUCH_ACTION_PAN_RIGHT);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanX, TOUCH_ACTION_PAN_X);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanUp, TOUCH_ACTION_PAN_UP);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanDown, TOUCH_ACTION_PAN_DOWN);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPanY, TOUCH_ACTION_PAN_Y);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPan, TOUCH_ACTION_PAN);
-STATIC_ASSERT_ENUM(blink::WebTouchActionPinchZoom, TOUCH_ACTION_PINCH_ZOOM);
-STATIC_ASSERT_ENUM(blink::WebTouchActionManipulation,
-                   TOUCH_ACTION_MANIPULATION);
-STATIC_ASSERT_ENUM(blink::WebTouchActionDoubleTapZoom,
-                   TOUCH_ACTION_DOUBLE_TAP_ZOOM);
-STATIC_ASSERT_ENUM(blink::WebTouchActionAuto, TOUCH_ACTION_AUTO);
 
 void RenderWidget::setTouchAction(
     blink::WebTouchAction web_touch_action) {

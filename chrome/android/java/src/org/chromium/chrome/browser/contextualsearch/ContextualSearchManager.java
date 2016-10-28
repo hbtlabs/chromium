@@ -47,7 +47,7 @@ import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.common.TopControlsState;
+import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -656,23 +656,29 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
      * @param contextLanguage The language of the original search term, or an empty string.
      * @param thumbnailUrl The URL of the thumbnail to display in our UX.
      * @param caption The caption to display.
+     * @param quickActionUri The URI for the intent associated with the quick action.
+     * @param quickActionCategory The {@link QuickActionCategory} for the quick action.
      */
     @CalledByNative
     public void onSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             final String searchTerm, final String displayText, final String alternateTerm,
             final String mid, boolean doPreventPreload, int selectionStartAdjust,
             int selectionEndAdjust, final String contextLanguage, final String thumbnailUrl,
-            final String caption) {
+            final String caption, final String quickActionUri, final int quickActionCategory) {
+        // TODO(twellington): Convert quickActionCategory to an enum value and pass that instead
+        //                    of an int.
         mNetworkCommunicator.handleSearchTermResolutionResponse(isNetworkUnavailable, responseCode,
                 searchTerm, displayText, alternateTerm, mid, doPreventPreload, selectionStartAdjust,
-                selectionEndAdjust, contextLanguage, thumbnailUrl, caption);
+                selectionEndAdjust, contextLanguage, thumbnailUrl, caption, quickActionUri,
+                quickActionCategory);
     }
 
     @Override
     public void handleSearchTermResolutionResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, String mid,
             boolean doPreventPreload, int selectionStartAdjust, int selectionEndAdjust,
-            String contextLanguage, String thumbnailUrl, String caption) {
+            String contextLanguage, String thumbnailUrl, String caption, String quickActionUri,
+            int quickActionCategory) {
         // Show an appropriate message for what to search for.
         String message;
         boolean doLiteralSearch = false;
@@ -692,7 +698,8 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
             doLiteralSearch = true;
         }
 
-        mSearchPanel.onSearchTermResolved(message, thumbnailUrl);
+        mSearchPanel.onSearchTermResolved(message, thumbnailUrl, quickActionUri,
+                quickActionCategory);
         if (!TextUtils.isEmpty(caption)) {
             // Call #onSetCaption() to set the caption. For entities, the caption should not be
             // regarded as an answer. In the future, when quick actions are added, doesAnswer will
@@ -902,7 +909,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
 
         @Override
         public void onMainFrameLoadStarted(String url, boolean isExternalUrl) {
-            mSearchPanel.updateTopControlsState();
+            mSearchPanel.updateBrowserControlsState();
 
             if (isExternalUrl) {
                 onExternalNavigation(url);
@@ -1209,7 +1216,7 @@ public class ContextualSearchManager implements ContextualSearchManagementDelega
     public void onSelectionChanged(String selection) {
         if (!isOverlayVideoMode()) {
             mSelectionController.handleSelectionChanged(selection);
-            mSearchPanel.updateTopControlsState(TopControlsState.BOTH, true);
+            mSearchPanel.updateBrowserControlsState(BrowserControlsState.BOTH, true);
         }
     }
 

@@ -8,13 +8,21 @@
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/safe_browsing_db/v4_database.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
+using base::TimeTicks;
 
 namespace safe_browsing {
+
+namespace {
+
+const char kV4DatabaseSizeMetric[] = "SafeBrowsing.V4Database.Size";
+
+}  // namespace
 
 // static
 V4StoreFactory* V4Database::factory_ = NULL;
@@ -31,9 +39,9 @@ void V4Database::Create(
   const scoped_refptr<base::SingleThreadTaskRunner> callback_task_runner =
       base::ThreadTaskRunnerHandle::Get();
   db_task_runner->PostTask(
-      FROM_HERE,
-      base::Bind(&V4Database::CreateOnTaskRunner, db_task_runner, base_path,
-                 list_infos, callback_task_runner, new_db_callback));
+      FROM_HERE, base::Bind(&V4Database::CreateOnTaskRunner, db_task_runner,
+                            base_path, list_infos, callback_task_runner,
+                            new_db_callback, TimeTicks::Now()));
 }
 
 // static
@@ -42,7 +50,8 @@ void V4Database::CreateOnTaskRunner(
     const base::FilePath& base_path,
     const ListInfos& list_infos,
     const scoped_refptr<base::SingleThreadTaskRunner>& callback_task_runner,
-    NewDatabaseReadyCallback new_db_callback) {
+    NewDatabaseReadyCallback new_db_callback,
+    const TimeTicks create_start_time) {
   DCHECK(db_task_runner->RunsTasksOnCurrentThread());
 
   if (!factory_) {
@@ -72,6 +81,9 @@ void V4Database::CreateOnTaskRunner(
   // thread. This would unblock resource loads.
   callback_task_runner->PostTask(
       FROM_HERE, base::Bind(new_db_callback, base::Passed(&v4_database)));
+
+  UMA_HISTOGRAM_TIMES("SafeBrowsing.V4DatabaseOpen.Time",
+                      TimeTicks::Now() - create_start_time);
 }
 
 V4Database::V4Database(
@@ -212,6 +224,17 @@ void V4Database::VerifyChecksumOnTaskRunner(
 
   callback_task_runner->PostTask(
       FROM_HERE, base::Bind(db_ready_for_updates_callback, stores_to_reset));
+}
+
+void V4Database::RecordFileSizeHistograms() {
+  int64_t db_size = 0;
+  for (const auto& store_map_iter : *store_map_) {
+    const int64_t size =
+        store_map_iter.second->RecordAndReturnFileSize(kV4DatabaseSizeMetric);
+    db_size += size;
+  }
+  const int64_t db_size_kilobytes = static_cast<int64_t>(db_size / 1024);
+  UMA_HISTOGRAM_COUNTS(kV4DatabaseSizeMetric, db_size_kilobytes);
 }
 
 ListInfo::ListInfo(const bool fetch_updates,

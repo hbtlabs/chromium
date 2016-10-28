@@ -56,14 +56,12 @@ class EntryTest : public testing::Test {
 TEST_F(EntryTest, Simple) {
   std::unique_ptr<Entry> entry = ReadEntry("simple", nullptr);
   EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ(service_manager::GetNamePath(entry->name()), entry->qualifier());
   EXPECT_EQ("Foo", entry->display_name());
 }
 
 TEST_F(EntryTest, Instance) {
   std::unique_ptr<Entry> entry = ReadEntry("instance", nullptr);
   EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ("bar", entry->qualifier());
   EXPECT_EQ("Foo", entry->display_name());
 }
 
@@ -71,13 +69,14 @@ TEST_F(EntryTest, ConnectionSpec) {
   std::unique_ptr<Entry> entry = ReadEntry("connection_spec", nullptr);
 
   EXPECT_EQ("service:foo", entry->name());
-  EXPECT_EQ("bar", entry->qualifier());
   EXPECT_EQ("Foo", entry->display_name());
   service_manager::InterfaceProviderSpec spec;
   service_manager::CapabilitySet capabilities;
   capabilities.insert("bar:bar");
   spec.requires["service:bar"] = capabilities;
-  EXPECT_EQ(spec, entry->connection_spec());
+  service_manager::InterfaceProviderSpecMap specs;
+  specs[service_manager::mojom::kServiceManager_ConnectorSpec] = spec;
+  EXPECT_EQ(specs, entry->interface_provider_specs());
 }
 
 TEST_F(EntryTest, Serialization) {

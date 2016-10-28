@@ -188,6 +188,7 @@ void QuicClientSessionBase::DeletePromised(QuicClientPromisedInfo* promised) {
   // Since promised_by_id_ contains the unique_ptr, this will destroy
   // promised.
   promised_by_id_.erase(promised->id());
+  headers_stream()->MaybeReleaseSequencerBuffer();
 }
 
 void QuicClientSessionBase::OnPushStreamTimedOut(QuicStreamId stream_id) {}
@@ -197,8 +198,20 @@ void QuicClientSessionBase::ResetPromised(QuicStreamId id,
   SendRstStream(id, error_code, 0);
   if (!IsOpenStream(id)) {
     MaybeIncreaseLargestPeerStreamId(id);
-    InsertLocallyClosedStreamsHighestOffset(id, 0);
+    if (!FLAGS_quic_bugfix_reset_promised) {
+      InsertLocallyClosedStreamsHighestOffset(id, 0);
+    }
   }
+}
+
+void QuicClientSessionBase::CloseStreamInner(QuicStreamId stream_id,
+                                             bool locally_reset) {
+  QuicSpdySession::CloseStreamInner(stream_id, locally_reset);
+  headers_stream()->MaybeReleaseSequencerBuffer();
+}
+
+bool QuicClientSessionBase::ShouldReleaseHeadersStreamSequencerBuffer() {
+  return num_active_requests() == 0 && promised_by_id_.empty();
 }
 
 }  // namespace net

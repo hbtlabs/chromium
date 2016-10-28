@@ -34,9 +34,13 @@ namespace ws {
 
 Display::Display(WindowServer* window_server,
                  const PlatformDisplayInitParams& platform_display_init_params)
-    : window_server_(window_server),
-      platform_display_(PlatformDisplay::Create(platform_display_init_params)),
-      last_cursor_(mojom::Cursor::CURSOR_NULL) {
+    : window_server_(window_server), last_cursor_(mojom::Cursor::CURSOR_NULL) {
+  CreateRootWindow(platform_display_init_params.metrics.pixel_size);
+
+  // Pass the display root ServerWindow to PlatformDisplay.
+  PlatformDisplayInitParams param_copy = platform_display_init_params;
+  param_copy.root_window = root_.get();
+  platform_display_.reset(PlatformDisplay::Create(param_copy));
   platform_display_->Init(this);
 
   window_server_->window_manager_window_tree_factory_set()->AddObserver(this);
@@ -99,11 +103,13 @@ mojom::WsDisplayPtr Display::ToWsDisplay() const {
 display::Display Display::ToDisplay() const {
   display::Display display(GetId());
 
-  display.set_bounds(platform_display_->GetBounds());
-  // TODO(sky): window manager needs an API to set the work area.
-  display.set_work_area(display.bounds());
-  display.set_device_scale_factor(platform_display_->GetDeviceScaleFactor());
-  display.set_rotation(platform_display_->GetRotation());
+  const display::ViewportMetrics& metrics =
+      platform_display_->GetViewportMetrics();
+
+  display.set_bounds(metrics.bounds);
+  display.set_work_area(metrics.work_area);
+  display.set_device_scale_factor(metrics.device_scale_factor);
+  display.set_rotation(metrics.rotation);
   display.set_touch_support(
       display::Display::TouchSupport::TOUCH_SUPPORT_UNKNOWN);
 
@@ -114,10 +120,6 @@ void Display::SchedulePaint(const ServerWindow* window,
                             const gfx::Rect& bounds) {
   DCHECK(root_->Contains(window));
   platform_display_->SchedulePaint(window, bounds);
-}
-
-display::Display::Rotation Display::GetRotation() const {
-  return platform_display_->GetRotation();
 }
 
 gfx::Size Display::GetSize() const {
@@ -309,17 +311,15 @@ void Display::OnNativeCaptureLost() {
     display_root->window_manager_state()->SetCapture(nullptr, kInvalidClientId);
 }
 
-void Display::OnViewportMetricsChanged(const ViewportMetrics& old_metrics,
-                                       const ViewportMetrics& new_metrics) {
-  if (!root_)
+void Display::OnViewportMetricsChanged(
+    const display::ViewportMetrics& new_metrics) {
+  if (!root_ || root_->bounds().size() == new_metrics.bounds.size())
     return;
 
   gfx::Rect new_bounds(new_metrics.bounds.size());
   root_->SetBounds(new_bounds);
   for (auto& pair : window_manager_display_root_map_)
     pair.second->root()->SetBounds(new_bounds);
-
-  display_manager()->OnDisplayUpdate(this);
 }
 
 bool Display::CanHaveActiveChildren(ServerWindow* window) const {

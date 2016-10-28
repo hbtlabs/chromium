@@ -5,8 +5,8 @@
 #include "ash/common/system/tray/tray_popup_layout_factory.h"
 
 #include "ash/common/material_design/material_design_controller.h"
-#include "ash/common/system/tray/three_view_layout.h"
 #include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
 
@@ -41,49 +41,42 @@ std::unique_ptr<views::LayoutManager> CreateDefaultEndsLayoutManager() {
 
 }  // namespace
 
-ThreeViewLayout* TrayPopupLayoutFactory::InstallDefaultLayout(
-    views::View* host) {
-  ThreeViewLayout* layout = new ThreeViewLayout(0 /* padding_between_items */);
+TriView* TrayPopupLayoutFactory::CreateDefaultRowView() {
+  TriView* tri_view = new TriView(0 /* padding_between_items */);
 
-  // TODO(bruthig): views::BoxLayout::SetFlexForView() fails on a DCHECK() if it
-  // has not yet been installed on a View. Evaluate whether this is necessary or
-  // if it can be removed. This would allow us to drop the |host| parameter from
-  // this function.
-  host->SetLayoutManager(layout);
+  tri_view->SetInsets(
+      gfx::Insets(0, GetTrayConstant(TRAY_POPUP_ITEM_LEFT_INSET), 0,
+                  GetTrayConstant(TRAY_POPUP_ITEM_RIGHT_INSET)));
+  tri_view->SetMinCrossAxisSize(GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
 
-  layout->SetInsets(gfx::Insets(0, GetTrayConstant(TRAY_POPUP_ITEM_LEFT_INSET),
-                                0,
-                                GetTrayConstant(TRAY_POPUP_ITEM_RIGHT_INSET)));
-  layout->SetMinCrossAxisSize(GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+  ConfigureDefaultLayout(tri_view, TriView::Container::START);
+  ConfigureDefaultLayout(tri_view, TriView::Container::CENTER);
+  ConfigureDefaultLayout(tri_view, TriView::Container::END);
 
-  ConfigureDefaultLayout(layout, ThreeViewLayout::Container::START);
-  ConfigureDefaultLayout(layout, ThreeViewLayout::Container::CENTER);
-  ConfigureDefaultLayout(layout, ThreeViewLayout::Container::END);
-
-  return layout;
+  return tri_view;
 }
 
 void TrayPopupLayoutFactory::ConfigureDefaultLayout(
-    ThreeViewLayout* layout,
-    ThreeViewLayout::Container container) {
+    TriView* tri_view,
+    TriView::Container container) {
   switch (container) {
-    case ThreeViewLayout::Container::START:
-      layout->SetLayoutManager(ThreeViewLayout::Container::START,
-                               CreateDefaultEndsLayoutManager());
-      layout->SetMinSize(
-          ThreeViewLayout::Container::START,
+    case TriView::Container::START:
+      tri_view->SetContainerLayout(TriView::Container::START,
+                                   CreateDefaultEndsLayoutManager());
+      tri_view->SetMinSize(
+          TriView::Container::START,
           gfx::Size(GetTrayConstant(TRAY_POPUP_ITEM_MIN_START_WIDTH), 0));
       break;
-    case ThreeViewLayout::Container::CENTER:
-      layout->SetLayoutManager(ThreeViewLayout::Container::CENTER,
-                               CreateDefaultCenterLayoutManager());
-      layout->SetFlexForContainer(ThreeViewLayout::Container::CENTER, 1.f);
+    case TriView::Container::CENTER:
+      tri_view->SetContainerLayout(TriView::Container::CENTER,
+                                   CreateDefaultCenterLayoutManager());
+      tri_view->SetFlexForContainer(TriView::Container::CENTER, 1.f);
       break;
-    case ThreeViewLayout::Container::END:
-      layout->SetLayoutManager(ThreeViewLayout::Container::END,
-                               CreateDefaultEndsLayoutManager());
-      layout->SetMinSize(
-          ThreeViewLayout::Container::END,
+    case TriView::Container::END:
+      tri_view->SetContainerLayout(TriView::Container::END,
+                                   CreateDefaultEndsLayoutManager());
+      tri_view->SetMinSize(
+          TriView::Container::END,
           gfx::Size(GetTrayConstant(TRAY_POPUP_ITEM_MIN_END_WIDTH), 0));
       break;
   }

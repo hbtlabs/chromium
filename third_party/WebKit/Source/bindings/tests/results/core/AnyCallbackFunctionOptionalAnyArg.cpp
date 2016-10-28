@@ -18,57 +18,52 @@
 
 namespace blink {
 
-AnyCallbackFunctionOptionalAnyArg::AnyCallbackFunctionOptionalAnyArg(v8::Isolate* isolate, v8::Local<v8::Function> callback)
-    : m_callback(isolate, callback)
-{
-    DCHECK(!m_callback.isEmpty());
-    m_callback.setPhantom();
+AnyCallbackFunctionOptionalAnyArg::AnyCallbackFunctionOptionalAnyArg(ScriptState* scriptState, v8::Local<v8::Function> callback)
+    : m_scriptState(scriptState),
+    m_callback(scriptState->isolate(), callback) {
+  DCHECK(!m_callback.isEmpty());
+  m_callback.setPhantom();
 }
 
-DEFINE_TRACE(AnyCallbackFunctionOptionalAnyArg)
-{
+DEFINE_TRACE(AnyCallbackFunctionOptionalAnyArg) {}
+
+DEFINE_TRACE_WRAPPERS(AnyCallbackFunctionOptionalAnyArg) {
+  visitor->traceWrappers(&m_callback.cast<v8::Object>());
 }
 
-DEFINE_TRACE_WRAPPERS(AnyCallbackFunctionOptionalAnyArg)
-{
-    visitor->traceWrappers(&m_callback.cast<v8::Object>());
-}
-
-bool AnyCallbackFunctionOptionalAnyArg::call(ScriptState* scriptState, ScriptWrappable* scriptWrappable, ScriptValue optionalAnyArg, ScriptValue& returnValue)
-{
-    if (!scriptState->contextIsValid())
-        return false;
-
-    ExecutionContext* context = scriptState->getExecutionContext();
-    DCHECK(context);
-    if (context->activeDOMObjectsAreSuspended() || context->activeDOMObjectsAreStopped())
-        return false;
-
-    if (m_callback.isEmpty())
-        return false;
-
-    // TODO(bashi): Make sure that using TrackExceptionState is OK.
-    // crbug.com/653769
-    TrackExceptionState exceptionState;
-    ScriptState::Scope scope(scriptState);
-
-    v8::Local<v8::Value> optionalAnyArgArgument = optionalAnyArg.v8Value();
-
-    v8::Local<v8::Value> thisValue = toV8(scriptWrappable, scriptState->context()->Global(), scriptState->isolate());
-
-    v8::Local<v8::Value> argv[] = { optionalAnyArgArgument };
-
-    v8::Local<v8::Value> v8ReturnValue;
-    v8::TryCatch exceptionCatcher(scriptState->isolate());
-    exceptionCatcher.SetVerbose(true);
-
-    if (V8ScriptRunner::callFunction(m_callback.newLocal(scriptState->isolate()), scriptState->getExecutionContext(), thisValue, 1, argv, scriptState->isolate()).ToLocal(&v8ReturnValue))
-    {
-        ScriptValue cppValue = ScriptValue(ScriptState::current(scriptState->isolate()), v8ReturnValue);
-        returnValue = cppValue;
-        return true;
-    }
+bool AnyCallbackFunctionOptionalAnyArg::call(ScriptWrappable* scriptWrappable, ScriptValue optionalAnyArg, ScriptValue& returnValue) {
+  if (!m_scriptState->contextIsValid())
     return false;
+
+  ExecutionContext* context = m_scriptState->getExecutionContext();
+  DCHECK(context);
+  if (context->activeDOMObjectsAreSuspended() || context->activeDOMObjectsAreStopped())
+    return false;
+
+  if (m_callback.isEmpty())
+    return false;
+
+  // TODO(bashi): Make sure that using TrackExceptionState is OK.
+  // crbug.com/653769
+  TrackExceptionState exceptionState;
+  ScriptState::Scope scope(m_scriptState.get());
+
+  v8::Local<v8::Value> optionalAnyArgArgument = optionalAnyArg.v8Value();
+
+  v8::Local<v8::Value> thisValue = toV8(scriptWrappable, m_scriptState->context()->Global(), m_scriptState->isolate());
+
+  v8::Local<v8::Value> argv[] = { optionalAnyArgArgument };
+
+  v8::Local<v8::Value> v8ReturnValue;
+  v8::TryCatch exceptionCatcher(m_scriptState->isolate());
+  exceptionCatcher.SetVerbose(true);
+
+  if (V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), thisValue, 1, argv, m_scriptState->isolate()).ToLocal(&v8ReturnValue)) {
+    ScriptValue cppValue = ScriptValue(ScriptState::current(m_scriptState->isolate()), v8ReturnValue);
+    returnValue = cppValue;
+    return true;
+  }
+  return false;
 }
 
-} // namespace blink
+}  // namespace blink

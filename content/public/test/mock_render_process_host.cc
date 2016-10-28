@@ -101,6 +101,8 @@ bool MockRenderProcessHost::Init() {
   return true;
 }
 
+void MockRenderProcessHost::EnableSendQueue() {}
+
 int MockRenderProcessHost::GetNextRoutingID() {
   return ++prev_routing_id_;
 }
@@ -297,6 +299,8 @@ bool MockRenderProcessHost::IsWorkerRefCountDisabled() {
 }
 
 void MockRenderProcessHost::PurgeAndSuspend() {}
+
+void MockRenderProcessHost::Resume() {}
 
 mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
   if (!renderer_interface_) {

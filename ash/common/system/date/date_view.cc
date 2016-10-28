@@ -6,7 +6,6 @@
 
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/system/tray/system_tray_controller.h"
-#include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_utils.h"
 #include "ash/common/wm_shell.h"
@@ -20,9 +19,11 @@
 #include "third_party/icu/source/i18n/unicode/smpdtfmt.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
 #include "ui/views/widget/widget.h"
 
@@ -198,7 +199,7 @@ bool DateView::PerformAction(const ui::Event& event) {
   if (action_ == TrayDate::SHOW_DATE_SETTINGS)
     WmShell::Get()->system_tray_controller()->ShowDateSettings();
   else if (action_ == TrayDate::SET_SYSTEM_TIME)
-    WmShell::Get()->system_tray_delegate()->ShowSetTimeDialog();
+    WmShell::Get()->system_tray_controller()->ShowSetTimeDialog();
   else
     return false;
   CloseSystemBubble();
@@ -291,8 +292,7 @@ void TimeView::UpdateClockLayout(TrayDate::ClockLayout clock_layout) {
   if (clock_layout == TrayDate::HORIZONTAL_CLOCK) {
     RemoveChildView(vertical_label_hours_.get());
     RemoveChildView(vertical_label_minutes_.get());
-    SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0));
+    SetLayoutManager(new views::FillLayout());
     AddChildView(horizontal_label_.get());
   } else {
     const bool is_material_design = MaterialDesignController::IsShelfMaterial();
@@ -321,16 +321,13 @@ void TimeView::UpdateClockLayout(TrayDate::ClockLayout clock_layout) {
 }
 
 void TimeView::SetBorderFromLayout(TrayDate::ClockLayout clock_layout) {
+  if (MaterialDesignController::IsShelfMaterial())
+    return;
+
   if (clock_layout == TrayDate::HORIZONTAL_CLOCK) {
-    bool is_material_design = MaterialDesignController::IsShelfMaterial();
-    const int time_view_left_padding =
-        is_material_design ? kClockLeadingPadding
-                           : kTrayLabelItemHorizontalPaddingBottomAlignment;
-    const int time_view_right_padding =
-        is_material_design ? GetTrayConstant(TRAY_IMAGE_ITEM_PADDING)
-                           : kTrayLabelItemHorizontalPaddingBottomAlignment;
-    SetBorder(views::Border::CreateEmptyBorder(0, time_view_left_padding, 0,
-                                               time_view_right_padding));
+    SetBorder(views::Border::CreateEmptyBorder(
+        0, kTrayLabelItemHorizontalPaddingBottomAlignment, 0,
+        kTrayLabelItemHorizontalPaddingBottomAlignment));
   } else {
     SetBorder(views::Border::NullBorder());
   }

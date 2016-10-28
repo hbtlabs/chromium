@@ -12,6 +12,11 @@
   },
   {
     "prefix": "threaded",
+    "base": "fast/idleToBlob",
+    "args": ["--enable-threaded-compositing"]
+  },
+  {
+    "prefix": "threaded",
     "base": "compositing/visibility",
     "args": ["--enable-threaded-compositing"]
   },
@@ -255,11 +260,6 @@
     "args": ["--enable-blink-features=DocumentWriteEvaluator"]
   },
   {
-    "prefix": "asyncawait",
-    "base": "inspector/sources/debugger-async/async-await",
-    "args": ["--js-flags=--harmony-async-await"]
-  },
-  {
     "prefix": "wheelscrolllatching",
     "base": "fast/events/wheel",
     "args": ["--enable-features=TouchpadAndWheelScrollLatching"]
@@ -277,6 +277,11 @@
   {
     "prefix": "mojo-loading",
     "base": "webexposed",
+    "args": ["--enable-blink-features=LoadingWithMojo"]
+  },
+  {
+    "prefix": "mojo-loading",
+    "base": "http/tests/xmlhttprequest/web-apps",
     "args": ["--enable-blink-features=LoadingWithMojo"]
   },
   {
@@ -307,6 +312,11 @@
   {
     "prefix": "layout_ng",
     "base": "fast/block/margin-collapse",
+    "args": ["--enable-blink-features=LayoutNG"]
+  },
+  {
+    "prefix": "layout_ng",
+    "base": "fast/block/float",
     "args": ["--enable-blink-features=LayoutNG"]
   }
 ]

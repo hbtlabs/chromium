@@ -13,16 +13,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/optin/arc_optin_preference_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
-#include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/metrics/metrics_pref_names.h"
-#include "components/prefs/pref_service.h"
 #include "components/user_manager/known_user.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -78,90 +74,99 @@ constexpr char kEventOnSendFeedbackClicked[] = "onSendFeedbackClicked";
 }  // namespace
 
 // static
-const char ArcSupportHost::kHostName[] = "com.google.arc_support";
-
-// static
 const char ArcSupportHost::kHostAppId[] = "cnbgggchhmkkdmeppjobngjoejnihlei";
 
 // static
 const char ArcSupportHost::kStorageId[] = "arc_support";
 
-// static
-const char* const ArcSupportHost::kHostOrigin[] = {
-    "chrome-extension://cnbgggchhmkkdmeppjobngjoejnihlei/"};
-
-// static
-std::unique_ptr<extensions::NativeMessageHost> ArcSupportHost::Create() {
-  return std::unique_ptr<NativeMessageHost>(new ArcSupportHost());
-}
-
 ArcSupportHost::ArcSupportHost() {
+  // TODO(hidehiko): Get rid of dependency to ArcAuthService.
   arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
   DCHECK(arc_auth_service);
 
   if (!arc_auth_service->IsAllowed())
     return;
-
-  arc_auth_service->AddObserver(this);
-  display::Screen::GetScreen()->AddObserver(this);
-
-  pref_local_change_registrar_.Init(g_browser_process->local_state());
-  pref_local_change_registrar_.Add(
-      metrics::prefs::kMetricsReportingEnabled,
-      base::Bind(&ArcSupportHost::OnMetricsPreferenceChanged,
-                 base::Unretained(this)));
-
-  pref_change_registrar_.Init(arc_auth_service->profile()->GetPrefs());
-  pref_change_registrar_.Add(
-      prefs::kArcBackupRestoreEnabled,
-      base::Bind(&ArcSupportHost::OnBackupAndRestorePreferenceChanged,
-                 base::Unretained(this)));
-  pref_change_registrar_.Add(
-      prefs::kArcLocationServiceEnabled,
-      base::Bind(&ArcSupportHost::OnLocationServicePreferenceChanged,
-                 base::Unretained(this)));
 }
 
 ArcSupportHost::~ArcSupportHost() {
-  display::Screen::GetScreen()->RemoveObserver(this);
-  arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-  if (arc_auth_service)
-    arc_auth_service->RemoveObserver(this);
+  if (message_host_)
+    DisconnectMessageHost();
 }
 
 void ArcSupportHost::Close() {
-  if (!client_)
+  if (!message_host_) {
+    VLOG(2) << "ArcSupportHost::Close() is called "
+            << "but message_host_ is not available.";
     return;
+  }
 
-  close_requested_ = true;
-  base::DictionaryValue response;
-  response.SetString(kAction, kActionCloseWindow);
-  std::string response_string;
-  base::JSONWriter::Write(response, &response_string);
-  client_->PostMessageFromNativeHost(response_string);
+  base::DictionaryValue message;
+  message.SetString(kAction, kActionCloseWindow);
+  message_host_->SendMessage(message);
+
+  // Disconnect immediately, so that onWindowClosed event will not be
+  // delivered to here.
+  DisconnectMessageHost();
 }
 
-void ArcSupportHost::Start(Client* client) {
-  DCHECK(!client_);
-  client_ = client;
+void ArcSupportHost::ShowPage(arc::ArcAuthService::UIPage page,
+                              const base::string16& status) {
+  if (!message_host_) {
+    VLOG(2) << "ArcSupportHost::ShowPage() is called "
+            << "but message_host_ is not available.";
+    return;
+  }
+
+  base::DictionaryValue message;
+  message.SetString(kAction, kActionShowPage);
+  message.SetInteger(kPage, static_cast<int>(page));
+  message.SetString(kStatus, status);
+  message_host_->SendMessage(message);
+}
+
+void ArcSupportHost::SetMessageHost(arc::ArcSupportMessageHost* message_host) {
+  if (message_host_ == message_host)
+    return;
+
+  if (message_host_)
+    DisconnectMessageHost();
+  message_host_ = message_host;
+  message_host_->SetObserver(this);
+  display::Screen::GetScreen()->AddObserver(this);
 
   if (!Initialize()) {
     Close();
     return;
   }
 
-  SendMetricsMode();
-  SendBackupAndRestoreMode();
-  SendLocationServicesMode();
-
   arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
   DCHECK(arc_auth_service);
-  OnOptInUIShowPage(arc_auth_service->ui_page(),
-                    arc_auth_service->ui_page_status());
+
+  preference_handler_ = base::MakeUnique<arc::ArcOptInPreferenceHandler>(
+      this, arc_auth_service->profile()->GetPrefs());
+  // This automatically updates all preferences.
+  preference_handler_->Start();
+
+  ShowPage(arc_auth_service->ui_page(), arc_auth_service->ui_page_status());
+}
+
+void ArcSupportHost::UnsetMessageHost(
+    arc::ArcSupportMessageHost* message_host) {
+  if (message_host_ != message_host)
+    return;
+  DisconnectMessageHost();
+}
+
+void ArcSupportHost::DisconnectMessageHost() {
+  DCHECK(message_host_);
+  preference_handler_.reset();
+  display::Screen::GetScreen()->RemoveObserver(this);
+  message_host_->SetObserver(nullptr);
+  message_host_ = nullptr;
 }
 
 bool ArcSupportHost::Initialize() {
-  DCHECK(client_);
+  DCHECK(message_host_);
   arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
   if (!arc_auth_service->IsAllowed())
     return false;
@@ -253,14 +258,11 @@ bool ArcSupportHost::Initialize() {
       "isOwnerProfile",
       chromeos::ProfileHelper::IsOwnerProfile(arc_auth_service->profile()));
 
-  base::DictionaryValue request;
-  std::string request_string;
-  request.SetString(kAction, kActionInitialize);
-  request.Set(kData, std::move(loadtime_data));
-  request.SetString(kDeviceId, device_id);
-  base::JSONWriter::Write(request, &request_string);
-  client_->PostMessageFromNativeHost(request_string);
-
+  base::DictionaryValue message;
+  message.SetString(kAction, kActionInitialize);
+  message.Set(kData, std::move(loadtime_data));
+  message.SetString(kDeviceId, device_id);
+  message_host_->SendMessage(message);
   return true;
 }
 
@@ -270,109 +272,42 @@ void ArcSupportHost::OnDisplayRemoved(const display::Display& old_display) {}
 
 void ArcSupportHost::OnDisplayMetricsChanged(const display::Display& display,
                                              uint32_t changed_metrics) {
-  base::DictionaryValue request;
-  std::string request_string;
-  request.SetString(kAction, kActionSetWindowBounds);
-  base::JSONWriter::Write(request, &request_string);
-  client_->PostMessageFromNativeHost(request_string);
+  if (!message_host_)
+    return;
+
+  base::DictionaryValue message;
+  message.SetString(kAction, kActionSetWindowBounds);
+  message_host_->SendMessage(message);
 }
 
-void ArcSupportHost::OnMetricsPreferenceChanged() {
-  SendMetricsMode();
+void ArcSupportHost::OnMetricsModeChanged(bool enabled, bool managed) {
+  SendPreferenceUpdate(kActionSetMetricsMode, enabled, managed);
 }
 
-void ArcSupportHost::OnBackupAndRestorePreferenceChanged() {
-  SendBackupAndRestoreMode();
+void ArcSupportHost::OnBackupAndRestoreModeChanged(bool enabled, bool managed) {
+  SendPreferenceUpdate(kActionBackupAndRestoreMode, enabled, managed);
 }
 
-void ArcSupportHost::OnLocationServicePreferenceChanged() {
-  SendLocationServicesMode();
-}
-
-void ArcSupportHost::SendMetricsMode() {
-  SendPreferenceUpdate(
-      kActionSetMetricsMode,
-      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled(),
-      IsMetricsReportingPolicyManaged());
-}
-
-void ArcSupportHost::SendBackupAndRestoreMode() {
-  SendOptionMode(kActionBackupAndRestoreMode, prefs::kArcBackupRestoreEnabled);
-}
-
-void ArcSupportHost::SendLocationServicesMode() {
-  SendOptionMode(kActionLocationServiceMode, prefs::kArcLocationServiceEnabled);
-}
-
-void ArcSupportHost::SendOptionMode(const std::string& action_name,
-                                    const std::string& pref_name) {
-  const arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-  DCHECK(arc_auth_service);
-  SendPreferenceUpdate(
-      action_name,
-      arc_auth_service->profile()->GetPrefs()->GetBoolean(pref_name),
-      arc_auth_service->profile()->GetPrefs()->IsManagedPreference(pref_name));
+void ArcSupportHost::OnLocationServicesModeChanged(bool enabled, bool managed) {
+  SendPreferenceUpdate(kActionLocationServiceMode, enabled, managed);
 }
 
 void ArcSupportHost::SendPreferenceUpdate(const std::string& action_name,
                                           bool is_enabled,
                                           bool is_managed) {
-  base::DictionaryValue request;
-  std::string request_string;
-  request.SetString(kAction, action_name);
-  request.SetBoolean(kEnabled, is_enabled);
-  request.SetBoolean(kManaged, is_managed);
-  base::JSONWriter::Write(request, &request_string);
-  client_->PostMessageFromNativeHost(request_string);
-}
-
-void ArcSupportHost::OnOptInUIClose() {
-  Close();
-}
-
-void ArcSupportHost::OnOptInUIShowPage(arc::ArcAuthService::UIPage page,
-                                       const base::string16& status) {
-  if (!client_)
+  if (!message_host_)
     return;
 
-  base::DictionaryValue response;
-  response.SetString(kAction, kActionShowPage);
-  response.SetInteger(kPage, static_cast<int>(page));
-  response.SetString(kStatus, status);
-  std::string response_string;
-  base::JSONWriter::Write(response, &response_string);
-  client_->PostMessageFromNativeHost(response_string);
+  base::DictionaryValue message;
+  message.SetString(kAction, action_name);
+  message.SetBoolean(kEnabled, is_enabled);
+  message.SetBoolean(kManaged, is_managed);
+  message_host_->SendMessage(message);
 }
 
-void ArcSupportHost::EnableMetrics(bool is_enabled) {
-  ChangeMetricsReportingState(is_enabled);
-}
-
-void ArcSupportHost::EnableBackupRestore(bool is_enabled) {
-  arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-  DCHECK(arc_auth_service && arc_auth_service->IsAllowed());
-  PrefService* pref_service = arc_auth_service->profile()->GetPrefs();
-  pref_service->SetBoolean(prefs::kArcBackupRestoreEnabled, is_enabled);
-}
-
-void ArcSupportHost::EnableLocationService(bool is_enabled) {
-  arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
-  DCHECK(arc_auth_service && arc_auth_service->IsAllowed());
-  PrefService* pref_service = arc_auth_service->profile()->GetPrefs();
-  pref_service->SetBoolean(prefs::kArcLocationServiceEnabled, is_enabled);
-}
-
-void ArcSupportHost::OnMessage(const std::string& message_string) {
-  std::unique_ptr<base::Value> message_value =
-      base::JSONReader::Read(message_string);
-  base::DictionaryValue* message;
-  if (!message_value || !message_value->GetAsDictionary(&message)) {
-    NOTREACHED();
-    return;
-  }
-
+void ArcSupportHost::OnMessage(const base::DictionaryValue& message) {
   std::string event;
-  if (!message->GetString(kEvent, &event)) {
+  if (!message.GetString(kEvent, &event)) {
     NOTREACHED();
     return;
   }
@@ -381,12 +316,13 @@ void ArcSupportHost::OnMessage(const std::string& message_string) {
   arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
   DCHECK(arc_auth_service);
 
+  DCHECK(preference_handler_);
+
   if (event == kEventOnWindowClosed) {
-    if (!close_requested_)
-      arc_auth_service->CancelAuthCode();
+    arc_auth_service->CancelAuthCode();
   } else if (event == kEventOnAuthSuccedded) {
     std::string code;
-    if (message->GetString(kCode, &code)) {
+    if (message.GetString(kCode, &code)) {
       arc_auth_service->SetAuthCodeAndStartArc(code);
     } else {
       NOTREACHED();
@@ -395,14 +331,14 @@ void ArcSupportHost::OnMessage(const std::string& message_string) {
     bool is_metrics_enabled;
     bool is_backup_restore_enabled;
     bool is_location_service_enabled;
-    if (message->GetBoolean(kIsMetricsEnabled, &is_metrics_enabled) &&
-        message->GetBoolean(kIsBackupRestoreEnabled,
-                            &is_backup_restore_enabled) &&
-        message->GetBoolean(kIsLocationServiceEnabled,
-                            &is_location_service_enabled)) {
-      EnableMetrics(is_metrics_enabled);
-      EnableBackupRestore(is_backup_restore_enabled);
-      EnableLocationService(is_location_service_enabled);
+    if (message.GetBoolean(kIsMetricsEnabled, &is_metrics_enabled) &&
+        message.GetBoolean(kIsBackupRestoreEnabled,
+                           &is_backup_restore_enabled) &&
+        message.GetBoolean(kIsLocationServiceEnabled,
+                           &is_location_service_enabled)) {
+      preference_handler_->EnableMetrics(is_metrics_enabled);
+      preference_handler_->EnableBackupRestore(is_backup_restore_enabled);
+      preference_handler_->EnableLocationService(is_location_service_enabled);
       arc_auth_service->StartLso();
     } else {
       NOTREACHED();
@@ -410,12 +346,7 @@ void ArcSupportHost::OnMessage(const std::string& message_string) {
   } else if (event == kEventOnSendFeedbackClicked) {
     chrome::OpenFeedbackDialog(nullptr);
   } else {
-    LOG(ERROR) << "Unknown message: " << message_string;
+    LOG(ERROR) << "Unknown message: " << event;
     NOTREACHED();
   }
-}
-
-scoped_refptr<base::SingleThreadTaskRunner> ArcSupportHost::task_runner()
-    const {
-  return base::ThreadTaskRunnerHandle::Get();
 }

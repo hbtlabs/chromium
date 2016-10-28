@@ -308,6 +308,12 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       mojom::URLLoaderClientPtr url_loader_client,
       ResourceMessageFilter* filter);
 
+  void OnSyncLoadWithMojo(int routing_id,
+                          int request_id,
+                          const ResourceRequest& request_data,
+                          ResourceMessageFilter* filter,
+                          const SyncLoadResultCallback& result_handler);
+
   // Helper function for initializing the |request| passed in. By initializing
   // we mean setting the |referrer| on the |request|, associating the
   // ResourceRequestInfoImpl structure with the |request|, etc.
@@ -543,11 +549,17 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                                 const ResourceRequest& request_data,
                                 LoaderMap::iterator iter);
 
+  // If |request_data| is for a request being transferred from another process,
+  // then CompleteTransfer method can be used to complete the transfer.
+  void CompleteTransfer(int request_id,
+                        const ResourceRequest& request_data,
+                        int route_id);
+
   void BeginRequest(
       int request_id,
       const ResourceRequest& request_data,
       const SyncLoadResultCallback& sync_result_handler, // only valid for sync
-      int route_id,                                      // only valid for async
+      int route_id,
       mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
       mojom::URLLoaderClientPtr url_loader_client);
 

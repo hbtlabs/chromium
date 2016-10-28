@@ -77,7 +77,7 @@ import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
 import org.chromium.chrome.browser.gsa.ContextReporter;
-import org.chromium.chrome.browser.gsa.GSAServiceClient;
+import org.chromium.chrome.browser.gsa.GSAAccountChangeListener;
 import org.chromium.chrome.browser.gsa.GSAState;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
@@ -87,6 +87,7 @@ import org.chromium.chrome.browser.metrics.StartupMetrics;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
+import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.nfc.BeamController;
 import org.chromium.chrome.browser.nfc.BeamProvider;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
@@ -101,6 +102,7 @@ import org.chromium.chrome.browser.printing.PrintShareActivity;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareHelper;
+import org.chromium.chrome.browser.snackbar.DataReductionPromoSnackbarController;
 import org.chromium.chrome.browser.snackbar.DataUseSnackbarController;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarManageable;
@@ -196,7 +198,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private TabContentManager mTabContentManager;
     private UmaSessionStats mUmaSessionStats;
     private ContextReporter mContextReporter;
-    protected GSAServiceClient mGSAServiceClient;
 
     private boolean mPartnerBrowserRefreshNeeded;
 
@@ -222,6 +223,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     private ReaderModeManager mReaderModeManager;
     private SnackbarManager mSnackbarManager;
     private DataUseSnackbarController mDataUseSnackbarController;
+    private DataReductionPromoSnackbarController mDataReductionPromoSnackbarController;
     private AppMenuPropertiesDelegate mAppMenuPropertiesDelegate;
     private AppMenuHandler mAppMenuHandler;
     private ToolbarManager mToolbarManager;
@@ -322,6 +324,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         mWindowAndroid.setKeyboardAccessoryView((ViewGroup) findViewById(R.id.keyboard_accessory));
         initializeToolbar();
         initializeTabModels();
+        if (!isFinishing()) mFullscreenManager = createFullscreenManager();
     }
 
     @Override
@@ -446,11 +449,6 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     protected final void initializeTabModels() {
         if (mTabModelsInitialized) return;
 
-        // TODO(tedchoc): FullscreenManager is required to create the TabModelSelector, but that
-        //                does not seem like the right ordering.  This should happen after
-        //                initializing the tab models.
-        mFullscreenManager = createFullscreenManager();
-
         mTabModelSelector = createTabModelSelector();
         if (mTabModelSelector == null) {
             assert isFinishing();
@@ -475,6 +473,19 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
                                    getApplicationContext())
                         && DataUseTabUIManager.checkAndResetDataUseTrackingEnded(tab)) {
                     mDataUseSnackbarController.showDataUseTrackingEndedBar();
+                }
+
+                // Only alert about data savings once the first paint has happened. It doesn't make
+                // sense to show a snackbar about savings when nothing has been displayed yet.
+                if (DataReductionProxySettings.getInstance().isSnackbarPromoAllowed(tab.getUrl())) {
+                    if (mDataReductionPromoSnackbarController == null) {
+                        mDataReductionPromoSnackbarController =
+                                new DataReductionPromoSnackbarController(
+                                        getApplicationContext(), getSnackbarManager());
+                    }
+                    mDataReductionPromoSnackbarController.maybeShowDataReductionPromoSnackbar(
+                            DataReductionProxySettings.getInstance()
+                                    .getTotalHttpContentLengthSaved());
                 }
             }
 
@@ -643,8 +654,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         ChromeActivitySessionTracker.getInstance().onStartWithNative();
 
         if (GSAState.getInstance(this).isGsaAvailable()) {
-            mGSAServiceClient = new GSAServiceClient(this);
-            mGSAServiceClient.connect();
+            GSAAccountChangeListener.getInstance().connect();
             createContextReporterIfNeeded();
         } else {
             ContextReporter.reportStatus(ContextReporter.STATUS_GSA_NOT_AVAILABLE);
@@ -746,9 +756,9 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
         Tab tab = getActivityTab();
         if (tab != null && !hasWindowFocus()) tab.onActivityHidden();
         if (mAppMenuHandler != null) mAppMenuHandler.hideAppMenu();
-        if (mGSAServiceClient != null) {
-            mGSAServiceClient.disconnect();
-            mGSAServiceClient = null;
+
+        if (GSAState.getInstance(this).isGsaAvailable()) {
+            GSAAccountChangeListener.getInstance().disconnect();
             if (mSyncStateChangedListener != null) {
                 ProfileSyncService syncService = ProfileSyncService.get();
                 if (syncService != null) {
@@ -1195,7 +1205,7 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
     }
 
     /**
-     * @return The resource id that contains how large the top controls are.
+     * @return The resource id that contains how large the browser controls are.
      */
     public int getControlContainerHeightResource() {
         return R.dimen.control_container_height;
@@ -1267,11 +1277,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
      * @return The {@link TabModelSelector}, possibly null.
      */
     public TabModelSelector getTabModelSelector() {
-        // TODO(tedchoc): Enable once CCT early tab creation is fixed.
-        //if (!mTabModelsInitialized) {
-        //    throw new IllegalStateException(
-        //            "Attempting to access TabModelSelector before initialization");
-        //}
+        if (!mTabModelsInitialized) {
+            throw new IllegalStateException(
+                    "Attempting to access TabModelSelector before initialization");
+        }
         return mTabModelSelector;
     }
 
@@ -1286,11 +1295,10 @@ public abstract class ChromeActivity extends AsyncInitializationActivity
 
     @Override
     public TabCreatorManager.TabCreator getTabCreator(boolean incognito) {
-        // TODO(tedchoc): Enable once CCT early tab creation is fixed.
-        //if (!mTabModelsInitialized) {
-        //    throw new IllegalStateException(
-        //            "Attempting to access TabCreator before initialization");
-        //}
+        if (!mTabModelsInitialized) {
+            throw new IllegalStateException(
+                    "Attempting to access TabCreator before initialization");
+        }
         return incognito ? mIncognitoTabCreator : mRegularTabCreator;
     }
 

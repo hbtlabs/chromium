@@ -462,10 +462,6 @@ void LayerTreeHostInProcess::FinishCommitOnImplThread(
   RecordGpuRasterizationHistogram();
 
   host_impl->SetViewportSize(layer_tree_->device_viewport_size());
-  // TODO(senorblanco): Move this to LayerTree::PushPropertiesTo so that it
-  // happens before GPU rasterization properties are set, since those trigger an
-  // update of GPU rasterization status, which depends on the device scale
-  // factor. (crbug.com/535700)
   sync_tree->SetDeviceScaleFactor(layer_tree_->device_scale_factor());
   host_impl->SetDebugState(debug_state_);
 
@@ -805,8 +801,7 @@ bool LayerTreeHostInProcess::DoUpdateLayers(Layer* root_layer) {
     draw_property_utils::UpdatePropertyTrees(property_trees,
                                              can_render_to_separate_surface);
     draw_property_utils::FindLayersThatNeedUpdates(
-        layer_tree_.get(), property_trees->transform_tree,
-        property_trees->effect_tree, &update_layer_list);
+        layer_tree_.get(), property_trees, &update_layer_list);
   }
 
   for (const auto& layer : update_layer_list)
@@ -891,13 +886,13 @@ const base::WeakPtr<InputHandler>& LayerTreeHostInProcess::GetInputHandler()
   return input_handler_weak_ptr_;
 }
 
-void LayerTreeHostInProcess::UpdateTopControlsState(
-    TopControlsState constraints,
-    TopControlsState current,
+void LayerTreeHostInProcess::UpdateBrowserControlsState(
+    BrowserControlsState constraints,
+    BrowserControlsState current,
     bool animate) {
-  // Top controls are only used in threaded or remote mode.
+  // Browser controls are only used in threaded or remote mode.
   DCHECK(IsThreaded() || IsRemoteServer());
-  proxy_->UpdateTopControlsState(constraints, current, animate);
+  proxy_->UpdateBrowserControlsState(constraints, current, animate);
 }
 
 void LayerTreeHostInProcess::AnimateLayers(base::TimeTicks monotonic_time) {

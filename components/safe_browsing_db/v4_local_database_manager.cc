@@ -13,10 +13,12 @@
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/safe_browsing_db/v4_feature_list.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
+using base::TimeTicks;
 
 namespace safe_browsing {
 
@@ -61,14 +63,12 @@ V4LocalDatabaseManager::PendingCheck::PendingCheck(
     Client* client,
     ClientCallbackType client_callback_type,
     const StoresToCheck& stores_to_check,
-    const GURL& url)
+    const std::vector<GURL>& urls)
     : client(client),
       client_callback_type(client_callback_type),
       result_threat_type(SB_THREAT_TYPE_SAFE),
       stores_to_check(stores_to_check),
-      url(url) {
-  DCHECK_GT(ClientCallbackType::CHECK_MAX, client_callback_type);
-}
+      urls(urls) {}
 
 V4LocalDatabaseManager::PendingCheck::~PendingCheck() {}
 
@@ -145,33 +145,26 @@ bool V4LocalDatabaseManager::CheckBrowseUrl(const GURL& url, Client* client) {
 
   std::unique_ptr<PendingCheck> check = base::MakeUnique<PendingCheck>(
       client, ClientCallbackType::CHECK_BROWSE_URL,
-      StoresToCheck({GetUrlMalwareId(), GetUrlSocEngId(), GetUrlUwsId()}), url);
-  if (!v4_database_) {
-    queued_checks_.push_back(std::move(check));
-    return false;
-  }
+      StoresToCheck({GetUrlMalwareId(), GetUrlSocEngId(), GetUrlUwsId()}),
+      std::vector<GURL>(1, url));
 
-  FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
-  if (!GetPrefixMatches(check, &full_hash_to_store_and_hash_prefixes)) {
-    return true;
-  }
-
-  // Post the task to check full hashes back on the IO thread to follow the
-  // documented behavior of CheckBrowseUrl.
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&V4LocalDatabaseManager::PerformFullHashCheck, this,
-                 base::Passed(std::move(check)),
-                 full_hash_to_store_and_hash_prefixes));
-  return false;
+  return HandleCheck(std::move(check));
 }
 
 bool V4LocalDatabaseManager::CheckDownloadUrl(
     const std::vector<GURL>& url_chain,
     Client* client) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  // TODO(vakh): Implement this skeleton.
-  return true;
+
+  if (!enabled_ || url_chain.empty()) {
+    return true;
+  }
+
+  std::unique_ptr<PendingCheck> check = base::MakeUnique<PendingCheck>(
+      client, ClientCallbackType::CHECK_DOWNLOAD_URLS,
+      StoresToCheck({GetUrlMalBinId()}), url_chain);
+
+  return HandleCheck(std::move(check));
 }
 
 bool V4LocalDatabaseManager::CheckExtensionIDs(
@@ -183,9 +176,18 @@ bool V4LocalDatabaseManager::CheckExtensionIDs(
 }
 
 bool V4LocalDatabaseManager::CheckResourceUrl(const GURL& url, Client* client) {
-  // TODO(vakh): Implement this skeleton.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return true;
+
+  if (!enabled_ || !CanCheckUrl(url)) {
+    return true;
+  }
+
+  std::unique_ptr<PendingCheck> check = base::MakeUnique<PendingCheck>(
+      client, ClientCallbackType::CHECK_RESOURCE_URL,
+      StoresToCheck({GetChromeUrlClientIncidentId()}),
+      std::vector<GURL>(1, url));
+
+  return HandleCheck(std::move(check));
 }
 
 bool V4LocalDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {
@@ -296,6 +298,8 @@ void V4LocalDatabaseManager::DatabaseReadyForChecks(
   if (enabled_) {
     v4_database_ = std::move(v4_database);
 
+    v4_database_->RecordFileSizeHistograms();
+
     // The consistency of the stores read from the disk needs to verified. Post
     // that task on the task runner. It calls |DatabaseReadyForUpdates|
     // callback with the stores to reset, if any, and then we can schedule the
@@ -324,6 +328,7 @@ void V4LocalDatabaseManager::DatabaseReadyForUpdates(
 
 void V4LocalDatabaseManager::DatabaseUpdated() {
   if (enabled_) {
+    v4_database_->RecordFileSizeHistograms();
     v4_update_protocol_manager_->ScheduleNextUpdate(
         v4_database_->GetStoreStateMap());
   }
@@ -336,11 +341,15 @@ bool V4LocalDatabaseManager::GetPrefixMatches(
 
   DCHECK(enabled_);
   DCHECK(v4_database_);
-  DCHECK_GT(ClientCallbackType::CHECK_MAX, check->client_callback_type);
+  full_hash_to_store_and_hash_prefixes->clear();
 
-  if (check->client_callback_type == ClientCallbackType::CHECK_BROWSE_URL) {
+  const base::TimeTicks before = TimeTicks::Now();
+  if (check->client_callback_type == ClientCallbackType::CHECK_BROWSE_URL ||
+      check->client_callback_type == ClientCallbackType::CHECK_DOWNLOAD_URLS) {
     std::unordered_set<FullHash> full_hashes;
-    V4ProtocolManagerUtil::UrlToFullHashes(check->url, &full_hashes);
+    for (const auto& url : check->urls) {
+      V4ProtocolManagerUtil::UrlToFullHashes(url, &full_hashes);
+    }
 
     StoreAndHashPrefixes matched_store_and_hash_prefixes;
     for (const auto& full_hash : full_hashes) {
@@ -352,14 +361,21 @@ bool V4LocalDatabaseManager::GetPrefixMatches(
             matched_store_and_hash_prefixes;
       }
     }
-
-    // No hash prefixes found in the local database so that resource must be
-    // safe.
-    return !full_hash_to_store_and_hash_prefixes->empty();
+  } else {
+    NOTREACHED() << "Unexpected client_callback_type encountered";
   }
 
-  NOTREACHED() << "Unexpected client_callback_type encountered";
-  return false;
+  // TODO(vakh): Only log SafeBrowsing.V4GetPrefixMatches.Time once PVer3 code
+  // is removed.
+  // NOTE(vakh): This doesn't distinguish which stores it's searching through.
+  // However, the vast majority of the entries in this histogram will be from
+  // searching the three CHECK_BROWSE_URL stores.
+  base::TimeDelta diff = TimeTicks::Now() - before;
+  UMA_HISTOGRAM_TIMES("SB2.FilterCheck", diff);
+  UMA_HISTOGRAM_CUSTOM_TIMES("SafeBrowsing.V4GetPrefixMatches.Time", diff,
+                             base::TimeDelta::FromMicroseconds(20),
+                             base::TimeDelta::FromSeconds(1), 50);
+  return !full_hash_to_store_and_hash_prefixes->empty();
 }
 
 void V4LocalDatabaseManager::GetSeverestThreatTypeAndMetadata(
@@ -399,6 +415,26 @@ SBThreatType V4LocalDatabaseManager::GetSBThreatTypeForList(
   return it->sb_threat_type();
 }
 
+bool V4LocalDatabaseManager::HandleCheck(std::unique_ptr<PendingCheck> check) {
+  if (!v4_database_) {
+    queued_checks_.push_back(std::move(check));
+    return false;
+  }
+
+  FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
+  if (!GetPrefixMatches(check, &full_hash_to_store_and_hash_prefixes)) {
+    return true;
+  }
+
+  // Post on the IO thread to enforce async behavior.
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&V4LocalDatabaseManager::PerformFullHashCheck, this,
+                 base::Passed(std::move(check)),
+                 full_hash_to_store_and_hash_prefixes));
+  return false;
+}
+
 void V4LocalDatabaseManager::OnFullHashResponse(
     std::unique_ptr<PendingCheck> pending_check,
     const std::vector<FullHashInfo>& full_hash_infos) {
@@ -409,7 +445,7 @@ void V4LocalDatabaseManager::OnFullHashResponse(
     return;
   }
 
-  auto it = pending_clients_.find(pending_check->client);
+  const auto it = pending_clients_.find(pending_check->client);
   if (it == pending_clients_.end()) {
     // The check has since been cancelled.
     return;
@@ -462,11 +498,20 @@ void V4LocalDatabaseManager::RespondSafeToQueuedChecks() {
 }
 
 void V4LocalDatabaseManager::RespondToClient(
-    std::unique_ptr<PendingCheck> pending_check) {
-  DCHECK(pending_check.get());
-  DCHECK_EQ(ClientCallbackType::CHECK_BROWSE_URL,
-            pending_check->client_callback_type);
-  // TODO(vakh): Implement this skeleton.
+    std::unique_ptr<PendingCheck> check) {
+  DCHECK(check.get());
+
+  if (check->client_callback_type == ClientCallbackType::CHECK_BROWSE_URL) {
+    DCHECK_EQ(1u, check->urls.size());
+    check->client->OnCheckBrowseUrlResult(
+        check->urls[0], check->result_threat_type, check->url_metadata);
+  } else if (check->client_callback_type ==
+             ClientCallbackType::CHECK_DOWNLOAD_URLS) {
+    check->client->OnCheckDownloadUrlResult(check->urls,
+                                            check->result_threat_type);
+  } else {
+    NOTREACHED() << "Unexpected client_callback_type encountered";
+  }
 }
 
 void V4LocalDatabaseManager::SetupDatabase() {

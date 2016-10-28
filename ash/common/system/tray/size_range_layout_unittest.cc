@@ -23,11 +23,18 @@ class SizeRangeLayoutTest : public testing::Test {
  protected:
   views::View host_;
 
+  const gfx::Size kAbsoluteMinSize;
+  const gfx::Size kAbsoluteMaxSize;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(SizeRangeLayoutTest);
 };
 
-SizeRangeLayoutTest::SizeRangeLayoutTest() {}
+SizeRangeLayoutTest::SizeRangeLayoutTest()
+    : kAbsoluteMinSize(SizeRangeLayout::kAbsoluteMinSize,
+                       SizeRangeLayout::kAbsoluteMinSize),
+      kAbsoluteMaxSize(SizeRangeLayout::kAbsoluteMaxSize,
+                       SizeRangeLayout::kAbsoluteMaxSize) {}
 
 gfx::Size SizeRangeLayoutTest::GetMinSize(const SizeRangeLayout* layout) const {
   return layout->min_size_;
@@ -39,8 +46,8 @@ gfx::Size SizeRangeLayoutTest::GetMaxSize(const SizeRangeLayout* layout) const {
 
 TEST_F(SizeRangeLayoutTest, SizeRangeForDefaultConstruction) {
   SizeRangeLayout layout;
-  EXPECT_EQ(SizeRangeLayout::AbsoluteMinSize(), GetMinSize(&layout));
-  EXPECT_EQ(SizeRangeLayout::AbsoluteMaxSize(), GetMaxSize(&layout));
+  EXPECT_EQ(kAbsoluteMinSize, GetMinSize(&layout));
+  EXPECT_EQ(kAbsoluteMaxSize, GetMaxSize(&layout));
 }
 
 TEST_F(SizeRangeLayoutTest, SizeRangeForExplicitConstruction) {
@@ -56,7 +63,7 @@ TEST_F(SizeRangeLayoutTest, InvalidMinSizeForExplicitConstruction) {
   const gfx::Size kInvalidSmallSize(-1, 2);
   const gfx::Size kExpectedMinSize(0, 2);
 
-  SizeRangeLayout layout(kInvalidSmallSize, SizeRangeLayout::AbsoluteMaxSize());
+  SizeRangeLayout layout(kInvalidSmallSize, kAbsoluteMaxSize);
   EXPECT_EQ(kExpectedMinSize, GetMinSize(&layout));
 }
 
@@ -64,7 +71,7 @@ TEST_F(SizeRangeLayoutTest, InvalidMaxSizeForExplicitConstruction) {
   const gfx::Size kInvalidSmallSize(-1, 2);
   const gfx::Size kExpectedMinSize(0, 2);
 
-  SizeRangeLayout layout(kInvalidSmallSize, SizeRangeLayout::AbsoluteMaxSize());
+  SizeRangeLayout layout(kInvalidSmallSize, kAbsoluteMaxSize);
   EXPECT_EQ(kExpectedMinSize, GetMinSize(&layout));
 }
 

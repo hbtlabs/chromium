@@ -79,6 +79,7 @@ crbug.com/24182 svg/hixie/perf/003.xml [ Slow ]
 crbug.com/24182 svg/hixie/perf/004.xml [ Slow ]
 crbug.com/24182 svg/hixie/perf/005.xml [ Slow ]
 crbug.com/24182 svg/hixie/perf/006.xml [ Slow ]
+crbug.com/659457 [ Linux Debug ] fast/mediacapturefromelement/HTMLMediaElementCapture-capture.html [ Slow ]
 crbug.com/451577 [ Debug ] fast/dom/gc-treescope.html  [ Slow ]
 crbug.com/451577 [ Debug ] fast/frames/calculate-round.html [ Slow ]
 crbug.com/451577 imported/wpt/IndexedDB/idbindex-multientry-big.htm [ Slow ]
@@ -110,7 +111,6 @@ crbug.com/420008 virtual/threaded/inspector/tracing/ [ Slow ]
 crbug.com/246190 [ Release ] http/tests/inspector/indexeddb/ [ Slow ]
 crbug.com/451577 [ Mac ] inspector/extensions/extensions-sidebar.html [ Slow ]
 crbug.com/451577 [ Mac ] inspector/extensions/extensions-events.html [ Slow ]
-crbug.com/450493 virtual/asyncawait/inspector/sources/debugger-async/ [ Slow ]
 
 # Random slow tests
 webkit.org/b/90488 [ Release ] http/tests/inspector/compiler-source-mapping-debug.html [ Slow ]
@@ -248,8 +248,6 @@ crbug.com/490511 imported/wpt/html/semantics/embedded-content/media-elements/pla
 crbug.com/490511 imported/wpt/html/semantics/forms/textfieldselection/selection.html [ Slow ]
 crbug.com/346259 http/tests/websocket/no-crash-on-cookie-flood.html [ Slow ]
 
-crbug.com/358313 virtual/gpu/fast/canvas/webgl/webgl-large-texture.html [ Slow ]
-
 crbug.com/522646 http/tests/media/encrypted-media/encrypted-media-encrypted-event-different-origin.html [ Slow ]
 crbug.com/411164 [ Win ] http/tests/security/powerfulFeatureRestrictions/serviceworker-on-insecure-origin.html [ Slow ]
 crbug.com/510337 inspector/console/console-format.html [ Slow ]
@@ -282,6 +280,23 @@ crbug.com/372424 http/tests/serviceworker/chromium/registration-stress.html [ Sl
 crbug.com/448670 http/tests/serviceworker/chromium/register-different-script-many-times.html [ Slow ]
 crbug.com/516319 [ Win ] http/tests/fetch/ [ Slow ]
 
+crbug.com/602693 imported/wpt/service-workers/service-worker/client-navigate.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/clients-get-cross-origin.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/clients-matchall-client-types.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-canvas-tainting-cache.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-canvas-tainting.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-cors-xhr.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-csp.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-event-async-respond-with.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-event-respond-with-stops-propagation.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-request-css-base-url.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-request-xhr.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/fetch-response-xhr.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/getregistrations.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/invalid-blobtype.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/invalid-header.https.html [ Slow ]
+crbug.com/602693 imported/wpt/service-workers/service-worker/referer.https.html [ Slow ]
+
 # Most crypto/subtle tests are slow some or most of the time.
 crbug.com/459009 crypto/subtle/ [ Slow ]
 
@@ -299,12 +314,16 @@ crbug.com/552556 [ Win Linux ] virtual/threaded/fast/scroll-behavior/overflow-sc
 crbug.com/570656 [ Mac ] fast/writing-mode/Kusa-Makura-background-canvas.html [ Slow ]
 crbug.com/570656 [ Mac ] fast/text/unicode-fallback-font.html [ Slow ]
 
+crbug.com/658211 [ Win7 Debug ] fast/text/line-break-ascii.html [ Slow ]
+
 crbug.com/445194 fast/dom/shadow/focus-controller-recursion-crash.html [ Slow ]
 
 crbug.com/584807 printing/webgl-oversized-printing.html [ Slow ]
 crbug.com/584807 virtual/threaded/printing/webgl-oversized-printing.html [ Slow ]
 
 crbug.com/592183 usb/usbDevice.html [ Slow ]
+
+crbug.com/658318 [ Win Debug ] fast/forms/time-multiple-fields/time-multiple-fields-stepup-stepdown-from-renderer-hour.html [ Slow ]
 
 crbug.com/594189 virtual/spv2/fast/overflow/lots-of-sibling-inline-boxes.html [ Slow ]
 

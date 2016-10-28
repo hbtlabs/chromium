@@ -453,12 +453,6 @@ willPositionSheet:(NSWindow*)sheet
     manager->UpdateAnchorPosition();
 }
 
-- (void)configureFullscreenToolbarController {
-  NSView* contentView = [[self window] contentView];
-  [fullscreenToolbarController_
-      setupFullscreenToolbarForContentView:contentView];
-}
-
 - (void)adjustUIForExitingFullscreenAndStopOmniboxSliding {
   [fullscreenToolbarController_ exitFullscreenMode];
   fullscreenToolbarController_.reset();
@@ -476,7 +470,7 @@ willPositionSheet:(NSWindow*)sheet
   if (!fullscreenToolbarController_) {
     fullscreenToolbarController_.reset(
         [self newFullscreenToolbarControllerWithStyle:style]);
-    [self configureFullscreenToolbarController];
+    [fullscreenToolbarController_ enterFullscreenMode];
   } else {
     fullscreenToolbarController_.get().slidingStyle = style;
   }
@@ -981,16 +975,8 @@ willPositionSheet:(NSWindow*)sheet
   if (!NSIsEmptyRect(output.toolbarFrame))
     [[toolbarController_ view] setFrame:output.toolbarFrame];
 
-  if (!NSIsEmptyRect(output.bookmarkFrame)) {
-    NSView* bookmarkBarView = [bookmarkBarController_ view];
-    [bookmarkBarView setFrame:output.bookmarkFrame];
-
-    // Pin the bookmark bar to the top of the window and make the width
-    // flexible.
-    [bookmarkBarView setAutoresizingMask:NSViewWidthSizable | NSViewMinYMargin];
-
-    [bookmarkBarController_ layoutSubviews];
-  }
+  if (!NSIsEmptyRect(output.bookmarkFrame))
+    [bookmarkBarController_ layoutToFrame:output.bookmarkFrame];
 
   // The info bar is never hidden. Sometimes it has zero effective height.
   [[infoBarContainerController_ view] setFrame:output.infoBarFrame];
@@ -1007,7 +993,7 @@ willPositionSheet:(NSWindow*)sheet
   if (!NSIsEmptyRect(output.fullscreenBackingBarFrame)) {
     [floatingBarBackingView_ setFrame:output.fullscreenBackingBarFrame];
     [fullscreenToolbarController_
-        setTrackingAreaFromOverlayFrame:output.fullscreenBackingBarFrame];
+        updateToolbarFrame:output.fullscreenBackingBarFrame];
   }
 
   [findBarCocoaController_

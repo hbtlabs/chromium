@@ -229,7 +229,6 @@ class WebMediaPlayerAndroid
   void UpdateNetworkState(blink::WebMediaPlayer::NetworkState state);
   void UpdateReadyState(blink::WebMediaPlayer::ReadyState state);
   void TryCreateStreamTextureProxyIfNeeded();
-  void DoCreateStreamTexture();
 
   // Helper method to reestablish the surface texture peer for android
   // media player.
@@ -246,7 +245,6 @@ class WebMediaPlayerAndroid
   void DrawRemotePlaybackText(const std::string& remote_playback_message);
   void ReallocateVideoFrame();
   void SetCurrentFrameInternal(scoped_refptr<media::VideoFrame>& frame);
-  void RemoveSurfaceTextureAndProxy();
   void DidLoadMediaInfo(MediaInfoLoader::Status status,
                         const GURL& redirected_url,
                         const GURL& first_party_for_cookies,
@@ -347,9 +345,6 @@ class WebMediaPlayerAndroid
   // GL texture mailbox for texture_id_ to provide in the VideoFrame, and sync
   // point for when the mailbox was produced.
   gpu::Mailbox texture_mailbox_;
-
-  // Stream texture ID allocated to the video.
-  unsigned int stream_id_;
 
   // Whether the media player has been initialized.
   bool is_player_initialized_;

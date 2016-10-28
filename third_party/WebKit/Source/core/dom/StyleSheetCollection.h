@@ -30,6 +30,7 @@
 #ifndef StyleSheetCollection_h
 #define StyleSheetCollection_h
 
+#include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/TraceWrapperMember.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -42,7 +43,8 @@ class CSSStyleSheet;
 class StyleSheet;
 
 class CORE_EXPORT StyleSheetCollection
-    : public GarbageCollected<StyleSheetCollection> {
+    : public GarbageCollected<StyleSheetCollection>,
+      public TraceWrapperBase {
   WTF_MAKE_NONCOPYABLE(StyleSheetCollection);
 
  public:
@@ -63,6 +65,8 @@ class CORE_EXPORT StyleSheetCollection
   void swapSheetsForSheetList(HeapVector<Member<StyleSheet>>&);
   void appendActiveStyleSheet(CSSStyleSheet*);
   void appendActiveStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
+  void appendActiveStyleSheets(
+      const HeapVector<TraceWrapperMember<CSSStyleSheet>>&);
   void appendSheetForList(StyleSheet*);
 
   DECLARE_VIRTUAL_TRACE();

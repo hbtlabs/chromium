@@ -413,6 +413,8 @@ SpdyProtocolErrorDetails MapRstStreamStatusToProtocolError(
       return STATUS_CODE_INADEQUATE_SECURITY;
     case RST_STREAM_HTTP_1_1_REQUIRED:
       return STATUS_CODE_HTTP_1_1_REQUIRED;
+    case RST_STREAM_NO_ERROR:
+      return STATUS_CODE_NO_ERROR;
     default:
       NOTREACHED();
       return static_cast<SpdyProtocolErrorDetails>(-1);
@@ -2327,8 +2329,8 @@ void SpdySession::OnRstStream(SpdyStreamId stream_id,
 
   CHECK_EQ(it->second.stream->stream_id(), stream_id);
 
-  if (status == 0) {
-    it->second.stream->OnDataReceived(std::unique_ptr<SpdyBuffer>());
+  if (status == RST_STREAM_NO_ERROR) {
+    CloseActiveStreamIterator(it, ERR_SPDY_RST_STREAM_NO_ERROR_RECEIVED);
   } else if (status == RST_STREAM_REFUSED_STREAM) {
     CloseActiveStreamIterator(it, ERR_SPDY_SERVER_REFUSED_STREAM);
   } else if (status == RST_STREAM_HTTP_1_1_REQUIRED) {
@@ -2465,14 +2467,15 @@ bool SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
 
   // Server-initiated streams must be associated with client-initiated streams.
   if ((associated_stream_id & 0x1) != 1) {
-    LOG(WARNING) << "Received invalid associated stream id " << stream_id;
+    LOG(WARNING) << "Received push stream id " << stream_id
+                 << " with invalid associated stream id";
     CloseSessionOnError(ERR_SPDY_PROTOCOL_ERROR, "Push on even stream id.");
     return false;
   }
 
   if (stream_id <= last_accepted_push_stream_id_) {
-    LOG(WARNING) << "Received push stream id lesser or equal to the last "
-                 << "accepted before " << stream_id;
+    LOG(WARNING) << "Received push stream id " << stream_id
+                 << " lesser or equal to the last accepted before";
     CloseSessionOnError(
         ERR_SPDY_PROTOCOL_ERROR,
         "New push stream id must be greater than the last accepted.");
@@ -2634,6 +2637,21 @@ bool SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   DCHECK(active_it->second.stream->IsReservedRemote());
   num_pushed_streams_++;
   return true;
+}
+
+void SpdySession::CancelPush(const GURL& url) {
+  UnclaimedPushedStreamContainer::const_iterator unclaimed_it =
+      unclaimed_pushed_streams_.find(url);
+  if (unclaimed_it == unclaimed_pushed_streams_.end())
+    return;
+
+  SpdyStreamId stream_id = unclaimed_it->second.stream_id;
+
+  if (active_streams_.find(stream_id) == active_streams_.end()) {
+    ResetStream(stream_id, RST_STREAM_CANCEL,
+                "Cancelled push stream with url: " + url.spec());
+  }
+  unclaimed_pushed_streams_.erase(unclaimed_it);
 }
 
 void SpdySession::OnPushPromise(SpdyStreamId stream_id,

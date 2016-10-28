@@ -59,6 +59,7 @@
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
@@ -1516,7 +1517,9 @@ void WebMediaPlayerImpl::StartPipeline() {
       BIND_TO_RENDER_LOOP(&WebMediaPlayerImpl::OnEncryptedMediaInitData);
 
   if (use_fallback_path_) {
-    demuxer_.reset(new MediaUrlDemuxer(media_task_runner_, fallback_url_));
+    demuxer_.reset(
+        new MediaUrlDemuxer(media_task_runner_, fallback_url_,
+                            frame_->document().firstPartyForCookies()));
     pipeline_controller_.Start(demuxer_.get(), this, false, false);
     return;
   }
@@ -1741,7 +1744,8 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
   // After HaveMetadata, we know which tracks are present and the duration.
   bool have_metadata = ready_state_ >= WebMediaPlayer::ReadyStateHaveMetadata;
 
-  // After HaveFutureData, Blink will call play() if the state is not paused.
+  // After HaveFutureData, Blink will call play() if the state is not paused;
+  // prior to this point |paused_| is not accurate.
   bool have_future_data =
       highest_ready_state_ >= WebMediaPlayer::ReadyStateHaveFutureData;
 
@@ -1756,8 +1760,13 @@ WebMediaPlayerImpl::UpdatePlayState_ComputePlayState(bool is_remote,
       delegate_ && delegate_->IsPlayingBackgroundVideo();
   bool background_suspended = is_backgrounded_video &&
                               !(can_play_backgrounded && is_background_playing);
-  bool background_pause_suspended = is_backgrounded && paused_;
+  bool background_pause_suspended =
+      is_backgrounded && paused_ && have_future_data;
 
+  // Idle suspension is allowed prior to have future data since there exist
+  // mechanisms to exit the idle state when the player is capable of reaching
+  // the have future data state; see didLoadingProgress().
+  //
   // TODO(sandersd): Make the delegate suspend idle players immediately when
   // hidden.
   bool idle_suspended = is_idle_ && paused_ && !seeking_ && !overlay_enabled_;

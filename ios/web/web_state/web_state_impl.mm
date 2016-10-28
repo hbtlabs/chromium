@@ -453,12 +453,12 @@ void WebStateImpl::RunJavaScriptDialog(
                                  message_text, default_prompt_text, callback);
 }
 
-void WebStateImpl::CancelActiveAndPendingDialogs() {
+void WebStateImpl::CancelDialogs() {
   if (delegate_) {
     JavaScriptDialogPresenter* presenter =
         delegate_->GetJavaScriptDialogPresenter(this);
     if (presenter) {
-      presenter->CancelActiveAndPendingDialogs(this);
+      presenter->CancelDialogs(this);
     }
   }
 }
@@ -544,7 +544,8 @@ int WebStateImpl::DownloadImage(
 
 service_manager::InterfaceRegistry* WebStateImpl::GetMojoInterfaceRegistry() {
   if (!mojo_interface_registry_) {
-    mojo_interface_registry_.reset(new service_manager::InterfaceRegistry);
+    mojo_interface_registry_.reset(
+        new service_manager::InterfaceRegistry(std::string()));
   }
   return mojo_interface_registry_.get();
 }

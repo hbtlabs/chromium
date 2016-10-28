@@ -145,6 +145,8 @@ class RequestCoordinator : public KeyedService,
     immediate_schedule_callback_ = callback;
   }
 
+  void StartImmediatelyForTest() { StartImmediatelyIfConnected(); }
+
   // Observers implementing the RequestCoordinator::Observer interface can
   // register here to get notifications of changes to request state.  This
   // pointer is not owned, and it is the callers responsibility to remove the
@@ -311,6 +313,11 @@ class RequestCoordinator : public KeyedService,
   void RemoveAttemptedRequest(const SavePageRequest& request,
                               BackgroundSavePageResult status);
 
+  // Completes aborting the request, reports an error if it fails.
+  void MarkAttemptAbortedDone(int64_t request_id,
+                              const ClientId& client_id,
+                              std::unique_ptr<UpdateRequestsResult> result);
+
   // Returns the appropriate offliner to use, getting a new one from the factory
   // if needed.
   void GetOffliner();
@@ -333,6 +340,9 @@ class RequestCoordinator : public KeyedService,
   void Shutdown() override;
 
   friend class RequestCoordinatorTest;
+
+  // Cached value of whether low end device. Overwritable for testing.
+  bool is_low_end_device_;
 
   // The offliner can only handle one request at a time - if the offliner is
   // busy, prevent other requests.  This flag marks whether the offliner is in

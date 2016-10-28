@@ -171,6 +171,7 @@
 #if defined(OS_WIN)
 #include "chrome/browser/ui/webui/conflicts_ui.h"
 #include "chrome/browser/ui/webui/set_as_default_browser_ui_win.h"
+#include "chrome/browser/ui/webui/welcome_win10_ui.h"
 #endif
 
 #if (defined(USE_NSS_CERTS) || defined(USE_OPENSSL_CERTS)) && defined(USE_AURA)
@@ -277,6 +278,13 @@ WebUIController* NewWebUI<WelcomeUI>(WebUI* web_ui, const GURL& url) {
 #endif  // !defined(OS_CHROMEOS)
 #endif  // !defined(OS_ANDROID)
 
+#if defined(OS_WIN)
+template <>
+WebUIController* NewWebUI<WelcomeWin10UI>(WebUI* web_ui, const GURL& url) {
+  return new WelcomeWin10UI(web_ui, url);
+}
+#endif  // defined(OS_WIN)
+
 #if defined(ENABLE_EXTENSIONS)
 // Only create ExtensionWebUI for URLs that are allowed extension bindings,
 // hosted by actual tabs.
@@ -308,7 +316,7 @@ bool IsAboutUI(const GURL& url) {
 #if defined(OS_CHROMEOS)
           || url.host() == chrome::kChromeUIOSCreditsHost
 #endif
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
           || url.host() == chrome::kChromeUIDiscardsHost
 #endif
           );  // NOLINT
@@ -562,6 +570,10 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   if (url.host() == chrome::kChromeUIWelcomeHost)
     return &NewWebUI<WelcomeUI>;
 #endif
+#if defined(OS_WIN)
+  if (url.host() == chrome::kChromeUIWelcomeWin10Host)
+    return &NewWebUI<WelcomeWin10UI>;
+#endif  // defined(OS_WIN)
 
   /****************************************************************************
    * Other #defines and special logics.

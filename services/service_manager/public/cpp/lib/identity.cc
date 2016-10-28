@@ -18,7 +18,7 @@ Identity::Identity(const std::string& name, const std::string& user_id,
                    const std::string& instance)
     : name_(name),
       user_id_(user_id),
-      instance_(instance.empty() ? GetNamePath(name_) : instance) {
+      instance_(instance) {
   CHECK(!user_id.empty());
   CHECK(base::IsValidGUID(user_id));
 }
@@ -38,6 +38,10 @@ bool Identity::operator<(const Identity& other) const {
 bool Identity::operator==(const Identity& other) const {
   return other.name_ == name_ && other.instance_ == instance_ &&
          other.user_id_ == user_id_;
+}
+
+bool Identity::IsValid() const {
+  return IsValidName(name_) && base::IsValidGUID(user_id_);
 }
 
 }  // namespace service_manager

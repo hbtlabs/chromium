@@ -1847,18 +1847,6 @@ String Internals::dumpRefCountedInstanceCounts() const {
   return WTF::dumpRefCountedInstanceCounts();
 }
 
-Vector<unsigned long> Internals::setMemoryCacheCapacities(
-    unsigned long minDeadBytes,
-    unsigned long maxDeadBytes,
-    unsigned long totalBytes) {
-  Vector<unsigned long> result;
-  result.append(memoryCache()->minDeadCapacity());
-  result.append(memoryCache()->maxDeadCapacity());
-  result.append(memoryCache()->capacity());
-  memoryCache()->setCapacities(minDeadBytes, maxDeadBytes, totalBytes);
-  return result;
-}
-
 bool Internals::hasGrammarMarker(Document* document, int from, int length) {
   ASSERT(document);
   if (!document->frame())
@@ -2215,12 +2203,6 @@ void Internals::mediaPlayerPlayingRemotelyChanged(
     mediaElement->disconnectedFromRemoteDevice();
 }
 
-void Internals::setAllowHiddenVolumeControls(HTMLMediaElement* mediaElement,
-                                             bool allow) {
-  ASSERT(mediaElement);
-  mediaElement->setAllowHiddenVolumeControls(allow);
-}
-
 void Internals::registerURLSchemeAsBypassingContentSecurityPolicy(
     const String& scheme) {
   SchemeRegistry::registerURLSchemeAsBypassingContentSecurityPolicy(scheme);
@@ -2311,14 +2293,16 @@ void Internals::stopTrackingRepaints(Document* document,
 void Internals::updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(
     Node* node,
     ExceptionState& exceptionState) {
-  Document* document;
+  Document* document = nullptr;
   if (!node) {
     document = contextDocument();
   } else if (node->isDocumentNode()) {
     document = toDocument(node);
   } else if (isHTMLIFrameElement(*node)) {
     document = toHTMLIFrameElement(*node).contentDocument();
-  } else {
+  }
+
+  if (!document) {
     exceptionState.throwTypeError(
         "The node provided is neither a document nor an IFrame.");
     return;

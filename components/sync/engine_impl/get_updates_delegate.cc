@@ -4,10 +4,10 @@
 
 #include "components/sync/engine_impl/get_updates_delegate.h"
 
-#include "components/sync/engine/events/configure_get_updates_request_event.h"
-#include "components/sync/engine/events/normal_get_updates_request_event.h"
-#include "components/sync/engine/events/poll_get_updates_request_event.h"
 #include "components/sync/engine_impl/directory_update_handler.h"
+#include "components/sync/engine_impl/events/configure_get_updates_request_event.h"
+#include "components/sync/engine_impl/events/normal_get_updates_request_event.h"
+#include "components/sync/engine_impl/events/poll_get_updates_request_event.h"
 #include "components/sync/engine_impl/get_updates_processor.h"
 
 namespace syncer {
@@ -17,20 +17,20 @@ namespace {
 void NonPassiveApplyUpdates(ModelTypeSet gu_types,
                             StatusController* status_controller,
                             UpdateHandlerMap* update_handler_map) {
-  for (UpdateHandlerMap::iterator it = update_handler_map->begin();
-       it != update_handler_map->end(); ++it) {
-    if (gu_types.Has(it->first))
-      it->second->ApplyUpdates(status_controller);
+  for (const auto& kv : *update_handler_map) {
+    if (gu_types.Has(kv.first)) {
+      kv.second->ApplyUpdates(status_controller);
+    }
   }
 }
 
 void PassiveApplyUpdates(ModelTypeSet gu_types,
                          StatusController* status_controller,
                          UpdateHandlerMap* update_handler_map) {
-  for (UpdateHandlerMap::iterator it = update_handler_map->begin();
-       it != update_handler_map->end(); ++it) {
-    if (gu_types.Has(it->first))
-      it->second->PassiveApplyUpdates(status_controller);
+  for (const auto& kv : *update_handler_map) {
+    if (gu_types.Has(kv.first)) {
+      kv.second->PassiveApplyUpdates(status_controller);
+    }
   }
 }
 

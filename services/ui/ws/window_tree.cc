@@ -19,8 +19,8 @@
 #include "services/ui/ws/operation.h"
 #include "services/ui/ws/platform_display.h"
 #include "services/ui/ws/server_window.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
 #include "services/ui/ws/server_window_observer.h"
-#include "services/ui/ws/server_window_surface_manager.h"
 #include "services/ui/ws/user_display_manager.h"
 #include "services/ui/ws/window_manager_display_root.h"
 #include "services/ui/ws/window_manager_state.h"
@@ -217,6 +217,10 @@ void WindowTree::OnWindowDestroyingTreeImpl(WindowTree* tree) {
           ClientWindowIdForWindow(tree_root).id);
     }
   }
+}
+
+void WindowTree::OnWmDisplayModified(const display::Display& display) {
+  window_manager_internal_->WmDisplayModified(display);
 }
 
 void WindowTree::NotifyChangeCompleted(
@@ -769,10 +773,11 @@ void WindowTree::ProcessWindowSurfaceChanged(ServerWindow* window,
     return;
   }
 
-  ServerWindowSurfaceManager* surface_manager =
-      window->GetOrCreateSurfaceManager();
-  ServerWindowSurface* surface = surface_manager->GetDefaultSurface();
-  cc::SurfaceSequence sequence = surface->CreateSurfaceSequence();
+  ServerWindowCompositorFrameSinkManager* compositor_frame_sink_manager =
+      window->GetOrCreateCompositorFrameSinkManager();
+  cc::SurfaceSequence sequence =
+      compositor_frame_sink_manager->CreateSurfaceSequence(
+          mojom::CompositorFrameSinkType::DEFAULT);
   client()->OnWindowSurfaceChanged(client_window_id.id, surface_id, sequence,
                                    frame_size, device_scale_factor);
 }
@@ -1048,7 +1053,8 @@ void WindowTree::DestroyWindows() {
   // If we get here from the destructor we're not going to get
   // ProcessWindowDeleted(). Copy the map and delete from the copy so that we
   // don't have to worry about whether |created_window_map_| changes or not.
-  base::hash_map<WindowId, ServerWindow*> created_window_map_copy;
+  std::unordered_map<WindowId, ServerWindow*, WindowIdHash>
+      created_window_map_copy;
   created_window_map_.swap(created_window_map_copy);
   // A sibling can be a transient parent of another window so we detach windows
   // from their transient parents to avoid double deletes.
@@ -1345,19 +1351,21 @@ void WindowTree::SetWindowOpacity(uint32_t change_id,
       change_id, SetWindowOpacity(ClientWindowId(window_id), opacity));
 }
 
-void WindowTree::AttachSurface(Id transport_window_id,
-                               mojom::SurfaceType type,
-                               mojo::InterfaceRequest<mojom::Surface> surface,
-                               mojom::SurfaceClientPtr client) {
+void WindowTree::AttachCompositorFrameSink(
+    Id transport_window_id,
+    mojom::CompositorFrameSinkType type,
+    mojo::InterfaceRequest<cc::mojom::MojoCompositorFrameSink> surface,
+    cc::mojom::MojoCompositorFrameSinkClientPtr client) {
   ServerWindow* window =
       GetWindowByClientId(ClientWindowId(transport_window_id));
   const bool success =
-      window && access_policy_->CanSetWindowSurface(window, type);
+      window && access_policy_->CanSetWindowCompositorFrameSink(window, type);
   if (!success) {
-    DVLOG(1) << "request to AttachSurface failed";
+    DVLOG(1) << "request to AttachCompositorFrameSink failed";
     return;
   }
-  window->CreateSurface(type, std::move(surface), std::move(client));
+  window->CreateCompositorFrameSink(type, std::move(surface),
+                                    std::move(client));
 }
 
 void WindowTree::OnWindowSurfaceDetached(Id transport_window_id,

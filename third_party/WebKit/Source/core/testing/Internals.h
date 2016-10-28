@@ -333,9 +333,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
   String dumpRefCountedInstanceCounts() const;
   LocalDOMWindow* openDummyInspectorFrontend(const String& url);
   void closeDummyInspectorFrontend();
-  Vector<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes,
-                                                 unsigned long maxDeadBytes,
-                                                 unsigned long totalBytes);
 
   String counterValue(Element*);
 
@@ -372,7 +369,6 @@ class Internals final : public GarbageCollectedFinalized<Internals>,
 
   void mediaPlayerRemoteRouteAvailabilityChanged(HTMLMediaElement*, bool);
   void mediaPlayerPlayingRemotelyChanged(HTMLMediaElement*, bool);
-  void setAllowHiddenVolumeControls(HTMLMediaElement*, bool);
 
   void registerURLSchemeAsBypassingContentSecurityPolicy(const String& scheme);
   void registerURLSchemeAsBypassingContentSecurityPolicy(

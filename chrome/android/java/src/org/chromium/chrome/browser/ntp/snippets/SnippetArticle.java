@@ -5,15 +5,12 @@ package org.chromium.chrome.browser.ntp.snippets;
 
 import android.graphics.Bitmap;
 
-import org.chromium.chrome.browser.ntp.cards.ItemViewType;
-import org.chromium.chrome.browser.ntp.cards.Leaf;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.ContentSuggestionsCardLayout.ContentSuggestionsCardLayoutEnum;
 
 /**
  * Represents the data for an article card on the NTP.
  */
-public class SnippetArticle extends Leaf {
+public class SnippetArticle {
     /** The category of this article. */
     public final int mCategory;
 
@@ -57,6 +54,15 @@ public class SnippetArticle extends Leaf {
     /** Stores whether impression of this article has been tracked already. */
     private boolean mImpressionTracked;
 
+    /** Whether the linked article (normal URL) is available offline. */
+    private boolean mAvailableOffline;
+
+    /** Whether the linked AMP article is available offline. */
+    private boolean mAmpAvailableOffline;
+
+    /** To be run when the offline status of the article or AMP article changes. */
+    private Runnable mOfflineStatusChangeRunnable;
+
     /**
      * Creates a SnippetArticleListItem object that will hold the data.
      */
@@ -88,25 +94,6 @@ public class SnippetArticle extends Leaf {
         return mCategory ^ mIdWithinCategory.hashCode();
     }
 
-    @Override
-    @ItemViewType
-    public int getItemViewType() {
-        return ItemViewType.SNIPPET;
-    }
-
-    @Override
-    protected void onBindViewHolder(NewTabPageViewHolder holder) {
-        assert holder instanceof SnippetArticleViewHolder;
-        ((SnippetArticleViewHolder) holder).onBindViewHolder(this);
-    }
-
-    @Override
-    public SnippetArticle getSuggestionAt(int position) {
-        if (position != 0) throw new IndexOutOfBoundsException();
-
-        return this;
-    }
-
     /**
      * Returns this article's thumbnail as a {@link Bitmap}. Can return {@code null} as it is
      * initially unset.
@@ -126,6 +113,44 @@ public class SnippetArticle extends Leaf {
         if (mImpressionTracked) return false;
         mImpressionTracked = true;
         return true;
+    }
+
+    /** Sets whether the non-AMP URL is available offline. */
+    public void setAvailableOffline(boolean available) {
+        boolean previous = mAvailableOffline;
+        mAvailableOffline = available;
+
+        if (mOfflineStatusChangeRunnable != null && available != previous) {
+            mOfflineStatusChangeRunnable.run();
+        }
+    }
+
+    /** Sets whether the AMP URL is available offline. */
+    public void setAmpAvailableOffline(boolean available) {
+        boolean previous = mAmpAvailableOffline;
+        mAmpAvailableOffline = available;
+
+        if (mOfflineStatusChangeRunnable != null && available != previous) {
+            mOfflineStatusChangeRunnable.run();
+        }
+    }
+
+    /** Whether the non-AMP URL is available offline. */
+    public boolean isAvailableOffline() {
+        return mAvailableOffline;
+    }
+
+    /** Whether the AMP URL is available offline. */
+    public boolean isAmpAvailableOffline() {
+        return mAmpAvailableOffline;
+    }
+
+    /**
+     * Sets the {@link Runnable} to be run when the article's offline status changes.
+     * Pass null to wipe.
+     */
+    public void setOfflineStatusChangeRunnable(Runnable runnable) {
+        mOfflineStatusChangeRunnable = runnable;
     }
 
     @Override

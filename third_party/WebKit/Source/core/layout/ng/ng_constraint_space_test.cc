@@ -4,7 +4,9 @@
 
 #include "core/layout/ng/ng_constraint_space.h"
 
+#include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_layout_opportunity_iterator.h"
+#include "core/layout/ng/ng_physical_constraint_space.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -12,15 +14,17 @@ namespace blink {
 namespace {
 
 TEST(NGConstraintSpaceTest, WritingMode) {
+  NGPhysicalConstraintSpace* phy_space = new NGPhysicalConstraintSpace(
+      NGPhysicalSize(LayoutUnit(200), LayoutUnit(100)), /* fixed_width */ true,
+      /* fixed_height */ false, /* width_direction_triggers_scrollbar */ true,
+      /* height_direction_triggers_scrollbar */ false, FragmentNone,
+      FragmentColumn, /* is_new_fc */ false);
+
   NGConstraintSpace* horz_space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(200), LayoutUnit(100)));
-  horz_space->SetOverflowTriggersScrollbar(true, false);
-  horz_space->SetFixedSize(true, false);
-  horz_space->SetFragmentationType(FragmentColumn);
+      new NGConstraintSpace(HorizontalTopBottom, LeftToRight, phy_space);
 
   NGConstraintSpace* vert_space =
-      new NGConstraintSpace(VerticalRightLeft, LeftToRight, horz_space);
+      new NGConstraintSpace(VerticalRightLeft, LeftToRight, phy_space);
 
   EXPECT_EQ(LayoutUnit(200), horz_space->ContainerSize().inline_size);
   EXPECT_EQ(LayoutUnit(200), vert_space->ContainerSize().block_size);
@@ -44,8 +48,8 @@ TEST(NGConstraintSpaceTest, WritingMode) {
   EXPECT_EQ(FragmentNone, vert_space->BlockFragmentationType());
 }
 
-static String OpportunityToString(const NGConstraintSpace* opportunity) {
-  return opportunity ? opportunity->ToString() : String("(null)");
+static String OpportunityToString(const NGLayoutOpportunity& opportunity) {
+  return opportunity.IsEmpty() ? String("(empty)") : opportunity.ToString();
 }
 
 TEST(NGConstraintSpaceTest, LayoutOpportunitiesNoExclusions) {
@@ -56,11 +60,10 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesNoExclusions) {
   auto* space =
       new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
 
-  bool for_inline_or_bfc = true;
-  auto* iterator = space->LayoutOpportunities(NGClearNone, for_inline_or_bfc);
+  auto* iterator = space->LayoutOpportunities();
 
   EXPECT_EQ("0,0 600x400", OpportunityToString(iterator->Next()));
-  EXPECT_EQ("(null)", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
 }
 
 TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopRightExclusion) {
@@ -75,8 +78,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopRightExclusion) {
 
   auto* space =
       new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
-  bool for_inline_or_bfc = true;
-  auto* iterator = space->LayoutOpportunities(NGClearNone, for_inline_or_bfc);
+  auto* iterator = space->LayoutOpportunities();
 
   // First opportunity should be to the left of the exclusion.
   EXPECT_EQ("0,0 500x400", OpportunityToString(iterator->Next()));
@@ -85,7 +87,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopRightExclusion) {
   EXPECT_EQ("0,100 600x300", OpportunityToString(iterator->Next()));
 
   // There should be no third opportunity.
-  EXPECT_EQ("(null)", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
 }
 
 TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopLeftExclusion) {
@@ -100,8 +102,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopLeftExclusion) {
 
   auto* space =
       new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
-  bool for_inline_or_bfc = true;
-  auto* iterator = space->LayoutOpportunities(NGClearNone, for_inline_or_bfc);
+  auto* iterator = space->LayoutOpportunities();
 
   // First opportunity should be to the right of the exclusion.
   EXPECT_EQ("100,0 500x400", OpportunityToString(iterator->Next()));
@@ -110,7 +111,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopLeftExclusion) {
   EXPECT_EQ("0,100 600x300", OpportunityToString(iterator->Next()));
 
   // There should be no third opportunity.
-  EXPECT_EQ("(null)", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
 }
 
 // Verifies that Layout Opportunity iterator produces 7 layout opportunities
@@ -119,16 +120,16 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTopLeftExclusion) {
 //
 // Test case visual representation:
 //
-//         100  200  300  400  500
-//     (1)--|----|----|-(2)|----|-(3)+
-//  50 |                             |
-// 100 |                             |
-// 150 |                             |
-// 200 |       **********            |
-// 250 |       **********            |
-// 300 (4)                           |
-// 350 |                        ***  |
-//     +-----------------------------+
+//         100  200   300  400  500
+//     (1)--|----|-(2)-|----|----|-(3)-+
+//  50 |                               |
+// 100 |                               |
+// 150 |                               |
+// 200 |       ******                  |
+// 250 |       ******                  |
+// 300 (4)                             |
+// 350 |                         ***   |
+//     +-------------------------------+
 //
 // Expected:
 //   Layout opportunity iterator generates the next opportunities:
@@ -150,8 +151,7 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddle) {
 
   auto* space =
       new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
-  bool for_inline_or_bfc = true;
-  auto* iterator = space->LayoutOpportunities(NGClearNone, for_inline_or_bfc);
+  auto* iterator = space->LayoutOpportunities();
 
   // 1st Start point
   EXPECT_EQ("0,0 600x200", OpportunityToString(iterator->Next()));
@@ -169,7 +169,55 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddle) {
   EXPECT_EQ("0,300 500x100", OpportunityToString(iterator->Next()));
 
   // Iterator is exhausted.
-  EXPECT_EQ("(null)", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
+}
+
+// This test is the same as LayoutOpportunitiesTwoInMiddle with the only
+// difference that NGLayoutOpportunityIterator takes the additional argument
+// origin_point that changes the iterator to return Layout Opportunities that
+// lay after the origin point.
+//
+// Expected:
+//   Layout opportunity iterator generates the next opportunities:
+//   - 1st Start Point (0, 200): 150x200
+//   - 2nd Start Point (250, 200): 350x150, 250x200
+//   - 3rd Start Point (550, 200): 50x200
+//   - 4th Start Point (0, 300): 600x50, 500x100
+//   All other opportunities that are located before the origin point should be
+//   filtered out.
+TEST(NGConstraintSpaceTest, LayoutOpportunitiesTwoInMiddleWithOrigin) {
+  NGPhysicalSize physical_size;
+  physical_size.width = LayoutUnit(600);
+  physical_size.height = LayoutUnit(400);
+  auto* physical_space = new NGPhysicalConstraintSpace(physical_size);
+
+  // Add exclusions
+  physical_space->AddExclusion(new NGExclusion(
+      LayoutUnit(200), LayoutUnit(250), LayoutUnit(300), LayoutUnit(150)));
+  physical_space->AddExclusion(new NGExclusion(
+      LayoutUnit(350), LayoutUnit(550), LayoutUnit(400), LayoutUnit(500)));
+
+  auto* space =
+      new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
+  const NGLogicalOffset origin_point = {LayoutUnit(0), LayoutUnit(200)};
+  auto* iterator = new NGLayoutOpportunityIterator(space, origin_point);
+
+  // 1st Start Point
+  EXPECT_EQ("0,200 150x200", OpportunityToString(iterator->Next()));
+
+  // 2nd Start Point
+  EXPECT_EQ("250,200 350x150", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("250,200 250x200", OpportunityToString(iterator->Next()));
+
+  // 3rd Start Point
+  EXPECT_EQ("550,200 50x200", OpportunityToString(iterator->Next()));
+
+  // 4th Start Point
+  EXPECT_EQ("0,300 600x50", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("0,300 500x100", OpportunityToString(iterator->Next()));
+
+  // Iterator is exhausted.
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
 }
 
 // Verifies that Layout Opportunity iterator ignores the exclusion that is not
@@ -198,11 +246,10 @@ TEST(NGConstraintSpaceTest, LayoutOpportunitiesWithOutOfBoundsExclusions) {
   auto* space =
       new NGConstraintSpace(HorizontalTopBottom, LeftToRight, physical_space);
 
-  bool for_inline_or_bfc = true;
-  auto* iterator = space->LayoutOpportunities(NGClearNone, for_inline_or_bfc);
+  auto* iterator = space->LayoutOpportunities();
 
   EXPECT_EQ("0,0 600x100", OpportunityToString(iterator->Next()));
-  EXPECT_EQ("(null)", OpportunityToString(iterator->Next()));
+  EXPECT_EQ("(empty)", OpportunityToString(iterator->Next()));
 }
 
 }  // namespace

@@ -67,8 +67,6 @@ class CONTENT_EXPORT CompositorImpl
 
   static bool IsInitialized();
 
-  void PopulateGpuCapabilities(gpu::Capabilities gpu_capabilities);
-
   void AddObserver(VSyncObserver* observer);
   void RemoveObserver(VSyncObserver* observer);
   void OnNeedsBeginFramesChange(bool needs_begin_frames);
@@ -110,8 +108,8 @@ class CONTENT_EXPORT CompositorImpl
   void DidCompletePageScaleAnimation() override {}
 
   // LayerTreeHostSingleThreadClient implementation.
-  void DidPostSwapBuffers() override;
-  void DidAbortSwapBuffers() override;
+  void DidSubmitCompositorFrame() override;
+  void DidLoseCompositorFrameSink() override;
 
   // WindowAndroidCompositor implementation.
   void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;

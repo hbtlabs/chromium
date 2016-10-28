@@ -156,7 +156,7 @@ class SpdyNetworkTransactionTest : public ::testing::Test {
       const HttpResponseInfo* response = trans_->GetResponseInfo();
       ASSERT_TRUE(response);
       ASSERT_TRUE(response->headers);
-      EXPECT_EQ(HttpResponseInfo::ConnectionInfoFromNextProto(kProtoHTTP2),
+      EXPECT_EQ(HttpResponseInfo::CONNECTION_INFO_HTTP2,
                 response->connection_info);
       EXPECT_EQ("HTTP/1.1 200", response->headers->GetStatusLine());
       EXPECT_TRUE(response->was_fetched_via_spdy);
@@ -604,6 +604,9 @@ TEST_F(SpdyNetworkTransactionTest, GetAtEachPriority) {
         break;
       case IDLE:
         EXPECT_EQ(4, spdy_prio);
+        break;
+      case THROTTLED:
+        EXPECT_EQ(5, spdy_prio);
         break;
       default:
         FAIL();
@@ -6327,6 +6330,50 @@ TEST_F(SpdyNetworkTransactionTest, CRLFInHeaderValue) {
   TransactionHelperResult out = helper.output();
 
   EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
+}
+
+// Regression test for https://crbug.com/603182.
+// No response headers received before RST_STREAM: error.
+TEST_F(SpdyNetworkTransactionTest, RstStreamNoError) {
+  SpdySerializedFrame req(spdy_util_.ConstructChunkedSpdyPost(nullptr, 0));
+  MockWrite writes[] = {CreateMockWrite(req, 0, ASYNC)};
+
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_NO_ERROR));
+  MockRead reads[] = {CreateMockRead(rst, 1), MockRead(ASYNC, 0, 2)};
+
+  SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
+  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
+                                     DEFAULT_PRIORITY, NetLogWithSource(),
+                                     nullptr);
+  helper.RunToCompletion(&data);
+  TransactionHelperResult out = helper.output();
+  EXPECT_THAT(out.rv, IsError(ERR_SPDY_PROTOCOL_ERROR));
+}
+
+// Regression test for https://crbug.com/603182.
+// Response headers and data, then RST_STREAM received,
+// before request body is sent: success.
+TEST_F(SpdyNetworkTransactionTest, RstStreamNoErrorAfterResponse) {
+  SpdySerializedFrame req(spdy_util_.ConstructChunkedSpdyPost(nullptr, 0));
+  MockWrite writes[] = {CreateMockWrite(req, 0, ASYNC)};
+
+  SpdySerializedFrame resp(spdy_util_.ConstructSpdyPostReply(nullptr, 0));
+  SpdySerializedFrame body(spdy_util_.ConstructSpdyDataFrame(1, true));
+  SpdySerializedFrame rst(
+      spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_NO_ERROR));
+  MockRead reads[] = {CreateMockRead(resp, 1), CreateMockRead(body, 2),
+                      CreateMockRead(rst, 3), MockRead(ASYNC, 0, 4)};
+
+  SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
+  NormalSpdyTransactionHelper helper(CreateChunkedPostRequest(),
+                                     DEFAULT_PRIORITY, NetLogWithSource(),
+                                     nullptr);
+  helper.RunToCompletion(&data);
+  TransactionHelperResult out = helper.output();
+  EXPECT_THAT(out.rv, IsOk());
+  EXPECT_EQ("HTTP/1.1 200", out.status_line);
+  EXPECT_EQ("hello!", out.response_data);
 }
 
 class SpdyNetworkTransactionTLSUsageCheckTest

@@ -47,6 +47,16 @@ public class ContextualSearchBarControl
     private final ContextualSearchCaptionControl mCaptionControl;
 
     /**
+     * The {@link ContextualSearchQuickActionControl} used to control quick action behavior.
+     */
+    private final ContextualSearchQuickActionControl mQuickActionControl;
+
+    /**
+     * The {@link ContextualSearchImageControl} for the panel.
+     */
+    private ContextualSearchImageControl mImageControl;
+
+    /**
      * The opacity of the Bar's Search Context.
      */
     private float mSearchBarContextOpacity = 1.f;
@@ -73,14 +83,23 @@ public class ContextualSearchBarControl
                                       ViewGroup container,
                                       DynamicResourceLoader loader) {
         mOverlayPanel = panel;
+        mImageControl = new ContextualSearchImageControl(panel, context);
         mContextControl = new ContextualSearchContextControl(panel, context, container, loader);
         mSearchTermControl = new ContextualSearchTermControl(panel, context, container, loader);
         mCaptionControl = new ContextualSearchCaptionControl(panel, context, container, loader);
+        mQuickActionControl = new ContextualSearchQuickActionControl(context, loader);
 
         mTextLayerMinHeight = context.getResources().getDimension(
                 R.dimen.contextual_search_text_layer_min_height);
         mTermCaptionSpacing = context.getResources().getDimension(
                 R.dimen.contextual_search_term_caption_spacing);
+    }
+
+    /**
+     * @return The {@link ContextualSearchImageControl} for the panel.
+     */
+    public ContextualSearchImageControl getImageControl() {
+        return mImageControl;
     }
 
     /**
@@ -115,6 +134,7 @@ public class ContextualSearchBarControl
     public void setSearchContext(String selection, String end) {
         cancelSearchTermResolutionAnimation();
         hideCaption();
+        mQuickActionControl.reset();
         mContextControl.setSearchContext(selection, end);
         resetSearchBarContextOpacity();
     }
@@ -126,6 +146,7 @@ public class ContextualSearchBarControl
     public void setSearchTerm(String searchTerm) {
         cancelSearchTermResolutionAnimation();
         hideCaption();
+        mQuickActionControl.reset();
         mSearchTermControl.setSearchTerm(searchTerm);
         resetSearchBarTermOpacity();
     }
@@ -188,6 +209,28 @@ public class ContextualSearchBarControl
      */
     public float getSearchBarTermOpacity() {
         return mSearchBarTermOpacity;
+    }
+
+    /**
+     * Sets the quick action if one is available.
+     * @param quickActionUri The URI for the intent associated with the quick action.
+     * @param quickActionCategory The {@link QuickActionCategory} for the quick action.
+     */
+    public void setQuickAction(String quickActionUri, int quickActionCategory) {
+        mQuickActionControl.setQuickAction(quickActionUri, quickActionCategory);
+        if (mQuickActionControl.hasQuickAction()) {
+            // TODO(twellington): should the quick action caption be stored separately from the
+            // regular caption?
+            mCaptionControl.setCaption(mQuickActionControl.getCaption());
+            mImageControl.setQuickActionIconResourceId(mQuickActionControl.getIconResId());
+        }
+    }
+
+    /**
+     * @return The {@link ContextualSearchQuickActionControl} for the panel.
+     */
+    public ContextualSearchQuickActionControl getQuickActionControl() {
+        return mQuickActionControl;
     }
 
     /**

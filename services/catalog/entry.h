@@ -34,27 +34,24 @@ class Entry {
   // services().
   static std::unique_ptr<Entry> Deserialize(const base::DictionaryValue& value);
 
-  bool ProvidesClass(const std::string& clazz) const;
+  bool ProvidesCapability(const std::string& capability) const;
 
   bool operator==(const Entry& other) const;
-  bool operator<(const Entry& other) const;
 
   const std::string& name() const { return name_; }
   void set_name(const std::string& name) { name_ = name; }
   const base::FilePath& path() const { return path_; }
   void set_path(const base::FilePath& path) { path_ = path; }
-  const std::string& qualifier() const { return qualifier_; }
-  void set_qualifier(const std::string& qualifier) { qualifier_ = qualifier; }
   const std::string& display_name() const { return display_name_; }
   void set_display_name(const std::string& display_name) {
     display_name_ = display_name;
   }
-  const service_manager::InterfaceProviderSpec& connection_spec() const {
-    return connection_spec_;
-  }
-  void set_connection_spec(
-      const service_manager::InterfaceProviderSpec& connection_spec) {
-    connection_spec_ = connection_spec;
+  void AddInterfaceProviderSpec(
+      const std::string& name,
+      const service_manager::InterfaceProviderSpec& spec);
+  const service_manager::InterfaceProviderSpecMap&
+      interface_provider_specs() const {
+    return interface_provider_specs_;
   }
   const Entry* package() const { return package_; }
   void set_package(Entry* package) { package_ = package; }
@@ -66,9 +63,8 @@ class Entry {
  private:
   std::string name_;
   base::FilePath path_;
-  std::string qualifier_;
   std::string display_name_;
-  service_manager::InterfaceProviderSpec connection_spec_;
+  service_manager::InterfaceProviderSpecMap interface_provider_specs_;
   Entry* package_ = nullptr;
   std::vector<std::unique_ptr<Entry>> children_;
 };

@@ -6,6 +6,7 @@
 #define WebGL2RenderingContextBase_h
 
 #include "bindings/core/v8/ScriptPromise.h"
+#include "bindings/core/v8/TraceWrapperMember.h"
 #include "modules/webgl/WebGLExtension.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 #include <memory>
@@ -642,7 +643,7 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   GLboolean isQuery(WebGLQuery*);
   void beginQuery(GLenum, WebGLQuery*);
   void endQuery(GLenum);
-  WebGLQuery* getQuery(GLenum, GLenum);
+  ScriptValue getQuery(ScriptState*, GLenum, GLenum);
   ScriptValue getQueryParameter(ScriptState*, WebGLQuery*, GLenum);
 
   /* Sampler Objects */
@@ -658,7 +659,7 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   WebGLSync* fenceSync(GLenum, GLbitfield);
   GLboolean isSync(WebGLSync*);
   void deleteSync(WebGLSync*);
-  GLenum clientWaitSync(WebGLSync*, GLbitfield, GLint64);
+  GLenum clientWaitSync(WebGLSync*, GLbitfield, GLuint64);
   void waitSync(WebGLSync*, GLbitfield, GLint64);
 
   ScriptValue getSyncParameter(ScriptState*, WebGLSync*, GLenum);
@@ -742,6 +743,9 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
       HTMLCanvasElement*,
       std::unique_ptr<WebGraphicsContext3DProvider>,
       const CanvasContextCreationAttributes& requestedAttributes);
+
+  // DrawingBuffer::Client implementation.
+  void DrawingBufferClientRestorePixelUnpackBufferBinding() override;
 
   // Helper function to validate target and the attachment combination for
   // getFramebufferAttachmentParameters.  Generate GL error and return false if
@@ -881,6 +885,7 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   TraceWrapperMember<WebGLQuery> m_currentBooleanOcclusionQuery;
   TraceWrapperMember<WebGLQuery>
       m_currentTransformFeedbackPrimitivesWrittenQuery;
+  TraceWrapperMember<WebGLQuery> m_currentElapsedQuery;
   HeapVector<TraceWrapperMember<WebGLSampler>> m_samplerUnits;
 
   GLint m_packRowLength;

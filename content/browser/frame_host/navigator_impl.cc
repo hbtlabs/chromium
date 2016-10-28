@@ -207,7 +207,7 @@ void NavigatorImpl::DidStartProvisionalLoad(
   render_frame_host->SetNavigationHandle(NavigationHandleImpl::Create(
       validated_url, render_frame_host->frame_tree_node(),
       is_renderer_initiated,
-      false,             // is_synchronous
+      false,             // is_same_page
       is_iframe_srcdoc,  // is_srcdoc
       navigation_start, pending_nav_entry_id, started_from_context_menu));
 }
@@ -300,6 +300,16 @@ bool NavigatorImpl::NavigateToEntry(
     // the wrong page.
     dest_url = entry.GetOriginalRequestURL();
     dest_referrer = Referrer();
+  }
+
+  // Don't attempt to navigate if the virtual URL is non-empty and invalid.
+  if (frame_tree_node->IsMainFrame()) {
+    const GURL& virtual_url = entry.GetVirtualURL();
+    if (!virtual_url.is_valid() && !virtual_url.is_empty()) {
+      LOG(WARNING) << "Refusing to load for invalid virtual URL: "
+                   << virtual_url.possibly_invalid_spec();
+      return false;
+    }
   }
 
   // Don't attempt to navigate to non-empty invalid URLs.

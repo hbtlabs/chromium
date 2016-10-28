@@ -7,8 +7,10 @@
 #include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/test/material_design_controller_test_api.h"
+#include "ash/common/test/test_new_window_client.h"
 #include "ash/common/test/test_session_state_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
+#include "ash/common/test/wm_shell_test_api.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
@@ -18,6 +20,7 @@
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_shell_delegate.h"
+#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "ui/aura/env.h"
 #include "ui/aura/input_state_lookup.h"
@@ -32,6 +35,7 @@
 #include "ui/message_center/message_center.h"
 #include "ui/wm/core/capture_controller.h"
 #include "ui/wm/core/cursor_manager.h"
+#include "ui/wm/core/wm_state.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/system/chromeos/screen_layout_observer.h"
@@ -71,6 +75,7 @@ AshTestHelper::~AshTestHelper() {}
 void AshTestHelper::SetUp(bool start_session,
                           MaterialDesignController::Mode material_mode) {
   display::ResetDisplayIdForTest();
+  wm_state_ = base::MakeUnique<::wm::WMState>();
   views_delegate_ = ash_test_environment_->CreateViewsDelegate();
 
   // Disable animations during tests.
@@ -151,6 +156,8 @@ void AshTestHelper::SetUp(bool start_session,
   test_screenshot_delegate_ = new TestScreenshotDelegate();
   shell->accelerator_controller_delegate()->SetScreenshotDelegate(
       std::unique_ptr<ScreenshotDelegate>(test_screenshot_delegate_));
+
+  WmShellTestApi().SetNewWindowClient(base::MakeUnique<TestNewWindowClient>());
 }
 
 void AshTestHelper::TearDown() {

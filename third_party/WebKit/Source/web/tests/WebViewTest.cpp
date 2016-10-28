@@ -54,7 +54,6 @@
 #include "core/paint/PaintLayerPainter.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "core/timing/PerformanceCompositeTiming.h"
 #include "platform/KeyboardCodes.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/IntRect.h"
@@ -239,7 +238,7 @@ class WebViewTest : public ::testing::Test {
 
   void testTextInputType(WebTextInputType expectedType,
                          const std::string& htmlFile);
-  void testInputMode(const WebString& expectedInputMode,
+  void testInputMode(WebTextInputMode expectedInputMode,
                      const std::string& htmlFile);
   bool tapElement(WebInputEvent::Type, Element*);
   bool tapElementById(WebInputEvent::Type, const WebString& id);
@@ -794,7 +793,7 @@ TEST_F(WebViewTest, TextInputInfoUpdateStyleAndLayout) {
   EXPECT_EQ(WebTextInputTypeText, webViewImpl->textInputInfo().type);
 }
 
-void WebViewTest::testInputMode(const WebString& expectedInputMode,
+void WebViewTest::testInputMode(WebTextInputMode expectedInputMode,
                                 const std::string& htmlFile) {
   URLTestHelpers::registerMockedURLFromBaseURL(
       WebString::fromUTF8(m_baseURL.c_str()),
@@ -805,13 +804,40 @@ void WebViewTest::testInputMode(const WebString& expectedInputMode,
 }
 
 TEST_F(WebViewTest, InputMode) {
-  testInputMode(WebString(), "input_mode_default.html");
-  testInputMode(WebString("unknown"), "input_mode_default_unknown.html");
-  testInputMode(WebString("verbatim"), "input_mode_default_verbatim.html");
-  testInputMode(WebString("verbatim"), "input_mode_type_text_verbatim.html");
-  testInputMode(WebString("verbatim"), "input_mode_type_search_verbatim.html");
-  testInputMode(WebString(), "input_mode_type_url_verbatim.html");
-  testInputMode(WebString("verbatim"), "input_mode_textarea_verbatim.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeDefault,
+                "input_mode_default.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeDefault,
+                "input_mode_default_unknown.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeVerbatim,
+                "input_mode_default_verbatim.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeVerbatim,
+                "input_mode_type_text_verbatim.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeVerbatim,
+                "input_mode_type_search_verbatim.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeDefault,
+                "input_mode_type_url_verbatim.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeLatin,
+                "input_mode_type_latin.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeLatinName,
+                "input_mode_type_latin_name.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeLatinProse,
+                "input_mode_type_latin_prose.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeFullWidthLatin,
+                "input_mode_type_full_width_latin.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeKana,
+                "input_mode_type_kana.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeKanaName,
+                "input_mode_type_kana_name.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeKataKana,
+                "input_mode_type_kata_kana.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeNumeric,
+                "input_mode_type_numeric.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeTel,
+                "input_mode_type_tel.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeEmail,
+                "input_mode_type_email.html");
+  testInputMode(WebTextInputMode::kWebTextInputModeUrl,
+                "input_mode_type_url.html");
 }
 
 TEST_F(WebViewTest, TextInputInfoWithReplacedElements) {
@@ -2400,6 +2426,100 @@ TEST_F(WebViewTest, SelectionOnReadOnlyInput) {
   EXPECT_FALSE(range.isNull());
   EXPECT_EQ(0, range.startOffset());
   EXPECT_EQ(static_cast<int>(testWord.length()), range.length());
+}
+
+TEST_F(WebViewTest, KeyDownScrollsHandled) {
+  URLTestHelpers::registerMockedURLFromBaseURL(
+      WebString::fromUTF8(m_baseURL.c_str()),
+      WebString::fromUTF8("content-width-1000.html"));
+
+  WebViewImpl* webView = m_webViewHelper.initializeAndLoad(
+      m_baseURL + "content-width-1000.html", true);
+  webView->resize(WebSize(100, 100));
+  webView->updateAllLifecyclePhases();
+  runPendingTasks();
+
+  WebKeyboardEvent keyEvent;
+
+  // RawKeyDown pagedown should be handled.
+  keyEvent.windowsKeyCode = VKEY_NEXT;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::HandledSystem,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  // Coalesced KeyDown arrow-down should be handled.
+  keyEvent.windowsKeyCode = VKEY_DOWN;
+  keyEvent.type = WebInputEvent::KeyDown;
+  EXPECT_EQ(WebInputEventResult::HandledSystem,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  // Ctrl-Home should be handled...
+  keyEvent.windowsKeyCode = VKEY_HOME;
+  keyEvent.modifiers = WebInputEvent::ControlKey;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  // But Ctrl-Down should not.
+  keyEvent.windowsKeyCode = VKEY_DOWN;
+  keyEvent.modifiers = WebInputEvent::ControlKey;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  // Shift, meta, and alt should not be handled.
+  keyEvent.windowsKeyCode = VKEY_NEXT;
+  keyEvent.modifiers = WebInputEvent::ShiftKey;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  keyEvent.windowsKeyCode = VKEY_NEXT;
+  keyEvent.modifiers = WebInputEvent::MetaKey;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  keyEvent.windowsKeyCode = VKEY_NEXT;
+  keyEvent.modifiers = WebInputEvent::AltKey;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  // System-key labeled Alt-Down (as in Windows) should do nothing,
+  // but non-system-key labeled Alt-Down (as in Mac) should be handled
+  // as a page-down.
+  keyEvent.windowsKeyCode = VKEY_DOWN;
+  keyEvent.modifiers = WebInputEvent::AltKey;
+  keyEvent.isSystemKey = true;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::NotHandled,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
+
+  keyEvent.windowsKeyCode = VKEY_DOWN;
+  keyEvent.modifiers = WebInputEvent::AltKey;
+  keyEvent.isSystemKey = false;
+  keyEvent.type = WebInputEvent::RawKeyDown;
+  EXPECT_EQ(WebInputEventResult::HandledSystem,
+            webView->handleInputEvent(keyEvent));
+  keyEvent.type = WebInputEvent::KeyUp;
+  webView->handleInputEvent(keyEvent);
 }
 
 static void configueCompositingWebView(WebSettings* settings) {

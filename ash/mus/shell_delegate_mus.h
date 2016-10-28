@@ -24,7 +24,6 @@ class ShellDelegateMus : public ShellDelegate {
 
   // ShellDelegate:
   service_manager::Connector* GetShellConnector() const override;
-  bool IsFirstRunAfterBoot() const override;
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
@@ -41,7 +40,6 @@ class ShellDelegateMus : public ShellDelegate {
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
   SessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  NewWindowDelegate* CreateNewWindowDelegate() override;
   MediaDelegate* CreateMediaDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,

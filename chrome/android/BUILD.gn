@@ -149,6 +149,7 @@ android_library("chrome_java") {
     "//chrome/android/webapk/libs/runtime_library:webapk_service_aidl_java",
     "//components/autofill/android:autofill_java",
     "//components/minidump_uploader:minidump_uploader_java",
+    "//components/payments:payment_request_java",
     "//components/safe_json/android:safe_json_java",
     "//components/spellcheck/browser/android:java",
     "//components/variations/android:variations_java",
@@ -200,6 +201,7 @@ android_library("chrome_java") {
     "//chrome:content_settings_type_javagen",
     "//chrome:data_use_ui_message_enum_javagen",
     "//chrome:signin_metrics_enum_javagen",
+    "//chrome:quick_action_category_enum_javagen",
   ]
 
   # Manifest used for linting (determining unused resources).
@@ -308,9 +310,12 @@ junit_binary("chrome_junit_tests") {
     ":chrome_java_resources",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//chrome/android/webapk/libs/client:client_java",
     "//chrome/android/webapk/libs/common:common_java",
+    "//chrome/android/webapk/test:junit_test_support",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/invalidation/impl:java",
+    "//components/payments:payment_request_java",
     "//components/signin/core/browser/android:java",
     "//components/signin/core/browser/android:signin_java_test_support",
     "//components/sync:sync_java_test_support",
@@ -382,6 +387,7 @@ android_library("chrome_test_java") {
     "//components/location/android:location_java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/navigation_interception/android:navigation_interception_java",
+    "//components/payments:payment_request_java",
     "//components/policy/android:policy_java",
     "//components/precache/android:precache_java",
     "//components/precache/android:precache_javatests",

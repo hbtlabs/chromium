@@ -9,6 +9,7 @@ WebInspector.PersistenceBinding.prototype.toString = function()
         "{",
         "       network: " + this.network.url(),
         "    fileSystem: " + this.fileSystem.url(),
+        "    exactMatch: " + this.exactMatch,
         "}"
     ];
     return lines.join("\n");
@@ -68,7 +69,7 @@ InspectorTest.waitForUISourceCode = function(name, projectType)
 
 InspectorTest.addFooJSFile = function(fs)
 {
-    return fs.root.mkdir("inspector").mkdir("persistence").mkdir("resources").addFile("foo.js", "window.foo = ()=>'foo';");
+    return fs.root.mkdir("inspector").mkdir("persistence").mkdir("resources").addFile("foo.js", "\n\nwindow.foo = ()=>'foo';");
 }
 
 }

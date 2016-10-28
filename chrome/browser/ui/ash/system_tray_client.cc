@@ -16,14 +16,15 @@
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/options/network_config_view.h"
+#include "chrome/browser/chromeos/set_time_dialog.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
+#include "chrome/browser/chromeos/ui/choose_mobile_network_dialog.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/generated_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/login_state.h"
@@ -31,7 +32,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "net/base/escape.h"
 #include "services/service_manager/public/cpp/connector.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
 
 using chromeos::DBusThreadManager;
 using chromeos::LoginState;
@@ -97,6 +98,8 @@ ash::LoginStatus SystemTrayClient::GetUserLoginStatus() {
       return ash::LoginStatus::SUPERVISED;
     case LoginState::LOGGED_IN_USER_KIOSK_APP:
       return ash::LoginStatus::KIOSK_APP;
+    case LoginState::LOGGED_IN_USER_ARC_KIOSK_APP:
+      return ash::LoginStatus::ARC_KIOSK_APP;
   }
   NOTREACHED();
   return ash::LoginStatus::NOT_LOGGED_IN;
@@ -135,12 +138,13 @@ void SystemTrayClient::ShowSettings() {
 
 void SystemTrayClient::ShowDateSettings() {
   content::RecordAction(base::UserMetricsAction("ShowDateOptions"));
-  std::string sub_page =
-      std::string(chrome::kSearchSubPage) + "#" +
-      l10n_util::GetStringUTF8(IDS_OPTIONS_SETTINGS_SECTION_TITLE_DATETIME);
   // Everybody can change the time zone (even though it is a device setting).
   chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
-                                        sub_page);
+                                        chrome::kDateTimeSubPage);
+}
+
+void SystemTrayClient::ShowSetTimeDialog() {
+  chromeos::SetTimeDialog::ShowDialogInContainer(GetDialogParentContainerId());
 }
 
 void SystemTrayClient::ShowDisplaySettings() {
@@ -177,10 +181,7 @@ void SystemTrayClient::ShowAccessibilityHelp() {
 
 void SystemTrayClient::ShowAccessibilitySettings() {
   content::RecordAction(base::UserMetricsAction("ShowAccessibilitySettings"));
-  std::string sub_page = std::string(chrome::kSearchSubPage) + "#" +
-                         l10n_util::GetStringUTF8(
-                             IDS_OPTIONS_SETTINGS_SECTION_TITLE_ACCESSIBILITY);
-  ShowSettingsSubPageForActiveUser(sub_page);
+  ShowSettingsSubPageForActiveUser(chrome::kAccessibilitySubPage);
 }
 
 void SystemTrayClient::ShowPaletteHelp() {
@@ -212,6 +213,15 @@ void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
   // Dialog will default to the primary display.
   chromeos::NetworkConfigView::ShowInContainer(network_id,
                                                GetDialogParentContainerId());
+}
+
+void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
+  int container_id = GetDialogParentContainerId();
+  if (type == shill::kTypeCellular) {
+    chromeos::ChooseMobileNetworkDialog::ShowDialogInContainer(container_id);
+    return;
+  }
+  chromeos::NetworkConfigView::ShowForTypeInContainer(type, container_id);
 }
 
 void SystemTrayClient::ShowNetworkSettings(const std::string& network_id) {

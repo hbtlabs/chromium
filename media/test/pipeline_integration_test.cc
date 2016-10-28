@@ -38,8 +38,8 @@
 
 #if defined(MOJO_RENDERER)
 #include "media/mojo/clients/mojo_renderer.h"
+#include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
-#include "media/mojo/interfaces/service_factory.mojom.h"
 #include "services/service_manager/public/cpp/connect.h"
 #include "services/service_manager/public/cpp/service_test.h"
 
@@ -110,9 +110,7 @@ const char kMP4VideoHEVC2[] = "video/mp4; codecs=\"hev1.1.6.L93.B0\"";
 const char kMP4Video[] = "video/mp4; codecs=\"avc1.4D4041\"";
 const char kMP4Audio[] = "audio/mp4; codecs=\"mp4a.40.2\"";
 const char kMP3[] = "audio/mpeg";
-#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 const char kMP2AudioSBR[] = "video/mp2t; codecs=\"avc1.4D4041,mp4a.40.5\"";
-#endif
 #endif  // defined(USE_PROPRIETARY_CODECS)
 
 // Key used to encrypt test files.
@@ -173,6 +171,7 @@ static base::Time kLiveTimelineOffset() {
   exploded_time.year = 2012;
   exploded_time.month = 11;
   exploded_time.day_of_month = 10;
+  exploded_time.day_of_week = 6;
   exploded_time.hour = 12;
   exploded_time.minute = 34;
   exploded_time.second = 56;
@@ -292,7 +291,7 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
   void OnResolve(PromiseResult expected) { EXPECT_EQ(expected, RESOLVED); }
 
   void OnReject(PromiseResult expected,
-                media::MediaKeys::Exception exception_code,
+                media::CdmPromise::Exception exception_code,
                 uint32_t system_code,
                 const std::string& error_message) {
     EXPECT_EQ(expected, REJECTED) << error_message;
@@ -669,6 +668,27 @@ class MockMediaSource {
   base::TimeDelta last_timestamp_offset_;
 };
 
+// A rough simulation of GpuVideoDecoder that fails every Decode() request. This
+// is used to test post-Initialize() fallback paths.
+class FailingVideoDecoder : public VideoDecoder {
+ public:
+  std::string GetDisplayName() const override { return "FailingVideoDecoder"; }
+  void Initialize(const VideoDecoderConfig& config,
+                  bool low_delay,
+                  CdmContext* cdm_context,
+                  const InitCB& init_cb,
+                  const OutputCB& output_cb) override {
+    init_cb.Run(true);
+  }
+  void Decode(const scoped_refptr<DecoderBuffer>& buffer,
+              const DecodeCB& decode_cb) override {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(decode_cb, DecodeStatus::DECODE_ERROR));
+  }
+  void Reset(const base::Closure& closure) override { closure.Run(); }
+  bool NeedsBitstreamConversion() const override { return true; }
+};
+
 // TODO(xhwang): These tests have been disabled for some time as apptests and no
 //               longer pass. They need to be reconstituted as shell tests.
 //               Currently there are compile issues which must be resolved,
@@ -688,19 +708,21 @@ class PipelineIntegrationTestHost : public service_manager::test::ServiceTest,
   }
 
  protected:
-  std::unique_ptr<Renderer> CreateRenderer() override {
-    connector()->ConnectToInterface("service:media", &media_service_factory_);
+  std::unique_ptr<Renderer> CreateRenderer(
+      ScopedVector<VideoDecoder> prepend_video_decoders,
+      ScopedVector<AudioDecoder> prepend_audio_decoders) override {
+    connector()->ConnectToInterface("service:media", &media_interface_factory_);
 
     mojom::RendererPtr mojo_renderer;
-    media_service_factory_->CreateRenderer(std::string(),
-                                           mojo::GetProxy(&mojo_renderer));
+    media_interface_factory_->CreateRenderer(std::string(),
+                                             mojo::GetProxy(&mojo_renderer));
 
     return base::MakeUnique<MojoRenderer>(message_loop_.task_runner(),
                                           std::move(mojo_renderer));
   }
 
  private:
-  mojom::ServiceFactoryPtr media_service_factory_;
+  mojom::InterfaceFactoryPtr media_interface_factory_;
 };
 #else
 class PipelineIntegrationTestHost : public testing::Test,
@@ -1533,6 +1555,18 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHi10P) {
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
+TEST_F(PipelineIntegrationTest, BasicFallback) {
+  ScopedVector<VideoDecoder> failing_video_decoder;
+  failing_video_decoder.push_back(new FailingVideoDecoder());
+
+  ASSERT_EQ(PIPELINE_OK,
+            Start("bear.mp4", kClockless, std::move(failing_video_decoder)));
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+};
+
 TEST_F(PipelineIntegrationTest, MediaSource_ADTS) {
   MockMediaSource source("sfx.adts", kADTS, kAppendWholeFile);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
@@ -1981,21 +2015,25 @@ TEST_F(PipelineIntegrationTest,
   Stop();
 }
 
-#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 TEST_F(PipelineIntegrationTest, Mp2ts_AAC_HE_SBR_Audio) {
   MockMediaSource source("bear-1280x720-aac_he.ts", kMP2AudioSBR,
                          kAppendWholeFile);
+#if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
-
   source.EndOfStream();
   ASSERT_EQ(PIPELINE_OK, pipeline_status_);
 
-  // When SBR is not taken into account correctly by mpeg2ts parser, it will
-  // estimate audio frame durations incorrectly and that will lead to gaps in
-  // buffered ranges (so this check will fail) and stalled playback.
+  // Check that SBR is taken into account correctly by mpeg2ts parser. When an
+  // SBR stream is parsed as non-SBR stream, then audio frame durations are
+  // calculated incorrectly and that leads to gaps in buffered ranges (so this
+  // check will fail) and eventually leads to stalled playback.
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
-}
+#else
+  EXPECT_EQ(
+      DEMUXER_ERROR_COULD_NOT_OPEN,
+      StartPipelineWithMediaSource(&source, kExpectDemuxerFailure, nullptr));
 #endif
+}
 
 TEST_F(PipelineIntegrationTest,
        MAYBE_EME(EncryptedPlayback_NoEncryptedFrames_MP4_CENC_AudioOnly)) {

@@ -100,6 +100,7 @@
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
+#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/IconURL.h"
 #include "core/dom/MessagePort.h"
 #include "core/dom/Node.h"
@@ -178,6 +179,7 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/InterfaceProvider.h"
+#include "public/platform/InterfaceRegistry.h"
 #include "public/platform/WebDoubleSize.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
@@ -189,6 +191,7 @@
 #include "public/platform/WebSuspendableTask.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebVector.h"
+#include "public/web/WebAssociatedURLLoaderOptions.h"
 #include "public/web/WebAutofillClient.h"
 #include "public/web/WebConsoleMessage.h"
 #include "public/web/WebDOMEvent.h"
@@ -211,13 +214,13 @@
 #include "public/web/WebSerializedScriptValue.h"
 #include "public/web/WebTreeScopeType.h"
 #include "skia/ext/platform_canvas.h"
-#include "web/AssociatedURLLoader.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/FindInPageCoordinates.h"
 #include "web/RemoteFrameOwner.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 #include "web/SuspendableScriptExecutor.h"
 #include "web/TextFinder.h"
+#include "web/WebAssociatedURLLoaderImpl.h"
 #include "web/WebDataSourceImpl.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebFrameWidgetImpl.h"
@@ -229,6 +232,7 @@
 #include "wtf/PtrUtil.h"
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 namespace blink {
 
@@ -955,9 +959,9 @@ void WebLocalFrameImpl::dispatchWillSendRequest(WebURLRequest& request) {
       request.toMutableResourceRequest());
 }
 
-WebURLLoader* WebLocalFrameImpl::createAssociatedURLLoader(
-    const WebURLLoaderOptions& options) {
-  return new AssociatedURLLoader(this, options);
+WebAssociatedURLLoader* WebLocalFrameImpl::createAssociatedURLLoader(
+    const WebAssociatedURLLoaderOptions& options) {
+  return new WebAssociatedURLLoaderImpl(this, options);
 }
 
 unsigned WebLocalFrameImpl::unloadListenerCount() const {
@@ -1613,11 +1617,19 @@ void WebLocalFrameImpl::initializeCoreFrame(FrameHost* host,
   // during init(). Note that this may dispatch JS events; the frame may be
   // detached after init() returns.
   frame()->init();
-  if (frame() &&
-      frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() &&
-      !parent() && !opener() &&
-      frame()->settings()->shouldReuseGlobalForUnownedMainFrame())
-    frame()->document()->getSecurityOrigin()->grantUniversalAccess();
+  if (frame()) {
+    if (frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument() &&
+        !parent() && !opener() &&
+        frame()->settings()->shouldReuseGlobalForUnownedMainFrame()) {
+      frame()->document()->getSecurityOrigin()->grantUniversalAccess();
+    }
+
+    // TODO(dominickn): This interface should be document-scoped rather than
+    // frame-scoped, as the resulting banner event is dispatched to
+    // frame()->document().
+    frame()->interfaceRegistry()->addInterface(WTF::bind(
+        &AppBannerController::bindMojoRequest, wrapWeakPersistent(frame())));
+  }
 }
 
 LocalFrame* WebLocalFrameImpl::createChildFrame(
@@ -1899,8 +1911,8 @@ void WebLocalFrameImpl::loadJavaScriptURL(const KURL& url) {
 
   String script = decodeURLEscapeSequences(
       url.getString().substring(strlen("javascript:")));
-  UserGestureIndicator gestureIndicator(
-      UserGestureToken::create(UserGestureToken::NewGesture));
+  UserGestureIndicator gestureIndicator(DocumentUserGestureToken::create(
+      frame()->document(), UserGestureToken::NewGesture));
   v8::HandleScope handleScope(toIsolate(frame()));
   v8::Local<v8::Value> result =
       frame()->script().executeScriptInMainWorldAndReturnValue(
@@ -2082,6 +2094,11 @@ void WebLocalFrameImpl::setCommittedFirstRealLoad() {
   ensureFrameLoaderHasCommitted(frame()->loader());
 }
 
+void WebLocalFrameImpl::setHasReceivedUserGesture() {
+  if (frame())
+    frame()->document()->setHasReceivedUserGesture();
+}
+
 void WebLocalFrameImpl::sendOrientationChangeEvent() {
   if (!frame())
     return;
@@ -2093,17 +2110,6 @@ void WebLocalFrameImpl::sendOrientationChangeEvent() {
   // Legacy window.orientation API
   if (RuntimeEnabledFeatures::orientationEventEnabled() && frame()->domWindow())
     frame()->localDOMWindow()->sendOrientationChangeEvent();
-}
-
-void WebLocalFrameImpl::willShowInstallBannerPrompt(
-    int requestId,
-    const WebVector<WebString>& platforms,
-    WebAppBannerPromptReply* reply) {
-  if (!frame())
-    return;
-
-  AppBannerController::willShowInstallBannerPrompt(
-      requestId, client()->appBannerClient(), frame(), platforms, reply);
 }
 
 void WebLocalFrameImpl::requestRunTask(WebSuspendableTask* task) const {

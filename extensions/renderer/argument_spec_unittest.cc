@@ -67,7 +67,7 @@ void ArgumentSpecUnitTest::RunTest(const ArgumentSpec& spec,
   v8::Local<v8::Context> context =
       v8::Local<v8::Context>::New(instance_->isolate(), context_);
   v8::TryCatch try_catch(isolate);
-  v8::Local<v8::Value> val = V8ValueFromScriptSource(isolate, script_source);
+  v8::Local<v8::Value> val = V8ValueFromScriptSource(context, script_source);
   ASSERT_FALSE(val.IsEmpty()) << script_source;
 
   std::string error;
@@ -120,6 +120,18 @@ TEST_F(ArgumentSpecUnitTest, Test) {
   {
     ArgumentSpec spec(
         *ValueFromString("{'type': 'string', 'enum': ['foo', 'bar']}"));
+    ExpectSuccess(spec, "'foo'", "'foo'");
+    ExpectSuccess(spec, "'bar'", "'bar'");
+    ExpectFailure(spec, "['foo']");
+    ExpectFailure(spec, "'fo'");
+    ExpectFailure(spec, "'foobar'");
+    ExpectFailure(spec, "'baz'");
+    ExpectFailure(spec, "''");
+  }
+
+  {
+    ArgumentSpec spec(*ValueFromString(
+        "{'type': 'string', 'enum': [{'name': 'foo'}, {'name': 'bar'}]}"));
     ExpectSuccess(spec, "'foo'", "'foo'");
     ExpectSuccess(spec, "'bar'", "'bar'");
     ExpectFailure(spec, "['foo']");
@@ -201,6 +213,15 @@ TEST_F(ArgumentSpecUnitTest, Test) {
         "    { get: () => { throw new Error('Badness'); } });\n"
         "x;",
         "Uncaught Error: Badness");
+  }
+
+  {
+    const char kFunctionSpec[] = "{ 'type': 'function' }";
+    // We don't allow conversion of functions (converting to a base::Value is
+    // impossible), but we should still be able to parse a function
+    // specification.
+    ArgumentSpec spec(*ValueFromString(kFunctionSpec));
+    EXPECT_EQ(ArgumentType::FUNCTION, spec.type());
   }
 }
 

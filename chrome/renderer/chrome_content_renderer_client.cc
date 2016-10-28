@@ -37,7 +37,6 @@
 #include "chrome/grit/locale_settings.h"
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/app_categorizer.h"
-#include "chrome/renderer/banners/app_banner_client.h"
 #include "chrome/renderer/benchmarking_extension.h"
 #include "chrome/renderer/chrome_render_frame_observer.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
@@ -118,6 +117,7 @@
 #include "ui/base/layout.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/webui/jstemplate_builder.h"
+#include "url/origin.h"
 
 #if !defined(DISABLE_NACL)
 #include "components/nacl/common/nacl_constants.h"
@@ -397,6 +397,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #if defined(OS_ANDROID)
   WebSecurityPolicy::registerURLSchemeAsAllowedForReferrer(
       WebString::fromUTF8(chrome::kAndroidAppScheme));
+  WebSecurityPolicy::registerURLSchemeAsLocal(
+      WebString::fromUTF8(url::kContentScheme));
 #endif
 
   // chrome-search: pages should not be accessible by bookmarklets
@@ -1347,13 +1349,6 @@ void ChromeContentRendererClient::RecordRapporURL(const std::string& metric,
   if (!rappor_recorder_)
     RenderThread::Get()->GetRemoteInterfaces()->GetInterface(&rappor_recorder_);
   rappor_recorder_->RecordRapporURL(metric, url);
-}
-
-std::unique_ptr<blink::WebAppBannerClient>
-ChromeContentRendererClient::CreateAppBannerClient(
-    content::RenderFrame* render_frame) {
-  return std::unique_ptr<blink::WebAppBannerClient>(
-      new AppBannerClient(render_frame));
 }
 
 void ChromeContentRendererClient::AddImageContextMenuProperties(

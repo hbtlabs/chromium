@@ -563,7 +563,7 @@ void LayoutTable::layout() {
   SubtreeLayoutScope layouter(*this);
 
   {
-    LayoutState state(*this, locationOffset());
+    LayoutState state(*this);
     LayoutUnit oldLogicalWidth = logicalWidth();
     LayoutUnit oldLogicalHeight = logicalHeight();
 
@@ -732,15 +732,16 @@ void LayoutTable::layout() {
 
     computeOverflow(clientLogicalBottom());
     updateAfterLayout();
+
+    if (state.pageLogicalHeight()) {
+      m_blockOffsetToFirstRepeatableHeader =
+          state.pageLogicalOffset(*this, LayoutUnit());
+    }
   }
 
   // FIXME: This value isn't the intrinsic content logical height, but we need
   // to update the value as its used by flexbox layout. crbug.com/367324
   setIntrinsicContentLogicalHeight(contentLogicalHeight());
-
-  if (view()->layoutState()->pageLogicalHeight())
-    setPageLogicalOffset(
-        view()->layoutState()->pageLogicalOffset(*this, logicalTop()));
 
   m_columnLogicalWidthChanged = false;
   clearNeedsLayout();
@@ -1057,7 +1058,6 @@ void LayoutTable::recalcSections() const {
   m_foot = nullptr;
   m_firstBody = nullptr;
   m_hasColElements = false;
-  m_noCellColspanAtLeast = calcNoCellColspanAtLeast();
 
   // We need to get valid pointers to caption, head, foot and first body again
   LayoutObject* nextSibling;
@@ -1116,6 +1116,7 @@ void LayoutTable::recalcSections() const {
 
   m_effectiveColumns.resize(maxCols);
   m_effectiveColumnPositions.resize(maxCols + 1);
+  m_noCellColspanAtLeast = calcNoCellColspanAtLeast();
 
   ASSERT(selfNeedsLayout());
 

@@ -92,8 +92,8 @@ TextTrack::TextTrack(const AtomicString& kind,
                      const AtomicString& id,
                      TextTrackType type)
     : TrackBase(WebMediaPlayer::TextTrack, kind, label, language, id),
-      m_cues(nullptr),
-      m_activeCues(this, nullptr),
+      m_cues(this, nullptr),
+      m_activeCues(nullptr),
       m_regions(nullptr),
       m_trackList(nullptr),
       m_mode(disabledKeyword()),
@@ -457,5 +457,6 @@ DEFINE_TRACE(TextTrack) {
 
 DEFINE_TRACE_WRAPPERS(TextTrack) {
   visitor->traceWrappers(m_cues);
+  EventTargetWithInlineData::traceWrappers(visitor);
 }
 }  // namespace blink

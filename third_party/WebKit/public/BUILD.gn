@@ -273,6 +273,7 @@ source_set("blink_headers") {
     "platform/WebScrollbarBehavior.h",
     "platform/WebScrollbarButtonsPlacement.h",
     "platform/WebScrollbarLayer.h",
+    "platform/WebScrollbarOverlayColorTheme.h",
     "platform/WebScrollbarThemeGeometry.h",
     "platform/WebScrollbarThemePainter.h",
     "platform/WebSecurityOrigin.h",
@@ -296,6 +297,7 @@ source_set("blink_headers") {
     "platform/WebSuspendableTask.h",
     "platform/WebTaskRunner.h",
     "platform/WebTextInputInfo.h",
+    "platform/WebTextInputMode.h",
     "platform/WebTextInputType.h",
     "platform/WebTextRun.h",
     "platform/WebThemeEngine.h",
@@ -319,9 +321,6 @@ source_set("blink_headers") {
     "platform/linux/WebFontRenderStyle.h",
     "platform/linux/WebSandboxSupport.h",
     "platform/mac/WebSandboxSupport.h",
-    "platform/modules/app_banner/WebAppBannerClient.h",
-    "platform/modules/app_banner/WebAppBannerPromptReply.h",
-    "platform/modules/app_banner/WebAppBannerPromptResult.h",
     "platform/modules/background_sync/WebSyncClient.h",
     "platform/modules/background_sync/WebSyncError.h",
     "platform/modules/background_sync/WebSyncProvider.h",
@@ -375,6 +374,7 @@ source_set("blink_headers") {
     "platform/modules/screen_orientation/WebScreenOrientationClient.h",
     "platform/modules/screen_orientation/WebScreenOrientationLockType.h",
     "platform/modules/screen_orientation/WebScreenOrientationType.h",
+    "platform/modules/serviceworker/WebNavigationPreloadState.h",
     "platform/modules/serviceworker/WebServiceWorker.h",
     "platform/modules/serviceworker/WebServiceWorkerCache.h",
     "platform/modules/serviceworker/WebServiceWorkerCacheError.h",
@@ -421,6 +421,7 @@ source_set("blink_headers") {
     "web/WebArrayBuffer.h",
     "web/WebArrayBufferConverter.h",
     "web/WebArrayBufferView.h",
+    "web/WebAssociatedURLLoaderOptions.h",
     "web/WebAutofillClient.h",
     "web/WebBlob.h",
     "web/WebCSSParser.h",
@@ -558,7 +559,6 @@ source_set("blink_headers") {
     "web/WebTextDirection.h",
     "web/WebTouchAction.h",
     "web/WebTreeScopeType.h",
-    "web/WebURLLoaderOptions.h",
     "web/WebUserGestureIndicator.h",
     "web/WebUserGestureToken.h",
     "web/WebUserMediaClient.h",
@@ -668,6 +668,7 @@ mojom("mojo_bindings") {
 
 mojom("new_wrapper_types_mojo_bindings") {
   sources = [
+    "platform/modules/app_banner/app_banner.mojom",
     "platform/modules/mediasession/media_session.mojom",
     "platform/modules/permissions/permission.mojom",
     "platform/modules/permissions/permission_status.mojom",
@@ -696,10 +697,10 @@ mojom("new_wrapper_types_mojo_bindings") {
 
 mojom("android_mojo_bindings") {
   sources = [
-    "platform/modules/payments/payment_request.mojom",
     "platform/modules/webshare/webshare.mojom",
   ]
   public_deps = [
+    "//components/payments:payment_request",
     "//url/mojo:url_mojom_gurl",
   ]
 

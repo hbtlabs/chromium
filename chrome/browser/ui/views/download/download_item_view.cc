@@ -575,8 +575,7 @@ void DownloadItemView::ButtonPressed(views::Button* sender,
   Profile* profile = shelf_->browser()->profile();
   if (!model_.IsMalicious() && model_.ShouldAllowDownloadFeedback() &&
       !profile->IsOffTheRecord()) {
-    if (!profile->GetPrefs()->HasPrefPath(
-            safe_browsing::GetExtendedReportingPrefName())) {
+    if (!safe_browsing::ExtendedReportingPrefExists(*profile->GetPrefs())) {
       // Show dialog, because the dialog hasn't been shown before.
       DownloadFeedbackDialogView::Show(
           shelf_->get_parent()->GetNativeWindow(), profile,
@@ -804,13 +803,12 @@ void DownloadItemView::UpdateColorsFromTheme() {
   SetBorder(base::MakeUnique<SeparatorBorder>(GetThemeProvider()->GetColor(
       ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR)));
 
-  SkColor text_color = GetTextColor();
   if (dangerous_download_label_)
-    dangerous_download_label_->SetEnabledColor(text_color);
+    dangerous_download_label_->SetEnabledColor(GetTextColor());
   if (save_button_)
-    save_button_->SetEnabledTextColors(text_color);
+    shelf_->ConfigureButtonForTheme(save_button_);
   if (discard_button_)
-    discard_button_->SetEnabledTextColors(text_color);
+    shelf_->ConfigureButtonForTheme(discard_button_);
 }
 
 void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,

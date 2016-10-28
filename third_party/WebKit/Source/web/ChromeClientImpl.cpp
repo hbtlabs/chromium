@@ -711,8 +711,6 @@ void ChromeClientImpl::openFileChooser(LocalFrame* frame,
   params.directory = fileChooser->settings().allowsDirectoryUpload;
   params.acceptTypes = fileChooser->settings().acceptTypes();
   params.selectedFiles = fileChooser->settings().selectedFiles;
-  if (params.selectedFiles.size() > 0)
-    params.initialValue = params.selectedFiles[0];
   params.useMediaCapture = fileChooser->settings().useMediaCapture;
   params.needLocalPath = fileChooser->settings().allowsDirectoryUpload;
   params.requestor = frame->document()->url();
@@ -1089,8 +1087,8 @@ void ChromeClientImpl::registerViewportLayers() const {
     m_webView->registerViewportLayersWithCompositor();
 }
 
-void ChromeClientImpl::didUpdateTopControls() const {
-  m_webView->didUpdateTopControls();
+void ChromeClientImpl::didUpdateBrowserControls() const {
+  m_webView->didUpdateBrowserControls();
 }
 
 CompositorProxyClient* ChromeClientImpl::createCompositorProxyClient(
@@ -1149,11 +1147,7 @@ void ChromeClientImpl::installSupplements(LocalFrame& frame) {
   provideNavigatorContentUtilsTo(
       frame, NavigatorContentUtilsClientImpl::create(webFrame));
 
-  bool enableWebBluetooth = RuntimeEnabledFeatures::webBluetoothEnabled();
-#if OS(CHROMEOS) || OS(ANDROID) || OS(MACOSX)
-  enableWebBluetooth = true;
-#endif
-  if (enableWebBluetooth)
+  if (RuntimeEnabledFeatures::webBluetoothEnabled())
     BluetoothSupplement::provideTo(frame, client->bluetooth());
 
   ScreenOrientationController::provideTo(frame,

@@ -15,6 +15,13 @@
 namespace blink {
 namespace {
 
+NGConstraintSpace* ConstructConstraintSpace(NGWritingMode writing_mode,
+                                            NGDirection direction,
+                                            NGPhysicalSize size) {
+  return new NGConstraintSpace(writing_mode, direction,
+                               new NGPhysicalConstraintSpace(size));
+}
+
 class NGBlockLayoutAlgorithmTest : public ::testing::Test {
  protected:
   void SetUp() override { style_ = ComputedStyle::create(); }
@@ -35,9 +42,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, FixedSize) {
   style_->setWidth(Length(30, Fixed));
   style_->setHeight(Length(40, Fixed));
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, nullptr);
 
   EXPECT_EQ(LayoutUnit(30), frag->Width());
@@ -65,9 +72,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, LayoutBlockChildren) {
 
   first_child->SetNextSibling(second_child);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
   EXPECT_EQ(LayoutUnit(kWidth), frag->Width());
@@ -111,9 +118,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, LayoutBlockChildrenWithWritingMode) {
 
   div1->SetFirstChild(div2);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(500), LayoutUnit(500)));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   const NGPhysicalFragmentBase* child = frag->Children()[0];
@@ -155,9 +162,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase1) {
 
   div1->SetFirstChild(div2);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   space->SetIsNewFormattingContext(true);
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
@@ -230,9 +237,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase2) {
   div5->SetFirstChild(div6);
   div6->SetNextSibling(div7);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 3UL);
@@ -279,9 +286,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase3) {
 
   div1->SetFirstChild(div2);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   // Verify that margins are collapsed.
@@ -328,9 +335,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase4) {
 
   div1->SetFirstChild(div2);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   // Verify that margins do NOT collapse.
@@ -384,9 +391,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase5) {
 
   vertical_div->SetNextSibling(horizontal_div);
 
-  auto* space =
-      new NGConstraintSpace(VerticalLeftRight, LeftToRight,
-                            NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
+  auto* space = ConstructConstraintSpace(
+      VerticalLeftRight, LeftToRight,
+      NGPhysicalSize(LayoutUnit(500), LayoutUnit(500)));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, vertical_div);
 
   ASSERT_EQ(frag->Children().size(), 2UL);
@@ -442,9 +449,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, CollapsingMarginsCase6) {
   div1->SetFirstChild(div2);
   div1->SetNextSibling(div3);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(500), LayoutUnit(500)));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(500), LayoutUnit(500)));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 2UL);
@@ -505,9 +512,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, BorderAndPadding) {
 
   div1->SetFirstChild(div2);
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(1000), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(1000), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
 
   ASSERT_EQ(frag->Children().size(), 1UL);
@@ -539,9 +546,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, PercentageSize) {
   first_style->setWidth(Length(40, Percent));
   NGBox* first_child = new NGBox(first_style.get());
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
   EXPECT_EQ(frag->Width(), LayoutUnit(kWidth + kPaddingLeft));
@@ -567,9 +574,9 @@ TEST_F(NGBlockLayoutAlgorithmTest, AutoMargin) {
   first_style->setMarginRight(Length(Auto));
   NGBox* first_child = new NGBox(first_style.get());
 
-  auto* space =
-      new NGConstraintSpace(HorizontalTopBottom, LeftToRight,
-                            NGLogicalSize(LayoutUnit(100), NGSizeIndefinite));
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(100), NGSizeIndefinite));
   NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, first_child);
 
   EXPECT_EQ(LayoutUnit(kWidth + kPaddingLeft), frag->Width());
@@ -581,6 +588,81 @@ TEST_F(NGBlockLayoutAlgorithmTest, AutoMargin) {
   EXPECT_EQ(LayoutUnit(kChildWidth), child->Width());
   EXPECT_EQ(LayoutUnit(kPaddingLeft + 10), child->LeftOffset());
   EXPECT_EQ(LayoutUnit(0), child->TopOffset());
+}
+
+// Verifies that 3 Left/Right float fragments are correctly positioned by the
+// algorithm.
+//
+// Test case's HTML representation:
+//  <div id="parent" style="width: 200px; height: 200px;">
+//    <div style="float:left; width: 30px; height: 30px;
+//        margin-top: 10px;"/>   <!-- DIV1 -->
+//    <div style="float:right; width: 50px; height: 50px;"/>  <!-- DIV2 -->
+//    <div style="float:left; width: 120px; height: 120px;
+//        margin-left: 30px;"/>  <!-- DIV3 -->
+//  </div>
+//
+// Expected:
+// - Left float(DIV1) is positioned at the left.
+// - Right float(DIV2) is positioned at the right.
+// - Left float(DIV3) is positioned at the left below DIV2.
+TEST_F(NGBlockLayoutAlgorithmTest, PositionFloatFragments) {
+  const int kDiv1TopMargin = 10;
+  const int kParentSize = 200;
+  const int kDiv1Size = 30;
+  const int kDiv2Size = 50;
+  const int kDiv3Size = kParentSize - kDiv1Size - kDiv2Size;
+  const int kDiv3LeftMargin = kDiv1Size;
+
+  style_->setHeight(Length(kParentSize, Fixed));
+  style_->setWidth(Length(kParentSize, Fixed));
+
+  // DIV1
+  RefPtr<ComputedStyle> div1_style = ComputedStyle::create();
+  div1_style->setWidth(Length(kDiv1Size, Fixed));
+  div1_style->setHeight(Length(kDiv1Size, Fixed));
+  div1_style->setFloating(EFloat::Left);
+  div1_style->setMarginTop(Length(kDiv1TopMargin, Fixed));
+  NGBox* div1 = new NGBox(div1_style.get());
+
+  // DIV2
+  RefPtr<ComputedStyle> div2_style = ComputedStyle::create();
+  div2_style->setWidth(Length(kDiv2Size, Fixed));
+  div2_style->setHeight(Length(kDiv2Size, Fixed));
+  div2_style->setFloating(EFloat::Right);
+  NGBox* div2 = new NGBox(div2_style.get());
+
+  // DIV3
+  RefPtr<ComputedStyle> div3_style = ComputedStyle::create();
+  div3_style->setWidth(Length(kDiv3Size, Fixed));
+  div3_style->setHeight(Length(kDiv3Size, Fixed));
+  div3_style->setMarginLeft(Length(kDiv3LeftMargin, Fixed));
+  div3_style->setFloating(EFloat::Left);
+  NGBox* div3 = new NGBox(div3_style.get());
+
+  div1->SetNextSibling(div2);
+  div2->SetNextSibling(div3);
+
+  auto* space = ConstructConstraintSpace(
+      HorizontalTopBottom, LeftToRight,
+      NGPhysicalSize(LayoutUnit(kParentSize), LayoutUnit(kParentSize)));
+  NGPhysicalFragment* frag = RunBlockLayoutAlgorithm(space, div1);
+  ASSERT_EQ(frag->Children().size(), 3UL);
+
+  // DIV1
+  const NGPhysicalFragmentBase* child1 = frag->Children()[0];
+  EXPECT_EQ(kDiv1TopMargin, child1->TopOffset());
+  EXPECT_EQ(0, child1->LeftOffset());
+
+  // DIV2
+  const NGPhysicalFragmentBase* child2 = frag->Children()[1];
+  EXPECT_EQ(0, child2->TopOffset());
+  EXPECT_EQ(kParentSize - kDiv2Size, child2->LeftOffset());
+
+  // DIV3
+  const NGPhysicalFragmentBase* child3 = frag->Children()[2];
+  EXPECT_EQ(kDiv2Size, child3->TopOffset());
+  EXPECT_EQ(kDiv3LeftMargin, child3->LeftOffset());
 }
 }  // namespace
 }  // namespace blink

@@ -9,14 +9,6 @@
 
 namespace ash {
 
-NetworkIconInfo::NetworkIconInfo()
-    : connecting(false),
-      connected(false),
-      tray_icon_visible(true),
-      is_cellular(false) {}
-
-NetworkIconInfo::~NetworkIconInfo() {}
-
 BluetoothDeviceInfo::BluetoothDeviceInfo()
     : connected(false), connecting(false), paired(false) {}
 
@@ -80,8 +72,6 @@ bool SystemTrayDelegate::ShouldShowSettings() {
   return false;
 }
 
-void SystemTrayDelegate::ShowSetTimeDialog() {}
-
 void SystemTrayDelegate::ShowEnterpriseInfo() {}
 
 void SystemTrayDelegate::ShowUserLogin() {}
@@ -119,8 +109,6 @@ bool SystemTrayDelegate::IsBluetoothDiscovering() {
   return false;
 }
 
-void SystemTrayDelegate::ShowOtherNetworkDialog(const std::string& type) {}
-
 bool SystemTrayDelegate::GetBluetoothAvailable() {
   return false;
 }
@@ -150,10 +138,6 @@ bool SystemTrayDelegate::GetSessionStartTime(
 bool SystemTrayDelegate::GetSessionLengthLimit(
     base::TimeDelta* session_length_limit) {
   return false;
-}
-
-int SystemTrayDelegate::GetSystemTrayMenuWidth() {
-  return 0;
 }
 
 void SystemTrayDelegate::ActiveUserWasChanged() {}

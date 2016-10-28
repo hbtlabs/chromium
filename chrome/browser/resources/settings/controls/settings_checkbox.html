@@ -1,8 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-checkbox/paper-checkbox.html">
-<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_behavior.html">
-<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
-<link rel="import" href="/controls/pref_control_behavior.html">
+<link rel="import" href="/controls/settings_boolean_control_behavior.html">
 <link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-checkbox">
@@ -33,7 +31,7 @@
     </style>
     <div id="outerRow" noSubLabel$="[[!subLabel]]">
       <paper-checkbox id="checkbox" checked="{{checked}}"
-          disabled="[[checkboxDisabled_(disabled, pref)]]">
+          disabled="[[controlDisabled_(disabled, pref)]]">
         <div>[[label]]</div>
         <div class="secondary">[[subLabel]]</div>
       </paper-checkbox>

@@ -123,8 +123,11 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
     @Nullable private EditorFieldModel mBillingAddressField;
     @Nullable private EditorFieldModel mSaveCardCheckbox;
     @Nullable private CreditCardScanner mCardScanner;
+    @Nullable private EditorFieldValidator mCardExpirationMonthValidator;
     private boolean mCanScan;
     private boolean mIsScanning;
+    private int mCurrentMonth;
+    private int mCurrentYear;
 
     /**
      * Builds a credit card editor.
@@ -264,15 +267,14 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
 
         // Ensure that |instrument| and |card| are never null.
         final AutofillPaymentInstrument instrument = isNewCard
-                ? new AutofillPaymentInstrument(mWebContents, new CreditCard(), null)
+                ? new AutofillPaymentInstrument(mContext, mWebContents, new CreditCard(), null)
                 : toEdit;
         final CreditCard card = instrument.getCard();
 
         // The title of the editor depends on whether we're adding a new card or editing an existing
         // card.
-        final EditorModel editor = new EditorModel(mContext.getString(isNewCard
-                ? R.string.autofill_create_credit_card
-                : R.string.autofill_edit_credit_card));
+        final EditorModel editor = new EditorModel(mContext.getString(
+                isNewCard ? R.string.payments_create_card : R.string.payments_edit_card));
 
         if (card.getIsLocal()) {
             Calendar calendar = null;
@@ -406,10 +408,42 @@ public class CardEditor extends EditorBase<AutofillPaymentInstrument>
 
         // Expiration month dropdown.
         if (mMonthField == null) {
+            mCurrentYear = calendar.get(Calendar.YEAR);
+            // The month in calendar is 0 based but the month value is 1 based.
+            mCurrentMonth = calendar.get(Calendar.MONTH) + 1;
+
+            if (mCardExpirationMonthValidator == null) {
+                mCardExpirationMonthValidator = new EditorFieldValidator() {
+                    @Override
+                    public boolean isValid(@Nullable CharSequence monthValue) {
+                        CharSequence yearValue = mYearField.getValue();
+                        if (monthValue == null || yearValue == null) return false;
+
+                        int month = Integer.parseInt(monthValue.toString());
+                        int year = Integer.parseInt(yearValue.toString());
+
+                        return year > mCurrentYear
+                              || (year == mCurrentYear && month >= mCurrentMonth);
+                    }
+                };
+            }
+
             mMonthField = EditorFieldModel.createDropdown(
                     mContext.getString(R.string.autofill_credit_card_editor_expiration_date),
-                    buildMonthDropdownKeyValues(calendar));
+                    buildMonthDropdownKeyValues(calendar),
+                    mCardExpirationMonthValidator,
+                    mContext.getString(
+                          R.string.payments_card_expiration_invalid_validation_message));
             mMonthField.setIsFullLine(false);
+
+            if (mObserverForTest != null) {
+                mMonthField.setDropdownCallback(new Callback<Pair<String, Runnable>>() {
+                    @Override
+                    public void onResult(final Pair<String, Runnable> eventData) {
+                        mObserverForTest.onPaymentRequestServiceExpirationMonthChange();
+                    }
+                });
+            }
         }
         if (mMonthField.getDropdownKeys().contains(card.getMonth())) {
             mMonthField.setValue(card.getMonth());

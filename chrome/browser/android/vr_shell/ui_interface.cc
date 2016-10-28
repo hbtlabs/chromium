@@ -14,7 +14,7 @@ UiInterface::UiInterface() {
 
 UiInterface::~UiInterface() {}
 
-void UiInterface::SetUiMessageHandler(VrShellUIMessageHandler* handler) {
+void UiInterface::SetUiCommandHandler(UiCommandHandler* handler) {
   handler_ = handler;
 }
 
@@ -24,12 +24,15 @@ void UiInterface::SetMode(Mode mode) {
 }
 
 void UiInterface::SetSecureOrigin(bool secure) {
-  updates_.SetBoolean("secureOrigin", static_cast<int>(secure));
+  updates_.SetBoolean("secureOrigin", secure);
   FlushUpdates();
 }
 
 void UiInterface::OnDomContentsLoaded() {
   loaded_ = true;
+#if defined(ENABLE_VR_SHELL_UI_DEV)
+  updates_.SetBoolean("enableReloadUi", true);
+#endif
   FlushUpdates();
 }
 

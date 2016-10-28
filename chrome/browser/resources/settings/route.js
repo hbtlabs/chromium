@@ -142,7 +142,7 @@ cr.define('settings', function() {
   r.SITE_SETTINGS_SITE_DETAILS =
       r.SITE_SETTINGS_ALL.createChild('/siteSettings/siteDetails');
 
-  r.SITE_SETTINGS_HANDLERS = r.SITE_SETTINGS.createChild('handlers');
+  r.SITE_SETTINGS_HANDLERS = r.SITE_SETTINGS.createChild('/handlers');
 
   // TODO(tommycli): Find a way to refactor these repetitive category routes.
   r.SITE_SETTINGS_AUTOMATIC_DOWNLOADS =
@@ -166,19 +166,15 @@ cr.define('settings', function() {
 
 <if expr="chromeos">
   r.DATETIME = r.ADVANCED.createSection('/dateTime', 'dateTime');
-
   r.BLUETOOTH = r.ADVANCED.createSection('/bluetooth', 'bluetooth');
-  r.BLUETOOTH_ADD_DEVICE = r.BLUETOOTH.createChild('/bluetoothAddDevice');
-  r.BLUETOOTH_PAIR_DEVICE =
-      r.BLUETOOTH_ADD_DEVICE.createChild('bluetoothPairDevice');
 </if>
 
-  r.PASSWORDS = r.ADVANCED.createSection('/passwords', 'passwordsAndForms');
+  r.PASSWORDS =
+      r.ADVANCED.createSection('/passwordsAndForms', 'passwordsAndForms');
   r.AUTOFILL = r.PASSWORDS.createChild('/autofill');
-  r.MANAGE_PASSWORDS = r.PASSWORDS.createChild('/managePasswords');
+  r.MANAGE_PASSWORDS = r.PASSWORDS.createChild('/passwords');
 
   r.LANGUAGES = r.ADVANCED.createSection('/languages', 'languages');
-  r.LANGUAGES_DETAIL = r.LANGUAGES.createChild('edit');
 <if expr="chromeos">
   r.INPUT_METHODS = r.LANGUAGES.createChild('/inputMethods');
 </if>

@@ -542,8 +542,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
     /**
      *
-     * @param topControlsHeightPix       The height of the top controls in pixels.
-     * @param topControlsShrinkBlinkSize The Y amount in pixels to shrink the viewport by.  This
+     * @param browserControlsHeightPix       The height of the browser controls in pixels.
+     * @param browserControlsShrinkBlinkSize The Y amount in pixels to shrink the viewport by.  This
      *                                   specifies how much smaller the Blink layout size should be
      *                                   relative to the size of this View.
      */
@@ -940,7 +940,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
      * @return The amount that the viewport size given to Blink is shrunk by the URL-bar..
      */
     @CalledByNative
-    public boolean doTopControlsShrinkBlinkSize() {
+    public boolean doBrowserControlsShrinkBlinkSize() {
         return mTopControlsShrinkBlinkSize;
     }
 
@@ -2244,17 +2244,14 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
 
     @SuppressWarnings("unused")
     @CalledByNative
-    private void updateFrameInfo(
-            float scrollOffsetX, float scrollOffsetY,
-            float pageScaleFactor, float minPageScaleFactor, float maxPageScaleFactor,
-            float contentWidth, float contentHeight,
-            float viewportWidth, float viewportHeight,
-            float topControlsHeightDp, float topControlsShownRatio,
+    private void updateFrameInfo(float scrollOffsetX, float scrollOffsetY, float pageScaleFactor,
+            float minPageScaleFactor, float maxPageScaleFactor, float contentWidth,
+            float contentHeight, float viewportWidth, float viewportHeight,
+            float browserControlsHeightDp, float browserControlsShownRatio,
             float bottomControlsHeightDp, float bottomControlsShownRatio,
-            boolean isMobileOptimizedHint,
-            boolean hasInsertionMarker, boolean isInsertionMarkerVisible,
-            float insertionMarkerHorizontal, float insertionMarkerTop,
-            float insertionMarkerBottom) {
+            boolean isMobileOptimizedHint, boolean hasInsertionMarker,
+            boolean isInsertionMarkerVisible, float insertionMarkerHorizontal,
+            float insertionMarkerTop, float insertionMarkerBottom) {
         TraceEvent.begin("ContentViewCore:updateFrameInfo");
         mIsMobileOptimizedHint = isMobileOptimizedHint;
         // Adjust contentWidth/Height to be always at least as big as
@@ -2264,7 +2261,8 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
                 mViewportWidthPix / (deviceScale * pageScaleFactor));
         contentHeight = Math.max(contentHeight,
                 mViewportHeightPix / (deviceScale * pageScaleFactor));
-        final float topBarShownPix = topControlsHeightDp * deviceScale * topControlsShownRatio;
+        final float topBarShownPix =
+                browserControlsHeightDp * deviceScale * browserControlsShownRatio;
         final float bottomBarShownPix = bottomControlsHeightDp * deviceScale
                 * bottomControlsShownRatio;
 
@@ -2317,7 +2315,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         if (needUpdateZoomControls) mZoomControlsDelegate.updateZoomControls();
 
         if (topBarChanged) {
-            float topBarTranslate = topBarShownPix - topControlsHeightDp * deviceScale;
+            float topBarTranslate = topBarShownPix - browserControlsHeightDp * deviceScale;
             getContentViewClient().onTopControlsChanged(topBarTranslate, topBarShownPix);
         }
         if (bottomBarChanged) {
@@ -2525,7 +2523,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
             return;
         }
 
-        if (!mHasInsertion || !canPaste()) return;
+        if (!mHasInsertion || (!supportsFloatingActionMode() && !canPaste())) return;
 
         PastePopupMenu pastePopupMenu = getPastePopup();
         if (pastePopupMenu == null) return;
@@ -2533,9 +2531,9 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         final float deviceScale = mRenderCoordinates.getDeviceScaleFactor();
         final int xPix = (int) (x * deviceScale);
         final int yPix = (int) (y * deviceScale);
-        final float topControlsShownPix = mRenderCoordinates.getContentOffsetYPix();
+        final float browserControlsShownPix = mRenderCoordinates.getContentOffsetYPix();
         try {
-            pastePopupMenu.show(xPix, (int) (yPix + topControlsShownPix));
+            pastePopupMenu.show(xPix, (int) (yPix + browserControlsShownPix));
         } catch (WindowManager.BadTokenException e) {
         }
     }
@@ -2991,11 +2989,14 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Displa
         viewNode.setDimens(boundsInParent.left, boundsInParent.top, 0, 0, width, height);
         viewNode.setChildCount(node.children.size());
         if (node.hasStyle) {
+            // The text size should be in physical pixels, not CSS pixels.
+            float textSize = mRenderCoordinates.fromLocalCssToPix(node.textSize);
+
             int style = (node.bold ? ViewNode.TEXT_STYLE_BOLD : 0)
                     | (node.italic ? ViewNode.TEXT_STYLE_ITALIC : 0)
                     | (node.underline ? ViewNode.TEXT_STYLE_UNDERLINE : 0)
                     | (node.lineThrough ? ViewNode.TEXT_STYLE_STRIKE_THRU : 0);
-            viewNode.setTextStyle(node.textSize, node.color, node.bgcolor, style);
+            viewNode.setTextStyle(textSize, node.color, node.bgcolor, style);
         }
         for (int i = 0; i < node.children.size(); i++) {
             createVirtualStructure(viewNode.asyncNewChild(i), node.children.get(i), true);

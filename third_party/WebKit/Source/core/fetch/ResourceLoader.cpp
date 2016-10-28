@@ -80,8 +80,8 @@ void ResourceLoader::start(const ResourceRequest& request,
   }
 
   m_loader = wrapUnique(Platform::current()->createURLLoader());
-  m_loader->setDefersLoading(defersLoading);
   DCHECK(m_loader);
+  m_loader->setDefersLoading(defersLoading);
   m_loader->setLoadingTaskRunner(loadingTaskRunner);
 
   if (m_resource->options().synchronousPolicy == RequestSynchronously)
@@ -90,12 +90,12 @@ void ResourceLoader::start(const ResourceRequest& request,
     m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
 }
 
-void ResourceLoader::restartForServiceWorkerFallback(
-    const ResourceRequest& request) {
+void ResourceLoader::restart(const ResourceRequest& request,
+                             WebTaskRunner* loadingTaskRunner,
+                             bool defersLoading) {
+  CHECK_EQ(m_resource->options().synchronousPolicy, RequestAsynchronously);
   m_loader.reset();
-  m_loader = wrapUnique(Platform::current()->createURLLoader());
-  DCHECK(m_loader);
-  m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
+  start(request, loadingTaskRunner, defersLoading);
 }
 
 void ResourceLoader::setDefersLoading(bool defers) {
@@ -119,15 +119,15 @@ void ResourceLoader::didChangePriority(ResourceLoadPriority loadPriority,
 }
 
 void ResourceLoader::cancel() {
-  didFail(nullptr, ResourceError::cancelledError(
-                       m_resource->lastResourceRequest().url()));
+  didFail(
+      ResourceError::cancelledError(m_resource->lastResourceRequest().url()));
 }
 
 void ResourceLoader::cancelForRedirectAccessCheckError(const KURL& newURL) {
   m_resource->willNotFollowRedirect();
 
   if (m_loader)
-    didFail(nullptr, ResourceError::cancelledDueToAccessCheckError(newURL));
+    didFail(ResourceError::cancelledDueToAccessCheckError(newURL));
 }
 
 bool ResourceLoader::willFollowRedirect(
@@ -222,6 +222,10 @@ void ResourceLoader::didFinishLoading(WebURLLoader*,
 }
 
 void ResourceLoader::didFail(WebURLLoader*, const WebURLError& error) {
+  didFail(error);
+}
+
+void ResourceLoader::didFail(const ResourceError& error) {
   m_loader.reset();
   m_fetcher->didFailLoading(m_resource.get(), error);
 }

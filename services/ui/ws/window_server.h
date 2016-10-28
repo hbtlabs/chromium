@@ -18,7 +18,6 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
-#include "services/ui/public/interfaces/window_tree_host.mojom.h"
 #include "services/ui/surfaces/display_compositor.h"
 #include "services/ui/surfaces/display_compositor_client.h"
 #include "services/ui/ws/display.h"
@@ -197,7 +196,7 @@ class WindowServer : public ServerWindowDelegate,
   void ProcessWillChangeWindowPredefinedCursor(ServerWindow* window,
                                                mojom::Cursor cursor_id);
   void ProcessWindowSurfaceCreated(ServerWindow* window,
-                                   mojom::SurfaceType surface_type,
+                                   mojom::CompositorFrameSinkType surface_type,
                                    const cc::SurfaceId& surface_id,
                                    const gfx::Size& frame_size,
                                    float device_scale_factor);

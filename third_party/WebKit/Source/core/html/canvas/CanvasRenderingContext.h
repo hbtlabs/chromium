@@ -90,6 +90,9 @@ class CORE_EXPORT CanvasRenderingContext
 
   virtual PassRefPtr<Image> getImage(AccelerationHint,
                                      SnapshotReason) const = 0;
+  virtual ImageData* toImageData(SnapshotReason reason) const {
+    return nullptr;
+  }
   virtual ContextType getContextType() const = 0;
   virtual bool isAccelerated() const { return false; }
   virtual bool shouldAntialias() const { return false; }
@@ -162,9 +165,7 @@ class CORE_EXPORT CanvasRenderingContext
 
   // OffscreenCanvas-specific methods
   OffscreenCanvas* getOffscreenCanvas() const { return m_offscreenCanvas; }
-  virtual ImageBitmap* transferToImageBitmap(ExceptionState&) {
-    return nullptr;
-  }
+  virtual ImageBitmap* transferToImageBitmap(ScriptState*) { return nullptr; }
 
   bool wouldTaintOrigin(CanvasImageSource*, SecurityOrigin* = nullptr);
   void didMoveToNewDocument(Document*);

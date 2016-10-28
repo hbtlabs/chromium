@@ -195,10 +195,19 @@ void DeleteSelectionCommand::setStartingSelectionOnSmartDelete(
       document().lifecycle());
 
   bool isBaseFirst = startingSelection().isBaseFirst();
+  // TODO(yosin): We should not call |createVisiblePosition()| here and use
+  // |start| and |end| as base/extent since |VisibleSelection| also calls
+  // |createVisiblePosition()| during construction.
+  // Because of |newBase.affinity()| can be |Upstream|, we can't simply
+  // use |start| and |end| here.
   VisiblePosition newBase = createVisiblePosition(isBaseFirst ? start : end);
   VisiblePosition newExtent = createVisiblePosition(isBaseFirst ? end : start);
-  setStartingSelection(createVisibleSelection(
-      newBase, newExtent, startingSelection().isDirectional()));
+  SelectionInDOMTree::Builder builder;
+  builder.setAffinity(newBase.affinity())
+      .setBaseAndExtentDeprecated(newBase.deepEquivalent(),
+                                  newExtent.deepEquivalent())
+      .setIsDirectional(startingSelection().isDirectional());
+  setStartingSelection(createVisibleSelection(builder.build()));
 }
 
 void DeleteSelectionCommand::initializePositionData(
@@ -1093,8 +1102,12 @@ void DeleteSelectionCommand::doApply(EditingState* editingState) {
   if (brResult) {
     calculateTypingStyleAfterDelete();
     document().updateStyleAndLayoutIgnorePendingStylesheets();
-    setEndingSelection(createVisibleSelection(
-        m_endingPosition, affinity, endingSelection().isDirectional()));
+    SelectionInDOMTree::Builder builder;
+    builder.setAffinity(affinity);
+    builder.setIsDirectional(endingSelection().isDirectional());
+    if (m_endingPosition.isNotNull())
+      builder.collapse(m_endingPosition);
+    setEndingSelection(builder.build());
     clearTransientState();
     rebalanceWhitespace();
     return;
@@ -1150,8 +1163,12 @@ void DeleteSelectionCommand::doApply(EditingState* editingState) {
 
   document().updateStyleAndLayoutIgnorePendingStylesheets();
 
-  setEndingSelection(createVisibleSelection(m_endingPosition, affinity,
-                                            endingSelection().isDirectional()));
+  SelectionInDOMTree::Builder builder;
+  builder.setAffinity(affinity);
+  builder.setIsDirectional(endingSelection().isDirectional());
+  if (m_endingPosition.isNotNull())
+    builder.collapse(m_endingPosition);
+  setEndingSelection(builder.build());
 
   if (relocatableReferencePosition.position().isNull()) {
     clearTransientState();

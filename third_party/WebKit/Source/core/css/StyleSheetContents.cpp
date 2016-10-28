@@ -92,6 +92,8 @@ StyleSheetContents::StyleSheetContents(const StyleSheetContents& o)
   // FIXME: Copy import rules.
   ASSERT(o.m_importRules.isEmpty());
 
+  // LazyParseCSS: Copying child rules is a strict point for lazy parsing, so
+  // there is no need to copy lazy parsing state here.
   for (unsigned i = 0; i < m_childRules.size(); ++i)
     m_childRules[i] = o.m_childRules[i]->copy();
 }
@@ -180,7 +182,7 @@ void StyleSheetContents::setHasMediaQueries() {
 }
 
 StyleRuleBase* StyleSheetContents::ruleAt(unsigned index) const {
-  ASSERT_WITH_SECURITY_IMPLICATION(index < ruleCount());
+  SECURITY_DCHECK(index < ruleCount());
 
   if (index < m_importRules.size())
     return m_importRules[index].get();
@@ -212,7 +214,7 @@ void StyleSheetContents::clearRules() {
 bool StyleSheetContents::wrapperInsertRule(StyleRuleBase* rule,
                                            unsigned index) {
   ASSERT(m_isMutable);
-  ASSERT_WITH_SECURITY_IMPLICATION(index <= ruleCount());
+  SECURITY_DCHECK(index <= ruleCount());
 
   if (index < m_importRules.size() ||
       (index == m_importRules.size() && rule->isImportRule())) {
@@ -272,7 +274,7 @@ bool StyleSheetContents::wrapperInsertRule(StyleRuleBase* rule,
 
 bool StyleSheetContents::wrapperDeleteRule(unsigned index) {
   ASSERT(m_isMutable);
-  ASSERT_WITH_SECURITY_IMPLICATION(index < ruleCount());
+  SECURITY_DCHECK(index < ruleCount());
 
   if (index < m_importRules.size()) {
     m_importRules[index]->clearParentStyleSheet();
@@ -351,7 +353,8 @@ void StyleSheetContents::parseAuthorStyleSheet(
   }
 
   CSSParserContext context(parserContext(), UseCounter::getFrom(this));
-  CSSParser::parseSheet(context, this, sheetText);
+  CSSParser::parseSheet(context, this, sheetText,
+                        RuntimeEnabledFeatures::lazyParseCSSEnabled());
 }
 
 void StyleSheetContents::parseString(const String& sheetText) {
@@ -478,7 +481,7 @@ static bool childRulesHaveFailedOrCanceledSubresources(
     const StyleRuleBase* rule = rules[i].get();
     switch (rule->type()) {
       case StyleRuleBase::Style:
-        if (toStyleRule(rule)->properties().hasFailedOrCanceledSubresources())
+        if (toStyleRule(rule)->propertiesHaveFailedOrCanceledSubresources())
           return true;
         break;
       case StyleRuleBase::FontFace:

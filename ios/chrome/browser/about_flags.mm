@@ -19,11 +19,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/switches.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/flags_ui/feature_entry.h"
 #include "components/flags_ui/feature_entry_macros.h"
 #include "components/flags_ui/flags_storage.h"
 #include "components/flags_ui/flags_ui_switches.h"
+#include "components/ntp_tiles/switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "google_apis/gaia/gaia_switches.h"
@@ -57,6 +59,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      IDS_IOS_FLAGS_PHYSICAL_WEB_DESCRIPTION, flags_ui::kOsIos,
      ENABLE_DISABLE_VALUE_TYPE(switches::kEnableIOSPhysicalWeb,
                                switches::kDisableIOSPhysicalWeb)},
+    {"browser-task-scheduler", IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_NAME,
+     IDS_IOS_FLAGS_BROWSER_TASK_SCHEDULER_DESCRIPTION, flags_ui::kOsIos,
+     ENABLE_DISABLE_VALUE_TYPE(switches::kEnableBrowserTaskScheduler,
+                               switches::kDisableBrowserTaskScheduler)},
 };
 
 // Add all switches from experimental flags to |command_line|.
@@ -183,6 +189,10 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
       command_line->AppendSwitchASCII(switches::kReaderModeHeuristics,
                                       switches::reader_mode_heuristics::kNone);
     }
+  }
+
+  if ([defaults boolForKey:@"EnablePopularSites"]) {
+    command_line->AppendSwitch(ntp_tiles::switches::kEnableNTPPopularSites);
   }
 
   // Set the UA flag if UseMobileSafariUA is enabled.

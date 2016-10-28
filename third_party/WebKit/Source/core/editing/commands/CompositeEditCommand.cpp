@@ -297,7 +297,7 @@ void CompositeEditCommand::applyCommandToComposite(
   command->setParent(this);
   if (selection != command->endingSelection()) {
     command->setStartingSelection(selection);
-    command->setEndingSelection(selection);
+    command->setEndingVisibleSelection(selection);
   }
   command->doApply(editingState);
   if (!editingState->isAborted())
@@ -1242,8 +1242,8 @@ void CompositeEditCommand::pushAnchorElementDown(Element* anchorNode,
 
   DCHECK(anchorNode->isLink()) << anchorNode;
 
-  setEndingSelection(createVisibleSelection(
-      SelectionInDOMTree::Builder().selectAllChildren(*anchorNode).build()));
+  setEndingSelection(
+      SelectionInDOMTree::Builder().selectAllChildren(*anchorNode).build());
   applyStyledElement(anchorNode, editingState);
   if (editingState->isAborted())
     return;
@@ -1437,9 +1437,8 @@ void CompositeEditCommand::moveParagraphWithClones(
   cloneParagraphUnderNewElement(start, end, outerNode, blockElement,
                                 editingState);
 
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-
-  setEndingSelection(createVisibleSelection(start, end));
+  setEndingSelection(
+      SelectionInDOMTree::Builder().collapse(start).extend(end).build());
   deleteSelection(editingState, false, false, false);
   if (editingState->isAborted())
     return;
@@ -1598,7 +1597,8 @@ void CompositeEditCommand::moveParagraphs(
 
   DCHECK(!document().needsLayoutTreeUpdate());
 
-  setEndingSelection(createVisibleSelection(start, end));
+  setEndingSelection(
+      SelectionInDOMTree::Builder().collapse(start).extend(end).build());
   document()
       .frame()
       ->spellChecker()
@@ -1646,8 +1646,11 @@ void CompositeEditCommand::moveParagraphs(
       Position::firstPositionInNode(document().documentElement()),
       destination.toParentAnchoredPosition(), true);
 
-  VisibleSelection destinationSelection = createVisibleSelection(
-      destination.toPositionWithAffinity(), originalIsDirectional);
+  const SelectionInDOMTree& destinationSelection =
+      SelectionInDOMTree::Builder()
+          .collapse(destination.toPositionWithAffinity())
+          .setIsDirectional(originalIsDirectional)
+          .build();
   if (endingSelection().isNone()) {
     // We abort executing command since |destination| becomes invisible.
     editingState->abort();
@@ -1706,9 +1709,11 @@ void CompositeEditCommand::moveParagraphs(
                                 .createRangeForSelection(*documentElement);
   if (endRange.isNull())
     return;
-  setEndingSelection(createVisibleSelection(
-      startRange.startPosition(), endRange.startPosition(),
-      TextAffinity::Downstream, originalIsDirectional));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(startRange.startPosition())
+                         .extend(endRange.startPosition())
+                         .setIsDirectional(originalIsDirectional)
+                         .build());
 }
 
 // FIXME: Send an appropriate shouldDeleteRange call.
@@ -1809,10 +1814,10 @@ bool CompositeEditCommand::breakOutOfEmptyListItem(EditingState* editingState) {
   if (editingState->isAborted())
     return false;
 
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-  setEndingSelection(createVisibleSelection(
-      Position::firstPositionInNode(newBlock), TextAffinity::Downstream,
-      endingSelection().isDirectional()));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(Position::firstPositionInNode(newBlock))
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
 
   style->prepareToApplyAt(endingSelection().start());
   if (!style->isEmpty()) {
@@ -1871,8 +1876,10 @@ bool CompositeEditCommand::breakOutOfEmptyMailBlockquotedParagraph(
       return false;
     document().updateStyleAndLayoutIgnorePendingStylesheets();
   }
-  setEndingSelection(createVisibleSelection(atBR.toPositionWithAffinity(),
-                                            endingSelection().isDirectional()));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(atBR.toPositionWithAffinity())
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
 
   // If this is an empty paragraph there must be a line break here.
   if (!lineBreakExistsAtVisiblePosition(caret))

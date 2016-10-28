@@ -39,13 +39,13 @@ WebInspector.LayerTreeModel = function(target)
     WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._onMainFrameNavigated, this);
     /** @type {?WebInspector.LayerTreeBase} */
     this._layerTree = null;
-}
+};
 
 /** @enum {symbol} */
 WebInspector.LayerTreeModel.Events = {
     LayerTreeChanged: Symbol("LayerTreeChanged"),
     LayerPainted: Symbol("LayerPainted"),
-}
+};
 
 WebInspector.LayerTreeModel.prototype = {
     disable: function()
@@ -133,7 +133,7 @@ WebInspector.LayerTreeModel.prototype = {
     },
 
     __proto__: WebInspector.SDKModel.prototype
-}
+};
 
 /**
   * @constructor
@@ -143,7 +143,7 @@ WebInspector.LayerTreeModel.prototype = {
 WebInspector.AgentLayerTree = function(target)
 {
     WebInspector.LayerTreeBase.call(this, target);
-}
+};
 
 WebInspector.AgentLayerTree.prototype = {
     /**
@@ -221,7 +221,7 @@ WebInspector.AgentLayerTree.prototype = {
     },
 
     __proto__: WebInspector.LayerTreeBase.prototype
-}
+};
 
 /**
  * @constructor
@@ -233,7 +233,7 @@ WebInspector.AgentLayer = function(target, layerPayload)
 {
     this._target = target;
     this._reset(layerPayload);
-}
+};
 
 WebInspector.AgentLayer.prototype = {
     /**
@@ -464,17 +464,15 @@ WebInspector.AgentLayer.prototype = {
     },
 
     /**
-     * @param {function(!WebInspector.PaintProfilerSnapshot=)} callback
+     * @override
+     * @return {!Array<!Promise<?WebInspector.SnapshotWithRect>>}
      */
-    requestSnapshot: function(callback)
+    snapshots: function()
     {
-        if (!this._target) {
-            callback();
-            return;
-        }
-
-        var wrappedCallback = InspectorBackend.wrapClientCallback(callback, "LayerTreeAgent.makeSnapshot(): ", WebInspector.PaintProfilerSnapshot.bind(null, this._target));
-        this._target.layerTreeAgent().makeSnapshot(this.id(), wrappedCallback);
+        var rect = {x: 0, y: 0, width: this.width(), height: this.height()};
+        var promise = this._target.layerTreeAgent().makeSnapshot(this.id(),
+            (error, snapshotId) => error || !this._target ? null : {rect: rect, snapshot: new WebInspector.PaintProfilerSnapshot(this._target, snapshotId)});
+        return [promise];
     },
 
     /**
@@ -563,7 +561,7 @@ WebInspector.AgentLayer.prototype = {
 
         this._children.forEach(calculateQuadForLayer);
     }
-}
+};
 
 /**
  * @constructor
@@ -573,7 +571,7 @@ WebInspector.AgentLayer.prototype = {
 WebInspector.LayerTreeDispatcher = function(layerTreeModel)
 {
     this._layerTreeModel = layerTreeModel;
-}
+};
 
 WebInspector.LayerTreeDispatcher.prototype = {
     /**
@@ -594,7 +592,7 @@ WebInspector.LayerTreeDispatcher.prototype = {
     {
         this._layerTreeModel._layerPainted(layerId, clipRect);
     }
-}
+};
 
 /**
  * @param {!WebInspector.Target} target
@@ -609,4 +607,4 @@ WebInspector.LayerTreeModel.fromTarget = function(target)
     if (!model)
         model = new WebInspector.LayerTreeModel(target);
     return model;
-}
+};

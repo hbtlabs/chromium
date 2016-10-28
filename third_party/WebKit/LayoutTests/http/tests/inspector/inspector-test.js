@@ -459,7 +459,7 @@ InspectorTest.deprecatedRunAfterPendingDispatches = function(callback)
     var barrier = new CallbackBarrier();
     var targets = WebInspector.targetManager.targets();
     for (var i = 0; i < targets.length; ++i)
-        targets[i]._connection.deprecatedRunAfterPendingDispatches(barrier.createCallback());
+        targets[i]._deprecatedRunAfterPendingDispatches(barrier.createCallback());
     barrier.callWhenDone(InspectorTest.safeWrap(callback));
 }
 
@@ -893,12 +893,11 @@ WebInspector.targetManager.observeTargets({
         InspectorTest.EmulationAgent = target.emulationAgent();
         InspectorTest.HeapProfilerAgent = target.heapProfilerAgent();
         InspectorTest.InspectorAgent = target.inspectorAgent();
-        InspectorTest.LayerTreeAgent = target.layerTreeAgent();
         InspectorTest.NetworkAgent = target.networkAgent();
         InspectorTest.PageAgent = target.pageAgent();
         InspectorTest.ProfilerAgent = target.profilerAgent();
         InspectorTest.RuntimeAgent = target.runtimeAgent();
-        InspectorTest.WorkerAgent = target.workerAgent();
+        InspectorTest.TargetAgent = target.targetAgent();
 
         InspectorTest.consoleModel = target.consoleModel;
         InspectorTest.networkManager = WebInspector.NetworkManager.fromTarget(target);
@@ -909,7 +908,6 @@ WebInspector.targetManager.observeTargets({
         InspectorTest.runtimeModel = target.runtimeModel;
         InspectorTest.domModel = WebInspector.DOMModel.fromTarget(target);
         InspectorTest.cssModel = WebInspector.CSSModel.fromTarget(target);
-        InspectorTest.workerManager = target.workerManager;
         InspectorTest.powerProfiler = target.powerProfiler;
         InspectorTest.cpuProfilerModel = target.cpuProfilerModel;
         InspectorTest.heapProfilerModel = target.heapProfilerModel;
@@ -918,7 +916,6 @@ WebInspector.targetManager.observeTargets({
         InspectorTest.serviceWorkerManager = target.serviceWorkerManager;
         InspectorTest.tracingManager = target.tracingManager;
         InspectorTest.mainTarget = target;
-        InspectorTest.connection = target._connection;
     },
 
     targetRemoved: function(target) { }
@@ -940,12 +937,12 @@ InspectorTest.preloadModule = function(moduleName)
 
 InspectorTest.isDedicatedWorker = function(target)
 {
-    return target && !target.hasBrowserCapability() && target.hasJSCapability() && !target.hasNetworkCapability() && !target.hasWorkerCapability();
+    return target && !target.hasBrowserCapability() && target.hasJSCapability() && !target.hasNetworkCapability() && !target.hasTargetCapability();
 }
 
 InspectorTest.isServiceWorker = function(target)
 {
-    return target && !target.hasBrowserCapability() && !target.hasJSCapability() && target.hasNetworkCapability() && target.hasWorkerCapability();
+    return target && !target.hasBrowserCapability() && !target.hasJSCapability() && target.hasNetworkCapability() && target.hasTargetCapability();
 }
 
 InspectorTest.describeTargetType = function(target)

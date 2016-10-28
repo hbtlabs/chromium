@@ -21,6 +21,9 @@ const base::Feature kRecentOfflineTabSuggestionsFeature{
 const base::Feature kSaveToOfflineFeature{
     "NTPSaveToOffline", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kOfflineBadgeFeature{
+    "NTPOfflineBadge", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kDownloadSuggestionsFeature{
     "NTPDownloadSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -31,7 +34,7 @@ const base::Feature kContentSuggestionsFeature{
     "NTPSnippets", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSectionDismissalFeature{
-    "NTPSuggestionsSectionDismissal", base::FEATURE_DISABLED_BY_DEFAULT};
+    "NTPSuggestionsSectionDismissal", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kForeignSessionsSuggestionsFeature{
     "NTPForeignSessionsSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};

@@ -88,6 +88,7 @@
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/common/isolated_world_ids.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "device/generic_sensor/sensor_provider_impl.h"
@@ -96,7 +97,6 @@
 #include "device/wake_lock/wake_lock_service_context.h"
 #include "media/base/media_switches.h"
 #include "media/mojo/interfaces/media_service.mojom.h"
-#include "media/mojo/interfaces/service_factory.mojom.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -811,9 +811,9 @@ void RenderFrameHostImpl::RenderProcessGone(SiteInstanceImpl* site_instance) {
 
 void RenderFrameHostImpl::Create(
     const service_manager::Identity& remote_identity,
-    media::mojom::ServiceFactoryRequest request) {
-  std::unique_ptr<service_manager::InterfaceRegistry> registry(
-      new service_manager::InterfaceRegistry);
+    media::mojom::InterfaceFactoryRequest request) {
+  auto registry = base::MakeUnique<service_manager::InterfaceRegistry>(
+      std::string());
 #if defined(OS_ANDROID) && defined(ENABLE_MOJO_CDM)
   registry->AddInterface(
       base::Bind(&ProvisionFetcherImpl::Create, this));
@@ -821,7 +821,11 @@ void RenderFrameHostImpl::Create(
   GetContentClient()->browser()->ExposeInterfacesToMediaService(registry.get(),
                                                                 this);
   service_manager::mojom::InterfaceProviderPtr interfaces;
-  registry->Bind(GetProxy(&interfaces));
+  registry->Bind(GetProxy(&interfaces),
+                 service_manager::Identity(),
+                 service_manager::InterfaceProviderSpec(),
+                 service_manager::Identity(),
+                 service_manager::InterfaceProviderSpec());
   media_registries_.push_back(std::move(registry));
 
   // TODO(slan): Use the BrowserContext Connector instead. See crbug.com/638950.
@@ -829,8 +833,8 @@ void RenderFrameHostImpl::Create(
   service_manager::Connector* connector =
       ServiceManagerConnection::GetForProcess()->GetConnector();
   connector->ConnectToInterface("service:media", &media_service);
-  media_service->CreateServiceFactory(std::move(request),
-                                      std::move(interfaces));
+  media_service->CreateInterfaceFactory(std::move(request),
+                                        std::move(interfaces));
 }
 
 bool RenderFrameHostImpl::CreateRenderFrame(int proxy_routing_id,
@@ -917,10 +921,12 @@ void RenderFrameHostImpl::SetRenderFrameCreated(bool created) {
   // If the current status is different than the new status, the delegate
   // needs to be notified.
   if (delegate_ && (created != was_created)) {
-    if (created)
+    if (created) {
+      SetUpMojoIfNeeded();
       delegate_->RenderFrameCreated(this);
-    else
+    } else {
       delegate_->RenderFrameDeleted(this);
+    }
   }
 
   if (created && render_widget_host_)
@@ -1173,10 +1179,10 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
     return;
   }
 
-  // If the URL does not match what the NavigationHandle expects, treat the
-  // commit as a new navigation. This can happen if an ongoing slow
-  // same-process navigation is interrupted by a synchronous renderer-initiated
-  // navigation.
+  // If the URL or |was_within_same_page| does not match what the
+  // NavigationHandle expects, treat the commit as a new navigation. This can
+  // happen if an ongoing slow same-process navigation is interwoven with a
+  // synchronous renderer-initiated navigation.
   // TODO(csharrison): Data navigations loaded with LoadDataWithBaseURL get
   // reset here, because the NavigationHandle tracks the URL but the
   // validated_params.url tracks the data. The trick of saving the old entry ids
@@ -1185,7 +1191,9 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
   int entry_id_for_data_nav = 0;
   bool is_renderer_initiated = true;
   if (navigation_handle_ &&
-      (navigation_handle_->GetURL() != validated_params.url)) {
+      ((navigation_handle_->GetURL() != validated_params.url) ||
+       navigation_handle_->IsSamePage() !=
+           validated_params.was_within_same_page)) {
     // Make sure that the pending entry was really loaded via
     // LoadDataWithBaseURL and that it matches this handle.
     NavigationEntryImpl* pending_entry =
@@ -1209,16 +1217,16 @@ void RenderFrameHostImpl::OnDidCommitProvisionalLoad(const IPC::Message& msg) {
 
   // Synchronous renderer-initiated navigations will send a
   // DidCommitProvisionalLoad IPC without a prior DidStartProvisionalLoad
-  // message.
+  // message. Or in addition, the if block above can reset the NavigationHandle
+  // in cases it doesn't match the expected commit.
   if (!navigation_handle_) {
     // There is no pending NavigationEntry in these cases, so pass 0 as the
     // nav_id. If the previous handle was a prematurely aborted navigation
     // loaded via LoadDataWithBaseURL, propogate the entry id.
     navigation_handle_ = NavigationHandleImpl::Create(
         validated_params.url, frame_tree_node_, is_renderer_initiated,
-        true,  // is_synchronous
-        validated_params.is_srcdoc, base::TimeTicks::Now(),
-        entry_id_for_data_nav,
+        validated_params.was_within_same_page, validated_params.is_srcdoc,
+        base::TimeTicks::Now(), entry_id_for_data_nav,
         false);  // started_from_context_menu
     // PlzNavigate
     if (IsBrowserSideNavigationEnabled()) {
@@ -1529,6 +1537,15 @@ void RenderFrameHostImpl::OnSwappedOut() {
 
 void RenderFrameHostImpl::DisableSwapOutTimerForTesting() {
   swapout_event_monitor_timeout_.reset();
+}
+
+void RenderFrameHostImpl::OnRendererConnect(
+    const service_manager::ServiceInfo& local_info,
+    const service_manager::ServiceInfo& remote_info) {
+  if (remote_info.identity.name() != kRendererServiceName)
+    return;
+  browser_info_ = local_info;
+  renderer_info_ = remote_info;
 }
 
 void RenderFrameHostImpl::OnContextMenu(const ContextMenuParams& params) {
@@ -2175,19 +2192,11 @@ void RenderFrameHostImpl::RegisterMojoInterfaces() {
       base::Bind(&device::VibrationManagerImpl::Create));
 #endif  // defined(OS_ANDROID)
 
-  bool enable_web_bluetooth = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableWebBluetooth);
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_MACOSX)
-  enable_web_bluetooth = true;
-#endif
+  GetInterfaceRegistry()->AddInterface(base::Bind(
+      base::IgnoreResult(&RenderFrameHostImpl::CreateWebBluetoothService),
+      base::Unretained(this)));
 
-  if (enable_web_bluetooth) {
-    GetInterfaceRegistry()->AddInterface(base::Bind(
-        base::IgnoreResult(&RenderFrameHostImpl::CreateWebBluetoothService),
-        base::Unretained(this)));
-  }
-
-  GetInterfaceRegistry()->AddInterface<media::mojom::ServiceFactory>(this);
+  GetInterfaceRegistry()->AddInterface<media::mojom::InterfaceFactory>(this);
 
   // This is to support usage of WebSockets in cases in which there is an
   // associated RenderFrame. This is important for showing the correct security
@@ -2581,7 +2590,20 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
   if (interface_registry_.get())
     return;
 
-  interface_registry_.reset(new service_manager::InterfaceRegistry);
+  interface_registry_ = base::MakeUnique<service_manager::InterfaceRegistry>(
+      mojom::kNavigation_FrameSpec);
+
+  ServiceManagerConnection* service_manager_connection =
+      BrowserContext::GetServiceManagerConnectionFor(
+          GetProcess()->GetBrowserContext());
+  // |service_manager_connection| may not be set in unit tests using
+  // TestBrowserContext.
+  if (service_manager_connection) {
+    on_connect_handler_id_ = service_manager_connection->AddOnConnectHandler(
+        base::Bind(&RenderFrameHostImpl::OnRendererConnect,
+        weak_ptr_factory_.GetWeakPtr()));
+  }
+
   if (!GetProcess()->GetRemoteInterfaces())
     return;
 
@@ -2601,6 +2623,16 @@ void RenderFrameHostImpl::SetUpMojoIfNeeded() {
 
 void RenderFrameHostImpl::InvalidateMojoConnection() {
   interface_registry_.reset();
+
+  ServiceManagerConnection* service_manager_connection =
+      BrowserContext::GetServiceManagerConnectionFor(
+          GetProcess()->GetBrowserContext());
+  // |service_manager_connection| may be null in tests using TestBrowserContext.
+  if (service_manager_connection) {
+    service_manager_connection->RemoveOnConnectHandler(on_connect_handler_id_);
+    on_connect_handler_id_ = 0;
+  }
+
   frame_.reset();
   frame_host_binding_.Close();
 
@@ -2727,6 +2759,10 @@ void RenderFrameHostImpl::ResetLoadingState() {
 
 void RenderFrameHostImpl::SuppressFurtherDialogs() {
   Send(new FrameMsg_SuppressFurtherDialogs(GetRoutingID()));
+}
+
+void RenderFrameHostImpl::SetHasReceivedUserGesture() {
+  Send(new FrameMsg_SetHasReceivedUserGesture(GetRoutingID()));
 }
 
 bool RenderFrameHostImpl::IsSameSiteInstance(
@@ -2865,7 +2901,17 @@ void RenderFrameHostImpl::FilesSelectedInChooser(
 
 void RenderFrameHostImpl::GetInterfaceProvider(
     service_manager::mojom::InterfaceProviderRequest interfaces) {
-  interface_registry_->Bind(std::move(interfaces));
+  service_manager::InterfaceProviderSpec browser_spec, renderer_spec;
+  // TODO(beng): CHECK these return true.
+  service_manager::GetInterfaceProviderSpec(
+      mojom::kNavigation_FrameSpec, browser_info_.interface_provider_specs,
+      &browser_spec);
+  service_manager::GetInterfaceProviderSpec(
+      mojom::kNavigation_FrameSpec, renderer_info_.interface_provider_specs,
+      &renderer_spec);
+  interface_registry_->Bind(std::move(interfaces),
+                            browser_info_.identity, browser_spec,
+                            renderer_info_.identity, renderer_spec);
 }
 
 #if defined(USE_EXTERNAL_POPUP_MENU)

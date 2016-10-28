@@ -417,9 +417,7 @@ public class MediaNotificationManager {
     }
 
     private static boolean isRunningN() {
-        // TODO(zqzhang): Use Build.VERSION_CODES.N when Android SDK is rolled to level 24.
-        // See https://crbug.com/645059
-        return Build.VERSION.CODENAME.equals("N") || Build.VERSION.SDK_INT > Build.VERSION_CODES.M;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N;
     }
 
     private final Context mContext;
@@ -691,11 +689,11 @@ public class MediaNotificationManager {
             style.setMediaSession(mMediaSession.getSessionToken());
 
             if (mMediaNotificationInfo.isPaused) {
-                builder.addAction(R.drawable.ic_vidcontrol_play, mPlayDescription,
+                builder.addAction(R.drawable.ic_media_control_play, mPlayDescription,
                         createPendingIntent(ListenerService.ACTION_PLAY));
             } else {
                 // If we're here, the notification supports play/pause button and is playing.
-                builder.addAction(R.drawable.ic_vidcontrol_pause, mPauseDescription,
+                builder.addAction(R.drawable.ic_media_control_pause, mPauseDescription,
                         createPendingIntent(ListenerService.ACTION_PAUSE));
             }
             style.setShowActionsInCompactView(0);
@@ -705,7 +703,7 @@ public class MediaNotificationManager {
         }
 
         if (mMediaNotificationInfo.supportsStop()) {
-            builder.addAction(R.drawable.ic_vidcontrol_stop, mStopDescription,
+            builder.addAction(R.drawable.ic_media_control_stop, mStopDescription,
                     createPendingIntent(ListenerService.ACTION_STOP));
         }
     }

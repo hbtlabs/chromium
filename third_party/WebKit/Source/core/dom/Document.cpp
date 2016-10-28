@@ -37,8 +37,10 @@
 #include "bindings/core/v8/Microtask.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
+#include "bindings/core/v8/StringOrDictionary.h"
 #include "bindings/core/v8/V0CustomElementConstructorBuilder.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
+#include "bindings/core/v8/V8ElementCreationOptions.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/HTMLElementFactory.h"
@@ -75,6 +77,7 @@
 #include "core/dom/DocumentParserTiming.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementCreationOptions.h"
 #include "core/dom/ElementDataCache.h"
 #include "core/dom/ElementRegistrationOptions.h"
 #include "core/dom/ElementTraversal.h"
@@ -120,6 +123,7 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/InputMethodController.h"
+#include "core/editing/SelectionController.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
@@ -241,6 +245,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebFrameScheduler.h"
+#include "public/platform/WebPrerenderingSupport.h"
 #include "public/platform/WebScheduler.h"
 #include "wtf/AutoReset.h"
 #include "wtf/CurrentTime.h"
@@ -398,22 +403,11 @@ static void runAutofocusTask(ExecutionContext* context) {
   }
 }
 
-// These are logged to UMA, so don't re-arrange them without creating a new
-// histogram.
-enum DocumentVisibilityForDeferredLoading {
-  Created,
-  WouldLoadBecauseVisible,
-  // TODO(dgrogan): Add WouldLoadBecauseTopOrLeft, WouldLoadBecauseDisplayNone,
-  // etc
-
-  DocumentVisibilityForDeferredLoadingEnd
-};
-
-static void RecordStateToHistogram(DocumentVisibilityForDeferredLoading state) {
-  DEFINE_STATIC_LOCAL(EnumerationHistogram, unseenFrameHistogram,
-                      ("Navigation.DeferredDocumentLoading.StatesV1",
-                       DocumentVisibilityForDeferredLoadingEnd));
-  unseenFrameHistogram.count(state);
+static void recordLoadReasonToHistogram(WouldLoadReason reason) {
+  DEFINE_STATIC_LOCAL(
+      EnumerationHistogram, unseenFrameHistogram,
+      ("Navigation.DeferredDocumentLoading.StatesV3", WouldLoadReasonEnd));
+  unseenFrameHistogram.count(reason);
 }
 
 Document::Document(const DocumentInit& initializer,
@@ -437,8 +431,10 @@ Document::Document(const DocumentInit& initializer,
           this,
           &Document::executeScriptsWaitingForResources)),
       m_hasAutofocused(false),
-      m_clearFocusedElementTimer(this,
-                                 &Document::clearFocusedElementTimerFired),
+      m_clearFocusedElementTimer(
+          TaskRunnerHelper::get(TaskType::Internal, this),
+          this,
+          &Document::clearFocusedElementTimerFired),
       m_domTreeVersion(++s_globalTreeVersion),
       m_styleVersion(0),
       m_listenerTypes(0),
@@ -456,8 +452,10 @@ Document::Document(const DocumentInit& initializer,
       m_ignoreDestructiveWriteCount(0),
       m_throwOnDynamicMarkupInsertionCount(0),
       m_markers(new DocumentMarkerController(*this)),
-      m_updateFocusAppearanceTimer(this,
-                                   &Document::updateFocusAppearanceTimerFired),
+      m_updateFocusAppearanceTimer(
+          TaskRunnerHelper::get(TaskType::Internal, this),
+          this,
+          &Document::updateFocusAppearanceTimerFired),
       m_cssTarget(nullptr),
       m_loadEventProgress(LoadEventNotRun),
       m_startTime(currentTime()),
@@ -467,6 +465,7 @@ Document::Document(const DocumentInit& initializer,
       m_hasXMLDeclaration(0),
       m_designMode(false),
       m_isRunningExecCommand(false),
+      m_hasReceivedUserGesture(false),
       m_hasAnnotatedRegions(false),
       m_annotatedRegionsDirty(false),
       m_useSecureKeyboardEntryWhenActive(false),
@@ -479,26 +478,33 @@ Document::Document(const DocumentInit& initializer,
       m_contextDocument(initializer.contextDocument()),
       m_hasFullscreenSupplement(false),
       m_loadEventDelayCount(0),
-      m_loadEventDelayTimer(this, &Document::loadEventDelayTimerFired),
-      m_pluginLoadingTimer(this, &Document::pluginLoadingTimerFired),
+      m_loadEventDelayTimer(TaskRunnerHelper::get(TaskType::Networking, this),
+                            this,
+                            &Document::loadEventDelayTimerFired),
+      m_pluginLoadingTimer(TaskRunnerHelper::get(TaskType::Internal, this),
+                           this,
+                           &Document::pluginLoadingTimerFired),
       m_documentTiming(*this),
       m_writeRecursionIsTooDeep(false),
       m_writeRecursionDepth(0),
       m_taskRunner(MainThreadTaskRunner::create(this)),
       m_registrationContext(initializer.registrationContext(this)),
-      m_elementDataCacheClearTimer(this,
-                                   &Document::elementDataCacheClearTimerFired),
+      m_elementDataCacheClearTimer(
+          TaskRunnerHelper::get(TaskType::Internal, this),
+          this,
+          &Document::elementDataCacheClearTimerFired),
       m_timeline(DocumentTimeline::create(this)),
       m_compositorPendingAnimations(new CompositorPendingAnimations()),
       m_templateDocumentHost(nullptr),
       m_didAssociateFormControlsTimer(
+          TaskRunnerHelper::get(TaskType::Internal, this),
           this,
           &Document::didAssociateFormControlsTimerFired),
       m_timers(TaskRunnerHelper::get(TaskType::Timer, this)->clone()),
       m_hasViewportUnits(false),
       m_parserSyncPolicy(AllowAsynchronousParsing),
       m_nodeCount(0),
-      m_visibilityWasLogged(false) {
+      m_wouldLoadReason(Created) {
   if (m_frame) {
     DCHECK(m_frame->page());
     provideContextFeaturesToDocumentFrom(*this, *m_frame->page());
@@ -529,11 +535,6 @@ Document::Document(const DocumentInit& initializer,
     setURL(initializer.url());
 
   initSecurityContext(initializer);
-  DCHECK(getSecurityOrigin());
-  if (frame() && frame()->tree().top()->securityContext() &&
-      !getSecurityOrigin()->canAccess(
-          frame()->tree().top()->securityContext()->getSecurityOrigin()))
-    RecordStateToHistogram(Created);
 
   initDNSPrefetch();
 
@@ -658,6 +659,7 @@ AtomicString Document::convertLocalName(const AtomicString& name) {
   return isHTMLDocument() ? name.lower() : name;
 }
 
+// https://dom.spec.whatwg.org/#dom-document-createelement
 Element* Document::createElement(const AtomicString& name,
                                  ExceptionState& exceptionState) {
   if (!isValidName(name)) {
@@ -668,18 +670,46 @@ Element* Document::createElement(const AtomicString& name,
   }
 
   if (isXHTMLDocument() || isHTMLDocument()) {
-    if (CustomElement::shouldCreateCustomElement(name))
-      return CustomElement::createCustomElementSync(*this, name,
-                                                    exceptionState);
-    return HTMLElementFactory::createHTMLElement(convertLocalName(name), *this,
-                                                 0, CreatedByCreateElement);
+    // 2. If the context object is an HTML document, let localName be
+    // converted to ASCII lowercase.
+    AtomicString localName = convertLocalName(name);
+    if (CustomElement::shouldCreateCustomElement(localName))
+      return CustomElement::createCustomElementSync(*this, localName);
+    return HTMLElementFactory::createHTMLElement(localName, *this, 0,
+                                                 CreatedByCreateElement);
   }
 
   return Element::create(QualifiedName(nullAtom, name, nullAtom), this);
 }
 
+String getTypeExtension(Document* document,
+                        const StringOrDictionary& stringOrOptions,
+                        ExceptionState& exceptionState) {
+  if (stringOrOptions.isNull())
+    return emptyString();
+
+  if (stringOrOptions.isString()) {
+    UseCounter::count(document,
+                      UseCounter::DocumentCreateElement2ndArgStringHandling);
+    return stringOrOptions.getAsString();
+  }
+
+  if (stringOrOptions.isDictionary()) {
+    Dictionary dict = stringOrOptions.getAsDictionary();
+    ElementCreationOptions impl;
+    V8ElementCreationOptions::toImpl(dict.isolate(), dict.v8Value(), impl,
+                                     exceptionState);
+    if (impl.hasIs())
+      return impl.is();
+
+    return toCoreString(dict.v8Value()->ToString());
+  }
+
+  return emptyString();
+}
+
 Element* Document::createElement(const AtomicString& localName,
-                                 const AtomicString& typeExtension,
+                                 const StringOrDictionary& stringOrOptions,
                                  ExceptionState& exceptionState) {
   if (!isValidName(localName)) {
     exceptionState.throwDOMException(
@@ -690,9 +720,9 @@ Element* Document::createElement(const AtomicString& localName,
 
   Element* element;
 
-  if (CustomElement::shouldCreateCustomElement(localName)) {
-    element = CustomElement::createCustomElementSync(*this, localName,
-                                                     exceptionState);
+  if (CustomElement::shouldCreateCustomElement(convertLocalName(localName))) {
+    element = CustomElement::createCustomElementSync(
+        *this, convertLocalName(localName));
   } else if (V0CustomElement::isValidName(localName) && registrationContext()) {
     element = registrationContext()->createCustomTagElement(
         *this, QualifiedName(nullAtom, convertLocalName(localName),
@@ -703,9 +733,12 @@ Element* Document::createElement(const AtomicString& localName,
       return nullptr;
   }
 
-  if (!typeExtension.isEmpty())
+  String typeExtention =
+      getTypeExtension(this, stringOrOptions, exceptionState);
+  if (!typeExtention.isEmpty()) {
     V0CustomElementRegistrationContext::setIsAttributeAndTypeExtension(
-        element, typeExtension);
+        element, AtomicString(typeExtention));
+  }
 
   return element;
 }
@@ -741,13 +774,13 @@ Element* Document::createElementNS(const AtomicString& namespaceURI,
     return nullptr;
 
   if (CustomElement::shouldCreateCustomElement(qName))
-    return CustomElement::createCustomElementSync(*this, qName, exceptionState);
+    return CustomElement::createCustomElementSync(*this, qName);
   return createElement(qName, CreatedByCreateElement);
 }
 
 Element* Document::createElementNS(const AtomicString& namespaceURI,
                                    const AtomicString& qualifiedName,
-                                   const AtomicString& typeExtension,
+                                   const StringOrDictionary& stringOrOptions,
                                    ExceptionState& exceptionState) {
   QualifiedName qName(
       createQualifiedName(namespaceURI, qualifiedName, exceptionState));
@@ -756,17 +789,19 @@ Element* Document::createElementNS(const AtomicString& namespaceURI,
 
   Element* element;
   if (CustomElement::shouldCreateCustomElement(qName))
-    element =
-        CustomElement::createCustomElementSync(*this, qName, exceptionState);
+    element = CustomElement::createCustomElementSync(*this, qName);
   else if (V0CustomElement::isValidName(qName.localName()) &&
            registrationContext())
     element = registrationContext()->createCustomTagElement(*this, qName);
   else
     element = createElement(qName, CreatedByCreateElement);
 
-  if (!typeExtension.isEmpty())
+  String typeExtention =
+      getTypeExtension(this, stringOrOptions, exceptionState);
+  if (!typeExtention.isEmpty()) {
     V0CustomElementRegistrationContext::setIsAttributeAndTypeExtension(
-        element, typeExtension);
+        element, AtomicString(typeExtention));
+  }
 
   return element;
 }
@@ -2032,6 +2067,9 @@ void Document::updateStyleAndLayout() {
 
   if (lifecycle().state() < DocumentLifecycle::LayoutClean)
     lifecycle().advanceTo(DocumentLifecycle::LayoutClean);
+
+  if (FrameView* frameView = view())
+    frameView->performScrollAnchoringAdjustments();
 }
 
 void Document::layoutUpdated() {
@@ -2074,7 +2112,6 @@ void Document::clearFocusedElementSoon() {
 
 void Document::clearFocusedElementTimerFired(TimerBase*) {
   updateStyleAndLayoutTree();
-  m_clearFocusedElementTimer.stop();
 
   if (m_focusedElement && !m_focusedElement->isFocusable())
     m_focusedElement->blur();
@@ -2376,6 +2413,7 @@ void Document::shutdown() {
   frameHost()->eventHandlerRegistry().documentDetached(*this);
 
   m_frame->selection().documentDetached(*this);
+  m_frame->eventHandler().selectionController().documentDetached();
   m_frame->inputMethodController().documentDetached();
 
   // If this Document is associated with a live DocumentLoader, the
@@ -5145,6 +5183,9 @@ void Document::finishedParsing() {
 
   // Parser should have picked up all preloads by now
   m_fetcher->clearPreloads(ResourceFetcher::ClearSpeculativeMarkupPreloads);
+
+  if (isPrefetchOnly())
+    WebPrerenderingSupport::current()->prefetchFinished();
 }
 
 void Document::elementDataCacheClearTimerFired(TimerBase*) {
@@ -6373,12 +6414,14 @@ DEFINE_TRACE(Document) {
   SecurityContext::trace(visitor);
 }
 
-void Document::onVisibilityMaybeChanged(bool visible) {
+void Document::maybeRecordLoadReason(WouldLoadReason reason) {
+  DCHECK(m_wouldLoadReason == Created || reason != Created);
   DCHECK(frame());
-  if (visible && !m_visibilityWasLogged && frame()->isCrossOriginSubframe()) {
-    m_visibilityWasLogged = true;
-    RecordStateToHistogram(WouldLoadBecauseVisible);
+  if (m_wouldLoadReason == Created && frame()->isCrossOriginSubframe() &&
+      frame()->loader().stateMachine()->committedFirstRealDocumentLoad()) {
+    recordLoadReasonToHistogram(reason);
   }
+  m_wouldLoadReason = reason;
 }
 
 DEFINE_TRACE_WRAPPERS(Document) {
@@ -6388,7 +6431,7 @@ DEFINE_TRACE_WRAPPERS(Document) {
   visitor->traceWrappers(m_styleEngine);
   for (int i = 0; i < numNodeListInvalidationTypes; ++i) {
     for (auto list : m_nodeLists[i]) {
-      visitor->traceWrappers(list);
+      visitor->traceWrappersWithManualWriteBarrier(list);
     }
   }
   // Cannot trace in Supplementable<Document> as it is part of platform/ and

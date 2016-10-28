@@ -64,6 +64,25 @@ TEST_F('CrSettingsCheckboxTest', 'All', function() {
   mocha.run();
 });
 
+function CrSettingsToggleButtonTest() {}
+
+CrSettingsToggleButtonTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/controls/settings_toggle_button.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'settings_toggle_button_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsToggleButtonTest', 'All', function() {
+  settings_toggle_button.registerTests();
+  mocha.run();
+});
+
 function CrSettingsDropdownMenuTest() {}
 
 CrSettingsDropdownMenuTest.prototype = {
@@ -969,3 +988,30 @@ CrSettingsActionMenuTest.prototype = {
 TEST_F('CrSettingsActionMenuTest', 'All', function() {
   mocha.run();
 });
+
+GEN('#if defined(OS_CHROMEOS)');
+
+/**
+ * Test fixture for the Date and Time page.
+ * @constructor
+ * @extends {CrSettingsBrowserTest}
+ */
+function CrSettingsDateTimePageTest() {}
+
+CrSettingsDateTimePageTest.prototype = {
+  __proto__: CrSettingsBrowserTest.prototype,
+
+  /** @override */
+  browsePreload: 'chrome://md-settings/date_time_page/date_time_page.html',
+
+  /** @override */
+  extraLibraries: CrSettingsBrowserTest.prototype.extraLibraries.concat([
+    'date_time_page_tests.js',
+  ]),
+};
+
+TEST_F('CrSettingsDateTimePageTest', 'DateTimePageTest', function() {
+  mocha.run();
+});
+
+GEN('#endif');

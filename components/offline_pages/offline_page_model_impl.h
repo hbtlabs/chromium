@@ -49,6 +49,7 @@ struct OfflinePageItem;
 
 class ArchiveManager;
 class ClientPolicyController;
+class OfflinePageModelQuery;
 class OfflinePageStorageManager;
 
 // Implementation of service for saving pages offline, storing the offline
@@ -73,6 +74,12 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void MarkPageAccessed(int64_t offline_id) override;
   void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                               const DeletePageCallback& callback) override;
+  void DeletePagesByClientIds(const std::vector<ClientId>& client_ids,
+                              const DeletePageCallback& callback) override;
+  void GetPagesByClientIds(
+      const std::vector<ClientId>& client_ids,
+      const MultipleOfflinePageItemCallback& callback) override;
+
   void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) override;
@@ -85,18 +92,12 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void GetOfflineIdsForClientId(
       const ClientId& client_id,
       const MultipleOfflineIdCallback& callback) override;
-  const std::vector<int64_t> MaybeGetOfflineIdsForClientId(
-      const ClientId& client_id) const override;
   void GetPageByOfflineId(
       int64_t offline_id,
       const SingleOfflinePageItemCallback& callback) override;
-  const OfflinePageItem* MaybeGetPageByOfflineId(
-      int64_t offline_id) const override;
   void GetPagesByOnlineURL(
       const GURL& online_url,
       const MultipleOfflinePageItemCallback& callback) override;
-  const OfflinePageItem* MaybeGetBestPageForOnlineURL(
-      const GURL& online_url) const override;
   void ExpirePages(const std::vector<int64_t>& offline_ids,
                    const base::Time& expiration_time,
                    const base::Callback<void(bool)>& callback) override;
@@ -120,19 +121,14 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
  private:
   FRIEND_TEST_ALL_PREFIXES(OfflinePageModelImplTest, MarkPageForDeletion);
 
-  enum class GetAllPageMode {
-    ALL,               // Get all active page entries.
-    ALL_WITH_EXPIRED,  // Get all pages entries including expired ones.
-  };
-
   typedef ScopedVector<OfflinePageArchiver> PendingArchivers;
+
+  void ExecuteQuery(std::unique_ptr<OfflinePageModelQuery> query,
+                    const MultipleOfflinePageItemCallback& callback);
 
   // Callback for ensuring archive directory is created.
   void OnEnsureArchivesDirCreatedDone(const base::TimeTicks& start_time);
 
-  void GetAllPagesAfterLoadDone(
-      GetAllPageMode mode,
-      const MultipleOfflinePageItemCallback& callback) const;
   void CheckPagesExistOfflineAfterLoadDone(
       const std::set<GURL>& urls,
       const CheckPagesExistOfflineCallback& callback);
@@ -142,6 +138,8 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   void GetPageByOfflineIdWhenLoadDone(
       int64_t offline_id,
       const SingleOfflinePageItemCallback& callback) const;
+  const std::vector<int64_t> MaybeGetOfflineIdsForClientId(
+      const ClientId& client_id) const;
   void GetPagesByOnlineURLWhenLoadDone(
       const GURL& online_url,
       const MultipleOfflinePageItemCallback& callback) const;
@@ -216,6 +214,13 @@ class OfflinePageModelImpl : public OfflinePageModel, public KeyedService {
   // Actually does the work of deleting, requires the model is loaded.
   void DoDeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                                 const DeletePageCallback& callback);
+
+  // Actually does the work of deleting, requires the model is loaded.
+  void DeletePages(const DeletePageCallback& callback,
+                   const MultipleOfflinePageItemResult& items);
+
+  void DoGetPagesByClientIds(const std::vector<ClientId>& client_ids,
+                             const MultipleOfflinePageItemCallback& callback);
 
   // Similar to DoDeletePagesByOfflineId, does actual work of deleting, and
   // requires that the model is loaded.

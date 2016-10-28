@@ -65,11 +65,15 @@ extern const base::Feature kMaterialDesignSettings;
 extern const base::Feature kNativeNotifications;
 #endif  // defined(OS_MACOSX)
 
+extern const base::Feature kOverrideYouTubeFlashEmbed;
+
 #if defined(ENABLE_PLUGINS)
 extern const base::Feature kPreferHtmlOverPlugins;
 #endif
 
-extern const base::Feature kOverrideYouTubeFlashEmbed;
+#if defined(ENABLE_PRINT_PREVIEW)
+extern const base::Feature kPrintScaling;
+#endif
 
 extern const base::Feature kPushMessagingBackgroundMode;
 
@@ -85,9 +89,15 @@ extern const base::Feature kSafeSearchUrlReporting;
 
 extern const base::Feature kSimplifiedFullscreenUI;
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+extern const base::Feature kSecurityChip;
+#endif
+
 #if defined(SYZYASAN)
 extern const base::Feature kSyzyasanDeferredFree;
 #endif
+
+extern const base::Feature kUseGroupedPermissionInfobars;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;

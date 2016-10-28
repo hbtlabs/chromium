@@ -9,12 +9,7 @@
         {
           "object": "LayoutText #text",
           "rect": [8, 8, 32, 48],
-          "reason": "selection"
-        },
-        {
-          "object": "LayoutText #text",
-          "rect": [8, 40, 32, 16],
-          "reason": "incremental"
+          "reason": "bounds change"
         }
       ]
     }
@@ -34,27 +29,15 @@
     },
     {
       "object": "LayoutText #text",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'xx'",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'y'",
-      "reason": "selection"
-    },
-    {
-      "object": "LayoutText #text",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'xx'",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'y'",
-      "reason": "incremental"
+      "reason": "bounds change"
     }
   ]
 }

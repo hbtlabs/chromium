@@ -12,7 +12,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/EXTColorBufferFloat.h"
-#include "modules/webgl/EXTDisjointTimerQuery.h"
+#include "modules/webgl/EXTDisjointTimerQueryWebGL2.h"
 #include "modules/webgl/EXTTextureFilterAnisotropic.h"
 #include "modules/webgl/OESTextureFloatLinear.h"
 #include "modules/webgl/WebGLCompressedTextureASTC.h"
@@ -38,17 +38,14 @@ CanvasRenderingContext* WebGL2RenderingContext::Factory::create(
     HTMLCanvasElement* canvas,
     const CanvasContextCreationAttributes& attrs,
     Document&) {
-  if (!RuntimeEnabledFeatures::unsafeES3APIsEnabled()) {
-    canvas->dispatchEvent(WebGLContextEvent::create(
-        EventTypeNames::webglcontextcreationerror, false, true,
-        "Creation of WebGL2 contexts disabled."));
-    return nullptr;
-  }
-
   std::unique_ptr<WebGraphicsContext3DProvider> contextProvider(
       createWebGraphicsContext3DProvider(canvas, attrs, 2));
-  if (!contextProvider)
+  if (!contextProvider) {
+    canvas->dispatchEvent(WebGLContextEvent::create(
+        EventTypeNames::webglcontextcreationerror, false, true,
+        "Failed to create a WebGL2 context."));
     return nullptr;
+  }
   gpu::gles2::GLES2Interface* gl = contextProvider->contextGL();
   std::unique_ptr<Extensions3DUtil> extensionsUtil =
       Extensions3DUtil::create(gl);
@@ -103,7 +100,7 @@ void WebGL2RenderingContext::setOffscreenCanvasGetContextResult(
 }
 
 ImageBitmap* WebGL2RenderingContext::transferToImageBitmap(
-    ExceptionState& exceptionState) {
+    ScriptState* scriptState) {
   NOTIMPLEMENTED();
   return nullptr;
 }
@@ -115,7 +112,7 @@ void WebGL2RenderingContext::registerContextExtensions() {
 
   // Register extensions.
   registerExtension<EXTColorBufferFloat>(m_extColorBufferFloat);
-  registerExtension<EXTDisjointTimerQuery>(m_extDisjointTimerQuery);
+  registerExtension<EXTDisjointTimerQueryWebGL2>(m_extDisjointTimerQueryWebGL2);
   registerExtension<EXTTextureFilterAnisotropic>(m_extTextureFilterAnisotropic);
   registerExtension<OESTextureFloatLinear>(m_oesTextureFloatLinear);
   registerExtension<WebGLCompressedTextureASTC>(m_webglCompressedTextureASTC);
@@ -133,7 +130,7 @@ void WebGL2RenderingContext::registerContextExtensions() {
 
 DEFINE_TRACE(WebGL2RenderingContext) {
   visitor->trace(m_extColorBufferFloat);
-  visitor->trace(m_extDisjointTimerQuery);
+  visitor->trace(m_extDisjointTimerQueryWebGL2);
   visitor->trace(m_extTextureFilterAnisotropic);
   visitor->trace(m_oesTextureFloatLinear);
   visitor->trace(m_webglCompressedTextureASTC);
@@ -150,20 +147,7 @@ DEFINE_TRACE(WebGL2RenderingContext) {
 }
 
 DEFINE_TRACE_WRAPPERS(WebGL2RenderingContext) {
-  visitor->traceWrappers(m_extColorBufferFloat);
-  visitor->traceWrappers(m_extDisjointTimerQuery);
-  visitor->traceWrappers(m_extTextureFilterAnisotropic);
-  visitor->traceWrappers(m_oesTextureFloatLinear);
-  visitor->traceWrappers(m_webglCompressedTextureASTC);
-  visitor->traceWrappers(m_webglCompressedTextureATC);
-  visitor->traceWrappers(m_webglCompressedTextureETC);
-  visitor->traceWrappers(m_webglCompressedTextureETC1);
-  visitor->traceWrappers(m_webglCompressedTexturePVRTC);
-  visitor->traceWrappers(m_webglCompressedTextureS3TC);
-  visitor->traceWrappers(m_webglCompressedTextureS3TCsRGB);
-  visitor->traceWrappers(m_webglDebugRendererInfo);
-  visitor->traceWrappers(m_webglDebugShaders);
-  visitor->traceWrappers(m_webglLoseContext);
+  // Extensions are managed by WebGL2RenderingContextBase.
   WebGL2RenderingContextBase::traceWrappers(visitor);
 }
 

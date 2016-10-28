@@ -4,46 +4,108 @@
 
 package org.chromium.chrome.browser.ntp.cards;
 
+import org.chromium.base.Callback;
+import org.chromium.base.Promise;
 import org.chromium.base.VisibleForTesting;
+import org.chromium.chrome.browser.ntp.NewTabPage.DestructionObserver;
+import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus.CategoryStatusEnum;
 import org.chromium.chrome.browser.ntp.snippets.SectionHeader;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
- * A group of suggestions, with a header, a status card, and a progress indicator.
+ * A group of suggestions, with a header, a status card, and a progress indicator. This is
+ * responsible for tracking whether its suggestions have been saved offline.
  */
 public class SuggestionsSection extends InnerNode {
     private final List<TreeNode> mChildren = new ArrayList<>();
     private final List<SnippetArticle> mSuggestions = new ArrayList<>();
     private final SectionHeader mHeader;
+    private final TreeNode mSuggestionsList = new SuggestionsList(this);
     private final StatusItem mStatus;
     private final ProgressItem mProgressIndicator = new ProgressItem();
     private final ActionItem mMoreButton;
     private final SuggestionsCategoryInfo mCategoryInfo;
+    private final OfflinePageBridge mOfflinePageBridge;
 
-    public SuggestionsSection(NodeParent parent, SuggestionsCategoryInfo info) {
+    public SuggestionsSection(NodeParent parent, SuggestionsCategoryInfo info,
+            NewTabPageManager manager, OfflinePageBridge offlineBridge) {
         super(parent);
         mHeader = new SectionHeader(info.getTitle());
         mCategoryInfo = info;
         mMoreButton = new ActionItem(info);
         mStatus = StatusItem.createNoSuggestionsItem(info);
         resetChildren();
+
+        mOfflinePageBridge = offlineBridge;
+        final OfflinePageModelObserver offlinePageObserver = new OfflinePageModelObserver() {
+            @Override
+            public void offlinePageModelChanged() {
+                markSnippetsAvailableOffline();
+            }
+        };
+
+        mOfflinePageBridge.addObserver(offlinePageObserver);
+        manager.addDestructionObserver(new DestructionObserver() {
+            @Override
+            public void onDestroy() {
+                mOfflinePageBridge.removeObserver(offlinePageObserver);
+            }
+        });
+    }
+
+    private class SuggestionsList extends ChildNode {
+        public SuggestionsList(NodeParent parent) {
+            super(parent);
+        }
+
+        @Override
+        public int getItemCount() {
+            return mSuggestions.size();
+        }
+
+        @Override
+        @ItemViewType
+        public int getItemViewType(int position) {
+            return ItemViewType.SNIPPET;
+        }
+
+        @Override
+        public void onBindViewHolder(NewTabPageViewHolder holder, int position) {
+            assert holder instanceof SnippetArticleViewHolder;
+            ((SnippetArticleViewHolder) holder).onBindViewHolder(getSuggestionAt(position));
+        }
+
+        @Override
+        public SnippetArticle getSuggestionAt(int position) {
+            return mSuggestions.get(position);
+        }
+
+        @Override
+        public int getDismissSiblingPosDelta(int position) {
+            return 0;
+        }
     }
 
     @Override
-    public List<TreeNode> getChildren() {
+    protected List<TreeNode> getChildren() {
         return mChildren;
     }
 
     private void resetChildren() {
         mChildren.clear();
         mChildren.add(mHeader);
-        mChildren.addAll(mSuggestions);
+        mChildren.add(mSuggestionsList);
 
         if (mSuggestions.isEmpty()) mChildren.add(mStatus);
         if (mCategoryInfo.hasMoreButton() || mSuggestions.isEmpty()) mChildren.add(mMoreButton);
@@ -64,13 +126,9 @@ public class SuggestionsSection extends InnerNode {
         notifyItemRemoved(globalRemovedIndex);
 
         // If we still have some suggestions, we are done. Otherwise, we'll have to notify about the
-        // status-related items that are now present.
-        if (hasSuggestions()) return;
-        notifyItemInserted(globalRemovedIndex); // Status card.
-        if (!mCategoryInfo.hasMoreButton()) {
-            notifyItemInserted(globalRemovedIndex + 1); // Action card.
-        }
-        notifyItemInserted(globalRemovedIndex + 2); // Progress indicator.
+        // status-related items (status card, action card, and progress indicator) that are
+        // now present.
+        if (!hasSuggestions()) notifyItemRangeInserted(globalRemovedIndex, 3);
     }
 
     public void removeSuggestionById(String idWithinCategory) {
@@ -99,12 +157,36 @@ public class SuggestionsSection extends InnerNode {
         mSuggestions.clear();
         mSuggestions.addAll(suggestions);
 
+        markSnippetsAvailableOffline();
+
         if (mMoreButton != null) {
             mMoreButton.setPosition(mSuggestions.size());
             mMoreButton.setDismissable(mSuggestions.isEmpty());
         }
         resetChildren();
         notifySectionChanged(itemCountBefore);
+    }
+
+
+    /** Checks which SnippetArticles are available offline, and updates them accordingly. */
+    private void markSnippetsAvailableOffline() {
+        final Set<String> urls = new HashSet<>();
+        Promise<Set<String>> promise = new Promise<>();
+
+        for (final SnippetArticle article : mSuggestions) {
+            urls.add(article.mUrl);
+            urls.add(article.mAmpUrl);
+
+            promise.then(new Callback<Set<String>>() {
+                @Override
+                public void onResult(Set<String> offlineUrls) {
+                    if (offlineUrls.contains(article.mUrl)) article.setAvailableOffline(true);
+                    if (offlineUrls.contains(article.mAmpUrl)) article.setAmpAvailableOffline(true);
+                }
+            });
+        }
+
+        mOfflinePageBridge.checkPagesExistOffline(urls, promise.fulfillmentCallback());
     }
 
     /** Sets the status for the section. Some statuses can cause the suggestions to be cleared. */
@@ -135,16 +217,7 @@ public class SuggestionsSection extends InnerNode {
         }
     }
 
-    /**
-     * The dismiss sibling is an item that should be dismissed at the same time as the provided
-     * one. For example, if we want to dismiss a status card that has a More button attached, the
-     * button is the card's dismiss sibling. This function return the adapter position delta to
-     * apply to get to the sibling from the provided item. For the previous example, it would return
-     * {@code +1}, as the button comes right after the status card.
-     *
-     * @return a position delta to apply to the position of the provided item to get the adapter
-     * position of the item to animate. Returns {@code 0} if there is no dismiss sibling.
-     */
+    @Override
     public int getDismissSiblingPosDelta(int position) {
         // The only dismiss siblings we have so far are the More button and the status card.
         // Exit early if there is no More button.
@@ -153,13 +226,13 @@ public class SuggestionsSection extends InnerNode {
         // When there are suggestions we won't have contiguous status and action items.
         if (hasSuggestions()) return 0;
 
-        TreeNode item = getChildren().get(position);
+        TreeNode child = getChildForPosition(position);
 
         // The sibling of the more button is the status card, that should be right above.
-        if (item == mMoreButton) return -1;
+        if (child == mMoreButton) return -1;
 
         // The sibling of the status card is the more button when it exists, should be right below.
-        if (item == mStatus) return 1;
+        if (child == mStatus) return 1;
 
         return 0;
     }

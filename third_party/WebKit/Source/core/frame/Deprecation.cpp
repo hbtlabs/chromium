@@ -449,23 +449,12 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature) {
           "Fetching scripts with an invalid type/language attributes", M56,
           "5760718284521472");
 
-    // The PaymentAddress.careOf was deprecated and then will be removed in M56.
-    // Please see: https://www.chromestatus.com/features/5728579069411328
-    case UseCounter::PaymentAddressCareOf:
-      return willBeRemoved("PaymentAddress.careOf", M56, "5728579069411328");
-
     case UseCounter::VRDeprecatedFieldOfView:
       return replacedBy("VREyeParameters.fieldOfView",
                         "projection matrices provided by VRFrameData");
 
     case UseCounter::VRDeprecatedGetPose:
       return replacedBy("VRDisplay.getPose()", "VRDisplay.getFrameData()");
-
-    case UseCounter::DeprecatedBluetoothDeviceUUIDsAttribute:
-      return String::format(
-          "BluetoothDevice.uuids is deprecated and will be removed in %s. Use "
-          "getPrimaryServices() to retrieve all available UUIDs.",
-          milestoneString(M57));
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

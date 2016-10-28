@@ -41,8 +41,10 @@ int GetUniqueIDInConstructor() {
   return ++unique_id_counter;
 }
 
-void RecursivelyGenerateFrameEntries(const ExplodedFrameState& state,
-                                     NavigationEntryImpl::TreeNode* node) {
+void RecursivelyGenerateFrameEntries(
+    const ExplodedFrameState& state,
+    const std::vector<base::NullableString16>& referenced_files,
+    NavigationEntryImpl::TreeNode* node) {
   node->frame_entry = new FrameNavigationEntry(
       UTF16ToUTF8(state.target.string()), state.item_sequence_number,
       state.document_sequence_number, nullptr, nullptr,
@@ -52,6 +54,15 @@ void RecursivelyGenerateFrameEntries(const ExplodedFrameState& state,
 
   // Set a single-frame PageState on the entry.
   ExplodedPageState page_state;
+
+  // Copy the incoming PageState's list of referenced files into the main
+  // frame's PageState.  (We don't pass the list to subframes below.)
+  // TODO(creis): Grant access to this list for each process that renders
+  // this page, even for OOPIFs.  Eventually keep track of a verified list of
+  // files per frame, so that we only grant access to processes that need it.
+  if (referenced_files.size() > 0)
+    page_state.referenced_files = referenced_files;
+
   page_state.top = state;
   std::string data;
   EncodePageState(page_state, &data);
@@ -62,11 +73,16 @@ void RecursivelyGenerateFrameEntries(const ExplodedFrameState& state,
   }
   node->frame_entry->SetPageState(PageState::CreateFromEncodedData(data));
 
+  // Don't pass the file list to subframes, since that would result in multiple
+  // copies of it ending up in the combined list in GetPageState (via
+  // RecursivelyGenerateFrameState).
+  std::vector<base::NullableString16> empty_file_list;
+
   for (const ExplodedFrameState& child_state : state.children) {
     NavigationEntryImpl::TreeNode* child_node =
         new NavigationEntryImpl::TreeNode(node, nullptr);
     node->children.push_back(child_node);
-    RecursivelyGenerateFrameEntries(child_state, child_node);
+    RecursivelyGenerateFrameEntries(child_state, empty_file_list, child_node);
   }
 }
 
@@ -365,7 +381,8 @@ void NavigationEntryImpl::SetPageState(const PageState& state) {
     return;
   }
 
-  RecursivelyGenerateFrameEntries(exploded_state.top, frame_tree_.get());
+  RecursivelyGenerateFrameEntries(
+      exploded_state.top, exploded_state.referenced_files, frame_tree_.get());
 }
 
 PageState NavigationEntryImpl::GetPageState() const {
@@ -692,7 +709,7 @@ RequestNavigationParams NavigationEntryImpl::ConstructRequestNavigationParams(
     const FrameNavigationEntry& frame_entry,
     bool is_same_document_history_load,
     bool is_history_navigation_in_new_child,
-    const std::set<std::string>& subframe_unique_names,
+    const std::map<std::string, bool>& subframe_unique_names,
     bool has_committed_real_load,
     bool intended_as_new_entry,
     int pending_history_list_offset,
@@ -847,14 +864,34 @@ FrameNavigationEntry* NavigationEntryImpl::GetFrameEntry(
   return tree_node ? tree_node->frame_entry.get() : nullptr;
 }
 
-std::set<std::string> NavigationEntryImpl::GetSubframeUniqueNames(
+std::map<std::string, bool> NavigationEntryImpl::GetSubframeUniqueNames(
     FrameTreeNode* frame_tree_node) const {
-  std::set<std::string> names;
+  std::map<std::string, bool> names;
   NavigationEntryImpl::TreeNode* tree_node = FindFrameEntry(frame_tree_node);
   if (tree_node) {
     // Return the names of all immediate children.
-    for (TreeNode* child : tree_node->children)
-      names.insert(child->frame_entry->frame_unique_name());
+    for (TreeNode* child : tree_node->children) {
+      // Keep track of whether we would be loading about:blank, since the
+      // renderer should be allowed to just commit the initial blank frame if
+      // that was the default URL.  PageState doesn't matter there, because
+      // content injected into about:blank frames doesn't use it.
+      //
+      // Be careful not to include iframe srcdoc URLs in this check, which do
+      // need their PageState.  The committed URL in that case gets rewritten to
+      // about:blank, but we can detect it via the PageState's URL.
+      //
+      // See https://crbug.com/657896 for details.
+      bool is_about_blank = false;
+      ExplodedPageState exploded_page_state;
+      if (DecodePageState(child->frame_entry->page_state().ToEncodedData(),
+                          &exploded_page_state)) {
+        ExplodedFrameState frame_state = exploded_page_state.top;
+        if (UTF16ToUTF8(frame_state.url_string.string()) == url::kAboutBlankURL)
+          is_about_blank = true;
+      }
+
+      names[child->frame_entry->frame_unique_name()] = is_about_blank;
+    }
   }
   return names;
 }

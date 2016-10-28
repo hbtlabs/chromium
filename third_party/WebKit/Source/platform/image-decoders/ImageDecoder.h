@@ -28,6 +28,7 @@
 #define ImageDecoder_h
 
 #include "SkColorPriv.h"
+#include "SkColorSpaceXform.h"
 #include "platform/PlatformExport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/graphics/ImageOrientation.h"
@@ -42,13 +43,8 @@
 #include "wtf/text/WTFString.h"
 #include <memory>
 
-#if USE(SKCOLORXFORM)
-#include "SkColorSpaceXform.h"
-#endif
-
 namespace blink {
 
-#if USE(SKCOLORXFORM)
 #if SK_B32_SHIFT
 inline SkColorSpaceXform::ColorFormat xformColorFormat() {
   return SkColorSpaceXform::kRGBA_8888_ColorFormat;
@@ -58,7 +54,6 @@ inline SkColorSpaceXform::ColorFormat xformColorFormat() {
   return SkColorSpaceXform::kBGRA_8888_ColorFormat;
 }
 #endif
-#endif  // USE(SKCOLORXFORM)
 
 // ImagePlanes can be used to decode color components into provided buffers
 // instead of using an ImageFrame.
@@ -91,10 +86,7 @@ class PLATFORM_EXPORT ImageDecoder {
 
   enum AlphaOption { AlphaPremultiplied, AlphaNotPremultiplied };
 
-  enum GammaAndColorProfileOption {
-    GammaAndColorProfileApplied,
-    GammaAndColorProfileIgnored
-  };
+  enum ColorSpaceOption { ColorSpaceApplied, ColorSpaceIgnored };
 
   virtual ~ImageDecoder() {}
 
@@ -105,12 +97,11 @@ class PLATFORM_EXPORT ImageDecoder {
   static std::unique_ptr<ImageDecoder> create(PassRefPtr<SegmentReader> data,
                                               bool dataComplete,
                                               AlphaOption,
-                                              GammaAndColorProfileOption);
-  static std::unique_ptr<ImageDecoder> create(
-      PassRefPtr<SharedBuffer> data,
-      bool dataComplete,
-      AlphaOption alphaoption,
-      GammaAndColorProfileOption colorOptions) {
+                                              ColorSpaceOption);
+  static std::unique_ptr<ImageDecoder> create(PassRefPtr<SharedBuffer> data,
+                                              bool dataComplete,
+                                              AlphaOption alphaoption,
+                                              ColorSpaceOption colorOptions) {
     return create(SegmentReader::createFromSharedBuffer(std::move(data)),
                   dataComplete, alphaoption, colorOptions);
   }
@@ -215,25 +206,21 @@ class PLATFORM_EXPORT ImageDecoder {
 
   ImageOrientation orientation() const { return m_orientation; }
 
-  bool ignoresGammaAndColorProfile() const {
-    return m_ignoreGammaAndColorProfile;
-  }
+  bool ignoresColorSpace() const { return m_ignoreColorSpace; }
   static void setTargetColorProfile(const WebVector<char>&);
 
-  // Note that hasColorProfile refers to the existence of a not-ignored
-  // embedded color profile, and is independent of whether or not that
-  // profile's transform has been baked into the pixel values.
-  bool hasColorProfile() const { return m_hasColorProfile; }
+  // Note that hasColorSpace refers to the existence of a not-ignored
+  // embedded color space, and is independent of whether or not that
+  // space's transform has been baked into the pixel values.
+  bool hasColorSpace() const { return m_srcSpace.get(); }
   void setColorSpaceAndComputeTransform(const char* iccData,
-                                        unsigned iccLength,
-                                        bool useSRGB);
+                                        unsigned iccLength);
+  void setColorSpaceAndComputeTransform(sk_sp<SkColorSpace> srcSpace);
 
-#if USE(SKCOLORXFORM)
   // Transformation from encoded color space to target color space.
   SkColorSpaceXform* colorTransform() {
     return m_sourceToOutputDeviceColorTransform.get();
   }
-#endif
 
   // Sets the "decode failure" flag.  For caller convenience (since so
   // many callers want to return false after calling this), returns false
@@ -272,11 +259,10 @@ class PLATFORM_EXPORT ImageDecoder {
 
  protected:
   ImageDecoder(AlphaOption alphaOption,
-               GammaAndColorProfileOption colorOptions,
+               ColorSpaceOption colorOptions,
                size_t maxDecodedBytes)
       : m_premultiplyAlpha(alphaOption == AlphaPremultiplied),
-        m_ignoreGammaAndColorProfile(colorOptions ==
-                                     GammaAndColorProfileIgnored),
+        m_ignoreColorSpace(colorOptions == ColorSpaceIgnored),
         m_maxDecodedBytes(maxDecodedBytes),
         m_purgeAggressively(false) {}
 
@@ -315,13 +301,13 @@ class PLATFORM_EXPORT ImageDecoder {
   // Decodes the requested frame.
   virtual void decode(size_t) = 0;
 
-  // Returns the embedded image color profile.
-  const ImageFrame::ICCProfile& colorProfile() const { return m_colorProfile; }
+  // Returns the embedded image color space.
+  sk_sp<SkColorSpace> colorSpace() const { return m_srcSpace; }
 
   RefPtr<SegmentReader> m_data;  // The encoded data.
   Vector<ImageFrame, 1> m_frameBufferCache;
   const bool m_premultiplyAlpha;
-  const bool m_ignoreGammaAndColorProfile;
+  const bool m_ignoreColorSpace;
   ImageOrientation m_orientation;
 
   // The maximum amount of memory a decoded image should require. Ideally,
@@ -356,12 +342,8 @@ class PLATFORM_EXPORT ImageDecoder {
   bool m_isAllDataReceived = false;
   bool m_failed = false;
 
-  bool m_hasColorProfile = false;
-  ImageFrame::ICCProfile m_colorProfile;
-
-#if USE(SKCOLORXFORM)
+  sk_sp<SkColorSpace> m_srcSpace = nullptr;
   std::unique_ptr<SkColorSpaceXform> m_sourceToOutputDeviceColorTransform;
-#endif
 };
 
 }  // namespace blink

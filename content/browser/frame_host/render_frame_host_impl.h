@@ -36,7 +36,7 @@
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_message_type.h"
-#include "media/mojo/interfaces/service_factory.mojom.h"
+#include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "net/http/http_response_headers.h"
 #include "services/service_manager/public/cpp/interface_factory.h"
 #include "services/service_manager/public/cpp/interface_registry.h"
@@ -107,7 +107,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
       public BrowserAccessibilityDelegate,
       public SiteInstanceImpl::Observer,
       public NON_EXPORTED_BASE(
-          service_manager::InterfaceFactory<media::mojom::ServiceFactory>) {
+          service_manager::InterfaceFactory<media::mojom::InterfaceFactory>) {
  public:
   using AXTreeSnapshotCallback =
       base::Callback<void(
@@ -195,9 +195,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // SiteInstanceImpl::Observer
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
 
-  // service_manager::InterfaceFactory<media::mojom::ServiceFactory>
+  // service_manager::InterfaceFactory<media::mojom::InterfaceFactory>
   void Create(const service_manager::Identity& remote_identity,
-              media::mojom::ServiceFactoryRequest request) override;
+              media::mojom::InterfaceFactoryRequest request) override;
 
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
@@ -579,6 +579,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // no longer on the stack when we attempt to swap it out.
   void SuppressFurtherDialogs();
 
+  void SetHasReceivedUserGesture();
+
   // PlzNavigate: returns the LoFi state of the last successful navigation that
   // made a network request.
   LoFiState last_navigation_lofi_state() const {
@@ -815,6 +817,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // happen before it fires (to avoid flakiness).
   void DisableSwapOutTimerForTesting();
 
+  void OnRendererConnect(const service_manager::ServiceInfo& local_info,
+                         const service_manager::ServiceInfo& remote_info);
+
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
   // RenderFrameHostManager to just care about RenderFrameHosts, while ensuring
@@ -957,6 +962,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   std::unique_ptr<service_manager::InterfaceRegistry> interface_registry_;
   std::unique_ptr<service_manager::InterfaceProvider> remote_interfaces_;
+
+  service_manager::ServiceInfo browser_info_;
+  service_manager::ServiceInfo renderer_info_;
+
+  int on_connect_handler_id_ = 0;
 
 #if defined(OS_ANDROID)
   // The filter for MessagePort messages between an Android apps and web.

@@ -799,8 +799,8 @@ void LoginDisplayHostImpl::OnBrowserCreated() {
 
 OobeUI* LoginDisplayHostImpl::GetOobeUI() const {
   if (!login_view_)
-    return NULL;
-  return static_cast<OobeUI*>(login_view_->GetWebUI()->GetController());
+    return nullptr;
+  return login_view_->GetOobeUI();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1274,7 +1274,7 @@ void ShowLoginWizard(const std::string& first_screen_name) {
 
   gfx::Rect screen_bounds(chromeos::CalculateScreenBounds(gfx::Size()));
 
-  g_browser_process->platform_part()->SessionManager()->SetSessionState(
+  session_manager::SessionManager::Get()->SetSessionState(
       StartupUtils::IsOobeCompleted()
           ? session_manager::SessionState::LOGIN_PRIMARY
           : session_manager::SessionState::OOBE);

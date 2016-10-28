@@ -161,15 +161,30 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
     PreloadReferencedWhileLoading,
     PreloadReferencedWhileComplete
   };
-  PreloadResult getPreloadResult() const {
-    return static_cast<PreloadResult>(m_preloadResult);
-  }
+  PreloadResult getPreloadResult() const { return m_preloadResult; }
 
-  Status getStatus() const { return static_cast<Status>(m_status); }
+  Status getStatus() const { return m_status; }
   void setStatus(Status status) { m_status = status; }
 
   size_t size() const { return encodedSize() + decodedSize() + overheadSize(); }
+
+  // Returns the size of content (response body) before decoding. Adding a new
+  // usage of this function is not recommended (See the TODO below).
+  //
+  // TODO(hiroshige): Now encodedSize/decodedSize states are inconsistent and
+  // need to be refactored (crbug/643135).
   size_t encodedSize() const { return m_encodedSize; }
+
+  // Returns the current memory usage for the encoded data. Adding a new usage
+  // of this function is not recommended as the same reason as |encodedSize()|.
+  //
+  // |encodedSize()| and |encodedSizeMemoryUsageForTesting()| can return
+  // different values, e.g., when ImageResource purges encoded image data after
+  // finishing loading.
+  size_t encodedSizeMemoryUsageForTesting() const {
+    return m_encodedSizeMemoryUsage;
+  }
+
   size_t decodedSize() const { return m_decodedSize; }
   size_t overheadSize() const { return m_overheadSize; }
 
@@ -319,6 +334,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void destroyDecodedDataForFailedRevalidation() {}
 
   void setEncodedSize(size_t);
+  void setEncodedSizeMemoryUsage(size_t);
   void setDecodedSize(size_t);
   void didAccessDecodedData();
 
@@ -327,7 +343,6 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void didAddClient(ResourceClient*);
   void willAddClientOrObserver(PreloadReferencePolicy);
 
-  // |this| object may be dead after didRemoveClientOrObserver().
   void didRemoveClientOrObserver();
   virtual void allClientsAndObserversRemoved();
 
@@ -364,6 +379,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   void setCachePolicyBypassingCache();
   void setLoFiStateOff();
+  void clearRangeRequestHeader();
 
   SharedBuffer* data() const { return m_data.get(); }
   void clearData() { m_data.clear(); }
@@ -401,6 +417,7 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   unsigned long m_identifier;
 
   size_t m_encodedSize;
+  size_t m_encodedSizeMemoryUsage;
   size_t m_decodedSize;
 
   // Resource::calculateOverheadSize() is affected by changes in
@@ -415,9 +432,9 @@ class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   String m_cacheIdentifier;
 
-  unsigned m_preloadResult : 2;  // PreloadResult
-  unsigned m_type : 4;           // Type
-  unsigned m_status : 3;         // Status
+  PreloadResult m_preloadResult;
+  Type m_type;
+  Status m_status;
 
   bool m_needsSynchronousCacheHit;
   bool m_linkPreload;

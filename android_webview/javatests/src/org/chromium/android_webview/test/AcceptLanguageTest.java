@@ -31,8 +31,7 @@ public class AcceptLanguageTest extends AwTestBase {
         mContentsClient = new TestAwContentsClient();
         mAwContents = createAwTestContainerViewOnMainSync(mContentsClient).getAwContents();
 
-        mTestServer = EmbeddedTestServer.createAndStartDefaultServer(
-                getInstrumentation().getContext());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -85,7 +84,7 @@ public class AcceptLanguageTest extends AwTestBase {
                 JSUtils.executeJavaScriptAndWaitForResult(
                         this, mAwContents, mContentsClient.getOnEvaluateJavaScriptResultHelper(),
                         "document.body.textContent"));
-        assertEquals(LocaleUtils.getDefaultLocale(), acceptLanguages[0]);
+        assertEquals(LocaleUtils.getDefaultLocaleString(), acceptLanguages[0]);
 
         String[] acceptLanguagesJs = getAcceptLanguages(
                 JSUtils.executeJavaScriptAndWaitForResult(
@@ -107,6 +106,6 @@ public class AcceptLanguageTest extends AwTestBase {
                 JSUtils.executeJavaScriptAndWaitForResult(
                         this, mAwContents, mContentsClient.getOnEvaluateJavaScriptResultHelper(),
                         "document.body.textContent"));
-        assertEquals(LocaleUtils.getDefaultLocale(), acceptLanguages[0]);
+        assertEquals(LocaleUtils.getDefaultLocaleString(), acceptLanguages[0]);
     }
 }

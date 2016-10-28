@@ -74,11 +74,11 @@
 #include "components/sync/syncable/directory.h"
 #include "components/sync/syncable/sync_db_util.h"
 #include "components/sync/syncable/syncable_read_transaction.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/session_data_type_controller.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
 #include "components/sync_sessions/sync_sessions_client.h"
-#include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/version_info/version_info_values.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -364,7 +364,7 @@ void ProfileSyncService::Initialize() {
 #endif
 
 #if !defined(OS_ANDROID)
-  DCHECK(sync_error_controller_ == NULL)
+  DCHECK(sync_error_controller_ == nullptr)
       << "Initialize() called more than once.";
   sync_error_controller_ = base::MakeUnique<syncer::SyncErrorController>(this);
   AddObserver(sync_error_controller_.get());
@@ -430,7 +430,7 @@ bool ProfileSyncService::IsDataTypeControllerRunning(
 
 sync_sessions::OpenTabsUIDelegate* ProfileSyncService::GetOpenTabsUIDelegate() {
   if (!IsDataTypeControllerRunning(syncer::SESSIONS))
-    return NULL;
+    return nullptr;
   return sessions_sync_manager_.get();
 }
 
@@ -1781,7 +1781,7 @@ syncer::UserShare* ProfileSyncService::GetUserShare() const {
     return backend_->GetUserShare();
   }
   NOTREACHED();
-  return NULL;
+  return nullptr;
 }
 
 syncer::SyncCycleSnapshot ProfileSyncService::GetLastCycleSnapshot() const {
@@ -1937,7 +1937,7 @@ void ProfileSyncService::ConsumeCachedPassphraseIfPossible() {
 
 void ProfileSyncService::RequestAccessToken() {
   // Only one active request at a time.
-  if (access_token_request_ != NULL)
+  if (access_token_request_ != nullptr)
     return;
   request_access_token_retry_timer_.Stop();
   OAuth2TokenService::ScopeSet oauth2_scopes;
@@ -2290,7 +2290,7 @@ bool ProfileSyncService::IsSyncRequested() const {
 
 SigninManagerBase* ProfileSyncService::signin() const {
   if (!signin_)
-    return NULL;
+    return nullptr;
   return signin_->GetOriginal();
 }
 
@@ -2370,7 +2370,7 @@ syncer::SyncableService* ProfileSyncService::GetDeviceInfoSyncableService() {
   return device_info_sync_service_.get();
 }
 
-syncer::ModelTypeService* ProfileSyncService::GetDeviceInfoService() {
+syncer::ModelTypeSyncBridge* ProfileSyncService::GetDeviceInfoService() {
   return device_info_service_.get();
 }
 
@@ -2393,7 +2393,7 @@ void ProfileSyncService::OverrideNetworkResourcesForTest(
 }
 
 bool ProfileSyncService::HasSyncingBackend() const {
-  return backend_ != NULL;
+  return backend_ != nullptr;
 }
 
 void ProfileSyncService::UpdateFirstSyncTimePref() {
@@ -2406,7 +2406,7 @@ void ProfileSyncService::UpdateFirstSyncTimePref() {
 }
 
 void ProfileSyncService::FlushDirectory() const {
-  // backend_initialized_ implies backend_ isn't NULL and the manager exists.
+  // backend_initialized_ implies backend_ isn't null and the manager exists.
   // If sync is not initialized yet, we fail silently.
   if (backend_initialized_)
     backend_->FlushDirectory();
@@ -2422,7 +2422,7 @@ base::MessageLoop* ProfileSyncService::GetSyncLoopForTest() const {
   } else if (backend_) {
     return backend_->GetSyncLoopForTesting();
   } else {
-    return NULL;
+    return nullptr;
   }
 }
 

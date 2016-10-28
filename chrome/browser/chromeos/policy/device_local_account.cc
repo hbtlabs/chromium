@@ -17,9 +17,9 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "components/user_manager/user_names.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 
 namespace policy {
@@ -28,6 +28,7 @@ namespace {
 
 const char kPublicAccountDomainPrefix[] = "public-accounts";
 const char kKioskAppAccountDomainPrefix[] = "kiosk-apps";
+const char kArcKioskAppAccountDomainPrefix[] = "arc-kiosk-apps";
 const char kDeviceLocalAccountDomainSuffix[] = ".device-local.localhost";
 
 }  // namespace
@@ -59,6 +60,9 @@ std::string GenerateDeviceLocalAccountUserId(const std::string& account_id,
     case DeviceLocalAccount::TYPE_KIOSK_APP:
       domain_prefix = kKioskAppAccountDomainPrefix;
       break;
+    case DeviceLocalAccount::TYPE_ARC_KIOSK_APP:
+      domain_prefix = kArcKioskAppAccountDomainPrefix;
+      break;
     case DeviceLocalAccount::TYPE_COUNT:
       NOTREACHED();
       break;
@@ -72,7 +76,7 @@ bool IsDeviceLocalAccountUser(const std::string& user_id,
                               DeviceLocalAccount::Type* type) {
   // For historical reasons, the guest user ID does not contain an @ symbol and
   // therefore, cannot be parsed by gaia::ExtractDomainName().
-  if (user_id == chromeos::login::GuestAccountId().GetUserEmail())
+  if (user_id == user_manager::GuestAccountId().GetUserEmail())
     return false;
   const std::string domain = gaia::ExtractDomainName(user_id);
   if (!base::EndsWith(domain, kDeviceLocalAccountDomainSuffix,
@@ -90,6 +94,11 @@ bool IsDeviceLocalAccountUser(const std::string& user_id,
   if (domain_prefix == kKioskAppAccountDomainPrefix) {
     if (type)
       *type = DeviceLocalAccount::TYPE_KIOSK_APP;
+    return true;
+  }
+  if (domain_prefix == kArcKioskAppAccountDomainPrefix) {
+    if (type)
+      *type = DeviceLocalAccount::TYPE_ARC_KIOSK_APP;
     return true;
   }
 

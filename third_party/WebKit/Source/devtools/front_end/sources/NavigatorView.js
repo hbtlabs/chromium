@@ -34,9 +34,10 @@
 WebInspector.NavigatorView = function()
 {
     WebInspector.VBox.call(this);
+    this.registerRequiredCSS("sources/navigatorView.css");
 
     this._scriptsTree = new TreeOutlineInShadow();
-    this._scriptsTree.registerRequiredCSS("sources/navigatorView.css");
+    this._scriptsTree.registerRequiredCSS("sources/navigatorTree.css");
     this._scriptsTree.setComparator(WebInspector.NavigatorView._treeElementsCompare);
     this.element.appendChild(this._scriptsTree.element);
     this.setDefaultFocusedElement(this._scriptsTree.element);
@@ -73,7 +74,7 @@ WebInspector.NavigatorView = function()
     WebInspector.targetManager.observeTargets(this);
     this._resetWorkspace(WebInspector.workspace);
     this._workspace.uiSourceCodes().forEach(this._addUISourceCode.bind(this));
-}
+};
 
 WebInspector.NavigatorView.Types = {
     Category: "category",
@@ -86,7 +87,7 @@ WebInspector.NavigatorView.Types = {
     Root: "root",
     SourceMapFolder: "sm-folder",
     Worker: "worker"
-}
+};
 
 /**
  * @param {!TreeElement} treeElement
@@ -126,7 +127,7 @@ WebInspector.NavigatorView._treeElementOrder = function(treeElement)
     }
 
     return order;
-}
+};
 
 /**
  * @param {!WebInspector.ContextMenu} contextMenu
@@ -140,7 +141,7 @@ WebInspector.NavigatorView.appendAddFolderItem = function(contextMenu)
 
     var addFolderLabel = WebInspector.UIString("Add folder to workspace");
     contextMenu.appendItem(addFolderLabel, addFolder);
-}
+};
 
 /**
  * @param {!WebInspector.ContextMenu} contextMenu
@@ -159,7 +160,7 @@ WebInspector.NavigatorView.appendSearchItem = function(contextMenu, path)
         searchLabel = WebInspector.UIString("Search in all files");
     }
     contextMenu.appendItem(searchLabel, searchPath);
-}
+};
 
 WebInspector.NavigatorView.prototype = {
     /**
@@ -840,7 +841,7 @@ WebInspector.NavigatorView.prototype = {
     },
 
     __proto__: WebInspector.VBox.prototype
-}
+};
 
 /**
  * @param {!TreeElement} treeElement1
@@ -858,7 +859,7 @@ WebInspector.NavigatorView._treeElementsCompare = function compare(treeElement1,
     if (typeWeight1 < typeWeight2)
         return -1;
     return treeElement1.titleAsText().compareTo(treeElement2.titleAsText());
-}
+};
 
 /**
  * @constructor
@@ -878,7 +879,7 @@ WebInspector.NavigatorFolderTreeElement = function(navigatorView, type, title, h
     this.createIcon();
     this._navigatorView = navigatorView;
     this._hoverCallback = hoverCallback;
-}
+};
 
 WebInspector.NavigatorFolderTreeElement.prototype = {
     onpopulate: function()
@@ -944,7 +945,7 @@ WebInspector.NavigatorFolderTreeElement.prototype = {
     },
 
     __proto__: TreeElement.prototype
-}
+};
 
 /**
  * @constructor
@@ -964,7 +965,7 @@ WebInspector.NavigatorSourceTreeElement = function(navigatorView, uiSourceCode, 
 
     this._navigatorView = navigatorView;
     this._uiSourceCode = uiSourceCode;
-}
+};
 
 WebInspector.NavigatorSourceTreeElement.prototype = {
     /**
@@ -1090,7 +1091,7 @@ WebInspector.NavigatorSourceTreeElement.prototype = {
     },
 
     __proto__: TreeElement.prototype
-}
+};
 
 /**
  * @constructor
@@ -1103,7 +1104,7 @@ WebInspector.NavigatorTreeNode = function(id, type)
     this._type = type;
     /** @type {!Map.<string, !WebInspector.NavigatorTreeNode>} */
     this._children = new Map();
-}
+};
 
 WebInspector.NavigatorTreeNode.prototype = {
     /**
@@ -1234,7 +1235,7 @@ WebInspector.NavigatorTreeNode.prototype = {
     {
         this._children.clear();
     }
-}
+};
 
 /**
  * @constructor
@@ -1245,7 +1246,7 @@ WebInspector.NavigatorRootTreeNode = function(navigatorView)
 {
     WebInspector.NavigatorTreeNode.call(this, "", WebInspector.NavigatorView.Types.Root);
     this._navigatorView = navigatorView;
-}
+};
 
 WebInspector.NavigatorRootTreeNode.prototype = {
     /**
@@ -1267,7 +1268,7 @@ WebInspector.NavigatorRootTreeNode.prototype = {
     },
 
     __proto__: WebInspector.NavigatorTreeNode.prototype
-}
+};
 
 /**
  * @constructor
@@ -1282,7 +1283,7 @@ WebInspector.NavigatorUISourceCodeTreeNode = function(navigatorView, uiSourceCod
     this._uiSourceCode = uiSourceCode;
     this._treeElement = null;
     this._eventListeners = [];
-}
+};
 
 WebInspector.NavigatorUISourceCodeTreeNode.prototype = {
     /**
@@ -1440,7 +1441,7 @@ WebInspector.NavigatorUISourceCodeTreeNode.prototype = {
     },
 
     __proto__: WebInspector.NavigatorTreeNode.prototype
-}
+};
 
 /**
  * @constructor
@@ -1459,7 +1460,7 @@ WebInspector.NavigatorFolderTreeNode = function(navigatorView, project, id, type
     this._project = project;
     this._folderPath = folderPath;
     this._title = title;
-}
+};
 
 WebInspector.NavigatorFolderTreeNode.prototype = {
     /**
@@ -1604,7 +1605,7 @@ WebInspector.NavigatorFolderTreeNode.prototype = {
     },
 
     __proto__: WebInspector.NavigatorTreeNode.prototype
-}
+};
 
 /**
  * @constructor
@@ -1622,7 +1623,7 @@ WebInspector.NavigatorGroupTreeNode = function(navigatorView, project, id, type,
     this._navigatorView = navigatorView;
     this._title = title;
     this.populate();
-}
+};
 
 WebInspector.NavigatorGroupTreeNode.prototype = {
     /**
@@ -1686,4 +1687,4 @@ WebInspector.NavigatorGroupTreeNode.prototype = {
     },
 
     __proto__: WebInspector.NavigatorTreeNode.prototype
-}
+};

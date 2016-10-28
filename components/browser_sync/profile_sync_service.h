@@ -36,12 +36,12 @@
 #include "components/sync/driver/data_type_manager_observer.h"
 #include "components/sync/driver/data_type_status_table.h"
 #include "components/sync/driver/glue/sync_backend_host.h"
-#include "components/sync/driver/protocol_event_observer.h"
 #include "components/sync/driver/startup_controller.h"
 #include "components/sync/driver/sync_client.h"
 #include "components/sync/driver/sync_frontend.h"
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_stopped_reporter.h"
+#include "components/sync/engine/events/protocol_event_observer.h"
 #include "components/sync/engine/model_safe_worker.h"
 #include "components/sync/engine/net/network_time_update_callback.h"
 #include "components/sync/engine/shutdown_reason.h"
@@ -345,8 +345,8 @@ class ProfileSyncService : public syncer::SyncService,
   // Returns the SyncableService for syncer::DEVICE_INFO.
   virtual syncer::SyncableService* GetDeviceInfoSyncableService();
 
-  // Returns the ModelTypeService for syncer::DEVICE_INFO.
-  virtual syncer::ModelTypeService* GetDeviceInfoService();
+  // Returns the ModelTypeSyncBridge for syncer::DEVICE_INFO.
+  virtual syncer::ModelTypeSyncBridge* GetDeviceInfoService();
 
   // Returns synced devices tracker.
   virtual syncer::DeviceInfoTracker* GetDeviceInfoTracker() const;
@@ -468,7 +468,7 @@ class ProfileSyncService : public syncer::SyncService,
   // server.
   bool HasUnsyncedItems() const;
 
-  // Used by ProfileSyncServiceHarness.  May return NULL.
+  // Used by ProfileSyncServiceHarness.  May return null.
   syncer::BackendMigrator* GetBackendMigratorForTest();
 
   // Used by tests to inspect interaction with OAuth2TokenService.
@@ -958,7 +958,7 @@ class ProfileSyncService : public syncer::SyncService,
 
   std::unique_ptr<syncer::LocalDeviceInfoProvider> local_device_;
 
-  // Locally owned SyncableService and ModelTypeService implementations.
+  // Locally owned SyncableService and ModelTypeSyncBridge implementations.
   std::unique_ptr<sync_sessions::SessionsSyncManager> sessions_sync_manager_;
   std::unique_ptr<syncer::DeviceInfoSyncService> device_info_sync_service_;
   std::unique_ptr<syncer::DeviceInfoService> device_info_service_;

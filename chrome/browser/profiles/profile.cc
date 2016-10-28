@@ -94,8 +94,11 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
       prefs::kSafeBrowsingEnabled,
       true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(safe_browsing::GetExtendedReportingPrefName(),
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingExtendedReportingEnabled,
                                 false);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutReportingEnabled,
+                                false);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutGroupSelected, false);
   registry->RegisterBooleanPref(prefs::kSafeBrowsingProceedAnywayDisabled,
                                 false);
   registry->RegisterBooleanPref(prefs::kSSLErrorOverrideAllowed, true);
@@ -201,8 +204,8 @@ bool Profile::IsSystemProfile() const {
 bool Profile::IsNewProfile() {
   // The profile has been shut down if the prefs were loaded from disk, unless
   // first-run autoimport wrote them and reloaded the pref service.
-  // TODO(dconnelly): revisit this when crbug.com/22142 (unifying the profile
-  // import code) is fixed.
+  // TODO(crbug.com/660346): revisit this when crbug.com/22142 (unifying the
+  // profile import code) is fixed.
   return GetOriginalProfile()->GetPrefs()->GetInitializationStatus() ==
       PrefService::INITIALIZATION_STATUS_CREATED_NEW_PREF_STORE;
 }

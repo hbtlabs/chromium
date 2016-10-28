@@ -68,6 +68,7 @@ namespace blink {
 class ANGLEInstancedArrays;
 class EXTBlendMinMax;
 class EXTDisjointTimerQuery;
+class EXTDisjointTimerQueryWebGL2;
 class EXTFragDepth;
 class EXTShaderTextureLOD;
 class EXTsRGB;
@@ -133,7 +134,8 @@ class ScopedRGBEmulationColorMask {
   const bool m_requiresEmulation;
 };
 
-class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
+class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
+                                                 public DrawingBuffer::Client {
   WTF_MAKE_NONCOPYABLE(WebGLRenderingContextBase);
 
  public:
@@ -546,11 +548,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
   void restoreScissorEnabled();
   void restoreScissorBox();
   void restoreClearColor();
-  void restoreClearDepthf();
-  void restoreClearStencil();
-  void restoreStencilMaskSeparate();
   void restoreColorMask();
-  void restoreDepthMask();
 
   gpu::gles2::GLES2Interface* contextGL() const {
     DrawingBuffer* d = drawingBuffer();
@@ -598,15 +596,17 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
   };
 
   PassRefPtr<Image> getImage(AccelerationHint, SnapshotReason) const override;
+  ImageData* toImageData(SnapshotReason) const override;
   void setFilterQuality(SkFilterQuality) override;
   bool isWebGL2OrHigher() { return version() >= 2; }
 
   void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
 
-  void commit(ExceptionState&);
+  void commit(ScriptState*, ExceptionState&);
 
  protected:
   friend class EXTDisjointTimerQuery;
+  friend class EXTDisjointTimerQueryWebGL2;
   friend class WebGLDrawBuffers;
   friend class WebGLFramebuffer;
   friend class WebGLObject;
@@ -622,6 +622,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
   friend class WebGLCompressedTextureS3TCsRGB;
   friend class WebGLRenderingContextErrorMessageCallback;
   friend class WebGLVertexArrayObjectBase;
+  friend class ScopedDrawingBufferBinder;
   friend class ScopedTexture2DRestorer;
   friend class ScopedFramebufferRestorer;
   // To allow V8WebGL[2]RenderingContext to call visitChildDOMWrappers.
@@ -647,6 +648,16 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
   bool paintRenderingResultsToCanvas(SourceDrawingBuffer) override;
   WebLayer* platformLayer() const override;
   void stop() override;
+
+  // DrawingBuffer::Client implementation.
+  bool DrawingBufferClientIsBoundForDraw() override;
+  void DrawingBufferClientRestoreScissorTest() override;
+  void DrawingBufferClientRestoreMaskAndClearValues() override;
+  void DrawingBufferClientRestorePixelPackAlignment() override;
+  void DrawingBufferClientRestoreTexture2DBinding() override;
+  void DrawingBufferClientRestoreRenderbufferBinding() override;
+  void DrawingBufferClientRestoreFramebufferBinding() override;
+  void DrawingBufferClientRestorePixelUnpackBufferBinding() override;
 
   void addSharedObject(WebGLSharedObject*);
   void addContextObject(WebGLContextObject*);
@@ -918,7 +929,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
           m_readFramebufferBinding(framebufferBinding) {
       // Commit DrawingBuffer if needed (e.g., for multisampling)
       if (!m_readFramebufferBinding && m_drawingBuffer)
-        m_drawingBuffer->commit();
+        m_drawingBuffer->resolveAndBindForReadAndDraw();
     }
 
     ~ScopedDrawingBufferBinder() {
@@ -977,9 +988,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
     CombinedClear
   };
   HowToClear clearIfComposited(GLbitfield clearMask = 0);
-
-  // Helper to restore state that clearing the framebuffer may destroy.
-  void restoreStateAfterClear();
 
   // Convert texture internal format.
   GLenum convertTexInternalFormat(GLenum internalformat, GLenum type);
@@ -1452,7 +1460,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
   static WebGLRenderingContextBase* oldestContext();
   static WebGLRenderingContextBase* oldestEvictedContext();
 
-  ImageBitmap* transferToImageBitmapBase();
+  ImageBitmap* transferToImageBitmapBase(ScriptState*);
 
   // Helper functions for tex(Sub)Image2D && texSubImage3D
   void texImageHelperDOMArrayBufferView(TexImageFunctionID,

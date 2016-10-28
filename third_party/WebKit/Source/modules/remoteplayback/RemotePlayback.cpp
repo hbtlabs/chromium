@@ -86,7 +86,10 @@ ScriptPromise RemotePlayback::watchAvailability(
   int id;
   do {
     id = getExecutionContext()->circularSequentialID();
-  } while (!m_availabilityCallbacks.add(id, callback).isNewEntry);
+  } while (!m_availabilityCallbacks
+                .add(id, TraceWrapperMember<RemotePlaybackAvailabilityCallback>(
+                             this, callback))
+                .isNewEntry);
 
   // Report the current availability via the callback.
   getExecutionContext()->postTask(
@@ -202,7 +205,7 @@ void RemotePlayback::notifyInitialAvailability(int callbackId) {
   if (iter == m_availabilityCallbacks.end())
     return;
 
-  iter->value->call(m_scriptState.get(), this, m_availability);
+  iter->value->call(this, m_availability);
 }
 
 void RemotePlayback::stateChanged(WebRemotePlaybackState state) {
@@ -243,7 +246,7 @@ void RemotePlayback::availabilityChanged(bool available) {
 
   m_availability = available;
   for (auto& callback : m_availabilityCallbacks.values())
-    callback->call(m_scriptState.get(), this, m_availability);
+    callback->call(this, m_availability);
 }
 
 void RemotePlayback::promptCancelled() {

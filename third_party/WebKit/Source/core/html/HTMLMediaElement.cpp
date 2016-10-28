@@ -784,11 +784,16 @@ void HTMLMediaElement::invokeLoadAlgorithm() {
   // TODO(mlamouri): the promises are first resolved then rejected but the
   // order between resolved/rejected promises isn't respected. This could be
   // improved when the same task is used for both cases.
-  if (m_playPromiseResolveTask->isPending()) {
+  //
+  // TODO(mlamouri): don't run the callback synchronously if we are not allowed
+  // to run scripts. It can happen in some edge cases. https://crbug.com/660382
+  if (m_playPromiseResolveTask->isPending() &&
+      !ScriptForbiddenScope::isScriptForbidden()) {
     m_playPromiseResolveTask->cancel();
     resolveScheduledPlayPromises();
   }
-  if (m_playPromiseRejectTask->isPending()) {
+  if (m_playPromiseRejectTask->isPending() &&
+      !ScriptForbiddenScope::isScriptForbidden()) {
     m_playPromiseRejectTask->cancel();
     rejectScheduledPlayPromises();
   }
@@ -3673,11 +3678,6 @@ void HTMLMediaElement::setAudioSourceNode(
 
   AudioSourceProviderClientLockScope scope(*this);
   getAudioSourceProvider().setClient(m_audioSourceNode);
-}
-
-void HTMLMediaElement::setAllowHiddenVolumeControls(bool allow) {
-  ensureMediaControls();
-  mediaControls()->setAllowHiddenVolumeControls(allow);
 }
 
 WebMediaPlayer::CORSMode HTMLMediaElement::corsMode() const {

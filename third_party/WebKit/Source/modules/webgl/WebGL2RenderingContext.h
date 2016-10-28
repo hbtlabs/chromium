@@ -39,7 +39,7 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
   CanvasRenderingContext::ContextType getContextType() const override {
     return CanvasRenderingContext::ContextWebgl2;
   }
-  ImageBitmap* transferToImageBitmap(ExceptionState&) final;
+  ImageBitmap* transferToImageBitmap(ScriptState*) final;
   String contextName() const override { return "WebGL2RenderingContext"; }
   void registerContextExtensions() override;
   void setCanvasGetContextResult(RenderingContext&) final;
@@ -56,7 +56,7 @@ class WebGL2RenderingContext : public WebGL2RenderingContextBase {
       const CanvasContextCreationAttributes& requestedAttributes);
 
   Member<EXTColorBufferFloat> m_extColorBufferFloat;
-  Member<EXTDisjointTimerQuery> m_extDisjointTimerQuery;
+  Member<EXTDisjointTimerQueryWebGL2> m_extDisjointTimerQueryWebGL2;
   Member<EXTTextureFilterAnisotropic> m_extTextureFilterAnisotropic;
   Member<OESTextureFloatLinear> m_oesTextureFloatLinear;
   Member<WebGLCompressedTextureASTC> m_webglCompressedTextureASTC;

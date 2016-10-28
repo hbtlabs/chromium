@@ -5,15 +5,11 @@
 #ifndef COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 #define COMPONENTS_SESSION_MANAGER_CORE_SESSION_MANAGER_H_
 
-#include <memory>
-
 #include "base/macros.h"
 #include "components/session_manager/session_manager_export.h"
 #include "components/session_manager/session_manager_types.h"
 
 namespace session_manager {
-
-class SessionManagerDelegate;
 
 class SESSION_EXPORT SessionManager {
  public:
@@ -27,14 +23,20 @@ class SESSION_EXPORT SessionManager {
   SessionState session_state() const { return session_state_; }
   virtual void SetSessionState(SessionState state);
 
-  // Let session delegate executed on its plan of actions depending on the
-  // current session type / state.
-  void Start();
+  // Returns true if we're logged in and browser has been started i.e.
+  // browser_creator.LaunchBrowser(...) was called after sign in
+  // or restart after crash.
+  virtual bool IsSessionStarted() const;
+
+  // Called when browser session is started i.e. after
+  // browser_creator.LaunchBrowser(...) was called after user sign in.
+  // When user is at the image screen IsUserLoggedIn() will return true
+  // but IsSessionStarted() will return false. During the kiosk splash screen,
+  // we perform additional initialization after the user is logged in but
+  // before the session has been started.
+  virtual void SessionStarted();
 
  protected:
-  // Initializes SessionManager with delegate.
-  void Initialize(SessionManagerDelegate* delegate);
-
   // Sets SessionManager instance.
   static void SetInstance(SessionManager* session_manager);
 
@@ -46,28 +48,12 @@ class SESSION_EXPORT SessionManager {
   // g_browser_process->platform_part().
   static SessionManager* instance;
 
-  SessionState session_state_;
-  std::unique_ptr<SessionManagerDelegate> delegate_;
+  SessionState session_state_ = SessionState::UNKNOWN;
+
+  // True if SessionStarted() has been called.
+  bool session_started_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SessionManager);
-};
-
-class SESSION_EXPORT SessionManagerDelegate {
- public:
-  SessionManagerDelegate();
-  virtual ~SessionManagerDelegate();
-
-  virtual void SetSessionManager(
-      session_manager::SessionManager* session_manager);
-
-  // Executes specific actions defined by this delegate.
-  virtual void Start() = 0;
-
- protected:
-  session_manager::SessionManager* session_manager_;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(SessionManagerDelegate);
 };
 
 }  // namespace session_manager

@@ -76,6 +76,7 @@ static_library("arc") {
 
   deps = [
     "//ash:ash",
+    "//ash/public/interfaces",
     "//base",
     "//chromeos",
     "//chromeos:power_manager_proto",
@@ -203,6 +204,7 @@ source_set("unit_tests") {
     "intent_helper/font_size_util_unittest.cc",
     "intent_helper/intent_filter_unittest.cc",
     "intent_helper/link_handler_model_impl_unittest.cc",
+    "intent_helper/local_activity_resolver_unittest.cc",
     "intent_helper/page_transition_util_unittest.cc",
   ]
 

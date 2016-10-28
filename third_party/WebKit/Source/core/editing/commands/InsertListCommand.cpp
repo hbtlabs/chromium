@@ -155,10 +155,14 @@ void InsertListCommand::doApply(EditingState* editingState) {
   // consistent and then use a left margin/padding rule here.
   if (visibleEnd.deepEquivalent() != visibleStart.deepEquivalent() &&
       isStartOfParagraph(visibleEnd, CanSkipOverEditingBoundary)) {
-    setEndingSelection(createVisibleSelection(
-        visibleStart,
-        previousPositionOf(visibleEnd, CannotCrossEditingBoundary),
-        endingSelection().isDirectional()));
+    const VisiblePosition& newEnd =
+        previousPositionOf(visibleEnd, CannotCrossEditingBoundary);
+    SelectionInDOMTree::Builder builder;
+    builder.setIsDirectional(endingSelection().isDirectional());
+    builder.collapse(visibleStart.toPositionWithAffinity());
+    if (newEnd.isNotNull())
+      builder.extend(newEnd.deepEquivalent());
+    setEndingSelection(builder.build());
     if (!endingSelection().rootEditableElement())
       return;
   }
@@ -212,7 +216,10 @@ void InsertListCommand::doApply(EditingState* editingState) {
         // and use it as the end of the new selection.
         if (!startOfLastParagraph.isConnected())
           return;
-        setEndingSelection(startOfCurrentParagraph);
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .collapse(startOfCurrentParagraph.deepEquivalent())
+                .build());
 
         // Save and restore visibleEndOfSelection and startOfLastParagraph when
         // necessary since moveParagraph and movePragraphWithClones can remove
@@ -249,7 +256,9 @@ void InsertListCommand::doApply(EditingState* editingState) {
         startOfCurrentParagraph =
             startOfNextParagraph(endingSelection().visibleStart());
       }
-      setEndingSelection(visibleEndOfSelection);
+      setEndingSelection(SelectionInDOMTree::Builder()
+                             .collapse(visibleEndOfSelection.deepEquivalent())
+                             .build());
     }
     doApplyForSingleParagraph(forceListCreation, listTag, *currentSelection,
                               editingState);
@@ -277,9 +286,13 @@ void InsertListCommand::doApply(EditingState* editingState) {
       visibleStartOfSelection = createVisiblePosition(startOfSelection);
     }
 
-    setEndingSelection(
-        createVisibleSelection(visibleStartOfSelection, visibleEndOfSelection,
-                               endingSelection().isDirectional()));
+    setEndingSelection(SelectionInDOMTree::Builder()
+                           .setAffinity(visibleStartOfSelection.affinity())
+                           .setBaseAndExtentDeprecated(
+                               visibleStartOfSelection.deepEquivalent(),
+                               visibleEndOfSelection.deepEquivalent())
+                           .setIsDirectional(endingSelection().isDirectional())
+                           .build());
     return;
   }
 
@@ -402,8 +415,9 @@ bool InsertListCommand::doApplyForSingleParagraph(
         currentSelection.setEnd(newList, Position::lastOffsetInNode(newList),
                                 IGNORE_EXCEPTION);
 
-      document().updateStyleAndLayoutIgnorePendingStylesheets();
-      setEndingSelection(VisiblePosition::firstPositionInNode(newList));
+      setEndingSelection(SelectionInDOMTree::Builder()
+                             .collapse(Position::firstPositionInNode(newList))
+                             .build());
 
       return true;
     }

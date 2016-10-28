@@ -138,7 +138,6 @@
 #include "core/svg/SVGElement.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/graphics/CompositorMutableProperties.h"
 #include "platform/graphics/CompositorMutation.h"
 #include "platform/scroll/ScrollableArea.h"
@@ -2175,8 +2174,8 @@ ShadowRoot* Element::attachShadow(const ScriptState* scriptState,
       tagName == HTMLNames::h3Tag || tagName == HTMLNames::h4Tag ||
       tagName == HTMLNames::h5Tag || tagName == HTMLNames::h6Tag ||
       tagName == HTMLNames::headerTag || tagName == HTMLNames::navTag ||
-      tagName == HTMLNames::pTag || tagName == HTMLNames::sectionTag ||
-      tagName == HTMLNames::spanTag;
+      tagName == HTMLNames::mainTag || tagName == HTMLNames::pTag ||
+      tagName == HTMLNames::sectionTag || tagName == HTMLNames::spanTag;
   if (!tagNameIsSupported) {
     exceptionState.throwDOMException(
         NotSupportedError, "This element does not support attachShadow");
@@ -2337,10 +2336,6 @@ AttrNodeList* Element::attrNodeList() {
   return hasRareData() ? elementRareData()->attrNodeList() : nullptr;
 }
 
-AttrNodeList& Element::ensureAttrNodeList() {
-  return ensureElementRareData().ensureAttrNodeList();
-}
-
 void Element::removeAttrNodeList() {
   DCHECK(attrNodeList());
   if (hasRareData())
@@ -2405,7 +2400,7 @@ Attr* Element::setAttributeNode(Attr* attrNode,
 
   attrNode->attachToElement(this, localName);
   treeScope().adoptIfNeeded(*attrNode);
-  ensureAttrNodeList().append(attrNode);
+  ensureElementRareData().addAttr(attrNode);
 
   return oldAttrNode;
 }
@@ -2626,7 +2621,7 @@ void Element::focus(const FocusParams& params) {
     return;
 
   if (document().focusedElement() == this &&
-      UserGestureIndicator::processedUserGestureSinceLoad()) {
+      document().hasReceivedUserGesture()) {
     // Bring up the keyboard in the context of anything triggered by a user
     // gesture. Since tracking that across arbitrary boundaries (eg.
     // animations) is difficult, for now we match IE's heuristic and bring
@@ -2654,15 +2649,15 @@ void Element::updateFocusAppearance(
     document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     // FIXME: We should restore the previous selection if there is one.
-    VisibleSelection newSelection = createVisibleSelection(
-        firstPositionInOrBeforeNode(this), TextAffinity::Downstream);
     // Passing DoNotSetFocus as this function is called after
     // FocusController::setFocusedElement() and we don't want to change the
     // focus to a new Element.
-    frame->selection().setSelection(newSelection,
-                                    FrameSelection::CloseTyping |
-                                        FrameSelection::ClearTypingStyle |
-                                        FrameSelection::DoNotSetFocus);
+    frame->selection().setSelection(
+        SelectionInDOMTree::Builder()
+            .collapse(firstPositionInOrBeforeNode(this))
+            .build(),
+        FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle |
+            FrameSelection::DoNotSetFocus);
     frame->selection().revealSelection();
   } else if (layoutObject() && !layoutObject()->isLayoutPart()) {
     layoutObject()->scrollRectToVisible(boundingBox());
@@ -3362,7 +3357,7 @@ void Element::setFloatingPointAttribute(const QualifiedName& attributeName,
 
 void Element::setContainsFullScreenElement(bool flag) {
   setElementFlag(ContainsFullScreenElement, flag);
-  document().styleEngine().ensureFullscreenUAStyle();
+  document().styleEngine().ensureUAStyleForFullscreen();
   pseudoStateChanged(CSSSelector::PseudoFullScreenAncestor);
 }
 
@@ -3655,7 +3650,7 @@ Attr* Element::ensureAttr(const QualifiedName& name) {
   if (!attrNode) {
     attrNode = Attr::create(*this, name);
     treeScope().adoptIfNeeded(*attrNode);
-    ensureAttrNodeList().append(attrNode);
+    ensureElementRareData().addAttr(attrNode);
   }
   return attrNode;
 }
@@ -3992,8 +3987,7 @@ bool Element::supportsStyleSharing() const {
   if (isSVGElement() && toSVGElement(this)->animatedSMILStyleProperties())
     return false;
   // Ids stop style sharing if they show up in the stylesheets.
-  if (hasID() &&
-      document().ensureStyleResolver().hasRulesForId(idForStyleResolution()))
+  if (hasID() && document().styleEngine().hasRulesForId(idForStyleResolution()))
     return false;
   // :active and :hover elements always make a chain towards the document node
   // and no siblings or cousins will have the same state. There's also only one

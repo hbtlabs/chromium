@@ -43,7 +43,6 @@
 #include "core/editing/GranularityStrategy.h"
 #include "core/editing/InputMethodController.h"
 #include "core/editing/PendingSelection.h"
-#include "core/editing/RenderedPosition.h"
 #include "core/editing/SelectionController.h"
 #include "core/editing/SelectionEditor.h"
 #include "core/editing/SelectionModifier.h"
@@ -168,108 +167,6 @@ void FrameSelection::moveCaretSelection(const IntPoint& point) {
   if (position.isNotNull())
     builder.collapse(position.toPositionWithAffinity());
   setSelection(builder.build(), CloseTyping | ClearTypingStyle | UserTriggered);
-}
-
-// TODO(xiaochengh): We should not use reference to return value.
-template <typename Strategy>
-static void adjustEndpointsAtBidiBoundary(
-    VisiblePositionTemplate<Strategy>& visibleBase,
-    VisiblePositionTemplate<Strategy>& visibleExtent) {
-  DCHECK(visibleBase.isValid());
-  DCHECK(visibleExtent.isValid());
-
-  RenderedPosition base(visibleBase);
-  RenderedPosition extent(visibleExtent);
-
-  if (base.isNull() || extent.isNull() || base.isEquivalent(extent))
-    return;
-
-  if (base.atLeftBoundaryOfBidiRun()) {
-    if (!extent.atRightBoundaryOfBidiRun(base.bidiLevelOnRight()) &&
-        base.isEquivalent(
-            extent.leftBoundaryOfBidiRun(base.bidiLevelOnRight()))) {
-      visibleBase = createVisiblePosition(fromPositionInDOMTree<Strategy>(
-          base.positionAtLeftBoundaryOfBiDiRun()));
-      return;
-    }
-    return;
-  }
-
-  if (base.atRightBoundaryOfBidiRun()) {
-    if (!extent.atLeftBoundaryOfBidiRun(base.bidiLevelOnLeft()) &&
-        base.isEquivalent(
-            extent.rightBoundaryOfBidiRun(base.bidiLevelOnLeft()))) {
-      visibleBase = createVisiblePosition(fromPositionInDOMTree<Strategy>(
-          base.positionAtRightBoundaryOfBiDiRun()));
-      return;
-    }
-    return;
-  }
-
-  if (extent.atLeftBoundaryOfBidiRun() &&
-      extent.isEquivalent(
-          base.leftBoundaryOfBidiRun(extent.bidiLevelOnRight()))) {
-    visibleExtent = createVisiblePosition(fromPositionInDOMTree<Strategy>(
-        extent.positionAtLeftBoundaryOfBiDiRun()));
-    return;
-  }
-
-  if (extent.atRightBoundaryOfBidiRun() &&
-      extent.isEquivalent(
-          base.rightBoundaryOfBidiRun(extent.bidiLevelOnLeft()))) {
-    visibleExtent = createVisiblePosition(fromPositionInDOMTree<Strategy>(
-        extent.positionAtRightBoundaryOfBiDiRun()));
-    return;
-  }
-}
-
-void FrameSelection::setNonDirectionalSelectionIfNeeded(
-    const VisibleSelectionInFlatTree& passedNewSelection,
-    TextGranularity granularity,
-    EndPointsAdjustmentMode endpointsAdjustmentMode) {
-  VisibleSelectionInFlatTree newSelection = passedNewSelection;
-  bool isDirectional = shouldAlwaysUseDirectionalSelection(m_frame) ||
-                       newSelection.isDirectional();
-
-  // TODO(xiaochengh): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited.  See http://crbug.com/590369 for more details.
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-
-  const PositionInFlatTree basePosition =
-      m_originalBaseInFlatTree.deepEquivalent();
-  const VisiblePositionInFlatTree originalBase =
-      basePosition.isConnected() ? createVisiblePosition(basePosition)
-                                 : VisiblePositionInFlatTree();
-  const VisiblePositionInFlatTree base =
-      originalBase.isNotNull() ? originalBase
-                               : createVisiblePosition(newSelection.base());
-  VisiblePositionInFlatTree newBase = base;
-  const VisiblePositionInFlatTree extent =
-      createVisiblePosition(newSelection.extent());
-  VisiblePositionInFlatTree newExtent = extent;
-  if (endpointsAdjustmentMode == AdjustEndpointsAtBidiBoundary)
-    adjustEndpointsAtBidiBoundary(newBase, newExtent);
-
-  if (newBase.deepEquivalent() != base.deepEquivalent() ||
-      newExtent.deepEquivalent() != extent.deepEquivalent()) {
-    m_originalBaseInFlatTree = base;
-    newSelection.setBase(newBase);
-    newSelection.setExtent(newExtent);
-  } else if (originalBase.isNotNull()) {
-    if (visibleSelection<EditingInFlatTreeStrategy>().base() ==
-        newSelection.base())
-      newSelection.setBase(originalBase);
-    m_originalBaseInFlatTree = VisiblePositionInFlatTree();
-  }
-
-  // Adjusting base and extent will make newSelection always directional
-  newSelection.setIsDirectional(isDirectional);
-  if (visibleSelection<EditingInFlatTreeStrategy>() == newSelection)
-    return;
-
-  const SetSelectionOptions options = CloseTyping | ClearTypingStyle;
-  setSelection(newSelection, options, CursorAlignOnScroll::IfNeeded,
-               granularity);
 }
 
 template <typename Strategy>
@@ -813,7 +710,6 @@ void FrameSelection::documentAttached(Document* document) {
 void FrameSelection::documentDetached(const Document& document) {
   DCHECK_EQ(m_document, document);
   m_document = nullptr;
-  m_originalBaseInFlatTree = VisiblePositionInFlatTree();
   m_granularity = CharacterGranularity;
 
   LayoutViewItem view = m_frame->contentLayoutItem();
@@ -823,6 +719,7 @@ void FrameSelection::documentDetached(const Document& document) {
   clearTypingStyle();
   m_selectionEditor->documentDetached(document);
   m_frameCaret->documentDetached();
+  m_frame->eventHandler().selectionController().documentDetached();
 }
 
 LayoutBlock* FrameSelection::caretLayoutObject() const {
@@ -945,10 +842,15 @@ void FrameSelection::selectFrameElementInParentIfFullySelected() {
       Position(ownerElementParent, ownerElementNodeIndex + 1),
       VP_UPSTREAM_IF_POSSIBLE);
 
+  SelectionInDOMTree::Builder builder;
+  builder
+      .setBaseAndExtentDeprecated(beforeOwnerElement.deepEquivalent(),
+                                  afterOwnerElement.deepEquivalent())
+      .setAffinity(beforeOwnerElement.affinity());
+
   // Focus on the parent frame, and then select from before this element to
   // after.
-  VisibleSelection newSelection =
-      createVisibleSelection(beforeOwnerElement, afterOwnerElement);
+  VisibleSelection newSelection = createVisibleSelection(builder.build());
   page->focusController().setFocusedFrame(parent);
   // setFocusedFrame can dispatch synchronous focus/blur events.  The document
   // tree might be modified.
@@ -991,7 +893,7 @@ void FrameSelection::selectAll() {
       selectStartTarget = document().body();
     }
   }
-  if (!root || editingIgnoresContent(root))
+  if (!root || editingIgnoresContent(*root))
     return;
 
   if (selectStartTarget) {
@@ -1020,10 +922,13 @@ bool FrameSelection::setSelectedRange(const EphemeralRange& range,
   // can be modified by event handlers, we should create |Range| object before
   // calling it.
   Range* logicalRange = createRange(range);
-  VisibleSelection newSelection = createVisibleSelection(
-      range.startPosition(), range.endPosition(), affinity,
-      directional == SelectionDirectionalMode::Directional);
-  setSelection(newSelection, options);
+  setSelection(SelectionInDOMTree::Builder()
+                   .setBaseAndExtent(range)
+                   .setAffinity(affinity)
+                   .setIsDirectional(directional ==
+                                     SelectionDirectionalMode::Directional)
+                   .build(),
+               options);
   m_selectionEditor->setLogicalRange(logicalRange);
   return true;
 }
@@ -1332,8 +1237,9 @@ void FrameSelection::setSelectionFromNone() {
     // needs to be audited.  See http://crbug.com/590369 for more details.
     document->updateStyleAndLayoutIgnorePendingStylesheets();
 
-    setSelection(createVisibleSelection(firstPositionInOrBeforeNode(body),
-                                        TextAffinity::Downstream));
+    setSelection(SelectionInDOMTree::Builder()
+                     .collapse(firstPositionInOrBeforeNode(body))
+                     .build());
   }
 }
 
@@ -1368,7 +1274,6 @@ DEFINE_TRACE(FrameSelection) {
   visitor->trace(m_frame);
   visitor->trace(m_pendingSelection);
   visitor->trace(m_selectionEditor);
-  visitor->trace(m_originalBaseInFlatTree);
   visitor->trace(m_typingStyle);
   visitor->trace(m_frameCaret);
 }
@@ -1387,9 +1292,13 @@ bool FrameSelection::selectWordAroundPosition(const VisiblePosition& position) {
     String text =
         plainText(EphemeralRange(start.deepEquivalent(), end.deepEquivalent()));
     if (!text.isEmpty() && !isSeparator(text.characterStartingAt(0))) {
-      setSelection(createVisibleSelection(start, end),
-                   CloseTyping | ClearTypingStyle,
-                   CursorAlignOnScroll::IfNeeded, WordGranularity);
+      setSelection(
+          createVisibleSelection(SelectionInDOMTree::Builder()
+                                     .collapse(start.toPositionWithAffinity())
+                                     .extend(end.deepEquivalent())
+                                     .build()),
+          CloseTyping | ClearTypingStyle, CursorAlignOnScroll::IfNeeded,
+          WordGranularity);
       return true;
     }
   }
@@ -1428,11 +1337,18 @@ void FrameSelection::moveRangeSelectionExtent(const IntPoint& contentsPoint) {
                CursorAlignOnScroll::IfNeeded, CharacterGranularity);
 }
 
+// TODO(yosin): We should make |FrameSelection::moveRangeSelection()| to take
+// two |IntPoint| instead of two |VisiblePosition| like
+// |moveRangeSelectionExtent()|.
 void FrameSelection::moveRangeSelection(const VisiblePosition& basePosition,
                                         const VisiblePosition& extentPosition,
                                         TextGranularity granularity) {
-  VisibleSelection newSelection =
-      createVisibleSelection(basePosition, extentPosition);
+  VisibleSelection newSelection = createVisibleSelection(
+      SelectionInDOMTree::Builder()
+          .setBaseAndExtentDeprecated(basePosition.deepEquivalent(),
+                                      extentPosition.deepEquivalent())
+          .setAffinity(basePosition.affinity())
+          .build());
   newSelection.expandUsingGranularity(granularity);
 
   if (newSelection.isNone())

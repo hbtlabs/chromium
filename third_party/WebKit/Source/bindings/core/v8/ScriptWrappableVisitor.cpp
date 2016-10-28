@@ -178,6 +178,10 @@ void ScriptWrappableVisitor::RegisterV8References(
 bool ScriptWrappableVisitor::AdvanceTracing(
     double deadlineInMs,
     v8::EmbedderHeapTracer::AdvanceTracingActions actions) {
+  // Do not drain the marking deque in a state where we can generally not
+  // perform a GC. This makes sure that TraceTraits and friends find
+  // themselves in a well-defined environment, e.g., properly set up vtables.
+  DCHECK(!ThreadState::current()->isGCForbidden());
   DCHECK(m_tracingInProgress);
   WTF::AutoReset<bool>(&m_advancingTracing, true);
   while (actions.force_completion ==
@@ -229,11 +233,6 @@ void ScriptWrappableVisitor::markWrapper(
     const v8::PersistentBase<v8::Object>* handle) const {
   DCHECK(m_reporter);
   handle->RegisterExternalReference(m_reporter);
-}
-
-void ScriptWrappableVisitor::dispatchTraceWrappers(
-    const ScriptWrappable* wrappable) const {
-  wrappable->traceWrappers(this);
 }
 
 void ScriptWrappableVisitor::dispatchTraceWrappers(

@@ -32,10 +32,10 @@
 #include "ui/views/test/views_test_base.h"
 
 #if defined(USE_AURA)
+#include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/scoped_window_targeter.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/menu/menu_pre_target_handler.h"
-#include "ui/wm/public/drag_drop_client.h"
 #endif
 
 #if defined(USE_X11)
@@ -206,8 +206,6 @@ class TestDragDropClient : public aura::client::DragDropClient {
                        const gfx::Point& screen_location,
                        int operation,
                        ui::DragDropTypes::DragEventSource source) override;
-  void DragUpdate(aura::Window* target, const ui::LocatedEvent& event) override;
-  void Drop(aura::Window* target, const ui::LocatedEvent& event) override;
   void DragCancel() override;
   bool IsDragDropInProgress() override;
 
@@ -230,12 +228,6 @@ int TestDragDropClient::StartDragAndDrop(
   return 0;
 }
 
-void TestDragDropClient::DragUpdate(aura::Window* target,
-                                    const ui::LocatedEvent& event) {}
-void TestDragDropClient::Drop(aura::Window* target,
-                              const ui::LocatedEvent& event) {
-  drag_in_progress_ = false;
-}
 void TestDragDropClient::DragCancel() {
   drag_in_progress_ = false;
 }

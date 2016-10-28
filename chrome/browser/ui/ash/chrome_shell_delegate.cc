@@ -46,7 +46,6 @@
 #include "chrome/browser/ui/app_list/app_list_view_delegate.h"
 #include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
-#include "chrome/browser/ui/ash/chrome_new_window_delegate.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/media_delegate_chromeos.h"
@@ -336,11 +335,6 @@ service_manager::Connector* ChromeShellDelegate::GetShellConnector() const {
   return content::ServiceManagerConnection::GetForProcess()->GetConnector();
 }
 
-bool ChromeShellDelegate::IsFirstRunAfterBoot() const {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kFirstExecAfterBoot);
-}
-
 bool ChromeShellDelegate::IsMultiProfilesEnabled() const {
   if (!profiles::IsMultipleProfilesEnabled())
     return false;
@@ -392,7 +386,9 @@ bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
 }
 
 void ChromeShellDelegate::PreInit() {
-  chromeos::LoadDisplayPreferences(IsFirstRunAfterBoot());
+  bool first_run_after_boot = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kFirstExecAfterBoot);
+  chromeos::LoadDisplayPreferences(first_run_after_boot);
   // Object owns itself, and deletes itself when Observer::OnShutdown is called:
   new policy::DisplayRotationDefaultHandler();
   // Set the observer now so that we can save the initial state
@@ -500,10 +496,6 @@ ash::SessionStateDelegate* ChromeShellDelegate::CreateSessionStateDelegate() {
 
 ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateImpl;
-}
-
-ash::NewWindowDelegate* ChromeShellDelegate::CreateNewWindowDelegate() {
-  return new ChromeNewWindowDelegate;
 }
 
 ash::MediaDelegate* ChromeShellDelegate::CreateMediaDelegate() {

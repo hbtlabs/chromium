@@ -56,7 +56,7 @@ WebInspector.DebuggerModel = function(target)
     WebInspector.moduleSetting("enableAsyncStackTraces").addChangeListener(this.asyncStackTracesStateChanged, this);
 
     this.enableDebugger();
-}
+};
 
 /** @typedef {{location: ?WebInspector.DebuggerModel.Location, functionName: string}} */
 WebInspector.DebuggerModel.FunctionDetails;
@@ -84,7 +84,7 @@ WebInspector.DebuggerModel.Events = {
     GlobalObjectCleared: Symbol("GlobalObjectCleared"),
     CallFrameSelected: Symbol("CallFrameSelected"),
     ConsoleCommandEvaluatedInSelectedCallFrame: Symbol("ConsoleCommandEvaluatedInSelectedCallFrame")
-}
+};
 
 /** @enum {string} */
 WebInspector.DebuggerModel.BreakReason = {
@@ -96,7 +96,7 @@ WebInspector.DebuggerModel.BreakReason = {
     Assert: "assert",
     DebugCommand: "debugCommand",
     Other: "other"
-}
+};
 
 WebInspector.DebuggerModel.prototype = {
     /**
@@ -277,8 +277,11 @@ WebInspector.DebuggerModel.prototype = {
         function didSetBreakpoint(error, breakpointId, actualLocation)
         {
             if (callback) {
-                var location = WebInspector.DebuggerModel.Location.fromPayload(this, actualLocation);
-                callback(error ? null : breakpointId, [location]);
+                if (error || !actualLocation) {
+                    callback(null, []);
+                    return;
+                }
+                callback(breakpointId, [WebInspector.DebuggerModel.Location.fromPayload(this, actualLocation)]);
             }
         }
         this._agent.setBreakpoint(rawLocation.payload(), condition, didSetBreakpoint.bind(this));
@@ -713,7 +716,7 @@ WebInspector.DebuggerModel.prototype = {
      */
     addBreakpointListener: function(breakpointId, listener, thisObject)
     {
-        this._breakpointResolvedEventTarget.addEventListener(breakpointId, listener, thisObject)
+        this._breakpointResolvedEventTarget.addEventListener(breakpointId, listener, thisObject);
     },
 
     /**
@@ -792,7 +795,7 @@ WebInspector.DebuggerModel.prototype = {
     },
 
     __proto__: WebInspector.SDKModel.prototype
-}
+};
 
 WebInspector.DebuggerEventTypes = {
     JavaScriptPause: 0,
@@ -808,7 +811,7 @@ WebInspector.DebuggerEventTypes = {
 WebInspector.DebuggerDispatcher = function(debuggerModel)
 {
     this._debuggerModel = debuggerModel;
-}
+};
 
 WebInspector.DebuggerDispatcher.prototype = {
     /**
@@ -880,7 +883,7 @@ WebInspector.DebuggerDispatcher.prototype = {
     {
         this._debuggerModel._breakpointResolved(breakpointId, location);
     }
-}
+};
 
 /**
  * @constructor
@@ -897,7 +900,7 @@ WebInspector.DebuggerModel.Location = function(debuggerModel, scriptId, lineNumb
     this.scriptId = scriptId;
     this.lineNumber = lineNumber;
     this.columnNumber = columnNumber || 0;
-}
+};
 
 /**
  * @param {!WebInspector.DebuggerModel} debuggerModel
@@ -907,7 +910,7 @@ WebInspector.DebuggerModel.Location = function(debuggerModel, scriptId, lineNumb
 WebInspector.DebuggerModel.Location.fromPayload = function(debuggerModel, payload)
 {
     return new WebInspector.DebuggerModel.Location(debuggerModel, payload.scriptId, payload.lineNumber, payload.columnNumber);
-}
+};
 
 WebInspector.DebuggerModel.Location.prototype = {
     /**
@@ -940,7 +943,7 @@ WebInspector.DebuggerModel.Location.prototype = {
     },
 
     __proto__: WebInspector.SDKObject.prototype
-}
+};
 
 /**
  * @constructor
@@ -968,7 +971,7 @@ WebInspector.DebuggerModel.CallFrame = function(debuggerModel, script, payload)
     }
     if (payload.functionLocation)
         this._functionLocation = WebInspector.DebuggerModel.Location.fromPayload(debuggerModel, payload.functionLocation);
-}
+};
 
 /**
  * @param {!WebInspector.DebuggerModel} debuggerModel
@@ -985,7 +988,7 @@ WebInspector.DebuggerModel.CallFrame.fromPayloadArray = function(debuggerModel, 
             result.push(new WebInspector.DebuggerModel.CallFrame(debuggerModel, script, callFrame));
     }
     return result;
-}
+};
 
 WebInspector.DebuggerModel.CallFrame.prototype = {
     /**
@@ -1134,7 +1137,7 @@ WebInspector.DebuggerModel.CallFrame.prototype = {
     },
 
     __proto__: WebInspector.SDKObject.prototype
-}
+};
 
 /**
  * @constructor
@@ -1150,7 +1153,7 @@ WebInspector.DebuggerModel.Scope = function(callFrame, ordinal)
     this._ordinal = ordinal;
     this._startLocation = this._payload.startLocation ? WebInspector.DebuggerModel.Location.fromPayload(callFrame.debuggerModel, this._payload.startLocation) : null;
     this._endLocation = this._payload.endLocation ? WebInspector.DebuggerModel.Location.fromPayload(callFrame.debuggerModel, this._payload.endLocation) : null;
-}
+};
 
 WebInspector.DebuggerModel.Scope.prototype = {
     /**
@@ -1219,7 +1222,7 @@ WebInspector.DebuggerModel.Scope.prototype = {
         var declarativeScope = this._type !== DebuggerAgent.ScopeType.With && this._type !== DebuggerAgent.ScopeType.Global;
         return declarativeScope ? "" : (this._payload.object.description || "");
     }
-}
+};
 
 /**
  * @constructor
@@ -1239,8 +1242,9 @@ WebInspector.DebuggerPausedDetails = function(debuggerModel, callFrames, reason,
     this.reason = reason;
     this.auxData = auxData;
     this.breakpointIds = breakpointIds;
-    this.asyncStackTrace = asyncStackTrace;
-}
+    if (asyncStackTrace)
+        this.asyncStackTrace = this._cleanRedundantFrames(asyncStackTrace);
+};
 
 WebInspector.DebuggerPausedDetails.prototype = {
     /**
@@ -1253,8 +1257,28 @@ WebInspector.DebuggerPausedDetails.prototype = {
         return this.target().runtimeModel.createRemoteObject(/** @type {!RuntimeAgent.RemoteObject} */(this.auxData));
     },
 
+    /**
+     * @param {!RuntimeAgent.StackTrace} asyncStackTrace
+     * @return {!RuntimeAgent.StackTrace}
+     */
+    _cleanRedundantFrames: function(asyncStackTrace)
+    {
+        var stack = asyncStackTrace;
+        var previous = null;
+        while (stack) {
+            if (stack.description === "async function" && stack.callFrames.length)
+                stack.callFrames.shift();
+            if (previous && !stack.callFrames.length)
+                previous.parent = stack.parent;
+            else
+                previous = stack;
+            stack = stack.parent;
+        }
+        return asyncStackTrace;
+    },
+
     __proto__: WebInspector.SDKObject.prototype
-}
+};
 
 /**
  * @return {!Array<!WebInspector.DebuggerModel>}
@@ -1268,7 +1292,7 @@ WebInspector.DebuggerModel.instances = function()
             result.push(debuggerModel);
     }
     return result;
-}
+};
 
 /**
  * @param {?WebInspector.Target} target
@@ -1279,4 +1303,4 @@ WebInspector.DebuggerModel.fromTarget = function(target)
     if (!target || !target.hasJSCapability())
         return null;
     return /** @type {?WebInspector.DebuggerModel} */ (target.model(WebInspector.DebuggerModel));
-}
+};

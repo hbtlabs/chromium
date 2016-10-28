@@ -72,46 +72,6 @@ VisibleSelection createVisibleSelection(const SelectionInDOMTree& selection) {
   return VisibleSelection::create(selection);
 }
 
-VisibleSelection createVisibleSelection(const Position& pos,
-                                        TextAffinity affinity,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(pos));
-  SelectionInDOMTree::Builder builder;
-  builder.setAffinity(affinity).setIsDirectional(isDirectional);
-  if (pos.isNotNull())
-    builder.collapse(pos);
-  return createVisibleSelection(builder.build());
-}
-
-VisibleSelection createVisibleSelection(const Position& base,
-                                        const Position& extent,
-                                        TextAffinity affinity,
-                                        bool isDirectional) {
-  DCHECK(!needsLayoutTreeUpdate(base));
-  DCHECK(!needsLayoutTreeUpdate(extent));
-  // TODO(yosin): We should use |Builder::setBaseAndExtent()| once we get rid
-  // of callers passing |base.istNull()| but |extent.isNotNull()|.
-  SelectionInDOMTree::Builder builder;
-  builder.setBaseAndExtentDeprecated(base, extent)
-      .setAffinity(affinity)
-      .setIsDirectional(isDirectional);
-  return createVisibleSelection(builder.build());
-}
-
-VisibleSelection createVisibleSelection(const PositionWithAffinity& pos,
-                                        bool isDirectional) {
-  return createVisibleSelection(pos.position(), pos.affinity(), isDirectional);
-}
-
-VisibleSelection createVisibleSelection(const VisiblePosition& base,
-                                        const VisiblePosition& extent,
-                                        bool isDirectional) {
-  DCHECK(base.isValid());
-  DCHECK(extent.isValid());
-  return createVisibleSelection(base.deepEquivalent(), extent.deepEquivalent(),
-                                base.affinity(), isDirectional);
-}
-
 VisibleSelectionInFlatTree createVisibleSelection(
     const SelectionInFlatTree& selection) {
   return VisibleSelectionInFlatTree::create(selection);

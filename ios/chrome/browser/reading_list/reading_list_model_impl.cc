@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/reading_list/reading_list_model_impl.h"
 
+#include "base/strings/string_util.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_storage.h"
 #include "url/gurl.h"
 
@@ -54,7 +55,6 @@ void ReadingListModelImpl::ResetUnseenEntries() {
     storageLayer_->SavePersistentHasUnseen(false);
 }
 
-// Returns a specific entry.
 const ReadingListEntry& ReadingListModelImpl::GetUnreadEntryAtIndex(
     size_t index) const {
   DCHECK(loaded());
@@ -67,20 +67,26 @@ const ReadingListEntry& ReadingListModelImpl::GetReadEntryAtIndex(
   return read_[index];
 }
 
+const ReadingListEntry* ReadingListModelImpl::GetEntryFromURL(
+    const GURL& gurl) const {
+  DCHECK(loaded());
+  ReadingListEntry entry(gurl, std::string());
+  auto it = std::find(read_.begin(), read_.end(), entry);
+  if (it == read_.end()) {
+    it = std::find(unread_.begin(), unread_.end(), entry);
+    if (it == unread_.end())
+      return nullptr;
+  }
+  return &(*it);
+}
+
 bool ReadingListModelImpl::CallbackEntryURL(
     const GURL& url,
     base::Callback<void(const ReadingListEntry&)> callback) const {
   DCHECK(loaded());
-  ReadingListEntry entry(url, std::string());
-  auto resultUnread = std::find(unread_.begin(), unread_.end(), entry);
-  if (resultUnread != unread_.end()) {
-    callback.Run(*resultUnread);
-    return true;
-  }
-
-  auto resultRead = std::find(read_.begin(), read_.end(), entry);
-  if (resultRead != read_.end()) {
-    callback.Run(*resultRead);
+  const ReadingListEntry* entry = GetEntryFromURL(url);
+  if (entry) {
+    callback.Run(*entry);
     return true;
   }
   return false;
@@ -124,7 +130,11 @@ const ReadingListEntry& ReadingListModelImpl::AddEntry(
     const std::string& title) {
   DCHECK(loaded());
   RemoveEntryByUrl(url);
-  ReadingListEntry entry(url, title);
+
+  std::string trimmedTitle(title);
+  base::TrimWhitespaceASCII(trimmedTitle, base::TRIM_ALL, &trimmedTitle);
+
+  ReadingListEntry entry(url, trimmedTitle);
   for (auto& observer : observers_)
     observer.ReadingListWillAddUnreadEntry(this, entry);
   unread_.insert(unread_.begin(), std::move(entry));
@@ -136,6 +146,30 @@ const ReadingListEntry& ReadingListModelImpl::AddEntry(
   for (auto& observer : observers_)
     observer.ReadingListDidApplyChanges(this);
   return *unread_.begin();
+}
+
+void ReadingListModelImpl::MarkUnreadByURL(const GURL& url) {
+  DCHECK(loaded());
+  ReadingListEntry entry(url, std::string());
+  auto result = std::find(read_.begin(), read_.end(), entry);
+  if (result == read_.end())
+    return;
+
+  for (ReadingListModelObserver& observer : observers_) {
+    observer.ReadingListWillMoveEntry(this,
+                                      std::distance(read_.begin(), result));
+  }
+
+  unread_.insert(unread_.begin(), std::move(*result));
+  read_.erase(result);
+
+  if (storageLayer_ && !IsPerformingBatchUpdates()) {
+    storageLayer_->SavePersistentUnreadList(read_);
+    storageLayer_->SavePersistentReadList(unread_);
+  }
+  for (ReadingListModelObserver& observer : observers_) {
+    observer.ReadingListDidApplyChanges(this);
+  }
 }
 
 void ReadingListModelImpl::MarkReadByURL(const GURL& url) {

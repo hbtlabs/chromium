@@ -7,6 +7,7 @@
 #include <map>
 #include <string>
 
+#include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -38,11 +39,18 @@ const char kOptOutThreshold[] = "opt_out_threshold";
 // The amount of time a host remains blacklisted due to opt outs.
 const char kBlackListDurationInDays[] = "black_list_duration_in_days";
 
+// The amount of time after any opt out that no previews should be shown.
+const char kSingleOptOutDurationInSeconds[] =
+    "single_opt_out_duration_in_seconds";
+
 // The string that corresponds to enabled for the variation param experiments.
 const char kExperimentEnabled[] = "true";
 
 // In seconds. Hosts are blacklisted for 30 days.
-constexpr int kDefaultBlackListDurationInDays = 30;
+const int kDefaultBlackListDurationInDays = 30;
+
+// In seconds. Previews are not shown for 5 minutes after an opt out.
+constexpr int kDefaultSingleOptOutDurationInSeconds = 60 * 5;
 
 // Returns the parameter value of |param| as a string. If there is no value for
 // |param|, returns an empty string.
@@ -99,6 +107,15 @@ base::TimeDelta BlackListDuration() {
   return base::TimeDelta::FromDays(duration);
 }
 
+base::TimeDelta SingleOptOutDuration() {
+  std::string param_value = ParamValue(kSingleOptOutDurationInSeconds);
+  int duration;
+  if (!base::StringToInt(param_value, &duration)) {
+    return base::TimeDelta::FromSeconds(kDefaultSingleOptOutDurationInSeconds);
+  }
+  return base::TimeDelta::FromSeconds(duration);
+}
+
 }  // namespace params
 
 bool IsIncludedInClientSidePreviewsExperimentsFieldTrial() {
@@ -110,8 +127,14 @@ bool IsIncludedInClientSidePreviewsExperimentsFieldTrial() {
       kEnabled, base::CompareCase::SENSITIVE);
 }
 
-bool IsOfflinePreviewsEnabled() {
-  return ParamValue(kOfflinePagesSlowNetwork) == kExperimentEnabled;
+bool IsPreviewsTypeEnabled(PreviewsType type) {
+  switch (type) {
+    case PreviewsType::OFFLINE:
+      return ParamValue(kOfflinePagesSlowNetwork) == kExperimentEnabled;
+    default:
+      NOTREACHED();
+      return false;
+  }
 }
 
 bool EnableOfflinePreviewsForTesting() {

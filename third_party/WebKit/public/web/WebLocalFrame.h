@@ -23,7 +23,6 @@ class WebFrameWidget;
 class WebRange;
 class WebScriptExecutionCallback;
 class WebSuspendableTask;
-enum class WebAppBannerPromptReply;
 enum class WebCachePolicy;
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
@@ -147,6 +146,10 @@ class WebLocalFrame : public WebFrame {
   // in this frame. Used to propagate state when this frame has navigated
   // cross process.
   virtual void setCommittedFirstRealLoad() = 0;
+
+  // Mark this frame's document as having received a user gesture, based on
+  // one of its descendants having processed a user gesture.
+  virtual void setHasReceivedUserGesture() = 0;
 
   // Orientation Changes ----------------------------------------------------
 
@@ -310,16 +313,6 @@ class WebLocalFrame : public WebFrame {
   // Content Settings -------------------------------------------------------
 
   virtual void setContentSettingsClient(WebContentSettingsClient*) = 0;
-
-  // App banner -------------------------------------------------------------
-
-  // Request to show an application install banner for the given |platforms|.
-  // The implementation can request the embedder to cancel the call by setting
-  // |cancel| to true.
-  virtual void willShowInstallBannerPrompt(
-      int requestId,
-      const WebVector<WebString>& platforms,
-      WebAppBannerPromptReply*) = 0;
 
   // Image reload -----------------------------------------------------------
 

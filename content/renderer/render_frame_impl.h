@@ -8,6 +8,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@
 #include "content/common/associated_interface_registry_impl.h"
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
+#include "content/common/host_zoom.mojom.h"
 #include "content/common/renderer.mojom.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/javascript_message_type.h"
@@ -40,6 +42,7 @@
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
+#include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/interfaces/connector.mojom.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
@@ -48,7 +51,6 @@
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
-#include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
@@ -66,10 +68,6 @@
 
 #if defined(OS_ANDROID)
 #include "content/renderer/media/android/renderer_media_player_manager.h"
-#endif
-
-#if defined(ENABLE_MOJO_MEDIA)
-#include "media/mojo/interfaces/service_factory.mojom.h"  // nogncheck
 #endif
 
 class TransportDIB;
@@ -177,6 +175,7 @@ class CreateFrameWidgetParams;
 class CONTENT_EXPORT RenderFrameImpl
     : public RenderFrame,
       NON_EXPORTED_BASE(mojom::Frame),
+      NON_EXPORTED_BASE(mojom::HostZoom),
       NON_EXPORTED_BASE(public blink::WebFrameClient),
       NON_EXPORTED_BASE(public blink::WebFrameSerializerClient) {
  public:
@@ -451,10 +450,14 @@ class CONTENT_EXPORT RenderFrameImpl
   bool IsUsingLoFi() const override;
   bool IsPasting() const override;
   blink::WebPageVisibilityState GetVisibilityState() const override;
+  bool IsBrowserSideNavigationPending() override;
 
   // mojom::Frame implementation:
   void GetInterfaceProvider(
       service_manager::mojom::InterfaceProviderRequest request) override;
+
+  // mojom::HostZoom implementation:
+  void SetHostZoomLevel(const GURL& url, double zoom_level) override;
 
   // blink::WebFrameClient implementation:
   blink::WebPlugin* createPlugin(blink::WebLocalFrame* frame,
@@ -635,7 +638,6 @@ class CONTENT_EXPORT RenderFrameImpl
   void didChangeManifest() override;
   void enterFullscreen() override;
   void exitFullscreen() override;
-  blink::WebAppBannerClient* appBannerClient() override;
   void registerProtocolHandler(const blink::WebString& scheme,
                                const blink::WebURL& url,
                                const blink::WebString& title) override;
@@ -676,6 +678,14 @@ class CONTENT_EXPORT RenderFrameImpl
   // process; for layout tests, this allows the test to mock out services at
   // the Mojo IPC layer.
   void MaybeEnableMojoBindings();
+  // Adds the given file chooser request to the file_chooser_completion_ queue
+  // (see that var for more) and requests the chooser be displayed if there are
+  // no other waiting items in the queue.
+  //
+  // Returns true if the chooser was successfully scheduled. False means we
+  // didn't schedule anything.
+  bool ScheduleFileChooser(const FileChooserParams& params,
+                           blink::WebFileChooserCompletion* completion);
 
   // Plugin-related functions --------------------------------------------------
 
@@ -720,6 +730,7 @@ class CONTENT_EXPORT RenderFrameImpl
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, ShowPopupThenNavigate);
   FRIEND_TEST_ALL_PREFIXES(RenderAccessibilityImplTest,
                            AccessibilityMessagesQueueWhileSwappedOut);
+  FRIEND_TEST_ALL_PREFIXES(RenderFrameImplTest, ZoomLimit);
 
   // A wrapper class used as the callback for JavaScript executed
   // in an isolated world.
@@ -857,6 +868,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnStopFinding(StopFindAction action);
   void OnEnableViewSourceMode();
   void OnSuppressFurtherDialogs();
+  void OnSetHasReceivedUserGesture();
   void OnFileChooserResponse(
       const std::vector<content::FileChooserFileInfo>& files);
 #if defined(OS_ANDROID)
@@ -941,15 +953,6 @@ class CONTENT_EXPORT RenderFrameImpl
                             const base::string16& default_value,
                             const GURL& frame_url,
                             base::string16* result);
-
-  // Adds the given file chooser request to the file_chooser_completion_ queue
-  // (see that var for more) and requests the chooser be displayed if there are
-  // no other waiting items in the queue.
-  //
-  // Returns true if the chooser was successfully scheduled. False means we
-  // didn't schedule anything.
-  bool ScheduleFileChooser(const FileChooserParams& params,
-                           blink::WebFileChooserCompletion* completion);
 
   // Loads the appropriate error page for the specified failure into the frame.
   // |entry| is only used by PlzNavigate when navigating to a history item.
@@ -1050,6 +1053,8 @@ class CONTENT_EXPORT RenderFrameImpl
   template <typename Interface>
   void GetInterface(mojo::InterfaceRequest<Interface> request);
 
+  void OnHostZoomClientRequest(mojom::HostZoomAssociatedRequest request);
+
   // Returns the media delegate for WebMediaPlayer usage.  If
   // |media_player_delegate_| is NULL, one is created.
   media::RendererWebMediaPlayerDelegate* GetWebMediaPlayerDelegate();
@@ -1123,15 +1128,18 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<NavigationParams> pending_navigation_params_;
 
   // Keeps track of which future subframes the browser process has history items
-  // for during a history navigation.  The renderer process should ask the
-  // browser for history items when subframes with these names are created, and
-  // directly load the initial URLs for any other subframes.  This state is
-  // incrementally cleared as it is used and then reset in didStopLoading, since
-  // it is not needed after the first load completes and is never used after the
-  // initial navigation.
+  // for during a history navigation, as well as whether those items are for
+  // about:blank.  The renderer process should ask the browser for history items
+  // when subframes with these names are created (as long as they are not
+  // staying at about:blank), and directly load the initial URLs for any other
+  // subframes.
+  //
+  // This state is incrementally cleared as it is used and then reset in
+  // didStopLoading, since it is not needed after the first load completes and
+  // is never used after the initial navigation.
   // TODO(creis): Expand this to include any corresponding same-process
   // PageStates for the whole subtree in https://crbug.com/639842.
-  std::set<std::string> history_subframe_unique_names_;
+  std::map<std::string, bool> history_subframe_unique_names_;
 
   // Stores the current history item for this frame, so that updates to it can
   // be reported to the browser process via SendUpdateState.
@@ -1243,6 +1251,9 @@ class CONTENT_EXPORT RenderFrameImpl
   service_manager::mojom::InterfaceProviderRequest
       pending_remote_interface_provider_request_;
 
+  service_manager::ServiceInfo local_info_;
+  service_manager::ServiceInfo remote_info_;
+
   // The Connector proxy used to connect to services.
   service_manager::mojom::ConnectorPtr connector_;
 
@@ -1260,8 +1271,6 @@ class CONTENT_EXPORT RenderFrameImpl
   // Only valid if |accessibility_mode_| is anything other than
   // AccessibilityModeOff.
   RenderAccessibilityImpl* render_accessibility_;
-
-  std::unique_ptr<blink::WebAppBannerClient> app_banner_client_;
 
   std::unique_ptr<blink::WebBluetooth> bluetooth_;
 
@@ -1312,7 +1321,10 @@ class CONTENT_EXPORT RenderFrameImpl
   PepperPluginInstanceImpl* pepper_last_mouse_event_target_;
 #endif
 
+  HostZoomLevels host_zoom_levels_;
+
   mojo::Binding<mojom::Frame> frame_binding_;
+  mojo::AssociatedBinding<mojom::HostZoom> host_zoom_binding_;
   mojom::FrameHostPtr frame_host_;
 
   // Indicates whether |didAccessInitialDocument| was called.
@@ -1325,6 +1337,8 @@ class CONTENT_EXPORT RenderFrameImpl
   // TODO(dcheng): Remove these members.
   bool committed_first_load_ = false;
   bool name_changed_before_first_commit_ = false;
+
+  bool browser_side_navigation_pending_ = false;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_;
 

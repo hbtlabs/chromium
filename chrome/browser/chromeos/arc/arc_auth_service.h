@@ -13,16 +13,16 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/arc/arc_android_management_checker_delegate.h"
 #include "chrome/browser/chromeos/arc/arc_auth_code_fetcher_delegate.h"
 #include "chrome/browser/chromeos/arc/arc_auth_context_delegate.h"
+#include "chrome/browser/chromeos/policy/android_management_client.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/auth.mojom.h"
 #include "components/arc/instance_holder.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/syncable_prefs/pref_service_syncable_observer.h"
-#include "components/syncable_prefs/synced_pref_observer.h"
+#include "components/sync_preferences/pref_service_syncable_observer.h"
+#include "components/sync_preferences/synced_pref_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 class ArcAppLauncher;
@@ -35,6 +35,8 @@ class ShelfDelegate;
 namespace user_prefs {
 class PrefRegistrySyncable;
 }
+
+class ArcSupportHost;
 
 namespace arc {
 
@@ -49,11 +51,10 @@ class ArcAuthService : public ArcService,
                        public mojom::AuthHost,
                        public ArcBridgeService::Observer,
                        public InstanceHolder<mojom::AuthInstance>::Observer,
-                       public ArcAndroidManagementCheckerDelegate,
                        public ArcAuthContextDelegate,
                        public ArcAuthCodeFetcherDelegate,
-                       public syncable_prefs::PrefServiceSyncableObserver,
-                       public syncable_prefs::SyncedPrefObserver {
+                       public sync_preferences::PrefServiceSyncableObserver,
+                       public sync_preferences::SyncedPrefObserver {
  public:
   enum class State {
     NOT_INITIALIZED,  // Service is not initialized.
@@ -64,7 +65,6 @@ class ArcAuthService : public ArcService,
 
   enum class UIPage {
     NO_PAGE,              // Hide everything.
-    TERMS_PROGRESS,       // Terms loading progress page.
     TERMS,                // Terms content page.
     LSO_PROGRESS,         // LSO loading progress page.
     LSO,                  // LSO page to enter user's credentials.
@@ -79,12 +79,6 @@ class ArcAuthService : public ArcService,
 
     // Called whenever Opt-In state of the ARC has been changed.
     virtual void OnOptInChanged(State state) {}
-
-    // Called to notify that OptIn UI needs to be closed.
-    virtual void OnOptInUIClose() {}
-
-    // Called to notify that OptIn UI needs to show specific page.
-    virtual void OnOptInUIShowPage(UIPage page, const base::string16& status) {}
 
     // Called to notify that ARC bridge is shut down.
     virtual void OnShutdownBridge() {}
@@ -171,10 +165,10 @@ class ArcAuthService : public ArcService,
   void EnableArc();
   void DisableArc();
 
-  // syncable_prefs::PrefServiceSyncableObserver
+  // sync_preferences::PrefServiceSyncableObserver
   void OnIsSyncingChanged() override;
 
-  // syncable_prefs::SyncedPrefObserver
+  // sync_preferences::SyncedPrefObserver
   void OnSyncedPrefChanged(const std::string& path, bool from_sync) override;
 
   // ArcAuthContextDelegate:
@@ -184,10 +178,6 @@ class ArcAuthService : public ArcService,
   // ArcAuthCodeFetcherDelegate:
   void OnAuthCodeSuccess(const std::string& auth_code) override;
   void OnAuthCodeFailed() override;
-
-  // ArcAndroidManagementCheckerDelegate:
-  void OnAndroidManagementChecked(
-      policy::AndroidManagementClient::Result result) override;
 
   // Stops ARC without changing ArcEnabled preference.
   void StopArc();
@@ -205,10 +195,13 @@ class ArcAuthService : public ArcService,
   UIPage ui_page() const { return ui_page_; }
 
   // Returns current page status, relevant to the specific page.
-  const base::string16& ui_page_status() { return ui_page_status_; }
+  const base::string16& ui_page_status() const { return ui_page_status_; }
+
+  ArcSupportHost* support_host() { return support_host_.get(); }
 
  private:
   void StartArc();
+  // TODO: move UI methods/fields to ArcSupportHost.
   void ShowUI(UIPage page, const base::string16& status);
   void CloseUI();
   void SetUIPage(UIPage page, const base::string16& status);
@@ -219,10 +212,22 @@ class ArcAuthService : public ArcService,
   void OnOptInPreferenceChanged();
   void StartUI();
   void StartAndroidManagementClient();
-  void CheckAndroidManagement(bool background_mode);
-  void StartArcIfSignedIn();
+  void OnAndroidManagementPassed();
   void OnArcDataRemoved(bool success);
   void OnArcSignInTimeout();
+  bool IsAuthCodeRequest() const;
+  void FetchAuthCode();
+  void PrepareContextForAuthCodeRequest();
+
+  // Called when the Android management check is done in opt-in flow or
+  // re-auth flow.
+  void OnAndroidManagementChecked(
+      policy::AndroidManagementClient::Result result);
+
+  // Called when the background Android management check is done. It is
+  // triggered when the second or later ARC boot timing.
+  void OnBackgroundAndroidManagementChecked(
+      policy::AndroidManagementClient::Result result);
 
   // Unowned pointer. Keeps current profile.
   Profile* profile_ = nullptr;
@@ -238,12 +243,16 @@ class ArcAuthService : public ArcService,
   GetAuthCodeCallback auth_callback_;
   GetAuthCodeAndAccountTypeCallback auth_account_callback_;
   bool initial_opt_in_ = false;
-  bool disable_arc_from_ui_ = false;
   UIPage ui_page_ = UIPage::NO_PAGE;
   base::string16 ui_page_status_;
   bool clear_required_ = false;
   bool reenable_arc_ = false;
   base::OneShotTimer arc_sign_in_timer_;
+
+  // Temporarily keeps the ArcSupportHost instance.
+  // This should be moved to ArcSessionManager when the refactoring is
+  // done.
+  std::unique_ptr<ArcSupportHost> support_host_;
 
   std::unique_ptr<ArcAuthContext> context_;
   std::unique_ptr<ArcAuthCodeFetcher> auth_code_fetcher_;
@@ -256,6 +265,7 @@ class ArcAuthService : public ArcService,
   DISALLOW_COPY_AND_ASSIGN(ArcAuthService);
 };
 
+// Outputs the stringified |state| to |os|. This is only for logging purposes.
 std::ostream& operator<<(std::ostream& os, const ArcAuthService::State& state);
 
 }  // namespace arc

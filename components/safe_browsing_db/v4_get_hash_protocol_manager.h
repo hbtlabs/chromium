@@ -106,7 +106,8 @@ struct FullHashCallbackInfo {
                        std::unique_ptr<net::URLFetcher> fetcher,
                        const FullHashToStoreAndHashPrefixesMap&
                            full_hash_to_store_and_hash_prefixes,
-                       const FullHashCallback& callback);
+                       const FullHashCallback& callback,
+                       const base::Time& network_start_time);
   ~FullHashCallbackInfo();
 
   // The FullHashInfo objects retrieved from cache. These are merged with the
@@ -124,6 +125,10 @@ struct FullHashCallbackInfo {
   // The generated full hashes and the corresponding prefixes and the stores in
   // which to look for a full hash match.
   FullHashToStoreAndHashPrefixesMap full_hash_to_store_and_hash_prefixes;
+
+  // Used to measure how long did it take to fetch the full hash response from
+  // the server.
+  base::Time network_start_time;
 
   // The prefixes that were requested from the server.
   std::vector<HashPrefix> prefixes_requested;
@@ -266,10 +271,10 @@ class V4GetHashProtocolManager : public net::URLFetcherDelegate,
                          std::vector<FullHashInfo>* full_hash_infos,
                          base::Time* negative_cache_expire);
 
-  // Parses the store specific |metadata| information from |match|. Returns
-  // true if the metadata information was parsed correctly and was consistent
-  // with what's expected from that corresponding store; false otherwise.
-  bool ParseMetadata(const ThreatMatch& match, ThreatMetadata* metadata);
+  // Parses the store specific |metadata| information from |match|. Logs errors
+  // to UMA if the metadata information was not parsed correctly or was
+  // inconsistent with what's expected from that corresponding store.
+  static void ParseMetadata(const ThreatMatch& match, ThreatMetadata* metadata);
 
   // Resets the gethash error counter and multiplier.
   void ResetGetHashErrors();

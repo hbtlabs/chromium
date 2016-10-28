@@ -163,9 +163,7 @@ inline ContainerNode* parentCrossingShadowBoundaries<EditingInFlatTreeStrategy>(
 // Returns true for nodes that either have no content, or have content that is
 // ignored (skipped over) while editing. There are no VisiblePositions inside
 // these nodes.
-inline bool editingIgnoresContent(const Node* node) {
-  return EditingStrategy::editingIgnoresContent(node);
-}
+bool editingIgnoresContent(const Node&);
 
 inline bool canHaveChildrenForEditing(const Node* node) {
   return !node->isTextNode() && node->canContainRangeEndPoint();

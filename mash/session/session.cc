@@ -27,15 +27,14 @@ namespace session {
 Session::Session() : screen_locked_(false) {}
 Session::~Session() {}
 
-void Session::OnStart(const service_manager::Identity& identity) {
-  StartAppDriver();
+void Session::OnStart(const service_manager::ServiceInfo& info) {
   StartWindowManager();
   StartQuickLaunch();
   // Launch a chrome window for dev convience; don't do this in the long term.
   connector()->Connect("service:content_browser");
 }
 
-bool Session::OnConnect(const service_manager::Identity& remote_identity,
+bool Session::OnConnect(const service_manager::ServiceInfo& remote_info,
                         service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mojom::Session>(this);
   return true;
@@ -94,12 +93,6 @@ void Session::StartWindowManager() {
       "service:ash",
       base::Bind(&Session::StartWindowManager,
                  base::Unretained(this)));
-}
-
-void Session::StartAppDriver() {
-  StartRestartableService(
-      "service:app_driver",
-      base::Bind(&Session::StartAppDriver, base::Unretained(this)));
 }
 
 void Session::StartQuickLaunch() {

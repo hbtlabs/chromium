@@ -49,28 +49,31 @@ void ServiceContext::SetConnectionLostClosure(const base::Closure& closure) {
 ////////////////////////////////////////////////////////////////////////////////
 // ServiceContext, mojom::Service implementation:
 
-void ServiceContext::OnStart(const service_manager::Identity& identity,
+void ServiceContext::OnStart(const ServiceInfo& info,
                              const OnStartCallback& callback) {
-  identity_ = identity;
+  local_info_ = info;
   if (!initialize_handler_.is_null())
     initialize_handler_.Run();
 
   callback.Run(std::move(pending_connector_request_));
 
-  service_->OnStart(identity_);
+  service_->OnStart(info);
 }
 
 void ServiceContext::OnConnect(
-    const Identity& source,
-    mojom::InterfaceProviderRequest interfaces,
-    const InterfaceSet& allowed_interfaces,
-    const CapabilitySet& allowed_capabilities) {
-  // TODO(beng): do something with |allowed_capabilities|.
-  std::unique_ptr<InterfaceRegistry> registry(
-      new InterfaceRegistry(identity_, source, allowed_interfaces));
-  registry->Bind(std::move(interfaces));
+    const ServiceInfo& source_info,
+    mojom::InterfaceProviderRequest interfaces) {
+  InterfaceProviderSpec source_spec, target_spec;
+  GetInterfaceProviderSpec(mojom::kServiceManager_ConnectorSpec,
+                           local_info_.interface_provider_specs, &target_spec);
+  GetInterfaceProviderSpec(mojom::kServiceManager_ConnectorSpec,
+                           source_info.interface_provider_specs, &source_spec);
+  auto registry =
+      base::MakeUnique<InterfaceRegistry>(mojom::kServiceManager_ConnectorSpec);
+  registry->Bind(std::move(interfaces), local_info_.identity, target_spec,
+                 source_info.identity, source_spec);
 
-  if (!service_->OnConnect(source, registry.get()))
+  if (!service_->OnConnect(source_info, registry.get()))
     return;
 
   // TODO(beng): it appears we never prune this list. We should, when the

@@ -82,7 +82,7 @@ inline void findBlendRangeAtRow(const blink::IntRect& src,
                                 int& width1,
                                 int& left2,
                                 int& width2) {
-  ASSERT_WITH_SECURITY_IMPLICATION(canvasY >= src.y() && canvasY < src.maxY());
+  SECURITY_DCHECK(canvasY >= src.y() && canvasY < src.maxY());
   left1 = -1;
   width1 = 0;
   left2 = -1;
@@ -139,7 +139,7 @@ void alphaBlendNonPremultiplied(blink::ImageFrame& src,
 namespace blink {
 
 WEBPImageDecoder::WEBPImageDecoder(AlphaOption alphaOption,
-                                   GammaAndColorProfileOption colorOptions,
+                                   ColorSpaceOption colorOptions,
                                    size_t maxDecodedBytes)
     : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes),
       m_decoder(0),
@@ -247,7 +247,7 @@ bool WEBPImageDecoder::updateDemuxer() {
       m_formatFlags &= ~ICCP_FLAG;
     }
 
-    if ((m_formatFlags & ICCP_FLAG) && !ignoresGammaAndColorProfile())
+    if ((m_formatFlags & ICCP_FLAG) && !ignoresColorSpace())
       readColorProfile();
   }
 
@@ -267,8 +267,8 @@ bool WEBPImageDecoder::initFrameBuffer(size_t frameIndex) {
   const size_t requiredPreviousFrameIndex = buffer.requiredPreviousFrameIndex();
   if (requiredPreviousFrameIndex == kNotFound) {
     // This frame doesn't rely on any previous data.
-    if (!buffer.setSizeAndColorProfile(size().width(), size().height(),
-                                       colorProfile()))
+    if (!buffer.setSizeAndColorSpace(size().width(), size().height(),
+                                     colorSpace()))
       return setFailed();
     m_frameBackgroundHasAlpha =
         !buffer.originalFrameRect().contains(IntRect(IntPoint(), size()));
@@ -342,8 +342,7 @@ void WEBPImageDecoder::readColorProfile() {
       reinterpret_cast<const char*>(chunkIterator.chunk.bytes);
   size_t profileSize = chunkIterator.chunk.size;
 
-  setColorSpaceAndComputeTransform(profileData, profileSize,
-                                   false /* useSRGB */);
+  setColorSpaceAndComputeTransform(profileData, profileSize);
 
   WebPDemuxReleaseChunkIterator(&chunkIterator);
 }
@@ -358,12 +357,11 @@ void WEBPImageDecoder::applyPostProcessing(size_t frameIndex) {
     return;
 
   const IntRect& frameRect = buffer.originalFrameRect();
-  ASSERT_WITH_SECURITY_IMPLICATION(width == frameRect.width());
-  ASSERT_WITH_SECURITY_IMPLICATION(decodedHeight <= frameRect.height());
+  SECURITY_DCHECK(width == frameRect.width());
+  SECURITY_DCHECK(decodedHeight <= frameRect.height());
   const int left = frameRect.x();
   const int top = frameRect.y();
 
-#if USE(SKCOLORXFORM)
   // TODO (msarett):
   // Here we apply the color space transformation to the dst space.
   // It does not really make sense to transform to a gamma-encoded
@@ -390,7 +388,6 @@ void WEBPImageDecoder::applyPostProcessing(size_t frameIndex) {
       }
     }
   }
-#endif  // USE(SKCOLORXFORM)
 
   // During the decoding of the current frame, we may have set some pixels to be
   // transparent (i.e. alpha < 255). If the alpha blend source was
@@ -524,8 +521,8 @@ bool WEBPImageDecoder::decodeSingleFrame(const uint8_t* dataBytes,
   ASSERT(buffer.getStatus() != ImageFrame::FrameComplete);
 
   if (buffer.getStatus() == ImageFrame::FrameEmpty) {
-    if (!buffer.setSizeAndColorProfile(size().width(), size().height(),
-                                       colorProfile()))
+    if (!buffer.setSizeAndColorSpace(size().width(), size().height(),
+                                     colorSpace()))
       return setFailed();
     buffer.setStatus(ImageFrame::FramePartial);
     // The buffer is transparent outside the decoded area while the image is
@@ -540,7 +537,6 @@ bool WEBPImageDecoder::decodeSingleFrame(const uint8_t* dataBytes,
     WEBP_CSP_MODE mode = outputMode(m_formatFlags & ALPHA_FLAG);
     if (!m_premultiplyAlpha)
       mode = outputMode(false);
-#if USE(SKCOLORXFORM)
     if (colorTransform()) {
       // Swizzling between RGBA and BGRA is zero cost in a color transform.
       // So when we have a color transform, we should decode to whatever is
@@ -551,7 +547,6 @@ bool WEBPImageDecoder::decodeSingleFrame(const uint8_t* dataBytes,
       // either faster or the same cost as RGBA.
       mode = MODE_BGRA;
     }
-#endif
     WebPInitDecBuffer(&m_decoderBuffer);
     m_decoderBuffer.colorspace = mode;
     m_decoderBuffer.u.RGBA.stride =

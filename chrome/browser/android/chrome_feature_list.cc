@@ -37,12 +37,12 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kSimplifiedFullscreenUI,
     &features::kWebPayments,
     &kAndroidPayIntegrationV1,
+    &kCCTExternalLinkHandling,
     &kChromeHomeFeature,
+    &kContextualSearchSingleActions,
     &kDownloadsUiFeature,
     &kImportantSitesInCBD,
-    &ntp_snippets::kContentSuggestionsFeature,
-    &ntp_snippets::kSaveToOfflineFeature,
-    &ntp_snippets::kSectionDismissalFeature,
+    &kNoCreditCardAbort,
     &kNTPFakeOmniboxTextFeature,
     &kNTPOfflinePagesFeature,
     &kPhysicalWebFeature,
@@ -51,9 +51,13 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kSpecialLocaleFeature,
     &kSpecialLocaleWrapper,
     &kTabReparenting,
-    &kCCTExternalLinkHandling,
-    &offline_pages::kOfflinePagesBackgroundLoadingFeature,
+    &kWebApks,
+    &ntp_snippets::kContentSuggestionsFeature,
+    &ntp_snippets::kOfflineBadgeFeature,
+    &ntp_snippets::kSaveToOfflineFeature,
+    &ntp_snippets::kSectionDismissalFeature,
     &offline_pages::kBackgroundLoaderForDownloadsFeature,
+    &offline_pages::kOfflinePagesBackgroundLoadingFeature,
     &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
     &offline_pages::kOfflinePagesSharingFeature,
     &password_manager::features::kViewPasswords,
@@ -61,17 +65,27 @@ const base::Feature* kFeaturesExposedToJava[] = {
 
 }  // namespace
 
+// Alphabetical:
 const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomeFeature{"ChromeHome",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextualSearchSingleActions{
+    "ContextualSearchSingleActions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kDownloadsUiFeature{"DownloadsUi",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kImportantSitesInCBD{"ImportantSitesInCBD",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kNoCreditCardAbort{"NoCreditCardAbort",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNTPOfflinePagesFeature{"NTPOfflinePages",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -97,11 +111,12 @@ const base::Feature kSpecialLocaleWrapper{"SpecialLocaleWrapper",
 const base::Feature kTabReparenting{"TabReparenting",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
-                                    base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kUserMediaScreenCapturing{
     "UserMediaScreenCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Makes "Add to Home screen" in the app menu generate an APK for the shortcut
+// URL which opens Chrome in fullscreen.
+const base::Feature kWebApks{"WebApks", base::FEATURE_DISABLED_BY_DEFAULT};
 
 static jboolean IsEnabled(JNIEnv* env,
                           const JavaParamRef<jclass>& clazz,

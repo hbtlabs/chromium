@@ -4,6 +4,7 @@
 
 #include "content/browser/memory/memory_coordinator_impl.h"
 
+#include "base/memory/memory_coordinator_proxy.h"
 #include "base/run_loop.h"
 #include "content/browser/memory/memory_monitor.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,8 +51,19 @@ class MockMemoryMonitor : public MemoryMonitor {
 class MemoryCoordinatorImplTest : public testing::Test {
  public:
   void SetUp() override {
+    MemoryCoordinator::EnableFeaturesForTesting();
+
     coordinator_.reset(new MemoryCoordinatorImpl(
         message_loop_.task_runner(), base::WrapUnique(new MockMemoryMonitor)));
+
+    base::MemoryCoordinatorProxy::GetInstance()->
+        SetGetCurrentMemoryStateCallback(base::Bind(
+            &MemoryCoordinator::GetCurrentMemoryState,
+            base::Unretained(coordinator_.get())));
+    base::MemoryCoordinatorProxy::GetInstance()->
+        SetSetCurrentMemoryStateForTestingCallback(base::Bind(
+            &MemoryCoordinator::SetCurrentMemoryStateForTesting,
+            base::Unretained(coordinator_.get())));
   }
 
   MockMemoryMonitor* GetMockMemoryMonitor() {
@@ -73,10 +85,17 @@ TEST_F(MemoryCoordinatorImplTest, CalculateNextState) {
 
   // The default state is NORMAL.
   EXPECT_EQ(base::MemoryState::NORMAL, coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::NORMAL,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
 
   // Transitions from NORMAL
   coordinator_->current_state_ = base::MemoryState::NORMAL;
   EXPECT_EQ(base::MemoryState::NORMAL, coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::NORMAL,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(50);
   EXPECT_EQ(base::MemoryState::NORMAL, coordinator_->CalculateNextState());
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(40);
@@ -88,6 +107,10 @@ TEST_F(MemoryCoordinatorImplTest, CalculateNextState) {
   coordinator_->current_state_ = base::MemoryState::THROTTLED;
   EXPECT_EQ(base::MemoryState::THROTTLED,
             coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(40);
   EXPECT_EQ(base::MemoryState::THROTTLED, coordinator_->CalculateNextState());
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(50);
@@ -97,8 +120,14 @@ TEST_F(MemoryCoordinatorImplTest, CalculateNextState) {
 
   // Transitions from SUSPENDED
   coordinator_->current_state_ = base::MemoryState::SUSPENDED;
-  EXPECT_EQ(base::MemoryState::SUSPENDED,
+  // GetCurrentMemoryState() returns THROTTLED state for the browser process
+  // when the global state is SUSPENDED.
+  EXPECT_EQ(base::MemoryState::THROTTLED,
             coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(20);
   EXPECT_EQ(base::MemoryState::SUSPENDED, coordinator_->CalculateNextState());
   GetMockMemoryMonitor()->SetFreeMemoryUntilCriticalMB(30);
@@ -142,6 +171,46 @@ TEST_F(MemoryCoordinatorImplTest, UpdateState) {
     EXPECT_EQ(base::MemoryState::NORMAL, client.state());
     base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(&client);
   }
+}
+
+TEST_F(MemoryCoordinatorImplTest, SetMemoryStateForTesting) {
+  coordinator_->expected_renderer_size_ = 10;
+  coordinator_->new_renderers_until_throttled_ = 4;
+  coordinator_->new_renderers_until_suspended_ = 2;
+  coordinator_->new_renderers_back_to_normal_ = 5;
+  coordinator_->new_renderers_back_to_throttled_ = 3;
+  DCHECK(coordinator_->ValidateParameters());
+
+  MockMemoryCoordinatorClient client;
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Register(&client);
+  EXPECT_EQ(base::MemoryState::NORMAL, coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::NORMAL,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::NORMAL, client.state());
+
+  base::MemoryCoordinatorProxy::GetInstance()->SetCurrentMemoryStateForTesting(
+      base::MemoryState::SUSPENDED);
+  // GetCurrentMemoryState() returns THROTTLED state for the browser process
+  // when the global state is SUSPENDED.
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+
+  base::MemoryCoordinatorProxy::GetInstance()->SetCurrentMemoryStateForTesting(
+      base::MemoryState::THROTTLED);
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            coordinator_->GetCurrentMemoryState());
+  EXPECT_EQ(base::MemoryState::THROTTLED,
+            base::MemoryCoordinatorProxy::GetInstance()->
+                GetCurrentMemoryState());
+  base::RunLoop loop;
+  loop.RunUntilIdle();
+  EXPECT_TRUE(client.is_called());
+  EXPECT_EQ(base::MemoryState::THROTTLED, client.state());
+  base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(&client);
 }
 
 }  // namespace content

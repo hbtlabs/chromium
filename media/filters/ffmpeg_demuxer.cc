@@ -670,6 +670,15 @@ void FFmpegDemuxerStream::InitBitstreamConverter() {
 #if defined(USE_PROPRIETARY_CODECS)
   switch (stream_->codec->codec_id) {
     case AV_CODEC_ID_H264:
+      // Clear |extra_data| so that future (fallback) decoders will know that
+      // conversion is forcibly enabled on this stream.
+      //
+      // TODO(sandersd): Ideally we would convert |extra_data| to concatenated
+      // SPS/PPS data, but it's too late to be useful because Initialize() was
+      // already called on GpuVideoDecoder, which is the only path that would
+      // consume that data.
+      if (video_config_)
+        video_config_->SetExtraData(std::vector<uint8_t>());
       bitstream_converter_.reset(
           new FFmpegH264ToAnnexBBitstreamConverter(stream_->codec));
       break;
@@ -1287,6 +1296,17 @@ void FFmpegDemuxer::OnFindStreamInfoDone(const PipelineStatusCB& status_cb,
     }
 
     StreamParser::TrackId track_id = stream->id;
+
+    if ((codec_type == AVMEDIA_TYPE_AUDIO &&
+         media_tracks->getAudioConfig(track_id).IsValidConfig()) ||
+        (codec_type == AVMEDIA_TYPE_VIDEO &&
+         media_tracks->getVideoConfig(track_id).IsValidConfig())) {
+      MEDIA_LOG(INFO, media_log_)
+          << GetDisplayName()
+          << ": skipping duplicate media stream id=" << track_id;
+      continue;
+    }
+
     std::string track_label = streams_[i]->GetMetadata("handler_name");
     std::string track_language = streams_[i]->GetMetadata("language");
 

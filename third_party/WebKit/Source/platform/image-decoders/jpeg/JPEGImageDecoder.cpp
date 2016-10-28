@@ -46,9 +46,7 @@
 extern "C" {
 #include <stdio.h>  // jpeglib.h needs stdio FILE.
 #include "jpeglib.h"
-#if USE(ICCJPEG)
 #include "iccjpeg.h"
-#endif
 #include <setjmp.h>
 }
 
@@ -302,10 +300,8 @@ class JPEGImageReader final {
     m_src.pub.term_source = term_source;
     m_src.reader = this;
 
-#if USE(ICCJPEG)
     // Retain ICC color profile markers for color management.
     setup_read_icc_profile(&m_info);
-#endif
 
     // Keep APP1 blocks, for obtaining exif data.
     jpeg_save_markers(&m_info, exifMarker, 0xFFFF);
@@ -448,22 +444,17 @@ class JPEGImageReader final {
         m_decoder->setOrientation(readImageOrientation(info()));
 
         // Allow color management of the decoded RGBA pixels if possible.
-        if (!m_decoder->ignoresGammaAndColorProfile()) {
-#if USE(ICCJPEG)
+        if (!m_decoder->ignoresColorSpace()) {
           JOCTET* profile = nullptr;
           unsigned profileLength = 0;
           if (read_icc_profile(info(), &profile, &profileLength)) {
             decoder()->setColorSpaceAndComputeTransform(
-                reinterpret_cast<char*>(profile), profileLength,
-                false /* useSRGB */);
+                reinterpret_cast<char*>(profile), profileLength);
             free(profile);
           }
-#endif  // USE(ICCJPEG)
-#if USE(SKCOLORXFORM)
           if (decoder()->colorTransform()) {
             overrideColorSpace = JCS_UNKNOWN;
           }
-#endif  // USE(SKCOLORXFORM)
         }
         if (overrideColorSpace == JCS_YCbCr) {
           m_info.out_color_space = JCS_YCbCr;
@@ -714,7 +705,7 @@ void term_source(j_decompress_ptr jd) {
 }
 
 JPEGImageDecoder::JPEGImageDecoder(AlphaOption alphaOption,
-                                   GammaAndColorProfileOption colorOptions,
+                                   ColorSpaceOption colorOptions,
                                    size_t maxDecodedBytes)
     : ImageDecoder(alphaOption, colorOptions, maxDecodedBytes) {}
 
@@ -851,14 +842,12 @@ bool outputRows(JPEGImageReader* reader, ImageFrame& buffer) {
     for (int x = 0; x < width; ++pixel, ++x)
       setPixel<colorSpace>(buffer, pixel, samples, x);
 
-#if USE(SKCOLORXFORM)
     SkColorSpaceXform* xform = reader->decoder()->colorTransform();
     if (JCS_RGB == colorSpace && xform) {
       ImageFrame::PixelData* row = buffer.getAddr(0, y);
       xform->apply(xformColorFormat(), row, xformColorFormat(), row, width,
                    kOpaque_SkAlphaType);
     }
-#endif
   }
 
   buffer.setPixelsChanged(true);
@@ -939,8 +928,8 @@ bool JPEGImageDecoder::outputScanlines() {
     ASSERT(info->output_height ==
            static_cast<JDIMENSION>(m_decodedSize.height()));
 
-    if (!buffer.setSizeAndColorProfile(info->output_width, info->output_height,
-                                       colorProfile()))
+    if (!buffer.setSizeAndColorSpace(info->output_width, info->output_height,
+                                     colorSpace()))
       return setFailed();
 
     // The buffer is transparent outside the decoded area while the image is
@@ -960,13 +949,11 @@ bool JPEGImageDecoder::outputScanlines() {
       if (jpeg_read_scanlines(info, &row, 1) != 1)
         return false;
 
-#if USE(SKCOLORXFORM)
       SkColorSpaceXform* xform = colorTransform();
       if (xform) {
         xform->apply(xformColorFormat(), row, xformColorFormat(), row,
                      info->output_width, kOpaque_SkAlphaType);
       }
-#endif
     }
     buffer.setPixelsChanged(true);
     return true;

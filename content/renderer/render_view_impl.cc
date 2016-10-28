@@ -23,6 +23,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/process/kill.h"
 #include "base/process/process.h"
 #include "base/single_thread_task_runner.h"
@@ -170,6 +171,7 @@
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/native_widget_types.h"
+#include "url/origin.h"
 #include "url/url_constants.h"
 #include "v8/include/v8.h"
 
@@ -679,9 +681,9 @@ RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
       target_url_status_(TARGET_NONE),
       uses_temporary_zoom_level_(false),
 #if defined(OS_ANDROID)
-      top_controls_constraints_(TOP_CONTROLS_STATE_BOTH),
+      top_controls_constraints_(BROWSER_CONTROLS_STATE_BOTH),
 #endif
-      top_controls_shrink_blink_size_(false),
+      browser_controls_shrink_blink_size_(false),
       top_controls_height_(0.f),
       webview_(nullptr),
       has_scrolled_focused_editable_node_into_rect_(false),
@@ -1172,6 +1174,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setAlwaysShowContextMenuOnTouch(
       prefs.always_show_context_menu_on_touch);
 
+  settings->setHideDownloadUI(prefs.hide_download_ui);
+
 #if defined(OS_MACOSX)
   settings->setDoubleTapToZoomEnabled(true);
   web_view->setMaximumLegibleScale(prefs.default_maximum_page_scale_factor);
@@ -1297,8 +1301,16 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
 
   // Input IPC messages must not be processed if the RenderView is in
   // swapped out state.
-  if (is_swapped_out_ && IPC_MESSAGE_ID_CLASS(message.type()) == InputMsgStart)
+  if (is_swapped_out_ &&
+      IPC_MESSAGE_ID_CLASS(message.type()) == InputMsgStart) {
+    // TODO(dtapuska): Remove this histogram once we have seen that it actually
+    // produces results true. See crbug.com/615090
+    UMA_HISTOGRAM_BOOLEAN("Event.RenderView.DiscardInput", true);
+    IPC_BEGIN_MESSAGE_MAP(RenderViewImpl, message)
+      IPC_MESSAGE_HANDLER(InputMsg_HandleInputEvent, OnDiscardInputEvent)
+    IPC_END_MESSAGE_MAP()
     return false;
+  }
 
   for (auto& observer : observers_) {
     if (observer.OnMessageReceived(message))
@@ -1313,8 +1325,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
                         OnScrollFocusedEditableNodeIntoRect)
     IPC_MESSAGE_HANDLER(ViewMsg_SetPageScale, OnSetPageScale)
     IPC_MESSAGE_HANDLER(ViewMsg_Zoom, OnZoom)
-    IPC_MESSAGE_HANDLER(ViewMsg_SetZoomLevelForLoadingURL,
-                        OnSetZoomLevelForLoadingURL)
     IPC_MESSAGE_HANDLER(DragMsg_TargetDragEnter, OnDragTargetDragEnter)
     IPC_MESSAGE_HANDLER(DragMsg_TargetDragOver, OnDragTargetDragOver)
     IPC_MESSAGE_HANDLER(DragMsg_TargetDragLeave, OnDragTargetDragLeave)
@@ -1359,8 +1369,8 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
                         OnSetHistoryOffsetAndLength)
 
 #if defined(OS_ANDROID)
-    IPC_MESSAGE_HANDLER(ViewMsg_UpdateTopControlsState,
-                        OnUpdateTopControlsState)
+    IPC_MESSAGE_HANDLER(ViewMsg_UpdateBrowserControlsState,
+                        OnUpdateBrowserControlsState)
     IPC_MESSAGE_HANDLER(ViewMsg_ExtractSmartClipData, OnExtractSmartClipData)
 #elif defined(OS_MACOSX)
     IPC_MESSAGE_HANDLER(ViewMsg_GetRenderedText,
@@ -1525,11 +1535,11 @@ WebView* RenderViewImpl::createView(WebLocalFrame* creator,
     params->opener_top_level_frame_url = creator->top()->document().url();
   } else {
     params->opener_top_level_frame_url =
-        blink::WebStringToGURL(creator->top()->getSecurityOrigin().toString());
+        url::Origin(creator->top()->getSecurityOrigin()).GetURL();
   }
 
-  GURL security_url(blink::WebStringToGURL(
-      creator->document().getSecurityOrigin().toString()));
+  GURL security_url(
+      url::Origin(creator->document().getSecurityOrigin()).GetURL());
   if (!security_url.is_valid())
     security_url = GURL();
   params->opener_security_origin = security_url;
@@ -2241,21 +2251,6 @@ void RenderViewImpl::OnZoom(PageZoom zoom) {
   zoomLevelChanged();
 }
 
-void RenderViewImpl::OnSetZoomLevelForLoadingURL(const GURL& url,
-                                                 double zoom_level) {
-  // TODO(wjmaclean): We should see if this restriction is really necessary,
-  // since it isn't enforced in other parts of the page zoom system (e.g.
-  // when a users changes the zoom of a currently displayed page). Android
-  // has no UI for this, so in theory the following code would normally just use
-  // the default zoom anyways.
-#if !defined(OS_ANDROID)
-  // On Android, page zoom isn't used, and in case of WebView, text zoom is used
-  // for legacy WebView text scaling emulation. Thus, the code that resets
-  // the zoom level from this map will be effectively resetting text zoom level.
-  host_zoom_levels_[url] = zoom_level;
-#endif
-}
-
 void RenderViewImpl::OnSetZoomLevel(
     PageMsg_SetZoomLevel_Command command,
     double zoom_level) {
@@ -2391,8 +2386,8 @@ void RenderViewImpl::OnDisableAutoResize(const gfx::Size& new_size) {
     resize_params.screen_info = screen_info_;
     resize_params.new_size = new_size;
     resize_params.physical_backing_size = physical_backing_size_;
-    resize_params.top_controls_shrink_blink_size =
-        top_controls_shrink_blink_size_;
+    resize_params.browser_controls_shrink_blink_size =
+        browser_controls_shrink_blink_size_;
     resize_params.top_controls_height = top_controls_height_;
     resize_params.visible_viewport_size = visible_viewport_size_;
     resize_params.is_fullscreen_granted = is_fullscreen_granted();
@@ -2492,9 +2487,9 @@ void RenderViewImpl::OnMoveOrResizeStarted() {
 }
 
 void RenderViewImpl::ResizeWebWidget() {
-    webview()->resizeWithTopControls(GetSizeForWebWidget(),
-                                     top_controls_height_,
-                                     top_controls_shrink_blink_size_);
+  webview()->resizeWithBrowserControls(GetSizeForWebWidget(),
+                                       top_controls_height_,
+                                       browser_controls_shrink_blink_size_);
 }
 
 void RenderViewImpl::OnResize(const ResizeParams& params) {
@@ -2515,7 +2510,8 @@ void RenderViewImpl::OnResize(const ResizeParams& params) {
 
   gfx::Size old_visible_viewport_size = visible_viewport_size_;
 
-  top_controls_shrink_blink_size_ = params.top_controls_shrink_blink_size;
+  browser_controls_shrink_blink_size_ =
+      params.browser_controls_shrink_blink_size;
   top_controls_height_ = params.top_controls_height;
 
   RenderWidget::OnResize(params);
@@ -2808,6 +2804,8 @@ void RenderViewImpl::LaunchAndroidContentIntent(const GURL& intent,
   ScheduleComposite();
 
   if (!intent.is_empty()) {
+    base::RecordAction(base::UserMetricsAction(
+        "Android.ContentDetectorActivated"));
     Send(new ViewHostMsg_StartContentIntent(GetRoutingID(), intent,
                                             is_main_frame));
   }
@@ -2949,7 +2947,7 @@ void RenderViewImpl::SetDeviceScaleFactorForTesting(float factor) {
   params.new_size = size();
   params.visible_viewport_size = visible_viewport_size_;
   params.physical_backing_size = gfx::ScaleToCeiledSize(size(), factor);
-  params.top_controls_shrink_blink_size = false;
+  params.browser_controls_shrink_blink_size = false;
   params.top_controls_height = 0.f;
   params.is_fullscreen_granted = is_fullscreen_granted();
   params.display_mode = display_mode_;
@@ -3030,6 +3028,25 @@ void RenderViewImpl::UpdateWebViewWithDeviceScaleFactor() {
   }
   webview()->settings()->setPreferCompositingToLCDTextEnabled(
       PreferCompositingToLCDText(compositor_deps_, device_scale_factor_));
+}
+
+void RenderViewImpl::OnDiscardInputEvent(
+    const blink::WebInputEvent* input_event,
+    const ui::LatencyInfo& latency_info,
+    InputEventDispatchType dispatch_type) {
+  if (!input_event || (dispatch_type != DISPATCH_TYPE_BLOCKING &&
+                       dispatch_type != DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN)) {
+    return;
+  }
+
+  if (dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN) {
+    NotifyInputEventHandled(input_event->type,
+                            INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
+
+  std::unique_ptr<InputEventAck> ack(
+      new InputEventAck(input_event->type, INPUT_EVENT_ACK_STATE_NOT_CONSUMED));
+  OnInputEventAck(std::move(ack));
 }
 
 }  // namespace content

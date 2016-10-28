@@ -513,7 +513,11 @@ void InputType::dispatchSearchEvent() {}
 void InputType::setValue(const String& sanitizedValue,
                          bool valueChanged,
                          TextFieldEventBehavior eventBehavior) {
-  element().setValueInternal(sanitizedValue, eventBehavior);
+  // This setValue() implementation is used only for ValueMode::kValue except
+  // TextFieldInputType. That is to say, type=color, type=range, and temporal
+  // input types.
+  DCHECK_EQ(valueMode(), ValueMode::kValue);
+  element().setNonAttributeValue(sanitizedValue);
   if (!valueChanged)
     return;
   switch (eventBehavior) {
@@ -668,7 +672,7 @@ ColorChooserClient* InputType::colorChooserClient() {
 }
 
 void InputType::applyStep(const Decimal& current,
-                          int count,
+                          double count,
                           AnyStepHandling anyStepHandling,
                           TextFieldEventBehavior eventBehavior,
                           ExceptionState& exceptionState) {
@@ -721,7 +725,7 @@ void InputType::applyStep(const Decimal& current,
       --count;
     }
   }
-  newValue = newValue + stepRange.step() * count;
+  newValue = newValue + stepRange.step() * Decimal::fromDouble(count);
 
   if (!equalIgnoringCase(stepString, "any"))
     newValue = stepRange.alignValueForStep(current, newValue);
@@ -764,7 +768,7 @@ StepRange InputType::createStepRange(AnyStepHandling) const {
   return StepRange();
 }
 
-void InputType::stepUp(int n, ExceptionState& exceptionState) {
+void InputType::stepUp(double n, ExceptionState& exceptionState) {
   if (!isSteppable()) {
     exceptionState.throwDOMException(InvalidStateError,
                                      "This form element is not steppable.");

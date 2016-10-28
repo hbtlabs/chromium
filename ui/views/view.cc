@@ -128,10 +128,6 @@ View::~View() {
 
   ViewStorage::GetInstance()->ViewRemoved(this);
 
-  // Some layout managers hold a reference to the host that they are installed
-  // to and may need to access this during destruction.
-  layout_manager_.reset();
-
   for (Views::const_iterator i(children_.begin()); i != children_.end(); ++i) {
     (*i)->parent_ = NULL;
     if (!(*i)->owned_by_client_)
@@ -2083,7 +2079,7 @@ void View::CreateLayer() {
   for (int i = 0, count = child_count(); i < count; ++i)
     child_at(i)->UpdateChildLayerVisibility(true);
 
-  SetLayer(new ui::Layer());
+  SetLayer(base::MakeUnique<ui::Layer>());
   layer()->set_delegate(this);
   layer()->set_name(GetClassName());
 

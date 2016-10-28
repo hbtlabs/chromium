@@ -46,7 +46,6 @@
 #endif
 
 #if defined(OS_WIN)
-#include "base/win/windows_version.h"
 #include "ui/native_theme/native_theme_dark_win.h"
 #endif
 
@@ -146,16 +145,6 @@ bool BrowserFrame::UseCustomFrame() const {
   return native_browser_frame_->UseCustomFrame();
 }
 
-bool BrowserFrame::CustomDrawSystemTitlebar() const {
-#if defined(OS_WIN)
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kWindows10CustomTitlebar) &&
-         base::win::GetVersion() >= base::win::VERSION_WIN10;
-#else
-  return false;
-#endif
-}
-
 bool BrowserFrame::ShouldSaveWindowPlacement() const {
   return native_browser_frame_->ShouldSaveWindowPlacement();
 }
@@ -238,7 +227,7 @@ void BrowserFrame::OnNativeWidgetActivationChanged(bool active) {
 
 void BrowserFrame::OnNativeWidgetWorkspaceChanged() {
   chrome::SaveWindowWorkspace(browser_view_->browser(), GetWorkspace());
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if !defined(OS_CHROMEOS) && defined(USE_X11)
   BrowserList::MoveBrowsersInWorkspaceToFront(
       views::X11DesktopHandler::get()->GetWorkspace());
 #endif

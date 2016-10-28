@@ -249,7 +249,8 @@ void SafeBrowsingUIManager::DisplayBlockingPage(
   }
 
   if (resource.threat_type != SB_THREAT_TYPE_SAFE) {
-    FOR_EACH_OBSERVER(Observer, observer_list_, OnSafeBrowsingHit(resource));
+    for (Observer& observer : observer_list_)
+      observer.OnSafeBrowsingHit(resource);
   }
   AddToWhitelistUrlSet(resource, true /* A decision is now pending */);
   SafeBrowsingBlockingPage::ShowBlockingPage(this, resource);
@@ -388,6 +389,9 @@ void SafeBrowsingUIManager::AddToWhitelistUrlSet(const UnsafeResource& resource,
   } else {
     site_list->Insert(whitelisted_url);
   }
+
+  // Notify security UI that security state has changed.
+  web_contents->DidChangeVisibleSecurityState();
 }
 
 bool SafeBrowsingUIManager::IsWhitelisted(const UnsafeResource& resource) {

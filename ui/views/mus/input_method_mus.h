@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ui/base/ime/input_method_base.h"
-
 #ifndef UI_VIEWS_MUS_INPUT_METHOD_MUS_H_
 #define UI_VIEWS_MUS_INPUT_METHOD_MUS_H_
 
@@ -11,6 +9,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/ui/public/interfaces/ime.mojom.h"
+#include "ui/base/ime/input_method_base.h"
 #include "ui/views/mus/mus_export.h"
 
 namespace ui {

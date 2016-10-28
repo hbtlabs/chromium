@@ -19,6 +19,7 @@
 #include "cc/blink/web_layer_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "content/app/mojo/mojo_init.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
@@ -123,6 +124,9 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport() {
   // Set up a FeatureList instance, so that code using that API will not hit a
   // an error that it's not set. Cleared by ClearInstanceForTesting() below.
   base::FeatureList::SetInstance(base::WrapUnique(new base::FeatureList));
+
+  // Initialize mojo firstly to enable Blink initialization to use it.
+  InitializeMojo();
 
   blink::initialize(this);
   blink::setLayoutTestMode(true);
@@ -330,9 +334,12 @@ class TestWebRTCCertificateGenerator
   std::unique_ptr<blink::WebRTCCertificate> fromPEM(
       blink::WebString pem_private_key,
       blink::WebString pem_certificate) override {
-    return base::MakeUnique<RTCCertificate>(
+    rtc::scoped_refptr<rtc::RTCCertificate> certificate =
         rtc::RTCCertificate::FromPEM(rtc::RTCCertificatePEM(
-            pem_private_key.utf8(), pem_certificate.utf8())));
+            pem_private_key.utf8(), pem_certificate.utf8()));
+    if (!certificate)
+      return nullptr;
+    return base::MakeUnique<RTCCertificate>(certificate);
   }
 };
 

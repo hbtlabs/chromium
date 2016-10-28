@@ -111,7 +111,6 @@
 #include "content/renderer/media/render_media_client.h"
 #include "content/renderer/media/renderer_gpu_video_accelerator_factories.h"
 #include "content/renderer/media/video_capture_impl_manager.h"
-#include "content/renderer/media/video_capture_message_filter.h"
 #include "content/renderer/net_info_helper.h"
 #include "content/renderer/p2p/socket_dispatcher.h"
 #include "content/renderer/render_frame_proxy.h"
@@ -697,7 +696,6 @@ void RenderThreadImpl::Init(
   AddFilter(db_message_filter_.get());
 
   vc_manager_.reset(new VideoCaptureImplManager());
-  AddFilter(vc_manager_->video_capture_message_filter());
 
   browser_plugin_manager_.reset(new BrowserPluginManager());
   AddObserver(browser_plugin_manager_.get());
@@ -949,7 +947,6 @@ void RenderThreadImpl::Shutdown() {
   // by the PC factory.  Once those tasks have been freed, the factory can be
   // deleted.
 #endif
-  RemoveFilter(vc_manager_->video_capture_message_filter());
   vc_manager_.reset();
 
   RemoveFilter(db_message_filter_.get());
@@ -1760,13 +1757,16 @@ void RenderThreadImpl::OnProcessBackgrounded(bool backgrounded) {
   } else {
     renderer_scheduler_->OnRendererForegrounded();
     record_purge_suspend_metric_closure_.Cancel();
+    record_purge_suspend_metric_closure_.Reset(
+        base::Bind(&RenderThreadImpl::RecordPurgeAndSuspendMetrics,
+                   base::Unretained(this)));
     is_renderer_suspended_ = false;
   }
 }
 
 void RenderThreadImpl::OnProcessPurgeAndSuspend() {
   ChildThreadImpl::OnProcessPurgeAndSuspend();
-  if (is_renderer_suspended_)
+  if (is_renderer_suspended_ || !RendererIsHidden())
     return;
   // TODO(hajimehoshi): Implement purging e.g. cache (crbug/607077)
   is_renderer_suspended_ = true;
@@ -1875,6 +1875,14 @@ void RenderThreadImpl::RecordPurgeAndSuspendMetrics() const {
                            blink_stats.blinkGCTotalAllocatedBytes +
                            malloc_usage + v8_usage + discardable_usage) /
                               1024 / 1024);
+}
+
+void RenderThreadImpl::OnProcessResume() {
+  ChildThreadImpl::OnProcessResume();
+
+  DCHECK(is_renderer_suspended_);
+  is_renderer_suspended_ = false;
+  renderer_scheduler_->ResumeRenderer();
 }
 
 scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync() {

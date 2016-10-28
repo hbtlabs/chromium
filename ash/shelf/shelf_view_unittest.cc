@@ -23,7 +23,10 @@
 #include "ash/common/shelf/wm_shelf_observer.h"
 #include "ash/common/system/web_notification/web_notification_tray.h"
 #include "ash/common/test/material_design_controller_test_api.h"
+#include "ash/common/test/test_shelf_delegate.h"
+#include "ash/common/test/test_shelf_item_delegate.h"
 #include "ash/common/test/test_system_tray_delegate.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
@@ -33,8 +36,6 @@
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/overflow_bubble_view_test_api.h"
 #include "ash/test/shelf_view_test_api.h"
-#include "ash/test/test_shelf_delegate.h"
-#include "ash/test/test_shelf_item_delegate.h"
 #include "ash/test/test_shell_delegate.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
@@ -165,23 +166,21 @@ class ShelfItemSelectionTracker : public TestShelfItemDelegate {
 };
 
 TEST_F(WmShelfObserverIconTest, AddRemove) {
-  TestShelfDelegate* shelf_delegate = TestShelfDelegate::instance();
-  ASSERT_TRUE(shelf_delegate);
-
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.context = CurrentContext();
+  views::Widget widget;
+  widget.Init(params);
 
-  std::unique_ptr<views::Widget> widget(new views::Widget());
-  widget->Init(params);
-  shelf_delegate->AddShelfItem(widget->GetNativeWindow());
+  TestShelfDelegate::instance()->AddShelfItem(
+      WmLookup::Get()->GetWindowForWidget(&widget));
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   observer()->Reset();
 
-  widget->Show();
-  widget->GetNativeWindow()->parent()->RemoveChild(widget->GetNativeWindow());
+  widget.Show();
+  widget.GetNativeWindow()->parent()->RemoveChild(widget.GetNativeWindow());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   observer()->Reset();
@@ -198,24 +197,22 @@ TEST_F(WmShelfObserverIconTest, AddRemoveWithMultipleDisplays) {
   WmShelf* second_shelf = second_root->GetRootWindowController()->GetShelf();
   TestWmShelfObserver second_observer(second_shelf);
 
-  TestShelfDelegate* shelf_delegate = TestShelfDelegate::instance();
-  ASSERT_TRUE(shelf_delegate);
-
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.bounds = gfx::Rect(0, 0, 200, 200);
   params.context = CurrentContext();
+  views::Widget widget;
+  widget.Init(params);
 
-  std::unique_ptr<views::Widget> widget(new views::Widget());
-  widget->Init(params);
-  shelf_delegate->AddShelfItem(widget->GetNativeWindow());
+  TestShelfDelegate::instance()->AddShelfItem(
+      WmLookup::Get()->GetWindowForWidget(&widget));
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   EXPECT_TRUE(second_observer.icon_positions_changed());
   observer()->Reset();
   second_observer.Reset();
 
-  widget->GetNativeWindow()->parent()->RemoveChild(widget->GetNativeWindow());
+  widget.GetNativeWindow()->parent()->RemoveChild(widget.GetNativeWindow());
   shelf_view_test()->RunMessageLoopUntilAnimationsDone();
   EXPECT_TRUE(observer()->icon_positions_changed());
   EXPECT_TRUE(second_observer.icon_positions_changed());
@@ -1638,8 +1635,9 @@ TEST_F(ShelfViewTest, CheckDragInsertBoundsOfScrolledOverflowBubble) {
   // Add more buttons until OverflowBubble is scrollable and it has 3 invisible
   // items.
   while (bubble_view_api.GetContentsSize().width() <
-         (bubble_view->GetContentsBounds().width() + 3 * item_width))
+         (bubble_view->GetContentsBounds().width() + 3 * item_width)) {
     AddAppShortcut();
+  }
 
   ASSERT_TRUE(test_api_->IsShowingOverflowBubble());
 
@@ -1657,8 +1655,9 @@ TEST_F(ShelfViewTest, CheckDragInsertBoundsOfScrolledOverflowBubble) {
   EXPECT_TRUE(drag_reinsert_bounds.Contains(first_point));
   EXPECT_FALSE(drag_reinsert_bounds.Contains(last_point));
 
-  // Scrolls sufficiently to show last item.
-  bubble_view_api.ScrollByXOffset(3 * item_width);
+  // Scroll sufficiently to completely show last item.
+  bubble_view_api.ScrollByXOffset(bubble_view_api.GetContentsSize().width() -
+                                  bubble_view->GetContentsBounds().width());
   drag_reinsert_bounds =
       test_for_overflow_view.GetBoundsForDragInsertInScreen();
   first_point = first_button->GetBoundsInScreen().CenterPoint();
@@ -1957,7 +1956,14 @@ TEST_P(ShelfViewVisibleBoundsTest, ItemsAreInBounds) {
 }
 
 INSTANTIATE_TEST_CASE_P(LtrRtl, ShelfViewTextDirectionTest, testing::Bool());
-INSTANTIATE_TEST_CASE_P(VisibleBounds,
+
+// This test seems to be flaky with material design shelf (see
+// https://crbug.com/625671) and even in non-material mode (see
+// https://crbug.com/619344 which is fixed using a hack). Disabling for now.
+// TODO(mohsen): Hopefully, the fix for https://crbug.com/634128 that fixes
+// issues with shelf spacing, will fix this flake, too. Re-enable when that
+// issue is fixed.
+INSTANTIATE_TEST_CASE_P(DISABLED_VisibleBounds,
                         ShelfViewVisibleBoundsTest,
                         testing::Bool());
 

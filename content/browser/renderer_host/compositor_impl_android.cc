@@ -14,7 +14,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/cancelable_callback.h"
 #include "base/command_line.h"
 #include "base/containers/hash_tables.h"
 #include "base/lazy_instance.h"
@@ -213,18 +212,13 @@ void ExternalBeginFrameSource::OnVSync(base::TimeTicks frame_time,
 
 class AndroidOutputSurface : public cc::OutputSurface {
  public:
-  AndroidOutputSurface(
-      scoped_refptr<ContextProviderCommandBuffer> context_provider,
-      const base::Callback<void(gpu::Capabilities)>&
-          populate_gpu_capabilities_callback)
+  explicit AndroidOutputSurface(
+      scoped_refptr<ContextProviderCommandBuffer> context_provider)
       : cc::OutputSurface(std::move(context_provider)),
-        populate_gpu_capabilities_callback_(populate_gpu_capabilities_callback),
-        swap_buffers_completion_callback_(
-            base::Bind(&AndroidOutputSurface::OnSwapBuffersCompleted,
-                       base::Unretained(this))),
         overlay_candidate_validator_(
             new display_compositor::
-                CompositorOverlayCandidateValidatorAndroid()) {
+                CompositorOverlayCandidateValidatorAndroid()),
+        weak_ptr_factory_(this) {
     capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
   }
 
@@ -240,16 +234,13 @@ class AndroidOutputSurface : public cc::OutputSurface {
     }
   }
 
-  bool BindToClient(cc::OutputSurfaceClient* client) override {
-    if (!OutputSurface::BindToClient(client))
-      return false;
-
+  void BindToClient(cc::OutputSurfaceClient* client) override {
+    DCHECK(client);
+    DCHECK(!client_);
+    client_ = client;
     GetCommandBufferProxy()->SetSwapBuffersCompletionCallback(
-        swap_buffers_completion_callback_.callback());
-
-    populate_gpu_capabilities_callback_.Run(
-        context_provider_->ContextCapabilities());
-    return true;
+        base::Bind(&AndroidOutputSurface::OnSwapBuffersCompleted,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 
   void EnsureBackbuffer() override {}
@@ -305,13 +296,9 @@ class AndroidOutputSurface : public cc::OutputSurface {
   }
 
  private:
-  base::Callback<void(gpu::Capabilities)> populate_gpu_capabilities_callback_;
-  base::CancelableCallback<void(
-      const std::vector<ui::LatencyInfo>&,
-      gfx::SwapResult,
-      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac)>
-      swap_buffers_completion_callback_;
+  cc::OutputSurfaceClient* client_ = nullptr;
   std::unique_ptr<cc::OverlayCandidateValidator> overlay_candidate_validator_;
+  base::WeakPtrFactory<AndroidOutputSurface> weak_ptr_factory_;
 };
 
 #if defined(ENABLE_VULKAN)
@@ -699,10 +686,12 @@ void CompositorImpl::OnGpuChannelEstablished(
           context_provider_command_buffer =
               static_cast<ContextProviderCommandBuffer*>(
                   context_provider.get());
+      context_provider_command_buffer->BindToCurrentThread();
+      gpu_capabilities_ =
+          context_provider_command_buffer->ContextCapabilities();
+
       auto display_output_surface = base::MakeUnique<AndroidOutputSurface>(
-          context_provider_command_buffer,
-          base::Bind(&CompositorImpl::PopulateGpuCapabilities,
-                     base::Unretained(this)));
+          std::move(context_provider_command_buffer));
       InitializeDisplay(std::move(display_output_surface), nullptr,
                         std::move(context_provider));
       break;
@@ -746,11 +735,6 @@ void CompositorImpl::InitializeDisplay(
   host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }
 
-void CompositorImpl::PopulateGpuCapabilities(
-    gpu::Capabilities gpu_capabilities) {
-  gpu_capabilities_ = gpu_capabilities;
-}
-
 void CompositorImpl::AddObserver(VSyncObserver* observer) {
   observer_list_.AddObserver(observer);
 }
@@ -774,8 +758,8 @@ bool CompositorImpl::SupportsETC1NonPowerOfTwo() const {
   return gpu_capabilities_.texture_format_etc1_npot;
 }
 
-void CompositorImpl::DidPostSwapBuffers() {
-  TRACE_EVENT0("compositor", "CompositorImpl::DidPostSwapBuffers");
+void CompositorImpl::DidSubmitCompositorFrame() {
+  TRACE_EVENT0("compositor", "CompositorImpl::DidSubmitCompositorFrame");
   pending_swapbuffers_++;
 }
 
@@ -786,13 +770,8 @@ void CompositorImpl::DidReceiveCompositorFrameAck() {
   client_->OnSwapBuffersCompleted(pending_swapbuffers_);
 }
 
-void CompositorImpl::DidAbortSwapBuffers() {
-  TRACE_EVENT0("compositor", "CompositorImpl::DidAbortSwapBuffers");
-  // This really gets called only once from
-  // SingleThreadProxy::DidLoseCompositorFrameSinkOnImplThread() when the
-  // context was lost.
-  if (host_->IsVisible())
-    host_->SetNeedsCommit();
+void CompositorImpl::DidLoseCompositorFrameSink() {
+  TRACE_EVENT0("compositor", "CompositorImpl::DidLoseCompositorFrameSink");
   client_->OnSwapBuffersCompleted(0);
 }
 

@@ -135,8 +135,8 @@ const int showTreeCharacterOffset = 39;
 // function for some important information on this.
 //
 // Also some Node don't have an associated LayoutObjects e.g. if display: none
-// is set. For more detail, see LayoutObject::createObject that creates the
-// right LayoutObject based on the style.
+// or display: contents is set. For more detail, see LayoutObject::createObject
+// that creates the right LayoutObject based on the style.
 //
 // Because the SVG and CSS classes both inherit from this object, functions can
 // belong to either realm and sometimes to both.
@@ -333,7 +333,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     if (needsLayout())
       showLayoutTreeForThis();
 #endif
-    ASSERT_WITH_SECURITY_IMPLICATION(!needsLayout());
+    SECURITY_DCHECK(!needsLayout());
   }
 
   void assertSubtreeIsLaidOut() const {
@@ -474,7 +474,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // This function is used to create the appropriate LayoutObject based
   // on the style, in particular 'display' and 'content'.
-  // "display: none" is the only time this function will return nullptr.
+  // "display: none" or "display: contents" are the only times this function
+  // will return nullptr.
   //
   // For renderer creation, the inline-* values create the same renderer
   // as the non-inline version. The difference is that inline-* sets
@@ -1014,12 +1015,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // 'width' set to auto.
   virtual void layout() = 0;
   virtual bool updateImageLoadingPriorities() { return false; }
-  void setHasPendingResourceUpdate(bool hasPendingResourceUpdate) {
-    m_bitfields.setHasPendingResourceUpdate(hasPendingResourceUpdate);
-  }
-  bool hasPendingResourceUpdate() const {
-    return m_bitfields.hasPendingResourceUpdate();
-  }
 
   void handleSubtreeModifications();
   virtual void subtreeDidChange() {}
@@ -1505,9 +1500,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            !isInert();
   }
 
+  // Warning: inertness can change without causing relayout.
   bool visibleToHitTesting() const {
-    return style()->visibility() == EVisibility::Visible &&
-           style()->pointerEvents() != PE_NONE && !isInert();
+    return style()->visibleToHitTesting() && !isInert();
   }
 
   // Map points and quads through elements, potentially via 3d transforms. You
@@ -1602,6 +1597,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // The returned rect does *not* account for composited scrolling.
   const LayoutRect& previousPaintInvalidationRect() const {
     return m_previousPaintInvalidationRect;
+  }
+
+  // The previous paint invalidation rect may have been expanded to whole pixels
+  // or be rotated, skewed, etc., so covers more pixels than the object covers.
+  bool previousPaintInvalidationRectCoversExtraPixels() const {
+    return m_bitfields.previousPaintInvalidationRectCoversExtraPixels();
   }
 
   // Called when the previous paint invalidation rect(s) is no longer valid.
@@ -1710,8 +1711,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       m_layoutObject.ensureIsReadyForPaintInvalidation();
     }
 
-    void setPreviousPaintInvalidationRect(const LayoutRect& r) {
+    void setPreviousPaintInvalidationRect(const LayoutRect& r,
+                                          bool coversExtraPixels) {
       m_layoutObject.setPreviousPaintInvalidationRect(r);
+      m_layoutObject.m_bitfields
+          .setPreviousPaintInvalidationRectCoversExtraPixels(coversExtraPixels);
     }
     void setPreviousPositionFromPaintInvalidationBacking(const LayoutPoint& p) {
       m_layoutObject.setPreviousPositionFromPaintInvalidationBacking(p);
@@ -1862,6 +1866,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // other custom mechanisms (if they need to be notified of parent style
   // changes at all).
   virtual bool anonymousHasStylePropagationOverride() { return false; }
+
+  // Allows objects to adjust |visualEffect|, which is in the space of the
+  // paint invalidation container, for any special raster effects that might
+  // expand the rastered pixel area.
+  virtual void adjustVisualRectForRasterEffects(LayoutRect& visualRect) const {}
 
  protected:
   // This function is called before calling the destructor so that some clean-up
@@ -2093,6 +2102,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           m_mayNeedPaintInvalidationSubtree(false),
           m_mayNeedPaintInvalidationAnimatedBackgroundImage(false),
           m_shouldInvalidateSelection(false),
+          m_previousPaintInvalidationRectCoversExtraPixels(false),
           m_floating(false),
           m_isAnonymous(!node),
           m_isText(false),
@@ -2107,7 +2117,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           m_hasCounterNodeMap(false),
           m_everHadLayout(false),
           m_ancestorLineBoxDirty(false),
-          m_hasPendingResourceUpdate(false),
           m_isInsideFlowThread(false),
           m_subtreeChangeListenerRegistered(false),
           m_notifiedOfSubtreeChange(false),
@@ -2125,7 +2134,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           m_backgroundObscurationState(BackgroundObscurationStatusInvalid),
           m_fullPaintInvalidationReason(PaintInvalidationNone) {}
 
-    // 32 bits have been used in the first word, and 18 in the second.
+    // 32 bits have been used in the first word, and 20 in the second.
 
     // Self needs layout means that this layout object is marked for a full
     // layout. This is the default layout but it is expensive as it recomputes
@@ -2193,6 +2202,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                          MayNeedPaintInvalidationAnimatedBackgroundImage);
     ADD_BOOLEAN_BITFIELD(shouldInvalidateSelection, ShouldInvalidateSelection);
 
+    ADD_BOOLEAN_BITFIELD(previousPaintInvalidationRectCoversExtraPixels,
+                         PreviousPaintInvalidationRectCoversExtraPixels);
+
     // This boolean is the cached value of 'float'
     // (see ComputedStyle::isFloating).
     ADD_BOOLEAN_BITFIELD(floating, Floating);
@@ -2245,8 +2257,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
     ADD_BOOLEAN_BITFIELD(everHadLayout, EverHadLayout);
     ADD_BOOLEAN_BITFIELD(ancestorLineBoxDirty, AncestorLineBoxDirty);
-
-    ADD_BOOLEAN_BITFIELD(hasPendingResourceUpdate, HasPendingResourceUpdate);
 
     ADD_BOOLEAN_BITFIELD(isInsideFlowThread, IsInsideFlowThread);
 

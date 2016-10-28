@@ -38,7 +38,9 @@ ClipPaintPropertyNode* rootClipNode() {
 
 EffectPaintPropertyNode* rootEffectNode() {
   DEFINE_STATIC_REF(EffectPaintPropertyNode, rootEffect,
-                    (EffectPaintPropertyNode::create(nullptr, 1.0)));
+                    (EffectPaintPropertyNode::create(
+                        nullptr, rootTransformNode(), rootClipNode(),
+                        CompositorFilterOperations(), 1.0)));
   return rootEffect;
 }
 
@@ -222,6 +224,12 @@ void PaintPropertyTreeBuilder::buildTreeNodes(
 void PaintPropertyTreeBuilder::updatePaintOffsetTranslation(
     const LayoutObject& object,
     PaintPropertyTreeBuilderContext& context) {
+  // LayoutView's paint offset is updated in the FrameView property update.
+  if (object.isLayoutView()) {
+    DCHECK(context.current.paintOffset == LayoutPoint());
+    return;
+  }
+
   if (object.isBoxModelObject() &&
       context.current.paintOffset != LayoutPoint()) {
     // TODO(trchen): Eliminate PaintLayer dependency.
@@ -254,9 +262,6 @@ void PaintPropertyTreeBuilder::updatePaintOffsetTranslation(
     }
   }
 
-  if (object.isLayoutView())
-    return;
-
   if (auto* properties = object.getMutableForPainting().paintProperties())
     properties->clearPaintOffsetTranslation();
 }
@@ -270,90 +275,157 @@ static FloatPoint3D transformOrigin(const LayoutBox& box) {
       style.transformOriginZ());
 }
 
+// SVG does not use the general transform update of |updateTransform|, instead
+// creating a transform node for SVG-specific transforms without 3D.
+void PaintPropertyTreeBuilder::updateTransformForNonRootSVG(
+    const LayoutObject& object,
+    PaintPropertyTreeBuilderContext& context) {
+  DCHECK(object.isSVG() && !object.isSVGRoot());
+  // SVG (other than SVGForeignObject) does not use paint offset internally.
+  DCHECK(object.isSVGForeignObject() ||
+         context.current.paintOffset == LayoutPoint());
+
+  // FIXME(pdr): Refactor this so all non-root SVG objects use the same
+  // transform function.
+  const AffineTransform& transform = object.isSVGForeignObject()
+                                         ? object.localSVGTransform()
+                                         : object.localToSVGParentTransform();
+
+  // FIXME(pdr): Check for the presence of a transform instead of the value.
+  // Checking for an identity matrix will cause the property tree structure to
+  // change during animations if the animation passes through the identity
+  // matrix.
+  if (!transform.isIdentity()) {
+    // The origin is included in the local transform, so leave origin empty.
+    context.current.transform =
+        object.getMutableForPainting().ensurePaintProperties().updateTransform(
+            context.current.transform, TransformationMatrix(transform),
+            FloatPoint3D());
+    context.current.renderingContextID = 0;
+    context.current.shouldFlattenInheritedTransform = false;
+  } else {
+    if (auto* properties = object.getMutableForPainting().paintProperties())
+      properties->clearTransform();
+  }
+}
+
 void PaintPropertyTreeBuilder::updateTransform(
     const LayoutObject& object,
     PaintPropertyTreeBuilderContext& context) {
   if (object.isSVG() && !object.isSVGRoot()) {
-    // SVG (other than SVGForeignObject) does not use paint offset internally.
-    DCHECK(object.isSVGForeignObject() ||
-           context.current.paintOffset == LayoutPoint());
-
-    // FIXME(pdr): Check for the presence of a transform instead of the value.
-    // Checking for an identity matrix will cause the property tree structure to
-    // change during animations if the animation passes through the identity
-    // matrix.
-    // FIXME(pdr): Refactor this so all non-root SVG objects use the same
-    // transform function.
-    const AffineTransform& transform = object.isSVGForeignObject()
-                                           ? object.localSVGTransform()
-                                           : object.localToSVGParentTransform();
-    if (!transform.isIdentity()) {
-      // The origin is included in the local transform, so leave origin empty.
-      context.current.transform =
-          object.getMutableForPainting()
-              .ensurePaintProperties()
-              .updateTransform(context.current.transform,
-                               TransformationMatrix(transform), FloatPoint3D());
-      context.current.renderingContextID = 0;
-      context.current.shouldFlattenInheritedTransform = false;
-      return;
-    }
-  } else {
-    const ComputedStyle& style = object.styleRef();
-    if (object.isBox() && (style.hasTransform() || style.preserves3D())) {
-      TransformationMatrix matrix;
-      style.applyTransform(
-          matrix, toLayoutBox(object).size(),
-          ComputedStyle::ExcludeTransformOrigin,
-          ComputedStyle::IncludeMotionPath,
-          ComputedStyle::IncludeIndependentTransformProperties);
-      FloatPoint3D origin = transformOrigin(toLayoutBox(object));
-
-      unsigned renderingContextID = context.current.renderingContextID;
-      unsigned renderingContextIDForChildren = 0;
-      bool flattensInheritedTransform =
-          context.current.shouldFlattenInheritedTransform;
-      bool childrenFlattenInheritedTransform = true;
-
-      // TODO(trchen): transform-style should only be respected if a PaintLayer
-      // is created.
-      if (style.preserves3D()) {
-        // If a node with transform-style: preserve-3d does not exist in an
-        // existing rendering context, it establishes a new one.
-        if (!renderingContextID)
-          renderingContextID = PtrHash<const LayoutObject>::hash(&object);
-        renderingContextIDForChildren = renderingContextID;
-        childrenFlattenInheritedTransform = false;
-      }
-
-      context.current.transform =
-          object.getMutableForPainting()
-              .ensurePaintProperties()
-              .updateTransform(context.current.transform, matrix, origin,
-                               flattensInheritedTransform, renderingContextID);
-      context.current.renderingContextID = renderingContextIDForChildren;
-      context.current.shouldFlattenInheritedTransform =
-          childrenFlattenInheritedTransform;
-      return;
-    }
+    updateTransformForNonRootSVG(object, context);
+    return;
   }
 
-  if (auto* properties = object.getMutableForPainting().paintProperties())
-    properties->clearTransform();
+  const ComputedStyle& style = object.styleRef();
+  if (object.isBox() && (style.hasTransform() || style.preserves3D())) {
+    TransformationMatrix matrix;
+    style.applyTransform(matrix, toLayoutBox(object).size(),
+                         ComputedStyle::ExcludeTransformOrigin,
+                         ComputedStyle::IncludeMotionPath,
+                         ComputedStyle::IncludeIndependentTransformProperties);
+    FloatPoint3D origin = transformOrigin(toLayoutBox(object));
+
+    unsigned renderingContextID = context.current.renderingContextID;
+    unsigned renderingContextIDForChildren = 0;
+    bool flattensInheritedTransform =
+        context.current.shouldFlattenInheritedTransform;
+    bool childrenFlattenInheritedTransform = true;
+
+    // TODO(trchen): transform-style should only be respected if a PaintLayer
+    // is created.
+    if (style.preserves3D()) {
+      // If a node with transform-style: preserve-3d does not exist in an
+      // existing rendering context, it establishes a new one.
+      if (!renderingContextID)
+        renderingContextID = PtrHash<const LayoutObject>::hash(&object);
+      renderingContextIDForChildren = renderingContextID;
+      childrenFlattenInheritedTransform = false;
+    }
+
+    context.current.transform =
+        object.getMutableForPainting().ensurePaintProperties().updateTransform(
+            context.current.transform, matrix, origin,
+            flattensInheritedTransform, renderingContextID);
+    context.current.renderingContextID = renderingContextIDForChildren;
+    context.current.shouldFlattenInheritedTransform =
+        childrenFlattenInheritedTransform;
+  } else {
+    if (auto* properties = object.getMutableForPainting().paintProperties())
+      properties->clearTransform();
+  }
 }
 
 void PaintPropertyTreeBuilder::updateEffect(
     const LayoutObject& object,
     PaintPropertyTreeBuilderContext& context) {
-  if (!object.styleRef().hasOpacity()) {
-    if (auto* properties = object.getMutableForPainting().paintProperties())
+  const ComputedStyle& style = object.styleRef();
+
+  if (!style.isStackingContext()) {
+    if (ObjectPaintProperties* properties =
+            object.getMutableForPainting().paintProperties())
+      properties->clearEffect();
+    return;
+  }
+
+  // TODO(trchen): Can't omit effect node if we have 3D children.
+  // TODO(trchen): Can't omit effect node if we have blending children.
+  bool effectNodeNeeded = false;
+
+  float opacity = style.opacity();
+  if (opacity != 1.0f)
+    effectNodeNeeded = true;
+
+  CompositorFilterOperations filter;
+  if (object.isSVG() && !object.isSVGRoot()) {
+    // TODO(trchen): SVG caches filters in SVGResources. Implement it.
+  } else if (PaintLayer* layer = toLayoutBoxModelObject(object).layer()) {
+    // TODO(trchen): Eliminate PaintLayer dependency.
+    filter = layer->createCompositorFilterOperationsForFilter(style);
+  }
+
+  const ClipPaintPropertyNode* outputClip = rootClipNode();
+  // The CSS filter spec didn't specify how filters interact with overflow
+  // clips. The implementation here mimics the old Blink/WebKit behavior for
+  // backward compatibility.
+  // Basically the output of the filter will be affected by clips that applies
+  // to the current element. The descendants that paints into the input of the
+  // filter ignores any clips collected so far. For example:
+  // <div style="overflow:scroll">
+  //   <div style="filter:blur(1px);">
+  //     <div>A</div>
+  //     <div style="position:absolute;">B</div>
+  //   </div>
+  // </div>
+  // In this example "A" should be clipped if the filter was not present.
+  // With the filter, "A" will be rastered without clipping, but instead
+  // the blurred result will be clipped.
+  // On the other hand, "B" should not be clipped because the overflow clip is
+  // not in its containing block chain, but as the filter output will be
+  // clipped, so a blurred "B" may still be invisible.
+  if (!filter.isEmpty()) {
+    effectNodeNeeded = true;
+    outputClip = context.current.clip;
+
+    // TODO(trchen): A filter may contain spatial operations such that an output
+    // pixel may depend on an input pixel outside of the output clip. Need to
+    // generate special clip node to hint how to expand clip / cull rect.
+    const ClipPaintPropertyNode* expansionHint = context.current.clip;
+    context.current.clip = context.absolutePosition.clip =
+        context.fixedPosition.clip = expansionHint;
+  }
+
+  if (!effectNodeNeeded) {
+    if (ObjectPaintProperties* properties =
+            object.getMutableForPainting().paintProperties())
       properties->clearEffect();
     return;
   }
 
   context.currentEffect =
       object.getMutableForPainting().ensurePaintProperties().updateEffect(
-          context.currentEffect, object.styleRef().opacity());
+          context.currentEffect, context.current.transform, outputClip,
+          std::move(filter), opacity);
 }
 
 void PaintPropertyTreeBuilder::updateCssClip(
@@ -462,7 +534,8 @@ void PaintPropertyTreeBuilder::updateOverflowClip(
   } else if (box.hasOverflowClip() || box.styleRef().containsPaint() ||
              (box.isSVGRoot() &&
               toLayoutSVGRoot(box).shouldApplyViewportClip())) {
-    clipRect = box.overflowClipRect(context.current.paintOffset);
+    clipRect = LayoutRect(
+        pixelSnappedIntRect(box.overflowClipRect(context.current.paintOffset)));
   } else {
     if (auto* properties = object.getMutableForPainting().paintProperties()) {
       properties->clearInnerBorderRadiusClip();

@@ -23,7 +23,9 @@ from telemetry.util import bot_utils
 SCRIPT_TESTS = [
   {
     'args': [
-      'gpu_perftests'
+      'gpu_perftests',
+      '--adb-path',
+      'src/third_party/catapult/devil/bin/deps/linux2/x86_64/bin/adb',
     ],
     'name': 'gpu_perftests',
     'script': 'gtest_perf_test.py',
@@ -56,7 +58,9 @@ SCRIPT_TESTS = [
   },
   {
     'args': [
-      'cc_perftests'
+      'cc_perftests',
+      '--adb-path',
+      'src/third_party/catapult/devil/bin/deps/linux2/x86_64/bin/adb',
     ],
     'name': 'cc_perftests',
     'script': 'gtest_perf_test.py',
@@ -97,6 +101,22 @@ SCRIPT_TESTS = [
       '--test-launcher-print-test-stdio=always'
     ],
     'name': 'cc_perftests',
+    'script': 'gtest_perf_test.py',
+    'testers': {
+      'chromium.perf': [
+        {
+          'name': 'Linux Perf',
+          'shards': [3]
+        },
+      ]
+    }
+  },
+  {
+    'args': [
+      'tracing_perftests',
+      '--test-launcher-print-test-stdio=always'
+    ],
+    'name': 'tracing_perftests',
     'script': 'gtest_perf_test.py',
     'testers': {
       'chromium.perf': [
@@ -234,11 +254,6 @@ def get_fyi_waterfall_config():
     waterfall, 'Win 10 Low-End Perf Tests',
     'win-low-end-2-core', 'win',
     swarming=[
-      {
-       'gpu': '8086:22b1',
-       'os': 'Windows-10-10586',
-       'device_ids': ['build187-b4']
-      },
       {
        'gpu': '1002:9874',
        'os': 'Windows-10-10586',
@@ -451,6 +466,17 @@ BENCHMARK_NAME_WHITELIST = set([
     u'dromaeo.cssqueryjquery',
 ])
 
+# List of benchmarks that are to never be run on a waterfall.
+BENCHMARK_NAME_BLACKLIST = [
+    'multipage_skpicture_printer',
+    'multipage_skpicture_printer_ct',
+    'rasterize_and_record_micro_ct',
+    'repaint_ct',
+    'multipage_skpicture_printer',
+    'multipage_skpicture_printer_ct',
+    'skpicture_printer',
+    'skpicture_printer_ct',
+]
 
 def current_benchmarks(use_whitelist):
   current_dir = os.path.dirname(__file__)
@@ -460,6 +486,13 @@ def current_benchmarks(use_whitelist):
   all_benchmarks = discover.DiscoverClasses(
       benchmarks_dir, top_level_dir, benchmark_module.Benchmark,
       index_by_class_name=True).values()
+  # Remove all blacklisted benchmarks
+  for blacklisted in BENCHMARK_NAME_BLACKLIST:
+    for benchmark in all_benchmarks:
+      if benchmark.Name() == blacklisted:
+        all_benchmarks.remove(benchmark)
+        break
+
   if use_whitelist:
     all_benchmarks = (
         bench for bench in all_benchmarks

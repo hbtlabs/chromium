@@ -41,13 +41,13 @@
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/ErrorEvent.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/frame/BrowserControls.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Location.h"
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/Settings.h"
-#include "core/frame/TopControls.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/html/HTMLPlugInElement.h"
@@ -166,7 +166,7 @@ FrameView::FrameView(LocalFrame* frame)
       m_inputEventsScaleFactorForEmulation(1),
       m_layoutSizeFixedToFrameSize(true),
       m_didScrollTimer(this, &FrameView::didScrollTimerFired),
-      m_topControlsViewportAdjustment(0),
+      m_browserControlsViewportAdjustment(0),
       m_needsUpdateWidgetGeometries(false),
       m_needsUpdateViewportIntersection(true),
       m_needsUpdateViewportIntersectionInSubtree(true),
@@ -187,6 +187,7 @@ FrameView::FrameView(LocalFrame* frame)
       m_currentUpdateLifecyclePhasesTargetState(
           DocumentLifecycle::Uninitialized),
       m_scrollAnchor(this),
+      m_scrollbarManager(*this),
       m_needsScrollbarsUpdate(false),
       m_suppressAdjustViewSize(false),
       m_allowsLayoutInvalidationAfterLayoutClean(true) {
@@ -219,11 +220,11 @@ DEFINE_TRACE(FrameView) {
   visitor->trace(m_scrollableAreas);
   visitor->trace(m_animatingScrollableAreas);
   visitor->trace(m_autoSizeInfo);
-  visitor->trace(m_horizontalScrollbar);
-  visitor->trace(m_verticalScrollbar);
   visitor->trace(m_children);
   visitor->trace(m_viewportScrollableArea);
   visitor->trace(m_scrollAnchor);
+  visitor->trace(m_anchoringAdjustmentQueue);
+  visitor->trace(m_scrollbarManager);
   Widget::trace(visitor);
   ScrollableArea::trace(visitor);
 }
@@ -333,8 +334,7 @@ void FrameView::detachScrollbars() {
   // However, for Oilpan, we still need to remove the native scrollbars before
   // we lose the connection to the HostWindow, so we just unconditionally
   // detach any scrollbars now.
-  setHasHorizontalScrollbar(false);
-  setHasVerticalScrollbar(false);
+  m_scrollbarManager.dispose();
 
   if (m_scrollCorner) {
     m_scrollCorner->destroy();
@@ -342,14 +342,85 @@ void FrameView::detachScrollbars() {
   }
 }
 
+void FrameView::ScrollbarManager::setHasHorizontalScrollbar(bool hasScrollbar) {
+  if (hasScrollbar == hasHorizontalScrollbar())
+    return;
+
+  if (hasScrollbar) {
+    m_hBar = createScrollbar(HorizontalScrollbar);
+    m_scrollableArea->layoutBox()->document().view()->addChild(m_hBar.get());
+    m_scrollableArea->didAddScrollbar(*m_hBar, HorizontalScrollbar);
+    m_hBar->styleChanged();
+    m_hBarIsAttached = 1;
+  } else {
+    m_hBarIsAttached = 0;
+    destroyScrollbar(HorizontalScrollbar);
+  }
+
+  m_scrollableArea->setScrollCornerNeedsPaintInvalidation();
+}
+
+void FrameView::ScrollbarManager::setHasVerticalScrollbar(bool hasScrollbar) {
+  if (hasScrollbar == hasVerticalScrollbar())
+    return;
+
+  if (hasScrollbar) {
+    m_vBar = createScrollbar(VerticalScrollbar);
+    m_scrollableArea->layoutBox()->document().view()->addChild(m_vBar.get());
+    m_scrollableArea->didAddScrollbar(*m_vBar, VerticalScrollbar);
+    m_vBar->styleChanged();
+    m_vBarIsAttached = 1;
+  } else {
+    m_vBarIsAttached = 0;
+    destroyScrollbar(VerticalScrollbar);
+  }
+
+  m_scrollableArea->setScrollCornerNeedsPaintInvalidation();
+}
+
+Scrollbar* FrameView::ScrollbarManager::createScrollbar(
+    ScrollbarOrientation orientation) {
+  Element* customScrollbarElement = nullptr;
+  LocalFrame* customScrollbarFrame = nullptr;
+
+  LayoutBox* box = m_scrollableArea->layoutBox();
+  if (box->document().view()->shouldUseCustomScrollbars(customScrollbarElement,
+                                                        customScrollbarFrame)) {
+    return LayoutScrollbar::createCustomScrollbar(
+        m_scrollableArea.get(), orientation, customScrollbarElement,
+        customScrollbarFrame);
+  }
+
+  // Nobody set a custom style, so we just use a native scrollbar.
+  return Scrollbar::create(m_scrollableArea.get(), orientation,
+                           RegularScrollbar,
+                           &box->frame()->page()->chromeClient());
+}
+
+void FrameView::ScrollbarManager::destroyScrollbar(
+    ScrollbarOrientation orientation) {
+  Member<Scrollbar>& scrollbar =
+      orientation == HorizontalScrollbar ? m_hBar : m_vBar;
+  DCHECK(orientation == HorizontalScrollbar ? !m_hBarIsAttached
+                                            : !m_vBarIsAttached);
+  if (!scrollbar)
+    return;
+
+  m_scrollableArea->willRemoveScrollbar(*scrollbar, orientation);
+  m_scrollableArea->layoutBox()->document().view()->removeChild(
+      scrollbar.get());
+  scrollbar->disconnectFromScrollableArea();
+  scrollbar = nullptr;
+}
+
 void FrameView::recalculateCustomScrollbarStyle() {
   bool didStyleChange = false;
-  if (m_horizontalScrollbar && m_horizontalScrollbar->isCustomScrollbar()) {
-    m_horizontalScrollbar->styleChanged();
+  if (horizontalScrollbar() && horizontalScrollbar()->isCustomScrollbar()) {
+    horizontalScrollbar()->styleChanged();
     didStyleChange = true;
   }
-  if (m_verticalScrollbar && m_verticalScrollbar->isCustomScrollbar()) {
-    m_verticalScrollbar->styleChanged();
+  if (verticalScrollbar() && verticalScrollbar()->isCustomScrollbar()) {
+    verticalScrollbar()->styleChanged();
     didStyleChange = true;
   }
   if (didStyleChange) {
@@ -517,15 +588,7 @@ bool FrameView::shouldUseCustomScrollbars(
 }
 
 Scrollbar* FrameView::createScrollbar(ScrollbarOrientation orientation) {
-  Element* customScrollbarElement = nullptr;
-  LocalFrame* customScrollbarFrame = nullptr;
-  if (shouldUseCustomScrollbars(customScrollbarElement, customScrollbarFrame))
-    return LayoutScrollbar::createCustomScrollbar(
-        this, orientation, customScrollbarElement, customScrollbarFrame);
-
-  // Nobody set a custom style, so we just use a native scrollbar.
-  return Scrollbar::create(this, orientation, RegularScrollbar,
-                           &frame().page()->chromeClient());
+  return m_scrollbarManager.createScrollbar(orientation);
 }
 
 void FrameView::setContentsSize(const IntSize& size) {
@@ -847,7 +910,7 @@ void FrameView::performPreLayoutTasks() {
   lifecycle().advanceTo(DocumentLifecycle::StyleClean);
 
   if (shouldPerformScrollAnchoring())
-    m_scrollAnchor.save();
+    m_scrollAnchor.notifyBeforeLayout();
 }
 
 bool FrameView::shouldPerformScrollAnchoring() const {
@@ -1237,14 +1300,14 @@ FloatSize FrameView::viewportSizeForViewportUnits() const {
   // so that we get correct results on mobile where the page is laid out into
   // a rect that may be larger than the viewport (e.g. the 980px fallback
   // width for desktop pages). Since the layout height is statically set to
-  // be the viewport with top controls showing, we add the top controls
+  // be the viewport with browser controls showing, we add the browser controls
   // height, compensating for page scale as well, since we want to use the
-  // viewport with top controls hidden for vh (to match Safari).
-  TopControls& topControls = m_frame->host()->topControls();
+  // viewport with browser controls hidden for vh (to match Safari).
+  BrowserControls& browserControls = m_frame->host()->browserControls();
   if (m_frame->isMainFrame() && size.width()) {
     float pageScaleAtLayoutWidth =
         m_frame->host()->visualViewport().size().width() / size.width();
-    size.expand(0, topControls.height() / pageScaleAtLayoutWidth);
+    size.expand(0, browserControls.height() / pageScaleAtLayoutWidth);
   }
 
   size.scale(1 / zoom);
@@ -1665,20 +1728,20 @@ void FrameView::didUpdateElasticOverscroll() {
   if (!page)
     return;
   FloatSize elasticOverscroll = page->chromeClient().elasticOverscroll();
-  if (m_horizontalScrollbar) {
+  if (horizontalScrollbar()) {
     float delta =
-        elasticOverscroll.width() - m_horizontalScrollbar->elasticOverscroll();
+        elasticOverscroll.width() - horizontalScrollbar()->elasticOverscroll();
     if (delta != 0) {
-      m_horizontalScrollbar->setElasticOverscroll(elasticOverscroll.width());
+      horizontalScrollbar()->setElasticOverscroll(elasticOverscroll.width());
       scrollAnimator().notifyContentAreaScrolled(FloatSize(delta, 0));
       setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
     }
   }
-  if (m_verticalScrollbar) {
+  if (verticalScrollbar()) {
     float delta =
-        elasticOverscroll.height() - m_verticalScrollbar->elasticOverscroll();
+        elasticOverscroll.height() - verticalScrollbar()->elasticOverscroll();
     if (delta != 0) {
-      m_verticalScrollbar->setElasticOverscroll(elasticOverscroll.height());
+      verticalScrollbar()->setElasticOverscroll(elasticOverscroll.height());
       scrollAnimator().notifyContentAreaScrolled(FloatSize(0, delta));
       setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
     }
@@ -2059,7 +2122,7 @@ void FrameView::setBaseBackgroundColor(const Color& backgroundColor) {
     if (compositedLayerMapping->mainGraphicsLayer())
       compositedLayerMapping->mainGraphicsLayer()->setNeedsDisplay();
   }
-  recalculateScrollbarOverlayStyle(documentBackgroundColor());
+  recalculateScrollbarOverlayColorTheme(documentBackgroundColor());
 
   if (!shouldThrottleRendering())
     page()->animator().scheduleVisualUpdate(m_frame.get());
@@ -2224,11 +2287,6 @@ void FrameView::performPostLayoutTasks() {
     scrollingCoordinator->notifyGeometryChanged();
 
   scrollToFragmentAnchor();
-  // TODO(skobes): Figure out interactions between scroll anchor, fragment
-  // anchor, and history restoration.
-  if (shouldPerformScrollAnchoring())
-    m_scrollAnchor.restore();
-
   sendResizeEventIfNeeded();
 }
 
@@ -2655,6 +2713,10 @@ void FrameView::updateLifecyclePhasesInternal(
     return;
   }
 
+  forAllNonThrottledFrameViews([](FrameView& frameView) {
+    frameView.performScrollAnchoringAdjustments();
+  });
+
   if (targetState == DocumentLifecycle::PaintClean) {
     forAllNonThrottledFrameViews(
         [](FrameView& frameView) { frameView.notifyResizeObservers(); });
@@ -2720,6 +2782,21 @@ void FrameView::updateLifecyclePhasesInternal(
   }
 
   updateViewportIntersectionsForSubtree(targetState);
+}
+
+void FrameView::enqueueScrollAnchoringAdjustment(
+    ScrollableArea* scrollableArea) {
+  m_anchoringAdjustmentQueue.add(scrollableArea);
+}
+
+void FrameView::performScrollAnchoringAdjustments() {
+  for (WeakMember<ScrollableArea>& scroller : m_anchoringAdjustmentQueue) {
+    if (scroller) {
+      DCHECK(scroller->scrollAnchor());
+      scroller->scrollAnchor()->adjust();
+    }
+  }
+  m_anchoringAdjustmentQueue.clear();
 }
 
 void FrameView::updatePaintProperties() {
@@ -3392,8 +3469,8 @@ void FrameView::didAddScrollbar(Scrollbar& scrollbar,
   ScrollableArea::didAddScrollbar(scrollbar, orientation);
 }
 
-void FrameView::setTopControlsViewportAdjustment(float adjustment) {
-  m_topControlsViewportAdjustment = adjustment;
+void FrameView::setBrowserControlsViewportAdjustment(float adjustment) {
+  m_browserControlsViewportAdjustment = adjustment;
 }
 
 IntSize FrameView::maximumScrollOffsetInt() const {
@@ -3401,7 +3478,7 @@ IntSize FrameView::maximumScrollOffsetInt() const {
   // FIXME: We probably shouldn't be storing the bounds in a float.
   // crbug.com/422331.
   IntSize visibleSize =
-      visibleContentSize(ExcludeScrollbars) + topControlsSize();
+      visibleContentSize(ExcludeScrollbars) + browserControlsSize();
   IntSize contentBounds = contentsSize();
   IntSize maximumOffset =
       toIntSize(-scrollOrigin() + (contentBounds - visibleSize));
@@ -3412,44 +3489,6 @@ void FrameView::addChild(Widget* child) {
   ASSERT(child != this && !child->parent());
   child->setParent(this);
   m_children.add(child);
-}
-
-void FrameView::setHasHorizontalScrollbar(bool hasBar) {
-  if (hasBar == !!m_horizontalScrollbar)
-    return;
-
-  if (hasBar) {
-    m_horizontalScrollbar = createScrollbar(HorizontalScrollbar);
-    addChild(m_horizontalScrollbar.get());
-    didAddScrollbar(*m_horizontalScrollbar, HorizontalScrollbar);
-    m_horizontalScrollbar->styleChanged();
-  } else {
-    willRemoveScrollbar(*m_horizontalScrollbar, HorizontalScrollbar);
-    removeChild(m_horizontalScrollbar.get());
-    m_horizontalScrollbar->disconnectFromScrollableArea();
-    m_horizontalScrollbar = nullptr;
-  }
-
-  setScrollCornerNeedsPaintInvalidation();
-}
-
-void FrameView::setHasVerticalScrollbar(bool hasBar) {
-  if (hasBar == !!m_verticalScrollbar)
-    return;
-
-  if (hasBar) {
-    m_verticalScrollbar = createScrollbar(VerticalScrollbar);
-    addChild(m_verticalScrollbar.get());
-    didAddScrollbar(*m_verticalScrollbar, VerticalScrollbar);
-    m_verticalScrollbar->styleChanged();
-  } else {
-    willRemoveScrollbar(*m_verticalScrollbar, VerticalScrollbar);
-    removeChild(m_verticalScrollbar.get());
-    m_verticalScrollbar->disconnectFromScrollableArea();
-    m_verticalScrollbar = nullptr;
-  }
-
-  setScrollCornerNeedsPaintInvalidation();
 }
 
 void FrameView::setScrollbarModes(ScrollbarMode horizontalMode,
@@ -3532,21 +3571,20 @@ IntSize FrameView::minimumScrollOffsetInt() const {
 }
 
 void FrameView::adjustScrollbarOpacity() {
-  if (m_horizontalScrollbar && layerForHorizontalScrollbar()) {
-    bool isOpaqueScrollbar = !m_horizontalScrollbar->isOverlayScrollbar();
+  if (horizontalScrollbar() && layerForHorizontalScrollbar()) {
+    bool isOpaqueScrollbar = !horizontalScrollbar()->isOverlayScrollbar();
     layerForHorizontalScrollbar()->setContentsOpaque(isOpaqueScrollbar);
   }
-  if (m_verticalScrollbar && layerForVerticalScrollbar()) {
-    bool isOpaqueScrollbar = !m_verticalScrollbar->isOverlayScrollbar();
+  if (verticalScrollbar() && layerForVerticalScrollbar()) {
+    bool isOpaqueScrollbar = !verticalScrollbar()->isOverlayScrollbar();
     layerForVerticalScrollbar()->setContentsOpaque(isOpaqueScrollbar);
   }
 }
 
 int FrameView::scrollSize(ScrollbarOrientation orientation) const {
   Scrollbar* scrollbar =
-      ((orientation == HorizontalScrollbar) ? m_horizontalScrollbar
-                                            : m_verticalScrollbar)
-          .get();
+      ((orientation == HorizontalScrollbar) ? horizontalScrollbar()
+                                            : verticalScrollbar());
 
   // If no scrollbars are present, the content may still be scrollable.
   if (!scrollbar) {
@@ -3607,7 +3645,7 @@ void FrameView::updateScrollOffset(const ScrollOffset& offset,
       documentLoader->initialScrollState().wasScrolledByUser = true;
   }
 
-  if (scrollType != AnchoringScroll)
+  if (scrollType != AnchoringScroll && scrollType != ClampingScroll)
     clearScrollAnchor();
 }
 
@@ -3624,9 +3662,9 @@ void FrameView::clearScrollAnchor() {
 }
 
 bool FrameView::hasOverlayScrollbars() const {
-  return (m_horizontalScrollbar &&
-          m_horizontalScrollbar->isOverlayScrollbar()) ||
-         (m_verticalScrollbar && m_verticalScrollbar->isOverlayScrollbar());
+  return (horizontalScrollbar() &&
+          horizontalScrollbar()->isOverlayScrollbar()) ||
+         (verticalScrollbar() && verticalScrollbar()->isOverlayScrollbar());
 }
 
 void FrameView::computeScrollbarExistence(
@@ -3640,8 +3678,8 @@ void FrameView::computeScrollbarExistence(
     return;
   }
 
-  bool hasHorizontalScrollbar = m_horizontalScrollbar;
-  bool hasVerticalScrollbar = m_verticalScrollbar;
+  bool hasHorizontalScrollbar = horizontalScrollbar();
+  bool hasVerticalScrollbar = verticalScrollbar();
 
   newHasHorizontalScrollbar = hasHorizontalScrollbar;
   newHasVerticalScrollbar = hasVerticalScrollbar;
@@ -3683,42 +3721,42 @@ void FrameView::computeScrollbarExistence(
 }
 
 void FrameView::updateScrollbarGeometry() {
-  if (m_horizontalScrollbar) {
-    int thickness = m_horizontalScrollbar->scrollbarThickness();
+  if (horizontalScrollbar()) {
+    int thickness = horizontalScrollbar()->scrollbarThickness();
     int clientWidth = visibleWidth();
-    IntRect oldRect(m_horizontalScrollbar->frameRect());
+    IntRect oldRect(horizontalScrollbar()->frameRect());
     IntRect hBarRect(
-        (shouldPlaceVerticalScrollbarOnLeft() && m_verticalScrollbar)
-            ? m_verticalScrollbar->width()
+        (shouldPlaceVerticalScrollbarOnLeft() && verticalScrollbar())
+            ? verticalScrollbar()->width()
             : 0,
         height() - thickness,
-        width() - (m_verticalScrollbar ? m_verticalScrollbar->width() : 0),
+        width() - (verticalScrollbar() ? verticalScrollbar()->width() : 0),
         thickness);
-    m_horizontalScrollbar->setFrameRect(hBarRect);
-    if (oldRect != m_horizontalScrollbar->frameRect())
+    horizontalScrollbar()->setFrameRect(hBarRect);
+    if (oldRect != horizontalScrollbar()->frameRect())
       setScrollbarNeedsPaintInvalidation(HorizontalScrollbar);
 
-    m_horizontalScrollbar->setEnabled(contentsWidth() > clientWidth);
-    m_horizontalScrollbar->setProportion(clientWidth, contentsWidth());
-    m_horizontalScrollbar->offsetDidChange();
+    horizontalScrollbar()->setEnabled(contentsWidth() > clientWidth);
+    horizontalScrollbar()->setProportion(clientWidth, contentsWidth());
+    horizontalScrollbar()->offsetDidChange();
   }
 
-  if (m_verticalScrollbar) {
-    int thickness = m_verticalScrollbar->scrollbarThickness();
+  if (verticalScrollbar()) {
+    int thickness = verticalScrollbar()->scrollbarThickness();
     int clientHeight = visibleHeight();
-    IntRect oldRect(m_verticalScrollbar->frameRect());
+    IntRect oldRect(verticalScrollbar()->frameRect());
     IntRect vBarRect(
         shouldPlaceVerticalScrollbarOnLeft() ? 0 : (width() - thickness), 0,
         thickness,
         height() -
-            (m_horizontalScrollbar ? m_horizontalScrollbar->height() : 0));
-    m_verticalScrollbar->setFrameRect(vBarRect);
-    if (oldRect != m_verticalScrollbar->frameRect())
+            (horizontalScrollbar() ? horizontalScrollbar()->height() : 0));
+    verticalScrollbar()->setFrameRect(vBarRect);
+    if (oldRect != verticalScrollbar()->frameRect())
       setScrollbarNeedsPaintInvalidation(VerticalScrollbar);
 
-    m_verticalScrollbar->setEnabled(contentsHeight() > clientHeight);
-    m_verticalScrollbar->setProportion(clientHeight, contentsHeight());
-    m_verticalScrollbar->offsetDidChange();
+    verticalScrollbar()->setEnabled(contentsHeight() > clientHeight);
+    verticalScrollbar()->setProportion(clientHeight, contentsHeight());
+    verticalScrollbar()->offsetDidChange();
   }
 }
 
@@ -3733,8 +3771,8 @@ bool FrameView::adjustScrollbarExistence(
   if (!m_scrollbarsSuppressed)
     scrollbarExistenceDidChange();
 
-  bool hasHorizontalScrollbar = m_horizontalScrollbar;
-  bool hasVerticalScrollbar = m_verticalScrollbar;
+  bool hasHorizontalScrollbar = horizontalScrollbar();
+  bool hasVerticalScrollbar = verticalScrollbar();
 
   bool newHasHorizontalScrollbar = false;
   bool newHasVerticalScrollbar = false;
@@ -3747,8 +3785,8 @@ bool FrameView::adjustScrollbarExistence(
   if (!scrollbarExistenceChanged)
     return false;
 
-  setHasHorizontalScrollbar(newHasHorizontalScrollbar);
-  setHasVerticalScrollbar(newHasVerticalScrollbar);
+  m_scrollbarManager.setHasHorizontalScrollbar(newHasHorizontalScrollbar);
+  m_scrollbarManager.setHasVerticalScrollbar(newHasVerticalScrollbar);
 
   if (m_scrollbarsSuppressed)
     return true;
@@ -3765,10 +3803,10 @@ bool FrameView::needsScrollbarReconstruction() const {
   bool shouldUseCustom =
       shouldUseCustomScrollbars(customScrollbarElement, customScrollbarFrame);
 
-  bool hasAnyScrollbar = m_horizontalScrollbar || m_verticalScrollbar;
+  bool hasAnyScrollbar = horizontalScrollbar() || verticalScrollbar();
   bool hasCustom =
-      (m_horizontalScrollbar && m_horizontalScrollbar->isCustomScrollbar()) ||
-      (m_verticalScrollbar && m_verticalScrollbar->isCustomScrollbar());
+      (horizontalScrollbar() && horizontalScrollbar()->isCustomScrollbar()) ||
+      (verticalScrollbar() && verticalScrollbar()->isCustomScrollbar());
 
   return hasAnyScrollbar && (shouldUseCustom != hasCustom);
 }
@@ -3792,8 +3830,8 @@ void FrameView::updateScrollbars() {
 
   // Avoid drawing two sets of scrollbars when visual viewport is enabled.
   if (visualViewportSuppliesScrollbars()) {
-    setHasHorizontalScrollbar(false);
-    setHasVerticalScrollbar(false);
+    m_scrollbarManager.setHasHorizontalScrollbar(false);
+    m_scrollbarManager.setHasVerticalScrollbar(false);
     adjustScrollOffsetFromUpdateScrollbars();
     return;
   }
@@ -3805,8 +3843,8 @@ void FrameView::updateScrollbars() {
   bool scrollbarExistenceChanged = false;
 
   if (needsScrollbarReconstruction()) {
-    setHasHorizontalScrollbar(false);
-    setHasVerticalScrollbar(false);
+    m_scrollbarManager.setHasHorizontalScrollbar(false);
+    m_scrollbarManager.setHasVerticalScrollbar(false);
     scrollbarExistenceChanged = true;
   }
 
@@ -3835,15 +3873,8 @@ void FrameView::updateScrollbars() {
 
 void FrameView::adjustScrollOffsetFromUpdateScrollbars() {
   ScrollOffset clamped = clampScrollOffset(scrollOffset());
-  // Restore before clamping because clamping clears the scroll anchor.
-  // TODO(ymalik): This same logic exists in PaintLayerScrollableArea.
-  // Remove when root-layer-scrolls is enabled.
-  if (clamped != scrollOffset() && shouldPerformScrollAnchoring()) {
-    m_scrollAnchor.restore();
-    clamped = clampScrollOffset(scrollOffset());
-  }
   if (clamped != scrollOffset() || scrollOriginChanged()) {
-    ScrollableArea::setScrollOffset(clamped, ProgrammaticScroll);
+    ScrollableArea::setScrollOffset(clamped, ClampingScroll);
     resetScrollOriginChanged();
   }
 }
@@ -3972,14 +4003,14 @@ IntPoint FrameView::soonToBeRemovedUnscaledViewportToContents(
 }
 
 Scrollbar* FrameView::scrollbarAtFramePoint(const IntPoint& pointInFrame) {
-  if (m_horizontalScrollbar &&
-      m_horizontalScrollbar->shouldParticipateInHitTesting() &&
-      m_horizontalScrollbar->frameRect().contains(pointInFrame))
-    return m_horizontalScrollbar.get();
-  if (m_verticalScrollbar &&
-      m_verticalScrollbar->shouldParticipateInHitTesting() &&
-      m_verticalScrollbar->frameRect().contains(pointInFrame))
-    return m_verticalScrollbar.get();
+  if (horizontalScrollbar() &&
+      horizontalScrollbar()->shouldParticipateInHitTesting() &&
+      horizontalScrollbar()->frameRect().contains(pointInFrame))
+    return horizontalScrollbar();
+  if (verticalScrollbar() &&
+      verticalScrollbar()->shouldParticipateInHitTesting() &&
+      verticalScrollbar()->frameRect().contains(pointInFrame))
+    return verticalScrollbar();
   return nullptr;
 }
 
@@ -4071,22 +4102,22 @@ IntRect FrameView::scrollCornerRect() const {
   if (hasOverlayScrollbars())
     return cornerRect;
 
-  if (m_horizontalScrollbar && width() - m_horizontalScrollbar->width() > 0) {
+  if (horizontalScrollbar() && width() - horizontalScrollbar()->width() > 0) {
     cornerRect.unite(IntRect(shouldPlaceVerticalScrollbarOnLeft()
                                  ? 0
-                                 : m_horizontalScrollbar->width(),
-                             height() - m_horizontalScrollbar->height(),
-                             width() - m_horizontalScrollbar->width(),
-                             m_horizontalScrollbar->height()));
+                                 : horizontalScrollbar()->width(),
+                             height() - horizontalScrollbar()->height(),
+                             width() - horizontalScrollbar()->width(),
+                             horizontalScrollbar()->height()));
   }
 
-  if (m_verticalScrollbar && height() - m_verticalScrollbar->height() > 0) {
+  if (verticalScrollbar() && height() - verticalScrollbar()->height() > 0) {
     cornerRect.unite(IntRect(shouldPlaceVerticalScrollbarOnLeft()
                                  ? 0
-                                 : (width() - m_verticalScrollbar->width()),
-                             m_verticalScrollbar->height(),
-                             m_verticalScrollbar->width(),
-                             height() - m_verticalScrollbar->height()));
+                                 : (width() - verticalScrollbar()->width()),
+                             verticalScrollbar()->height(),
+                             verticalScrollbar()->width(),
+                             height() - verticalScrollbar()->height()));
   }
 
   return cornerRect;
@@ -4130,23 +4161,23 @@ bool FrameView::isPointInScrollbarCorner(const IntPoint& pointInRootFrame) {
 
   IntPoint framePoint = convertFromRootFrame(pointInRootFrame);
 
-  if (m_horizontalScrollbar) {
-    int horizontalScrollbarYMin = m_horizontalScrollbar->frameRect().y();
-    int horizontalScrollbarYMax = m_horizontalScrollbar->frameRect().y() +
-                                  m_horizontalScrollbar->frameRect().height();
-    int horizontalScrollbarXMin = m_horizontalScrollbar->frameRect().x() +
-                                  m_horizontalScrollbar->frameRect().width();
+  if (horizontalScrollbar()) {
+    int horizontalScrollbarYMin = horizontalScrollbar()->frameRect().y();
+    int horizontalScrollbarYMax = horizontalScrollbar()->frameRect().y() +
+                                  horizontalScrollbar()->frameRect().height();
+    int horizontalScrollbarXMin = horizontalScrollbar()->frameRect().x() +
+                                  horizontalScrollbar()->frameRect().width();
 
     return framePoint.y() > horizontalScrollbarYMin &&
            framePoint.y() < horizontalScrollbarYMax &&
            framePoint.x() > horizontalScrollbarXMin;
   }
 
-  int verticalScrollbarXMin = m_verticalScrollbar->frameRect().x();
-  int verticalScrollbarXMax = m_verticalScrollbar->frameRect().x() +
-                              m_verticalScrollbar->frameRect().width();
-  int verticalScrollbarYMin = m_verticalScrollbar->frameRect().y() +
-                              m_verticalScrollbar->frameRect().height();
+  int verticalScrollbarXMin = verticalScrollbar()->frameRect().x();
+  int verticalScrollbarXMax = verticalScrollbar()->frameRect().x() +
+                              verticalScrollbar()->frameRect().width();
+  int verticalScrollbarYMin = verticalScrollbar()->frameRect().y() +
+                              verticalScrollbar()->frameRect().height();
 
   return framePoint.x() > verticalScrollbarXMin &&
          framePoint.x() < verticalScrollbarXMax &&
@@ -4154,9 +4185,9 @@ bool FrameView::isPointInScrollbarCorner(const IntPoint& pointInRootFrame) {
 }
 
 bool FrameView::scrollbarCornerPresent() const {
-  return (m_horizontalScrollbar &&
-          width() - m_horizontalScrollbar->width() > 0) ||
-         (m_verticalScrollbar && height() - m_verticalScrollbar->height() > 0);
+  return (horizontalScrollbar() &&
+          width() - horizontalScrollbar()->width() > 0) ||
+         (verticalScrollbar() && height() - verticalScrollbar()->height() > 0);
 }
 
 IntRect FrameView::convertFromScrollbarToContainingWidget(
@@ -4308,10 +4339,29 @@ void FrameView::updateViewportIntersectionIfNeeded() {
   m_viewportIntersectionValid = true;
   FrameView* parent = parentFrameView();
   if (!parent) {
+    HTMLFrameOwnerElement* element = frame().deprecatedLocalOwner();
+    if (!element)
+      frame().document()->maybeRecordLoadReason(WouldLoadOutOfProcess);
+    // Having no layout object means the frame is not drawn.
+    else if (!element->layoutObject())
+      frame().document()->maybeRecordLoadReason(WouldLoadDisplayNone);
     m_viewportIntersection = frameRect();
     return;
   }
   ASSERT(!parent->m_needsUpdateViewportIntersection);
+
+  bool parentLoaded = parent->frame().document()->wouldLoadReason() > Created;
+  // If the parent wasn't loaded, the children won't be either.
+  if (parentLoaded) {
+    if (frameRect().isEmpty())
+      frame().document()->maybeRecordLoadReason(WouldLoadZeroByZero);
+    else if (frameRect().maxY() < 0 && frameRect().maxX() < 0)
+      frame().document()->maybeRecordLoadReason(WouldLoadAboveAndLeft);
+    else if (frameRect().maxY() < 0)
+      frame().document()->maybeRecordLoadReason(WouldLoadAbove);
+    else if (frameRect().maxX() < 0)
+      frame().document()->maybeRecordLoadReason(WouldLoadLeft);
+  }
 
   // If our parent is hidden, then we are too.
   if (parent->m_viewportIntersection.isEmpty()) {
@@ -4332,6 +4382,9 @@ void FrameView::updateViewportIntersectionIfNeeded() {
   // content while scrolling.
   IntRect viewport = parent->m_viewportIntersection;
   m_viewportIntersection.intersect(viewport);
+
+  if (parentLoaded && !m_viewportIntersection.isEmpty())
+    frame().document()->maybeRecordLoadReason(WouldLoadVisible);
 }
 
 void FrameView::updateViewportIntersectionsForSubtree(
@@ -4416,8 +4469,6 @@ void FrameView::notifyRenderThrottlingObservers() {
   bool wasThrottled = canThrottleRendering();
 
   updateThrottlingStatus();
-
-  frame().document()->onVisibilityMaybeChanged(!m_hiddenForThrottling);
 
   bool becameThrottled = !wasThrottled && canThrottleRendering();
   bool becameUnthrottled = wasThrottled && !canThrottleRendering();

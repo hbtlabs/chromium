@@ -82,9 +82,9 @@ import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoScreen;
 import org.chromium.chrome.browser.signin.SigninPromoUtil;
 import org.chromium.chrome.browser.snackbar.undo.UndoBarController;
+import org.chromium.chrome.browser.tab.BrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
-import org.chromium.chrome.browser.tab.TopControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tabmodel.ChromeTabCreator;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -186,6 +186,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     private static final String ACTION_CLOSE_TABS =
             "com.google.android.apps.chrome.ACTION_CLOSE_TABS";
 
+    /** The task id of the activity that tabs were merged into. */
+    private static int sMergedInstanceTaskId;
+
     private final ActivityStopMetrics mActivityStopMetrics = new ActivityStopMetrics();
 
     private FindToolbarManager mFindToolbarManager;
@@ -240,28 +243,29 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         }
     }
 
-    private class TabbedModeTopControlsVisibilityDelegate extends TopControlsVisibilityDelegate {
-        public TabbedModeTopControlsVisibilityDelegate(Tab tab) {
+    private class TabbedModeBrowserControlsVisibilityDelegate
+            extends BrowserControlsVisibilityDelegate {
+        public TabbedModeBrowserControlsVisibilityDelegate(Tab tab) {
             super(tab);
         }
 
         @Override
-        public boolean isShowingTopControlsEnabled() {
+        public boolean isShowingBrowserControlsEnabled() {
             if (mVrShellDelegate.isInVR()) return false;
-            return super.isShowingTopControlsEnabled();
+            return super.isShowingBrowserControlsEnabled();
         }
 
         @Override
-        public boolean isHidingTopControlsEnabled() {
+        public boolean isHidingBrowserControlsEnabled() {
             if (mVrShellDelegate.isInVR()) return true;
-            return super.isHidingTopControlsEnabled();
+            return super.isHidingBrowserControlsEnabled();
         }
     }
 
     private class TabbedModeTabDelegateFactory extends TabDelegateFactory {
         @Override
-        public TopControlsVisibilityDelegate createTopControlsVisibilityDelegate(Tab tab) {
-            return new TabbedModeTopControlsVisibilityDelegate(tab);
+        public BrowserControlsVisibilityDelegate createBrowserControlsVisibilityDelegate(Tab tab) {
+            return new TabbedModeBrowserControlsVisibilityDelegate(tab);
         }
     }
 
@@ -443,6 +447,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
         if (getActivityTab() != null) getActivityTab().setIsAllowedToReturnToExternalApp(false);
 
+        if (mVrShellDelegate.isVrShellEnabled()) {
+            mVrShellDelegate.close();
+        }
         mTabModelSelectorImpl.saveState();
         StartupMetrics.getInstance().recordHistogram(true);
         mActivityStopMetrics.onStopWithNative(this);
@@ -991,8 +998,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         int index = savedInstanceState != null ? savedInstanceState.getInt(WINDOW_INDEX, 0) : 0;
 
         mTabModelSelectorImpl = (TabModelSelectorImpl)
-                TabWindowManager.getInstance().requestSelector(this, this, getFullscreenManager(),
-                        index);
+                TabWindowManager.getInstance().requestSelector(this, this, index);
         if (mTabModelSelectorImpl == null) {
             Toast.makeText(this, getString(R.string.unsupported_number_of_windows),
                     Toast.LENGTH_LONG).show();
@@ -1088,6 +1094,25 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 AutocompleteController.nativePrefetchZeroSuggestResults();
             }
         });
+    }
+
+    @Override
+    protected boolean isStartedUpCorrectly(Intent intent) {
+        // If tabs from this instance were merged into a different ChromeTabbedActivity instance
+        // then this instance should not be created. This may happen if the process is restarted
+        // e.g. on upgrade or from about://flags. See crbug.com/657418
+        boolean tabsMergedIntoAnotherInstance =
+                sMergedInstanceTaskId != 0 && sMergedInstanceTaskId != getTaskId();
+        if (tabsMergedIntoAnotherInstance) {
+            // Currently only two instances of ChromeTabbedActivity may be running at any given
+            // time. If tabs were merged into another instance and this instance is being killed due
+            // to incorrect startup, then no other instances should exist. Reset the merged instance
+            // task id.
+            setMergedInstanceTaskId(0);
+            return false;
+        }
+
+        return super.isStartedUpCorrectly(intent);
     }
 
     @Override
@@ -1195,6 +1220,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 MultiWindowUtils.getInstance().getOpenInOtherWindowActivity(this);
         if (targetActivity == null) return;
 
+        // When a second instance is created, the merged instance task id should be cleared.
+        setMergedInstanceTaskId(0);
         Intent intent = new Intent(this, targetActivity);
         MultiWindowUtils.setOpenInOtherWindowIntentExtras(intent, this, targetActivity);
 
@@ -1614,6 +1641,8 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         // 4. Ask TabPersistentStore to merge state.
         RecordUserAction.record("Android.MergeState.Live");
         mTabModelSelectorImpl.mergeState();
+
+        setMergedInstanceTaskId(getTaskId());
     }
 
     /**
@@ -1658,6 +1687,10 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     protected ChromeFullscreenManager createFullscreenManager() {
         return new ChromeFullscreenManager(this,
                 (ToolbarControlContainer) findViewById(R.id.control_container),
-                getControlContainerHeightResource(), true);
+                getTabModelSelector(), getControlContainerHeightResource(), true);
+    }
+
+    private static void setMergedInstanceTaskId(int mergedInstanceTaskId) {
+        sMergedInstanceTaskId = mergedInstanceTaskId;
     }
 }

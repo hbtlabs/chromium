@@ -55,8 +55,9 @@ const char kTestAndroidRealm2[] = "android://hash@com.example.two.android/";
 class MockPasswordManagerClient : public StubPasswordManagerClient {
  public:
   MOCK_CONST_METHOD0(IsSavingAndFillingEnabledForCurrentPage, bool());
+  MOCK_CONST_METHOD0(IsFillingEnabledForCurrentPage, bool());
+  MOCK_METHOD0(OnCredentialManagerUsed, bool());
   MOCK_CONST_METHOD0(IsOffTheRecord, bool());
-  MOCK_CONST_METHOD0(DidLastPageLoadEncounterSSLErrors, bool());
   MOCK_METHOD0(NotifyUserAutoSigninPtr, bool());
   MOCK_METHOD1(NotifyUserCouldBeAutoSignedInPtr,
                bool(autofill::PasswordForm* form));
@@ -213,9 +214,11 @@ class CredentialManagerImplTest : public content::RenderViewHostTestHarness {
         web_contents(), client_.get(), stub_driver_.get()));
     ON_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
         .WillByDefault(testing::Return(true));
+    ON_CALL(*client_, IsFillingEnabledForCurrentPage())
+        .WillByDefault(testing::Return(true));
+    ON_CALL(*client_, OnCredentialManagerUsed())
+        .WillByDefault(testing::Return(true));
     ON_CALL(*client_, IsOffTheRecord()).WillByDefault(testing::Return(false));
-    ON_CALL(*client_, DidLastPageLoadEncounterSSLErrors())
-        .WillByDefault(testing::Return(false));
 
     NavigateAndCommit(GURL("https://example.com/test.html"));
 
@@ -646,7 +649,8 @@ TEST_F(CredentialManagerImplTest, CredentialManagerOnRequireUserMediation) {
 
 TEST_F(CredentialManagerImplTest,
        CredentialManagerOnRequireUserMediationIncognito) {
-  EXPECT_CALL(*client_, IsOffTheRecord()).WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsSavingAndFillingEnabledForCurrentPage())
+      .WillRepeatedly(testing::Return(false));
   store_->AddLogin(form_);
   RunAllPendingTasks();
 
@@ -1026,8 +1030,20 @@ TEST_F(CredentialManagerImplTest, RequestCredentialWithFirstRunAndSkip) {
 
 TEST_F(CredentialManagerImplTest, RequestCredentialWithTLSErrors) {
   // If we encounter TLS errors, we won't return credentials.
-  EXPECT_CALL(*client_, DidLastPageLoadEncounterSSLErrors())
-      .WillRepeatedly(testing::Return(true));
+  EXPECT_CALL(*client_, IsFillingEnabledForCurrentPage())
+      .WillRepeatedly(testing::Return(false));
+
+  store_->AddLogin(form_);
+
+  std::vector<GURL> federations;
+
+  ExpectZeroClickSignInFailure(true, true, federations);
+}
+
+TEST_F(CredentialManagerImplTest, RequestCredentialWhilePrerendering) {
+  // The client disallows the credential manager for the current page.
+  EXPECT_CALL(*client_, OnCredentialManagerUsed())
+      .WillRepeatedly(testing::Return(false));
 
   store_->AddLogin(form_);
 

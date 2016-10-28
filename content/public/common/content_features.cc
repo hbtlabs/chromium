@@ -36,8 +36,14 @@ const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
 
 // Enable GPU Rasterization by default. This can still be overridden by
 // --force-gpu-rasterization or --disable-gpu-rasterization.
+#if defined(OS_ANDROID) || defined(OS_MACOSX)
+// DefaultEnableGpuRasterization has launched on Android and Mac.
+const base::Feature kDefaultEnableGpuRasterization{
+    "DefaultEnableGpuRasterization", base::FEATURE_ENABLED_BY_DEFAULT};
+#else
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
@@ -65,7 +71,7 @@ const base::Feature kFontCacheScaling{"FontCacheScaling",
 // same-origin to the top frame, or if a user gesture is being processed.
 const base::Feature kFramebustingNeedsSameOriginOrUserGesture{
     "FramebustingNeedsSameOriginOrUserGesture",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables extended Gamepad API features like motion tracking and haptics.
 const base::Feature kGamepadExtensions{"GamepadExtensions",
@@ -92,21 +98,10 @@ const base::Feature kMemoryCoordinator {
   "MemoryCoordinator", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
-// Enable the material design playback UI for media elements.  This is always
-// on for OS_ANDROID, but may be enabled by experiment for other platforms.
-const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Non-validating reload for desktop.
 // See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnNormalReload{
     "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
-// See https://crbug.com/591245
-const base::Feature kNonValidatingReloadOnRefreshContent{
-    "NonValidatingReloadOnRefreshContentV2",
-    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experiment to optimize resource loading IPC for small resources.
 // http://crbug.com/580928
@@ -140,9 +135,13 @@ const base::Feature kPointerEvents{"PointerEvent",
 const base::Feature kPointerEventV1SpecCapturing{
     "PointerEventV1SpecCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// RAF aligned input events support.
-const base::Feature kRafAlignedInputEvents{"RafAlignedInput",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+// RAF aligned mouse input events support.
+const base::Feature kRafAlignedMouseInputEvents{
+    "RafAlignedMouseInput", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// RAF aligned touch input events support.
+const base::Feature kRafAlignedTouchInputEvents{
+    "RafAlignedTouchInput", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If Pepper 3D Image Chromium is allowed, this feature controls whether it is
 // enabled.

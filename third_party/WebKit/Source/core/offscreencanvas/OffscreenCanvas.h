@@ -10,6 +10,7 @@
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasImageSource.h"
+#include "core/offscreencanvas/ImageEncodeOptions.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcher.h"
 #include "platform/heap/Handle.h"
@@ -40,7 +41,10 @@ class CORE_EXPORT OffscreenCanvas final
   void setHeight(unsigned, ExceptionState&);
 
   // API Methods
-  ImageBitmap* transferToImageBitmap(ExceptionState&);
+  ImageBitmap* transferToImageBitmap(ScriptState*, ExceptionState&);
+  ScriptPromise convertToBlob(ScriptState*,
+                              const ImageEncodeOptions&,
+                              ExceptionState&);
 
   IntSize size() const { return m_size; }
   void setAssociatedCanvasId(int canvasId) { m_canvasId = canvasId; }
@@ -105,6 +109,7 @@ class CORE_EXPORT OffscreenCanvas final
   Member<CanvasRenderingContext> m_context;
   int m_canvasId = -1;  // DOMNodeIds starts from 0, using -1 to indicate no
                         // associated canvas element.
+
   IntSize m_size;
   bool m_isNeutered = false;
 

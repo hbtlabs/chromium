@@ -89,7 +89,8 @@ SpdyHeaderBlock::ValueProxy::ValueProxy(
       storage_(storage),
       lookup_result_(lookup_result),
       key_(key),
-      valid_(true) {}
+      valid_(true) {
+}
 
 SpdyHeaderBlock::ValueProxy::ValueProxy(ValueProxy&& other)
     : block_(other.block_),
@@ -220,11 +221,6 @@ SpdyHeaderBlock::ValueProxy SpdyHeaderBlock::operator[](const StringPiece key) {
     out_key = iter->first;
   }
   return ValueProxy(&block_, GetStorage(), iter, out_key);
-}
-
-StringPiece SpdyHeaderBlock::GetHeader(const StringPiece key) const {
-  auto iter = block_.find(key);
-  return iter == block_.end() ? StringPiece() : iter->second;
 }
 
 void SpdyHeaderBlock::AppendValueOrAddHeader(const StringPiece key,

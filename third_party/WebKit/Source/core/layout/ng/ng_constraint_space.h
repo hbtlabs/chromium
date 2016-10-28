@@ -25,33 +25,17 @@ class NGLayoutOpportunityIterator;
 class CORE_EXPORT NGConstraintSpace final
     : public GarbageCollected<NGConstraintSpace> {
  public:
-  // Constructs a constraint space with a new backing NGPhysicalConstraintSpace.
-  // The size will be used for both for the physical constraint space's
-  // container size and this constraint space's Size().
-  NGConstraintSpace(NGWritingMode, NGDirection, NGLogicalSize);
-
   // Constructs a constraint space based on an existing backing
   // NGPhysicalConstraintSpace. Sets this constraint space's size to the
   // physical constraint space's container size, converted to logical
   // coordinates.
-  // TODO(layout-ng): Do we need this constructor?
   NGConstraintSpace(NGWritingMode, NGDirection, NGPhysicalConstraintSpace*);
-
-  // Constructs a constraint space with a different NGWritingMode and
-  // NGDirection that's otherwise identical.
-  NGConstraintSpace(NGWritingMode, NGDirection, const NGConstraintSpace*);
-
-  // Constructs a derived constraint space sharing the same backing
-  // NGPhysicalConstraintSpace, NGWritingMode and NGDirection. Primarily for use
-  // by NGLayoutOpportunityIterator.
-  NGConstraintSpace(const NGConstraintSpace& other,
-                    NGLogicalOffset,
-                    NGLogicalSize);
 
   // Constructs a derived constraint space that shares the exclusions of the
   // input constraint space, but has a different container size, writing mode
   // and direction. Sets the offset to zero. For use by layout algorithms
   // to use as the basis to find layout opportunities for children.
+  // TODO(layout-dev): Remove once NGConstraintSpaceBuilder exists.
   NGConstraintSpace(NGWritingMode,
                     NGDirection,
                     const NGConstraintSpace& other,
@@ -61,13 +45,27 @@ class CORE_EXPORT NGConstraintSpace final
   // NGConstraintSpace or a NGPhysicalConstraintSpace.
   static NGConstraintSpace* CreateFromLayoutObject(const LayoutBox&);
 
-  NGPhysicalConstraintSpace* PhysicalSpace() const { return physical_space_; }
+  // Mutable Getters.
+  // TODO(layout-dev): remove const constraint from MutablePhysicalSpace method
+  NGPhysicalConstraintSpace* MutablePhysicalSpace() const {
+    return physical_space_;
+  }
+
+  // Read-only Getters.
+  const NGPhysicalConstraintSpace* PhysicalSpace() const {
+    return physical_space_;
+  }
 
   NGDirection Direction() const { return static_cast<NGDirection>(direction_); }
 
   NGWritingMode WritingMode() const {
     return static_cast<NGWritingMode>(writing_mode_);
   }
+
+  // Adds the exclusion in the physical constraint space.
+  // Passing the exclusion ignoring the writing mode is fine here since the
+  // exclusion is set in physical coordinates.
+  void AddExclusion(const NGExclusion* exclusion) const;
 
   // Size of the container. Used for the following three cases:
   // 1) Percentage resolution.

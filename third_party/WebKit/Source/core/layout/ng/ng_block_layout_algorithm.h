@@ -37,13 +37,7 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
   // returns true. The same constraint space has to be passed each time.
   bool Layout(const NGConstraintSpace*, NGPhysicalFragment**) override;
 
-  DEFINE_INLINE_VIRTUAL_TRACE() {
-    NGLayoutAlgorithm::trace(visitor);
-    visitor->trace(first_child_);
-    visitor->trace(builder_);
-    visitor->trace(constraint_space_for_children_);
-    visitor->trace(current_child_);
-  }
+  DECLARE_VIRTUAL_TRACE();
 
  private:
   // Computes collapsed margins for 2 adjoining blocks and updates the resultant
@@ -58,12 +52,37 @@ class CORE_EXPORT NGBlockLayoutAlgorithm : public NGLayoutAlgorithm {
                              const NGBoxStrut& child_margins,
                              const NGFragment& fragment);
 
+  // Calculates position of the in-flow block-level fragment that needs to be
+  // positioned relative to the current fragment that is being built.
+  //
+  // @param fragment Fragment that needs to be placed.
+  // @param child_margins Margins information for the current child fragment.
+  // @param space Constraint space for the block.
+  // @return Position of the fragment in the parent's constraint space.
+  NGLogicalOffset PositionFragment(const NGFragment& fragment,
+                                   const NGBoxStrut& child_margins,
+                                   const NGConstraintSpace& space);
+
+  // Calculates position of the float fragment that needs to be
+  // positioned relative to the current fragment that is being built.
+  //
+  // @param fragment Fragment that needs to be placed.
+  // @param margins Margins information for the fragment.
+  // @return Position of the fragment in the parent's constraint space.
+  NGLogicalOffset PositionFloatFragment(const NGFragment& fragment,
+                                        const NGBoxStrut& margins);
+
   // Updates block-{start|end} of the currently constructed fragment.
   //
   // This method is supposed to be called on every child but it only updates
   // the block-start once (on the first non-zero height child fragment) and
   // keeps updating block-end (on every non-zero height child).
   void UpdateMarginStrut(const NGMarginStrut& from);
+
+  bool LayoutCurrentChild(const NGConstraintSpace*);
+
+  // Read-only Getters.
+  const ComputedStyle& Style() const { return *style_; }
 
   RefPtr<const ComputedStyle> style_;
   Member<NGBox> first_child_;

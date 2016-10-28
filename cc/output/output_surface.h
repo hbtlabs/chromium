@@ -37,13 +37,9 @@ struct ManagedMemoryPolicy;
 class OutputSurfaceClient;
 class OutputSurfaceFrame;
 
-// Represents the output surface for a compositor. The compositor owns
-// and manages its destruction. Its lifetime is:
-//   1. Created on the main thread by the LayerTreeHost through its client.
-//   2. Passed to the compositor thread and bound to a client via BindToClient.
-//      From here on, it will only be used on the compositor thread.
-//   3. If the 3D context is lost, then the compositor will delete the output
-//      surface (on the compositor thread) and go back to step 1.
+// This class represents a platform-independent API for presenting
+// buffers to display via GPU or software compositing. Implementations
+// can provide platform-specific behaviour.
 class CC_EXPORT OutputSurface {
  public:
   struct Capabilities {
@@ -67,12 +63,6 @@ class CC_EXPORT OutputSurface {
 
   virtual ~OutputSurface();
 
-  // Called by the compositor on the compositor thread. This is a place where
-  // thread-specific data for the output surface can be initialized. The
-  // OutputSurface will be destroyed on the same thread that BoundToClient is
-  // called on.
-  virtual bool BindToClient(OutputSurfaceClient* client);
-
   const Capabilities& capabilities() const { return capabilities_; }
 
   // Obtain the 3d context or the software device associated with this output
@@ -86,6 +76,8 @@ class CC_EXPORT OutputSurface {
   SoftwareOutputDevice* software_device() const {
     return software_device_.get();
   }
+
+  virtual void BindToClient(OutputSurfaceClient* client) = 0;
 
   virtual void EnsureBackbuffer() = 0;
   virtual void DiscardBackbuffer() = 0;
@@ -124,17 +116,10 @@ class CC_EXPORT OutputSurface {
   virtual void SwapBuffers(OutputSurfaceFrame frame) = 0;
 
  protected:
-  // Used internally for the context provider to inform the client about loss,
-  // and can be overridden to change behaviour instead of informing the client.
-  virtual void DidLoseOutputSurface();
-
-  OutputSurfaceClient* client_ = nullptr;
-
   struct OutputSurface::Capabilities capabilities_;
   scoped_refptr<ContextProvider> context_provider_;
   scoped_refptr<VulkanContextProvider> vulkan_context_provider_;
   std::unique_ptr<SoftwareOutputDevice> software_device_;
-  base::ThreadChecker thread_checker_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(OutputSurface);

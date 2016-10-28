@@ -472,11 +472,6 @@ public class AwContents implements SmartClipProvider,
         }
 
         @Override
-        public void newLoginRequest(String realm, String account, String args) {
-            mContentsClient.getCallbackHelper().postOnReceivedLoginRequest(realm, account, args);
-        }
-
-        @Override
         public void onReceivedError(AwContentsClient.AwWebResourceRequest request,
                 AwContentsClient.AwWebResourceError error) {
             String unreachableWebDataUrl = AwContentsStatics.getUnreachableWebDataUrl();
@@ -698,7 +693,7 @@ public class AwContents implements SmartClipProvider,
 
         @Override
         public void onConfigurationChanged(Configuration configuration) {
-            setLocale(LocaleUtils.getLocale(configuration.locale));
+            setLocale(LocaleUtils.toLanguageTag(configuration.locale));
             mSettings.updateAcceptLanguages();
         }
     };
@@ -734,7 +729,7 @@ public class AwContents implements SmartClipProvider,
             InternalAccessDelegate internalAccessAdapter,
             NativeDrawGLFunctorFactory nativeDrawGLFunctorFactory, AwContentsClient contentsClient,
             AwSettings settings, DependencyFactory dependencyFactory) {
-        setLocale(LocaleUtils.getDefaultLocale());
+        setLocale(LocaleUtils.getDefaultLocaleString());
         settings.updateAcceptLanguages();
 
         mBrowserContext = browserContext;
@@ -920,7 +915,8 @@ public class AwContents implements SmartClipProvider,
         updateNativeAwGLFunctor();
         mContainerView.setWillNotDraw(false);
 
-        mViewAndroidDelegate.updateCurrentContainerView(mContainerView);
+        mViewAndroidDelegate.updateCurrentContainerView(mContainerView,
+                mWindowAndroid.getWindowAndroid().getDisplay());
         mContentViewCore.setContainerView(mContainerView);
         if (mAwPdfExporter != null) {
             mAwPdfExporter.setContainerView(mContainerView);
@@ -2086,7 +2082,7 @@ public class AwContents implements SmartClipProvider,
      */
     public float getScale() {
         if (isDestroyed(WARN)) return 1;
-        return (float) (mPageScaleFactor * mContentViewCore.getDeviceScaleFactor());
+        return mPageScaleFactor * mContentViewCore.getDeviceScaleFactor();
     }
 
     /**
@@ -3142,7 +3138,7 @@ public class AwContents implements SmartClipProvider,
             postUpdateContentViewCoreVisibility();
             mCurrentFunctor.onAttachedToWindow();
 
-            setLocale(LocaleUtils.getDefaultLocale());
+            setLocale(LocaleUtils.getDefaultLocaleString());
             mSettings.updateAcceptLanguages();
 
             if (mComponentCallbacks != null) return;

@@ -199,10 +199,10 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
       load_flags |= net::LOAD_BYPASS_CACHE;
       break;
     case WebCachePolicy::ReturnCacheDataElseLoad:
-      load_flags |= net::LOAD_PREFERRING_CACHE;
+      load_flags |= net::LOAD_SKIP_CACHE_VALIDATION;
       break;
     case WebCachePolicy::ReturnCacheDataDontLoad:
-      load_flags |= net::LOAD_ONLY_FROM_CACHE;
+      load_flags |= net::LOAD_ONLY_FROM_CACHE | net::LOAD_SKIP_CACHE_VALIDATION;
       break;
     case WebCachePolicy::UseProtocolCachePolicy:
       break;
@@ -489,6 +489,8 @@ blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,
   error.staleCopyInCache = stale_copy_in_cache;
   if (reason == net::ERR_ABORTED) {
     error.isCancellation = true;
+  } else if (reason == net::ERR_CACHE_MISS) {
+    error.isCacheMiss = true;
   } else if (reason == net::ERR_TEMPORARILY_THROTTLED) {
     error.localizedDescription =
         WebString::fromUTF8(kThrottledErrorDescription);

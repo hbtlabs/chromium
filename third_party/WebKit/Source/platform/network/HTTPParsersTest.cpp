@@ -296,10 +296,7 @@ TEST(HTTPParsersTest, SuboriginParseValidNames) {
   expectParseNamePass("Alpha", "foo", "foo");
   expectParseNamePass("Whitespace alpha", "  foo  ", "foo");
   expectParseNamePass("Alphanumeric", "f0o", "f0o");
-  expectParseNamePass("Numeric", "42", "42");
-  expectParseNamePass("Hyphen middle", "foo-bar", "foo-bar");
-  expectParseNamePass("Hyphen start", "-foobar", "-foobar");
-  expectParseNamePass("Hyphen end", "foobar-", "foobar-");
+  expectParseNamePass("Numeric at end", "foo42", "foo42");
 
   // Mulitple headers should only give the first name
   expectParseNamePass("Multiple headers, no whitespace", "foo,bar", "foo");
@@ -317,6 +314,10 @@ TEST(HTTPParsersTest, SuboriginParseValidNames) {
 TEST(HTTPParsersTest, SuboriginParseInvalidNames) {
   // Single header, invalid value
   expectParseNameFail("Empty header", "");
+  expectParseNameFail("Numeric", "42");
+  expectParseNameFail("Hyphen middle", "foo-bar");
+  expectParseNameFail("Hyphen start", "-foobar");
+  expectParseNameFail("Hyphen end", "foobar-");
   expectParseNameFail("Whitespace in middle", "foo bar");
   expectParseNameFail("Invalid character at end of name", "foobar'");
   expectParseNameFail("Invalid character at start of name", "'foobar");
@@ -345,10 +346,13 @@ TEST(HTTPParsersTest, SuboriginParseValidPolicy) {
       Suborigin::SuboriginPolicyOptions::UnsafePostMessageReceive};
   const Suborigin::SuboriginPolicyOptions unsafeCookies[] = {
       Suborigin::SuboriginPolicyOptions::UnsafeCookies};
-  const Suborigin::SuboriginPolicyOptions unsafeAllOptions[] = {
+  const Suborigin::SuboriginPolicyOptions unsafeCredentials[] = {
+      Suborigin::SuboriginPolicyOptions::UnsafeCredentials};
+  const Suborigin::SuboriginPolicyOptions allOptions[] = {
       Suborigin::SuboriginPolicyOptions::UnsafePostMessageSend,
       Suborigin::SuboriginPolicyOptions::UnsafePostMessageReceive,
-      Suborigin::SuboriginPolicyOptions::UnsafeCookies};
+      Suborigin::SuboriginPolicyOptions::UnsafeCookies,
+      Suborigin::SuboriginPolicyOptions::UnsafeCredentials};
 
   // All simple, valid policies
   expectParsePolicyPass(
@@ -360,6 +364,9 @@ TEST(HTTPParsersTest, SuboriginParseValidPolicy) {
                         ARRAY_SIZE(unsafePostmessageReceive));
   expectParsePolicyPass("One policy, unsafe-cookies", "foobar 'unsafe-cookies'",
                         unsafeCookies, ARRAY_SIZE(unsafeCookies));
+  expectParsePolicyPass("One policy, unsafe-credentials",
+                        "foobar 'unsafe-credentials'", unsafeCredentials,
+                        ARRAY_SIZE(unsafeCredentials));
 
   // Formatting differences of policies and multiple policies
   expectParsePolicyPass("One policy, whitespace all around",
@@ -377,8 +384,9 @@ TEST(HTTPParsersTest, SuboriginParseValidPolicy) {
       ARRAY_SIZE(unsafePostmessageSendAndReceive));
   expectParsePolicyPass("Many different policies",
                         "foobar 'unsafe-postmessage-send' "
-                        "'unsafe-postmessage-receive' 'unsafe-cookies'",
-                        unsafeAllOptions, ARRAY_SIZE(unsafeAllOptions));
+                        "'unsafe-postmessage-receive' 'unsafe-cookies' "
+                        "'unsafe-credentials'",
+                        allOptions, ARRAY_SIZE(allOptions));
   expectParsePolicyPass("One policy, unknown option", "foobar 'unknown-option'",
                         {}, 0);
 }

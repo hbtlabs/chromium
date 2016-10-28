@@ -2,12 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/** @typedef {!{
+        rect: !DOMAgent.Rect,
+        snapshot: !WebInspector.PaintProfilerSnapshot
+    }}
+*/
+WebInspector.SnapshotWithRect;
+
 /**
  * @interface
  */
 WebInspector.Layer = function()
 {
-}
+};
 
 WebInspector.Layer.prototype = {
     /**
@@ -118,7 +125,12 @@ WebInspector.Layer.prototype = {
     /**
      * @return {boolean}
      */
-    drawsContent: function() { }
+    drawsContent: function() { },
+
+    /**
+     * @return {!Array<!Promise<?WebInspector.SnapshotWithRect>>}
+     */
+    snapshots: function() { }
 }
 
 WebInspector.Layer.ScrollRectType = {
@@ -126,7 +138,7 @@ WebInspector.Layer.ScrollRectType = {
     TouchEventHandler: "TouchEventHandler",
     WheelEventHandler: "WheelEventHandler",
     RepaintsOnScroll: "RepaintsOnScroll"
-}
+};
 
 /**
   * @constructor
@@ -141,7 +153,7 @@ WebInspector.LayerTreeBase = function(target)
     this._contentRoot = null;
     /** @type Map<number, ?WebInspector.DOMNode> */
     this._backendNodeIdToNode = new Map();
-}
+};
 
 WebInspector.LayerTreeBase.prototype = {
     /**
@@ -261,4 +273,4 @@ WebInspector.LayerTreeBase.prototype = {
     {
         return this._domModel ? this._domModel.nodeForId(id) : null;
     }
-}
+};

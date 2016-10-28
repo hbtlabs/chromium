@@ -13,7 +13,6 @@
 #include "headless/public/domains/accessibility.h"
 #include "headless/public/domains/animation.h"
 #include "headless/public/domains/application_cache.h"
-#include "headless/public/domains/browser.h"
 #include "headless/public/domains/cache_storage.h"
 #include "headless/public/domains/console.h"
 #include "headless/public/domains/css.h"
@@ -39,8 +38,8 @@
 #include "headless/public/domains/runtime.h"
 #include "headless/public/domains/security.h"
 #include "headless/public/domains/service_worker.h"
+#include "headless/public/domains/target.h"
 #include "headless/public/domains/tracing.h"
-#include "headless/public/domains/worker.h"
 #include "headless/public/headless_devtools_client.h"
 #include "headless/public/internal/message_dispatcher.h"
 
@@ -67,7 +66,6 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   accessibility::Domain* GetAccessibility() override;
   animation::Domain* GetAnimation() override;
   application_cache::Domain* GetApplicationCache() override;
-  browser::Domain* GetBrowser() override;
   cache_storage::Domain* GetCacheStorage() override;
   console::Domain* GetConsole() override;
   css::Domain* GetCSS() override;
@@ -93,8 +91,8 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   runtime::Domain* GetRuntime() override;
   security::Domain* GetSecurity() override;
   service_worker::Domain* GetServiceWorker() override;
+  target::Domain* GetTarget() override;
   tracing::Domain* GetTracing() override;
-  worker::Domain* GetWorker() override;
 
   // content::DevToolstAgentHostClient implementation:
   void DispatchProtocolMessage(content::DevToolsAgentHost* agent_host,
@@ -168,7 +166,6 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   accessibility::ExperimentalDomain accessibility_domain_;
   animation::ExperimentalDomain animation_domain_;
   application_cache::ExperimentalDomain application_cache_domain_;
-  browser::ExperimentalDomain browser_domain_;
   cache_storage::ExperimentalDomain cache_storage_domain_;
   console::ExperimentalDomain console_domain_;
   css::ExperimentalDomain css_domain_;
@@ -194,8 +191,8 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   runtime::ExperimentalDomain runtime_domain_;
   security::ExperimentalDomain security_domain_;
   service_worker::ExperimentalDomain service_worker_domain_;
+  target::ExperimentalDomain target_domain_;
   tracing::ExperimentalDomain tracing_domain_;
-  worker::ExperimentalDomain worker_domain_;
   scoped_refptr<base::SingleThreadTaskRunner> browser_main_thread_;
   base::WeakPtrFactory<HeadlessDevToolsClientImpl> weak_ptr_factory_;
 

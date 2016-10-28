@@ -12,7 +12,7 @@ namespace session_manager {
 // static
 SessionManager* SessionManager::instance = NULL;
 
-SessionManager::SessionManager() : session_state_(SessionState::UNKNOWN) {
+SessionManager::SessionManager() {
   DCHECK(!SessionManager::Get());
   SessionManager::SetInstance(this);
 }
@@ -38,30 +38,17 @@ void SessionManager::SetSessionState(SessionState state) {
   }
 }
 
-void SessionManager::Initialize(SessionManagerDelegate* delegate) {
-  DCHECK(delegate);
-  delegate_.reset(delegate);
-  delegate_->SetSessionManager(this);
+bool SessionManager::IsSessionStarted() const {
+  return session_started_;
+}
+
+void SessionManager::SessionStarted() {
+  session_started_ = true;
 }
 
 // static
 void SessionManager::SetInstance(SessionManager* session_manager) {
   SessionManager::instance = session_manager;
-}
-
-void SessionManager::Start() {
-  delegate_->Start();
-}
-
-SessionManagerDelegate::SessionManagerDelegate() : session_manager_(NULL) {
-}
-
-SessionManagerDelegate::~SessionManagerDelegate() {
-}
-
-void SessionManagerDelegate::SetSessionManager(
-    session_manager::SessionManager* session_manager) {
-  session_manager_ = session_manager;
 }
 
 }  // namespace session_manager

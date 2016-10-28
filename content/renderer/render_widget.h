@@ -225,12 +225,9 @@ class CONTENT_EXPORT RenderWidget
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
-  void DidCompleteSwapBuffers() override;
+  void DidReceiveCompositorFrameAck() override;
   void ForwardCompositorProto(const std::vector<uint8_t>& proto) override;
   bool IsClosing() const override;
-  void OnSwapBuffersAborted() override;
-  void OnSwapBuffersComplete() override;
-  void OnSwapBuffersPosted() override;
   void RequestScheduleAnimation() override;
   void UpdateVisualState() override;
   void WillBeginCompositorFrame() override;
@@ -294,8 +291,6 @@ class CONTENT_EXPORT RenderWidget
   // Override point to obtain that the current input method state and caret
   // position.
   virtual ui::TextInputType GetTextInputType();
-  virtual ui::TextInputType WebKitToUiTextInputType(
-      blink::WebTextInputType type);
 
 #if defined(OS_ANDROID)
   // Notifies that a tap was not consumed, so showing a UI for the unhandled
@@ -320,15 +315,6 @@ class CONTENT_EXPORT RenderWidget
   }
 
   void SetHandlingInputEventForTesting(bool handling_input_event);
-
-  // When paused in debugger, we send ack for mouse event early. This ensures
-  // that we continue receiving mouse moves and pass them to debugger. Returns
-  // whether we are paused in mouse move event and have sent the ack.
-  bool SendAckForMouseMoveFromDebugger();
-
-  // When resumed from pause in debugger while handling mouse move,
-  // we should not send an extra ack (see SendAckForMouseMoveFromDebugger).
-  void IgnoreAckForMouseMoveFromDebugger();
 
   // Callback for use with synthetic gestures (e.g. BeginSmoothScroll).
   typedef base::Callback<void()> SyntheticGestureCompletionCallback;
@@ -709,6 +695,9 @@ class CONTENT_EXPORT RenderWidget
 
   // Stores information about the current text input.
   blink::WebTextInputInfo text_input_info_;
+
+  // Stores the current text input type of |webwidget_|.
+  ui::TextInputType text_input_type_;
 
   // Stores the current text input mode of |webwidget_|.
   ui::TextInputMode text_input_mode_;

@@ -87,7 +87,6 @@
 #include "core/html/HTMLSlotElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/GeneratedChildren.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/style/StyleInheritedVariables.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
@@ -181,40 +180,19 @@ static void collectScopedResolversForHostedShadowTrees(
 
 StyleResolver::StyleResolver(Document& document)
     : m_document(document),
-      m_needCollectFeatures(false),
       m_printMediaType(false),
       m_styleSharingDepth(0) {
   FrameView* view = document.view();
-  if (view) {
-    m_medium = new MediaQueryEvaluator(&view->frame());
-    m_printMediaType =
-        equalIgnoringCase(view->mediaType(), MediaTypeNames::print);
-  } else {
-    m_medium = new MediaQueryEvaluator("all");
-  }
-
-  initWatchedSelectorRules();
+  DCHECK(view);
+  m_medium = new MediaQueryEvaluator(&view->frame());
+  m_printMediaType =
+      equalIgnoringCase(view->mediaType(), MediaTypeNames::print);
 }
 
 StyleResolver::~StyleResolver() {}
 
 void StyleResolver::dispose() {
   m_matchedPropertiesCache.clear();
-}
-
-void StyleResolver::initWatchedSelectorRules() {
-  m_watchedSelectorsRules = nullptr;
-  CSSSelectorWatch* watch = CSSSelectorWatch::fromIfExists(*m_document);
-  if (!watch)
-    return;
-  const HeapVector<Member<StyleRule>>& watchedSelectors =
-      watch->watchedCallbackSelectors();
-  if (!watchedSelectors.size())
-    return;
-  m_watchedSelectorsRules = RuleSet::create();
-  for (unsigned i = 0; i < watchedSelectors.size(); ++i)
-    m_watchedSelectorsRules->addStyleRule(watchedSelectors[i].get(),
-                                          RuleHasNoSpecialState);
 }
 
 void StyleResolver::lazyAppendAuthorStyleSheets(
@@ -269,7 +247,6 @@ void StyleResolver::appendPendingAuthorStyleSheets() {
     appendCSSStyleSheet(*styleSheet);
 
   m_pendingStyleSheets.clear();
-  finishAppendAuthorStyleSheets();
 }
 
 void StyleResolver::appendAuthorStyleSheets(
@@ -281,90 +258,8 @@ void StyleResolver::appendAuthorStyleSheets(
     appendCSSStyleSheet(*styleSheet);
 }
 
-void StyleResolver::finishAppendAuthorStyleSheets() {
-  collectFeatures();
-
-  if (!document().layoutViewItem().isNull() &&
-      document().layoutViewItem().style())
-    document().layoutViewItem().style()->font().update(
-        document().styleEngine().fontSelector());
-
-  document().styleEngine().resetCSSFeatureFlags(m_features);
-}
-
-void StyleResolver::resetRuleFeatures() {
-  // Need to recreate RuleFeatureSet.
-  m_features.clear();
-  m_siblingRuleSet.clear();
-  m_uncommonAttributeRuleSet.clear();
-  m_needCollectFeatures = true;
-}
-
-void StyleResolver::addTreeBoundaryCrossingScope(ContainerNode& scope) {
-  m_treeBoundaryCrossingScopes.add(&scope);
-}
-
-void StyleResolver::resetAuthorStyle(TreeScope& treeScope) {
-  m_treeBoundaryCrossingScopes.remove(&treeScope.rootNode());
-
-  ScopedStyleResolver* resolver = treeScope.scopedStyleResolver();
-  if (!resolver)
-    return;
-
-  resetRuleFeatures();
-
-  if (treeScope.rootNode().isDocumentNode()) {
-    resolver->resetAuthorStyle();
-    return;
-  }
-
-  // resolver is going to be freed below.
-  treeScope.clearScopedStyleResolver();
-}
-
-static RuleSet* makeRuleSet(const HeapVector<RuleFeature>& rules) {
-  size_t size = rules.size();
-  if (!size)
-    return nullptr;
-  RuleSet* ruleSet = RuleSet::create();
-  for (size_t i = 0; i < size; ++i)
-    ruleSet->addRule(rules[i].rule, rules[i].selectorIndex,
-                     rules[i].hasDocumentSecurityOrigin
-                         ? RuleHasDocumentSecurityOrigin
-                         : RuleHasNoSpecialState);
-  return ruleSet;
-}
-
-void StyleResolver::collectFeatures() {
-  m_features.clear();
-  // Collect all ids and rules using sibling selectors (:first-child and
-  // similar) in the current set of stylesheets. Style sharing code uses this
-  // information to reject sharing candidates.
-  CSSDefaultStyleSheets& defaultStyleSheets = CSSDefaultStyleSheets::instance();
-  if (defaultStyleSheets.defaultStyle()) {
-    m_features.add(defaultStyleSheets.defaultStyle()->features());
-    m_hasFullscreenUAStyle = defaultStyleSheets.fullscreenStyleSheet();
-  }
-
-  if (document().isViewSource())
-    m_features.add(defaultStyleSheets.defaultViewSourceStyle()->features());
-
-  if (m_watchedSelectorsRules)
-    m_features.add(m_watchedSelectorsRules->features());
-
-  document().styleEngine().collectScopedStyleFeaturesTo(m_features);
-
-  m_siblingRuleSet = makeRuleSet(m_features.siblingRules);
-  m_uncommonAttributeRuleSet = makeRuleSet(m_features.uncommonAttributeRules);
-  m_needCollectFeatures = false;
-}
-
-bool StyleResolver::hasRulesForId(const AtomicString& id) const {
-  return m_features.hasSelectorForId(id);
-}
-
 void StyleResolver::addToStyleSharingList(Element& element) {
-  ASSERT(RuntimeEnabledFeatures::styleSharingEnabled());
+  DCHECK(RuntimeEnabledFeatures::styleSharingEnabled());
   // Never add elements to the style sharing list if we're not in a recalcStyle,
   // otherwise we could leave stale pointers in there.
   if (!document().inStyleRecalc())
@@ -397,20 +292,16 @@ void StyleResolver::clearStyleSharingList() {
 static inline ScopedStyleResolver* scopedResolverFor(const Element& element) {
   // Ideally, returning element->treeScope().scopedStyleResolver() should be
   // enough, but ::cue and custom pseudo elements like ::-webkit-meter-bar
-  // pierce through a shadow dom boundary, yet they are not part of
-  // m_treeBoundaryCrossingScopes.  The assumption here is that these rules only
-  // pierce through one boundary and that the scope of these elements do not
-  // have a style resolver due to the fact that VTT scopes and UA shadow trees
-  // don't have <style> elements. This is backed up by the ASSERTs below.
-  //
-  // FIXME: Make ::cue and custom pseudo elements part of boundary crossing
-  // rules when moving those rules to ScopedStyleResolver as part of issue
-  // 401359.
+  // pierce through a shadow dom boundary, yet they are not part of boundary
+  // crossing rules. The assumption here is that these rules only pierce through
+  // one boundary and that the scope of these elements do not have a style
+  // resolver due to the fact that VTT scopes and UA shadow trees don't have
+  // <style> elements. This is backed up by the DCHECKs below.
 
   TreeScope* treeScope = &element.treeScope();
   if (ScopedStyleResolver* resolver = treeScope->scopedStyleResolver()) {
-    ASSERT(element.shadowPseudoId().isEmpty());
-    ASSERT(!element.isVTTElement());
+    DCHECK(element.shadowPseudoId().isEmpty());
+    DCHECK(!element.isVTTElement());
     return resolver;
   }
 
@@ -528,11 +419,13 @@ void StyleResolver::matchScopedRules(const Element& element,
 
   bool matchElementScopeDone = !elementScopeResolver && !element.inlineStyle();
 
-  for (auto it = m_treeBoundaryCrossingScopes.rbegin();
-       it != m_treeBoundaryCrossingScopes.rend(); ++it) {
+  const auto& treeBoundaryCrossingScopes =
+      document().styleEngine().treeBoundaryCrossingScopes();
+  for (auto it = treeBoundaryCrossingScopes.rbegin();
+       it != treeBoundaryCrossingScopes.rend(); ++it) {
     const TreeScope& scope = (*it)->containingTreeScope();
     ScopedStyleResolver* resolver = scope.scopedStyleResolver();
-    ASSERT(resolver);
+    DCHECK(resolver);
 
     bool isInnerTreeScope =
         element.containingTreeScope().isInclusiveAncestorOf(scope);
@@ -573,7 +466,7 @@ void StyleResolver::matchAuthorRules(const Element& element,
     return;
   }
 
-  ASSERT(RuntimeEnabledFeatures::shadowDOMV1Enabled());
+  DCHECK(RuntimeEnabledFeatures::shadowDOMV1Enabled());
   matchHostRules(element, collector);
   matchScopedRules(element, collector);
 }
@@ -597,7 +490,7 @@ void StyleResolver::matchAuthorRulesV0(const Element& element,
 
   // Apply /deep/ and ::shadow rules from outer scopes, and ::content from
   // inner.
-  collectTreeBoundaryCrossingRules(element, collector);
+  collectTreeBoundaryCrossingRulesV0CascadeOrder(element, collector);
   collector.sortAndTransferMatchedRules();
 }
 
@@ -687,18 +580,20 @@ void StyleResolver::matchAllRules(StyleResolverState& state,
   collector.finishAddingAuthorRulesForTreeScope();
 }
 
-void StyleResolver::collectTreeBoundaryCrossingRules(
+void StyleResolver::collectTreeBoundaryCrossingRulesV0CascadeOrder(
     const Element& element,
     ElementRuleCollector& collector) {
-  if (m_treeBoundaryCrossingScopes.isEmpty())
+  const auto& treeBoundaryCrossingScopes =
+      document().styleEngine().treeBoundaryCrossingScopes();
+  if (treeBoundaryCrossingScopes.isEmpty())
     return;
 
   // When comparing rules declared in outer treescopes, outer's rules win.
-  CascadeOrder outerCascadeOrder = m_treeBoundaryCrossingScopes.size() * 2;
+  CascadeOrder outerCascadeOrder = treeBoundaryCrossingScopes.size() * 2;
   // When comparing rules declared in inner treescopes, inner's rules win.
-  CascadeOrder innerCascadeOrder = m_treeBoundaryCrossingScopes.size();
+  CascadeOrder innerCascadeOrder = treeBoundaryCrossingScopes.size();
 
-  for (const auto& scopingNode : m_treeBoundaryCrossingScopes) {
+  for (const auto& scopingNode : treeBoundaryCrossingScopes) {
     // Skip rule collection for element when tree boundary crossing rules of
     // scopingNode's scope can never apply to it.
     bool isInnerTreeScope = element.containingTreeScope().isInclusiveAncestorOf(
@@ -761,9 +656,8 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
     StyleSharingBehavior sharingBehavior,
     RuleMatchingBehavior matchingBehavior) {
   DCHECK(document().frame());
-  ASSERT(document().settings());
-  ASSERT(!hasPendingAuthorStyleSheets());
-  ASSERT(!m_needCollectFeatures);
+  DCHECK(document().settings());
+  DCHECK(!hasPendingAuthorStyleSheets());
 
   // Once an element has a layoutObject, we don't try to destroy it, since
   // otherwise the layoutObject will vanish if a style recalc happens during
@@ -791,10 +685,8 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
   if (RuntimeEnabledFeatures::styleSharingEnabled() &&
       sharingBehavior == AllowStyleSharing &&
       (defaultParent || elementContext.parentStyle())) {
-    SharedStyleFinder styleFinder(elementContext, m_features,
-                                  m_siblingRuleSet.get(),
-                                  m_uncommonAttributeRuleSet.get(), *this);
-    if (RefPtr<ComputedStyle> sharedStyle = styleFinder.findSharedStyle())
+    if (RefPtr<ComputedStyle> sharedStyle =
+            document().styleEngine().findSharedStyle(elementContext))
       return sharedStyle.release();
   }
 
@@ -844,11 +736,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(
   }
 
   if (!baseComputedStyle) {
-    bool needsCollection = false;
-    CSSDefaultStyleSheets::instance().ensureDefaultStyleSheetsForElement(
-        *element, needsCollection);
-    if (needsCollection)
-      collectFeatures();
+    document().styleEngine().ensureUAStyleForElement(*element);
 
     ElementRuleCollector collector(state.elementContext(), m_selectorFilter,
                                    state.style());
@@ -986,7 +874,7 @@ PseudoElement* StyleResolver::createPseudoElementIfNeeded(Element& parent,
   if (!pseudoStyleForElementInternal(parent, pseudoId, parentStyle, state))
     return nullptr;
   RefPtr<ComputedStyle> style = state.takeStyle();
-  ASSERT(style);
+  DCHECK(style);
   parentStyle->addCachedPseudoStyle(style);
 
   if (!pseudoElementLayoutObjectIsNeeded(style.get()))
@@ -1005,10 +893,10 @@ bool StyleResolver::pseudoStyleForElementInternal(
     const PseudoStyleRequest& pseudoStyleRequest,
     const ComputedStyle* parentStyle,
     StyleResolverState& state) {
-  ASSERT(document().frame());
-  ASSERT(document().settings());
-  ASSERT(pseudoStyleRequest.pseudoId != PseudoIdFirstLineInherited);
-  ASSERT(state.parentStyle());
+  DCHECK(document().frame());
+  DCHECK(document().settings());
+  DCHECK(pseudoStyleRequest.pseudoId != PseudoIdFirstLineInherited);
+  DCHECK(state.parentStyle());
 
   SelectorFilterParentScope::ensureParentStackIsPushed();
 
@@ -1083,7 +971,7 @@ PassRefPtr<ComputedStyle> StyleResolver::pseudoStyleForElement(
     Element* element,
     const PseudoStyleRequest& pseudoStyleRequest,
     const ComputedStyle* parentStyle) {
-  ASSERT(parentStyle);
+  DCHECK(parentStyle);
   if (!element)
     return nullptr;
 
@@ -1104,7 +992,7 @@ PassRefPtr<ComputedStyle> StyleResolver::pseudoStyleForElement(
 }
 
 PassRefPtr<ComputedStyle> StyleResolver::styleForPage(int pageIndex) {
-  ASSERT(!hasPendingAuthorStyleSheets());
+  DCHECK(!hasPendingAuthorStyleSheets());
   // m_rootElementStyle will be set to the document style.
   StyleResolverState state(document(), document().documentElement());
 
@@ -1112,7 +1000,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForPage(int pageIndex) {
   const ComputedStyle* rootElementStyle = state.rootElementStyle()
                                               ? state.rootElementStyle()
                                               : document().computedStyle();
-  ASSERT(rootElementStyle);
+  DCHECK(rootElementStyle);
   style->inheritFrom(*rootElementStyle);
   state.setStyle(style.release());
 
@@ -1151,7 +1039,7 @@ PassRefPtr<ComputedStyle> StyleResolver::initialStyleForElement() {
 }
 
 PassRefPtr<ComputedStyle> StyleResolver::styleForText(Text* textNode) {
-  ASSERT(textNode);
+  DCHECK(textNode);
 
   Node* parentNode = LayoutTreeBuilderTraversal::parent(*textNode);
   if (!parentNode || !parentNode->computedStyle())
@@ -1169,7 +1057,7 @@ void StyleResolver::updateFont(StyleResolverState& state) {
 
 StyleRuleList* StyleResolver::styleRulesForElement(Element* element,
                                                    unsigned rulesToInclude) {
-  ASSERT(element);
+  DCHECK(element);
   StyleResolverState state(document(), element);
   ElementRuleCollector collector(state.elementContext(), m_selectorFilter,
                                  state.style());
@@ -1182,7 +1070,7 @@ StyleRuleList* StyleResolver::styleRulesForElement(Element* element,
 CSSRuleList* StyleResolver::pseudoCSSRulesForElement(Element* element,
                                                      PseudoId pseudoId,
                                                      unsigned rulesToInclude) {
-  ASSERT(element);
+  DCHECK(element);
   StyleResolverState state(document(), element);
   ElementRuleCollector collector(state.elementContext(), m_selectorFilter,
                                  state.style());
@@ -1216,12 +1104,12 @@ void StyleResolver::collectPseudoRulesForElement(
 bool StyleResolver::applyAnimatedProperties(StyleResolverState& state,
                                             const Element* animatingElement) {
   Element* element = state.element();
-  ASSERT(element);
+  DCHECK(element);
 
   // The animating element may be this element, or its pseudo element. It is
   // null when calculating the style for a potential pseudo element that has
   // yet to be created.
-  ASSERT(animatingElement == element || !animatingElement ||
+  DCHECK(animatingElement == element || !animatingElement ||
          animatingElement->parentOrShadowHostElement() == element);
 
   if (!(animatingElement && animatingElement->hasAnimations()) &&
@@ -1239,7 +1127,7 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state,
     return false;
 
   if (state.style()->insideLink() != NotInsideLink) {
-    ASSERT(state.applyPropertyToRegularStyle());
+    DCHECK(state.applyPropertyToRegularStyle());
     state.setApplyPropertyToVisitedLinkStyle(true);
   }
 
@@ -1263,7 +1151,7 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state,
   // Start loading resources used by animations.
   loadPendingResources(state);
 
-  ASSERT(!state.fontBuilder().fontDirty());
+  DCHECK(!state.fontBuilder().fontDirty());
 
   state.setApplyPropertyToVisitedLinkStyle(false);
 
@@ -1461,13 +1349,13 @@ static inline bool isValidFirstLetterStyleProperty(CSSPropertyID id) {
     case CSSPropertyWordSpacing:
       return true;
     case CSSPropertyTextDecoration:
-      ASSERT(!RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+      DCHECK(!RuntimeEnabledFeatures::css3TextDecorationsEnabled());
       return true;
     case CSSPropertyTextDecorationColor:
     case CSSPropertyTextDecorationLine:
     case CSSPropertyTextDecorationStyle:
     case CSSPropertyTextDecorationSkip:
-      ASSERT(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
+      DCHECK(RuntimeEnabledFeatures::css3TextDecorationsEnabled());
       return true;
 
     // text-shadow added in text decoration spec:
@@ -1516,7 +1404,7 @@ static inline bool isPropertyInWhitelist(
     return isValidCueStyleProperty(property) &&
            !shouldIgnoreTextTrackAuthorStyle(document);
 
-  ASSERT_NOT_REACHED();
+  NOTREACHED();
   return true;
 }
 
@@ -1680,7 +1568,7 @@ void StyleResolver::notifyResizeForViewportUnits() {
 void StyleResolver::applyMatchedProperties(StyleResolverState& state,
                                            const MatchResult& matchResult) {
   const Element* element = state.element();
-  ASSERT(element);
+  DCHECK(element);
 
   INCREMENT_STYLE_STATS_COUNTER(document().styleEngine(), matchedPropertyApply,
                                 1);
@@ -1831,14 +1719,14 @@ void StyleResolver::applyMatchedProperties(StyleResolverState& state,
 
   if (!cachedMatchedProperties && cacheHash &&
       MatchedPropertiesCache::isCacheable(state)) {
-    ASSERT(RuntimeEnabledFeatures::styleMatchedPropertiesCacheEnabled());
+    DCHECK(RuntimeEnabledFeatures::styleMatchedPropertiesCacheEnabled());
     INCREMENT_STYLE_STATS_COUNTER(document().styleEngine(),
                                   matchedPropertyCacheAdded, 1);
     m_matchedPropertiesCache.add(*state.style(), *state.parentStyle(),
                                  cacheHash, matchResult.matchedProperties());
   }
 
-  ASSERT(!state.fontBuilder().fontDirty());
+  DCHECK(!state.fontBuilder().fontDirty());
 }
 
 bool StyleResolver::hasAuthorBackground(const StyleResolverState& state) {
@@ -1864,7 +1752,9 @@ bool StyleResolver::hasAuthorBorder(const StyleResolverState& state) {
 }
 
 void StyleResolver::applyCallbackSelectors(StyleResolverState& state) {
-  if (!m_watchedSelectorsRules)
+  RuleSet* watchedSelectorsRuleSet =
+      document().styleEngine().watchedSelectorsRuleSet();
+  if (!watchedSelectorsRuleSet)
     return;
 
   ElementRuleCollector collector(state.elementContext(), m_selectorFilter,
@@ -1872,7 +1762,7 @@ void StyleResolver::applyCallbackSelectors(StyleResolverState& state) {
   collector.setMode(SelectorChecker::CollectingStyleRules);
   collector.setIncludeEmptyRules(true);
 
-  MatchRequest matchRequest(m_watchedSelectorsRules.get());
+  MatchRequest matchRequest(watchedSelectorsRuleSet);
   collector.collectMatchingRules(matchRequest);
   collector.sortAndTransferMatchedRules();
 
@@ -1940,11 +1830,6 @@ DEFINE_TRACE(StyleResolver) {
   visitor->trace(m_viewportDependentMediaQueryResults);
   visitor->trace(m_deviceDependentMediaQueryResults);
   visitor->trace(m_selectorFilter);
-  visitor->trace(m_features);
-  visitor->trace(m_siblingRuleSet);
-  visitor->trace(m_uncommonAttributeRuleSet);
-  visitor->trace(m_watchedSelectorsRules);
-  visitor->trace(m_treeBoundaryCrossingScopes);
   visitor->trace(m_styleSharingLists);
   visitor->trace(m_pendingStyleSheets);
   visitor->trace(m_document);

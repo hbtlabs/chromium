@@ -55,17 +55,13 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac'], bug=654187)
 
     # All platforms.
+    self.Fail('conformance2/textures/misc/tex-image-with-bad-args.html',
+        bug=656889)
     self.Fail('conformance2/context/methods-2.html', bug=616554)
     self.Flaky('conformance2/query/occlusion-query.html', bug=603168)
-    self.Fail('conformance/buffers/buffer-uninitialized.html',
-        bug=654201)
-    self.Fail('conformance2/transform_feedback/transform_feedback.html',
-        bug=654201)
 
     # Windows only.
     # We are awesome!
-    self.Fail('conformance2/buffers/get-buffer-sub-data.html',
-        ['win'], bug=654201)
 
     # Win / NVidia
     self.Flaky('deqp/functional/gles3/fbomultisample*',
@@ -498,9 +494,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['mac', 'intel'], bug=618464)
 
     # Linux only.
-    self.Fail('conformance2/buffers/get-buffer-sub-data.html',
-        ['linux'], bug=654201)
-
     self.Flaky('conformance/textures/video/' +
                'tex-2d-rgba-rgba-unsigned_byte.html',
                ['linux'], bug=627525)
@@ -518,16 +511,11 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
                ['linux'], bug=627525)
 
     # Linux Multi-vendor failures.
-
-    self.Fail('deqp/data/gles3/shaders/functions.html',
-        ['linux', 'amd', 'intel'], bug=483282)
     self.Skip('deqp/data/gles3/shaders/qualification_order.html',
         ['linux', 'amd', 'intel'], bug=483282)
     self.Flaky('deqp/functional/gles3/texturespecification/' +
         'random_teximage2d_2d.html',
         ['linux', 'amd', 'intel'], bug=618447)
-    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
-        ['linux', 'amd', 'intel'], bug=483282)
     self.Fail('deqp/data/gles3/shaders/linkage.html',
         ['linux', 'amd', 'intel'], bug=483282)
 
@@ -538,12 +526,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'nvidia'], bug=618447)
 
     # Linux Intel
-    self.Fail('deqp/functional/gles3/shaderderivate_dfdx.html',
-        ['linux', 'intel'], bug=618408)
-    self.Fail('deqp/functional/gles3/fbomultisample.2_samples.html',
-        ['linux', 'intel'], bug=635528)
-    self.Fail('deqp/functional/gles3/fbomultisample.4_samples.html',
-        ['linux', 'intel'], bug=635528)
     self.Fail('conformance2/extensions/ext-color-buffer-float.html',
         ['linux', 'intel'], bug=640389)
 
@@ -551,20 +533,25 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Skip('conformance/glsl/bugs/temp-expressions-should-not-crash.html',
         ['linux', 'intel'], bug=540543)  # GPU timeout
 
-    # The Mesa Intel driver has a scoping bug, see
-    # https://bugs.freedesktop.org/show_bug.cgi?id=95184
-    # It has been fixed in Mesa 12.0
-    self.Fail('deqp/data/gles3/shaders/scoping.html',
-        ['linux', 'intel'], bug=610800)
-
     self.Fail('deqp/functional/gles3/fbomultisample.8_samples.html',
         ['linux', 'intel'], bug=635528)
 
     # Linux Intel with ANGLE only
+    self.Fail('deqp/functional/gles3/framebufferblit/' +
+        'default_framebuffer_00.html',
+        ['linux', 'intel', 'opengl'], bug=658832)
+
     self.Fail('conformance2/textures/misc/copy-texture-image-luma-format.html',
         ['linux', 'intel', 'opengl'], bug=1492) # ANGLE bug id
     self.Fail('conformance2/rendering/blitframebuffer-filter-srgb.html',
         ['linux', 'intel', 'opengl'], bug=634525)
+    self.Fail('conformance2/rendering/blitframebuffer-filter-outofbounds.html',
+        ['linux', 'intel', 'opengl'], bug=655147)
+    self.Fail('conformance2/rendering/' +
+        'blitframebuffer-multisampled-readbuffer.html',
+        ['linux', 'intel', 'opengl'], bug=658898)
+    self.Fail('conformance2/rendering/blitframebuffer-test.html',
+        ['linux', 'intel', 'opengl'], bug=658898)
 
     # The Intel Mesa driver only supports sRGB encoding in ES 3.x, see
     # https://patchwork.freedesktop.org/patch/76903
@@ -602,12 +589,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/framebufferblit/conversion_34.html',
         ['linux', 'intel', 'opengl'], bug=598902)
 
-    # Linux Intel without ANGLE only
-    self.Fail('conformance2/reading/read-pixels-from-fbo-test.html',
-        ['linux', 'intel', 'no_angle'], bug=598902)
-
     # Linux AMD only.
     # It looks like AMD shader compiler rejects many valid ES3 semantics.
+    self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
+        ['linux', 'amd'], bug=483282)
+    self.Fail('deqp/data/gles3/shaders/functions.html',
+        ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/multisample.html',
         ['linux', 'amd'], bug=617290)
     self.Fail('deqp/data/gles3/shaders/conversions.html',
@@ -657,8 +644,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('conformance2/rendering/blitframebuffer-filter-srgb.html',
         ['linux', 'amd'], bug=634525)
-    self.Fail('conformance2/rendering/blitframebuffer-filter-outofbounds.html',
-        ['linux', 'amd'], bug=644740)
     self.Fail('conformance2/renderbuffers/framebuffer-texture-layer.html',
         ['linux', 'amd'], bug=295792)
     self.Fail('conformance2/textures/misc/tex-mipmap-levels.html',
@@ -802,6 +787,9 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd'], bug=483282)
     self.Fail('deqp/functional/gles3/framebufferblit/conversion_34.html',
         ['linux', 'amd'], bug=483282)
+    self.Fail('deqp/functional/gles3/framebufferblit/' +
+        'default_framebuffer_00.html',
+        ['linux', 'amd'], bug=658832)
 
     self.Fail('deqp/functional/gles3/shaderoperator/unary_operator_01.html',
         ['linux', 'amd'], bug=483282)
@@ -816,6 +804,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['linux', 'amd', 'no_angle'], bug=483282)
     self.Fail('conformance2/extensions/ext-color-buffer-float.html',
         ['linux', 'amd'], bug=633022)
+    self.Fail('conformance2/buffers/uniform-buffers.html',
+        ['linux', 'amd'], bug=658842)
+    self.Fail('conformance2/rendering/blitframebuffer-filter-outofbounds.html',
+        ['linux', 'amd'], bug=655147)
+    self.Fail('conformance2/rendering/uniform-block-buffer-size.html',
+        ['linux', 'amd'], bug=658844)
 
     # Conflicting expectations to test that the
     # "Expectations Have No collisions" unittest works.

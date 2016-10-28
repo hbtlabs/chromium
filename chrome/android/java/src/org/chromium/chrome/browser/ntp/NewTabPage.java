@@ -15,16 +15,15 @@ import android.os.SystemClock;
 import android.support.v4.view.ViewCompat;
 import android.support.v7.widget.RecyclerView;
 import android.text.TextUtils;
-import android.view.ContextMenu;
 import android.view.LayoutInflater;
 import android.view.Menu;
-import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.View;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
+import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
@@ -94,12 +93,6 @@ public class NewTabPage
         implements NativePage, InvalidationAwareThumbnailProvider, TemplateUrlServiceObserver {
     private static final String TAG = "NewTabPage";
 
-    // MostVisitedItem Context menu item IDs.
-    static final int ID_OPEN_IN_NEW_WINDOW = 0;
-    static final int ID_OPEN_IN_NEW_TAB = 1;
-    static final int ID_OPEN_IN_INCOGNITO_TAB = 2;
-    static final int ID_REMOVE = 3;
-
     // UMA enum constants. CTA means the "click-to-action" icon.
     private static final String LOGO_SHOWN_UMA_NAME = "NewTabPage.LogoShown";
     private static final int STATIC_LOGO_SHOWN = 0;
@@ -151,7 +144,7 @@ public class NewTabPage
     // Whether destroy() has been called.
     private boolean mIsDestroyed;
 
-    private DestructionObserver mDestructionObserver;
+    private final ObserverList<DestructionObserver> mDestructionObservers = new ObserverList<>();
 
     /**
      * Allows clients to listen for updates to the scroll changes of the search box on the
@@ -263,13 +256,28 @@ public class NewTabPage
         }
 
         @Override
-        public void openMostVisitedItem(MostVisitedItem item) {
+        public void openMostVisitedItem(int windowDisposition, MostVisitedItem item) {
             if (mIsDestroyed) return;
-            recordOpenedMostVisitedItem(item);
+
             String url = item.getUrl();
-            if (!switchToExistingTab(url)) {
-                openUrlMostVisited(WindowOpenDisposition.CURRENT_TAB, url);
+
+            // TODO(treib): Should we call recordOpenedMostVisitedItem here?
+            if (windowDisposition != WindowOpenDisposition.NEW_WINDOW) {
+                recordOpenedMostVisitedItem(item);
             }
+
+            if (windowDisposition == WindowOpenDisposition.CURRENT_TAB
+                    && switchToExistingTab(url)) {
+                return;
+            }
+
+            openUrl(windowDisposition, new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
+        }
+
+        @Override
+        public void removeMostVisitedItem(MostVisitedItem item) {
+            mMostVisitedSites.addBlacklistedUrl(item.getUrl());
+            showMostVisitedItemRemovedSnackbar(item.getUrl());
         }
 
         @Override
@@ -354,11 +362,6 @@ public class NewTabPage
             openUrl(windowOpenDisposition, loadUrlParams);
         }
 
-        // TODO(mastiz): Merge with openMostVisitedItem().
-        private void openUrlMostVisited(int windowOpenDisposition, String url) {
-            openUrl(windowOpenDisposition, new LoadUrlParams(url, PageTransition.AUTO_BOOKMARK));
-        }
-
         private void openUrl(int windowOpenDisposition, LoadUrlParams loadUrlParams) {
             assert !mIsDestroyed;
             switch (windowOpenDisposition) {
@@ -379,50 +382,6 @@ public class NewTabPage
                     break;
                 default:
                     assert false;
-            }
-        }
-
-        @Override
-        public void onCreateContextMenu(ContextMenu menu, OnMenuItemClickListener listener) {
-            if (mIsDestroyed) return;
-            if (isOpenInNewWindowEnabled()) {
-                menu.add(Menu.NONE, ID_OPEN_IN_NEW_WINDOW, Menu.NONE,
-                        R.string.contextmenu_open_in_other_window)
-                        .setOnMenuItemClickListener(listener);
-            }
-            menu.add(Menu.NONE, ID_OPEN_IN_NEW_TAB, Menu.NONE, R.string.contextmenu_open_in_new_tab)
-                    .setOnMenuItemClickListener(listener);
-            if (isOpenInIncognitoEnabled()) {
-                menu.add(Menu.NONE, ID_OPEN_IN_INCOGNITO_TAB, Menu.NONE,
-                        R.string.contextmenu_open_in_incognito_tab).setOnMenuItemClickListener(
-                        listener);
-            }
-            menu.add(Menu.NONE, ID_REMOVE, Menu.NONE, R.string.remove)
-                    .setOnMenuItemClickListener(listener);
-        }
-
-        @Override
-        public boolean onMenuItemClick(int menuId, MostVisitedItem item) {
-            if (mIsDestroyed) return false;
-            switch (menuId) {
-                case ID_OPEN_IN_NEW_WINDOW:
-                    // TODO(treib): Should we call recordOpenedMostVisitedItem here?
-                    openUrlMostVisited(WindowOpenDisposition.NEW_WINDOW, item.getUrl());
-                    return true;
-                case ID_OPEN_IN_NEW_TAB:
-                    recordOpenedMostVisitedItem(item);
-                    openUrlMostVisited(WindowOpenDisposition.NEW_FOREGROUND_TAB, item.getUrl());
-                    return true;
-                case ID_OPEN_IN_INCOGNITO_TAB:
-                    recordOpenedMostVisitedItem(item);
-                    openUrlMostVisited(WindowOpenDisposition.OFF_THE_RECORD, item.getUrl());
-                    return true;
-                case ID_REMOVE:
-                    mMostVisitedSites.addBlacklistedUrl(item.getUrl());
-                    showMostVisitedItemRemovedSnackbar(item.getUrl());
-                    return true;
-                default:
-                    return false;
             }
         }
 
@@ -665,10 +624,9 @@ public class NewTabPage
         }
 
         @Override
-        public void setDestructionObserver(DestructionObserver destructionObserver) {
+        public void addDestructionObserver(DestructionObserver destructionObserver) {
             if (mIsDestroyed) return;
-            assert mDestructionObserver == null;
-            mDestructionObserver = destructionObserver;
+            mDestructionObservers.addObserver(destructionObserver);
         }
 
         @Override
@@ -885,9 +843,8 @@ public class NewTabPage
             // The toolbar can't get the reference to the native page until its initialization is
             // finished, so we can't cache it here and transfer it to the view later. We pull that
             // state from the location bar when we get a reference to it as a workaround.
-            if (fakeboxDelegate.isUrlBarFocused()) {
-                mNewTabPageView.setUrlFocusChangeAnimationPercent(1f);
-            }
+            mNewTabPageView.setUrlFocusChangeAnimationPercent(
+                    fakeboxDelegate.isUrlBarFocused() ? 1f : 0f);
         }
     }
 
@@ -975,9 +932,10 @@ public class NewTabPage
         if (mMostVisitedItemRemovedController != null) {
             mTab.getSnackbarManager().dismissSnackbars(mMostVisitedItemRemovedController);
         }
-        if (mDestructionObserver != null) {
-            mDestructionObserver.onDestroy();
+        for (DestructionObserver observer : mDestructionObservers) {
+            observer.onDestroy();
         }
+        mDestructionObservers.clear();
         TemplateUrlService.getInstance().removeObserver(this);
         mTab.removeObserver(mTabObserver);
         mTabObserver = null;

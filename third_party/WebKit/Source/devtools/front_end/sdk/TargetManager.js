@@ -19,7 +19,7 @@ WebInspector.TargetManager = function()
     /** @type {!Map<symbol, !Array<{modelClass: !Function, thisObject: (!Object|undefined), listener: function(!WebInspector.Event)}>>} */
     this._modelListeners = new Map();
     this._isSuspended = false;
-}
+};
 
 /** @enum {symbol} */
 WebInspector.TargetManager.Events = {
@@ -31,7 +31,7 @@ WebInspector.TargetManager.Events = {
     WillReloadPage: Symbol("WillReloadPage"),
     TargetDisposed: Symbol("TargetDisposed"),
     SuspendStateChanged: Symbol("SuspendStateChanged")
-}
+};
 
 WebInspector.TargetManager._listenersSymbol = Symbol("WebInspector.TargetManager.Listeners");
 
@@ -183,13 +183,13 @@ WebInspector.TargetManager.prototype = {
     /**
      * @param {string} name
      * @param {number} capabilitiesMask
-     * @param {!InspectorBackendClass.Connection} connection
+     * @param {!InspectorBackendClass.Connection.Factory} connectionFactory
      * @param {?WebInspector.Target} parentTarget
      * @return {!WebInspector.Target}
      */
-    createTarget: function(name, capabilitiesMask, connection, parentTarget)
+    createTarget: function(name, capabilitiesMask, connectionFactory, parentTarget)
     {
-        var target = new WebInspector.Target(this, name, capabilitiesMask, connection, parentTarget);
+        var target = new WebInspector.Target(this, name, capabilitiesMask, connectionFactory, parentTarget);
 
         var logAgent = target.hasLogCapability() ? target.logAgent() : null;
 
@@ -217,8 +217,8 @@ WebInspector.TargetManager.prototype = {
             new WebInspector.CSSModel(target, domModel);
         }
 
-        /** @type {?WebInspector.WorkerManager} */
-        target.workerManager = target.hasWorkerCapability() ? new WebInspector.WorkerManager(target) : null;
+        /** @type {?WebInspector.SubTargetsManager} */
+        target.subTargetsManager = target.hasTargetCapability() ? new WebInspector.SubTargetsManager(target) : null;
         /** @type {!WebInspector.CPUProfilerModel} */
         target.cpuProfilerModel = new WebInspector.CPUProfilerModel(target);
         /** @type {!WebInspector.HeapProfilerModel} */
@@ -226,45 +226,11 @@ WebInspector.TargetManager.prototype = {
 
         target.tracingManager = new WebInspector.TracingManager(target);
 
-        if (target.hasBrowserCapability()) {
-            target.subTargetsManager = new WebInspector.SubTargetsManager(target);
+        if (target.subTargetsManager && target.hasBrowserCapability())
             target.serviceWorkerManager = new WebInspector.ServiceWorkerManager(target, target.subTargetsManager);
-        }
 
         this.addTarget(target);
         return target;
-    },
-
-    /**
-     * @param {function()} factory
-     */
-    setMainTargetFactory: function(factory)
-    {
-        this._mainTargetFactory = factory;
-    },
-
-    /**
-     * @param {function(string)} dispatch
-     * @return {!Promise<!WebInspector.RawProtocolConnection>}
-     */
-    interceptMainConnection: function(dispatch)
-    {
-        var target = WebInspector.targetManager.mainTarget();
-        if (target)
-            target.connection().close();
-
-        var fulfill;
-        var result = new Promise(resolve => fulfill = resolve);
-        InspectorFrontendHost.reattach(() => fulfill(new WebInspector.RawProtocolConnection(dispatch, yieldCallback.bind(this))));
-        return result;
-
-        /**
-         * @this {WebInspector.TargetManager}
-         */
-        function yieldCallback()
-        {
-            InspectorFrontendHost.reattach(this._mainTargetFactory());
-        }
     },
 
     /**
@@ -397,15 +363,72 @@ WebInspector.TargetManager.prototype = {
             setImmediate(resourceTreeModel.resumeReload.bind(resourceTreeModel));
     },
 
+    /**
+     * @param {function()} webSocketConnectionLostCallback
+     */
+    connectToMainTarget: function(webSocketConnectionLostCallback)
+    {
+        this._webSocketConnectionLostCallback = webSocketConnectionLostCallback;
+        this._connectAndCreateMainTarget();
+    },
+
+    _connectAndCreateMainTarget: function()
+    {
+        var capabilities =
+            WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.DOM |
+            WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Log |
+            WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Target;
+        if (Runtime.queryParam("isSharedWorker")) {
+            capabilities =
+                WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.Log |
+                WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Target;
+        } else if (Runtime.queryParam("v8only")) {
+            capabilities = WebInspector.Target.Capability.JS;
+        }
+
+        var target = this.createTarget(WebInspector.UIString("Main"), capabilities, this._createMainConnection.bind(this), null);
+        target.runtimeAgent().runIfWaitingForDebugger();
+    },
+
+    /**
+     * @param {!InspectorBackendClass.Connection.Params} params
+     * @return {!InspectorBackendClass.Connection}
+     */
+    _createMainConnection: function(params)
+    {
+        if (Runtime.queryParam("ws")) {
+            var ws = "ws://" + Runtime.queryParam("ws");
+            this._mainConnection = new WebInspector.WebSocketConnection(ws, this._webSocketConnectionLostCallback, params);
+        } else if (InspectorFrontendHost.isHostedMode()) {
+            this._mainConnection = new WebInspector.StubConnection(params);
+        } else {
+            this._mainConnection = new WebInspector.MainConnection(params);
+        }
+        return this._mainConnection;
+    },
+
+    /**
+     * @param {function(string)} onMessage
+     * @return {!Promise<!InspectorBackendClass.Connection>}
+     */
+    interceptMainConnection: function(onMessage)
+    {
+        var params = {
+            onMessage: onMessage,
+            onDisconnect: this._connectAndCreateMainTarget.bind(this)
+        };
+        return this._mainConnection.disconnect().then(this._createMainConnection.bind(this, params));
+    },
+
     __proto__: WebInspector.Object.prototype
-}
+};
 
 /**
  * @interface
  */
 WebInspector.TargetManager.Observer = function()
 {
-}
+};
 
 WebInspector.TargetManager.Observer.prototype = {
     /**
@@ -417,7 +440,7 @@ WebInspector.TargetManager.Observer.prototype = {
      * @param {!WebInspector.Target} target
      */
     targetRemoved: function(target) { },
-}
+};
 
 /**
  * @type {!WebInspector.TargetManager}

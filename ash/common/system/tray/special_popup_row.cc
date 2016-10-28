@@ -23,6 +23,7 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
+#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/toggle_button.h"
 #include "ui/views/controls/label.h"
@@ -36,6 +37,7 @@ namespace {
 const int kIconPaddingLeft = 5;
 const int kSeparatorInset = 10;
 const int kSpecialPopupRowHeight = 55;
+const int kSpecialPopupRowHeightMd = 48;
 const int kBorderHeight = 1;
 const SkColor kBorderColor = SkColorSetRGB(0xaa, 0xaa, 0xaa);
 
@@ -99,26 +101,30 @@ void SpecialPopupRow::SetContent(views::View* view) {
 
 views::Button* SpecialPopupRow::AddBackButton(views::ButtonListener* listener) {
   SystemMenuButton* button = new SystemMenuButton(
-      listener, kSystemMenuArrowBackIcon, IDS_ASH_STATUS_TRAY_PREVIOUS_MENU);
+      listener, SystemMenuButton::InkDropStyle::SQUARE,
+      kSystemMenuArrowBackIcon, IDS_ASH_STATUS_TRAY_PREVIOUS_MENU);
   AddViewBeforeContent(button);
   return button;
 }
 
-views::Button* SpecialPopupRow::AddSettingsButton(
+views::CustomButton* SpecialPopupRow::AddSettingsButton(
     views::ButtonListener* listener,
     LoginStatus status) {
   SystemMenuButton* button = new SystemMenuButton(
-      listener, kSystemMenuSettingsIcon, IDS_ASH_STATUS_TRAY_SETTINGS);
+      listener, SystemMenuButton::InkDropStyle::SQUARE, kSystemMenuSettingsIcon,
+      IDS_ASH_STATUS_TRAY_SETTINGS);
   if (!CanOpenWebUISettings(status))
     button->SetState(views::Button::STATE_DISABLED);
   AddViewAfterContent(button);
   return button;
 }
 
-views::Button* SpecialPopupRow::AddHelpButton(views::ButtonListener* listener,
-                                              LoginStatus status) {
-  SystemMenuButton* button = new SystemMenuButton(listener, kSystemMenuHelpIcon,
-                                                  IDS_ASH_STATUS_TRAY_HELP);
+views::CustomButton* SpecialPopupRow::AddHelpButton(
+    views::ButtonListener* listener,
+    LoginStatus status) {
+  SystemMenuButton* button =
+      new SystemMenuButton(listener, SystemMenuButton::InkDropStyle::SQUARE,
+                           kSystemMenuHelpIcon, IDS_ASH_STATUS_TRAY_HELP);
   if (!CanOpenWebUISettings(status))
     button->SetState(views::Button::STATE_DISABLED);
   AddViewAfterContent(button);
@@ -155,12 +161,16 @@ void SpecialPopupRow::AddViewToRowNonMd(views::View* view, bool add_separator) {
 
 gfx::Size SpecialPopupRow::GetPreferredSize() const {
   gfx::Size size = views::View::GetPreferredSize();
-  size.set_height(kSpecialPopupRowHeight);
+  size.set_height(MaterialDesignController::IsSystemTrayMenuMaterial()
+                      ? kSpecialPopupRowHeightMd + GetInsets().height()
+                      : kSpecialPopupRowHeight);
   return size;
 }
 
 int SpecialPopupRow::GetHeightForWidth(int width) const {
-  return kSpecialPopupRowHeight;
+  return MaterialDesignController::IsSystemTrayMenuMaterial()
+             ? kSpecialPopupRowHeightMd + GetInsets().height()
+             : kSpecialPopupRowHeight;
 }
 
 void SpecialPopupRow::Layout() {

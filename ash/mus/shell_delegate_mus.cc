@@ -13,7 +13,6 @@
 #include "ash/common/wm_shell.h"
 #include "ash/mus/accessibility_delegate_mus.h"
 #include "ash/mus/context_menu_mus.h"
-#include "ash/mus/new_window_delegate_mus.h"
 #include "ash/mus/shelf_delegate_mus.h"
 #include "ash/mus/wallpaper_delegate_mus.h"
 #include "base/memory/ptr_util.h"
@@ -48,7 +47,7 @@ class SessionStateDelegateStub : public SessionStateDelegate {
   bool IsActiveUserSessionStarted() const override { return true; }
   bool CanLockScreen() const override { return true; }
   bool IsScreenLocked() const override { return screen_locked_; }
-  bool ShouldLockScreenBeforeSuspending() const override { return false; }
+  bool ShouldLockScreenAutomatically() const override { return false; }
   void LockScreen() override {
     screen_locked_ = true;
     NOTIMPLEMENTED();
@@ -119,11 +118,6 @@ ShellDelegateMus::~ShellDelegateMus() {}
 
 service_manager::Connector* ShellDelegateMus::GetShellConnector() const {
   return connector_;
-}
-
-bool ShellDelegateMus::IsFirstRunAfterBoot() const {
-  NOTIMPLEMENTED();
-  return false;
 }
 
 bool ShellDelegateMus::IsIncognitoAllowed() const {
@@ -202,10 +196,6 @@ SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
 
 AccessibilityDelegate* ShellDelegateMus::CreateAccessibilityDelegate() {
   return new AccessibilityDelegateMus(connector_);
-}
-
-NewWindowDelegate* ShellDelegateMus::CreateNewWindowDelegate() {
-  return new mus::NewWindowDelegateMus;
 }
 
 MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {

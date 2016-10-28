@@ -36,6 +36,7 @@
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintInvalidationCapableScrollableArea.h"
 #include "core/paint/PaintPhase.h"
+#include "core/paint/ScrollbarManager.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/Widget.h"
 #include "platform/geometry/IntRect.h"
@@ -406,12 +407,12 @@ class CORE_EXPORT FrameView final
 
   void invalidatePaintForTickmarks();
 
-  // Since the compositor can resize the viewport due to top controls and
+  // Since the compositor can resize the viewport due to browser controls and
   // commit scroll offsets before a WebView::resize occurs, we need to adjust
   // our scroll extents to prevent clamping the scroll offsets.
-  void setTopControlsViewportAdjustment(float);
-  IntSize topControlsSize() const {
-    return IntSize(0, ceilf(m_topControlsViewportAdjustment));
+  void setBrowserControlsViewportAdjustment(float);
+  IntSize browserControlsSize() const {
+    return IntSize(0, ceilf(m_browserControlsViewportAdjustment));
   }
 
   IntSize maximumScrollOffsetInt() const override;
@@ -455,10 +456,10 @@ class CORE_EXPORT FrameView final
   // cross-platform Scrollbars. These functions can be used to obtain those
   // scrollbars.
   Scrollbar* horizontalScrollbar() const override {
-    return m_horizontalScrollbar.get();
+    return m_scrollbarManager.horizontalScrollbar();
   }
   Scrollbar* verticalScrollbar() const override {
-    return m_verticalScrollbar.get();
+    return m_scrollbarManager.verticalScrollbar();
   }
   LayoutScrollbarPart* scrollCorner() const override { return m_scrollCorner; }
 
@@ -727,6 +728,8 @@ class CORE_EXPORT FrameView final
   ScrollAnchor* scrollAnchor() override { return &m_scrollAnchor; }
   void clearScrollAnchor();
   bool shouldPerformScrollAnchoring() const override;
+  void enqueueScrollAnchoringAdjustment(ScrollableArea*);
+  void performScrollAnchoringAdjustments();
 
   // For PaintInvalidator temporarily. TODO(wangxianzhu): Move into
   // PaintInvalidator.
@@ -741,10 +744,6 @@ class CORE_EXPORT FrameView final
 
   // Scroll the content by invalidating everything.
   void scrollContentsSlowPath();
-
-  // These functions are used to create/destroy scrollbars.
-  void setHasHorizontalScrollbar(bool);
-  void setHasVerticalScrollbar(bool);
 
   ScrollBehavior scrollBehaviorStyle() const override;
 
@@ -779,6 +778,23 @@ class CORE_EXPORT FrameView final
 
  private:
   explicit FrameView(LocalFrame*);
+  class ScrollbarManager : public blink::ScrollbarManager {
+    DISALLOW_NEW();
+
+    // Helper class to manage the life cycle of Scrollbar objects.
+   public:
+    ScrollbarManager(FrameView& scroller) : blink::ScrollbarManager(scroller) {}
+
+    void setHasHorizontalScrollbar(bool hasScrollbar) override;
+    void setHasVerticalScrollbar(bool hasScrollbar) override;
+
+    // TODO(ymalik): This should be hidden and all calls should go through
+    // setHas*Scrollbar functions above.
+    Scrollbar* createScrollbar(ScrollbarOrientation) override;
+
+   protected:
+    void destroyScrollbar(ScrollbarOrientation) override;
+  };
 
   void updateScrollOffset(const ScrollOffset&, ScrollType) override;
 
@@ -989,7 +1005,7 @@ class CORE_EXPORT FrameView final
 
   Vector<IntRect> m_tickmarks;
 
-  float m_topControlsViewportAdjustment;
+  float m_browserControlsViewportAdjustment;
 
   bool m_needsUpdateWidgetGeometries;
   bool m_needsUpdateViewportIntersection;
@@ -1000,8 +1016,6 @@ class CORE_EXPORT FrameView final
   bool m_hasBeenDisposed;
 #endif
 
-  Member<Scrollbar> m_horizontalScrollbar;
-  Member<Scrollbar> m_verticalScrollbar;
   ScrollbarMode m_horizontalScrollbarMode;
   ScrollbarMode m_verticalScrollbarMode;
 
@@ -1064,6 +1078,12 @@ class CORE_EXPORT FrameView final
   DocumentLifecycle::LifecycleState m_currentUpdateLifecyclePhasesTargetState;
 
   ScrollAnchor m_scrollAnchor;
+  using AnchoringAdjustmentQueue =
+      HeapLinkedHashSet<WeakMember<ScrollableArea>>;
+  AnchoringAdjustmentQueue m_anchoringAdjustmentQueue;
+
+  // ScrollbarManager holds the Scrollbar instances.
+  ScrollbarManager m_scrollbarManager;
 
   bool m_needsScrollbarsUpdate;
   bool m_suppressAdjustViewSize;

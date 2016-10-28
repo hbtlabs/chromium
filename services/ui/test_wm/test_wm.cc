@@ -28,7 +28,7 @@ class TestWM : public service_manager::Service,
 
  private:
   // service_manager::Service:
-  void OnStart(const service_manager::Identity& identity) override {
+  void OnStart(const service_manager::ServiceInfo& info) override {
     window_tree_client_.reset(new ui::WindowTreeClient(this, this));
     window_tree_client_->ConnectAsWindowManager(connector());
   }
@@ -90,6 +90,7 @@ class TestWM : public service_manager::Service,
         std::move(frame_decoration_values));
   }
   void OnWmDisplayRemoved(ui::Window* window) override { window->Destroy(); }
+  void OnWmDisplayModified(const display::Display& display) override {}
   void OnWmPerformMoveLoop(Window* window,
                            mojom::MoveLoopSource source,
                            const gfx::Point& cursor_location,

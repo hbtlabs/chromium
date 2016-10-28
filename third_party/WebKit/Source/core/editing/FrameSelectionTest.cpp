@@ -10,8 +10,10 @@
 #include "core/dom/Text.h"
 #include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameCaret.h"
+#include "core/editing/SelectionController.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLBodyElement.h"
+#include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
@@ -28,7 +30,6 @@ namespace blink {
 
 class FrameSelectionTest : public EditingTestBase {
  protected:
-  FrameSelection& selection() const;
   const VisibleSelection& visibleSelectionInDOMTree() const {
     return selection().selection();
   }
@@ -55,10 +56,6 @@ class FrameSelectionTest : public EditingTestBase {
  private:
   Persistent<Text> m_textNode;
 };
-
-FrameSelection& FrameSelectionTest::selection() const {
-  return dummyPageHolder().frame().selection();
-}
 
 Text* FrameSelectionTest::appendTextNode(const String& data) {
   Text* text = document().createTextNode(data);
@@ -278,52 +275,26 @@ TEST_F(FrameSelectionTest, MoveRangeSelectionTest) {
   EXPECT_EQ_SELECTED_TEXT("Foo Bar");
 }
 
-TEST_F(FrameSelectionTest, setNonDirectionalSelectionIfNeeded) {
-  const char* bodyContent = "<span id=top>top</span><span id=host></span>";
-  const char* shadowContent = "<span id=bottom>bottom</span>";
-  setBodyContent(bodyContent);
-  ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
+// TODO(yosin): We should move |SelectionControllerTest" to
+// "SelectionControllerTest.cpp"
+class SelectionControllerTest : public EditingTestBase {
+ protected:
+  SelectionControllerTest() = default;
 
-  Node* top = document().getElementById("top")->firstChild();
-  Node* bottom = shadowRoot->getElementById("bottom")->firstChild();
-  Node* host = document().getElementById("host");
+  const VisibleSelection& visibleSelectionInDOMTree() const {
+    return selection().selection();
+  }
 
-  // top to bottom
-  selection().setNonDirectionalSelectionIfNeeded(
-      createVisibleSelection(SelectionInFlatTree::Builder()
-                                 .collapse(PositionInFlatTree(top, 1))
-                                 .extend(PositionInFlatTree(bottom, 3))
-                                 .build()),
-      CharacterGranularity);
-  EXPECT_EQ(Position(top, 1), visibleSelectionInDOMTree().base());
-  EXPECT_EQ(Position::beforeNode(host), visibleSelectionInDOMTree().extent());
-  EXPECT_EQ(Position(top, 1), visibleSelectionInDOMTree().start());
-  EXPECT_EQ(Position(top, 3), visibleSelectionInDOMTree().end());
+  const VisibleSelectionInFlatTree& visibleSelectionInFlatTree() const {
+    return selection().selectionInFlatTree();
+  }
 
-  EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().base());
-  EXPECT_EQ(PositionInFlatTree(bottom, 3),
-            visibleSelectionInFlatTree().extent());
-  EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().start());
-  EXPECT_EQ(PositionInFlatTree(bottom, 3), visibleSelectionInFlatTree().end());
+  void setNonDirectionalSelectionIfNeeded(const VisibleSelectionInFlatTree&,
+                                          TextGranularity);
 
-  // bottom to top
-  selection().setNonDirectionalSelectionIfNeeded(
-      createVisibleSelection(SelectionInFlatTree::Builder()
-                                 .collapse(PositionInFlatTree(bottom, 3))
-                                 .extend(PositionInFlatTree(top, 1))
-                                 .build()),
-      CharacterGranularity);
-  EXPECT_EQ(Position(bottom, 3), visibleSelectionInDOMTree().base());
-  EXPECT_EQ(Position::beforeNode(bottom->parentNode()),
-            visibleSelectionInDOMTree().extent());
-  EXPECT_EQ(Position(bottom, 0), visibleSelectionInDOMTree().start());
-  EXPECT_EQ(Position(bottom, 3), visibleSelectionInDOMTree().end());
-
-  EXPECT_EQ(PositionInFlatTree(bottom, 3), visibleSelectionInFlatTree().base());
-  EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().extent());
-  EXPECT_EQ(PositionInFlatTree(top, 1), visibleSelectionInFlatTree().start());
-  EXPECT_EQ(PositionInFlatTree(bottom, 3), visibleSelectionInFlatTree().end());
-}
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SelectionControllerTest);
+};
 
 TEST_F(FrameSelectionTest, SelectAllWithUnselectableRoot) {
   Element* select = document().createElement("select", ASSERT_NO_EXCEPTION);

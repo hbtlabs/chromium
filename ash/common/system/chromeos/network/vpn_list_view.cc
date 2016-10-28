@@ -8,6 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include "ash/common/system/chromeos/network/network_icon.h"
+#include "ash/common/system/chromeos/network/network_icon_animation.h"
+#include "ash/common/system/chromeos/network/network_icon_animation_observer.h"
+#include "ash/common/system/chromeos/network/network_list_delegate.h"
 #include "ash/common/system/chromeos/network/vpn_delegate.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
@@ -25,10 +29,6 @@
 #include "chromeos/network/network_type_pattern.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/network/network_icon.h"
-#include "ui/chromeos/network/network_icon_animation.h"
-#include "ui/chromeos/network/network_icon_animation_observer.h"
-#include "ui/chromeos/network/network_list_delegate.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/text_constants.h"
@@ -75,17 +75,16 @@ class VPNListProviderEntry : public VPNListEntryBase {
 // network is currently connected, a disconnect button will be shown next to its
 // name.
 class VPNListNetworkEntry : public VPNListEntryBase,
-                            public ui::network_icon::AnimationObserver,
-                            public views::ButtonListener {
+                            public network_icon::AnimationObserver {
  public:
   VPNListNetworkEntry(VPNListView* parent,
                       const chromeos::NetworkState* network);
   ~VPNListNetworkEntry() override;
 
-  // ui::network_icon::AnimationObserver:
+  // network_icon::AnimationObserver:
   void NetworkIconChanged() override;
 
-  // views::ButtonListener:
+  // Overriden from ActionableView.
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
@@ -137,7 +136,7 @@ VPNListNetworkEntry::VPNListNetworkEntry(VPNListView* parent,
 }
 
 VPNListNetworkEntry::~VPNListNetworkEntry() {
-  ui::network_icon::NetworkIconAnimation::GetInstance()->RemoveObserver(this);
+  network_icon::NetworkIconAnimation::GetInstance()->RemoveObserver(this);
 }
 
 void VPNListNetworkEntry::NetworkIconChanged() {
@@ -148,6 +147,11 @@ void VPNListNetworkEntry::NetworkIconChanged() {
 
 void VPNListNetworkEntry::ButtonPressed(views::Button* sender,
                                         const ui::Event& event) {
+  if (sender != disconnect_button_) {
+    ActionableView::ButtonPressed(sender, event);
+    return;
+  }
+
   WmShell::Get()->RecordUserMetricsAction(
       UMA_STATUS_AREA_VPN_DISCONNECT_CLICKED);
   chromeos::NetworkHandler::Get()
@@ -190,9 +194,9 @@ void VPNListNetworkEntry::DisconnectButton::OnBoundsChanged(
 void VPNListNetworkEntry::UpdateFromNetworkState(
     const chromeos::NetworkState* network) {
   if (network && network->IsConnectingState())
-    ui::network_icon::NetworkIconAnimation::GetInstance()->AddObserver(this);
+    network_icon::NetworkIconAnimation::GetInstance()->AddObserver(this);
   else
-    ui::network_icon::NetworkIconAnimation::GetInstance()->RemoveObserver(this);
+    network_icon::NetworkIconAnimation::GetInstance()->RemoveObserver(this);
 
   if (!network) {
     // This is a transient state where the network has been removed already but
@@ -203,11 +207,10 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
   RemoveAllChildViews(true);
   disconnect_button_ = nullptr;
 
-  AddIconAndLabel(ui::network_icon::GetImageForNetwork(
-                      network, ui::network_icon::ICON_TYPE_LIST),
-                  ui::network_icon::GetLabelForNetwork(
-                      network, ui::network_icon::ICON_TYPE_LIST),
-                  IsConnectedOrConnecting(network));
+  AddIconAndLabel(
+      network_icon::GetImageForNetwork(network, network_icon::ICON_TYPE_LIST),
+      network_icon::GetLabelForNetwork(network, network_icon::ICON_TYPE_LIST),
+      IsConnectedOrConnecting(network));
   if (IsConnectedOrConnecting(network)) {
     disconnect_button_ = new DisconnectButton(this);
     AddChildView(disconnect_button_);
@@ -230,8 +233,7 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
 
 }  // namespace
 
-VPNListView::VPNListView(ui::NetworkListDelegate* delegate)
-    : delegate_(delegate) {
+VPNListView::VPNListView(NetworkListDelegate* delegate) : delegate_(delegate) {
   WmShell::Get()->system_tray_delegate()->GetVPNDelegate()->AddObserver(this);
 }
 

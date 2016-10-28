@@ -82,6 +82,11 @@ inline bool compareEqual(const T& t, const U& u) {
   return t == static_cast<T>(u);
 }
 
+template <typename T>
+inline bool compareEqual(const T& a, const T& b) {
+  return a == b;
+}
+
 #define SET_VAR(group, variable, value)      \
   if (!compareEqual(group->variable, value)) \
   group.access()->variable = value
@@ -1695,8 +1700,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   // Independent transform properties.
   // translate
   static PassRefPtr<TranslateTransformOperation> initialTranslate() {
-    return TranslateTransformOperation::create(
-        Length(0, Fixed), Length(0, Fixed), 0, TransformOperation::Translate3D);
+    return nullptr;
   }
   TranslateTransformOperation* translate() const {
     return m_rareNonInheritedData->m_transform->m_translate.get();
@@ -1707,8 +1711,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
 
   // rotate
   static PassRefPtr<RotateTransformOperation> initialRotate() {
-    return RotateTransformOperation::create(0, 0, 1, 0,
-                                            TransformOperation::Rotate3D);
+    return nullptr;
   }
   RotateTransformOperation* rotate() const {
     return m_rareNonInheritedData->m_transform->m_rotate.get();
@@ -1718,10 +1721,7 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
   }
 
   // scale
-  static PassRefPtr<ScaleTransformOperation> initialScale() {
-    return ScaleTransformOperation::create(1, 1, 1,
-                                           TransformOperation::Scale3D);
-  }
+  static PassRefPtr<ScaleTransformOperation> initialScale() { return nullptr; }
   ScaleTransformOperation* scale() const {
     return m_rareNonInheritedData->m_transform->m_scale.get();
   }
@@ -3605,6 +3605,11 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
     return overflowY() == OverflowPagedX || overflowY() == OverflowPagedY;
   }
 
+  // Visibility utility functions.
+  bool visibleToHitTesting() const {
+    return visibility() == EVisibility::Visible && pointerEvents() != PE_NONE;
+  }
+
   // Animation utility functions.
   bool shouldCompositeForCurrentAnimations() const {
     return hasCurrentOpacityAnimation() || hasCurrentTransformAnimation() ||
@@ -4009,6 +4014,8 @@ class CORE_EXPORT ComputedStyle : public ComputedStyleBase,
                                 float originY,
                                 TransformationMatrix&) const;
 
+  bool scrollAnchorDisablingPropertyChanged(const ComputedStyle& other,
+                                            StyleDifference&) const;
   bool diffNeedsFullLayoutAndPaintInvalidation(
       const ComputedStyle& other) const;
   bool diffNeedsFullLayout(const ComputedStyle& other) const;

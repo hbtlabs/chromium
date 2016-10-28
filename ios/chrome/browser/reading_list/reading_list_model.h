@@ -53,9 +53,13 @@ class ReadingListModel {
   virtual bool HasUnseenEntries() const = 0;
   virtual void ResetUnseenEntries() = 0;
 
+  // TODO(659099): Remove methods.
   // Returns a specific entry.
   virtual const ReadingListEntry& GetUnreadEntryAtIndex(size_t index) const = 0;
   virtual const ReadingListEntry& GetReadEntryAtIndex(size_t index) const = 0;
+
+  // Returns a specific entry. Returns null if the entry does not exist.
+  virtual const ReadingListEntry* GetEntryFromURL(const GURL& gurl) const = 0;
 
   // Synchronously calls the |callback| with entry associated with this |url|.
   // Does nothing if there is no entry associated.
@@ -65,9 +69,10 @@ class ReadingListModel {
       base::Callback<void(const ReadingListEntry&)> callback) const = 0;
 
   // Adds |url| at the top of the unread entries, and removes entries with the
-  // same |url| from everywhere else if they exist. The addition may be
-  // asynchronous, and the data will be available only once the observers are
-  // notified.
+  // same |url| from everywhere else if they exist. The entry title will be a
+  // trimmed copy of |title.
+  // The addition may be asynchronous, and the data will be available only once
+  // the observers are notified.
   virtual const ReadingListEntry& AddEntry(const GURL& url,
                                            const std::string& title) = 0;
 
@@ -79,6 +84,10 @@ class ReadingListModel {
   // the reading list and read, move it to the top of unread if it is not here
   // already. This may trigger deletion of old read entries.
   virtual void MarkReadByURL(const GURL& url) = 0;
+  // If the |url| is in the reading list and read, mark it unread. If it is in
+  // the reading list and unread, move it to the top of read if it is not here
+  // already.
+  virtual void MarkUnreadByURL(const GURL& url) = 0;
 
   // Methods to mutate an entry. Will locate the relevant entry by URL. Does
   // nothing if the entry is not found.

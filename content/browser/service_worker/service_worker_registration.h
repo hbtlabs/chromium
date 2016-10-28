@@ -95,6 +95,10 @@ class CONTENT_EXPORT ServiceWorkerRegistration
     return active_version() || waiting_version();
   }
 
+  bool is_navigation_preload_enabled() const {
+    return is_navigation_preload_enabled_;
+  }
+
   ServiceWorkerVersion* GetNewestVersion() const;
 
   void AddListener(Listener* listener);
@@ -150,6 +154,8 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   void SetTaskRunnerForTest(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
+  void EnableNavigationPreload(bool enable);
+
  private:
   friend class base::RefCounted<ServiceWorkerRegistration>;
 
@@ -192,6 +198,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   bool is_uninstalling_;
   bool is_uninstalled_;
   bool should_activate_when_ready_;
+  bool is_navigation_preload_enabled_;
   base::Time last_update_check_;
   int64_t resources_total_size_bytes_;
 

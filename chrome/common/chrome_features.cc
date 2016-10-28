@@ -41,7 +41,7 @@ const base::Feature kBlockPromptsIfDismissedOften{
 
 // Experiment to disable small cross-origin content. (http://crbug.com/608886)
 const base::Feature kBlockSmallContent{"BlockSmallPluginContent",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Fixes for browser hang bugs are deployed in a field trial in order to measure
 // their impact. See crbug.com/478209.
@@ -94,6 +94,12 @@ const base::Feature kMaterialDesignExtensions{
 const base::Feature kOverrideYouTubeFlashEmbed{
     "OverrideYouTubeFlashEmbed", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables the Print Scaling feature in print preview.
+#if defined(ENABLE_PRINT_PREVIEW)
+const base::Feature kPrintScaling{"PrintScaling",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables or disables push subscriptions keeping Chrome running in the
 // background when closed.
 const base::Feature kPushMessagingBackgroundMode{
@@ -138,6 +144,12 @@ const base::Feature kRunAllFlashInAllowMode{"RunAllFlashInAllowMode",
 const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
+// Sets the visibility and animation of the security chip.
+const base::Feature kSecurityChip{"SecurityChip",
+                                  base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // A new user experience for transitioning into fullscreen and mouse pointer
 // lock states.
 const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
@@ -150,6 +162,11 @@ const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
 const base::Feature kSyzyasanDeferredFree{"SyzyasanDeferredFree",
                                           base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
+
+// Experiment to use grouped permission infobars which could show and handle
+// multiple permission requests.
+const base::Feature kUseGroupedPermissionInfobars{
+    "UseGroupedPermissionInfobars", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.

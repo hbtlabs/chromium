@@ -489,10 +489,10 @@ are declared in build/common.gypi.
         Sign in to Chrome
       </message>
       <message name="IDS_MD_HISTORY_SIGN_IN_PROMO" desc="Text of the sign-in promo. This will show up if a user is not logged in and has no synced tabs.">
-        Pick up where you left off
+        Continue from another device
       </message>
-      <message name="IDS_MD_HISTORY_SIGN_IN_PROMO_DESC" desc="Description of the sign-in promo. Further tell users to sign in to Chrome to see synced tabs from other devices.">
-        Sign in to Chrome to see your tabs from all your devices.
+      <message name="IDS_MD_HISTORY_SIGN_IN_PROMO_DESC" desc="Description of the sign-in promo. Further tells users to sign in to Chrome to see synced tabs from other devices.">
+        To get your tabs from your other devices, sign in to Chrome.
       </message>
       <message name="IDS_MD_HISTORY_MENU_PROMO" desc="Text body of a promotional tooltip that shows up the first time a user runs the Material Design History UI in narrow mode to help find 'Clear Browsing Data' and the side navigation.">
         You can clear your browsing data from this menu
@@ -1032,9 +1032,8 @@ are declared in build/common.gypi.
         </message>
         <message name="IDS_VISIT_DESKTOP_WARNING_MESSAGE" desc="The message on the dialog which warns user about oddities which can be seen when a window gets moved to another user desktop.">
           Moving windows to another desktop may result in unexpected behaviour.
-        </message>
-        <message name="IDS_VISIT_DESKTOP_WARNING_EXPLANATION" desc="The explanation message on the dialog which warns user about oddities which can be seen when a window gets moved to another user desktop.">
-          Subsequent notifications, windows and dialogs may be split between desktops.
+
+Subsequent notifications, windows and dialogs may be split between desktops.
         </message>
         <message name="IDS_VISIT_DESKTOP_WARNING_SHOW_DISMISS" desc="Label for checkbox dismissing show of teleportation warning dialog.">
           Got it, don't show me again.
@@ -1790,7 +1789,7 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
       </if>
       <message name="IDS_PROMPT_UNCOMMON_DOWNLOAD_CONTENT"
          desc="Message shown to the user to validate the download when the download content is classified as uncommon by safebrowsing.">
-        <ph name="FILE_NAME">$1<ex>bla.exe</ex></ph> is not commonly downloaded and could be dangerous.
+        <ph name="FILE_NAME">$1<ex>bla.exe</ex></ph> is not commonly downloaded and may be dangerous.
       </message>
       <message name="IDS_BLOCK_REASON_UNCOMMON_DOWNLOAD"
          desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is uncommon.">
@@ -3544,6 +3543,12 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         <message name="IDS_TASK_MANAGER_ARC_SYSTEM" desc="The prefix for an ARC system processes row">
           System: <ph name="ARC_PROCESS_NAME">$1<ex>com.android.systemui</ex></ph>
         </message>
+        <message name="IDS_TASK_MANAGER_ISOLATED_SUBFRAMES_PREFIX" desc="The prefix for an out-of-process-iframe row in the Task Manager for subframes that were isolated because of 'top document isolation' mode">
+          Subframes for: <ph name="PARENT_SITE">$1<ex>https://youtube.com/</ex></ph>
+        </message>
+        <message name="IDS_TASK_MANAGER_ISOLATED_INCOGNITO_SUBFRAMES_PREFIX" desc="The prefix for an Incognito out-of-process-iframe row in the Task Manager for subframes that were isolated because of 'top document isolation' mode">
+          Incognito subframes for: <ph name="PARENT_SITE">$1<ex>https://youtube.com/</ex></ph>
+        </message>
       </if>
 
       <message name="IDS_UTILITY_PROCESS_COMPONENT_PATCHER_NAME" desc="The name of the utility process used for patching components.">
@@ -5095,6 +5100,14 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Disabled
       </message>
 
+      <!-- Print scaling feature -->
+      <message name="IDS_FLAGS_PRINT_SCALING_NAME" desc="Name for the flag to add the print scaling feature to print preview.">
+        Print Scaling.
+      </message>
+      <message name="IDS_FLAGS_PRINT_SCALING_DESCRIPTION" desc="Description for the flag to add the print scaling feature to print preview.">
+        If enabled, an option to scale documents will be available in print preview.
+      </message>
+
       <!-- Components -->
       <message name="IDS_COMPONENTS_TITLE" desc="Title for the chrome://components page.">
         Components
@@ -5549,11 +5562,17 @@ Keep your key file in a safe place. You will need it to create new versions of y
         <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_DESCRIPTION" desc="Description for the flag to enable Contextual Search." translateable="false">
           Whether or not Contextual Search is enabled.
         </message>
-       <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION" desc="Title for the flag to enable Contextual Search integration with Contextual Cards data in the bar." translateable="false">
+        <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION" desc="Title for the flag to enable Contextual Search integration with Contextual Cards data in the bar." translateable="false">
           Contextual Search - Contextual Cards Integration
         </message>
         <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_CONTEXTUAL_CARDS_BAR_INTEGRATION_DESCRIPTION" desc="Description for the flag to enable Contextual Search integration with Contextual Cards data in the bar." translateable="false">
           Whether or not integration of Contextual Cards data in the Contextual Search Bar is enabled.
+        </message>
+        <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_SINGLE_ACTIONS" desc="Title for the flag to enable Contextual Search single actions using Contextual Cards data in the bar." translateable="false">
+          Contextual Search - Single Actions
+        </message>
+        <message name="IDS_FLAGS_CONTEXTUAL_SEARCH_SINGLE_ACTIONS_DESCRIPTION" desc="Description for the flag to enable Contextual Search single actions using Contextual Cards data in the bar." translateable="false">
+          Whether or not single actions using Contextual Cards data in the Contextual Search Bar is enabled.
         </message>
       </if>
       <message name="IDS_FLAGS_GESTURE_TAP_HIGHLIGHTING_NAME" desc="Title for the flag to turn on gesture tap highlighting">
@@ -5983,12 +6002,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_ORIGIN_TRIALS_DESCRIPTION" desc="Description for the flag to enable origin trials.">
         Enables origin trials for controlling access to feature/API experiments.
       </message>
-      <message name="IDS_FLAGS_WEB_BLUETOOTH_NAME" desc="Name for the flag to enable Web Bluetooth.">
-        Web Bluetooth
-      </message>
-      <message name="IDS_FLAGS_WEB_BLUETOOTH_DESCRIPTION" desc="Description for the flag to enable Web Bluetooth.">
-        Enables Web Bluetooth which could allow websites to connect to and control Bluetooth devices around you.
-      </message>
       <message name="IDS_FLAGS_BLE_ADVERTISING_IN_EXTENSIONS_NAME" desc="Name for the flag for BLE Advertising">
         BLE Advertising in Chrome Apps
       </message>
@@ -6194,9 +6207,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_PASSWORD_MANAGER_SIGNIN_PROMO_TITLE" desc="Promotion text for Chrome sign-in appearing in the password bubble after a password is saved.">
         Password saved. To get your passwords on all your devices, sign in to Chrome.
       </message>
-      <message name="IDS_PASSWORD_MANAGER_SAVE_PROMPT_FIRST_RUN_EXPERIENCE" desc="The message which explains to the user what is Smart Lock, when the user sees the branded title of the Save prompt for the first time.">
-        Smart Lock helps you quickly sign in to apps and sites using passwords you have saved with Google.
-      </message>
       <message name="IDS_SAVE_PASSWORD" desc="The title of the save password bubble when a password can be saved.">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to save your password for this site?
       </message>
@@ -6274,12 +6284,6 @@ Keep your key file in a safe place. You will need it to create new versions of y
       </message>
       <message name="IDS_FLAGS_ENABLE_NON_VALIDATING_RELOAD_ON_NORMAL_RELOAD_DESCRIPTION" desc="Description of the flag to enable non-validating reload">
         Forces reload UIs trigger non-validating reload (while it usually means regular, cache-validating reload when the flag is disabled).
-      </message>
-      <message name="IDS_FLAGS_ENABLE_NON_VALIDATING_RELOAD_ON_REFRESH_CONTENT_NAME" desc="Name of the flag to enable non-validating reload on pull-to-refresh">
-        Enable non-validating reload on pull-to-refresh
-      </message>
-      <message name="IDS_FLAGS_ENABLE_NON_VALIDATING_RELOAD_ON_REFRESH_CONTENT_DESCRIPTION" desc="Description of the flag to enable non-validating reload on pull-to-refresh">
-        Forces pull-to-refresh trigger non-validating reload (while it usually means regular, cache-validating reload when the flag is disabled).
       </message>
       <message name="IDS_FLAGS_TRACE_UPLOAD_URL" desc="Name of the flag to set the trace upload url">
         Trace label for navigation tracing
@@ -8603,6 +8607,9 @@ I don't think this site should be blocked!
         <message name="IDS_PRINT_PREVIEW_COPIES_LABEL" desc="Copies option label.">
           Copies
         </message>
+        <message name="IDS_PRINT_PREVIEW_SCALING_LABEL" desc="Scaling option label.">
+          Scale
+        </message>
         <message name="IDS_PRINT_PREVIEW_EXAMPLE_PAGE_RANGE_TEXT" desc="Example page range text.">
           e.g. 1-5, 8, 11-13
         </message>
@@ -8658,13 +8665,10 @@ I don't think this site should be blocked!
           Out of bounds page reference, limit is <ph name="MAXIMUM_PAGE">$1<ex>1</ex></ph>
         </message>
         <message name="IDS_PRINT_PREVIEW_COPIES_INSTRUCTION" desc="Instruction shown when the user enters an invalid number of copies.">
-          Use a number to indicate how many copies to print (1 or more).
+          Use a number to indicate how many copies to print (1 to 999).
         </message>
-        <message name="IDS_PRINT_PREVIEW_INCREMENT_TITLE" desc="Title shown when the user hovers mouse over the increment button. Also added for improved accessibility">
-          More copies
-        </message>
-        <message name="IDS_PRINT_PREVIEW_DECREMENT_TITLE" desc="Title shown when the user hovers mouse over the decrement button. Also added for improved accessibility">
-          Less copies
+        <message name="IDS_PRINT_PREVIEW_SCALING_INSTRUCTION" desc="Instruction shown when the user enters an invalid scaling value.">
+          Scale amount must be an integer between 10 and 200.
         </message>
         <message name="IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL" desc="ARIA label used by screen reader to explain the purpose of the page selection textbox">
           Print Specific Pages
@@ -8910,6 +8914,9 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_LOAD_STATE_WAITING_FOR_RESPONSE">
         Waiting for <ph name="HOST_NAME">$1<ex>www.google.com</ex></ph>...
+      </message>
+      <message name="IDS_LOAD_STATE_THROTTLED" desc="Tab status shown when tab loading is blocked on other in process network operations">
+        Waiting for other requests to complete...
       </message>
 
       <!-- Tab Context Menu -->
@@ -9183,6 +9190,9 @@ I don't think this site should be blocked!
       </message>
       <message name="IDS_SAFE_BROWSING_MALWARE_REPORTING_AGREE" desc="SafeBrowsing Malware v2 Details label next to checkbox">
         <ph name="BEGIN_WHITEPAPER_LINK">&lt;a href="#" id="whitepaper-link"&gt;</ph>Automatically report<ph name="END_WHITEPAPER_LINK">&lt;/a&gt;</ph> details of possible security incidents to Google. <ph name="PRIVACY_PAGE_LINK">$1</ph>
+      </message>
+      <message name="IDS_SAFE_BROWSING_SCOUT_REPORTING_AGREE" desc="SafeBrowsing Scout label next to checkbox">
+        <ph name="BEGIN_WHITEPAPER_LINK">&lt;a href="#" id="whitepaper-link"&gt;</ph>Automatically send<ph name="END_WHITEPAPER_LINK">&lt;/a&gt;</ph> some system information and page content to Google to help detect dangerous apps and sites. <ph name="PRIVACY_PAGE_LINK">$1</ph>
       </message>
 
       <!-- Harmful download interstitial V3 -->
@@ -9905,6 +9915,9 @@ I don't think this site should be blocked!
         <message name="IDS_OPTIONS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING" desc="Checkbox label: should Chrome upload information about suspicious downloads and websites to Safe Browsing">
           Automatically report details of possible security incidents to Google
         </message>
+        <message name="IDS_OPTIONS_SAFEBROWSING_ENABLE_SCOUT_REPORTING" desc="Checkbox label: should Chrome upload some system information and page content to Safe Browsing for malware detection">
+          Automatically send some system information and page content to Google to help detect dangerous apps and sites
+        </message>
 
         <if expr="chromeos">
           <message name="IDS_OPTIONS_FACTORY_RESET" desc="Name of the factory reset option on the Chrome settings page">
@@ -10400,7 +10413,7 @@ I don't think this site should be blocked!
       </message>
 
       <!-- Enterprise sign-in profile linking -->
-      <!-- TODO(dconnelly): remove "new-style" once the old dialog is gone. -->
+      <!-- TODO(crbug.com/660349): remove "new-style" once the old dialog is gone. -->
       <message name="IDS_ENTERPRISE_SIGNIN_CREATE_NEW_PROFILE_NEW_STYLE" desc="Text of the button to create a new profile after enterprise account sign-in">
         Create a new profile
       </message>
@@ -11204,6 +11217,7 @@ I don't think this site should be blocked!
       <message name="IDS_SYNC_CONFIRMATION_TITLE" desc="Title of the sync confirmation dialog in the tab modal signin flow">
         You're now signed in to Chrome
       </message>
+
       <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_TITLE" desc="Title of the chrome sync section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Chrome Sync
       </message>
@@ -11228,6 +11242,21 @@ I don't think this site should be blocked!
       <message name="IDS_SYNC_CONFIRMATION_UNDO_BUTTON_LABEL" desc="Label of the undo button in the sync confirmation dialog of the tab modal signin flow">
         Undo
       </message>
+
+      <!--- Sync Confirmation section of the tab modal signin flow when sync is disabled by policy -->
+      <message name="IDS_SYNC_DISABLED_CONFIRMATION_CHROME_SYNC_TITLE" desc="Title of the chrome sync section of the sync confirmation dialog in the tab modal signin flow when sync is disabled by policy" formatter_data="android_java">
+        Sync is disabled by your administrator
+      </message>
+      <message name="IDS_SYNC_DISABLED_CONFIRMATION_DETAILS" desc="Body of the sync confirmation dialog in the tab modal signin flow when sync is disabled by policy">
+        Your administrator has disabled syncing of your bookmarks, history, passwords, and other settings.
+       </message>
+      <message name="IDS_SYNC_DISABLED_CONFIRMATION_CONFIRM_BUTTON_LABEL" desc="Label of the confirmation button in the sync confirmation dialog of the tab modal signin flow">
+        Sign in anyway
+      </message>
+      <message name="IDS_SYNC_DISABLED_CONFIRMATION_UNDO_BUTTON_LABEL" desc="Label of the undo button in the sync confirmation dialog of the tab modal signin flow">
+        Cancel sign in
+      </message>
+
 
       <!-- Signin Error tab modal dialogue -->
       <message name="IDS_SIGNIN_ERROR_TITLE" desc="Title of the signin error tab modal dialog.">
@@ -11581,7 +11610,7 @@ Tell us what happened exactly before you got the profile error message:
 
       <!-- Shared between all the plaforms -->
       <message name="IDS_SYNC_ENTER_GOOGLE_PASSPHRASE_BODY_WITH_DATE" desc="Instructions for the dialog where the user needs to enter their previous google passphrase.">
-        Your data was encrypted with your Google password as of <ph name="TIME">$1<ex>Sept 1, 2012</ex></ph>. Please enter it below.
+        Your data was encrypted with your Google password as of <ph name="TIME">$1<ex>Sept 1, 2012</ex></ph>. Enter it to start sync.
       </message>
       <message name="IDS_SYNC_ACCOUNT_INFO" desc="The message that appears in the options dialog indicating that the user is signed in with the given email address.">
         Signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>.
@@ -11925,24 +11954,6 @@ Tell us what happened exactly before you got the profile error message:
         <message name="IDS_SYNC_SUCCESS" desc="Operation successful">
           Success!
         </message>
-
-        <!-- Sync app menu item strings -->
-        <if expr="not use_titlecase">
-          <message name="IDS_SYNC_MENU_PRE_SYNCED_LABEL" desc="The text for the sync app menu item before an account is synced.">
-            Sign in to <ph name="SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph>...
-          </message>
-          <message name="IDS_SYNC_MENU_SYNCED_LABEL" desc="The text for the sync app menu item when bookmark sync has been enabled">
-            Signed in as <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>...
-          </message>
-        </if>
-        <if expr="use_titlecase">
-          <message name="IDS_SYNC_MENU_PRE_SYNCED_LABEL" desc="The text for the sync app menu item before an account is synced.">
-            Sign in to <ph name="SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph>...
-          </message>
-          <message name="IDS_SYNC_MENU_SYNCED_LABEL" desc="The text for the sync app menu item when bookmark sync has been enabled">
-            Signed in as <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>...
-          </message>
-        </if>
 
         <!-- Sync promo page chrome://signin -->
         <message name="IDS_SYNC_PROMO_TAB_TITLE" desc="The title of the sync promo tab.">
@@ -15113,7 +15124,10 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
         No Bluetooth devices found.
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF" desc="Text of a link the user can click to get help information when Bluetooth adapter is turned off.">
-        Turn on Bluetooth to allow pairing
+        <ph name="TURN_ON_BLUETOOTH_LINK">$1<ex>Turn on Bluetooth</ex></ph> to allow pairing
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ON_BLUETOOTH_LINK_TEXT" desc="Text of the 'Turn on Bluetooth' link when Bluetooth adapter is turned off.">
+        Turn on Bluetooth
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING" desc="The label that is used to indicate the chooser is scanning for Bluetooth devices.">
         Scanning for devices...
@@ -15261,6 +15275,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       </message>
       <message name="IDS_FLAGS_ENABLE_NTP_SAVE_TO_OFFLINE_DESCRIPTION" desc="Description for the flag to enable offline page suggestions on the New Tab page." translateable="false">
         If enabled, the Snippets context menu (see #enable-ntp-snippets) will contain the option to save linked page for offline viewing.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_BADGE_NAME" desc="Name for the flag to enable offline badges for snippets on the New Tab page." translateable="false">
+        Show offline badge for offline available snippets on the ntp.
+      </message>
+      <message name="IDS_FLAGS_ENABLE_NTP_OFFLINE_BADGE_DESCRIPTION" desc="Description for the flag to enable offline badges for snippets on the New Tab page." translateable="false">
+        If enabled, Snippets that are available offline will have an offline badge.
       </message>
       <message name="IDS_FLAGS_ENABLE_NTP_DOWNLOAD_SUGGESTIONS_NAME" desc="Name for the flag to enable downloads suggestions on the New Tab page." translateable="false">
         Show downloads on the New Tab page
@@ -15562,9 +15582,18 @@ read aloud to screenreader users to announce that a completion is available.">
         <message name="IDS_FLAGS_ENABLE_DEFAULT_MEDIA_SESSION_ENABLED" desc="Option for enabling the default MediaSession">
             Enabled
         </message>
-        <message name="IDS_FLAGS_ENABLE_DEFAULT_MEDIA_SESSION_ENABLED_WITH_FLASH" desc="Option for enabling the default MediaSession with Flash">
-            Enabled (with Flash)
+        <message name="IDS_FLAGS_ENABLE_DEFAULT_MEDIA_SESSION_ENABLED_DUCK_FLASH" desc="Option for enabling the default MediaSession with Flash">
+            Enabled (Flash ducks when losing audio focus, experimental)
         </message>
+    </if>
+
+    <if expr="is_android">
+      <message name="IDS_FLAGS_NO_CREDIT_CARD_ABORT" desc="Title for the flag to enable the No Card Abort in Payment Request." translateable="false">
+        No Credit Card Abort
+      </message>
+      <message name="IDS_FLAGS_NO_CREDIT_CARD_ABORT_DESCRIPTION" desc="Description for the flag to enable the No Card Abort in Payment Request." translateable="false">
+        Whether or not the No Credit Card Abort is enabled.
+      </message>
     </if>
   </messages>
  </release>

@@ -50,7 +50,7 @@ WebInspector.ElementsTreeElement = function(node, elementCloseTag)
         this._canAddAttributes = true;
     this._searchQuery = null;
     this._expandedChildrenLimit = WebInspector.ElementsTreeElement.InitialChildrenLimit;
-}
+};
 
 WebInspector.ElementsTreeElement.InitialChildrenLimit = 500;
 
@@ -73,7 +73,7 @@ WebInspector.ElementsTreeElement.animateOnDOMUpdate = function(treeElement)
 {
     var tagName = treeElement.listItemElement.querySelector(".webkit-html-tag-name");
     WebInspector.runCSSAnimationOnce(tagName || treeElement.listItemElement, "dom-update-highlight");
-}
+};
 
 /**
  * @param {!WebInspector.DOMNode} node
@@ -93,7 +93,7 @@ WebInspector.ElementsTreeElement.visibleShadowRoots = function(node)
         return root.shadowRootType() !== WebInspector.DOMNode.ShadowRootTypes.UserAgent;
     }
     return roots;
-}
+};
 
 /**
  * @param {!WebInspector.DOMNode} node
@@ -112,7 +112,7 @@ WebInspector.ElementsTreeElement.canShowInlineText = function(node)
     if (textChild.nodeValue().length < maxInlineTextChildLength)
         return true;
     return false;
-}
+};
 
 /**
  * @param {!WebInspector.ContextSubMenuItem} subMenu
@@ -135,7 +135,7 @@ WebInspector.ElementsTreeElement.populateForcedPseudoStateItems = function(subMe
     {
         WebInspector.CSSModel.fromNode(node).forcePseudoState(node, pseudoState, enabled);
     }
-}
+};
 
 WebInspector.ElementsTreeElement.prototype = {
     /**
@@ -262,6 +262,7 @@ WebInspector.ElementsTreeElement.prototype = {
         if (!this.selectionElement) {
             this.selectionElement = createElement("div");
             this.selectionElement.className = "selection fill";
+            this.selectionElement.style.setProperty("margin-left", (-this._computeLeftIndent()) + "px");
             listItemElement.insertBefore(this.selectionElement, listItemElement.firstChild);
         }
     },
@@ -857,7 +858,7 @@ WebInspector.ElementsTreeElement.prototype = {
         function markAsBeingEdited(controller)
         {
             this._editing = /** @type {!WebInspector.InplaceEditor.Controller} */ (controller);
-            this._editing.setWidth(this.treeOutline.visibleWidth());
+            this._editing.setWidth(this.treeOutline.visibleWidth() - this._computeLeftIndent());
             this.treeOutline.setMultilineEditing(this._editing);
         }
     },
@@ -1079,7 +1080,10 @@ WebInspector.ElementsTreeElement.prototype = {
         this._highlightSearchResults();
     },
 
-    updateDecorations: function()
+    /**
+     * @return {number}
+     */
+    _computeLeftIndent: function()
     {
         var treeElement = this.parent;
         var depth = 0;
@@ -1089,7 +1093,12 @@ WebInspector.ElementsTreeElement.prototype = {
         }
 
         /** Keep it in sync with elementsTreeOutline.css **/
-        this._gutterContainer.style.left = (-12 * (depth - 2) - (this.isExpandable() ? 1 : 12)) + "px";
+        return 12 * (depth - 2) + (this.isExpandable() ? 1 : 12);
+    },
+
+    updateDecorations: function()
+    {
+        this._gutterContainer.style.left = (-this._computeLeftIndent()) + "px";
 
         if (this.isClosingTag())
             return;
@@ -1632,4 +1641,4 @@ WebInspector.ElementsTreeElement.prototype = {
     },
 
     __proto__: TreeElement.prototype
-}
+};

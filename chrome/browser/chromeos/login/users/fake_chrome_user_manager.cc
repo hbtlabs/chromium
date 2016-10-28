@@ -16,8 +16,8 @@
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/login/login_state.h"
-#include "chromeos/login/user_names.h"
 #include "components/user_manager/user_image/user_image.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
@@ -160,8 +160,7 @@ const AccountId& FakeChromeUserManager::GetOwnerAccountId() const {
   return owner_account_id_;
 }
 
-void FakeChromeUserManager::SessionStarted() {
-}
+void FakeChromeUserManager::OnSessionStarted() {}
 
 void FakeChromeUserManager::RemoveUser(
     const AccountId& account_id,
@@ -230,7 +229,7 @@ bool FakeChromeUserManager::GetPlatformKnownUserId(
 }
 
 const AccountId& FakeChromeUserManager::GetGuestAccountId() const {
-  return login::GuestAccountId();
+  return user_manager::GuestAccountId();
 }
 
 bool FakeChromeUserManager::IsFirstExecAfterBoot() const {
@@ -245,17 +244,17 @@ void FakeChromeUserManager::AsyncRemoveCryptohome(
 
 bool FakeChromeUserManager::IsGuestAccountId(
     const AccountId& account_id) const {
-  return account_id == login::GuestAccountId();
+  return account_id == user_manager::GuestAccountId();
 }
 
 bool FakeChromeUserManager::IsStubAccountId(const AccountId& account_id) const {
-  return account_id == login::StubAccountId();
+  return account_id == user_manager::StubAccountId();
 }
 
 bool FakeChromeUserManager::IsSupervisedAccountId(
     const AccountId& account_id) const {
   return gaia::ExtractDomainName(account_id.GetUserEmail()) ==
-         chromeos::login::kSupervisedUserDomain;
+         user_manager::kSupervisedUserDomain;
 }
 
 bool FakeChromeUserManager::HasBrowserRestarted() const {

@@ -157,7 +157,7 @@ void TypingCommand::updateSelectionIfDifferentFromCurrentSelection(
     return;
 
   typingCommand->setStartingSelection(currentSelection);
-  typingCommand->setEndingSelection(currentSelection);
+  typingCommand->setEndingVisibleSelection(currentSelection);
 }
 
 static String dispatchBeforeTextInsertedEvent(
@@ -218,7 +218,7 @@ void TypingCommand::insertText(Document& document,
           lastTypingCommandIfStillOpenForTyping(frame)) {
     if (lastTypingCommand->endingSelection() != selectionForInsertion) {
       lastTypingCommand->setStartingSelection(selectionForInsertion);
-      lastTypingCommand->setEndingSelection(selectionForInsertion);
+      lastTypingCommand->setEndingVisibleSelection(selectionForInsertion);
     }
 
     lastTypingCommand->setCompositionType(compositionType);
@@ -238,11 +238,11 @@ void TypingCommand::insertText(Document& document,
   bool changeSelection = selectionForInsertion != currentSelection;
   if (changeSelection) {
     command->setStartingSelection(selectionForInsertion);
-    command->setEndingSelection(selectionForInsertion);
+    command->setEndingVisibleSelection(selectionForInsertion);
   }
   command->apply();
   if (changeSelection) {
-    command->setEndingSelection(currentSelection);
+    command->setEndingVisibleSelection(currentSelection);
     frame->selection().setSelection(currentSelection);
   }
 }
@@ -512,10 +512,10 @@ bool TypingCommand::makeEditableRootEmpty(EditingState* editingState) {
   addBlockPlaceholderIfNeeded(root, editingState);
   if (editingState->isAborted())
     return false;
-  document().updateStyleAndLayoutIgnorePendingStylesheets();
-  setEndingSelection(createVisibleSelection(Position::firstPositionInNode(root),
-                                            TextAffinity::Downstream,
-                                            endingSelection().isDirectional()));
+  setEndingSelection(SelectionInDOMTree::Builder()
+                         .collapse(Position::firstPositionInNode(root))
+                         .setIsDirectional(endingSelection().isDirectional())
+                         .build());
 
   return true;
 }
@@ -609,9 +609,12 @@ void TypingCommand::deleteKeyPressed(TextGranularity granularity,
         // If the caret is just after a table, select the table and don't delete
         // anything.
       } else if (Element* table = tableElementJustBefore(visibleStart)) {
-        setEndingSelection(createVisibleSelection(
-            Position::beforeNode(table), endingSelection().start(),
-            TextAffinity::Downstream, endingSelection().isDirectional()));
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .collapse(Position::beforeNode(table))
+                .extend(endingSelection().start())
+                .setIsDirectional(endingSelection().isDirectional())
+                .build());
         typingAddedToOpenCommand(DeleteKey);
         return;
       }
@@ -727,10 +730,13 @@ void TypingCommand::forwardDeleteKeyPressed(TextGranularity granularity,
       if (isDisplayInsideTable(downstreamEnd.computeContainerNode()) &&
           downstreamEnd.computeOffsetInContainerNode() <=
               caretMinOffset(downstreamEnd.computeContainerNode())) {
-        setEndingSelection(createVisibleSelection(
-            endingSelection().end(),
-            Position::afterNode(downstreamEnd.computeContainerNode()),
-            TextAffinity::Downstream, endingSelection().isDirectional()));
+        setEndingSelection(
+            SelectionInDOMTree::Builder()
+                .setBaseAndExtentDeprecated(
+                    endingSelection().end(),
+                    Position::afterNode(downstreamEnd.computeContainerNode()))
+                .setIsDirectional(endingSelection().isDirectional())
+                .build());
         typingAddedToOpenCommand(ForwardDeleteKey);
         return;
       }

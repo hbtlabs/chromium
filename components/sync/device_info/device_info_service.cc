@@ -38,7 +38,7 @@ DeviceInfoService::DeviceInfoService(
     LocalDeviceInfoProvider* local_device_info_provider,
     const StoreFactoryFunction& callback,
     const ChangeProcessorFactory& change_processor_factory)
-    : ModelTypeService(change_processor_factory, DEVICE_INFO),
+    : ModelTypeSyncBridge(change_processor_factory, DEVICE_INFO),
       local_device_info_provider_(local_device_info_provider) {
   DCHECK(local_device_info_provider);
 
@@ -180,6 +180,31 @@ std::string DeviceInfoService::GetStorageKey(const EntityData& entity_data) {
   return entity_data.specifics.device_info().cache_guid();
 }
 
+void DeviceInfoService::DisableSync() {
+  // TODO(skym, crbug.com/659263): Would it be reasonable to pulse_timer_.Stop()
+  // or subscription_.reset() here?
+
+  // Allow deletion of metadata to happen before the deletion of data below. If
+  // we crash after removing metadata but not regular data, then merge can
+  // handle pairing everything back up.
+  ModelTypeSyncBridge::DisableSync();
+
+  // Remove all local data, if sync is being disabled, the user has expressed
+  // their desire to not have knowledge about other devices.
+  if (!all_data_.empty()) {
+    std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
+    for (const auto& kv : all_data_) {
+      store_->DeleteData(batch.get(), kv.first);
+    }
+    store_->CommitWriteBatch(
+        std::move(batch),
+        base::Bind(&DeviceInfoService::OnCommit, base::AsWeakPtr(this)));
+
+    all_data_.clear();
+    NotifyObservers();
+  }
+}
+
 bool DeviceInfoService::IsSyncing() const {
   return !all_data_.empty();
 }
@@ -277,6 +302,12 @@ bool DeviceInfoService::DeleteSpecifics(const std::string& guid,
 }
 
 void DeviceInfoService::OnProviderInitialized() {
+  // Now that the provider has initialized, remove the subscription. The service
+  // should only need to give the processor metadata upon initialization. If
+  // sync is disabled and enabled, our provider will try to retrigger this
+  // event, but we do not want to send any more metadata to the processor.
+  subscription_.reset();
+
   has_provider_initialized_ = true;
   LoadMetadataIfReady();
 }
@@ -406,22 +437,27 @@ void DeviceInfoService::ReconcileLocalAndStored() {
 void DeviceInfoService::SendLocalData() {
   DCHECK(has_provider_initialized_);
 
-  std::unique_ptr<DeviceInfoSpecifics> specifics =
-      CopyToSpecifics(*local_device_info_provider_->GetLocalDeviceInfo());
-  specifics->set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
+  // It is possible that the provider no longer has data for us, such as when
+  // the user signs out. No-op this pulse, but keep the timer going in case sync
+  // is enabled later.
+  if (local_device_info_provider_->GetLocalDeviceInfo() != nullptr) {
+    std::unique_ptr<DeviceInfoSpecifics> specifics =
+        CopyToSpecifics(*local_device_info_provider_->GetLocalDeviceInfo());
+    specifics->set_last_updated_timestamp(TimeToProtoTime(Time::Now()));
 
-  std::unique_ptr<MetadataChangeList> metadata_change_list =
-      CreateMetadataChangeList();
-  if (change_processor()->IsTrackingMetadata()) {
-    change_processor()->Put(specifics->cache_guid(),
-                            CopyToEntityData(*specifics),
-                            metadata_change_list.get());
+    std::unique_ptr<MetadataChangeList> metadata_change_list =
+        CreateMetadataChangeList();
+    if (change_processor()->IsTrackingMetadata()) {
+      change_processor()->Put(specifics->cache_guid(),
+                              CopyToEntityData(*specifics),
+                              metadata_change_list.get());
+    }
+
+    std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
+    StoreSpecifics(std::move(specifics), batch.get());
+    CommitAndNotify(std::move(batch), std::move(metadata_change_list), true);
   }
 
-  std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
-  StoreSpecifics(std::move(specifics), batch.get());
-
-  CommitAndNotify(std::move(batch), std::move(metadata_change_list), true);
   pulse_timer_.Start(
       FROM_HERE, DeviceInfoUtil::kPulseInterval,
       base::Bind(&DeviceInfoService::SendLocalData, base::Unretained(this)));

@@ -63,7 +63,8 @@ void CredentialManagerImpl::Store(const CredentialInfo& credential,
   // Send acknowledge response back.
   callback.Run();
 
-  if (!client_->IsSavingAndFillingEnabledForCurrentPage())
+  if (!client_->IsSavingAndFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed())
     return;
 
   client_->NotifyStorePasswordCalled();
@@ -117,7 +118,8 @@ void CredentialManagerImpl::RequireUserMediation(
         .LogRequireUserMediation(web_contents()->GetLastCommittedURL());
   }
   PasswordStore* store = GetPasswordStore();
-  if (!store || !IsUpdatingCredentialAllowed()) {
+  if (!store || !client_->IsSavingAndFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed()) {
     callback.Run();
     return;
   }
@@ -178,8 +180,9 @@ void CredentialManagerImpl::Get(bool zero_click_only,
 
   // Return an empty credential if zero-click is required but disabled, or if
   // the current page has TLS errors.
-  if ((zero_click_only && !IsZeroClickAllowed()) ||
-      client_->DidLastPageLoadEncounterSSLErrors()) {
+  if (!client_->IsFillingEnabledForCurrentPage() ||
+      !client_->OnCredentialManagerUsed() ||
+      (zero_click_only && !IsZeroClickAllowed())) {
     // Callback with empty credential info.
     callback.Run(mojom::CredentialManagerError::SUCCESS, CredentialInfo());
     return;
@@ -262,7 +265,6 @@ void CredentialManagerImpl::SendPasswordForm(
     info = CredentialInfo(*form, type_to_return);
     if (PasswordStore* store = GetPasswordStore()) {
       if (form->skip_zero_click && IsZeroClickAllowed()) {
-        DCHECK(IsUpdatingCredentialAllowed());
         autofill::PasswordForm update_form = *form;
         update_form.skip_zero_click = false;
         store->UpdateLogin(update_form);
@@ -293,11 +295,6 @@ PasswordStore::FormDigest CredentialManagerImpl::GetSynthesizedFormForOrigin()
 void CredentialManagerImpl::DoneRequiringUserMediation() {
   DCHECK(pending_require_user_mediation_);
   pending_require_user_mediation_.reset();
-}
-
-bool CredentialManagerImpl::IsUpdatingCredentialAllowed() const {
-  return !client_->DidLastPageLoadEncounterSSLErrors() &&
-         !client_->IsOffTheRecord();
 }
 
 }  // namespace password_manager

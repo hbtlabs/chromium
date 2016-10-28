@@ -59,6 +59,7 @@ enum ScrollDirectionPhysical { ScrollUp, ScrollDown, ScrollLeft, ScrollRight };
 enum ScrollType {
   UserScroll,
   ProgrammaticScroll,
+  ClampingScroll,
   CompositorScroll,
   AnchoringScroll
 };
@@ -184,10 +185,9 @@ enum ScrollbarPart {
   AllParts = 0xffffffff
 };
 
-enum ScrollbarOverlayStyle {
-  ScrollbarOverlayStyleDefault,
-  ScrollbarOverlayStyleDark,
-  ScrollbarOverlayStyleLight
+enum ScrollbarOverlayColorTheme {
+  ScrollbarOverlayColorThemeDark,
+  ScrollbarOverlayColorThemeLight
 };
 
 enum ScrollBehavior {

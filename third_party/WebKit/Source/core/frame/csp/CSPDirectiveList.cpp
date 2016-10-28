@@ -52,9 +52,6 @@ CSPDirectiveList::CSPDirectiveList(ContentSecurityPolicy* policy,
       m_headerType(type),
       m_headerSource(source),
       m_hasSandboxPolicy(false),
-      m_reflectedXSSDisposition(ReflectedXSSUnset),
-      m_didSetReferrerPolicy(false),
-      m_referrerPolicy(ReferrerPolicyDefault),
       m_strictMixedContentCheckingEnforced(false),
       m_upgradeInsecureRequests(false),
       m_treatAsPublicAddress(false),
@@ -810,7 +807,7 @@ bool CSPDirectiveList::shouldSendCSPHeader(Resource::Type type) const {
 // directive-list    = [ directive *( ";" [ directive ] ) ]
 //
 void CSPDirectiveList::parse(const UChar* begin, const UChar* end) {
-  m_header = String(begin, end - begin);
+  m_header = String(begin, end - begin).stripWhiteSpace();
 
   if (begin == end)
     return;
@@ -1071,104 +1068,6 @@ void CSPDirectiveList::enableInsecureRequestsUpgrade(const String& name,
     m_policy->reportValueForEmptyDirective(name, value);
 }
 
-void CSPDirectiveList::parseReflectedXSS(const String& name,
-                                         const String& value) {
-  if (m_reflectedXSSDisposition != ReflectedXSSUnset) {
-    m_policy->reportDuplicateDirective(name);
-    m_reflectedXSSDisposition = ReflectedXSSInvalid;
-    return;
-  }
-
-  if (value.isEmpty()) {
-    m_reflectedXSSDisposition = ReflectedXSSInvalid;
-    m_policy->reportInvalidReflectedXSS(value);
-    return;
-  }
-
-  Vector<UChar> characters;
-  value.appendTo(characters);
-
-  const UChar* position = characters.data();
-  const UChar* end = position + characters.size();
-
-  skipWhile<UChar, isASCIISpace>(position, end);
-  const UChar* begin = position;
-  skipWhile<UChar, isNotASCIISpace>(position, end);
-
-  StringView token(begin, position - begin);
-
-  // value1
-  //       ^
-  if (equalIgnoringCase("allow", token)) {
-    m_reflectedXSSDisposition = AllowReflectedXSS;
-  } else if (equalIgnoringCase("filter", token)) {
-    m_reflectedXSSDisposition = FilterReflectedXSS;
-  } else if (equalIgnoringCase("block", token)) {
-    m_reflectedXSSDisposition = BlockReflectedXSS;
-  } else {
-    m_reflectedXSSDisposition = ReflectedXSSInvalid;
-    m_policy->reportInvalidReflectedXSS(value);
-    return;
-  }
-
-  skipWhile<UChar, isASCIISpace>(position, end);
-  if (position == end && m_reflectedXSSDisposition != ReflectedXSSUnset)
-    return;
-
-  // value1 value2
-  //        ^
-  m_reflectedXSSDisposition = ReflectedXSSInvalid;
-  m_policy->reportInvalidReflectedXSS(value);
-}
-
-void CSPDirectiveList::parseReferrer(const String& name, const String& value) {
-  m_didSetReferrerPolicy = true;
-
-  if (value.isEmpty()) {
-    m_policy->reportInvalidReferrer(value);
-    m_referrerPolicy = ReferrerPolicyNever;
-    return;
-  }
-
-  Vector<UChar> characters;
-  value.appendTo(characters);
-
-  const UChar* position = characters.data();
-  const UChar* end = position + characters.size();
-
-  skipWhile<UChar, isASCIISpace>(position, end);
-  const UChar* begin = position;
-  skipWhile<UChar, isNotASCIISpace>(position, end);
-
-  StringView token(begin, position - begin);
-
-  // value1
-  //       ^
-  if (equalIgnoringCase("unsafe-url", token)) {
-    m_referrerPolicy = ReferrerPolicyAlways;
-  } else if (equalIgnoringCase("no-referrer", token)) {
-    m_referrerPolicy = ReferrerPolicyNever;
-  } else if (equalIgnoringCase("no-referrer-when-downgrade", token)) {
-    m_referrerPolicy = ReferrerPolicyDefault;
-  } else if (equalIgnoringCase("origin", token)) {
-    m_referrerPolicy = ReferrerPolicyOrigin;
-  } else if (equalIgnoringCase("origin-when-cross-origin", token) ||
-             equalIgnoringCase("origin-when-crossorigin", token)) {
-    m_referrerPolicy = ReferrerPolicyOriginWhenCrossOrigin;
-  } else {
-    m_policy->reportInvalidReferrer(value);
-    return;
-  }
-
-  skipWhile<UChar, isASCIISpace>(position, end);
-  if (position == end)
-    return;
-
-  // value1 value2
-  //        ^
-  m_policy->reportInvalidReferrer(value);
-}
-
 void CSPDirectiveList::addDirective(const String& name, const String& value) {
   ASSERT(!name.isEmpty());
 
@@ -1211,10 +1110,6 @@ void CSPDirectiveList::addDirective(const String& name, const String& value) {
     setCSPDirective<SourceListDirective>(name, value, m_formAction);
   } else if (equalIgnoringCase(name, ContentSecurityPolicy::PluginTypes)) {
     setCSPDirective<MediaListDirective>(name, value, m_pluginTypes);
-  } else if (equalIgnoringCase(name, ContentSecurityPolicy::ReflectedXSS)) {
-    parseReflectedXSS(name, value);
-  } else if (equalIgnoringCase(name, ContentSecurityPolicy::Referrer)) {
-    parseReferrer(name, value);
   } else if (equalIgnoringCase(
                  name, ContentSecurityPolicy::UpgradeInsecureRequests)) {
     enableInsecureRequestsUpgrade(name, value);

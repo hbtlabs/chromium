@@ -6,6 +6,10 @@
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/memory/memory_monitor.h"
+#include "content/public/browser/notification_service.h"
+#include "content/public/browser/notification_types.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host.h"
 #include "content/public/common/content_features.h"
 
 namespace content {
@@ -94,6 +98,10 @@ void MemoryCoordinatorImpl::Start() {
   DCHECK(CalledOnValidThread());
   DCHECK(last_state_change_.is_null());
   DCHECK(ValidateParameters());
+
+  notification_registrar_.Add(
+      this, NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED,
+      NotificationService::AllBrowserContextsAndSources());
   ScheduleUpdateState(base::TimeDelta());
 }
 
@@ -103,7 +111,42 @@ void MemoryCoordinatorImpl::OnChildAdded(int render_process_id) {
 }
 
 base::MemoryState MemoryCoordinatorImpl::GetCurrentMemoryState() const {
-  return current_state_;
+  // SUSPENDED state may not make sense to the browser process. Use THROTTLED
+  // instead when the global state is SUSPENDED.
+  // TODO(bashi): Maybe worth considering another state for the browser.
+  return current_state_ == MemoryState::SUSPENDED ? MemoryState::THROTTLED
+                                                  : current_state_;
+}
+
+void MemoryCoordinatorImpl::SetCurrentMemoryStateForTesting(
+    base::MemoryState memory_state) {
+  // This changes the current state temporariy for testing. The state will be
+  // updated later by the task posted at ScheduleUpdateState.
+  DCHECK(memory_state != MemoryState::UNKNOWN);
+  base::MemoryState prev_state = current_state_;
+  current_state_ = memory_state;
+  if (prev_state != current_state_) {
+    NotifyStateToClients();
+    NotifyStateToChildren();
+  }
+}
+
+void MemoryCoordinatorImpl::Observe(int type,
+                                    const NotificationSource& source,
+                                    const NotificationDetails& details) {
+  DCHECK(type == NOTIFICATION_RENDER_WIDGET_VISIBILITY_CHANGED);
+  RenderWidgetHost* render_widget_host = Source<RenderWidgetHost>(source).ptr();
+  RenderProcessHost* process = render_widget_host->GetProcess();
+  if (!process)
+    return;
+  auto iter = children().find(process->GetID());
+  if (iter == children().end())
+    return;
+  bool is_visible = *Details<bool>(details).ptr();
+  // We don't throttle/suspend a visible renderer for now.
+  auto new_state = is_visible ? mojom::MemoryState::NORMAL
+                              : ToMojomMemoryState(current_state_);
+  SetMemoryState(iter->first, new_state);
 }
 
 base::MemoryState MemoryCoordinatorImpl::CalculateNextState() {
@@ -162,11 +205,7 @@ void MemoryCoordinatorImpl::UpdateState() {
 }
 
 void MemoryCoordinatorImpl::NotifyStateToClients() {
-  // SUSPENDED state may not make sense to the browser process. Use THROTTLED
-  // instead when the global state is SUSPENDED.
-  // TODO(bashi): Maybe worth considering another state for the browser.
-  auto state = current_state_ == MemoryState::SUSPENDED ? MemoryState::THROTTLED
-                                                        : current_state_;
+  auto state = GetCurrentMemoryState();
   base::MemoryCoordinatorClientRegistry::GetInstance()->Notify(state);
 }
 
@@ -174,9 +213,6 @@ void MemoryCoordinatorImpl::NotifyStateToChildren() {
   auto mojo_state = ToMojomMemoryState(current_state_);
   // It's OK to call SetMemoryState() unconditionally because it checks whether
   // this state transition is valid.
-  // TODO(bashi): In SUSPENDED state, we should update children's state
-  // accordingly when the foreground tab is changed (e.g. resume a renderer
-  // which becomes foreground and suspend a renderer which goes to background).
   for (auto& iter : children())
     SetMemoryState(iter.first, mojo_state);
 }

@@ -535,6 +535,10 @@ chrome.automation.AutomationNode.prototype.focus = function() {};
 chrome.automation.AutomationNode.prototype.showContextMenu = function() {};
 
 
+chrome.automation.AutomationNode.prototype
+    .setSequentialFocusNavigationStartingPoint = function() {};
+
+
 /**
  * @param {number} start
  * @param {number} end
@@ -654,6 +658,8 @@ chrome.automation.AutomationNode.prototype.nextOnLine;
 /** @type {chrome.automation.AutomationNode} */
 chrome.automation.AutomationNode.prototype.previousOnLine;
 
+/** @type {Object<string, string>} */
+chrome.automation.AutomationNode.prototype.htmlAttributes;
 
 /**
  * @extends {chrome.automation.AutomationNode}

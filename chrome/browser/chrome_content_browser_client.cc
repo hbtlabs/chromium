@@ -131,6 +131,7 @@
 #include "components/metrics/client_info.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
+#include "components/payments/payment_request.mojom.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -139,8 +140,6 @@
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_host_impl.h"
-#include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
-#include "components/subresource_filter/content/browser/subresource_filter_navigation_throttle.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/variations/variations_associated_data.h"
@@ -186,7 +185,6 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "storage/browser/fileapi/external_mount_points.h"
-#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 #include "third_party/WebKit/public/platform/modules/webshare/webshare.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -202,7 +200,8 @@
 #include "chrome/browser/chrome_browser_main_mac.h"
 #elif defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
-#include "chrome/browser/chromeos/arc/arc_navigation_throttle.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_backend_delegate.h"
+#include "chrome/browser/chromeos/arc/intent_helper/arc_navigation_throttle.h"
 #include "chrome/browser/chromeos/attestation/platform_verification_impl.h"
 #include "chrome/browser/chromeos/chrome_browser_main_chromeos.h"
 #include "chrome/browser/chromeos/chrome_interface_factory.h"
@@ -325,7 +324,6 @@
 
 #if defined(ENABLE_WEBRTC)
 #include "chrome/browser/media/audio_debug_recordings_handler.h"
-#include "chrome/browser/media/webrtc/webrtc_event_log_handler.h"
 #include "chrome/browser/media/webrtc/webrtc_logging_handler_host.h"
 #endif
 
@@ -1056,11 +1054,6 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       new base::UserDataAdapter<AudioDebugRecordingsHandler>(
           audio_debug_recordings_handler));
 
-  WebRtcEventLogHandler* webrtc_event_log_handler =
-      new WebRtcEventLogHandler(profile);
-  host->SetUserData(WebRtcEventLogHandler::kWebRtcEventLogHandlerKey,
-                    new base::UserDataAdapter<WebRtcEventLogHandler>(
-                        webrtc_event_log_handler));
 #endif
 #if !defined(DISABLE_NACL)
   host->AddFilter(new nacl::NaClHostMessageFilter(
@@ -2753,11 +2746,12 @@ void ChromeContentBrowserClient::GetAdditionalFileSystemBackends(
       content::BrowserContext::GetMountPoints(browser_context);
   DCHECK(external_mount_points);
   chromeos::FileSystemBackend* backend = new chromeos::FileSystemBackend(
-      new drive::FileSystemBackendDelegate,
-      new chromeos::file_system_provider::BackendDelegate,
-      new chromeos::MTPFileSystemBackendDelegate(storage_partition_path),
-      external_mount_points,
-      storage::ExternalMountPoints::GetSystemInstance());
+      base::MakeUnique<drive::FileSystemBackendDelegate>(),
+      base::MakeUnique<chromeos::file_system_provider::BackendDelegate>(),
+      base::MakeUnique<chromeos::MTPFileSystemBackendDelegate>(
+          storage_partition_path),
+      base::MakeUnique<arc::ArcContentFileSystemBackendDelegate>(),
+      external_mount_points, storage::ExternalMountPoints::GetSystemInstance());
   backend->AddSystemMountPoints();
   DCHECK(backend->CanHandleType(storage::kFileSystemTypeExternal));
   additional_backends->push_back(backend);
@@ -3148,20 +3142,6 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
 #if defined(ENABLE_EXTENSIONS)
   throttles.push_back(new extensions::ExtensionNavigationThrottle(handle));
 #endif
-
-  subresource_filter::ContentSubresourceFilterDriverFactory*
-      subresource_filter_driver_factory =
-          subresource_filter::ContentSubresourceFilterDriverFactory::
-              FromWebContents(handle->GetWebContents());
-  if (subresource_filter_driver_factory && handle->IsInMainFrame() &&
-      handle->GetURL().SchemeIsHTTPOrHTTPS()) {
-    // TODO(melandory): Activation logic should be moved to the
-    // WebContentsObserver, once ReadyToCommitNavigation is available on
-    // pre-PlzNavigate world (tracking bug: https://crbug.com/621856).
-    throttles.push_back(
-        subresource_filter::SubresourceFilterNavigationThrottle::Create(
-            handle));
-  }
 
   return throttles;
 }

@@ -489,8 +489,16 @@ inline bool LayoutBlockFlow::layoutBlockFlow(bool relayoutChildren,
   if (pageLogicalHeightChanged)
     relayoutChildren = true;
 
-  LayoutState state(*this, locationOffset(), pageLogicalHeight,
-                    pageLogicalHeightChanged, logicalWidthChanged);
+  LayoutState state(*this, pageLogicalHeight, pageLogicalHeightChanged,
+                    logicalWidthChanged);
+
+  if (m_paginationStateChanged) {
+    // We now need a deep layout to clean up struts after pagination, if we
+    // just ceased to be paginated, or, if we just became paginated on the
+    // other hand, we now need the deep layout, to insert pagination struts.
+    m_paginationStateChanged = false;
+    state.setPaginationStateChanged();
+  }
 
   // We use four values, maxTopPos, maxTopNeg, maxBottomPos, and maxBottomNeg,
   // to track our current maximal positive and negative margins. These values
@@ -1115,6 +1123,8 @@ void LayoutBlockFlow::adjustLinePositionForPagination(RootInlineBox& lineBox,
   logicalOffset += delta;
   lineBox.setPaginationStrut(LayoutUnit());
   lineBox.setIsFirstAfterPageBreak(false);
+  if (!view()->layoutState()->isPaginated())
+    return;
   LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalOffset);
   if (!pageLogicalHeight)
     return;
@@ -3128,6 +3138,12 @@ void LayoutBlockFlow::collapseAnonymousBlockChild(LayoutBlockFlow* child) {
       LayoutInvalidationReason::ChildAnonymousBlockChanged);
 
   child->moveAllChildrenTo(this, child->nextSibling(), child->hasLayer());
+  // If we make an object's children inline we are going to frustrate any future
+  // attempts to remove floats from its children's float-lists before the next
+  // layout happens so clear down all the floatlists now - they will be rebuilt
+  // at layout.
+  if (child->childrenInline())
+    removeFloatingObjectsFromDescendants();
   setChildrenInline(child->childrenInline());
 
   children()->removeChildNode(this, child, child->hasLayer());
@@ -4206,6 +4222,7 @@ void LayoutBlockFlow::createOrDestroyMultiColumnFlowThreadIfNeeded(
       // spanners, paged containers may not).
       multiColumnFlowThread()->evacuateAndDestroy();
       ASSERT(!multiColumnFlowThread());
+      m_paginationStateChanged = true;
     }
   }
 
@@ -4225,6 +4242,7 @@ void LayoutBlockFlow::createOrDestroyMultiColumnFlowThreadIfNeeded(
 
   LayoutMultiColumnFlowThread* flowThread = createMultiColumnFlowThread(type);
   addChild(flowThread);
+  m_paginationStateChanged = true;
 
   // Check that addChild() put the flow thread as a direct child, and didn't do
   // fancy things.

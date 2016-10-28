@@ -84,7 +84,7 @@ WebInspector.ElementsPanel = function()
     WebInspector.moduleSetting("showUAShadowDOM").addChangeListener(this._showUAShadowDOMChanged.bind(this));
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.DocumentUpdated, this._documentUpdatedEvent, this);
     WebInspector.extensionServer.addEventListener(WebInspector.ExtensionServer.Events.SidebarPaneAdded, this._extensionSidebarPaneAdded, this);
-}
+};
 
 WebInspector.ElementsPanel._elementsSidebarViewTitleSymbol = Symbol("title");
 
@@ -323,14 +323,12 @@ WebInspector.ElementsPanel.prototype = {
      */
     _selectedNodeChanged: function(event)
     {
-        var selectedNode = /** @type {?WebInspector.DOMNode} */ (event.data);
+        var selectedNode = /** @type {?WebInspector.DOMNode} */ (event.data.node);
+        var focus = /** @type {boolean} */ (event.data.focus);
         for (var i = 0; i < this._treeOutlines.length; ++i) {
             if (!selectedNode || selectedNode.domModel() !== this._treeOutlines[i].domModel())
                 this._treeOutlines[i].selectDOMNode(null);
         }
-
-        if (!selectedNode && this._lastValidSelectedNode)
-            this._selectedPathOnReset = this._lastValidSelectedNode.path();
 
         this._breadcrumbs.setSelectedNode(selectedNode);
 
@@ -339,7 +337,10 @@ WebInspector.ElementsPanel.prototype = {
         if (!selectedNode)
             return;
         selectedNode.setAsInspectedNode();
-        this._lastValidSelectedNode = selectedNode;
+        if (focus) {
+            this._selectedNodeOnReset = selectedNode;
+            this._hasNonDefaultSelectedNode = true;
+        }
 
         var executionContexts = selectedNode.target().runtimeModel.executionContexts();
         var nodeFrameId = selectedNode.frameId();
@@ -382,53 +383,64 @@ WebInspector.ElementsPanel.prototype = {
             return;
         }
 
+        this._hasNonDefaultSelectedNode = false;
         WebInspector.domBreakpointsSidebarPane.restoreBreakpoints(inspectedRootDocument);
-
-        /**
-         * @this {WebInspector.ElementsPanel}
-         * @param {?WebInspector.DOMNode} candidateFocusNode
-         */
-        function selectNode(candidateFocusNode)
-        {
-            if (!candidateFocusNode)
-                candidateFocusNode = inspectedRootDocument.body || inspectedRootDocument.documentElement;
-
-            if (!candidateFocusNode)
-                return;
-
-            if (!this._pendingNodeReveal) {
-                this.selectDOMNode(candidateFocusNode);
-                if (treeOutline.selectedTreeElement)
-                    treeOutline.selectedTreeElement.expand();
-            }
-        }
-
-        /**
-         * @param {?DOMAgent.NodeId} nodeId
-         * @this {WebInspector.ElementsPanel}
-         */
-        function selectLastSelectedNode(nodeId)
-        {
-            if (this.selectedDOMNode()) {
-                // Focused node has been explicitly set while reaching out for the last selected node.
-                return;
-            }
-            var node = nodeId ? domModel.nodeForId(nodeId) : null;
-            selectNode.call(this, node);
-            this._lastSelectedNodeSelectedForTest();
-        }
 
         if (this._omitDefaultSelection)
             return;
 
-        if (this._selectedPathOnReset)
-            domModel.pushNodeByPathToFrontend(this._selectedPathOnReset, selectLastSelectedNode.bind(this));
-        else
-            selectNode.call(this, null);
-        delete this._selectedPathOnReset;
+        var savedSelectedNodeOnReset = this._selectedNodeOnReset;
+        restoreNode.call(this, domModel, this._selectedNodeOnReset);
+
+        /**
+         * @param {!WebInspector.DOMModel} domModel
+         * @param {?WebInspector.DOMNode} staleNode
+         * @this {WebInspector.ElementsPanel}
+         */
+        function restoreNode(domModel, staleNode)
+        {
+            var nodePath = staleNode ? staleNode.path() : null;
+            if (!nodePath) {
+                onNodeRestored.call(this, null);
+                return;
+            }
+            domModel.pushNodeByPathToFrontend(nodePath, onNodeRestored.bind(this));
+        }
+
+        /**
+         * @param {?DOMAgent.NodeId} restoredNodeId
+         * @this {WebInspector.ElementsPanel}
+         */
+        function onNodeRestored(restoredNodeId)
+        {
+            if (savedSelectedNodeOnReset !== this._selectedNodeOnReset)
+                return;
+            var node = restoredNodeId ? domModel.nodeForId(restoredNodeId) : null;
+            if (!node) {
+                var inspectedDocument = domModel.existingDocument();
+                node = inspectedDocument ? inspectedDocument.body || inspectedDocument.documentElement : null;
+            }
+            this._setDefaultSelectedNode(node);
+            this._lastSelectedNodeSelectedForTest();
+        }
     },
 
     _lastSelectedNodeSelectedForTest: function() { },
+
+    /**
+     * @param {?WebInspector.DOMNode} node
+     */
+    _setDefaultSelectedNode: function(node)
+    {
+        if (!node || this._hasNonDefaultSelectedNode || this._pendingNodeReveal)
+            return;
+        var treeOutline = WebInspector.ElementsTreeOutline.forDOMModel(node.domModel());
+        if (!treeOutline)
+            return;
+        this.selectDOMNode(node);
+        if (treeOutline.selectedTreeElement)
+            treeOutline.selectedTreeElement.expand();
+    },
 
     /**
      * @override
@@ -719,7 +731,7 @@ WebInspector.ElementsPanel.prototype = {
 
         var treeOutline = null;
         for (var i = 0; i < this._treeOutlines.length; ++i) {
-            if (this._treeOutlines[i].selectedDOMNode() === this._lastValidSelectedNode)
+            if (this._treeOutlines[i].selectedDOMNode())
                 treeOutline = this._treeOutlines[i];
         }
         if (!treeOutline)
@@ -877,7 +889,8 @@ WebInspector.ElementsPanel.prototype = {
         tabbedPane.element.addEventListener("contextmenu", this._sidebarContextMenuEventFired.bind(this), false);
         if (this._popoverHelper)
             this._popoverHelper.hidePopover();
-        this._popoverHelper = new WebInspector.PopoverHelper(tabbedPane.element, this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
+        this._popoverHelper = new WebInspector.PopoverHelper(tabbedPane.element);
+        this._popoverHelper.initializeCallbacks(this._getPopoverAnchor.bind(this), this._showPopover.bind(this));
         this._popoverHelper.setTimeout(0);
 
         if (horizontally) {
@@ -939,7 +952,7 @@ WebInspector.ElementsPanel.prototype = {
     },
 
     __proto__: WebInspector.Panel.prototype
-}
+};
 
 /**
  * @constructor
@@ -947,7 +960,7 @@ WebInspector.ElementsPanel.prototype = {
  */
 WebInspector.ElementsPanel.ContextMenuProvider = function()
 {
-}
+};
 
 WebInspector.ElementsPanel.ContextMenuProvider.prototype = {
     /**
@@ -976,13 +989,13 @@ WebInspector.ElementsPanel.ContextMenuProvider.prototype = {
         var commandCallback = WebInspector.Revealer.reveal.bind(WebInspector.Revealer, object);
         contextMenu.appendItem(WebInspector.UIString.capitalize("Reveal in Elements ^panel"), commandCallback);
     }
-}
+};
 
 /**
  * @constructor
  * @implements {WebInspector.Revealer}
  */
-WebInspector.ElementsPanel.DOMNodeRevealer = function() { }
+WebInspector.ElementsPanel.DOMNodeRevealer = function() { };
 
 WebInspector.ElementsPanel.DOMNodeRevealer.prototype = {
     /**
@@ -1033,13 +1046,13 @@ WebInspector.ElementsPanel.DOMNodeRevealer.prototype = {
             }
         }
     }
-}
+};
 
 /**
  * @constructor
  * @implements {WebInspector.Revealer}
  */
-WebInspector.ElementsPanel.CSSPropertyRevealer = function() { }
+WebInspector.ElementsPanel.CSSPropertyRevealer = function() { };
 
 WebInspector.ElementsPanel.CSSPropertyRevealer.prototype = {
     /**
@@ -1052,7 +1065,7 @@ WebInspector.ElementsPanel.CSSPropertyRevealer.prototype = {
         var panel = WebInspector.ElementsPanel.instance();
         return panel._revealProperty(/** @type {!WebInspector.CSSProperty} */ (property));
     }
-}
+};
 
 /**
  * @return {!WebInspector.ElementsPanel}
@@ -1060,13 +1073,13 @@ WebInspector.ElementsPanel.CSSPropertyRevealer.prototype = {
 WebInspector.ElementsPanel.instance = function()
 {
     return /** @type {!WebInspector.ElementsPanel} */ (self.runtime.sharedInstance(WebInspector.ElementsPanel));
-}
+};
 
 /**
  * @constructor
  * @implements {WebInspector.ActionDelegate}
  */
-WebInspector.ElementsActionDelegate = function() { }
+WebInspector.ElementsActionDelegate = function() { };
 
 WebInspector.ElementsActionDelegate.prototype = {
     /**
@@ -1094,7 +1107,7 @@ WebInspector.ElementsActionDelegate.prototype = {
         }
         return false;
     }
-}
+};
 
 /**
  * @constructor
@@ -1102,7 +1115,7 @@ WebInspector.ElementsActionDelegate.prototype = {
  */
 WebInspector.ElementsPanel.PseudoStateMarkerDecorator = function()
 {
-}
+};
 
 WebInspector.ElementsPanel.PseudoStateMarkerDecorator.prototype = {
     /**
@@ -1114,4 +1127,4 @@ WebInspector.ElementsPanel.PseudoStateMarkerDecorator.prototype = {
     {
         return { color: "orange", title: WebInspector.UIString("Element state: %s", ":" + WebInspector.CSSModel.fromNode(node).pseudoState(node).join(", :")) };
     }
-}
+};

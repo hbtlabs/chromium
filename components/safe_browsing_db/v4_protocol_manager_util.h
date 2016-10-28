@@ -131,7 +131,9 @@ std::ostream& operator<<(std::ostream& os, const ListIdentifier& id);
 
 PlatformType GetCurrentPlatformType();
 const ListIdentifier GetChromeUrlApiId();
+const ListIdentifier GetChromeUrlClientIncidentId();
 const ListIdentifier GetUrlMalwareId();
+const ListIdentifier GetUrlMalBinId();
 const ListIdentifier GetUrlSocEngId();
 const ListIdentifier GetUrlUwsId();
 

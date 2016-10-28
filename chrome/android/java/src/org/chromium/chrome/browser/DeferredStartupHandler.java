@@ -29,6 +29,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
+import org.chromium.chrome.browser.crash.ChromeMinidumpUploadDelegate;
 import org.chromium.chrome.browser.crash.CrashFileManager;
 import org.chromium.chrome.browser.crash.MinidumpUploadService;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
@@ -174,10 +175,6 @@ public class DeferredStartupHandler {
         mDeferredTasks.add(new Runnable() {
             @Override
             public void run() {
-                // Initialize the WebappRegistry if it's not already initialized. Must be done on
-                // the main thread.
-                WebappRegistry.getInstance();
-
                 // Punt all tasks that may block on disk off onto a background thread.
                 initAsyncDiskTask();
 
@@ -243,6 +240,11 @@ public class DeferredStartupHandler {
                 try {
                     TraceEvent.begin("ChromeBrowserInitializer.onDeferredStartup.doInBackground");
                     long asyncTaskStartTime = SystemClock.uptimeMillis();
+
+                    // Initialize the WebappRegistry if it's not already initialized. Must be in
+                    // async task due to shared preferences disk access on N.
+                    WebappRegistry.getInstance();
+
                     boolean crashDumpDisabled = CommandLine.getInstance().hasSwitch(
                             ChromeSwitches.DISABLE_CRASH_DUMP_UPLOAD);
                     if (!crashDumpDisabled) {
@@ -251,13 +253,14 @@ public class DeferredStartupHandler {
                                 asyncTaskStartTime - UmaUtils.getForegroundStartTime(),
                                 TimeUnit.MILLISECONDS);
                         PrivacyPreferencesManager.getInstance().enablePotentialCrashUploading();
+                        MinidumpUploadService.setUploadDelegate(new ChromeMinidumpUploadDelegate());
                         MinidumpUploadService.tryUploadAllCrashDumps(mAppContext);
                     }
                     CrashFileManager crashFileManager =
                             new CrashFileManager(mAppContext.getCacheDir());
                     crashFileManager.cleanOutAllNonFreshMinidumpFiles();
 
-                    MinidumpUploadService.storeBreakpadUploadStatsInUma(
+                    ChromeMinidumpUploadDelegate.storeBreakpadUploadStatsInUma(
                             ChromePreferenceManager.getInstance(mAppContext));
 
                     // Force a widget refresh in order to wake up any possible zombie widgets.

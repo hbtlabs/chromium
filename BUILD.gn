@@ -358,7 +358,11 @@ group("both_gn_and_gyp") {
   }
 
   if (use_ozone) {
-    deps += [ "//ui/ozone" ]
+    deps += [
+      "//ui/ozone",
+      "//ui/ozone:ozone_unittests",
+      "//ui/ozone/gl:ozone_gl_unittests",
+    ]
   }
 
   if (use_x11) {
@@ -728,10 +732,7 @@ group("gn_only") {
   }
 
   if (!is_android && !is_ios && !is_chromeos) {
-    deps += [
-      "//components/proximity_auth:proximity_auth_unittests",
-      "//media/remoting:media_remoting_unittests",
-    ]
+    deps += [ "//components/proximity_auth:proximity_auth_unittests" ]
   }
 
   if (is_win || is_linux) {
@@ -741,10 +742,16 @@ group("gn_only") {
       "//mojo",
       "//services/navigation",
       "//services/ui/demo",
+      "//services/ui/demo:mus_demo_unittests",
+      "//services/ui/public/interfaces:ui_struct_traits_unittests",
       "//services/ui/ws:tests",
       "//ui/views/mus:views_mus_interactive_ui_tests",
       "//ui/views/mus:views_mus_unittests",
     ]
+
+    if (use_ozone) {
+      deps += [ "//services/ui/display:display_service_unittests" ]
+    }
   }
 
   if (is_linux && !is_chromeos && !is_chromecast) {
@@ -786,19 +793,6 @@ group("gn_only") {
       "//third_party/leveldatabase:leveldb_version_edit_test",
       "//third_party/leveldatabase:leveldb_write_batch_test",
       "//third_party/libjpeg_turbo:simd",
-      "//third_party/libsrtp:rdbx_driver",
-      "//third_party/libsrtp:replay_driver",
-      "//third_party/libsrtp:roc_driver",
-      "//third_party/libsrtp:rtpw",
-      "//third_party/libsrtp:srtp_driver",
-      "//third_party/libsrtp:srtp_test_aes_calc",
-      "//third_party/libsrtp:srtp_test_cipher_driver",
-      "//third_party/libsrtp:srtp_test_datatypes_driver",
-      "//third_party/libsrtp:srtp_test_env",
-      "//third_party/libsrtp:srtp_test_kernel_driver",
-      "//third_party/libsrtp:srtp_test_rand_gen",
-      "//third_party/libsrtp:srtp_test_sha1_driver",
-      "//third_party/libsrtp:srtp_test_stat_driver",
       "//third_party/opus:opus_compare",
       "//third_party/opus:opus_demo",
       "//third_party/opus:test_opus_api",
@@ -963,6 +957,7 @@ group("chromium_builder_perf") {
       "//cc:cc_perftests",
       "//chrome/test:load_library_perf_tests",
       "//chrome/test:telemetry_perf_tests",
+      "//components/tracing:tracing_perftests",
       "//gpu:gpu_perftests",
       "//media:media_perftests",
       "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
@@ -979,9 +974,7 @@ group("chromium_builder_perf") {
         data_deps += [ "//chrome:linux_symbols" ]
       }
 
-      if (!is_chromeos) {
-        data_deps += [ "//tools/perf/clear_system_cache" ]
-      }
+      data_deps += [ "//tools/perf/clear_system_cache" ]
     }
 
     if (is_win) {

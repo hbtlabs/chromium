@@ -92,6 +92,10 @@ class CORE_EXPORT DOMMatrix : public DOMMatrixReadOnly {
                          double ox = 0,
                          double oy = 0,
                          double oz = 0);
+  DOMMatrix* rotateSelf(double rotX);
+  DOMMatrix* rotateSelf(double rotX, double rotY);
+  DOMMatrix* rotateSelf(double rotX, double rotY, double rotZ);
+  DOMMatrix* rotateFromVectorSelf(double x, double y);
   DOMMatrix* rotateAxisAngleSelf(double x = 0,
                                  double y = 0,
                                  double z = 0,
@@ -99,6 +103,8 @@ class CORE_EXPORT DOMMatrix : public DOMMatrixReadOnly {
   DOMMatrix* skewXSelf(double sx = 0);
   DOMMatrix* skewYSelf(double sy = 0);
   DOMMatrix* invertSelf();
+
+  DOMMatrix* setMatrixValue(const String&, ExceptionState&);
 
  private:
   DOMMatrix(const TransformationMatrix&, bool is2D = true);

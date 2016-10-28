@@ -240,6 +240,7 @@ static_library("content_shell_lib") {
     "//gpu",
     "//ipc",
     "//media",
+    "//media/capture",
     "//mojo/edk/js",
     "//net",
     "//net:net_resources",
@@ -489,7 +490,6 @@ if (is_android) {
   executable("content_shell") {
     testonly = true
 
-    # TODO(GYP) mac resource bundle stuff for this target.
     sources = [
       "app/shell_main.cc",
     ]

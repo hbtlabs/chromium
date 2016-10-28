@@ -58,8 +58,7 @@ WKWebViewConfigurationProvider::GetWebViewConfiguration() {
   DCHECK([NSThread isMainThread]);
   if (!configuration_) {
     configuration_.reset([[WKWebViewConfiguration alloc] init]);
-    if (is_off_the_record_ && base::ios::IsRunningOnIOS9OrLater()) {
-      // WKWebsiteDataStore is iOS9 only.
+    if (is_off_the_record_) {
       [configuration_
           setWebsiteDataStore:[WKWebsiteDataStore nonPersistentDataStore]];
     }
@@ -67,8 +66,7 @@ WKWebViewConfigurationProvider::GetWebViewConfiguration() {
 #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
     if (base::ios::IsRunningOnIOS10OrLater()) {
       [configuration_ setDataDetectorTypes:WKDataDetectorTypeCalendarEvent |
-                                           WKDataDetectorTypeFlightNumber |
-                                           WKDataDetectorTypePhoneNumber];
+                                           WKDataDetectorTypeFlightNumber];
     }
 #endif
     // API available on iOS 9, although doesn't appear to enable inline playback

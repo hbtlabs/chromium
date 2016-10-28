@@ -120,8 +120,8 @@ class PLATFORM_EXPORT FontCache {
 #else
   static const AtomicString& legacySystemFontFamily();
 #endif
-#if OS(LINUX)
-  static void setSystemFontFamily(const char*);
+#if OS(LINUX) || OS(ANDROID)
+  static void setSystemFontFamily(const AtomicString&);
 #endif
 
 #if OS(WIN)
@@ -210,6 +210,9 @@ class PLATFORM_EXPORT FontCache {
   FontPlatformData* getFontPlatformData(const FontDescription&,
                                         const FontFaceCreationParams&,
                                         bool checkingAlternateName = false);
+#if !OS(MACOSX)
+  FontPlatformData* systemFontPlatformData(const FontDescription&);
+#endif
 
   // These methods are implemented by each platform.
   std::unique_ptr<FontPlatformData> createFontPlatformData(

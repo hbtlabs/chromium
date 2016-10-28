@@ -27,17 +27,14 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
-#include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/transform_util.h"
 #include "ui/gfx/vector_icons_public.h"
@@ -288,7 +285,7 @@ class WindowSelectorItem::RoundedContainerView
     if (0 != (sequence->properties() &
               ui::LayerAnimationElement::AnimatableProperty::OPACITY)) {
       if (item_)
-        item_->HideHeaderAndSetShape(0);
+        item_->HideHeader();
       StopObservingLayerAnimations();
       AnimateColor(gfx::Tween::EASE_IN, kSelectorColorSlideMilliseconds);
     }
@@ -427,8 +424,15 @@ void WindowSelectorItem::Shutdown() {
     // gradual upon exiting the overview mode.
     WmWindow* label_window =
         WmLookup::Get()->GetWindowForWidget(window_label_.get());
-    label_window->GetParent()->StackChildAbove(label_window,
-                                               transform_window_.window());
+
+    // |label_window| was originally created in the same container as the
+    // |transform_window_| but when closing overview the |transform_window_|
+    // could have been reparented if a drag was active. Only change stacking
+    // if the windows still belong to the same container.
+    if (label_window->GetParent() == transform_window_.window()->GetParent()) {
+      label_window->GetParent()->StackChildAbove(label_window,
+                                                 transform_window_.window());
+    }
   }
   if (background_view_) {
     background_view_->OnItemRestored();
@@ -508,8 +512,8 @@ void WindowSelectorItem::CloseWindow() {
   transform_window_.Close();
 }
 
-void WindowSelectorItem::HideHeaderAndSetShape(int radius) {
-  transform_window_.HideHeaderAndSetShape(radius);
+void WindowSelectorItem::HideHeader() {
+  transform_window_.HideHeader();
 }
 
 void WindowSelectorItem::SetDimmed(bool dimmed) {
@@ -572,7 +576,6 @@ void WindowSelectorItem::SetItemBounds(const gfx::Rect& target_bounds,
   ScopedTransformOverviewWindow::ScopedAnimationSettings animation_settings;
   transform_window_.BeginScopedAnimation(animation_type, &animation_settings);
   transform_window_.SetTransform(root_window_, transform);
-  transform_window_.set_overview_transform(transform);
 }
 
 void WindowSelectorItem::SetOpacity(float opacity) {
@@ -646,9 +649,6 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
                                                transform_window_.window());
   }
   window_label_button_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  window_label_button_view_->SetFontList(
-      bundle.GetFontList(ui::ResourceBundle::BaseFont));
   // Hint at the background color that the label will be drawn onto (for
   // subpixel antialiasing). Does not actually set the background color.
   window_label_button_view_->SetBackgroundColorHint(kLabelBackgroundColor);

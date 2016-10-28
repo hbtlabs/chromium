@@ -24,6 +24,7 @@
 #include "cc/trees/scroll_node.h"
 #include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
+
 namespace cc {
 
 template <typename T>
@@ -180,9 +181,10 @@ void TransformTree::set_needs_update(bool needs_update) {
   needs_update_ = needs_update;
 }
 
-bool TransformTree::ComputeTransform(int source_id,
-                                     int dest_id,
-                                     gfx::Transform* transform) const {
+bool TransformTree::ComputeTransformForTesting(
+    int source_id,
+    int dest_id,
+    gfx::Transform* transform) const {
   transform->MakeIdentity();
 
   if (source_id == dest_id)
@@ -278,7 +280,6 @@ void TransformTree::UpdateTransforms(int id) {
     UndoSnapping(node);
   }
   UpdateScreenSpaceTransform(node, parent_node, target_node);
-  UpdateSurfaceContentsScale(node);
   UpdateAnimationProperties(node, parent_node);
   UpdateSnapping(node);
   UpdateNodeAndAncestorsHaveIntegerTranslations(node, parent_node);
@@ -332,22 +333,11 @@ void TransformTree::CombineTransformsBetween(int source_id,
   std::vector<int> source_to_destination;
   source_to_destination.push_back(current->id);
   current = parent(current);
-  bool destination_has_non_zero_surface_contents_scale =
-      dest->surface_contents_scale.x() != 0.f &&
-      dest->surface_contents_scale.y() != 0.f;
-  DCHECK(destination_has_non_zero_surface_contents_scale ||
-         !dest->ancestors_are_invertible);
   for (; current && current->id > dest_id; current = parent(current))
     source_to_destination.push_back(current->id);
 
   gfx::Transform combined_transform;
-  if (current->id > dest_id) {
-    // The stored target space transform has surface contents scale baked in,
-    // but we need the unscaled transform.
-    combined_transform.matrix().postScale(
-        1.0f / dest->surface_contents_scale.x(),
-        1.0f / dest->surface_contents_scale.y(), 1.0f);
-  } else if (current->id < dest_id) {
+  if (current->id < dest_id) {
     // We have reached the lowest common ancestor of the source and destination
     // nodes. This case can occur when we are transforming between a node
     // corresponding to a fixed-position layer (or its descendant) and the node
@@ -424,9 +414,18 @@ gfx::Vector2dF StickyPositionOffset(TransformTree* tree, TransformNode* node) {
   gfx::ScrollOffset scroll_offset =
       tree->property_trees()->scroll_tree.current_scroll_offset(
           scroll_node->owner_id);
+  gfx::PointF scroll_position(scroll_offset.x(), scroll_offset.y());
+  TransformNode* scroll_ancestor_transform_node =
+      tree->Node(scroll_node->transform_id);
+  if (scroll_ancestor_transform_node->scrolls) {
+    // The scroll position does not include snapping which shifts the scroll
+    // offset to align to a pixel boundary, we need to manually include it here.
+    // In this case, snapping is caused by a scroll.
+    scroll_position -= scroll_ancestor_transform_node->snap_amount;
+  }
 
   gfx::RectF clip(
-      gfx::PointF(scroll_offset.x(), scroll_offset.y()),
+      scroll_position,
       gfx::SizeF(tree->property_trees()->scroll_tree.scroll_clip_layer_bounds(
           scroll_node->id)));
   gfx::Vector2dF sticky_offset(
@@ -503,14 +502,20 @@ void TransformTree::UpdateLocalTransform(TransformNode* node) {
     gfx::Vector2dF unsnapping;
     TransformNode* current;
     TransformNode* parent_node;
+    // Since we are calculating the adjustment for fixed position node or a
+    // scroll child, we need to unsnap only if the snap was caused by a scroll.
     for (current = Node(node->source_node_id); current->id > node->parent_id;
          current = parent(current)) {
-      unsnapping.Subtract(current->scroll_snap);
+      DCHECK(current->scrolls || current->snap_amount.IsZero());
+      if (current->scrolls)
+        unsnapping.Subtract(current->snap_amount);
     }
     for (parent_node = Node(node->parent_id);
          parent_node->id > node->source_node_id;
          parent_node = parent(parent_node)) {
-      unsnapping.Add(parent_node->scroll_snap);
+      DCHECK(parent_node->scrolls || parent_node->snap_amount.IsZero());
+      if (parent_node->scrolls)
+        unsnapping.Add(parent_node->snap_amount);
     }
     // If a node NeedsSourceToParentUpdate, the node is either a fixed position
     // node or a scroll child.
@@ -577,48 +582,6 @@ void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
   SetFromScreen(node->id, from_screen);
 }
 
-void TransformTree::UpdateSurfaceContentsScale(TransformNode* node) {
-  // The surface contents scale depends on the screen space transform, so update
-  // it too.
-  if (!node->needs_surface_contents_scale) {
-    node->surface_contents_scale = gfx::Vector2dF(1.0f, 1.0f);
-    return;
-  }
-
-  float layer_scale_factor =
-      device_scale_factor_ * device_transform_scale_factor_;
-  if (node->in_subtree_of_page_scale_layer)
-    layer_scale_factor *= page_scale_factor_;
-  node->surface_contents_scale = MathUtil::ComputeTransform2dScaleComponents(
-      ToScreen(node->id), layer_scale_factor);
-}
-
-void TransformTree::UpdateTargetSpaceTransform(TransformNode* node,
-                                               TransformNode* target_node) {
-  gfx::Transform target_space_transform;
-  if (node->needs_surface_contents_scale) {
-    target_space_transform.MakeIdentity();
-    target_space_transform.Scale(node->surface_contents_scale.x(),
-                                 node->surface_contents_scale.y());
-  } else {
-    // In order to include the root transform for the root surface, we walk up
-    // to the root of the transform tree in ComputeTransform.
-    int target_id = target_node->id;
-    ComputeTransform(node->id, target_id, &target_space_transform);
-    if (target_id != kRootNodeId) {
-      target_space_transform.matrix().postScale(
-          target_node->surface_contents_scale.x(),
-          target_node->surface_contents_scale.y(), 1.f);
-    }
-  }
-
-  gfx::Transform from_target;
-  if (!target_space_transform.GetInverse(&from_target))
-    node->ancestors_are_invertible = false;
-  SetToTarget(node->id, target_space_transform);
-  SetFromTarget(node->id, from_target);
-}
-
 void TransformTree::UpdateAnimationProperties(TransformNode* node,
                                               TransformNode* parent_node) {
   bool ancestor_is_animating = false;
@@ -629,25 +592,27 @@ void TransformTree::UpdateAnimationProperties(TransformNode* node,
 }
 
 void TransformTree::UndoSnapping(TransformNode* node) {
-  // to_parent transform has the scroll snap from previous frame baked in.
+  // to_parent transform has snapping from previous frame baked in.
   // We need to undo it and use the un-snapped transform to compute current
   // target and screen space transforms.
-  node->to_parent.Translate(-node->scroll_snap.x(), -node->scroll_snap.y());
+  node->to_parent.Translate(-node->snap_amount.x(), -node->snap_amount.y());
 }
 
 void TransformTree::UpdateSnapping(TransformNode* node) {
-  if (!node->scrolls || node->to_screen_is_potentially_animated ||
+  if (!node->should_be_snapped || node->to_screen_is_potentially_animated ||
       !ToScreen(node->id).IsScaleOrTranslation() ||
       !node->ancestors_are_invertible) {
     return;
   }
 
-  // Scroll snapping must be done in screen space (the pixels we care about).
-  // This means we effectively snap the screen space transform. If ST is the
+  // Snapping must be done in target space (the pixels we care about) and then
+  // the render pass should also be snapped if necessary. But, we do it in
+  // screen space because it is easier and works most of the time if there is
+  // no intermediate render pass with a snap-destrying transform. If ST is the
   // screen space transform and ST' is ST with its translation components
   // rounded, then what we're after is the scroll delta X, where ST * X = ST'.
-  // I.e., we want a transform that will realize our scroll snap. It follows
-  // that X = ST^-1 * ST'. We cache ST and ST^-1 to make this more efficient.
+  // I.e., we want a transform that will realize our snap. It follows that
+  // X = ST^-1 * ST'. We cache ST and ST^-1 to make this more efficient.
   gfx::Transform rounded = ToScreen(node->id);
   rounded.RoundTranslationComponents();
   gfx::Transform delta = FromScreen(node->id);
@@ -658,14 +623,14 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
 
   gfx::Vector2dF translation = delta.To2dTranslation();
 
-  // Now that we have our scroll delta, we must apply it to each of our
-  // combined, to/from matrices.
+  // Now that we have our delta, we must apply it to each of our combined,
+  // to/from matrices.
   SetToScreen(node->id, rounded);
   node->to_parent.Translate(translation.x(), translation.y());
   gfx::Transform from_screen = FromScreen(node->id);
   from_screen.matrix().postTranslate(-translation.x(), -translation.y(), 0);
   SetFromScreen(node->id, from_screen);
-  node->scroll_snap = translation;
+  node->snap_amount = translation;
 }
 
 void TransformTree::UpdateTransformChanged(TransformNode* node,
@@ -761,29 +726,6 @@ bool TransformTree::HasNodesAffectedByInnerViewportBoundsDelta() const {
 
 bool TransformTree::HasNodesAffectedByOuterViewportBoundsDelta() const {
   return !nodes_affected_by_outer_viewport_bounds_delta_.empty();
-}
-
-gfx::Transform TransformTree::FromTarget(int node_id, int effect_id) const {
-  gfx::Transform from_target;
-  property_trees()->GetFromTarget(node_id, effect_id, &from_target);
-  return from_target;
-}
-
-void TransformTree::SetFromTarget(int node_id,
-                                  const gfx::Transform& transform) {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  cached_data_[node_id].from_target = transform;
-}
-
-gfx::Transform TransformTree::ToTarget(int node_id, int effect_id) const {
-  gfx::Transform to_target;
-  property_trees()->GetToTarget(node_id, effect_id, &to_target);
-  return to_target;
-}
-
-void TransformTree::SetToTarget(int node_id, const gfx::Transform& transform) {
-  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
-  cached_data_[node_id].to_target = transform;
 }
 
 const gfx::Transform& TransformTree::FromScreen(int node_id) const {
@@ -994,8 +936,8 @@ void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
             parent_transform_node->sorting_context_id ==
                 transform_node->sorting_context_id) {
           gfx::Transform surface_draw_transform;
-          property_trees()->ComputeTransformToTarget(
-              transform_node->id, node->target_id, &surface_draw_transform);
+          property_trees()->GetToTarget(transform_node->id, node->target_id,
+                                        &surface_draw_transform);
           node->hidden_by_backface_visibility =
               surface_draw_transform.IsBackFaceVisible();
         } else {
@@ -1129,13 +1071,7 @@ void EffectTree::TakeCopyRequestsAndTransformToSurface(
       source_id = TransformTree::kContentsRootNodeId;
     }
     gfx::Transform transform;
-    property_trees()->transform_tree.ComputeTransform(source_id, destination_id,
-                                                      &transform);
-    if (effect_node->id != kContentsRootNodeId) {
-      transform.matrix().postScale(effect_node->surface_contents_scale.x(),
-                                   effect_node->surface_contents_scale.y(),
-                                   1.f);
-    }
+    property_trees()->GetToTarget(source_id, node_id, &transform);
     it->set_area(MathUtil::MapEnclosingClippedRect(transform, it->area()));
   }
 }
@@ -2301,25 +2237,6 @@ gfx::Transform PropertyTrees::ToScreenSpaceTransformWithoutSurfaceContentsScale(
     screen_space_transform.Scale(1.0 / effect_node->surface_contents_scale.x(),
                                  1.0 / effect_node->surface_contents_scale.y());
   return screen_space_transform;
-}
-
-bool PropertyTrees::ComputeTransformToTarget(int transform_id,
-                                             int effect_id,
-                                             gfx::Transform* transform) const {
-  transform->MakeIdentity();
-  if (transform_id == TransformTree::kInvalidNodeId)
-    return true;
-
-  const EffectNode* effect_node = effect_tree.Node(effect_id);
-
-  bool success = true;
-  success = GetToTarget(transform_id, effect_id, transform);
-  if (effect_node->surface_contents_scale.x() != 0.f &&
-      effect_node->surface_contents_scale.y() != 0.f)
-    transform->matrix().postScale(
-        1.0f / effect_node->surface_contents_scale.x(),
-        1.0f / effect_node->surface_contents_scale.y(), 1.0f);
-  return success;
 }
 
 bool PropertyTrees::ComputeTransformFromTarget(

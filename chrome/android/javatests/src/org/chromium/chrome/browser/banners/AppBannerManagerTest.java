@@ -12,7 +12,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.graphics.Bitmap;
-import android.os.Environment;
 import android.test.mock.MockPackageManager;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -22,6 +21,7 @@ import android.widget.Button;
 import android.widget.TextView;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
@@ -194,14 +194,11 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
             }
         });
 
-        AppBannerManager.disableSecureSchemeCheckForTesting();
-
         // Navigations in this test are all of type ui::PAGE_TRANSITION_LINK, i.e. indirect.
         // Force indirect navigations to be worth the same as direct for testing.
         AppBannerManager.setEngagementWeights(1, 1);
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
         mNativeAppUrl = mTestServer.getURL(NATIVE_APP_PATH);
         mWebAppUrl = mTestServer.getURL(WEB_APP_PATH);
     }
@@ -478,9 +475,10 @@ public class AppBannerManagerTest extends ChromeTabbedActivityTestBase {
                 WEB_APP_SHORT_TITLE);
     }
 
-    @SmallTest
+    /*@SmallTest
     @Feature({"AppBanners"})
-    @RetryOnFailure
+    @RetryOnFailure*/
+    @DisabledTest(message = "http://crbug.com/660237")
     public void testWebAppSplashscreenIsDownloaded() throws Exception {
         // Sets the overriden factory to observer splash screen update.
         final TestDataStorageFactory dataStorageFactory = new TestDataStorageFactory();

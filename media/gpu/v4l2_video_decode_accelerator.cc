@@ -343,8 +343,9 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffersTask(
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK_EQ(decoder_state_, kAwaitingPictureBuffers);
 
-  const uint32_t req_buffer_count =
-      output_dpb_size_ + kDpbOutputBufferExtraCount;
+  uint32_t req_buffer_count = output_dpb_size_ + kDpbOutputBufferExtraCount;
+  if (image_processor_device_)
+    req_buffer_count += kDpbOutputBufferExtraCountForImageProcessor;
 
   if (buffers.size() < req_buffer_count) {
     LOGF(ERROR) << "Failed to provide requested picture buffers. (Got "
@@ -384,11 +385,11 @@ void V4L2VideoDecodeAccelerator::AssignPictureBuffersTask(
     DCHECK_EQ(output_record.egl_sync, EGL_NO_SYNC_KHR);
     DCHECK_EQ(output_record.picture_id, -1);
     DCHECK_EQ(output_record.cleared, false);
-    DCHECK_EQ(1u, buffers[i].texture_ids().size());
+    DCHECK_EQ(1u, buffers[i].service_texture_ids().size());
     DCHECK(output_record.processor_input_fds.empty());
 
     output_record.picture_id = buffers[i].id();
-    output_record.texture_id = buffers[i].texture_ids()[0];
+    output_record.texture_id = buffers[i].service_texture_ids()[0];
     // This will remain kAtClient until ImportBufferForPicture is called, either
     // by the client, or by ourselves, if we are allocating.
     output_record.state = kAtClient;
@@ -2422,7 +2423,10 @@ bool V4L2VideoDecodeAccelerator::CreateOutputBuffers() {
 
   // Output format setup in Initialize().
 
-  const uint32_t buffer_count = output_dpb_size_ + kDpbOutputBufferExtraCount;
+  uint32_t buffer_count = output_dpb_size_ + kDpbOutputBufferExtraCount;
+  if (image_processor_device_)
+    buffer_count += kDpbOutputBufferExtraCountForImageProcessor;
+
   DVLOGF(3) << "buffer_count=" << buffer_count
             << ", coded_size=" << egl_image_size_.ToString();
 

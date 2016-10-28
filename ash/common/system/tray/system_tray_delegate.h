@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string16.h"
-#include "ui/gfx/image/image_skia.h"
 
 class AccountId;
 
@@ -39,22 +38,6 @@ class SystemTrayItem;
 
 using IMEInfoList = std::vector<IMEInfo>;
 using IMEPropertyInfoList = std::vector<IMEPropertyInfo>;
-
-struct ASH_EXPORT NetworkIconInfo {
-  NetworkIconInfo();
-  ~NetworkIconInfo();
-
-  bool highlight() const { return connected || connecting; }
-
-  bool connecting;
-  bool connected;
-  bool tray_icon_visible;
-  gfx::ImageSkia image;
-  base::string16 name;
-  base::string16 description;
-  std::string service_path;
-  bool is_cellular;
-};
 
 struct ASH_EXPORT BluetoothDeviceInfo {
   BluetoothDeviceInfo();
@@ -149,9 +132,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Returns true if settings menu item should appear.
   virtual bool ShouldShowSettings();
 
-  // Shows the dialog to set system time, date, and timezone.
-  virtual void ShowSetTimeDialog();
-
   // Shows information about enterprise enrolled devices.
   virtual void ShowEnterpriseInfo();
 
@@ -203,10 +183,6 @@ class ASH_EXPORT SystemTrayDelegate {
   // Toggles bluetooth.
   virtual void ToggleBluetooth();
 
-  // Shows UI to connect to an unlisted network of type |type|. On Chrome OS
-  // |type| corresponds to a Shill network type.
-  virtual void ShowOtherNetworkDialog(const std::string& type);
-
   // Returns whether bluetooth capability is available.
   virtual bool GetBluetoothAvailable();
 
@@ -227,9 +203,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Retrieves the session length limit. Returns |false| if no limit is set.
   virtual bool GetSessionLengthLimit(base::TimeDelta* session_length_limit);
-
-  // Get the system tray menu size in pixels (dependent on the language).
-  virtual int GetSystemTrayMenuWidth();
 
   // The active user has been changed. This will be called when the UI is ready
   // to be switched to the new user.

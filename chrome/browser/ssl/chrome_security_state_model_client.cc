@@ -4,8 +4,6 @@
 
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 
-#include <openssl/ssl.h>
-
 #include <vector>
 
 #include "base/command_line.h"
@@ -34,6 +32,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "ui/base/l10n/l10n_util.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromeSecurityStateModelClient);
@@ -328,30 +327,48 @@ void ChromeSecurityStateModelClient::GetSecurityInfo(
   security_state_model_->GetSecurityInfo(result);
 }
 
-void ChromeSecurityStateModelClient::VisibleSSLStateChanged() {
+void ChromeSecurityStateModelClient::VisibleSecurityStateChanged() {
   if (logged_http_warning_on_current_navigation_)
     return;
 
   security_state::SecurityStateModel::SecurityInfo security_info;
   GetSecurityInfo(&security_info);
-  if (security_info.security_level ==
-      security_state::SecurityStateModel::HTTP_SHOW_WARNING) {
-    web_contents_->GetMainFrame()->AddMessageToConsole(
-        content::CONSOLE_MESSAGE_LEVEL_WARNING,
-        "In Chrome M56 (Jan 2017), this page will be marked "
-        "as \"not secure\" in the URL bar. For more "
-        "information, see https://goo.gl/zmWq3m");
-    logged_http_warning_on_current_navigation_ = true;
+  if (!security_info.displayed_private_user_data_input_on_http)
+    return;
+
+  std::string warning;
+  bool warning_is_user_visible = false;
+  switch (security_info.security_level) {
+    case security_state::SecurityStateModel::HTTP_SHOW_WARNING:
+      warning =
+          "This page includes a password or credit card input in a non-secure "
+          "context. A warning has been added to the URL bar. For more "
+          "information, see https://goo.gl/zmWq3m.";
+      warning_is_user_visible = true;
+      break;
+    case security_state::SecurityStateModel::NONE:
+    case security_state::SecurityStateModel::DANGEROUS:
+      warning =
+          "This page includes a password or credit card input in a non-secure "
+          "context. A warning will be added to the URL bar in Chrome 56 (Jan "
+          "2017). For more information, see https://goo.gl/zmWq3m.";
+      break;
+    default:
+      return;
   }
+
+  logged_http_warning_on_current_navigation_ = true;
+  web_contents_->GetMainFrame()->AddMessageToConsole(
+      content::CONSOLE_MESSAGE_LEVEL_WARNING, warning);
+  UMA_HISTOGRAM_BOOLEAN("Security.HTTPBad.UserWarnedAboutSensitiveInput",
+                        warning_is_user_visible);
 }
 
 void ChromeSecurityStateModelClient::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (navigation_handle->IsInMainFrame() &&
-      !navigation_handle->IsSynchronousNavigation()) {
+  if (navigation_handle->IsInMainFrame() && !navigation_handle->IsSamePage()) {
     // Only reset the console message flag for main-frame navigations,
-    // and not for synchronous navigations like reference fragments and
-    // pushState.
+    // and not for same-page navigations like reference fragments and pushState.
     logged_http_warning_on_current_navigation_ = false;
   }
 }

@@ -67,6 +67,7 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
                    PassRefPtr<SerializedScriptValue> message,
                    const MessagePortArray&,
                    ExceptionState&);
+  static bool canTransferArrayBuffer() { return false; }
 
   void start();
   void close();
@@ -144,8 +145,6 @@ class CORE_EXPORT MessagePort : public EventTargetWithInlineData,
 
   bool m_started;
   bool m_closed;
-
-  RefPtr<ScriptState> m_scriptStateForConversion;
 };
 
 }  // namespace blink

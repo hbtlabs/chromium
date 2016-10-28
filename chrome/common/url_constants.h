@@ -88,6 +88,7 @@ extern const char kChromeUIUserActionsURL[];
 extern const char kChromeUIUserManagerURL[];
 extern const char kChromeUIVersionURL[];
 extern const char kChromeUIWelcomeURL[];
+extern const char kChromeUIWelcomeWin10URL[];
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 extern const char kChromeUIContextualSearchPromoURL[];
@@ -138,7 +139,7 @@ extern const char kChromeUICastURL[];
 #endif
 #endif
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
 extern const char kChromeUIDiscardsHost[];
 extern const char kChromeUIDiscardsURL[];
 #endif
@@ -242,6 +243,7 @@ extern const char kChromeUIUsbInternalsHost[];
 extern const char kChromeUIUserActionsHost[];
 extern const char kChromeUIVersionHost[];
 extern const char kChromeUIWelcomeHost[];
+extern const char kChromeUIWelcomeWin10Host[];
 extern const char kChromeUIWorkersHost[];
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -333,16 +335,18 @@ extern const char kImportDataSubPage[];
 extern const char kLanguageOptionsSubPage[];
 extern const char kManageProfileSubPage[];
 extern const char kPasswordManagerSubPage[];
-extern const char kPowerOptionsSubPage[];
 extern const char kResetProfileSettingsSubPage[];
 extern const char kSearchEnginesSubPage[];
-extern const char kSearchSubPage[];
-extern const char kSearchUsersSubPage[];
 extern const char kSignOutSubPage[];
 extern const char kSyncSetupSubPage[];
 extern const char kTriggeredResetProfileSettingsSubPage[];
 #if defined(OS_CHROMEOS)
+extern const char kAccessibilitySubPage[];
+extern const char kBluetoothSubPage[];
+extern const char kDateTimeSubPage[];
+extern const char kDeprecatedOptionsSearchSubPage[];
 extern const char kInternetOptionsSubPage[];
+extern const char kPowerOptionsSubPage[];
 #endif
 
 // Extensions sub pages.

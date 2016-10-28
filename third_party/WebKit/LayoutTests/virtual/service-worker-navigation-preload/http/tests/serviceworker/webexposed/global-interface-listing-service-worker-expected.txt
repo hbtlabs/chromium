@@ -197,6 +197,7 @@ interface ExtendableMessageEvent : ExtendableEvent
 interface FetchEvent : ExtendableEvent
     getter clientId
     getter isReload
+    getter navigationPreload
     getter request
     method constructor
     method respondWith
@@ -484,6 +485,7 @@ interface OffscreenCanvas
     getter height
     getter width
     method constructor
+    method convertToBlob
     method getContext
     method transferToImageBitmap
     setter height

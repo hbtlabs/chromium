@@ -111,13 +111,12 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
         }
     }
 
-    private static class MockCrashReportingPermissionManager
-            implements CrashReportingPermissionManager {
+    static class MockCrashReportingPermissionManager implements CrashReportingPermissionManager {
         protected boolean mIsInSample;
         protected boolean mIsPermitted;
         protected boolean mIsUserPermitted;
         protected boolean mIsCommandLineDisabled;
-        protected boolean mIsLimited;
+        protected boolean mIsNetworkAvailable;
         protected boolean mIsEnabledForTests;
 
         MockCrashReportingPermissionManager() {}
@@ -128,28 +127,23 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
         }
 
         @Override
-        public boolean isUploadPermitted() {
+        public boolean isNetworkAvailableForCrashUploads() {
+            return mIsNetworkAvailable;
+        }
+
+        @Override
+        public boolean isMetricsUploadPermitted() {
             return mIsPermitted;
         }
 
         @Override
-        public boolean isUmaUploadPermitted() {
-            return mIsPermitted;
-        }
-
-        @Override
-        public boolean isUploadUserPermitted() {
+        public boolean isUsageAndCrashReportingPermittedByUser() {
             return mIsUserPermitted;
         }
 
         @Override
-        public boolean isUploadCommandLineDisabled() {
+        public boolean isCrashUploadDisabledByCommandLine() {
             return mIsCommandLineDisabled;
-        }
-
-        @Override
-        public boolean isUploadLimited() {
-            return mIsLimited;
         }
 
         @Override
@@ -206,7 +200,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -231,7 +225,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = false;
                         mIsUserPermitted = false;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -259,7 +253,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = true;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -283,7 +277,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -308,39 +302,15 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                 new MockCrashReportingPermissionManager() {
                     {
                         mIsInSample = true;
-                        mIsPermitted = false;
+                        mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = false;
                         mIsEnabledForTests = false;
                     }
                 };
 
         HttpURLConnectionFactory httpURLConnectionFactory = new FailHttpURLConnectionFactory();
-
-        MinidumpUploadCallable minidumpUploadCallable =
-                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
-        assertEquals(MinidumpUploadCallable.UPLOAD_FAILURE,
-                minidumpUploadCallable.call().intValue());
-        assertFalse(mExpectedFileAfterUpload.exists());
-    }
-
-    @SmallTest
-    @Feature({"Android-AppBase"})
-    public void testCrashUploadConstrainted() throws Exception {
-        CrashReportingPermissionManager testPermManager =
-                new MockCrashReportingPermissionManager() {
-                    {
-                        mIsInSample = true;
-                        mIsPermitted = true;
-                        mIsUserPermitted = true;
-                        mIsCommandLineDisabled = false;
-                        mIsLimited = true;
-                        mIsEnabledForTests = false;
-                    }
-                };
-
-        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
 
         MinidumpUploadCallable minidumpUploadCallable =
                 new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
@@ -359,7 +329,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = false;
                         mIsUserPermitted = false;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = true;
+                        mIsNetworkAvailable = false;
                         mIsEnabledForTests = true;
                     }
                 };
@@ -385,7 +355,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -411,7 +381,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = false;
                         mIsUserPermitted = false;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -440,7 +410,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = true;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -465,7 +435,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = true;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
+                        mIsNetworkAvailable = true;
                         mIsEnabledForTests = false;
                     }
                 };
@@ -494,36 +464,7 @@ public class MinidumpUploadCallableTest extends CrashTestCase {
                         mIsPermitted = false;
                         mIsUserPermitted = true;
                         mIsCommandLineDisabled = false;
-                        mIsLimited = false;
-                        mIsEnabledForTests = false;
-                    }
-                };
-
-        HttpURLConnectionFactory httpURLConnectionFactory = new TestHttpURLConnectionFactory();
-
-        MinidumpUploadCallable minidumpUploadCallable =
-                new MockMinidumpUploadCallable(httpURLConnectionFactory, testPermManager);
-        assertEquals(
-                MinidumpUploadCallable.UPLOAD_SUCCESS, minidumpUploadCallable.call().intValue());
-
-        File expectedSkippedFileAfterUpload =
-                new File(mCrashDir, mTestUpload.getName().replace(".forced", ".skipped"));
-        assertFalse(expectedSkippedFileAfterUpload.exists());
-        assertTrue(mExpectedFileAfterUpload.exists());
-    }
-
-    @SmallTest
-    @Feature({"Android-AppBase"})
-    public void testCrashUploadConstrainted_ForcedUpload() throws Exception {
-        setForcedUpload();
-        CrashReportingPermissionManager testPermManager =
-                new MockCrashReportingPermissionManager() {
-                    {
-                        mIsInSample = true;
-                        mIsPermitted = true;
-                        mIsUserPermitted = true;
-                        mIsCommandLineDisabled = false;
-                        mIsLimited = true;
+                        mIsNetworkAvailable = false;
                         mIsEnabledForTests = false;
                     }
                 };

@@ -4,12 +4,15 @@
 
 package org.chromium.chrome.browser.payments;
 
+import android.content.Context;
 import android.os.Handler;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
+
+import org.json.JSONObject;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
@@ -33,11 +36,11 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.payments.mojom.PaymentItem;
-import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -76,6 +79,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     protected final CallbackHelper mUnableToAbort;
     protected final CallbackHelper mBillingAddressChangeProcessed;
     protected final CallbackHelper mShowFailed;
+    protected final CallbackHelper mExpirationMonthChange;
     protected PaymentRequestUI mUI;
 
     private final AtomicReference<ContentViewCore> mViewCoreRef;
@@ -97,6 +101,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mDismissed = new CallbackHelper();
         mUnableToAbort = new CallbackHelper();
         mBillingAddressChangeProcessed = new CallbackHelper();
+        mExpirationMonthChange = new CallbackHelper();
         mShowFailed = new CallbackHelper();
         mViewCoreRef = new AtomicReference<>();
         mWebContentsRef = new AtomicReference<>();
@@ -143,6 +148,13 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         });
         assertWaitForPageScaleFactorMatch(1);
         clickNodeAndWait(nodeId, helper);
+    }
+
+    protected void reTriggerUIAndWait(
+            String nodeId, PaymentsCallbackHelper<PaymentRequestUI> helper)
+            throws InterruptedException, ExecutionException, TimeoutException {
+        clickNodeAndWait(nodeId, helper);
+        mUI = helper.getTarget();
     }
 
     /** Clicks on an HTML node. */
@@ -487,6 +499,24 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         helper.waitForCallback(callCount);
     }
 
+    /** Directly sets the text in the expired card unmask UI. */
+    protected void setTextInExpiredCardUnmaskDialogAndWait(
+            final int[] resourceIds, final String[] values, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        assert resourceIds.length == values.length;
+        int callCount = helper.getCallCount();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < resourceIds.length; ++i) {
+                    ((EditText) mCardUnmaskPrompt.getDialogForTest().findViewById(resourceIds[i]))
+                            .setText(values[i]);
+                }
+            }
+        });
+        helper.waitForCallback(callCount);
+    }
+
     /** Verifies the contents of the test webpage. */
     protected void expectResultContains(final String[] contents) throws InterruptedException {
         CriteriaHelper.pollInstrumentationThread(new Criteria() {
@@ -578,6 +608,12 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     }
 
     @Override
+    public void onPaymentRequestServiceExpirationMonthChange() {
+        ThreadUtils.assertOnUiThread();
+        mExpirationMonthChange.notifyCalled();
+    }
+
+    @Override
     public void onPaymentRequestServiceShowFailed() {
         ThreadUtils.assertOnUiThread();
         mShowFailed.notifyCalled();
@@ -651,7 +687,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         final TestPay app = new TestPay(methodName, instrumentPresence, responseSpeed);
         PaymentAppFactory.setAdditionalFactory(new PaymentAppFactoryAddition() {
             @Override
-            public List<PaymentApp> create(WebContents webContents) {
+            public List<PaymentApp> create(Context context, WebContents webContents) {
                 List<PaymentApp> additionalApps = new ArrayList<>();
                 additionalApps.add(app);
                 return additionalApps;
@@ -675,7 +711,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
 
         @Override
         public void getInstruments(
-                JSONObject details, final InstrumentsCallback instrumentsCallback) {
+                Map<String, JSONObject> methodData, final InstrumentsCallback instrumentsCallback) {
             mCallback = instrumentsCallback;
             respond();
         }
@@ -700,14 +736,14 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         }
 
         @Override
-        public Set<String> getSupportedMethodNames() {
+        public Set<String> getAppMethodNames() {
             Set<String> methodNames = new HashSet<>();
             methodNames.add(mMethodName);
             return methodNames;
         }
 
         @Override
-        public String getIdentifier() {
+        public String getAppIdentifier() {
             return mMethodName;
         }
     }
@@ -717,23 +753,24 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         private final String mMethodName;
 
         TestPayInstrument(String methodName) {
-            super(methodName, "Test Pay", null, NO_ICON);
+            super(methodName, "Test Pay", null, null);
             mMethodName = methodName;
         }
 
         @Override
-        public String getMethodName() {
+        public String getInstrumentMethodName() {
             return mMethodName;
         }
 
         @Override
-        public void getDetails(String merchantName, String origin, PaymentItem total,
-                List<PaymentItem> cart, JSONObject details, DetailsCallback detailsCallback) {
+        public void getInstrumentDetails(String merchantName, String origin, PaymentItem total,
+                List<PaymentItem> cart, JSONObject details,
+                InstrumentDetailsCallback detailsCallback) {
             detailsCallback.onInstrumentDetailsReady(
                     mMethodName, "{\"transaction\": 1337}");
         }
 
         @Override
-        public void dismiss() {}
+        public void dismissInstrument() {}
     }
 }

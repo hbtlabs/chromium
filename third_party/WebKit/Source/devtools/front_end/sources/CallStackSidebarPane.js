@@ -42,7 +42,7 @@ WebInspector.CallStackSidebarPane = function()
     this.callFrames = [];
     this._locationPool = new WebInspector.LiveLocationPool();
     this._update();
-}
+};
 
 WebInspector.CallStackSidebarPane.prototype = {
     /**
@@ -69,9 +69,9 @@ WebInspector.CallStackSidebarPane.prototype = {
         this.callFrames = [];
         this._hiddenCallFrames = 0;
 
-        this._updateStatusMessage(details);
-
         if (!details) {
+            var infoElement = this.element.createChild("div", "gray-info-message");
+            infoElement.textContent = WebInspector.UIString("Not Paused");
             WebInspector.context.setFlavor(WebInspector.DebuggerModel.CallFrame, null);
             return;
         }
@@ -81,12 +81,23 @@ WebInspector.CallStackSidebarPane.prototype = {
         this._appendSidebarCallFrames(this._callFramesFromDebugger(details.callFrames));
         var topStackHidden = (this._hiddenCallFrames === this.callFrames.length);
 
+        var peviousStackTrace = details.callFrames;
         while (asyncStackTrace) {
-            var title = WebInspector.asyncStackTraceLabel(asyncStackTrace.description);
+            var title = "";
+            if (asyncStackTrace.description === "async function") {
+                var lastPreviousFrame = peviousStackTrace[peviousStackTrace.length - 1];
+                var topFrame = asyncStackTrace.callFrames[0];
+                var lastPreviousFrameName = WebInspector.beautifyFunctionName(lastPreviousFrame.functionName);
+                var topFrameName = WebInspector.beautifyFunctionName(topFrame.functionName);
+                title = topFrameName + " awaits " + lastPreviousFrameName;
+            } else {
+                title = WebInspector.asyncStackTraceLabel(asyncStackTrace.description);
+            }
             var asyncCallFrame = new WebInspector.UIList.Item(title, "", true);
             asyncCallFrame.setHoverable(false);
             asyncCallFrame.element.addEventListener("contextmenu", this._asyncCallFrameContextMenu.bind(this, this.callFrames.length), true);
             this._appendSidebarCallFrames(this._callFramesFromRuntime(asyncStackTrace.callFrames, asyncCallFrame), asyncCallFrame);
+            peviousStackTrace = asyncStackTrace.callFrames;
             asyncStackTrace = asyncStackTrace.parent;
         }
 
@@ -107,52 +118,6 @@ WebInspector.CallStackSidebarPane.prototype = {
         }
         this._selectNextVisibleCallFrame(0);
         this.revealView();
-    },
-
-    /**
-     * @param {?WebInspector.DebuggerPausedDetails} details
-     */
-    _updateStatusMessage: function(details)
-    {
-        var status = this.contentElement.createChild("div", "callstack-info");
-        status.removeChildren();
-
-        if (!details) {
-            status.textContent = WebInspector.UIString("Not Paused");
-            status.classList.toggle("status", false);
-            return;
-        }
-
-        if (details.reason === WebInspector.DebuggerModel.BreakReason.DOM) {
-            status.appendChild(WebInspector.domBreakpointsSidebarPane.createBreakpointHitStatusMessage(details));
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.EventListener) {
-            var eventName = details.auxData["eventName"];
-            var eventNameForUI = WebInspector.EventListenerBreakpointsSidebarPane.eventNameForUI(eventName, details.auxData);
-            status.textContent = WebInspector.UIString("Paused on a \"%s\" Event Listener.", eventNameForUI);
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.XHR) {
-            status.textContent = WebInspector.UIString("Paused on a XMLHttpRequest.");
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.Exception) {
-            var description = details.auxData["description"] || "";
-            status.textContent = WebInspector.UIString("Paused on exception: '%s'.", description.split("\n", 1)[0]);
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.PromiseRejection) {
-            var description = details.auxData["description"] || "";
-            status.textContent = WebInspector.UIString("Paused on promise rejection: '%s'.", description.split("\n", 1)[0]);
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.Assert) {
-            status.textContent = WebInspector.UIString("Paused on assertion.");
-        } else if (details.reason === WebInspector.DebuggerModel.BreakReason.DebugCommand) {
-            status.textContent = WebInspector.UIString("Paused on a debugged function.");
-        } else {
-            if (details.callFrames.length) {
-                var uiLocation = details && details.callFrames.length ? WebInspector.debuggerWorkspaceBinding.rawLocationToUILocation(details.callFrames[0].location()) : null;
-                var breakpoint = uiLocation ? WebInspector.breakpointManager.findBreakpointOnLine(uiLocation.uiSourceCode, uiLocation.lineNumber) : null;
-                if (breakpoint) {
-                    status.textContent = WebInspector.UIString("Paused on a JavaScript breakpoint.");
-                }
-            } else {
-                console.warn("ScriptsPanel paused, but callFrames.length is zero."); // TODO remove this once we understand this case better
-            }
-        }
-        status.classList.toggle("hidden", !status.firstChild);
     },
 
     /**
@@ -458,7 +423,7 @@ WebInspector.CallStackSidebarPane.prototype = {
     },
 
     __proto__: WebInspector.SimpleView.prototype
-}
+};
 
 /**
  * @constructor
@@ -477,7 +442,7 @@ WebInspector.CallStackSidebarPane.CallFrame = function(functionName, location, l
     this._debuggerCallFrame = debuggerCallFrame;
     this._asyncCallFrame = asyncCallFrame;
     WebInspector.debuggerWorkspaceBinding.createCallFrameLiveLocation(location, this._update.bind(this), locationPool);
-}
+};
 
 WebInspector.CallStackSidebarPane.CallFrame.prototype = {
     /**
@@ -494,4 +459,4 @@ WebInspector.CallStackSidebarPane.CallFrame.prototype = {
     },
 
     __proto__: WebInspector.UIList.Item.prototype
-}
+};

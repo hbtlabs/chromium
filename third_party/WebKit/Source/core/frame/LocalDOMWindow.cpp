@@ -349,6 +349,9 @@ Document* LocalDOMWindow::installNewDocument(const String& mimeType,
   }
 
   frame()->selection().updateSecureKeyboardEntryIfActive();
+
+  m_document->maybeRecordLoadReason(Created);
+
   return m_document;
 }
 
@@ -697,15 +700,6 @@ void LocalDOMWindow::print(ScriptState* scriptState) {
   FrameHost* host = frame()->host();
   if (!host)
     return;
-
-  if (document()->isSandboxed(SandboxModals)) {
-    UseCounter::count(document(), UseCounter::DialogInSandboxedContext);
-    frameConsole()->addMessage(ConsoleMessage::create(
-        SecurityMessageSource, ErrorMessageLevel,
-        "Ignored call to 'print()'. The document is sandboxed, and the "
-        "'allow-modals' keyword is not set."));
-    return;
-  }
 
   if (scriptState &&
       v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {

@@ -36,7 +36,7 @@ WebInspector.Main = function()
 {
     WebInspector.Main._instanceForTest = this;
     runOnWindowLoad(this._loaded.bind(this));
-}
+};
 
 WebInspector.Main.prototype = {
     _loaded: function()
@@ -207,6 +207,7 @@ WebInspector.Main.prototype = {
         WebInspector.ShortcutsScreen.registerShortcuts();
         this._registerForwardedShortcuts();
         this._registerMessageSinkListener();
+        new WebInspector.Main.InspectorDomainObserver();
 
         self.runtime.extension(WebInspector.AppProvider).instance().then(this._showAppUI.bind(this));
         console.timeEnd("Main._createAppUI");
@@ -252,7 +253,7 @@ WebInspector.Main.prototype = {
         this._appUIShown = true;
         if (this._fileSystemManagerInitialized) {
             // Allow UI cycles to repaint prior to creating connection.
-            setTimeout(this._connectAndCreateTarget.bind(this), 0);
+            setTimeout(this._initializeTarget.bind(this), 0);
         }
         console.timeEnd("Main._showAppUI");
     },
@@ -261,78 +262,24 @@ WebInspector.Main.prototype = {
     {
         this._fileSystemManagerInitialized = true;
         if (this._appUIShown)
-            this._connectAndCreateTarget();
+            this._initializeTarget();
     },
 
-    _connectAndCreateTarget: function()
+    _initializeTarget: function()
     {
-        console.time("Main._connectAndCreateTarget");
-        this._createConnection().then(connection => {
-            this._createMainTarget(connection);
-            InspectorFrontendHost.readyForTest();
-            WebInspector.targetManager.setMainTargetFactory(this._recreateMainTarget.bind(this));
-            // Asynchronously run the extensions.
-            console.timeEnd("Main._connectAndCreateTarget");
-            setTimeout(this._lateInitialization.bind(this), 100);
-        });
-    },
+        console.time("Main._initializeTarget");
+        WebInspector.targetManager.connectToMainTarget(webSocketConnectionLost);
 
-    _recreateMainTarget: function()
-    {
-        this._createConnection().then(this._createMainTarget.bind(this));
-    },
+        InspectorFrontendHost.readyForTest();
+        // Asynchronously run the extensions.
+        setTimeout(this._lateInitialization.bind(this), 100);
+        console.timeEnd("Main._initializeTarget");
 
-    /**
-     * @return {!Promise<!InspectorBackendClass.Connection>}
-     */
-    _createConnection: function()
-    {
-        if (Runtime.queryParam("ws")) {
-            var ws = "ws://" + Runtime.queryParam("ws");
-            return WebInspector.WebSocketConnection.Create(ws).then(connection => {
-                connection.addEventListener(InspectorBackendClass.Connection.Events.Disconnected, onDisconnected);
-                return connection;
-            });
-        }
-
-        return /** @type {!Promise<!InspectorBackendClass.Connection>} */ (Promise.resolve(InspectorFrontendHost.isHostedMode() ?
-            new WebInspector.StubConnection() : new WebInspector.MainConnection()));
-
-        /**
-         * @param {!WebInspector.Event} event
-         */
-        function onDisconnected(event)
+        function webSocketConnectionLost()
         {
-            if (WebInspector._disconnectedScreenWithReasonWasShown)
-                return;
-            WebInspector.RemoteDebuggingTerminatedScreen.show(event.data.reason);
+            if (!WebInspector._disconnectedScreenWithReasonWasShown)
+                WebInspector.RemoteDebuggingTerminatedScreen.show("WebSocket disconnected");
         }
-    },
-
-    /**
-     * @param {!InspectorBackendClass.Connection} connection
-     */
-    _createMainTarget: function(connection)
-    {
-        console.time("Main._createMainTarget");
-        var capabilities =
-            WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.DOM |
-            WebInspector.Target.Capability.JS | WebInspector.Target.Capability.Log |
-            WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
-        if (Runtime.queryParam("isSharedWorker")) {
-            capabilities =
-                WebInspector.Target.Capability.Browser | WebInspector.Target.Capability.Log |
-                WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
-        } else if (Runtime.queryParam("v8only")) {
-            capabilities = WebInspector.Target.Capability.JS;
-        }
-
-        var target = WebInspector.targetManager.createTarget(WebInspector.UIString("Main"), capabilities, connection, null);
-        target.registerInspectorDispatcher(new WebInspector.Main.InspectorDomainDispatcher(target));
-        target.runtimeAgent().runIfWaitingForDebugger();
-        if (target.hasBrowserCapability())
-            target.inspectorAgent().enable();
-        console.timeEnd("Main._createMainTarget");
     },
 
     _lateInitialization: function()
@@ -546,7 +493,36 @@ WebInspector.Main.prototype = {
         var suspended = WebInspector.targetManager.allTargetsSuspended();
         WebInspector.inspectorView.onSuspendStateChanged(suspended);
     }
-}
+};
+
+/**
+ * @constructor
+ * @implements {WebInspector.TargetManager.Observer}
+ */
+WebInspector.Main.InspectorDomainObserver = function()
+{
+    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.Browser);
+};
+
+WebInspector.Main.InspectorDomainObserver.prototype = {
+    /**
+     * @override
+     * @param {!WebInspector.Target} target
+     */
+    targetAdded: function(target)
+    {
+        target.registerInspectorDispatcher(new WebInspector.Main.InspectorDomainDispatcher(target));
+        target.inspectorAgent().enable();
+    },
+
+    /**
+     * @override
+     * @param {!WebInspector.Target} target
+     */
+    targetRemoved: function(target)
+    {
+    },
+};
 
 /**
  * @constructor
@@ -556,7 +532,7 @@ WebInspector.Main.prototype = {
 WebInspector.Main.InspectorDomainDispatcher = function(target)
 {
     this._target = target;
-}
+};
 
 WebInspector.Main.InspectorDomainDispatcher.prototype = {
     /**
@@ -578,7 +554,7 @@ WebInspector.Main.InspectorDomainDispatcher.prototype = {
         if (debuggerModel)
             WebInspector.TargetCrashedScreen.show(debuggerModel);
     }
-}
+};
 
 
 /**
@@ -587,7 +563,7 @@ WebInspector.Main.InspectorDomainDispatcher.prototype = {
  */
 WebInspector.Main.ReloadActionDelegate = function()
 {
-}
+};
 
 WebInspector.Main.ReloadActionDelegate.prototype = {
     /**
@@ -611,7 +587,7 @@ WebInspector.Main.ReloadActionDelegate.prototype = {
         }
         return false;
     }
-}
+};
 
 /**
  * @constructor
@@ -619,7 +595,7 @@ WebInspector.Main.ReloadActionDelegate.prototype = {
  */
 WebInspector.Main.ZoomActionDelegate = function()
 {
-}
+};
 
 WebInspector.Main.ZoomActionDelegate.prototype = {
     /**
@@ -646,7 +622,7 @@ WebInspector.Main.ZoomActionDelegate.prototype = {
         }
         return false;
     }
-}
+};
 
 /**
  * @constructor
@@ -654,7 +630,7 @@ WebInspector.Main.ZoomActionDelegate.prototype = {
  */
 WebInspector.Main.SearchActionDelegate = function()
 {
-}
+};
 
 WebInspector.Main.SearchActionDelegate.prototype = {
     /**
@@ -681,7 +657,7 @@ WebInspector.Main.SearchActionDelegate.prototype = {
         }
         return false;
     }
-}
+};
 
 /**
  * @param {boolean} hard
@@ -691,7 +667,7 @@ WebInspector.Main._reloadPage = function(hard)
     var mainTarget = WebInspector.targetManager.mainTarget();
     if (mainTarget && mainTarget.hasBrowserCapability())
         WebInspector.targetManager.reloadPage(hard);
-}
+};
 
 /**
  * @constructor
@@ -715,7 +691,7 @@ WebInspector.Main.WarningErrorCounter = function()
     WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageAdded, this._update, this);
     WebInspector.multitargetConsoleModel.addEventListener(WebInspector.ConsoleModel.Events.MessageUpdated, this._update, this);
     this._update();
-}
+};
 
 WebInspector.Main.WarningErrorCounter.prototype = {
     /**
@@ -777,7 +753,7 @@ WebInspector.Main.WarningErrorCounter.prototype = {
     {
         return this._toolbarItem;
     }
-}
+};
 
 /**
  * @constructor
@@ -787,7 +763,7 @@ WebInspector.Main.MainMenuItem = function()
 {
     this._item = new WebInspector.ToolbarButton(WebInspector.UIString("Customize and control DevTools"), "menu-toolbar-item");
     this._item.addEventListener("mousedown", this._mouseDown, this);
-}
+};
 
 WebInspector.Main.MainMenuItem.prototype = {
     /**
@@ -858,7 +834,7 @@ WebInspector.Main.MainMenuItem.prototype = {
 
         contextMenu.show();
     }
-}
+};
 
 /**
  * @constructor
@@ -884,7 +860,7 @@ WebInspector.NetworkPanelIndicator = function()
             WebInspector.inspectorView.setPanelIcon("network", "", "");
         }
     }
-}
+};
 
 /**
  * @constructor
@@ -903,7 +879,7 @@ WebInspector.SourcesPanelIndicator = function()
             WebInspector.inspectorView.setPanelIcon("sources", "", "");
         }
     }
-}
+};
 
 /**
  * @constructor
@@ -911,7 +887,7 @@ WebInspector.SourcesPanelIndicator = function()
 WebInspector.Main.PauseListener = function()
 {
     WebInspector.targetManager.addModelListener(WebInspector.DebuggerModel, WebInspector.DebuggerModel.Events.DebuggerPaused, this._debuggerPaused, this);
-}
+};
 
 WebInspector.Main.PauseListener.prototype = {
     /**
@@ -925,7 +901,7 @@ WebInspector.Main.PauseListener.prototype = {
         WebInspector.context.setFlavor(WebInspector.Target, debuggerModel.target());
         WebInspector.Revealer.reveal(debuggerPausedDetails);
     }
-}
+};
 
 /**
  * @constructor
@@ -933,7 +909,7 @@ WebInspector.Main.PauseListener.prototype = {
 WebInspector.Main.InspectedNodeRevealer = function()
 {
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.NodeInspected, this._inspectNode, this);
-}
+};
 
 WebInspector.Main.InspectedNodeRevealer.prototype = {
     /**
@@ -944,7 +920,7 @@ WebInspector.Main.InspectedNodeRevealer.prototype = {
         var deferredNode = /** @type {!WebInspector.DeferredDOMNode} */ (event.data);
         WebInspector.Revealer.reveal(deferredNode);
     }
-}
+};
 
 /**
  * @param {string} method
@@ -953,15 +929,14 @@ WebInspector.Main.InspectedNodeRevealer.prototype = {
  */
 WebInspector.sendOverProtocol = function(method, params)
 {
-    var connection = WebInspector.targetManager.mainTarget().connection();
     return new Promise((resolve, reject) => {
-        connection.sendRawMessageForTesting(method, params, (err, result) => {
+        InspectorBackendClass.sendRawMessageForTesting(method, params, (err, result) => {
             if (err)
                 return reject(err);
             return resolve(result);
         });
     });
-}
+};
 
 /**
  * @constructor
@@ -978,7 +953,7 @@ WebInspector.RemoteDebuggingTerminatedScreen = function(reason)
     this.contentElement.createChild("div", "message").textContent = WebInspector.UIString("Reconnect when ready by reopening DevTools.");
     var button = createTextButton(WebInspector.UIString("Reconnect DevTools"), () => window.location.reload());
     this.contentElement.createChild("div", "button").appendChild(button);
-}
+};
 
 /**
  * @param {string} reason
@@ -991,11 +966,11 @@ WebInspector.RemoteDebuggingTerminatedScreen.show = function(reason)
     dialog.setDimmed(true);
     new WebInspector.RemoteDebuggingTerminatedScreen(reason).show(dialog.element);
     dialog.show();
-}
+};
 
 WebInspector.RemoteDebuggingTerminatedScreen.prototype = {
     __proto__: WebInspector.VBox.prototype
-}
+};
 
 /**
  * @constructor
@@ -1009,7 +984,7 @@ WebInspector.TargetCrashedScreen = function(hideCallback)
     this.contentElement.createChild("div", "message").textContent = WebInspector.UIString("DevTools was disconnected from the page.");
     this.contentElement.createChild("div", "message").textContent = WebInspector.UIString("Once page is reloaded, DevTools will automatically reconnect.");
     this._hideCallback = hideCallback;
-}
+};
 
 /**
  * @param {!WebInspector.DebuggerModel} debuggerModel
@@ -1030,7 +1005,7 @@ WebInspector.TargetCrashedScreen.show = function(debuggerModel)
     {
         debuggerModel.removeEventListener(WebInspector.DebuggerModel.Events.GlobalObjectCleared, hideBound);
     }
-}
+};
 
 WebInspector.TargetCrashedScreen.prototype = {
     /**
@@ -1042,7 +1017,7 @@ WebInspector.TargetCrashedScreen.prototype = {
     },
 
     __proto__: WebInspector.VBox.prototype
-}
+};
 
 /**
  * @constructor
@@ -1057,7 +1032,7 @@ WebInspector.BackendSettingsSync = function()
     this._blockedEventsWarningSetting = WebInspector.settings.moduleSetting("blockedEventsWarningEnabled");
     this._blockedEventsWarningSetting.addChangeListener(this._update, this);
     WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.Browser);
-}
+};
 
 WebInspector.BackendSettingsSync.prototype = {
     /**
@@ -1093,7 +1068,7 @@ WebInspector.BackendSettingsSync.prototype = {
     targetRemoved: function(target)
     {
     }
-}
+};
 
 /**
  * @constructor
@@ -1101,7 +1076,7 @@ WebInspector.BackendSettingsSync.prototype = {
  */
 WebInspector.ShowMetricsRulersSettingUI = function()
 {
-}
+};
 
 WebInspector.ShowMetricsRulersSettingUI.prototype = {
     /**
@@ -1112,6 +1087,6 @@ WebInspector.ShowMetricsRulersSettingUI.prototype = {
     {
         return WebInspector.SettingsUI.createSettingCheckbox(WebInspector.UIString("Show rulers"), WebInspector.moduleSetting("showMetricsRulers"));
     }
-}
+};
 
 new WebInspector.Main();

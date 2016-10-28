@@ -136,14 +136,6 @@ gl::ScopedJavaSurface AVDAPictureBufferManager::Initialize(
   state_provider_ = state_provider;
   shared_state_ = new AVDASharedState();
 
-  bool using_virtual_context = false;
-  if (gl::GLContext* context = gl::GLContext::GetCurrent()) {
-    if (gl::GLShareGroup* share_group = context->share_group())
-      using_virtual_context =
-          !!share_group->GetSharedContext(gl::GLSurface::GetCurrent());
-  }
-  UMA_HISTOGRAM_BOOLEAN("Media.AVDA.VirtualContext", using_virtual_context);
-
   // Acquire the SurfaceView surface if given a valid id.
   if (surface_view_id != VideoDecodeAccelerator::Config::kNoSurfaceID) {
     return gpu::GpuSurfaceLookup::GetInstance()->AcquireJavaSurface(
@@ -210,9 +202,9 @@ gpu::gles2::TextureRef* AVDAPictureBufferManager::GetTextureForPicture(
       gles_decoder->GetContextGroup()->texture_manager();
   RETURN_NULL_IF_NULL(texture_manager);
 
-  DCHECK_LE(1u, picture_buffer.internal_texture_ids().size());
+  DCHECK_LE(1u, picture_buffer.client_texture_ids().size());
   gpu::gles2::TextureRef* texture_ref =
-      texture_manager->GetTexture(picture_buffer.internal_texture_ids()[0]);
+      texture_manager->GetTexture(picture_buffer.client_texture_ids()[0]);
   RETURN_NULL_IF_NULL(texture_ref);
 
   return texture_ref;
@@ -305,8 +297,8 @@ void AVDAPictureBufferManager::AssignOnePictureBuffer(
     // unless we make the texture transparent.
     static const uint8_t rgba[] = {0, 0, 0, 0};
     const gfx::Size size(1, 1);
-    DCHECK_LE(1u, picture_buffer.texture_ids().size());
-    glBindTexture(GL_TEXTURE_2D, picture_buffer.texture_ids()[0]);
+    DCHECK_LE(1u, picture_buffer.service_texture_ids().size());
+    glBindTexture(GL_TEXTURE_2D, picture_buffer.service_texture_ids()[0]);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, size.width(), size.height(), 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, rgba);
   }

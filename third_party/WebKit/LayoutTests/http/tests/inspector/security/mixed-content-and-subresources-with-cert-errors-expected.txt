@@ -10,8 +10,8 @@ Active Mixed Content
         <DIV >
 You have recently allowed non-secure content (such as scripts or iframes) to run on this site.
         </DIV>
-        <DIV class=security-mixed-content link >
-View requests in Network Panel
+        <DIV class=security-mixed-content >
+Reload the page to record requests for HTTP resources.
         </DIV>
     </DIV>
 </DIV>
@@ -25,8 +25,8 @@ Mixed Content
         <DIV >
 The site includes HTTP resources.
         </DIV>
-        <DIV class=security-mixed-content link >
-View requests in Network Panel
+        <DIV class=security-mixed-content >
+Reload the page to record requests for HTTP resources.
         </DIV>
     </DIV>
 </DIV>

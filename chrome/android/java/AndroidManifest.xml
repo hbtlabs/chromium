@@ -83,6 +83,8 @@ by a child template that "extends" this file.
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
     <uses-permission android:name="com.android.launcher.permission.INSTALL_SHORTCUT"/>
 
+    <uses-permission android:name="com.google.android.apps.now.CURRENT_ACCOUNT_ACCESS" />
+
     {% block extra_uses_permissions %}
     {% endblock %}
 
@@ -165,10 +167,6 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.NOTIFICATION_PREFERENCES" />
                 {% if channel in ['dev', 'canary', 'default'] %}
                 <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
-                {% endif %}
-                {% if enable_vr_shell == "true" %}
-                <!-- Show icon in Daydream app launcher. -->
-                <category android:name="com.google.intent.category.DAYDREAM" />
                 {% endif %}
             </intent-filter>
             <!-- Matches the common case of intents with no MIME type.
@@ -328,6 +326,8 @@ by a child template that "extends" this file.
             android:exported="false"
             android:taskAffinity=""
             android:windowSoftInputMode="adjustResize"
+            android:persistableMode="persistNever"
+            android:autoRemoveFromRecents="false"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:hardwareAccelerated="false">
         </activity>

@@ -140,9 +140,7 @@ ResourceRequest FrameLoader::resourceRequestFromHistoryItem(
     request.setHTTPMethod(HTTPNames::POST);
     request.setHTTPBody(formData);
     request.setHTTPContentType(item->formContentType());
-    RefPtr<SecurityOrigin> securityOrigin =
-        SecurityOrigin::createFromString(item->referrer().referrer);
-    request.addHTTPOriginIfNeeded(securityOrigin.get());
+    request.addHTTPOriginIfNeeded(item->referrer().referrer);
   }
   return request;
 }
@@ -168,8 +166,9 @@ ResourceRequest FrameLoader::resourceRequestForReload(
   // was initiated by something in the current document and should therefore
   // show the current document's url as the referrer.
   if (clientRedirectPolicy == ClientRedirectPolicy::ClientRedirect) {
-    request.setHTTPReferrer(Referrer(m_frame->document()->outgoingReferrer(),
-                                     m_frame->document()->getReferrerPolicy()));
+    request.setHTTPReferrer(SecurityPolicy::generateReferrer(
+        m_frame->document()->getReferrerPolicy(), m_frame->document()->url(),
+        m_frame->document()->outgoingReferrer()));
   }
 
   if (!overrideURL.isEmpty()) {
@@ -354,9 +353,6 @@ void FrameLoader::replaceDocumentWhileExecutingJavaScriptURL(
           Document::NoDismissal)
     return;
 
-  // DocumentLoader::replaceDocumentWhileExecutingJavaScriptURL can cause the
-  // DocumentLoader to get deref'ed and possible destroyed, so protect it with a
-  // RefPtr.
   DocumentLoader* documentLoader(m_frame->document()->loader());
 
   UseCounter::count(*m_frame->document(),
@@ -393,10 +389,6 @@ void FrameLoader::setHistoryItemStateForCommit(
     FrameLoadType loadType,
     HistoryCommitType historyCommitType,
     HistoryNavigationType navigationType) {
-  if (m_frame->settings()->historyEntryRequiresUserGesture() &&
-      historyCommitType == StandardCommit)
-    UserGestureIndicator::clearProcessedUserGestureSinceLoad();
-
   HistoryItem* oldItem = m_currentItem;
   if (isBackForwardLoadType(loadType) && m_provisionalItem)
     m_currentItem = m_provisionalItem.release();
@@ -613,7 +605,7 @@ void FrameLoader::finishedParsing() {
   checkCompleted();
 
   if (!m_frame->view())
-    return;  // We are being destroyed by something checkCompleted called.
+    return;
 
   // Check if the scrollbars are really needed for the content. If not, remove
   // them, relayout, and repaint.
@@ -790,9 +782,9 @@ void FrameLoader::updateForSameDocumentNavigation(
   if (!m_currentItem)
     historyCommitType = HistoryInertCommit;
   if (m_frame->settings()->historyEntryRequiresUserGesture() &&
-      !UserGestureIndicator::processedUserGestureSinceLoad() &&
-      initiatingDocument)
+      initiatingDocument && !initiatingDocument->hasReceivedUserGesture()) {
     historyCommitType = HistoryInertCommit;
+  }
 
   setHistoryItemStateForCommit(
       type, historyCommitType,
@@ -891,9 +883,7 @@ void FrameLoader::setReferrerForFrameRequest(FrameLoadRequest& frameRequest) {
       originDocument->outgoingReferrer());
 
   request.setHTTPReferrer(referrer);
-  RefPtr<SecurityOrigin> referrerOrigin =
-      SecurityOrigin::createFromString(referrer.referrer);
-  request.addHTTPOriginIfNeeded(referrerOrigin.get());
+  request.addHTTPOriginIfNeeded(referrer.referrer);
 }
 
 FrameLoadType FrameLoader::determineFrameLoadType(
@@ -937,8 +927,8 @@ FrameLoadType FrameLoader::determineFrameLoadType(
     return FrameLoadTypeReload;
 
   if (m_frame->settings()->historyEntryRequiresUserGesture() &&
-      !UserGestureIndicator::processedUserGestureSinceLoad() &&
-      request.originDocument())
+      request.originDocument() &&
+      !request.originDocument()->hasReceivedUserGesture())
     return FrameLoadTypeReplaceCurrentItem;
 
   return FrameLoadTypeStandard;
@@ -962,17 +952,6 @@ bool FrameLoader::prepareRequestForThisFrame(FrameLoadRequest& request) {
   if (!request.form() && request.frameName().isEmpty())
     request.setFrameName(m_frame->document()->baseTarget());
   return true;
-}
-
-static bool shouldOpenInNewWindow(Frame* targetFrame,
-                                  const FrameLoadRequest& request,
-                                  NavigationPolicy policy) {
-  if (!targetFrame && !request.frameName().isEmpty())
-    return true;
-  // FIXME: This case is a workaround for the fact that ctrl+clicking a form
-  // submission incorrectly sends as a GET rather than a POST if it creates a
-  // new window in a different process.
-  return request.form() && policy != NavigationPolicyCurrentTab;
 }
 
 static bool shouldNavigateTargetFrame(NavigationPolicy policy) {
@@ -1108,6 +1087,8 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest,
     m_provisionalItem = historyItem;
   }
 
+  // Form submissions appear to need their special-case of finding the target at
+  // schedule rather than at fire.
   Frame* targetFrame = request.form()
                            ? nullptr
                            : m_frame->findFrameForNavigation(
@@ -1127,7 +1108,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest,
 
   setReferrerForFrameRequest(request);
 
-  if (shouldOpenInNewWindow(targetFrame, request, policy)) {
+  if (!targetFrame && !request.frameName().isEmpty()) {
     if (policy == NavigationPolicyDownload) {
       client()->loadURLExternally(request.resourceRequest(),
                                   NavigationPolicyDownload, String(), false);
@@ -1578,10 +1559,11 @@ bool FrameLoader::shouldContinueForNavigationPolicy(
   if (request.url().isEmpty() || substituteData.isValid())
     return true;
 
-  // If we're loading content into a subframe, check against the parent's
-  // Content Security Policy and kill the load if that check fails, unless we
-  // should bypass the main world's CSP.
-  if (shouldCheckMainWorldContentSecurityPolicy == CheckContentSecurityPolicy) {
+  // If we're loading content into |m_frame| (NavigationPolicyCurrentTab), check
+  // against the parent's Content Security Policy and kill the load if that
+  // check fails, unless we should bypass the main world's CSP.
+  if (policy == NavigationPolicyCurrentTab &&
+      shouldCheckMainWorldContentSecurityPolicy == CheckContentSecurityPolicy) {
     Frame* parentFrame = m_frame->tree().parent();
     if (parentFrame) {
       ContentSecurityPolicy* parentPolicy =

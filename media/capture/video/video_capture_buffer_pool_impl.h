@@ -16,12 +16,12 @@
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "build/build_config.h"
-#include "media/base/video_capture_types.h"
 #include "media/base/video_frame.h"
 #include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_buffer_handle.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory.h"
+#include "media/capture/video_capture_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -75,8 +75,7 @@ class CAPTURE_EXPORT VideoCaptureBufferPoolImpl
   int last_relinquished_buffer_id_;
 
   // The buffers, indexed by the first parameter, a buffer id.
-  using TrackerMap = std::map<int, VideoCaptureBufferTracker*>;
-  TrackerMap trackers_;
+  std::map<int, std::unique_ptr<VideoCaptureBufferTracker>> trackers_;
 
   const std::unique_ptr<VideoCaptureBufferTrackerFactory>
       buffer_tracker_factory_;

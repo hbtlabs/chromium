@@ -106,8 +106,15 @@ ScopedJavaLocalRef<jobject> WalkAXTreeDepthFirst(
   if (node->HasFloatAttribute(ui::AX_ATTR_FONT_SIZE)) {
     color = node->GetIntAttribute(ui::AX_ATTR_COLOR);
     bgcolor = node->GetIntAttribute(ui::AX_ATTR_BACKGROUND_COLOR);
-    size =  node->GetFloatAttribute(ui::AX_ATTR_FONT_SIZE);
     text_style = node->GetIntAttribute(ui::AX_ATTR_TEXT_STYLE);
+
+    // The font size is just the computed style for that element; apply
+    // transformations to get the actual pixel size.
+    gfx::RectF text_size_rect(
+        0, 0, 1, node->GetFloatAttribute(ui::AX_ATTR_FONT_SIZE));
+    gfx::Rect scaled_text_size_rect = node->RelativeToAbsoluteBounds(
+        text_size_rect, false);
+    size = scaled_text_size_rect.height();
   }
 
   const gfx::Rect& absolute_rect = node->GetPageBoundsRect();
@@ -429,7 +436,7 @@ void WebContentsAndroid::ExitFullscreen(JNIEnv* env,
   web_contents_->ExitFullscreen(/*will_cause_resize=*/false);
 }
 
-void WebContentsAndroid::UpdateTopControlsState(
+void WebContentsAndroid::UpdateBrowserControlsState(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     bool enable_hiding,
@@ -438,10 +445,8 @@ void WebContentsAndroid::UpdateTopControlsState(
   RenderViewHost* host = web_contents_->GetRenderViewHost();
   if (!host)
     return;
-  host->Send(new ViewMsg_UpdateTopControlsState(host->GetRoutingID(),
-                                                enable_hiding,
-                                                enable_showing,
-                                                animate));
+  host->Send(new ViewMsg_UpdateBrowserControlsState(
+      host->GetRoutingID(), enable_hiding, enable_showing, animate));
 }
 
 void WebContentsAndroid::ShowImeIfNeeded(JNIEnv* env,
@@ -651,7 +656,7 @@ void WebContentsAndroid::GetContentBitmap(
                  weak_factory_.GetWeakPtr(),
                  base::Owned(new ScopedJavaGlobalRef<jobject>(env, obj)),
                  base::Owned(new ScopedJavaGlobalRef<jobject>(env, jcallback)));
-  SkColorType pref_color_type = gfx::ConvertToSkiaColorType(color_type.obj());
+  SkColorType pref_color_type = gfx::ConvertToSkiaColorType(color_type);
   if (!view || pref_color_type == kUnknown_SkColorType) {
     result_callback.Run(SkBitmap(), READBACK_FAILED);
     return;

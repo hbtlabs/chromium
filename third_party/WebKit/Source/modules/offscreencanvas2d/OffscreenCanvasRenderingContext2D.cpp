@@ -45,7 +45,10 @@ DEFINE_TRACE(OffscreenCanvasRenderingContext2D) {
   BaseRenderingContext2D::trace(visitor);
 }
 
-void OffscreenCanvasRenderingContext2D::commit(ExceptionState& exceptionState) {
+void OffscreenCanvasRenderingContext2D::commit(ScriptState* scriptState,
+                                               ExceptionState& exceptionState) {
+  UseCounter::Feature feature = UseCounter::OffscreenCanvasCommit2D;
+  UseCounter::count(scriptState->getExecutionContext(), feature);
   if (getOffscreenCanvas()->getAssociatedCanvasId() < 0) {
     // If an OffscreenCanvas has no associated canvas Id, it indicates that
     // it is not an OffscreenCanvas created by transfering control from html
@@ -138,7 +141,10 @@ OffscreenCanvasRenderingContext2D::transferToStaticBitmapImage() {
 }
 
 ImageBitmap* OffscreenCanvasRenderingContext2D::transferToImageBitmap(
-    ExceptionState& exceptionState) {
+    ScriptState* scriptState) {
+  UseCounter::Feature feature =
+      UseCounter::OffscreenCanvasTransferToImageBitmap2D;
+  UseCounter::count(scriptState->getExecutionContext(), feature);
   RefPtr<StaticBitmapImage> image = transferToStaticBitmapImage();
   if (!image)
     return nullptr;
@@ -156,6 +162,24 @@ PassRefPtr<Image> OffscreenCanvasRenderingContext2D::getImage(
   RefPtr<StaticBitmapImage> image =
       StaticBitmapImage::create(std::move(skImage));
   return image;
+}
+
+ImageData* OffscreenCanvasRenderingContext2D::toImageData(
+    SnapshotReason reason) const {
+  if (!imageBuffer())
+    return nullptr;
+  sk_sp<SkImage> snapshot =
+      m_imageBuffer->newSkImageSnapshot(PreferNoAcceleration, reason);
+  ImageData* imageData = nullptr;
+  if (snapshot) {
+    imageData = ImageData::create(this->getOffscreenCanvas()->size());
+    SkImageInfo imageInfo =
+        SkImageInfo::Make(this->width(), this->height(), kRGBA_8888_SkColorType,
+                          kUnpremul_SkAlphaType);
+    snapshot->readPixels(imageInfo, imageData->data()->data(),
+                         imageInfo.minRowBytes(), 0, 0);
+  }
+  return imageData;
 }
 
 void OffscreenCanvasRenderingContext2D::setOffscreenCanvasGetContextResult(

@@ -30,7 +30,6 @@
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/file_chooser_file_info.h"
-#include "content/public/common/file_chooser_params.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -228,7 +227,7 @@ std::string FrameTreeVisualizer::DepictFrameTree(FrameTreeNode* root) {
     SiteInstanceImpl* site_instance =
         static_cast<SiteInstanceImpl*>(legend_entry.second);
     std::string description = site_instance->GetSiteURL().spec();
-    if (site_instance->is_default_subframe_site_instance())
+    if (site_instance->IsDefaultSubframeSiteInstance())
       description = "default subframe process";
     base::StringAppendF(&result, "\n%s%s = %s", prefix,
                         legend_entry.first.c_str(), description.c_str());
@@ -357,6 +356,7 @@ void FileChooserDelegate::RunFileChooser(RenderFrameHost* render_frame_host,
   render_frame_host->FilesSelectedInChooser(files, FileChooserParams::Open);
 
   file_chosen_ = true;
+  params_ = params;
 }
 
 FrameTestNavigationManager::FrameTestNavigationManager(

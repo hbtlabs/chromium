@@ -109,6 +109,10 @@ DesktopAutomationHandler.prototype = {
     if (!node)
       return;
 
+    // Decide whether to announce and sync this event.
+    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
+      return;
+
     var prevRange = ChromeVoxState.instance.currentRange;
 
     ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
@@ -120,10 +124,6 @@ DesktopAutomationHandler.prototype = {
     if (prevRange &&
         evt.type == 'focus' &&
         ChromeVoxState.instance.currentRange.equals(prevRange))
-      return;
-
-    // Decide whether to announce this event.
-    if (!DesktopAutomationHandler.announceActions && evt.eventFrom == 'action')
       return;
 
     var output = new Output();
@@ -227,6 +227,7 @@ DesktopAutomationHandler.prototype = {
     if (!AutomationPredicate.checkable(evt.target))
       return;
 
+    Output.forceModeForNextSpeechUtterance(cvox.QueueMode.CATEGORY_FLUSH);
     this.onEventIfInRange(
         new chrome.automation.AutomationEvent(
             EventType.checkedStateChanged, evt.target, evt.eventFrom));
@@ -428,6 +429,11 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onSelection: function(evt) {
+    // Invalidate any previous editable text handler state since some nodes,
+    // like menuitems, can receive selection while focus remains on an editable
+    // leading to braille output routing to the editable.
+    this.textEditHandler_ = null;
+
     chrome.automation.getFocus(function(focus) {
       // Desktop tabs get "selection" when there's a focused webview during tab
       // switching.

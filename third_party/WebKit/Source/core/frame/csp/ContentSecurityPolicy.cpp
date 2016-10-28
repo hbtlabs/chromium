@@ -41,7 +41,6 @@
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/CSPDirectiveList.h"
 #include "core/frame/csp/CSPSource.h"
-#include "core/frame/csp/CSPSourceList.h"
 #include "core/frame/csp/MediaListDirective.h"
 #include "core/frame/csp/SourceListDirective.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -92,8 +91,6 @@ const char ContentSecurityPolicy::ChildSrc[] = "child-src";
 const char ContentSecurityPolicy::FormAction[] = "form-action";
 const char ContentSecurityPolicy::FrameAncestors[] = "frame-ancestors";
 const char ContentSecurityPolicy::PluginTypes[] = "plugin-types";
-const char ContentSecurityPolicy::ReflectedXSS[] = "reflected-xss";
-const char ContentSecurityPolicy::Referrer[] = "referrer";
 
 // CSP Editor's Draft:
 // https://w3c.github.io/webappsec/specs/content-security-policy
@@ -127,8 +124,6 @@ bool ContentSecurityPolicy::isDirectiveName(const String& name) {
       equalIgnoringCase(name, FormAction) ||
       equalIgnoringCase(name, FrameAncestors) ||
       equalIgnoringCase(name, PluginTypes) ||
-      equalIgnoringCase(name, ReflectedXSS) ||
-      equalIgnoringCase(name, Referrer) ||
       equalIgnoringCase(name, ManifestSrc) ||
       equalIgnoringCase(name, BlockAllMixedContent) ||
       equalIgnoringCase(name, UpgradeInsecureRequests) ||
@@ -193,7 +188,6 @@ ContentSecurityPolicy::ContentSecurityPolicy()
       m_scriptHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone),
       m_styleHashAlgorithmsUsed(ContentSecurityPolicyHashAlgorithmNone),
       m_sandboxMask(0),
-      m_referrerPolicy(ReferrerPolicyDefault),
       m_treatAsPublicAddress(false),
       m_insecureRequestPolicy(kLeaveInsecureRequestsAlone) {}
 
@@ -216,9 +210,6 @@ void ContentSecurityPolicy::applyPolicySideEffectsToExecutionContext() {
          m_executionContext->securityContext().getSecurityOrigin());
 
   setupSelf(*m_executionContext->securityContext().getSecurityOrigin());
-
-  if (didSetReferrerPolicy())
-    m_executionContext->setReferrerPolicy(m_referrerPolicy);
 
   // If we're in a Document, set mixed content checking and sandbox
   // flags, then dump all the parsing error messages, then poke at histograms.
@@ -365,12 +356,6 @@ void ContentSecurityPolicy::addPolicyFromHeaderValue(
     //        ^                  ^
     Member<CSPDirectiveList> policy =
         CSPDirectiveList::create(this, begin, position, type, source);
-
-    // When a referrer policy has already been set, the most recent
-    // one takes precedence.
-    if (type != ContentSecurityPolicyHeaderTypeReport &&
-        policy->didSetReferrerPolicy())
-      m_referrerPolicy = policy->getReferrerPolicy();
 
     if (!policy->allowEval(0, SuppressReport) &&
         m_disableEvalErrorMessage.isNull())
@@ -591,8 +576,19 @@ bool isAllowedByAll(const CSPDirectiveListVector& policies,
                     ParserDisposition parserDisposition,
                     RedirectStatus redirectStatus,
                     ContentSecurityPolicy::ReportingStatus reportingStatus) {
-  if (SchemeRegistry::schemeShouldBypassContentSecurityPolicy(url.protocol()))
-    return true;
+  if (SchemeRegistry::schemeShouldBypassContentSecurityPolicy(url.protocol())) {
+    // If we're running experimental features, bypass CSP only for
+    // non-parser-inserted resources whose scheme otherwise bypasses CSP. If
+    // we're not running experimental features, bypass CSP for all resources
+    // regardless of parser state. Once we have more data via the
+    // 'ScriptWithCSPBypassingScheme*' metrics, make a decision about what
+    // behavior to ship. https://crbug.com/653521
+    if (parserDisposition == NotParserInserted ||
+        !RuntimeEnabledFeatures::
+            experimentalContentSecurityPolicyFeaturesEnabled()) {
+      return true;
+    }
+  }
 
   bool isAllowed = true;
   for (const auto& policy : policies) {
@@ -625,7 +621,7 @@ bool checkDigest(const String& source,
                  const CSPDirectiveListVector& policies) {
   // Any additions or subtractions from this struct should also modify the
   // respective entries in the kSupportedPrefixes array in
-  // CSPSourceList::parseHash().
+  // SourceListDirective::parseHash().
   static const struct {
     ContentSecurityPolicyHashAlgorithm cspHashAlgorithm;
     HashAlgorithm algorithm;
@@ -775,6 +771,13 @@ bool ContentSecurityPolicy::allowScriptFromSource(
     ParserDisposition parserDisposition,
     RedirectStatus redirectStatus,
     ContentSecurityPolicy::ReportingStatus reportingStatus) const {
+  if (SchemeRegistry::schemeShouldBypassContentSecurityPolicy(url.protocol())) {
+    UseCounter::count(
+        document(),
+        parserDisposition == ParserInserted
+            ? UseCounter::ScriptWithCSPBypassingSchemeParserInserted
+            : UseCounter::ScriptWithCSPBypassingSchemeNotParserInserted);
+  }
   return isAllowedByAll<&CSPDirectiveList::allowScriptFromSource>(
       m_policies, url, nonce, parserDisposition, redirectStatus,
       reportingStatus);
@@ -1010,24 +1013,6 @@ bool ContentSecurityPolicy::isActive() const {
   return !m_policies.isEmpty();
 }
 
-ReflectedXSSDisposition ContentSecurityPolicy::getReflectedXSSDisposition()
-    const {
-  ReflectedXSSDisposition disposition = ReflectedXSSUnset;
-  for (const auto& policy : m_policies) {
-    if (policy->getReflectedXSSDisposition() > disposition)
-      disposition = std::max(disposition, policy->getReflectedXSSDisposition());
-  }
-  return disposition;
-}
-
-bool ContentSecurityPolicy::didSetReferrerPolicy() const {
-  for (const auto& policy : m_policies) {
-    if (policy->didSetReferrerPolicy())
-      return true;
-  }
-  return false;
-}
-
 const KURL ContentSecurityPolicy::url() const {
   return m_executionContext->contextURL();
 }
@@ -1118,7 +1103,7 @@ static void gatherSecurityPolicyViolationEventData(
     }
   }
   init.setReferrer(document->referrer());
-  init.setViolatedDirective(directiveText);
+  init.setViolatedDirective(effectiveDirective);
   init.setEffectiveDirective(effectiveDirective);
   init.setOriginalPolicy(header);
   init.setDisposition(headerType == ContentSecurityPolicyHeaderTypeEnforce
@@ -1264,7 +1249,9 @@ void ContentSecurityPolicy::dispatchViolationEvents(
     const SecurityPolicyViolationEventInit& violationData,
     Element* element,
     Document* document) {
-  if (!document->domWindow())
+  // If the document is detached or closed (thus clearing its event queue)
+  // between the violation occuring and this event dispatch, exit early.
+  if (!document->domWindow() || !document->domWindow()->getEventQueue())
     return;
 
   SecurityPolicyViolationEvent* event = SecurityPolicyViolationEvent::create(
@@ -1282,15 +1269,6 @@ void ContentSecurityPolicy::reportMixedContent(const KURL& mixedURL,
                                                RedirectStatus redirectStatus) {
   for (const auto& policy : m_policies)
     policy->reportMixedContent(mixedURL, redirectStatus);
-}
-
-void ContentSecurityPolicy::reportInvalidReferrer(const String& invalidValue) {
-  logToConsole(
-      "The 'referrer' Content Security Policy directive has the invalid value "
-      "\"" +
-      invalidValue +
-      "\". Valid values are \"no-referrer\", \"no-referrer-when-downgrade\", "
-      "\"origin\", \"origin-when-cross-origin\", and \"unsafe-url\".");
 }
 
 void ContentSecurityPolicy::reportReportOnlyInMeta(const String& header) {
@@ -1404,15 +1382,6 @@ void ContentSecurityPolicy::reportInvalidSandboxFlags(
   logToConsole(
       "Error while parsing the 'sandbox' Content Security Policy directive: " +
       invalidFlags);
-}
-
-void ContentSecurityPolicy::reportInvalidReflectedXSS(
-    const String& invalidValue) {
-  logToConsole(
-      "The 'reflected-xss' Content Security Policy directive has the invalid "
-      "value \"" +
-      invalidValue +
-      "\". Valid values are \"allow\", \"filter\", and \"block\".");
 }
 
 void ContentSecurityPolicy::reportInvalidRequireSRIForTokens(

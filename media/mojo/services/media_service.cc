@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "media/base/media_log.h"
+#include "media/mojo/services/interface_factory_impl.h"
 #include "media/mojo/services/mojo_media_client.h"
-#include "media/mojo/services/service_factory_impl.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connection.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -26,11 +26,11 @@ MediaService::MediaService(std::unique_ptr<MojoMediaClient> mojo_media_client,
 
 MediaService::~MediaService() {}
 
-void MediaService::OnStart(const service_manager::Identity& identity) {
+void MediaService::OnStart(const service_manager::ServiceInfo& info) {
   mojo_media_client_->Initialize();
 }
 
-bool MediaService::OnConnect(const service_manager::Identity& remote_identity,
+bool MediaService::OnConnect(const service_manager::ServiceInfo& remote_info,
                              service_manager::InterfaceRegistry* registry) {
   registry->AddInterface<mojom::MediaService>(this);
   return true;
@@ -46,17 +46,17 @@ void MediaService::Create(const service_manager::Identity& remote_identity,
   bindings_.AddBinding(this, std::move(request));
 }
 
-void MediaService::CreateServiceFactory(
-    mojom::ServiceFactoryRequest request,
+void MediaService::CreateInterfaceFactory(
+    mojom::InterfaceFactoryRequest request,
     service_manager::mojom::InterfaceProviderPtr remote_interfaces) {
   // Ignore request if service has already stopped.
   if (!mojo_media_client_)
     return;
 
   mojo::MakeStrongBinding(
-      base::MakeUnique<ServiceFactoryImpl>(std::move(remote_interfaces),
-                                           media_log_, ref_factory_.CreateRef(),
-                                           mojo_media_client_.get()),
+      base::MakeUnique<InterfaceFactoryImpl>(
+          std::move(remote_interfaces), media_log_, ref_factory_.CreateRef(),
+          mojo_media_client_.get()),
       std::move(request));
 }
 

@@ -6,13 +6,13 @@ package org.chromium.chrome.browser.media.ui;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_HAS_CAMERA;
 
-import android.os.Environment;
 import android.support.v7.widget.SwitchCompat;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.Smoke;
 
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -82,8 +82,7 @@ public class MediaPermissionsTest extends ChromeActivityTestCaseBase<ChromeActiv
         mListener =  new InfoBarTestAnimationListener();
         container.setAnimationListener(mListener);
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override
@@ -145,9 +144,10 @@ public class MediaPermissionsTest extends ChromeActivityTestCaseBase<ChromeActiv
      * switch appears and that permission is granted with it toggled off.
      * @throws Exception
      */
-    @MediumTest
-    @CommandLineFlags.Add("enable-features=DisplayPersistenceToggleInPermissionPrompts")
-    @Feature({"MediaPermissions"})
+    //@MediumTest
+    //@CommandLineFlags.Add("enable-features=DisplayPersistenceToggleInPermissionPrompts")
+    //@Feature({"MediaPermissions"})
+    @DisabledTest
     public void testMicrophonePersistenceOff() throws Exception {
         testMediaPermissionsPlumbing("Mic count:", "initiate_getMicrophone()", 1, true, true);
     }

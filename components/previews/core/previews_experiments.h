@@ -25,14 +25,23 @@ int BlackListOptOutThreshold();
 // The amount of time a host remains blacklisted due to opt outs.
 base::TimeDelta BlackListDuration();
 
+// The amount of time after any opt out that no previews should be shown.
+base::TimeDelta SingleOptOutDuration();
+
 }  // namespace params
+
+enum class PreviewsType {
+  NONE = 0,
+  OFFLINE = 1,
+  LAST = 2,
+};
 
 // Returns true if any client-side previews experiment is active.
 bool IsIncludedInClientSidePreviewsExperimentsFieldTrial();
 
-// Returns true if the field trial that should enable offline pages for
+// Returns true if the field trial that should enable previews for |type| for
 // prohibitvely slow networks is active.
-bool IsOfflinePreviewsEnabled();
+bool IsPreviewsTypeEnabled(PreviewsType type);
 
 // Sets the appropriate state for field trial and variations to imitate the
 // offline pages field trial.

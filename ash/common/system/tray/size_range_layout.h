@@ -42,14 +42,6 @@ namespace ash {
 //
 class ASH_EXPORT SizeRangeLayout : public views::LayoutManager {
  public:
-  // Returns the absolute minimum possible size. Use this with set_min_size() to
-  // effectively unset the minimum preferred size.
-  static gfx::Size AbsoluteMinSize();
-
-  // Returns the absolute maximum possible size. Use this with set_max_size() to
-  // effectively unset the maximum preferred size.
-  static gfx::Size AbsoluteMaxSize();
-
   // Create a layout with no minimum or maximum preferred size.
   SizeRangeLayout();
 
@@ -60,13 +52,23 @@ class ASH_EXPORT SizeRangeLayout : public views::LayoutManager {
 
   ~SizeRangeLayout() override;
 
+  // The absolute minimum possible width/height. Use this with SetMinSize() to
+  // effectively unset the minimum preferred size.
+  static const int kAbsoluteMinSize;
+
+  // Tthe absolute maximum possible width/height. Use this with SetMaxSize() to
+  // effectively unset the maximum preferred size.
+  static const int kAbsoluteMaxSize;
+
   // Sets both the minimum and maximum preferred size.
   void SetSize(const gfx::Size& size);
+  void SetSize(int width, int height);
 
   // Set the minimum preferred size that GetPreferredSize() will round up to. If
   // |size| is larger than the current |max_size_| then |max_size_| will set to
   // |size| as well.
   void SetMinSize(const gfx::Size& size);
+  void SetMinSize(int width, int height);
 
   // Set the minimum preferred size that GetPreferredSize() will round down to.
   // If |size| is smaller than the current |min_size_| then |min_size_| will set

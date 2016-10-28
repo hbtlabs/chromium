@@ -37,12 +37,10 @@ import errno
 import itertools
 import json
 import logging
-import os
 import operator
 import optparse
 import re
 import sys
-
 
 from webkitpy.common import find_files
 from webkitpy.common import read_checksum_from_png
@@ -53,6 +51,7 @@ from webkitpy.common.webkit_finder import WebKitFinder
 from webkitpy.layout_tests.layout_package.bot_test_expectations import BotTestExpectationsFactory
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.models.test_configuration import TestConfiguration
+from webkitpy.layout_tests.models.test_expectations import SKIP
 from webkitpy.layout_tests.port import driver
 from webkitpy.layout_tests.port import server_process
 from webkitpy.layout_tests.port.factory import PortFactory
@@ -281,11 +280,6 @@ class Port(object):
             return 1
         return max_locked_shards
 
-    def baseline_path(self):
-        """Return the absolute path to the directory to store new baselines in for this port."""
-        # FIXME: remove once all callers are calling either baseline_version_dir() or baseline_platform_dir()
-        return self.baseline_version_dir()
-
     def baseline_platform_dir(self):
         """Return the absolute path to the default (version-independent) platform-specific results."""
         return self._filesystem.join(self.layout_tests_dir(), 'platform', self.port_name)
@@ -311,7 +305,7 @@ class Port(object):
         """Return a list of absolute paths to directories to search under for
         baselines. The directories are searched in order.
         """
-        return map(self._webkit_baseline_path, self.FALLBACK_PATHS[self.version()])
+        return map(self._absolute_baseline_path, self.FALLBACK_PATHS[self.version()])
 
     @memoized
     def _compare_baseline(self):
@@ -932,6 +926,21 @@ class Port(object):
         """Returns tests skipped outside of the TestExpectations files."""
         return set(self._skipped_tests_for_unsupported_features(test_list))
 
+    def skips_test(self, test, generic_expectations, full_expectations):
+        """Checks whether the given test is skipped for this port.
+
+        This should return True if the test is skipped because the port
+        runs smoke tests only, or because there's a skip test expectation line.
+        """
+        fs = self.host.filesystem
+        if self.default_smoke_test_only():
+            smoke_test_filename = fs.join(self.layout_tests_dir(), 'SmokeTests')
+            if fs.exists(smoke_test_filename) and test not in fs.read_text_file(smoke_test_filename):
+                return True
+
+        return (SKIP in full_expectations.get_expectations(test) and
+                SKIP not in generic_expectations.get_expectations(test))
+
     def _tests_from_skipped_file_contents(self, skipped_file_contents):
         tests_to_skip = []
         for line in skipped_file_contents.split('\n'):
@@ -945,7 +954,7 @@ class Port(object):
     def _expectations_from_skipped_files(self, skipped_file_paths):
         tests_to_skip = []
         for search_path in skipped_file_paths:
-            filename = self._filesystem.join(self._webkit_baseline_path(search_path), "Skipped")
+            filename = self._filesystem.join(self._absolute_baseline_path(search_path), "Skipped")
             if not self._filesystem.exists(filename):
                 _log.debug("Skipped does not exist: %s", filename)
                 continue
@@ -966,9 +975,6 @@ class Port(object):
             if self._filesystem.isdir(category) and test_name.startswith(test_or_category):
                 return True
         return False
-
-    def is_chromium(self):
-        return True
 
     def name(self):
         """Returns a name that uniquely identifies this particular type of port
@@ -1552,11 +1558,11 @@ class Port(object):
                 return path
         return None
 
-    def _webkit_baseline_path(self, platform):
-        """Return the  full path to the top of the baseline tree for a
-        given platform.
+    def _absolute_baseline_path(self, platform_dir):
+        """Return the absolute path to the top of the baseline tree for a
+        given platform directory.
         """
-        return self._filesystem.join(self.layout_tests_dir(), 'platform', platform)
+        return self._filesystem.join(self.layout_tests_dir(), 'platform', platform_dir)
 
     def _driver_class(self):
         """Returns the port's driver implementation."""

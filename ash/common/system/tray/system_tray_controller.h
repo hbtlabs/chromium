@@ -42,6 +42,7 @@ class ASH_EXPORT SystemTrayController
   // Wrappers around the mojom::SystemTrayClient interface.
   void ShowSettings();
   void ShowDateSettings();
+  void ShowSetTimeDialog();
   void ShowDisplaySettings();
   void ShowPowerSettings();
   void ShowChromeSlow();
@@ -53,6 +54,7 @@ class ASH_EXPORT SystemTrayController
   void ShowPaletteSettings();
   void ShowPublicAccountInfo();
   void ShowNetworkConfigure(const std::string& network_id);
+  void ShowNetworkCreate(const std::string& type);
   void ShowNetworkSettings(const std::string& network_id);
   void ShowProxySettings();
 

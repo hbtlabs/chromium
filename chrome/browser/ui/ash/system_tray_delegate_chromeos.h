@@ -89,7 +89,6 @@ class SystemTrayDelegateChromeOS
   bool IsUserChild() const override;
   void GetSystemUpdateInfo(ash::UpdateInfo* info) const override;
   bool ShouldShowSettings() override;
-  void ShowSetTimeDialog() override;
   void ShowEnterpriseInfo() override;
   void ShowUserLogin() override;
   void SignOut() override;
@@ -107,7 +106,6 @@ class SystemTrayDelegateChromeOS
   void ActivateIMEProperty(const std::string& key) override;
   void ManageBluetoothDevices() override;
   void ToggleBluetooth() override;
-  void ShowOtherNetworkDialog(const std::string& type) override;
   bool GetBluetoothAvailable() override;
   bool GetBluetoothEnabled() override;
   bool GetBluetoothDiscovering() override;
@@ -115,7 +113,6 @@ class SystemTrayDelegateChromeOS
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
-  int GetSystemTrayMenuWidth() override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
   void AddCustodianInfoTrayObserver(
@@ -166,8 +163,6 @@ class SystemTrayDelegateChromeOS
   // Overridden from SessionManagerClient::Observer.
   void ScreenIsLocked() override;
   void ScreenIsUnlocked() override;
-
-  gfx::NativeWindow GetNativeWindow() const;
 
   // content::NotificationObserver implementation.
   void Observe(int type,

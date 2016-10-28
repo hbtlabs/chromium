@@ -147,6 +147,15 @@ _BANNED_OBJC_FUNCTIONS = (
       ),
       True,
     ),
+    (
+      r"/\s+UTF8String\s*]",
+      (
+       'The use of -[NSString UTF8String] is dangerous as it can return null',
+       'even if |canBeConvertedToEncoding:NSUTF8StringEncoding| returns YES.',
+       'Please use |SysNSStringToUTF8| instead.',
+      ),
+      True,
+    ),
 )
 
 
@@ -303,15 +312,6 @@ _BANNED_CPP_FUNCTIONS = (
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
-      ),
-      True,
-      (),
-    ),
-    (
-      r'FOR_EACH_OBSERVER(',
-      (
-        'Use range-based for loops to iterate through base::ObserverList, e.g.',
-        '        for (auto& observer : observers) { observer.Observe(); }',
       ),
       True,
       (),

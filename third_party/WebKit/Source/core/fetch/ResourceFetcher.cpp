@@ -1164,6 +1164,11 @@ void ResourceFetcher::didFinishLoading(Resource* resource,
   if (finishReason == DidFinishLoading)
     resource->finish(finishTime);
   context().didLoadResource(resource);
+
+  if (resource->isImage() &&
+      toImageResource(resource)->shouldReloadBrokenPlaceholder()) {
+    toImageResource(resource)->reloadIfLoFiOrPlaceholder(this);
+  }
 }
 
 void ResourceFetcher::didFailLoading(Resource* resource,
@@ -1176,6 +1181,11 @@ void ResourceFetcher::didFailLoading(Resource* resource,
   context().dispatchDidFail(resource->identifier(), error, isInternalRequest);
   resource->error(error);
   context().didLoadResource(resource);
+
+  if (resource->isImage() &&
+      toImageResource(resource)->shouldReloadBrokenPlaceholder()) {
+    toImageResource(resource)->reloadIfLoFiOrPlaceholder(this);
+  }
 }
 
 void ResourceFetcher::didReceiveResponse(Resource* resource,
@@ -1199,7 +1209,8 @@ void ResourceFetcher::didReceiveResponse(Resource* resource,
       // handled a request.
       request.setSkipServiceWorker(
           WebURLRequest::SkipServiceWorker::Controlling);
-      resource->loader()->restartForServiceWorkerFallback(request);
+      resource->loader()->restart(request, context().loadingTaskRunner(),
+                                  context().defersLoading());
       return;
     }
 
@@ -1213,13 +1224,13 @@ void ResourceFetcher::didReceiveResponse(Resource* resource,
                                  resource->resourceRequest(), originalURL,
                                  resource->options())) {
       resource->loader()->didFail(
-          nullptr, ResourceError::cancelledDueToAccessCheckError(originalURL));
+          ResourceError::cancelledDueToAccessCheckError(originalURL));
       return;
     }
   } else if (resource->options().corsEnabled == IsCORSEnabled &&
              !canAccessResponse(resource, response)) {
     resource->loader()->didFail(
-        nullptr, ResourceError::cancelledDueToAccessCheckError(response.url()));
+        ResourceError::cancelledDueToAccessCheckError(response.url()));
     return;
   }
 
@@ -1229,8 +1240,7 @@ void ResourceFetcher::didReceiveResponse(Resource* resource,
   resource->responseReceived(response, std::move(handle));
   if (resource->loader() && response.httpStatusCode() >= 400 &&
       !resource->shouldIgnoreHTTPStatusCodeErrors()) {
-    resource->loader()->didFail(nullptr,
-                                ResourceError::cancelledError(response.url()));
+    resource->loader()->didFail(ResourceError::cancelledError(response.url()));
   }
 }
 
@@ -1423,7 +1433,7 @@ void ResourceFetcher::reloadLoFiImages() {
     Resource* resource = documentResource.value.get();
     if (resource && resource->isImage()) {
       ImageResource* imageResource = toImageResource(resource);
-      imageResource->reloadIfLoFi(this);
+      imageResource->reloadIfLoFiOrPlaceholder(this);
     }
   }
 }

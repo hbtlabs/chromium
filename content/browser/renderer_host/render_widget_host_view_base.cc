@@ -32,7 +32,8 @@ const int kFlushInputRateInUs = 16666;
 }
 
 RenderWidgetHostViewBase::RenderWidgetHostViewBase()
-    : popup_type_(blink::WebPopupTypeNone),
+    : is_fullscreen_(false),
+      popup_type_(blink::WebPopupTypeNone),
       background_color_(SK_ColorWHITE),
       mouse_locked_(false),
       showing_context_menu_(false),
@@ -42,7 +43,6 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase()
 #endif
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
-      pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
       text_input_manager_(nullptr),
       renderer_frame_number_(0),
       weak_factory_(this) {
@@ -109,7 +109,7 @@ gfx::Size RenderWidgetHostViewBase::GetPhysicalBackingSize() const {
                                 display.device_scale_factor());
 }
 
-bool RenderWidgetHostViewBase::DoTopControlsShrinkBlinkSize() const {
+bool RenderWidgetHostViewBase::DoBrowserControlsShrinkBlinkSize() const {
   return false;
 }
 

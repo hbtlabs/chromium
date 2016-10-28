@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-typedef long long      GLint64;
+typedef long long GLint64;
+typedef unsigned long long GLuint64;
 
 [
-    RuntimeEnabled=UnsafeES3APIs,
     NoInterfaceObject,
 ] interface WebGL2RenderingContextBase {
     const GLenum READ_BUFFER                                   = 0x0C02;
@@ -289,7 +289,7 @@ typedef long long      GLint64;
     void framebufferTextureLayer(GLenum target, GLenum attachment, WebGLTexture? texture, GLint level, GLint layer);
     [CallWith=ScriptState] any getInternalformatParameter(GLenum target, GLenum internalformat, GLenum pname);
     void invalidateFramebuffer(GLenum target, sequence<GLenum> attachments);
-    void invalidateSubFramebuffer (GLenum target, sequence<GLenum> attachments, GLint x, GLint y, GLsizei width, GLsizei height);
+    void invalidateSubFramebuffer(GLenum target, sequence<GLenum> attachments, GLint x, GLint y, GLsizei width, GLsizei height);
     void readBuffer(GLenum mode);
 
     /* Renderbuffer objects */
@@ -398,7 +398,7 @@ typedef long long      GLint64;
     GLboolean isQuery(WebGLQuery? query);
     void beginQuery(GLenum target, WebGLQuery? query);
     void endQuery(GLenum target);
-    WebGLQuery getQuery(GLenum target, GLenum pname);
+    [CallWith=ScriptState] any getQuery(GLenum target, GLenum pname);
     [CallWith=ScriptState] any getQueryParameter(WebGLQuery? query, GLenum pname);
 
     /* Sampler Objects */
@@ -414,7 +414,7 @@ typedef long long      GLint64;
     WebGLSync fenceSync(GLenum condition, GLbitfield flags);
     GLboolean isSync(WebGLSync? sync);
     void deleteSync(WebGLSync? sync);
-    GLenum clientWaitSync(WebGLSync? sync, GLbitfield flags, GLint64 timeout);
+    GLenum clientWaitSync(WebGLSync? sync, GLbitfield flags, GLuint64 timeout);
     void waitSync(WebGLSync? sync, GLbitfield flags, GLint64 timeout);
 
     [CallWith=ScriptState] any getSyncParameter(WebGLSync? sync, GLenum pname);
@@ -423,7 +423,7 @@ typedef long long      GLint64;
     WebGLTransformFeedback createTransformFeedback();
     void deleteTransformFeedback(WebGLTransformFeedback? feedback);
     GLboolean isTransformFeedback(WebGLTransformFeedback? feedback);
-    void bindTransformFeedback (GLenum target, WebGLTransformFeedback? feedback);
+    void bindTransformFeedback(GLenum target, WebGLTransformFeedback? feedback);
     void beginTransformFeedback(GLenum primitiveMode);
     void endTransformFeedback();
     void transformFeedbackVaryings(WebGLProgram? program, sequence<DOMString> varyings, GLenum bufferMode);

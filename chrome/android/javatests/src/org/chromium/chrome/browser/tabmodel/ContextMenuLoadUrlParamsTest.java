@@ -5,14 +5,12 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.app.Activity;
-import android.os.Environment;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
@@ -48,9 +46,9 @@ public class ContextMenuLoadUrlParamsTest extends ChromeTabbedActivityTestBase {
             return super.openNewTab(loadUrlParams, type, parent, incognito);
         }
 
-        public RecordingTabModelSelector(Activity activity, TabCreatorManager tabCreatorManager,
-                FullscreenManager fullscreenManager, int selectorIndex) {
-            super(activity, tabCreatorManager, fullscreenManager,
+        public RecordingTabModelSelector(
+                Activity activity, TabCreatorManager tabCreatorManager, int selectorIndex) {
+            super(activity, tabCreatorManager,
                     new TabbedModeTabPersistencePolicy(selectorIndex, false), true);
         }
     }
@@ -68,17 +66,16 @@ public class ContextMenuLoadUrlParamsTest extends ChromeTabbedActivityTestBase {
                             @Override
                             public TabModelSelector buildSelector(
                                     Activity activity, TabCreatorManager tabCreatorManager,
-                                    FullscreenManager fullscreenManager, int selectorIndex) {
-                                return new RecordingTabModelSelector(activity, tabCreatorManager,
-                                        fullscreenManager, selectorIndex);
+                                    int selectorIndex) {
+                                return new RecordingTabModelSelector(
+                                        activity, tabCreatorManager, selectorIndex);
                             }
                         });
             }
         });
         super.setUp();
 
-        mTestServer = EmbeddedTestServer.createAndStartFileServer(
-                getInstrumentation().getContext(), Environment.getExternalStorageDirectory());
+        mTestServer = EmbeddedTestServer.createAndStartServer(getInstrumentation().getContext());
     }
 
     @Override

@@ -38,7 +38,8 @@ bool NGBox::Layout(const NGConstraintSpace* constraint_space,
     // Change the coordinate system of the constraint space.
     NGConstraintSpace* child_constraint_space = new NGConstraintSpace(
         FromPlatformWritingMode(Style()->getWritingMode()),
-        FromPlatformDirection(Style()->direction()), constraint_space);
+        FromPlatformDirection(Style()->direction()),
+        constraint_space->MutablePhysicalSpace());
 
     NGPhysicalFragment* fragment = nullptr;
     if (!algorithm_->Layout(child_constraint_space, &fragment))
@@ -117,7 +118,13 @@ bool NGBox::CanUseNewLayout() {
   if (!layout_box_->isLayoutBlockFlow())
     return false;
   const LayoutBlockFlow* block_flow = toLayoutBlockFlow(layout_box_);
-  return !block_flow->childrenInline() || !block_flow->firstChild();
+  LayoutObject* child = block_flow->firstChild();
+  while (child) {
+    if (child->isInline())
+      return false;
+    child = child->nextSibling();
+  }
+  return true;
 }
 
 void NGBox::CopyFragmentDataToLayoutBox(

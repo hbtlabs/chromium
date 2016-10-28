@@ -8,9 +8,10 @@ namespace chromeos {
 
 namespace {
 const char kChromeVoxEnabledMessage[] = "chrome vox spoken feedback is ready";
-const char kChromeVoxUpdateNotificationMessage[] =
-    "n to learn more about chrome vox Next.";
-}  // anonymous namespace
+const char kChromeVoxAlertMessage[] = "Alert";
+const char kChromeVoxUpdate1[] = "chrome vox Updated Press chrome vox o,";
+const char kChromeVoxUpdate2[] = "n to learn more about chrome vox Next.";
+}  // namespace
 
 SpeechMonitor::SpeechMonitor() {
   TtsController::GetInstance()->SetPlatformImpl(this);
@@ -32,8 +33,10 @@ std::string SpeechMonitor::GetNextUtterance() {
 }
 
 bool SpeechMonitor::SkipChromeVoxEnabledMessage() {
-  bool saw_enabled_message = false;
-  bool saw_update_message = false;
+  return SkipChromeVoxMessage(kChromeVoxEnabledMessage);
+}
+
+bool SpeechMonitor::SkipChromeVoxMessage(const std::string& message) {
   while (true) {
     if (utterance_queue_.empty()) {
       loop_runner_ = new content::MessageLoopRunner();
@@ -42,9 +45,7 @@ bool SpeechMonitor::SkipChromeVoxEnabledMessage() {
     }
     std::string result = utterance_queue_.front();
     utterance_queue_.pop_front();
-    saw_enabled_message |= result == kChromeVoxEnabledMessage;
-    saw_update_message |= result == kChromeVoxUpdateNotificationMessage;
-    if (saw_enabled_message && saw_update_message)
+    if (result == message)
       return true;
   }
   return false;
@@ -90,9 +91,12 @@ std::string SpeechMonitor::error() {
 
 void SpeechMonitor::WillSpeakUtteranceWithVoice(const Utterance* utterance,
                                                 const VoiceData& voice_data) {
+  // Blacklist some phrases.
   // Filter out empty utterances which can be used to trigger a start event from
   // tts as an earcon sync.
-  if (utterance->text() == "")
+  if (utterance->text() == "" || utterance->text() == kChromeVoxAlertMessage ||
+      utterance->text() == kChromeVoxUpdate1 ||
+      utterance->text() == kChromeVoxUpdate2)
     return;
 
   VLOG(0) << "Speaking " << utterance->text();

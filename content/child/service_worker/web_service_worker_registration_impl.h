@@ -56,9 +56,13 @@ class CONTENT_EXPORT WebServiceWorkerRegistrationImpl
   void unregister(blink::WebServiceWorkerProvider* provider,
                   WebServiceWorkerUnregistrationCallbacks* callbacks) override;
   void enableNavigationPreload(
-      WebEnableNavigationPreloadCallbacks* callbacks) override;
-  void disableNavigationPreload(
-      WebDisableNavigationPreloadCallbacks* callbacks) override;
+      bool enable,
+      blink::WebServiceWorkerProvider* provider,
+      std::unique_ptr<WebEnableNavigationPreloadCallbacks> callbacks) override;
+  void getNavigationPreloadState(
+      blink::WebServiceWorkerProvider* provider,
+      std::unique_ptr<WebGetNavigationPreloadStateCallbacks> callbacks)
+      override;
 
   int64_t registration_id() const;
 

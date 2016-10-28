@@ -209,6 +209,16 @@ void ApplyRenderParams(const FontRenderParams& params,
 // for rendering and translation between logical and visual data.
 class GFX_EXPORT RenderText {
  public:
+// The character used for displaying obscured text.
+// TODO(benrg): GTK uses the first of U+25CF, U+2022, U+2731, U+273A, '*'
+// that's available in the font (find_invisible_char() in gtkentry.c).
+// Use a bullet character on Mac.
+#if defined(OS_MACOSX)
+  static constexpr base::char16 kPasswordReplacementChar = 0x2022;
+#else
+  static constexpr base::char16 kPasswordReplacementChar = '*';
+#endif
+
   virtual ~RenderText();
 
   // Creates a platform-specific or cross-platform RenderText instance.
@@ -340,6 +350,12 @@ class GFX_EXPORT RenderText {
   // If any index in |selection_model| is not a cursorable position (not on a
   // grapheme boundary), it is a no-op and returns false.
   bool MoveCursorTo(const SelectionModel& selection_model);
+
+  // Moves the cursor to the text index corresponding to |point|. If |select| is
+  // true, a selection is made with the current selection start index. If the
+  // resultant text indices do not lie on valid grapheme boundaries, it is a no-
+  // op and returns false.
+  bool MoveCursorTo(const gfx::Point& point, bool select);
 
   // Set the selection_model_ based on |range|.
   // If the |range| start or end is greater than text length, it is modified

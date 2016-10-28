@@ -34,7 +34,6 @@
 #include "core/css/resolver/CSSPropertyPriority.h"
 #include "core/css/resolver/MatchedPropertiesCache.h"
 #include "core/css/resolver/StyleBuilder.h"
-#include "core/dom/DocumentOrderedList.h"
 #include "core/style/CachedUAStyle.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Deque.h"
@@ -113,16 +112,12 @@ class CORE_EXPORT StyleResolver final
   // we factor StyleResolver further.
   // https://bugs.webkit.org/show_bug.cgi?id=108890
   void appendAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
-  void resetAuthorStyle(TreeScope&);
-  void resetRuleFeatures();
-  void finishAppendAuthorStyleSheets();
-
   void lazyAppendAuthorStyleSheets(unsigned firstNew,
                                    const HeapVector<Member<CSSStyleSheet>>&);
   void removePendingAuthorStyleSheets(const HeapVector<Member<CSSStyleSheet>>&);
   void appendPendingAuthorStyleSheets();
   bool hasPendingAuthorStyleSheets() const {
-    return m_pendingStyleSheets.size() > 0 || m_needCollectFeatures;
+    return m_pendingStyleSheets.size() > 0;
   }
 
   // TODO(esprehn): StyleResolver should probably not contain tree walking
@@ -172,17 +167,7 @@ class CORE_EXPORT StyleResolver final
     return s_styleNotYetAvailable;
   }
 
-  RuleFeatureSet& ensureUpdatedRuleFeatureSet() {
-    if (hasPendingAuthorStyleSheets())
-      appendPendingAuthorStyleSheets();
-    RELEASE_ASSERT(m_features.isAlive());
-    return m_features;
-  }
-
   StyleSharingList& styleSharingList();
-
-  bool hasRulesForId(const AtomicString&) const;
-  bool hasFullscreenUAStyle() const { return m_hasFullscreenUAStyle; }
 
   void addToStyleSharingList(Element&);
   void clearStyleSharingList();
@@ -193,9 +178,6 @@ class CORE_EXPORT StyleResolver final
   PseudoElement* createPseudoElementIfNeeded(Element& parent, PseudoId);
 
   DECLARE_TRACE();
-
-  void addTreeBoundaryCrossingScope(ContainerNode& scope);
-  void initWatchedSelectorRules();
 
  private:
   explicit StyleResolver(Document&);
@@ -222,8 +204,8 @@ class CORE_EXPORT StyleResolver final
   void matchAllRules(StyleResolverState&,
                      ElementRuleCollector&,
                      bool includeSMILProperties);
-  void collectFeatures();
-  void collectTreeBoundaryCrossingRules(const Element&, ElementRuleCollector&);
+  void collectTreeBoundaryCrossingRulesV0CascadeOrder(const Element&,
+                                                      ElementRuleCollector&);
 
   void applyMatchedProperties(StyleResolverState&, const MatchResult&);
   bool applyAnimatedProperties(StyleResolverState&,
@@ -279,19 +261,7 @@ class CORE_EXPORT StyleResolver final
 
   HeapListHashSet<Member<CSSStyleSheet>, 16> m_pendingStyleSheets;
 
-  // FIXME: The entire logic of collecting features on StyleResolver, as well as
-  // transferring them between various parts of machinery smells wrong. This
-  // needs to be better somehow.
-  RuleFeatureSet m_features;
-  Member<RuleSet> m_siblingRuleSet;
-  Member<RuleSet> m_uncommonAttributeRuleSet;
-  Member<RuleSet> m_watchedSelectorsRules;
-
-  DocumentOrderedList m_treeBoundaryCrossingScopes;
-
-  bool m_needCollectFeatures;
   bool m_printMediaType;
-  bool m_hasFullscreenUAStyle = false;
 
   unsigned m_styleSharingDepth;
   HeapVector<Member<StyleSharingList>, styleSharingMaxDepth>

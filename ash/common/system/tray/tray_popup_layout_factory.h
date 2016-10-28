@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "ash/common/system/tray/three_view_layout.h"
+#include "ash/common/system/tray/tri_view.h"
 #include "base/macros.h"
 
 namespace views {
@@ -16,36 +16,30 @@ class View;
 
 namespace ash {
 
-// Factory functions for system menu row layout managers.
+// Factory functions for system menu row container views.
 class TrayPopupLayoutFactory {
  public:
-  // Sets the layout manager of |host| to the default layout manager used by
-  // most system menu rows. The newly created layout manager is owned by the
-  // |host| but is returned so child Views can be added.
+  // Creates a default container view to be used most system menu rows. The
+  // caller takes over ownership of the created view.
   //
-  // The returned layout manager consists of 3 regions: START, CENTER, and END.
-  // Any child Views added to the START and END containers will be added
-  // horizonatlly and any Views added to the CENTER container will be added
-  // vertically.
+  // The returned view consists of 3 regions: START, CENTER, and END. Any child
+  // Views added to the START and END containers will be added horizonatlly and
+  // any Views added to the CENTER container will be added vertically.
   //
   // The START and END containers have a fixed width but can grow into the
   // CENTER container if space is required and available.
   //
   // The CENTER container has a flexible width.
-  static ThreeViewLayout* InstallDefaultLayout(views::View* host);
-
-  // Configures the different |container| Views with the default layout
-  // managers.
-  //
-  // This can be used by clients who need to embed portions of the default
-  // layout manager into a different container view, e.g. just the END layout
-  // into a clickable View.
-  static void ConfigureDefaultLayout(ThreeViewLayout* layout,
-                                     ThreeViewLayout::Container container);
+  static TriView* CreateDefaultRowView();
 
  private:
   TrayPopupLayoutFactory();
   ~TrayPopupLayoutFactory();
+
+  // Configures the specified |container| view with the default layout. Used by
+  // CreateDefaultRowView().
+  static void ConfigureDefaultLayout(TriView* tri_view,
+                                     TriView::Container container);
 
   DISALLOW_COPY_AND_ASSIGN(TrayPopupLayoutFactory);
 };

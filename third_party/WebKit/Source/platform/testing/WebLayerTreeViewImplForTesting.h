@@ -86,7 +86,7 @@ class WebLayerTreeViewImplForTesting
                            const gfx::Vector2dF& outerDelta,
                            const gfx::Vector2dF& elasticOverscrollDelta,
                            float pageScale,
-                           float topControlsDelta) override;
+                           float browserControlsDelta) override;
   void RequestNewCompositorFrameSink() override;
   void DidInitializeCompositorFrameSink() override {}
   void DidFailToInitializeCompositorFrameSink() override;
@@ -97,8 +97,8 @@ class WebLayerTreeViewImplForTesting
   void DidCompletePageScaleAnimation() override {}
 
   // cc::LayerTreeHostSingleThreadClient implementation.
-  void DidPostSwapBuffers() override {}
-  void DidAbortSwapBuffers() override {}
+  void DidSubmitCompositorFrame() override {}
+  void DidLoseCompositorFrameSink() override {}
 
  private:
   cc::TestTaskGraphRunner m_taskGraphRunner;

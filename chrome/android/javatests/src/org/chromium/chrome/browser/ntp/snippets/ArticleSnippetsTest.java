@@ -7,9 +7,7 @@ package org.chromium.chrome.browser.ntp.snippets;
 import android.graphics.BitmapFactory;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.util.TypedValue;
-import android.view.ContextMenu;
 import android.view.Menu;
-import android.view.MenuItem.OnMenuItemClickListener;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -31,7 +29,9 @@ import org.chromium.chrome.browser.ntp.UiConfig;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
+import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
 
@@ -78,7 +78,8 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
                 View aboveTheFold = new View(getActivity());
 
                 mRecyclerView.setAboveTheFoldView(aboveTheFold);
-                mAdapter = new NewTabPageAdapter(mNtpManager, aboveTheFold, mUiConfig);
+                mAdapter = new NewTabPageAdapter(mNtpManager, aboveTheFold, mUiConfig,
+                        OfflinePageBridge.getForProfile(Profile.getLastUsedProfile()));
                 mRecyclerView.setAdapter(mAdapter);
             }
         });
@@ -175,7 +176,7 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
 
         mSnippetsSource.setInfoForCategory(KnownCategories.ARTICLES,
                 new SuggestionsCategoryInfo(KnownCategories.ARTICLES, "Section Title",
-                        ContentSuggestionsCardLayout.FULL_CARD, false, true));
+                        ContentSuggestionsCardLayout.FULL_CARD, false, true, "No suggestions"));
         mSnippetsSource.setStatusForCategory(KnownCategories.ARTICLES,
                 CategoryStatus.AVAILABLE);
         mSnippetsSource.setSuggestionsForCategory(KnownCategories.ARTICLES,
@@ -217,17 +218,12 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void openMostVisitedItem(MostVisitedItem item) {
+        public void removeMostVisitedItem(MostVisitedItem item) {
             throw new UnsupportedOperationException();
         }
 
         @Override
-        public void onCreateContextMenu(ContextMenu menu, OnMenuItemClickListener listener) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public boolean onMenuItemClick(int menuId, MostVisitedItem item) {
+        public void openMostVisitedItem(int windowDisposition, MostVisitedItem item) {
             throw new UnsupportedOperationException();
         }
 
@@ -353,7 +349,7 @@ public class ArticleSnippetsTest extends ChromeActivityTestCaseBase<ChromeActivi
         }
 
         @Override
-        public void setDestructionObserver(DestructionObserver destructionObserver) {}
+        public void addDestructionObserver(DestructionObserver destructionObserver) {}
 
         @Override
         public void closeContextMenu() {

@@ -23,7 +23,6 @@
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_vsync_manager.h"
 #include "ui/compositor/layer.h"
-#include "ui/compositor/layer_owner_delegate.h"
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
@@ -72,7 +71,6 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
       int compositor_frame_sink_id,
       bool is_swap_ack,
       const cc::ReturnedResourceArray& resources) = 0;
-  virtual void DelegatedFrameHostOnLostCompositorResources() = 0;
 
   virtual void SetBeginFrameSource(cc::BeginFrameSource* source) = 0;
   virtual bool IsAutoResizeEnabled() const = 0;
@@ -85,7 +83,6 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
 class CONTENT_EXPORT DelegatedFrameHost
     : public ui::CompositorObserver,
       public ui::CompositorVSyncManager::Observer,
-      public ui::LayerOwnerDelegate,
       public ui::ContextFactoryObserver,
       public DelegatedFrameEvictorClient,
       public cc::SurfaceFactoryClient,
@@ -100,16 +97,12 @@ class CONTENT_EXPORT DelegatedFrameHost
   void OnCompositingStarted(ui::Compositor* compositor,
                             base::TimeTicks start_time) override;
   void OnCompositingEnded(ui::Compositor* compositor) override;
-  void OnCompositingAborted(ui::Compositor* compositor) override;
   void OnCompositingLockStateChanged(ui::Compositor* compositor) override;
   void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
   // ui::CompositorVSyncManager::Observer implementation.
   void OnUpdateVSyncParameters(base::TimeTicks timebase,
                                base::TimeDelta interval) override;
-
-  // ui::LayerOwnerObserver implementation.
-  void OnLayerRecreated(ui::Layer* old_layer, ui::Layer* new_layer) override;
 
   // ImageTransportFactoryObserver implementation.
   void OnLostResources() override;

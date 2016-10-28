@@ -472,6 +472,9 @@ bool CompositedLayerMapping::
   if (clippingContainer->enclosingLayer() == scrollParent)
     return false;
 
+  if (clippingContainer->enclosingLayer()->hasRootScrollerAsDescendant())
+    return false;
+
   if (compositingAncestor->layoutObject()->isDescendantOf(clippingContainer))
     return false;
 
@@ -531,7 +534,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration() {
     needsDescendantsClippingLayer = false;
 
   // We disable clipping on ancestor layers of the root scroller to give it
-  // the same behavior w.r.t top controls as the real root layer. See the
+  // the same behavior w.r.t browser controls as the real root layer. See the
   // RootScrollerController class for more details.
   if (m_owningLayer.hasRootScrollerAsDescendant())
     needsDescendantsClippingLayer = false;
@@ -545,10 +548,7 @@ bool CompositedLayerMapping::updateGraphicsLayerConfiguration() {
   // that sibling need not be composited at all. In such scenarios, an ancestor
   // clipping layer is necessary to apply the composited clip for this layer.
   bool needsAncestorClip =
-      owningLayerClippedByLayerNotAboveCompositedAncestor(scrollParent) &&
-      !m_owningLayer.clippingContainer()
-           ->enclosingLayer()
-           ->hasRootScrollerAsDescendant();
+      owningLayerClippedByLayerNotAboveCompositedAncestor(scrollParent);
 
   if (updateClippingLayers(needsAncestorClip, needsDescendantsClippingLayer))
     layerConfigChanged = true;
@@ -1234,7 +1234,7 @@ void CompositedLayerMapping::updateScrollingLayerGeometry(
   ASSERT(m_scrollingContentsLayer);
   LayoutBox* layoutBox = toLayoutBox(layoutObject());
   IntRect overflowClipRect =
-      enclosingIntRect(layoutBox->overflowClipRect(LayoutPoint()));
+      pixelSnappedIntRect(layoutBox->overflowClipRect(LayoutPoint()));
   FloatPoint scrollPosition =
       m_owningLayer.getScrollableArea()->scrollPosition();
   m_scrollingLayer->setPosition(FloatPoint(

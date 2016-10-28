@@ -52,7 +52,7 @@ RecentTabSuggestionsProvider::RecentTabSuggestionsProvider(
       category_status_(CategoryStatus::AVAILABLE_LOADING),
       provided_category_(
           category_factory->FromKnownCategory(KnownCategories::RECENT_TABS)),
-      offline_page_proxy_(offline_page_proxy),
+      offline_page_proxy_(std::move(offline_page_proxy)),
       pref_service_(pref_service),
       weak_ptr_factory_(this) {
   observer->OnCategoryStatusChanged(this, provided_category_, category_status_);
@@ -73,18 +73,15 @@ CategoryStatus RecentTabSuggestionsProvider::GetCategoryStatus(
 }
 
 CategoryInfo RecentTabSuggestionsProvider::GetCategoryInfo(Category category) {
-  if (category == provided_category_) {
-    return CategoryInfo(l10n_util::GetStringUTF16(
-                            IDS_NTP_RECENT_TAB_SUGGESTIONS_SECTION_HEADER),
-                        ContentSuggestionsCardLayout::MINIMAL_CARD,
-                        /*has_more_button=*/false,
-                        /*show_if_empty=*/false);
-  }
-  NOTREACHED() << "Unknown category " << category.id();
-  return CategoryInfo(base::string16(),
-                      ContentSuggestionsCardLayout::MINIMAL_CARD,
-                      /*has_more_button=*/false,
-                      /*show_if_empty=*/false);
+  DCHECK_EQ(provided_category_, category);
+  return CategoryInfo(
+      l10n_util::GetStringUTF16(IDS_NTP_RECENT_TAB_SUGGESTIONS_SECTION_HEADER),
+      ContentSuggestionsCardLayout::MINIMAL_CARD,
+      /*has_more_button=*/false,
+      /*show_if_empty=*/false,
+      l10n_util::GetStringUTF16(IDS_NTP_SUGGESTIONS_SECTION_EMPTY));
+  // TODO(vitaliii): Replace IDS_NTP_SUGGESTIONS_SECTION_EMPTY with a
+  // category-specific string.
 }
 
 void RecentTabSuggestionsProvider::DismissSuggestion(

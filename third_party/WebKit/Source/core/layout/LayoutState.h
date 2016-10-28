@@ -74,7 +74,6 @@ class LayoutState {
   explicit LayoutState(LayoutObject& root);
 
   LayoutState(LayoutBox&,
-              const LayoutSize& offset,
               LayoutUnit pageLogicalHeight = LayoutUnit(),
               bool pageHeightLogicalChanged = false,
               bool containingBlockLogicalWidthChanged = false);
@@ -96,13 +95,15 @@ class LayoutState {
     m_heightOffsetForTableHeaders = offset;
   };
 
-  const LayoutSize& layoutOffset() const { return m_layoutOffset; }
-  const LayoutSize& pageOffset() const { return m_pageOffset; }
+  const LayoutSize& paginationOffset() const { return m_paginationOffset; }
   LayoutUnit pageLogicalHeight() const { return m_pageLogicalHeight; }
   bool pageLogicalHeightChanged() const { return m_pageLogicalHeightChanged; }
   bool containingBlockLogicalWidthChanged() const {
     return m_containingBlockLogicalWidthChanged;
   }
+
+  bool paginationStateChanged() const { return m_paginationStateChanged; }
+  void setPaginationStateChanged() { m_paginationStateChanged = true; }
 
   LayoutState* next() const { return m_next; }
 
@@ -117,14 +118,15 @@ class LayoutState {
   // If our page height has changed, this will force all blocks to relayout.
   bool m_pageLogicalHeightChanged : 1;
   bool m_containingBlockLogicalWidthChanged : 1;
+  bool m_paginationStateChanged : 1;
 
   LayoutFlowThread* m_flowThread;
 
   LayoutState* m_next;
 
-  // x/y offset from container. Does not include relative positioning or scroll
-  // offsets.
-  LayoutSize m_layoutOffset;
+  // x/y offset from the logical top / start of the first page. Does not include
+  // relative positioning or scroll offsets.
+  LayoutSize m_paginationOffset;
 
   // The current page height for the pagination model that encloses us.
   LayoutUnit m_pageLogicalHeight;
@@ -132,10 +134,6 @@ class LayoutState {
   // The height we need to make available for repeating table headers in
   // paginated layout.
   LayoutUnit m_heightOffsetForTableHeaders;
-
-  // The offset of the start of the first page in the nearest enclosing
-  // pagination model.
-  LayoutSize m_pageOffset;
 
   LayoutObject& m_layoutObject;
 };

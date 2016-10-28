@@ -369,7 +369,7 @@ void AddClipNodeIfNeeded(const DataForRecursion<LayerType>& data_from_ancestor,
       // of its own, but clips from ancestor nodes don't need to be considered
       // when computing clip rects or visibility.
       has_unclipped_surface = true;
-      DCHECK(!parent->applies_local_clip);
+      DCHECK_NE(parent->clip_type, ClipNode::ClipType::APPLIES_LOCAL_CLIP);
     }
     // A surface with unclipped descendants cannot be clipped by its ancestor
     // clip at draw time since the unclipped descendants aren't affected by the
@@ -429,7 +429,10 @@ void AddClipNodeIfNeeded(const DataForRecursion<LayerType>& data_from_ancestor,
       node.layer_clipping_uses_only_local_clip = false;
     }
 
-    node.applies_local_clip = layer_clips_subtree;
+    if (layer_clips_subtree)
+      node.clip_type = ClipNode::ClipType::APPLIES_LOCAL_CLIP;
+    else
+      node.clip_type = ClipNode::ClipType::NONE;
     node.resets_clip = has_unclipped_surface;
     node.target_is_clipped = data_for_children->target_is_clipped;
     node.layers_are_clipped = layers_are_clipped;
@@ -490,6 +493,7 @@ bool AddTransformNodeIfNeeded(
   const bool is_scrollable = layer->scrollable();
   const bool is_fixed = PositionConstraint(layer).is_fixed_position();
   const bool is_sticky = StickyPositionConstraint(layer).is_sticky;
+  const bool is_snapped = layer->IsSnapped();
 
   const bool has_significant_transform =
       !Transform(layer).IsIdentityOr2DTranslation();
@@ -520,7 +524,8 @@ bool AddTransformNodeIfNeeded(
   const bool is_at_boundary_of_3d_rendering_context =
       IsAtBoundaryOf3dRenderingContext(layer);
 
-  bool requires_node = is_root || is_scrollable || has_significant_transform ||
+  DCHECK(!is_scrollable || is_snapped);
+  bool requires_node = is_root || is_snapped || has_significant_transform ||
                        has_any_transform_animation || has_surface || is_fixed ||
                        is_page_scale_layer || is_overscroll_elasticity_layer ||
                        has_proxied_transform_related_property ||
@@ -596,6 +601,7 @@ bool AddTransformNodeIfNeeded(
       node->id;
 
   node->scrolls = is_scrollable;
+  node->should_be_snapped = is_snapped;
   node->flattens_inherited_transform = data_for_children->should_flatten;
 
   node->sorting_context_id = layer->sorting_context_id();
@@ -639,9 +645,6 @@ bool AddTransformNodeIfNeeded(
     data_for_children->property_trees->transform_tree.set_page_scale_factor(
         data_from_ancestor.page_scale_factor);
   }
-
-  if (has_surface && !is_root)
-    node->needs_surface_contents_scale = true;
 
   node->source_node_id = source_index;
   node->post_local_scale_factor = post_local_scale_factor;
@@ -1388,9 +1391,10 @@ void BuildPropertyTreesTopLevelInternal(
 
   ClipNode root_clip;
   root_clip.resets_clip = true;
-  root_clip.applies_local_clip = true;
+  root_clip.clip_type = ClipNode::ClipType::APPLIES_LOCAL_CLIP;
   root_clip.clip = gfx::RectF(viewport);
   root_clip.transform_id = kRootPropertyTreeNodeId;
+  root_clip.target_transform_id = kRootPropertyTreeNodeId;
   data_for_recursion.clip_tree_parent =
       data_for_recursion.property_trees->clip_tree.Insert(
           root_clip, kRootPropertyTreeNodeId);

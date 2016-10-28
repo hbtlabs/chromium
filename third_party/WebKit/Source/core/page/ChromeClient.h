@@ -203,7 +203,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
   virtual void setToolTip(LocalFrame&, const String&, TextDirection) = 0;
   void clearToolTip(LocalFrame&);
 
-  void print(LocalFrame*);
+  bool print(LocalFrame*);
 
   virtual void annotatedRegionsChanged() = 0;
 
@@ -313,7 +313,7 @@ class CORE_EXPORT ChromeClient : public HostWindow {
 
   virtual void onMouseDown(Node*) {}
 
-  virtual void didUpdateTopControls() const {}
+  virtual void didUpdateBrowserControls() const {}
 
   virtual void registerPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void unregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;

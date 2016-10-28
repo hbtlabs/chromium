@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "9.11",
+  "version": "9.12",
   "entries": [
     {
       "id": 1,
@@ -419,6 +419,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     },
     {
       "id": 52,
+      "cr_bugs": [449116, 471200, 612474],
       "description": "ES3 MSAA is broken on Qualcomm",
       "os": {
         "type": "android"
@@ -1457,11 +1458,7 @@ LONG_STRING_CONST(
         "type": "android"
       },
       "gl_vendor": "Qualcomm.*",
-      "gl_renderer": "Adreno \\(TM\\) 4.*",
-      "driver_version": {
-        "op": "<",
-        "value": "141.0"
-      },
+      "gl_renderer": "Adreno \\(TM\\) [45].*",
       "features": [
         "broken_egl_image_ref_counting"
       ]
@@ -2156,6 +2153,21 @@ LONG_STRING_CONST(
       "vendor_id": "0x1002",
       "features": [
         "adjust_src_dst_region_for_blitframebuffer"
+      ]
+    },
+    {
+      "id": 200,
+      "description": "ES3 support is unreliable on some older drivers",
+      "cr_bugs": [657925],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "4.4"
+        }
+      },
+      "features": [
+        "disable_es3_gl_context"
       ]
     }
   ]

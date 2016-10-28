@@ -9,8 +9,6 @@ namespace catalog {
 // static
 const char Store::kNameKey[] = "name";
 // static
-const char Store::kQualifierKey[] = "process-group";
-// static
 const char Store::kDisplayNameKey[] = "display_name";
 // static
 const char Store::kInterfaceProviderSpecsKey[] = "interface_provider_specs";
@@ -18,9 +16,6 @@ const char Store::kInterfaceProviderSpecsKey[] = "interface_provider_specs";
 const char Store::kInterfaceProviderSpecs_ProvidesKey[] = "provides";
 // static
 const char Store::kInterfaceProviderSpecs_RequiresKey[] = "requires";
-// static
-const char Store::kInterfaceProvider_ConnectionSpecKey[] =
-    "service_manager:connector";
 // static
 const char Store::kServicesKey[] = "services";
 

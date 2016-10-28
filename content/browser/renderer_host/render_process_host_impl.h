@@ -22,7 +22,6 @@
 #include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
-#include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/browser/webrtc/webrtc_eventlog_host.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
@@ -38,6 +37,10 @@
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
+
+#if defined(OS_ANDROID)
+#include "content/browser/android/synchronous_compositor_browser_filter.h"
+#endif
 
 namespace base {
 class CommandLine;
@@ -116,6 +119,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // RenderProcessHost implementation (public portion).
   bool Init() override;
+  void EnableSendQueue() override;
   int GetNextRoutingID() override;
   void AddRoute(int32_t routing_id, IPC::Listener* listener) override;
   void RemoveRoute(int32_t routing_id) override;
@@ -175,6 +179,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void ForceReleaseWorkerRefCounts() override;
   bool IsWorkerRefCountDisabled() override;
   void PurgeAndSuspend() override;
+  void Resume() override;
   mojom::Renderer* GetRendererInterface() override;
 
   mojom::RouteProvider* GetRemoteRouteProvider();
@@ -262,6 +267,12 @@ class CONTENT_EXPORT RenderProcessHostImpl
     return notification_message_filter_.get();
   }
 
+#if defined(OS_ANDROID)
+  SynchronousCompositorBrowserFilter* synchronous_compositor_filter() const {
+    return synchronous_compositor_filter_.get();
+  }
+#endif
+
   void set_is_for_guests_only_for_testing(bool is_for_guests_only) {
     is_for_guests_only_ = is_for_guests_only;
   }
@@ -309,6 +320,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Initializes a new IPC::ChannelProxy in |channel_|, which will be connected
   // to the next child process launched for this host, if any.
   void InitializeChannelProxy();
+
+  // Resets |channel_|, removing it from the attachment broker if necessary.
+  // Always call this in lieu of directly resetting |channel_|.
+  void ResetChannelProxy();
 
   // Creates and adds the IO thread message filters.
   void CreateMessageFilters();
@@ -461,6 +476,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // closure per notification that must be freed when the notification closes.
   scoped_refptr<NotificationMessageFilter> notification_message_filter_;
 
+#if defined(OS_ANDROID)
+  scoped_refptr<SynchronousCompositorBrowserFilter>
+      synchronous_compositor_filter_;
+#endif
+
   // Used in single-process mode.
   std::unique_ptr<base::Thread> in_process_renderer_;
 
@@ -525,9 +545,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // through RenderProcessHostObserver::RenderProcessExited.
   bool within_process_died_observer_;
 
-  // Forwards power state messages to the renderer process.
-  PowerMonitorMessageBroadcaster power_monitor_broadcaster_;
-
   scoped_refptr<AudioRendererHost> audio_renderer_host_;
 
   scoped_refptr<AudioInputRendererHost> audio_input_renderer_host_;
@@ -562,12 +579,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   // The memory allocator, if any, in which the renderer will write its metrics.
   std::unique_ptr<base::SharedPersistentMemoryAllocator> metrics_allocator_;
-
-  // Anonymous shared memory segment to share with subprocess containing list of
-  // field trials (represented as a string).
-  // TODO(crbug.com/653874): Eventually remove this and use single shared memory
-  // object across processes.
-  std::unique_ptr<base::SharedMemory> field_trial_state_;
 
   bool channel_connected_;
   bool sent_render_process_ready_;

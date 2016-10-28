@@ -15,7 +15,7 @@
 #include "services/ui/ws/display_binding.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/platform_display_init_params.h"
-#include "services/ui/ws/server_window_surface_manager_test_api.h"
+#include "services/ui/ws/server_window_compositor_frame_sink_manager_test_api.h"
 #include "services/ui/ws/window_manager_access_policy.h"
 #include "services/ui/ws/window_manager_window_tree_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -41,9 +41,7 @@ class TestPlatformDisplay : public PlatformDisplay {
   ~TestPlatformDisplay() override {}
 
   // PlatformDisplay:
-  void Init(PlatformDisplayDelegate* delegate) override {
-    delegate->CreateRootWindow(display_metrics_.bounds.size());
-  }
+  void Init(PlatformDisplayDelegate* delegate) override {}
   int64_t GetId() const override { return id_; }
   void SchedulePaint(const ServerWindow* window,
                      const gfx::Rect& bounds) override {}
@@ -54,24 +52,25 @@ class TestPlatformDisplay : public PlatformDisplay {
   void SetCursorById(mojom::Cursor cursor) override {
     *cursor_storage_ = cursor;
   }
-  display::Display::Rotation GetRotation() override {
-    return display::Display::Rotation::ROTATE_0;
-  }
-  float GetDeviceScaleFactor() override {
-    return display_metrics_.device_scale_factor;
-  }
   void UpdateTextInputState(const ui::TextInputState& state) override {}
   void SetImeVisibility(bool visible) override {}
   bool IsFramePending() const override { return false; }
-  void RequestCopyOfOutput(
-      std::unique_ptr<cc::CopyOutputRequest> output_request) override {}
   gfx::Rect GetBounds() const override { return display_metrics_.bounds; }
+  bool UpdateViewportMetrics(const display::ViewportMetrics& metrics) override {
+    if (display_metrics_ == metrics)
+      return false;
+    display_metrics_ = metrics;
+    return true;
+  }
+  const display::ViewportMetrics& GetViewportMetrics() const override {
+    return display_metrics_;
+  }
   bool IsPrimaryDisplay() const override { return is_primary_; }
   void OnGpuChannelEstablished(
       scoped_refptr<gpu::GpuChannelHost> host) override {}
 
  private:
-  ViewportMetrics display_metrics_;
+  display::ViewportMetrics display_metrics_;
 
   int64_t id_;
   bool is_primary_;
@@ -144,7 +143,8 @@ bool TestFrameGeneratorDelegate::IsInHighContrastMode() {
   return false;
 }
 
-const ViewportMetrics& TestFrameGeneratorDelegate::GetViewportMetrics() {
+const display::ViewportMetrics& TestFrameGeneratorDelegate::GetViewportMetrics()
+    const {
   return metrics_;
 }
 

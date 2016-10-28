@@ -8,13 +8,8 @@
       "paintInvalidations": [
         {
           "object": "LayoutText #text",
-          "rect": [8, 8, 48, 32],
-          "reason": "selection"
-        },
-        {
-          "object": "LayoutText #text",
-          "rect": [40, 8, 16, 33],
-          "reason": "incremental"
+          "rect": [8, 8, 48, 33],
+          "reason": "bounds change"
         }
       ]
     }
@@ -34,27 +29,15 @@
     },
     {
       "object": "LayoutText #text",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'xx'",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'y'",
-      "reason": "selection"
-    },
-    {
-      "object": "LayoutText #text",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'xx'",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'y'",
-      "reason": "incremental"
+      "reason": "bounds change"
     }
   ]
 }

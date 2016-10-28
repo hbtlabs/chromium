@@ -9,22 +9,12 @@
         {
           "object": "LayoutText #text",
           "rect": [11, 33, 79, 18],
-          "reason": "selection"
+          "reason": "bounds change"
         },
         {
           "object": "LayoutText #text",
           "rect": [11, 11, 61, 18],
-          "reason": "selection"
-        },
-        {
-          "object": "LayoutText #text",
-          "rect": [85, 33, 5, 18],
-          "reason": "incremental"
-        },
-        {
-          "object": "LayoutText #text",
-          "rect": [67, 11, 5, 18],
-          "reason": "incremental"
+          "reason": "bounds change"
         }
       ]
     }
@@ -48,19 +38,11 @@
     },
     {
       "object": "LayoutText #text",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'First cell'",
-      "reason": "selection"
-    },
-    {
-      "object": "LayoutText #text",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'First cell'",
-      "reason": "incremental"
+      "reason": "bounds change"
     },
     {
       "object": "LayoutTableCell TD id='secondCell'",
@@ -68,19 +50,11 @@
     },
     {
       "object": "LayoutText #text",
-      "reason": "selection"
+      "reason": "bounds change"
     },
     {
       "object": "InlineTextBox 'Second cell'",
-      "reason": "selection"
-    },
-    {
-      "object": "LayoutText #text",
-      "reason": "incremental"
-    },
-    {
-      "object": "InlineTextBox 'Second cell'",
-      "reason": "incremental"
+      "reason": "bounds change"
     }
   ]
 }

@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <memory>
 #include <set>
 
 #include "base/callback_forward.h"
@@ -293,8 +294,9 @@ class WebContents : public PageNavigator,
   // necessary. However if the embedder wants to create its own WebUI object and
   // keep track of it manually, it can use this. |frame_name| is used to
   // identify the frame and cannot be empty.
-  virtual WebUI* CreateSubframeWebUI(const GURL& url,
-                                     const std::string& frame_name) = 0;
+  virtual std::unique_ptr<WebUI> CreateSubframeWebUI(
+      const GURL& url,
+      const std::string& frame_name) = 0;
 
   // Returns the committed WebUI if one exists, otherwise the pending one.
   virtual WebUI* GetWebUI() const = 0;
@@ -402,6 +404,9 @@ class WebContents : public PageNavigator,
   virtual base::TimeTicks GetLastActiveTime() const = 0;
   virtual void SetLastActiveTime(base::TimeTicks last_active_time) = 0;
 
+  // Get the last time that the WebContents was made hidden.
+  virtual base::TimeTicks GetLastHiddenTime() const = 0;
+
   // Invoked when the WebContents becomes shown/hidden.
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
@@ -424,6 +429,9 @@ class WebContents : public PageNavigator,
   virtual void AttachToOuterWebContentsFrame(
       WebContents* outer_web_contents,
       RenderFrameHost* outer_contents_frame) = 0;
+
+  // Invoked when visible security state changes.
+  virtual void DidChangeVisibleSecurityState() = 0;
 
   // Commands ------------------------------------------------------------------
 
@@ -718,6 +726,9 @@ class WebContents : public PageNavigator,
   // SSLStatus to record the sensitive input field, so that embedders
   // can adjust the UI if desired.
   virtual void OnCreditCardInputShownOnHttp() = 0;
+
+  // Sets whether the WebContents is for overlaying content on a page.
+  virtual void SetIsOverlayContent(bool is_overlay_content) = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(

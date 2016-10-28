@@ -193,6 +193,7 @@ split_static_library("ui") {
     "views/platform_keys_certificate_selector_chromeos.cc",
     "views/platform_keys_certificate_selector_chromeos.h",
     "web_contents_sizer.h",
+    "website_settings/permission_prompt.h",
     "website_settings/website_settings.cc",
     "website_settings/website_settings.h",
     "website_settings/website_settings_ui.cc",
@@ -529,6 +530,7 @@ split_static_library("ui") {
     "//components/search_engines",
     "//components/security_interstitials/core",
     "//components/security_state",
+    "//components/session_manager/core",
     "//components/sessions",
     "//components/signin/core/account_id",
     "//components/signin/core/browser",
@@ -540,8 +542,8 @@ split_static_library("ui") {
     "//components/suggestions/proto",
     "//components/supervised_user_error_page",
     "//components/sync",
+    "//components/sync_preferences",
     "//components/sync_sessions",
-    "//components/syncable_prefs",
     "//components/toolbar",
     "//components/tracing:startup_tracing",
     "//components/undo",
@@ -725,6 +727,7 @@ split_static_library("ui") {
       "global_error/global_error_service_factory.h",
       "infobar_container_delegate.cc",
       "infobar_container_delegate.h",
+      "javascript_dialogs/javascript_dialog.h",
       "javascript_dialogs/javascript_dialog_tab_helper.cc",
       "javascript_dialogs/javascript_dialog_tab_helper.h",
       "javascript_dialogs/javascript_dialog_views.cc",
@@ -874,7 +877,6 @@ split_static_library("ui") {
       "website_settings/chooser_bubble_delegate.h",
       "website_settings/permission_menu_model.cc",
       "website_settings/permission_menu_model.h",
-      "website_settings/permission_prompt.h",
       "website_settings/website_settings_infobar_delegate.cc",
       "website_settings/website_settings_infobar_delegate.h",
       "webui/app_launcher_login_handler.cc",
@@ -1276,8 +1278,8 @@ split_static_library("ui") {
       "ash/chrome_keyboard_ui.h",
       "ash/chrome_launcher_prefs.cc",
       "ash/chrome_launcher_prefs.h",
-      "ash/chrome_new_window_delegate.cc",
-      "ash/chrome_new_window_delegate.h",
+      "ash/chrome_new_window_client.cc",
+      "ash/chrome_new_window_client.h",
       "ash/chrome_screenshot_grabber.cc",
       "ash/chrome_screenshot_grabber.h",
       "ash/chrome_shell_content_state.cc",
@@ -1365,8 +1367,6 @@ split_static_library("ui") {
       "ash/multi_user/user_switch_animator_chromeos.h",
       "ash/multi_user/user_switch_util.cc",
       "ash/multi_user/user_switch_util.h",
-      "ash/network_connect_delegate_chromeos.cc",
-      "ash/network_connect_delegate_chromeos.h",
       "ash/networking_config_delegate_chromeos.cc",
       "ash/networking_config_delegate_chromeos.h",
       "ash/palette_delegate_chromeos.cc",
@@ -1571,6 +1571,8 @@ split_static_library("ui") {
     }
     if (!is_mac || mac_views_browser) {
       sources += [
+        "javascript_dialogs/javascript_dialog.cc",
+
         # This test header is included because it contains forward declarations
         # needed for "friend" statements for use in tests.
         "translate/translate_bubble_test_utils.h",
@@ -1630,8 +1632,6 @@ split_static_library("ui") {
         "views/dropdown_bar_host.cc",
         "views/dropdown_bar_host.h",
         "views/dropdown_bar_host_delegate.h",
-        "views/dropdown_bar_view.cc",
-        "views/dropdown_bar_view.h",
         "views/elevation_icon_setter.cc",
         "views/elevation_icon_setter.h",
         "views/find_bar_host.cc",
@@ -1891,11 +1891,12 @@ split_static_library("ui") {
     deps += [ "//build/linux/libgio" ]
   }
   if (use_aura && !use_ozone && is_desktop_linux) {
-    deps += [
-      # gtk2 is the only component that can interact with gtk2 in our new
-      # world.
-      "//chrome/browser/ui/libgtk2ui",
-    ]
+    # These are the only components that can interact with gtk.
+    if (use_gtk3) {
+      deps += [ "//chrome/browser/ui/libgtkui:libgtk3ui" ]
+    } else {
+      deps += [ "//chrome/browser/ui/libgtkui:libgtk2ui" ]
+    }
   }
   if (is_win || is_mac || is_desktop_linux) {
     sources += [
@@ -2073,6 +2074,7 @@ split_static_library("ui") {
       "webui/theme_source.cc",
       "webui/theme_source.h",
     ]
+    deps += [ "//chrome/browser:theme_properties" ]
   }
   if (enable_print_preview) {
     sources += [
@@ -2147,8 +2149,6 @@ split_static_library("ui") {
         "android/infobars/instant_apps_infobar.h",
         "android/infobars/permission_infobar.cc",
         "android/infobars/permission_infobar.h",
-        "android/infobars/save_password_infobar.cc",
-        "android/infobars/save_password_infobar.h",
         "android/infobars/simple_confirm_infobar_builder.cc",
         "android/infobars/simple_confirm_infobar_builder.h",
         "android/infobars/subresource_filter_infobar.cc",
@@ -2643,6 +2643,10 @@ split_static_library("ui") {
         "cocoa/full_size_content_window.mm",
         "cocoa/fullscreen/fullscreen_menubar_tracker.h",
         "cocoa/fullscreen/fullscreen_menubar_tracker.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_animation_controller.h",
+        "cocoa/fullscreen/fullscreen_toolbar_animation_controller.mm",
+        "cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.h",
+        "cocoa/fullscreen/fullscreen_toolbar_mouse_tracker.mm",
         "cocoa/fullscreen_low_power_coordinator.h",
         "cocoa/fullscreen_low_power_coordinator.mm",
         "cocoa/fullscreen_toolbar_controller.h",
@@ -2913,6 +2917,9 @@ split_static_library("ui") {
         # See crbug.com/590850
         "content_settings/content_setting_media_menu_model.cc",
         "content_settings/content_setting_media_menu_model.h",
+        "javascript_dialogs/javascript_dialog_cocoa.h",
+        "javascript_dialogs/javascript_dialog_cocoa.mm",
+        "javascript_dialogs/javascript_dialog_mac.cc",
         "proximity_auth/proximity_auth_error_bubble_stub.cc",
       ]
     }
@@ -2952,6 +2959,10 @@ split_static_library("ui") {
       "webui/cast/cast_ui.h",
       "webui/conflicts_ui.cc",
       "webui/conflicts_ui.h",
+      "webui/welcome_win10_handler.cc",
+      "webui/welcome_win10_handler.h",
+      "webui/welcome_win10_ui.cc",
+      "webui/welcome_win10_ui.h",
     ]
     public_deps += [
       "//ui/views",

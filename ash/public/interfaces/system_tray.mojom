@@ -20,7 +20,8 @@ interface SystemTrayClient {
   // Shows the settings related to date, timezone etc.
   ShowDateSettings();
 
-  // TODO(crbug.com/647412): ShowSetTimeDialog();
+  // Shows the dialog to set system time, date, and timezone.
+  ShowSetTimeDialog();
 
   // Shows settings related to multiple displays.
   ShowDisplaySettings();
@@ -57,6 +58,11 @@ interface SystemTrayClient {
   // Shows UI to configure or activate the network specified by |network_id|,
   // which may include showing payment or captive portal UI when appropriate.
   ShowNetworkConfigure(string network_id);
+
+  // Shows UI to create a new network connection. The |type| is a Shill/Flimflam
+  // network type from third_party/cros_system_api/dbus/shill/dbus-constants.h
+  // ('wifi', 'cellular', etc.).
+  ShowNetworkCreate(string type);
 
   // Shows settings related to networking. If |network_id| is empty, shows
   // general settings. Otherwise shows settings for the individual network.

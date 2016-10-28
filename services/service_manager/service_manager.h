@@ -82,7 +82,7 @@ class ServiceManager : public Service {
   class Instance;
 
   // Service:
-  bool OnConnect(const Identity& remote_identity,
+  bool OnConnect(const ServiceInfo& remote_info,
                  InterfaceRegistry* registry) override;
 
   void InitCatalog(mojom::ServicePtr catalog);
@@ -122,7 +122,8 @@ class ServiceManager : public Service {
   // running as a different user if one is available that services all users.
   Instance* GetExistingInstance(const Identity& identity) const;
 
-  void NotifyPIDAvailable(const Identity& identity, base::ProcessId pid);
+  void NotifyServiceStarted(const Identity& identity, base::ProcessId pid);
+  void NotifyServiceFailedToStart(const Identity& identity);
 
   // Attempt to complete the connection requested by |params| by connecting to
   // an existing instance. If there is an existing instance, |params| is taken,
@@ -131,7 +132,7 @@ class ServiceManager : public Service {
 
   Instance* CreateInstance(const Identity& source,
                            const Identity& target,
-                           const InterfaceProviderSpec& connection_spec);
+                           const InterfaceProviderSpecMap& specs);
 
   // Called from the instance implementing mojom::ServiceManager.
   void AddListener(mojom::ServiceManagerListenerPtr listener);

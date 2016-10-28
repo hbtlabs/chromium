@@ -54,6 +54,7 @@
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/host_zoom_map_impl.h"
+#include "content/browser/host_zoom_map_observer.h"
 #include "content/browser/loader/loader_io_thread_notifier.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/manifest/manifest_manager_host.h"
@@ -451,6 +452,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
       virtual_keyboard_requested_(false),
       page_scale_factor_is_one_(true),
       mouse_lock_widget_(nullptr),
+      is_overlay_content_(false),
       loading_weak_factory_(this),
       weak_factory_(this) {
   frame_tree_.SetFrameRemoveListener(
@@ -468,6 +470,7 @@ WebContentsImpl::WebContentsImpl(BrowserContext* browser_context)
   wake_lock_service_context_.reset(new device::WakeLockServiceContext(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
       base::Bind(&WebContentsImpl::GetNativeView, base::Unretained(this))));
+  host_zoom_map_observer_.reset(new HostZoomMapObserver(this));
 }
 
 WebContentsImpl::~WebContentsImpl() {
@@ -1028,8 +1031,9 @@ void WebContentsImpl::GetScreenInfo(ScreenInfo* screen_info) {
     GetView()->GetScreenInfo(screen_info);
 }
 
-WebUI* WebContentsImpl::CreateSubframeWebUI(const GURL& url,
-                                            const std::string& frame_name) {
+std::unique_ptr<WebUI> WebContentsImpl::CreateSubframeWebUI(
+    const GURL& url,
+    const std::string& frame_name) {
   DCHECK(!frame_name.empty());
   return CreateWebUI(url, frame_name);
 }
@@ -1324,6 +1328,10 @@ void WebContentsImpl::SetLastActiveTime(base::TimeTicks last_active_time) {
   last_active_time_ = last_active_time;
 }
 
+base::TimeTicks WebContentsImpl::GetLastHiddenTime() const {
+  return last_hidden_time_;
+}
+
 void WebContentsImpl::WasShown() {
   controller_.SetActive(true);
 
@@ -1363,6 +1371,8 @@ void WebContentsImpl::WasHidden() {
 
     SendPageMessage(new PageMsg_WasHidden(MSG_ROUTING_NONE));
   }
+
+  last_hidden_time_ = base::TimeTicks::Now();
 
   for (auto& observer : observers_)
     observer.WasHidden();
@@ -1445,6 +1455,20 @@ void WebContentsImpl::AttachToOuterWebContentsFrame(
   // state tracking from inner WebContents's TextInputManager to that of the
   // outer WebContent (crbug.com/609846)?
   text_input_manager_.reset(nullptr);
+}
+
+void WebContentsImpl::DidChangeVisibleSecurityState() {
+  if (delegate_) {
+    delegate_->VisibleSecurityStateChanged(this);
+
+    SecurityStyleExplanations security_style_explanations;
+    blink::WebSecurityStyle security_style =
+        delegate_->GetSecurityStyle(this, &security_style_explanations);
+    for (auto& observer : observers_) {
+      observer.SecurityStyleChanged(security_style,
+                                    security_style_explanations);
+    }
+  }
 }
 
 void WebContentsImpl::Stop() {
@@ -1719,7 +1743,8 @@ void WebContentsImpl::RenderWidgetDeleted(
       view_->RestoreFocus();
   }
 
-  CHECK(mouse_lock_widget_ != render_widget_host);
+  if (mouse_lock_widget_)
+    LostMouseLock(mouse_lock_widget_);
 }
 
 void WebContentsImpl::RenderWidgetGotFocus(
@@ -3813,6 +3838,10 @@ void WebContentsImpl::OnCreditCardInputShownOnHttp() {
   controller_.ssl_manager()->DidShowCreditCardInputOnHttp();
 }
 
+void WebContentsImpl::SetIsOverlayContent(bool is_overlay_content) {
+  is_overlay_content_ = is_overlay_content;
+}
+
 void WebContentsImpl::OnFirstVisuallyNonEmptyPaint() {
   for (auto& observer : observers_)
     observer.DidFirstVisuallyNonEmptyPaint();
@@ -3824,20 +3853,6 @@ void WebContentsImpl::OnFirstVisuallyNonEmptyPaint() {
     for (auto& observer : observers_)
       observer.DidChangeThemeColor(theme_color_);
     last_sent_theme_color_ = theme_color_;
-  }
-}
-
-void WebContentsImpl::DidChangeVisibleSSLState() {
-  if (delegate_) {
-    delegate_->VisibleSSLStateChanged(this);
-
-    SecurityStyleExplanations security_style_explanations;
-    blink::WebSecurityStyle security_style =
-        delegate_->GetSecurityStyle(this, &security_style_explanations);
-    for (auto& observer : observers_) {
-      observer.SecurityStyleChanged(security_style,
-                                    security_style_explanations);
-    }
   }
 }
 
@@ -4143,6 +4158,10 @@ double WebContentsImpl::GetPendingPageZoomLevel() {
   GURL url = pending_entry->GetURL();
   return HostZoomMap::GetForWebContents(this)->GetZoomLevelForHostAndScheme(
       url.scheme(), net::GetHostOrSpecFromURL(url));
+}
+
+bool WebContentsImpl::HideDownloadUI() const {
+  return is_overlay_content_;
 }
 
 bool WebContentsImpl::IsNeverVisible() {
@@ -4812,8 +4831,7 @@ NavigationControllerImpl& WebContentsImpl::GetControllerForRenderManager() {
 
 std::unique_ptr<WebUIImpl> WebContentsImpl::CreateWebUIForRenderFrameHost(
     const GURL& url) {
-  return std::unique_ptr<WebUIImpl>(
-      static_cast<WebUIImpl*>(CreateWebUI(url, std::string())));
+  return CreateWebUI(url, std::string());
 }
 
 NavigationEntry*
@@ -5053,19 +5071,21 @@ void WebContentsImpl::OnPreferredSizeChanged(const gfx::Size& old_size) {
     delegate_->UpdatePreferredSize(this, new_size);
 }
 
-WebUI* WebContentsImpl::CreateWebUI(const GURL& url,
-                                    const std::string& frame_name) {
-  WebUIImpl* web_ui = new WebUIImpl(this, frame_name);
-  WebUIController* controller = WebUIControllerFactoryRegistry::GetInstance()->
-      CreateWebUIControllerForURL(web_ui, url);
+std::unique_ptr<WebUIImpl> WebContentsImpl::CreateWebUI(
+    const GURL& url,
+    const std::string& frame_name) {
+  std::unique_ptr<WebUIImpl> web_ui =
+      base::MakeUnique<WebUIImpl>(this, frame_name);
+  WebUIController* controller =
+      WebUIControllerFactoryRegistry::GetInstance()
+          ->CreateWebUIControllerForURL(web_ui.get(), url);
   if (controller) {
     web_ui->AddMessageHandler(new GenericHandler());
     web_ui->SetController(controller);
     return web_ui;
   }
 
-  delete web_ui;
-  return NULL;
+  return nullptr;
 }
 
 FindRequestManager* WebContentsImpl::GetOrCreateFindRequestManager() {

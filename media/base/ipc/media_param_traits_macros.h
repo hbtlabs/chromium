@@ -10,6 +10,7 @@
 #include "media/base/audio_parameters.h"
 #include "media/base/buffering_state.h"
 #include "media/base/cdm_key_information.h"
+#include "media/base/cdm_promise.h"
 #include "media/base/channel_layout.h"
 #include "media/base/decode_status.h"
 #include "media/base/decryptor.h"
@@ -19,7 +20,6 @@
 #include "media/base/media_keys.h"
 #include "media/base/sample_format.h"
 #include "media/base/subsample_entry.h"
-#include "media/base/video_capture_types.h"
 #include "media/base/video_codecs.h"
 #include "media/base/video_types.h"
 
@@ -63,8 +63,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::EmeInitDataType, media::EmeInitDataType::MAX)
 IPC_ENUM_TRAITS_MAX_VALUE(media::EncryptionScheme::CipherMode,
                           media::EncryptionScheme::CipherMode::CIPHER_MODE_MAX)
 
-IPC_ENUM_TRAITS_MAX_VALUE(media::MediaKeys::Exception,
-                          media::MediaKeys::EXCEPTION_MAX)
+IPC_ENUM_TRAITS_MAX_VALUE(media::CdmPromise::Exception,
+                          media::CdmPromise::EXCEPTION_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::MediaKeys::MessageType,
                           media::MediaKeys::MESSAGE_TYPE_MAX)
@@ -81,8 +81,6 @@ IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::VideoCodecProfile,
                               media::VIDEO_CODEC_PROFILE_MAX)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelFormat, media::PIXEL_FORMAT_MAX)
-
-IPC_ENUM_TRAITS_MAX_VALUE(media::VideoPixelStorage, media::PIXEL_STORAGE_MAX)
 
 // Struct traits.
 

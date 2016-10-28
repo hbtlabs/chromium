@@ -60,7 +60,6 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/login/login_state.h"
-#include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/timezone/timezone_resolver.h"
 #include "components/policy/policy_constants.h"
@@ -73,6 +72,7 @@
 #include "components/user_manager/remove_user_delegate.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_image/user_image.h"
+#include "components/user_manager/user_names.h"
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -373,16 +373,6 @@ user_manager::UserList ChromeUserManagerImpl::GetUnlockUsers() const {
   }
 
   return unlock_users;
-}
-
-void ChromeUserManagerImpl::SessionStarted() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  ChromeUserManager::SessionStarted();
-
-  content::NotificationService::current()->Notify(
-      chrome::NOTIFICATION_SESSION_STARTED,
-      content::Source<UserManager>(this),
-      content::Details<const user_manager::User>(GetActiveUser()));
 }
 
 void ChromeUserManagerImpl::RemoveUserInternal(
@@ -738,7 +728,7 @@ void ChromeUserManagerImpl::GuestUserLoggedIn() {
       user_manager::User::USER_IMAGE_INVALID, false);
 
   // Initializes wallpaper after active_user_ is set.
-  WallpaperManager::Get()->SetUserWallpaperNow(login::GuestAccountId());
+  WallpaperManager::Get()->SetUserWallpaperNow(user_manager::GuestAccountId());
 }
 
 void ChromeUserManagerImpl::RegularUserLoggedIn(const AccountId& account_id) {
@@ -878,13 +868,14 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
 
 void ChromeUserManagerImpl::DemoAccountLoggedIn() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  active_user_ = user_manager::User::CreateKioskAppUser(login::DemoAccountId());
+  active_user_ =
+      user_manager::User::CreateKioskAppUser(user_manager::DemoAccountId());
   active_user_->SetStubImage(
       base::MakeUnique<user_manager::UserImage>(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
               IDR_PROFILE_PICTURE_LOADING)),
       user_manager::User::USER_IMAGE_INVALID, false);
-  WallpaperManager::Get()->SetUserWallpaperNow(login::DemoAccountId());
+  WallpaperManager::Get()->SetUserWallpaperNow(user_manager::DemoAccountId());
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitch(::switches::kForceAppMode);
@@ -1173,11 +1164,6 @@ void ChromeUserManagerImpl::UpdateNumberOfUsers() {
 }
 
 void ChromeUserManagerImpl::UpdateUserTimeZoneRefresher(Profile* profile) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kDisableTimeZoneTrackingOption)) {
-    return;
-  }
-
   const user_manager::User* user =
       ProfileHelper::Get()->GetUserByProfile(profile);
   if (user == NULL)
@@ -1268,7 +1254,7 @@ bool ChromeUserManagerImpl::GetPlatformKnownUserId(
 }
 
 const AccountId& ChromeUserManagerImpl::GetGuestAccountId() const {
-  return login::GuestAccountId();
+  return user_manager::GuestAccountId();
 }
 
 bool ChromeUserManagerImpl::IsFirstExecAfterBoot() const {
@@ -1285,17 +1271,17 @@ void ChromeUserManagerImpl::AsyncRemoveCryptohome(
 
 bool ChromeUserManagerImpl::IsGuestAccountId(
     const AccountId& account_id) const {
-  return account_id == login::GuestAccountId();
+  return account_id == user_manager::GuestAccountId();
 }
 
 bool ChromeUserManagerImpl::IsStubAccountId(const AccountId& account_id) const {
-  return account_id == login::StubAccountId();
+  return account_id == user_manager::StubAccountId();
 }
 
 bool ChromeUserManagerImpl::IsSupervisedAccountId(
     const AccountId& account_id) const {
   return gaia::ExtractDomainName(account_id.GetUserEmail()) ==
-         chromeos::login::kSupervisedUserDomain;
+         user_manager::kSupervisedUserDomain;
 }
 
 bool ChromeUserManagerImpl::HasBrowserRestarted() const {
@@ -1340,6 +1326,9 @@ ChromeUserManagerImpl::CreateUserFromDeviceLocalAccount(
       break;
     case policy::DeviceLocalAccount::TYPE_KIOSK_APP:
       user.reset(user_manager::User::CreateKioskAppUser(account_id));
+      break;
+    case policy::DeviceLocalAccount::TYPE_ARC_KIOSK_APP:
+      user.reset(user_manager::User::CreateArcKioskAppUser(account_id));
       break;
     default:
       NOTREACHED();

@@ -293,7 +293,7 @@ void LayoutBox::styleDidChange(StyleDifference diff,
   }
 
   if (isDocumentElement() || isBody()) {
-    document().view()->recalculateScrollbarOverlayStyle(
+    document().view()->recalculateScrollbarOverlayColorTheme(
         document().view()->documentBackgroundColor());
     document().view()->recalculateCustomScrollbarStyle();
     if (LayoutView* layoutView = view()) {
@@ -465,7 +465,7 @@ void LayoutBox::layout() {
     return;
   }
 
-  LayoutState state(*this, locationOffset());
+  LayoutState state(*this);
   while (child) {
     child->layoutIfNeeded();
     ASSERT(!child->needsLayout());
@@ -1008,6 +1008,12 @@ LayoutBox* LayoutBox::findAutoscrollable(LayoutObject* layoutObject) {
   while (
       layoutObject &&
       !(layoutObject->isBox() && toLayoutBox(layoutObject)->canAutoscroll())) {
+    // Do not start autoscroll when the node is inside a fixed-position element.
+    if (layoutObject->isBox() && toLayoutBox(layoutObject)->hasLayer() &&
+        toLayoutBox(layoutObject)->layer()->scrollsWithViewport()) {
+      return nullptr;
+    }
+
     if (!layoutObject->parent() &&
         layoutObject->node() == layoutObject->document() &&
         layoutObject->document().localOwner())
@@ -1016,7 +1022,8 @@ LayoutBox* LayoutBox::findAutoscrollable(LayoutObject* layoutObject) {
       layoutObject = layoutObject->parent();
   }
 
-  return layoutObject && layoutObject->isBox() ? toLayoutBox(layoutObject) : 0;
+  return layoutObject && layoutObject->isBox() ? toLayoutBox(layoutObject)
+                                               : nullptr;
 }
 
 static inline int adjustedScrollDelta(int beginningDelta) {
@@ -1152,12 +1159,8 @@ LayoutRect LayoutBox::clippingRect() const {
 
 bool LayoutBox::mapScrollingContentsRectToBoxSpace(
     LayoutRect& rect,
-    ApplyOverflowClipFlag applyOverflowClip,
     VisualRectFlags visualRectFlags) const {
   if (!hasClipRelatedProperty())
-    return true;
-
-  if (applyOverflowClip == ApplyNonScrollOverflowClip)
     return true;
 
   if (hasOverflowClip()) {
@@ -2370,11 +2373,9 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
   // we use the values cached by the layer.
   rect.setLocation(topLeft);
 
-  if (container->isBox() &&
+  if (container->isBox() && container != ancestor &&
       !toLayoutBox(container)->mapScrollingContentsRectToBoxSpace(
-          rect, container == ancestor ? ApplyNonScrollOverflowClip
-                                      : ApplyOverflowClip,
-          visualRectFlags))
+          rect, visualRectFlags))
     return false;
 
   if (ancestorSkipped) {
@@ -2387,7 +2388,7 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
     // doesn't need viewport-adjusting.
     if (ancestor->style()->position() != FixedPosition &&
         container->isLayoutView() && position == FixedPosition)
-      toLayoutView(container)->adjustOffsetForFixedPosition(rect);
+      rect.move(toLayoutView(container)->offsetForFixedPosition(true));
     return true;
   }
 
@@ -3394,7 +3395,7 @@ LayoutUnit LayoutBox::computeReplacedLogicalHeightUsing(
 
       if (cb->isOutOfFlowPositioned() && cb->style()->height().isAuto() &&
           !(cb->style()->top().isAuto() || cb->style()->bottom().isAuto())) {
-        ASSERT_WITH_SECURITY_IMPLICATION(cb->isLayoutBlock());
+        SECURITY_DCHECK(cb->isLayoutBlock());
         LayoutBlock* block = toLayoutBlock(cb);
         LogicalExtentComputedValues computedValues;
         block->computeLogicalHeight(block->logicalHeight(), LayoutUnit(),
@@ -4552,7 +4553,7 @@ LayoutRect LayoutBox::localCaretRect(InlineBox* box,
   // is needed because we use offsets inside an "atomic" element to represent
   // positions before and after the element in deprecated editing offsets.
   if (node() &&
-      !(editingIgnoresContent(node()) || isDisplayInsideTable(node()))) {
+      !(editingIgnoresContent(*node()) || isDisplayInsideTable(node()))) {
     rect.setX(rect.x() + borderLeft() + paddingLeft());
     rect.setY(rect.y() + paddingTop() + borderTop());
   }
@@ -4706,6 +4707,10 @@ void LayoutBox::markChildForPaginationRelayoutIfNeeded(
     SubtreeLayoutScope& layoutScope) {
   DCHECK(!child.needsLayout());
   LayoutState* layoutState = view()->layoutState();
+  if (layoutState->paginationStateChanged()) {
+    layoutScope.setChildNeedsLayout(&child);
+    return;
+  }
   if (!layoutState->isPaginated())
     return;
 
@@ -5265,10 +5270,8 @@ LayoutUnit LayoutBox::offsetFromLogicalTopOfFirstPage() const {
     return LayoutUnit();
 
   if (layoutState->layoutObject() == this) {
-    LayoutSize offsetDelta =
-        layoutState->layoutOffset() - layoutState->pageOffset();
-    return isHorizontalWritingMode() ? offsetDelta.height()
-                                     : offsetDelta.width();
+    LayoutSize offset = layoutState->paginationOffset();
+    return isHorizontalWritingMode() ? offset.height() : offset.width();
   }
 
   // A LayoutBlock always establishes a layout state, and this method is only

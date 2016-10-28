@@ -19,37 +19,35 @@ namespace blink {
 
 class ScriptState;
 
-class CORE_EXPORT VoidCallbackFunction final : public GarbageCollectedFinalized<VoidCallbackFunction>,
-                                        public TraceWrapperBase {
-public:
-    static VoidCallbackFunction* create(v8::Isolate* isolate, v8::Local<v8::Function> callback)
-    {
-        return new VoidCallbackFunction(isolate, callback);
-    }
+class CORE_EXPORT VoidCallbackFunction final : public GarbageCollectedFinalized<VoidCallbackFunction>, public TraceWrapperBase {
+ public:
+  static VoidCallbackFunction* create(ScriptState* scriptState, v8::Local<v8::Function> callback)  {
+    return new VoidCallbackFunction(scriptState, callback);
+  }
 
-    ~VoidCallbackFunction() = default;
+  ~VoidCallbackFunction() = default;
 
-    DECLARE_TRACE();
-    DECLARE_TRACE_WRAPPERS();
+  DECLARE_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
-    bool call(ScriptState* scriptState, ScriptWrappable* scriptWrappable);
+  bool call(ScriptWrappable* scriptWrappable);
 
-    v8::Local<v8::Function> v8Value(v8::Isolate* isolate)
-    {
-        return m_callback.newLocal(isolate);
-    }
+  v8::Local<v8::Function> v8Value(v8::Isolate* isolate) {
+    return m_callback.newLocal(isolate);
+  }
 
-    void setWrapperReference(v8::Isolate* isolate, const v8::Persistent<v8::Object>& wrapper)
-    {
-        DCHECK(!m_callback.isEmpty());
-        m_callback.setReference(wrapper, isolate);
-    }
+  void setWrapperReference(v8::Isolate* isolate, const v8::Persistent<v8::Object>& wrapper) {
+    DCHECK(!m_callback.isEmpty());
+    m_callback.setReference(wrapper, isolate);
+  }
 
-private:
-    VoidCallbackFunction(v8::Isolate* isolate, v8::Local<v8::Function>);
-    ScopedPersistent<v8::Function> m_callback;
+ private:
+  VoidCallbackFunction(ScriptState*, v8::Local<v8::Function>);
+
+  RefPtr<ScriptState> m_scriptState;
+  ScopedPersistent<v8::Function> m_callback;
 };
 
-} // namespace blink
+}  // namespace blink
 
-#endif // VoidCallbackFunction_h
+#endif  // VoidCallbackFunction_h
