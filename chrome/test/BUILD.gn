@@ -2075,7 +2075,6 @@ test("browser_tests") {
         "../browser/ui/ash/multi_user/multi_user_window_manager_test.h",
         "../browser/ui/ash/shelf_browsertest.cc",
         "../browser/ui/ash/system_tray_delegate_chromeos_browsertest_chromeos.cc",
-        "../browser/ui/ash/system_tray_tray_cast_browsertest_chromeos.cc",
         "../browser/ui/ash/system_tray_tray_cast_browsertest_media_router_chromeos.cc",
         "../browser/ui/ash/volume_controller_browsertest_chromeos.cc",
         "../browser/ui/views/frame/browser_non_client_frame_view_ash_browsertest.cc",
@@ -3607,6 +3606,7 @@ test("unit_tests") {
       "../browser/ui/webui/md_downloads/md_downloads_dom_handler_unittest.cc",
       "../browser/ui/webui/ntp/ntp_user_data_logger_unittest.cc",
       "../browser/ui/webui/options/autofill_options_handler_unittest.cc",
+      "../browser/ui/webui/options/font_settings_utils_unittest.cc",
       "../browser/ui/webui/options/language_options_handler_unittest.cc",
       "../browser/ui/webui/options/password_manager_handler_unittest.cc",
       "../browser/ui/webui/options/pepper_flash_content_settings_utils_unittest.cc",
@@ -4626,7 +4626,7 @@ test("unit_tests") {
     ]
   }
   if (is_win || is_mac || is_chromeos) {
-    sources += [ "../common/extensions/api/networking_private/networking_private_crypto_unittest.cc" ]
+    sources += [ "../browser/extensions/api/networking_private/networking_private_crypto_unittest.cc" ]
   }
   if (enable_rlz_support) {
     sources += [ "../browser/rlz/chrome_rlz_tracker_delegate_unittest.cc" ]

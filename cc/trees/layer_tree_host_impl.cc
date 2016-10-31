@@ -172,15 +172,12 @@ std::unique_ptr<LayerTreeHostImpl> LayerTreeHostImpl::Create(
     LayerTreeHostImplClient* client,
     TaskRunnerProvider* task_runner_provider,
     RenderingStatsInstrumentation* rendering_stats_instrumentation,
-    SharedBitmapManager* shared_bitmap_manager,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     TaskGraphRunner* task_graph_runner,
     std::unique_ptr<AnimationHost> animation_host,
     int id) {
   return base::WrapUnique(new LayerTreeHostImpl(
       settings, client, task_runner_provider, rendering_stats_instrumentation,
-      shared_bitmap_manager, gpu_memory_buffer_manager, task_graph_runner,
-      std::move(animation_host), id));
+      task_graph_runner, std::move(animation_host), id));
 }
 
 LayerTreeHostImpl::LayerTreeHostImpl(
@@ -188,8 +185,6 @@ LayerTreeHostImpl::LayerTreeHostImpl(
     LayerTreeHostImplClient* client,
     TaskRunnerProvider* task_runner_provider,
     RenderingStatsInstrumentation* rendering_stats_instrumentation,
-    SharedBitmapManager* shared_bitmap_manager,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     TaskGraphRunner* task_graph_runner,
     std::unique_ptr<AnimationHost> animation_host,
     int id)
@@ -233,8 +228,6 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       animation_host_(std::move(animation_host)),
       rendering_stats_instrumentation_(rendering_stats_instrumentation),
       micro_benchmark_controller_(this),
-      shared_bitmap_manager_(shared_bitmap_manager),
-      gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       task_graph_runner_(task_graph_runner),
       id_(id),
       requires_high_res_to_draw_(false),
@@ -1665,13 +1658,12 @@ bool LayerTreeHostImpl::DrawLayers(FrameData* frame) {
     }
   }
 
-  auto data = base::MakeUnique<DelegatedFrameData>();
-  resource_provider_->PrepareSendToParent(resources, &data->resource_list);
-  data->render_pass_list = std::move(frame->render_passes);
 
   CompositorFrame compositor_frame;
   compositor_frame.metadata = std::move(metadata);
-  compositor_frame.delegated_frame_data = std::move(data);
+  resource_provider_->PrepareSendToParent(resources,
+                                          &compositor_frame.resource_list);
+  compositor_frame.render_pass_list = std::move(frame->render_passes);
   compositor_frame_sink_->SubmitCompositorFrame(std::move(compositor_frame));
 
   // The next frame should start by assuming nothing has changed, and changes
@@ -2223,6 +2215,10 @@ LayerImpl* LayerTreeHostImpl::ViewportMainScrollLayer() {
   return viewport()->MainScrollLayer();
 }
 
+void LayerTreeHostImpl::DidChangeScrollbarVisibility() {
+  client_->SetNeedsCommitOnImplThread();
+}
+
 void LayerTreeHostImpl::CleanUpTileManagerAndUIResources() {
   ClearUIResources();
   tile_manager_.FinishTasksAndCleanUp();
@@ -2305,8 +2301,9 @@ bool LayerTreeHostImpl::InitializeRenderer(
   compositor_frame_sink_ = compositor_frame_sink;
   has_valid_compositor_frame_sink_ = true;
   resource_provider_ = base::MakeUnique<ResourceProvider>(
-      compositor_frame_sink_->context_provider(), shared_bitmap_manager_,
-      gpu_memory_buffer_manager_,
+      compositor_frame_sink_->context_provider(),
+      compositor_frame_sink_->shared_bitmap_manager(),
+      compositor_frame_sink_->gpu_memory_buffer_manager(),
       task_runner_provider_->blocking_main_thread_task_runner(),
       settings_.renderer_settings.highp_threshold_min,
       settings_.renderer_settings.texture_id_allocation_chunk_size,
@@ -3350,14 +3347,26 @@ static void CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
           ? tree_impl->InnerViewportScrollLayer()->id()
           : Layer::INVALID_ID;
 
-  return tree_impl->property_trees()->scroll_tree.CollectScrollDeltas(
+  tree_impl->property_trees()->scroll_tree.CollectScrollDeltas(
       scroll_info, inner_viewport_layer_id);
+}
+
+static void CollectScrollbarUpdates(
+    ScrollAndScaleSet* scroll_info,
+    std::unordered_map<int, std::unique_ptr<ScrollbarAnimationController>>*
+        controllers) {
+  scroll_info->scrollbars.reserve(controllers->size());
+  for (auto& pair : *controllers) {
+    scroll_info->scrollbars.push_back(LayerTreeHostCommon::ScrollbarsUpdateInfo(
+        pair.first, pair.second->ScrollbarsHidden()));
+  }
 }
 
 std::unique_ptr<ScrollAndScaleSet> LayerTreeHostImpl::ProcessScrollDeltas() {
   std::unique_ptr<ScrollAndScaleSet> scroll_info(new ScrollAndScaleSet());
 
   CollectScrollDeltas(scroll_info.get(), active_tree_.get());
+  CollectScrollbarUpdates(scroll_info.get(), &scrollbar_animation_controllers_);
   scroll_info->page_scale_delta =
       active_tree_->page_scale_factor()->PullDeltaForMainThread();
   scroll_info->top_controls_delta =

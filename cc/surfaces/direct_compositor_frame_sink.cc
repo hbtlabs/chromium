@@ -20,9 +20,13 @@ DirectCompositorFrameSink::DirectCompositorFrameSink(
     SurfaceManager* surface_manager,
     Display* display,
     scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider)
+    scoped_refptr<ContextProvider> worker_context_provider,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+    SharedBitmapManager* shared_bitmap_manager)
     : CompositorFrameSink(std::move(context_provider),
-                          std::move(worker_context_provider)),
+                          std::move(worker_context_provider),
+                          gpu_memory_buffer_manager,
+                          shared_bitmap_manager),
       frame_sink_id_(frame_sink_id),
       surface_manager_(surface_manager),
       display_(display),
@@ -85,8 +89,7 @@ void DirectCompositorFrameSink::DetachFromClient() {
 }
 
 void DirectCompositorFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
-  gfx::Size frame_size =
-      frame.delegated_frame_data->render_pass_list.back()->output_rect.size();
+  gfx::Size frame_size = frame.render_pass_list.back()->output_rect.size();
   if (frame_size.IsEmpty() || frame_size != last_swap_frame_size_) {
     if (!delegated_local_frame_id_.is_null()) {
       factory_.Destroy(delegated_local_frame_id_);

@@ -17,7 +17,6 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkXfermode.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/transform.h"
 #include "wtf/typed_arrays/ArrayBuffer.h"
@@ -108,6 +107,8 @@ void OffscreenCanvasFrameDispatcherImpl::
   gl->TexImage2D(GL_TEXTURE_2D, 0, format, m_width, m_height, 0, format,
                  GL_UNSIGNED_BYTE, 0);
   gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, m_width, m_height, format,
                     GL_UNSIGNED_BYTE, dstPixels->data());
 
@@ -157,7 +158,6 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
   cc::CompositorFrame frame;
   // TODO(crbug.com/652931): update the device_scale_factor
   frame.metadata.device_scale_factor = 1.0f;
-  frame.delegated_frame_data.reset(new cc::DelegatedFrameData);
 
   const gfx::Rect bounds(m_width, m_height);
   const cc::RenderPassId renderPassId(1, 1);
@@ -214,7 +214,7 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
   commitTypeHistogram.count(commitType);
 
   m_nextResourceId++;
-  frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+  frame.resource_list.push_back(std::move(resource));
 
   cc::TextureDrawQuad* quad =
       pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
@@ -235,7 +235,7 @@ void OffscreenCanvasFrameDispatcherImpl::dispatchFrame(
                SK_ColorTRANSPARENT, vertexOpacity, yflipped, nearestNeighbor,
                false);
 
-  frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  frame.render_pass_list.push_back(std::move(pass));
 
   double elapsedTime = WTF::monotonicallyIncreasingTime() - commitStartTime;
   switch (commitType) {

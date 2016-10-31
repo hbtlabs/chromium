@@ -86,7 +86,8 @@ TEST_F('MaterialHistoryBrowserTest', 'HistoryItemTest', function() {
   mocha.run();
 });
 
-TEST_F('MaterialHistoryBrowserTest', 'HistoryListTest', function() {
+// Flaky on chromeos, http://crbug.com/640862
+TEST_F('MaterialHistoryBrowserTest', 'DISABLED_HistoryListTest', function() {
   md_history.history_list_test.registerTests();
   mocha.run();
 });
@@ -116,7 +117,8 @@ TEST_F('MaterialHistoryBrowserTest', 'RoutingTest', function() {
   mocha.run();
 });
 
-TEST_F('MaterialHistoryBrowserTest', 'SyncedTabsTest', function() {
+// Fails on Mac, http://crbug.com/640862
+TEST_F('MaterialHistoryBrowserTest', 'DISABLED_SyncedTabsTest', function() {
   md_history.history_synced_tabs_test.registerTests();
   mocha.run();
 });

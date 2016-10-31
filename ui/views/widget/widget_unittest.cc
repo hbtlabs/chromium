@@ -969,6 +969,11 @@ TEST_F(WidgetObserverTest, ClosingOnHiddenParent) {
 
 // Test behavior of NativeWidget*::GetWindowPlacement on the native desktop.
 TEST_F(WidgetTest, GetWindowPlacement) {
+#if defined(OS_MACOSX)
+  if (base::mac::IsOS10_10())
+    return;  // Fails when swarmed. http://crbug.com/660582
+#endif
+
   if (IsMus()) {
     NOTIMPLEMENTED();
     return;
@@ -3625,6 +3630,22 @@ TEST_F(WidgetTest, WidgetRemovalsObserverCalledWhenMovingBetweenWidgets) {
   EXPECT_TRUE(removals_observer.DidRemoveView(child));
 
   widget->RemoveRemovalsObserver(&removals_observer);
+}
+
+// Test dispatch of ui::ET_MOUSEWHEEL.
+TEST_F(WidgetTest, MouseWheelEvent) {
+  WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
+  widget->SetBounds(gfx::Rect(0, 0, 600, 600));
+  EventCountView* event_count_view = new EventCountView();
+  widget->GetContentsView()->AddChildView(event_count_view);
+  event_count_view->SetBounds(0, 0, 600, 600);
+  widget->Show();
+
+  ui::test::EventGenerator event_generator(GetContext(),
+                                           widget->GetNativeWindow());
+
+  event_generator.MoveMouseWheel(1, 1);
+  EXPECT_EQ(1, event_count_view->GetEventCount(ui::ET_MOUSEWHEEL));
 }
 
 #if defined(OS_WIN)

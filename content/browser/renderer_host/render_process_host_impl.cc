@@ -1269,8 +1269,6 @@ void RenderProcessHostImpl::RegisterMojoInterfaces() {
   registry->AddInterface(base::Bind(&DeviceMotionHost::Create));
   registry->AddInterface(base::Bind(&DeviceOrientationHost::Create));
   registry->AddInterface(base::Bind(&DeviceOrientationAbsoluteHost::Create));
-  registry->AddInterface(
-      base::Bind(&URLLoaderFactoryImpl::Create, resource_message_filter_));
 
   registry->AddInterface(
       base::Bind(&VideoCaptureHost::Create,
@@ -1687,7 +1685,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
     switches::kEnableStatsTable,
     switches::kEnableThreadedCompositing,
     switches::kEnableTouchDragDrop,
-    switches::kEnableUnsafeES3APIs,
     switches::kEnableUseZoomForDSF,
     switches::kEnableViewport,
     switches::kEnableVp9InMp4,

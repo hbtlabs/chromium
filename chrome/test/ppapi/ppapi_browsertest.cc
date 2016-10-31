@@ -32,6 +32,10 @@
 #include "extensions/test/extension_test_message_listener.h"
 #include "ppapi/shared_impl/test_utils.h"
 
+#if defined(OS_MACOSX)
+#include "base/mac/mac_util.h"
+#endif
+
 using content::RenderViewHost;
 
 // This macro finesses macro expansion to do what we want.
@@ -1295,6 +1299,10 @@ class NonSfiPackagedAppTest : public PackagedAppTest {
 // back.
 IN_PROC_BROWSER_TEST_F(NewlibPackagedAppTest,
                        MAYBE_PPAPI_NACL(SuccessfulLoad)) {
+#if defined(OS_MACOSX)
+  if (base::mac::IsOS10_10() || base::mac::IsOS10_11())
+    return;  // Fails when swarmed. http://crbug.com/660582
+#endif
   RunTests("packaged_app");
 }
 

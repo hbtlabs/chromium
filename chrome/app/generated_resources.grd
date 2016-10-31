@@ -5362,11 +5362,11 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLAGS_IFRAME_BASED_SIGNIN_DESCRIPTION" desc="Description for the flag for iframe-based sign-in flows">
         Uses an iframe-based sign-in flow instead of a webview-based flow.
       </message>
-      <message name="IDS_FLAGS_MEDIA_ROUTER_NAME" desc="Title of the flag for the media router.">
-        Media Router
+      <message name="IDS_FLAGS_LOAD_MEDIA_ROUTER_COMPONENT_EXTENSION_NAME" desc="Title of the flag for loading the Media Router component extension.">
+        Load Media Router Component Extension
       </message>
-      <message name="IDS_FLAGS_MEDIA_ROUTER_DESCRIPTION" desc="Description of the flag for the media router.">
-        Enables Chrome to access external presentation-type displays and use them for presenting web content.
+      <message name="IDS_FLAGS_LOAD_MEDIA_ROUTER_COMPONENT_EXTENSION_DESCRIPTION" desc="Description of the flag for loading the Media Router component extension.">
+        Loads the Media Router component extension at startup.
       </message>
       <message name="IDS_FLAGS_PRINT_PREVIEW_REGISTER_PROMOS_NAME">
         Print Preview Registration Promos
@@ -8668,7 +8668,7 @@ I don't think this site should be blocked!
           Use a number to indicate how many copies to print (1 to 999).
         </message>
         <message name="IDS_PRINT_PREVIEW_SCALING_INSTRUCTION" desc="Instruction shown when the user enters an invalid scaling value.">
-          Scale amount must be an integer between 10 and 200.
+          Scale amount must be a number between 10 and 200.
         </message>
         <message name="IDS_PRINT_PREVIEW_PRINT_PAGES_LABEL" desc="ARIA label used by screen reader to explain the purpose of the page selection textbox">
           Print Specific Pages
@@ -14995,6 +14995,12 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@gmail.com</ex
       <message name="IDS_FLAGS_MERGE_KEY_CHAR_EVENTS_DESCRIPTION" desc="Description for the flag to enable/disable merging the key event with char event.">
         If disabled, Chrome will handle WM_KEY* and WM_CHAR separatedly.
       </message>
+      <message name="IDS_FLAGS_USE_WINRT_MIDI_API_NAME" desc="Name for the flag to use Windows Runtime MIDI API.">
+        Use Windows Runtime MIDI API
+      </message>
+      <message name="IDS_FLAGS_USE_WINRT_MIDI_API_DESCRIPTION" desc="Description for the flag to use Windows Runtime MIDI API.">
+        Use Windows Runtime MIDI API for WebMIDI (effective only on Windows 10 or later).
+      </message>
       <message name="IDS_FLAGS_DISABLE_WINRT_MIDI_API_NAME" desc="Name for the flag to disable Windows Runtime MIDI API.">
         Disable Windows Runtime MIDI API
       </message>
@@ -15428,12 +15434,6 @@ read aloud to screenreader users to announce that a completion is available.">
       </message>
       <message name="IDS_FLAGS_ENABLE_ANDROID_PAY_INTEGRATION_V1_DESCRIPTION" desc="Description for the flag to enable the first version of Android Pay integration">
         Enable integration with Android Pay using the first version of the API
-      </message>
-      <message name="IDS_FLAGS_SCAN_CARDS_IN_WEB_PAYMENTS_NAME" desc="Title for the flag to enable OCR scanning of credit cards for web payments API">
-        Scan Cards in Web Payments
-      </message>
-      <message name="IDS_FLAGS_SCAN_CARDS_IN_WEB_PAYMENTS_DESCRIPTION" desc="Description for the flag to enable OCR scanning of credit cards for web payments API">
-        Enable OCR scanning of credit cards from the UI for the web payments API
       </message>
     </if>
 

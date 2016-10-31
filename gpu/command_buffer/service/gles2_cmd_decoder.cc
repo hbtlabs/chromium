@@ -3091,7 +3091,7 @@ bool GLES2DecoderImpl::Initialize(
 
   if (feature_info_->IsWebGL2OrES3Context()) {
     if (!feature_info_->IsES3Capable()) {
-      LOG(ERROR) << "Underlying driver does not support ES3.";
+      LOG(ERROR) << "ES3 is blacklisted/disabled/unsupported by driver.";
       Destroy(true);
       return false;
     }
@@ -3535,7 +3535,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
                 1);
   DoGetIntegerv(GL_BIND_GENERATES_RESOURCE_CHROMIUM,
                 &caps.bind_generates_resource_chromium, 1);
-  if (unsafe_es3_apis_enabled()) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     // TODO(zmo): Note that some parameter values could be more than 32-bit,
     // but for now we clamp them to 32-bit max.
     DoGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &caps.max_3d_texture_size, 1);
@@ -3597,7 +3597,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   }
   if (feature_info_->feature_flags().multisampled_render_to_texture ||
       feature_info_->feature_flags().chromium_framebuffer_multisample ||
-      unsafe_es3_apis_enabled()) {
+      feature_info_->IsWebGL2OrES3Context()) {
     DoGetIntegerv(GL_MAX_SAMPLES, &caps.max_samples, 1);
   }
 
@@ -3801,6 +3801,8 @@ bool GLES2DecoderImpl::InitializeShaderTranslator() {
     driver_bug_workarounds |= SH_EMULATE_ISNAN_FLOAT_FUNCTION;
   if (workarounds().use_unused_standard_shared_blocks)
     driver_bug_workarounds |= SH_USE_UNUSED_STANDARD_SHARED_BLOCKS;
+  if (workarounds().dont_remove_invariant_for_fragment_input)
+    driver_bug_workarounds |= SH_DONT_REMOVE_INVARIANT_FOR_FRAGMENT_INPUT;
 
   resources.WEBGL_debug_shader_precision =
       group_->gpu_preferences().emulate_shader_precision;
@@ -6223,7 +6225,7 @@ bool GLES2DecoderImpl::GetHelper(
         return true;
       }
   }
-  if (unsafe_es3_apis_enabled()) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     switch (pname) {
       case GL_MAX_VARYING_COMPONENTS: {
         if (gl_version_info().is_es) {
@@ -6815,7 +6817,7 @@ void GLES2DecoderImpl::DoGetInteger64v(GLenum pname,
                                        GLint64* params,
                                        GLsizei params_size) {
   DCHECK(params);
-  if (unsafe_es3_apis_enabled()) {
+  if (feature_info_->IsWebGL2OrES3Context()) {
     switch (pname) {
       case GL_MAX_ELEMENT_INDEX: {
         DCHECK_EQ(params_size, 1);
@@ -7697,7 +7699,7 @@ void GLES2DecoderImpl::DoGetFramebufferAttachmentParameteriv(
   const char kFunctionName[] = "glGetFramebufferAttachmentParameteriv";
   Framebuffer* framebuffer = GetFramebufferInfoForTarget(target);
   if (!framebuffer) {
-    if (!unsafe_es3_apis_enabled()) {
+    if (!feature_info_->IsWebGL2OrES3Context()) {
       LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, kFunctionName,
           "no framebuffer bound");
       return;
@@ -9037,7 +9039,7 @@ void GLES2DecoderImpl::DoUniformMatrix2fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !unsafe_es3_apis_enabled()) {
+  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix2fv", "transpose not FALSE");
     return;
@@ -9060,7 +9062,7 @@ void GLES2DecoderImpl::DoUniformMatrix3fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !unsafe_es3_apis_enabled()) {
+  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix3fv", "transpose not FALSE");
     return;
@@ -9083,7 +9085,7 @@ void GLES2DecoderImpl::DoUniformMatrix4fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !unsafe_es3_apis_enabled()) {
+  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix4fv", "transpose not FALSE");
     return;
@@ -10703,7 +10705,7 @@ void GLES2DecoderImpl::DoVertexAttribI4uiv(GLuint index,
 error::Error GLES2DecoderImpl::HandleVertexAttribIPointer(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribIPointer& c =
       *static_cast<const volatile gles2::cmds::VertexAttribIPointer*>(cmd_data);
@@ -11763,7 +11765,7 @@ error::Error GLES2DecoderImpl::HandleGetAttribLocation(
 error::Error GLES2DecoderImpl::HandleGetBufferSubDataAsyncCHROMIUM(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled()) {
+  if (!feature_info_->IsWebGL2OrES3Context()) {
     return error::kUnknownCommand;
   }
   const volatile gles2::cmds::GetBufferSubDataAsyncCHROMIUM& c =
@@ -11865,7 +11867,7 @@ error::Error GLES2DecoderImpl::HandleGetUniformLocation(
 error::Error GLES2DecoderImpl::HandleGetUniformIndices(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetUniformIndices& c =
       *static_cast<const volatile gles2::cmds::GetUniformIndices*>(cmd_data);
@@ -11946,7 +11948,7 @@ error::Error GLES2DecoderImpl::GetFragDataLocationHelper(
 error::Error GLES2DecoderImpl::HandleGetFragDataLocation(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetFragDataLocation& c =
       *static_cast<const volatile gles2::cmds::GetFragDataLocation*>(cmd_data);
@@ -12014,7 +12016,7 @@ error::Error GLES2DecoderImpl::HandleGetFragDataIndexEXT(
 error::Error GLES2DecoderImpl::HandleGetUniformBlockIndex(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetUniformBlockIndex& c =
       *static_cast<const volatile gles2::cmds::GetUniformBlockIndex*>(cmd_data);
@@ -12058,13 +12060,13 @@ error::Error GLES2DecoderImpl::HandleGetString(uint32_t immediate_data_size,
   std::string extensions;
   switch (name) {
     case GL_VERSION:
-      if (unsafe_es3_apis_enabled())
+      if (feature_info_->IsWebGL2OrES3Context())
         str = "OpenGL ES 3.0 Chromium";
       else
         str = "OpenGL ES 2.0 Chromium";
       break;
     case GL_SHADING_LANGUAGE_VERSION:
-      if (unsafe_es3_apis_enabled())
+      if (feature_info_->IsWebGL2OrES3Context())
         str = "OpenGL ES GLSL ES 3.0 Chromium";
       else
         str = "OpenGL ES GLSL ES 1.0 Chromium";
@@ -13422,7 +13424,7 @@ error::Error GLES2DecoderImpl::HandleTexImage2D(uint32_t immediate_data_size,
 
 error::Error GLES2DecoderImpl::HandleTexImage3D(uint32_t immediate_data_size,
                                                 const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
 
   const char* func_name = "glTexImage3D";
@@ -14264,7 +14266,7 @@ error::Error GLES2DecoderImpl::HandleTexSubImage2D(
 error::Error GLES2DecoderImpl::HandleTexSubImage3D(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
 
   const char* func_name = "glTexSubImage3D";
@@ -14480,7 +14482,7 @@ error::Error GLES2DecoderImpl::HandleGetUniformiv(
 error::Error GLES2DecoderImpl::HandleGetUniformuiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
 
   const volatile gles2::cmds::GetUniformuiv& c =
@@ -14657,7 +14659,7 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniform(
 error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetActiveUniformBlockiv& c =
       *static_cast<const volatile gles2::cmds::GetActiveUniformBlockiv*>(
@@ -14678,7 +14680,11 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockiv(
         "glGetActiveActiveUniformBlockiv", "program not linked");
     return error::kNoError;
   }
-  LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("GetActiveUniformBlockiv");
+  if (index >= program->uniform_block_size_info().size()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glGetActiveUniformBlockiv",
+                       "uniformBlockIndex >= active uniform blocks");
+    return error::kNoError;
+  }
   GLsizei num_values = 1;
   if (pname == GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES) {
     GLint num = 0;
@@ -14704,19 +14710,14 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockiv(
     return error::kInvalidArguments;
   }
   glGetActiveUniformBlockiv(service_id, index, pname, params);
-  GLenum error = glGetError();
-  if (error == GL_NO_ERROR) {
-    result->SetNumResults(num_values);
-  } else {
-    LOCAL_SET_GL_ERROR(error, "GetActiveUniformBlockiv", "");
-  }
+  result->SetNumResults(num_values);
   return error::kNoError;
 }
 
 error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockName(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetActiveUniformBlockName& c =
       *static_cast<const volatile gles2::cmds::GetActiveUniformBlockName*>(
@@ -14747,6 +14748,11 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockName(
         "glGetActiveActiveUniformBlockName", "program not linked");
     return error::kNoError;
   }
+  if (index >= program->uniform_block_size_info().size()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glGetActiveUniformBlockName",
+                       "uniformBlockIndex >= active uniform blocks");
+    return error::kNoError;
+  }
   GLint max_length = 0;
   glGetProgramiv(
       service_id, GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH, &max_length);
@@ -14771,7 +14777,7 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformBlockName(
 error::Error GLES2DecoderImpl::HandleGetActiveUniformsiv(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!unsafe_es3_apis_enabled())
+  if (!feature_info_->IsWebGL2OrES3Context())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetActiveUniformsiv& c =
       *static_cast<const volatile gles2::cmds::GetActiveUniformsiv*>(cmd_data);
@@ -14803,6 +14809,15 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformsiv(
   if (!program) {
     return error::kNoError;
   }
+  GLint activeUniforms = 0;
+  program->GetProgramiv(GL_ACTIVE_UNIFORMS, &activeUniforms);
+  for (int i = 0; i < count; i++) {
+    if (indices[i] >= static_cast<GLuint>(activeUniforms)) {
+      LOCAL_SET_GL_ERROR(GL_INVALID_VALUE,
+          "glGetActiveUniformsiv", "index >= active uniforms");
+      return error::kNoError;
+    }
+  }
   GLuint service_id = program->service_id();
   GLint link_status = GL_FALSE;
   glGetProgramiv(service_id, GL_LINK_STATUS, &link_status);
@@ -14811,14 +14826,8 @@ error::Error GLES2DecoderImpl::HandleGetActiveUniformsiv(
         "glGetActiveUniformsiv", "program not linked");
     return error::kNoError;
   }
-  LOCAL_COPY_REAL_GL_ERRORS_TO_WRAPPER("GetActiveUniformsiv");
   glGetActiveUniformsiv(service_id, count, indices, pname, params);
-  GLenum error = glGetError();
-  if (error == GL_NO_ERROR) {
-    result->SetNumResults(count);
-  } else {
-    LOCAL_SET_GL_ERROR(error, "GetActiveUniformsiv", "");
-  }
+  result->SetNumResults(count);
   return error::kNoError;
 }
 

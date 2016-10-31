@@ -22,6 +22,7 @@ namespace content {
 MusBrowserCompositorOutputSurface::MusBrowserCompositorOutputSurface(
     ui::Window* window,
     scoped_refptr<ContextProviderCommandBuffer> context,
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
     cc::SyntheticBeginFrameSource* begin_frame_source,
     std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
@@ -32,7 +33,8 @@ MusBrowserCompositorOutputSurface::MusBrowserCompositorOutputSurface(
                                         std::move(overlay_candidate_validator)),
       ui_window_(window) {
   ui_compositor_frame_sink_ = ui_window_->RequestCompositorFrameSink(
-      ui::mojom::CompositorFrameSinkType::DEFAULT, context);
+      ui::mojom::CompositorFrameSinkType::DEFAULT, context,
+      gpu_memory_buffer_manager);
   ui_compositor_frame_sink_->BindToClient(this);
 }
 
@@ -45,7 +47,6 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
   ui_frame.metadata.latency_info = std::move(frame.latency_info);
   // Reset latency_info to known empty state after moving contents.
   frame.latency_info.clear();
-  ui_frame.delegated_frame_data = base::MakeUnique<cc::DelegatedFrameData>();
   const cc::RenderPassId render_pass_id(1, 1);
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   const bool has_transparent_background = true;
@@ -86,7 +87,7 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
   resource.read_lock_fences_enabled = false;
   resource.is_software = false;
   resource.is_overlay_candidate = false;
-  ui_frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+  ui_frame.resource_list.push_back(std::move(resource));
 
   const bool needs_blending = true;
   const bool premultiplied_alpha = true;
@@ -105,7 +106,7 @@ void MusBrowserCompositorOutputSurface::SwapBuffers(
                background_color, vertex_opacity, y_flipped, nearest_neighbor,
                secure_output_only);
 
-  ui_frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  ui_frame.render_pass_list.push_back(std::move(pass));
   ui_compositor_frame_sink_->SubmitCompositorFrame(std::move(ui_frame));
   return;
 }

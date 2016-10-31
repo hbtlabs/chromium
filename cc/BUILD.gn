@@ -237,8 +237,6 @@ component("cc") {
     "output/copy_output_request.h",
     "output/copy_output_result.cc",
     "output/copy_output_result.h",
-    "output/delegated_frame_data.cc",
-    "output/delegated_frame_data.h",
     "output/direct_renderer.cc",
     "output/direct_renderer.h",
     "output/dynamic_geometry_binding.cc",
@@ -1084,5 +1082,10 @@ test("cc_perftests") {
 
   data = [
     "test/data/",
+
+    # Needed for isolate script to execute.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_gtest_perf_test.py",
   ]
 }

@@ -50,7 +50,6 @@
 #include "cc/test/render_pass_test_utils.h"
 #include "cc/test/skia_common.h"
 #include "cc/test/test_compositor_frame_sink.h"
-#include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
@@ -5972,14 +5971,14 @@ class LayerTreeHostTestCrispUpAfterPinchEnds : public LayerTreeHostTest {
       // On frame 3, we will have a lower res tile complete for the pinch-out
       // gesture even though it's not displayed. We wait for it here to prevent
       // flakiness.
-      EXPECT_EQ(0.75f, tile->contents_scale());
+      EXPECT_EQ(0.75f, tile->contents_scale_key());
       PostNextAfterDraw(host_impl);
     }
     // On frame_ == 4, we are preventing texture uploads from completing,
     // so this verifies they are not completing before frame_ == 5.
     // Flaky failures here indicate we're failing to prevent uploads from
     // completing.
-    EXPECT_NE(4, frame_) << tile->contents_scale();
+    EXPECT_NE(4, frame_) << tile->contents_scale_key();
   }
 
   void AfterTest() override {}
@@ -6978,15 +6977,12 @@ class LayerTreeHostTestSubmitFrameMetadata : public LayerTreeHostTest {
       const CompositorFrame& frame) override {
     EXPECT_EQ(1, ++num_swaps_);
 
-    DelegatedFrameData* last_frame_data = frame.delegated_frame_data.get();
-    ASSERT_TRUE(frame.delegated_frame_data);
-    EXPECT_EQ(drawn_viewport_,
-              last_frame_data->render_pass_list.back()->output_rect);
+    EXPECT_EQ(drawn_viewport_, frame.render_pass_list.back()->output_rect);
     EXPECT_EQ(0.5f, frame.metadata.min_page_scale_factor);
     EXPECT_EQ(4.f, frame.metadata.max_page_scale_factor);
 
-    EXPECT_EQ(0u, frame.delegated_frame_data->resource_list.size());
-    EXPECT_EQ(1u, frame.delegated_frame_data->render_pass_list.size());
+    EXPECT_EQ(0u, frame.resource_list.size());
+    EXPECT_EQ(1u, frame.render_pass_list.size());
 
     EndTest();
   }
@@ -7024,14 +7020,12 @@ class LayerTreeHostTestSubmitFrameResources : public LayerTreeHostTest {
 
   void DisplayReceivedCompositorFrameOnThread(
       const CompositorFrame& frame) override {
-    ASSERT_TRUE(frame.delegated_frame_data);
-
-    EXPECT_EQ(2u, frame.delegated_frame_data->render_pass_list.size());
+    EXPECT_EQ(2u, frame.render_pass_list.size());
     // Each render pass has 10 resources in it. And the root render pass has a
     // mask resource used when drawing the child render pass. The number 10 may
     // change if AppendOneOfEveryQuadType() is updated, and the value here
     // should be updated accordingly.
-    EXPECT_EQ(21u, frame.delegated_frame_data->resource_list.size());
+    EXPECT_EQ(21u, frame.resource_list.size());
 
     EndTest();
   }

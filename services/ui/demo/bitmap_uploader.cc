@@ -40,7 +40,8 @@ BitmapUploader::BitmapUploader(Window* window)
 
 void BitmapUploader::Init(ui::GpuService* gpu_service) {
   gpu_service->EstablishGpuChannel(base::Bind(
-      &BitmapUploader::OnGpuChannelEstablished, weak_factory_.GetWeakPtr()));
+      &BitmapUploader::OnGpuChannelEstablished, weak_factory_.GetWeakPtr(),
+      gpu_service->gpu_memory_buffer_manager()));
 }
 
 BitmapUploader::~BitmapUploader() {
@@ -78,8 +79,7 @@ void BitmapUploader::Upload() {
   cc::CompositorFrame frame;
   // TODO(rjkroege): Support device scale factors other than 1.
   frame.metadata.device_scale_factor = 1.0f;
-  frame.delegated_frame_data.reset(new cc::DelegatedFrameData());
-  frame.delegated_frame_data->resource_list.resize(0u);
+  frame.resource_list.resize(0u);
 
   const cc::RenderPassId render_pass_id(1, 1);
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
@@ -123,7 +123,7 @@ void BitmapUploader::Upload() {
     resource.read_lock_fences_enabled = false;
     resource.is_software = false;
     resource.is_overlay_candidate = false;
-    frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+    frame.resource_list.push_back(std::move(resource));
 
     cc::TextureDrawQuad* quad =
         pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
@@ -166,17 +166,18 @@ void BitmapUploader::Upload() {
                  force_antialiasing_off);
   }
 
-  frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  frame.render_pass_list.push_back(std::move(pass));
 
   // TODO(rjkroege, fsamuel): We should throttle frames.
   compositor_frame_sink_->SubmitCompositorFrame(std::move(frame));
 }
 
 void BitmapUploader::OnGpuChannelEstablished(
+    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     scoped_refptr<gpu::GpuChannelHost> gpu_channel) {
   compositor_frame_sink_ = window_->RequestCompositorFrameSink(
       mojom::CompositorFrameSinkType::DEFAULT,
-      new ContextProvider(std::move(gpu_channel)));
+      new ContextProvider(std::move(gpu_channel)), gpu_memory_buffer_manager);
   compositor_frame_sink_->BindToClient(this);
 }
 

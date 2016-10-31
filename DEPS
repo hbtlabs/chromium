@@ -39,11 +39,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '3effb79fc550fae5a55f1aba6b39cd97acd422c0',
+  'skia_revision': '4d598a35cd7a9b2bbfd724e7503840e2ad8ee778',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': 'c646c1ccd7327ddf69db3b280e1e80266adb4c46',
+  'v8_revision': '40ac2fde74f1cdb3a948b4aad045ebfa88eb7967',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'af7f301f6ba9e5f31d1511142a936a9ba84169d0',
+  'angle_revision': '705a9194438dd19a2f456235dda5a175cfce94d5',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -63,7 +63,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '71ba5883dd00145b2256935635492cbcc8d94bac',
+  'pdfium_revision': '96c7b33510c5d48ef5707326de88b35dcd2e4b45',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -71,7 +71,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': 'fc4467e5688d8f61b992684c2705e7934679d331',
+  'boringssl_revision': 'ea213d1f0b655d60793b67337bac2019c37300e7',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
@@ -87,7 +87,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '631223764fe3ebe0de2b8109b75015abe56e34ed',
+  'nacl_revision': 'bba323f75e3d20d2d496a1986f91fc81b624affa',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype-android
   # and whatever else without interference from each other.
@@ -95,7 +95,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '7e668f7a7030468c1aaafd63ddd55f72d3e34da2',
+  'catapult_revision': 'd44a7cccf2af55ea552fa93b874f97a8915df0a7',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -222,7 +222,7 @@ deps = {
     Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '215a597efed43e3e5117f6c3b63dbbcd955dedd9', # commit position 14804
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'eff0dd542fb21b7c0560845d25478077bc84829d', # commit position 14857
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -286,7 +286,7 @@ deps = {
     Var('catapult_revision'),
 
   'src/third_party/openh264/src':
-    Var('chromium_git') + '/external/github.com/cisco/openh264' + '@' + '0fd88df93c5dcaf858c57eb7892bd27763f0f0ac',
+    Var('chromium_git') + '/external/github.com/cisco/openh264' + '@' + 'b37cda248234162033e3e11b0335f3131cdfe488',
 
   'src/third_party/re2/src':
     Var('chromium_git') + '/external/github.com/google/re2.git' + '@' + 'dba3349aba83b5588e85e5ecf2b56c97f2d259b7',

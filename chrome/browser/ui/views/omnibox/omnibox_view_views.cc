@@ -22,7 +22,6 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
@@ -44,7 +43,6 @@
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
@@ -61,8 +59,6 @@
 #if defined(OS_WIN)
 #include "chrome/browser/browser_process.h"
 #endif
-
-using bookmarks::BookmarkNodeData;
 
 namespace {
 
@@ -412,8 +408,21 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
   return true;
 }
 
-void OmniboxViewViews::AccessibilitySetValue(const base::string16& new_value) {
-  SetUserText(new_value, true);
+void OmniboxViewViews::AccessibilitySetValue(const base::string16& new_value,
+                                             bool clear_first) {
+  if (read_only())
+    return;
+  if (clear_first) {
+    SetUserText(new_value, true);
+  } else {
+    model()->SetInputInProgress(true);
+    if (saved_selection_for_focus_change_.IsValid()) {
+      SelectRange(saved_selection_for_focus_change_);
+      saved_selection_for_focus_change_ = gfx::Range::InvalidRange();
+    }
+    InsertOrReplaceText(new_value);
+    TextChanged();
+  }
 }
 
 void OmniboxViewViews::UpdateSecurityLevel() {
@@ -737,7 +746,14 @@ void OmniboxViewViews::GetAccessibleState(ui::AXViewState* state) {
 
   base::string16::size_type entry_start;
   base::string16::size_type entry_end;
-  GetSelectionBounds(&entry_start, &entry_end);
+  // Selection information is saved separately when focus is moved off the
+  // current window - use that when there is no focus and it's valid.
+  if (saved_selection_for_focus_change_.IsValid()) {
+    entry_start = saved_selection_for_focus_change_.start();
+    entry_end = saved_selection_for_focus_change_.end();
+  } else {
+    GetSelectionBounds(&entry_start, &entry_end);
+  }
   state->selection_start = entry_start;
   state->selection_end = entry_end;
 
@@ -788,8 +804,7 @@ void OmniboxViewViews::OnBlur() {
   SelectRange(gfx::Range(0));
 
   // The location bar needs to repaint without a focus ring.
-  if (ui::MaterialDesignController::IsModeMaterial())
-    location_bar_view_->SchedulePaint();
+  location_bar_view_->SchedulePaint();
 }
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
@@ -991,14 +1006,11 @@ void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardType clipboard_type) {
   if (IsSelectAll())
     UMA_HISTOGRAM_COUNTS(OmniboxEditModel::kCutOrCopyAllTextHistogram, 1);
 
-  if (write_url) {
-    BookmarkNodeData data;
-    data.ReadFromTuple(url, selected_text);
-    data.WriteToClipboard(clipboard_type);
-  } else {
-    ui::ScopedClipboardWriter scoped_clipboard_writer(clipboard_type);
+  ui::ScopedClipboardWriter scoped_clipboard_writer(clipboard_type);
+  if (write_url)
+    scoped_clipboard_writer.WriteURL(selected_text);
+  else
     scoped_clipboard_writer.WriteText(selected_text);
-  }
 }
 
 void OmniboxViewViews::OnWriteDragData(ui::OSExchangeData* data) {

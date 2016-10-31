@@ -46,38 +46,23 @@
 namespace blink {
 
 class Attribute;
-class ClassCollection;
 class ContainerNode;
-class DOMTokenList;
 class Document;
 class Element;
 class ElementShadow;
 class Event;
-class EventDispatchMediator;
 class EventListener;
 class ExceptionState;
-class FloatPoint;
 class GetRootNodeOptions;
-class LocalFrame;
-class HTMLInputElement;
 class HTMLQualifiedName;
 class HTMLSlotElement;
 class IntRect;
 class EventDispatchHandlingState;
-class KeyboardEvent;
-class NSResolver;
-class NameNodeList;
-class NamedNodeMap;
-class NodeEventContext;
 class NodeList;
 class NodeListsNodeData;
 class NodeRareData;
-class PlatformGestureEvent;
 class PlatformMouseEvent;
-class PlatformWheelEvent;
-class PointerEvent;
 class QualifiedName;
-class RadioNodeList;
 class RegisteredEventListener;
 class LayoutBox;
 class LayoutBoxModelObject;
@@ -89,7 +74,6 @@ template <typename NodeType>
 class StaticNodeTypeList;
 using StaticNodeList = StaticNodeTypeList<Node>;
 class StyleChangeReasonForTracing;
-class TagCollection;
 class Text;
 class TouchEvent;
 
@@ -111,6 +95,11 @@ enum class CustomElementState {
   Failed = 3 << nodeCustomElementShift,
 
   NotDefinedFlag = 2 << nodeCustomElementShift,
+};
+
+enum class SlotChangeType {
+  Initial,
+  Chained,
 };
 
 class NodeRareDataBase {
@@ -312,7 +301,7 @@ class CORE_EXPORT Node : public EventTarget {
   bool isInsertionPoint() const { return getFlag(IsInsertionPointFlag); }
 
   bool canParticipateInFlatTree() const;
-  bool isSlotOrActiveInsertionPoint() const;
+  bool isActiveSlotOrActiveInsertionPoint() const;
   // A re-distribution across v0 and v1 shadow trees is not supported.
   bool isSlotable() const {
     return isTextNode() || (isElementNode() && !isInsertionPoint());
@@ -498,16 +487,6 @@ class CORE_EXPORT Node : public EventTarget {
   bool hasEventTargetData() const { return getFlag(HasEventTargetDataFlag); }
   void setHasEventTargetData(bool flag) {
     setFlag(flag, HasEventTargetDataFlag);
-  }
-
-  bool isV8CollectableDuringMinorGC() const {
-    return getFlag(V8CollectableDuringMinorGCFlag);
-  }
-  void markV8CollectableDuringMinorGC() {
-    setFlag(true, V8CollectableDuringMinorGCFlag);
-  }
-  void clearV8CollectableDuringMinorGC() {
-    setFlag(false, V8CollectableDuringMinorGCFlag);
   }
 
   virtual void setFocused(bool flag);
@@ -794,9 +773,13 @@ class CORE_EXPORT Node : public EventTarget {
     return getFlag(IsFinishedParsingChildrenFlag);
   }
 
-  void checkSlotChange();
-  void checkSlotChangeAfterInserted() { checkSlotChange(); }
-  void checkSlotChangeBeforeRemoved() { checkSlotChange(); }
+  void checkSlotChange(SlotChangeType);
+  void checkSlotChangeAfterInserted() {
+    checkSlotChange(SlotChangeType::Initial);
+  }
+  void checkSlotChangeBeforeRemoved() {
+    checkSlotChange(SlotChangeType::Initial);
+  }
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -853,14 +836,13 @@ class CORE_EXPORT Node : public EventTarget {
 
     HasNameOrIsEditingTextFlag = 1 << 23,
     HasWeakReferencesFlag = 1 << 24,
-    V8CollectableDuringMinorGCFlag = 1 << 25,
-    HasEventTargetDataFlag = 1 << 26,
+    HasEventTargetDataFlag = 1 << 25,
 
-    V0CustomElementFlag = 1 << 27,
-    V0CustomElementUpgradedFlag = 1 << 28,
+    V0CustomElementFlag = 1 << 26,
+    V0CustomElementUpgradedFlag = 1 << 27,
 
-    NeedsReattachLayoutTree = 1 << 29,
-    ChildNeedsReattachLayoutTree = 1 << 30,
+    NeedsReattachLayoutTree = 1 << 28,
+    ChildNeedsReattachLayoutTree = 1 << 29,
 
     DefaultNodeFlags = IsFinishedParsingChildrenFlag | NeedsReattachStyleChange
   };

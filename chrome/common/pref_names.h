@@ -393,6 +393,7 @@ extern const char kPrintPreviewDefaultDestinationSelectionRules[];
 
 #if defined(OS_CHROMEOS)
 extern const char kPrintingDevices[];
+extern const char kRecommendedNativePrinters[];
 #endif  // OS_CHROMEOS
 
 extern const char kDefaultSupervisedUserFilteringBehavior[];
@@ -821,10 +822,8 @@ extern const char kLatestVersionWhenClickedUpdateMenuItem[];
 #endif
 
 #if defined(ENABLE_MEDIA_ROUTER)
-#if defined(GOOGLE_CHROME_BUILD)
 extern const char kMediaRouterCloudServicesPrefSet[];
 extern const char kMediaRouterEnableCloudServices[];
-#endif  // defined(GOOGLE_CHROME_BUILD)
 extern const char kMediaRouterFirstRunFlowAcknowledged[];
 #endif
 

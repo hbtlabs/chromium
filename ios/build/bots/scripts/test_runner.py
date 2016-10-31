@@ -256,6 +256,7 @@ class TestRunner(object):
       line = line.rstrip()
       parser.ProcessLine(line)
       print line
+      sys.stdout.flush()
 
     proc.wait()
     sys.stdout.flush()
@@ -397,8 +398,11 @@ class SimulatorTestRunner(TestRunner):
           # The simulator's name varies by Xcode version.
           'iPhone Simulator', # Xcode 5
           'iOS Simulator', # Xcode 6
-          'Simulator', # Xcode 7
+          'Simulator', # Xcode 7+
+          'simctl', # https://crbug.com/637429
       ])
+      # If a signal was sent, wait for the simulators to actually be killed.
+      time.sleep(5)
     except subprocess.CalledProcessError as e:
       if e.returncode != 1:
         # Ignore a 1 exit code (which means there were no simulators to kill).
@@ -537,6 +541,17 @@ class SimulatorTestRunner(TestRunner):
     cmd.extend(self.test_args)
     cmd.extend(args)
     return cmd
+
+  def get_launch_env(self):
+    """Returns a dict of environment variables to use to launch the test app.
+
+    Returns:
+      A dict of environment variables.
+    """
+    env = super(SimulatorTestRunner, self).get_launch_env()
+    if self.xctest_path:
+      env['NSUnbufferedIO'] = 'YES'
+    return env
 
 
 class DeviceTestRunner(TestRunner):

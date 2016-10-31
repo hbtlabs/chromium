@@ -149,8 +149,6 @@ class CC_EXPORT LayerTreeHostImpl
       LayerTreeHostImplClient* client,
       TaskRunnerProvider* task_runner_provider,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
-      SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<AnimationHost> animation_host,
       int id);
@@ -356,6 +354,7 @@ class CC_EXPORT LayerTreeHostImpl
   void SetNeedsAnimateForScrollbarAnimation() override;
   void SetNeedsRedrawForScrollbarAnimation() override;
   ScrollbarSet ScrollbarsFor(int scroll_layer_id) const override;
+  void DidChangeScrollbarVisibility() override;
 
   // VideoBeginFrameSource implementation.
   void AddVideoFrameController(VideoFrameController* controller) override;
@@ -605,8 +604,6 @@ class CC_EXPORT LayerTreeHostImpl
       LayerTreeHostImplClient* client,
       TaskRunnerProvider* task_runner_provider,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
-      SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<AnimationHost> animation_host,
       int id);
@@ -815,8 +812,6 @@ class CC_EXPORT LayerTreeHostImpl
   // Optional callback to notify of new tree activations.
   base::Closure tree_activation_callback_;
 
-  SharedBitmapManager* shared_bitmap_manager_;
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   TaskGraphRunner* task_graph_runner_;
   int id_;
 

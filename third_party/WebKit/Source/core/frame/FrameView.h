@@ -64,7 +64,6 @@ class DocumentLifecycle;
 class Cursor;
 class Element;
 class FloatSize;
-class HTMLFrameOwnerElement;
 class JSONArray;
 class JSONObject;
 class LayoutItem;
@@ -761,6 +760,8 @@ class CORE_EXPORT FrameView final
   // view.
   void updateScrollbars();
   void updateScrollbarsIfNeeded();
+
+  void didChangeScrollbarsHidden() override;
 
   class InUpdateScrollbarsScope {
     STACK_ALLOCATED();

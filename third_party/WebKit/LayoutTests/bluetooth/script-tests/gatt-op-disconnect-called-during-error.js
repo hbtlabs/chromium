@@ -10,7 +10,8 @@ promise_test(() => {
         .then(service => service.getCharacteristic(errorUUID(0xA1)))
         .then(error_characteristic => {
           let promise = assert_promise_rejects_with_message(
-            error_characteristic.CALLS([readValue()]),
+            error_characteristic.CALLS([
+              readValue()| writeValue(val)| startNotifications()]),
             new DOMException(
               'GATT Server disconnected while performing a GATT operation.',
               'NetworkError'));

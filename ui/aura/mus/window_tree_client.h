@@ -22,9 +22,10 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/aura_export.h"
-#include "ui/aura/client/capture_client_observer.h"
 #include "ui/aura/client/focus_change_observer.h"
 #include "ui/aura/client/transient_window_client_observer.h"
+#include "ui/aura/mus/capture_synchronizer_delegate.h"
+#include "ui/aura/mus/drag_drop_controller_host.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/window_manager_delegate.h"
 #include "ui/aura/mus/window_tree_host_mus_delegate.h"
@@ -42,8 +43,9 @@ class Connector;
 }
 
 namespace aura {
+class CaptureSynchronizer;
+class DragDropControllerMus;
 class InFlightBoundsChange;
-class InFlightCaptureChange;
 class InFlightChange;
 class InFlightFocusChange;
 class InFlightPropertyChange;
@@ -74,9 +76,10 @@ using EventResultCallback = base::Callback<void(ui::mojom::EventResult)>;
 class AURA_EXPORT WindowTreeClient
     : NON_EXPORTED_BASE(public ui::mojom::WindowTreeClient),
       NON_EXPORTED_BASE(public ui::mojom::WindowManager),
+      public CaptureSynchronizerDelegate,
+      public DragDropControllerHost,
       public WindowManagerClient,
       public WindowTreeHostMusDelegate,
-      public client::CaptureClientObserver,
       public client::FocusChangeObserver,
       public client::TransientWindowClientObserver {
  public:
@@ -135,10 +138,6 @@ class AURA_EXPORT WindowTreeClient
   // Returns the root of this connection.
   std::set<Window*> GetRoots();
 
-  // Returns the Window with input capture; null if no window has requested
-  // input capture, or if another app has capture.
-  Window* GetCaptureWindow();
-
   // Returns the focused window; null if focus is not yet known or another app
   // is focused.
   Window* GetFocusedWindow();
@@ -152,18 +151,6 @@ class AURA_EXPORT WindowTreeClient
   // will be ignored.
   void StartPointerWatcher(bool want_moves);
   void StopPointerWatcher();
-
-  void PerformDragDrop(
-      Window* window,
-      const std::map<std::string, std::vector<uint8_t>>& drag_data,
-      int drag_operation,
-      const gfx::Point& cursor_location,
-      const SkBitmap& bitmap,
-      const base::Callback<void(bool, uint32_t)>& callback);
-
-  // Cancels a in progress drag drop. (If no drag is in progress, does
-  // nothing.)
-  void CancelDragDrop(Window* window);
 
   // Performs a window move. |callback| will be asynchronously called with the
   // whether the move loop completed successfully.
@@ -181,14 +168,11 @@ class AURA_EXPORT WindowTreeClient
 
  private:
   friend class InFlightBoundsChange;
-  friend class InFlightCaptureChange;
   friend class InFlightFocusChange;
   friend class InFlightPropertyChange;
   friend class InFlightVisibleChange;
   friend class WindowPortMus;
   friend class WindowTreeClientPrivate;
-
-  struct CurrentDragState;
 
   using IdToWindowMap = std::map<Id, WindowMus*>;
 
@@ -205,8 +189,6 @@ class AURA_EXPORT WindowTreeClient
   void SetFocusFromServer(WindowMus* window);
   void SetFocusFromServerImpl(client::FocusClient* focus_client,
                               WindowMus* window);
-
-  void SetCaptureFromServer(WindowMus* window);
 
   // Returns the oldest InFlightChange that matches |change|.
   InFlightChange* GetOldestInFlightChangeMatching(const InFlightChange& change);
@@ -250,6 +232,9 @@ class AURA_EXPORT WindowTreeClient
 
   // Sets the ui::mojom::WindowTree implementation.
   void SetWindowTree(ui::mojom::WindowTreePtr window_tree_ptr);
+
+  // Called when the connection to the server is established.
+  void WindowTreeConnectionEstablished(ui::mojom::WindowTree* window_tree);
 
   // Called when the ui::mojom::WindowTree connection is lost, deletes this.
   void OnConnectionLost();
@@ -441,9 +426,6 @@ class AURA_EXPORT WindowTreeClient
   // Overriden from client::FocusChangeObserver:
   void OnWindowFocused(Window* gained_focus, Window* lost_focus) override;
 
-  // Overriden from client::CaptureClientObserver:
-  void OnCaptureChanged(Window* lost_capture, Window* gained_capture) override;
-
   // Overriden from WindowTreeHostMusDelegate:
   void SetRootWindowBounds(Window* window, gfx::Rect* bounds) override;
 
@@ -452,6 +434,12 @@ class AURA_EXPORT WindowTreeClient
                                    Window* transient_child) override;
   void OnTransientChildWindowRemoved(Window* parent,
                                      Window* transient_child) override;
+
+  // Overriden from DragDropControllerHost:
+  uint32_t CreateChangeIdForDrag(WindowMus* window) override;
+
+  // Overrided from CaptureSynchronizerDelegate:
+  uint32_t CreateChangeIdForCapture(WindowMus* window) override;
 
   // The one int in |cursor_location_mapping_|. When we read from this
   // location, we must always read from it atomically.
@@ -480,9 +468,7 @@ class AURA_EXPORT WindowTreeClient
   IdToWindowMap windows_;
   std::map<ClientSpecificId, std::set<Window*>> embedded_windows_;
 
-  bool setting_capture_ = false;
-  WindowMus* window_setting_capture_to_ = nullptr;
-  WindowMus* capture_window_ = nullptr;
+  std::unique_ptr<CaptureSynchronizer> capture_synchronizer_;
 
   bool setting_focus_ = false;
   WindowMus* window_setting_focus_to_ = nullptr;
@@ -522,18 +508,7 @@ class AURA_EXPORT WindowTreeClient
   uint32_t current_wm_move_loop_change_ = 0u;
   Id current_wm_move_loop_window_id_ = 0u;
 
-  // State related to being the initiator of a drag started with
-  // PerformDragDrop().
-  std::unique_ptr<CurrentDragState> current_drag_state_;
-
-  // The mus server sends the mime drag data once per connection; we cache this
-  // and are responsible for sending it to all of our windows.
-  mojo::Map<mojo::String, mojo::Array<uint8_t>> mime_drag_data_;
-
-  // A set of window ids for windows that we received an OnDragEnter() message
-  // for. We maintain this set so we know who to send OnDragFinish() messages
-  // at the end of the drag.
-  std::set<Id> drag_entered_windows_;
+  std::unique_ptr<DragDropControllerMus> drag_drop_controller_;
 
   base::WeakPtrFactory<WindowTreeClient> weak_factory_;
 

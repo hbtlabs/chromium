@@ -11,7 +11,11 @@ promise_test(() => {
         .then(measurement_interval => {
           gattServer.disconnect();
           return assert_promise_rejects_with_message(
-            measurement_interval.CALLS([readValue()]),
+            measurement_interval.CALLS([
+              readValue()|
+              writeValue(val)|
+              startNotifications()|
+              stopNotifications()]),
             new DOMException(
               'GATT Server is disconnected. Cannot perform GATT operations.',
               'NetworkError'));

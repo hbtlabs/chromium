@@ -4,7 +4,6 @@
 
 #include "components/ui_devtools/devtools_client.h"
 
-#include "components/ui_devtools/Protocol.h"
 #include "components/ui_devtools/devtools_server.h"
 
 namespace ui {
@@ -21,10 +20,9 @@ UiDevToolsClient::UiDevToolsClient(const std::string& name,
 
 UiDevToolsClient::~UiDevToolsClient() {}
 
-void UiDevToolsClient::AddDOMBackend(
-    std::unique_ptr<protocol::DOM::Backend> dom_backend) {
-  dom_backend_ = std::move(dom_backend);
-  protocol::DOM::Dispatcher::wire(&dispatcher_, dom_backend_.get());
+void UiDevToolsClient::AddAgent(std::unique_ptr<UiDevToolsAgent> agent) {
+  agent->Init(&dispatcher_);
+  agents_.push_back(std::move(agent));
 }
 
 void UiDevToolsClient::Dispatch(const std::string& data) {

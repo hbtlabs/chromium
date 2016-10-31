@@ -17,6 +17,7 @@ WebInspector.NetworkTimelineColumn = function(rowHeight, calculator)
     this._canvas = this.contentElement.createChild("canvas");
     this._canvas.tabIndex = 1;
     this.setDefaultFocusedElement(this._canvas);
+    this._canvasPosition = this._canvas.getBoundingClientRect();
 
     /** @const */
     this._leftPadding = 5;
@@ -41,6 +42,9 @@ WebInspector.NetworkTimelineColumn = function(rowHeight, calculator)
 
     /** @type {?WebInspector.NetworkRequest} */
     this._navigationRequest = null;
+
+    /** @type {!Map<string, !Array<number>>} */
+    this._eventDividers = new Map();
 
     var colorUsage = WebInspector.ThemeSupport.ColorUsage;
     this._rowNavigationRequestColor = WebInspector.themeSupport.patchColor("#def", colorUsage.Background);
@@ -97,14 +101,14 @@ WebInspector.NetworkTimelineColumn.prototype = {
         var start = this._timeToPosition(range.start);
         var end = this._timeToPosition(range.end);
 
-        if (event.offsetX < start || event.offsetX > end)
+        if (event.clientX < this._canvasPosition.left + start || event.clientX > this._canvasPosition.left + end)
             return;
 
         var rowIndex = this._requestData.findIndex(request => this._hoveredRequest === request);
         var barHeight = this._getBarHeight(range.name);
         var y = this._headerHeight + (this._rowHeight * rowIndex - this._scrollTop) + ((this._rowHeight - barHeight) / 2);
 
-        if (event.offsetY < y || event.offsetY > y + barHeight)
+        if (event.clientY < this._canvasPosition.top + y || event.clientY > this._canvasPosition.top + y + barHeight)
             return;
 
         var anchorBox = this.element.boxInWindow();
@@ -188,9 +192,10 @@ WebInspector.NetworkTimelineColumn.prototype = {
 
     /**
      * @param {number=} scrollTop
+     * @param {!Map<string, !Array<number>>=} eventDividers
      * @param {!{requests: !Array<!WebInspector.NetworkRequest>, navigationRequest: ?WebInspector.NetworkRequest}=} requestData
      */
-    update: function(scrollTop, requestData)
+    update: function(scrollTop, eventDividers, requestData)
     {
         if (scrollTop !== undefined)
             this._scrollTop = scrollTop;
@@ -199,6 +204,8 @@ WebInspector.NetworkTimelineColumn.prototype = {
             this._navigationRequest = requestData.navigationRequest;
             this._calculateCanvasSize();
         }
+        if (eventDividers !== undefined)
+            this._eventDividers = eventDividers;
         this.element.window().cancelAnimationFrame(this._updateRequestID);
         this._updateRequestID = null;
 
@@ -231,6 +238,7 @@ WebInspector.NetworkTimelineColumn.prototype = {
     {
         this._offsetWidth = this.contentElement.offsetWidth - this._rightPadding;
         this._offsetHeight = this.contentElement.offsetHeight;
+        this._canvasPosition = this._canvas.getBoundingClientRect();
     },
 
     /**
@@ -285,6 +293,7 @@ WebInspector.NetworkTimelineColumn.prototype = {
         var context = this._canvas.getContext("2d");
         context.save();
         context.scale(window.devicePixelRatio, window.devicePixelRatio);
+        context.save();
         context.translate(0, this._headerHeight);
         context.rect(0, 0, this._offsetWidth, this._offsetHeight);
         context.clip();
@@ -299,10 +308,36 @@ WebInspector.NetworkTimelineColumn.prototype = {
             else
                 this._drawSimplifiedBars(context, request, rowOffset - this._scrollTop);
         }
+        this._drawEventDividers(context);
         context.restore();
+        // This is outside of the save/restore above because it must draw in header.
         this._drawDividers(context);
+        context.restore();
     },
 
+    /**
+     * @param {!CanvasRenderingContext2D} context
+     */
+    _drawEventDividers: function(context)
+    {
+        context.save();
+        context.lineWidth = 1;
+        for (var color of this._eventDividers.keys()) {
+            context.strokeStyle = color;
+            for (var time of this._eventDividers.get(color)) {
+                context.beginPath();
+                var x = this._timeToPosition(time);
+                context.moveTo(x, 0);
+                context.lineTo(x, this._offsetHeight);
+            }
+            context.stroke();
+        }
+        context.restore();
+    },
+
+    /**
+     * @param {!CanvasRenderingContext2D} context
+     */
     _drawDividers: function(context)
     {
         context.save();

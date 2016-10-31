@@ -241,8 +241,9 @@ void BlimpCompositor::OnContextProvidersCreated(
 
   auto compositor_frame_sink = base::MakeUnique<BlimpCompositorFrameSink>(
       std::move(compositor_context_provider),
-      std::move(worker_context_provider), base::ThreadTaskRunnerHandle::Get(),
-      weak_ptr_factory_.GetWeakPtr());
+      std::move(worker_context_provider),
+      GetEmbedderDeps()->GetGpuMemoryBufferManager(), nullptr,
+      base::ThreadTaskRunnerHandle::Get(), weak_ptr_factory_.GetWeakPtr());
 
   host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
 }
@@ -261,8 +262,7 @@ void BlimpCompositor::SubmitCompositorFrame(cc::CompositorFrame frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(surface_factory_);
 
-  cc::RenderPass* root_pass =
-      frame.delegated_frame_data->render_pass_list.back().get();
+  cc::RenderPass* root_pass = frame.render_pass_list.back().get();
   gfx::Size surface_size = root_pass->output_rect.size();
 
   if (local_frame_id_.is_null() || current_surface_size_ != surface_size) {
@@ -363,8 +363,6 @@ void BlimpCompositor::CreateLayerTreeHost() {
   cc::LayerTreeHostInProcess::InitParams params;
   params.client = this;
   params.task_graph_runner = compositor_dependencies_->GetTaskGraphRunner();
-  params.gpu_memory_buffer_manager =
-      GetEmbedderDeps()->GetGpuMemoryBufferManager();
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
   if (!use_threaded_layer_tree_host_) {
     params.image_serialization_processor =

@@ -5,7 +5,8 @@
       "provides": {
         "browser": [
           "arc::mojom::VideoAcceleratorService",
-          "arc::mojom::VideoAcceleratorServiceClient"
+          "arc::mojom::VideoAcceleratorServiceClient",
+          "mojom::ResourceUsageReporter"
         ]
       }
     }

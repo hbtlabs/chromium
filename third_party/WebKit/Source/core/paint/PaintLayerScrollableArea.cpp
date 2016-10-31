@@ -488,6 +488,8 @@ IntSize PaintLayerScrollableArea::maximumScrollOffsetInt() const {
     // based on stale layout overflow data (http://crbug.com/576933).
     contentSize = contentSize.expandedTo(visibleSize);
   }
+  if (box().isLayoutView())
+    visibleSize += toLayoutView(box()).frameView()->browserControlsSize();
   return toIntSize(-scrollOrigin() + (contentSize - visibleSize));
 }
 
@@ -652,6 +654,22 @@ void PaintLayerScrollableArea::setScrollOffsetUnconditionally(
   scrollOffsetChanged(offset, scrollType);
 }
 
+void PaintLayerScrollableArea::didChangeScrollbarsHidden() {
+  updateScrollbarsEnabledState();
+}
+
+void PaintLayerScrollableArea::updateScrollbarsEnabledState() {
+  // overflow:scroll should just enable/disable.
+  if (box().style()->overflowX() == OverflowScroll && horizontalScrollbar()) {
+    horizontalScrollbar()->setEnabled(hasHorizontalOverflow() &&
+                                      !scrollbarsHidden());
+  }
+  if (box().style()->overflowY() == OverflowScroll && verticalScrollbar()) {
+    verticalScrollbar()->setEnabled(hasVerticalOverflow() &&
+                                    !scrollbarsHidden());
+  }
+}
+
 void PaintLayerScrollableArea::updateAfterLayout() {
   ASSERT(box().hasOverflowClip());
 
@@ -738,11 +756,7 @@ void PaintLayerScrollableArea::updateAfterLayout() {
     // compositing/overflow/automatically-opt-into-composited-scrolling-after-style-change.html.
     DisableCompositingQueryAsserts disabler;
 
-    // overflow:scroll should just enable/disable.
-    if (box().style()->overflowX() == OverflowScroll && horizontalScrollbar())
-      horizontalScrollbar()->setEnabled(hasHorizontalOverflow());
-    if (box().style()->overflowY() == OverflowScroll && verticalScrollbar())
-      verticalScrollbar()->setEnabled(hasVerticalOverflow());
+    updateScrollbarsEnabledState();
 
     // Set up the range (and page step/line step).
     if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar()) {
