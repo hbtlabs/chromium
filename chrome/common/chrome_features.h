@@ -53,6 +53,8 @@ extern const base::Feature kHappinessTrackingSystem;
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 #endif
 
+extern const base::Feature kMaterialDesignBookmarks;
+
 #if defined(ENABLE_EXTENSIONS)
 extern const base::Feature kMaterialDesignExtensions;
 #endif
@@ -60,6 +62,8 @@ extern const base::Feature kMaterialDesignExtensions;
 extern const base::Feature kMaterialDesignHistory;
 
 extern const base::Feature kMaterialDesignSettings;
+
+extern const base::Feature kModalPermissionPrompts;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kNativeNotifications;

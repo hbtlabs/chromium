@@ -59,7 +59,7 @@ VisibleSelectionTemplate<Strategy>::VisibleSelectionTemplate(
       m_isDirectional(selection.isDirectional()),
       m_granularity(selection.granularity()),
       m_hasTrailingWhitespace(selection.hasTrailingWhitespace()) {
-  validate();
+  validate(m_granularity);
 }
 
 template <typename Strategy>
@@ -220,14 +220,6 @@ VisibleSelectionTemplate<Strategy>::toNormalizedEphemeralRange() const {
 }
 
 template <typename Strategy>
-void VisibleSelectionTemplate<Strategy>::expandUsingGranularity(
-    TextGranularity granularity) {
-  if (isNone())
-    return;
-  validate(granularity);
-}
-
-template <typename Strategy>
 static EphemeralRangeTemplate<Strategy> makeSearchRange(
     const PositionTemplate<Strategy>& pos) {
   Node* node = pos.anchorNode();
@@ -246,7 +238,11 @@ static EphemeralRangeTemplate<Strategy> makeSearchRange(
 
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::appendTrailingWhitespace() {
+  if (isNone())
+    return;
   DCHECK_EQ(m_granularity, WordGranularity);
+  if (!isRange())
+    return;
   const EphemeralRangeTemplate<Strategy> searchRange = makeSearchRange(end());
   if (searchRange.isNull())
     return;

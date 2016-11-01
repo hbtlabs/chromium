@@ -41,6 +41,9 @@
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
           "blink::mojom::ShareService",
+          "bluetooth::mojom::AdapterFactory",
+          "device::usb::ChooserService",
+          "device::usb::DeviceManager",
           "dom_distiller::mojom::DistillabilityService",
           "dom_distiller::mojom::DistillerJavaScriptService",
           "extensions::KeepAlive",
@@ -48,7 +51,13 @@
           "media_router::mojom::MediaRouter",
           "mojom::OmniboxPageHandler",
           "password_manager::mojom::CredentialManager",
-          "translate::mojom::ContentTranslateDriver"
+          "translate::mojom::ContentTranslateDriver",
+
+          // TODO(beng): These should be moved to a separate capability.
+          "mojom::OmniboxPageHandler",
+          "mojom::PluginsPageHandler",
+          "mojom::SiteEngagementUIHandler",
+          "mojom::UsbInternalsPageHandler"
         ]
       }
     }

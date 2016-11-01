@@ -84,15 +84,46 @@ const base::Feature kLinuxObsoleteSystemIsEndOfTheLine{
     "LinuxObsoleteSystemIsEndOfTheLine", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Enables or disables the Material Design version of chrome://bookmarks.
+const base::Feature kMaterialDesignBookmarks{"MaterialDesignBookmarks",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(ENABLE_EXTENSIONS)
 // Enabled or disabled the Material Design version of chrome://extensions.
 const base::Feature kMaterialDesignExtensions{
     "MaterialDesignExtensions", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+// Enables or disables the Material Design version of chrome://history.
+const base::Feature kMaterialDesignHistory{"MaterialDesignHistory",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables or disables the Material Design version of chrome://settings.
+// Also affects chrome://help.
+const base::Feature kMaterialDesignSettings{"MaterialDesignSettings",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables or disables modal permission prompts.
+const base::Feature kModalPermissionPrompts{"ModalPermissionPrompts",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the use of native notification centers instead of using the Message
+// Center for displaying the toasts.
+#if defined(OS_MACOSX)
+const base::Feature kNativeNotifications{"NativeNotifications",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MACOSX)
+
 // Enables YouTube Flash videos to be overridden.
 const base::Feature kOverrideYouTubeFlashEmbed{
     "OverrideYouTubeFlashEmbed", base::FEATURE_ENABLED_BY_DEFAULT};
+
+#if defined(ENABLE_PLUGINS)
+// Prefer HTML content by hiding Flash from the list of plugins.
+// https://crbug.com/626728
+const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables the Print Scaling feature in print preview.
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -104,29 +135,6 @@ const base::Feature kPrintScaling{"PrintScaling",
 // background when closed.
 const base::Feature kPushMessagingBackgroundMode{
     "PushMessagingBackgroundMode", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables or disables the Material Design version of chrome://history.
-const base::Feature kMaterialDesignHistory{
-    "MaterialDesignHistory", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables or disables the Material Design version of chrome://settings.
-// Also affects chrome://help.
-const base::Feature kMaterialDesignSettings{
-    "MaterialDesignSettings", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables the use of native notification centers instead of using the Message
-// Center for displaying the toasts.
-#if defined(OS_MACOSX)
-const base::Feature kNativeNotifications{"NativeNotifications",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_MACOSX)
-
-#if defined(ENABLE_PLUGINS)
-// Prefer HTML content by hiding Flash from the list of plugins.
-// https://crbug.com/626728
-const base::Feature kPreferHtmlOverPlugins{"PreferHtmlOverPlugins",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
 
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in

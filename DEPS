@@ -35,11 +35,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling sfntly
   # and whatever else without interference from each other.
-  'sfntly_revision': '6e984975bf31b5a94fa3337dd56ab687bcee91c1',
+  'sfntly_revision': '64f78562d2003eb7cacaaa86a398cbd41881ba6f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '4d598a35cd7a9b2bbfd724e7503840e2ad8ee778',
+  'skia_revision': 'c25c5d73e9f4d840dc758c399496d5690709ad58',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '705a9194438dd19a2f456235dda5a175cfce94d5',
+  'angle_revision': '60e6edfa7fe2549c8e60fec84d3af225e185a85d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -63,7 +63,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '96c7b33510c5d48ef5707326de88b35dcd2e4b45',
+  'pdfium_revision': '5a22582ca1dbe1d66b18d5253bfa1d202fcc3b4a',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -95,7 +95,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': 'd44a7cccf2af55ea552fa93b874f97a8915df0a7',
+  'catapult_revision': '0d3575d73a471a53e1d1d363a349ad4536f293fc',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -390,7 +390,7 @@ deps_os = {
 
     # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
     'src/third_party/chromite':
-      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '39f0ff99d0ccd7c887800f4149e591f1226600c0',
+      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '340d0d268ff9f320e3b40710c692bb54efd99fcb',
 
     # Dependency of chromite.git and skia.
     'src/third_party/pyelftools':

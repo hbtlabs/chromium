@@ -2760,7 +2760,6 @@ void BackTexture::DestroyNativeGpuMemoryBuffer(bool have_context) {
         decoder_->state_.GetErrorState());
 
     image_->ReleaseTexImage(Target());
-    image_->Destroy(have_context);
 
     decoder_->texture_manager()->SetLevelImage(texture_ref_.get(), Target(), 0,
                                                nullptr, Texture::UNBOUND);
@@ -3535,7 +3534,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
                 1);
   DoGetIntegerv(GL_BIND_GENERATES_RESOURCE_CHROMIUM,
                 &caps.bind_generates_resource_chromium, 1);
-  if (feature_info_->IsWebGL2OrES3Context()) {
+  if (unsafe_es3_apis_enabled()) {
     // TODO(zmo): Note that some parameter values could be more than 32-bit,
     // but for now we clamp them to 32-bit max.
     DoGetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &caps.max_3d_texture_size, 1);
@@ -3597,7 +3596,7 @@ Capabilities GLES2DecoderImpl::GetCapabilities() {
   }
   if (feature_info_->feature_flags().multisampled_render_to_texture ||
       feature_info_->feature_flags().chromium_framebuffer_multisample ||
-      feature_info_->IsWebGL2OrES3Context()) {
+      unsafe_es3_apis_enabled()) {
     DoGetIntegerv(GL_MAX_SAMPLES, &caps.max_samples, 1);
   }
 
@@ -4748,10 +4747,7 @@ void GLES2DecoderImpl::Destroy(bool have_context) {
     transform_feedback_manager_.reset();
   }
 
-  if (image_manager_.get()) {
-    image_manager_->Destroy(have_context);
-    image_manager_.reset();
-  }
+  image_manager_.reset();
 
   offscreen_target_frame_buffer_.reset();
   offscreen_target_color_texture_.reset();
@@ -6225,7 +6221,7 @@ bool GLES2DecoderImpl::GetHelper(
         return true;
       }
   }
-  if (feature_info_->IsWebGL2OrES3Context()) {
+  if (unsafe_es3_apis_enabled()) {
     switch (pname) {
       case GL_MAX_VARYING_COMPONENTS: {
         if (gl_version_info().is_es) {
@@ -6817,7 +6813,7 @@ void GLES2DecoderImpl::DoGetInteger64v(GLenum pname,
                                        GLint64* params,
                                        GLsizei params_size) {
   DCHECK(params);
-  if (feature_info_->IsWebGL2OrES3Context()) {
+  if (unsafe_es3_apis_enabled()) {
     switch (pname) {
       case GL_MAX_ELEMENT_INDEX: {
         DCHECK_EQ(params_size, 1);
@@ -7699,7 +7695,7 @@ void GLES2DecoderImpl::DoGetFramebufferAttachmentParameteriv(
   const char kFunctionName[] = "glGetFramebufferAttachmentParameteriv";
   Framebuffer* framebuffer = GetFramebufferInfoForTarget(target);
   if (!framebuffer) {
-    if (!feature_info_->IsWebGL2OrES3Context()) {
+    if (!unsafe_es3_apis_enabled()) {
       LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, kFunctionName,
           "no framebuffer bound");
       return;
@@ -9039,7 +9035,7 @@ void GLES2DecoderImpl::DoUniformMatrix2fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
+  if (transpose && !unsafe_es3_apis_enabled()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix2fv", "transpose not FALSE");
     return;
@@ -9062,7 +9058,7 @@ void GLES2DecoderImpl::DoUniformMatrix3fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
+  if (transpose && !unsafe_es3_apis_enabled()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix3fv", "transpose not FALSE");
     return;
@@ -9085,7 +9081,7 @@ void GLES2DecoderImpl::DoUniformMatrix4fv(GLint fake_location,
                                           const volatile GLfloat* value) {
   GLenum type = 0;
   GLint real_location = -1;
-  if (transpose && !feature_info_->IsWebGL2OrES3Context()) {
+  if (transpose && !unsafe_es3_apis_enabled()) {
     LOCAL_SET_GL_ERROR(
         GL_INVALID_VALUE, "glUniformMatrix4fv", "transpose not FALSE");
     return;
@@ -9804,26 +9800,36 @@ error::Error GLES2DecoderImpl::DoDrawArrays(
     return error::kNoError;
   }
 
-  if (state_.bound_transform_feedback.get() &&
-      state_.bound_transform_feedback->active() &&
-      !state_.bound_transform_feedback->paused() &&
-      mode != state_.bound_transform_feedback->primitive_mode()) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
-        "mode is not identical with active transformfeedback's primitiveMode");
-    return error::kNoError;
-  }
-
-  if (count == 0 || primcount == 0) {
-    LOCAL_RENDER_WARNING("Render count or primcount is 0.");
-    return error::kNoError;
-  }
-
   if (feature_info_->IsWebGL2OrES3Context()) {
     if (!AttribsTypeMatch()) {
       LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
                          "vertexAttrib function must match shader attrib type");
       return error::kNoError;
     }
+
+    DCHECK(state_.bound_transform_feedback.get());
+    if (state_.bound_transform_feedback->active() &&
+        !state_.bound_transform_feedback->paused()) {
+      if (mode != state_.bound_transform_feedback->primitive_mode()) {
+        LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, function_name,
+            "mode differs from active transformfeedback's primitiveMode");
+        return error::kNoError;
+      }
+      if (!buffer_manager()->RequestBuffersAccess(
+              state_.GetErrorState(),
+              state_.bound_transform_feedback.get(),
+              state_.current_program->GetTransformFeedbackVaryingSizes(),
+              count,
+              function_name,
+              "transformfeedback buffers")) {
+        return error::kNoError;
+      }
+    }
+  }
+
+  if (count == 0 || primcount == 0) {
+    LOCAL_RENDER_WARNING("Render count or primcount is 0.");
+    return error::kNoError;
   }
 
   base::CheckedNumeric<GLuint> checked_max_vertex = first;
@@ -10705,7 +10711,7 @@ void GLES2DecoderImpl::DoVertexAttribI4uiv(GLuint index,
 error::Error GLES2DecoderImpl::HandleVertexAttribIPointer(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!feature_info_->IsWebGL2OrES3Context())
+  if (!unsafe_es3_apis_enabled())
     return error::kUnknownCommand;
   const volatile gles2::cmds::VertexAttribIPointer& c =
       *static_cast<const volatile gles2::cmds::VertexAttribIPointer*>(cmd_data);
@@ -11765,7 +11771,7 @@ error::Error GLES2DecoderImpl::HandleGetAttribLocation(
 error::Error GLES2DecoderImpl::HandleGetBufferSubDataAsyncCHROMIUM(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!feature_info_->IsWebGL2OrES3Context()) {
+  if (!unsafe_es3_apis_enabled()) {
     return error::kUnknownCommand;
   }
   const volatile gles2::cmds::GetBufferSubDataAsyncCHROMIUM& c =
@@ -11867,7 +11873,7 @@ error::Error GLES2DecoderImpl::HandleGetUniformLocation(
 error::Error GLES2DecoderImpl::HandleGetUniformIndices(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!feature_info_->IsWebGL2OrES3Context())
+  if (!unsafe_es3_apis_enabled())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetUniformIndices& c =
       *static_cast<const volatile gles2::cmds::GetUniformIndices*>(cmd_data);
@@ -11948,7 +11954,7 @@ error::Error GLES2DecoderImpl::GetFragDataLocationHelper(
 error::Error GLES2DecoderImpl::HandleGetFragDataLocation(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!feature_info_->IsWebGL2OrES3Context())
+  if (!unsafe_es3_apis_enabled())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetFragDataLocation& c =
       *static_cast<const volatile gles2::cmds::GetFragDataLocation*>(cmd_data);
@@ -12016,7 +12022,7 @@ error::Error GLES2DecoderImpl::HandleGetFragDataIndexEXT(
 error::Error GLES2DecoderImpl::HandleGetUniformBlockIndex(
     uint32_t immediate_data_size,
     const volatile void* cmd_data) {
-  if (!feature_info_->IsWebGL2OrES3Context())
+  if (!unsafe_es3_apis_enabled())
     return error::kUnknownCommand;
   const volatile gles2::cmds::GetUniformBlockIndex& c =
       *static_cast<const volatile gles2::cmds::GetUniformBlockIndex*>(cmd_data);
@@ -12060,13 +12066,13 @@ error::Error GLES2DecoderImpl::HandleGetString(uint32_t immediate_data_size,
   std::string extensions;
   switch (name) {
     case GL_VERSION:
-      if (feature_info_->IsWebGL2OrES3Context())
+      if (unsafe_es3_apis_enabled())
         str = "OpenGL ES 3.0 Chromium";
       else
         str = "OpenGL ES 2.0 Chromium";
       break;
     case GL_SHADING_LANGUAGE_VERSION:
-      if (feature_info_->IsWebGL2OrES3Context())
+      if (unsafe_es3_apis_enabled())
         str = "OpenGL ES GLSL ES 3.0 Chromium";
       else
         str = "OpenGL ES GLSL ES 1.0 Chromium";
@@ -16654,23 +16660,18 @@ void GLES2DecoderImpl::TexStorageImpl(GLenum target,
     GLsizei level_width = width;
     GLsizei level_height = height;
     GLsizei level_depth = depth;
-    GLenum adjusted_format = internal_format;
-#if defined(OS_MACOSX)
-    // TODO(dshwang): remove it after fixing the root cause. crbug.com/657532
-    adjusted_format = feature_info_->IsES3Enabled() ? internal_format : format;
-#endif
 
     for (int ii = 0; ii < levels; ++ii) {
       if (target == GL_TEXTURE_CUBE_MAP) {
         for (int jj = 0; jj < 6; ++jj) {
           GLenum face = GL_TEXTURE_CUBE_MAP_POSITIVE_X + jj;
           texture_manager()->SetLevelInfo(
-              texture_ref, face, ii, adjusted_format, level_width, level_height,
+              texture_ref, face, ii, internal_format, level_width, level_height,
               1, 0, format, type, gfx::Rect());
         }
       } else {
         texture_manager()->SetLevelInfo(
-            texture_ref, target, ii, adjusted_format, level_width, level_height,
+            texture_ref, target, ii, internal_format, level_width, level_height,
             level_depth, 0, format, type, gfx::Rect());
       }
       level_width = std::max(1, level_width >> 1);
