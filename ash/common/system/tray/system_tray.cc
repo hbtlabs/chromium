@@ -75,6 +75,39 @@ using views::TrayBubbleView;
 
 namespace ash {
 
+namespace {
+
+// A tray item that just reserves space in the tray.
+class PaddingTrayItem : public SystemTrayItem {
+ public:
+  PaddingTrayItem() : SystemTrayItem(nullptr, UMA_NOT_RECORDED) {}
+  ~PaddingTrayItem() override {}
+
+  // SystemTrayItem:
+  views::View* CreateTrayView(LoginStatus status) override {
+    return new PaddingView();
+  }
+
+ private:
+  class PaddingView : public views::View {
+   public:
+    PaddingView() {}
+    ~PaddingView() override {}
+
+   private:
+    gfx::Size GetPreferredSize() const override {
+      return gfx::Size(GetTrayConstant(TRAY_IMAGE_ITEM_PADDING),
+                       GetTrayConstant(TRAY_IMAGE_ITEM_PADDING));
+    }
+
+    DISALLOW_COPY_AND_ASSIGN(PaddingView);
+  };
+
+  DISALLOW_COPY_AND_ASSIGN(PaddingTrayItem);
+};
+
+}  // namespace
+
 // The minimum width of the system tray menu.
 const int kMinimumSystemTrayMenuWidth = 300;
 const int kMinimumSystemTrayMenuWidthMd = 332;
@@ -180,12 +213,11 @@ SystemTray::SystemTray(WmShelf* wm_shelf)
       tray_cast_(nullptr),
       tray_date_(nullptr),
       tray_tiles_(nullptr),
+      tray_system_info_(nullptr),
       tray_update_(nullptr),
       screen_capture_tray_item_(nullptr),
       screen_share_tray_item_(nullptr) {
   SetContentsBackground();
-  if (MaterialDesignController::IsSystemTrayMenuMaterial())
-    tray_container()->SetMargin(GetTrayConstant(TRAY_IMAGE_ITEM_PADDING), 0);
 }
 
 SystemTray::~SystemTray() {
@@ -222,6 +254,11 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
                                   ->GetMaximumNumberOfLoggedInUsers();
   for (int i = 0; i < maximum_user_profiles; i++)
     AddTrayItem(new TrayUser(this, i));
+
+  // Crucially, this trailing padding has to be inside the user item(s).
+  // Otherwise it could be a main axis margin on the tray's box layout.
+  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    AddTrayItem(new PaddingTrayItem());
 
   if (maximum_user_profiles > 1) {
     // Add a special double line separator between users and the rest of the
@@ -272,7 +309,8 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   if (use_material_design) {
     tray_tiles_ = new TrayTiles(this);
     AddTrayItem(tray_tiles_);
-    AddTrayItem(new TraySystemInfo(this));
+    tray_system_info_ = new TraySystemInfo(this);
+    AddTrayItem(tray_system_info_);
   } else {
     AddTrayItem(tray_date_);
   }
@@ -282,6 +320,9 @@ void SystemTray::CreateItems(SystemTrayDelegate* delegate) {
   if (!use_material_design)
     AddTrayItem(tray_date_);
 #endif
+  // Leading padding.
+  if (MaterialDesignController::IsSystemTrayMenuMaterial())
+    AddTrayItem(new PaddingTrayItem());
 }
 
 void SystemTray::AddTrayItem(SystemTrayItem* item) {
@@ -798,6 +839,14 @@ TrayCast* SystemTray::GetTrayCastForTesting() const {
 
 TrayDate* SystemTray::GetTrayDateForTesting() const {
   return tray_date_;
+}
+
+TraySystemInfo* SystemTray::GetTraySystemInfoForTesting() const {
+  return tray_system_info_;
+}
+
+TrayTiles* SystemTray::GetTrayTilesForTesting() const {
+  return tray_tiles_;
 }
 
 TrayUpdate* SystemTray::GetTrayUpdateForTesting() const {

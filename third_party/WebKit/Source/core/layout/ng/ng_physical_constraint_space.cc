@@ -24,30 +24,13 @@ NGPhysicalConstraintSpace::NGPhysicalConstraintSpace(
       height_direction_fragmentation_type_(height_direction_fragmentation_type),
       is_new_fc_(is_new_fc) {}
 
-NGPhysicalConstraintSpace::NGPhysicalConstraintSpace(
-    NGPhysicalSize container_size)
-    : container_size_(container_size),
-      fixed_width_(0),
-      fixed_height_(0),
-      width_direction_triggers_scrollbar_(0),
-      height_direction_triggers_scrollbar_(0),
-      width_direction_fragmentation_type_(FragmentNone),
-      height_direction_fragmentation_type_(FragmentNone) {}
-
-NGPhysicalConstraintSpace::NGPhysicalConstraintSpace()
-    : fixed_width_(0),
-      fixed_height_(0),
-      width_direction_triggers_scrollbar_(0),
-      height_direction_triggers_scrollbar_(0),
-      width_direction_fragmentation_type_(FragmentNone),
-      height_direction_fragmentation_type_(FragmentNone) {}
-
-void NGPhysicalConstraintSpace::AddExclusion(const NGExclusion* exclusion,
+void NGPhysicalConstraintSpace::AddExclusion(const NGLogicalRect& exclusion,
                                              unsigned options) {
-  exclusions_.append(exclusion);
+  NGLogicalRect* exclusion_ptr = new NGLogicalRect(exclusion);
+  exclusions_.append(WTF::wrapUnique(exclusion_ptr));
 }
 
-const HeapVector<Member<const NGExclusion>>&
+const Vector<std::unique_ptr<const NGLogicalRect>>&
 NGPhysicalConstraintSpace::Exclusions(unsigned options) const {
   // TODO(layout-ng): Filter based on options? Perhaps layout Opportunities
   // should filter instead?

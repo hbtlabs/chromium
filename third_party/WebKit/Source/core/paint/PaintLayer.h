@@ -558,6 +558,12 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
             compositingState() != PaintsIntoOwnBacking);
   }
 
+  // Returns true if the element or any ancestor is transformed.
+  bool compositesWithTransform() const;
+
+  // Returns true if the element or any ancestor has non 1 opacity.
+  bool compositesWithOpacity() const;
+
   bool paintsWithTransform(GlobalPaintFlags) const;
 
   // Returns true if background phase is painted opaque in the given rect.
@@ -717,11 +723,11 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       bool hasRootScrollerAsDescendant);
   void didUpdateCompositingInputs();
 
-  IntRect clippedAbsoluteBoundingBox() const {
+  const IntRect& clippedAbsoluteBoundingBox() const {
     DCHECK(!m_needsAncestorDependentCompositingInputsUpdate);
     return m_ancestorDependentCompositingInputs.clippedAbsoluteBoundingBox;
   }
-  IntRect unclippedAbsoluteBoundingBox() const {
+  const IntRect& unclippedAbsoluteBoundingBox() const {
     DCHECK(!m_needsAncestorDependentCompositingInputsUpdate);
     return m_ancestorDependentCompositingInputs.unclippedAbsoluteBoundingBox;
   }

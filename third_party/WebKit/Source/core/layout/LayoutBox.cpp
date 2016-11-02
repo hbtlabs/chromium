@@ -1364,7 +1364,7 @@ void LayoutBox::clearExtraInlineAndBlockOffests() {
 
 LayoutUnit LayoutBox::adjustBorderBoxLogicalWidthForBoxSizing(
     float width) const {
-  LayoutUnit bordersPlusPadding = borderAndPaddingLogicalWidth();
+  LayoutUnit bordersPlusPadding = collapsedBorderAndCSSPaddingLogicalWidth();
   LayoutUnit result(width);
   if (style()->boxSizing() == BoxSizingContentBox)
     return result + bordersPlusPadding;
@@ -1373,7 +1373,7 @@ LayoutUnit LayoutBox::adjustBorderBoxLogicalWidthForBoxSizing(
 
 LayoutUnit LayoutBox::adjustBorderBoxLogicalHeightForBoxSizing(
     float height) const {
-  LayoutUnit bordersPlusPadding = borderAndPaddingLogicalHeight();
+  LayoutUnit bordersPlusPadding = collapsedBorderAndCSSPaddingLogicalHeight();
   LayoutUnit result(height);
   if (style()->boxSizing() == BoxSizingContentBox)
     return result + bordersPlusPadding;
@@ -1384,7 +1384,7 @@ LayoutUnit LayoutBox::adjustContentBoxLogicalWidthForBoxSizing(
     float width) const {
   LayoutUnit result(width);
   if (style()->boxSizing() == BoxSizingBorderBox)
-    result -= borderAndPaddingLogicalWidth();
+    result -= collapsedBorderAndCSSPaddingLogicalWidth();
   return std::max(LayoutUnit(), result);
 }
 
@@ -1392,7 +1392,7 @@ LayoutUnit LayoutBox::adjustContentBoxLogicalHeightForBoxSizing(
     float height) const {
   LayoutUnit result(height);
   if (style()->boxSizing() == BoxSizingBorderBox)
-    result -= borderAndPaddingLogicalHeight();
+    result -= collapsedBorderAndCSSPaddingLogicalHeight();
   return std::max(LayoutUnit(), result);
 }
 
@@ -2265,7 +2265,7 @@ bool LayoutBox::paintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
   return true;
 }
 
-LayoutRect LayoutBox::localOverflowRectForPaintInvalidation() const {
+LayoutRect LayoutBox::localVisualRect() const {
   if (style()->visibility() != EVisibility::Visible)
     return LayoutRect();
 
@@ -2403,11 +2403,9 @@ bool LayoutBox::mapToVisualRectInAncestorSpace(
                                                      visualRectFlags);
 }
 
-void LayoutBox::inflateVisualRectForFilter(
-    LayoutRect& paintInvalidationRect) const {
+void LayoutBox::inflateVisualRectForFilter(LayoutRect& visualRect) const {
   if (layer() && layer()->hasFilterInducingProperty())
-    paintInvalidationRect =
-        layer()->mapLayoutRectForFilter(paintInvalidationRect);
+    visualRect = layer()->mapLayoutRectForFilter(visualRect);
 }
 
 void LayoutBox::updateLogicalWidth() {
@@ -3202,7 +3200,8 @@ LayoutUnit LayoutBox::computePercentageLogicalHeight(
         // cases, but it is preferable to the alternative (sizing intrinsically
         // and making the row end up too big).
         LayoutTableCell* cell = toLayoutTableCell(cb);
-        if (scrollsOverflowY() &&
+        if (style()->overflowY() != OverflowVisible &&
+            style()->overflowY() != OverflowHidden &&
             (!cell->style()->logicalHeight().isAuto() ||
              !cell->table()->style()->logicalHeight().isAuto()))
           return LayoutUnit();
@@ -4719,44 +4718,51 @@ void LayoutBox::updateFragmentationInfoForChild(LayoutBox& child) {
     child.setOffsetToNextPage(spaceLeft);
 }
 
+bool LayoutBox::childNeedsRelayoutForPagination(const LayoutBox& child) const {
+  // TODO(mstensho): Should try to get this to work for floats too, instead of
+  // just marking and bailing here.
+  if (child.isFloating())
+    return true;
+  LayoutUnit logicalTop = child.logicalTop();
+  // Figure out if we really need to force re-layout of the child. We only need
+  // to do this if there's a chance that we need to recalculate pagination
+  // struts inside.
+  if (LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalTop)) {
+    LayoutUnit logicalHeight = child.logicalHeightIncludingOverflow();
+    LayoutUnit remainingSpace = pageRemainingLogicalHeightForOffset(
+        logicalTop, AssociateWithLatterPage);
+    if (child.offsetToNextPage()) {
+      // We need to relayout unless we're going to break at the exact same
+      // location as before.
+      if (child.offsetToNextPage() != remainingSpace)
+        return true;
+    } else if (logicalHeight > remainingSpace) {
+      // Last time we laid out this child, we didn't need to break, but now we
+      // have to. So we need to relayout.
+      return true;
+    }
+  } else if (child.offsetToNextPage()) {
+    // This child did previously break, but it won't anymore, because we no
+    // longer have a known fragmentainer height.
+    return true;
+  }
+
+  // It seems that we can skip layout of this child, but we need to ask the flow
+  // thread for permission first. We currently cannot skip over objects
+  // containing column spanners.
+  LayoutFlowThread* flowThread = child.flowThreadContainingBlock();
+  return flowThread && !flowThread->canSkipLayout(child);
+}
+
 void LayoutBox::markChildForPaginationRelayoutIfNeeded(
     LayoutBox& child,
     SubtreeLayoutScope& layoutScope) {
   DCHECK(!child.needsLayout());
   LayoutState* layoutState = view()->layoutState();
-  // TODO(mstensho): Should try to get this to work for floats too, instead of
-  // just marking and bailing here.
-  if (layoutState->paginationStateChanged() || child.isFloating()) {
+
+  if (layoutState->paginationStateChanged() ||
+      (layoutState->isPaginated() && childNeedsRelayoutForPagination(child)))
     layoutScope.setChildNeedsLayout(&child);
-    return;
-  }
-  if (!layoutState->isPaginated())
-    return;
-
-  LayoutUnit logicalTop = child.logicalTop();
-  if (LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalTop)) {
-    // Figure out if we really need to force re-layout of the child. We only
-    // need to do this if there's a chance that we need to recalculate
-    // pagination struts inside.
-    LayoutUnit remainingSpace = pageRemainingLogicalHeightForOffset(
-        logicalTop, AssociateWithLatterPage);
-    LayoutUnit logicalHeight = child.logicalHeightIncludingOverflow();
-    if ((!child.offsetToNextPage() && logicalHeight <= remainingSpace) ||
-        child.offsetToNextPage() == remainingSpace) {
-      // We don't need to relayout this child, either because the child wasn't
-      // previously fragmented, and won't be fragmented now either, or because
-      // it would fragment at the exact same position as before.
-      //
-      // We want to skip layout of this child, but we need to ask the flow
-      // thread for permission first. We currently cannot skip over objects
-      // containing column spanners.
-      LayoutFlowThread* flowThread = child.flowThreadContainingBlock();
-      if (!flowThread || flowThread->canSkipLayout(child))
-        return;
-    }
-  }
-
-  layoutScope.setChildNeedsLayout(&child);
 }
 
 void LayoutBox::markOrthogonalWritingModeRoot() {
@@ -5264,8 +5270,7 @@ LayoutObject* LayoutBox::splitAnonymousBoxesAroundChild(
       LayoutBox* parentBox = toLayoutBox(boxToSplit->parent());
       // We need to invalidate the |parentBox| before inserting the new node
       // so that the table paint invalidation logic knows the structure is
-      // dirty.
-      // See for example LayoutTableCell:localOverflowRectForPaintInvalidation.
+      // dirty. See for example LayoutTableCell:localVisualRect().
       markBoxForRelayoutAfterSplit(parentBox);
       parentBox->virtualChildren()->insertChildNode(parentBox, postBox,
                                                     boxToSplit->nextSibling());
@@ -5485,10 +5490,10 @@ ShapeOutsideInfo* LayoutBox::shapeOutsideInfo() const {
                                                : nullptr;
 }
 
-void LayoutBox::clearPreviousPaintInvalidationRects() {
-  LayoutBoxModelObject::clearPreviousPaintInvalidationRects();
+void LayoutBox::clearPreviousVisualRects() {
+  LayoutBoxModelObject::clearPreviousVisualRects();
   if (PaintLayerScrollableArea* scrollableArea = this->getScrollableArea())
-    scrollableArea->clearPreviousPaintInvalidationRects();
+    scrollableArea->clearPreviousVisualRects();
 }
 
 void LayoutBox::setPercentHeightContainer(LayoutBlock* container) {

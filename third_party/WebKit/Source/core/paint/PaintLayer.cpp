@@ -622,11 +622,11 @@ void PaintLayer::mapRectToPaintInvalidationBacking(
     return;
   }
 
-  // This code adjusts the paint invalidation rectangle to be in the space of
-  // the transformed ancestor of the grouped (i.e. squashed) layer. This is
-  // because all layers that squash together need to issue paint invalidations
-  // w.r.t. a single container that is an ancestor of all of them, in order to
-  // properly take into account any local transforms etc.
+  // This code adjusts the visual rect to be in the space of the transformed
+  // ancestor of the grouped (i.e. squashed) layer. This is because all layers
+  // that squash together need to issue paint invalidations w.r.t. a single
+  // container that is an ancestor of all of them, in order to properly take
+  // into account any local transforms etc.
   // FIXME: remove this special-case code that works around the paint
   // invalidation code structure.
   layoutObject.mapToVisualRectInAncestorSpace(&paintInvalidationContainer,
@@ -2707,6 +2707,14 @@ bool PaintLayer::paintsWithTransform(GlobalPaintFlags globalPaintFlags) const {
           layoutObject()->style()->position() == FixedPosition) &&
          ((globalPaintFlags & GlobalPaintFlattenCompositingLayers) ||
           compositingState() != PaintsIntoOwnBacking);
+}
+
+bool PaintLayer::compositesWithTransform() const {
+  return transformAncestor() || transform();
+}
+
+bool PaintLayer::compositesWithOpacity() const {
+  return opacityAncestor() || layoutObject()->style()->hasOpacity();
 }
 
 bool PaintLayer::backgroundIsKnownToBeOpaqueInRect(

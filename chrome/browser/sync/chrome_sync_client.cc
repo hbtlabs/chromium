@@ -79,7 +79,7 @@
 #include "chrome/browser/sync/glue/extension_setting_data_type_controller.h"
 #endif
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_shared_settings_service_factory.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
@@ -104,8 +104,8 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/app_list/arc/arc_package_sync_data_type_controller.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
-#include "components/wifi_sync/wifi_credential_syncable_service.h"
-#include "components/wifi_sync/wifi_credential_syncable_service_factory.h"
+#include "components/sync_wifi/wifi_credential_syncable_service.h"
+#include "components/sync_wifi/wifi_credential_syncable_service_factory.h"
 #endif
 
 using content::BrowserThread;
@@ -376,7 +376,7 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
       return favicons ? favicons->AsWeakPtr()
                       : base::WeakPtr<syncer::SyncableService>();
     }
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
     case syncer::SUPERVISED_USER_SETTINGS:
       return SupervisedUserSettingsServiceFactory::GetForProfile(profile_)->
           AsWeakPtr();
@@ -412,8 +412,9 @@ ChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
     }
 #if defined(OS_CHROMEOS)
     case syncer::WIFI_CREDENTIALS:
-      return wifi_sync::WifiCredentialSyncableServiceFactory::
-          GetForBrowserContext(profile_)->AsWeakPtr();
+      return sync_wifi::WifiCredentialSyncableServiceFactory::
+          GetForBrowserContext(profile_)
+              ->AsWeakPtr();
     case syncer::ARC_PACKAGE:
       return arc::ArcPackageSyncableService::Get(profile_)->AsWeakPtr();
 #endif
@@ -586,7 +587,7 @@ void ChromeSyncClient::RegisterDesktopDataTypes(
   }
 #endif
 
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   sync_service->RegisterDataTypeController(
       base::MakeUnique<SupervisedUserSyncDataTypeController>(
           syncer::SUPERVISED_USER_SETTINGS, error_callback, this, profile_));
@@ -623,7 +624,7 @@ void ChromeSyncClient::RegisterAndroidDataTypes(
     syncer::ModelTypeSet enabled_types) {
   base::Closure error_callback =
       base::Bind(&syncer::ReportUnrecoverableError, chrome::GetChannel());
-#if defined(ENABLE_SUPERVISED_USERS)
+#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   sync_service->RegisterDataTypeController(
       base::MakeUnique<SupervisedUserSyncDataTypeController>(
           syncer::SUPERVISED_USER_SETTINGS, error_callback, this, profile_));

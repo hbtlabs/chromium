@@ -39,7 +39,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '8a8668b4721097de657ad8b30d45f60f62433c6f',
+  'skia_revision': 'eb21ef6641315ae08c20728f868534a4dd762a38',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
@@ -51,7 +51,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': '60e6edfa7fe2549c8e60fec84d3af225e185a85d',
+  'angle_revision': 'eb66a6e21e66e2884888382c1890f146ef4cbd90',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
@@ -63,7 +63,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '5a22582ca1dbe1d66b18d5253bfa1d202fcc3b4a',
+  'pdfium_revision': '8837c91c0db8f9205b7e58db97946e9af7958b39',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -95,7 +95,7 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '79ada3255800a3cfa0f1d94a6386d73bf310792b',
+  'catapult_revision': '807b605255406d4eab676e037a398d0aba35a62d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -186,7 +186,7 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + 'cf0c088eb6231ba91069540de881a09862c5a0ae',
+    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '579c7f930d86137af07b4b6fedd2991742e48e45',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
@@ -222,7 +222,7 @@ deps = {
     Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'eff0dd542fb21b7c0560845d25478077bc84829d', # commit position 14857
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '21c188f315a95ced39a8b0dbe33fe57694d3925e', # commit position 14876
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -421,7 +421,7 @@ deps_os = {
 
     # gRPC, an RPC framework. For Blimp use only.
     'src/third_party/grpc':
-      Var('chromium_git') + '/external/github.com/grpc/grpc' + '@' + '642ab2bc2fc0f3df84fb659e7da4d7aab260e2ed',
+      Var('chromium_git') + '/external/github.com/grpc/grpc' + '@' + 'b4cc5fc16c1368149c8a20c51248a18009ff8254',
   },
   'android': {
     'src/third_party/android_protobuf/src':

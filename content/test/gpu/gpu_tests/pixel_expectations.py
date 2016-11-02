@@ -19,6 +19,7 @@ class PixelExpectations(GpuTestExpectations):
     self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositing', ['android'])
     self.Skip('Pixel_OffscreenCanvasWebGLSoftwareCompositingWorker',
               ['android'])
+    self.Skip('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', ['android'])
 
     self.Fail('Pixel_ScissorTestWithPreserveDrawingBuffer',
         ['android'], bug=521588)
@@ -45,8 +46,3 @@ class PixelExpectations(GpuTestExpectations):
 
     # TODO(kbr): flakily timing out on this configuration.
     self.Flaky('*', ['linux', 'intel', 'debug'], bug=648369)
-
-    # TODO(zakerinasab): check / generate reference images.
-    self.Fail('Pixel_CanvasDisplayLinearRGBAccelerated2D', bug=657946)
-    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2D', bug=657946)
-    self.Fail('Pixel_CanvasDisplayLinearRGBUnaccelerated2DGPUCompositing', bug=657946)

@@ -33,6 +33,8 @@ namespace cc {
 
 RenderSurfaceImpl::RenderSurfaceImpl(LayerImpl* owning_layer)
     : owning_layer_(owning_layer),
+      layer_tree_impl_(owning_layer->layer_tree_impl()),
+      stable_effect_id_(owning_layer->id()),
       surface_property_changed_(false),
       ancestor_property_changed_(false),
       contributes_to_drawn_surface_(false),
@@ -45,8 +47,7 @@ RenderSurfaceImpl::RenderSurfaceImpl(LayerImpl* owning_layer)
 RenderSurfaceImpl::~RenderSurfaceImpl() {}
 
 RenderSurfaceImpl* RenderSurfaceImpl::render_target() {
-  EffectTree& effect_tree =
-      owning_layer_->layer_tree_impl()->property_trees()->effect_tree;
+  EffectTree& effect_tree = layer_tree_impl_->property_trees()->effect_tree;
   EffectNode* node = effect_tree.Node(EffectTreeIndex());
   EffectNode* target_node = effect_tree.Node(node->target_id);
   if (target_node->id != 0)
@@ -57,7 +58,7 @@ RenderSurfaceImpl* RenderSurfaceImpl::render_target() {
 
 const RenderSurfaceImpl* RenderSurfaceImpl::render_target() const {
   const EffectTree& effect_tree =
-      owning_layer_->layer_tree_impl()->property_trees()->effect_tree;
+      layer_tree_impl_->property_trees()->effect_tree;
   const EffectNode* node = effect_tree.Node(EffectTreeIndex());
   const EffectNode* target_node = effect_tree.Node(node->target_id);
   if (target_node->id != 0)
@@ -117,16 +118,12 @@ SkColor RenderSurfaceImpl::GetDebugBorderColor() const {
 }
 
 float RenderSurfaceImpl::GetDebugBorderWidth() const {
-  return DebugColors::SurfaceBorderWidth(owning_layer_->layer_tree_impl());
-}
-
-int RenderSurfaceImpl::OwningLayerId() const {
-  return owning_layer_ ? owning_layer_->id() : 0;
+  return DebugColors::SurfaceBorderWidth(layer_tree_impl_);
 }
 
 LayerImpl* RenderSurfaceImpl::MaskLayer() {
   int mask_layer_id = OwningEffectNode()->mask_layer_id;
-  return owning_layer_->layer_tree_impl()->LayerById(mask_layer_id);
+  return layer_tree_impl_->LayerById(mask_layer_id);
 }
 
 bool RenderSurfaceImpl::HasMask() const {
@@ -162,11 +159,12 @@ int RenderSurfaceImpl::ClipTreeIndex() const {
 }
 
 int RenderSurfaceImpl::EffectTreeIndex() const {
-  return owning_layer_->effect_tree_index();
+  return layer_tree_impl_->property_trees()
+      ->effect_id_to_index_map[stable_effect_id_];
 }
 
 const EffectNode* RenderSurfaceImpl::OwningEffectNode() const {
-  return owning_layer_->layer_tree_impl()->property_trees()->effect_tree.Node(
+  return layer_tree_impl_->property_trees()->effect_tree.Node(
       EffectTreeIndex());
 }
 
@@ -188,6 +186,17 @@ void RenderSurfaceImpl::SetContentRect(const gfx::Rect& content_rect) {
 
 void RenderSurfaceImpl::SetContentRectForTesting(const gfx::Rect& rect) {
   SetContentRect(rect);
+}
+
+gfx::Rect RenderSurfaceImpl::CalculateExpandedClipForFilters(
+    const gfx::Transform& target_to_surface) {
+  gfx::Rect clip_in_surface_space =
+      MathUtil::ProjectEnclosingClippedRect(target_to_surface, clip_rect());
+  gfx::Rect expanded_clip_in_surface_space = Filters().MapRectReverse(
+      clip_in_surface_space, FiltersTransform().matrix());
+  gfx::Rect expanded_clip_in_target_space = MathUtil::MapEnclosingClippedRect(
+      draw_transform(), expanded_clip_in_surface_space);
+  return expanded_clip_in_target_space;
 }
 
 gfx::Rect RenderSurfaceImpl::CalculateClippedAccumulatedContentRect() {
@@ -214,7 +223,13 @@ gfx::Rect RenderSurfaceImpl::CalculateClippedAccumulatedContentRect() {
   if (clip_rect().Contains(accumulated_rect_in_target_space))
     return accumulated_content_rect();
 
-  gfx::Rect clipped_accumulated_rect_in_target_space = clip_rect();
+  gfx::Rect clipped_accumulated_rect_in_target_space;
+  if (Filters().HasFilterThatMovesPixels()) {
+    clipped_accumulated_rect_in_target_space =
+        CalculateExpandedClipForFilters(target_to_surface);
+  } else {
+    clipped_accumulated_rect_in_target_space = clip_rect();
+  }
   clipped_accumulated_rect_in_target_space.Intersect(
       accumulated_rect_in_target_space);
 
@@ -252,9 +267,8 @@ void RenderSurfaceImpl::CalculateContentRectFromAccumulatedContentRect(
 void RenderSurfaceImpl::SetContentRectToViewport() {
   // Only root render surface use viewport as content rect.
   DCHECK_EQ(render_target(), this);
-  gfx::Rect viewport = gfx::ToEnclosingRect(owning_layer_->layer_tree_impl()
-                                                ->property_trees()
-                                                ->clip_tree.ViewportClip());
+  gfx::Rect viewport = gfx::ToEnclosingRect(
+      layer_tree_impl_->property_trees()->clip_tree.ViewportClip());
   SetContentRect(viewport);
 }
 
@@ -311,8 +325,7 @@ bool RenderSurfaceImpl::SurfacePropertyChangedOnlyFromDescendant() const {
 }
 
 bool RenderSurfaceImpl::AncestorPropertyChanged() const {
-  const PropertyTrees* property_trees =
-      owning_layer_->layer_tree_impl()->property_trees();
+  const PropertyTrees* property_trees = layer_tree_impl_->property_trees();
   return ancestor_property_changed_ || property_trees->full_tree_damaged ||
          property_trees->transform_tree.Node(TransformTreeIndex())
              ->transform_changed ||
@@ -361,8 +374,7 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
   if (visible_layer_rect.IsEmpty())
     return;
 
-  const PropertyTrees* property_trees =
-      owning_layer_->layer_tree_impl()->property_trees();
+  const PropertyTrees* property_trees = layer_tree_impl_->property_trees();
   int sorting_context_id =
       property_trees->transform_tree.Node(TransformTreeIndex())
           ->sorting_context_id;
@@ -373,7 +385,7 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
       draw_properties_.clip_rect, draw_properties_.is_clipped,
       draw_properties_.draw_opacity, BlendMode(), sorting_context_id);
 
-  if (owning_layer_->ShowDebugBorders()) {
+  if (layer_tree_impl_->debug_state().show_debug_borders) {
     DebugBorderDrawQuad* debug_border_quad =
         render_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
     debug_border_quad->SetNew(shared_quad_state, content_rect(),

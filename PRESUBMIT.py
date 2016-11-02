@@ -52,8 +52,6 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'.*[\\\/](test|tool(s)?)[\\\/].*',
     # content_shell is used for running layout tests.
     r'content[\\\/]shell[\\\/].*',
-    # At request of folks maintaining this folder.
-    r'chrome[\\\/]browser[\\\/]automation[\\\/].*',
     # Non-production example code.
     r'mojo[\\\/]examples[\\\/].*',
     # Launcher for running iOS tests on the simulator.
@@ -312,15 +310,6 @@ _BANNED_CPP_FUNCTIONS = (
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
-      ),
-      True,
-      (),
-    ),
-    (
-      r'STLDeleteContainerPointers',  # http://crbug.com/555865
-      (
-        'This call is obsolete with C++ 11; create a container with owning',
-        'pointers instead (e.g. std::vector<std::unique_ptr<x>> ).',
       ),
       True,
       (),
