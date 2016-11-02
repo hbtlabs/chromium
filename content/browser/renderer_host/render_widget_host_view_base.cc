@@ -34,7 +34,7 @@ const int kFlushInputRateInUs = 16666;
 RenderWidgetHostViewBase::RenderWidgetHostViewBase()
     : is_fullscreen_(false),
       popup_type_(blink::WebPopupTypeNone),
-      background_color_(SK_ColorWHITE),
+      background_color_(SK_ColorBLACK),
       mouse_locked_(false),
       showing_context_menu_(false),
 #if !defined(USE_AURA)
