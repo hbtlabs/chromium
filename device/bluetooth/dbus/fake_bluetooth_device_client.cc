@@ -1061,7 +1061,7 @@ void FakeBluetoothDeviceClient::RemoveDevice(
   PropertiesMap::const_iterator iter = properties_map_.find(device_path);
   Properties* properties = iter->second.get();
 
-  VLOG(1) << "removing device: " << properties->alias.value();
+  VLOG(1) << "removing device: " << properties->name.value();
   device_list_.erase(listiter);
 
   // Remove the Input interface if it exists. This should be called before the
